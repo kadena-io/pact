@@ -48,7 +48,7 @@ withCapability =
   \upon completion of BODY. Nested 'with-capability' calls for the same token \
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
   \but simply execute BODY. \
-   \`$(with capability (update-users id) (update users id { salary: new-salary }))`"
+   \`$(with-capability (update-users id) (update users id { salary: new-salary }))`"
   where
     withCapability' :: NativeFun e
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
@@ -72,7 +72,7 @@ evalCap a@App{..} = requireDefcap a >>= \d@Def{..} -> do
         NewlyAcquired -> Just cap
         AlreadyAcquired -> Nothing
 
-requireDefcap :: App (Term Ref) -> Eval e (Def Term Ref)
+requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
 requireDefcap App{..} = case _appFun of
   (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
     Defcap -> return d

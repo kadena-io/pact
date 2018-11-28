@@ -388,16 +388,16 @@ instance Show Module where
     Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
     Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
 
-data Def t n = Def
+data Def n = Def
   { _dDefName :: !DefName
   , _dModule :: !ModuleName
   , _dDefType :: !DefType
-  , _dFunType :: !(FunType (t n))
-  , _dDefBody :: !(Scope Int t n)
+  , _dFunType :: !(FunType (Term n))
+  , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq)
-instance (Show (t n)) => Show (Def t n) where
+instance (Show n) => Show (Def n) where
   show Def{..} = "(" ++ unwords
     [ defTypeRep _dDefType
     , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
@@ -461,7 +461,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TDef {
-      _tDef :: Def Term n
+      _tDef :: Def n
     , _tInfo :: !Info
     } |
     TNative {

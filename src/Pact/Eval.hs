@@ -145,6 +145,10 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 capabilityGranted :: Capability -> Eval e Bool
 capabilityGranted cap = (cap `elem`) <$> use evalCapabilities
 
+-- | Test if capability is already installed, if not
+-- evaluate `test` which is expected to fail by some
+-- guard throwing a failure. Upon successful return of
+-- `test` install capability.
 acquireCapability :: Capability -> Eval e () -> Eval e CapAcquireResult
 acquireCapability cap test = do
   granted <- capabilityGranted cap
@@ -464,11 +468,11 @@ reduceApp (App (TLitString errMsg) _ i) = evalError i $ unpack errMsg
 reduceApp (App r _ ai) = evalError ai $ "Expected def: " ++ show r
 
 -- | precompute "UserApp" cost
-computeUserAppGas :: Def Term Ref -> Info -> Eval e Gas
+computeUserAppGas :: Def Ref -> Info -> Eval e Gas
 computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) GUserApp
 
 -- | prepare reduced args and funtype, and typecheck
-prepareUserAppArgs :: Def Term Ref -> [Term Ref] -> Eval e ([Term Name], FunType (Term Name))
+prepareUserAppArgs :: Def Ref -> [Term Ref] -> Eval e ([Term Name], FunType (Term Name))
 prepareUserAppArgs Def{..} as = do
   as' <- mapM reduce as
   ft' <- traverse reduce _dFunType
@@ -476,13 +480,8 @@ prepareUserAppArgs Def{..} as = do
   return (as',ft')
 
 -- | Instantiate args in body and evaluate using supplied action.
-evalUserAppBody
-  :: Def Term Ref
-     -> ([Term Name], FunType (Term Name))
-     -> Info
-     -> Gas
-     -> (Term Ref -> Eval e a)
-     -> Eval e a
+evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
+                -> (Term Ref -> Eval e a) -> Eval e a
 evalUserAppBody Def{..} (as',ft') ai g run =
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
       fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
