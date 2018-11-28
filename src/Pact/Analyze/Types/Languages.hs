@@ -920,9 +920,6 @@ pattern PNot a = CoreProp (Logical NotOp [a])
 -- constructions as 'Core'.
 newtype Invariant a = CoreInvariant (Core Invariant a)
 
--- deriving instance Eq   (Concrete a) => Eq   (Core Invariant a)
--- deriving instance Show (Concrete a) => Show (Core Invariant a)
-
 deriving instance Eq   (Concrete a) => Eq   (Invariant a)
 deriving instance Show (Concrete a) => Show (Invariant a)
 
@@ -1046,9 +1043,6 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     ReadKeySet name      -> parenList ["read-keyset", userShow name]
     ReadDecimal name     -> parenList ["read-decimal", userShow name]
     ReadInteger name     -> parenList ["read-integer", userShow name]
-
--- deriving instance Eq   (Concrete a) => Eq   (Core Term a)
--- deriving instance Show (Concrete a) => Show (Core Term a)
 
 deriving instance Eq   (Concrete a) => Eq   (Term a)
 deriving instance Show (Concrete a) => Show (Term a)
