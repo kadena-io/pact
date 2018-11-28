@@ -52,6 +52,8 @@ import           Pact.Analyze.Util
     -> CoreProp <$> (ListTake ty <$> float a <*> float b);                    \
   CoreProp (ListConcat ty l1 l2)                                              \
   -> CoreProp <$> (ListConcat ty <$> float l1 <*> float l2);                  \
+  CoreProp (MakeList ty a b)                                                  \
+  -> CoreProp <$> (MakeList ty <$> float a <*> float b);                      \
   CoreProp (LiteralList ty as)                                                \
     -> CoreProp <$> (LiteralList ty <$> traverse float as)
 

@@ -189,6 +189,9 @@ pattern AST_Sort node list <- App node (NativeFunc SSort) [list]
 pattern AST_Take :: a -> AST a -> AST a -> AST a
 pattern AST_Take node num list <- App node (NativeFunc SListTake) [num, list]
 
+pattern AST_MakeList :: a -> AST a -> AST a -> AST a
+pattern AST_MakeList node num val <- App node (NativeFunc SMakeList) [num, val]
+
 pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
 

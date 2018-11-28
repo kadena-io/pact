@@ -205,16 +205,15 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ListDrop :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjDrop :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
 
-  -- ListFilter ::
-  -- ListFold ::
-  -- ListMap ::
-  -- MkList ?
-  -- MakeList :: t a -> t 'TyInteger -> Core t [a]
-
   ListTake    :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjTake     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
 
   ListConcat  :: SingTy 'SimpleK a -> t ('TyList a) -> t ('TyList a) -> Core t ('TyList a)
+
+  -- ListFilter ::
+  -- ListFold ::
+  -- ListMap ::
+  MakeList :: SingTy 'SimpleK a -> t 'TyInteger -> t a -> Core t ('TyList a)
 
   ObjectMerge :: t 'TyObject -> t 'TyObject -> Core t 'TyObject
 
@@ -413,6 +412,7 @@ instance
   ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
   ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
   ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
+  MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && uniformlyEq'' ty1 b1 b2
   ObjectMerge a1 b1           == ObjectMerge a2 b2           = a1 == a2 && b1 == b2
   LiteralObject m1            == LiteralObject m2            = m1 == m2
   LiteralList ty1 l1          == LiteralList _ty2 l2         = uniformlyEq' ty1 l1 l2
@@ -579,6 +579,13 @@ instance
       . uniformlyShows ty 11 a
       . showString " "
       . uniformlyShows ty 11 b
+    MakeList ty a b ->
+        showString "MakeList "
+      . showsPrec 11 ty
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . uniformlyShows'' ty 11 b
     ObjectMerge a b ->
         showString "ObjectMerge "
       . showsPrec 11 a
@@ -637,6 +644,7 @@ instance
     ListTake ty n lst        -> parenList [SListTake, userShow n, uniformlyUserShow ty lst]
     ObjTake _schema k obj    -> parenList [SObjectTake, userShow k, userShow obj]
     ListConcat ty x y        -> parenList [SConcatenation, uniformlyUserShow ty x, uniformlyUserShow ty y]
+    MakeList ty x y          -> parenList [SMakeList, userShow x, uniformlyUserShow'' ty y]
     ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
     LiteralList ty lst       -> uniformlyUserShow' ty lst

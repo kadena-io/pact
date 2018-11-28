@@ -1057,6 +1057,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     ESimple SInteger num'          <- translateNode num
     pure $ EList ty' $ CoreTerm $ ListTake elemTy num' list'
 
+  AST_MakeList _node num a -> do
+    ESimple SInteger num' <- translateNode num
+    ESimple ty       a'   <- translateNode a
+    pure $ EList (SList ty) $ CoreTerm $ MakeList ty num' a'
+
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
 

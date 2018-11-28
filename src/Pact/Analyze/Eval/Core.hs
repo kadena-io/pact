@@ -14,7 +14,7 @@ import           Data.Monoid                 ((<>))
 import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, false, ite, true, (|||), bAny)
+                                              SymWord, false, ite, true, (|||), bAny, unliteral)
 import qualified Data.SBV.List               as SBVL
 import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
                                               bzipWith)
@@ -249,6 +249,13 @@ evalCore (ListReverse ty l) = withShow ty $ withSymWord ty $ do
 evalCore (ListSort ty l) = withShow ty $ withSymWord ty $ do
   S prov l' <- eval l
   pure $ S prov $ bsort listBound l'
+evalCore (MakeList ty i a) = withShow ty $ withSymWord ty $ do
+  S _ i' <- eval i
+  S _ a' <- eval a
+  case unliteral i' of
+    Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
+    Nothing  -> throwErrorNoLoc $ UnhandledTerm
+      "make-list currently requires a statically determined length"
 
 evalCore (Var vid name) = do
   mVal <- getVar vid

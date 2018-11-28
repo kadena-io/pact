@@ -95,6 +95,7 @@ data Feature
   | FReverse
   | FSort
   | FListTake
+  | FMakeList
   -- String operators
   | FStringLength
   | FConcatenation
@@ -794,7 +795,7 @@ doc FListDrop = Doc
   "drop"
   CList
   InvAndProp
-  "drop n values from a list"
+  "drop the first `n` values from the beginning of a list (or the end if `n` is negative)"
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(drop n xs)"
@@ -811,7 +812,7 @@ doc FReverse = Doc
   "reverse"
   CList
   InvAndProp
-  ""
+  "reverse a list of values"
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(reverse xs)"
@@ -827,10 +828,10 @@ doc FSort = Doc
   "sort"
   CList
   InvAndProp
-  "(sort xs)"
+  "sort a list of values"
   [ let a = TyVar $ TypeVar "a"
     in Usage
-      ""
+      "(sort xs)"
       Map.empty
       $ Fun
         Nothing
@@ -843,7 +844,7 @@ doc FListTake = Doc
   "take"
   CList
   InvAndProp
-  ""
+  "take the first `n` values from `xs` (taken from the end if `n` is negative)"
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(take n xs)"
@@ -852,6 +853,23 @@ doc FListTake = Doc
         Nothing
         [ ("n", TyCon int)
         , ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FMakeList = Doc
+  "make-list"
+  CList
+  InvAndProp
+  "create a new list with `n` copies of `a`"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(make-list n a)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("n", TyCon int)
+        , ("a", a)
         ]
       (TyList' a)
   ]
@@ -1350,6 +1368,7 @@ PAT(SListDrop, FListDrop)
 PAT(SReverse, FReverse)
 PAT(SSort, FSort)
 PAT(SListTake, FListTake)
+PAT(SMakeList, FMakeList)
 PAT(SObjectMerge, FObjectMerge)
 PAT(SObjectDrop, FObjectDrop)
 PAT(SObjectTake, FObjectTake)

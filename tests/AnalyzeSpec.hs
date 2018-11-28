@@ -2523,9 +2523,9 @@ spec = describe "analyze" $ do
           (defun test:string (acct:string)
             @model
               [ (property
-                (=
-                  (+ (at 'balance (read accounts acct 'before)) 100)
-                     (at 'balance (read accounts acct 'after))))
+                  (=
+                    (+ (at 'balance (read accounts acct 'before)) 100)
+                       (at 'balance (read accounts acct 'after))))
               ]
             (write accounts acct { 'balance: 0 })
             (with-read accounts acct { 'balance := bal }
@@ -2576,6 +2576,24 @@ spec = describe "analyze" $ do
           |]
     -- we expect this to give an error
     expectFail code0 $ Satisfiable $ Inj Success
+
+  describe "make-list" $ do
+    let code = [text|
+          (defun test:[integer] (a:integer)
+            @model
+              [ (property (= (length result) 5))
+              , (property
+                  (forall (i:integer)
+                    (when
+                      (and
+                        (>= i 0)
+                        (<  i 5))
+                      (= (at i result) a))))
+              ]
+            (make-list 5 a))
+          |]
+    -- we expect this to give an error
+    expectVerified code
 
   describe "list drop" $ do
     let code1 model = [text|
