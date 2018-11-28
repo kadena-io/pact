@@ -99,7 +99,7 @@ replDefs = ("Repl",
      ,defZRNative "env-pactid" envPactId
       (funType tTyString [] <>
        funType tTyString [("id",tTyString)])
-       "Query, or set with ID, pact state pact id."
+       "Query environment pact id, or set to ID."
      ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
       ("Inspect state from previous pact execution. Returns object with fields " <>
       "'yield': yield result or 'false' if none; 'step': executed step; " <>

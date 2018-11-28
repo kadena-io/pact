@@ -1395,7 +1395,7 @@ pact> (env-keys ["my-key" "admin-key"])
 *id*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Query, or set with ID, pact state pact id.
+Query environment pact id, or set to ID.
 
 
 ### env-step {#env-step}
