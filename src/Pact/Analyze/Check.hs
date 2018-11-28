@@ -29,8 +29,8 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (at, ifoldrM, ifor, itraversed, ix,
                                             traversed, view, (%~), (&), (<&>),
-                                            (?~), (^.), (^?), (^@..), _1, _2,
-                                            _Left)
+                                            (?~), (^.), (^?), (^@..), (^?!),
+                                            _1, _2, _Left)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -59,7 +59,7 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker     (typecheckTopLevel)
 import           Pact.Types.Lang      (pattern ColonExp, pattern CommaExp,
                                        Info, mModel, renderInfo, renderParsed,
-                                       tMeta, _tDefName)
+                                       tInfo, tMeta, _tDefName)
 import           Pact.Types.Runtime   (Exp, ModuleData(..), ModuleName,
                                        Ref (Ref), mdRefMap, mdModule,
                                        Term (TConst, TDef, TSchema, TTable),
@@ -413,11 +413,18 @@ moduleTables modules ModuleData{..} = do
 
     invariants <- case schemas ^? ix schemaName.tMeta.mModel of
       -- no model = no invariants
-      Nothing -> pure []
-      Just model -> liftEither $ do
-        exps <- collectExps "invariant" model
-        runExpParserOver exps $
-          flip runReaderT (varIdArgs _utFields) . expToInvariant SBool
+      Nothing    -> pure []
+      Just model -> case normalizeListLit model of
+        Nothing -> throwError
+          -- reconstruct an `Exp Info` for this list
+          ( Pact.EList $ Pact.ListExp model Pact.Brackets $
+              schemas ^?! ix schemaName.tInfo
+          , "malformed list (inconsistent use of comma separators?)"
+          )
+        Just model' -> liftEither $ do
+          exps <- collectExps "invariant" model'
+          runExpParserOver exps $
+            flip runReaderT (varIdArgs _utFields) . expToInvariant SBool
 
     pure $ Table tabName schema invariants
 
@@ -590,13 +597,19 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
 
     checks <- case defn ^? tMeta . mModel of
       Nothing -> pure []
-      Just model -> withExcept ModuleParseFailure $ liftEither $ do
-        exps <- collectExps "property" model
-        let funName = _tDefName defn
-            applicableModuleChecks = map _moduleProperty $
-              filter (applicableCheck funName) modCheckExps
-        runExpParserOver (applicableModuleChecks <> exps) $
-          expToCheck tableEnv vidStart nameVids vidTys consts propDefs
+      Just model -> case normalizeListLit model of
+        Nothing -> throwError $ ModuleParseFailure
+          -- reconstruct an `Exp Info` for this list
+          ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
+          , "malformed list (inconsistent use of comma separators?)"
+          )
+        Just model' -> withExcept ModuleParseFailure $ liftEither $ do
+          exps <- collectExps "property" model'
+          let funName = _tDefName defn
+              applicableModuleChecks = map _moduleProperty $
+                filter (applicableCheck funName) modCheckExps
+          runExpParserOver (applicableModuleChecks <> exps) $
+            expToCheck tableEnv vidStart nameVids vidTys consts propDefs
 
     pure (ref, Right checks)
 
