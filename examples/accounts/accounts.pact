@@ -92,27 +92,25 @@
   (defpact payment (payer payer-entity payee payee-entity amount date)
     "Debit PAYER at PAYER-ENTITY then credit PAYEE at PAYEE-ENTITY for AMOUNT on DATE"
     (step-with-rollback payer-entity
-      (priv-debit payer amount date
-            { "payee": payee
-            , "payee-entity": payee-entity
-            , PACT_REF: (pact-id)
-            })
-      (priv-credit payer amount date
-           { PACT_REF: (pact-id), "note": "rollback" }))
+      (with-capability (TRANSFER)
+        (debit payer amount date
+          { "payee": payee
+          , "payee-entity": payee-entity
+          , PACT_REF: (pact-id)
+          }))
+      (with-capability (TRANSFER)
+        (credit payer amount date
+          { PACT_REF: (pact-id), "note": "rollback" })))
 
     (step payee-entity
-      (priv-credit payee amount date
-            { "payer": payer
-            , "payer-entity": payer-entity
-            , PACT_REF: (pact-id)
-            }
-      )))
+      (with-capability (TRANSFER)
+        (credit payee amount date
+          { "payer": payer
+          , "payer-entity": payer-entity
+          , PACT_REF: (pact-id)
+          })))
+  )
 
-  (defun priv-debit (id amt date note)
-    (with-capability (TRANSFER) (debit id amt date note)))
-
-  (defun priv-credit (id amt date note)
-    (with-capability (TRANSFER) (credit id amt date note)))
 
   (defun debit (acct amount date data)
     "Debit AMOUNT from ACCT balance recording DATE and DATA"
