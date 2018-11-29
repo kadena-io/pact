@@ -1065,7 +1065,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
 
-  AST_NFun _node "identity" [a] -> do
+  AST_NFun _node SIdentity [a] -> do
     ea' <- translateNode a
     pure $ case ea' of
       ESimple ty     a' -> ESimple ty     $ CoreTerm $ Identity ty      a'

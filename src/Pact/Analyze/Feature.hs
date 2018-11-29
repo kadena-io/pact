@@ -40,6 +40,7 @@ data FeatureClass
   | CTransactional
   | CDatabase
   | CAuthorization
+  | COther
   deriving (Eq, Ord, Show)
 
 classTitle :: FeatureClass -> Text
@@ -53,6 +54,7 @@ classTitle CTransactional  = "Transactional"
 classTitle CDatabase       = "Database"
 classTitle CAuthorization  = "Authorization"
 classTitle CList           = "List"
+classTitle COther          = "Other"
 
 data Feature
   -- Numerical operators
@@ -126,6 +128,8 @@ data Feature
   -- Authorization operators
   | FAuthorizedBy
   | FRowEnforced
+  -- Other
+  | FIdentity
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -1303,6 +1307,24 @@ doc FRowEnforced = Doc
         (TyCon bool)
   ]
 
+-- Other features
+
+doc FIdentity = Doc
+  "identity"
+  CAuthorization
+  PropOnly
+  "identity returns its argument unchanged"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(identity a)"
+      (Map.singleton "a" (OneOf [tbl, str]))
+      $ Fun
+        Nothing
+        [ ("a", a)
+        ]
+        a
+  ]
+
 allFeatures :: Set Feature
 allFeatures = Set.fromList $ enumFrom minBound
 
@@ -1396,6 +1418,7 @@ PAT(SRowExists, FRowExists)
 PAT(SPropRead, FPropRead)
 PAT(SAuthorizedBy, FAuthorizedBy)
 PAT(SRowEnforced, FRowEnforced)
+PAT(SIdentity, FIdentity)
 
 -- 'Text'/op prisms
 
