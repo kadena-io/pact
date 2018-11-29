@@ -27,7 +27,7 @@ import           Pact.Native.Time
 import           Pact.Typechecker           (typecheckTopLevel)
 import           Pact.Types.Exp             (Literal (..))
 import           Pact.Types.Native          (NativeDef)
-import           Pact.Types.Term            (Meta (Meta),
+import           Pact.Types.Term            (Meta (Meta), App(..),
                                              Term (TApp, TConst, TLiteral))
 import qualified Pact.Types.Term            as Pact
 import qualified Pact.Types.Type            as Pact
@@ -117,7 +117,7 @@ toPactTm = \case
   ESimple TKeySet  (CoreTerm (Lit (KeySet x))) -> do
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
-      Just (ks, _) -> pure $ Pact.TKeySet ks dummyInfo
+      Just (ks, _) -> pure $ Pact.TGuard (Pact.GKeySet ks) dummyInfo
       Nothing      -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
@@ -171,7 +171,7 @@ toPactTm = \case
       -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
     mkApp (_, defTm) args = do
       args' <- traverse toPactTm args
-      pure $ TApp (liftTerm defTm) args' dummyInfo
+      pure $ TApp (App (liftTerm defTm) args' dummyInfo) dummyInfo
 
     -- Like mkApp but for functions that take two arguments, the second of
     -- which is a list. This pattern is used in `enforce-one` and `format`
@@ -183,7 +183,7 @@ toPactTm = \case
     mkApp' (_, defTm) arg argList = do
       arg'     <- toPactTm arg
       argList' <- traverse toPactTm argList
-      pure $ TApp (liftTerm defTm)
+      pure $ (`TApp` dummyInfo) $ App (liftTerm defTm)
         [arg', Pact.TList argList' (Pact.TyList Pact.TyAny) dummyInfo]
         dummyInfo
 
@@ -260,7 +260,7 @@ reverseTranslateType = \case
   TInt     -> Pact.TyPrim Pact.TyInteger
   TStr     -> Pact.TyPrim Pact.TyString
   TTime    -> Pact.TyPrim Pact.TyTime
-  TKeySet  -> Pact.TyPrim Pact.TyKeySet
+  TKeySet  -> Pact.TyPrim (Pact.TyGuard $ Just Pact.GTyKeySet)
   TAny     -> Pact.TyAny
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)

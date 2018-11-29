@@ -27,7 +27,7 @@ testJSONPersist = do
   rt (PLiteral (LBool False))
   rt (PLiteral (LString "hello"))
   rt (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
-  rt (PKeySet (KeySet [PublicKey "askjh",PublicKey "dfgh"] (Name "predfun" def)))
+  rt (PGuard (GKeySet (KeySet [PublicKey "askjh",PublicKey "dfgh"] (Name "predfun" def))))
   rt (PValue (fromJust (decode "{ \"stuff\": [ 1.0, false ] }" :: Maybe Value)))
 
 testJSONColumns :: Spec

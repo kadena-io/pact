@@ -29,14 +29,19 @@ module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
-    ,resolveFreeVars,resolveArg
+    ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
     ,checkUserType
     ,deref
     ,installModule
-    ,runPure,runPureSys,Purity
-    ,liftTerm,apply,apply'
+    ,runPure,runReadOnly,Purity
+    ,liftTerm,apply
     ,preGas
+    ,acquireCapability,acquireModuleAdmin
+    ,capabilityGranted
+    ,revokeCapability,revokeAllCapabilities
+    ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
+    ,enscopeApply
     ) where
 
 import Control.Lens
@@ -66,15 +71,16 @@ import Pact.Gas
 
 
 evalBeginTx :: Info -> Eval e ()
-evalBeginTx i = beginTx i =<< view eeTxId
+evalBeginTx i = revokeAllCapabilities >> view eeTxId >>= beginTx i
 {-# INLINE evalBeginTx #-}
 
 evalRollbackTx :: Info -> Eval e ()
-evalRollbackTx = void . rollbackTx
+evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
 {-# INLINE evalRollbackTx #-}
 
 evalCommitTx :: Info -> Eval e [TxLog Value]
 evalCommitTx i = do
+  revokeAllCapabilities
   tid <- view eeTxId
   case tid of
     Nothing -> evalRollbackTx i >> return []
@@ -104,28 +110,27 @@ enforceKeySet i ksn KeySet{..} = do
     Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
     Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
     Nothing -> do
-      let app = TApp (TVar _ksPredFun def)
-                [toTerm count,toTerm matched] i
-      app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
-      r <- reduce app'
+      r <- enscopeApply $
+        App (TVar _ksPredFun def) [toTerm count,toTerm matched] i
       case r of
         (TLiteral (LBool b) _) | b -> return ()
                                | otherwise -> failTx i $ "Keyset failure: " ++ maybe "[dynamic]" show ksn
         _ -> evalError i $ "Invalid response from keyset predicate: " ++ show r
 {-# INLINE enforceKeySet #-}
 
+
 -- Hoist Name back to ref
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
 
--- | Re-application of 'f as' with additional args.
-apply :: Term Ref -> [Term Ref] -> Info -> [Term Name] ->  Eval e (Term Name)
-apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
+enscopeApply :: App (Term Name) -> Eval e (Term Name)
+enscopeApply a = do
+  a' <- enscope $ TApp a (_appInfo a)
+  reduce a'
 
--- | Unsafe version of 'apply' where first arg is assumed to be a 'TApp',
--- to which additional args are applied.
-apply' :: Term Ref -> [Term Name] -> Eval e (Term Name)
-apply' app as' = apply (_tAppFun app) (_tAppArgs app) (_tInfo app) as'
+-- | Application with additional args.
+apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
+apply app as = reduceApp $ over appArgs (++ map liftTerm as) app
 
 -- | Precompute gas on unreduced args returning reduced values.
 preGas :: FunApp -> [Term Ref] -> Eval e (Gas,[Term Name])
@@ -137,29 +142,57 @@ topLevelCall
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
+capabilityGranted :: Capability -> Eval e Bool
+capabilityGranted cap = (cap `elem`) <$> use evalCapabilities
+
+-- | Test if capability is already installed, if not
+-- evaluate `test` which is expected to fail by some
+-- guard throwing a failure. Upon successful return of
+-- `test` install capability.
+acquireCapability :: Capability -> Eval e () -> Eval e CapAcquireResult
+acquireCapability cap test = do
+  granted <- capabilityGranted cap
+  if granted then return AlreadyAcquired else do
+    test
+    evalCapabilities %= (cap:)
+    return NewlyAcquired
+
+acquireModuleAdmin :: Info -> ModuleName -> KeySetName -> Eval e CapAcquireResult
+acquireModuleAdmin i modName modKeySetName =
+  acquireCapability moduleAdminCapability $ enforceKeySetName i modKeySetName
+  where moduleAdminCapability = ModuleAdminCapability modName
+
+
+revokeAllCapabilities :: Eval e ()
+revokeAllCapabilities = evalCapabilities .= []
+
+revokeCapability :: Capability -> Eval e ()
+revokeCapability c = evalCapabilities %= filter (/= c)
+
+
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
-eval (TModule m@Module{..} bod i) =
-  topLevelCall i "module" (GModule m) $ \g0 -> do
+eval (TModule m@Module{} bod i) =
+  topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- enforce old module keysets
-    oldM <- readRow i Modules _mName
+    oldM <- readRow i Modules (_mName m)
     case oldM of
       Nothing -> return ()
       Just om ->
         case om of
-          Module{..} -> enforceKeySetName i _mKeySet
+          Module{} -> void $ acquireModuleAdmin i (_mName om) (_mKeySet om)
           Interface{..} -> evalError i $
-            "Name overlap: module " ++ show _mName ++ " overlaps with interface  " ++ show _interfaceName
+            "Name overlap: module " ++ show (_mName om) ++ " overlaps with interface  " ++ show _interfaceName
     -- enforce new module keyset
-    enforceKeySetName i _mKeySet
+    enforceKeySetName i (_mKeySet m)
     -- build/install module from defs
     (g,_defs) <- loadModule m bod i g0
-    writeRow i Write Modules _mName m
-    return (g, msg $ pack $ "Loaded module " ++ show _mName ++ ", hash " ++ show _mHash)
+    writeRow i Write Modules (_mName m) m
+    return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
 eval (TModule m@Interface{..} bod i) =
-  topLevelCall i "interface" (GInterface m) $ \gas -> do
+  topLevelCall i "interface" (GInterfaceDecl m) $ \gas -> do
     oldI <- readRow i Modules _interfaceName
     case oldI of
       Nothing -> return ()
@@ -201,7 +234,7 @@ loadModule m@Module{..} bod1 mi g0 = do
       (TList bd _ _bi) -> do
         let doDef (g,rs) t = do
               dnm <- case t of
-                TDef {..} -> return $ Just _tDefName
+                TDef {..} -> return $ Just $ asString (_dDefName _tDef)
                 TConst {..} -> return $ Just $ _aName _tConstArg
                 TSchema {..} -> return $ Just $ asString _tSchemaName
                 TTable {..} -> return $ Just $ asString _tTableName
@@ -226,7 +259,7 @@ loadModule i@Interface{..} body info gas0 = do
     (TList bd _ _bi) -> do
       let doDef (g,rs) t = do
             dnm <- case t of
-              TDef {..} -> return $ Just _tDefName
+              TDef {..} -> return $ Just $ asString (_dDefName _tDef)
               TConst {..} -> return $ Just $ _aName _tConstArg
               TSchema {..} -> return $ Just $ asString _tSchemaName
               TUse (Use {..}) _ -> return Nothing
@@ -322,8 +355,8 @@ solveConstraint info refName (Ref t) evalMap = do
       evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
     Just (Ref s) ->
       case (t, s) of
-        (TDef _n _mn dt (FunType args rty) _ m _,
-          TDef _n' _mn' dt' (FunType args' rty') b m' i) -> do
+        (TDef (Def _n _mn dt (FunType args rty) _ m _) _,
+          TDef (Def _n' _mn' dt' (FunType args' rty') b m' i) _) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
@@ -331,7 +364,8 @@ solveConstraint info refName (Ref t) evalMap = do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
           -- the model concatenation step: we must reinsert the ref back into the map with new models
-          pure $ HM.insert refName (Ref $ TDef _n' _mn' dt' (FunType args' rty') b (m <> m') i) em
+          -- TODO yuck, should be lensing here
+          pure $ HM.insert refName (Ref $ TDef (Def _n' _mn' dt' (FunType args' rty') b (m <> m') i) i) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
@@ -375,10 +409,10 @@ unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static te
 
 -- | Main function for reduction/evaluation.
 reduce :: Term Ref ->  Eval e (Term Name)
-reduce (TApp f as ai) = reduceApp f as ai
+reduce (TApp a _) = reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
-reduce t@TKeySet {} = unsafeReduce t
+reduce t@TGuard {} = unsafeReduce t
 reduce t@TValue {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
@@ -419,22 +453,41 @@ resolveArg ai as i = fromMaybe (appError ai $ pack $ "Missing argument value at 
 appCall :: Show t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map (pack.abbrev) as)))
 
-reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
-reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
-reduceApp TDef {..} as ai = do
-  g <- computeGas (Left (_tInfo, asString _tDefName)) GUser
-  as' <- mapM reduce as
-  ft' <- traverse reduce _tFunType
-  typecheck (zip (_ftArgs ft') as')
-  let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
-      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') (_mDocs _tMeta)
-  appCall fa ai as $ fmap (g,) $ do
-    case _tDefType of
+reduceApp :: App (Term Ref) -> Eval e (Term Name)
+reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
+reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
+reduceApp (App (TDef d@Def{..} _) as ai) = do
+  g <- computeUserAppGas d ai
+  af <- prepareUserAppArgs d as
+  evalUserAppBody d af ai g $ \bod' ->
+    case _dDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
-reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
-reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
+      Defcap -> evalError ai "Cannot directly evaluate defcap"
+reduceApp (App (TLitString errMsg) _ i) = evalError i $ unpack errMsg
+reduceApp (App r _ ai) = evalError ai $ "Expected def: " ++ show r
+
+-- | precompute "UserApp" cost
+computeUserAppGas :: Def Ref -> Info -> Eval e Gas
+computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) GUserApp
+
+-- | prepare reduced args and funtype, and typecheck
+prepareUserAppArgs :: Def Ref -> [Term Ref] -> Eval e ([Term Name], FunType (Term Name))
+prepareUserAppArgs Def{..} as = do
+  as' <- mapM reduce as
+  ft' <- traverse reduce _dFunType
+  typecheck (zip (_ftArgs ft') as')
+  return (as',ft')
+
+-- | Instantiate args in body and evaluate using supplied action.
+evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
+                -> (Term Ref -> Eval e a) -> Eval e a
+evalUserAppBody Def{..} (as',ft') ai g run =
+  let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
+      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+  in appCall fa ai as' $ fmap (g,) $ run bod'
+
+
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
@@ -489,7 +542,7 @@ applyPact t = evalError (_tInfo t) "applyPact: expected list of steps"
 
 -- | Create special error form handled in 'reduceApp'
 appError :: Info -> Text -> Term n
-appError i errMsg = TApp (toTerm errMsg) [] i
+appError i errMsg = TApp (App (toTerm errMsg) [] i) i
 
 resolveFreeVars ::  Info -> Scope d Term Name ->  Eval e (Scope d Term Ref)
 resolveFreeVars i b = traverse r b where
@@ -588,6 +641,10 @@ typecheckTerm i spec t = do
     -- check object
     (TySchema TyObject ospec,TySchema TyObject oty,TObject {..}) ->
       paramCheck ospec oty (checkUserType True i _tObject)
+    (TyPrim (TyGuard a),TyPrim (TyGuard b),_) -> case (a,b) of
+      (Nothing,Just _) -> tcOK
+      (Just _,Nothing) -> tcOK
+      (c,d) -> if c == d then tcOK else tcFail ty
     _ -> tcFail ty
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
@@ -613,11 +670,11 @@ runPure action = ask >>= \env -> case _eePurity env of
   PNoDb -> unsafeCoerce action -- yuck. would love safer coercion here
   _ -> mkNoDbEnv env >>= runPure' action
 
-runPureSys :: Info -> Eval (EnvSysRead e) a -> Eval e a
-runPureSys i action = ask >>= \env -> case _eePurity env of
+runReadOnly :: Info -> Eval (EnvReadOnly e) a -> Eval e a
+runReadOnly i action = ask >>= \env -> case _eePurity env of
   PNoDb -> evalError i "internal error: attempting sysread in pure context"
-  PSysRead -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkSysReadEnv env >>= runPure' action
+  PReadOnly -> unsafeCoerce action -- yuck. would love safer coercion here
+  _ -> mkReadOnlyEnv env >>= runPure' action
 
 runPure' :: Eval f b -> EvalEnv f -> Eval e b
 runPure' action pureEnv = do

@@ -43,10 +43,10 @@ data GasArgs
   | GUnreduced [Term Ref]
   | GReduced [Term Name]
   | GUse ModuleName (Maybe Hash)
-  | GModule Module
-  | GInterface Module
+  | GModuleDecl Module
+  | GInterfaceDecl Module
   | GModuleMember Module
-  | GUser
+  | GUserApp
 
 
 newtype GasLimit = GasLimit Word64

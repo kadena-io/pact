@@ -61,13 +61,13 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker     (typecheckTopLevel)
 import           Pact.Types.Lang      (pattern ColonExp, pattern CommaExp,
                                        Info, mModel, renderInfo, renderParsed,
-                                       tMeta, _tDefName)
+                                       tMeta, _tDef, tDef, _dDefName, dMeta)
 import           Pact.Types.Runtime   (Exp, ModuleData(..), ModuleName,
                                        Ref (Ref), mdRefMap, mdModule,
                                        Term (TConst, TDef, TSchema, TTable),
                                        asString, getInfo, tShow)
 import qualified Pact.Types.Runtime   as Pact
-import           Pact.Types.Term      (Module(..))
+import           Pact.Types.Term      (Module(..),DefName(..))
 import           Pact.Types.Typecheck (AST,
                                        Fun (FDefun, _fArgs, _fBody, _fInfo),
                                        Named, Node, TcId (_tiInfo),
@@ -435,8 +435,8 @@ data ModuleProperty = ModuleProperty
   }
 
 -- Does this (module-scoped) property apply to this function?
-applicableCheck :: Text -> ModuleProperty -> Bool
-applicableCheck funName (ModuleProperty _ propScope) = case propScope of
+applicableCheck :: DefName -> ModuleProperty -> Bool
+applicableCheck (DefName funName) (ModuleProperty _ propScope) = case propScope of
   Everywhere      -> True
   Excluding names -> funName `Set.notMember` names
   Including names -> funName `Set.member`    names
@@ -589,12 +589,16 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
                   \(Pact.Arg argName ty _) ->
                     (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
             in (TableName (T.unpack _tableName), colMap)
-
-    checks <- case defn ^? tMeta . mModel of
+    -- TODO: this was very hard code to debug as the unsafe lenses just result
+    -- in properties not showing up, instead of a compile error when I changed 'TDef'
+    -- to a safe constructor. Please consider
+    -- moving this code to use pattern matches to ensure the proper constructor
+    -- is found; and/or change 'funTypes' to hold 'Def' objects
+    checks <- case defn ^? tDef . dMeta . mModel of
       Nothing -> pure []
       Just model -> withExcept ModuleParseFailure $ liftEither $ do
         exps <- collectExps "property" model
-        let funName = _tDefName defn
+        let funName = _dDefName (_tDef defn)
             applicableModuleChecks = map _moduleProperty $
               filter (applicableCheck funName) modCheckExps
         runExpParserOver (applicableModuleChecks <> exps) $

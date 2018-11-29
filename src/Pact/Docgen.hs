@@ -74,7 +74,7 @@ renderTerm h TNative {..} = do
   case parseString nativeDocParser mempty (unpack _tNativeDocs) of
     Success (t,es) -> do
          hPutStrLn h t
-         if null es then noexs else renderExamples h es
+         if null es then noexs else renderExamples h _tNativeName es
     _ -> hPutStrLn h (unpack _tNativeDocs) >> noexs
   when _tNativeTopLevelOnly $ do
     hPutStrLn h ""
@@ -82,8 +82,8 @@ renderTerm h TNative {..} = do
   hPutStrLn h ""
 renderTerm _ _ = return ()
 
-renderExamples :: Handle -> [String] -> IO ()
-renderExamples h es = do
+renderExamples :: Handle -> NativeDefName -> [String] -> IO ()
+renderExamples h f es = do
   hPutStrLn h "```lisp"
   forM_ es $ \e -> do
     let (et,e') = case head e of
@@ -98,7 +98,8 @@ renderExamples h es = do
         case (r,et) of
           (Right r',_)       -> hPrint h r'
           (Left err,ExecErr) -> hPutStrLn h err
-          (Left err,_)       -> throwM (userError err)
+          (Left err,_)       ->
+            throwM (userError $ "Error rendering example for fucntion " ++ show f ++ ": " ++ e ++ ": " ++ err)
   hPutStrLn h "```"
 
 renderProperties :: Handle -> IO ()

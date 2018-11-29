@@ -26,7 +26,7 @@ module Pact.Types.Typecheck
     OverloadSpecial (..),
     Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
     Failure (..),prettyFails,
-    TcState (..),tcDebug,tcSupply,tcOverloads,tcFailures,tcAstToVar,tcVarToTypes,
+    TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,tcVarToTypes,
     TC (..), runTC,
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,
@@ -50,7 +50,7 @@ import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$$>),(<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-import Pact.Types.Lang
+import Pact.Types.Lang hiding (App)
 import Pact.Types.Native
 
 
@@ -118,6 +118,7 @@ data TcState = TcState {
   _tcSupply :: Int,
   -- | Maps native app AST to an overloaded function type, and stores result of solver.
   _tcOverloads :: M.Map TcId (Overload (AST Node)),
+  _tcOverloadOrder :: [TcId],
   _tcFailures :: S.Set Failure,
   -- | Maps ASTs to a type var.
   _tcAstToVar :: M.Map TcId (TypeVar UserType),
@@ -126,7 +127,7 @@ data TcState = TcState {
   } deriving (Eq,Show)
 
 mkTcState :: Int -> Bool -> TcState
-mkTcState sup dbg = TcState dbg sup def def def def
+mkTcState sup dbg = TcState dbg sup def def def def def
 
 instance Pretty TcState where
   pretty TcState {..} =
@@ -154,12 +155,12 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
 -- | Storage for literal values.
 data PrimValue =
   PrimLit Literal |
-  PrimKeySet KeySet |
+  PrimGuard Guard |
   PrimValue Value
   deriving (Eq,Show)
 instance Pretty PrimValue where
   pretty (PrimLit l) = text (show l)
-  pretty (PrimKeySet k) = text (show k)
+  pretty (PrimGuard k) = text (show k)
   pretty (PrimValue v) = text (show v)
 
 

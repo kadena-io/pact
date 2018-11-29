@@ -96,6 +96,10 @@ replDefs = ("Repl",
       ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
        "Clears any previous pact execution state. `$(env-step 1)` `$(env-step 0 true)`")
+     ,defZRNative "env-pactid" envPactId
+      (funType tTyString [] <>
+       funType tTyString [("id",tTyString)])
+       "Query environment pact id, or set to ID."
      ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
       ("Inspect state from previous pact execution. Returns object with fields " <>
       "'yield': yield result or 'false' if none; 'step': executed step; " <>
@@ -186,6 +190,10 @@ setop v = setLibState $ set rlsOp v
 setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
+{-
+overenv :: Setter' (EvalEnv LibState) a -> (a -> a) -> Eval LibState ()
+overenv l f = setop $ UpdateEnv $ Endo (over l f)
+-}
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
@@ -222,6 +230,16 @@ setstep i as = case as of
     setstep' s = do
       setenv eePactStep s
       evalPactExec .= Nothing
+
+envPactId :: RNativeFun LibState
+envPactId i as = view eePactStep >>= \psm -> case psm of
+  Nothing -> evalError' i "no pact state set currently"
+  Just ps@PactStep{..} -> case as of
+    [] -> return $ toTerm _psPactId
+    [TLitString pid] -> do
+      setenv eePactStep $ Just $ set psPactId (PactId pid) ps
+      return $ tStr $ "Setting pact id to " <> tShow pid
+    _ -> argsError i as
 
 setentity :: RNativeFun LibState
 setentity i as = case as of

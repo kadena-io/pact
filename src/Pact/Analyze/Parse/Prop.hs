@@ -53,7 +53,7 @@ import           Data.Type.Equality           ((:~:) (Refl))
 import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
-                                               SchemaVar, TKeySet, TableName,
+                                               SchemaVar, TableName,
                                                Type)
 import           Pact.Types.Util              (tShow)
 

@@ -17,7 +17,7 @@ import Pact.Types.Info (Info(..))
 import Pact.Types.Runtime (RefStore(..), ModuleData(..),
                            eeRefStore, rsModules)
 import Pact.Types.Term (Module(..), ModuleName(..),
-                        Meta(..), Term(..), Ref(..))
+                        Meta(..), Term(..), Ref(..), Def(..))
 
 
 spec :: Spec
@@ -62,7 +62,7 @@ aggregateFunctionModels :: ModuleData -> [Exp Info]
 aggregateFunctionModels ModuleData{..} =
   foldMap (extractExp . snd) $ HM.toList _mdRefMap
   where
-    extractExp (Ref (TDef _ _ _ _ _ Meta{_mModel=mModel} _)) = mModel
+    extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=mModel} _) _)) = mModel
     extractExp _ = []
 
 -- Because models will necessarily have conflicting Info values
