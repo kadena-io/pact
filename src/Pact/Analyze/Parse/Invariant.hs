@@ -74,7 +74,7 @@ expToInvariant ty exp = case (ty, exp) of
       <$> expToInvariant STime a    <*> expToInvariant STime b
     , CoreInvariant ... BoolComparison op
       <$> expToInvariant SBool a    <*> expToInvariant SBool b
-    , CoreInvariant ... StringComparison op
+    , CoreInvariant ... StrComparison op
       <$> expToInvariant SStr a     <*> expToInvariant SStr b
     , case toOp eqNeqP op' of
       Just eqNeq -> CoreInvariant ... KeySetEqNeq eqNeq

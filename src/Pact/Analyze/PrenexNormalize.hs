@@ -32,6 +32,7 @@ import           Pact.Analyze.Util
   CoreProp Var{}      -> ([], p);                                             \
   CoreProp Lit{}      -> ([], p);                                             \
   CoreProp Sym{}      -> ([], p);                                             \
+  CoreProp (Identity ty a) -> CoreProp . Identity ty <$> float a;             \
   CoreProp (ListAt ty a b) -> CoreProp <$>                                    \
     (ListAt ty <$> float a <*> float b) ;                                     \
   CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;
@@ -41,6 +42,7 @@ import           Pact.Analyze.Util
   CoreProp Lit{}                 -> ([], p);                                  \
   CoreProp Sym{}                 -> ([], p);                                  \
   CoreProp Var{}                 -> ([], p);                                  \
+  CoreProp (Identity ty a)       -> CoreProp . Identity ty <$> float a;       \
   CoreProp ListAt{}              -> vacuousMatch "nested lists not allowed";  \
   CoreProp Numerical{}           -> vacuousMatch "numerical can't be a list"; \
   CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;  \
@@ -110,7 +112,7 @@ instance Float 'TyObject where
     STANDARD_INSTANCES
     CoreProp Numerical{}     -> vacuousMatch "numerical can't be Object"
     CoreProp LiteralObject{} -> ([], p)
-    CoreProp ObjectMerge{}   -> ([], p)
+    CoreProp ObjMerge{}      -> ([], p)
     CoreProp (ObjDrop schema keys obj) -> CoreProp <$>
       (ObjDrop schema <$> float keys <*> float obj)
     CoreProp (ObjTake schema keys obj) -> CoreProp <$>
@@ -220,8 +222,8 @@ floatBoolQuantifiers p = case p of
     -> CoreProp ... DecimalComparison op <$> float a <*> float b
   CoreProp (TimeComparison op a b)
     -> CoreProp ... TimeComparison op <$> float a <*> float b
-  CoreProp (StringComparison op a b)
-    -> CoreProp ... StringComparison op <$> float a <*> float b
+  CoreProp (StrComparison op a b)
+    -> CoreProp ... StrComparison op <$> float a <*> float b
   CoreProp (BoolComparison op a b)
     -> CoreProp ... BoolComparison op <$> float a <*> float b
   CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
@@ -230,8 +232,8 @@ floatBoolQuantifiers p = case p of
     CoreProp <$> (ListEqNeq ty op <$> float a <*> float b)
   CoreProp (ObjContains schema a b) -> CoreProp <$>
     (ObjContains schema <$> float a <*> float b)
-  CoreProp (StringContains needle haystack) -> CoreProp <$>
-    (StringContains <$> float needle <*> float haystack)
+  CoreProp (StrContains needle haystack) -> CoreProp <$>
+    (StrContains <$> float needle <*> float haystack)
   CoreProp (ListContains ty needle haystack) -> withFloat ty $
     CoreProp <$> (ListContains ty <$> float needle <*> float haystack)
 

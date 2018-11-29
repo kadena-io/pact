@@ -149,15 +149,18 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- variable, or column
   Var :: VarId -> Text -> Core t a
 
+  Identity     :: SingTy k a   -> t a      -> Core t a
+
   -- string ops
   -- | The concatenation of two 'String' expressions
-  StrConcat    :: t 'TyStr  -> t 'TyStr  -> Core t 'TyStr
+  StrConcat    :: t 'TyStr     -> t 'TyStr -> Core t 'TyStr
   -- | The length of a 'String' expression
-  StrLength    :: t 'TyStr  ->              Core t 'TyInteger
+  StrLength    :: t 'TyStr     ->             Core t 'TyInteger
   -- | Conversion of a base-10 string to an integer
-  StrToInt     :: t 'TyStr  ->              Core t 'TyInteger
-  -- | Conversion of a base-1-16 string to an integer
-  StrToIntBase :: t 'TyInteger -> t 'TyStr  -> Core t 'TyInteger
+  StrToInt     :: t 'TyStr     ->             Core t 'TyInteger
+  -- | Conversion of a base-2-16 string to an integer
+  StrToIntBase :: t 'TyInteger -> t 'TyStr -> Core t 'TyInteger
+  StrContains  :: t 'TyStr     -> t 'TyStr -> Core t 'TyBool
 
   -- numeric ops
   Numerical    :: Numerical t a -> Core t a
@@ -179,26 +182,23 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- | A 'ComparisonOp' expression over two 'Time' expressions
   TimeComparison    :: ComparisonOp -> t 'TyTime    -> t 'TyTime    -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'String' expressions
-  StringComparison  :: ComparisonOp -> t 'TyStr     -> t 'TyStr     -> Core t 'TyBool
+  StrComparison     :: ComparisonOp -> t 'TyStr     -> t 'TyStr     -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
   --
   -- note: this is more broad than the set ({=, !=}) of comparisons pact
   -- supports on bools.
   BoolComparison    :: ComparisonOp -> t 'TyBool    -> t 'TyBool    -> Core t 'TyBool
 
+  -- object ops
+
   KeySetEqNeq :: EqNeq -> t 'TyKeySet   -> t 'TyKeySet   -> Core t 'TyBool
   ObjectEqNeq :: EqNeq -> t 'TyObject   -> t 'TyObject   -> Core t 'TyBool
 
-  ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
-
-  ObjContains    :: Schema ->            t 'TyStr -> t 'TyObject   -> Core t 'TyBool
-  StringContains ::                      t 'TyStr -> t 'TyStr      -> Core t 'TyBool
-  ObjDrop :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
-
+  ObjAt       :: Schema -> t 'TyStr -> t 'TyObject -> EType  -> Core t a
+  ObjContains :: Schema -> t 'TyStr -> t 'TyObject           -> Core t 'TyBool
+  ObjDrop     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
   ObjTake     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
-
-
-  ObjectMerge :: t 'TyObject -> t 'TyObject -> Core t 'TyObject
+  ObjMerge    ::           t 'TyObject        -> t 'TyObject -> Core t 'TyObject
 
   LiteralObject :: Map Text (Existential t) -> Core t 'TyObject
 
@@ -228,10 +228,10 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   LiteralList  :: SingTy 'SimpleK a -> [t a] -> Core t ('TyList a)
 
-  -- TODO:
+  -- ListMap      ::
+
   -- ListFilter ::
   -- ListFold   ::
-  -- ListMap    ::
 
 -- Note [Uniform Functions]:
 --
@@ -296,7 +296,7 @@ uniformlyEq' ty t1 t2 = case ty of
 
 uniformlyEq''
   :: OfPactTypes Eq tm
-  => SingTy 'SimpleK a -> tm a -> tm a -> Bool
+  => SingTy k a -> tm a -> tm a -> Bool
 uniformlyEq'' ty t1 t2 = case ty of
   SStr     -> t1 == t2
   SInteger -> t1 == t2
@@ -305,6 +305,16 @@ uniformlyEq'' ty t1 t2 = case ty of
   SBool    -> t1 == t2
   SKeySet  -> t1 == t2
   SAny     -> t1 == t2
+
+  SList SStr     -> t1 == t2
+  SList SInteger -> t1 == t2
+  SList STime    -> t1 == t2
+  SList SDecimal -> t1 == t2
+  SList SBool    -> t1 == t2
+  SList SKeySet  -> t1 == t2
+  SList SAny     -> t1 == t2
+
+  SObject -> t1 == t2
 
 uniformlyUserShow
   :: OfPactTypes UserShow tm
@@ -332,7 +342,7 @@ uniformlyUserShow' ty tm = case ty of
 
 uniformlyUserShow''
   :: OfPactTypes UserShow tm
-  => SingTy 'SimpleK a -> tm a -> Text
+  => SingTy k a -> tm a -> Text
 uniformlyUserShow'' ty tm = case ty of
   SStr     -> userShow tm
   SInteger -> userShow tm
@@ -341,6 +351,16 @@ uniformlyUserShow'' ty tm = case ty of
   SBool    -> userShow tm
   SKeySet  -> userShow tm
   SAny     -> userShow tm
+
+  SList SStr     -> userShow tm
+  SList SInteger -> userShow tm
+  SList STime    -> userShow tm
+  SList SDecimal -> userShow tm
+  SList SBool    -> userShow tm
+  SList SKeySet  -> userShow tm
+  SList SAny     -> userShow tm
+
+  SObject -> userShow tm
 
 uniformlyShows
   :: OfPactTypes Show tm
@@ -368,7 +388,7 @@ uniformlyShows' ty p t = case ty of
 
 uniformlyShows''
   :: OfPactTypes Show tm
-  => SingTy 'SimpleK a -> Int -> tm a -> ShowS
+  => SingTy k a -> Int -> tm a -> ShowS
 uniformlyShows'' ty p t = case ty of
   SStr     -> showsPrec p t
   SInteger -> showsPrec p t
@@ -377,6 +397,16 @@ uniformlyShows'' ty p t = case ty of
   SBool    -> showsPrec p t
   SKeySet  -> showsPrec p t
   SAny     -> showsPrec p t
+
+  SList SStr     -> showsPrec p t
+  SList SInteger -> showsPrec p t
+  SList STime    -> showsPrec p t
+  SList SDecimal -> showsPrec p t
+  SList SBool    -> showsPrec p t
+  SList SKeySet  -> showsPrec p t
+  SList SAny     -> showsPrec p t
+
+  SObject -> showsPrec p t
 
 
 instance
@@ -388,26 +418,27 @@ instance
   Lit a                       == Lit b                       = a == b
   Sym a                       == Sym b                       = a == b
   Var a1 b1                   == Var a2 b2                   = a1 == a2 && b1 == b2
+  Identity ty1 a1             == Identity _ty2 a2            = uniformlyEq'' ty1 a1 a2
   StrConcat a1 b1             == StrConcat a2 b2             = a1 == a2 && b1 == b2
   StrLength a                 == StrLength b                 = a == b
   StrToInt s1                 == StrToInt s2                 = s1 == s2
   StrToIntBase b1 s1          == StrToIntBase b2 s2          = b1 == b2 && s1 == s2
+  StrContains a1 b1           == StrContains a2 b2           = a1 == a2 && b1 == b2
   Numerical a                 == Numerical b                 = a == b
   IntAddTime a1 b1            == IntAddTime a2 b2            = a1 == a2 && b1 == b2
   DecAddTime a1 b1            == DecAddTime a2 b2            = a1 == a2 && b1 == b2
   IntegerComparison op1 a1 b1 == IntegerComparison op2 a2 b2 = op1 == op2 && a1 == a2 && b1 == b2
   DecimalComparison op1 a1 b1 == DecimalComparison op2 a2 b2 = op1 == op2 && a1 == a2 && b1 == b2
   TimeComparison op1 a1 b1    == TimeComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
-  StringComparison op1 a1 b1  == StringComparison op2 a2 b2  = op1 == op2 && a1 == a2 && b1 == b2
+  StrComparison op1 a1 b1     == StrComparison op2 a2 b2  = op1 == op2 && a1 == a2 && b1 == b2
   BoolComparison op1 a1 b1    == BoolComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
   KeySetEqNeq op1 a1 b1       == KeySetEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
   ObjectEqNeq op1 a1 b1       == ObjectEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
   ObjAt s1 a1 b1 t1           == ObjAt s2 a2 b2 t2           = s1 == s2 && a1 == a2 && b1 == b2 && t1 == t2
   ObjContains s1 a1 b1        == ObjContains s2 a2 b2        = s1 == s2 && a1 == a2 && b1 == b2
-  StringContains a1 b1        == StringContains a2 b2        = a1 == a2 && b1 == b2
   ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
   ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
-  ObjectMerge a1 b1           == ObjectMerge a2 b2           = a1 == a2 && b1 == b2
+  ObjMerge a1 b1              == ObjMerge a2 b2              = a1 == a2 && b1 == b2
   LiteralObject m1            == LiteralObject m2            = m1 == m2
   Logical op1 args1           == Logical op2 args2           = op1 == op2 && args1 == args2
 
@@ -437,10 +468,12 @@ instance
     Lit a            -> showString "Lit "        . showsPrec 11 a
     Sym a            -> showString "Sym "        . showsPrec 11 a
     Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
+    Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . uniformlyShows'' a 11 b
     StrConcat a b    -> showString "StrConcat "  . showsPrec 11 a . showString " " . showsPrec 11 b
     StrLength a      -> showString "StrLength "  . showsPrec 11 a
     StrToInt a       -> showString "StrToInt "   . showsPrec 11 a
     StrToIntBase a b -> showString "StrToIntBase " . showsPrec 11 a . showString " " . showsPrec 11 b
+    StrContains  a b -> showString "StrContains " . showsPrec 11 a . showString " " . showsPrec 11 b
     Numerical a      -> showString "Numerical "  . showsPrec 11 a
     IntAddTime a b   -> showString "IntAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
     DecAddTime a b   -> showString "DecAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
@@ -465,8 +498,8 @@ instance
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
-    StringComparison op a b ->
-        showString "StringComparison "
+    StrComparison op a b ->
+        showString "StrComparison "
       . showsPrec 11 op
       . showString " "
       . showsPrec 11 a
@@ -510,11 +543,6 @@ instance
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
-    StringContains a b ->
-        showString "StringContains "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
     ObjDrop a b c ->
         showString "ObjDrop "
       . showsPrec 11 a
@@ -529,8 +557,8 @@ instance
       . showsPrec 11 b
       . showString " "
       . showsPrec 11 c
-    ObjectMerge a b ->
-        showString "ObjectMerge "
+    ObjMerge a b ->
+        showString "ObjMerge "
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
@@ -622,28 +650,29 @@ instance
   userShowPrec d = \case
     Lit a                    -> userShowPrec d a
     Sym s                    -> tShow s
+    Var _vid name            -> name
+    Identity ty x            -> parenList ["identity", uniformlyUserShow'' ty x]
     StrConcat x y            -> parenList [SConcatenation, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
     StrToInt s               -> parenList [SStringToInteger, userShow s]
     StrToIntBase b s         -> parenList [SStringToInteger, userShow b, userShow s]
+    StrContains needle haystack
+      -> parenList [SContains, userShow needle, userShow haystack]
     Numerical tm             -> userShowPrec d tm
     IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
     DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
     TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    StringComparison op x y  -> parenList [userShow op, userShow x, userShow y]
+    StrComparison op x y     -> parenList [userShow op, userShow x, userShow y]
     BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    Var _vid name            -> name
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
     ObjContains _schema a b  -> parenList [SContains, userShow a, userShow b]
-    StringContains needle haystack
-      -> parenList [SContains, userShow needle, userShow haystack]
     ObjDrop _schema k obj    -> parenList [SObjectDrop, userShow k, userShow obj]
     ObjTake _schema k obj    -> parenList [SObjectTake, userShow k, userShow obj]
-    ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
+    ObjMerge x y             -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
     Logical op args          -> parenList $ userShow op : fmap userShow args
 

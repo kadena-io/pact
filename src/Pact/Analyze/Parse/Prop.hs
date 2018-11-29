@@ -411,7 +411,7 @@ inferPreProp preProp = case preProp of
           SDecimal -> ret (CoreProp .... DecimalComparison) aProp bProp
           STime    -> ret (CoreProp .... TimeComparison)    aProp bProp
           SBool    -> ret (CoreProp .... BoolComparison)    aProp bProp
-          SStr     -> ret (CoreProp .... StringComparison)  aProp bProp
+          SStr     -> ret (CoreProp .... StrComparison)     aProp bProp
           SAny     -> throwErrorIn preProp $
             "cannot compare objects of type " <> userShow aTy
           SKeySet  -> case toOp eqNeqP op' of

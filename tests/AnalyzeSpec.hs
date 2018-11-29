@@ -964,7 +964,7 @@ spec = describe "analyze" $ do
     let schema = Schema $
           Map.fromList [("name", EType SStr), ("balance", EType SInteger)]
         ety    = EType SStr
-    expectPass code $ Valid $ CoreProp $ StringComparison Eq
+    expectPass code $ Valid $ CoreProp $ StrComparison Eq
       (PObjAt schema (Lit' "name") (Inj Result) ety)
       (Lit' "stu" :: Prop 'TyStr)
 
@@ -1302,13 +1302,13 @@ spec = describe "analyze" $ do
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
 
     expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
-      CoreProp (StringComparison Neq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
+      CoreProp (StrComparison Neq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
         ==>
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
 
     expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
-      CoreProp (StringComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
+      CoreProp (StrComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
         ==>
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
@@ -1521,7 +1521,7 @@ spec = describe "analyze" $ do
           (IntegerComparison Gte (Result' :: Prop 'TyInteger) 0)
 
         expectPass code $ Valid $
-          Success' &&& CoreProp (StringComparison Eq (PVar 1 "s") "123") ==>
+          Success' &&& CoreProp (StrComparison Eq (PVar 1 "s") "123") ==>
             (CoreProp $ IntegerComparison Eq (Result' :: Prop 'TyInteger) 123)
 
     describe "with specified base" $ do
@@ -1910,9 +1910,9 @@ spec = describe "analyze" $ do
 
     it "lifts forall string" $
       prenexConvert (PAnd (Lit' True)
-        (allA1 intTy (CoreProp $ StringComparison Gte a1 a1)))
+        (allA1 intTy (CoreProp $ StrComparison Gte a1 a1)))
       `shouldBe`
-      allA1 intTy (PAnd (Lit' True) (CoreProp $ StringComparison Gte a1 a1))
+      allA1 intTy (PAnd (Lit' True) (CoreProp $ StrComparison Gte a1 a1))
 
     it "lifts over a list" $
       prenexConvert (CoreProp (ListAt SBool 0
@@ -2039,7 +2039,7 @@ spec = describe "analyze" $ do
           (ESimple SBool
             (Inj $ Forall (VarId 1) "x" (EType SStr)
               (Inj $ Forall (VarId 2) "y" (EType SStr)
-                (CoreProp $ StringComparison Eq
+                (CoreProp $ StrComparison Eq
                   (PVar (VarId 1) "x" :: Prop 'TyStr)
                   (PVar (VarId 2) "y")))))
 
@@ -2728,3 +2728,19 @@ spec = describe "analyze" $ do
             (min a (min b c)))
           |]
     expectVerified code11
+
+  describe "identity" $ do
+    let code = [text|
+          (defun test:integer ()
+            @model []
+            (identity 1))
+          |]
+    expectVerified code
+
+  -- describe "list map" $ do
+  --   let code = [text|
+  --         (defun test:[integer] ()
+  --           @model []
+  --           (map (identity) [1 2 3]))
+  --         |]
+  --   expectVerified code

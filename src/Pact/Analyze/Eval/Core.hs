@@ -149,6 +149,14 @@ evalCore
   => Core (TermOf m) a -> m (S a')
 evalCore (Lit a)                           = pure (literalS a)
 evalCore (Sym s)                           = pure s
+evalCore (Var vid name) = do
+  mVal <- getVar vid
+  case mVal of
+    Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
+    Just (AVal mProv sval) -> pure $ mkS mProv sval
+    Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
+    Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
+evalCore (Identity ty a)                   = withShow ty $ eval a
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
 evalCore (StrLength p)
   = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
@@ -160,23 +168,23 @@ evalCore (DecAddTime time secs)            = evalDecAddTime time secs
 evalCore (IntegerComparison op x y)        = evalComparisonOp op x y
 evalCore (DecimalComparison op x y)        = evalComparisonOp op x y
 evalCore (TimeComparison op x y)           = evalComparisonOp op x y
-evalCore (StringComparison op x y)         = evalComparisonOp op x y
+evalCore (StrComparison op x y)            = evalComparisonOp op x y
 evalCore (BoolComparison op x y)           = evalComparisonOp op x y
 evalCore (ObjectEqNeq op x y)              = evalObjectEqNeq  op x y
 evalCore (KeySetEqNeq      op x y)         = evalEqNeq        op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT retType)
   = evalObjAt schema colNameT objT retType
-evalCore (ObjectMerge _ _)                 =
-  error "object merge can not produce a simple value"
-evalCore LiteralObject {}                  =
-  error "literal object can't be an argument to evalCore"
+evalCore ObjMerge{}
+  = error "object merge can not produce a simple value"
+evalCore LiteralObject {}
+  = error "literal object can't be an argument to evalCore"
 evalCore (ObjContains (Schema schema) key _obj) = do
   key' <- eval key
   pure $ sansProv $ bAny
     (\testKey -> literalS (Str (T.unpack testKey)) .== key')
     $ Map.keys schema
-evalCore (StringContains needle haystack) = do
+evalCore (StrContains needle haystack) = do
   needle'   <- eval needle
   haystack' <- eval haystack
   pure $ sansProv $
@@ -256,14 +264,6 @@ evalCore (MakeList ty i a) = withShow ty $ withSymWord ty $ do
     Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
     Nothing  -> throwErrorNoLoc $ UnhandledTerm
       "make-list currently requires a statically determined length"
-
-evalCore (Var vid name) = do
-  mVal <- getVar vid
-  case mVal of
-    Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
-    Just (AVal mProv sval) -> pure $ mkS mProv sval
-    Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
-    Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore x = error $ "no case for: " ++ show x
 
 evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)
@@ -279,7 +279,7 @@ evalStrToInt sT = do
 evalStrToIntBase
   :: (Analyzer m) => TermOf m 'TyInteger -> TermOf m 'TyStr -> m (S Integer)
 evalStrToIntBase bT sT = do
-  b <- eval bT
+  b  <- eval bT
   s' <- eval sT
   let s = coerceS @Str @String s'
 
@@ -398,7 +398,7 @@ evalCoreO
   => Core (TermOf m) 'TyObject -> m Object
 evalCoreO (LiteralObject obj) = Object <$> traverse evalExistential obj
 evalCoreO (ObjAt _schema colNameT objT _retType) = evalObjAtO colNameT objT
-evalCoreO (ObjectMerge objT1 objT2) = mappend <$> evalO objT1 <*> evalO objT2
+evalCoreO (ObjMerge objT1 objT2) = mappend <$> evalO objT1 <*> evalO objT2
 evalCoreO (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -409,12 +409,13 @@ evalCoreO (Var vid name) = do
 
 -- TODO(joel): I don't think an object can appear hear. Get more clarity on
 -- this.
-evalCoreO (Lit obj)     = pure obj
-evalCoreO (Sym _)       = vacuousMatch "an object cannot be a symbolic value"
-evalCoreO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
-evalCoreO ListAt{} = throwErrorNoLoc "not yet implemented"
-evalCoreO ObjTake{} = throwErrorNoLoc "not yet implemented"
-evalCoreO ObjDrop{} = throwErrorNoLoc "not yet implemented"
+evalCoreO (Lit obj)      = pure obj
+evalCoreO (Sym _)        = vacuousMatch "an object cannot be a symbolic value"
+evalCoreO (Identity _ a) = evalO a
+evalCoreO (Numerical _)  = vacuousMatch "an object cannot be a numerical value"
+evalCoreO ListAt{}       = throwErrorNoLoc "not yet implemented"
+evalCoreO ObjTake{}      = throwErrorNoLoc "not yet implemented"
+evalCoreO ObjDrop{}      = throwErrorNoLoc "not yet implemented"
 
 -- evalCoreO (ObjDrop schema@(Schema schemaFields) keys _obj) = do
 --   keys' <- eval keys

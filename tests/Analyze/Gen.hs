@@ -239,7 +239,7 @@ genCore BoundedBool = Gen.recursive Gen.choice [
          mkBool $ TimeComparison op (extract x) (extract y)
   , do op <- genComparisonOp
        Gen.subtermM2 (genCore strSize) (genCore strSize) $ \x y ->
-         mkBool $ StringComparison op (extract x) (extract y)
+         mkBool $ StrComparison op (extract x) (extract y)
   , do op <- Gen.element [Eq, Neq]
        Gen.subtermM2 (genCore BoundedBool) (genCore BoundedBool) $ \x y ->
          mkBool $ BoolComparison op (extract x) (extract y)

@@ -84,7 +84,7 @@ toPactTm = \case
   ESimple SBool (Inj (DecimalComparison op x y)) ->
     mkApp (comparisonOpToDef op) [ESimple SDecimal x, ESimple SDecimal y]
 
-  ESimple SBool (Inj (StringComparison op x y)) ->
+  ESimple SBool (Inj (StrComparison op x y)) ->
     mkApp (comparisonOpToDef op) [ESimple SStr x, ESimple SStr y]
 
   ESimple SBool (Inj (BoolComparison op x y)) ->

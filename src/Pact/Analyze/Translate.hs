@@ -766,7 +766,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
           (STime, STime) -> pure $
             ESimple SBool $ inject $ TimeComparison op a' b'
           (SStr, SStr) -> pure $
-            ESimple SBool $ inject $ StringComparison op a' b'
+            ESimple SBool $ inject $ StrComparison op a' b'
           (SBool, SBool) -> pure $
             ESimple SBool $ inject $ BoolComparison op a' b'
           (SKeySet, SKeySet) -> do
@@ -872,7 +872,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
           _ -> throwError' $ MalformedArithOp fn args
       (EObject s1 o1, EObject s2 o2) ->
         -- Feature 3: object merge
-        pure $ EObject (s1 <> s2) $ inject $ ObjectMerge o1 o2
+        pure $ EObject (s1 <> s2) $ inject $ ObjMerge o1 o2
       (EList (SList tyA) a', EList (SList tyB) b') -> case singEq tyA tyB of
         -- Feature 4: list concatenation
         Just Refl -> pure $ EList (SList tyA) $ inject $ ListConcat tyA a' b'
@@ -1027,7 +1027,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     case collection' of
       -- ESimple SStr needle -> case collection' of
       ESimple SStr haystack -> case needleTy of
-        SStr -> pure $ ESimple SBool $ CoreTerm $ StringContains needle haystack
+        SStr -> pure $ ESimple SBool $ CoreTerm $ StrContains needle haystack
         _    -> throwError' $ TypeError node
       ESimple _ _ -> throwError' $ TypeError node
       EObject schema obj -> case needleTy of
@@ -1065,11 +1065,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
 
+  AST_NFun _node "identity" [a] -> do
+    ea' <- translateNode a
+    pure $ case ea' of
+      ESimple ty     a' -> ESimple ty     $ CoreTerm $ Identity ty      a'
+      EList   ty     a' -> EList   ty     $ CoreTerm $ Identity ty      a'
+      EObject schema a' -> EObject schema $ CoreTerm $ Identity SObject a'
+
   AST_NFun _ f _
     --
     -- TODO: add symbols these to Feature once implemented.
     --
-    | f `Set.member` Set.fromList ["map", "filter", "fold"]
+    | f `Set.member` Set.fromList ["filter", "fold"]
     -> throwError' $ NoLists astNode
 
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
