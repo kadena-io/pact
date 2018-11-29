@@ -263,7 +263,7 @@ call :: StackFrame -> Eval e (Gas,a) -> Eval e a
 call s act = do
   evalCallStack %= (s:)
   (_gas,r) <- act -- TODO opportunity for per-call gas logging here
-  evalCallStack %= \st -> case st of (_:as) -> as; [] -> []
+  evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
 

@@ -351,9 +351,7 @@ createTable' i as = argsError i as
 
 guardTable :: Show n => FunApp -> Term n -> Eval e ()
 guardTable i TTable {..} = do
-  let findMod _ r@Just {} = r
-      findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
-  r <- foldr findMod Nothing . reverse <$> use evalCallStack
+  r <- uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))
   case r of
     (Just mn) | mn == _tModule -> enforceBlessedHashes i _tModule _tHash
     _ -> do
