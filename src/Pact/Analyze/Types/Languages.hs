@@ -233,9 +233,9 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- ListFilter ::
   -- ListFold   ::
 
--- Note [Uniform Functions]:
+-- Note [Sing Functions]:
 --
--- The `uniformly*` family of 9 functions differs in two dimensions:
+-- The `sing*` family of 9 functions differs in two dimensions:
 -- * The class required is `Eq`, `UserShow`, or `Show`
 -- * It is applied at either `tm ('TyList a)`, `[tm a]`, or `tm a`
 --
@@ -270,10 +270,10 @@ instance OfPactTypes UserShow Prop      where
 instance OfPactTypes UserShow Invariant where
 instance OfPactTypes UserShow Term      where
 
-uniformlyEq
+singEqTmList
   :: OfPactTypes Eq tm
   => SingTy 'SimpleK a -> tm ('TyList a) -> tm ('TyList a) -> Bool
-uniformlyEq ty t1 t2 = case ty of
+singEqTmList ty t1 t2 = case ty of
   SStr     -> t1 == t2
   SInteger -> t1 == t2
   STime    -> t1 == t2
@@ -282,10 +282,10 @@ uniformlyEq ty t1 t2 = case ty of
   SKeySet  -> t1 == t2
   SAny     -> t1 == t2
 
-uniformlyEq'
+singEqListTm
   :: OfPactTypes Eq tm
   => SingTy 'SimpleK a -> [tm a] -> [tm a] -> Bool
-uniformlyEq' ty t1 t2 = case ty of
+singEqListTm ty t1 t2 = case ty of
   SStr     -> t1 == t2
   SInteger -> t1 == t2
   STime    -> t1 == t2
@@ -294,10 +294,10 @@ uniformlyEq' ty t1 t2 = case ty of
   SKeySet  -> t1 == t2
   SAny     -> t1 == t2
 
-uniformlyEq''
+singEqTm
   :: OfPactTypes Eq tm
   => SingTy k a -> tm a -> tm a -> Bool
-uniformlyEq'' ty t1 t2 = case ty of
+singEqTm ty t1 t2 = case ty of
   SStr     -> t1 == t2
   SInteger -> t1 == t2
   STime    -> t1 == t2
@@ -316,10 +316,10 @@ uniformlyEq'' ty t1 t2 = case ty of
 
   SObject -> t1 == t2
 
-uniformlyUserShow
+singUserShowTmList
   :: OfPactTypes UserShow tm
   => SingTy 'SimpleK a -> tm ('TyList a) -> Text
-uniformlyUserShow ty tm = case ty of
+singUserShowTmList ty tm = case ty of
   SStr     -> userShow tm
   SInteger -> userShow tm
   STime    -> userShow tm
@@ -328,10 +328,10 @@ uniformlyUserShow ty tm = case ty of
   SKeySet  -> userShow tm
   SAny     -> userShow tm
 
-uniformlyUserShow'
+singUserShowListTm
   :: OfPactTypes UserShow tm
   => SingTy 'SimpleK a -> [tm a] -> Text
-uniformlyUserShow' ty tm = case ty of
+singUserShowListTm ty tm = case ty of
   SStr     -> userShow tm
   SInteger -> userShow tm
   STime    -> userShow tm
@@ -340,10 +340,10 @@ uniformlyUserShow' ty tm = case ty of
   SKeySet  -> userShow tm
   SAny     -> userShow tm
 
-uniformlyUserShow''
+singUserShowTm
   :: OfPactTypes UserShow tm
   => SingTy k a -> tm a -> Text
-uniformlyUserShow'' ty tm = case ty of
+singUserShowTm ty tm = case ty of
   SStr     -> userShow tm
   SInteger -> userShow tm
   STime    -> userShow tm
@@ -362,10 +362,10 @@ uniformlyUserShow'' ty tm = case ty of
 
   SObject -> userShow tm
 
-uniformlyShows
+singShowsTmList
   :: OfPactTypes Show tm
   => SingTy 'SimpleK a -> Int -> tm ('TyList a) -> ShowS
-uniformlyShows ty p t = case ty of
+singShowsTmList ty p t = case ty of
   SStr     -> showsPrec p t
   SInteger -> showsPrec p t
   STime    -> showsPrec p t
@@ -374,10 +374,10 @@ uniformlyShows ty p t = case ty of
   SKeySet  -> showsPrec p t
   SAny     -> showsPrec p t
 
-uniformlyShows'
+singShowsListTm
   :: OfPactTypes Show tm
   => SingTy 'SimpleK a -> Int -> [tm a] -> ShowS
-uniformlyShows' ty p t = case ty of
+singShowsListTm ty p t = case ty of
   SStr     -> showsPrec p t
   SInteger -> showsPrec p t
   STime    -> showsPrec p t
@@ -386,10 +386,10 @@ uniformlyShows' ty p t = case ty of
   SKeySet  -> showsPrec p t
   SAny     -> showsPrec p t
 
-uniformlyShows''
+singShowsTm
   :: OfPactTypes Show tm
   => SingTy k a -> Int -> tm a -> ShowS
-uniformlyShows'' ty p t = case ty of
+singShowsTm ty p t = case ty of
   SStr     -> showsPrec p t
   SInteger -> showsPrec p t
   STime    -> showsPrec p t
@@ -418,7 +418,7 @@ instance
   Lit a                       == Lit b                       = a == b
   Sym a                       == Sym b                       = a == b
   Var a1 b1                   == Var a2 b2                   = a1 == a2 && b1 == b2
-  Identity ty1 a1             == Identity _ty2 a2            = uniformlyEq'' ty1 a1 a2
+  Identity ty1 a1             == Identity _ty2 a2            = singEqTm ty1 a1 a2
   StrConcat a1 b1             == StrConcat a2 b2             = a1 == a2 && b1 == b2
   StrLength a                 == StrLength b                 = a == b
   StrToInt s1                 == StrToInt s2                 = s1 == s2
@@ -444,18 +444,18 @@ instance
 
   ListEqNeq ty1 op1 a1 b1     == ListEqNeq ty2 op2 a2 b2     = case singEq ty1 ty2 of
     Nothing   -> False
-    Just Refl -> op1 == op2 && uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
-  ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && uniformlyEq ty1 b1 b2
+    Just Refl -> op1 == op2 && singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
+  ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && singEqTmList ty1 b1 b2
   ListContains ty1 a1 b1      == ListContains ty2 a2 b2      = case singEq ty1 ty2 of
-    Just Refl -> uniformlyEq'' ty1 a1 a2 && uniformlyEq ty1 b1 b2
+    Just Refl -> singEqTm ty1 a1 a2 && singEqTmList ty1 b1 b2
     Nothing   -> False
   ListLength ty1 a1           == ListLength ty2 a2           = case singEq ty1 ty2 of
     Nothing   -> False
-    Just Refl -> uniformlyEq ty1 a1 a2
-  ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && uniformlyEq ty1 l1 l2
-  ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
-  MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && uniformlyEq'' ty1 b1 b2
-  LiteralList ty1 l1          == LiteralList _ty2 l2         = uniformlyEq' ty1 l1 l2
+    Just Refl -> singEqTmList ty1 a1 a2
+  ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
+  ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
+  MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && singEqTm ty1 b1 b2
+  LiteralList ty1 l1          == LiteralList _ty2 l2         = singEqListTm ty1 l1 l2
 
   _                           == _                           = False
 
@@ -468,7 +468,7 @@ instance
     Lit a            -> showString "Lit "        . showsPrec 11 a
     Sym a            -> showString "Sym "        . showsPrec 11 a
     Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
-    Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . uniformlyShows'' a 11 b
+    Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . singShowsTm a 11 b
     StrConcat a b    -> showString "StrConcat "  . showsPrec 11 a . showString " " . showsPrec 11 b
     StrLength a      -> showString "StrLength "  . showsPrec 11 a
     StrToInt a       -> showString "StrToInt "   . showsPrec 11 a
@@ -576,71 +576,71 @@ instance
       . showString " "
       . showsPrec 11 op
       . showString " "
-      . uniformlyShows ty 11 a
+      . singShowsTmList ty 11 a
       . showString " "
-      . uniformlyShows ty 11 b
+      . singShowsTmList ty 11 b
     ListAt ty a b ->
         showString "ListAt "
       . showsPrec 11 ty
       . showString " "
       . showsPrec 11 a
       . showString " "
-      . uniformlyShows ty 11 b
+      . singShowsTmList ty 11 b
     ListContains ty a b ->
         showString "ListContains "
       . showsPrec 11 ty
       . showString " "
-      . uniformlyShows'' ty 11 a
+      . singShowsTm ty 11 a
       . showString " "
-      . uniformlyShows ty 11 b
+      . singShowsTmList ty 11 b
     ListLength ty a ->
         showString "ListLength "
       . showsPrec 11 ty
       . showString " "
-      . uniformlyShows ty 11 a
+      . singShowsTmList ty 11 a
     ListReverse ty a ->
         showString "ListReverse "
       . showsPrec 11 ty
       . showString " "
-      . uniformlyShows ty 11 a
+      . singShowsTmList ty 11 a
     ListSort ty a ->
         showString "ListSort "
       . showsPrec 11 ty
       . showString " "
-      . uniformlyShows ty 11 a
+      . singShowsTmList ty 11 a
     ListDrop ty i l ->
         showString "ListDrop "
       . showsPrec 11 ty
       . showString " "
       . showsPrec 11 i
       . showString " "
-      . uniformlyShows ty 11 l
+      . singShowsTmList ty 11 l
     ListTake ty a b ->
         showString "ListTake "
       . showsPrec 11 ty
       . showString " "
       . showsPrec 11 a
       . showString " "
-      . uniformlyShows ty 11 b
+      . singShowsTmList ty 11 b
     ListConcat ty a b ->
         showString "ListConcat "
       . showsPrec 11 ty
       . showString " "
-      . uniformlyShows ty 11 a
+      . singShowsTmList ty 11 a
       . showString " "
-      . uniformlyShows ty 11 b
+      . singShowsTmList ty 11 b
     MakeList ty a b ->
         showString "MakeList "
       . showsPrec 11 ty
       . showString " "
       . showsPrec 11 a
       . showString " "
-      . uniformlyShows'' ty 11 b
+      . singShowsTm ty 11 b
     LiteralList ty l ->
         showString "LiteralList "
       . showsPrec 11 ty
       . showString " "
-      . uniformlyShows' ty 11 l
+      . singShowsListTm ty 11 l
 
 instance
   ( OfPactTypes UserShow tm
@@ -651,7 +651,7 @@ instance
     Lit a                    -> userShowPrec d a
     Sym s                    -> tShow s
     Var _vid name            -> name
-    Identity ty x            -> parenList ["identity", uniformlyUserShow'' ty x]
+    Identity ty x            -> parenList ["identity", singUserShowTm ty x]
     StrConcat x y            -> parenList [SConcatenation, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
     StrToInt s               -> parenList [SStringToInteger, userShow s]
@@ -676,18 +676,18 @@ instance
     LiteralObject obj        -> userShow obj
     Logical op args          -> parenList $ userShow op : fmap userShow args
 
-    ListEqNeq ty op x y      -> parenList [userShow op, uniformlyUserShow ty x, uniformlyUserShow ty y]
-    ListAt ty k lst          -> parenList [userShow k, uniformlyUserShow ty lst]
+    ListEqNeq ty op x y      -> parenList [userShow op, singUserShowTmList ty x, singUserShowTmList ty y]
+    ListAt ty k lst          -> parenList [userShow k, singUserShowTmList ty lst]
     ListContains ty needle haystack
-      -> parenList [SContains, uniformlyUserShow'' ty needle, uniformlyUserShow ty haystack]
-    ListLength ty x          -> parenList [SListLength, uniformlyUserShow ty x]
-    ListReverse ty lst       -> parenList [SReverse, uniformlyUserShow ty lst]
-    ListSort ty lst          -> parenList [SSort, uniformlyUserShow ty lst]
-    ListDrop ty n lst        -> parenList [SListDrop, userShow n, uniformlyUserShow ty lst]
-    ListTake ty n lst        -> parenList [SListTake, userShow n, uniformlyUserShow ty lst]
-    ListConcat ty x y        -> parenList [SConcatenation, uniformlyUserShow ty x, uniformlyUserShow ty y]
-    MakeList ty x y          -> parenList [SMakeList, userShow x, uniformlyUserShow'' ty y]
-    LiteralList ty lst       -> uniformlyUserShow' ty lst
+      -> parenList [SContains, singUserShowTm ty needle, singUserShowTmList ty haystack]
+    ListLength ty x          -> parenList [SListLength, singUserShowTmList ty x]
+    ListReverse ty lst       -> parenList [SReverse, singUserShowTmList ty lst]
+    ListSort ty lst          -> parenList [SSort, singUserShowTmList ty lst]
+    ListDrop ty n lst        -> parenList [SListDrop, userShow n, singUserShowTmList ty lst]
+    ListTake ty n lst        -> parenList [SListTake, userShow n, singUserShowTmList ty lst]
+    ListConcat ty x y        -> parenList [SConcatenation, singUserShowTmList ty x, singUserShowTmList ty y]
+    MakeList ty x y          -> parenList [SMakeList, userShow x, singUserShowTm ty y]
+    LiteralList ty lst       -> singUserShowListTm ty lst
 
 
 data BeforeOrAfter = Before | After
