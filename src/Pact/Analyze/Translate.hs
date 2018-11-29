@@ -1066,11 +1066,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
 
   AST_NFun _ f _
-    | f `Set.member` Set.fromList
-      --
-      -- TODO: add symbols these to Feature once implemented.
-      --
-      ["map", "make-list", "filter", "fold"]
+    --
+    -- TODO: add symbols these to Feature once implemented.
+    --
+    | f `Set.member` Set.fromList ["map", "filter", "fold"]
     -> throwError' $ NoLists astNode
 
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
