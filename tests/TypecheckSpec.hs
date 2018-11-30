@@ -18,6 +18,7 @@ import qualified Data.Text as T
 spec :: Spec
 spec = do
   void $ runIO $ inferModule False "tests/pact/tc.repl" "tctest"
+  void $ runIO $ inferModule False "tests/pact/caps.repl" "caps"
   void $ runIO $ inferModule False "examples/cp/cp.repl" "cp"
   void $ runIO $ inferModule False "examples/accounts/accounts.repl" "accounts"
   checkFuns

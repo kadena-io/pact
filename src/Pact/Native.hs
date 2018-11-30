@@ -60,6 +60,7 @@ import Pact.Native.Internal
 import Pact.Native.Time
 import Pact.Native.Ops
 import Pact.Native.Keysets
+import Pact.Native.Capabilities
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
@@ -72,7 +73,8 @@ natives = [
   dbDefs,
   timeDefs,
   opDefs,
-  keyDefs]
+  keyDefs,
+  capDefs]
 
 
 -- | Production native modules as a dispatch map.
@@ -116,7 +118,7 @@ enforceOneDef =
   where
 
     enforceOne :: NativeFun e
-    enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $
+    enforceOne i as@[msg,TList conds _ _] = runReadOnly (_faInfo i) $
       gasUnreduced i as $ do
         msg' <- reduce msg >>= \m -> case m of
           TLitString s -> return s
@@ -361,7 +363,7 @@ a = mkTyVar "a" []
 
 map' :: NativeFun e
 map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply' app . pure)
+           TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply (_tApp app) . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
 
@@ -381,7 +383,7 @@ reverse' i as = argsError i as
 fold' :: NativeFun e
 fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
-                         foldM (\r a' -> apply' app [r,a']) initv' ls
+                         foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
            t -> evalError' i $ "fold: expecting list: " ++ abbrev t
 fold' i as = argsError' i as
 
@@ -390,7 +392,7 @@ filter' :: NativeFun e
 filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls lt _ -> ((\b -> TList b lt def) . concat) <$>
                          forM ls (\a' -> do
-                           t <- apply' app [a']
+                           t <- apply (_tApp app) [a']
                            case t of
                              (TLiteral (LBool True) _) -> return [a']
                              _ -> return []) -- hmm, too permissive here, select is stricter
@@ -442,8 +444,8 @@ remove i as = argsError i as
 compose :: NativeFun e
 compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
   v' <- reduce v
-  a' <- apply' appA [v']
-  apply' appB [a']
+  a' <- apply (_tApp appA) [v']
+  apply (_tApp appB) [a']
 compose i as = argsError' i as
 
 
@@ -484,9 +486,7 @@ readInteger i as = argsError i as
 
 
 pactId :: RNativeFun e
-pactId i [] = use evalPactExec >>= \pe -> case pe of
-  Nothing -> evalError' i "pact-id: not in pact execution"
-  Just PactExec{..} -> return $ toTerm _pePactId
+pactId i [] = toTerm <$> getPactId i
 pactId i as = argsError i as
 
 bind :: NativeFun e
@@ -535,7 +535,7 @@ resume i as = argsError' i as
 
 where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
-  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply' app [v]
+  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
 where' i as = argsError' i as
 
@@ -545,7 +545,7 @@ sort' _ [TList{..}] = case nub (map typeof _tList) of
   [ty] -> case ty of
     Right rty@(TyPrim pty) -> case pty of
       TyValue -> badTy (show ty)
-      TyKeySet -> badTy (show ty)
+      TyGuard{} -> badTy (show ty)
       _ -> do
         sl <- forM _tList $ \e -> case firstOf tLiteral e of
           Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ show e

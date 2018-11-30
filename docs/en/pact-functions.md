@@ -287,7 +287,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.6.0"
+"2.6.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1124,8 +1124,10 @@ pact> (sqrt 25)
 
 *name*&nbsp;`string` *keyset*&nbsp;`string` *&rarr;*&nbsp;`string`
 
+*name*&nbsp;`string` *&rarr;*&nbsp;`string`
 
-Define keyset as NAME with KEYSET. If keyset NAME already exists, keyset will be enforced before updating to new value.
+
+Define keyset as NAME with KEYSET, or if unspecified, read NAME from message payload as keyset, similarly to 'read-keyset'. If keyset NAME already exists, keyset will be enforced before updating to new value.
 ```lisp
 (define-keyset 'admin-keyset (read-keyset "keyset"))
 ```
@@ -1135,13 +1137,15 @@ Top level only: this function will fail if used in module code.
 
 ### enforce-keyset {#enforce-keyset}
 
-*keyset-or-name*&nbsp;`<k[string,keyset]>` *&rarr;*&nbsp;`bool`
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Special form to enforce KEYSET-OR-NAME against message keys before running BODY. KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. 
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. 
 ```lisp
-(with-keyset 'admin-keyset ...)
-(with-keyset (read-keyset "keyset") ...)
+(enforce-keyset 'admin-keyset)
+(enforce-keyset row-guard)
 ```
 
 
@@ -1189,6 +1193,75 @@ true
 Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN }). PREDFUN should resolve to a keys predicate. 
 ```lisp
 (read-keyset "admin-keyset")
+```
+
+## Capabilities {#Capabilities}
+
+### create-module-guard {#create-module-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard by NAME that enforces the current module admin predicate.
+
+
+### create-pact-guard {#create-pact-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
+
+
+### create-user-guard {#create-user-guard}
+
+*data*&nbsp;`<a>` *predfun*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
+
+
+### enforce-guard {#enforce-guard}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. 
+```lisp
+(enforce-guard 'admin-keyset)
+(enforce-guard row-guard)
+```
+
+
+### keyset-ref-guard {#keyset-ref-guard}
+
+*keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
+
+
+### require-capability {#require-capability}
+
+*capability*&nbsp;`( -> bool)` *&rarr;*&nbsp;`bool`
+
+
+Specifies and tests for existing grant of CAPABILITY, failing if not found in environment. 
+```lisp
+(require-capability (TRANSFER src dest))
+```
+
+
+### with-capability {#with-capability}
+
+*capability*&nbsp;`( -> bool)` *body*&nbsp;`list` *&rarr;*&nbsp;`<a>`
+
+
+Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is applied, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 
+```lisp
+(with-capability (update-users id) (update users id { salary: new-salary }))
 ```
 
 ## REPL-only functions {#repl-lib}
@@ -1313,6 +1386,16 @@ Set transaction signature KEYS.
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
 ```
+
+
+### env-pactid {#env-pactid}
+
+ *&rarr;*&nbsp;`string`
+
+*id*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Query environment pact id, or set to ID.
 
 
 ### env-step {#env-step}

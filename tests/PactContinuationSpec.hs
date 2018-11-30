@@ -505,9 +505,9 @@ testFinishAlone opts = do
   let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
 
   let tryCredAloneCheck = makeCheck tryCredAloneCmd True
-                          (Just "(enforce-keyset k): Failure: Tx Failed: Keyset failure (keys-all)")
+                          (Just "(enforce-guard g): Failure: Tx Failed: Keyset failure (keys-all)")
       tryDebAloneCheck  = makeCheck tryDebAloneCmd True
-                          (Just "(enforce-keyset k): Failure: Tx Failed: Keyset failure (keys-all)")
+                          (Just "(enforce-guard g): Failure: Tx Failed: Keyset failure (keys-all)")
       allChecks         = [tryCredAloneCheck, tryDebAloneCheck]
 
   twoPartyEscrow allCmds allChecks opts

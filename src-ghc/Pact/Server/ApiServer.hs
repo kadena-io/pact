@@ -44,6 +44,7 @@ import Snap.Util.CORS
 import Snap.Core
 import Snap.Http.Server as Snap
 
+import Pact.Analyze.Remote.Server (verify)
 import Pact.Types.Command
 import Pact.Types.API
 import Pact.Types.Server
@@ -64,7 +65,8 @@ runApiServer histChan inbChan logFn port logDir = do
   let conf' = ApiEnv logFn histChan inbChan
   httpServe (serverConf port logDir) $
     applyCORS defaultOptions $ methods [GET, POST] $
-    route [("api/v1", runReaderT api conf')]
+    route [("api/v1", runReaderT api conf')
+          ,("verify", method POST verify)]
 
 api :: Api ()
 api = route [

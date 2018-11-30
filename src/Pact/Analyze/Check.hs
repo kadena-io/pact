@@ -9,6 +9,7 @@
 {-# LANGUAGE RecordWildCards       #-}
 module Pact.Analyze.Check
   ( verifyModule
+  , renderVerifiedModule
   , verifyCheck
   , describeCheckFailure
   , describeCheckResult
@@ -27,7 +28,8 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (at, ifoldrM, ifor, itraversed, ix,
+import           Control.Lens              (at, each, ifoldrM, ifor,
+                                            itraversed, ix, toListOf,
                                             traversed, view, (%~), (&), (<&>),
                                             (?~), (^.), (^?), (^@..), _1, _2,
                                             _Left)
@@ -59,13 +61,13 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker     (typecheckTopLevel)
 import           Pact.Types.Lang      (pattern ColonExp, pattern CommaExp,
                                        Info, mModel, renderInfo, renderParsed,
-                                       tMeta, _tDefName)
+                                       tMeta, _tDef, tDef, _dDefName, dMeta)
 import           Pact.Types.Runtime   (Exp, ModuleData(..), ModuleName,
                                        Ref (Ref), mdRefMap, mdModule,
                                        Term (TConst, TDef, TSchema, TTable),
                                        asString, getInfo, tShow)
 import qualified Pact.Types.Runtime   as Pact
-import           Pact.Types.Term      (Module(..))
+import           Pact.Types.Term      (Module(..),DefName(..))
 import           Pact.Types.Typecheck (AST,
                                        Fun (FDefun, _fArgs, _fBody, _fInfo),
                                        Named, Node, TcId (_tiInfo),
@@ -433,8 +435,8 @@ data ModuleProperty = ModuleProperty
   }
 
 -- Does this (module-scoped) property apply to this function?
-applicableCheck :: Text -> ModuleProperty -> Bool
-applicableCheck funName (ModuleProperty _ propScope) = case propScope of
+applicableCheck :: DefName -> ModuleProperty -> Bool
+applicableCheck (DefName funName) (ModuleProperty _ propScope) = case propScope of
   Everywhere      -> True
   Excluding names -> funName `Set.notMember` names
   Including names -> funName `Set.member`    names
@@ -587,12 +589,16 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
                   \(Pact.Arg argName ty _) ->
                     (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
             in (TableName (T.unpack _tableName), colMap)
-
-    checks <- case defn ^? tMeta . mModel of
+    -- TODO: this was very hard code to debug as the unsafe lenses just result
+    -- in properties not showing up, instead of a compile error when I changed 'TDef'
+    -- to a safe constructor. Please consider
+    -- moving this code to use pattern matches to ensure the proper constructor
+    -- is found; and/or change 'funTypes' to hold 'Def' objects
+    checks <- case defn ^? tDef . dMeta . mModel of
       Nothing -> pure []
       Just model -> withExcept ModuleParseFailure $ liftEither $ do
         exps <- collectExps "property" model
-        let funName = _tDefName defn
+        let funName = _dDefName (_tDef defn)
             applicableModuleChecks = map _moduleProperty $
               filter (applicableCheck funName) modCheckExps
         runExpParserOver (applicableModuleChecks <> exps) $
@@ -737,6 +743,24 @@ verifyModule modules moduleData = runExceptT $ do
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
   pure $ ModuleChecks funChecks''' invariantChecks warnings
+
+renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
+renderVerifiedModule = \case
+  Left (ModuleParseFailure failure)  ->
+    [describeParseFailure failure]
+  Left (ModuleCheckFailure checkFailure) ->
+    [describeCheckFailure checkFailure]
+  Left (TypeTranslationFailure msg ty) ->
+    [msg <> ": " <> tShow ty]
+  Left (InvalidRefType) ->
+    ["Invalid reference type given to typechecker."]
+  Left (FailedConstTranslation msg) ->
+    [T.pack msg]
+  Right (ModuleChecks propResults invariantResults warnings) ->
+    let propResults'      = toListOf (traverse.each)          propResults
+        invariantResults' = toListOf (traverse.traverse.each) invariantResults
+    in (describeCheckResult <$> propResults' <> invariantResults') <>
+         [describeVerificationWarnings warnings]
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck

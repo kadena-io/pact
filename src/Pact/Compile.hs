@@ -24,6 +24,7 @@ module Pact.Compile
     (
      compile,compileExps
     ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
+    ,Reserved(..)
     )
 
 where
@@ -89,6 +90,7 @@ data Reserved =
   | RDefschema
   | RDeftable
   | RDefun
+  | RDefcap
   | RFalse
   | RImplements
   | RInterface
@@ -99,6 +101,7 @@ data Reserved =
   | RStepWithRollback
   | RTrue
   | RUse
+  | RWithCapability
   deriving (Eq,Enum,Bounded)
 
 instance AsString Reserved where
@@ -109,6 +112,7 @@ instance AsString Reserved where
     RDefschema -> "defschema"
     RDeftable -> "deftable"
     RDefun -> "defun"
+    RDefcap -> "defcap"
     RFalse -> "false"
     RImplements -> "implements"
     RInterface -> "interface"
@@ -119,6 +123,7 @@ instance AsString Reserved where
     RStepWithRollback -> "step-with-rollback"
     RTrue -> "true"
     RUse -> "use"
+    RWithCapability -> "with-capability"
 
 instance Show Reserved where show = unpack . asString
 
@@ -201,6 +206,7 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
   valueLevelForm r = case r of
     RLet -> return letForm
     RLetStar -> return letsForm
+    RWithCapability -> return withCapability
     _ -> expected "value level form (let, let*)"
 
 moduleLevel :: Compile [Term Name]
@@ -210,7 +216,8 @@ moduleLevel = specialForm $ \r -> case r of
     RBless -> return (bless >> return [])
     RDeftable -> returnl deftable
     RDefschema -> returnl defschema
-    RDefun -> returnl defun
+    RDefun -> returnl $ defunOrCap Defun
+    RDefcap -> returnl $ defunOrCap Defcap
     RDefpact -> returnl defpact
     RImplements -> return (implements >> return [])
     _ -> expected "module level form (use, def..., special form)"
@@ -236,8 +243,9 @@ userAtom = do
 app :: Compile (Term Name)
 app = do
   v <- varAtom
-  body <- many (valueLevel <|> bindingForm)
-  TApp v body <$> contextInfo
+  args <- many (valueLevel <|> bindingForm)
+  i <- contextInfo
+  return $ TApp (App v args i) i
 
 -- | Bindings (`{ "column" := binding }`) do not syntactically scope the
 -- following body form as a sexp, instead letting the body contents
@@ -290,6 +298,18 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
   commit >> return (TLiteral _litLiteral _litInfo)
+
+-- | Macro to form '(with-capability CAP BODY)' app from
+-- '(with-capability (my-cap foo bar) (baz 1) (bof true))'
+withCapability :: Compile (Term Name)
+withCapability = do
+  wcInf <- getInfo <$> current
+  let wcVar = TVar (Name (asString RWithCapability) wcInf) wcInf
+  capApp <- sexp app
+  body@(top:_) <- some valueLevel
+  i <- contextInfo
+  return $ TApp (App wcVar [capApp,TList body TyAny (_tInfo top)] i) i
+
 
 
 deftable :: Compile (Term Name)
@@ -355,14 +375,18 @@ defschema = do
   fields <- many arg
   TSchema (TypeName tn) modName m fields <$> contextInfo
 
-defun :: Compile (Term Name)
-defun = do
+defunOrCap :: DefType -> Compile (Term Name)
+defunOrCap dt = do
   modName <- currentModuleName
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
-  TDef defname modName Defun (FunType args returnTy)
-    <$> abstractBody valueLevel args <*> pure m <*> contextInfo
+  b <- abstractBody valueLevel args
+  i <- contextInfo
+  return $ (`TDef` i) $
+    Def (DefName defname) modName dt (FunType args returnTy)
+      b m i
+
 
 defpact :: Compile (Term Name)
 defpact = do
@@ -374,8 +398,9 @@ defpact = do
     RStep -> return step
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
-  TDef defname modName Defpact (FunType args returnTy)
-    (abstractBody' args (TList body TyAny bi)) m <$> contextInfo
+  i <- contextInfo
+  return $ TDef (Def (DefName defname) modName Defpact (FunType args returnTy)
+                  (abstractBody' args (TList body TyAny bi)) m i) i
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
@@ -432,8 +457,8 @@ emptyDef = do
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
   info <- contextInfo
-  return $
-    TDef defName modName Defun
+  return $ (`TDef` info) $
+    Def (DefName defName) modName Defun
     (FunType args returnTy) (abstract (const Nothing) (TList [] TyAny info)) m info
 
 
@@ -528,7 +553,8 @@ parseType = msum
   , TyPrim TyString  <$ symbol tyString
   , TyList TyAny     <$ symbol tyList
   , TyPrim TyValue   <$ symbol tyValue
-  , TyPrim TyKeySet  <$ symbol tyKeySet
+  , TyPrim (TyGuard $ Just GTyKeySet)  <$ symbol tyKeySet
+  , TyPrim (TyGuard Nothing) <$ symbol tyGuard
   ]
 
 parseListType :: Compile (Type (Term Name))

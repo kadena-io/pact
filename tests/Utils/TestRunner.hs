@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Utils.TestRunner
   ( ApiResultCheck (..)
@@ -161,17 +162,27 @@ checkResult isFailure expect result =
                     else checkIfSuccess h expect
         _ -> expectationFailure $ show cmdRes ++ " should be Object"
 
+
+fieldShouldBe :: (T.Text,HM.HashMap T.Text Value) -> Maybe Value -> Expectation
+fieldShouldBe (k,m) b = do
+  let a = HM.lookup k m
+  unless (a == b) $
+    expectationFailure $
+    "Expected " ++ show b ++ ", found " ++ show a ++ " for field " ++ show k ++ " in " ++ show m
+
 checkIfSuccess :: Object -> Maybe Value -> Expectation
-checkIfSuccess h Nothing = HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "success"
+checkIfSuccess h Nothing =
+  ("status",h) `fieldShouldBe` (Just . String . T.pack) "success"
 checkIfSuccess h (Just expect) = do
-  HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "success"
-  HM.lookup (T.pack "data") h `shouldBe` Just (toJSON expect)
+  ("status", h) `fieldShouldBe` (Just . String . T.pack) "success"
+  ("data", h) `fieldShouldBe` Just (toJSON expect)
 
 checkIfFailure :: Object -> Maybe Value -> Expectation
-checkIfFailure h Nothing = HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "failure"
+checkIfFailure h Nothing =
+  ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
 checkIfFailure h (Just expect) = do
-  HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "failure"
-  HM.lookup (T.pack "detail") h `shouldBe` Just (toJSON expect)
+  ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
+  ("detail", h) `fieldShouldBe` Just (toJSON expect)
 
 
 
