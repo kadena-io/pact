@@ -17,7 +17,7 @@ import           Data.SBV                    (Boolean (bnot, false, true),
                                               SymWord, false, ite, true, (|||), bAny, unliteral)
 import qualified Data.SBV.List               as SBVL
 import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
-                                              bzipWith)
+                                              bmap, bzipWith)
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
@@ -143,7 +143,8 @@ evalLogicalOp NotOp [a] = bnot <$> eval a
 evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 evalCore
-  :: ( Analyzer m
+  :: forall m a a'.
+     ( Analyzer m
      , a' ~ Concrete a
      , SymWord a', Show (Core (TermOf m) a))
   => Core (TermOf m) a -> m (S a')
@@ -220,7 +221,7 @@ evalCore (ListAt tyA i l) = do
   -- statically build a list of index comparisons
   pure $ sansProv $ SBVL.elemAt l' i'
 evalCore (ListLength ty l) = withShow ty $ withSymWord ty $ do
-  S prov l' <- withShow ty $ eval l
+  S prov l' <- eval l
   pure $ S prov $ SBVL.length l'
 
 evalCore (LiteralList ty xs) = withShow ty $ withSymWord ty $ do
@@ -264,6 +265,15 @@ evalCore (MakeList ty i a) = withShow ty $ withSymWord ty $ do
     Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
     Nothing  -> throwErrorNoLoc $ UnhandledTerm
       "make-list currently requires a statically determined length"
+evalCore (ListMap tya tyb (vid, _) expr as) = withShow tyb $ withSymWord tyb $
+  withShow tya $ withSymWord tya $ do
+    S _ as' <- eval as
+    let run :: m (S b) -> S b
+        run = undefined
+    -- bmap :: (SymWord a, SymWord b) => Int -> (SBV a -> SBV b) -> SList a -> SList b
+    pure $ sansProv $ bmap listBound
+      (\val -> _sSbv $ run $ withVar vid (mkAVal' val) (eval expr))
+      as'
 evalCore x = error $ "no case for: " ++ show x
 
 evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)

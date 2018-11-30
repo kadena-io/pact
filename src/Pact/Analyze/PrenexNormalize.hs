@@ -57,7 +57,9 @@ import           Pact.Analyze.Util
   CoreProp (MakeList ty a b)                                                  \
   -> CoreProp <$> (MakeList ty <$> float a <*> float b);                      \
   CoreProp (LiteralList ty as)                                                \
-    -> CoreProp <$> (LiteralList ty <$> traverse float as)
+    -> CoreProp <$> (LiteralList ty <$> traverse float as);                   \
+  CoreProp (ListMap tya tyb v b as) -> withFloat tya $                          \
+       CoreProp <$> (ListMap tya tyb v <$> float b <*> float as)
 
 instance Float ('TyList 'TyObject) where
   float p = case p of

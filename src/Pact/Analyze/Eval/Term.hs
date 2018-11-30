@@ -67,6 +67,7 @@ instance Analyzer Analyze where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
+  withVar vid val m = local (scope . at vid ?~ val) m
   markFailure b = succeeds %= (&&& sansProv (bnot b))
 
 addConstraint :: S Bool -> Analyze ()

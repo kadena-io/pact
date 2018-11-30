@@ -57,6 +57,7 @@ import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+import Debug.Trace
 
 -- * Translation types
 
@@ -1065,12 +1066,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
 
-  AST_NFun _node SIdentity [a] -> do
+  AST_NFun _node "identity" [a] -> do
     ea' <- translateNode a
     pure $ case ea' of
       ESimple ty     a' -> ESimple ty     $ CoreTerm $ Identity ty      a'
       EList   ty     a' -> EList   ty     $ CoreTerm $ Identity ty      a'
       EObject schema a' -> EObject schema $ CoreTerm $ Identity SObject a'
+
+  AST_NFun _node "map" [ AST_NFun _node' "identity" [ Pact.Var varName ], _l ]
+    -> do
+    traceShowM varName
+    -- f' <- translateNode f
+    throwError' $ NoLists astNode
 
   AST_NFun _ f _
     --

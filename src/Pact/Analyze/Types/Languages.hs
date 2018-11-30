@@ -228,7 +228,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   LiteralList  :: SingTy 'SimpleK a -> [t a] -> Core t ('TyList a)
 
-  -- ListMap      ::
+  ListMap      :: SingTy 'SimpleK a -> SingTy 'SimpleK b -> (VarId, Text) -> t b -> t ('TyList a) -> Core t ('TyList b)
 
   -- ListFilter ::
   -- ListFold   ::
@@ -456,6 +456,9 @@ instance
   ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
   MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && singEqTm ty1 b1 b2
   LiteralList ty1 l1          == LiteralList _ty2 l2         = singEqListTm ty1 l1 l2
+  ListMap tya1 tyb1 v1 b1 as1 == ListMap tya2 _ v2 b2 as2    = case singEq tya1 tya2 of
+    Nothing   -> False
+    Just Refl -> singEqTm tyb1 b1 b2 && singEqTmList tya1 as1 as2 && v1 == v2
 
   _                           == _                           = False
 
@@ -641,6 +644,17 @@ instance
       . showsPrec 11 ty
       . showString " "
       . singShowsListTm ty 11 l
+    ListMap tya tyb vid b as ->
+        showString "ListMap "
+      . showsPrec 11 tya
+      . showString " "
+      . showsPrec 11 tyb
+      . showString " "
+      . showsPrec 11 vid
+      . showString " "
+      . singShowsTm tyb 11 b
+      . showString " "
+      . singShowsTmList tya 11 as
 
 instance
   ( OfPactTypes UserShow tm
@@ -688,6 +702,11 @@ instance
     ListConcat ty x y        -> parenList [SConcatenation, singUserShowTmList ty x, singUserShowTmList ty y]
     MakeList ty x y          -> parenList [SMakeList, userShow x, singUserShowTm ty y]
     LiteralList ty lst       -> singUserShowListTm ty lst
+    ListMap tya tyb (_, v) b as -> parenList
+      [ "map"
+      , parenList [ "lambda", v, singUserShowTm tyb b ]
+      , singUserShowTmList tya as
+      ]
 
 
 data BeforeOrAfter = Before | After

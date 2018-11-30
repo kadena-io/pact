@@ -72,11 +72,12 @@ class ( MonadError AnalyzeFailure m
   where
     type TermOf m   :: Ty -> *
     eval            :: (a' ~ Concrete a, Show a', SymWord a')
-                    => TermOf m a          -> m (S a')
-    evalO           :: TermOf m 'TyObject  -> m Object
-    throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
-    getVar          :: VarId               -> m (Maybe AVal)
-    markFailure     :: SBV Bool            -> m ()
+                    => TermOf m a           -> m (S a')
+    evalO           :: TermOf m 'TyObject   -> m Object
+    throwErrorNoLoc :: AnalyzeFailureNoLoc  -> m a
+    getVar          :: VarId                -> m (Maybe AVal)
+    withVar         :: VarId -> AVal -> m a -> m a
+    markFailure     :: SBV Bool             -> m ()
 
 data AnalyzeEnv
   = AnalyzeEnv
