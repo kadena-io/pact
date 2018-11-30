@@ -5,19 +5,22 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE Rank2Types          #-}
 module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
+import           Data.Constraint             (Dict (Dict), withDict)
 import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
 import           Data.Monoid                 ((<>))
 import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, false, ite, true, (|||), bAny, unliteral)
+                                              SymWord, false, ite, true, (|||),
+                                              bAny, unliteral, SBV, Mergeable)
 import qualified Data.SBV.List               as SBVL
 import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
-                                              bmap, bzipWith)
+                                              bmapM, bzipWith)
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
@@ -265,16 +268,32 @@ evalCore (MakeList ty i a) = withShow ty $ withSymWord ty $ do
     Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
     Nothing  -> throwErrorNoLoc $ UnhandledTerm
       "make-list currently requires a statically determined length"
-evalCore (ListMap tya tyb (vid, _) expr as) = withShow tyb $ withSymWord tyb $
-  withShow tya $ withSymWord tya $ do
-    S _ as' <- eval as
-    let run :: m (S b) -> S b
-        run = undefined
-    -- bmap :: (SymWord a, SymWord b) => Int -> (SBV a -> SBV b) -> SList a -> SList b
-    pure $ sansProv $ bmap listBound
-      (\val -> _sSbv $ run $ withVar vid (mkAVal' val) (eval expr))
-      as'
+evalCore (ListMap tya tyb (vid, _) expr as)
+  = withShow tyb $ withSymWord tyb $
+      withShow tya $ withSymWord tya $
+        withMergeableSbv tyb $ do
+          S _ as' <- eval as
+          bs <- bmapM listBound
+            (\val -> _sSbv <$> withVar vid (mkAVal' val) (eval expr))
+            as'
+          pure $ sansProv bs
 evalCore x = error $ "no case for: " ++ show x
+
+withMergeableSbv
+  :: forall a b m.
+     Analyzer m
+  => SingTy 'SimpleK a -> (Mergeable (m (SBV [Concrete a])) => m b) -> m b
+withMergeableSbv = withDict . mkSing where
+
+  mkSing :: SingTy 'SimpleK a -> Dict (Mergeable (m (SBV [Concrete a])))
+  mkSing = \case
+    SInteger -> Dict
+    SBool    -> Dict
+    SStr     -> Dict
+    STime    -> Dict
+    SDecimal -> Dict
+    SKeySet  -> Dict
+    SAny     -> Dict
 
 evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)
 evalStrToInt sT = do

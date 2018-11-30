@@ -67,6 +67,13 @@ class ( MonadError AnalyzeFailure m
       -- via QuantifiedConstraints, once we're on 8.6:
       , Mergeable (m (S Bool))
       , Mergeable (m (S Integer))
+      , Mergeable (m (SBV [Integer]))
+      , Mergeable (m (SBV [Bool   ]))
+      , Mergeable (m (SBV [Str    ]))
+      , Mergeable (m (SBV [Time   ]))
+      , Mergeable (m (SBV [Decimal]))
+      , Mergeable (m (SBV [KeySet ]))
+      , Mergeable (m (SBV [Any    ]))
       )
       => Analyzer m
   where
