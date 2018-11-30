@@ -173,10 +173,7 @@ enforceGuardDef dn =
               enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
 
 findCallingModule :: Eval e (Maybe ModuleName)
-findCallingModule = do
-  let findMod _ r@Just {} = r
-      findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
-  foldr findMod Nothing . reverse <$> use evalCallStack
+findCallingModule = uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.
