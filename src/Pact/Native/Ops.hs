@@ -246,12 +246,12 @@ liftLogic n bop desc shortCircuit =
   where
     r = mkTyVar "r" []
     fun i as@[a@TApp{},b@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> do
-      ar <- apply' a [v]
+      ar <- apply (_tApp a) [v]
       case ar of
         TLitBool ab
           | ab == shortCircuit -> return $ toTerm shortCircuit
           | otherwise -> do
-              br <- apply' b [v]
+              br <- apply (_tApp b) [v]
               case br of
                 TLitBool bb -> return $ toTerm $ bop ab bb
                 _ -> delegateError (show n) b br
@@ -259,7 +259,7 @@ liftLogic n bop desc shortCircuit =
     fun i as = argsError' i as
 
 liftNot :: NativeFun e
-liftNot i as@[app@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> apply' app [v] >>= \r -> case r of
+liftNot i as@[app@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> apply (_tApp app) [v] >>= \r -> case r of
   TLitBool b -> return $ toTerm $ not b
   _ -> delegateError "not?" app r
 liftNot i as = argsError' i as

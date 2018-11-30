@@ -148,8 +148,7 @@ handleCompile src exp a =
                         outStr HErr (renderPrettyString (colors mode) (_pDelta d))
                         outStrLn HErr $ ": error: " ++ unpack (peText er)
             Nothing -> outStrLn HErr $ "[No location]: " ++ unpack (peText er)
-          return (Left $ show er)
-
+          Left <$> renderErr er
 
 compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
 compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)

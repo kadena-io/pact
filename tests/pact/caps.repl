@@ -1,0 +1,123 @@
+
+(begin-tx)
+
+(env-data { "kall": ["a" "b" "c"], "kadmin": ["admin"] })
+(define-keyset 'kall)
+(define-keyset 'kadmin)
+
+(env-keys ["admin"])
+
+(module caps 'kadmin
+
+  (defschema guards g:guard)
+  (deftable guard-table:{guards})
+
+  (defschema yieldschema result:integer)
+
+  (defcap KALL-CAP () (enforce-keyset 'kall))
+
+  (defun with-kall ()
+    (with-capability (KALL-CAP) 1))
+
+  (defcap KEYSET-ID-CAP (id:string)
+    (enforce-keyset id))
+
+  (defun test-id-cap (id)
+    (with-capability (KEYSET-ID-CAP id) (test-require id)))
+
+  (defun test-require (id)
+    (require-capability (KEYSET-ID-CAP id)) 1)
+
+  (defun get-module-guard ()
+    (create-module-guard "test"))
+
+  (defun msg-keyset-user-guard (key:string)
+    (create-user-guard key "enforce-msg-keyset"))
+
+  (defun enforce-msg-keyset (key:string)
+    (enforce-keyset (read-keyset key)))
+
+  (defpact test-pact-guards (id:string)
+    (step (step1 id))
+    (step (step2 id)))
+
+  (defun step1 (id:string)
+    (insert guard-table id { "g": (create-pact-guard "test")}))
+
+  (defun step2:object{yieldschema} (id:string)
+    (enforce-guard (get-guard id))
+    (yield { "result": 1 }))
+
+  (defun get-guard (id:string)
+    (at 'g (read guard-table id)))
+
+)
+(create-table guard-table)
+
+(commit-tx)
+
+(typecheck 'caps)
+
+(begin-tx)
+(use caps)
+
+(expect-failure "with-kall should fail w/o kall ks" (with-kall))
+
+(env-keys ["a" "b" "c"])
+
+(expect "with-kall succeeds with kall ks" 1 (with-kall))
+
+(env-data { "k1": ["k1"], "k2": ["k2"] })
+(define-keyset "k1")
+(define-keyset "k2")
+
+(expect-failure "cap k1 fails w/o key" (test-id-cap "k1"))
+(expect-failure "cap k2 fails w/o key" (test-id-cap "k2"))
+
+(env-keys ["k1"])
+(expect "cap k1 succeeds" 1 (test-id-cap "k1"))
+(expect-failure "direct call to test-require fails for k1" (require-capability "k1"))
+(expect-failure "cap k2 fails w/o key" (test-id-cap "k2"))
+
+(env-keys ["k2"])
+(expect-failure "cap k1 fails w/o key" (test-id-cap "k1"))
+(expect-failure "direct call to test-require fails for k2" (require-capability "k2"))
+(expect "cap k2 succeeds" 1 (test-id-cap "k2"))
+
+(expect-failure "top-level with-capability fails"
+                (with-capability (KEYSET-ID-CAP "k2") 1))
+
+(expect-failure "module guard fails w/o admin"
+                (enforce-guard (get-module-guard)))
+
+(env-keys ["admin","k2"])
+(enforce-guard (get-module-guard))
+(expect "top-level with-capability succeeds with module admin"
+        1 (with-capability (KEYSET-ID-CAP "k2") 1))
+
+(commit-tx)
+(begin-tx)
+(use caps)
+
+(env-data { "k1": ["k1"], "k2": ["k2"] })
+(env-keys ["k1"])
+(enforce-guard (msg-keyset-user-guard "k1"))
+(expect-failure "user guard reading keyset k2 fails"
+                (enforce-guard (msg-keyset-user-guard "k2")))
+
+(enforce-guard (keyset-ref-guard "k1"))
+(expect-failure "keyset ref guard k2"
+                (enforce-guard (keyset-ref-guard "k2")))
+
+(test-pact-guards "a")
+
+(env-step 1) ;;clears pact state
+(let ((g (get-guard "a"))) ;; doing let so db failure doesn't confuse below
+  (expect-failure "enforcing pact guard outside of pact" (enforce-guard g)))
+
+(env-pactid "3")
+(test-pact-guards "a")
+(expect "pact enforce succeeds" 1 (at 'result (at 'yield (pact-state))))
+
+(env-pactid "4")
+(expect-failure "pact enforce fails" (test-pact-guards "a"))
