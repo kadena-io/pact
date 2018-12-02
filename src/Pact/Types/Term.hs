@@ -24,6 +24,7 @@
 module Pact.Types.Term
  (
    Namespace(..), nsName, nsKeySet,
+   NamespaceName(..),
    Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..),
@@ -54,7 +55,7 @@ module Pact.Types.Term
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,tNamespaceName,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',guardTypeOf,
@@ -102,25 +103,6 @@ import Pact.Types.Info
 import Pact.Types.Type
 import Pact.Types.Exp
 
-
-data Namespace = Namespace
-  { _nsName    :: Text
-  , _nsKeySet  :: KeySet
-  } deriving (Eq, Generic)
-
-instance Show Namespace where
-  show Namespace{..} = "(namespace " ++ unpack _nsName ++ ")"
-
-instance FromJSON Namespace where
-  parseJSON = withObject "Namespace" $ \o -> Namespace
-    <$> o .: "name"
-    <*> o .: "keyset"
-
-instance ToJSON Namespace where
-  toJSON Namespace{..} = object
-    [ "name"   .= _nsName
-    , "keyset" .= _nsKeySet
-    ]
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
@@ -290,10 +272,10 @@ instance Semigroup Gas where
 instance Monoid Gas where
   mempty = 0
 
-data NativeDFun = NativeDFun {
-      _nativeName :: NativeDefName,
-      _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
-    }
+data NativeDFun = NativeDFun
+  { _nativeName :: NativeDefName
+  , _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
+  }
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a
 
@@ -408,24 +390,6 @@ instance Show Module where
     Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
     Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
 
-data Def n = Def
-  { _dDefName :: !DefName
-  , _dModule :: !ModuleName
-  , _dDefType :: !DefType
-  , _dFunType :: !(FunType (Term n))
-  , _dDefBody :: !(Scope Int Term n)
-  , _dMeta :: !Meta
-  , _dInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq)
-instance (Show n) => Show (Def n) where
-  show Def{..} = "(" ++ unwords
-    [ defTypeRep _dDefType
-    , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
-    , "(" ++ unwords (map show (_ftArgs _dFunType)) ++ ")"] ++
-    maybeDelim " " (_mDocs _dMeta) ++ ")"
-
-
-
 instance ToJSON Module where
   toJSON Module{..} = object
     [ "name" .= _mName
@@ -452,6 +416,44 @@ instance FromJSON Module where
     <*> (HS.fromList <$> o .: "blessed")
     <*> o .: "interfaces"
     <*> pure []
+
+data Def n = Def
+  { _dDefName :: !DefName
+  , _dModule :: !ModuleName
+  , _dDefType :: !DefType
+  , _dFunType :: !(FunType (Term n))
+  , _dDefBody :: !(Scope Int Term n)
+  , _dMeta :: !Meta
+  , _dInfo :: !Info
+  } deriving (Functor,Foldable,Traversable,Eq)
+instance (Show n) => Show (Def n) where
+  show Def{..} = "(" ++ unwords
+    [ defTypeRep _dDefType
+    , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
+    , "(" ++ unwords (map show (_ftArgs _dFunType)) ++ ")"] ++
+    maybeDelim " " (_mDocs _dMeta) ++ ")"
+
+newtype NamespaceName = NamespaceName Text
+  deriving (Eq, FromJSON, ToJSON, IsString, AsString)
+
+data Namespace = Namespace
+  { _nsName   :: NamespaceName
+  , _nsKeySet :: KeySet
+  } deriving (Eq, Generic)
+
+instance Show Namespace where
+  show Namespace{..} = "(namespace " ++ asString' _nsName ++ ")"
+
+instance FromJSON Namespace where
+  parseJSON = withObject "Namespace" $ \o -> Namespace
+    <$> o .: "name"
+    <*> o .: "keyset"
+
+instance ToJSON Namespace where
+  toJSON Namespace{..} = object
+    [ "name"   .= _nsName
+    , "keyset" .= _nsKeySet
+    ]
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
@@ -529,6 +531,10 @@ data Term n =
       _tLiteral :: !Literal
     , _tInfo :: !Info
     } |
+    TNamespace {
+      _tNamespaceName :: !NamespaceName
+    , _tInfo          :: !Info
+    } |
     TGuard {
       _tGuard :: !Guard
     , _tInfo :: !Info
@@ -572,6 +578,7 @@ instance Show n => Show (Term n) where
     show (TObject bs _ _) =
       "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
+    show (TNamespace n _) = "(TNamespace " ++ asString' n ++ ")"
     show (TGuard k _) = show k
     show (TUse u _) = show u
     show (TValue v _) = BSL.toString $ encode v
@@ -610,6 +617,7 @@ instance Eq1 Term where
     liftEq (\(w,x) (y,z) -> liftEq eq w y && liftEq eq x z) a m && liftEq (liftEq eq) b n && c == o
   liftEq _ (TLiteral a b) (TLiteral m n) =
     a == m && b == n
+  liftEq _ (TNamespace n _) (TNamespace n' _) = n == n'
   liftEq _ (TGuard a b) (TGuard m n) =
     a == m && b == n
   liftEq _ (TUse a b) (TUse m n) =
@@ -641,6 +649,7 @@ instance Monad Term where
     TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
     TLiteral l i >>= _ = TLiteral l i
+    TNamespace n i >>= _ = TNamespace n i
     TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
     TValue v i >>= _ = TValue v i
@@ -722,6 +731,7 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
+      TNamespace {} -> Left "namespace"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -781,6 +791,7 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
+abbrev TNamespace {..} = "<namespace " ++ asString' _tNamespaceName ++ ">"
 
 
 

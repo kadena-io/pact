@@ -21,13 +21,10 @@
 --
 
 module Pact.Compile
-    (
-     compile,compileExps
-    ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
-    ,Reserved(..)
-    )
-
-where
+  ( compile,compileExps
+  , MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
+  , Reserved(..)
+  ) where
 
 import qualified Text.Trifecta as TF hiding (expected)
 import Control.Applicative hiding (some,many)
@@ -75,13 +72,14 @@ initModuleState n h = ModuleState n h def def def
 data CompileState = CompileState
   { _csFresh :: Int
   , _csModule :: Maybe ModuleState
+  , _csNamespace :: Maybe NamespaceName
   }
 makeLenses ''CompileState
 
 type Compile a = ExpParse CompileState a
 
 initParseState :: Exp Info -> ParseState CompileState
-initParseState e = ParseState e $ CompileState 0 Nothing
+initParseState e = ParseState e $ CompileState 0 Nothing Nothing
 
 data Reserved =
     RBless
@@ -97,6 +95,7 @@ data Reserved =
   | RLet
   | RLetStar
   | RModule
+  | RNamespace
   | RStep
   | RStepWithRollback
   | RTrue
@@ -119,6 +118,7 @@ instance AsString Reserved where
     RLet -> "let"
     RLetStar -> "let*"
     RModule -> "module"
+    RNamespace -> "namespace"
     RStep -> "step"
     RStepWithRollback -> "step-with-rollback"
     RTrue -> "true"
@@ -198,7 +198,8 @@ topLevel = specialFormOrApp topLevelForm <|> literals <|> varAtom  where
     RLetStar -> return letsForm
     RModule -> return moduleForm
     RInterface -> return interface
-    _ -> expected "top-level form (use, let[*], module, interface)"
+    RNamespace -> return namespace
+    _ -> expected "top-level form (use, let[*], module, interface, namespace)"
 
 
 valueLevel :: Compile (Term Name)
@@ -237,7 +238,6 @@ userAtom = do
   a@AtomExp{..} <- bareAtom
   when (_atomAtom `elem` reserved) $ unexpected' "reserved word"
   pure a
-
 
 
 app :: Compile (Term Name)
@@ -449,6 +449,14 @@ interface = do
   return $ TModule
     (Interface iname code m _msImports)
     (abstract (const Nothing) bd) info
+
+namespace :: Compile (Term Name)
+namespace = do
+  bareName <- _atomAtom <$> bareAtom
+  info <- contextInfo
+  let _nsName = NamespaceName bareName
+  psUser . csNamespace .= (Just _nsName)
+  pure $ TNamespace _nsName info
 
 emptyDef :: Compile (Term Name)
 emptyDef = do
