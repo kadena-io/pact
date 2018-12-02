@@ -418,6 +418,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     purity
     _eeHash
     _eeGasEnv
+    _eeNamespace
 
 
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))

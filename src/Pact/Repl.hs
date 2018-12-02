@@ -82,7 +82,7 @@ initReplState m verifyUri =
 initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
-  return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0) def def mv repldb def initialHash freeGasEnv
+  return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0) def def mv repldb def initialHash freeGasEnv Nothing
 
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
