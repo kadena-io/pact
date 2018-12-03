@@ -232,9 +232,8 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
       case oldNamespace of
         Just _  -> evalError' fi $ "define-namespace: namespace already defined"
         Nothing ->  do
-          -- if guard is defined, rotate check for namespace collisions
+          -- if guard is defined, rotate guard
           enforceGuard fi g
-          -- if successful, write namespace
           writeRow info Write Namespaces name (Namespace name g) &
             success "Namespace defined"
 

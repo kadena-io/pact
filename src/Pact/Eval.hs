@@ -174,6 +174,8 @@ revokeCapability c = evalCapabilities %= filter (/= c)
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
+eval (TNamespace n info) = topLevelCall info "namespace" GNamespace $ \g ->
+  evalNamespace n >> return (g, tStr . pack $ "Namespace " ++ show _nsName)
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- enforce old module keysets
@@ -226,6 +228,8 @@ evalUse (Use mn h i) = do
 
       installModule md
 
+evalNamespace :: NamespaceName -> Eval e ()
+evalNamespace = undefined
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
 loadModule m@Module{..} bod1 mi g0 = do

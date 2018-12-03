@@ -47,7 +47,7 @@ data GasArgs
   | GInterfaceDecl Module
   | GModuleMember Module
   | GUserApp
-
+  | GNamespace
 
 newtype GasLimit = GasLimit Word64
   deriving (Eq,Ord,Num,Real,Integral,Enum)
