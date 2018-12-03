@@ -222,21 +222,21 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
   where
     defineNamespace :: RNativeFun e
     defineNamespace i as = case as of
-      [TLitString nsn, TGuard g _] -> defineNamespace' i nsn g
+      [TLitString nsn, TGuard g _] -> go i nsn g
       _ -> argsError i as
-      where
-        defineNamespace' fi nsn g = do
-          let name = NamespaceName nsn
-              info = _faInfo fi
-          oldNamespace <- view eeNamespace
-          case oldNamespace of
-            Just _  -> evalError' fi $ "define-namespace: namespace already defined"
-            Nothing ->  do
-              -- if guard is defined, rotate check for namespace collisions
-              enforceGuard i g
-              -- if successful, write namespace
-              writeRow info Write Namespaces name (Namespace name g) &
-                success "Namespace defined"
+
+    go fi nsn g = do
+      let name = NamespaceName nsn
+          info = _faInfo fi
+      oldNamespace <- view eeNamespace
+      case oldNamespace of
+        Just _  -> evalError' fi $ "define-namespace: namespace already defined"
+        Nothing ->  do
+          -- if guard is defined, rotate check for namespace collisions
+          enforceGuard fi g
+          -- if successful, write namespace
+          writeRow info Write Namespaces name (Namespace name g) &
+            success "Namespace defined"
 
 langDefs :: NativeModule
 langDefs =
