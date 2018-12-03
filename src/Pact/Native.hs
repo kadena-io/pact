@@ -212,35 +212,24 @@ readDecimalDef = defRNative "read-decimal" readDecimal
     readDecimal i as = argsError i as
 
 defineNamespaceDef :: NativeDef
-defineNamespaceDef = defNative "define-namespace" defineNamespace
+defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("keyset", tTyString)])
    "Create a namespace called NAMESPACE for a given KEYSET. All expressions that occur \
    \ in a given transaction will be tied to NAMESPACE, and may be accessed using the toplevel \
    \ call (namespace NAMESPACE) when KEYSET is in scope. `(namespace my-namespace)`"
   where
-    defineNamespace :: NativeFun e
+    defineNamespace :: RNativeFun e
     defineNamespace i [TLitString ns, TGuard (GKeySet ks) _] = do
-      maybeNs <- view eeNamespace
-
-      case maybeNs of
+      let newName = NamespaceName ns
+          info    = _faInfo i
+      oldNamespace <- readRow info Namespaces newName
+      case oldNamespace of
         Nothing ->
-
-          let newNs = newNamespace ns ks
-              info  = _faInfo i
-
-          writeRow info Write Namespaces (NamespaceName ns) newNs
-          void $ eeNamespace .= (Just newNs)
-
-          undefined
-
-        Just ns -> evalError' i $ "define-namespace: namespace already defined in current transaction"
-
-      where
-        newNamespace :: Text -> KeySet -> Namespace
-        newNamespace n k = Namespace (NamespaceName n) k
-
-
-    defineNamespace i as = argsError' i as
+          writeRow info Write Namespaces newName (Namespace newName ks)
+            & success "Namespace defined"
+        Just (Namespace _ _) ->
+          evalError' i $ "define-namespace: namespace already defined"
+    defineNamespace i as = argsError i as
 
 langDefs :: NativeModule
 langDefs =

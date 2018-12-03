@@ -101,7 +101,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet _cmdSigs
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv
+                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv Nothing
   pr <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec (erInput pr)) (erExec pr)
   let newPacts = case newCmdPact of
@@ -145,7 +145,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
-                        _ceGasEnv
+                        _ceGasEnv Nothing
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
 
           -- Update pacts state
@@ -153,7 +153,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
             Left (SomeException ex) -> throwM ex
             Right EvalResult{..} -> do
               exec@PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
-                                   return erExec         
+                                   return erExec
               if _cmRollback
                 then rollbackUpdate env msg state
                 else continuationUpdate env msg state pact exec
@@ -162,7 +162,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
 rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
 rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
   -- if step doesn't have a rollback function, no error thrown. Therefore, pact will be deleted
-  -- from state. 
+  -- from state.
   let newState = CommandState _csRefStore $ M.delete _cmTxId _csPacts
   liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: rollbackUpdate: reaping pact "
     ++ show _cmTxId
@@ -172,7 +172,7 @@ continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandPact -> 
 continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} PactExec{..} = do
   let nextStep = _cmStep + 1
       isLast = nextStep >= _cpStepCount
-      updateState pacts = CommandState _csRefStore pacts -- never loading modules during continuations 
+      updateState pacts = CommandState _csRefStore pacts -- never loading modules during continuations
 
   if isLast
     then do
@@ -183,4 +183,4 @@ continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} P
       let newPact = CommandPact _cpTxId _cpContinuation _cpStepCount _cmStep _peYield
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
         ++ show _cmTxId ++ ": " ++ show newPact
-      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert _cmTxId newPact _csPacts 
+      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert _cmTxId newPact _csPacts

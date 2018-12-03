@@ -23,6 +23,7 @@ import Control.Monad.Catch
 import Data.Maybe
 import qualified Data.HashMap.Strict as HM
 
+import Pact.Types.Term
 import Pact.Types.Runtime
 import Pact.Compile
 import Pact.Eval
@@ -68,9 +69,16 @@ evalContinuation :: EvalEnv e -> Term Name -> IO EvalResult
 evalContinuation ee pact = interpret ee [pact]
 
 
-setupEvalEnv :: PactDbEnv e -> Maybe EntityName -> ExecutionMode ->
-                MsgData -> RefStore -> GasEnv -> EvalEnv e
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv =
+setupEvalEnv
+  :: PactDbEnv e
+  -> Maybe EntityName
+  -> ExecutionMode
+  -> MsgData
+  -> RefStore
+  -> GasEnv
+  -> Maybe Namespace
+  -> EvalEnv e
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv envNamespace =
   EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mdSigs msgData
@@ -83,6 +91,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv =
   , _eePurity = PImpure
   , _eeHash = mdHash msgData
   , _eeGasEnv = gasEnv
+  , _eeNamespace = envNamespace
   }
   where modeToTx (Transactional t) = Just t
         modeToTx Local = Nothing
