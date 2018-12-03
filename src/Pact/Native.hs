@@ -213,23 +213,30 @@ readDecimalDef = defRNative "read-decimal" readDecimal
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
-  (funType tTyString [("namespace", tTyString), ("keyset", tTyString)])
-   "Create a namespace called NAMESPACE for a given KEYSET. All expressions that occur \
+  (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
+   "Create a namespace called NAMESPACE for a given GUARD. All expressions that occur \
    \ in a given transaction will be tied to NAMESPACE, and may be accessed using the toplevel \
-   \ call (namespace NAMESPACE) when KEYSET is in scope. `(namespace my-namespace)`"
+   \ call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
+   \ the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
+   \ its place. `(define-namespace \"my-namespace\" 'my-guard)`"
   where
     defineNamespace :: RNativeFun e
-    defineNamespace i [TLitString ns, TGuard (GKeySet ks) _] = do
-      let newName = NamespaceName ns
-          info    = _faInfo i
-      oldNamespace <- readRow info Namespaces newName
-      case oldNamespace of
-        Nothing ->
-          writeRow info Write Namespaces newName (Namespace newName ks)
-            & success "Namespace defined"
-        Just (Namespace _ _) ->
-          evalError' i $ "define-namespace: namespace already defined"
-    defineNamespace i as = argsError i as
+    defineNamespace i as = case as of
+      [TLitString nsn, TGuard g _] -> defineNamespace' i nsn g
+      _ -> argsError i as
+      where
+        defineNamespace' fi nsn g = do
+          let name = NamespaceName nsn
+              info = _faInfo fi
+          oldNamespace <- view eeNamespace
+          case oldNamespace of
+            Just _  -> evalError' fi $ "define-namespace: namespace already defined"
+            Nothing ->  do
+              -- if guard is defined, rotate check for namespace collisions
+              enforceGuard i g
+              -- if successful, write namespace
+              writeRow info Write Namespaces name (Namespace name g) &
+                success "Namespace defined"
 
 langDefs :: NativeModule
 langDefs =

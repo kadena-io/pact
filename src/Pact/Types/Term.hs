@@ -23,7 +23,7 @@
 
 module Pact.Types.Term
  (
-   Namespace(..), nsName, nsKeySet,
+   Namespace(..), nsName, nsGuard,
    NamespaceName(..),
    Meta(..),mDocs,mModel,
    PublicKey(..),
@@ -438,7 +438,7 @@ newtype NamespaceName = NamespaceName Text
 
 data Namespace = Namespace
   { _nsName   :: NamespaceName
-  , _nsKeySet :: KeySet
+  , _nsGuard  :: Guard
   } deriving (Eq, Generic)
 
 instance Show Namespace where
@@ -447,12 +447,12 @@ instance Show Namespace where
 instance FromJSON Namespace where
   parseJSON = withObject "Namespace" $ \o -> Namespace
     <$> o .: "name"
-    <*> o .: "keyset"
+    <*> o .: "guard"
 
 instance ToJSON Namespace where
   toJSON Namespace{..} = object
     [ "name"   .= _nsName
-    , "keyset" .= _nsKeySet
+    , "guard"  .= _nsGuard
     ]
 
 data ConstVal n =

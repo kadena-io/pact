@@ -18,6 +18,7 @@ module Pact.Native.Internal
   (success
   ,parseMsgKey
   ,bindReduce
+  ,enforceGuard
   ,defNative,defGasRNative,defRNative
   ,setTopLevelOnly
   ,foldDefs
@@ -150,27 +151,27 @@ enforceGuardDef dn =
   where
     enforceGuard' :: RNativeFun e
     enforceGuard' i as = case as of
-      [TGuard g _] -> go g
-      [TLitString k] -> go (GKeySetRef (KeySetName k))
+      [TGuard g _] -> enforceGuard i g >> return (toTerm True)
+      [TLitString k] -> enforceGuard i (GKeySetRef (KeySetName k)) >> return (toTerm True)
       _ -> argsError i as
-      where
-        go g = runGuard g >> return (toTerm True)
-        runGuard g = case g of
-          GKeySet k -> runPure $ enforceKeySet (_faInfo i) Nothing k
-          GKeySetRef n -> enforceKeySetName (_faInfo i) n
-          GPact PactGuard{..} -> do
-            pid <- getPactId i
-            unless (pid == _pgPactId) $
-              evalError' i $
-                "Pact guard failed, intended: " ++ show _pgPactId ++ ", active: " ++ show pid
-          GModule mg@ModuleGuard{..} -> do
-            m <- getModule (_faInfo i) _mgModuleName
-            case m of
-              Module{..} -> enforceKeySetName (_faInfo i) _mKeySet
-              Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
-          GUser UserGuard{..} -> do
-            void $ runReadOnly (_faInfo i) $
-              enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
+
+enforceGuard :: FunApp -> Guard -> Eval e ()
+enforceGuard i g = case g of
+  GKeySet k -> runPure $ enforceKeySet (_faInfo i) Nothing k
+  GKeySetRef n -> enforceKeySetName (_faInfo i) n
+  GPact PactGuard{..} -> do
+    pid <- getPactId i
+    unless (pid == _pgPactId) $
+      evalError' i $ "Pact guard failed, intended: " ++ show _pgPactId ++ ", active: " ++ show pid
+  GModule mg@ModuleGuard{..} -> do
+    m <- getModule (_faInfo i) _mgModuleName
+    case m of
+      Module{..} -> enforceKeySetName (_faInfo i) _mKeySet
+      Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
+  GUser UserGuard{..} -> do
+    void $ runReadOnly (_faInfo i) $
+      enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
+
 
 findCallingModule :: Eval e (Maybe ModuleName)
 findCallingModule = uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))
