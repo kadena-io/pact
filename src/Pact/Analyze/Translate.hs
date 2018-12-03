@@ -57,7 +57,6 @@ import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
-import Debug.Trace
 
 -- * Translation types
 
@@ -726,21 +725,21 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Days days -> do
     ESimple daysTy days' <- translateNode days
     case daysTy of
-      SInteger     -> pure $ ESimple SInteger     $ inject $ IntArithOp Mul (60 * 60 * 24) days'
+      SInteger -> pure $ ESimple SInteger $ inject $ IntArithOp Mul (60 * 60 * 24) days'
       SDecimal -> pure $ ESimple SDecimal $ inject $ DecArithOp Mul (60 * 60 * 24) days'
       _        -> throwError' $ BadTimeType astNode
 
   AST_Hours hours -> do
     ESimple hoursTy hours' <- translateNode hours
     case hoursTy of
-      SInteger     -> pure $ ESimple SInteger     $ inject $ IntArithOp Mul (60 * 60) hours'
+      SInteger -> pure $ ESimple SInteger $ inject $ IntArithOp Mul (60 * 60) hours'
       SDecimal -> pure $ ESimple SDecimal $ inject $ DecArithOp Mul (60 * 60) hours'
       _        -> throwError' $ BadTimeType astNode
 
   AST_Minutes minutes -> do
     ESimple minutesTy minutes' <- translateNode minutes
     case minutesTy of
-      SInteger     -> pure $ ESimple SInteger     $ inject $ IntArithOp Mul 60 minutes'
+      SInteger -> pure $ ESimple SInteger $ inject $ IntArithOp Mul 60 minutes'
       SDecimal -> pure $ ESimple SDecimal $ inject $ DecArithOp Mul 60 minutes'
       _        -> throwError' $ BadTimeType astNode
 
@@ -1073,11 +1072,40 @@ translateNode astNode = withAstContext astNode $ case astNode of
       EList   ty     a' -> EList   ty     $ CoreTerm $ Identity ty      a'
       EObject schema a' -> EObject schema $ CoreTerm $ Identity SObject a'
 
-  AST_NFun _node "map" [ AST_NFun _node' "identity" [ Pact.Var varName ], _l ]
+  AST_NFun _node "map" [ AST_NFun node' "+" [ n, Pact.Var varNode ], l ]
     -> do
-    traceShowM varName
-    -- f' <- translateNode f
-    throwError' $ NoLists astNode
+    EType bTy           <- translateType node'
+    EType aType         <- translateType varNode
+    ESimple SInteger n' <- translateNode n
+    aTy'                <- requireSimple aType
+    bTy'                <- requireSimple bTy
+    vid                 <- genVarId
+    EList (SList ty) l' <- translateNode l
+
+    case singEq ty aTy' of
+      Nothing   -> error "TODO"
+      Just Refl -> case singEq bTy' SInteger of
+        Nothing -> error "TODO"
+        Just Refl -> pure $
+          EList (SList bTy') $ CoreTerm $ ListMap aTy' bTy' (vid, "x")
+            (Inj (IntArithOp Add n' (CoreTerm (Var vid "x"))))
+            l'
+
+  AST_NFun _node "map" [ AST_NFun node' "identity" [ Pact.Var varNode ], l ]
+    -> do
+    EType bTy           <- translateType node'
+    EType aType         <- translateType varNode
+    aTy'                <- requireSimple aType
+    bTy'                <- requireSimple bTy
+    vid                 <- genVarId
+    EList (SList ty) l' <- translateNode l
+
+    case singEq ty aTy' of
+      Nothing   -> error "TODO"
+      Just Refl -> pure $
+        EList (SList bTy') $ CoreTerm $ ListMap aTy' bTy' (vid, "x")
+          (CoreTerm (Var vid "x"))
+          l'
 
   AST_NFun _ f _
     --
@@ -1089,6 +1117,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
+
+requireSimple :: SingTy k a -> TranslateM (SingTy 'SimpleK a)
+requireSimple ty = case refineSimple ty of
+  Nothing  -> throwError' (error "TODO")
+  Just ty' -> pure ty'
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph
 mkExecutionGraph vertex0 rootPath st = ExecutionGraph

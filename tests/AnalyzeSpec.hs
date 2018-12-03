@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
 
-module AnalyzeSpec (spec) where
+module AnalyzeSpec (spec, spec') where
 
 
 import           Control.Lens                 (at, findOf, ix, matching, (&),
@@ -2737,10 +2737,18 @@ spec = describe "analyze" $ do
           |]
     expectVerified code
 
-  -- describe "list map" $ do
-  --   let code = [text|
-  --         (defun test:[integer] ()
-  --           @model []
-  --           (map (identity) [1 2 3]))
-  --         |]
-  --   expectVerified code
+spec' =
+  describe "list map" $ do
+    let code1 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [1 2 3]))]
+            (map (identity) [1 2 3]))
+          |]
+    expectVerified code1
+
+    let code2 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [2 3 4]))]
+            (map (+ 1) [1 2 3]))
+          |]
+    expectVerified code2

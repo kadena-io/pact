@@ -193,3 +193,14 @@ singCase sing kSimple kList kObject = case sing of
   SAny     -> kSimple Refl
   SList _  -> kList   Refl
   SObject  -> kObject Refl
+
+refineSimple :: SingTy k a -> Maybe (SingTy 'SimpleK a)
+refineSimple ty = case ty of
+  SInteger -> Just ty
+  SBool    -> Just ty
+  SStr     -> Just ty
+  STime    -> Just ty
+  SDecimal -> Just ty
+  SKeySet  -> Just ty
+  SAny     -> Just ty
+  _        -> Nothing
