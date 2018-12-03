@@ -219,18 +219,26 @@ defineNamespaceDef = defNative "define-namespace" defineNamespace
    \ call (namespace NAMESPACE) when KEYSET is in scope. `(namespace my-namespace)`"
   where
     defineNamespace :: NativeFun e
-    defineNamespace i as@[TLitString ns, TLiteral (LString key) keyInfo] = do
-      ks <- readKeySet
+    defineNamespace i [TLitString ns, TGuard (GKeySet ks) _] = do
       maybeNs <- view eeNamespace
+
       case maybeNs of
         Nothing ->
---          eeNamespace .= (envNamespace ns ks)
+
+          let newNs = newNamespace ns ks
+              info  = _faInfo i
+
+          writeRow info Write Namespaces (NamespaceName ns) newNs
+          void $ eeNamespace .= (Just newNs)
+
           undefined
-        Just ns -> evalError' i $ "define-namespace: namespace already defined"
+
+        Just ns -> evalError' i $ "define-namespace: namespace already defined in current transaction"
 
       where
-        readKeySet = ((`TGuard` keyInfo) . GKeySet) <$> readKeySet' i key
-        envNamespace n k = Just $ Namespace (NamespaceName n) k
+        newNamespace :: Text -> KeySet -> Namespace
+        newNamespace n k = Namespace (NamespaceName n) k
+
 
     defineNamespace i as = argsError' i as
 
