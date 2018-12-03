@@ -2374,7 +2374,7 @@ pact-version
 .. code:: lisp
 
    pact> (pact-version)
-   "2.6.0"
+   "2.6.1"
 
 최상위 수준에서만 사용 가능: 모듈 코드에 적용 시 실패합니다.
 
@@ -3334,7 +3334,7 @@ BODY 를 실행하기 전에 메시지 키에 대해 KEYSET-OR-NAME 을 enforce 
 .. code:: lisp
 
    (enforce-keyset 'admin-keyset)
-   (enforce-keyset (read-keyset "admin-keyset"))
+   (enforce-keyset row-guard)
 
 keys-2
 ~~~~~~

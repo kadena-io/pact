@@ -1859,7 +1859,7 @@ pact> (map (+ 1) [1 2 3])
 
 ```
 pact> (pact-version)
-"2.5.0"
+"2.6.1"
 ```
 
 ### read-decimal {#read-decimal}
@@ -2682,8 +2682,7 @@ KEYSET-OR-NAME はキーセット名のシンボル、またはキーセット �
 
 ```lisp
 (enforce-keyset 'admin-keyset)
-
-(enforce-keyset (read-keyset "admin-keyset"))
+(enforce-keyset row-guard)
 ```
 
 ### keys-2 {#keys-2}

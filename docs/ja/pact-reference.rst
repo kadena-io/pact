@@ -2433,7 +2433,7 @@ pact-version
 ::
 
    pact> (pact-version)
-   "2.5.0"
+   "2.6.1"
 
 read-decimal
 ~~~~~~~~~~~~
@@ -3412,8 +3412,7 @@ BODY の実行前に、メッセージ キーに対して KEYSET-OR-NAME
 .. code:: lisp
 
    (enforce-keyset 'admin-keyset)
-
-   (enforce-keyset (read-keyset "admin-keyset"))
+   (enforce-keyset row-guard)
 
 keys-2
 ~~~~~~
