@@ -222,6 +222,7 @@ data TranslateState
       -- The \ edges correspond to the execution of each case. The _ edges
       -- correspond to successful exit early due to the lack of a failure.
       -- These three "success" edges all join together at the same vertex.
+    , _tsFoundVars :: [(VarId, Text, EType)]
     }
 
 makeLenses ''TranslateFailure
@@ -597,8 +598,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
     translateLet (FunctionScope nm) bindings body
 
   AST_Var node -> do
-    Just (Munged varName, vid) <- view $ teNodeVars.at node
-    ty <- translateType node
+    mVar <- view $ teNodeVars.at node
+    ty   <- translateType node
+    (Munged varName, vid) <- case mVar of
+      Just x  -> pure x
+      Nothing -> do
+        vid <- genVarId
+        tsFoundVars %= cons (vid, "x", ty)
+        pure (Munged "x", vid) -- TODO better name?
     pure $ case ty of
       EType ty'        -> singCase ty'
         (\Refl -> ESimple ty' $ CoreTerm $ Var vid varName)
@@ -1072,40 +1079,24 @@ translateNode astNode = withAstContext astNode $ case astNode of
       EList   ty     a' -> EList   ty     $ CoreTerm $ Identity ty      a'
       EObject schema a' -> EObject schema $ CoreTerm $ Identity SObject a'
 
-  AST_NFun _node "map" [ AST_NFun node' "+" [ n, Pact.Var varNode ], l ]
-    -> do
-    EType bTy           <- translateType node'
-    EType aType         <- translateType varNode
-    ESimple SInteger n' <- translateNode n
-    aTy'                <- requireSimple aType
-    bTy'                <- requireSimple bTy
-    vid                 <- genVarId
-    EList (SList ty) l' <- translateNode l
+  AST_NFun _node "map" [ fun, l ] -> do
+    tsFoundVars .= [] -- TODO assert already []
+    ESimple bTy fun' <- translateNode fun
+    vs               <- use tsFoundVars
+    tsFoundVars .= []
+    (vid, varName, EType aType) <- case vs of
+      [v] -> pure v
+      _   -> error "TODO"
 
-    case singEq ty aTy' of
-      Nothing   -> error "TODO"
-      Just Refl -> case singEq bTy' SInteger of
-        Nothing -> error "TODO"
-        Just Refl -> pure $
-          EList (SList bTy') $ CoreTerm $ ListMap aTy' bTy' (vid, "x")
-            (Inj (IntArithOp Add n' (CoreTerm (Var vid "x"))))
-            l'
+    aTy' <- requireSimple aType
 
-  AST_NFun _node "map" [ AST_NFun node' "identity" [ Pact.Var varNode ], l ]
-    -> do
-    EType bTy           <- translateType node'
-    EType aType         <- translateType varNode
-    aTy'                <- requireSimple aType
-    bTy'                <- requireSimple bTy
-    vid                 <- genVarId
-    EList (SList ty) l' <- translateNode l
+    EList (SList listTy) l' <- translateNode l
 
-    case singEq ty aTy' of
+    case singEq listTy aTy' of
       Nothing   -> error "TODO"
       Just Refl -> pure $
-        EList (SList bTy') $ CoreTerm $ ListMap aTy' bTy' (vid, "x")
-          (CoreTerm (Var vid "x"))
-          l'
+        EList (SList bTy) $ CoreTerm $ ListMap aTy' bTy (vid, varName)
+          fun' l'
 
   AST_NFun _ f _
     --
@@ -1161,7 +1152,7 @@ runTranslation name info pactArgs body = do
           path0      = Path 0
           nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
-          state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
+          state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty []
           translation = do
             retTid    <- genTagId
             -- For our toplevel 'FunctionScope', we reuse variables we've
@@ -1188,7 +1179,7 @@ translateNodeNoGraph node =
       nextTagId  = succ $ _pathTag path0
       graph0     = pure vertex0
       translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty
+        Map.empty mempty path0 Map.empty []
 
       translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
 
