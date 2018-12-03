@@ -1765,17 +1765,17 @@ follows:
 ``%Z`` - timezone name
 
 ``%c`` - The preferred calendar time representation for the current
-locale. As ‘dateTimeFmt’ ``locale`` (e.g. ``%a %b %e %H:%M:%S %Z %Y``)
+locale. As ‘dateTimeFmt’ ``locale`` (e.g. ``%a %b %e %H:%M:%S %Z %Y``)
 
 ``%R`` - same as ``%H:%M``
 
 ``%T`` - same as ``%H:%M:%S``
 
 ``%X`` - The preferred time of day representation for the current
-locale. As ‘timeFmt’ ``locale`` (e.g. ``%H:%M:%S``)
+locale. As ‘timeFmt’ ``locale`` (e.g. ``%H:%M:%S``)
 
 ``%r`` - The complete calendar time using the AM/PM format of the
-current locale. As ‘time12Fmt’ ``locale`` (e.g. ``%I:%M:%S %p``)
+current locale. As ‘time12Fmt’ ``locale`` (e.g. ``%I:%M:%S %p``)
 
 ``%P`` - day-half of day from (‘amPm’ ``locale``), converted to
 lowercase, ``"am"``, ``"pm"``
@@ -1814,7 +1814,7 @@ seconds before the Unix epoch is formatted as ``"-1.1"`` with ``%s%Q``.
 
 ``%F`` - same as ``%Y-%m-%d``
 
-``%x`` - as ‘dateFmt’ ``locale`` (e.g. ``%m\/%d\/%y``)
+``%x`` - as ‘dateFmt’ ``locale`` (e.g. ``%m\/%d\/%y``)
 
 ``%Y`` - year, no padding.
 

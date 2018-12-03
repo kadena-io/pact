@@ -345,7 +345,7 @@ or that it increases by a set amount during a transaction:
    (= 1 (column-delta 'accounts 'balance))
 
 ``column-delta`` is defined in terms of the increase of the column from
-before to after the transaction (i.e. ``after - before``) – not an
+before to after the transaction (i.e. ``after - before``) – not an
 absolute value of change. So here ``1`` means an increase of ``1`` to
 the column’s total sum.
 
