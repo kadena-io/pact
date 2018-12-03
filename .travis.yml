@@ -92,7 +92,7 @@ matrix:
   #   addons: {apt: {packages: [libgmp-dev]}}
 
   # OSX Build El Cap
-  - env: BUILD=stack ARGS=""
+  - env: BUILD=stack ARGS="-v"
     os: osx
     addons:
       artifacts:
@@ -100,7 +100,7 @@ matrix:
           - .stack-work/dist/x86_64-osx/Cabal-2.2.0.1/build/pact/pact
 
   # Linux build
-  - env: BUILD=stack ARGS="-j1"
+  - env: BUILD=stack ARGS="-j1 -v"
     addons:
       apt: {packages: [libgmp-dev]}
       artifacts:
