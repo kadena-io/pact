@@ -1246,8 +1246,11 @@ define-keyset
 
 *name* ``string`` *keyset* ``string`` *→* ``string``
 
-Define keyset as NAME with KEYSET. If keyset NAME already exists, keyset
-will be enforced before updating to new value.
+*name* ``string`` *→* ``string``
+
+Define keyset as NAME with KEYSET, or if unspecified, read NAME from
+message payload as keyset, similarly to ‘read-keyset’. If keyset NAME
+already exists, keyset will be enforced before updating to new value.
 
 .. code:: lisp
 
@@ -1258,16 +1261,17 @@ Top level only: this function will fail if used in module code.
 enforce-keyset
 ~~~~~~~~~~~~~~
 
-*keyset-or-name* ``<k[string,keyset]>`` *→* ``bool``
+*guard* ``guard`` *→* ``bool``
 
-Special form to enforce KEYSET-OR-NAME against message keys before
-running BODY. KEYSET-OR-NAME can be a symbol of a keyset name or a
-keyset object.
+*keysetname* ``string`` *→* ``bool``
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired
+predicate logic.
 
 .. code:: lisp
 
    (enforce-keyset 'admin-keyset)
-   (enforce-keyset (read-keyset "admin-keyset"))
+   (enforce-keyset row-guard)
 
 keys-2
 ~~~~~~
@@ -1316,6 +1320,97 @@ PREDFUN }). PREDFUN should resolve to a keys predicate.
 .. code:: lisp
 
    (read-keyset "admin-keyset")
+
+.. _Capabilities:
+
+Capabilities
+------------
+
+create-module-guard
+~~~~~~~~~~~~~~~~~~~
+
+*name* ``string`` *→* ``guard``
+
+Defines a guard by NAME that enforces the current module admin
+predicate.
+
+create-pact-guard
+~~~~~~~~~~~~~~~~~
+
+*name* ``string`` *→* ``guard``
+
+Defines a guard predicate by NAME that captures the results of
+‘pact-id’. At enforcement time, the success condition is that at that
+time ‘pact-id’ must return the same value. In effect this ensures that
+the guard will only succeed within the multi-transaction identified by
+the pact id.
+
+create-user-guard
+~~~~~~~~~~~~~~~~~
+
+*data* ``<a>`` *predfun* ``string`` *→* ``guard``
+
+Defines a custom guard predicate, where DATA will be passed to PREDFUN
+at time of enforcement. PREDFUN is a valid name in the declaring
+environment. PREDFUN must refer to a pure function or enforcement will
+fail at runtime.
+
+enforce-guard
+~~~~~~~~~~~~~
+
+*guard* ``guard`` *→* ``bool``
+
+*keysetname* ``string`` *→* ``bool``
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired
+predicate logic.
+
+.. code:: lisp
+
+   (enforce-guard 'admin-keyset)
+   (enforce-guard row-guard)
+
+keyset-ref-guard
+~~~~~~~~~~~~~~~~
+
+*keyset-ref* ``string`` *→* ``guard``
+
+Creates a guard for the keyset registered as KEYSET-REF with
+‘define-keyset’. Concrete keysets are themselves guard types; this
+function is specifically to store references alongside other guards in
+the database, etc.
+
+require-capability
+~~~~~~~~~~~~~~~~~~
+
+*capability* ``( -> bool)`` *→* ``bool``
+
+Specifies and tests for existing grant of CAPABILITY, failing if not
+found in environment.
+
+.. code:: lisp
+
+   (require-capability (TRANSFER src dest))
+
+with-capability
+~~~~~~~~~~~~~~~
+
+*capability* ``( -> bool)`` *body* ``list`` *→* ``<a>``
+
+Specifies and requests grant of CAPABILITY which is an application of a
+‘defcap’ production. Given the unique token specified by this
+application, ensure that the token is granted in the environment during
+execution of BODY. ‘with-capability’ can only be called in the same
+module that declares the corresponding ‘defcap’, otherwise module-admin
+rights are required. If token is not present, the CAPABILITY is applied,
+with successful completion resulting in the installation/granting of the
+token, which will then be revoked upon completion of BODY. Nested
+‘with-capability’ calls for the same token will detect the presence of
+the token, and will not re-apply CAPABILITY, but simply execute BODY.
+
+.. code:: lisp
+
+   (with-capability (update-users id) (update users id { salary: new-salary }))
 
 .. _repl-lib:
 
@@ -1443,6 +1538,15 @@ Set transaction signature KEYS.
 
    pact> (env-keys ["my-key" "admin-key"])
    "Setting transaction keys"
+
+env-pactid
+~~~~~~~~~~
+
+*→* ``string``
+
+*id* ``string`` *→* ``string``
+
+Query environment pact id, or set to ID.
 
 env-step
 ~~~~~~~~

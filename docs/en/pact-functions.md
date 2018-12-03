@@ -1146,7 +1146,6 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```lisp
 (enforce-keyset 'admin-keyset)
 (enforce-keyset row-guard)
-(enforce-keyset (read-keyset "admin-keyset"))
 ```
 
 
