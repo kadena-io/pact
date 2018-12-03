@@ -175,7 +175,7 @@ eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
 eval (TNamespace n info) = topLevelCall info "namespace" GNamespace $ \g ->
-  evalNamespace n >> return (g, tStr . pack $ "Namespace " ++ show _nsName)
+  evalNamespace n >> return (g, tStr . pack $ "Namespace " ++ asString' n)
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- enforce old module keysets
@@ -228,8 +228,11 @@ evalUse (Use mn h i) = do
 
       installModule md
 
+
 evalNamespace :: NamespaceName -> Eval e ()
 evalNamespace = undefined
+
+
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
 loadModule m@Module{..} bod1 mi g0 = do
@@ -323,11 +326,10 @@ evaluateConstraints
 evaluateConstraints info Interface{} _ =
   evalError info "Unexpected: interface found in module position while solving constraints"
 evaluateConstraints info m evalMap =
-  -- we would like the lazy semantics of foldr to shortcircuit the solver
-  foldr evaluateConstraint (pure (m, evalMap)) (_mInterfaces m)
+  -- we would like the lazy semantics of foldM to shortcircuit the solver
+  foldM evaluateConstraint (m, evalMap) $ _mInterfaces m
   where
-    evaluateConstraint ifn em = do
-      (m',refMap) <- em
+    evaluateConstraint (m', refMap) ifn = do
       refData <- preview $ eeRefStore . rsModules . ix ifn
       case refData of
         Nothing -> evalError info $
@@ -360,16 +362,15 @@ solveConstraint info refName (Ref t) evalMap = do
     Just (Ref s) ->
       case (t, s) of
         (TDef (Def _n _mn dt (FunType args rty) _ m _) _,
-          TDef (Def _n' _mn' dt' (FunType args' rty') b m' i) _) -> do
+          TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _) _) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
-          -- the model concatenation step: we must reinsert the ref back into the map with new models
-          -- TODO yuck, should be lensing here
-          pure $ HM.insert refName (Ref $ TDef (Def _n' _mn' dt' (FunType args' rty') b (m <> m') i) i) em
+          -- the model concatenation step: we reinsert the ref back into the map with new models
+          pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
