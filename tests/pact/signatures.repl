@@ -1,0 +1,209 @@
+(begin-tx)
+
+; simple interfaces with only defun and defconst
+(interface sig-test1
+  ; simple defuns of varying parameter list sizes,
+  ; typed and untyped
+  (defun test1-f1:bool ())
+  (defun test1-f2:string (x:bool))
+  (defun test1-f3:decimal (x:bool y:string z:decimal))
+
+  ; simple defconsts
+  (defconst TEST1-C1 0)
+  (defconst TEST1-C2 "const 1")
+  (defconst TEST1-C3 2.0)
+)
+
+; more complex interface with model properties
+; and  docstrings at the module level
+(interface sig-test2
+  @doc "this is a docstring for sig-test2"
+  @model [(property (do (something)))]
+
+  (defun test2-f1:decimal (x:bool))
+  (defun test2-f2:string ())
+  (defconst TEST2-C1 "test2-C1")
+  (defconst TEST2-C2 true)
+)
+
+; most complex interface with model properties
+; defined at module and function level, as well
+; as docstrings in both positions, typed and untyped
+(interface sig-test3
+  @doc "this is a docstring for sig-test3"
+  @model [(property (do (something)))]
+
+  (defun test3-f1:bool (x:bool))
+  (defun test3-f2:bool (x:decimal y:bool) @doc "i love pact")
+  (defun test3-f3:string () "docs work without the doc")
+  (defun test3-f4:decimal ()
+    @model [(property (do (subproperty)))])
+
+  ; a full example of what a function may look like
+  (defun test3-f5:bool (x:bool y:bool)
+    @model [(property (do (subproperty1)))]
+    @doc "example function docstring")
+
+  ; typed and inferred variants
+  (defconst TEST3-C1 true)
+  (defconst TEST3-C2 1)
+  (defconst TEST3-C3 "const the casbah")
+)
+
+(commit-tx)
+(begin-tx)
+
+(define-keyset 'test-keyset (sig-keyset))
+(module mod-test1 'test-keyset
+
+  @doc "my module documentation"
+  @model [(property (do (mymodule prop)))]
+
+  ; implement arbitrarily many interfaces
+  (implements sig-test1)
+  (implements sig-test2)
+  (implements sig-test3)
+
+
+  (defun test1-f1:bool ()
+    true)
+
+  (defun test1-f2:string (x:bool)
+    @doc "implementation of test1-f2"
+    "forget about x")
+
+  (defun test1-f3:decimal (x: bool y: string z:decimal)
+    z)
+
+  (defun test2-f1:decimal (x:bool)
+    2.0)
+
+  (defun test2-f2:string ()
+    @doc "implementation of test2-f2"
+    "axiomatic string")
+
+  (defun test3-f1:bool (x:bool)
+    true)
+  (defun test3-f2:bool (x:decimal y:bool)
+    @doc "i love pact"
+    y)
+
+  (defun test3-f3:string ()
+    "docs work without the doc"
+    "i love pact twice")
+  (defun test3-f4:decimal ()
+    @model [(property (do (subproperty)))]
+    2.0)
+
+  ; a full example of what a function may look like
+  ; using constants defined in interfaces
+  ; Note: interface subproperty1 and module subproperty2 are
+  ; both verified for this function
+  (defun test3-f5:bool (x: bool y: bool)
+    @model [(property (do (subproperty2)))]
+    "example function docstring"
+    (and x y))
+
+  ; access to constants defined in signatures
+  ; is allowed via dot-accessor notation.
+  (defun use-consts:integer ()
+    (+ sig-test1.TEST1-C1 sig-test3.TEST3-C2))
+)
+
+(commit-tx)
+;; Define a module schema, and use in an abstract interface
+(begin-tx)
+(define-keyset 'test-keyset (sig-keyset))
+(module test-module 'test-keyset
+  @doc "schema test module"
+
+  (defschema account
+    @doc "dummy account schema"
+    @model [(invariant (>= balance 0.0))]
+    balance:decimal
+    amount:decimal
+    ccy:string
+    auth:string
+    )
+)
+
+(commit-tx)
+(begin-tx)
+
+;; Test to see if properties defined in interface
+;; are inherited properly by modules that implement the
+;; interface at different levels of definition (defun-level,
+;; module-level etc)
+
+;; Note: to see this verified, see 'SignatureSpec.hs'
+(interface model-test1
+  @doc "Test to make sure interface global models and function \
+      \ models are concatenated properly in implementing modules"
+  @model [ (defproperty implies (a:bool b:bool) (when a b)) ]
+
+  (defun always-false:bool (x:bool)
+    @doc   "this function always flips false!"
+    @model [(property (= result false))])
+
+  (defun always-nonnegative:integer (x:integer)
+    @doc   "only allow non-negative results"
+    @model [(property (>= result 0))])
+
+)
+
+(commit-tx)
+(begin-tx)
+
+(define-keyset 'model-keyset (sig-keyset))
+(module model-test1-impl 'model-keyset
+
+  (implements model-test1)
+
+  (defschema test-account
+    @doc   "user accounts with balances"
+    @model [(invariant (>= balance 0))]
+
+    balance:integer
+    ks:keyset)
+
+  (deftable test-accounts:{test-account})
+
+
+  (defun always-false:bool (x:bool)
+    x)
+
+  (defun always-nonnegative:integer (x:integer)
+    (if (< x 0)
+        (* x x)
+        (* x (* x x)))
+    )
+)
+
+(commit-tx)
+(begin-tx)
+
+;; Test that module-defined schema types are brought into scope
+;; via 'use' in interfaces
+(interface test-sig
+
+  (use test-module)
+
+  (defun test-1:object{account} (x:object{account}))
+)
+
+(commit-tx)
+
+;; Test to see that implementations of interfaces inherit schema types brought into
+;; scope from other modules
+(module test-impl 'test-keyset
+  @doc "test if implementing test-sig resolves schema type"
+
+  (use test-module)
+  (implements test-sig)
+
+  (deftable accounts:{account}
+    "test reference")
+
+  (defun test-1:object{account} (x:object{account})
+    x)
+)

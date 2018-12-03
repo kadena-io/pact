@@ -25,20 +25,24 @@ module Pact.Native
     ,enforceOneDef
     ,pactVersionDef
     ,formatDef
+    ,strToIntDef
     ,hashDef
     ,ifDef
     ,readDecimalDef
+    ,baseStrToInt
     ) where
 
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Reader (asks)
 import Control.Monad.Catch
+
+import Data.Char (isHexDigit, digitToInt)
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import Prelude
 import qualified Data.HashMap.Strict as M
-import qualified Data.Text as T
+import qualified Data.Text as T (isInfixOf, length, all, splitOn, null, append, unpack, singleton)
 import Safe
 import Control.Arrow hiding (app)
 import Data.Foldable
@@ -56,6 +60,7 @@ import Pact.Native.Internal
 import Pact.Native.Time
 import Pact.Native.Ops
 import Pact.Native.Keysets
+import Pact.Native.Capabilities
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
@@ -68,7 +73,8 @@ natives = [
   dbDefs,
   timeDefs,
   opDefs,
-  keyDefs]
+  keyDefs,
+  capDefs]
 
 
 -- | Production native modules as a dispatch map.
@@ -90,7 +96,7 @@ listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (
 enforceDef :: NativeDef
 enforceDef = defNative "enforce" enforce
   (funType tTyBool [("test",tTyBool),("msg",tTyString)])
-  "Fail transaction with MSG if pure function TEST fails, or returns true. \
+  "Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true. \
   \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
   where
 
@@ -112,7 +118,7 @@ enforceOneDef =
   where
 
     enforceOne :: NativeFun e
-    enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $
+    enforceOne i as@[msg,TList conds _ _] = runReadOnly (_faInfo i) $
       gasUnreduced i as $ do
         msg' <- reduce msg >>= \m -> case m of
           TLitString s -> return s
@@ -128,8 +134,9 @@ enforceOneDef =
     enforceOne i as = argsError' i as
 
 pactVersionDef :: NativeDef
-pactVersionDef =
-  defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
+pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
+  (\_ _ -> return $ toTerm pactVersion)
+  (funType tTyString [])
   "Obtain current pact build version. `(pact-version)`"
 
 
@@ -158,12 +165,19 @@ formatDef =
                   (zip es (tail parts))
     format i as = argsError i as
 
+strToIntDef :: NativeDef
+strToIntDef = defRNative "str-to-int" strToInt
+  (funType tTyInteger [("str-val", tTyString)] <>
+   funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
+  "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
+  \chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for \
+  \the base. `(str-to-int 16 \"abcdef123456\")` `(str-to-int \"123456\")`"
+
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
   \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
   where
-
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ encodeUtf8 s
@@ -173,7 +187,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
 
 ifDef :: NativeDef
 ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
-  "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
+  "Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE. \
   \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
   where
 
@@ -204,7 +218,7 @@ langDefs =
      ifDef
     ,defNative "map" map'
      (funType (TyList a) [("app",lam b a),("list",TyList b)])
-     "Apply elements in LIST as last arg to APP, returning list of results. \
+     "Apply APP to each element in LIST, returning a new list of results. \
      \`(map (+ 1) [1 2 3])`"
 
     ,defNative "fold" fold'
@@ -219,18 +233,18 @@ langDefs =
     ,defRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
      "Create list by repeating VALUE LENGTH times. `(make-list 5 true)`"
 
-    ,defRNative "reverse" reverse' (funType (TyList a) [("l",TyList a)])
-     "Reverse a list. `(reverse [1 2 3])`"
+    ,defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
+     "Reverse LIST. `(reverse [1 2 3])`"
 
     ,defNative "filter" filter'
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
-     "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
+     "Filter LIST by applying APP to each element. For each true result, the original value is kept.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
     ,defRNative "sort" sort'
      (funType (TyList a) [("values",TyList a)] <>
       funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
-     "Sort monotyped list of primitive VALUES, or objects using supplied FIELDS list. \
+     "Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. \
      \`(sort [3 1 2])` `(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"
 
     ,defNative (specialForm Where) where'
@@ -273,8 +287,8 @@ langDefs =
      "Parse KEY string or number value from top level of message data body as integer. `$(read-integer \"age\")`"
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
      "Read KEY from top level of message data body, or data body itself if not provided. \
-     \Coerces value to pact type: String -> string, Number -> integer, Boolean -> bool, \
-     \List -> value, Object -> value. NB value types are not introspectable in pact. \
+     \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
+     \List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type. \
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
     ,defRNative "tx-hash" txHash (funType tTyString [])
@@ -286,10 +300,11 @@ langDefs =
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
-    ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
+    ,setTopLevelOnly $ defRNative "list-modules" listModules
+     (funType (TyList tTyString) []) "List modules available for loading."
     ,defRNative "yield" yield (funType yieldv [("OBJECT",yieldv)])
      "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
-     \only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. \
+     \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values. \
      \`$(yield { \"amount\": 100.0 })`"
     ,defNative "resume" resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
@@ -297,7 +312,7 @@ langDefs =
 
     ,pactVersionDef
 
-    ,defRNative "enforce-pact-version" enforceVersion
+    ,setTopLevelOnly $ defRNative "enforce-pact-version" enforceVersion
      (funType tTyBool [("min-version",tTyString)] <>
       funType tTyBool [("min-version",tTyString),("max-version",tTyString)])
     "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \
@@ -315,12 +330,12 @@ langDefs =
      (funType a [("value",a),("ignore1",b)] <>
       funType a [("value",a),("ignore1",b),("ignore2",c)] <>
       funType a [("value",a),("ignore1",b),("ignore2",c),("ignore3",d)])
-     "Ignore (lazily) arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
+     "Lazily ignore arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
+    ,strToIntDef
     ,hashDef
-
     ])
     where b = mkTyVar "b" []
           c = mkTyVar "c" []
@@ -339,7 +354,7 @@ a = mkTyVar "a" []
 
 map' :: NativeFun e
 map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply' app . pure)
+           TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply (_tApp app) . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
 
@@ -359,7 +374,7 @@ reverse' i as = argsError i as
 fold' :: NativeFun e
 fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
-                         foldM (\r a' -> apply' app [r,a']) initv' ls
+                         foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
            t -> evalError' i $ "fold: expecting list: " ++ abbrev t
 fold' i as = argsError' i as
 
@@ -368,7 +383,7 @@ filter' :: NativeFun e
 filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls lt _ -> ((\b -> TList b lt def) . concat) <$>
                          forM ls (\a' -> do
-                           t <- apply' app [a']
+                           t <- apply (_tApp app) [a']
                            case t of
                              (TLiteral (LBool True) _) -> return [a']
                              _ -> return []) -- hmm, too permissive here, select is stricter
@@ -420,8 +435,8 @@ remove i as = argsError i as
 compose :: NativeFun e
 compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
   v' <- reduce v
-  a' <- apply' appA [v']
-  apply' appB [a']
+  a' <- apply (_tApp appA) [v']
+  apply (_tApp appB) [a']
 compose i as = argsError' i as
 
 
@@ -462,9 +477,7 @@ readInteger i as = argsError i as
 
 
 pactId :: RNativeFun e
-pactId i [] = use evalPactExec >>= \pe -> case pe of
-  Nothing -> evalError' i "pact-id: not in pact execution"
-  Just PactExec{..} -> return $ toTerm _pePactId
+pactId i [] = toTerm <$> getPactId i
 pactId i as = argsError i as
 
 bind :: NativeFun e
@@ -513,7 +526,7 @@ resume i as = argsError' i as
 
 where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
-  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply' app [v]
+  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
 where' i as = argsError' i as
 
@@ -523,7 +536,7 @@ sort' _ [TList{..}] = case nub (map typeof _tList) of
   [ty] -> case ty of
     Right rty@(TyPrim pty) -> case pty of
       TyValue -> badTy (show ty)
-      TyKeySet -> badTy (show ty)
+      TyGuard{} -> badTy (show ty)
       _ -> do
         sl <- forM _tList $ \e -> case firstOf tLiteral e of
           Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ show e
@@ -592,6 +605,48 @@ identity :: RNativeFun e
 identity _ [a'] = return a'
 identity i as = argsError i as
 
+strToInt :: RNativeFun e
+strToInt i as =
+  case as of
+    [TLitString s] -> go 10 s
+    [TLitInteger base, TLitString s] -> go base s
+    _ -> argsError i as
+  where
+    go base' txt =
+      if T.all isHexDigit txt
+      then
+        if T.length txt <= 128
+        then case baseStrToInt base' txt of
+          Left _ -> argsError i as
+          Right n -> return (toTerm n)
+        else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack txt)
+      else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack txt)
+
 txHash :: RNativeFun e
 txHash _ [] = (tStr . asString) <$> view eeHash
 txHash i as = argsError i as
+
+-- | Change of base for Text-based representations of integrals. Only bases
+-- 2 through 16 are supported, for non-empty text of length <= 128
+--
+-- e.g.
+--   -- hexadecimal to decimal
+--   baseStrToInt 10 "abcdef123456" = 188900967593046
+--
+baseStrToInt :: Integer -> Text -> Either Text Integer
+baseStrToInt base t =
+  if base <= 1 || base > 16
+  then Left $ "baseStrToInt - unsupported base: " `T.append` asString base
+  else
+    if T.null t
+    then Left $ "baseStrToInt - empty text: " `T.append` asString t
+    else foldM go 0 $ T.unpack t
+  where
+    go :: Integer -> Char -> Either Text Integer
+    go acc c =
+      let val = fromIntegral . digitToInt $ c
+      in if val < base
+         then pure $ base * acc + val
+         else Left $ "baseStrToInt - character '" <> T.singleton c <>
+                "' is out of range for base " <> tShow base <> ": " <> t
+{-# INLINE baseStrToInt #-}

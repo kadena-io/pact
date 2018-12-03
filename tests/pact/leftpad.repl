@@ -22,7 +22,6 @@
 (use impure)
 
 (module dep 'k
-  (defconst IMPURE_V1_HASH (at 'hash (describe-module 'impure)))
   (defun dep-leftpad () (left-pad "hello" 3))
   (defun dep-impure (k v) (ins k { "value": v })))
 

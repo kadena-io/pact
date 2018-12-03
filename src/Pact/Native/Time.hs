@@ -26,14 +26,13 @@ import Data.Thyme
 import Data.Decimal
 import System.Locale
 import Data.AffineSpace
-import Data.Semigroup
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
 
 
 timedoc :: Text
-timedoc = "See [\"Time Formats\" docs](#time-formats) for supported formats."
+timedoc = "See [\"Time Formats\" docs](pact-reference.html#time-formats) for supported formats."
 
 defAddTime :: NativeDef
 defAddTime = defRNative "add-time" addTime

@@ -50,7 +50,7 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 *value*&nbsp;`<a>` *ignore1*&nbsp;`<b>` *ignore2*&nbsp;`<c>` *ignore3*&nbsp;`<d>` *&rarr;*&nbsp;`<a>`
 
 
-Ignore (lazily) arguments IGNORE* and return VALUE. 
+Lazily ignore arguments IGNORE* and return VALUE. 
 ```lisp
 pact> (filter (constantly true) [1 2 3])
 [1 2 3]
@@ -100,7 +100,7 @@ pact> (drop ['name] { 'name: "Vlad", 'active: false})
 *test*&nbsp;`bool` *msg*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Fail transaction with MSG if pure function TEST fails, or returns true. 
+Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true. 
 ```lisp
 pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
 <interactive>:0:0: Chaos reigns
@@ -132,13 +132,15 @@ pact> (enforce-pact-version "2.3")
 true
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### filter {#filter}
 
 *app*&nbsp;`(x:<a> -> bool)` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Filter LIST by applying APP to each element to get a boolean determining inclusion.
+Filter LIST by applying APP to each element. For each true result, the original value is kept.
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ["dog" "has" "fleas"]
@@ -200,7 +202,7 @@ pact> (map (identity) [1 2 3])
 *cond*&nbsp;`bool` *then*&nbsp;`<a>` *else*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
 
 
-Test COND, if true evaluate THEN, otherwise evaluate ELSE. 
+Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE. 
 ```lisp
 pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 "Sanity prevails"
@@ -242,6 +244,8 @@ pact> (list 1 2 3)
 
 List modules available for loading.
 
+Top level only: this function will fail if used in module code.
+
 
 ### make-list {#make-list}
 
@@ -260,7 +264,7 @@ pact> (make-list 5 true)
 *app*&nbsp;`(x:<b> -> <a>)` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Apply elements in LIST as last arg to APP, returning list of results. 
+Apply APP to each element in LIST, returning a new list of results. 
 ```lisp
 pact> (map (+ 1) [1 2 3])
 [2 3 4]
@@ -283,8 +287,10 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.5.0"
+"2.6.1"
 ```
+
+Top level only: this function will fail if used in module code.
 
 
 ### read-decimal {#read-decimal}
@@ -317,7 +323,7 @@ Parse KEY string or number value from top level of message data body as integer.
 *key*&nbsp;`string` *&rarr;*&nbsp;`<a>`
 
 
-Read KEY from top level of message data body, or data body itself if not provided. Coerces value to pact type: String -> string, Number -> integer, Boolean -> bool, List -> value, Object -> value. NB value types are not introspectable in pact. 
+Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type. 
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -346,10 +352,10 @@ Special form binds to a yielded object value from the prior step execution in a 
 
 ### reverse {#reverse}
 
-*l*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+*list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Reverse a list. 
+Reverse LIST. 
 ```lisp
 pact> (reverse [1 2 3])
 [3 2 1]
@@ -363,12 +369,28 @@ pact> (reverse [1 2 3])
 *fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
 
 
-Sort monotyped list of primitive VALUES, or objects using supplied FIELDS list. 
+Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. 
 ```lisp
 pact> (sort [3 1 2])
 [1 2 3]
 pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
+```
+
+
+### str-to-int {#str-to-int}
+
+*str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
+
+*base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
+
+
+Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for the base. 
+```lisp
+pact> (str-to-int 16 "abcdef123456")
+188900967593046
+pact> (str-to-int "123456")
+123456
 ```
 
 
@@ -431,7 +453,7 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 *OBJECT*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
 
 
-Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. 
+Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values. 
 ```lisp
 (yield { "amount": 100.0 })
 ```
@@ -448,13 +470,17 @@ Create table TABLE.
 (create-table accounts)
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### describe-keyset {#describe-keyset}
 
 *keyset*&nbsp;`string` *&rarr;*&nbsp;`value`
 
 
-Get metadata for KEYSET
+Get metadata for KEYSET.
+
+Top level only: this function will fail if used in module code.
 
 
 ### describe-module {#describe-module}
@@ -467,6 +493,8 @@ Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code
 (describe-module 'my-module)
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### describe-table {#describe-table}
 
@@ -478,6 +506,8 @@ Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code'
 (describe-table accounts)
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### insert {#insert}
 
@@ -486,7 +516,7 @@ Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code'
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
 ```lisp
-(insert 'accounts { "balance": 0.0, "note": "Created account." })
+(insert accounts { "balance": 0.0, "note": "Created account." })
 ```
 
 
@@ -497,7 +527,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data already exis
 
 Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects indexed by txid. 
 ```lisp
-(keylog 'accounts "Alice" 123485945)
+(keylog accounts "Alice" 123485945)
 ```
 
 
@@ -508,7 +538,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 
 Return all keys in TABLE. 
 ```lisp
-(keys 'accounts)
+(keys accounts)
 ```
 
 
@@ -519,9 +549,9 @@ Return all keys in TABLE.
 *table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object:<{row}>`
 
 
-Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. 
+Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified. 
 ```lisp
-(read 'accounts id ['balance 'ccy])
+(read accounts id ['balance 'ccy])
 ```
 
 
@@ -557,7 +587,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 
 Return all updates to TABLE performed in transaction TXID. 
 ```lisp
-(txlog 'accounts 123485945)
+(txlog accounts 123485945)
 ```
 
 
@@ -568,7 +598,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY.
 ```lisp
-(update 'accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+(update accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
 ```
 
 
@@ -579,7 +609,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names. 
 ```lisp
-(with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
+(with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
    (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
@@ -591,7 +621,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.
 ```lisp
-(with-read 'accounts id { "balance":= bal, "ccy":= ccy }
+(with-read accounts id { "balance":= bal, "ccy":= ccy }
    (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
@@ -603,7 +633,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 Write entry in TABLE for KEY of OBJECT column data.
 ```lisp
-(write 'accounts { "balance": 100.0 })
+(write accounts { "balance": 100.0 })
 ```
 
 ## Time {#Time}
@@ -653,7 +683,7 @@ pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
 *format*&nbsp;`string` *time*&nbsp;`time` *&rarr;*&nbsp;`string`
 
 
-Format TIME using FORMAT. See ["Time Formats" docs](#time-formats) for supported formats.
+Format TIME using FORMAT. See ["Time Formats" docs](pact-reference.html#time-formats) for supported formats.
 ```lisp
 pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
 "2016-07-22"
@@ -693,7 +723,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 *format*&nbsp;`string` *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using FORMAT. See ["Time Formats" docs](#time-formats) for supported formats.
+Construct time from UTCVAL using FORMAT. See ["Time Formats" docs](pact-reference.html#time-formats) for supported formats.
 ```lisp
 pact> (parse-time "%F" "2016-09-12")
 "2016-09-12T00:00:00Z"
@@ -952,7 +982,7 @@ pact> (ceiling 100.15234 2)
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
-Exp of X 
+Exp of X. 
 ```lisp
 pact> (round (exp 3) 6)
 20.085537
@@ -1094,22 +1124,28 @@ pact> (sqrt 25)
 
 *name*&nbsp;`string` *keyset*&nbsp;`string` *&rarr;*&nbsp;`string`
 
+*name*&nbsp;`string` *&rarr;*&nbsp;`string`
 
-Define keyset as NAME with KEYSET. If keyset NAME already exists, keyset will be enforced before updating to new value.
+
+Define keyset as NAME with KEYSET, or if unspecified, read NAME from message payload as keyset, similarly to 'read-keyset'. If keyset NAME already exists, keyset will be enforced before updating to new value.
 ```lisp
 (define-keyset 'admin-keyset (read-keyset "keyset"))
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### enforce-keyset {#enforce-keyset}
 
-*keyset-or-name*&nbsp;`<k[string,keyset]>` *&rarr;*&nbsp;`bool`
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Special form to enforce KEYSET-OR-NAME against message keys before running BODY. KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. 
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. 
 ```lisp
-(with-keyset 'admin-keyset ...)
-(with-keyset (read-keyset "keyset") ...)
+(enforce-keyset 'admin-keyset)
+(enforce-keyset row-guard)
 ```
 
 
@@ -1159,9 +1195,78 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 (read-keyset "admin-keyset")
 ```
 
+## Capabilities {#Capabilities}
+
+### create-module-guard {#create-module-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard by NAME that enforces the current module admin predicate.
+
+
+### create-pact-guard {#create-pact-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
+
+
+### create-user-guard {#create-user-guard}
+
+*data*&nbsp;`<a>` *predfun*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
+
+
+### enforce-guard {#enforce-guard}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. 
+```lisp
+(enforce-guard 'admin-keyset)
+(enforce-guard row-guard)
+```
+
+
+### keyset-ref-guard {#keyset-ref-guard}
+
+*keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
+
+
+### require-capability {#require-capability}
+
+*capability*&nbsp;`( -> bool)` *&rarr;*&nbsp;`bool`
+
+
+Specifies and tests for existing grant of CAPABILITY, failing if not found in environment. 
+```lisp
+(require-capability (TRANSFER src dest))
+```
+
+
+### with-capability {#with-capability}
+
+*capability*&nbsp;`( -> bool)` *body*&nbsp;`list` *&rarr;*&nbsp;`<a>`
+
+
+Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is applied, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 
+```lisp
+(with-capability (update-users id) (update users id { salary: new-salary }))
+```
+
 ## REPL-only functions {#repl-lib}
 
-The following functions are loaded magically in the interactive REPL, or in script files with a `.repl` extension. They are not available for blockchain-based execution.
+The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
 
 
 ### begin-tx {#begin-tx}
@@ -1232,7 +1337,7 @@ Set environment confidential ENTITY id, or unset with no argument. Clears any pr
 *gas*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Query gas state, or set it to GAS
+Query gas state, or set it to GAS.
 
 
 ### env-gaslimit {#env-gaslimit}
@@ -1240,7 +1345,7 @@ Query gas state, or set it to GAS
 *limit*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Set environment gas limit to LIMIT
+Set environment gas limit to LIMIT.
 
 
 ### env-gasprice {#env-gasprice}
@@ -1248,7 +1353,7 @@ Set environment gas limit to LIMIT
 *price*&nbsp;`decimal` *&rarr;*&nbsp;`string`
 
 
-Set environment gas price to PRICE
+Set environment gas price to PRICE.
 
 
 ### env-gasrate {#env-gasrate}
@@ -1256,7 +1361,7 @@ Set environment gas price to PRICE
 *rate*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Update gas model to charge constant RATE
+Update gas model to charge constant RATE.
 
 
 ### env-hash {#env-hash}
@@ -1281,6 +1386,16 @@ Set transaction signature KEYS.
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
 ```
+
+
+### env-pactid {#env-pactid}
+
+ *&rarr;*&nbsp;`string`
+
+*id*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Query environment pact id, or set to ID.
 
 
 ### env-step {#env-step}
@@ -1344,7 +1459,7 @@ pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
 *file*&nbsp;`string` *reset*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
 
-Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. 
+Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. 
 ```lisp
 (load "accounts.repl")
 ```
@@ -1366,7 +1481,7 @@ Inspect state from previous pact execution. Returns object with fields 'yield': 
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Print a string, mainly to format newlines correctly
+Output VALUE to terminal as unquoted, unescaped text.
 
 
 ### rollback-tx {#rollback-tx}
@@ -1385,7 +1500,7 @@ Rollback transaction.
  *&rarr;*&nbsp;`keyset`
 
 
-Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
+Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
 
 
 ### typecheck {#typecheck}

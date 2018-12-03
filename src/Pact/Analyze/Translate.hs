@@ -25,12 +25,11 @@ import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, modify',
-                                             runStateT)
+                                             runStateT, evalStateT)
 import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe, isNothing)
-import           Data.Monoid                ((<>))
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
@@ -40,8 +39,9 @@ import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
+import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
-                                             Type (..))
+                                             Type (..), GuardType(..))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
@@ -53,7 +53,6 @@ import           Pact.Analyze.Feature       hiding (TyVar, Var, col, obj, str,
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
-
 
 -- * Translation types
 
@@ -167,8 +166,8 @@ data TranslateState
       --
       -- 'TraceSubpathStart's are emitted once for each path: at the start of
       -- an execution trace, and at the beginning of either side of a
-      -- conditional.  After a conditional, we resume the path from before the
-      -- conditional.  Either side of a conditional will contain a minimum of
+      -- conditional. After a conditional, we resume the path from before the
+      -- conditional. Either side of a conditional will contain a minimum of
       -- two edges: splitting away from the other branch, and then rejoining
       -- back to the other branch at the join point. The following program:
       --
@@ -296,20 +295,20 @@ startNewSubpath = do
   pure p
 
 tagDbAccess
-  :: (Located (TagId, Schema) -> TraceEvent)
+  :: (Schema -> Located TagId -> TraceEvent)
   -> Node
   -> Schema
   -> TranslateM TagId
 tagDbAccess mkEvent node schema = do
   tid <- genTagId
-  emit $ mkEvent $ Located (nodeInfo node) (tid, schema)
+  emit $ mkEvent schema (Located (nodeInfo node) tid)
   pure tid
 
 tagRead :: Node -> Schema -> TranslateM TagId
 tagRead = tagDbAccess TraceRead
 
-tagWrite :: Node -> Schema -> TranslateM TagId
-tagWrite = tagDbAccess TraceWrite
+tagWrite :: WriteType -> Node -> Schema -> TranslateM TagId
+tagWrite = tagDbAccess . TraceWrite
 
 tagAssert :: Node -> TranslateM TagId
 tagAssert node = do
@@ -363,7 +362,7 @@ maybeTranslateType' f = \case
   TyPrim TyInteger -> pure $ EType TInt
   TyPrim TyString  -> pure $ EType TStr
   TyPrim TyTime    -> pure $ EType TTime
-  TyPrim TyKeySet  -> pure $ EType TKeySet
+  TyPrim (TyGuard (Just GTyKeySet))  -> pure $ EType TKeySet
 
   -- Pretend any and an unknown var are the same -- we can't analyze either of
   -- them.
@@ -378,6 +377,7 @@ maybeTranslateType' f = \case
   TyPrim TyValue   -> empty
   TyList _         -> empty
   TyFun _          -> empty
+  TyPrim (TyGuard _) -> empty
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -657,7 +657,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       return $ ESimple TBool $ Enforce Nothing $ NameAuthorized tid ksnT
 
   AST_EnforceKeyset ksA
-    | ksA ^? aNode.aTy == Just (TyPrim TyKeySet)
+    | ksA ^? aNode.aTy == Just (TyPrim (TyGuard $ Just GTyKeySet))
     -> do
       ESimple TKeySet ksT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
@@ -673,13 +673,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     let n = length casesA -- invariant: n > 0
         genPath = Path <$> genTagId
     preEnforcePath <- use tsCurrentPath
-    pathPairs <- (++)
-        -- For the first n-1 cases, we generate a failure, then success, tag,
-        -- for each possibility after the case runs.
-        <$> replicateM (pred n) ((,) <$> genPath <*> genPath)
-        -- For the last case, we generate a single tag for both, to result in a
-        -- fully-connected graph:
-        <*> replicateM 1        (genPath <&> \p -> (p, p))
+    -- Generate failure and success paths for each case. We generate and tag
+    -- the final failure path, but don't include it in the graph.
+    pathPairs <- replicateM n ((,) <$> genPath <*> genPath)
 
     let (failurePaths, successPaths) = unzip pathPairs
         -- we don't start a new path for the first case -- we *always* run it:
@@ -863,7 +859,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     ESimple TStr row'   <- translateNode row
     EObject schema obj' <- translateNode obj
-    tid                 <- tagWrite node schema
+    tid                 <- tagWrite writeType node schema
     pure $ ESimple TStr $
       Write writeType tid (TableName (T.unpack tn)) schema row' obj'
 
@@ -883,6 +879,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
     case typeEq ta tb of
       Just Refl -> pure $ ESimple ta $ IfThenElse cond' (truePath, a) (falsePath, b)
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
+
+  AST_NFun _node "str-to-int" [s] -> do
+    ESimple TStr s' <- translateNode s
+    pure $ ESimple TInt $ CoreTerm $ StrToInt s'
+
+  AST_NFun _node "str-to-int" [b, s] -> do
+    ESimple TInt b' <- translateNode b
+    ESimple TStr s' <- translateNode s
+    pure $ ESimple TInt $ CoreTerm $ StrToIntBase b' s'
 
   AST_NFun _node "pact-version" [] -> pure $ ESimple TStr PactVersion
 
@@ -977,11 +982,12 @@ mkExecutionGraph vertex0 rootPath st = ExecutionGraph
     (_tsPathEdges st)
 
 runTranslation
-  :: Info
+  :: Text
+  -> Info
   -> [Named Node]
   -> [AST Node]
   -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
-runTranslation info pactArgs body = do
+runTranslation name info pactArgs body = do
     (args, translationVid) <- runArgsTranslation
     (tm, graph) <- runBodyTranslation args translationVid
     pure (args, tm, graph)
@@ -992,6 +998,11 @@ runTranslation info pactArgs body = do
       (runReaderT (traverse translateArg pactArgs) info)
       (VarId 1)
 
+    argToBinding :: Arg -> Located Binding
+    argToBinding (Arg unmunged vid node ety) =
+      Located (node ^. aId . Pact.tiInfo) $
+        Binding vid unmunged (node ^. aId.tiName.to Munged) ety
+
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
     runBodyTranslation args nextVarId =
@@ -1001,7 +1012,36 @@ runTranslation info pactArgs body = do
           nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
-          translation = translateBody body
-                     <* extendPath -- form final edge for any remaining events
+          translation = do
+            retTid    <- genTagId
+            -- For our toplevel 'FunctionScope', we reuse variables we've
+            -- already generated during argument translation:
+            let bindingTs = fmap argToBinding args
+            res <- withNewScope (FunctionScope name) bindingTs retTid $
+              translateBody body
+            _ <- extendPath -- form final edge for any remaining events
+            pure res
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info args)
+
+-- | Translate a node ignoring the execution graph. This is useful in cases
+-- where we don't show an execution trace. Those two places (currently) are:
+-- * Translating `defconst`s for use in properties. This is for use only in
+-- properties, as opposed to in execution.
+-- * Translating terms for property testing. Here we don't show a trace -- we
+-- just test that pact and analysis come to the same result.
+translateNodeNoGraph :: AST Node -> Except TranslateFailure ETerm
+translateNodeNoGraph node =
+  let vertex0    = 0
+      nextVertex = succ vertex0
+      path0      = Path 0
+      nextTagId  = succ $ _pathTag path0
+      graph0     = pure vertex0
+      translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
+        Map.empty mempty path0 Map.empty
+
+      translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
+
+  in (`evalStateT` translateState) $
+       (`runReaderT` translateEnv) $
+         unTranslateM $ translateNode node

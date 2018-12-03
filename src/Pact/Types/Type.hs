@@ -22,12 +22,13 @@ module Pact.Types.Type
    FunType(..),ftArgs,ftReturn,
    FunTypes,funTypes,showFunTypes,
    PrimType(..),
+   GuardType(..),
    tyInteger,tyDecimal,tyTime,tyBool,tyString,
    tyList,tyObject,tyValue,tyKeySet,tyTable,
    SchemaType(..),
    TypeVarName(..),typeVarName,
    TypeVar(..),tvName,tvConstraint,
-   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,
+   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,tyGuard,
    mkTyVar,mkTyVar',mkSchemaVar,
    isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
 
@@ -98,6 +99,18 @@ showFunTypes :: Show o => FunTypes o -> String
 showFunTypes (t :| []) = show t
 showFunTypes ts = show (toList ts)
 
+data GuardType
+  = GTyKeySet
+  | GTyKeySetName
+  | GTyPact
+  | GTyUser
+  | GTyModule
+  deriving (Eq,Ord,Generic)
+
+instance NFData GuardType
+
+-- | Primitive/unvarying types.
+-- Guard is lame Maybe to allow "wildcards".
 data PrimType =
   TyInteger |
   TyDecimal |
@@ -105,13 +118,14 @@ data PrimType =
   TyBool |
   TyString |
   TyValue |
-  TyKeySet
+  TyGuard (Maybe GuardType)
   deriving (Eq,Ord,Generic)
 
 instance NFData PrimType
 
 
-tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet,tyTable :: Text
+tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,
+  tyKeySet,tyTable,tyGuard :: Text
 tyInteger = "integer"
 tyDecimal = "decimal"
 tyTime = "time"
@@ -121,16 +135,20 @@ tyList = "list"
 tyObject = "object"
 tyValue = "value"
 tyKeySet = "keyset"
+tyGuard = "guard"
 tyTable = "table"
 
 instance Show PrimType where
-  show TyInteger = unpack tyInteger
-  show TyDecimal = unpack tyDecimal
-  show TyTime = unpack tyTime
-  show TyBool = unpack tyBool
-  show TyString = unpack tyString
-  show TyValue = unpack tyValue
-  show TyKeySet = unpack tyKeySet
+  show t = unpack $ case t of
+    TyInteger -> tyInteger
+    TyDecimal -> tyDecimal
+    TyTime -> tyTime
+    TyBool -> tyBool
+    TyString -> tyString
+    TyValue -> tyValue
+    TyGuard tg -> case tg of
+      Just GTyKeySet -> tyKeySet
+      _ -> tyGuard
 instance Pretty PrimType where pretty = text . show
 
 data SchemaType =

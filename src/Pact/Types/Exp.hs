@@ -22,8 +22,6 @@
 
 module Pact.Types.Exp
  (
-   ModuleName(..),
-   Name(..),
    Literal(..),
    _LString,_LInteger,_LDecimal,_LBool,_LTime,
    simpleISO8601,formatLTime,
@@ -33,75 +31,28 @@ module Pact.Types.Exp
    _ELiteral,_EAtom,_EList,_ESeparator,
    ListDelimiter(..),listDelims,enlist,
    Separator(..),
-   pattern CommaExp
+   pattern CommaExp,
+   pattern ColonExp
    ) where
 
 
 import Control.Lens (makePrisms)
-import Control.Applicative
 import Data.List
 import Control.Monad
 import Prelude
 import Data.Text (Text,pack,unpack)
 import Data.Aeson
-import Data.String
-import Data.Default
 import Data.Char
 import Data.Thyme
 import System.Locale
 import Data.Scientific
 import GHC.Generics (Generic)
 import Data.Decimal
-import Data.Hashable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Control.DeepSeq
-import qualified Data.Attoparsec.Text as AP
-import Text.Trifecta (try,ident,TokenParsing,(<?>))
 import Data.Serialize (Serialize)
 
-import Pact.Types.Util
-import Pact.Types.Parser
 import Pact.Types.Info
 import Pact.Types.Type
-
-
-newtype ModuleName = ModuleName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
-instance Show ModuleName where show (ModuleName s) = show s
-
--- | A named reference from source.
-data Name =
-    QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info } |
-    Name { _nName :: Text, _nInfo :: Info }
-         deriving (Generic)
-instance Show Name where
-    show (QName q n _) = asString' q ++ "." ++ unpack n
-    show (Name n _) = unpack n
-instance ToJSON Name where toJSON = toJSON . show
-instance FromJSON Name where
-  parseJSON = withText "Name" $ \t -> case AP.parseOnly (parseName def) t of
-    Left s -> fail s
-    Right n -> return n
-
-parseName :: (TokenParsing m, Monad m) => Info -> m Name
-parseName i = do
-  a <- ident style
-  try (qualified >>= \qn -> return (QName (ModuleName a) qn i) <?> "qualified name") <|>
-    return (Name a i)
-
-
-instance Hashable Name where
-  hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
-  hashWithSalt s (QName q n _) = s `hashWithSalt` (1::Int) `hashWithSalt` q `hashWithSalt` n
-instance Eq Name where
-  (QName a b _) == (QName c d _) = (a,b) == (c,d)
-  (Name a _) == (Name b _) = a == b
-  _ == _ = False
-instance Ord Name where
-  (QName a b _) `compare` (QName c d _) = (a,b) `compare` (c,d)
-  (Name a _) `compare` (Name b _) = a `compare` b
-  Name {} `compare` QName {} = LT
-  QName {} `compare` Name {} = GT
 
 
 data Literal =
@@ -227,7 +178,6 @@ instance HasInfo (Exp Info) where
     EList l -> getInfo l
     ESeparator s -> getInfo s
 
-
 makePrisms ''Exp
 
 
@@ -240,3 +190,6 @@ instance Show (Exp i) where
 
 pattern CommaExp :: Exp t
 pattern CommaExp <- ESeparator (SeparatorExp Comma _i)
+
+pattern ColonExp :: Exp t
+pattern ColonExp <- ESeparator (SeparatorExp Colon _i)

@@ -1,6 +1,6 @@
 ![](img/kadena-logo-210px.png)
 
-The Pact property checking system
+The Pact Property Checking System
 ===
 
 ## What is it?
@@ -24,7 +24,7 @@ property _statically_, before any code is deployed to the blockchain.
 Compared with conventional unit testing, wherein the behavior of a program is
 validated for a single combination of inputs and the author hopes this case
 generalizes to all inputs, the Pact property checking system _automatically_
-checks the code under test against all possible inputs, and therefore all
+checks the code against all possible inputs, and therefore all
 possible execution paths.
 
 Pact does this by allowing authors to specify _schema invariants_ about columns
@@ -48,16 +48,16 @@ sophisticated properties about their smart contracts over time.
 
 Here's an example of Pact's properties in action -- we declare a property
 alongside the docstring of the function to which it corresponds. Note that the
-function farms out its implementation of keyset enforcement to another
-function, `enforce-admin`, and we don't have to be concerned about how that
-happens to be implemented. Our property states that if the transaction
+function delegates its implementation of keyset enforcement to another
+function, `enforce-admin`, and we don't need to be concerned about its
+internal details. Our property states that if the transaction
 submitted to the blockchain runs successfully, it must be the case that the
 transaction has the proper signatures to satisfy the keyset named `admins`:
 
 ```lisp
 (defun read-account (id)
   @doc   "Read data for account ID"
-  @model (properties [(authorized-by 'admins)])
+  @model [(property (authorized-by 'admins))]
 
   (enforce-admin)
   (read 'accounts id ['balance 'ccy 'amount]))
@@ -67,7 +67,7 @@ There's a set of square brackets around our property because Pact allows
 multiple properties to be defined simultaneously:
 
 ```lisp
-(properties [p1 p2 p3 ...])
+[p1 p2 p3 ...]
 ```
 
 Next, we see an example of schema invariants. For any table with the following
@@ -77,7 +77,7 @@ will always maintain the invariant that token balances are greater than zero:
 ```lisp
 (defschema tokens
   @doc   "token schema"
-  @model (invariants [(> balance 0)])
+  @model [(invariant (> balance 0))]
 
   username:string
   balance:integer)
@@ -128,7 +128,7 @@ return values can be referred to by the name `result`:
 ```lisp
 (defun negate:integer (x:integer)
   @doc   "negate a number"
-  @model (properties [(= result (* -1 x))])
+  @model [(property (= result (* -1 x)))]
 
   (* x -1))
 ```
@@ -141,7 +141,7 @@ We can also define properties in terms of the standard comparison operators:
 ```lisp
 (defun abs:integer (x:integer)
   @doc   "absolute value"
-  @model (properties [(>= result 0)])
+  @model [(property (>= result 0))]
 
   (if (< x 0)
     (negate x)
@@ -158,12 +158,12 @@ properties at once:
 ```lisp
 (defun negate:integer (x:integer)
   @doc   "negate a number"
-  @model (properties
-    [(when (< x 0) (> result 0))
-     (when (> x 0) (< result 0))
-     (and
+  @model
+    [(property (when (< x 0) (> result 0)))
+     (property (when (> x 0) (< result 0)))
+     (property (and
        (when (< x 0) (> result 0))
-       (when (> x 0) (< result 0)))])
+       (when (> x 0) (< result 0))))]
 
   (* x -1))
 ```
@@ -171,13 +171,13 @@ properties at once:
 ### Transaction abort and success
 
 By default, every property is predicated on the successful completion of the
-transaction which would contain an invocation of the function under test. This
+transaction which would contain an invocation of the function being tested. This
 means that properties like the following:
 
 ```lisp
 (defun ensured-positive (val:integer)
   @doc   "halts when passed a non-positive number"
-  @model (properties [(!= result 0)])
+  @model [(property (!= result 0))]
 
   (enforce (> val 0) "val is not positive")
   val)
@@ -240,9 +240,9 @@ code path enforces the keyset:
 ```lisp
 (defun admins-only (action:string)
   @doc   "Only admins or super-admins can call this function successfully.
-  @model (properties
-    [(or (authorized-by 'admins) (authorized-by 'super-admins))
-     (when (== "create" action) (authorized-by 'super-admins))])
+  @model
+    [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
+     (property (when (== "create" action) (authorized-by 'super-admins)))]
 
   (if (== action "create")
     (create)
@@ -296,7 +296,7 @@ For an example using this property, see "A simple balance transfer example"
 below.
 
 It turns out that `conserves-mass` is actually just a trivial application of
-another property called `column-delta`, which returns an numeric value of the
+another property called `column-delta`, which returns a numeric value of the
 sum of all changes to the column during the transaction. So
 `(conserves-mass 'accounts 'balance)` is actually just the same as:
 
@@ -326,17 +326,17 @@ change. So here `1` means an increase of `1` to the column's total sum.
 In examples like `(row-enforced 'accounts 'ks key)` or
 `(row-written 'accounts key)` above, we've so far only referred to function
 arguments by the use of the variable named `key`. But what if we wanted to
-talk about all possible rows that will be written, if function doesn't simply
-update a single row keyed by an input to the function?
+talk about all possible rows that will be written, if a function doesn't simply
+update a single row?
 
 In such a situation we could use universal quantification to talk about _any_
 such row:
 
 ```lisp
-(properties
-  [(forall (key:string)
-     (when (row-written 'accounts key)
-       (row-enforced 'accounts 'ks key)))])
+(property
+  (forall (key:string)
+   (when (row-written 'accounts key)
+     (row-enforced 'accounts 'ks key))))
 ```
 
 This property says that for any possible row written by the function, the
@@ -347,9 +347,9 @@ that there merely exists a row that is read during the transaction, we could
 use existential quantification like so:
 
 ```lisp
-(properties
-  [(exists (key:string)
-     (row-read 'accounts key))])
+(property
+  (exists (key:string)
+    (row-read 'accounts key)))
 ```
 
 For both universal and existential quantification, note that a type annotation
@@ -375,7 +375,7 @@ and then used at the function level by referring to the property's name:
 
 ```lisp
 (defun read-account (id)
-  @model (property auth-required)
+  @model [(property auth-required)]
 
   ; ...
   )
@@ -404,7 +404,7 @@ table.
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   @doc   "Transfer money between accounts"
-  @model (properties [(row-enforced 'accounts 'ks from)])
+  @model [(property (row-enforced 'accounts 'ks from))]
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -419,7 +419,7 @@ Let's start by adding an invariant that balances can never drop below zero:
 ```lisp
 (defschema account
   @doc   "user accounts with balances"
-  @model (invariants [(>= balance 0)])
+  @model [(invariant (>= balance 0))]
 
   balance:integer
   ks:keyset)
@@ -435,7 +435,7 @@ try again:
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   @doc   "Transfer money between accounts"
-  @model (properties [(row-enforced 'accounts 'ks from)])
+  @model [(property (row-enforced 'accounts 'ks from))]
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -453,9 +453,9 @@ for the function to be used to create or destroy any money:
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   @doc   "Transfer money between accounts"
-  @model (properties
-    [(row-enforced 'accounts 'ks from)
-     (conserves-mass 'accounts 'balance)])
+  @model
+    [(property (row-enforced 'accounts 'ks from))
+     (property (conserves-mass 'accounts 'balance))]
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -490,9 +490,9 @@ this unintended behavior:
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   @doc   "Transfer money between accounts"
-  @model (properties
-    [(row-enforced 'accounts 'ks from)
-     (conserves-mass 'accounts 'balance)])
+  @model
+    [(property (row-enforced 'accounts 'ks from))
+     (property (conserves-mass 'accounts 'balance))]
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }

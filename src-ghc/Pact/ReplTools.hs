@@ -21,7 +21,6 @@ import System.Console.Haskeline
   (runInputT, withInterrupt, InputT, getInputLine, handleInterrupt,
    CompletionFunc, completeQuotedWord, completeWord, listFiles,
    filenameWordBreakChars, Settings(Settings), simpleCompletion)
-import Data.Monoid
 
 import Pact.Parse
 import Pact.Types.Runtime
@@ -36,11 +35,12 @@ import Pact.Repl.Types
 interactiveRepl :: IO (Either () (Term Name))
 interactiveRepl = generalRepl Interactive
 
+-- Note(emily): revisit whether we want all _module_ names, or all interface names as well.
 completeFn :: (MonadIO m, MonadState ReplState m) => CompletionFunc m
 completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') ("\"\'" ++ filenameWordBreakChars) $ \str -> do
     modules <- use (rEnv . eeRefStore . rsModules)
-    let namesInModules = toListOf (traverse . _2 . to HM.keys . each) modules
+    let namesInModules = toListOf (traverse . mdRefMap . to HM.keys . each) modules
         allNames = concat
           [ namesInModules
           , nameOfModule <$> HM.keys modules
@@ -64,7 +64,7 @@ replSettings = Settings
   True -- automatically add each line to history
 
 generalRepl :: ReplMode -> IO (Either () (Term Name))
-generalRepl m = initReplState m >>= \s -> case m of
+generalRepl m = initReplState m Nothing >>= \s -> case m of
   Interactive -> evalStateT
     (runInputT replSettings (withInterrupt (haskelineLoop [] Nothing)))
     (setReplLib s)

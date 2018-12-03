@@ -1,6 +1,5 @@
-
 name:                pact
-version:             2.5.0
+version:             2.6.1
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -18,11 +17,12 @@ build-type:          Simple
 cabal-version:       >=1.22
 
 library
-
-  exposed-modules:     Pact.Compile
+  exposed-modules:     Pact.Analyze.Remote.Types
+                     , Pact.Compile
                      , Pact.Eval
                      , Pact.Gas
                      , Pact.Native
+                     , Pact.Native.Capabilities
                      , Pact.Native.Db
                      , Pact.Native.Internal
                      , Pact.Native.Time
@@ -54,9 +54,16 @@ library
                      , Crypto.Hash.Blake2Native
                      , Pact.Types.Typecheck
                      , Pact.Typechecker
+
+  if impl(ghcjs)
+    build-depends: ghcjs-dom
+    exposed-modules:
+      Pact.Analyze.Remote.Client
+
   if !impl(ghcjs)
     hs-source-dirs: src-ghc
     exposed-modules:
+      Pact.Analyze.Alloc
       Pact.Analyze.Eval
       Pact.Analyze.Eval.Invariant
       Pact.Analyze.Eval.Numerical
@@ -88,6 +95,7 @@ library
       Pact.Analyze.Types.Shared
       Pact.Analyze.Types.UserShow
       Pact.Analyze.Util
+      Pact.Analyze.Remote.Server
       Pact.ApiReq
       Pact.Bench
       Pact.Docgen
@@ -112,8 +120,8 @@ library
       Pact.Types.SQLite
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
-                     , aeson >= 0.11.3.0 && < 1.4
-                     , algebraic-graphs >= 0.1.1 && < 0.2
+                     , aeson >= 0.11.3.0 && < 1.5
+                     , algebraic-graphs >= 0.2 && < 0.3
                      , ansi-wl-pprint >= 0.6.7.3 && < 0.7
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.9.0.0 && < 4.12
@@ -145,12 +153,17 @@ library
                      -- kadena ghcjs compat fork
                      , thyme == 0.3.6.0
                      , transformers >= 0.5.2.0 && < 0.6
-                     , trifecta >= 1.6 && < 1.8
+                     , trifecta >= 2 && < 2.1
                      , unordered-containers >= 0.2.7.2 && < 0.3
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-space >= 0.10.4 && < 0.14
-                     , mmorph >= 1.0 && < 1.1
+                     , mmorph >= 1.1 && < 1.2
+
+  if impl(ghcjs)
+    build-depends:
+      ghcjs-base,
+      ghcjs-prim
 
   if !impl(ghcjs)
     build-depends:
@@ -188,6 +201,9 @@ executable pact
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+  if os(darwin)
+    ghc-options: -optP-Wno-nonportable-include-path
+
 executable bench
   main-is:             Bench.hs
   build-depends:       base
@@ -198,8 +214,12 @@ executable bench
   default-language:    Haskell2010
 
 test-suite hspec
-  type:             exitcode-stdio-1.0
-  main-is:          hspec.hs
+  if !impl(ghcjs)
+    main-is:          hspec.hs
+    type:             exitcode-stdio-1.0
+  else
+    main-is:          hspec-ghcjs.hs
+    type:             exitcode-stdio-1.0
   hs-source-dirs:   tests
   default-language: Haskell2010
   ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
@@ -228,6 +248,10 @@ test-suite hspec
               , hedgehog == 0.6.*
               , hw-hspec-hedgehog == 0.1.*
               , intervals
+  other-modules:
+                Blake2Spec
+                KeysetSpec
+                TypesSpec
   if !impl(ghcjs)
     build-depends:
         neat-interpolation
@@ -237,21 +261,18 @@ test-suite hspec
       , crypto-api
       , http-client
       , wreq
-  other-modules:
-                Blake2Spec
-                KeysetSpec
-                TypesSpec
-                HashSpec
-  if !impl(ghcjs)
+      , snap-server
     other-modules:
         DocgenSpec
       , PactTestsSpec
       , ParserSpec
       , PersistSpec
+      , RemoteVerifySpec
+      , SignatureSpec
       , TypecheckSpec
       , PactContinuationSpec
       , Utils.TestRunner
-      , AnalyzeProperties
+      , AnalyzePropertiesSpec
       , AnalyzeSpec
       , Analyze.Eval
       , Analyze.Gen

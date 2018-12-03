@@ -7,16 +7,12 @@ module Analyze.Translate where
 import           Control.Lens               hiding (op, (...))
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
-import           Control.Monad.State.Strict (runStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe  (MaybeT (MaybeT, runMaybeT),
                                              exceptToMaybeT)
-import qualified Data.Map.Strict            as Map
 import qualified Data.Text                  as T
 
-import           Pact.Analyze.Translate     (TranslateEnv (TranslateEnv),
-                                             TranslateM (..),
-                                             TranslateState (..), translateNode)
+import           Pact.Analyze.Translate     (translateNodeNoGraph)
 import           Pact.Analyze.Types         hiding (Object, Term)
 import           Pact.Analyze.Util          (dummyInfo)
 
@@ -24,14 +20,14 @@ import           Pact.Eval                  (liftTerm)
 import           Pact.Native                (enforceDef, enforceOneDef,
                                              formatDef, hashDef, ifDef,
                                              lengthDef, pactVersionDef,
-                                             readDecimalDef)
+                                             readDecimalDef, strToIntDef)
 import           Pact.Native.Keysets
 import           Pact.Native.Ops
 import           Pact.Native.Time
 import           Pact.Typechecker           (typecheckTopLevel)
 import           Pact.Types.Exp             (Literal (..))
 import           Pact.Types.Native          (NativeDef)
-import           Pact.Types.Term            (Meta (Meta),
+import           Pact.Types.Term            (Meta (Meta), App(..),
                                              Term (TApp, TConst, TLiteral))
 import qualified Pact.Types.Term            as Pact
 import qualified Pact.Types.Type            as Pact
@@ -77,6 +73,12 @@ toPactTm = \case
   ESimple TStr (Inj (StrConcat x y)) ->
     mkApp addDef [ESimple TStr x, ESimple TStr y]
 
+  ESimple TInt (Inj (StrToInt s)) ->
+    mkApp strToIntDef [ESimple TStr s]
+
+  ESimple TInt (Inj (StrToIntBase b s)) ->
+    mkApp strToIntDef [ESimple TInt b, ESimple TStr s]
+
   ESimple TBool (Inj (IntegerComparison op x y)) ->
     mkApp (comparisonOpToDef op) [ESimple TInt x, ESimple TInt y]
 
@@ -115,7 +117,7 @@ toPactTm = \case
   ESimple TKeySet  (CoreTerm (Lit (KeySet x))) -> do
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
-      Just (ks, _) -> pure $ Pact.TKeySet ks dummyInfo
+      Just (ks, _) -> pure $ Pact.TGuard (Pact.GKeySet ks) dummyInfo
       Nothing      -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
@@ -169,7 +171,7 @@ toPactTm = \case
       -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
     mkApp (_, defTm) args = do
       args' <- traverse toPactTm args
-      pure $ TApp (liftTerm defTm) args' dummyInfo
+      pure $ TApp (App (liftTerm defTm) args' dummyInfo) dummyInfo
 
     -- Like mkApp but for functions that take two arguments, the second of
     -- which is a list. This pattern is used in `enforce-one` and `format`
@@ -181,7 +183,7 @@ toPactTm = \case
     mkApp' (_, defTm) arg argList = do
       arg'     <- toPactTm arg
       argList' <- traverse toPactTm argList
-      pure $ TApp (liftTerm defTm)
+      pure $ (`TApp` dummyInfo) $ App (liftTerm defTm)
         [arg', Pact.TList argList' (Pact.TyList Pact.TyAny) dummyInfo]
         dummyInfo
 
@@ -237,7 +239,7 @@ toAnalyze ty tm = do
         (Pact.Arg "tm" ty dummyInfo)
         "module"
         (Pact.CVRaw tm)
-        (Meta Nothing Nothing)
+        (Meta Nothing [])
         dummyInfo
       ref = Pact.Ref cnst
   maybeConst <- lift $ Pact.runTC 0 False $ typecheckTopLevel ref
@@ -246,24 +248,9 @@ toAnalyze ty tm = do
       -> pure (constTy, constAst)
     _ -> MaybeT $ pure Nothing
 
-  -- Note: these values all copied from runTranslation
-  let vertex0    = 0
-      nextVertex = succ vertex0
-      path0      = Path 0
-      nextTagId  = succ $ _pathTag path0
-      graph0     = pure vertex0
-      state0     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty
-
-      translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
-
   hoist generalize $
     exceptToMaybeT $
-      fmap fst $
-        flip runStateT state0 $
-          runReaderT
-            (unTranslateM (translateNode ast))
-            translateEnv
+      translateNodeNoGraph ast
 
 -- This is limited to simple types for now
 reverseTranslateType :: Type a -> Pact.Type b
@@ -273,7 +260,7 @@ reverseTranslateType = \case
   TInt     -> Pact.TyPrim Pact.TyInteger
   TStr     -> Pact.TyPrim Pact.TyString
   TTime    -> Pact.TyPrim Pact.TyTime
-  TKeySet  -> Pact.TyPrim Pact.TyKeySet
+  TKeySet  -> Pact.TyPrim (Pact.TyGuard $ Just Pact.GTyKeySet)
   TAny     -> Pact.TyAny
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)

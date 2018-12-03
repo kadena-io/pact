@@ -96,7 +96,7 @@ benchRead KeySets _ = rc (Just benchKeySet)
 benchRead UserTables {} _ = rc (Just acctRow)
 benchRead _ _ = rc Nothing
 
-benchReadValue :: (PactKey k, PactValue v) => Table k -> k -> Persist () (Maybe v)
+benchReadValue :: Table k -> k -> Persist () (Maybe v)
 benchReadValue (DataTable t) _k
   | t == "SYS_keysets" = rcp $ Just (unsafeCoerce benchKeySet)
   | t == "USER_bench_bench-accounts" = rcp $ Just (unsafeCoerce acctRow)

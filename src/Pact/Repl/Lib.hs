@@ -21,7 +21,7 @@ module Pact.Repl.Lib where
 
 import Control.Arrow ((&&&))
 import Data.Default
-import Data.Semigroup
+import Data.Semigroup (Endo(..))
 import qualified Data.HashMap.Strict as HM
 import Control.Monad.Reader
 import Control.Monad.Catch
@@ -32,18 +32,15 @@ import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
 import Data.Text.Encoding
 import Data.Maybe
-#if !defined(ghcjs_HOST_OS)
+#if defined(ghcjs_HOST_OS)
+import qualified Pact.Analyze.Remote.Client as RemoteClient
+#else
 import Control.Monad.State.Strict (get)
 import Criterion
 import Criterion.Types
 import qualified Data.Map as M
-import qualified Data.Text as Text
-import Pact.Analyze.Check
-#if MIN_VERSION_statistics(0,14,0)
+import qualified Pact.Analyze.Check as Check
 import Statistics.Types (Estimate(..))
-#else
-import Statistics.Resampling.Bootstrap
-#endif
 #endif
 import Pact.Typechecker
 import Pact.Types.Typecheck
@@ -58,13 +55,13 @@ import Pact.Types.Logger
 import Pact.Repl.Types
 
 
-initLibState :: Loggers -> IO LibState
-initLibState loggers = do
+initLibState :: Loggers -> Maybe String -> IO LibState
+initLibState loggers verifyUri = do
   m <- newMVar (DbEnv def persister
                 (newLogger loggers "Repl")
                 def def)
   createSchema m
-  return (LibState m Noop def def)
+  return (LibState m Noop def def verifyUri)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -84,7 +81,7 @@ replDefs = ("Repl",
      [
       defZRNative "load" load (funType tTyString [("file",tTyString)] <>
                               funType tTyString [("file",tTyString),("reset",tTyBool)]) $
-      "Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. " <>
+      "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. " <>
       "`$(load \"accounts.repl\")`"
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
@@ -99,6 +96,10 @@ replDefs = ("Repl",
       ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
        "Clears any previous pact execution state. `$(env-step 1)` `$(env-step 0 true)`")
+     ,defZRNative "env-pactid" envPactId
+      (funType tTyString [] <>
+       funType tTyString [("id",tTyString)])
+       "Query environment pact id, or set to ID."
      ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
       ("Inspect state from previous pact execution. Returns object with fields " <>
       "'yield': yield result or 'false' if none; 'step': executed step; " <>
@@ -123,25 +124,23 @@ replDefs = ("Repl",
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
        "Typecheck MODULE, optionally enabling DEBUG output."
      ,defZRNative "env-gaslimit" setGasLimit (funType tTyString [("limit",tTyInteger)])
-       "Set environment gas limit to LIMIT"
+       "Set environment gas limit to LIMIT."
      ,defZRNative "env-gas" envGas (funType tTyInteger [] <> funType tTyString [("gas",tTyInteger)])
-       "Query gas state, or set it to GAS"
+       "Query gas state, or set it to GAS."
      ,defZRNative "env-gasprice" setGasPrice (funType tTyString [("price",tTyDecimal)])
-       "Set environment gas price to PRICE"
+       "Set environment gas price to PRICE."
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
-       "Update gas model to charge constant RATE"
-#if !defined(ghcjs_HOST_OS)
+       "Update gas model to charge constant RATE."
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
-#endif
 
      ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
       "Encode pact expression EXP as a JSON value. " <>
       "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " <>
       "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
-     "Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
+     "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
      ,defZRNative "print" print' (funType tTyString [("value",a)])
-     "Print a string, mainly to format newlines correctly"
+     "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
      ])
@@ -191,6 +190,10 @@ setop v = setLibState $ set rlsOp v
 setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
+{-
+overenv :: Setter' (EvalEnv LibState) a -> (a -> a) -> Eval LibState ()
+overenv l f = setop $ UpdateEnv $ Endo (over l f)
+-}
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
@@ -227,6 +230,16 @@ setstep i as = case as of
     setstep' s = do
       setenv eePactStep s
       evalPactExec .= Nothing
+
+envPactId :: RNativeFun LibState
+envPactId i as = view eePactStep >>= \psm -> case psm of
+  Nothing -> evalError' i "no pact state set currently"
+  Just ps@PactStep{..} -> case as of
+    [] -> return $ toTerm _psPactId
+    [TLitString pid] -> do
+      setenv eePactStep $ Just $ set psPactId (PactId pid) ps
+      return $ tStr $ "Setting pact id to " <> tShow pid
+    _ -> argsError i as
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
@@ -347,7 +360,6 @@ tc i as = case as of
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
-#if !defined(ghcjs_HOST_OS)
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
@@ -356,28 +368,18 @@ verify i as = case as of
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        modResult <- liftIO $ verifyModule modules md
-        -- TODO: build describeModuleResult
-        case modResult of
-          Left (ModuleParseFailure failure)  -> setop $ TcErrors
-            [Text.unpack $ describeParseFailure failure]
-          Left (ModuleCheckFailure checkFailure) -> setop $ TcErrors
-            [Text.unpack $ describeCheckFailure checkFailure]
-          Left (TypeTranslationFailure msg ty) -> setop $ TcErrors
-            [Text.unpack $ msg <> ": " <> tShow ty]
-          Left (InvalidRefType) -> setop $ TcErrors
-            ["Invalid reference type given to typechecker."]
-          Right (ModuleChecks propResults invariantResults warnings) -> setop $ TcErrors $
-            let propResults'      = propResults      ^.. traverse . each
-                invariantResults' = invariantResults ^.. traverse . traverse . each
-            in fmap Text.unpack $
-                 (describeCheckResult <$> propResults' <> invariantResults') <>
-                 [describeVerificationWarnings warnings]
-
-        return (tStr "")
+#if defined(ghcjs_HOST_OS)
+        uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
+        renderedLines <- liftIO $
+          RemoteClient.verifyModule modules md uri
+#else
+        modResult <- liftIO $ Check.verifyModule modules md
+        let renderedLines = Check.renderVerifiedModule modResult
+#endif
+        -- setop $ TcErrors $ Text.unpack <$> renderedLines
+        return (tStr $ mconcat renderedLines)
 
   _ -> argsError i as
-#endif
 
 json' :: RNativeFun LibState
 json' _ [a] = return $ TValue (toJSON a) def

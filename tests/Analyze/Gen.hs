@@ -31,9 +31,9 @@ import           Pact.Analyze.Types         hiding (Object, Term)
 import qualified Pact.Analyze.Types         as Analyze
 import           Pact.Analyze.Util          (dummyInfo)
 
-import           Pact.Types.Exp             (Name (Name))
 import           Pact.Types.Persistence     (WriteType)
 import qualified Pact.Types.Term            as Pact
+import           Pact.Types.Term            (Name(Name))
 
 import           Analyze.TimeGen
 
@@ -290,7 +290,18 @@ genTerm size = scale 2 $ Gen.choice [genCore size, genTermSpecific size]
 genTermSpecific
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => BoundedType -> m ETerm
-genTermSpecific size@BoundedInt{} = genTermSpecific' size
+genTermSpecific size@BoundedInt{} = Gen.choice
+  [ do
+      base <- Gen.int (Range.linear 2 16)
+      formatted <- Gen.string (Range.exponential 1 128) (genBaseChar base)
+      pure $ ESimple TInt $ inject $ StrToIntBase
+        (lit (fromIntegral base :: Integer))
+        (lit formatted)
+  , do
+      formatted <- Gen.string (Range.exponential 1 128) (genBaseChar 10)
+      pure $ ESimple TInt $ inject $ StrToInt $ lit formatted
+  , genTermSpecific' size
+  ]
 genTermSpecific BoundedBool       = Gen.choice
   [
   -- TODO: temporarily disabled pending
@@ -378,6 +389,10 @@ genTermSpecific BoundedTime = scale 8 $ Gen.choice
        timeStr <- genTimeOfFormat standardTimeFormat
        pure $ ESimple TTime $ ParseTime Nothing $ lit timeStr
   ]
+
+genBaseChar :: MonadGen m => Int -> m Char
+genBaseChar base = Gen.element $
+  take (2 * base) "00112233445566778899aAbBcCdDeEfF"
 
 genWriteType :: MonadGen m => m WriteType
 genWriteType = Gen.enumBounded

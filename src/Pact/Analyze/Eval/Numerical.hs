@@ -16,6 +16,22 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 
+-- When doing binary arithmetic involving:
+-- * decimal x decimal
+-- * integer x decimal
+-- * decimal x integer
+--
+-- We widen / downcast the integer to be a decimal. This just requires shifting
+-- the number left 255 decimal digits in the case of an integer.
+class DecimalRepresentable a where
+  widenToDecimal :: S a -> S Decimal
+
+instance DecimalRepresentable Integer where
+  widenToDecimal = lShift255D . coerceS
+
+instance DecimalRepresentable Decimal where
+  widenToDecimal = id
+
 -- This module handles evaluation of unary and binary integers and decimals.
 -- Two tricky details to watch out for:
 --
@@ -135,7 +151,7 @@ evalRoundingLikeOp1 op x = do
     -- Round is much more complicated because pact uses the banker's method,
     -- where a real exactly between two integers (_.5) is rounded to the
     -- nearest even.
-    Round   -> banker'sMethod x'
+    Round   -> banker'sMethodS x'
 
 -- In the decimal rounding operations we shift the number left by `precision`
 -- digits, round using the integer method, and shift back right.
@@ -159,41 +175,5 @@ evalRoundingLikeOp2 op xT precisionT = do
     evalRoundingLikeOp1 op (inject (lShiftD' precision x))
 
 -- Round a real exactly between two integers (_.5) to the nearest even
-banker'sMethod :: S Decimal -> S Integer
-banker'sMethod x = iteS isExactlyHalf
-  -- nearest even number!
-  (wholePart + oneIfS wholePartIsOdd)
-  -- otherwise we round
-  (decRound x)
-
-  where
-    wholePart      = floorD x
-    wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
-    isExactlyHalf  = sansProv $ fractionalPart .== 0.5
-
-    halfIntRep :: S Integer
-    halfIntRep = 5 * 10 ^ (decimalPrecision - 1)
-
-    fractionalPart :: S Decimal
-    fractionalPart = coerceS $
-      coerceS x `sMod` (10 ^ decimalPrecision :: S Integer)
-
-    -- round decimals by taking the floor of `x + 0.5`
-    decRound :: S Decimal -> S Integer
-    decRound = floorD . coerceS @Integer @Decimal . (+ halfIntRep) . coerceS
-
--- When doing binary arithmetic involving:
--- * decimal x decimal
--- * integer x decimal
--- * decimal x integer
---
--- We widen / downcast the integer to be a decimal. This just requires shifting
--- the number left 255 decimal digits in the case of an integer.
-class DecimalRepresentable a where
-  widenToDecimal :: S a -> S Decimal
-
-instance DecimalRepresentable Integer where
-  widenToDecimal = lShift255D . coerceS
-
-instance DecimalRepresentable Decimal where
-  widenToDecimal = id
+banker'sMethodS :: S Decimal -> S Integer
+banker'sMethodS (S prov x) = S prov $ banker'sMethod x

@@ -5,7 +5,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
-
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -21,28 +20,28 @@ module Pact.Types.Runtime
    evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
-   ModuleData,
+   ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
-   Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvSysRead(..),mkNoDbEnv,mkSysReadEnv,
+   Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
-   RefState(..),rsLoaded,rsLoadedModules,rsNew,
-   EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,
+   RefState(..),rsLoaded,rsLoadedModules,rsNewModules,
+   EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
+   Capability(..),CapAcquireResult(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
    module Pact.Types.Gas
    ) where
 
-
 import Control.Arrow ((&&&))
-import Control.Lens hiding ((.=))
+import Control.Lens hiding ((.=),DefName)
 import Control.DeepSeq
 import Data.List
 import Control.Monad.Except
@@ -65,6 +64,14 @@ import Pact.Types.Orphans ()
 import Pact.Types.Persistence
 import Pact.Types.Util
 
+
+data Capability
+  = ModuleAdminCapability ModuleName
+  | UserCapability DefName [Term Name]
+  deriving (Eq,Show)
+
+data CapAcquireResult = NewlyAcquired|AlreadyAcquired
+  deriving (Eq,Show)
 
 data StackFrame = StackFrame {
       _sfName :: !Text
@@ -110,14 +117,9 @@ instance AsString KeyPredBuiltins where
   asString KeysAll = "keys-all"
   asString KeysAny = "keys-any"
   asString Keys2 = "keys-2"
+
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
-
-
-
-newtype PactId = PactId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
-instance Show PactId where show (PactId s) = show s
 
 -- | Environment setup for pact execution.
 data PactStep = PactStep {
@@ -128,16 +130,20 @@ data PactStep = PactStep {
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
-type ModuleData = (Module,HM.HashMap Text Ref)
+-- | Module ref store
+data ModuleData = ModuleData
+  { _mdModule :: Module
+  , _mdRefMap :: HM.HashMap Text Ref
+  } deriving (Eq, Show)
+makeLenses ''ModuleData
 
--- | Storage for loaded modules and natives.
+-- | Storage for loaded modules, interfaces, and natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     , _rsModules :: HM.HashMap ModuleName ModuleData
-    } deriving (Eq,Show)
+    } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
-
 
 newtype EntityName = EntityName Text
   deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
@@ -159,7 +165,7 @@ data Purity =
   -- | No database access at all.
   PNoDb |
   -- | Access to read of module, keyset systables.
-  PSysRead |
+  PReadOnly |
   -- | All database access allowed (normal).
   PImpure
   deriving (Eq,Show,Ord,Bounded,Enum)
@@ -167,7 +173,7 @@ instance Default Purity where def = PImpure
 
 -- | Marker class for 'PNoDb' environments.
 class PureNoDb e
--- | Marker class for 'PSysRead' environments.
+-- | Marker class for 'PReadOnly' environments.
 -- SysRead supports pure operations as well.
 class PureNoDb e => PureSysRead e
 
@@ -208,17 +214,16 @@ data RefState = RefState {
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName Module
       -- | Modules that were compiled and loaded in this tx.
-    , _rsNew :: [(ModuleName,ModuleData)]
-    }
-                deriving (Eq,Show)
+    , _rsNewModules :: HM.HashMap ModuleName ModuleData
+    } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty def
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty
 
--- | Update for newly-loaded modules.
+-- | Update for newly-loaded modules and interfaces.
 updateRefStore :: RefState -> RefStore -> RefStore
 updateRefStore RefState {..}
-  | null _rsNew = id
-  | otherwise = over rsModules $ HM.union $ HM.fromList _rsNew
+  | HM.null _rsNewModules = id
+  | otherwise = over rsModules (HM.union _rsNewModules)
 
 -- | Interpreter mutable state.
 data EvalState = EvalState {
@@ -230,9 +235,11 @@ data EvalState = EvalState {
     , _evalPactExec :: !(Maybe PactExec)
       -- | Gas tally
     , _evalGas :: Gas
+      -- | Capability list
+    , _evalCapabilities :: [Capability]
     } deriving (Show)
 makeLenses ''EvalState
-instance Default EvalState where def = EvalState def def def 0
+instance Default EvalState where def = EvalState def def def 0 def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
@@ -262,7 +269,7 @@ call :: StackFrame -> Eval e (Gas,a) -> Eval e a
 call s act = do
   evalCallStack %= (s:)
   (_gas,r) <- act -- TODO opportunity for per-call gas logging here
-  evalCallStack %= \st -> case st of (_:as) -> as; [] -> []
+  evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
 
@@ -368,10 +375,13 @@ argsError' i as = throwArgsError i (map (toTerm.pack.abbrev) as) "Invalid argume
 --
 
 newtype EnvNoDb e = EnvNoDb (EvalEnv e)
+
 instance PureNoDb (EnvNoDb e)
-newtype EnvSysRead e = EnvSysRead (EvalEnv e)
-instance PureSysRead (EnvSysRead e)
-instance PureNoDb (EnvSysRead e)
+
+newtype EnvReadOnly e = EnvReadOnly (EvalEnv e)
+
+instance PureSysRead (EnvReadOnly e)
+instance PureNoDb (EnvReadOnly e)
 
 diePure :: Method e a
 diePure _ = throwM $ PactError EvalError def def "Illegal database access in pure context"
@@ -411,8 +421,6 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))
 mkNoDbEnv = mkPureEnv EnvNoDb PNoDb (\_ _ -> diePure)
 
-mkSysReadEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysRead e))
-mkSysReadEnv = mkPureEnv EnvSysRead PSysRead $ \d k e -> case d of
-  KeySets -> withMVar e $ \(EnvSysRead EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
-  Modules -> withMVar e $ \(EnvSysRead EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
-  _ -> diePure e
+mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
+mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->
+  withMVar e $ \(EnvReadOnly EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar

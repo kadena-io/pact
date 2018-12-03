@@ -30,9 +30,12 @@
 (commit-tx)
 (begin-tx)
 (use 'accounts)
+;;admin reads
 (expect "balance of 123 after transfer" 229.0 (with-read accounts "123" { "balance" := b } b))
 (expect "balance of 456 after transfer" 5.0 (with-read accounts "456" { "balance" := b } b))
-
+(commit-tx)
+(begin-tx)
+(use 'accounts)
 (env-keys ["user123" "user456"])
 (expect-failure "should not allow read" (with-read accounts "123" { "balance" := b } b))
 

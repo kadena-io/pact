@@ -27,7 +27,6 @@ module Pact.Native.Ops
 import Data.Decimal
 import Data.Default
 import qualified Data.Map.Strict as M
-import Data.Semigroup
 
 import Pact.Native.Internal
 import Pact.Types.Runtime
@@ -116,7 +115,7 @@ lnDef :: NativeDef
 lnDef = defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
 
 expDef :: NativeDef
-expDef = defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
+expDef = defRNative "exp" (unopd exp) unopTy "Exp of X. `(round (exp 3) 6)`"
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
@@ -247,12 +246,12 @@ liftLogic n bop desc shortCircuit =
   where
     r = mkTyVar "r" []
     fun i as@[a@TApp{},b@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> do
-      ar <- apply' a [v]
+      ar <- apply (_tApp a) [v]
       case ar of
         TLitBool ab
           | ab == shortCircuit -> return $ toTerm shortCircuit
           | otherwise -> do
-              br <- apply' b [v]
+              br <- apply (_tApp b) [v]
               case br of
                 TLitBool bb -> return $ toTerm $ bop ab bb
                 _ -> delegateError (show n) b br
@@ -260,7 +259,7 @@ liftLogic n bop desc shortCircuit =
     fun i as = argsError' i as
 
 liftNot :: NativeFun e
-liftNot i as@[app@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> apply' app [v] >>= \r -> case r of
+liftNot i as@[app@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> apply (_tApp app) [v] >>= \r -> case r of
   TLitBool b -> return $ toTerm $ not b
   _ -> delegateError "not?" app r
 liftNot i as = argsError' i as

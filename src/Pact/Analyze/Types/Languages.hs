@@ -22,10 +22,12 @@ module Pact.Analyze.Types.Languages
   , Prop(..)
   , PropSpecific(..)
   , Term(..)
+  , BeforeOrAfter(..)
 
   , lit
   , toPact
   , fromPact
+  , valueToProp
 
   , pattern ILiteral
   , pattern ILogicalOp
@@ -48,7 +50,6 @@ module Pact.Analyze.Types.Languages
 
 import           Data.Map.Strict              (Map)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)))
-import           Data.Semigroup               ((<>))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as Text
@@ -130,12 +131,16 @@ data Core t a where
 
   -- string ops
   -- | The concatenation of two 'String' expressions
-  StrConcat :: t String -> t String -> Core t String
+  StrConcat    :: t String  -> t String  -> Core t String
   -- | The length of a 'String' expression
-  StrLength :: t String                     -> Core t Integer
+  StrLength    :: t String  ->              Core t Integer
+  -- | Conversion of a base-10 string to an integer
+  StrToInt     :: t String  ->              Core t Integer
+  -- | Conversion of a base-1-16 string to an integer
+  StrToIntBase :: t Integer -> t String  -> Core t Integer
 
   -- numeric ops
-  Numerical :: Numerical t a -> Core t a
+  Numerical    :: Numerical t a -> Core t a
 
   -- Time
   -- | Adds an 'Integer' expression to a 'Time' expression
@@ -194,6 +199,8 @@ instance
     Sym s                    -> tShow s
     StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
+    StrToInt s               -> parenList ["str-to-int", userShow s]
+    StrToIntBase b s         -> parenList ["str-to-int", userShow b, userShow s]
     Numerical tm             -> userShowsPrec d tm
     IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
@@ -210,6 +217,14 @@ instance
     ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
 
+
+data BeforeOrAfter = Before | After
+  deriving (Eq, Show)
+
+instance UserShow BeforeOrAfter where
+  userShowsPrec _p = \case
+    Before -> "'before"
+    After  -> "'after"
 
 -- | Property-specific constructions.
 --
@@ -274,6 +289,8 @@ data PropSpecific a where
   RowWrite      :: Prop TableName  -> Prop RowKey -> PropSpecific Bool
   -- | Number of times a row is written
   RowWriteCount :: Prop TableName  -> Prop RowKey -> PropSpecific Integer
+  -- | Whether a row exists prior to the transaction
+  RowExists     :: Prop TableName  -> Prop RowKey -> BeforeOrAfter -> PropSpecific Bool
 
   --
   -- TODO: StaleRead?
@@ -285,6 +302,9 @@ data PropSpecific a where
   KsNameAuthorized :: KeySetName      ->                                   PropSpecific Bool
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: Prop TableName  -> Prop ColumnName -> Prop RowKey -> PropSpecific Bool
+
+
+  PropRead :: BeforeOrAfter -> Schema -> Prop TableName -> Prop RowKey -> PropSpecific Object
 
 deriving instance Eq a   => Eq   (PropSpecific a)
 deriving instance Show a => Show (PropSpecific a)
@@ -318,6 +338,8 @@ instance UserShow a => UserShow (PropSpecific a) where
     RowWriteCount tab rk    -> parenList [SRowWriteCount, userShow tab, userShow rk]
     KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
     RowEnforced tn cn rk    -> parenList [SRowEnforced, userShow tn, userShow cn, userShow rk]
+    RowExists tn rk ba      -> parenList [SRowExists, userShow tn, userShow rk, userShow ba]
+    PropRead ba _sch tn rk  -> parenList [SPropRead, userShow tn, userShow rk, userShow ba]
 
 instance UserShow a => UserShow (Prop a) where
   userShowsPrec d = \case
@@ -352,6 +374,9 @@ instance IsString (Prop TableName) where
   fromString = PLit . fromString
 
 instance IsString (Prop ColumnName) where
+  fromString = PLit . fromString
+
+instance IsString (Prop RowKey) where
   fromString = PLit . fromString
 
 instance Boolean (Prop Bool) where
@@ -594,3 +619,9 @@ instance Num (Term Decimal) where
 
 lit :: a -> Term a
 lit = CoreTerm . Lit
+
+valueToProp :: ETerm -> Either String EProp
+valueToProp = \case
+  EObject{} -> Left "can't (yet) convert objects to props"
+  ESimple ty (CoreTerm (Lit l)) -> Right $ ESimple ty (CoreProp (Lit l))
+  ESimple _ _ -> Left "can only convert (simple) values terms to props"

@@ -16,7 +16,6 @@ import Control.Concurrent.MVar
 import System.Directory
 
 import Data.ByteString (ByteString)
-import Data.Semigroup ((<>))
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import Data.HashMap.Strict (HashMap)

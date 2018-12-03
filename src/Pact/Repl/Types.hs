@@ -2,11 +2,11 @@
 module Pact.Repl.Types
   ( ReplMode(..)
   , Hdl(..)
-  , ReplState(..),rEnv,rEvalState,rMode,rOut,rFile
+  , ReplState(..),rEnv,rEvalState,rMode,rOut,rFile,rTermOut
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests
+  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri
   , Tx(..)
   ) where
 
@@ -41,6 +41,7 @@ data ReplState = ReplState {
     , _rEvalState :: EvalState
     , _rMode :: ReplMode
     , _rOut :: String
+    , _rTermOut :: [Term Name]
     , _rFile :: Maybe FilePath
     }
 
@@ -63,6 +64,7 @@ data LibState = LibState {
     , _rlsOp :: LibOp
     , _rlsTxName :: Maybe Text
     , _rlsTests :: [TestResult]
+    , _rlsVerifyUri :: Maybe String
 }
 
 

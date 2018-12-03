@@ -87,7 +87,7 @@ analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
 analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
   -- analyze setup
   let tables = []
-      args = Map.empty
+      args   = Map.empty
       state0 = mkInitialAnalyzeState tables
 
       tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty
@@ -131,7 +131,7 @@ analyzeEval EObject{} _ = pure (Left "TODO: analyzeEval EObject")
 -- decimals.
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
 mkEvalEnv (GenState _ keysets decimals) = do
-  evalEnv <- liftIO initPureEvalEnv
+  evalEnv <- liftIO $ initPureEvalEnv Nothing
   let keysets' = HM.fromList
         $ fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
         $ Map.toList keysets

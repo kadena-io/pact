@@ -32,7 +32,6 @@ import Data.Aeson (toJSON)
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Data.Semigroup ((<>))
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
@@ -63,14 +62,14 @@ dbDefs =
       bindTy = TySchema TyBinding rt
       a = mkTyVar "a" []
   in ("Database",
-    [defRNative "create-table" createTable'
+    [setTopLevelOnly $ defRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
      "Create table TABLE. `$(create-table accounts)`"
 
     ,defNative (specialForm WithRead) withRead
      (funType a [("table",tableTy),("key",tTyString),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
-     \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
+     \`$(with-read accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
@@ -78,14 +77,14 @@ dbDefs =
       [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
-     \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
+     \`$(with-default-read accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
     ,defGasRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
       funType rowTy [("table",tableTy),("key",tTyString),("columns",TyList tTyString)])
-     "Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. \
-     \`$(read 'accounts id ['balance 'ccy])`"
+     "Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified. \
+     \`$(read accounts id ['balance 'ccy])`"
 
     ,defNative (specialForm Select) select
       (funType (TyList rowTy)  [("table",tableTy),("where",TyFun $ funType' tTyBool [("row",rowTy)])] <>
@@ -96,35 +95,35 @@ dbDefs =
 
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
-     "Return all keys in TABLE. `$(keys 'accounts)`"
+     "Return all keys in TABLE. `$(keys accounts)`"
 
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
-     (writeDocs "." "(write 'accounts { \"balance\": 100.0 })")
+     (writeDocs "." "(write accounts { \"balance\": 100.0 })")
     ,defRNative "insert" (write Insert) writeArgs
      (writeDocs ", failing if data already exists for KEY."
-     "(insert 'accounts { \"balance\": 0.0, \"note\": \"Created account.\" })")
+     "(insert accounts { \"balance\": 0.0, \"note\": \"Created account.\" })")
     ,defRNative "update" (write Update) writeArgs
      (writeDocs ", failing if data does not exist for KEY."
-      "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
+      "(update accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
-      "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
+      "Return all updates to TABLE performed in transaction TXID. `$(txlog accounts 123485945)`"
     ,defGasRNative "keylog" keylog
      (funType (TyList (tTyObject TyAny)) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
       "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
       \indexed by txid. \
-      \`$(keylog 'accounts \"Alice\" 123485945)`"
-    ,defRNative "describe-table" descTable
+      \`$(keylog accounts \"Alice\" 123485945)`"
+    ,setTopLevelOnly $ defRNative "describe-table" descTable
      (funType tTyValue [("table",tableTy)])
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
      \`$(describe-table accounts)`"
-    ,defRNative "describe-keyset" descKeySet
-     (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
-    ,defRNative "describe-module" descModule
+    ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
+     (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET."
+    ,setTopLevelOnly $ defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
      "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
      \`$(describe-module 'my-module)`"
@@ -147,14 +146,24 @@ descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
-  mods <- view (eeRefStore.rsModules.at (ModuleName t))
-  case mods of
-    Just (Module{..},_) ->
-      return $ TObject [(tStr "name",tStr $ asString _mName),
-                         (tStr "hash", tStr $ asString _mHash),
-                         (tStr "keyset", tStr $ asString _mKeySet),
-                         (tStr "blessed", toTList tTyString def (map (tStr . asString) (HS.toList _mBlessed))),
-                         (tStr "code", tStr $ asString _mCode)] TyAny def
+  mods <- view (eeRefStore . rsModules . at (ModuleName t))
+  case _mdModule <$> mods of
+    Just m ->
+      case m of
+        Module{..} ->
+          return $ TObject
+            [ (tStr "name"      , tStr $ asString _mName)
+            , (tStr "hash"      , tStr $ asString _mHash)
+            , (tStr "keyset"    , tStr $ asString _mKeySet)
+            , (tStr "blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
+            , (tStr "code"      , tStr $ asString _mCode)
+            , (tStr "interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
+            ] TyAny def
+        Interface{..} ->
+          return $ TObject
+            [ (tStr "name", tStr $ asString _interfaceName)
+            , (tStr "code", tStr $ asString _interfaceCode)
+            ] TyAny def
     Nothing -> evalError' i $ "Module not found: " ++ show t
 descModule i as = argsError i as
 
@@ -186,7 +195,7 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
 
 read' _ i as = argsError i as
 
-gasPostRead :: Readable r =>FunApp -> Gas -> r -> Eval e Gas
+gasPostRead :: Readable r => FunApp -> Gas -> r -> Eval e Gas
 gasPostRead i g0 row = (g0 +) <$> computeGas (Right i) (GPostRead $ readable row)
 
 gasPostRead' :: Readable r => FunApp -> Gas -> r -> Eval e a -> Eval e (Gas,a)
@@ -235,7 +244,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
         Just row -> do
           g <- gasPostRead i gPrev row
           let obj = columnsToObject tblTy row
-          result <- apply' app [obj]
+          result <- apply (_tApp app) [obj]
           fmap (g,) $ case result of
             (TLiteral (LBool include) _)
               | include -> case cols' of
@@ -341,25 +350,21 @@ createTable' i [t@TTable {..}] = do
 createTable' i as = argsError i as
 
 guardTable :: Show n => FunApp -> Term n -> Eval e ()
-guardTable i TTable {..} = do
-  let findMod _ r@Just {} = r
-      findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
-  r <- foldr findMod Nothing . reverse <$> use evalCallStack
-  case r of
-    (Just mn) | mn == _tModule -> enforceBlessedHashes i _tModule _tHash
-    _ -> do
-      m <- getModule (_faInfo i) _tModule
-      enforceKeySetName (_faInfo i) (_mKeySet m)
+guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModule $
+  enforceBlessedHashes i _tModule _tHash
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " ++ show t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
 enforceBlessedHashes i mn h = do
-  mmRs <- fmap fst . HM.lookup mn <$> view (eeRefStore.rsModules)
+  mmRs <- fmap _mdModule . HM.lookup mn <$> view (eeRefStore . rsModules)
   mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
   case mm of
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
-    Just Module{..}
-      | h == _mHash -> return () -- current version ok
-      | h `HS.member` _mBlessed -> return () -- hash is blessed
-      | otherwise -> evalError' i $
-                     "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h
+    Just m ->
+      case m of
+        Module{..}
+          | h == _mHash -> return () -- current version ok
+          | h `HS.member` _mBlessed -> return () -- hash is blessed
+          | otherwise -> evalError' i $
+            "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h
+        _ -> evalError' i $ "Internal error: expected module reference " ++ show mn

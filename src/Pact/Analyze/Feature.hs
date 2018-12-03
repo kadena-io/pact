@@ -85,11 +85,13 @@ data Feature
   -- String operators
   | FStringLength
   | FStringConcatenation
+  | FStringToInteger
   -- Temporal operators
   | FTemporalAddition
   -- Quantification forms
   | FUniversalQuantification
   | FExistentialQuantification
+  | FColumnOf
   -- Transactional operators
   | FTransactionAborts
   | FTransactionSucceeds
@@ -105,6 +107,8 @@ data Feature
   | FRowWritten
   | FRowReadCount
   | FRowWriteCount
+  | FRowExists
+  | FPropRead
   -- Authorization operators
   | FAuthorizedBy
   | FRowEnforced
@@ -179,6 +183,7 @@ newtype TypeVar
 data Type
   = TyCon ConcreteType
   | TyVar TypeVar
+  | TyEnum [Text]
   deriving (Eq, Ord, Show)
 
 data Bindings
@@ -186,16 +191,17 @@ data Bindings
   | BindObject
   deriving (Eq, Ord, Show)
 
-int, dec, str, time, bool, obj, ks, tbl, col :: ConcreteType
-int  = "integer"
-dec  = "decimal"
-str  = "string"
-time = "time"
-bool = "bool"
-obj  = "object"
-ks   = "keyset"
-tbl  = "table"
-col  = "column"
+int, dec, str, time, bool, obj, ks, tbl, col, type' :: ConcreteType
+int   = "integer"
+dec   = "decimal"
+str   = "string"
+time  = "time"
+bool  = "bool"
+obj   = "object"
+ks    = "keyset"
+tbl   = "table"
+col   = "column"
+type' = "type"
 
 doc :: Feature -> Doc
 
@@ -678,6 +684,29 @@ doc FStringConcatenation = Doc
         ]
         (TyCon str)
   ]
+doc FStringToInteger = Doc
+  "str-to-int"
+  CString
+  InvAndProp
+  "String to integer conversion"
+  [ Usage
+      "(str-to-int s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon str)
+        ]
+        (TyCon int)
+  , Usage
+      "(str-to-int b s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("b", TyCon int)
+        , ("s", TyCon str)
+        ]
+        (TyCon int)
+  ]
 
 -- Temporal features
 
@@ -735,6 +764,21 @@ doc FExistentialQuantification = Doc
         [ ("y", r)
         ]
         r
+  ]
+
+doc FColumnOf = Doc
+  "column-of"
+  CQuantification
+  PropOnly
+  "The *type* of `column`s for a given `table`. Commonly used in conjunction with quantification; e.g.: `(exists (col:(column-of accounts)) (column-written accounts col))`."
+  [ Usage
+      "(column-of t)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("t", TyCon tbl)
+        ]
+        (TyCon type')
   ]
 
 -- Transactional features
@@ -952,6 +996,40 @@ doc FRowWriteCount = Doc
         ]
         (TyCon int)
   ]
+doc FRowExists = Doc
+  "row-exists"
+  CDatabase
+  PropOnly
+  "Whether a row exists before or after a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(row-exists t r time)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        , ("time", TyEnum ["before", "after"])
+        ]
+        (TyCon bool)
+  ]
+doc FPropRead = Doc
+  "read"
+  CDatabase
+  PropOnly
+  "The value of a read before or after a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(read t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        , ("time", TyEnum ["before", "after"])
+        ]
+        (TyCon obj)
+  ]
 
 -- Authorization features
 
@@ -1053,9 +1131,11 @@ PAT(SObjectProjection, FObjectProjection)
 PAT(SObjectMerge, FObjectMerge)
 PAT(SStringLength, FStringLength)
 PAT(SStringConcatenation, FStringConcatenation)
+PAT(SStringToInteger, FStringToInteger)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
+PAT(SColumnOf, FColumnOf)
 PAT(STransactionAborts, FTransactionAborts)
 PAT(STransactionSucceeds, FTransactionSucceeds)
 PAT(SFunctionResult, FFunctionResult)
@@ -1069,6 +1149,8 @@ PAT(SRowRead, FRowRead)
 PAT(SRowWritten, FRowWritten)
 PAT(SRowReadCount, FRowReadCount)
 PAT(SRowWriteCount, FRowWriteCount)
+PAT(SRowExists, FRowExists)
+PAT(SPropRead, FPropRead)
 PAT(SAuthorizedBy, FAuthorizedBy)
 PAT(SRowEnforced, FRowEnforced)
 

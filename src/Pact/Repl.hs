@@ -41,7 +41,7 @@ import GHC.Word (Word8)
 import System.IO
 import Text.Trifecta.Delta
 import Control.Concurrent
-import Data.Monoid
+import Data.Monoid (appEndo)
 import System.FilePath
 
 import Pact.Compile
@@ -60,7 +60,7 @@ repl :: IO (Either () (Term Name))
 repl = repl' Interactive
 
 repl' :: ReplMode -> IO (Either () (Term Name))
-repl' m = initReplState m >>= \s -> runPipedRepl' (m == Interactive) s stdin
+repl' m = initReplState m Nothing >>= \s -> runPipedRepl' (m == Interactive) s stdin
 
 isPactFile :: String -> Bool
 isPactFile fp = endsWith fp ".pact"
@@ -75,12 +75,13 @@ runPipedRepl' :: Bool -> ReplState -> Handle -> IO (Either () (Term Name))
 runPipedRepl' p s@ReplState{..} h =
     evalStateT (useReplLib >> pipeLoop p h Nothing) s
 
-initReplState :: MonadIO m => ReplMode -> m ReplState
-initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def def)
+initReplState :: MonadIO m => ReplMode -> Maybe String -> m ReplState
+initReplState m verifyUri =
+  liftIO (initPureEvalEnv verifyUri) >>= \e -> return (ReplState e def m def def def)
 
-initPureEvalEnv :: IO (EvalEnv LibState)
-initPureEvalEnv = do
-  mv <- initLibState neverLog >>= newMVar
+initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
+initPureEvalEnv verifyUri = do
+  mv <- initLibState neverLog verifyUri >>= newMVar
   return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0) def def mv repldb def initialHash freeGasEnv
 
 
@@ -147,8 +148,7 @@ handleCompile src exp a =
                         outStr HErr (renderPrettyString (colors mode) (_pDelta d))
                         outStrLn HErr $ ": error: " ++ unpack (peText er)
             Nothing -> outStrLn HErr $ "[No location]: " ++ unpack (peText er)
-          return (Left $ show er)
-
+          Left <$> renderErr er
 
 compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
 compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
@@ -156,7 +156,7 @@ compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
 
 pureEval :: Info -> Eval LibState (Term Name) -> Repl (Either String (Term Name))
 pureEval ei e = do
-  (ReplState evalE evalS _ _ _) <- get
+  (ReplState evalE evalS _ _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
                  Left (SomeException ex) -> (Left (PactError EvalError def def (pack $ show ex)),evalS)
@@ -187,10 +187,10 @@ pureEval ei e = do
               mapM_ (\c -> outStrLn HErr $ " at " ++ show c) cs
             return (Left serr)
 
-doOut :: Show t => Info -> ReplMode -> t -> Repl ()
+doOut :: Info -> ReplMode -> Term Name -> Repl ()
 doOut ei mode a = case mode of
   Interactive -> plainOut
-  StringEval -> plainOut
+  StringEval -> rTermOut %= (a:)
   StdinPipe -> plainOut
   Script True _ -> lineOut
   _ -> return ()
@@ -220,7 +220,10 @@ updateForOp a = do
       rEnv %= appEndo e
       return (Right a)
     Load fp reset -> do
-                  when reset (initReplState mode >>= put >> void useReplLib)
+                  when reset $ do
+                    replState <- liftIO $ readMVar mv
+                    let verifyUri = _rlsVerifyUri replState
+                    (initReplState mode verifyUri >>= put >> void useReplLib)
                   (a <$) <$> loadFile fp
     TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)
     Print t -> do
@@ -241,8 +244,8 @@ doTx i t n = do
   pureEval i (e >> return (tStr "")) >>= \r -> forM r $ \_ -> do
     case t of
       Commit -> do
-        newmods <- use (rEvalState.evalRefs.rsNew)
-        rEnv.eeRefStore.rsModules %= HM.union (HM.fromList newmods)
+        newmods <- use (rEvalState . evalRefs . rsNewModules)
+        rEnv . eeRefStore . rsModules %= HM.union newmods
       _ -> return ()
     rEvalState .= def
     useReplLib
@@ -318,26 +321,36 @@ execScript dolog f = do
 
 execScript' :: ReplMode -> FilePath -> IO (Either String (Term Name),ReplState)
 execScript' m fp = do
-  s <- initReplState m
+  s <- initReplState m Nothing
   runStateT (useReplLib >> loadFile fp) s
 
 
+-- | install repl lib functions into monad state
 useReplLib :: Repl ()
 useReplLib = id %= setReplLib
 
+-- | mutate repl state to install lib functions
 setReplLib :: ReplState -> ReplState
-setReplLib = rEvalState.evalRefs.rsLoaded %~ HM.union (moduleToMap replDefs)
+setReplLib = over (rEvalState.evalRefs.rsLoaded) $ HM.union (moduleToMap replDefs)
 
+-- | mutate repl state to remove lib functions
+unsetReplLib :: ReplState -> ReplState
+unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`HM.difference` (moduleToMap replDefs))
 
+-- | evaluate string in repl monad
+evalPact :: String -> Repl (Either String (Term Name))
+evalPact cmd = parsedCompileEval cmd (TF.parseString exprsOnly mempty cmd)
+
+-- | evaluate string in repl monad, loading lib functions first.
 evalRepl' :: String -> Repl (Either String (Term Name))
-evalRepl' cmd = useReplLib >> parsedCompileEval cmd (TF.parseString exprsOnly mempty cmd)
+evalRepl' cmd = useReplLib >> evalPact cmd
 
 evalRepl :: ReplMode -> String -> IO (Either String (Term Name))
-evalRepl m cmd = initReplState m >>= evalStateT (evalRepl' cmd)
+evalRepl m cmd = initReplState m Nothing >>= evalStateT (evalRepl' cmd)
 
 evalString :: Bool -> String -> IO Value
 evalString showLog cmd = do
-  (er,s) <- initReplState StringEval >>= runStateT (evalRepl' cmd)
+  (er,s) <- initReplState StringEval Nothing >>= runStateT (evalRepl' cmd)
   return $ object $ case (showLog,er) of
     (False,Right v) -> [ "success" A..= v]
     (True,Right _) -> ["success" A..= trim (_rOut s) ]

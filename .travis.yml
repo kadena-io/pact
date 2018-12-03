@@ -20,6 +20,7 @@ cache:
   - $HOME/.ghc
   - $HOME/.cabal
   - $HOME/.stack
+  timeout: 900
 
 # The different configurations we want to test. We have BUILD=cabal which uses
 # cabal-install, and BUILD=stack which uses Stack. More documentation on each
@@ -92,21 +93,19 @@ matrix:
 
   # OSX Build El Cap
   - env: BUILD=stack ARGS=""
-    compiler: ": #stack default osx default (el cap)"
     os: osx
     addons:
       artifacts:
         paths:
-          - .stack-work/dist/x86_64-osx/Cabal-1.24.2.0/build/pact/pact
+          - .stack-work/dist/x86_64-osx/Cabal-2.2.0.1/build/pact/pact
 
   # Linux build
-  - env: BUILD=stack ARGS=""
-    compiler: ": #stack default linux"
+  - env: BUILD=stack ARGS="-j1"
     addons:
       apt: {packages: [libgmp-dev]}
       artifacts:
         paths:
-          - .stack-work/dist/x86_64-linux/Cabal-1.24.2.0/build/pact/pact
+          - .stack-work/dist/x86_64-linux/Cabal-2.2.0.1/build/pact/pact
 
 
 

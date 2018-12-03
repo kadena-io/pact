@@ -8,11 +8,10 @@ module Pact.Analyze.Model.Graph
   , linearize
   ) where
 
-import           Control.Lens       (Traversal', at, to, (^.), (^?), _Just)
+import           Control.Lens       (Traversal', at, to, (^.), (^?), _2, _Just)
 import           Data.Bool          (bool)
 import           Data.Map.Strict    (Map)
 import qualified Data.Map.Strict    as Map
-import           Data.Monoid        ((<>))
 import           Data.SBV           (SBV)
 import qualified Data.SBV           as SBV
 import           Data.Set           (Set)
@@ -28,6 +27,17 @@ linearize model = go traceEvents
       (\event (ExecutionTrace futureEvents mRes) ->
         let continue = ExecutionTrace (event : futureEvents) mRes
             stop     = ExecutionTrace [event] Nothing
+
+            handleDbAccess
+              :: Traversal' (ModelTags 'Concrete) (SBV Bool)
+              -> ExecutionTrace
+            handleDbAccess tagsBool =
+              let mSucceeds = model ^? modelTags . tagsBool . to SBV.unliteral . _Just
+              in case mSucceeds of
+                   Nothing    ->
+                     error "impossible: missing db access tag, or symbolic value"
+                   Just False -> stop
+                   Just True  -> continue
 
             handleEnforce
               :: Recoverability
@@ -65,9 +75,13 @@ linearize model = go traceEvents
                handleEnforce recov $ mtAsserts.at tid._Just.located
              TraceAuth recov (_located -> tid) ->
                handleEnforce recov $ mtAuths.at tid._Just.located.authSuccess
+             TraceRead _schema (Located _i tid) ->
+               handleDbAccess $ mtReads.at tid._Just.located.accSuccess
+             TraceWrite _writeType _schema (Located _i tid) ->
+               handleDbAccess $ mtWrites.at tid._Just.located.accSuccess
              _ ->
                continue)
-      (ExecutionTrace [] (Just $ model ^. modelTags.mtResult.located))
+      (ExecutionTrace [] (Just $ model ^. modelTags.mtResult._2.located))
 
     -- NOTE: 'Map' is ordered, so our @(Vertex, Vertex)@ 'Edge' representation
     -- over monotonically increasing 'Vertex's across the execution graph

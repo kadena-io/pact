@@ -11,10 +11,8 @@ module Pact.Analyze.Model.Text
 
 import           Control.Lens               (Lens', at, ifoldr, view, (^.))
 import           Control.Monad.State.Strict (State, evalState, get, modify)
-import qualified Data.Foldable              as Foldable
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
-import           Data.Monoid                ((<>))
 import           Data.SBV                   (SBV, SymWord)
 import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Internals         as SBVI
@@ -23,6 +21,7 @@ import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact
+import qualified Pact.Types.Persistence     as Pact
 
 import           Pact.Analyze.Model.Graph   (linearize)
 import           Pact.Analyze.Types
@@ -63,19 +62,39 @@ showArg (Located _ (Unmunged nm, tval)) = nm <> " = " <> showTVal tval
 showVar :: Located (Unmunged, TVal) -> Text
 showVar (Located _ (Unmunged nm, tval)) = nm <> " := " <> showTVal tval
 
---
--- TODO: this should display the table name
---
-showRead :: Located Access -> Text
-showRead (Located _ (Access srk obj)) = "read " <> showObject obj
-                                     <> " for key " <> showS srk
+data ExpectPresent = ExpectPresent | ExpectNotPresent
+
+showDbAccessSuccess :: SBV Bool -> ExpectPresent -> Text
+showDbAccessSuccess successSbv expectPresent = case SBV.unliteral successSbv of
+  Nothing    -> "[ERROR:symbolic]"
+  Just True  -> "succeeds"
+  Just False -> case expectPresent of
+    ExpectPresent    -> "fails because the row was not present"
+    ExpectNotPresent -> "fails because the was already present"
 
 --
 -- TODO: this should display the table name
 --
-showWrite :: Located Access -> Text
-showWrite (Located _ (Access srk obj)) = "write " <> showObject obj
-                                      <> " to key " <> showS srk
+showRead :: Located Access -> Text
+showRead (Located _ (Access srk obj suc))
+  = "read " <> showObject obj <> " for key " <> showS srk <> " "
+  <> showDbAccessSuccess suc ExpectPresent
+
+--
+-- TODO: this should display the table name
+--
+showWrite :: Pact.WriteType -> Located Access -> Text
+showWrite writeType (Located _ (Access srk obj suc))
+  = let writeTypeT = case writeType of
+          Pact.Insert -> "insert"
+          Pact.Update -> "update"
+          Pact.Write  -> "write"
+        expectPresent = case writeType of
+          Pact.Insert -> ExpectNotPresent
+          Pact.Update -> ExpectPresent
+          Pact.Write  -> error "invariant violation: write should never fail"
+    in writeTypeT <> " " <> showObject obj <> " to key " <> showS srk <> " "
+       <> showDbAccessSuccess suc expectPresent
 
 showKsn :: S KeySetName -> Text
 showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
@@ -133,10 +152,10 @@ showEvent ksProvs tags event = do
   lastDepth <- get
   fmap (fmap (indent lastDepth)) $
     case event of
-      TraceRead (_located -> (tid, _)) ->
+      TraceRead _ (_located -> tid) ->
         pure [display mtReads tid showRead]
-      TraceWrite (_located -> (tid, _)) ->
-        pure [display mtWrites tid showWrite]
+      TraceWrite writeType _ (_located -> tid) ->
+        pure [display mtWrites tid (showWrite writeType)]
       TraceAssert recov (_located -> tid) ->
         pure [display mtAsserts tid (showAssert recov)]
       TraceAuth recov (_located -> tid) ->
@@ -155,8 +174,8 @@ showEvent ksProvs tags event = do
           ObjectScope ->
             "destructuring object" : displayVids showVar
           FunctionScope nm ->
-            let header = "entering function " <> nm
-                      <> " with argument" <> if length vids > 1 then "s" else ""
+            let header = "entering function " <> nm <> " with "
+                      <> if length vids > 1 then "arguments" else "argument"
             in header : (displayVids showArg ++ [emptyLine])
       TracePopScope _ scopeTy tid _ -> do
         modify pred
@@ -181,18 +200,9 @@ showEvent ksProvs tags event = do
 showModel :: Model 'Concrete -> Text
 showModel model =
     T.intercalate "\n" $ T.intercalate "\n" . map indent1 <$>
-      [ ["Arguments:"]
-      , indent1 <$> Foldable.toList (showArg <$> (model ^. modelArgs))
-      , []
-      , ["Program trace:"]
+      [ ["Program trace:"]
       , indent1 <$> (concat $ evalState (traverse showEvent' traceEvents) 0)
-      , []
-      , ["Result:"]
-      , [indent1 $ maybe
-          "Transaction aborted."
-          (\tval -> "Return value: " <> showTVal tval)
-          mRetval
-        ]
+      , [maybe "\nTransaction aborted." (const "") mRetval]
       ]
 
   where

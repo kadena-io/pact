@@ -1,3 +1,35 @@
+2.6.1
+---
+* Korean readthedocs
+* Interfaces copy models onto implementing modules
+* Better/tighter compile phase, remove TBless, TImplements
+* Fix bug preventing correct reporting of argument values in falsifying models
+  from the property checker
+
+2.6.0
+---
+* Pact Interfaces
+* Localized docs in JP, EN
+* Add configurable gas limit for `pact -s`
+* Remove file server from `pact -s`
+* Fix empty list runtime type enforcement bug
+* Enforce top-level only for builtins `pact-version`, `enforce-pact-version`, etc
+* Various changes to support web repl
+* use cryptonite for Blake2 implementation
+* new `str-to-int` builtin
+* Numerous fixes to pact reference docs
+* New compiler using megaparsec
+* analysis supports `str-to-int` and `read-integer` built-ins
+* new `row-exists`, `read`, `column-of`, `column-written` properties
+* `@model` now always takes a list when applied on modules, functions, or schemas.
+* properties can now be applied to an entire module
+* Fix bug in analysis impl of decimal arithmetic
+* Model falsifications are now presented as execution traces with example values
+
+2.5.1
+---
+* Fix keyset enforce of old keyset
+
 2.5.0
 ---
 * Pluggable gas model with simple fixed-rate implementation
