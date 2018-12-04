@@ -172,7 +172,6 @@ enforceGuard i g = case g of
     void $ runReadOnly (_faInfo i) $
       enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
 
-
 findCallingModule :: Eval e (Maybe ModuleName)
 findCallingModule = uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))
 

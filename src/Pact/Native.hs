@@ -218,7 +218,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
    \ in a given transaction will be tied to NAMESPACE, and may be accessed using the toplevel \
    \ call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
    \ the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
-   \ its place. `(define-namespace \"my-namespace\" 'my-guard)`"
+   \ its place. `(define-namespace 'my-namespace 'my-guard)`"
   where
     defineNamespace :: RNativeFun e
     defineNamespace i as = case as of
@@ -228,14 +228,19 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
     go fi nsn g = do
       let name = NamespaceName nsn
           info = _faInfo fi
-      oldNamespace <- view eeNamespace
-      case oldNamespace of
-        Just _  -> evalError' fi $ "define-namespace: namespace already defined"
-        Nothing ->  do
-          -- if guard is defined, rotate guard
-          enforceGuard fi g
-          writeRow info Write Namespaces name (Namespace name g) &
-            success "Namespace defined"
+
+      mOldNs <- readRow info Namespaces name
+      case mOldNs of
+        Just (Namespace _ g') -> do
+          -- if namespace is defined, enforce old guard and rotate
+          enforceGuard fi g'
+          writeNamespace info name g
+        Nothing -> writeNamespace info name g
+
+    writeNamespace info n g =
+      writeRow info Write Namespaces n (Namespace n g)
+        & success "Namespace defined"
+
 
 langDefs :: NativeModule
 langDefs =
