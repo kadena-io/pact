@@ -178,7 +178,7 @@ eval (TNamespace n info) = topLevelCall info "namespace" GNamespace $ \g ->
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- enforce old module keysets
-    oldM <- readRow i Modules (_mName m)
+    oldM <- readRow i Modules $ _mName m
     case oldM of
       Nothing -> return ()
       Just om ->

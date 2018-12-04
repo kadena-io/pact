@@ -42,9 +42,9 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    TableName(..),
-   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,mNamespace,
-   interfaceCode, interfaceMeta, interfaceName, interfaceImports,interfaceNamespace,
-   ModuleName(..),
+   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
+   interfaceCode, interfaceMeta, interfaceName, interfaceImports,
+   ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
    ConstVal(..),
    Use(..),
@@ -303,9 +303,38 @@ newtype TableName = TableName Text
 instance Show TableName where show (TableName s) = show s
 
 -- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
-newtype ModuleName = ModuleName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
-instance Show ModuleName where show (ModuleName s) = show s
+data ModuleName = ModuleName
+  { _mnName :: Text
+  , _mnNamespace :: Maybe NamespaceName
+  } deriving (Eq, Ord)
+
+instance Pretty ModuleName where
+  pretty (ModuleName n _) = pretty n
+
+instance Hashable ModuleName where
+  hashWithSalt s (ModuleName a Nothing) =
+    s `hashWithSalt` (0::Int) `hashWithSalt` a
+  hashWithSalt s (ModuleName a (Just b)) =
+    s `hashWithSalt` (1::Int) `hashWithSalt` a `hashWithSalt` b
+
+instance AsString ModuleName where
+  asString (ModuleName n _) = n
+
+instance IsString ModuleName where
+  fromString s = ModuleName (pack s) Nothing
+
+instance Show ModuleName where show (ModuleName s _) = show s
+
+instance ToJSON ModuleName where
+  toJSON ModuleName{..} = object
+    [ "name"      .= _mnName
+    , "namespace" .= _mnNamespace
+    ]
+
+instance FromJSON ModuleName where
+  parseJSON = withObject "ModuleName" $ \o -> ModuleName
+    <$> o .: "name"
+    <*> o .: "namespace"
 
 newtype DefName = DefName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
@@ -333,7 +362,7 @@ parseName i = AP.parseOnly (nameParser i)
 nameParser :: (TokenParsing m, Monad m) => Info -> m Name
 nameParser i = do
   a <- ident style
-  try (qualified >>= \qn -> return (QName (ModuleName a) qn i) <?> "qualified name") <|>
+  try (qualified >>= \qn -> return (QName (ModuleName a Nothing) qn i) <?> "qualified name") <|>
     return (Name a i)
 
 instance Hashable Name where
@@ -377,14 +406,12 @@ data Module
   , _mBlessed :: !(HS.HashSet Hash)
   , _mInterfaces :: [ModuleName]
   , _mImports :: [Use]
-  , _mNamespace :: Maybe NamespaceName
   }
   | Interface
   { _interfaceName :: !ModuleName
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
   , _interfaceImports :: [Use]
-  , _interfaceNamespace :: Maybe NamespaceName
   } deriving Eq
 
 instance Show Module where
@@ -401,7 +428,6 @@ instance ToJSON Module where
     , "hash" .= _mHash
     , "blessed" .= _mBlessed
     , "interfaces" .= _mInterfaces
-    , "namespace"  .= _mNamespace
     ]
   toJSON Interface{..} = object
     [ "name" .= _interfaceName
@@ -419,7 +445,6 @@ instance FromJSON Module where
     <*> (HS.fromList <$> o .: "blessed")
     <*> o .: "interfaces"
     <*> pure []
-    <*> o .: "namespace"
 
 data Def n = Def
   { _dDefName :: !DefName
@@ -438,7 +463,7 @@ instance (Show n) => Show (Def n) where
     maybeDelim " " (_mDocs _dMeta) ++ ")"
 
 newtype NamespaceName = NamespaceName Text
-  deriving (Eq, FromJSON, ToJSON, IsString, AsString)
+  deriving (Eq, Ord, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty)
 
 data Namespace = Namespace
   { _nsName   :: NamespaceName
@@ -806,3 +831,4 @@ makeLenses ''Meta
 makeLenses ''Module
 makeLenses ''App
 makeLenses ''Def
+makeLenses ''ModuleName

@@ -346,7 +346,8 @@ tc i as = case as of
   _ -> argsError i as
   where
     go modname dbg = do
-      mdm <- HM.lookup (ModuleName modname) <$> view (eeRefStore . rsModules)
+      ns  <- uses eeNamespace (fmap _nsName)
+      mdm <- HM.lookup (ModuleName modname ns) <$> view (eeRefStore . rsModules)
       case mdm of
         Nothing -> evalError' i $ "No such module: " ++ show modname
         Just md -> do
@@ -363,8 +364,9 @@ tc i as = case as of
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
+    ns  <- uses eeNamespace (fmap _nsName)
     modules <- view (eeRefStore . rsModules)
-    let mdm = HM.lookup (ModuleName modName) modules
+    let mdm = HM.lookup (ModuleName modName ns) modules
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do

@@ -146,7 +146,8 @@ descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
-  mods <- view (eeRefStore . rsModules . at (ModuleName t))
+  ns   <- uses eeNamespace (fmap _nsName)
+  mods <- view $ eeRefStore . rsModules . at (ModuleName t ns)
   case _mdModule <$> mods of
     Just m ->
       case m of
