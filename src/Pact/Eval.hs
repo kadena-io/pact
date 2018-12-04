@@ -230,16 +230,16 @@ evalUse (Use mn h i) = do
 
 evalNamespace :: Info -> NamespaceName -> Eval e ()
 evalNamespace info name = do
-  mOldNs <- view eeNamespace
+  mOldNs <- use eeNamespace
   case mOldNs of
     Just (Namespace n _) ->
       evalError info $ "Namespace already in use: " ++ asString' n
     Nothing -> do
       mNs <- readRow info Namespaces name
       case mNs of
-        Nothing   ->
+        Nothing ->
           evalError info $ "Namespace not defined: " ++ asString' name
-        definedNs -> undefined
+        ns      -> eeNamespace .= ns
 
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
