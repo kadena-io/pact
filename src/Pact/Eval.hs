@@ -175,7 +175,7 @@ eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
 eval (TNamespace n info) = topLevelCall info "namespace" GNamespace $ \g ->
-  evalNamespace n >> return (g, tStr . pack $ "Namespace " ++ asString' n)
+  evalNamespace info n >> return (g, tStr . pack $ "Namespace " ++ asString' n)
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- enforce old module keysets
@@ -229,8 +229,19 @@ evalUse (Use mn h i) = do
       installModule md
 
 
-evalNamespace :: NamespaceName -> Eval e ()
-evalNamespace = undefined
+evalNamespace :: Info -> NamespaceName -> Eval e ()
+evalNamespace info name = do
+  mOldNs <- view eeNamespace
+  case mOldNs of
+    Just (Namespace n _) ->
+      evalError info $ "Namespace already in use: " ++ asString' n
+    Nothing -> do
+      mNs <- readRow info Namespaces name
+      case mNs of
+        Nothing   ->
+          evalError info $ "Namespace not defined: " ++ asString' name
+        definedNs -> undefined
+
 
 
 -- | Make table of module definitions for storage in namespace/RefStore.
