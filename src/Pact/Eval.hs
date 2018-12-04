@@ -87,8 +87,7 @@ evalCommitTx i = do
     Just {} -> commitTx i
 {-# INLINE evalCommitTx #-}
 
-
-enforceKeySetName ::  Info -> KeySetName ->  Eval e ()
+enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " ++ show mksn) return =<< readRow mi KeySets mksn
   runPure $ enforceKeySet mi (Just mksn) ks
