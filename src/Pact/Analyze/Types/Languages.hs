@@ -31,6 +31,7 @@ module Pact.Analyze.Types.Languages
   , PropSpecific(..)
   , Term(..)
   , BeforeOrAfter(..)
+  , Open(..)
 
   , toPact
   , fromPact
@@ -121,6 +122,10 @@ class (sub :: * -> *) :*<: (sup :: Ty -> *) where
   inject'  :: sub (Concrete a) -> sup a
   project' :: sup a            -> Maybe (sub (Concrete a))
 
+-- | An open term (: 'b') with a free variable (: 'a').
+data Open (a :: Ty) (tm :: Ty -> *) (b :: Ty) = Open !VarId !Text !(tm b)
+  deriving (Eq, Show)
+
 -- | Core terms.
 --
 -- These are the expressions shared by all three languages ('Prop',
@@ -150,6 +155,15 @@ data Core (t :: Ty -> *) (a :: Ty) where
   Var :: VarId -> Text -> Core t a
 
   Identity     :: SingTy k a   -> t a      -> Core t a
+  Constantly   :: SingTy k a   -> t a -> Existential t -> Core t a
+
+  -- compose
+  -- * f :: a -> b (free a)
+  -- * g :: b -> c (free b)
+  -- :: c
+  Compose
+    :: SingTy k a -> SingTy k b -> SingTy k c
+    ->        t a -> Open a t b -> Open b t c -> Core t c
 
   -- string ops
   -- | The concatenation of two 'String' expressions
@@ -228,14 +242,18 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   LiteralList  :: SingTy 'SimpleK a -> [t a] -> Core t ('TyList a)
 
-  ListMap      :: SingTy 'SimpleK a -> SingTy 'SimpleK b -> (VarId, Text) -> t b -> t ('TyList a) -> Core t ('TyList b)
+  ListMap
+    :: SingTy 'SimpleK a -> SingTy 'SimpleK b
+    -> Open a t b
+    -> t ('TyList a)
+    -> Core t ('TyList b)
 
   -- ListFilter ::
   -- ListFold   ::
 
 -- Note [Sing Functions]:
 --
--- The `sing*` family of 9 functions differs in two dimensions:
+-- The `sing*` family of 9 (+3) functions differs in two dimensions:
 -- * The class required is `Eq`, `UserShow`, or `Show`
 -- * It is applied at either `tm ('TyList a)`, `[tm a]`, or `tm a`
 --
@@ -316,6 +334,12 @@ singEqTm ty t1 t2 = case ty of
 
   SObject -> t1 == t2
 
+singEqOpen
+  :: OfPactTypes Eq tm
+  => SingTy k a -> Open x tm a -> Open x tm a -> Bool
+singEqOpen ty (Open v1 nm1 a1) (Open v2 nm2 a2)
+  = singEqTm ty a1 a2 && v1 == v2 && nm1 == nm2
+
 singUserShowTmList
   :: OfPactTypes UserShow tm
   => SingTy 'SimpleK a -> tm ('TyList a) -> Text
@@ -361,6 +385,12 @@ singUserShowTm ty tm = case ty of
   SList SAny     -> userShow tm
 
   SObject -> userShow tm
+
+singUserShowOpen
+  :: OfPactTypes UserShow tm
+  => SingTy k a -> Open x tm a -> Text
+singUserShowOpen ty (Open _ nm a)
+  = parenList [ "lambda", nm, singUserShowTm ty a ]
 
 singShowsTmList
   :: OfPactTypes Show tm
@@ -408,6 +438,15 @@ singShowsTm ty p t = case ty of
 
   SObject -> showsPrec p t
 
+singShowsOpen
+  :: OfPactTypes Show tm
+  => SingTy k a -> Open x tm a -> ShowS
+singShowsOpen ty (Open v nm a) = showParen true $
+    showsPrec 11 v
+  . showString " "
+  . showsPrec 11 nm
+  . showString " "
+  . singShowsTm ty 11 a
 
 instance
   ( Eq (Concrete a)
@@ -419,6 +458,16 @@ instance
   Sym a                       == Sym b                       = a == b
   Var a1 b1                   == Var a2 b2                   = a1 == a2 && b1 == b2
   Identity ty1 a1             == Identity _ty2 a2            = singEqTm ty1 a1 a2
+  Constantly ty1 a1 e1        == Constantly _ty2 a2 e2       = singEqTm ty1 a1 a2 && e1 == e2
+  Compose tya1 tyb1 tyc1 a1 b1 c1
+    == Compose tya2 tyb2 tyc2 a2 b2 c2=
+    case singEq tya1 tya2 of
+      Nothing -> False
+      Just Refl -> case singEq tyb1 tyb2 of
+        Nothing -> False
+        Just Refl -> case singEq tyc1 tyc2 of
+          Nothing -> False
+          Just Refl -> singEqTm tya1 a1 a2 && singEqOpen tyb1 b1 b2 && singEqOpen tyc1 c1 c2
   StrConcat a1 b1             == StrConcat a2 b2             = a1 == a2 && b1 == b2
   StrLength a                 == StrLength b                 = a == b
   StrToInt s1                 == StrToInt s2                 = s1 == s2
@@ -456,9 +505,11 @@ instance
   ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
   MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && singEqTm ty1 b1 b2
   LiteralList ty1 l1          == LiteralList _ty2 l2         = singEqListTm ty1 l1 l2
-  ListMap tya1 tyb1 v1 b1 as1 == ListMap tya2 _ v2 b2 as2    = case singEq tya1 tya2 of
-    Nothing   -> False
-    Just Refl -> singEqTm tyb1 b1 b2 && singEqTmList tya1 as1 as2 && v1 == v2
+  ListMap tya1 tyb1 (Open v1 nm1 b1) as1 == ListMap tya2 _ (Open v2 nm2 b2) as2
+    = case singEq tya1 tya2 of
+      Nothing   -> False
+      Just Refl -> singEqTm tyb1 b1 b2 && singEqTmList tya1 as1 as2
+        && v1 == v2 && nm1 == nm2
 
   _                           == _                           = False
 
@@ -472,6 +523,25 @@ instance
     Sym a            -> showString "Sym "        . showsPrec 11 a
     Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
     Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . singShowsTm a 11 b
+    Constantly a b c ->
+        showString "Constantly "
+      . showsPrec 11 a
+      . showString " "
+      . singShowsTm a 11 b
+      . showString " "
+      . showsPrec 11 c
+    Compose tya tyb tyc a b c ->
+        showString "Compose "
+      . showsPrec 11 tya
+      . showString " "
+      . showsPrec 11 tyb
+      . showString " "
+      . showsPrec 11 tyc
+      . showString " "
+      . singShowsTm tya 11 a
+      . singShowsOpen tyb b
+      . showString " "
+      . singShowsOpen tyc c
     StrConcat a b    -> showString "StrConcat "  . showsPrec 11 a . showString " " . showsPrec 11 b
     StrLength a      -> showString "StrLength "  . showsPrec 11 a
     StrToInt a       -> showString "StrToInt "   . showsPrec 11 a
@@ -644,15 +714,13 @@ instance
       . showsPrec 11 ty
       . showString " "
       . singShowsListTm ty 11 l
-    ListMap tya tyb vid b as ->
+    ListMap tya tyb b as ->
         showString "ListMap "
       . showsPrec 11 tya
       . showString " "
       . showsPrec 11 tyb
       . showString " "
-      . showsPrec 11 vid
-      . showString " "
-      . singShowsTm tyb 11 b
+      . singShowsOpen tyb b
       . showString " "
       . singShowsTmList tya 11 as
 
@@ -666,6 +734,8 @@ instance
     Sym s                    -> tShow s
     Var _vid name            -> name
     Identity ty x            -> parenList ["identity", singUserShowTm ty x]
+    Constantly ty x y        -> parenList ["constantly", singUserShowTm ty x, userShowPrec 11 y]
+    Compose _ tyb tyc _ b c  -> parenList ["compose", singUserShowOpen tyb b, singUserShowOpen tyc c]
     StrConcat x y            -> parenList [SConcatenation, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
     StrToInt s               -> parenList [SStringToInteger, userShow s]
@@ -702,9 +772,9 @@ instance
     ListConcat ty x y        -> parenList [SConcatenation, singUserShowTmList ty x, singUserShowTmList ty y]
     MakeList ty x y          -> parenList [SMakeList, userShow x, singUserShowTm ty y]
     LiteralList ty lst       -> singUserShowListTm ty lst
-    ListMap tya tyb (_, v) b as -> parenList
+    ListMap tya tyb b as -> parenList
       [ "map"
-      , parenList [ "lambda", v, singUserShowTm tyb b ]
+      , singUserShowOpen tyb b
       , singUserShowTmList tya as
       ]
 

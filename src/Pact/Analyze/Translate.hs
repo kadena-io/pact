@@ -87,6 +87,7 @@ data TranslateFailureNoLoc
   | NoKeys (AST Node)
   | NoReadMsg (AST Node)
   | DeprecatedList Node
+  | SimpleTypeRequired
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
   | TypeError Node
@@ -117,6 +118,7 @@ describeTranslateFailureNoLoc = \case
   NoKeys _node  -> "`keys` is not yet supported"
   NoReadMsg _ -> "`read-msg` is not yet supported"
   DeprecatedList node -> "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
+  SimpleTypeRequired -> "Lists are currently limited to holding simply-typed objects"
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   TypeError node -> "\"impossible\" post-typechecker type error in node: " <> tShow node
 
@@ -1079,24 +1081,46 @@ translateNode astNode = withAstContext astNode $ case astNode of
       EList   ty     a' -> EList   ty     $ CoreTerm $ Identity ty      a'
       EObject schema a' -> EObject schema $ CoreTerm $ Identity SObject a'
 
-  AST_NFun _node "map" [ fun, l ] -> do
-    tsFoundVars .= [] -- TODO assert already []
-    ESimple bTy fun' <- translateNode fun
-    vs               <- use tsFoundVars
+  AST_NFun _node "constantly" [ a, b ] -> do
+    ea' <- translateNode a
+    b'  <- translateNode b
+    pure $ case ea' of
+      ESimple ty     a' -> ESimple ty     $ CoreTerm $ Constantly ty      a' b'
+      EList   ty     a' -> EList   ty     $ CoreTerm $ Constantly ty      a' b'
+      EObject schema a' -> EObject schema $ CoreTerm $ Constantly SObject a' b'
+
+  AST_NFun _node "compose" [ f, g, a ] -> do
+    ESimple tya a' <- translateNode a
+    avarLst        <- use tsFoundVars
     tsFoundVars .= []
-    (vid, varName, EType aType) <- case vs of
-      [v] -> pure v
-      _   -> error "TODO"
+
+    ESimple tyb f' <- translateNode f
+    (avid, _, _)   <- captureOneFreeVar
+
+    ESimple tyc g' <- translateNode g
+    (bvid, _, _)   <- captureOneFreeVar
+
+    -- important: we captured a, so we need to leave it free (by restoring
+    -- tsFoundVars)
+    tsFoundVars .= avarLst
+
+    pure $ ESimple tyc $ CoreTerm $
+      Compose tya tyb tyc a' (Open avid "a" f') (Open bvid "b" g')
+
+  AST_NFun node "map" [ fun, l ] -> do
+    expectNoFreeVars
+    ESimple bTy fun' <- translateNode fun
+    (vid, varName, EType aType) <- captureOneFreeVar
 
     aTy' <- requireSimple aType
 
     EList (SList listTy) l' <- translateNode l
 
     case singEq listTy aTy' of
-      Nothing   -> error "TODO"
+      Nothing   -> throwError' $ TypeError node
       Just Refl -> pure $
-        EList (SList bTy) $ CoreTerm $ ListMap aTy' bTy (vid, varName)
-          fun' l'
+        EList (SList bTy) $ CoreTerm $ ListMap aTy' bTy
+          (Open vid varName fun') l'
 
   AST_NFun _ f _
     --
@@ -1109,9 +1133,24 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   _ -> throwError' $ UnexpectedNode astNode
 
+captureOneFreeVar :: TranslateM (VarId, Text, EType)
+captureOneFreeVar = do
+  vs <- use tsFoundVars
+  tsFoundVars .= []
+  case vs of
+    [v] -> pure v
+    _   -> error $ "unexpected vars found: " ++ show vs
+
+expectNoFreeVars :: TranslateM ()
+expectNoFreeVars = do
+  vars <- use tsFoundVars
+  case vars of
+    [] -> pure ()
+    _  -> error "invariant violation: free variable unexpectedly found"
+
 requireSimple :: SingTy k a -> TranslateM (SingTy 'SimpleK a)
 requireSimple ty = case refineSimple ty of
-  Nothing  -> throwError' (error "TODO")
+  Nothing  -> throwError' SimpleTypeRequired
   Just ty' -> pure ty'
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph

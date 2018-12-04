@@ -1,10 +1,11 @@
 {-# LANGUAGE CPP                   #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
-{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE Rank2Types            #-}
 {-# options_ghc -fno-warn-orphans #-}
 
@@ -33,6 +34,12 @@ import           Pact.Analyze.Util
   CoreProp Lit{}      -> ([], p);                                             \
   CoreProp Sym{}      -> ([], p);                                             \
   CoreProp (Identity ty a) -> CoreProp . Identity ty <$> float a;             \
+  CoreProp (Constantly ty a b) -> withFloat ty $ CoreProp <$>                 \
+    (Constantly ty                                                            \
+      <$> float a                                                             \
+      <*> pure b); {- TODO -}                                                 \
+  CoreProp (Compose tya tyb tyc a b c) -> withFloat tya $ withFloat tyb $     \
+    CoreProp <$> (Compose tya tyb tyc <$> float a <*> float b <*> float c);   \
   CoreProp (ListAt ty a b) -> CoreProp <$>                                    \
     (ListAt ty <$> float a <*> float b) ;                                     \
   CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;
@@ -43,6 +50,12 @@ import           Pact.Analyze.Util
   CoreProp Sym{}                 -> ([], p);                                  \
   CoreProp Var{}                 -> ([], p);                                  \
   CoreProp (Identity ty a)       -> CoreProp . Identity ty <$> float a;       \
+  CoreProp (Constantly ty a b) -> withFloat ty $ CoreProp <$>                 \
+    (Constantly ty                                                            \
+      <$> float a                                                             \
+      <*> pure b); {- TODO -}                                                 \
+  CoreProp (Compose tya tyb tyc a b c) -> withFloat tya $ withFloat tyb $     \
+    CoreProp <$> (Compose tya tyb tyc <$> float a <*> float b <*> float c);   \
   CoreProp ListAt{}              -> vacuousMatch "nested lists not allowed";  \
   CoreProp Numerical{}           -> vacuousMatch "numerical can't be a list"; \
   CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;  \
@@ -58,58 +71,61 @@ import           Pact.Analyze.Util
   -> CoreProp <$> (MakeList ty <$> float a <*> float b);                      \
   CoreProp (LiteralList ty as)                                                \
     -> CoreProp <$> (LiteralList ty <$> traverse float as);                   \
-  CoreProp (ListMap tya tyb v b as) -> withFloat tya $                          \
-       CoreProp <$> (ListMap tya tyb v <$> float b <*> float as)
+  CoreProp (ListMap tya tyb (Open v nm b) as) -> withFloatL tya $             \
+       CoreProp <$> (ListMap tya tyb <$> (Open v nm <$> float b) <*> float as);
 
-instance Float ('TyList 'TyObject) where
+instance Float Prop a => Float (Open x Prop) a where
+  float (Open a b tm) = Open a b <$> float tm
+
+instance Float Prop ('TyList 'TyObject) where
   float p = case p of
     STANDARD_LIST_INSTANCES
 
-instance Float ('TyList 'TyKeySet) where
+instance Float Prop ('TyList 'TyKeySet) where
   float p = case p of
     STANDARD_LIST_INSTANCES
 
-instance Float ('TyList 'TyAny) where
+instance Float Prop ('TyList 'TyAny) where
   float p = case p of
     STANDARD_LIST_INSTANCES
 
-instance Float ('TyList 'TyInteger) where
+instance Float Prop ('TyList 'TyInteger) where
   float p = case p of
     STANDARD_LIST_INSTANCES
 
-instance Float ('TyList 'TyDecimal) where
+instance Float Prop ('TyList 'TyDecimal) where
   float p = case p of
     STANDARD_LIST_INSTANCES
 
-instance Float ('TyList 'TyTime) where
+instance Float Prop ('TyList 'TyTime) where
   float p = case p of
     STANDARD_LIST_INSTANCES
 
-instance Float ('TyList 'TyStr) where
+instance Float Prop ('TyList 'TyStr) where
   float p = case p of
     STANDARD_LIST_INSTANCES
 
-instance Float ('TyList 'TyBool) where
+instance Float Prop ('TyList 'TyBool) where
   float p = case p of
     STANDARD_LIST_INSTANCES
 
 
-instance Float 'TyInteger where
+instance Float Prop 'TyInteger where
   float = floatIntegerQuantifiers
 
-instance Float 'TyBool where
+instance Float Prop 'TyBool where
   float = floatBoolQuantifiers
 
-instance Float 'TyDecimal where
+instance Float Prop 'TyDecimal where
   float = floatDecimalQuantifiers
 
-instance Float 'TyStr where
+instance Float Prop 'TyStr where
   float = floatStringQuantifiers
 
-instance Float 'TyTime where
+instance Float Prop 'TyTime where
   float = floatTimeQuantifiers
 
-instance Float 'TyObject where
+instance Float Prop 'TyObject where
   float p = case p of
     STANDARD_INSTANCES
     CoreProp Numerical{}     -> vacuousMatch "numerical can't be Object"
@@ -122,12 +138,12 @@ instance Float 'TyObject where
     PropSpecific (PropRead ba schema tn pRk)
       -> PropSpecific . PropRead ba schema tn <$> float pRk
 
-instance Float 'TyKeySet where
+instance Float Prop 'TyKeySet where
   float p = case p of
     STANDARD_INSTANCES
     CoreProp Numerical{} -> vacuousMatch "numerical can't be KeySet"
 
-instance Float 'TyAny where
+instance Float Prop 'TyAny where
   float p = case p of
     STANDARD_INSTANCES
     CoreProp Numerical{} -> vacuousMatch "numerical can't be Any"
@@ -142,7 +158,7 @@ floatIntegerQuantifiers p = case p of
   STANDARD_INSTANCES
 
   CoreProp (ListLength ty pLst)
-    -> withFloat ty $ CoreProp . ListLength ty <$> float pLst
+    -> withFloatL ty $ CoreProp . ListLength ty <$> float pLst
   CoreProp (StrLength pStr)
     -> PStrLength <$> float pStr
   CoreProp (StrToInt s)
@@ -230,13 +246,13 @@ floatBoolQuantifiers p = case p of
     -> CoreProp ... BoolComparison op <$> float a <*> float b
   CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
-  CoreProp (ListEqNeq ty op a b) -> withFloat ty $
+  CoreProp (ListEqNeq ty op a b) -> withFloatL ty $
     CoreProp <$> (ListEqNeq ty op <$> float a <*> float b)
   CoreProp (ObjContains schema a b) -> CoreProp <$>
     (ObjContains schema <$> float a <*> float b)
   CoreProp (StrContains needle haystack) -> CoreProp <$>
     (StrContains <$> float needle <*> float haystack)
-  CoreProp (ListContains ty needle haystack) -> withFloat ty $
+  CoreProp (ListContains ty needle haystack) -> withFloatL ty $
     CoreProp <$> (ListContains ty <$> float needle <*> float haystack)
 
   PAnd a b     -> PAnd <$> float a <*> float b
@@ -249,8 +265,27 @@ floatBoolQuantifiers p = case p of
   PropSpecific (RowExists tn pRk beforeAfter)
     -> PropSpecific ... RowExists tn <$> float pRk <*> pure beforeAfter
 
-withFloat :: SingTy 'SimpleK a -> ((Float a, Float ('TyList a)) => b) -> b
+withFloat :: SingTy k a -> (Float Prop a => b) -> b
 withFloat ty f = case ty of
+  SBool          -> f
+  SInteger       -> f
+  SStr           -> f
+  STime          -> f
+  SDecimal       -> f
+  SKeySet        -> f
+  SAny           -> f
+  SList SBool    -> f
+  SList SInteger -> f
+  SList SStr     -> f
+  SList STime    -> f
+  SList SDecimal -> f
+  SList SKeySet  -> f
+  SList SAny     -> f
+  SObject        -> f
+
+withFloatL
+  :: SingTy 'SimpleK a -> ((Float Prop a, Float Prop ('TyList a)) => b) -> b
+withFloatL ty f = case ty of
   SBool    -> f
   SInteger -> f
   SStr     -> f

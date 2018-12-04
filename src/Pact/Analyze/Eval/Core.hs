@@ -145,6 +145,12 @@ evalLogicalOp OrOp [a, b] = do
 evalLogicalOp NotOp [a] = bnot <$> eval a
 evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
+-- | Throw an analyze failure when Nothing
+(??) :: Analyzer m => Maybe a -> AnalyzeFailureNoLoc -> m a
+(Just a) ?? _   = pure a
+Nothing  ?? err = throwErrorNoLoc err
+infix 0 ??
+
 evalCore
   :: forall m a a'.
      ( Analyzer m
@@ -161,6 +167,17 @@ evalCore (Var vid name) = do
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore (Identity ty a)                   = withShow ty $ eval a
+evalCore (Constantly tya a _) = withShow tya $ eval a
+evalCore (Compose tya tyb tyc a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
+  tya' <- singSimple tya ?? SimpleKindRequired
+  tyb' <- singSimple tyb ?? SimpleKindRequired
+  tyc' <- singSimple tyc ?? SimpleKindRequired
+  withShow tya' $ withSymWord tya' $
+    withShow tyb' $ withSymWord tyb' $
+      withShow tyc' $ do -- withSymWord tyc' $ do
+        a' <- eval a
+        b' <- withVar vida (mkAVal a') $ eval tmb
+        withVar vidb (mkAVal b') $ eval tmc
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
 evalCore (StrLength p)
   = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
@@ -268,7 +285,7 @@ evalCore (MakeList ty i a) = withShow ty $ withSymWord ty $ do
     Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
     Nothing  -> throwErrorNoLoc $ UnhandledTerm
       "make-list currently requires a statically determined length"
-evalCore (ListMap tya tyb (vid, _) expr as)
+evalCore (ListMap tya tyb (Open vid _ expr) as)
   = withShow tyb $ withSymWord tyb $
       withShow tya $ withSymWord tya $
         withMergeableSbv tyb $ do
@@ -436,11 +453,15 @@ evalCoreO (Var vid name) = do
     Just (AnObj obj)   -> pure obj
     Just OpaqueVal     -> throwErrorNoLoc OpaqueValEncountered
 
--- TODO(joel): I don't think an object can appear hear. Get more clarity on
+-- TODO(joel): I don't think an object can appear here. Get more clarity on
 -- this.
 evalCoreO (Lit obj)      = pure obj
 evalCoreO (Sym _)        = vacuousMatch "an object cannot be a symbolic value"
 evalCoreO (Identity _ a) = evalO a
+evalCoreO (Constantly _ a _) = evalO a
+evalCoreO Compose{}          = throwErrorNoLoc "not yet implemented"
+-- evalCoreO (Compose _ _ _ (Open va _ tmb) (Open vb _ tmc)) = do
+
 evalCoreO (Numerical _)  = vacuousMatch "an object cannot be a numerical value"
 evalCoreO ListAt{}       = throwErrorNoLoc "not yet implemented"
 evalCoreO ObjTake{}      = throwErrorNoLoc "not yet implemented"

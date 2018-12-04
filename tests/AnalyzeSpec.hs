@@ -2752,3 +2752,24 @@ spec' =
             (map (+ 1) [1 2 3]))
           |]
     expectVerified code2
+
+    let code3 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [1 1 1]))]
+            (map (constantly 1) [1 2 3]))
+          |]
+    expectVerified code3
+
+    let code4 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [2 2 2]))]
+            (map (compose (constantly 1) (+ 1)) [1 2 3]))
+          |]
+    expectVerified code4
+
+    let code5 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [1 1 1]))]
+            (map (compose (+ 1) (constantly 1)) [1 2 3]))
+          |]
+    expectVerified code5

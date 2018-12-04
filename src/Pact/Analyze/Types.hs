@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
@@ -48,8 +49,8 @@ data Quantifier
   = Forall' VarId Text QType
   | Exists' VarId Text QType
 
-class Float a where
-  float :: Prop a -> ([Quantifier], Prop a)
+class Float (tm :: Ty -> *) (a :: Ty) where
+  float :: tm a -> ([Quantifier], tm a)
 
 genId :: (MonadState s m, Num i) => Lens' s i -> m i
 genId l = do
