@@ -92,7 +92,7 @@ matrix:
   #   addons: {apt: {packages: [libgmp-dev]}}
 
   # OSX Build El Cap
-  - env: BUILD=stack ARGS="-v"
+  - env: BUILD=stack ARGS=""
     os: osx
     addons:
       artifacts:
@@ -100,7 +100,7 @@ matrix:
           - .stack-work/dist/x86_64-osx/Cabal-2.2.0.1/build/pact/pact
 
   # Linux build
-  - env: BUILD=stack ARGS="-j1 -v"
+  - env: BUILD=stack ARGS="-j1"
     addons:
       apt: {packages: [libgmp-dev]}
       artifacts:
@@ -216,7 +216,7 @@ script:
   set -ex
   case "$BUILD" in
     stack)
-      stack build --no-terminal --test --ghc-options="-Werror" $ARGS
+      stack build --no-terminal --test --ghc-options="-Werror" --test-arguments=--format=progress $ARGS
       stack exec -- bench +RTS -K1k
       ;;
     cabal)
