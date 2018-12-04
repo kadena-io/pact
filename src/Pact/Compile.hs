@@ -457,6 +457,9 @@ namespace = do
   bareName <- _atomAtom <$> bareAtom
   info <- contextInfo
   let _nsName = NamespaceName bareName
+  use (psUser . csNamespace) >>= \case
+    Just ns -> syntaxError $ "A namespace has already been declared: " ++ asString' ns
+    Nothing -> pure ()
   psUser . csNamespace .= (Just _nsName)
   pure $ TNamespace _nsName info
 
