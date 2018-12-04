@@ -231,10 +231,9 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
 
       mOldNs <- readRow info Namespaces name
       case mOldNs of
-        Just (Namespace _ g') -> do
+        Just (Namespace _ g') ->
           -- if namespace is defined, enforce old guard and rotate
-          enforceGuard fi g'
-          writeNamespace info name g
+          enforceGuard fi g' >> writeNamespace info name g
         Nothing -> writeNamespace info name g
 
     writeNamespace info n g =
