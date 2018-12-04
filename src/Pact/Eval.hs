@@ -228,7 +228,6 @@ evalUse (Use mn h i) = do
 
       installModule md
 
-
 evalNamespace :: Info -> NamespaceName -> Eval e ()
 evalNamespace info name = do
   mOldNs <- view eeNamespace
@@ -241,8 +240,6 @@ evalNamespace info name = do
         Nothing   ->
           evalError info $ "Namespace not defined: " ++ asString' name
         definedNs -> undefined
-
-
 
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))

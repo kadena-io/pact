@@ -202,8 +202,6 @@ data EvalEnv e = EvalEnv {
     , _eeHash :: Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
-      -- | Namespace. 'Nothing' indicates no namespace is set
-    , _eeNamespace :: Maybe Namespace
     } -- deriving (Eq,Show)
 makeLenses ''EvalEnv
 
@@ -239,9 +237,11 @@ data EvalState = EvalState {
     , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: [Capability]
+      -- | Namespace. 'Nothing' indicates no namespace is set
+    , _eeNamespace :: Maybe Namespace
     } deriving (Show)
 makeLenses ''EvalState
-instance Default EvalState where def = EvalState def def def 0 def
+instance Default EvalState where def = EvalState def def def 0 def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
