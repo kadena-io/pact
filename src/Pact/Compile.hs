@@ -411,6 +411,7 @@ moduleForm = do
     Just {} -> syntaxError "Invalid nested module or interface"
     Nothing -> return ()
   i <- contextInfo
+  namespaceName <- use (psUser . csNamespace)
   let code = case i of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
@@ -418,7 +419,7 @@ moduleForm = do
       modHash = hash $ encodeUtf8 $ _unCode code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
-    (Module modName (KeySetName keyset) m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
+    (Module modName (KeySetName keyset) m code modHash (HS.fromList _msBlessed) _msImplements _msImports namespaceName)
     (abstract (const Nothing) (TList (concat bd) TyAny bi)) i
 
 implements :: Compile ()
@@ -434,6 +435,7 @@ interface = do
   use (psUser . csModule) >>= \ci -> case ci of
     Just {} -> syntaxError "invalid nested interface or module"
     Nothing -> return ()
+  namespaceName <- use (psUser . csNamespace)
   info <- contextInfo
   let code = case info of
         Info Nothing -> "<code unavailable>"
@@ -447,7 +449,7 @@ interface = do
               RUse -> return useForm
               t -> syntaxError $ "Invalid interface declaration: " ++ show (asString t)
   return $ TModule
-    (Interface iname code m _msImports)
+    (Interface iname code m _msImports namespaceName)
     (abstract (const Nothing) bd) info
 
 namespace :: Compile (Term Name)

@@ -42,8 +42,8 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    TableName(..),
-   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
-   interfaceCode, interfaceMeta, interfaceName, interfaceImports,
+   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,mNamespace,
+   interfaceCode, interfaceMeta, interfaceName, interfaceImports,interfaceNamespace,
    ModuleName(..),
    Name(..),parseName,
    ConstVal(..),
@@ -377,12 +377,14 @@ data Module
   , _mBlessed :: !(HS.HashSet Hash)
   , _mInterfaces :: [ModuleName]
   , _mImports :: [Use]
+  , _mNamespace :: Maybe NamespaceName
   }
   | Interface
   { _interfaceName :: !ModuleName
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
   , _interfaceImports :: [Use]
+  , _interfaceNamespace :: Maybe NamespaceName
   } deriving Eq
 
 instance Show Module where
@@ -399,6 +401,7 @@ instance ToJSON Module where
     , "hash" .= _mHash
     , "blessed" .= _mBlessed
     , "interfaces" .= _mInterfaces
+    , "namespace"  .= _mNamespace
     ]
   toJSON Interface{..} = object
     [ "name" .= _interfaceName
@@ -416,6 +419,7 @@ instance FromJSON Module where
     <*> (HS.fromList <$> o .: "blessed")
     <*> o .: "interfaces"
     <*> pure []
+    <*> o .: "namespace"
 
 data Def n = Def
   { _dDefName :: !DefName
