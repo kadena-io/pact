@@ -106,6 +106,9 @@ data BoundedType where
   BoundedTime    ::             BoundedType
   BoundedBool    ::             BoundedType
   BoundedKeySet  ::             BoundedType
+
+  BoundedList :: BoundedType -> BoundedType
+
   -- TODO: cover objects
 
 arithSize :: ArithOp -> NumBound -> (NumBound, NumBound)
@@ -246,6 +249,12 @@ genCore BoundedBool = Gen.recursive Gen.choice [
   , do op <- Gen.element [AndOp, OrOp]
        Gen.subtermM2 (genCore BoundedBool) (genCore BoundedBool) $ \x y ->
          mkBool $ Logical op [extract x, extract y]
+  -- , do op <- Gen.element [Eq', Neq']
+  --      let aSize = undefined
+  --          ty = undefined
+  --      Gen.subtermM2
+  --        (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $ \x y ->
+  --          mkBool $ ListEqNeq ty op (extract x) (extract y)
   , Gen.subtermM (genCore BoundedBool) $ \x ->
       mkBool $ Logical NotOp [extract x]
   ]
@@ -259,6 +268,29 @@ genCore BoundedTime = Gen.recursive Gen.choice [
   ]
 genCore BoundedKeySet = ESimple SKeySet . Lit' . KeySet
   <$> genInteger (0 ... 2)
+genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
+  -- EqNeq, At, Contains
+  [ Gen.subtermM (genCore bound) $ \(EList lty@(SList ty) lst) ->
+      pure $ EList lty $ Inj $ ListReverse ty lst
+  , Gen.subtermM (genCore bound) $ \(EList lty@(SList ty) lst) ->
+      pure $ EList lty $ Inj $ ListSort ty lst
+  , Gen.subtermM2 (genCore bound) (genCore bound) $ \
+      (EList lty@(SList ty) l1)
+      (EList lty2 l2) -> case singEq lty lty2 of
+        Nothing   -> error "impossible"
+        Just Refl -> pure $ EList lty $ Inj $ ListConcat ty l1 l2
+  , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
+      \(EList lty@(SList ty) l) (ESimple SInteger i) ->
+        pure $ EList lty $ Inj $ ListDrop ty i l
+  , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
+      \(EList lty@(SList ty) l) (ESimple SInteger i) ->
+        pure $ EList lty $ Inj $ ListTake ty i l
+  , Gen.subtermM2 (genCore (BoundedInt (0 ... 50))) (genCore elemBound) $
+      \(ESimple SInteger i) (ESimple ty a) ->
+        pure $ EList (SList ty) $ Inj $ MakeList ty i a
+  -- LiteralList
+  -- , Gen.subtermM
+  ]
 
 intSize, decSize, strSize :: BoundedType
 intSize = BoundedInt     (0 +/- 1e25)
@@ -282,11 +314,17 @@ genAnyTerm = Gen.choice
   , genTerm BoundedBool
   , genTerm BoundedTime
   -- , genTerm BoundedKeySet
+  , genTerm (BoundedList intSize)
+  , genTerm (BoundedList decSize)
+  , genTerm (BoundedList strSize)
+  , genTerm (BoundedList BoundedBool)
+  , genTerm (BoundedList BoundedTime)
   ]
 
 genTerm
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => BoundedType -> m ETerm
+genTerm size@(BoundedList _) = scale 2 $ genCore size
 genTerm size = scale 2 $ Gen.choice [genCore size, genTermSpecific size]
 
 genTermSpecific
@@ -391,6 +429,8 @@ genTermSpecific BoundedTime = scale 8 $ Gen.choice
        timeStr <- genTimeOfFormat standardTimeFormat
        pure $ ESimple STime $ ParseTime Nothing $ StrLit timeStr
   ]
+genTermSpecific (BoundedList _)
+  = error "There are no term-specific list constructors"
 
 genBaseChar :: MonadGen m => Int -> m Char
 genBaseChar base = Gen.element $

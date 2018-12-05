@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
 
-module AnalyzeSpec (spec, spec') where
+module AnalyzeSpec (spec) where
 
 
 import           Control.Lens                 (at, findOf, ix, matching, (&),
@@ -2737,7 +2737,6 @@ spec = describe "analyze" $ do
           |]
     expectVerified code
 
-spec' =
   describe "list map" $ do
     let code1 = [text|
           (defun test:[integer] ()
@@ -2773,3 +2772,54 @@ spec' =
             (map (compose (+ 1) (constantly 1)) [1 2 3]))
           |]
     expectVerified code5
+
+  describe "list filter" $ do
+    let code = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [2 3 4]))]
+            (filter (> 5) [2 6 3 7 4 8]))
+          |]
+    expectVerified code
+
+    let code' = [text|
+          (defun test:[string] ()
+            @model [(property (= result ["dog" "has" "fleas"]))]
+            (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"]))
+          |]
+    expectVerified code'
+
+  describe "list fold" $ do
+    let code = [text|
+          (defun test:integer ()
+            @model [(property (= result 115))]
+            (fold (+) 0 [100 10 5]))
+          |]
+    expectVerified code
+
+  describe "and?" $ do
+    let code = [text|
+          (defun test:bool ()
+            @model [(property (= result false))]
+            (and? (> 20) (> 10) 15))
+          |]
+    expectVerified code
+
+  describe "or?" $ do
+    let code = [text|
+          (defun test:bool ()
+            @model [(property (= result true))]
+            (or? (> 20) (> 10) 15))
+          |]
+    expectVerified code
+
+  describe "where" $
+    it "works" $
+      pendingWith "implementation"
+
+  describe "typeof" $ do
+    let code = [text|
+          (defun test:string ()
+            @model [(property (= result "string"))]
+            (typeof "foo"))
+          |]
+    expectVerified code

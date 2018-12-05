@@ -42,7 +42,12 @@ import           Pact.Analyze.Util
     CoreProp <$> (Compose tya tyb tyc <$> float a <*> float b <*> float c);   \
   CoreProp (ListAt ty a b) -> CoreProp <$>                                    \
     (ListAt ty <$> float a <*> float b) ;                                     \
-  CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;
+  CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;  \
+  CoreProp (ListFold tya tyb (Open v1 nm1 (Open v2 nm2 a)) b c) -> do         \
+    a' <- float a;                                                            \
+    b' <- float b;                                                            \
+    c' <- withFloatL tyb $ float c;                                           \
+    pure $ CoreProp $ ListFold tya tyb (Open v1 nm1 (Open v2 nm2 a')) b' c'
 
 #define STANDARD_LIST_INSTANCES                                               \
   PropSpecific Result            -> ([], p);                                  \
@@ -66,13 +71,20 @@ import           Pact.Analyze.Util
   CoreProp (ListTake ty a b)                                                  \
     -> CoreProp <$> (ListTake ty <$> float a <*> float b);                    \
   CoreProp (ListConcat ty l1 l2)                                              \
-  -> CoreProp <$> (ListConcat ty <$> float l1 <*> float l2);                  \
+    -> CoreProp <$> (ListConcat ty <$> float l1 <*> float l2);                \
   CoreProp (MakeList ty a b)                                                  \
-  -> CoreProp <$> (MakeList ty <$> float a <*> float b);                      \
+    -> CoreProp <$> (MakeList ty <$> float a <*> float b);                    \
   CoreProp (LiteralList ty as)                                                \
     -> CoreProp <$> (LiteralList ty <$> traverse float as);                   \
   CoreProp (ListMap tya tyb (Open v nm b) as) -> withFloatL tya $             \
-       CoreProp <$> (ListMap tya tyb <$> (Open v nm <$> float b) <*> float as);
+       CoreProp <$> (ListMap tya tyb <$> (Open v nm <$> float b) <*> float as);\
+  CoreProp (ListFilter ty a b)                                                \
+    -> CoreProp <$> (ListFilter ty <$> float a <*> float b);                  \
+  CoreProp (ListFold tya tyb (Open v1 nm1 (Open v2 nm2 a)) b c) -> do         \
+    a' <- float a;                                                            \
+    b' <- float b;                                                            \
+    c' <- withFloatL tyb $ float c;                                           \
+    pure $ CoreProp $ ListFold tya tyb (Open v1 nm1 (Open v2 nm2 a')) b' c'
 
 instance Float Prop a => Float (Open x Prop) a where
   float (Open a b tm) = Open a b <$> float tm
@@ -204,6 +216,7 @@ floatStringQuantifiers p = case p of
   STANDARD_INSTANCES
   CoreProp Numerical{} -> vacuousMatch "numerical can't be String"
   CoreProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
+  CoreProp (Typeof ty a) -> CoreProp . Typeof ty <$> withFloat ty (float a)
 
 floatTimeQuantifiers :: Prop 'TyTime -> ([Quantifier], Prop 'TyTime)
 floatTimeQuantifiers p = case p of
@@ -259,6 +272,12 @@ floatBoolQuantifiers p = case p of
   POr a b      -> POr  <$> float a <*> float b
   PNot a       -> bimap (fmap flipQuantifier) PNot (float a)
   CoreProp (Logical _ _) -> error ("ill-defined logical op: " ++ show p)
+  CoreProp (AndQ ty f g a) -> CoreProp <$>
+    (AndQ ty <$> float f <*> float g <*> withFloat ty (float a))
+  CoreProp (OrQ ty f g a) -> CoreProp <$>
+    (OrQ ty <$> float f <*> float g <*> withFloat ty (float a))
+  CoreProp (Where schema ty a b c) -> CoreProp <$>
+    (Where schema ty <$> float a <*> float b <*> float c)
 
   PropSpecific (RowRead  tn pRk)  -> PropSpecific . RowRead   tn <$> float pRk
   PropSpecific (RowWrite tn pRk)  -> PropSpecific . RowWrite  tn <$> float pRk

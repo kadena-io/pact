@@ -17,10 +17,11 @@ import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                               SymWord, false, ite, true, (|||),
-                                              bAny, unliteral, SBV, Mergeable)
+                                              bAny, unliteral, SBV, Mergeable, (&&&), (|||), literal)
+import           Data.SBV.List               ((.:))
 import qualified Data.SBV.List               as SBVL
 import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
-                                              bmapM, bzipWith)
+                                              bmapM, bzipWith, bfoldrM)
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
@@ -288,19 +289,79 @@ evalCore (MakeList ty i a) = withShow ty $ withSymWord ty $ do
 evalCore (ListMap tya tyb (Open vid _ expr) as)
   = withShow tyb $ withSymWord tyb $
       withShow tya $ withSymWord tya $
-        withMergeableSbv tyb $ do
+        withMergeableSbvList tyb $ do
           S _ as' <- eval as
           bs <- bmapM listBound
             (\val -> _sSbv <$> withVar vid (mkAVal' val) (eval expr))
             as'
           pure $ sansProv bs
+evalCore (ListFilter tya (Open vid _ f) as)
+  = withShow tya $ withSymWord tya $ withMergeableSbvList tya $ do
+    S _ as' <- eval as
+    let bfilterM = bfoldrM listBound
+          (\sbva svblst -> do
+            S _ x' <- withVar vid (mkAVal' sbva) (eval f)
+            pure $ ite x' (sbva .: svblst) svblst)
+          (literal [])
+    sansProv <$> bfilterM as'
+evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
+  = withShow tya $ withShow tyb $ withSymWord tyb $ withMergeableSbv tya $ do
+    S _ a'  <- eval a
+    S _ bs' <- eval bs
+    result <- bfoldrM listBound
+      (\sbvb sbva -> fmap _sSbv $
+        withVar vid1 (mkAVal' sbvb) $
+          withVar vid2 (mkAVal' sbva) $
+            eval f)
+      a' bs'
+    pure $ sansProv result
+
+evalCore (AndQ tya (Open vid1 _ f) (Open vid2 _ g) a)
+  = withShow tya $ withSymWord tya $ do
+    S _ a' <- eval a
+    fv     <- withVar vid1 (mkAVal' a') $ eval f
+    gv     <- withVar vid2 (mkAVal' a') $ eval g
+    pure $ fv &&& gv
+
+evalCore (OrQ tya (Open vid1 _ f) (Open vid2 _ g) a)
+  = withShow tya $ withSymWord tya $ do
+    S _ a' <- eval a
+    fv     <- withVar vid1 (mkAVal' a') $ eval f
+    gv     <- withVar vid2 (mkAVal' a') $ eval g
+    pure $ fv ||| gv
+
+evalCore Where{} = throwErrorNoLoc "Not yet supported: where"
+
+-- evalCore (Where schema tya key (Open vid _ f) obj) = withSymWord tya $ do
+--   S _ v <- evalObjAt schema key obj (EType tya)
+--   withVar vid (mkAVal' v) $ eval f
+
+evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
+
+
 evalCore x = error $ "no case for: " ++ show x
 
 withMergeableSbv
   :: forall a b m.
      Analyzer m
-  => SingTy 'SimpleK a -> (Mergeable (m (SBV [Concrete a])) => m b) -> m b
+  => SingTy 'SimpleK a -> (Mergeable (m (SBV (Concrete a))) => m b) -> m b
 withMergeableSbv = withDict . mkSing where
+
+  mkSing :: SingTy 'SimpleK a -> Dict (Mergeable (m (SBV (Concrete a))))
+  mkSing = \case
+    SInteger -> Dict
+    SBool    -> Dict
+    SStr     -> Dict
+    STime    -> Dict
+    SDecimal -> Dict
+    SKeySet  -> Dict
+    SAny     -> Dict
+
+withMergeableSbvList
+  :: forall a b m.
+     Analyzer m
+  => SingTy 'SimpleK a -> (Mergeable (m (SBV [Concrete a])) => m b) -> m b
+withMergeableSbvList = withDict . mkSing where
 
   mkSing :: SingTy 'SimpleK a -> Dict (Mergeable (m (SBV [Concrete a])))
   mkSing = \case
@@ -464,6 +525,7 @@ evalCoreO Compose{}          = throwErrorNoLoc "not yet implemented"
 
 evalCoreO (Numerical _)  = vacuousMatch "an object cannot be a numerical value"
 evalCoreO ListAt{}       = throwErrorNoLoc "not yet implemented"
+evalCoreO ListFold{}     = throwErrorNoLoc "not yet implemented"
 evalCoreO ObjTake{}      = throwErrorNoLoc "not yet implemented"
 evalCoreO ObjDrop{}      = throwErrorNoLoc "not yet implemented"
 

@@ -83,7 +83,6 @@ data TranslateFailureNoLoc
   | NonConstKey (AST Node)
   | FailedVarLookup Text
   | NoPacts (AST Node)
-  | NoLists (AST Node)
   | NoKeys (AST Node)
   | NoReadMsg (AST Node)
   | DeprecatedList Node
@@ -114,7 +113,6 @@ describeTranslateFailureNoLoc = \case
   NonConstKey k -> "Pact can currently only analyze constant keys in objects. Found " <> tShow k
   FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
   NoPacts _node -> "Analysis of pacts is not yet supported"
-  NoLists _node -> "Analysis of lists is not yet supported"
   NoKeys _node  -> "`keys` is not yet supported"
   NoReadMsg _ -> "`read-msg` is not yet supported"
   DeprecatedList node -> "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
@@ -1122,12 +1120,75 @@ translateNode astNode = withAstContext astNode $ case astNode of
         EList (SList bTy) $ CoreTerm $ ListMap aTy' bTy
           (Open vid varName fun') l'
 
-  AST_NFun _ f _
-    --
-    -- TODO: add symbols these to Feature once implemented.
-    --
-    | f `Set.member` Set.fromList ["filter", "fold"]
-    -> throwError' $ NoLists astNode
+  AST_NFun node "filter" [ fun, l ] -> do
+    expectNoFreeVars
+    ESimple SBool fun' <- translateNode fun
+    (vid, varName, EType aType) <- captureOneFreeVar
+
+    aTy' <- requireSimple aType
+
+    EList (SList listTy) l' <- translateNode l
+
+    case singEq listTy aTy' of
+      Nothing   -> throwError' $ TypeError node
+      Just Refl -> pure $
+        EList (SList aTy') $ CoreTerm $ ListFilter aTy'
+          (Open vid varName fun') l'
+
+  AST_NFun node "fold" [ fun, a, l ] -> do
+    expectNoFreeVars
+    ESimple funTy fun' <- translateNode fun
+    [ (vidb, varNameb, EType tyb), (vida, varNamea, EType tya) ]
+      <- captureTwoFreeVars
+
+    tya' <- requireSimple tya
+    tyb' <- requireSimple tyb
+
+    ESimple aTy' a'         <- translateNode a
+    EList (SList listTy) l' <- translateNode l
+
+    case singEq aTy' tya' of
+      Nothing   -> throwError' $ TypeError node
+      Just Refl -> case singEq aTy' funTy of
+        Nothing   -> throwError' $ TypeError node
+        Just Refl -> case singEq listTy tyb' of
+          Nothing   -> throwError' $ TypeError node
+          Just Refl -> pure $ ESimple tya' $ CoreTerm $ ListFold tya' tyb'
+            (Open vida varNamea (Open vidb varNameb fun')) a' l'
+
+  AST_NFun _ name [ f, g, a ]
+    | name == "and?" || name == "or?" -> do
+    expectNoFreeVars
+    ESimple SBool f' <- translateNode f
+    (fvid, fvarName, _) <- captureOneFreeVar
+
+    ESimple SBool g' <- translateNode g
+    (gvid, gvarName, _) <- captureOneFreeVar
+
+    ESimple aTy' a' <- translateNode a
+
+    pure $ ESimple SBool $ CoreTerm $ (if name == "and?" then AndQ else OrQ)
+      aTy' (Open fvid fvarName f') (Open gvid gvarName g') a'
+
+  AST_NFun _ "where" [ field, fun, obj ] -> do
+    ESimple SStr field' <- translateNode field
+
+    expectNoFreeVars
+    ESimple SBool fun' <- translateNode fun
+    (vid, varName, EType freeTy) <- captureOneFreeVar
+    freeTy' <- requireSimple freeTy
+
+    EObject objTy obj' <- translateNode obj
+
+    pure $ ESimple SBool $ CoreTerm $
+      Where objTy freeTy' field' (Open vid varName fun') obj'
+
+  AST_NFun _ "typeof" [tm] -> do
+    etm <- translateNode tm
+    pure $ ESimple SStr $ CoreTerm $ case etm of
+      ESimple ty tm' -> Typeof ty      tm'
+      EList   ty tm' -> Typeof ty      tm'
+      EObject _  tm' -> Typeof SObject tm'
 
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 
@@ -1140,6 +1201,14 @@ captureOneFreeVar = do
   case vs of
     [v] -> pure v
     _   -> error $ "unexpected vars found: " ++ show vs
+
+captureTwoFreeVars :: TranslateM [(VarId, Text, EType)]
+captureTwoFreeVars = do
+  vs <- use tsFoundVars
+  tsFoundVars .= []
+  case vs of
+    [_, _] -> pure vs
+    _      -> error $ "unexpected vars found: " ++ show vs
 
 expectNoFreeVars :: TranslateM ()
 expectNoFreeVars = do

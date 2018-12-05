@@ -248,8 +248,26 @@ data Core (t :: Ty -> *) (a :: Ty) where
     -> t ('TyList a)
     -> Core t ('TyList b)
 
-  -- ListFilter ::
-  -- ListFold   ::
+  ListFilter
+    :: SingTy 'SimpleK a
+    -> Open a t 'TyBool -> t ('TyList a) -> Core t ('TyList a)
+
+  ListFold
+    :: SingTy 'SimpleK a -> SingTy 'SimpleK b
+    -> Open a (Open b t) a -> t a -> t ('TyList b) -> Core t a
+
+  AndQ
+    :: SingTy 'SimpleK a
+    -> Open a t 'TyBool -> Open a t 'TyBool -> t a -> Core t 'TyBool
+  OrQ
+    :: SingTy 'SimpleK a
+    -> Open a t 'TyBool -> Open a t 'TyBool -> t a -> Core t 'TyBool
+
+  Where
+    :: Schema -> SingTy 'SimpleK a
+    -> t 'TyStr -> Open a t 'TyBool -> t 'TyObject -> Core t 'TyBool
+
+  Typeof :: SingTy k a -> t a -> Core t 'TyStr
 
 -- Note [Sing Functions]:
 --
@@ -723,6 +741,61 @@ instance
       . singShowsOpen tyb b
       . showString " "
       . singShowsTmList tya 11 as
+    ListFilter tya f as ->
+        showString "ListFilter "
+      . showsPrec 11 tya
+      . showString " "
+      . showsPrec 11 f
+      . showString " "
+      . singShowsTmList tya 11 as
+    ListFold tya tyb (Open vid nm f) a bs ->
+        showString "ListFold "
+      . showsPrec 11 tya
+      . showString " "
+      . showsPrec 11 tyb
+      . showString " (Open "
+        . showsPrec 11 vid
+        . showString " "
+        . showsPrec 11 nm
+        . singShowsOpen tya f
+      . showString ") "
+      . singShowsTm tya 11 a
+      . showString " "
+      . singShowsTmList tyb 11 bs
+    AndQ tya f g a ->
+        showString "AndQ "
+      . showsPrec 11 tya
+      . showString " "
+      . showsPrec 11 f
+      . showString " "
+      . showsPrec 11 g
+      . showString " "
+      . singShowsTm tya 11 a
+    OrQ tya f g a ->
+        showString "OrQ "
+      . showsPrec 11 tya
+      . showString " "
+      . showsPrec 11 f
+      . showString " "
+      . showsPrec 11 g
+      . showString " "
+      . singShowsTm tya 11 a
+    Where schema tya str f obj ->
+        showString "Where "
+      . showsPrec 11 schema
+      . showString " "
+      . showsPrec 11 tya
+      . showString " "
+      . showsPrec 11 str
+      . showString " "
+      . showsPrec 11 f
+      . showString " "
+      . showsPrec 11 obj
+    Typeof tya a ->
+        showString "Typeof "
+      . showsPrec 11 tya
+      . showString " "
+      . singShowsTm tya 11 a
 
 instance
   ( OfPactTypes UserShow tm
@@ -777,6 +850,31 @@ instance
       , singUserShowOpen tyb b
       , singUserShowTmList tya as
       ]
+    ListFilter ty a b -> parenList
+      [ "filter"
+      , singUserShowOpen SBool a
+      , singUserShowTmList ty b
+      ]
+    ListFold tya tyb (Open _ nm a) b c -> parenList
+      [ "fold"
+      , parenList [ "lambda", nm, singUserShowOpen tya a ]
+      , singUserShowTm tya b
+      , singUserShowTmList tyb c
+      ]
+    AndQ ty a b c -> parenList
+      [ "and?"
+      , singUserShowOpen SBool a
+      , singUserShowOpen SBool b
+      , singUserShowTm ty c
+      ]
+    OrQ ty a b c -> parenList
+      [ "or?"
+      , singUserShowOpen SBool a
+      , singUserShowOpen SBool b
+      , singUserShowTm ty c
+      ]
+    Where _ _ a b c -> parenList ["where", userShow a, singUserShowOpen SBool b, userShow c]
+    Typeof ty a -> parenList ["typeof", singUserShowTm ty a]
 
 
 data BeforeOrAfter = Before | After
