@@ -106,11 +106,13 @@ import Pact.Types.Exp
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
-  , _mModel :: ![Exp Info]   -- ^ model
+  , _mModel :: ![Exp Info]   -- ^ models
   } deriving (Eq, Show, Generic)
+
 instance ToJSON Meta where
   toJSON Meta {..} = object
     [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
+
 instance Default Meta where def = Meta def def
 
 instance Semigroup Meta where
@@ -416,8 +418,8 @@ data Module
 
 instance Show Module where
   show m = case m of
-    Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
-    Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
+    Module{..} -> "(Module " ++ asString' (_mnName _mName) ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
+    Interface{..} -> "(Interface " ++ asString' (_mnName _interfaceName) ++ ")"
 
 instance ToJSON Module where
   toJSON Module{..} = object

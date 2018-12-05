@@ -271,7 +271,8 @@ varAtom = do
     [] -> return $ Name _atomAtom _atomInfo
     [q] -> do
       when (q `elem` reserved) $ unexpected' "reserved word"
-      return $ QName (ModuleName q Nothing) _atomAtom _atomInfo
+      ns <- use $ psUser . csNamespace
+      return $ QName (ModuleName q ns) _atomAtom _atomInfo
     _ -> expected "single qualifier"
   commit
   return $ TVar n _atomInfo
@@ -411,11 +412,11 @@ moduleForm = do
     Just {} -> syntaxError "Invalid nested module or interface"
     Nothing -> return ()
   i <- contextInfo
-  namespaceName <- use (psUser . csNamespace)
+  ns <- use $ psUser . csNamespace
   let code = case i of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      modName = ModuleName modName' namespaceName
+      modName = ModuleName modName' ns
       modHash = hash $ encodeUtf8 $ _unCode code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
@@ -435,12 +436,12 @@ interface = do
   use (psUser . csModule) >>= \ci -> case ci of
     Just {} -> syntaxError "invalid nested interface or module"
     Nothing -> return ()
-  namespaceName <- use (psUser . csNamespace)
+  ns <- use (psUser . csNamespace)
   info <- contextInfo
   let code = case info of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      iname = ModuleName iname' namespaceName
+      iname = ModuleName iname' ns
       ihash = hash $ encodeUtf8 (_unCode code)
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
             bodyForm $ specialForm $ \r -> case r of
@@ -456,12 +457,12 @@ namespace :: Compile (Term Name)
 namespace = do
   bareName <- _atomAtom <$> bareAtom
   info <- contextInfo
-  let _nsName = NamespaceName bareName
+  let ns = NamespaceName bareName
   use (psUser . csNamespace) >>= \case
-    Just ns -> syntaxError $ "A namespace has already been declared: " ++ asString' ns
-    Nothing -> pure ()
-  psUser . csNamespace .= (Just _nsName)
-  pure $ TNamespace _nsName info
+    Just ns' -> syntaxError $ "A namespace has already been declared: " ++ asString' ns'
+    Nothing  -> pure ()
+  psUser . csNamespace .= (Just ns)
+  pure $ TNamespace ns info
 
 emptyDef :: Compile (Term Name)
 emptyDef = do
