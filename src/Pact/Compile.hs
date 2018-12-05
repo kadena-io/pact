@@ -529,7 +529,8 @@ useForm :: Compile (Term Name)
 useForm = do
   modName <- (_atomAtom <$> userAtom) <|> str <|> expected "bare atom, string, symbol"
   i <- contextInfo
-  u <- Use (ModuleName modName Nothing) <$> optional hash' <*> pure i
+  n <- use $ psUser . csNamespace
+  u <- Use (ModuleName modName n) <$> optional hash' <*> pure i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
   return $ TUse u i
