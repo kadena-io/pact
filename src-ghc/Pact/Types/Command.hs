@@ -97,7 +97,6 @@ mkCommand' creds env = Command env (sig <$> creds) hsh
     sig (scheme, sk, pk) = UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign hsh sk pk)
 
 
-
 verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
       (Right env', Right _, Nothing) -> ProcSucc $ orig { _cmdPayload = env' }
@@ -163,18 +162,20 @@ instance ToJSON UserSig where
     "scheme" .= _usScheme, "pubKey" .= _usPubKey, "sig" .= _usSig ]
 instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o ->
-    UserSig . fromMaybe ED25519 <$> o .:? "scheme" <*> o .: "pubKey" <*> o .: "sig"
+    UserSig <$> (o .: "scheme" >>= parseJSON)  <*> o .: "pubKey" <*> o .: "sig"
   {-# INLINE parseJSON #-}
 
 
-
-
 verifyUserSig :: Hash -> UserSig -> Bool
+verifyUserSig _ UserSig{..} = undefined
+
+{--verifyUserSig :: Hash -> UserSig -> Bool
 verifyUserSig h UserSig{..} = case _usScheme of
   ED25519 -> case (fromText _usPubKey,fromText _usSig) of
     (Success pk,Success sig) -> valid h pk sig
     _ -> False
 {-# INLINE verifyUserSig #-}
+--}
 
 
 data CommandError = CommandError {

@@ -19,7 +19,7 @@ module Pact.Types.Crypto
   , PrivateKey, importPrivate, exportPrivate
   , Signature(..), exportSignature
   , sign, valid
-  , PPKScheme(..)
+  , PPKScheme(..), SignatureAlgo(..), HashAlgo(..), AddressFormat(..), defaultScheme
   , Hash(..), initialHash, hashLengthAsBS, hashLengthAsBase16, hashToB16Text
   ) where
 
@@ -62,19 +62,79 @@ instance ParseText Signature where
 exportSignature :: Signature -> ByteString
 exportSignature (Sig s) = s
 
-data PPKScheme = ED25519
+
+{-- A PPK Scheme indicates
+      1. How to format blockchain addresses
+      2. The hash algorithm used to hash the transaction payload
+      3. The signature algorithm used in signing transactions (i.e. ED25519, ECDSA)
+--}
+newtype PPKScheme = PPKScheme (AddressFormat, HashAlgo, SignatureAlgo)
   deriving (Show, Eq, Ord, Generic)
 
 instance NFData PPKScheme
 -- default instance with only one value is empty array!!
-instance ToJSON PPKScheme where toJSON ED25519 = "ED25519"
+instance ToJSON PPKScheme where
+  toJSON (PPKScheme (hashAlgo, sigAlgo, addrFormat)) =
+    A.object ["address" .= (toJSON addrFormat),
+              "hash" .= (toJSON hashAlgo),
+              "signature" .= (toJSON sigAlgo)]
 instance FromJSON PPKScheme where
-  parseJSON = withText "PPKScheme" $ \s -> case s of
-    "ED25519" -> return ED25519
-    _ -> fail $ "Unsupported PPKScheme: " ++ show s
-  {-# INLINE parseJSON #-}
+  parseJSON = A.withObject "PPKScheme" $ \o -> do
+    af <- (o .: "address") >>= parseJSON
+    ha <- (o .: "hash") >>= parseJSON
+    sa <- (o .: "signature") >>= parseJSON
+    return (PPKScheme (af, ha, sa))
 instance Serialize PPKScheme
 
+
+data AddressFormat = Chainweb
+  deriving (Show, Eq, Ord, Generic)
+
+instance NFData AddressFormat
+-- default instance with only one value is empty array!!
+instance ToJSON AddressFormat where
+  toJSON Chainweb = "Chainweb"
+instance FromJSON AddressFormat where
+  parseJSON = withText "AddressFormat" $ \s -> case s of
+    "Chainweb" -> return Chainweb
+    _ -> fail $ "Unsupported Blockchain Address Format: " ++ show s
+  {-# INLINE parseJSON #-}
+instance Serialize AddressFormat
+
+
+data HashAlgo = Blake2b_512
+  deriving (Show, Eq, Ord, Generic)
+
+instance NFData HashAlgo
+-- default instance with only one value is empty array!!
+instance ToJSON HashAlgo where
+  toJSON Blake2b_512 = "Blake2b_512"
+instance FromJSON HashAlgo where
+  parseJSON = withText "HashAlgo" $ \s -> case s of
+    "Blake2b_512" -> return Blake2b_512
+    _ -> fail $ "Unsupported Hash Algorithm: " ++ show s
+  {-# INLINE parseJSON #-}
+instance Serialize HashAlgo
+
+
+data SignatureAlgo = ED25519
+  deriving (Show, Eq, Ord, Generic)
+
+instance NFData SignatureAlgo
+-- default instance with only one value is empty array!!
+instance ToJSON SignatureAlgo where
+  toJSON ED25519 = "ED25519"
+instance FromJSON SignatureAlgo where
+  parseJSON = withText "SignatureAlgo" $ \s -> case s of
+    "ED25519" -> return ED25519
+    _ -> fail $ "Unsupported Signature Algorithm: " ++ show s
+  {-# INLINE parseJSON #-}
+instance Serialize SignatureAlgo
+
+
+
+defaultScheme :: PPKScheme
+defaultScheme = PPKScheme (Chainweb, Blake2b_512, ED25519)
 
 valid :: Hash -> PublicKey -> Signature -> Bool
 valid (Hash h) = Ed25519.valid h

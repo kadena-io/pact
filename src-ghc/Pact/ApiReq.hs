@@ -122,7 +122,7 @@ mkExec code mdata addy kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    (map (\KeyPair {..} -> (ED25519,_kpSecret,_kpPublic)) kps)
+    (map (\KeyPair {..} -> (defaultScheme,_kpSecret,_kpPublic)) kps)
     addy
     (pack $ show rid)
     (Exec (ExecMsg (pack code) mdata))
@@ -162,7 +162,7 @@ mkCont txid step rollback mdata addy kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    (map (\KeyPair {..} -> (ED25519,_kpSecret,_kpPublic)) kps)
+    (map (\KeyPair {..} -> (defaultScheme,_kpSecret,_kpPublic)) kps)
     addy
     (pack $ show rid)
     (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
