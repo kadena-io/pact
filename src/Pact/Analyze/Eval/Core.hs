@@ -168,7 +168,7 @@ evalCore (Var vid name) = do
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore (Identity ty a)                   = withShow ty $ eval a
-evalCore (Constantly tya a _) = withShow tya $ eval a
+evalCore (Constantly tya a _)              = withShow tya $ eval a
 evalCore (Compose tya tyb tyc a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
   tya' <- singSimple tya ?? SimpleKindRequired
   tyb' <- singSimple tyb ?? SimpleKindRequired
