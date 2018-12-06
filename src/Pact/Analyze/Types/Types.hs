@@ -165,18 +165,6 @@ singEq (SList a) (SList b) = apply Refl <$> singEq a b
 singEq SObject   SObject   = Just Refl
 singEq _         _         = Nothing
 
-singSimple :: SingTy k a -> Maybe (SingTy 'SimpleK a)
-singSimple ty = case ty of
-  SInteger  -> Just ty
-  SBool     -> Just ty
-  SStr      -> Just ty
-  STime     -> Just ty
-  SDecimal  -> Just ty
-  SKeySet   -> Just ty
-  SAny      -> Just ty
-  SList{}   -> Nothing
-  SObject{} -> Nothing
-
 singCase
   :: SingTy k a
   -> (k :~: 'SimpleK -> b)

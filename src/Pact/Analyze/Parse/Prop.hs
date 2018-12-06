@@ -207,7 +207,7 @@ parseType = \case
     -- TODO: look up quantified table names
     -> pure $ QColumnOf $ TableName $ T.unpack tabName
   SquareList [ty]  -> case parseType ty of
-    Just (EType ty') -> EType . SList <$> singSimple ty'
+    Just (EType ty') -> EType . SList <$> refineSimple ty'
     _                -> Nothing
   SquareList _     -> Nothing
 

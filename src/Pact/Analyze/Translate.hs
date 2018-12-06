@@ -87,9 +87,9 @@ data TranslateFailureNoLoc
   | NoReadMsg (AST Node)
   | DeprecatedList Node
   | SimpleTypeRequired
-  -- For cases we don't handle yet:
-  | UnhandledType Node (Pact.Type Pact.UserType)
   | TypeError Node
+  | FreeVarInvariantViolation Text
+  | UnhandledType Node (Pact.Type Pact.UserType)
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -117,8 +117,9 @@ describeTranslateFailureNoLoc = \case
   NoReadMsg _ -> "`read-msg` is not yet supported"
   DeprecatedList node -> "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
   SimpleTypeRequired -> "Lists are currently limited to holding simply-typed objects"
-  UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   TypeError node -> "\"impossible\" post-typechecker type error in node: " <> tShow node
+  FreeVarInvariantViolation msg -> msg
+  UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
 
 data TranslateEnv
   = TranslateEnv
@@ -1032,7 +1033,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
     ESimple needleTy needle <- translateNode val
     collection'             <- translateNode collection
     case collection' of
-      -- ESimple SStr needle -> case collection' of
       ESimple SStr haystack -> case needleTy of
         SStr -> pure $ ESimple SBool $ CoreTerm $ StrContains needle haystack
         _    -> throwError' $ TypeError node
@@ -1200,7 +1200,8 @@ captureOneFreeVar = do
   tsFoundVars .= []
   case vs of
     [v] -> pure v
-    _   -> error $ "unexpected vars found: " ++ show vs
+    _   -> throwError' $ FreeVarInvariantViolation $
+      "unexpected vars found: " <> tShow vs
 
 captureTwoFreeVars :: TranslateM [(VarId, Text, EType)]
 captureTwoFreeVars = do
@@ -1208,14 +1209,16 @@ captureTwoFreeVars = do
   tsFoundVars .= []
   case vs of
     [_, _] -> pure vs
-    _      -> error $ "unexpected vars found: " ++ show vs
+    _      -> throwError' $ FreeVarInvariantViolation $
+      "unexpected vars found: " <> tShow vs
 
 expectNoFreeVars :: TranslateM ()
 expectNoFreeVars = do
   vars <- use tsFoundVars
   case vars of
     [] -> pure ()
-    _  -> error "invariant violation: free variable unexpectedly found"
+    _  -> throwError' $ FreeVarInvariantViolation
+      "invariant violation: free variable unexpectedly found"
 
 requireSimple :: SingTy k a -> TranslateM (SingTy 'SimpleK a)
 requireSimple ty = case refineSimple ty of

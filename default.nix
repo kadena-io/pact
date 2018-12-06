@@ -51,7 +51,7 @@ in
             hlint = self.callHackage "hlint" "2.0.14" {};
             # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-            # sbv with two (temporary) patches
+            # sbv with a patch to disable "unsupported query call" until it's fixed upstream
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "joelburget";
               repo = "sbv";
