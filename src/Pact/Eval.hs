@@ -333,7 +333,6 @@ evaluateConstraints
 evaluateConstraints info Interface{} _ =
   evalError info "Unexpected: interface found in module position while solving constraints"
 evaluateConstraints info m evalMap =
-  -- we would like the lazy semantics of foldM to shortcircuit the solver
   foldM evaluateConstraint (m, evalMap) $ _mInterfaces m
   where
     evaluateConstraint (m', refMap) ifn = do

@@ -336,7 +336,6 @@ defconst = do
   modName <- currentModuleName
   a <- arg
   v <- valueLevel
-
   m <- meta ModelNotAllowed
   TConst a modName (CVRaw v) m <$> contextInfo
 
