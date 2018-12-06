@@ -20,6 +20,8 @@ import           Data.Constraint             (Dict (Dict))
 import           Data.Constraint.Extras
 import           Data.Semigroup              ((<>))
 import           Data.Type.Equality          ((:~:) (Refl), apply)
+import           Data.Type.Map
+import           GHC.TypeLits
 
 import           Pact.Analyze.Types.UserShow
 
@@ -33,7 +35,7 @@ data Ty
   | TyKeySet
   | TyAny
   | TyList Ty
-  | TyObject
+  | TyObject (Map '[ Mapping Symbol Ty ])
 
 type family ListElem (a :: Ty) where
   ListElem ('TyList a) = a
@@ -54,7 +56,7 @@ data SingTy :: Kind -> Ty -> * where
   SKeySet  ::                      SingTy 'SimpleK 'TyKeySet
   SAny     ::                      SingTy 'SimpleK 'TyAny
   SList    :: SingTy 'SimpleK a -> SingTy 'ListK   ('TyList a)
-  SObject  ::                      SingTy 'ObjectK 'TyObject
+  SObject  :: Map [ Mapping Symbol SingTy ] -> SingTy 'ObjectK ('TyObject m)
 
 instance Show (SingTy k ty) where
   showsPrec p = \case

@@ -155,6 +155,7 @@ library
                      , mmorph >= 1.0 && < 1.2
                      , constraints
                      , constraints-extras
+                     , type-level-sets >= 0.8.9.0
 
   if !impl(ghcjs)
     build-depends:
