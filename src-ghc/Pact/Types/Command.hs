@@ -44,7 +44,6 @@ import Control.Applicative
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.DeepSeq
-
 import Data.Aeson as A
 import Data.Maybe
 import Data.ByteString (ByteString)
@@ -62,7 +61,6 @@ import Prelude
 import Pact.Types.Runtime
 import Pact.Types.Orphans ()
 import Pact.Types.Crypto as Base
-import Pact.Types.Hash
 import Pact.Parse
 import Pact.Types.RPC
 
@@ -93,8 +91,9 @@ mkCommand creds addy nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Paylo
 mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
 mkCommand' creds env = Command env (sig <$> creds) hsh
   where
-    hsh = hash env
-    sig (scheme, sk, pk) = UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign hsh sk pk)
+    hsh = hashTx Blake2b_512 env   -- hash associated with a Command, aka a Command's Request Key
+    sig (scheme, sk, pk) =
+      UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign scheme env sk pk)
 
 
 verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
@@ -105,15 +104,14 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     ppcmdPayload' = traverse (traverse parsePact) =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
-    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
-    ppcmdHash' = verifyHash _cmdHash _cmdPayload
+    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdPayload u)) <$> _cmdSigs
+    ppcmdHash' = verifyHashTx Blake2b_512 _cmdHash _cmdPayload
     mSigIssue = if all snd ppcmdSigs' then Nothing
       else Just $ "Invalid sig(s) found: " ++ show (A.encode . fst <$> filter (not.snd) ppcmdSigs')
     toErrStr :: Either String a -> String
     toErrStr (Right _) = ""
     toErrStr (Left s) = s ++ "; "
 {-# INLINE verifyCommand #-}
-
 
 data ProcessedCommand a =
   ProcSucc !(Command (Payload a)) |
@@ -166,17 +164,12 @@ instance FromJSON UserSig where
   {-# INLINE parseJSON #-}
 
 
-verifyUserSig :: Hash -> UserSig -> Bool
-verifyUserSig _ UserSig{..} = undefined
-
-{--verifyUserSig :: Hash -> UserSig -> Bool
-verifyUserSig h UserSig{..} = case _usScheme of
-  ED25519 -> case (fromText _usPubKey,fromText _usSig) of
-    (Success pk,Success sig) -> valid h pk sig
+verifyUserSig :: ByteString -> UserSig -> Bool
+verifyUserSig msg UserSig{..} =
+  case (fromText _usPubKey,fromText _usSig) of
+    (Success pk,Success sig) -> valid _usScheme msg pk sig
     _ -> False
 {-# INLINE verifyUserSig #-}
---}
-
 
 data CommandError = CommandError {
       _ceMsg :: String
@@ -233,7 +226,7 @@ instance Show RequestKey where
   show (RequestKey rk) = show rk
 
 initialRequestKey :: RequestKey
-initialRequestKey = RequestKey initialHash
+initialRequestKey = RequestKey $ initialHashTx Blake2b_512
 
 
 

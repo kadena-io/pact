@@ -18,9 +18,9 @@ module Pact.Types.Crypto
   ( PublicKey, importPublic, exportPublic
   , PrivateKey, importPrivate, exportPrivate
   , Signature(..), exportSignature
-  , sign, valid
-  , PPKScheme(..), SignatureAlgo(..), HashAlgo(..), AddressFormat(..), defaultScheme
-  , Hash(..), initialHash, hashLengthAsBS, hashLengthAsBase16, hashToB16Text
+  , hashTx, verifyHashTx, initialHashTx, sign, valid
+  , PPKScheme(..), SignatureAlgo(..), HashAlgo(..), AddressFormat(..)
+  , hashLengthAsBS, hashLengthAsBase16, hashToB16Text
   ) where
 
 import Control.Applicative
@@ -29,11 +29,14 @@ import Control.DeepSeq
 
 import Crypto.Ed25519.Pure ( PublicKey, PrivateKey, Signature(..), importPublic, importPrivate, exportPublic, exportPrivate)
 import qualified Crypto.Ed25519.Pure as Ed25519
+import qualified Crypto.Hash as H
 
 import Data.Aeson as A
 import Data.Aeson.Types (toJSONKeyText)
 
+import Data.Default (Default, def)
 import Data.ByteString (ByteString)
+import qualified Data.ByteArray as B
 import Data.Serialize as SZ
 import qualified Data.Serialize as S
 import Data.Maybe
@@ -43,7 +46,6 @@ import GHC.Generics
 import Prelude
 
 import Pact.Types.Util
-import Pact.Types.Hash
 
 deriving instance Eq Signature
 deriving instance Ord Signature
@@ -65,7 +67,9 @@ exportSignature (Sig s) = s
 
 {-- A PPK Scheme indicates
       1. How to format blockchain addresses
-      2. The hash algorithm used to hash the transaction payload
+      2. The hash algorithm used to hash the transaction payload. This hash algorithm
+         is also used in the signing/verification phase of certain signature
+         algorithms (i.e. ECDSA).
       3. The signature algorithm used in signing transactions (i.e. ED25519, ECDSA)
 --}
 newtype PPKScheme = PPKScheme (AddressFormat, HashAlgo, SignatureAlgo)
@@ -74,7 +78,7 @@ newtype PPKScheme = PPKScheme (AddressFormat, HashAlgo, SignatureAlgo)
 instance NFData PPKScheme
 -- default instance with only one value is empty array!!
 instance ToJSON PPKScheme where
-  toJSON (PPKScheme (hashAlgo, sigAlgo, addrFormat)) =
+  toJSON (PPKScheme (addrFormat, hashAlgo, sigAlgo)) =
     A.object ["address" .= (toJSON addrFormat),
               "hash" .= (toJSON hashAlgo),
               "signature" .= (toJSON sigAlgo)]
@@ -85,6 +89,8 @@ instance FromJSON PPKScheme where
     sa <- (o .: "signature") >>= parseJSON
     return (PPKScheme (af, ha, sa))
 instance Serialize PPKScheme
+instance Default PPKScheme where
+  def = PPKScheme (def, def, def)
 
 
 data AddressFormat = Chainweb
@@ -100,6 +106,7 @@ instance FromJSON AddressFormat where
     _ -> fail $ "Unsupported Blockchain Address Format: " ++ show s
   {-# INLINE parseJSON #-}
 instance Serialize AddressFormat
+instance Default AddressFormat where  def = Chainweb
 
 
 data HashAlgo = Blake2b_512
@@ -115,6 +122,7 @@ instance FromJSON HashAlgo where
     _ -> fail $ "Unsupported Hash Algorithm: " ++ show s
   {-# INLINE parseJSON #-}
 instance Serialize HashAlgo
+instance Default HashAlgo where  def = Blake2b_512
 
 
 data SignatureAlgo = ED25519
@@ -130,19 +138,35 @@ instance FromJSON SignatureAlgo where
     _ -> fail $ "Unsupported Signature Algorithm: " ++ show s
   {-# INLINE parseJSON #-}
 instance Serialize SignatureAlgo
+instance Default SignatureAlgo where  def = ED25519
 
 
 
-defaultScheme :: PPKScheme
-defaultScheme = PPKScheme (Chainweb, Blake2b_512, ED25519)
+hashTx :: HashAlgo -> ByteString -> Hash
+hashTx algo b = case algo of
+  Blake2b_512 -> (Hash . B.convert . H.hashWith H.Blake2b_512) b
 
-valid :: Hash -> PublicKey -> Signature -> Bool
-valid (Hash h) = Ed25519.valid h
-{-# INLINE valid #-}
+verifyHashTx :: HashAlgo -> Hash -> ByteString -> Either String Hash
+verifyHashTx algo h b = if hashTx algo b == h
+  then Right h
+  else Left $ "Hash Mismatch, received " ++ show h
+       ++ " but our hashing resulted in " ++ show (hashTx algo b)
+{-# INLINE verifyHashTx #-}
 
-sign :: Hash -> PrivateKey -> PublicKey -> Signature
-sign (Hash h) = Ed25519.sign h
-{-# INLINE sign #-}
+initialHashTx :: HashAlgo -> Hash
+initialHashTx algo = hashTx algo mempty
+
+sign :: PPKScheme -> ByteString -> PrivateKey -> PublicKey -> Signature
+sign (PPKScheme (_, hashAlgo, sigAlgo)) msg privKey pubKey =
+  case sigAlgo of
+    ED25519 -> Ed25519.sign hsh privKey pubKey
+  where (Hash hsh) = hashTx hashAlgo msg
+
+valid :: PPKScheme -> ByteString -> PublicKey -> Signature -> Bool
+valid (PPKScheme (_, hashAlgo, sigAlgo)) msg pubKey sig =
+  case sigAlgo of
+    ED25519 -> Ed25519.valid hsh pubKey sig
+  where (Hash hsh) = hashTx hashAlgo msg
 
 
 

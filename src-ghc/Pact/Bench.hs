@@ -15,7 +15,7 @@ import Data.ByteString.Lazy (toStrict)
 import Pact.Types.Command
 import Control.DeepSeq
 import Data.Aeson
-import Pact.Types.Crypto
+import Pact.Types.Crypto (initialHashTx, HashAlgo(..))
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Interpreter
@@ -71,7 +71,7 @@ loadBenchModule db = do
   let md = MsgData S.empty
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
-           initialHash
+           (initialHashTx Blake2b_512)
   erRefStore <$> evalExec (setupEvalEnv db entity (Transactional 1) md initRefStore freeGasEnv) pc
 
 parseCode :: Text -> IO ParsedCode
@@ -83,7 +83,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData initialHash) refStore freeGasEnv) pc
+  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData (initialHashTx Blake2b_512)) refStore freeGasEnv) pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
@@ -121,7 +121,7 @@ main = do
   !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue benchReadValue }
   !mpdbRS <- loadBenchModule mockPersistDb
   print =<< runPactExec mockPersistDb mpdbRS benchCmd
-  !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(defaultScheme,pub,priv)]
+  !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(def,pub,priv)]
               (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" Nothing))
 
   defaultMain [

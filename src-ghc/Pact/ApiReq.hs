@@ -32,6 +32,7 @@ import Data.List
 import Prelude
 import System.Directory
 import System.FilePath
+import Data.Default (def)
 import Data.Aeson
 import GHC.Generics
 import qualified Data.Yaml as Y
@@ -43,7 +44,6 @@ import qualified Data.Set as S
 
 import Crypto.Ed25519.Pure
 
-import Pact.Types.Crypto
 import Pact.Types.Util
 import Pact.Types.Command
 import Pact.Types.RPC
@@ -122,7 +122,7 @@ mkExec code mdata addy kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    (map (\KeyPair {..} -> (defaultScheme,_kpSecret,_kpPublic)) kps)
+    (map (\KeyPair {..} -> (def,_kpSecret,_kpPublic)) kps)
     addy
     (pack $ show rid)
     (Exec (ExecMsg (pack code) mdata))
@@ -162,7 +162,7 @@ mkCont txid step rollback mdata addy kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    (map (\KeyPair {..} -> (defaultScheme,_kpSecret,_kpPublic)) kps)
+    (map (\KeyPair {..} -> (def,_kpSecret,_kpPublic)) kps)
     addy
     (pack $ show rid)
     (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
