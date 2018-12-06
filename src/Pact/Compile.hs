@@ -158,7 +158,7 @@ withModuleState :: ModuleState -> Compile a -> Compile (a,ModuleState)
 withModuleState ms0 act = do
   psUser . csModule .= Just ms0
   a <- act
-  ms1 <- state $ \s -> (view (psUser . csModule) s,set (psUser .csModule) Nothing s)
+  ms1 <- state $ \s -> (view (psUser . csModule) s, set (psUser . csModule) Nothing s)
   case ms1 of
     Nothing -> syntaxError "Invalid internal state, module data not found"
     Just ms -> return (a,ms)
@@ -528,8 +528,7 @@ useForm :: Compile (Term Name)
 useForm = do
   modName <- (_atomAtom <$> userAtom) <|> str <|> expected "bare atom, string, symbol"
   i <- contextInfo
-  n <- use $ psUser . csNamespace
-  u <- Use (ModuleName modName n) <$> optional hash' <*> pure i
+  u <- Use (ModuleName modName Nothing) <$> optional hash' <*> pure i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
   return $ TUse u i

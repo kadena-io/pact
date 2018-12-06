@@ -336,17 +336,17 @@ instance ToJSON ModuleName where
 instance FromJSON ModuleName where
   parseJSON = withObject "ModuleName" $ \o -> ModuleName
     <$> o .: "name"
-    <*> o .: "namespace"
+    <*> o .:? "namespace"
 
 newtype DefName = DefName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show DefName where show (DefName s) = show s
 
 -- | A named reference from source.
-data Name =
-    QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info } |
-    Name { _nName :: Text, _nInfo :: Info }
-         deriving (Generic)
+data Name
+  = QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info }
+  | Name { _nName :: Text, _nInfo :: Info }
+  deriving Generic
 
 instance Show Name where
   show (QName q n _) = asString' q ++ "." ++ unpack n
