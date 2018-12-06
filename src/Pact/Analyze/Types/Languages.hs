@@ -806,9 +806,9 @@ instance
     Lit a                    -> userShowPrec d a
     Sym s                    -> tShow s
     Var _vid name            -> name
-    Identity ty x            -> parenList ["identity", singUserShowTm ty x]
-    Constantly ty x y        -> parenList ["constantly", singUserShowTm ty x, userShowPrec 11 y]
-    Compose _ tyb tyc _ b c  -> parenList ["compose", singUserShowOpen tyb b, singUserShowOpen tyc c]
+    Identity ty x            -> parenList [SIdentity, singUserShowTm ty x]
+    Constantly ty x y        -> parenList [SConstantly, singUserShowTm ty x, userShowPrec 11 y]
+    Compose _ tyb tyc _ b c  -> parenList [SCompose, singUserShowOpen tyb b, singUserShowOpen tyc c]
     StrConcat x y            -> parenList [SConcatenation, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
     StrToInt s               -> parenList [SStringToInteger, userShow s]
@@ -846,35 +846,35 @@ instance
     MakeList ty x y          -> parenList [SMakeList, userShow x, singUserShowTm ty y]
     LiteralList ty lst       -> singUserShowListTm ty lst
     ListMap tya tyb b as -> parenList
-      [ "map"
+      [ SMap
       , singUserShowOpen tyb b
       , singUserShowTmList tya as
       ]
     ListFilter ty a b -> parenList
-      [ "filter"
+      [ SFilter
       , singUserShowOpen SBool a
       , singUserShowTmList ty b
       ]
     ListFold tya tyb (Open _ nm a) b c -> parenList
-      [ "fold"
+      [ SFold
       , parenList [ "lambda", nm, singUserShowOpen tya a ]
       , singUserShowTm tya b
       , singUserShowTmList tyb c
       ]
     AndQ ty a b c -> parenList
-      [ "and?"
+      [ SAndQ
       , singUserShowOpen SBool a
       , singUserShowOpen SBool b
       , singUserShowTm ty c
       ]
     OrQ ty a b c -> parenList
-      [ "or?"
+      [ SOrQ
       , singUserShowOpen SBool a
       , singUserShowOpen SBool b
       , singUserShowTm ty c
       ]
-    Where _ _ a b c -> parenList ["where", userShow a, singUserShowOpen SBool b, userShow c]
-    Typeof ty a -> parenList ["typeof", singUserShowTm ty a]
+    Where _ _ a b c -> parenList [SWhere, userShow a, singUserShowOpen SBool b, userShow c]
+    Typeof ty a -> parenList [STypeof, singUserShowTm ty a]
 
 
 data BeforeOrAfter = Before | After

@@ -2759,12 +2759,15 @@ spec = describe "analyze" $ do
           |]
     expectVerified code3
 
-    let code4 = [text|
-          (defun test:[integer] ()
-            @model [(property (= result [2 2 2]))]
-            (map (compose (constantly 1) (+ 1)) [1 2 3]))
-          |]
-    expectVerified code4
+    describe "constantly" $ do
+      let code4 = [text|
+            (defun test:[integer] ()
+              @model [(property (= result [2 2 2]))]
+              (map (compose (constantly 1) (+ 1)) [1 2 3]))
+            |]
+      expectVerified code4
+
+      it "ignores multiple variables" $ pendingWith "implementation"
 
     let code5 = [text|
           (defun test:[integer] ()
