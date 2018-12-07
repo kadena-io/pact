@@ -27,7 +27,7 @@ import Control.Applicative
 import Control.Monad.Reader
 import Control.DeepSeq
 
-import Crypto.Ed25519.Pure ( PublicKey, PrivateKey, Signature(..), importPublic, importPrivate, exportPublic, exportPrivate)
+import Crypto.Ed25519.Pure ( PublicKey, PrivateKey, importPublic, importPrivate, exportPublic, exportPrivate)
 import qualified Crypto.Ed25519.Pure as Ed25519
 import qualified Crypto.Hash as H
 
@@ -47,22 +47,23 @@ import Prelude
 
 import Pact.Types.Util
 
-deriving instance Eq Signature
-deriving instance Ord Signature
+
+newtype Signature = Signature ByteString
+  deriving (Show, Eq, Ord)
 instance Serialize Signature where
-  put (Sig s) = S.put s
-  get = Sig <$> (S.get >>= S.getByteString)
+  put (Signature s) = S.put s
+  get = Signature <$> (S.get >>= S.getByteString)
 instance ToJSON Signature where
-  toJSON (Sig s) = toB16JSON s
+  toJSON (Signature s) = toB16JSON s
 instance FromJSON Signature where
   parseJSON = withText "Signature" parseText
   {-# INLINE parseJSON #-}
 instance ParseText Signature where
-  parseText s = Sig <$> parseB16Text s
+  parseText s = Signature <$> parseB16Text s
   {-# INLINE parseText #-}
 
 exportSignature :: Signature -> ByteString
-exportSignature (Sig s) = s
+exportSignature (Signature s) = s
 
 
 {-- A PPK Scheme indicates
@@ -159,13 +160,14 @@ initialHashTx algo = hashTx algo mempty
 sign :: PPKScheme -> ByteString -> PrivateKey -> PublicKey -> Signature
 sign (PPKScheme (_, hashAlgo, sigAlgo)) msg privKey pubKey =
   case sigAlgo of
-    ED25519 -> Ed25519.sign hsh privKey pubKey
+    ED25519 -> let (Ed25519.Sig b) = Ed25519.sign hsh privKey pubKey
+               in Signature b
   where (Hash hsh) = hashTx hashAlgo msg
 
 valid :: PPKScheme -> ByteString -> PublicKey -> Signature -> Bool
 valid (PPKScheme (_, hashAlgo, sigAlgo)) msg pubKey sig =
   case sigAlgo of
-    ED25519 -> Ed25519.valid hsh pubKey sig
+    ED25519 -> Ed25519.valid hsh pubKey $ Ed25519.Sig $ exportSignature sig
   where (Hash hsh) = hashTx hashAlgo msg
 
 
