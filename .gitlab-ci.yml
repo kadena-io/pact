@@ -1,3 +1,4 @@
 pact:
   script:
     - nix-build
+    - nix-build --argstr system x86_64-linux
