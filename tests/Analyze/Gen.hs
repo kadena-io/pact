@@ -270,24 +270,33 @@ genCore BoundedKeySet = ESimple SKeySet . Lit' . KeySet
   <$> genInteger (0 ... 2)
 genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
   -- EqNeq, At, Contains
-  [ Gen.subtermM (genCore bound) $ \(EList lty@(SList ty) lst) ->
-      pure $ EList lty $ Inj $ ListReverse ty lst
-  , Gen.subtermM (genCore bound) $ \(EList lty@(SList ty) lst) ->
-      pure $ EList lty $ Inj $ ListSort ty lst
-  , Gen.subtermM2 (genCore bound) (genCore bound) $ \
-      (EList lty@(SList ty) l1)
-      (EList lty2 l2) -> case singEq lty lty2 of
+  [ Gen.subtermM (genCore bound) $ \case
+      EList lty@(SList ty) lst -> pure $ EList lty $ Inj $ ListReverse ty lst
+      other -> error (show other)
+  , Gen.subtermM (genCore bound) $ \case
+      EList lty@(SList ty) lst -> pure $ EList lty $ Inj $ ListSort ty lst
+      other -> error (show other)
+  , Gen.subtermM2 (genCore bound) (genCore bound) $ \elst1 elst2 ->
+    case (elst1, elst2) of
+      (EList lty@(SList ty) l1, EList lty2 l2) -> case singEq lty lty2 of
         Nothing   -> error "impossible"
         Just Refl -> pure $ EList lty $ Inj $ ListConcat ty l1 l2
+      _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
-      \(EList lty@(SList ty) l) (ESimple SInteger i) ->
-        pure $ EList lty $ Inj $ ListDrop ty i l
+      \elst1 elst2 -> case (elst1, elst2) of
+      (EList lty@(SList ty) l, ESimple SInteger i)
+        -> pure $ EList lty $ Inj $ ListDrop ty i l
+      _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
-      \(EList lty@(SList ty) l) (ESimple SInteger i) ->
-        pure $ EList lty $ Inj $ ListTake ty i l
+      \elst1 elst2 -> case (elst1, elst2) of
+      (EList lty@(SList ty) l, ESimple SInteger i)
+        -> pure $ EList lty $ Inj $ ListTake ty i l
+      _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore (BoundedInt (0 ... 50))) (genCore elemBound) $
-      \(ESimple SInteger i) (ESimple ty a) ->
-        pure $ EList (SList ty) $ Inj $ MakeList ty i a
+      \elst1 elst2 -> case (elst1, elst2) of
+      (ESimple SInteger i, ESimple ty a)
+        -> pure $ EList (SList ty) $ Inj $ MakeList ty i a
+      _ -> error (show (elst1, elst2))
   -- LiteralList
   -- , Gen.subtermM
   ]
