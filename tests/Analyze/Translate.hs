@@ -167,6 +167,9 @@ toPactTm = \case
   ESimple ty (IfThenElse t1 (_, t2) (_, t3)) ->
     mkApp ifDef [ESimple SBool t1, ESimple ty t2, ESimple ty t3]
 
+  ESimple SBool (CoreTerm (ListEqNeq ty op l1 l2)) ->
+    mkApp (eqNeqOpToDef op) [ EList (SList ty) l1, EList (SList ty) l2 ]
+
   EList ty (CoreTerm (ListReverse _ lst)) ->
     mkApp reverseDef [ EList ty lst ]
 
@@ -240,6 +243,11 @@ toPactTm = \case
       Lte -> lteDef
       Eq  -> eqDef
       Neq -> neqDef
+
+    eqNeqOpToDef :: EqNeq -> NativeDef
+    eqNeqOpToDef = \case
+        Eq'  -> eqDef
+        Neq' -> neqDef
 
     logicalOpToDef :: LogicalOp -> NativeDef
     logicalOpToDef = \case
