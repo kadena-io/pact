@@ -84,6 +84,9 @@ instance Eq (Existential tm) where                        \
   ESimple sa ia == ESimple sb ib = case singEq sa sb of { \
     Just Refl -> withEq sa (ia == ib);                    \
     Nothing   -> False};                                  \
+  EList   sa la == EList   sb lb = case singEq sa sb of { \
+    Just Refl -> withEq sa (la == lb);                    \
+    Nothing   -> False};                                  \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
   _ == _ = False;
 
@@ -519,15 +522,42 @@ instance
   ListLength ty1 a1           == ListLength ty2 a2           = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> singEqTmList ty1 a1 a2
-  ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
+  ListReverse ty1 a1          == ListReverse _ty2 a2         = singEqTmList ty1 a1 a2
+  ListSort ty1 a1             == ListSort _ty2 a2            = singEqTmList ty1 a1 a2
   ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
+  ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
+  ListTake ty1 i1 l1          == ListTake _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
   MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && singEqTm ty1 b1 b2
   LiteralList ty1 l1          == LiteralList _ty2 l2         = singEqListTm ty1 l1 l2
-  ListMap tya1 tyb1 (Open v1 nm1 b1) as1 == ListMap tya2 _ (Open v2 nm2 b2) as2
+  ListMap tya1 tyb1 f1 as1 == ListMap tya2 _ f2 as2
     = case singEq tya1 tya2 of
       Nothing   -> False
-      Just Refl -> singEqTm tyb1 b1 b2 && singEqTmList tya1 as1 as2
-        && v1 == v2 && nm1 == nm2
+      Just Refl -> singEqOpen tyb1 f1 f2 && singEqTmList tya1 as1 as2
+  ListFilter ty1 f1 b1 == ListFilter _ty2 f2 b2
+    = singEqOpen SBool f1 f2 && singEqTmList ty1 b1 b2
+  ListFold tya1 tyb1 (Open v1 nm1 f1) b1 c1
+    == ListFold _tya2 tyb2 (Open v2 nm2 f2) b2 c2
+    = case singEq tyb1 tyb2 of
+        Nothing   -> False
+        Just Refl -> v1 == v2 && nm1 == nm2 && singEqOpen tya1 f1 f2
+          && singEqTm tya1 b1 b2 && singEqTmList tyb1 c1 c2
+  AndQ tya1 f1 g1 a1 == AndQ tya2 f2 g2 a2
+    = case singEq tya1 tya2 of
+      Nothing   -> False
+      Just Refl -> singEqOpen SBool f1 f2 && singEqOpen SBool g1 g2
+        && singEqTm tya1 a1 a2
+  OrQ tya1 f1 g1 a1 == OrQ tya2 f2 g2 a2
+    = case singEq tya1 tya2 of
+      Nothing   -> False
+      Just Refl -> singEqOpen SBool f1 f2 && singEqOpen SBool g1 g2
+        && singEqTm tya1 a1 a2
+  Where s1 tya1 a1 b1 c1 == Where s2 tya2 a2 b2 c2
+    = case singEq tya1 tya2 of
+      Nothing   -> False
+      Just Refl -> s1 == s2 && a1 == a2 && singEqOpen SBool b1 b2 && c1 == c2
+  Typeof ty1 a1 == Typeof ty2 a2 = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> singEqTm ty1 a1 a2
 
   _                           == _                           = False
 
