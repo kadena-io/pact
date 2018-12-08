@@ -38,6 +38,9 @@ data Ty
 type family ListElem (a :: Ty) where
   ListElem ('TyList a) = a
 
+listElem :: SingTy 'ListK a -> SingTy 'SimpleK (ListElem a)
+listElem (SList ty) = ty
+
 type TyTableName  = 'TyStr
 type TyColumnName = 'TyStr
 type TyRowKey     = 'TyStr
@@ -164,6 +167,11 @@ singEq SAny      SAny      = Just Refl
 singEq (SList a) (SList b) = apply Refl <$> singEq a b
 singEq SObject   SObject   = Just Refl
 singEq _         _         = Nothing
+
+singEqB :: SingTy k1 a -> SingTy k2 b -> Bool
+singEqB a b = case singEq a b of
+  Just Refl -> True
+  Nothing   -> False
 
 singCase
   :: SingTy k a
