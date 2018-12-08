@@ -577,6 +577,7 @@ where' i as = argsError' i as
 
 
 sort' :: RNativeFun e
+sort' _ [l@(TList [] _ _)] = pure l
 sort' _ [TList{..}] = case nub (map typeof _tList) of
   [ty] -> case ty of
     Right rty@(TyPrim pty) -> case pty of
