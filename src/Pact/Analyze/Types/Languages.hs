@@ -161,8 +161,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
   Constantly   :: SingTy k a   -> t a -> Existential t -> Core t a
 
   -- compose
-  -- * f :: a -> b (free a)
-  -- * g :: b -> c (free b)
+  -- - f :: a -> b (free a)
+  -- - g :: b -> c (free b)
   -- :: c
   Compose
     :: SingTy k a -> SingTy k b -> SingTy k c
