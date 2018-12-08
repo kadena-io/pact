@@ -221,7 +221,8 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
   ]
 genCore (BoundedString len) = Gen.recursive Gen.choice [
     ESimple SStr . StrLit
-      <$> Gen.string (Range.exponential 1 len) Gen.unicode
+      -- TODO: unicode (SBV has trouble with some unicode characters)
+      <$> Gen.string (Range.exponential 1 len) Gen.latin1
   ] [
     scale 4 $ Gen.subtermM2
       (genCore (BoundedString (len `div` 2)))
@@ -292,7 +293,9 @@ genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
       (EList lty@(SList ty) l, ESimple SInteger i)
         -> pure $ EList lty $ Inj $ ListTake ty i l
       _ -> error (show (elst1, elst2))
-  , Gen.subtermM2 (genCore (BoundedInt (0 ... 50))) (genCore elemBound) $
+  -- Note: we currently use bounded list checking so anything beyond 10 is
+  -- pointless
+  , Gen.subtermM2 (genCore (BoundedInt (0 ... 5))) (genCore elemBound) $
       \elst1 elst2 -> case (elst1, elst2) of
       (ESimple SInteger i, ESimple ty a)
         -> pure $ EList (SList ty) $ Inj $ MakeList ty i a

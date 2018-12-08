@@ -16,10 +16,14 @@ import           Pact.Analyze.Types        hiding (Object, Term)
 import           Pact.Analyze.Util         (dummyInfo)
 
 import           Pact.Eval                 (liftTerm)
-import           Pact.Native               (enforceDef, enforceOneDef,
+import           Pact.Native               (dropDef, enforceDef, enforceOneDef,
                                             formatDef, hashDef, ifDef,
-                                            lengthDef, pactVersionDef,
-                                            readDecimalDef, strToIntDef)
+                                            lengthDef, makeListDef,
+                                            pactVersionDef, readDecimalDef,
+                                            reverseDef, sortDef, strToIntDef,
+                                            takeDef
+  -- TODO: mapDef foldDef filterDef whereDef composeDef atDef
+                                            )
 import           Pact.Native.Keysets
 import           Pact.Native.Ops
 import           Pact.Native.Time
@@ -162,6 +166,24 @@ toPactTm = \case
 
   ESimple ty (IfThenElse t1 (_, t2) (_, t3)) ->
     mkApp ifDef [ESimple SBool t1, ESimple ty t2, ESimple ty t3]
+
+  EList ty (CoreTerm (ListReverse _ lst)) ->
+    mkApp reverseDef [ EList ty lst ]
+
+  EList ty (CoreTerm (ListSort _ lst)) ->
+    mkApp sortDef [ EList ty lst ]
+
+  EList ty (CoreTerm (ListConcat _ l1 l2)) ->
+    mkApp addDef [ EList ty l1, EList ty l2 ]
+
+  EList ty (CoreTerm (ListDrop _ i l2)) ->
+    mkApp dropDef [ ESimple SInteger i, EList ty l2 ]
+
+  EList ty (CoreTerm (ListTake _ i l2)) ->
+    mkApp takeDef [ ESimple SInteger i, EList ty l2 ]
+
+  EList (SList ty) (CoreTerm (MakeList _ i a)) ->
+    mkApp makeListDef [ ESimple SInteger i, ESimple ty a ]
 
   tm -> error $ "TODO: toPactTm " ++ show tm
 
