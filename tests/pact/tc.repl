@@ -130,6 +130,12 @@
   (defun fails-literal-typed-list:integer (a:integer)
     (at 0 [a 1 true]))
 
+  (defun tc-list-assumes-literal-type:[integer] ()
+    [1 2 3])
+
+  (defun fails-list-literal-type:[integer] ()
+    [1.0 2.0])
+
 
 )
 
