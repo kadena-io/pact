@@ -121,6 +121,16 @@
   ;;not tc per se but runtime type enforce error
   (defun rtc-empty-string-list:[string] (input:[string]) input)
 
+  (defun tc-at-literal-typed-list:integer (a:integer)
+    (at 0 [a]))
+
+  (defun tc-format-heterogenous:string ()
+    (format "{} {} {}" [1 1.0 true]))
+
+  (defun fails-literal-typed-list:integer (a:integer)
+    (at 0 [a 1 true]))
+
+
 )
 
 (create-table persons)

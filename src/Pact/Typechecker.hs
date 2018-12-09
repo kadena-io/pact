@@ -50,7 +50,6 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 import Data.String
 import Data.List
 import Data.Maybe (isJust)
-import Control.Compactable (traverseMaybe)
 
 
 import Pact.Types.Typecheck
@@ -261,41 +260,82 @@ asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " +
 
 -- | Visitor to inspect Objects and Bindings to validate schemas,
 -- "pushing down" the field types to associate with field ASTs.
+-- Also handles validating lists, as this seems like the right phase for that too.
 applySchemas :: Visitor TC Node
 applySchemas Pre ast = case ast of
+
   (Object n ps) -> findSchema n $ \sch -> do
-    debug $ "applySchemas: " ++ show (n,sch)
-    pmap <- M.fromList <$> forM ps
-      (\(k,v) -> (,) <$> asPrimString k <*> ((v,_aId (_aNode k),) <$> lookupTy (_aNode v)))
-    validateSchema sch pmap
+    debug $ "applySchemas [object]: " ++ show (n,sch)
+    pmap <- forM ps $ \(k,v) -> do
+      kstr <- asPrimString k
+      vt' <- lookupAndResolveTy (_aNode v)
+      return (kstr,(v,_aId (_aNode k),vt'))
+    validateSchema sch (M.fromList pmap)
     return ast
+
   (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch -> do
-    debug $ "applySchemas: " ++ show (n,sch)
-    pmap <- M.fromList <$> traverseMaybe lookupNode bs
-    validateSchema sch pmap
+    debug $ "applySchemas [binding]: " ++ show (n,sch)
+    pmapM <- forM bs $ \(Named _ node ni,bv) -> case bv of
+      Prim _ (PrimLit (LString bn)) -> do
+        vt' <- lookupAndResolveTy node
+        return $ Just (bn,(Var node,ni,vt'))
+      _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
+    case sequence pmapM of
+      Just pmap -> validateSchema sch (M.fromList pmap)
+      Nothing -> return () -- error already tracked above
     return ast
+
+  (List n ls) -> lookupAndResolveTy n >>= \ltym -> case ltym of
+    (TyList TyAny) -> do
+      debug $ "Skipping TC on specified heterogenous list for node: " ++ show n
+      return ast
+    (TyList lty) -> do
+      debug ("validateList: " ++ show lty)
+      validateList n lty ls
+      return ast
+    _ -> return ast
+
   _ -> return ast
+
   where
+    -- Given map of object text key to (value,key id,value ty) ...
+    validateSchema :: UserType -> M.Map Text (AST Node, TcId, Type UserType) -> TC ()
     validateSchema sch pmap = do
+      -- smap: lookup from field name to ty
       let smap = M.fromList <$> (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+      -- over each object field ...
       forM_ (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
+        -- validate field exists ...
         Nothing -> addFailure ki $ "Invalid field in schema object: " ++ show k
+        -- unify field value ty ...
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
+          -- associate unified ty with value node.
           Just u -> assocAstTy (_aNode v) (either id id u)
 
-    -- TODO Handle the type mismatch in some other way? `TC` does have a MonadThrow instance.
-    lookupNode (Named _ node ni, Prim _ (PrimLit (LString bn))) = Just . (bn,) . (Var node,ni,) <$> lookupTy node
-    lookupNode _ = pure Nothing
+    lookupAndResolveTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 
-    lookupTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
-
+    -- Resolve schema ty if possible and act on it, otherwise skip.
+    findSchema :: Node -> (UserType -> TC (AST Node)) -> TC (AST Node)
     findSchema n act = do
-      ty <- lookupTy n
+      ty <- lookupAndResolveTy n
       case ty of
         (TySchema _ (TyUser sch)) -> act sch
         _ -> return ast
+
+    validateList :: Node -> Type UserType -> [AST Node] -> TC ()
+    validateList n lty ls = forM_ ls $ \a -> do
+        aty <- lookupAndResolveTy $ _aNode a
+        case unifyTypes lty aty of
+          Nothing -> addFailure (_aId (_aNode a)) $ "Unable to unify list member type: " ++ show (lty,aty,a)
+          Just (Left uty) -> assocAstTy (_aNode a) uty
+          Just (Right uty) -> assocAstTy n (TyList uty)
+
+
 applySchemas Post a = return a
+
+
+
 
 -- | Visitor to process Apps of native funs.
 -- For non-overloads, associate fun tys with app args and result.
@@ -421,7 +461,7 @@ inlineAppArgs appNode defunType defunArgs defunBody args = do
       substitute sub = walkAST (substAppDefun (Just sub))
 
   body' <- forM defunBody $ \bodyExpr -> foldM (flip substitute) bodyExpr subs
-  return $ [Binding letNode letBindings body' bindType]
+  return [Binding letNode letBindings body' bindType]
 
 -- | Visitor to process Apps of user defuns.
 -- We want to a) replace AST nodes with the app arg ASTs,
@@ -510,6 +550,9 @@ assocTy ai av ty = do
               -- RH is tyvar tracking type. Unify and update tracked type.
               unifyTypes' ai aty tvtys $ \r' ->
                 (tcVarToTypes . at tv . _Just) .= either id id r'
+        TyList TyAny -> do
+          debug $ "assocTy: specified heterogenous list, " ++ show aty ++ " <= " ++ show ty
+          tcVarToTypes . at av . _Just .= ty
         _ -> debug $ "assocTy: noop: " ++ show (aty,ty)
     Right u -> do
       -- Associated ty is most specialized, simply update record for AST type.
@@ -842,12 +885,15 @@ mkTop t@TSchema {..} = do
 mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrev t
 
 
--- | Recursively find the "leaf type" for a type which could be a var,
--- or have a parameterized type in it.
+-- | Recursively compute the "leaf type" where
+-- vars are resolved to non-vars, if possible;
+-- schemas/lists are specialized.
+-- Recursive references are detected and error out.
 resolveTy :: Type UserType -> TC (Type UserType)
 resolveTy rt = do
   v2Ty <- use tcVarToTypes
-  let resolv tv@(TyVar v) =
+  let resolv :: Type UserType -> State [Type UserType] (Maybe (Type UserType))
+      resolv tv@(TyVar v) =
         case M.lookup v v2Ty of
           Just t | t /= tv -> go t
                  | otherwise -> return (Just tv)
