@@ -1,5 +1,8 @@
 let
-  rp = import ../reflex-platform {};
+  rp = import (builtins.fetchTarball {
+    url = "https://github.com/vaibhavsagar/reflex-platform/archive/ae542c3e7ed4fb1b4552f447b1205982e261cd68.tar.gz";
+    sha256 = "0p14b4kdjkykkcql8xdp2x8qvw7cla8imikl940a8qcsc49vkwpf";
+  }) {};
 in (rp.ghcMusl64.override {
   overrides = self: super:
     let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
@@ -24,7 +27,12 @@ in (rp.ghcMusl64.override {
           bytes = rp.nixpkgs.haskell.lib.dontCheck super.bytes;
           intervals = rp.nixpkgs.haskell.lib.dontCheck super.intervals;
           bound = rp.nixpkgs.haskell.lib.dontCheck super.bound;
-          trifecta = rp.nixpkgs.haskell.lib.dontCheck super.trifecta;
+          trifecta = dontHaddock (dontCheck (self.callCabal2nix "trifecta" (rp.nixpkgs.fetchFromGitHub {
+            owner = "vaibhavsagar";
+            repo = "trifecta";
+            rev = "8b8630eb66740683a3502bf52a12cb6084b3979a";
+            sha256 = "1kb0dnzs0q5ahn4xp2w1fb05v4jahr6rm5c1l4f3nbylsh0gf7ar";
+          }) {}));
           lens-aeson = rp.nixpkgs.haskell.lib.dontCheck super.lens-aeson;
           # test suite for this is failing on ghcjs:
           hw-hspec-hedgehog = rp.nixpkgs.haskell.lib.dontCheck super.hw-hspec-hedgehog;
