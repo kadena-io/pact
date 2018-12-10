@@ -1,4 +1,7 @@
-pact:
+pact-macos:
   script:
     - nix-build
+
+pact-linux:
+  script:
     - nix-build --argstr system x86_64-linux
