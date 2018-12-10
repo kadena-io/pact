@@ -102,13 +102,13 @@ dbDefs =
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
-     (writeDocs "." "(write accounts { \"balance\": 100.0 })")
+     (writeDocs "." "(write accounts id { \"balance\": 100.0 })")
     ,defRNative "insert" (write Insert) writeArgs
      (writeDocs ", failing if data already exists for KEY."
-     "(insert accounts { \"balance\": 0.0, \"note\": \"Created account.\" })")
+     "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
     ,defRNative "update" (write Update) writeArgs
      (writeDocs ", failing if data does not exist for KEY."
-      "(update accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
+      "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog accounts 123485945)`"
