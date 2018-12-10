@@ -1,7 +1,13 @@
 pact-macos:
   script:
     - nix-build
+  artifacts:
+    paths:
+    - result/
 
 pact-linux:
   script:
     - nix-build --argstr system x86_64-linux
+  artifacts:
+    paths:
+    - result/
