@@ -292,7 +292,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         key <- valueLevel
         val <- sep Colon *> valueLevel
         return (key,val)
-  ps <- pair `sepBy` sep Comma
+  ps <- (pair `sepBy` sep Comma) <* eof
   return $ TObject ps TyAny _listInfo
 
 literal :: Compile (Term Name)
