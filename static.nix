@@ -3,6 +3,10 @@ let
     url = "https://github.com/vaibhavsagar/reflex-platform/archive/ae542c3e7ed4fb1b4552f447b1205982e261cd68.tar.gz";
     sha256 = "0p14b4kdjkykkcql8xdp2x8qvw7cla8imikl940a8qcsc49vkwpf";
   }) {};
+  pact-src = builtins.filterSource
+    (path: type: !(builtins.elem (baseNameOf path)
+        ["result" "dist" "dist-ghcjs" ".git" ".stack-work"]))
+    ./.;
 in (rp.ghcMusl64.override {
   overrides = self: super:
     let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
@@ -82,11 +86,6 @@ in (rp.ghcMusl64.override {
             rev = "c3d04181eb64393d449a68084ffea3a94c3d8064";
             sha256 = "1l8lks6plj0naj9ghasmkqglshxym3f29gyybvjvkrkm770p2gl4";
           }) {});
+          pact = dontHaddock (dontCheck (self.callCabal2nix "pact" pact-src {}));
         };
-}).developPackage {
-  name = "pact";
-  root = builtins.filterSource
-    (path: type: !(builtins.elem (baseNameOf path)
-        ["result" "dist" "dist-ghcjs" ".git" ".stack-work"]))
-    ./.;
-}
+}).pact
