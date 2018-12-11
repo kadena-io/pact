@@ -173,8 +173,6 @@ revokeCapability c = evalCapabilities %= filter (/= c)
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
-eval (TNamespace n info) = topLevelCall info "namespace" GNamespace $ \g ->
-  evalNamespace info n >> return (g, tStr . pack $ "Namespace " ++ asString' n)
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- enforce old module keysets
@@ -226,19 +224,6 @@ evalUse (Use mn h i) = do
             Just _ -> evalError i $ "Interfaces should not have associated hashes: " ++ show _interfaceName
 
       installModule md
-
-evalNamespace :: Info -> NamespaceName -> Eval e ()
-evalNamespace info name = do
-  mOldNs <- use eeNamespace
-  case mOldNs of
-    Just (Namespace n _) ->
-      evalError info $ "Namespace already in use: " ++ asString' n
-    Nothing -> do
-      mNs <- readRow info Namespaces name
-      case mNs of
-        Nothing ->
-          evalError info $ "Namespace not defined: " ++ asString' name
-        ns      -> eeNamespace .= ns
 
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
@@ -380,11 +365,11 @@ solveConstraint info refName (Ref t) evalMap = do
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
-resolveRef qn@(QName q n _) = do
+resolveRef _qn@(QName q n _) = do
   dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
   case dsm of
     d@Just {} -> return d
-    Nothing -> preview (evalRefs . rsLoaded . ix qn) <$> get
+    Nothing -> evalError def $ "foobarresolve" -- preview (evalRefs . rsLoaded . ix qn) <$> get
 resolveRef nn@(Name _ _) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
@@ -441,7 +426,6 @@ reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
-reduce t@TNamespace{} = unsafeReduce t
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

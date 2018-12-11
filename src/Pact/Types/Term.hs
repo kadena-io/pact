@@ -55,7 +55,7 @@ module Pact.Types.Term
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,tNamespaceName,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',guardTypeOf,
@@ -562,10 +562,6 @@ data Term n =
       _tLiteral :: !Literal
     , _tInfo :: !Info
     } |
-    TNamespace {
-      _tNamespaceName :: !NamespaceName
-    , _tInfo          :: !Info
-    } |
     TGuard {
       _tGuard :: !Guard
     , _tInfo :: !Info
@@ -609,7 +605,6 @@ instance Show n => Show (Term n) where
     show (TObject bs _ _) =
       "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
-    show (TNamespace n _) = "(TNamespace " ++ asString' n ++ ")"
     show (TGuard k _) = show k
     show (TUse u _) = show u
     show (TValue v _) = BSL.toString $ encode v
@@ -648,7 +643,6 @@ instance Eq1 Term where
     liftEq (\(w,x) (y,z) -> liftEq eq w y && liftEq eq x z) a m && liftEq (liftEq eq) b n && c == o
   liftEq _ (TLiteral a b) (TLiteral m n) =
     a == m && b == n
-  liftEq _ (TNamespace n _) (TNamespace n' _) = n == n'
   liftEq _ (TGuard a b) (TGuard m n) =
     a == m && b == n
   liftEq _ (TUse a b) (TUse m n) =
@@ -680,7 +674,6 @@ instance Monad Term where
     TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
     TLiteral l i >>= _ = TLiteral l i
-    TNamespace n i >>= _ = TNamespace n i
     TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
     TValue v i >>= _ = TValue v i
@@ -762,7 +755,6 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
-      TNamespace {} -> Left "namespace"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -822,7 +814,6 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
-abbrev TNamespace {..} = "<namespace " ++ asString' _tNamespaceName ++ ">"
 
 
 

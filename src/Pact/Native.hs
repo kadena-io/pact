@@ -214,11 +214,11 @@ readDecimalDef = defRNative "read-decimal" readDecimal
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
-   "Create a namespace called NAMESPACE for a given GUARD. All expressions that occur \
-   \ in a given transaction will be tied to NAMESPACE, and may be accessed using the toplevel \
-   \ call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
-   \ the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
-   \ its place. `(define-namespace 'my-namespace 'my-guard)`"
+  "Create a namespace called NAMESPACE for a given GUARD. All expressions that occur in a    \
+  \ given transaction will be tied to NAMESPACE, and may be accessed using the toplevel      \
+  \ call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
+  \ the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
+  \ its place. `(define-namespace 'my-namespace 'my-guard)`"
   where
     defineNamespace :: RNativeFun e
     defineNamespace i as = case as of
@@ -240,6 +240,39 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
       writeRow info Write Namespaces n (Namespace n g)
         & success "Namespace defined"
 
+namespaceDef :: NativeDef
+namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
+  (funType tTyString [("namespace", tTyString)])
+  "Set the current namespace to NAMESPACE. All expressions that occur in a current \
+  \ transaction will be contained in the namespace NAMESPACE, and once committed,  \
+  \ may be accessed via their fully qualified name, which will include the name-   \
+  \ space. For example, if Alice were to define an interface named AbstractBob in  \
+  \ the namespace Carl, then it would be referenced by the name Carl.AbstractBob.  \
+  \ `(namespace 'my-namespace)`"
+  where
+    namespace :: RNativeFun e
+    namespace i as = case as of
+      [TLitString nsn] -> go i nsn
+      _ -> argsError i as
+
+    go funApp ns = do
+      let name = NamespaceName ns
+          info = _faInfo funApp
+
+      mNs <- readRow info Namespaces name
+      case mNs of
+        Just ns' -> setEnvNamespace funApp info ns' & success ("Namespace set: " <> ns)
+        Nothing  -> evalError info $
+          "namespace: Namespace '" ++ asString' name ++ "' not defined"
+
+    setEnvNamespace funApp info ns@(Namespace _ g) = do
+      mNs <- use $ evalRefs . rsNamespace
+      case mNs of
+        Nothing -> do
+          enforceGuard funApp g
+          (evalRefs . rsNamespace .= (Just ns))
+        Just (Namespace n' _) ->
+          evalError info $ "namespace already defined: " ++ asString' n'
 
 langDefs :: NativeModule
 langDefs =
@@ -365,6 +398,7 @@ langDefs =
     ,strToIntDef
     ,hashDef
     ,defineNamespaceDef
+    ,namespaceDef
     ])
     where b = mkTyVar "b" []
           c = mkTyVar "c" []

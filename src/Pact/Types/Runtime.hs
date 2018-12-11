@@ -23,11 +23,11 @@ module Pact.Types.Runtime
    ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,eeNamespace,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
-   RefState(..),rsLoaded,rsLoadedModules,rsNewModules,
+   RefState(..),rsLoaded,rsLoadedModules,rsNewModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',
    call,method,
@@ -209,15 +209,18 @@ makeLenses ''EvalEnv
 
 -- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.
 data RefState = RefState {
-      -- | Namespace-local defs.
+      -- | Imported Module-local defs and natives.
+      -- TODO: Name -> Text
       _rsLoaded :: HM.HashMap Name Ref
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName Module
       -- | Modules that were compiled and loaded in this tx.
     , _rsNewModules :: HM.HashMap ModuleName ModuleData
+      -- | Current Namespace
+    , _rsNamespace :: Maybe Namespace
     } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty HM.empty
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty Nothing
 
 -- | Update for newly-loaded modules and interfaces.
 updateRefStore :: RefState -> RefStore -> RefStore
@@ -237,11 +240,9 @@ data EvalState = EvalState {
     , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: [Capability]
-      -- | Namespace. 'Nothing' indicates no namespace is set
-    , _eeNamespace :: Maybe Namespace
     } deriving (Show)
 makeLenses ''EvalState
-instance Default EvalState where def = EvalState def def def 0 def def
+instance Default EvalState where def = EvalState def def def 0 def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =

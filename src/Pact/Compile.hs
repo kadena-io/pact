@@ -72,14 +72,13 @@ initModuleState n h = ModuleState n h def def def
 data CompileState = CompileState
   { _csFresh :: Int
   , _csModule :: Maybe ModuleState
-  , _csNamespace :: Maybe NamespaceName
   }
 makeLenses ''CompileState
 
 type Compile a = ExpParse CompileState a
 
 initParseState :: Exp Info -> ParseState CompileState
-initParseState e = ParseState e $ CompileState 0 Nothing Nothing
+initParseState e = ParseState e $ CompileState 0 Nothing
 
 data Reserved =
     RBless
@@ -95,7 +94,6 @@ data Reserved =
   | RLet
   | RLetStar
   | RModule
-  | RNamespace
   | RStep
   | RStepWithRollback
   | RTrue
@@ -118,7 +116,6 @@ instance AsString Reserved where
     RLet -> "let"
     RLetStar -> "let*"
     RModule -> "module"
-    RNamespace -> "namespace"
     RStep -> "step"
     RStepWithRollback -> "step-with-rollback"
     RTrue -> "true"
@@ -198,7 +195,6 @@ topLevel = specialFormOrApp topLevelForm <|> literals <|> varAtom  where
     RLetStar -> return letsForm
     RModule -> return moduleForm
     RInterface -> return interface
-    RNamespace -> return namespace
     _ -> expected "top-level form (use, let[*], module, interface, namespace)"
 
 
@@ -271,8 +267,7 @@ varAtom = do
     [] -> return $ Name _atomAtom _atomInfo
     [q] -> do
       when (q `elem` reserved) $ unexpected' "reserved word"
-      ns <- use $ psUser . csNamespace
-      return $ QName (ModuleName q ns) _atomAtom _atomInfo
+      return $ QName (ModuleName q Nothing) _atomAtom _atomInfo
     _ -> expected "single qualifier"
   commit
   return $ TVar n _atomInfo
@@ -310,8 +305,6 @@ withCapability = do
   body@(top:_) <- some valueLevel
   i <- contextInfo
   return $ TApp (App wcVar [capApp,TList body TyAny (_tInfo top)] i) i
-
-
 
 deftable :: Compile (Term Name)
 deftable = do
@@ -411,11 +404,10 @@ moduleForm = do
     Just {} -> syntaxError "Invalid nested module or interface"
     Nothing -> return ()
   i <- contextInfo
-  ns <- use $ psUser . csNamespace
   let code = case i of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      modName = ModuleName modName' ns
+      modName = ModuleName modName' Nothing
       modHash = hash $ encodeUtf8 $ _unCode code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
@@ -432,15 +424,11 @@ interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
   m <- meta ModelAllowed
-  use (psUser . csModule) >>= \ci -> case ci of
-    Just {} -> syntaxError "invalid nested interface or module"
-    Nothing -> return ()
-  ns <- use (psUser . csNamespace)
   info <- contextInfo
   let code = case info of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      iname = ModuleName iname' ns
+      iname = ModuleName iname' Nothing
       ihash = hash $ encodeUtf8 (_unCode code)
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
             bodyForm $ specialForm $ \r -> case r of
@@ -451,17 +439,6 @@ interface = do
   return $ TModule
     (Interface iname code m _msImports)
     (abstract (const Nothing) bd) info
-
-namespace :: Compile (Term Name)
-namespace = do
-  bareName <- _atomAtom <$> bareAtom
-  info <- contextInfo
-  let ns = NamespaceName bareName
-  use (psUser . csNamespace) >>= \case
-    Just ns' -> syntaxError $ "A namespace has already been declared: " ++ asString' ns'
-    Nothing  -> pure ()
-  psUser . csNamespace .= (Just ns)
-  pure $ TNamespace ns info
 
 emptyDef :: Compile (Term Name)
 emptyDef = do
