@@ -675,7 +675,7 @@ type family Concrete (a :: Ty) where
 
 -- Note [Supplying Dicts]:
 --
--- withEq, withShow, and withUserShow are straightforward uses of has because
+-- withEq, withShow, and withUserShow are straightforward uses of `has` because
 -- they apply to all types.
 --
 -- However, withSMTValue and withSymWord only apply to simple types, the

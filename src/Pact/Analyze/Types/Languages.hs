@@ -150,8 +150,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
   Constantly   :: SingTy a   -> t a -> Existential t -> Core t a
 
   -- compose
-  -- * f :: a -> b (free a)
-  -- * g :: b -> c (free b)
+  -- - f :: a -> b (free a)
+  -- - g :: b -> c (free b)
   -- :: c
   Compose
     :: SingTy a -> SingTy   b -> SingTy   c
@@ -533,15 +533,42 @@ instance
   ListLength ty1 a1           == ListLength ty2 a2           = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> singEqTmList ty1 a1 a2
-  ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
+  ListReverse ty1 a1          == ListReverse _ty2 a2         = singEqTmList ty1 a1 a2
+  ListSort ty1 a1             == ListSort _ty2 a2            = singEqTmList ty1 a1 a2
   ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
+  ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
+  ListTake ty1 i1 l1          == ListTake _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
   MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && singEqTm ty1 b1 b2
   LiteralList ty1 l1          == LiteralList _ty2 l2         = singEqListTm ty1 l1 l2
-  ListMap tya1 tyb1 (Open v1 nm1 b1) as1 == ListMap tya2 _ (Open v2 nm2 b2) as2
+  ListMap tya1 tyb1 f1 as1 == ListMap tya2 _ f2 as2
     = case singEq tya1 tya2 of
       Nothing   -> False
-      Just Refl -> singEqTm tyb1 b1 b2 && singEqTmList tya1 as1 as2
-        && v1 == v2 && nm1 == nm2
+      Just Refl -> singEqOpen tyb1 f1 f2 && singEqTmList tya1 as1 as2
+  ListFilter ty1 f1 b1 == ListFilter _ty2 f2 b2
+    = singEqOpen SBool f1 f2 && singEqTmList ty1 b1 b2
+  ListFold tya1 tyb1 (Open v1 nm1 f1) b1 c1
+    == ListFold _tya2 tyb2 (Open v2 nm2 f2) b2 c2
+    = case singEq tyb1 tyb2 of
+        Nothing   -> False
+        Just Refl -> v1 == v2 && nm1 == nm2 && singEqOpen tya1 f1 f2
+          && singEqTm tya1 b1 b2 && singEqTmList tyb1 c1 c2
+  AndQ tya1 f1 g1 a1 == AndQ tya2 f2 g2 a2
+    = case singEq tya1 tya2 of
+      Nothing   -> False
+      Just Refl -> singEqOpen SBool f1 f2 && singEqOpen SBool g1 g2
+        && singEqTm tya1 a1 a2
+  OrQ tya1 f1 g1 a1 == OrQ tya2 f2 g2 a2
+    = case singEq tya1 tya2 of
+      Nothing   -> False
+      Just Refl -> singEqOpen SBool f1 f2 && singEqOpen SBool g1 g2
+        && singEqTm tya1 a1 a2
+  Where s1 tya1 a1 b1 c1 == Where s2 tya2 a2 b2 c2
+    = case singEq tya1 tya2 of
+      Nothing   -> False
+      Just Refl -> s1 == s2 && a1 == a2 && singEqOpen SBool b1 b2 && c1 == c2
+  Typeof ty1 a1 == Typeof ty2 a2 = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> singEqTm ty1 a1 a2
 
   _                           == _                           = False
 
@@ -822,9 +849,9 @@ instance
     Lit a                    -> userShowPrec d a
     Sym s                    -> tShow s
     Var _vid name            -> name
-    Identity ty x            -> parenList ["identity", singUserShowTm ty x]
-    Constantly ty x y        -> parenList ["constantly", singUserShowTm ty x, userShowPrec 11 y]
-    Compose _ tyb tyc _ b c  -> parenList ["compose", singUserShowOpen tyb b, singUserShowOpen tyc c]
+    Identity ty x            -> parenList [SIdentity, singUserShowTm ty x]
+    Constantly ty x y        -> parenList [SConstantly, singUserShowTm ty x, userShowPrec 11 y]
+    Compose _ tyb tyc _ b c  -> parenList [SCompose, singUserShowOpen tyb b, singUserShowOpen tyc c]
     StrConcat x y            -> parenList [SConcatenation, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
     StrToInt s               -> parenList [SStringToInteger, userShow s]
@@ -862,36 +889,35 @@ instance
     MakeList ty x y          -> parenList [SMakeList, userShow x, singUserShowTm ty y]
     LiteralList ty lst       -> singUserShowListTm ty lst
     ListMap tya tyb b as -> parenList
-      [ "map"
+      [ SMap
       , singUserShowOpen tyb b
       , singUserShowTmList tya as
       ]
     ListFilter ty a b -> parenList
-      [ "filter"
+      [ SFilter
       , singUserShowOpen SBool a
       , singUserShowTmList ty b
       ]
     ListFold tya tyb (Open _ nm a) b c -> parenList
-      [ "fold"
+      [ SFold
       , parenList [ "lambda", nm, singUserShowOpen tya a ]
       , singUserShowTm tya b
       , singUserShowTmList tyb c
       ]
     AndQ ty a b c -> parenList
-      [ "and?"
+      [ SAndQ
       , singUserShowOpen SBool a
       , singUserShowOpen SBool b
       , singUserShowTm ty c
       ]
     OrQ ty a b c -> parenList
-      [ "or?"
+      [ SOrQ
       , singUserShowOpen SBool a
       , singUserShowOpen SBool b
       , singUserShowTm ty c
       ]
-    -- Where _ _ a b c -> parenList ["where", userShow a, singUserShowOpen SBool b, userShow c]
-    Typeof ty a -> parenList ["typeof", singUserShowTm ty a]
-    _ -> "TODO: UserShow (Core tm)"
+    -- Where _ _ a b c -> parenList [SWhere, userShow a, singUserShowOpen SBool b, userShow c]
+    Typeof ty a -> parenList [STypeof, singUserShowTm ty a]
 
 
 data BeforeOrAfter = Before | After

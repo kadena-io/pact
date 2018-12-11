@@ -153,11 +153,8 @@ Nothing  ?? err = throwErrorNoLoc err
 infix 0 ??
 
 evalCore
-  :: forall m a a'.
-     ( Analyzer m
-     , a' ~ Concrete a
-     , SymWord a', Show (Core (TermOf m) a))
-  => Core (TermOf m) a -> m (S a')
+  :: (Analyzer m, SymWord (Concrete a))
+  => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)                           = pure (literalS a)
 evalCore (Sym s)                           = pure s
 evalCore (Var vid name) = do
@@ -168,14 +165,14 @@ evalCore (Var vid name) = do
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore (Identity ty a)                   = withShow ty $ eval a
-evalCore (Constantly tya a _) = withShow tya $ eval a
+evalCore (Constantly tya a _)              = withShow tya $ eval a
 evalCore (Compose tya tyb tyc a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
-  tya' <- singSimple tya ?? SimpleKindRequired
-  tyb' <- singSimple tyb ?? SimpleKindRequired
-  tyc' <- singSimple tyc ?? SimpleKindRequired
+  tya' <- refineSimple tya ?? SimpleKindRequired
+  tyb' <- refineSimple tyb ?? SimpleKindRequired
+  tyc' <- refineSimple tyc ?? SimpleKindRequired
   withShow tya' $ withSymWord tya' $
     withShow tyb' $ withSymWord tyb' $
-      withShow tyc' $ do -- withSymWord tyc' $ do
+      withShow tyc' $ do
         a' <- eval a
         b' <- withVar vida (mkAVal a') $ eval tmb
         withVar vidb (mkAVal b') $ eval tmc
@@ -337,9 +334,8 @@ evalCore Where{} = throwErrorNoLoc "Not yet supported: where"
 --   withVar vid (mkAVal' v) $ eval f
 
 evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
-
-
-evalCore x = error $ "no case for: " ++ show x
+evalCore ObjTake{}      = throwErrorNoLoc "not yet implemented"
+evalCore ObjDrop{}      = throwErrorNoLoc "not yet implemented"
 
 withMergeableSbv
   :: forall a b m.

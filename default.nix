@@ -59,7 +59,7 @@ in
               sha256 = "0jh8lq3h37xhbgparf1giii8lph3vyd7p59qhdp9hgfkj0qsdx93";
             }) {});
 
-            # sbv with two (temporary) patches
+            # sbv with a patch to disable "unsupported query call" until it's fixed upstream
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "joelburget";
               repo = "sbv";

@@ -51,8 +51,8 @@ import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 
-import           Pact.Analyze.Feature       hiding (TyVar, Var, col, list, obj,
-                                             str, time)
+import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var, col,
+                                             list, obj, str, time)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -87,9 +87,9 @@ data TranslateFailureNoLoc
   | NoReadMsg (AST Node)
   | DeprecatedList Node
   | SimpleTypeRequired
-  -- For cases we don't handle yet:
-  | UnhandledType Node (Pact.Type Pact.UserType)
   | TypeError Node
+  | FreeVarInvariantViolation Text
+  | UnhandledType Node (Pact.Type Pact.UserType)
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -117,8 +117,9 @@ describeTranslateFailureNoLoc = \case
   NoReadMsg _ -> "`read-msg` is not yet supported"
   DeprecatedList node -> "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
   SimpleTypeRequired -> "Lists are currently limited to holding simply-typed objects"
-  UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   TypeError node -> "\"impossible\" post-typechecker type error in node: " <> tShow node
+  FreeVarInvariantViolation msg -> msg
+  UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
 
 data TranslateEnv
   = TranslateEnv
@@ -1042,8 +1043,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Existential needleTy needle <- translateNode val
     collection'             <- translateNode collection
     case collection' of
-      -- Existential SStr needle -> case collection' of
-      Existential SStr haystack -> case needleTy of
+      ESimple SStr haystack -> case needleTy of
         SStr -> pure $ Existential SBool $ CoreTerm $ StrContains needle haystack
         _    -> throwError' $ TypeError node
       Existential (SList ty) haystack -> case singEq needleTy ty of
@@ -1080,10 +1080,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Existential ty       a'   <- translateNode a
     pure $ Existential (SList ty) $ CoreTerm $ MakeList ty num' a'
 
-  AST_Step                -> throwError' $ NoPacts astNode
-  AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
-
-  AST_NFun _node "identity" [a] -> do
+  AST_NFun _node SIdentity [a] -> do
     ea' <- translateNode a
     pure $ case ea' of
       Existential ty     a' -> Existential ty     $ CoreTerm $ Identity ty      a'
@@ -1091,7 +1088,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       -- EList   ty     a' -> EList   ty     $ CoreTerm $ Identity ty      a'
       -- EObject schema a' -> EObject schema $ CoreTerm $ Identity SObject a'
 
-  AST_NFun _node "constantly" [ a, b ] -> do
+  AST_NFun _node SConstantly [ a, b ] -> do
     ea' <- translateNode a
     b'  <- translateNode b
     pure $ case ea' of
@@ -1100,7 +1097,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       -- EList   ty     a' -> EList   ty     $ CoreTerm $ Constantly ty      a' b'
       -- EObject schema a' -> EObject schema $ CoreTerm $ Constantly SObject a' b'
 
-  AST_NFun _node "compose" [ f, g, a ] -> do
+  AST_NFun _node SCompose [ f, g, a ] -> do
     Existential tya a' <- translateNode a
     avarLst        <- use tsFoundVars
     tsFoundVars .= []
@@ -1118,7 +1115,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Existential tyc $ CoreTerm $
       Compose tya tyb tyc a' (Open avid "a" f') (Open bvid "b" g')
 
-  AST_NFun node "map" [ fun, l ] -> do
+  AST_NFun node SMap [ fun, l ] -> do
     expectNoFreeVars
     Existential bTy fun' <- translateNode fun
     (vid, varName, EType aType) <- captureOneFreeVar
@@ -1133,7 +1130,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         Existential (SList bTy) $ CoreTerm $ ListMap aTy' bTy
           (Open vid varName fun') l'
 
-  AST_NFun node "filter" [ fun, l ] -> do
+  AST_NFun node SFilter [ fun, l ] -> do
     expectNoFreeVars
     Existential SBool fun' <- translateNode fun
     (vid, varName, EType aType) <- captureOneFreeVar
@@ -1148,9 +1145,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
         Existential (SList aTy') $ CoreTerm $ ListFilter aTy'
           (Open vid varName fun') l'
 
-  AST_NFun node "fold" [ fun, a, l ] -> do
+  AST_NFun node SFold [ fun, a, l ] -> do
     expectNoFreeVars
     Existential funTy fun' <- translateNode fun
+
+    -- Note: The order of these variables is important. `a` should be the first
+    -- variable we encounter when traversing `fun` (and `b` the second) because
+    -- `a` is the first argument and `b` is the second.
+    --
+    -- TODO(joel): this doesn't seem to follow
+    --
+    -- `a` encountered first, `b` will be consed on top of it, resulting in the
+    -- variables coming out backwards.
     [ (vidb, varNameb, EType tyb), (vida, varNamea, EType tya) ]
       <- captureTwoFreeVars
 
@@ -1170,7 +1176,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
             (Open vida varNamea (Open vidb varNameb fun')) a' l'
 
   AST_NFun _ name [ f, g, a ]
-    | name == "and?" || name == "or?" -> do
+    | name == SAndQ || name == SOrQ -> do
     expectNoFreeVars
     Existential SBool f' <- translateNode f
     (fvid, fvarName, _) <- captureOneFreeVar
@@ -1183,9 +1189,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Existential SBool $ CoreTerm $ (if name == "and?" then AndQ else OrQ)
       aTy' (Open fvid fvarName f') (Open gvid gvarName g') a'
 
---   TODO
---   AST_NFun _ "where" [ field, fun, obj ] -> do
---     Existential SStr field' <- translateNode field
+  -- AST_NFun _ SWhere [ field, fun, obj ] -> do
+  --   Existential SStr field' <- translateNode field
 
 --     expectNoFreeVars
 --     Existential SBool fun' <- translateNode fun
@@ -1197,14 +1202,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
 --     pure $ Existential SBool $ CoreTerm $
 --       Where objTy freeTy' field' (Open vid varName fun') obj'
 
-  AST_NFun _ "typeof" [tm] -> do
+  AST_NFun _ STypeof [tm] -> do
     etm <- translateNode tm
     pure $ Existential SStr $ CoreTerm $ case etm of
       Existential ty tm' -> Typeof ty      tm'
       -- EList   ty tm' -> Typeof ty      tm'
       -- EObject _  tm' -> Typeof SObject tm'
 
-  AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
+  AST_Step                -> throwError' $ NoPacts astNode
+  AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
+  AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
 
@@ -1214,7 +1221,8 @@ captureOneFreeVar = do
   tsFoundVars .= []
   case vs of
     [v] -> pure v
-    _   -> error $ "unexpected vars found: " ++ show vs
+    _   -> throwError' $ FreeVarInvariantViolation $
+      "unexpected vars found: " <> tShow vs
 
 captureTwoFreeVars :: TranslateM [(VarId, Text, EType)]
 captureTwoFreeVars = do
@@ -1222,14 +1230,16 @@ captureTwoFreeVars = do
   tsFoundVars .= []
   case vs of
     [_, _] -> pure vs
-    _      -> error $ "unexpected vars found: " ++ show vs
+    _      -> throwError' $ FreeVarInvariantViolation $
+      "unexpected vars found: " <> tShow vs
 
 expectNoFreeVars :: TranslateM ()
 expectNoFreeVars = do
   vars <- use tsFoundVars
   case vars of
     [] -> pure ()
-    _  -> error "invariant violation: free variable unexpectedly found"
+    _  -> throwError' $ FreeVarInvariantViolation
+      "invariant violation: free variable unexpectedly found"
 
 -- TODO: this is weird now
 requireSimple :: SingTy a -> TranslateM (SingTy a)

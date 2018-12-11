@@ -222,7 +222,8 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
   ]
 genCore (BoundedString len) = Gen.recursive Gen.choice [
     Existential SStr . StrLit
-      <$> Gen.string (Range.exponential 1 len) Gen.unicode
+      -- TODO: unicode (SBV has trouble with some unicode characters)
+      <$> Gen.string (Range.exponential 1 len) Gen.latin1
   ] [
     scale 4 $ Gen.subtermM2
       (genCore (BoundedString (len `div` 2)))
@@ -250,12 +251,28 @@ genCore BoundedBool = Gen.recursive Gen.choice [
   , do op <- Gen.element [AndOp, OrOp]
        Gen.subtermM2 (genCore BoundedBool) (genCore BoundedBool) $ \x y ->
          mkBool $ Logical op [extract x, extract y]
-  -- , do op <- Gen.element [Eq', Neq']
-  --      let aSize = undefined
-  --          ty = undefined
-  --      Gen.subtermM2
-  --        (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $ \x y ->
-  --          mkBool $ ListEqNeq ty op (extract x) (extract y)
+  , do op <- Gen.element [Eq', Neq']
+       EType ty <- Gen.element
+         -- TODO?: keyset
+         [EType SInteger, EType SDecimal, EType SBool, EType SStr, EType STime]
+       Just ty' <- pure $ refineSimple ty
+       let aSize = case ty of
+             SInteger -> intSize
+             SDecimal -> decSize
+             SStr     -> strSize
+             SBool    -> BoundedBool
+             STime    -> BoundedTime
+             _        -> error "impossible"
+       Gen.subtermM2
+         (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $
+           \elst1 elst2 -> case (elst1, elst2) of
+             (EList (SList lty1) l1, EList (SList lty2) l2) ->
+               case singEq lty1 ty' of
+                 Nothing   -> error "impossible"
+                 Just Refl -> case singEq lty2 ty' of
+                   Nothing   -> error "impossible"
+                   Just Refl -> mkBool $ ListEqNeq ty' op l1 l2
+             _ -> error (show (elst1, elst2))
   , Gen.subtermM (genCore BoundedBool) $ \x ->
       mkBool $ Logical NotOp [extract x]
   ]
@@ -271,24 +288,35 @@ genCore BoundedKeySet = Existential SKeySet . Lit' . KeySet
   <$> genInteger (0 ... 2)
 genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
   -- EqNeq, At, Contains
-  [ Gen.subtermM (genCore bound) $ \(Existential lty@(SList ty) lst) ->
-      pure $ Existential lty $ Inj $ ListReverse ty lst
-  , Gen.subtermM (genCore bound) $ \(Existential lty@(SList ty) lst) ->
-      pure $ Existential lty $ Inj $ ListSort ty lst
-  , Gen.subtermM2 (genCore bound) (genCore bound) $ \
-      (Existential lty@(SList ty) l1)
-      (Existential lty2 l2) -> case singEq lty lty2 of
+  [ Gen.subtermM (genCore bound) $ \case
+      Existential lty@(SList ty) lst -> pure $ Existential lty $ Inj $ ListReverse ty lst
+      other -> error (show other)
+  , Gen.subtermM (genCore bound) $ \case
+      Existential lty@(SList ty) lst -> pure $ Existential lty $ Inj $ ListSort ty lst
+      other -> error (show other)
+  , Gen.subtermM2 (genCore bound) (genCore bound) $ \elst1 elst2 ->
+    case (elst1, elst2) of
+      (Existential lty@(SList ty) l1, Existential lty2 l2) -> case singEq lty lty2 of
         Nothing   -> error "impossible"
         Just Refl -> pure $ Existential lty $ Inj $ ListConcat ty l1 l2
+      _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
-      \(Existential lty@(SList ty) l) (Existential SInteger i) ->
-        pure $ Existential lty $ Inj $ ListDrop ty i l
+      \elst1 elst2 -> case (elst1, elst2) of
+      (Existential lty@(SList ty) l, ESimple SInteger i)
+        -> pure $ Existential lty $ Inj $ ListDrop ty i l
+      _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
-      \(Existential lty@(SList ty) l) (Existential SInteger i) ->
-        pure $ Existential lty $ Inj $ ListTake ty i l
-  , Gen.subtermM2 (genCore (BoundedInt (0 ... 50))) (genCore elemBound) $
-      \(Existential SInteger i) (Existential ty a) ->
-        pure $ Existential (SList ty) $ Inj $ MakeList ty i a
+      \elst1 elst2 -> case (elst1, elst2) of
+      (Existential lty@(SList ty) l, ESimple SInteger i)
+        -> pure $ Existential lty $ Inj $ ListTake ty i l
+      _ -> error (show (elst1, elst2))
+  -- Note: we currently use bounded list checking so anything beyond 10 is
+  -- pointless
+  , Gen.subtermM2 (genCore (BoundedInt (0 ... 5))) (genCore elemBound) $
+      \elst1 elst2 -> case (elst1, elst2) of
+      (ESimple SInteger i, ESimple ty a)
+        -> pure $ Existential (SList ty) $ Inj $ MakeList ty i a
+      _ -> error (show (elst1, elst2))
   -- LiteralList
   -- , Gen.subtermM
   ]
