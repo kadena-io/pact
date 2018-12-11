@@ -18,8 +18,8 @@
 {-# LANGUAGE TypeOperators              #-}
 
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE PolyKinds       #-}
-{-# LANGUAGE TypeInType       #-}
+{-# LANGUAGE PolyKinds                  #-}
+{-# LANGUAGE TypeInType                 #-}
 
 module Pact.Analyze.Types.Shared where
 
@@ -413,8 +413,10 @@ symRowKey = coerceS
 -- | Typed symbolic value.
 type TVal = (EType, AVal)
 
-type family Concrete2 (f :: a -> b) (m :: Mapping Symbol a) :: Mapping Symbol b
-type instance Concrete2 f (k ':-> v) = k ':-> f v
+-- type family ConcreteMapping (m :: [Mapping Symbol a])
+--     :: [Mapping Symbol (Concrete a)] where
+--   ConcreteMapping [] = []
+--   ConcreteMapping ((k ':-> v) ': m) = k ':-> Concrete v ': ConcreteMapping m
 
 newtype Object (m :: [Mapping Symbol Type]) = Object (SMap.Map m)
 
@@ -426,19 +428,26 @@ newtype Object (m :: [Mapping Symbol Type]) = Object (SMap.Map m)
 --   Object (SMap.Ext SMap.Var v m) == Object (SMap.Ext SMap.Var v' m')
 --    = v == v' && m == m'
 
-newtype Schema
-  = Schema (Map Text EType)
-  deriving (Show, Eq, Semigroup)
+newtype Schema (m :: [Mapping Symbol Ty]) = Schema (SMap.Map m)
 
-instance Monoid Schema where
-  mempty = Schema Map.empty
+-- instance Monoid Schema where
+--   mempty = Schema Map.empty
 
-  -- NOTE: left-biased semantics of schemas for Pact's "object merging":
-  mappend = (<>)
+--   -- NOTE: left-biased semantics of schemas for Pact's "object merging":
+--   mappend = (<>)
 
 -- Note: this doesn't exactly match the pact syntax
-instance UserShow Schema where
-  userShowPrec d (Schema schema) = userShowPrec d schema
+instance UserShow (Schema m) where
+  userShowPrec d (Schema schema) = "TODO" -- userShowPrec d schema
+
+data ESchema where
+  ESchema :: SingTy ('TyObject m) -> Schema m -> ESchema
+
+instance Eq ESchema where
+  (==) = error "TODO"
+
+instance Show ESchema where
+  show = error "TODO"
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
@@ -693,7 +702,7 @@ withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
 withUserShow = error "TODO" -- has @UserShowConcrete
 
 withSMTValue
-  :: IsSimple a ~ True
+  :: IsSimple a ~ 'True
   => SingTy a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = withDict . singMkSMTValue
   where
@@ -709,7 +718,7 @@ withSMTValue = withDict . singMkSMTValue
       SAny     -> Dict
 
 withSymWord
-  :: IsSimple a ~ True
+  :: IsSimple a ~ 'True
   => SingTy a -> (SymWord (Concrete a) => b) -> b
 withSymWord = withDict . singMkSymWord
   where
@@ -724,13 +733,13 @@ withSymWord = withDict . singMkSymWord
       SKeySet  -> Dict
       SAny     -> Dict
 
-columnMapToSchema :: ColumnMap EType -> Schema
-columnMapToSchema
-  = Schema
-  . Map.fromList
-  . fmap (\(ColumnName name, ety) -> (fromString name, ety))
-  . Map.toList
-  . _columnMap
+-- columnMapToSchema :: ColumnMap EType -> Schema
+-- columnMapToSchema
+--   = Schema
+--   . Map.fromList
+--   . fmap (\(ColumnName name, ety) -> (fromString name, ety))
+--   . Map.toList
+--   . _columnMap
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }

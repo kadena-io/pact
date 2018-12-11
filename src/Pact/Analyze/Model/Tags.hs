@@ -35,6 +35,7 @@ import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Alloc   (Alloc, free)
 import           Pact.Analyze.Types
+import qualified Pact.Analyze.Types.Map as SMap
 
 allocS :: SymWord a => Alloc (S a)
 allocS = free
@@ -42,20 +43,22 @@ allocS = free
 allocSbv :: SymWord a => Alloc (SBV a)
 allocSbv = _sSbv <$> allocS
 
-allocSchema :: Schema -> Alloc Object
-allocSchema (Schema fieldTys) = Object <$>
-  for fieldTys (\ety -> (ety,) <$> allocAVal ety)
+allocSchema :: Schema m -> Alloc UObject
+allocSchema (Schema m) = case m of
+  SMap.Empty            -> pure $ UObject Map.empty
+  -- TODO
+  -- SMap.Ext SMap.Var v m -> allocSchema m
+-- allocSchema (Schema fieldTys) = UObject <$>
+--   for fieldTys (\ety -> (ety,) <$> allocAVal ety)
 
 allocAVal :: EType -> Alloc AVal
 allocAVal = \case
-  EObjectTy schema -> AnObj <$> allocSchema schema
-  EType (SList ty :: SingTy k ty) -> mkAVal <$>
-    (withSymWord ty allocS :: Alloc (S [Concrete (ListElem ty)]))
-  EType (ty :: SingTy k ty) -> singCase ty
-    (\Refl -> mkAVal <$>
-      (withSymWord ty allocS :: Alloc (S (Concrete ty))))
-    (\Refl -> error "this branch is impossible in the current formulation")
-    (\Refl -> error "this branch is impossible in the current formulation")
+  EType (SObject ty) -> AnObj <$> allocSchema (Schema ty)
+  _ -> error "TODO"
+  -- EType (SList ty :: SingTy ty) -> mkAVal <$>
+  --   (withSymWord ty allocS :: Alloc (S [Concrete (ListElem ty)]))
+  -- EType (ty :: SingTy ty) -> mkAVal <$>
+  --   (withSymWord ty allocS :: Alloc (S (Concrete ty)))
 
 allocTVal :: EType -> Alloc TVal
 allocTVal ety = (ety,) <$> allocAVal ety
@@ -104,10 +107,10 @@ allocModelTags argsMap locatedTm graph = ModelTags
             Just arg -> pure (vid, arg)
 
     allocAccesses
-      :: Traversal' TraceEvent (Schema, Located TagId)
+      :: Traversal' TraceEvent (ESchema, Located TagId)
       -> Alloc (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
-      for (toListOf (traverse.p) events) $ \(schema, Located info tid) -> do
+      for (toListOf (traverse.p) events) $ \(ESchema _ schema, Located info tid) -> do
         srk <- allocS
         obj <- allocSchema schema
         suc <- allocSbv
@@ -120,7 +123,7 @@ allocModelTags argsMap locatedTm graph = ModelTags
     allocWrites = allocAccesses traceWriteT
 
       where
-        traceWriteT :: Traversal' TraceEvent (Schema, Located TagId)
+        traceWriteT :: Traversal' TraceEvent (ESchema, Located TagId)
         traceWriteT f event = case event of
           TraceWrite _writeType schema tid -> const event <$> f (schema, tid)
           _                                -> pure event
@@ -175,18 +178,19 @@ saturateModel =
     fetchTVal (ety, av) = (ety,) <$> go ety av
       where
         go :: EType -> AVal -> SBV.Query AVal
-        go (EType (ty :: SingTy k t)) (AVal _mProv sval) = singCase ty
-          (\Refl -> withSymWord ty $ withSMTValue ty $
-            mkAVal' . SBV.literal
-              <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
-          (\Refl -> case ty of
-            SList ty' -> withSymWord ty' $ withSMTValue ty' $
-              mkAVal' . SBV.literal
-                <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
+        go (EType (SObject _)) (AnObj obj) = AnObj <$> fetchObject obj
 
-          (\Refl -> error "impossible in current formulation: should be EObjectTy")
+        -- TODO
+        -- go (EType (SList ty :: SingTy t)) (AVal _mProv sval) =
+        --   withSymWord ty $ withSMTValue ty $
+        --     mkAVal' . SBV.literal
+        --       <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
 
-        go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
+        -- go (EType (ty :: SingTy t)) (AVal _mProv sval) =
+        --   withSymWord ty $ withSMTValue ty $
+        --     mkAVal' . SBV.literal
+        --       <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
+
         go a b = error $ "fetchTVal: impossible: " ++ show (a, b)
 
     -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
@@ -196,8 +200,8 @@ saturateModel =
     fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBV.Query (S a)
     fetchS = traverseOf s2Sbv fetchSbv
 
-    fetchObject :: Object -> SBVI.Query Object
-    fetchObject (Object fields) = Object <$> traverse fetchTVal fields
+    fetchObject :: UObject -> SBVI.Query UObject
+    fetchObject (UObject fields) = UObject <$> traverse fetchTVal fields
 
     fetchAccess :: Access -> SBV.Query Access
     fetchAccess (Access sRk obj suc) = do

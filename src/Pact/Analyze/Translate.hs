@@ -304,19 +304,19 @@ startNewSubpath = do
   pure p
 
 tagDbAccess
-  :: (Schema -> Located TagId -> TraceEvent)
+  :: (ESchema -> Located TagId -> TraceEvent)
   -> Node
-  -> Schema
+  -> ESchema
   -> TranslateM TagId
 tagDbAccess mkEvent node schema = do
   tid <- genTagId
   emit $ mkEvent schema (Located (nodeInfo node) tid)
   pure tid
 
-tagRead :: Node -> Schema -> TranslateM TagId
+tagRead :: Node -> ESchema -> TranslateM TagId
 tagRead = tagDbAccess TraceRead
 
-tagWrite :: WriteType -> Node -> Schema -> TranslateM TagId
+tagWrite :: WriteType -> Node -> ESchema -> TranslateM TagId
 tagWrite = tagDbAccess . TraceWrite
 
 tagAssert :: Node -> TranslateM TagId
@@ -530,7 +530,7 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
 
 translateObjBinding
   :: [(Named Node, AST Node)]
-  -> Schema
+  -> Schema m
   -> [AST Node]
   -> ETerm
   -> TranslateM ETerm

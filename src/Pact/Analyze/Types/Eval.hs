@@ -85,9 +85,7 @@ class ( MonadError AnalyzeFailure m
       => Analyzer m
   where
     type TermOf m   :: Ty -> *
-    eval            :: (a' ~ Concrete a, Show a', SymWord a')
-                    => TermOf m a           -> m (S a')
-    evalO           :: TermOf m 'TyObject   -> m Object
+    eval            :: TermOf m a           -> m (S (Concrete a))
     throwErrorNoLoc :: AnalyzeFailureNoLoc  -> m a
     getVar          :: VarId                -> m (Maybe AVal)
     withVar         :: VarId -> AVal -> m a -> m a
@@ -125,8 +123,8 @@ mkAnalyzeEnv tables args tags info = do
 
   columnIds <- for tables $ \(Table tname ut _) ->
     case maybeTranslateUserType' ut of
-      Just (EObjectTy (Schema schema)) -> Just
-        (TableName (T.unpack tname), varIdColumns schema)
+      Just (EType (SObject schema)) -> Just
+        (TableName (T.unpack tname), error "TODO") -- varIdColumns schema)
       _ -> Nothing
 
   let columnIds' = TableMap (Map.fromList columnIds)

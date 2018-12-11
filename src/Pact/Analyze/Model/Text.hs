@@ -47,17 +47,16 @@ showTVal (ety, av) = case av of
   OpaqueVal   -> "[opaque]"
   AnObj obj   -> showObject obj
   AVal _ sval -> case ety of
-    EObjectTy _           -> error "showModel: impossible object type for AVal"
-    EType (ty :: SingTy k t) -> singCase ty
-      (\Refl -> withUserShow ty $ withSymWord ty $
-        showSbv (SBVI.SBV sval :: SBV (Concrete t)))
-      (\Refl -> case ty of
-        SList ty' -> withUserShow ty' $ withSymWord ty' $
-          showSbv (SBVI.SBV sval :: SBV (Concrete t)))
-      (\Refl -> error "showModel: impossible object type for AVal")
+    EType (SObject _) -> error "showModel: impossible object type for AVal"
+    EType (SList ty :: Sing t) -> error "TODO"
+      -- withUserShow ty $ withSymWord ty $
+      -- showSbv (SBVI.SBV sval :: SBV (Concrete t))
+    EType (ty :: Sing t) -> error "TODO"
+      -- withUserShow ty $ withSymWord ty $
+      -- showSbv (SBVI.SBV sval :: SBV (Concrete t))
 
-showObject :: Object -> Text
-showObject (Object m) = "{ "
+showObject :: UObject -> Text
+showObject (UObject m) = "{ "
   <> T.intercalate ", "
        (ifoldr (\key val acc -> showObjMapping key val : acc) [] m)
   <> " }"

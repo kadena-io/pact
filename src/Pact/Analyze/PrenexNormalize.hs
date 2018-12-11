@@ -41,8 +41,8 @@ float _ty p = case p of
   PropSpecific RowEnforced{}      -> ([], p)
   PropSpecific IntColumnDelta{}   -> ([], p)
   PropSpecific DecColumnDelta{}   -> ([], p)
-  PropSpecific (PropRead ba schema tn pRk)
-    -> PropSpecific . PropRead ba schema tn <$> singFloat pRk
+  PropSpecific (PropRead ty schema ba tn pRk)
+    -> PropSpecific . PropRead ty schema ba tn <$> singFloat pRk
 
   -- functions
   CoreProp (Identity ty a) -> CoreProp . Identity ty <$> float ty a;

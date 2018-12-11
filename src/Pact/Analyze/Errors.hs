@@ -13,7 +13,7 @@ import qualified Pact.Types.Persistence as Pact
 import           Pact.Analyze.Types
 
 data AnalyzeFailureNoLoc
-  = AtHasNoRelevantFields EType Schema
+  = AtHasNoRelevantFields EType ESchema
   | AValUnexpectedlySVal SBVI.SVal
   | AValUnexpectedlyObj EType
   | KeyNotPresent Text EType
@@ -29,7 +29,7 @@ data AnalyzeFailureNoLoc
   | OpaqueValEncountered
   | VarNotInScope Text VarId
   | UnsupportedObjectInDbCell
-  | InvalidDbWrite Pact.WriteType Schema EType
+  | InvalidDbWrite Pact.WriteType ESchema EType
   | SimpleKindRequired
   -- For cases we don't handle yet:
   | UnhandledTerm Text

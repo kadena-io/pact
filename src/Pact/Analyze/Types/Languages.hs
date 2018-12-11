@@ -979,10 +979,12 @@ data PropSpecific (a :: Ty) where
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
 
-  PropRead :: BeforeOrAfter -> Schema -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
+  PropRead :: SingTy ('TyObject m) -> Schema m -> BeforeOrAfter -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
 
-deriving instance Eq   (Concrete a) => Eq   (PropSpecific a)
-deriving instance Show (Concrete a) => Show (PropSpecific a)
+instance Eq   (Concrete a) => Eq   (PropSpecific a) where -- TODO
+instance Show (Concrete a) => Show (PropSpecific a) where -- TODO
+-- deriving instance Eq   (Concrete a) => Eq   (PropSpecific a)
+-- deriving instance Show (Concrete a) => Show (PropSpecific a)
 
 
 data Prop (a :: Ty)
@@ -1016,7 +1018,7 @@ instance UserShow (Concrete a) => UserShow (PropSpecific a) where
     KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
     RowEnforced tn cn rk    -> parenList [SRowEnforced, userShow tn, userShow cn, userShow rk]
     RowExists tn rk ba      -> parenList [SRowExists, userShow tn, userShow rk, userShow ba]
-    PropRead ba _sch tn rk  -> parenList [SPropRead, userShow tn, userShow rk, userShow ba]
+    PropRead _ty _sch ba tn rk  -> parenList [SPropRead, userShow tn, userShow rk, userShow ba]
 
 instance UserShow (Concrete a) => UserShow (Prop a) where
   userShowPrec d = \case
@@ -1226,8 +1228,11 @@ data Term (a :: Ty) where
   NameAuthorized  :: TagId -> Term 'TyStr -> Term 'TyBool
 
   -- Table access
-  Read            ::              TagId -> TableName -> Schema -> Term 'TyStr ->                Term ('TyObject m)
-  Write           :: SingTy ('TyObject m) -> WriteType -> TagId -> TableName -> Schema -> Term 'TyStr -> Term ('TyObject m) -> Term 'TyStr
+  Read            :: SingTy ('TyObject m) -> Schema m -> TagId -> TableName
+    -> Term 'TyStr -> Term ('TyObject m)
+  Write           :: SingTy ('TyObject m) -> Schema m
+    -> WriteType -> TagId -> TableName
+    -> Term 'TyStr -> Term ('TyObject m) -> Term 'TyStr
 
   PactVersion     :: Term 'TyStr
 
@@ -1262,8 +1267,8 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     NameAuthorized _ _
       -> error "NameAuthorized should only appear inside of an Enforce"
 
-    Read _ tab _ x       -> parenList ["read", userShow tab, userShow x]
-    Write ty _ _ tab _ x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty y]
+    Read _ _ _ tab x       -> parenList ["read", userShow tab, userShow x]
+    Write ty _ _ _ tab x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty y]
     PactVersion          -> parenList ["pact-version"]
     Format x y           -> parenList ["format", userShow x, userShow y]
     FormatTime x y       -> parenList ["format", userShow x, userShow y]

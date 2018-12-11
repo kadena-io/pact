@@ -76,8 +76,8 @@ data ScopeType
   deriving (Eq, Show)
 
 data TraceEvent
-  = TraceRead Schema (Located TagId)
-  | TraceWrite WriteType Schema (Located TagId)
+  = TraceRead ESchema (Located TagId)
+  | TraceWrite WriteType ESchema (Located TagId)
   | TraceAssert Recoverability (Located TagId)
   | TraceAuth Recoverability (Located TagId)
   | TraceSubpathStart Path
