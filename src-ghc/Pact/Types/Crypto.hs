@@ -27,7 +27,6 @@ import Control.Applicative
 import Control.Monad.Reader
 import Control.DeepSeq
 
-import Crypto.Ed25519.Pure ( PublicKey, PrivateKey, importPublic, importPrivate, exportPublic, exportPrivate)
 import qualified Crypto.Ed25519.Pure as Ed25519
 import qualified Crypto.Hash as H
 
@@ -157,19 +156,54 @@ verifyHashTx algo h b = if hashTx algo b == h
 initialHashTx :: HashAlgo -> Hash
 initialHashTx algo = hashTx algo mempty
 
-sign :: PPKScheme -> ByteString -> PrivateKey -> PublicKey -> Signature
+sign :: PPKScheme -> ByteString -> PrivateKey -> PublicKey -> Either String Signature
 sign (PPKScheme (_, hashAlgo, sigAlgo)) msg privKey pubKey =
   case sigAlgo of
-    ED25519 -> let (Ed25519.Sig b) = Ed25519.sign hsh privKey pubKey
-               in Signature b
+    ED25519 -> do
+      edPriv <- toEd25519Private privKey
+      edPub <- toEd25519Public pubKey
+      let (Ed25519.Sig b) = Ed25519.sign hsh edPriv edPub
+      return $ Signature b
   where (Hash hsh) = hashTx hashAlgo msg
 
-valid :: PPKScheme -> ByteString -> PublicKey -> Signature -> Bool
+valid :: PPKScheme -> ByteString -> PublicKey -> Signature -> Either String Bool
 valid (PPKScheme (_, hashAlgo, sigAlgo)) msg pubKey sig =
   case sigAlgo of
-    ED25519 -> Ed25519.valid hsh pubKey $ Ed25519.Sig $ exportSignature sig
+    ED25519 -> do
+      edPub <-  toEd25519Public pubKey
+      let edSig = Ed25519.Sig $ exportSignature sig
+      return $ Ed25519.valid hsh edPub edSig
   where (Hash hsh) = hashTx hashAlgo msg
 
+
+data PublicKey =  Pub SignatureAlgo ByteString
+data PrivateKey = Priv SignatureAlgo ByteString
+
+importPublic :: SignatureAlgo -> ByteString -> Maybe PublicKey
+importPublic algo b = case algo of
+  ED25519 -> let b' = Ed25519.exportPublic <$> Ed25519.importPublic b
+             in (Pub algo) <$> b'
+
+importPrivate :: SignatureAlgo -> ByteString -> Maybe PrivateKey
+importPrivate algo b = case algo of
+  ED25519 -> let b' = Ed25519.exportPrivate <$> Ed25519.importPrivate b
+             in (Priv algo) <$> b'
+
+exportPublic :: PublicKey -> (SignatureAlgo, ByteString)
+exportPublic (Pub algo b) = (algo, b)
+
+exportPrivate :: PrivateKey -> (SignatureAlgo, ByteString)
+exportPrivate (Priv algo b) = (algo, b)
+
+toEd25519Public :: PublicKey -> Either String Ed25519.PublicKey
+toEd25519Public (Pub _ b) = case (Ed25519.importPublic b) of
+  Nothing -> Left $ "Invalid Ed25519 Public Key: " ++ show b
+  Just edPub -> Right edPub
+
+toEd25519Private :: PrivateKey -> Either String Ed25519.PrivateKey
+toEd25519Private (Priv _ b) = case (Ed25519.importPrivate b) of
+  Nothing -> Left $ "Invalid Ed25519 Private Key: " ++ show b
+  Just edPriv -> Right edPriv
 
 
 instance Eq PublicKey where
@@ -177,40 +211,41 @@ instance Eq PublicKey where
 instance Ord PublicKey where
   b <= b' = exportPublic b <= exportPublic b'
 instance ToJSON PublicKey where
-  toJSON = toB16JSON . exportPublic
+  toJSON pub = A.object ["type" .= (toJSON typ), "key" .= (toB16JSON key)]
+    where (typ, key) = exportPublic pub
 instance FromJSON PublicKey where
-  parseJSON = withText "PublicKey" parseText
-  {-# INLINE parseJSON #-}
-instance ParseText PublicKey where
-  parseText s = do
-    s' <- parseB16Text s
-    failMaybe ("Public key import failed: " ++ show s) $ importPublic s'
-  {-# INLINE parseText #-}
+  parseJSON = A.withObject "PublicKey" $ \o -> do
+    typ <- (o .: "type") >>= parseJSON
+    key <- (o .: "key") >>= parseB16JSON
+    failMaybe (show typ ++ " Public key import failed: " ++ show key)
+      (importPublic typ key)
 
 instance Eq PrivateKey where
   b == b' = exportPrivate b == exportPrivate b'
 instance Ord PrivateKey where
   b <= b' = exportPrivate b <= exportPrivate b'
 instance ToJSON PrivateKey where
-  toJSON = toB16JSON . exportPrivate
+  toJSON priv = A.object ["type" .= (toJSON typ), "key" .= (toB16JSON key)]
+    where (typ, key) = exportPrivate priv
 instance FromJSON PrivateKey where
-  parseJSON = withText "PrivateKey" parseText
-  {-# INLINE parseJSON #-}
-instance ToJSONKey PublicKey
-instance FromJSONKey PublicKey
-instance ParseText PrivateKey where
-  parseText s = do
-    s' <- parseB16Text s
-    failMaybe ("Private key import failed: " ++ show s) $ importPrivate s'
-  {-# INLINE parseText #-}
+  parseJSON = A.withObject "PrivateKey" $ \o -> do
+    typ <- (o .: "type") >>= parseJSON
+    key <- (o .: "key") >>= parseB16JSON
+    failMaybe (show typ ++ " Private key import failed: " ++ show key)
+      (importPrivate typ key)
 
 instance Serialize PublicKey where
-  put s = S.putByteString (exportPublic s)
-  get = maybe (fail "Invalid PubKey") return =<< (importPublic <$> S.getByteString 32)
+  put s = S.put algo >> S.putByteString b
+    where (algo, b) = exportPublic s
+  get = maybe (fail "Invalid Public Key") return =<< (mkPub <$> pubTuple)
+    where pubTuple = getTwoOf get (S.getByteString 32)
+          mkPub (a', b') = importPublic a' b'
 instance Serialize PrivateKey where
-  put s = S.putByteString (exportPrivate s)
-  get = maybe (fail "Invalid PubKey") return =<< (importPrivate <$> S.getByteString 32)
-
+  put s =  S.put algo >> S.putByteString b
+    where (algo, b) = exportPrivate s
+  get = maybe (fail "Invalid Private Key") return =<< (mkPriv <$> privTuple)
+    where privTuple = getTwoOf get (S.getByteString 32)
+          mkPriv (a', b') = importPrivate a' b'
 
 
 instance ToJSON ByteString where
