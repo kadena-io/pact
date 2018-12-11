@@ -49,9 +49,6 @@ data Quantifier
   = Forall' VarId Text QType
   | Exists' VarId Text QType
 
--- class Float (tm :: Ty -> *) (a :: Ty) where
---   float :: tm a -> ([Quantifier], tm a)
-
 genId :: (MonadState s m, Num i) => Lens' s i -> m i
 genId l = do
   i <- use l

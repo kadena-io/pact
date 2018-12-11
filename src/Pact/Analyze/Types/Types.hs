@@ -45,11 +45,8 @@ type TyColumnName = 'TyStr
 type TyRowKey     = 'TyStr
 type TyKeySetName = 'TyStr
 
--- data Kind = SimpleK | ListK | ObjectK
-
 data family Sing :: k -> Type
 
--- data SingTy :: Ty -> Type where
 data instance Sing (a :: Ty) where
   SInteger ::           Sing 'TyInteger
   SBool    ::           Sing 'TyBool
@@ -148,18 +145,15 @@ class SingMap m where
 instance SingMap '[] where
   singMap = Empty
 
--- instance (SingMap s, SingI v) => SingMap ((k ':-> v) ': s) where
---   singMap = Ext undefined undefined singMap
+type family IsSimple (ty :: Ty) :: Bool where
+  IsSimple ('TyList _)   = 'False
+  IsSimple ('TyObject _) = 'False
+  IsSimple _             = 'True
 
-  -- | TyObject [ Mapping Symbol Ty ]
+type family IsList (ty :: Ty) :: Bool where
+  IsList ('TyList _) = 'True
+  IsList _           = 'False
 
--- refineSimple :: SingTy k a -> Maybe (SingTy 'SimpleK a)
--- refineSimple ty = case ty of
---   SInteger -> Just ty
---   SBool    -> Just ty
---   SStr     -> Just ty
---   STime    -> Just ty
---   SDecimal -> Just ty
---   SKeySet  -> Just ty
---   SAny     -> Just ty
---   _        -> Nothing
+type family IsObject (ty :: Ty) :: Bool where
+  IsObject ('TyObject _) = 'True
+  IsObject _             = 'False

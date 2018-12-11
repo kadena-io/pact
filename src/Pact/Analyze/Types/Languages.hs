@@ -198,6 +198,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- object ops
 
   KeySetEqNeq :: EqNeq -> t 'TyKeySet     -> t 'TyKeySet   -> Core t 'TyBool
+  -- TODO: should be two tys
   ObjectEqNeq :: SingTy ('TyObject m) -> EqNeq -> t ('TyObject m) -> t ('TyObject m) -> Core t 'TyBool
 
   ObjAt       :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t a

@@ -15,8 +15,8 @@ import           Pact.Analyze.Types
 data AnalyzeFailureNoLoc
   = AtHasNoRelevantFields EType Schema
   | AValUnexpectedlySVal SBVI.SVal
-  | AValUnexpectedlyObj Object
-  | KeyNotPresent Text Object
+  | AValUnexpectedlyObj EType
+  | KeyNotPresent Text EType
   | MalformedLogicalOpExec LogicalOp Int
   | ObjFieldOfWrongType Text EType
   | PossibleRoundoff Text
@@ -29,7 +29,7 @@ data AnalyzeFailureNoLoc
   | OpaqueValEncountered
   | VarNotInScope Text VarId
   | UnsupportedObjectInDbCell
-  | InvalidDbWrite Pact.WriteType Schema Object
+  | InvalidDbWrite Pact.WriteType Schema EType
   | SimpleKindRequired
   -- For cases we don't handle yet:
   | UnhandledTerm Text
