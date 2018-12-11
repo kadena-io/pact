@@ -84,6 +84,7 @@ library
       Pact.Analyze.Types
       Pact.Analyze.Types.Eval
       Pact.Analyze.Types.Languages
+      Pact.Analyze.Types.Map
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical
       Pact.Analyze.Types.Shared

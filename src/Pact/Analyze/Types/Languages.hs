@@ -60,7 +60,6 @@ module Pact.Analyze.Types.Languages
   , mkLiteralList
   ) where
 
-import           Data.Map.Strict              (Map)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
@@ -72,6 +71,7 @@ import           Pact.Types.Persistence       (WriteType)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec)
+import           Pact.Analyze.Types.Map (Map)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
@@ -79,28 +79,20 @@ import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util
 
-#define EQ_EXISTENTIAL(tm)                                \
-instance Eq (Existential tm) where                        \
-  ESimple sa ia == ESimple sb ib = case singEq sa sb of { \
-    Just Refl -> withEq sa (ia == ib);                    \
-    Nothing   -> False};                                  \
-  EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
-  _ == _ = False;
+#define EQ_EXISTENTIAL(tm)                                        \
+instance Eq (Existential tm) where                                \
+  Existential sa ia == Existential sb ib = case singEq sa sb of { \
+    Just Refl -> withEq sa (ia == ib);                            \
+    Nothing   -> False};                                          \
 
 #define SHOW_EXISTENTIAL(tm)                                                   \
 instance Show (Existential tm) where {                                         \
   showsPrec d e = showParen (d > 10) $ case e of                               \
-    ESimple ty inv -> showString "ESimple " . showsPrec 11 ty . showString " " \
-      . withShow ty (showsPrec 11 inv);                                        \
-    EList ty lst   -> showString "EList "   . showsPrec 11 ty . showString " " \
-      . withShow ty (showsPrec 11 lst);                                        \
-    EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
-      . showsPrec 11 obj; };                                                   \
+    Existential ty inv -> showString "Existential " . showsPrec 11 ty . showString " " \
+      . withShow ty (showsPrec 11 inv); };                                     \
 instance UserShow (Existential tm) where                                       \
   userShowPrec d e = case e of                                                 \
-    ESimple ty a  -> withUserShow ty (userShowPrec d a);                       \
-    EList ty lst  -> withUserShow ty (userShowPrec d lst);                     \
-    EObject _ty a -> userShowPrec d a;
+    Existential ty a -> withUserShow ty (userShowPrec d a)                   \
 
 -- | Subtyping relation from "Data types a la carte".
 --
@@ -154,16 +146,16 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- variable, or column
   Var :: VarId -> Text -> Core t a
 
-  Identity     :: SingTy k a   -> t a      -> Core t a
-  Constantly   :: SingTy k a   -> t a -> Existential t -> Core t a
+  Identity     :: SingTy a   -> t a      -> Core t a
+  Constantly   :: SingTy a   -> t a -> Existential t -> Core t a
 
   -- compose
   -- * f :: a -> b (free a)
   -- * g :: b -> c (free b)
   -- :: c
   Compose
-    :: SingTy k a -> SingTy k b -> SingTy k c
-    ->        t a -> Open a t b -> Open b t c -> Core t c
+    :: SingTy a -> SingTy   b -> SingTy   c
+    ->      t a -> Open a t b -> Open b t c -> Core t c
 
   -- string ops
   -- | The concatenation of two 'String' expressions
@@ -205,16 +197,16 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   -- object ops
 
-  KeySetEqNeq :: EqNeq -> t 'TyKeySet   -> t 'TyKeySet   -> Core t 'TyBool
-  ObjectEqNeq :: EqNeq -> t 'TyObject   -> t 'TyObject   -> Core t 'TyBool
+  KeySetEqNeq :: EqNeq -> t 'TyKeySet     -> t 'TyKeySet   -> Core t 'TyBool
+  ObjectEqNeq :: SingTy ('TyObject m) -> EqNeq -> t ('TyObject m) -> t ('TyObject m) -> Core t 'TyBool
 
-  ObjAt       :: Schema -> t 'TyStr -> t 'TyObject -> EType  -> Core t a
-  ObjContains :: Schema -> t 'TyStr -> t 'TyObject           -> Core t 'TyBool
-  ObjDrop     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
-  ObjTake     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
-  ObjMerge    ::           t 'TyObject        -> t 'TyObject -> Core t 'TyObject
+  ObjAt       :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t a
+  ObjContains :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t 'TyBool
+  ObjDrop     :: SingTy ('TyObject m) -> t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
+  ObjTake     :: SingTy ('TyObject m) -> t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
+  ObjMerge    :: SingTy ('TyObject m) -> t ('TyObject m)    -> t ('TyObject m) -> Core t ('TyObject m)
 
-  LiteralObject :: Map Text (Existential t) -> Core t 'TyObject
+  LiteralObject :: Map m -> Core t ('TyObject m)
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
@@ -224,50 +216,50 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- list ops. Each of these operations contains a singleton of the type of
   -- list elements (needed so we can implement `Eq`, `Show`, etc).
 
-  ListEqNeq    :: SingTy 'SimpleK a -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
-  ListAt       :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t a
-  ListContains :: SingTy 'SimpleK a -> t a      -> t ('TyList a) -> Core t 'TyBool
+  ListEqNeq    :: SingTy a -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
+  ListAt       :: SingTy a -> t 'TyInteger -> t ('TyList a) -> Core t a
+  ListContains :: SingTy a -> t a      -> t ('TyList a) -> Core t 'TyBool
 
-  ListLength   :: SingTy 'SimpleK a -> t ('TyList a) -> Core t 'TyInteger
+  ListLength   :: SingTy a -> t ('TyList a) -> Core t 'TyInteger
 
-  ListReverse  :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
-  ListSort     :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
+  ListReverse  :: SingTy a -> t ('TyList a) -> Core t ('TyList a)
+  ListSort     :: SingTy a -> t ('TyList a) -> Core t ('TyList a)
 
-  ListConcat   :: SingTy 'SimpleK a -> t ('TyList a) -> t ('TyList a) -> Core t ('TyList a)
+  ListConcat   :: SingTy a -> t ('TyList a) -> t ('TyList a) -> Core t ('TyList a)
 
-  ListDrop     :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
-  ListTake     :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
+  ListDrop     :: SingTy a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
+  ListTake     :: SingTy a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
 
-  MakeList     :: SingTy 'SimpleK a -> t 'TyInteger -> t a -> Core t ('TyList a)
+  MakeList     :: SingTy a -> t 'TyInteger -> t a -> Core t ('TyList a)
 
-  LiteralList  :: SingTy 'SimpleK a -> [t a] -> Core t ('TyList a)
+  LiteralList  :: SingTy a -> [t a] -> Core t ('TyList a)
 
   ListMap
-    :: SingTy 'SimpleK a -> SingTy 'SimpleK b
+    :: SingTy a -> SingTy b
     -> Open a t b
     -> t ('TyList a)
     -> Core t ('TyList b)
 
   ListFilter
-    :: SingTy 'SimpleK a
+    :: SingTy a
     -> Open a t 'TyBool -> t ('TyList a) -> Core t ('TyList a)
 
   ListFold
-    :: SingTy 'SimpleK a -> SingTy 'SimpleK b
+    :: SingTy a -> SingTy b
     -> Open a (Open b t) a -> t a -> t ('TyList b) -> Core t a
 
   AndQ
-    :: SingTy 'SimpleK a
+    :: SingTy a
     -> Open a t 'TyBool -> Open a t 'TyBool -> t a -> Core t 'TyBool
   OrQ
-    :: SingTy 'SimpleK a
+    :: SingTy a
     -> Open a t 'TyBool -> Open a t 'TyBool -> t a -> Core t 'TyBool
 
   Where
-    :: Schema -> SingTy 'SimpleK a
-    -> t 'TyStr -> Open a t 'TyBool -> t 'TyObject -> Core t 'TyBool
+    :: SingTy ('TyObject m) -> SingTy a
+    -> t 'TyStr -> Open a t 'TyBool -> t ('TyObject m) -> Core t 'TyBool
 
-  Typeof :: SingTy k a -> t a -> Core t 'TyStr
+  Typeof :: SingTy a -> t a -> Core t 'TyStr
 
 -- Note [Sing Functions]:
 --
@@ -286,7 +278,7 @@ class
   , c (tm 'TyDecimal)
   , c (tm 'TyBool)
   , c (tm 'TyKeySet)
-  , c (tm 'TyObject)
+  -- , c (tm 'TyObject)
   , c (tm 'TyAny)
   , c (tm ('TyList 'TyStr))
   , c (tm ('TyList 'TyInteger))
@@ -308,7 +300,7 @@ instance OfPactTypes UserShow Term      where
 
 singEqTmList
   :: OfPactTypes Eq tm
-  => SingTy 'SimpleK a -> tm ('TyList a) -> tm ('TyList a) -> Bool
+  => SingTy a -> tm ('TyList a) -> tm ('TyList a) -> Bool
 singEqTmList ty t1 t2 = case ty of
   SStr     -> t1 == t2
   SInteger -> t1 == t2
@@ -317,10 +309,12 @@ singEqTmList ty t1 t2 = case ty of
   SBool    -> t1 == t2
   SKeySet  -> t1 == t2
   SAny     -> t1 == t2
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singEqListTm
   :: OfPactTypes Eq tm
-  => SingTy 'SimpleK a -> [tm a] -> [tm a] -> Bool
+  => SingTy a -> [tm a] -> [tm a] -> Bool
 singEqListTm ty t1 t2 = case ty of
   SStr     -> t1 == t2
   SInteger -> t1 == t2
@@ -329,10 +323,12 @@ singEqListTm ty t1 t2 = case ty of
   SBool    -> t1 == t2
   SKeySet  -> t1 == t2
   SAny     -> t1 == t2
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singEqTm
   :: OfPactTypes Eq tm
-  => SingTy k a -> tm a -> tm a -> Bool
+  => SingTy a -> tm a -> tm a -> Bool
 singEqTm ty t1 t2 = case ty of
   SStr     -> t1 == t2
   SInteger -> t1 == t2
@@ -350,17 +346,18 @@ singEqTm ty t1 t2 = case ty of
   SList SKeySet  -> t1 == t2
   SList SAny     -> t1 == t2
 
-  SObject -> t1 == t2
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singEqOpen
   :: OfPactTypes Eq tm
-  => SingTy k a -> Open x tm a -> Open x tm a -> Bool
+  => SingTy a -> Open x tm a -> Open x tm a -> Bool
 singEqOpen ty (Open v1 nm1 a1) (Open v2 nm2 a2)
   = singEqTm ty a1 a2 && v1 == v2 && nm1 == nm2
 
 singUserShowTmList
   :: OfPactTypes UserShow tm
-  => SingTy 'SimpleK a -> tm ('TyList a) -> Text
+  => SingTy a -> tm ('TyList a) -> Text
 singUserShowTmList ty tm = case ty of
   SStr     -> userShow tm
   SInteger -> userShow tm
@@ -369,10 +366,12 @@ singUserShowTmList ty tm = case ty of
   SBool    -> userShow tm
   SKeySet  -> userShow tm
   SAny     -> userShow tm
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singUserShowListTm
   :: OfPactTypes UserShow tm
-  => SingTy 'SimpleK a -> [tm a] -> Text
+  => SingTy a -> [tm a] -> Text
 singUserShowListTm ty tm = case ty of
   SStr     -> userShow tm
   SInteger -> userShow tm
@@ -381,10 +380,12 @@ singUserShowListTm ty tm = case ty of
   SBool    -> userShow tm
   SKeySet  -> userShow tm
   SAny     -> userShow tm
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singUserShowTm
   :: OfPactTypes UserShow tm
-  => SingTy k a -> tm a -> Text
+  => SingTy a -> tm a -> Text
 singUserShowTm ty tm = case ty of
   SStr     -> userShow tm
   SInteger -> userShow tm
@@ -402,17 +403,18 @@ singUserShowTm ty tm = case ty of
   SList SKeySet  -> userShow tm
   SList SAny     -> userShow tm
 
-  SObject -> userShow tm
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singUserShowOpen
   :: OfPactTypes UserShow tm
-  => SingTy k a -> Open x tm a -> Text
+  => SingTy a -> Open x tm a -> Text
 singUserShowOpen ty (Open _ nm a)
   = parenList [ "lambda", nm, singUserShowTm ty a ]
 
 singShowsTmList
   :: OfPactTypes Show tm
-  => SingTy 'SimpleK a -> Int -> tm ('TyList a) -> ShowS
+  => SingTy a -> Int -> tm ('TyList a) -> ShowS
 singShowsTmList ty p t = case ty of
   SStr     -> showsPrec p t
   SInteger -> showsPrec p t
@@ -421,10 +423,12 @@ singShowsTmList ty p t = case ty of
   SBool    -> showsPrec p t
   SKeySet  -> showsPrec p t
   SAny     -> showsPrec p t
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singShowsListTm
   :: OfPactTypes Show tm
-  => SingTy 'SimpleK a -> Int -> [tm a] -> ShowS
+  => SingTy a -> Int -> [tm a] -> ShowS
 singShowsListTm ty p t = case ty of
   SStr     -> showsPrec p t
   SInteger -> showsPrec p t
@@ -433,10 +437,12 @@ singShowsListTm ty p t = case ty of
   SBool    -> showsPrec p t
   SKeySet  -> showsPrec p t
   SAny     -> showsPrec p t
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singShowsTm
   :: OfPactTypes Show tm
-  => SingTy k a -> Int -> tm a -> ShowS
+  => SingTy a -> Int -> tm a -> ShowS
 singShowsTm ty p t = case ty of
   SStr     -> showsPrec p t
   SInteger -> showsPrec p t
@@ -454,11 +460,12 @@ singShowsTm ty p t = case ty of
   SList SKeySet  -> showsPrec p t
   SList SAny     -> showsPrec p t
 
-  SObject -> showsPrec p t
+  SList   _ -> error "TODO"
+  SObject _ -> error "TODO"
 
 singShowsOpen
   :: OfPactTypes Show tm
-  => SingTy k a -> Open x tm a -> ShowS
+  => SingTy a -> Open x tm a -> ShowS
 singShowsOpen ty (Open v nm a) = showParen true $
     showsPrec 11 v
   . showString " "
@@ -500,13 +507,19 @@ instance
   StrComparison op1 a1 b1     == StrComparison op2 a2 b2  = op1 == op2 && a1 == a2 && b1 == b2
   BoolComparison op1 a1 b1    == BoolComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
   KeySetEqNeq op1 a1 b1       == KeySetEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
-  ObjectEqNeq op1 a1 b1       == ObjectEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
-  ObjAt s1 a1 b1 t1           == ObjAt s2 a2 b2 t2           = s1 == s2 && a1 == a2 && b1 == b2 && t1 == t2
-  ObjContains s1 a1 b1        == ObjContains s2 a2 b2        = s1 == s2 && a1 == a2 && b1 == b2
-  ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
-  ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
-  ObjMerge a1 b1              == ObjMerge a2 b2              = a1 == a2 && b1 == b2
-  LiteralObject m1            == LiteralObject m2            = m1 == m2
+  ObjectEqNeq ty1 op1 a1 b1   == ObjectEqNeq ty2 op2 a2 b2   = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> op1 == op2 && singEqTm ty1 a1 a2 && singEqTm ty1 b1 b2
+  ObjAt ty1 a1 b1             == ObjAt ty2 a2 b2             = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> a1 == a2 && singEqTm ty1 b1 b2
+  ObjContains ty1 a1 b1       == ObjContains ty2 a2 b2       = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> a1 == a2 && singEqTm ty1 b1 b2
+  -- ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
+  -- ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
+  -- ObjMerge a1 b1              == ObjMerge a2 b2              = a1 == a2 && b1 == b2
+  -- LiteralObject m1            == LiteralObject m2            = m1 == m2
   Logical op1 args1           == Logical op2 args2           = op1 == op2 && args1 == args2
 
   ListEqNeq ty1 op1 a1 b1     == ListEqNeq ty2 op2 a2 b2     = case singEq ty1 ty2 of
@@ -610,50 +623,52 @@ instance
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
-    ObjectEqNeq op a b ->
+    ObjectEqNeq ty op a b ->
         showString "ObjectEqNeq "
+      . showsPrec 11 ty
+      . showString " "
       . showsPrec 11 op
       . showString " "
-      . showsPrec 11 a
+      . singShowsTm ty 11 a
       . showString " "
-      . showsPrec 11 b
+      . singShowsTm ty 11 b
 
-    ObjAt s a b t ->
+    ObjAt ty a b ->
         showString "ObjAt "
-      . showsPrec 11 s
+      . showsPrec 11 ty
       . showString " "
       . showsPrec 11 a
       . showString " "
-      . showsPrec 11 b
-      . showString " "
-      . showsPrec 11 t
-    ObjContains s a b ->
+      . singShowsTm ty 11 b
+    ObjContains ty a b ->
         showString "ObjContains "
-      . showsPrec 11 s
+      . showsPrec 11 ty
       . showString " "
       . showsPrec 11 a
       . showString " "
-      . showsPrec 11 b
-    ObjDrop a b c ->
+      . singShowsTm ty 11 b
+    ObjDrop ty b c ->
         showString "ObjDrop "
-      . showsPrec 11 a
+      . showsPrec 11 ty
       . showString " "
       . showsPrec 11 b
       . showString " "
-      . showsPrec 11 c
-    ObjTake a b c ->
+      . singShowsTm ty 11 c
+    ObjTake ty b c ->
         showString "ObjTake "
-      . showsPrec 11 a
+      . showsPrec 11 ty
       . showString " "
       . showsPrec 11 b
       . showString " "
-      . showsPrec 11 c
-    ObjMerge a b ->
+      . singShowsTm ty 11 c
+    ObjMerge ty a b ->
         showString "ObjMerge "
-      . showsPrec 11 a
+      . showsPrec 11 ty
       . showString " "
-      . showsPrec 11 b
-    LiteralObject m -> showString "LiteralObject " . showsPrec 11 m
+      . singShowsTm ty 11 a
+      . showString " "
+      . singShowsTm ty 11 b
+    LiteralObject _ -> showString "LiteralObject " -- TODO . showsPrec 11 m
 
     Logical op args ->
         showString "Logical "
@@ -780,9 +795,9 @@ instance
       . showsPrec 11 g
       . showString " "
       . singShowsTm tya 11 a
-    Where schema tya str f obj ->
+    Where tyo tya str f obj ->
         showString "Where "
-      . showsPrec 11 schema
+      . showsPrec 11 tyo
       . showString " "
       . showsPrec 11 tya
       . showString " "
@@ -790,7 +805,7 @@ instance
       . showString " "
       . showsPrec 11 f
       . showString " "
-      . showsPrec 11 obj
+      . singShowsTm tyo 11 obj
     Typeof tya a ->
         showString "Typeof "
       . showsPrec 11 tya
@@ -824,13 +839,13 @@ instance
     StrComparison op x y     -> parenList [userShow op, userShow x, userShow y]
     BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
-    ObjContains _schema a b  -> parenList [SContains, userShow a, userShow b]
-    ObjDrop _schema k obj    -> parenList [SObjectDrop, userShow k, userShow obj]
-    ObjTake _schema k obj    -> parenList [SObjectTake, userShow k, userShow obj]
-    ObjMerge x y             -> parenList [SObjectMerge, userShow x, userShow y]
-    LiteralObject obj        -> userShow obj
+    -- ObjectEqNeq _ty op x y   -> parenList [userShow op, userShow x, userShow y]
+    -- ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
+    -- ObjContains _schema a b  -> parenList [SContains, userShow a, userShow b]
+    -- ObjDrop _schema k obj    -> parenList [SObjectDrop, userShow k, userShow obj]
+    -- ObjTake _schema k obj    -> parenList [SObjectTake, userShow k, userShow obj]
+    ObjMerge ty x y          -> parenList [SObjectMerge, singUserShowTm ty x, singUserShowTm ty y]
+    LiteralObject _obj       -> "LiteralObject TODO" -- userShow obj
     Logical op args          -> parenList $ userShow op : fmap userShow args
 
     ListEqNeq ty op x y      -> parenList [userShow op, singUserShowTmList ty x, singUserShowTmList ty y]
@@ -873,8 +888,9 @@ instance
       , singUserShowOpen SBool b
       , singUserShowTm ty c
       ]
-    Where _ _ a b c -> parenList ["where", userShow a, singUserShowOpen SBool b, userShow c]
+    -- Where _ _ a b c -> parenList ["where", userShow a, singUserShowOpen SBool b, userShow c]
     Typeof ty a -> parenList ["typeof", singUserShowTm ty a]
+    _ -> "TODO: UserShow (Core tm)"
 
 
 data BeforeOrAfter = Before | After
@@ -962,7 +978,7 @@ data PropSpecific (a :: Ty) where
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
 
-  PropRead :: BeforeOrAfter -> Schema -> Prop TyTableName -> Prop TyRowKey -> PropSpecific 'TyObject
+  PropRead :: BeforeOrAfter -> Schema -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
 
 deriving instance Eq   (Concrete a) => Eq   (PropSpecific a)
 deriving instance Show (Concrete a) => Show (PropSpecific a)
@@ -1061,21 +1077,17 @@ EQ_EXISTENTIAL(Prop)
 SHOW_EXISTENTIAL(Prop)
 
 mkLiteralList :: [Existential tm] -> Maybe (Existential (Core tm))
-mkLiteralList [] = Just $ EList (SList SAny) (LiteralList SAny [])
-mkLiteralList xs@(ESimple ty0 _ : _) = foldr
+mkLiteralList [] = Just $ Existential (SList SAny) (LiteralList SAny [])
+mkLiteralList xs@(Existential ty0 _ : _) = foldr
   (\case
-    EObject{}    -> \_ -> Nothing
-    EList{}      -> \_ -> Nothing
-    ESimple ty y -> \case
+    Existential ty y -> \case
       Nothing -> Nothing
-      Just EObject{} -> error "impossible"
-      Just (EList (SList ty') (LiteralList _ty ys)) -> case singEq ty ty' of
+      Just (Existential (SList ty') (LiteralList _ty ys)) -> case singEq ty ty' of
         Nothing   -> Nothing
-        Just Refl -> Just (EList (SList ty') (LiteralList ty' (y:ys)))
+        Just Refl -> Just (Existential (SList ty') (LiteralList ty' (y:ys)))
       _ -> error "impossible")
-  (Just (EList (SList ty0) (LiteralList ty0 [])))
+  (Just (Existential (SList ty0) (LiteralList ty0 [])))
   xs
-mkLiteralList _ = Nothing
 
 pattern Lit' :: forall tm ty. Core tm :<: tm => Concrete ty -> tm ty
 pattern Lit' a <- (project @(Core tm) @tm -> Just (Lit a)) where
@@ -1105,14 +1117,15 @@ pattern PIntAddTime x y = CoreProp (IntAddTime x y)
 pattern PDecAddTime :: Prop 'TyTime -> Prop 'TyDecimal -> Prop 'TyTime
 pattern PDecAddTime x y = CoreProp (DecAddTime x y)
 
-pattern PObjAt :: Schema -> Prop 'TyStr -> Prop 'TyObject -> EType -> Prop t
-pattern PObjAt a b c d = CoreProp (ObjAt a b c d)
+pattern PObjAt
+  :: SingTy ('TyObject m) -> Prop 'TyStr -> Prop ('TyObject m) -> Prop t
+pattern PObjAt a b c = CoreProp (ObjAt a b c)
 
 pattern PKeySetEqNeq :: EqNeq -> Prop 'TyKeySet -> Prop 'TyKeySet -> Prop 'TyBool
 pattern PKeySetEqNeq op x y = CoreProp (KeySetEqNeq op x y)
 
-pattern PObjectEqNeq :: EqNeq -> Prop 'TyObject -> Prop 'TyObject -> Prop 'TyBool
-pattern PObjectEqNeq op x y = CoreProp (ObjectEqNeq op x y)
+pattern PObjectEqNeq :: SingTy ('TyObject m) -> EqNeq -> Prop ('TyObject m) -> Prop ('TyObject m) -> Prop 'TyBool
+pattern PObjectEqNeq ty op x y = CoreProp (ObjectEqNeq ty op x y)
 
 pattern PLogical :: LogicalOp -> [Prop 'TyBool] -> Prop 'TyBool
 pattern PLogical op args = CoreProp (Logical op args)
@@ -1212,8 +1225,8 @@ data Term (a :: Ty) where
   NameAuthorized  :: TagId -> Term 'TyStr -> Term 'TyBool
 
   -- Table access
-  Read            ::              TagId -> TableName -> Schema -> Term 'TyStr ->                Term 'TyObject
-  Write           :: WriteType -> TagId -> TableName -> Schema -> Term 'TyStr -> Term 'TyObject -> Term 'TyStr
+  Read            ::              TagId -> TableName -> Schema -> Term 'TyStr ->                Term ('TyObject m)
+  Write           :: SingTy ('TyObject m) -> WriteType -> TagId -> TableName -> Schema -> Term 'TyStr -> Term ('TyObject m) -> Term 'TyStr
 
   PactVersion     :: Term 'TyStr
 
@@ -1249,7 +1262,7 @@ instance UserShow (Concrete a) => UserShow (Term a) where
       -> error "NameAuthorized should only appear inside of an Enforce"
 
     Read _ tab _ x       -> parenList ["read", userShow tab, userShow x]
-    Write _ _ tab _ x y  -> parenList ["read", userShow tab, userShow x, userShow y]
+    Write ty _ _ tab _ x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty y]
     PactVersion          -> parenList ["pact-version"]
     Format x y           -> parenList ["format", userShow x, userShow y]
     FormatTime x y       -> parenList ["format", userShow x, userShow y]
@@ -1260,8 +1273,12 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     ReadDecimal name     -> parenList ["read-decimal", userShow name]
     ReadInteger name     -> parenList ["read-integer", userShow name]
 
-deriving instance Eq   (Concrete a) => Eq   (Term a)
-deriving instance Show (Concrete a) => Show (Term a)
+instance Eq   (Concrete a) => Eq   (Term a) where
+  (==) = error "TODO"
+instance Show (Concrete a) => Show (Term a) where
+  show = error "TODO"
+-- deriving instance Eq   (Concrete a) => Eq   (Term a)
+-- deriving instance Show (Concrete a) => Show (Term a)
 
 instance S :*<: Term where
   inject' = CoreTerm . Sym
@@ -1299,8 +1316,5 @@ instance Num (Term 'TyDecimal) where
 
 valueToProp :: ETerm -> Either String EProp
 valueToProp = \case
-  EObject{} -> Left "can't (yet) convert objects to props"
-  ESimple ty (CoreTerm (Lit l)) -> Right $ ESimple ty (CoreProp (Lit l))
-  ESimple _ _ -> Left "can only convert (simple) values terms to props"
-  EList ty (CoreTerm (Lit l)) -> Right $ EList ty (CoreProp (Lit l))
-  EList _ _ -> Left "can only convert (simple) values terms to props"
+  Existential ty (CoreTerm (Lit l)) -> Right $ Existential ty (CoreProp (Lit l))
+  Existential _ _ -> Left "can only convert (simple) values terms to props"

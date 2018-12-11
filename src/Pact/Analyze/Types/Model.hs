@@ -107,7 +107,7 @@ data Concreteness
 data Access
   = Access
     { _accRowKey  :: S RowKey
-    , _accObject  :: Object
+    , _accObject  :: UObject
     , _accSuccess :: SBV Bool
     }
   deriving (Eq, Show)

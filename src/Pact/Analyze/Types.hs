@@ -15,7 +15,7 @@ module Pact.Analyze.Types
   , module Pact.Analyze.Types.UserShow
 
   , Check(..)
-  , Float(float)
+  -- , Float(float)
   , HasVarId(varId)
   , Quantifier(..)
   , Table(..)
@@ -49,8 +49,8 @@ data Quantifier
   = Forall' VarId Text QType
   | Exists' VarId Text QType
 
-class Float (tm :: Ty -> *) (a :: Ty) where
-  float :: tm a -> ([Quantifier], tm a)
+-- class Float (tm :: Ty -> *) (a :: Ty) where
+--   float :: tm a -> ([Quantifier], tm a)
 
 genId :: (MonadState s m, Num i) => Lens' s i -> m i
 genId l = do

@@ -18,6 +18,8 @@
 {-# LANGUAGE TypeOperators              #-}
 
 {-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE PolyKinds       #-}
+{-# LANGUAGE TypeInType       #-}
 
 module Pact.Analyze.Types.Shared where
 
@@ -30,7 +32,6 @@ import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible)
 import           Data.Constraint              (Dict (Dict), withDict)
-import           Data.Constraint.Extras       (has)
 import           Data.Data                    (Data, Typeable)
 import           Data.Function                (on)
 import           Data.List                    (sortBy)
@@ -68,6 +69,12 @@ import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
+-- import           Pact.Analyze.Types.Map    (Map)
+import           Pact.Analyze.Types.Map (Mapping((:->)))
+import qualified Pact.Analyze.Types.Map as SMap
+
+import           GHC.TypeLits (Symbol)
+import           Data.Kind (Type)
 
 
 data Located a
@@ -83,11 +90,13 @@ instance Mergeable a => Mergeable (Located a) where
   symbolicMerge f t (Located i a) (Located i' a') =
     Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
-data Existential (tm :: Ty -> *) where
-  ESimple :: SingTy 'SimpleK a -> tm a         -> Existential tm
-  -- TODO: combine with ESimple?
-  EList   :: SingTy 'ListK   a -> tm a         -> Existential tm
-  EObject :: Schema            -> tm 'TyObject -> Existential tm
+data Existential (tm :: Ty -> Type) where
+  Existential :: SingTy a -> tm a -> Existential tm
+
+--   ESimple :: SingTy a -> tm a         -> Existential tm
+--   -- TODO: combine with ESimple?
+--   EList   :: SingTy a -> tm a         -> Existential tm
+--   EObject :: Schema   -> tm 'TyObject -> Existential tm
 
 -- TODO: when we have quantified constraints we can do this (also for Show):
 -- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
@@ -100,17 +109,19 @@ data Existential (tm :: Ty -> *) where
 transformExistential
   :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
 transformExistential f term = case term of
-  ESimple ty  term' -> ESimple ty  (f term')
-  EObject sch term' -> EObject sch (f term')
-  EList   ty  term' -> EList   ty  (f term')
+  Existential ty term' -> Existential ty (f term')
+  -- ESimple ty  term' -> ESimple ty  (f term')
+  -- EObject sch term' -> EObject sch (f term')
+  -- EList   ty  term' -> EList   ty  (f term')
 
 mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
 mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
-existentialType (ESimple ety _) = EType ety
-existentialType (EList   ety _) = EType ety
-existentialType (EObject sch _) = EObjectTy sch
+existentialType (Existential ety _) = EType ety
+-- existentialType (ESimple ety _) = EType ety
+-- existentialType (EList   ety _) = EType ety
+-- existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
 
@@ -285,7 +296,7 @@ data Provenance
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
 -- particular table+row.
-data S (a :: *)
+data S (a :: Type)
   = S
     { _sProv :: Maybe Provenance
     , _sSbv  :: SBV a }
@@ -402,24 +413,18 @@ symRowKey = coerceS
 -- | Typed symbolic value.
 type TVal = (EType, AVal)
 
-newtype Object
-  = Object (Map Text TVal)
-  deriving (Eq, Show, Semigroup)
+type family Concrete2 (f :: a -> b) (m :: Mapping Symbol a) :: Mapping Symbol b
+type instance Concrete2 f (k ':-> v) = k ':-> f v
 
-instance UserShow Object where
-  userShowPrec d (Object m) = userShowPrec d (fmap snd m)
+newtype Object (m :: [Mapping Symbol Type]) = Object (SMap.Map m)
 
-instance Monoid Object where
-  mempty = Object Map.empty
+-- instance Show (Object m) where
+--   show _ = "Object" -- TODO
 
-  -- NOTE: left-biased semantics of schemas for Pact's "object merging":
-  mappend = (<>)
-
-objFields :: Lens' Object (Map Text TVal)
-objFields = lens getter setter
-  where
-    getter (Object fs) = fs
-    setter (Object _) fs' = Object fs'
+-- instance Eq (Object m) where
+--   Object SMap.Empty == Object SMap.Empty = True
+--   Object (SMap.Ext SMap.Var v m) == Object (SMap.Ext SMap.Var v' m')
+--    = v == v' && m == m'
 
 newtype Schema
   = Schema (Map Text EType)
@@ -451,10 +456,23 @@ varIdArgs args =
   let sortedList = sortBy (compare `on` Pact._aName) args
   in zip sortedList [0..]
 
+-- | Untyped object
+newtype UObject = UObject (Map Text TVal)
+  deriving (Eq, Show, Semigroup, Monoid)
+
+instance UserShow UObject where
+  userShowPrec d (UObject m) = userShowPrec d (fmap snd m)
+
+objFields :: Lens' UObject (Map Text TVal)
+objFields = lens getter setter
+  where
+    getter (UObject fs)    = fs
+    setter (UObject _) fs' = UObject fs'
+
 -- | Untyped symbolic value.
 data AVal
   = AVal (Maybe Provenance) SBVI.SVal
-  | AnObj Object
+  | AnObj UObject
   | OpaqueVal
   deriving (Eq, Show)
 
@@ -464,8 +482,8 @@ instance UserShow AVal where
     AnObj obj   -> userShow obj
     OpaqueVal   -> "[opaque]"
 
-instance EqSymbolic Object where
-  Object fields .== Object fields' =
+instance EqSymbolic UObject where
+  UObject fields .== UObject fields' =
     let ks  = Map.keysSet fields
         ks' = Map.keysSet fields'
     in if ks == ks'
@@ -532,9 +550,9 @@ isConcreteS = isConcrete . _sSbv
 
 data QKind = QType | QAny
 
-data Quantifiable :: QKind -> * where
-  EType     :: SingTy k a  -> Quantifiable q
-  EObjectTy :: Schema      -> Quantifiable q
+data Quantifiable :: QKind -> Type where
+  EType     :: SingTy a -> Quantifiable q
+  -- EObjectTy :: Schema      -> Quantifiable q
   QTable    ::                Quantifiable 'QAny
   QColumnOf :: TableName   -> Quantifiable 'QAny
 
@@ -544,7 +562,7 @@ instance Eq (Quantifiable q) where
   EType a == EType b = case singEq a b of
     Just Refl -> True
     Nothing   -> False
-  EObjectTy a == EObjectTy b = a == b
+  -- EObjectTy a == EObjectTy b = a == b
   QTable      == QTable      = True
   QColumnOf a == QColumnOf b = a == b
   _           == _           = False
@@ -558,12 +576,12 @@ type QType = Quantifiable 'QAny
 coerceQType :: EType -> QType
 coerceQType = \case
   EType ty         -> EType ty
-  EObjectTy schema -> EObjectTy schema
+  -- EObjectTy schema -> EObjectTy schema
 
 downcastQType :: QType -> Maybe EType
 downcastQType = \case
   EType ty         -> Just $ EType ty
-  EObjectTy schema -> Just $ EObjectTy schema
+  -- EObjectTy schema -> Just $ EObjectTy schema
   _                -> Nothing
 
 -- | Unique variable IDs
@@ -636,15 +654,15 @@ instance SMTValue KeySet where
   sexprToVal = fmap KeySet . sexprToVal
 
 type family Concrete (a :: Ty) where
-  Concrete 'TyInteger  = Integer
-  Concrete 'TyBool     = Bool
-  Concrete 'TyStr      = Str
-  Concrete 'TyTime     = Time
-  Concrete 'TyDecimal  = Decimal
-  Concrete 'TyKeySet   = KeySet
-  Concrete 'TyAny      = Any
-  Concrete ('TyList a) = [Concrete a]
-  Concrete 'TyObject   = Object
+  Concrete 'TyInteger    = Integer
+  Concrete 'TyBool       = Bool
+  Concrete 'TyStr        = Str
+  Concrete 'TyTime       = Time
+  Concrete 'TyDecimal    = Decimal
+  Concrete 'TyKeySet     = KeySet
+  Concrete 'TyAny        = Any
+  Concrete ('TyList a)   = [Concrete a]
+  -- Concrete ('TyObject []) = Object '[]
 
 -- Note [Supplying Dicts]:
 --
@@ -665,40 +683,48 @@ instance Show     (Concrete a) => ShowConcrete a where
 class    UserShow (Concrete a) => UserShowConcrete a where
 instance UserShow (Concrete a) => UserShowConcrete a where
 
-withEq :: SingTy k a -> (Eq (Concrete a) => b) -> b
-withEq = has @EqConcrete
+withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
+withEq = error "TODO" -- has @EqConcrete
 
-withShow :: SingTy k a -> (Show (Concrete a) => b) -> b
-withShow = has @ShowConcrete
+withShow :: SingTy a -> (Show (Concrete a) => b) -> b
+withShow = error "TODO" -- has @ShowConcrete
 
-withUserShow :: SingTy k a -> (UserShow (Concrete a) => b) -> b
-withUserShow = has @UserShowConcrete
+withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
+withUserShow = error "TODO" -- has @UserShowConcrete
 
-withSMTValue :: SingTy 'SimpleK a -> (SMTValue (Concrete a) => b) -> b
-withSMTValue = withDict . singMkSMTValue where
+withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> Maybe b
+withSMTValue ty f = case singMkSMTValue ty of
+  Nothing -> Nothing
+  Just d  -> Just $ withDict d f
+  where
 
-  singMkSMTValue :: SingTy 'SimpleK a -> Dict (SMTValue (Concrete a))
-  singMkSMTValue = \case
-    SInteger -> Dict
-    SBool    -> Dict
-    SStr     -> Dict
-    STime    -> Dict
-    SDecimal -> Dict
-    SKeySet  -> Dict
-    SAny     -> Dict
+    singMkSMTValue :: SingTy a -> Maybe (Dict (SMTValue (Concrete a)))
+    singMkSMTValue = \case
+      SInteger -> Just Dict
+      SBool    -> Just Dict
+      SStr     -> Just Dict
+      STime    -> Just Dict
+      SDecimal -> Just Dict
+      SKeySet  -> Just Dict
+      SAny     -> Just Dict
+      _        -> Nothing
 
-withSymWord :: SingTy 'SimpleK a -> (SymWord (Concrete a) => b) -> b
-withSymWord = withDict . singMkSymWord where
+withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> Maybe b
+withSymWord ty f = case singMkSymWord ty of
+  Nothing -> Nothing
+  Just d  -> Just $ withDict d f
+  where
 
-  singMkSymWord :: SingTy 'SimpleK a -> Dict (SymWord (Concrete a))
-  singMkSymWord = \case
-    SInteger -> Dict
-    SBool    -> Dict
-    SStr     -> Dict
-    STime    -> Dict
-    SDecimal -> Dict
-    SKeySet  -> Dict
-    SAny     -> Dict
+    singMkSymWord :: SingTy a -> Maybe (Dict (SymWord (Concrete a)))
+    singMkSymWord = \case
+      SInteger -> Just Dict
+      SBool    -> Just Dict
+      SStr     -> Just Dict
+      STime    -> Just Dict
+      SDecimal -> Just Dict
+      SKeySet  -> Just Dict
+      SAny     -> Just Dict
+      _        -> Nothing
 
 columnMapToSchema :: ColumnMap EType -> Schema
 columnMapToSchema
@@ -730,7 +756,7 @@ instance Mergeable a => Mergeable (TableMap a) where
 instance UserShow (Quantifiable q) where
   userShowPrec d = \case
     EType ty     -> userShowPrec d ty
-    EObjectTy ty -> userShowPrec d ty
+    -- EObjectTy ty -> userShowPrec d ty
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> userShow tn <> ")"
 
