@@ -55,7 +55,7 @@ completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
     unName (Name    name _) = name
 
     nameOfModule :: ModuleName -> Text
-    nameOfModule (ModuleName name _) = name
+    nameOfModule (ModuleName name) = name
 
 replSettings :: (MonadIO m, MonadState ReplState m) => Settings m
 replSettings = Settings

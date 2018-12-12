@@ -168,6 +168,16 @@ revokeAllCapabilities = evalCapabilities .= []
 revokeCapability :: Capability -> Eval e ()
 revokeCapability c = evalCapabilities %= filter (/= c)
 
+-- -- | Evaluate current namespace and append namespace
+-- -- to module name
+-- evalNamespace
+--   :: Info
+--   -> Maybe Namespace
+--   -> Module
+--   -> Eval e (Term Name)
+-- evalNamespace info Nothing _ =
+--   evalError info $ "Namespaces must be defined for all transactions"
+-- evalNamespace _info _m m' = undefined
 
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)

@@ -146,8 +146,7 @@ descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
-  -- ns   <- use $ evalRefs . rsNamespace . _Just . nsName
-  mods <- view $ eeRefStore . rsModules . at (ModuleName t undefined)
+  mods <- view $ eeRefStore . rsModules . at (ModuleName t)
   case _mdModule <$> mods of
     Just m ->
       case m of

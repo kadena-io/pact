@@ -23,7 +23,7 @@ module Pact.Types.Runtime
    ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
@@ -34,6 +34,8 @@ module Pact.Types.Runtime
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
    Capability(..),CapAcquireResult(..),
+   NamespacePolicy(..),
+   defaultNamespacePolicy,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -72,6 +74,13 @@ data Capability
 
 data CapAcquireResult = NewlyAcquired|AlreadyAcquired
   deriving (Eq,Show)
+
+newtype NamespacePolicy = NamespacePolicy
+  { _nsPolicy :: Namespace -> Bool
+  }
+
+defaultNamespacePolicy :: NamespacePolicy
+defaultNamespacePolicy = NamespacePolicy $ const True
 
 data StackFrame = StackFrame {
       _sfName :: !Text
@@ -202,6 +211,8 @@ data EvalEnv e = EvalEnv {
     , _eeHash :: Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
+      -- | Namespace Policy
+    , _eeNamespacePolicy :: NamespacePolicy
     } -- deriving (Eq,Show)
 makeLenses ''EvalEnv
 
@@ -419,6 +430,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     purity
     _eeHash
     _eeGasEnv
+    defaultNamespacePolicy
 
 
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))

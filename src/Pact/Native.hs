@@ -228,13 +228,17 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
     go fi nsn g = do
       let name = NamespaceName nsn
           info = _faInfo fi
-
       mOldNs <- readRow info Namespaces name
       case mOldNs of
-        Just (Namespace _ g') ->
-          -- if namespace is defined, enforce old guard and rotate
-          enforceGuard fi g' >> writeNamespace info name g
+        Just ns'@(Namespace _ g') ->
+          -- if namespace is defined, enforce old guard and rotate if policy allows
+          enforceGuard fi g' >> enforcePolicy info ns' >> writeNamespace info name g
         Nothing -> writeNamespace info name g
+
+    enforcePolicy info ns = do
+      NamespacePolicy{..} <- view eeNamespacePolicy
+      if _nsPolicy ns then pure ()
+        else evalError info $ "Cannot enforce namespace policy"
 
     writeNamespace info n g =
       writeRow info Write Namespaces n (Namespace n g)
@@ -261,7 +265,8 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
 
       mNs <- readRow info Namespaces name
       case mNs of
-        Just ns' -> setEnvNamespace funApp info ns' & success ("Namespace set: " <> ns)
+        Just ns' ->
+          setEnvNamespace funApp info ns' & success ("Namespace set: " <> ns)
         Nothing  -> evalError info $
           "namespace: Namespace '" ++ asString' name ++ "' not defined"
 
@@ -269,7 +274,9 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
       mNs <- use $ evalRefs . rsNamespace
       case mNs of
         Nothing -> do
+          -- enforce that the user has correct capabilities
           enforceGuard funApp g
+          -- set refstate namespace to the namespace
           (evalRefs . rsNamespace .= (Just ns))
         Just (Namespace n' _) ->
           evalError info $ "namespace already defined: " ++ asString' n'
