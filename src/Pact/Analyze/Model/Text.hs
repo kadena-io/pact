@@ -20,7 +20,6 @@ import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Internals         as SBVI
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
-import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact

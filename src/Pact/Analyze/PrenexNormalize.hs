@@ -132,7 +132,7 @@ float _ty p = case p of
   CoreProp (Logical AndOp [a, b]) -> PAnd <$> singFloat a <*> singFloat b
   CoreProp (Logical OrOp [a, b]) -> POr  <$> singFloat a <*> singFloat b
   CoreProp (Logical NotOp [a]) -> bimap (fmap flipQuantifier) PNot (singFloat a)
-  CoreProp (Logical _ _) -> error ("ill-defined logical op: " ++ show p)
+  CoreProp (Logical _ _) -> error ("ill-defined logical op: " ++ showTm p)
   CoreProp (AndQ ty f g a) -> CoreProp <$>
     (AndQ ty <$> singFloatOpen f <*> singFloatOpen g <*> float ty a)
   CoreProp (OrQ ty f g a) -> CoreProp <$>

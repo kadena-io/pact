@@ -7,6 +7,7 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -103,7 +104,26 @@ data AnalyzeEnv
     , _aeModelTags :: !(ModelTags 'Symbolic)
     , _aeInfo      :: !Info
     }
-  deriving Show
+
+instance Show AnalyzeEnv where
+  showsPrec p AnalyzeEnv{..} = showParen (p > 10)
+    $ showString "AnalyzeEnv "
+    . showsPrec 11 _aeScope
+    . showString " "
+    . showsPrec 11 _aeKeySets
+    . showString " "
+    . showsPrec 11 _aeKsAuths
+    . showString " "
+    . showsPrec 11 _aeDecimals
+    . showString " "
+    . showsPrec 11 _aeIntegers
+    . showString " "
+    -- . showsPrec 11 _invariants TODO
+    . showsPrec 11 _aeColumnIds
+    . showString " "
+    . showsPrec 11 _aeModelTags
+    . showString " "
+    . showsPrec 11 _aeInfo
 
 mkAnalyzeEnv
   :: [Table]

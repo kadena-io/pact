@@ -68,7 +68,12 @@ data Check
   = PropertyHolds !(Prop 'TyBool) -- valid, assuming success
   | Satisfiable   !(Prop 'TyBool) -- sat,   not assuming success
   | Valid         !(Prop 'TyBool) -- valid, not assuming success
-  deriving Show
+
+instance Show Check where
+  showsPrec p c = showParen (p > 10) $ case c of
+    PropertyHolds prop -> showString "PropertyHolds " . showsTm 11 prop
+    Satisfiable prop   -> showString "Satisfiable "   . showsTm 11 prop
+    Valid prop         -> showString "Valid "         . showsTm 11 prop
 
 checkGoal :: Check -> Goal
 checkGoal (PropertyHolds _) = Validation

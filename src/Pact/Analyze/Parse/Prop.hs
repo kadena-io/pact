@@ -395,20 +395,6 @@ inferPreProp preProp = case preProp of
         eqNeqMsg nouns = nouns <> " only support equality (" <> SEquality <>
           ") / inequality (" <> SInequality <> ") checks"
     case (a', b') of
-      (Existential aTy aProp, Existential bTy bProp) -> case singEq aTy bTy of
-        Just Refl -> case aTy of
-          SInteger -> ret (CoreProp .... IntegerComparison) aProp bProp
-          SDecimal -> ret (CoreProp .... DecimalComparison) aProp bProp
-          STime    -> ret (CoreProp .... TimeComparison)    aProp bProp
-          SBool    -> ret (CoreProp .... BoolComparison)    aProp bProp
-          SStr     -> ret (CoreProp .... StrComparison)     aProp bProp
-          SAny     -> throwErrorIn preProp $
-            "cannot compare objects of type " <> userShow aTy
-          SKeySet  -> case toOp eqNeqP op' of
-            Just eqNeq -> pure $ Existential SBool $ PKeySetEqNeq eqNeq aProp bProp
-            Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
-        Nothing -> typeError preProp aTy bTy
-
       -- cast ([] :: [*]) to any other list type
       (Existential (SList SAny) (CoreProp (LiteralList _ [])), Existential (SList ty) prop)
         | Just eqNeq <- toOp eqNeqP op'
@@ -436,10 +422,24 @@ inferPreProp preProp = case preProp of
 --             ObjectEqNeq eqNeq aProp bProp
 --           Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
 
-      (_, _) -> throwErrorIn preProp $
-        "can't compare primitive types with objects (found " <>
-        userShow (existentialType a') <> " and " <>
-        userShow (existentialType b') <> ")"
+      (Existential aTy aProp, Existential bTy bProp) -> case singEq aTy bTy of
+        Just Refl -> case aTy of
+          SInteger -> ret (CoreProp .... IntegerComparison) aProp bProp
+          SDecimal -> ret (CoreProp .... DecimalComparison) aProp bProp
+          STime    -> ret (CoreProp .... TimeComparison)    aProp bProp
+          SBool    -> ret (CoreProp .... BoolComparison)    aProp bProp
+          SStr     -> ret (CoreProp .... StrComparison)     aProp bProp
+          SAny     -> throwErrorIn preProp $
+            "cannot compare objects of type " <> userShow aTy
+          SKeySet  -> case toOp eqNeqP op' of
+            Just eqNeq -> pure $ Existential SBool $ PKeySetEqNeq eqNeq aProp bProp
+            Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
+        Nothing -> typeError preProp aTy bTy
+
+      -- (_, _) -> throwErrorIn preProp $
+      --   "can't compare primitive types with objects (found " <>
+      --   userShow (existentialType a') <> " and " <>
+      --   userShow (existentialType b') <> ")"
 
   PreApp op'@(toOp logicalOpP -> Just op) args ->
     Existential SBool <$> case (op, args) of
@@ -649,7 +649,7 @@ expectTableExists (PVar vid name) = do
     Nothing     -> throwErrorT $ "unable to look up variable " <> name <> " (expected table)"
     Just QTable -> pure ()
     _           -> throwErrorT $ "expected " <> name <> " to be a table"
-expectTableExists tn = throwError $ "table name must be concrete at this point: " ++ show tn
+expectTableExists tn = throwError $ "table name must be concrete at this point: " ++ showTm tn
 
 -- Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.

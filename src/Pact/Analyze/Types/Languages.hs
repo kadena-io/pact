@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE UndecidableInstances  #-} -- UserShow (Core tm a)
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -58,19 +57,26 @@ module Pact.Analyze.Types.Languages
   , pattern PVar
 
   , mkLiteralList
+
+  -- TEMP
+  , eqCoreTm
+  , showsPrecCore
+  , userShowCore
   ) where
 
+import           Data.Maybe                   (fromMaybe)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as Text
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
+import           Text.Show                    (showListWith)
 
 import           Pact.Types.Persistence       (WriteType)
 import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec)
+import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec, ks)
 import           Pact.Analyze.Types.Map (Map)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
@@ -79,20 +85,15 @@ import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util
 
-#define EQ_EXISTENTIAL(tm)                                        \
-instance Eq (Existential tm) where                                \
-  Existential sa ia == Existential sb ib = case singEq sa sb of { \
-    Just Refl -> withEq sa (ia == ib);                            \
-    Nothing   -> False};                                          \
+-- showExistential
+--   :: (forall ty. SingTy ty -> Int -> tm ty -> ShowS)
+--   -> Int -> Existential tm -> ShowS
+-- showExistential showsTm' p (Existential ty tm) = showsTm' ty p tm
 
-#define SHOW_EXISTENTIAL(tm)                                                   \
-instance Show (Existential tm) where {                                         \
-  showsPrec d e = showParen (d > 10) $ case e of                               \
-    Existential ty inv -> showString "Existential " . showsPrec 11 ty . showString " " \
-      . withShow ty (showsPrec 11 inv); };                                     \
-instance UserShow (Existential tm) where                                       \
-  userShowPrec d e = case e of                                                 \
-    Existential ty a -> withUserShow ty (userShowPrec d a)                   \
+-- userShowExistential
+--   :: (forall ty. SingTy ty -> tm ty -> Text)
+--   -> Existential tm -> Text
+-- userShowExistential userShowTm' (Existential ty tm) = userShowTm' ty tm
 
 -- | Subtyping relation from "Data types a la carte".
 --
@@ -205,6 +206,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ObjContains :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t 'TyBool
   ObjDrop     :: SingTy ('TyObject m) -> t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
   ObjTake     :: SingTy ('TyObject m) -> t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
+  -- TODO: should be two tys
   ObjMerge    :: SingTy ('TyObject m) -> t ('TyObject m)    -> t ('TyObject m) -> Core t ('TyObject m)
 
   LiteralObject :: Map m -> Core t ('TyObject m)
@@ -272,653 +274,580 @@ data Core (t :: Ty -> *) (a :: Ty) where
 -- etc. I've attempted something like this a few times but have failed every
 -- time. For now I'm content to write this boilerplate by hand.
 
-class
-  ( c (tm 'TyStr)
-  , c (tm 'TyInteger)
-  , c (tm 'TyTime)
-  , c (tm 'TyDecimal)
-  , c (tm 'TyBool)
-  , c (tm 'TyKeySet)
-  -- , c (tm 'TyObject)
-  , c (tm 'TyAny)
-  , c (tm ('TyList 'TyStr))
-  , c (tm ('TyList 'TyInteger))
-  , c (tm ('TyList 'TyTime))
-  , c (tm ('TyList 'TyDecimal))
-  , c (tm ('TyList 'TyBool))
-  , c (tm ('TyList 'TyKeySet))
-  , c (tm ('TyList 'TyAny))
-  ) => OfPactTypes c tm where
-instance OfPactTypes Eq Prop      where
-instance OfPactTypes Eq Invariant where
-instance OfPactTypes Eq Term      where
-instance OfPactTypes Show Prop      where
-instance OfPactTypes Show Invariant where
-instance OfPactTypes Show Term      where
-instance OfPactTypes UserShow Prop      where
-instance OfPactTypes UserShow Invariant where
-instance OfPactTypes UserShow Term      where
-
 singEqTmList
-  :: OfPactTypes Eq tm
-  => SingTy a -> tm ('TyList a) -> tm ('TyList a) -> Bool
-singEqTmList ty t1 t2 = case ty of
-  SStr     -> t1 == t2
-  SInteger -> t1 == t2
-  STime    -> t1 == t2
-  SDecimal -> t1 == t2
-  SBool    -> t1 == t2
-  SKeySet  -> t1 == t2
-  SAny     -> t1 == t2
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
+  :: IsTerm tm => SingTy a -> tm ('TyList a) -> tm ('TyList a) -> Bool
+singEqTmList ty t1 t2 = singEqTm' (SList ty) t1 t2
 
-singEqListTm
-  :: OfPactTypes Eq tm
-  => SingTy a -> [tm a] -> [tm a] -> Bool
-singEqListTm ty t1 t2 = case ty of
-  SStr     -> t1 == t2
-  SInteger -> t1 == t2
-  STime    -> t1 == t2
-  SDecimal -> t1 == t2
-  SBool    -> t1 == t2
-  SKeySet  -> t1 == t2
-  SAny     -> t1 == t2
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
+singEqListTm :: IsTerm tm => SingTy a -> [tm a] -> [tm a] -> Bool
+singEqListTm ty t1 t2 = and $ zipWith (singEqTm' ty) t1 t2
 
-singEqTm
-  :: OfPactTypes Eq tm
-  => SingTy a -> tm a -> tm a -> Bool
-singEqTm ty t1 t2 = case ty of
-  SStr     -> t1 == t2
-  SInteger -> t1 == t2
-  STime    -> t1 == t2
-  SDecimal -> t1 == t2
-  SBool    -> t1 == t2
-  SKeySet  -> t1 == t2
-  SAny     -> t1 == t2
+singEqTm :: IsTerm tm => SingTy a -> tm a -> tm a -> Bool
+singEqTm = singEqTm'
 
-  SList SStr     -> t1 == t2
-  SList SInteger -> t1 == t2
-  SList STime    -> t1 == t2
-  SList SDecimal -> t1 == t2
-  SList SBool    -> t1 == t2
-  SList SKeySet  -> t1 == t2
-  SList SAny     -> t1 == t2
-
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
-
-singEqOpen
-  :: OfPactTypes Eq tm
-  => SingTy a -> Open x tm a -> Open x tm a -> Bool
+singEqOpen :: IsTerm tm => SingTy a -> Open x tm a -> Open x tm a -> Bool
 singEqOpen ty (Open v1 nm1 a1) (Open v2 nm2 a2)
-  = singEqTm ty a1 a2 && v1 == v2 && nm1 == nm2
+  = singEqTm' ty a1 a2 && v1 == v2 && nm1 == nm2
 
-singUserShowTmList
-  :: OfPactTypes UserShow tm
-  => SingTy a -> tm ('TyList a) -> Text
-singUserShowTmList ty tm = case ty of
-  SStr     -> userShow tm
-  SInteger -> userShow tm
-  STime    -> userShow tm
-  SDecimal -> userShow tm
-  SBool    -> userShow tm
-  SKeySet  -> userShow tm
-  SAny     -> userShow tm
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
+singUserShowTmList :: IsTerm tm => SingTy a -> tm ('TyList a) -> Text
+singUserShowTmList ty tm = singUserShowTm' (SList ty) tm
 
-singUserShowListTm
-  :: OfPactTypes UserShow tm
-  => SingTy a -> [tm a] -> Text
-singUserShowListTm ty tm = case ty of
-  SStr     -> userShow tm
-  SInteger -> userShow tm
-  STime    -> userShow tm
-  SDecimal -> userShow tm
-  SBool    -> userShow tm
-  SKeySet  -> userShow tm
-  SAny     -> userShow tm
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
+-- singUserShowListTm :: IsTerm tm => SingTy a -> [tm a] -> Text
+singUserShowListTm :: SingTy a -> [tm a] -> Text
+singUserShowListTm = error "TODO" -- singUserShowTm' ty tms
 
-singUserShowTm
-  :: OfPactTypes UserShow tm
-  => SingTy a -> tm a -> Text
-singUserShowTm ty tm = case ty of
-  SStr     -> userShow tm
-  SInteger -> userShow tm
-  STime    -> userShow tm
-  SDecimal -> userShow tm
-  SBool    -> userShow tm
-  SKeySet  -> userShow tm
-  SAny     -> userShow tm
+singUserShowTm :: IsTerm tm => SingTy a -> tm a -> Text
+singUserShowTm = singUserShowTm'
 
-  SList SStr     -> userShow tm
-  SList SInteger -> userShow tm
-  SList STime    -> userShow tm
-  SList SDecimal -> userShow tm
-  SList SBool    -> userShow tm
-  SList SKeySet  -> userShow tm
-  SList SAny     -> userShow tm
-
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
-
-singUserShowOpen
-  :: OfPactTypes UserShow tm
-  => SingTy a -> Open x tm a -> Text
+singUserShowOpen :: IsTerm tm => SingTy a -> Open x tm a -> Text
 singUserShowOpen ty (Open _ nm a)
-  = parenList [ "lambda", nm, singUserShowTm ty a ]
+  = parenList [ "lambda", nm, singUserShowTm' ty a ]
 
-singShowsTmList
-  :: OfPactTypes Show tm
-  => SingTy a -> Int -> tm ('TyList a) -> ShowS
-singShowsTmList ty p t = case ty of
-  SStr     -> showsPrec p t
-  SInteger -> showsPrec p t
-  STime    -> showsPrec p t
-  SDecimal -> showsPrec p t
-  SBool    -> showsPrec p t
-  SKeySet  -> showsPrec p t
-  SAny     -> showsPrec p t
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
+singShowsTmList :: IsTerm tm => SingTy a -> Int -> tm ('TyList a) -> ShowS
+singShowsTmList ty = singShowsTm' (SList ty)
 
-singShowsListTm
-  :: OfPactTypes Show tm
-  => SingTy a -> Int -> [tm a] -> ShowS
-singShowsListTm ty p t = case ty of
-  SStr     -> showsPrec p t
-  SInteger -> showsPrec p t
-  STime    -> showsPrec p t
-  SDecimal -> showsPrec p t
-  SBool    -> showsPrec p t
-  SKeySet  -> showsPrec p t
-  SAny     -> showsPrec p t
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
+singShowsListTm :: IsTerm tm => SingTy a -> Int -> [tm a] -> ShowS
+singShowsListTm ty _ = showListWith (singShowsTm ty 0)
+  -- = "[" <> Text.intercalate ", " (singShowsTm ty <$> ts) <> "]"
 
-singShowsTm
-  :: OfPactTypes Show tm
-  => SingTy a -> Int -> tm a -> ShowS
-singShowsTm ty p t = case ty of
-  SStr     -> showsPrec p t
-  SInteger -> showsPrec p t
-  STime    -> showsPrec p t
-  SDecimal -> showsPrec p t
-  SBool    -> showsPrec p t
-  SKeySet  -> showsPrec p t
-  SAny     -> showsPrec p t
+singShowsTm :: IsTerm tm => SingTy a -> Int -> tm a -> ShowS
+singShowsTm = singShowsTm'
 
-  SList SStr     -> showsPrec p t
-  SList SInteger -> showsPrec p t
-  SList STime    -> showsPrec p t
-  SList SDecimal -> showsPrec p t
-  SList SBool    -> showsPrec p t
-  SList SKeySet  -> showsPrec p t
-  SList SAny     -> showsPrec p t
-
-  SList   _ -> error "TODO"
-  SObject _ -> error "TODO"
-
-singShowsOpen
-  :: OfPactTypes Show tm
-  => SingTy a -> Open x tm a -> ShowS
+singShowsOpen :: IsTerm tm => SingTy a -> Open x tm a -> ShowS
 singShowsOpen ty (Open v nm a) = showParen true $
     showsPrec 11 v
   . showString " "
   . showsPrec 11 nm
   . showString " "
-  . singShowsTm ty 11 a
+  . singShowsTm' ty 11 a
 
-instance
-  ( Eq (Concrete a)
-  , Eq (Existential tm)
-  , OfPactTypes Eq tm
-  ) => Eq (Core tm a) where
+eqLit :: SingTy a -> Concrete a -> Concrete a -> Bool
+eqLit = error "TODO"
 
-  Lit a                       == Lit b                       = a == b
-  Sym a                       == Sym b                       = a == b
-  Var a1 b1                   == Var a2 b2                   = a1 == a2 && b1 == b2
-  Identity ty1 a1             == Identity _ty2 a2            = singEqTm ty1 a1 a2
-  Constantly ty1 a1 e1        == Constantly _ty2 a2 e2       = singEqTm ty1 a1 a2 && e1 == e2
-  Compose tya1 tyb1 tyc1 a1 b1 c1
-    == Compose tya2 tyb2 tyc2 a2 b2 c2=
-    case singEq tya1 tya2 of
-      Nothing -> False
-      Just Refl -> case singEq tyb1 tyb2 of
-        Nothing -> False
-        Just Refl -> case singEq tyc1 tyc2 of
-          Nothing -> False
-          Just Refl -> singEqTm tya1 a1 a2 && singEqOpen tyb1 b1 b2 && singEqOpen tyc1 c1 c2
-  StrConcat a1 b1             == StrConcat a2 b2             = a1 == a2 && b1 == b2
-  StrLength a                 == StrLength b                 = a == b
-  StrToInt s1                 == StrToInt s2                 = s1 == s2
-  StrToIntBase b1 s1          == StrToIntBase b2 s2          = b1 == b2 && s1 == s2
-  StrContains a1 b1           == StrContains a2 b2           = a1 == a2 && b1 == b2
-  Numerical a                 == Numerical b                 = a == b
-  IntAddTime a1 b1            == IntAddTime a2 b2            = a1 == a2 && b1 == b2
-  DecAddTime a1 b1            == DecAddTime a2 b2            = a1 == a2 && b1 == b2
-  IntegerComparison op1 a1 b1 == IntegerComparison op2 a2 b2 = op1 == op2 && a1 == a2 && b1 == b2
-  DecimalComparison op1 a1 b1 == DecimalComparison op2 a2 b2 = op1 == op2 && a1 == a2 && b1 == b2
-  TimeComparison op1 a1 b1    == TimeComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
-  StrComparison op1 a1 b1     == StrComparison op2 a2 b2  = op1 == op2 && a1 == a2 && b1 == b2
-  BoolComparison op1 a1 b1    == BoolComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
-  KeySetEqNeq op1 a1 b1       == KeySetEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
-  ObjectEqNeq ty1 op1 a1 b1   == ObjectEqNeq ty2 op2 a2 b2   = case singEq ty1 ty2 of
+showsLit :: SingTy a -> Concrete a -> ShowS
+showsLit = error "TODO"
+
+userShowLit :: SingTy a -> Concrete a -> Text
+userShowLit = error "TODO"
+
+-- eqNumerical :: IsTerm tm => Numerical tm a -> Numerical tm a -> Bool
+eqNumerical :: SingTy a -> Numerical tm a -> Numerical tm a -> Bool
+eqNumerical = error "TODO"
+
+showsNumerical :: SingTy a -> Numerical tm a -> ShowS
+showsNumerical = error "TODO"
+
+userShowNumerical :: SingTy a -> Numerical tm a -> Text
+userShowNumerical = error "TODO"
+
+eqCoreTm :: IsTerm tm => SingTy ty -> Core tm ty -> Core tm ty -> Bool
+eqCoreTm ty (Lit a)                      (Lit b)
+  = eqLit ty a b
+eqCoreTm _ (Sym a)                       (Sym b)
+  = a == b
+eqCoreTm _ (Var a1 b1)                   (Var a2 b2)
+  = a1 == a2 && b1 == b2
+eqCoreTm _ (Identity ty1 a1)             (Identity _ty2 a2)
+  = singEqTm ty1 a1 a2
+eqCoreTm _ (Constantly ty1 a1 e1)        (Constantly _ty2 a2 e2)
+  = singEqTm ty1 a1 a2 && e1 == e2
+eqCoreTm _ (Compose tya1 tyb1 tyc1 a1 b1 c1) (Compose tya2 tyb2 tyc2 a2 b2 c2)
+  = fromMaybe False $ do
+    Refl <- singEq tya1 tya2
+    Refl <- singEq tyb1 tyb2
+    Refl <- singEq tyc1 tyc2
+    pure $ singEqTm tya1 a1 a2 && singEqOpen tyb1 b1 b2 && singEqOpen tyc1 c1 c2
+
+eqCoreTm _ (StrConcat a1 b1)             (StrConcat a2 b2)
+  = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (StrLength a)                 (StrLength b)
+  = eqTm a b
+eqCoreTm _ (StrToInt s1)                 (StrToInt s2)
+  = eqTm s1 s2
+eqCoreTm _ (StrToIntBase b1 s1)          (StrToIntBase b2 s2)
+  = eqTm b1 b2 && eqTm s1 s2
+eqCoreTm _ (StrContains a1 b1)           (StrContains a2 b2)
+  = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm ty (Numerical a)                (Numerical b)
+  = eqNumerical ty a b
+eqCoreTm _ (IntAddTime a1 b1)            (IntAddTime a2 b2)
+  = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (DecAddTime a1 b1)            (DecAddTime a2 b2)
+  = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (IntegerComparison op1 a1 b1) (IntegerComparison op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (DecimalComparison op1 a1 b1) (DecimalComparison op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (TimeComparison op1 a1 b1)    (TimeComparison op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (StrComparison op1 a1 b1)     (StrComparison op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (BoolComparison op1 a1 b1)    (BoolComparison op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (KeySetEqNeq op1 a1 b1)       (KeySetEqNeq op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (ObjectEqNeq ty1 op1 a1 b1)   (ObjectEqNeq ty2 op2 a2 b2)
+  = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> op1 == op2 && singEqTm ty1 a1 a2 && singEqTm ty1 b1 b2
-  ObjAt ty1 a1 b1             == ObjAt ty2 a2 b2             = case singEq ty1 ty2 of
+eqCoreTm _ (ObjAt ty1 a1 b1)             (ObjAt ty2 a2 b2)
+  = case singEq ty1 ty2 of
     Nothing   -> False
-    Just Refl -> a1 == a2 && singEqTm ty1 b1 b2
-  ObjContains ty1 a1 b1       == ObjContains ty2 a2 b2       = case singEq ty1 ty2 of
+    Just Refl -> eqTm a1 a2 && singEqTm ty1 b1 b2
+eqCoreTm _ (ObjContains ty1 a1 b1)       (ObjContains ty2 a2 b2)
+  = case singEq ty1 ty2 of
     Nothing   -> False
-    Just Refl -> a1 == a2 && singEqTm ty1 b1 b2
-  -- ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
-  -- ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
-  -- ObjMerge a1 b1              == ObjMerge a2 b2              = a1 == a2 && b1 == b2
-  -- LiteralObject m1            == LiteralObject m2            = m1 == m2
-  Logical op1 args1           == Logical op2 args2           = op1 == op2 && args1 == args2
+    Just Refl -> eqTm a1 a2 && singEqTm ty1 b1 b2
+eqCoreTm _ (ObjDrop a1 b1 c1)            (ObjDrop a2 b2 c2)
+  = case singEq a1 a2 of
+  Nothing    -> False
+  Just Refl -> eqTm b1 b2 && singEqTm a1 c1 c2
+eqCoreTm _ (ObjTake a1 b1 c1)            (ObjTake a2 b2 c2)
+  = case singEq a1 a2 of
+  Nothing -> False
+  Just Refl -> eqTm b1 b2 && singEqTm a1 c1 c2
+eqCoreTm _ (ObjMerge ty1 a1 b1)          (ObjMerge ty2 a2 b2)
+  = case singEq ty1 ty2 of
+  Nothing   -> False
+  Just Refl -> singEqTm ty1 a1 a2 && singEqTm ty1 b1 b2
+-- eqCoreTm _ (LiteralObject m1)            (LiteralObject m2)
+eqCoreTm _ LiteralObject{}            LiteralObject{}
+  = error "TODO" -- m1 == m2
+eqCoreTm _ (Logical op1 args1)           (Logical op2 args2)
+  = op1 == op2 && and (zipWith eqTm args1 args2)
 
-  ListEqNeq ty1 op1 a1 b1     == ListEqNeq ty2 op2 a2 b2     = case singEq ty1 ty2 of
+eqCoreTm _ (ListEqNeq ty1 op1 a1 b1)     (ListEqNeq ty2 op2 a2 b2)
+  = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> op1 == op2 && singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
-  ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && singEqTmList ty1 b1 b2
-  ListContains ty1 a1 b1      == ListContains ty2 a2 b2      = case singEq ty1 ty2 of
+eqCoreTm _ (ListAt ty1 a1 b1)            (ListAt _ty2 a2 b2)
+  = eqTm a1 a2 && singEqTmList ty1 b1 b2
+eqCoreTm _ (ListContains ty1 a1 b1)      (ListContains ty2 a2 b2)
+  = case singEq ty1 ty2 of
     Just Refl -> singEqTm ty1 a1 a2 && singEqTmList ty1 b1 b2
     Nothing   -> False
-  ListLength ty1 a1           == ListLength ty2 a2           = case singEq ty1 ty2 of
+eqCoreTm _ (ListLength ty1 a1)           (ListLength ty2 a2)
+  = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> singEqTmList ty1 a1 a2
-  ListReverse ty1 a1          == ListReverse _ty2 a2         = singEqTmList ty1 a1 a2
-  ListSort ty1 a1             == ListSort _ty2 a2            = singEqTmList ty1 a1 a2
-  ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
-  ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
-  ListTake ty1 i1 l1          == ListTake _ty2 i2 l2         = i1 == i2 && singEqTmList ty1 l1 l2
-  MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && singEqTm ty1 b1 b2
-  LiteralList ty1 l1          == LiteralList _ty2 l2         = singEqListTm ty1 l1 l2
-  ListMap tya1 tyb1 f1 as1 == ListMap tya2 _ f2 as2
-    = case singEq tya1 tya2 of
+eqCoreTm _ (ListReverse ty1 a1)          (ListReverse _ty2 a2)
+  = singEqTmList ty1 a1 a2
+eqCoreTm _ (ListSort ty1 a1)             (ListSort _ty2 a2)
+  = singEqTmList ty1 a1 a2
+eqCoreTm _ (ListConcat ty1 a1 b1)        (ListConcat _ty2 a2 b2)
+  = singEqTmList ty1 a1 a2 && singEqTmList ty1 b1 b2
+eqCoreTm _ (ListDrop ty1 i1 l1)          (ListDrop _ty2 i2 l2)
+  = eqTm i1 i2 && singEqTmList ty1 l1 l2
+eqCoreTm _ (ListTake ty1 i1 l1)          (ListTake _ty2 i2 l2)
+  = eqTm i1 i2 && singEqTmList ty1 l1 l2
+eqCoreTm _ (MakeList ty1 a1 b1)          (MakeList _ty2 a2 b2)
+  = eqTm a1 a2 && singEqTm ty1 b1 b2
+eqCoreTm _ (LiteralList ty1 l1)          (LiteralList _ty2 l2)
+  = singEqListTm ty1 l1 l2
+eqCoreTm _ (ListMap tya1 tyb1 f1 as1)    (ListMap tya2 _ f2 as2)
+  = case singEq tya1 tya2 of
       Nothing   -> False
       Just Refl -> singEqOpen tyb1 f1 f2 && singEqTmList tya1 as1 as2
-  ListFilter ty1 f1 b1 == ListFilter _ty2 f2 b2
-    = singEqOpen SBool f1 f2 && singEqTmList ty1 b1 b2
-  ListFold tya1 tyb1 (Open v1 nm1 f1) b1 c1
-    == ListFold _tya2 tyb2 (Open v2 nm2 f2) b2 c2
-    = case singEq tyb1 tyb2 of
+eqCoreTm _ (ListFilter ty1 f1 b1) (ListFilter _ty2 f2 b2)
+  = singEqOpen SBool f1 f2 && singEqTmList ty1 b1 b2
+eqCoreTm _ (ListFold tya1 tyb1 (Open v1 nm1 f1) b1 c1)
+    (ListFold _tya2 tyb2 (Open v2 nm2 f2) b2 c2)
+  = case singEq tyb1 tyb2 of
         Nothing   -> False
         Just Refl -> v1 == v2 && nm1 == nm2 && singEqOpen tya1 f1 f2
           && singEqTm tya1 b1 b2 && singEqTmList tyb1 c1 c2
-  AndQ tya1 f1 g1 a1 == AndQ tya2 f2 g2 a2
-    = case singEq tya1 tya2 of
+eqCoreTm _ (AndQ tya1 f1 g1 a1) (AndQ tya2 f2 g2 a2)
+  = case singEq tya1 tya2 of
       Nothing   -> False
       Just Refl -> singEqOpen SBool f1 f2 && singEqOpen SBool g1 g2
         && singEqTm tya1 a1 a2
-  OrQ tya1 f1 g1 a1 == OrQ tya2 f2 g2 a2
-    = case singEq tya1 tya2 of
+eqCoreTm _ (OrQ tya1 f1 g1 a1) (OrQ tya2 f2 g2 a2)
+  = case singEq tya1 tya2 of
       Nothing   -> False
       Just Refl -> singEqOpen SBool f1 f2 && singEqOpen SBool g1 g2
         && singEqTm tya1 a1 a2
-  -- TODO
-  -- Where s1 tya1 a1 b1 c1 == Where s2 tya2 a2 b2 c2
-  --   = case singEq tya1 tya2 of
-  --     Nothing   -> False
-  --     Just Refl -> s1 == s2 && a1 == a2 && singEqOpen SBool b1 b2 && c1 == c2
-  Typeof ty1 a1 == Typeof ty2 a2 = case singEq ty1 ty2 of
+eqCoreTm _ (Where tyobj1 tya1 k1 f1 obj1) (Where tyobj2 tya2 k2 f2 obj2)
+  = fromMaybe False $ do
+    Refl <- singEq tyobj1 tyobj2
+    Refl <- singEq tya1   tya2
+    pure $ eqTm k1 k2 && singEqOpen SBool f1 f2 && singEqTm tyobj1 obj1 obj2
+eqCoreTm _ (Typeof ty1 a1) (Typeof ty2 a2)
+  = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> singEqTm ty1 a1 a2
 
-  _                           == _                           = False
+eqCoreTm _ _ _                          = False
 
-instance
-  ( Show (Concrete a)
-  , Show (Existential tm)
-  , OfPactTypes Show tm
-  ) => Show (Core tm a) where
-  showsPrec p core = showParen (p > 10) $ case core of
-    Lit a            -> showString "Lit "        . showsPrec 11 a
-    Sym a            -> showString "Sym "        . showsPrec 11 a
-    Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
-    Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . singShowsTm a 11 b
-    Constantly a b c ->
-        showString "Constantly "
-      . showsPrec 11 a
-      . showString " "
-      . singShowsTm a 11 b
-      . showString " "
-      . showsPrec 11 c
-    Compose tya tyb tyc a b c ->
-        showString "Compose "
-      . showsPrec 11 tya
-      . showString " "
-      . showsPrec 11 tyb
-      . showString " "
-      . showsPrec 11 tyc
-      . showString " "
-      . singShowsTm tya 11 a
-      . singShowsOpen tyb b
-      . showString " "
-      . singShowsOpen tyc c
-    StrConcat a b    -> showString "StrConcat "  . showsPrec 11 a . showString " " . showsPrec 11 b
-    StrLength a      -> showString "StrLength "  . showsPrec 11 a
-    StrToInt a       -> showString "StrToInt "   . showsPrec 11 a
-    StrToIntBase a b -> showString "StrToIntBase " . showsPrec 11 a . showString " " . showsPrec 11 b
-    StrContains  a b -> showString "StrContains " . showsPrec 11 a . showString " " . showsPrec 11 b
-    Numerical a      -> showString "Numerical "  . showsPrec 11 a
-    IntAddTime a b   -> showString "IntAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
-    DecAddTime a b   -> showString "DecAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
-    IntegerComparison op a b ->
-        showString "IntegerComparison "
-      . showsPrec 11 op
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-    DecimalComparison op a b ->
-        showString "DecimalComparison "
-      . showsPrec 11 op
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-    TimeComparison op a b ->
-        showString "TimeComparison "
-      . showsPrec 11 op
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-    StrComparison op a b ->
-        showString "StrComparison "
-      . showsPrec 11 op
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-    BoolComparison op a b ->
-        showString "BoolComparison "
-      . showsPrec 11 op
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-    KeySetEqNeq op a b ->
-        showString "KeySetEqNeq "
-      . showsPrec 11 op
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-    ObjectEqNeq ty op a b ->
-        showString "ObjectEqNeq "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 op
-      . showString " "
-      . singShowsTm ty 11 a
-      . showString " "
-      . singShowsTm ty 11 b
+-- instance
+--   ( Show (Concrete a)
+--   , Show (Existential tm)
+--   , IsTerm tm
+--   ) => Show (Core tm a) where
 
-    ObjAt ty a b ->
-        showString "ObjAt "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . singShowsTm ty 11 b
-    ObjContains ty a b ->
-        showString "ObjContains "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . singShowsTm ty 11 b
-    ObjDrop ty b c ->
-        showString "ObjDrop "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 b
-      . showString " "
-      . singShowsTm ty 11 c
-    ObjTake ty b c ->
-        showString "ObjTake "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 b
-      . showString " "
-      . singShowsTm ty 11 c
-    ObjMerge ty a b ->
-        showString "ObjMerge "
-      . showsPrec 11 ty
-      . showString " "
-      . singShowsTm ty 11 a
-      . showString " "
-      . singShowsTm ty 11 b
-    LiteralObject _ -> showString "LiteralObject " -- TODO . showsPrec 11 m
+showsPrecCore :: IsTerm tm => SingTy a -> Int -> Core tm a -> ShowS
+showsPrecCore ty p core = showParen (p > 10) $ case core of
+  Lit a            -> showString "Lit "        . showsLit ty a
+  Sym a            -> showString "Sym "        . showsPrec 11 a
+  Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
+  Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . singShowsTm a 11 b
+  Constantly a b c ->
+      showString "Constantly "
+    . showsPrec 11 a
+    . showString " "
+    . singShowsTm a 11 b
+    . showString " "
+    . showsPrec 11 c
+  Compose tya tyb tyc a b c ->
+      showString "Compose "
+    . showsPrec 11 tya
+    . showString " "
+    . showsPrec 11 tyb
+    . showString " "
+    . showsPrec 11 tyc
+    . showString " "
+    . singShowsTm tya 11 a
+    . singShowsOpen tyb b
+    . showString " "
+    . singShowsOpen tyc c
+  StrConcat a b    -> showString "StrConcat "    . showsTm 11 a . showString " " . showsTm 11 b
+  StrLength a      -> showString "StrLength "    . showsTm 11 a
+  StrToInt a       -> showString "StrToInt "     . showsTm 11 a
+  StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showString " " . showsTm 11 b
+  StrContains  a b -> showString "StrContains "  . showsTm 11 a . showString " " . showsTm 11 b
+  Numerical a      -> showString "Numerical "    . showsNumerical ty a
+  IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showString " " . showsTm 11 b
+  DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showString " " . showsTm 11 b
+  IntegerComparison op a b ->
+      showString "IntegerComparison "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  DecimalComparison op a b ->
+      showString "DecimalComparison "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  TimeComparison op a b ->
+      showString "TimeComparison "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  StrComparison op a b ->
+      showString "StrComparison "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  BoolComparison op a b ->
+      showString "BoolComparison "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  KeySetEqNeq op a b ->
+      showString "KeySetEqNeq "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  ObjectEqNeq ty' op a b ->
+      showString "ObjectEqNeq "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsPrec 11 op
+    . showString " "
+    . singShowsTm ty' 11 a
+    . showString " "
+    . singShowsTm ty' 11 b
 
-    Logical op args ->
-        showString "Logical "
-      . showsPrec 11 op
-      . showString " "
-      . showsPrec 11 args
+  ObjAt ty' a b ->
+      showString "ObjAt "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . singShowsTm ty' 11 b
+  ObjContains ty' a b ->
+      showString "ObjContains "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . singShowsTm ty' 11 b
+  ObjDrop ty' b c ->
+      showString "ObjDrop "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsTm 11 b
+    . showString " "
+    . singShowsTm ty' 11 c
+  ObjTake ty' b c ->
+      showString "ObjTake "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsTm 11 b
+    . showString " "
+    . singShowsTm ty' 11 c
+  ObjMerge ty' a b ->
+      showString "ObjMerge "
+    . showsPrec 11 ty'
+    . showString " "
+    . singShowsTm ty' 11 a
+    . showString " "
+    . singShowsTm ty' 11 b
+  LiteralObject _ -> showString "LiteralObject " -- TODO . showsPrec 11 m
 
-    ListEqNeq ty op a b ->
-        showString "ListEqNeq "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 op
-      . showString " "
-      . singShowsTmList ty 11 a
-      . showString " "
-      . singShowsTmList ty 11 b
-    ListAt ty a b ->
-        showString "ListAt "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . singShowsTmList ty 11 b
-    ListContains ty a b ->
-        showString "ListContains "
-      . showsPrec 11 ty
-      . showString " "
-      . singShowsTm ty 11 a
-      . showString " "
-      . singShowsTmList ty 11 b
-    ListLength ty a ->
-        showString "ListLength "
-      . showsPrec 11 ty
-      . showString " "
-      . singShowsTmList ty 11 a
-    ListReverse ty a ->
-        showString "ListReverse "
-      . showsPrec 11 ty
-      . showString " "
-      . singShowsTmList ty 11 a
-    ListSort ty a ->
-        showString "ListSort "
-      . showsPrec 11 ty
-      . showString " "
-      . singShowsTmList ty 11 a
-    ListDrop ty i l ->
-        showString "ListDrop "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 i
-      . showString " "
-      . singShowsTmList ty 11 l
-    ListTake ty a b ->
-        showString "ListTake "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . singShowsTmList ty 11 b
-    ListConcat ty a b ->
-        showString "ListConcat "
-      . showsPrec 11 ty
-      . showString " "
-      . singShowsTmList ty 11 a
-      . showString " "
-      . singShowsTmList ty 11 b
-    MakeList ty a b ->
-        showString "MakeList "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . singShowsTm ty 11 b
-    LiteralList ty l ->
-        showString "LiteralList "
-      . showsPrec 11 ty
-      . showString " "
-      . singShowsListTm ty 11 l
-    ListMap tya tyb b as ->
-        showString "ListMap "
-      . showsPrec 11 tya
-      . showString " "
-      . showsPrec 11 tyb
-      . showString " "
-      . singShowsOpen tyb b
-      . showString " "
-      . singShowsTmList tya 11 as
-    ListFilter tya f as ->
-        showString "ListFilter "
-      . showsPrec 11 tya
-      . showString " "
-      . showsPrec 11 f
-      . showString " "
-      . singShowsTmList tya 11 as
-    ListFold tya tyb (Open vid nm f) a bs ->
-        showString "ListFold "
-      . showsPrec 11 tya
-      . showString " "
-      . showsPrec 11 tyb
-      . showString " (Open "
-        . showsPrec 11 vid
-        . showString " "
-        . showsPrec 11 nm
-        . singShowsOpen tya f
-      . showString ") "
-      . singShowsTm tya 11 a
-      . showString " "
-      . singShowsTmList tyb 11 bs
-    AndQ tya f g a ->
-        showString "AndQ "
-      . showsPrec 11 tya
-      . showString " "
-      . showsPrec 11 f
-      . showString " "
-      . showsPrec 11 g
-      . showString " "
-      . singShowsTm tya 11 a
-    OrQ tya f g a ->
-        showString "OrQ "
-      . showsPrec 11 tya
-      . showString " "
-      . showsPrec 11 f
-      . showString " "
-      . showsPrec 11 g
-      . showString " "
-      . singShowsTm tya 11 a
-    Where tyo tya str f obj ->
-        showString "Where "
-      . showsPrec 11 tyo
-      . showString " "
-      . showsPrec 11 tya
-      . showString " "
-      . showsPrec 11 str
-      . showString " "
-      . showsPrec 11 f
-      . showString " "
-      . singShowsTm tyo 11 obj
-    Typeof tya a ->
-        showString "Typeof "
-      . showsPrec 11 tya
-      . showString " "
-      . singShowsTm tya 11 a
+  Logical op args ->
+      showString "Logical "
+    . showsPrec 11 op
+    . showString " "
+    . showString "TODO"
+    . showListWith (singShowsTm SBool 0) args
 
-instance
-  ( OfPactTypes UserShow tm
-  , UserShow (Concrete a)
-  , UserShow (Existential tm)
-  ) => UserShow (Core tm a) where
-  userShowPrec d = \case
-    Lit a                    -> userShowPrec d a
-    Sym s                    -> tShow s
-    Var _vid name            -> name
-    Identity ty x            -> parenList [SIdentity, singUserShowTm ty x]
-    Constantly ty x y        -> parenList [SConstantly, singUserShowTm ty x, userShowPrec 11 y]
-    Compose _ tyb tyc _ b c  -> parenList [SCompose, singUserShowOpen tyb b, singUserShowOpen tyc c]
-    StrConcat x y            -> parenList [SConcatenation, userShow x, userShow y]
-    StrLength str            -> parenList [SStringLength, userShow str]
-    StrToInt s               -> parenList [SStringToInteger, userShow s]
-    StrToIntBase b s         -> parenList [SStringToInteger, userShow b, userShow s]
-    StrContains needle haystack
-      -> parenList [SContains, userShow needle, userShow haystack]
-    Numerical tm             -> userShowPrec d tm
-    IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
-    DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
-    IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
-    DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
-    TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    StrComparison op x y     -> parenList [userShow op, userShow x, userShow y]
-    BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    -- ObjectEqNeq _ty op x y   -> parenList [userShow op, userShow x, userShow y]
-    -- ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
-    -- ObjContains _schema a b  -> parenList [SContains, userShow a, userShow b]
-    -- ObjDrop _schema k obj    -> parenList [SObjectDrop, userShow k, userShow obj]
-    -- ObjTake _schema k obj    -> parenList [SObjectTake, userShow k, userShow obj]
-    ObjMerge ty x y          -> parenList [SObjectMerge, singUserShowTm ty x, singUserShowTm ty y]
-    LiteralObject _obj       -> "LiteralObject TODO" -- userShow obj
-    Logical op args          -> parenList $ userShow op : fmap userShow args
+  ListEqNeq ty' op a b ->
+      showString "ListEqNeq "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsPrec 11 op
+    . showString " "
+    . singShowsTmList ty' 11 a
+    . showString " "
+    . singShowsTmList ty' 11 b
+  ListAt ty' a b ->
+      showString "ListAt "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . singShowsTmList ty' 11 b
+  ListContains ty' a b ->
+      showString "ListContains "
+    . showsPrec 11 ty'
+    . showString " "
+    . singShowsTm ty' 11 a
+    . showString " "
+    . singShowsTmList ty' 11 b
+  ListLength ty' a ->
+      showString "ListLength "
+    . showsPrec 11 ty'
+    . showString " "
+    . singShowsTmList ty' 11 a
+  ListReverse ty' a ->
+      showString "ListReverse "
+    . showsPrec 11 ty'
+    . showString " "
+    . singShowsTmList ty' 11 a
+  ListSort ty' a ->
+      showString "ListSort "
+    . showsPrec 11 ty'
+    . showString " "
+    . singShowsTmList ty' 11 a
+  ListDrop ty' i l ->
+      showString "ListDrop "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsTm 11 i
+    . showString " "
+    . singShowsTmList ty' 11 l
+  ListTake ty' a b ->
+      showString "ListTake "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . singShowsTmList ty' 11 b
+  ListConcat ty' a b ->
+      showString "ListConcat "
+    . showsPrec 11 ty'
+    . showString " "
+    . singShowsTmList ty' 11 a
+    . showString " "
+    . singShowsTmList ty' 11 b
+  MakeList ty' a b ->
+      showString "MakeList "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . singShowsTm ty' 11 b
+  LiteralList ty' l ->
+      showString "LiteralList "
+    . showsPrec 11 ty'
+    . showString " "
+    . singShowsListTm ty' 11 l
+  ListMap tya tyb b as ->
+      showString "ListMap "
+    . showsPrec 11 tya
+    . showString " "
+    . showsPrec 11 tyb
+    . showString " "
+    . singShowsOpen tyb b
+    . showString " "
+    . singShowsTmList tya 11 as
+  ListFilter tya f as ->
+      showString "ListFilter "
+    . showsPrec 11 tya
+    . showString " "
+    . singShowsOpen sing f
+    . showString " "
+    . singShowsTmList tya 11 as
+  ListFold tya tyb (Open vid nm f) a bs ->
+      showString "ListFold "
+    . showsPrec 11 tya
+    . showString " "
+    . showsPrec 11 tyb
+    . showString " (Open "
+      . showsPrec 11 vid
+      . showString " "
+      . showsPrec 11 nm
+      . singShowsOpen tya f
+    . showString ") "
+    . singShowsTm tya 11 a
+    . showString " "
+    . singShowsTmList tyb 11 bs
+  AndQ tya f g a ->
+      showString "AndQ "
+    . showsPrec 11 tya
+    . showString " "
+    . singShowsOpen sing f
+    . showString " "
+    . singShowsOpen sing g
+    . showString " "
+    . singShowsTm tya 11 a
+  OrQ tya f g a ->
+      showString "OrQ "
+    . showsPrec 11 tya
+    . showString " "
+    . singShowsOpen sing f
+    . showString " "
+    . singShowsOpen sing g
+    . showString " "
+    . singShowsTm tya 11 a
+  Where tyo tya str f obj ->
+      showString "Where "
+    . showsPrec 11 tyo
+    . showString " "
+    . showsPrec 11 tya
+    . showString " "
+    . showsTm 11 str
+    . showString " "
+    . singShowsOpen sing f
+    . showString " "
+    . singShowsTm tyo 11 obj
+  Typeof tya a ->
+      showString "Typeof "
+    . showsPrec 11 tya
+    . showString " "
+    . singShowsTm tya 11 a
 
-    ListEqNeq ty op x y      -> parenList [userShow op, singUserShowTmList ty x, singUserShowTmList ty y]
-    ListAt ty k lst          -> parenList [userShow k, singUserShowTmList ty lst]
-    ListContains ty needle haystack
-      -> parenList [SContains, singUserShowTm ty needle, singUserShowTmList ty haystack]
-    ListLength ty x          -> parenList [SListLength, singUserShowTmList ty x]
-    ListReverse ty lst       -> parenList [SReverse, singUserShowTmList ty lst]
-    ListSort ty lst          -> parenList [SSort, singUserShowTmList ty lst]
-    ListDrop ty n lst        -> parenList [SListDrop, userShow n, singUserShowTmList ty lst]
-    ListTake ty n lst        -> parenList [SListTake, userShow n, singUserShowTmList ty lst]
-    ListConcat ty x y        -> parenList [SConcatenation, singUserShowTmList ty x, singUserShowTmList ty y]
-    MakeList ty x y          -> parenList [SMakeList, userShow x, singUserShowTm ty y]
-    LiteralList ty lst       -> singUserShowListTm ty lst
-    ListMap tya tyb b as -> parenList
-      [ SMap
-      , singUserShowOpen tyb b
-      , singUserShowTmList tya as
-      ]
-    ListFilter ty a b -> parenList
-      [ SFilter
-      , singUserShowOpen SBool a
-      , singUserShowTmList ty b
-      ]
-    ListFold tya tyb (Open _ nm a) b c -> parenList
-      [ SFold
-      , parenList [ "lambda", nm, singUserShowOpen tya a ]
-      , singUserShowTm tya b
-      , singUserShowTmList tyb c
-      ]
-    AndQ ty a b c -> parenList
-      [ SAndQ
-      , singUserShowOpen SBool a
-      , singUserShowOpen SBool b
-      , singUserShowTm ty c
-      ]
-    OrQ ty a b c -> parenList
-      [ SOrQ
-      , singUserShowOpen SBool a
-      , singUserShowOpen SBool b
-      , singUserShowTm ty c
-      ]
-    -- Where _ _ a b c -> parenList [SWhere, userShow a, singUserShowOpen SBool b, userShow c]
-    Typeof ty a -> parenList [STypeof, singUserShowTm ty a]
+instance IsTerm Term where
+  singEqTm'       = singEqTm
+  singShowsTm'    = singShowsTm
+  singUserShowTm' = singUserShowTm
+
+instance IsTerm Prop where
+  singEqTm'       = singEqTm
+  singShowsTm'    = singShowsTm
+  singUserShowTm' = singUserShowTm
+
+instance IsTerm Invariant where
+  singEqTm'       = singEqTm
+  singShowsTm'    = singShowsTm
+  singUserShowTm' = singUserShowTm
+
+instance IsTerm tm => IsTerm (Core tm) where
+  singEqTm'       = singEqTm
+  singShowsTm'    = singShowsTm
+  singUserShowTm' = singUserShowTm
+
+
+userShowCore :: IsTerm tm => SingTy ty -> Int -> Core tm ty -> Text
+userShowCore ty _p = \case
+  Lit a                    -> userShowLit ty a
+  Sym s                    -> tShow s
+  Var _vid name            -> name
+  Identity ty' x            -> parenList [SIdentity, singUserShowTm ty' x]
+  Constantly ty' x y        -> parenList [SConstantly, singUserShowTm ty' x, userShowPrec 11 y]
+  Compose _ tyb tyc _ b c  -> parenList [SCompose, singUserShowOpen tyb b, singUserShowOpen tyc c]
+  StrConcat x y            -> parenList [SConcatenation, userShowTm x, userShowTm y]
+  StrLength str            -> parenList [SStringLength, userShowTm str]
+  StrToInt s               -> parenList [SStringToInteger, userShowTm s]
+  StrToIntBase b s         -> parenList [SStringToInteger, userShowTm b, userShowTm s]
+  StrContains needle haystack
+    -> parenList [SContains, userShowTm needle, userShowTm haystack]
+  Numerical tm             -> userShowNumerical ty tm
+  IntAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
+  DecAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
+  IntegerComparison op x y -> parenList [userShow op, userShowTm x, userShowTm y]
+  DecimalComparison op x y -> parenList [userShow op, userShowTm x, userShowTm y]
+  TimeComparison op x y    -> parenList [userShow op, userShowTm x, userShowTm y]
+  StrComparison op x y     -> parenList [userShow op, userShowTm x, userShowTm y]
+  BoolComparison op x y    -> parenList [userShow op, userShowTm x, userShowTm y]
+  KeySetEqNeq op x y       -> parenList [userShow op, userShowTm x, userShowTm y]
+  ObjectEqNeq ty' op x y   -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
+  ObjAt ty' k obj          -> parenList [userShowTm k, singUserShowTm ty' obj]
+  ObjContains ty' k obj    -> parenList [SContains, userShowTm k, singUserShowTm ty' obj]
+  ObjDrop ty' ks obj       -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty' obj]
+  ObjTake ty' ks obj       -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty' obj]
+  ObjMerge ty' x y         -> parenList [SObjectMerge, singUserShowTm ty' x, singUserShowTm ty' y]
+  LiteralObject _obj       -> "LiteralObject TODO" -- userShow obj
+  Logical op args          -> parenList $ userShow op : fmap userShowTm args
+
+  ListEqNeq ty' op x y      -> parenList [userShow op, singUserShowTmList ty' x, singUserShowTmList ty' y]
+  ListAt ty' k lst          -> parenList [userShowTm k, singUserShowTmList ty' lst]
+  ListContains ty' needle haystack
+    -> parenList [SContains, singUserShowTm ty' needle, singUserShowTmList ty' haystack]
+  ListLength ty' x          -> parenList [SListLength, singUserShowTmList ty' x]
+  ListReverse ty' lst       -> parenList [SReverse, singUserShowTmList ty' lst]
+  ListSort ty' lst          -> parenList [SSort, singUserShowTmList ty' lst]
+  ListDrop ty' n lst        -> parenList [SListDrop, userShowTm n, singUserShowTmList ty' lst]
+  ListTake ty' n lst        -> parenList [SListTake, userShowTm n, singUserShowTmList ty' lst]
+  ListConcat ty' x y        -> parenList [SConcatenation, singUserShowTmList ty' x, singUserShowTmList ty' y]
+  MakeList ty' x y          -> parenList [SMakeList, userShowTm x, singUserShowTm ty' y]
+  LiteralList ty' lst       -> singUserShowListTm ty' lst
+  ListMap tya tyb b as -> parenList
+    [ SMap
+    , singUserShowOpen tyb b
+    , singUserShowTmList tya as
+    ]
+  ListFilter ty' a b -> parenList
+    [ SFilter
+    , singUserShowOpen SBool a
+    , singUserShowTmList ty' b
+    ]
+  ListFold tya tyb (Open _ nm a) b c -> parenList
+    [ SFold
+    , parenList [ "lambda", nm, singUserShowOpen tya a ]
+    , singUserShowTm tya b
+    , singUserShowTmList tyb c
+    ]
+  AndQ ty' a b c -> parenList
+    [ SAndQ
+    , singUserShowOpen SBool a
+    , singUserShowOpen SBool b
+    , singUserShowTm ty' c
+    ]
+  OrQ ty' a b c -> parenList
+    [ SOrQ
+    , singUserShowOpen SBool a
+    , singUserShowOpen SBool b
+    , singUserShowTm ty' c
+    ]
+  Where tyobj _tya k f obj -> parenList
+    [ SWhere
+    , userShowTm k
+    , singUserShowOpen SBool f
+    , singUserShowTm tyobj obj
+    ]
+  Typeof ty' a -> parenList [STypeof, singUserShowTm ty' a]
 
 
 data BeforeOrAfter = Before | After
@@ -1008,49 +937,48 @@ data PropSpecific (a :: Ty) where
 
   PropRead :: SingTy ('TyObject m) -> Schema m -> BeforeOrAfter -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
 
-instance Eq   (Concrete a) => Eq   (PropSpecific a) where -- TODO
-instance Show (Concrete a) => Show (PropSpecific a) where -- TODO
--- deriving instance Eq   (Concrete a) => Eq   (PropSpecific a)
--- deriving instance Show (Concrete a) => Show (PropSpecific a)
+-- instance Eq   (Concrete a) => Eq   (PropSpecific a) where -- TODO
+-- instance Show (Concrete a) => Show (PropSpecific a) where -- TODO
 
 
 data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
 
-deriving instance Eq   (Concrete a) => Eq   (Prop a)
-deriving instance Show (Concrete a) => Show (Prop a)
+-- deriving instance Eq   (Concrete a) => Eq   (Prop a)
+-- deriving instance Show (Concrete a) => Show (Prop a)
+-- instance UserShow (Concrete a) => UserShow (Prop a) where -- TODO
 
-instance UserShow (Concrete a) => UserShow (PropSpecific a) where
+instance UserShow (PropSpecific a) where
   userShowPrec _d = \case
     Abort                   -> STransactionAborts
     Success                 -> STransactionSucceeds
     Result                  -> SFunctionResult
     Forall _ var ty x       -> parenList
-      [SUniversalQuantification, parens (var <> ":" <> userShow ty), userShow x]
+      [SUniversalQuantification, parens (var <> ":" <> userShow ty), userShowTm x]
     Exists _ var ty x       -> parenList
-      [SExistentialQuantification, parens (var <> ":" <> userShow ty), userShow x]
-    TableWrite tab          -> parenList [STableWritten, userShow tab]
-    TableRead  tab          -> parenList [STableRead, userShow tab]
-    ColumnWritten tab col   -> parenList ["column-written", userShow tab, userShow col]
-    ColumnRead tab col      -> parenList ["column-read", userShow tab, userShow col]
-    IntCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
-    DecCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
-    IntColumnDelta tab col  -> parenList [SColumnDelta, userShow tab, userShow col]
-    DecColumnDelta tab col  -> parenList [SColumnDelta, userShow tab, userShow col]
-    RowRead tab rk          -> parenList [SRowRead, userShow tab, userShow rk]
-    RowReadCount tab rk     -> parenList [SRowReadCount, userShow tab, userShow rk]
-    RowWrite tab rk         -> parenList [SRowWritten, userShow tab, userShow rk]
-    RowWriteCount tab rk    -> parenList [SRowWriteCount, userShow tab, userShow rk]
+      [SExistentialQuantification, parens (var <> ":" <> userShow ty), userShowTm x]
+    TableWrite tab          -> parenList [STableWritten, userShowTm tab]
+    TableRead  tab          -> parenList [STableRead, userShowTm tab]
+    ColumnWritten tab col   -> parenList ["column-written", userShowTm tab, userShowTm col]
+    ColumnRead tab col      -> parenList ["column-read", userShowTm tab, userShowTm col]
+    IntCellDelta tab col rk -> parenList [SCellDelta, userShowTm tab, userShowTm col, userShowTm rk]
+    DecCellDelta tab col rk -> parenList [SCellDelta, userShowTm tab, userShowTm col, userShowTm rk]
+    IntColumnDelta tab col  -> parenList [SColumnDelta, userShowTm tab, userShowTm col]
+    DecColumnDelta tab col  -> parenList [SColumnDelta, userShowTm tab, userShowTm col]
+    RowRead tab rk          -> parenList [SRowRead, userShowTm tab, userShowTm rk]
+    RowReadCount tab rk     -> parenList [SRowReadCount, userShowTm tab, userShowTm rk]
+    RowWrite tab rk         -> parenList [SRowWritten, userShowTm tab, userShowTm rk]
+    RowWriteCount tab rk    -> parenList [SRowWriteCount, userShowTm tab, userShowTm rk]
     KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
-    RowEnforced tn cn rk    -> parenList [SRowEnforced, userShow tn, userShow cn, userShow rk]
-    RowExists tn rk ba      -> parenList [SRowExists, userShow tn, userShow rk, userShow ba]
-    PropRead _ty _sch ba tn rk  -> parenList [SPropRead, userShow tn, userShow rk, userShow ba]
+    RowEnforced tn cn rk    -> parenList [SRowEnforced, userShowTm tn, userShowTm cn, userShowTm rk]
+    RowExists tn rk ba      -> parenList [SRowExists, userShowTm tn, userShowTm rk, userShow ba]
+    PropRead _ty _sch ba tn rk  -> parenList [SPropRead, userShowTm tn, userShowTm rk, userShow ba]
 
-instance UserShow (Concrete a) => UserShow (Prop a) where
-  userShowPrec d = \case
-    PropSpecific p -> userShowPrec d p
-    CoreProp     p -> userShowPrec d p
+-- instance UserShow (Concrete a) => UserShow (Prop a) where
+--   userShowPrec d = \case
+--     PropSpecific p -> userShowPrec d p
+--     CoreProp     p -> userShowPrec d p
 
 instance S :*<: Prop where
   inject' = CoreProp . Sym
@@ -1103,8 +1031,6 @@ instance Num (Prop 'TyDecimal) where
   negate      = inject .   DecUnaryArithOp Negate
 
 type EProp = Existential Prop
-EQ_EXISTENTIAL(Prop)
-SHOW_EXISTENTIAL(Prop)
 
 mkLiteralList :: [Existential tm] -> Maybe (Existential (Core tm))
 mkLiteralList [] = Just $ Existential (SList SAny) (LiteralList SAny [])
@@ -1179,8 +1105,8 @@ pattern PNot a = CoreProp (Logical NotOp [a])
 -- constructions as 'Core'.
 newtype Invariant a = CoreInvariant (Core Invariant a)
 
-deriving instance Eq   (Concrete a) => Eq   (Invariant a)
-deriving instance Show (Concrete a) => Show (Invariant a)
+-- deriving instance Eq   (Concrete a) => Eq   (Invariant a)
+-- deriving instance Show (Concrete a) => Show (Invariant a)
 
 instance Core Invariant :<: Invariant where
   inject                    = CoreInvariant
@@ -1198,12 +1124,10 @@ instance S :*<: Invariant where
     CoreInvariant (Sym a) -> Just a
     _                     -> Nothing
 
-instance UserShow (Concrete a) => UserShow (Invariant a) where
-  userShowPrec d (CoreInvariant a) = userShowPrec d a
+-- instance UserShow (Concrete a) => UserShow (Invariant a) where
+--   userShowPrec d (CoreInvariant a) = error "UserShow (Core Invariant)" -- userShowPrec d a
 
 type EInvariant = Existential Invariant
-EQ_EXISTENTIAL(Invariant)
-SHOW_EXISTENTIAL(Invariant)
 
 pattern ILiteral :: Concrete a -> Invariant a
 pattern ILiteral a = CoreInvariant (Lit a)
@@ -1212,10 +1136,6 @@ pattern ILogicalOp :: LogicalOp -> [Invariant 'TyBool] -> Invariant 'TyBool
 pattern ILogicalOp op args = CoreInvariant (Logical op args)
 
 type ETerm = Existential Term
-EQ_EXISTENTIAL(Term)
-SHOW_EXISTENTIAL(Term)
-
-SHOW_EXISTENTIAL((Core Term))
 
 data Term (a :: Ty) where
   CoreTerm        :: Core Term a -> Term a
@@ -1268,6 +1188,7 @@ data Term (a :: Ty) where
   ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr -> Term 'TyTime
   Hash            :: ETerm                              -> Term 'TyStr
 
+{-
 instance UserShow (Concrete a) => UserShow (Term a) where
   userShowPrec _ = \case
     CoreTerm tm                -> userShow tm
@@ -1305,6 +1226,7 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     ReadKeySet name      -> parenList ["read-keyset", userShow name]
     ReadDecimal name     -> parenList ["read-decimal", userShow name]
     ReadInteger name     -> parenList ["read-integer", userShow name]
+-}
 
 instance Eq   (Concrete a) => Eq   (Term a) where
   (==) = error "TODO"

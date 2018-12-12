@@ -20,6 +20,9 @@
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE TypeInType                 #-}
+{-# LANGUAGE TypeFamilyDependencies     #-}
+
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
 module Pact.Analyze.Types.Shared where
 
@@ -70,12 +73,29 @@ import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 -- import           Pact.Analyze.Types.Map    (Map)
-import           Pact.Analyze.Types.Map (Mapping((:->)))
+import           Pact.Analyze.Types.Map (Mapping)
 import qualified Pact.Analyze.Types.Map as SMap
 
 import           GHC.TypeLits (Symbol)
 import           Data.Kind (Type)
 
+
+class IsTerm tm where
+  singEqTm'       :: SingTy ty -> tm ty -> tm ty -> Bool
+  singShowsTm'    :: SingTy ty -> Int   -> tm ty -> ShowS
+  singUserShowTm' :: SingTy ty ->          tm ty -> Text
+
+eqTm :: (SingI ty, IsTerm tm) => tm ty -> tm ty -> Bool
+eqTm = singEqTm' sing
+
+showsTm :: (SingI ty, IsTerm tm) => Int -> tm ty -> ShowS
+showsTm = singShowsTm' sing
+
+showTm :: (SingI ty, IsTerm tm) => tm ty -> String
+showTm tm = showsTm 0 tm ""
+
+userShowTm :: (SingI ty, IsTerm tm) => tm ty -> Text
+userShowTm = singUserShowTm' sing
 
 data Located a
   = Located
@@ -93,18 +113,16 @@ instance Mergeable a => Mergeable (Located a) where
 data Existential (tm :: Ty -> Type) where
   Existential :: SingTy a -> tm a -> Existential tm
 
---   ESimple :: SingTy a -> tm a         -> Existential tm
---   -- TODO: combine with ESimple?
---   EList   :: SingTy a -> tm a         -> Existential tm
---   EObject :: Schema   -> tm 'TyObject -> Existential tm
+instance IsTerm tm => Eq (Existential tm) where
+  Existential tya a == Existential tyb b = case singEq tya tyb of
+    Nothing   -> False
+    Just Refl -> singEqTm' tya a b
 
--- TODO: when we have quantified constraints we can do this (also for Show):
--- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
---   ESimple ta ia == ESimple tb ib = case typeEq ta tb of
---     Just Refl -> ia == ib
---     Nothing   -> False
---   EObject sa pa == EObject sb pb = sa == sb && pa == pb
---   _ == _ = False
+instance IsTerm tm => Show (Existential tm) where
+  showsPrec p (Existential ty tm) = singShowsTm' ty p tm
+
+instance IsTerm tm => UserShow (Existential tm) where
+  userShowPrec _ (Existential ty tm) = singUserShowTm' ty tm
 
 transformExistential
   :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
@@ -438,7 +456,7 @@ newtype Schema (m :: [Mapping Symbol Ty]) = Schema (SMap.Map m)
 
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow (Schema m) where
-  userShowPrec d (Schema schema) = "TODO" -- userShowPrec d schema
+  userShowPrec = error "TODO" -- userShowPrec d schema
 
 data ESchema where
   ESchema :: SingTy ('TyObject m) -> Schema m -> ESchema
@@ -662,7 +680,7 @@ instance HasKind KeySet where
 instance SMTValue KeySet where
   sexprToVal = fmap KeySet . sexprToVal
 
-type family Concrete (a :: Ty) where
+type family Concrete (a :: Ty) = r | r -> a where
   Concrete 'TyInteger    = Integer
   Concrete 'TyBool       = Bool
   Concrete 'TyStr        = Str
@@ -707,7 +725,7 @@ withSMTValue
 withSMTValue = withDict . singMkSMTValue
   where
 
-    singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
+    singMkSMTValue :: IsSimple a ~ 'True => SingTy a -> Dict (SMTValue (Concrete a))
     singMkSMTValue = \case
       SInteger -> Dict
       SBool    -> Dict
@@ -716,6 +734,7 @@ withSMTValue = withDict . singMkSMTValue
       SDecimal -> Dict
       SKeySet  -> Dict
       SAny     -> Dict
+      -- SList _ -> error ""
 
 withSymWord
   :: IsSimple a ~ 'True
@@ -723,7 +742,7 @@ withSymWord
 withSymWord = withDict . singMkSymWord
   where
 
-    singMkSymWord :: SingTy a -> Dict (SymWord (Concrete a))
+    singMkSymWord :: IsSimple a ~ 'True => SingTy a -> Dict (SymWord (Concrete a))
     singMkSymWord = \case
       SInteger -> Dict
       SBool    -> Dict

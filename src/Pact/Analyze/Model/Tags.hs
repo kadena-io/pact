@@ -29,7 +29,6 @@ import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
 import           Data.Traversable     (for)
-import           Data.Type.Equality   ((:~:) (Refl))
 
 import qualified Pact.Types.Typecheck as TC
 
