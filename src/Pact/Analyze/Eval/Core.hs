@@ -122,8 +122,8 @@ evalEqNeq op xT yT = do
 evalObjectEqNeq
   :: Analyzer m
   => EqNeq
-  -> TermOf m 'TyObject
-  -> TermOf m 'TyObject
+  -> TermOf m ('TyObject obj)
+  -> TermOf m ('TyObject obj)
   -> m (S Bool)
 evalObjectEqNeq op xT yT = do
   x <- evalO xT
@@ -339,11 +339,11 @@ evalCore ObjDrop{}      = throwErrorNoLoc "not yet implemented"
 
 withMergeableSbv
   :: forall a b m.
-     Analyzer m
-  => SingTy 'SimpleK a -> (Mergeable (m (SBV (Concrete a))) => m b) -> m b
+     (IsSimple a ~ 'True, Analyzer m)
+  => SingTy a -> (Mergeable (m (SBV (Concrete a))) => m b) -> m b
 withMergeableSbv = withDict . mkSing where
 
-  mkSing :: SingTy 'SimpleK a -> Dict (Mergeable (m (SBV (Concrete a))))
+  mkSing :: SingTy a -> Dict (Mergeable (m (SBV (Concrete a))))
   mkSing = \case
     SInteger -> Dict
     SBool    -> Dict
@@ -355,11 +355,11 @@ withMergeableSbv = withDict . mkSing where
 
 withMergeableSbvList
   :: forall a b m.
-     Analyzer m
-  => SingTy 'SimpleK a -> (Mergeable (m (SBV [Concrete a])) => m b) -> m b
+     (IsSimple a ~ 'True, Analyzer m)
+  => SingTy a -> (Mergeable (m (SBV [Concrete a])) => m b) -> m b
 withMergeableSbvList = withDict . mkSing where
 
-  mkSing :: SingTy 'SimpleK a -> Dict (Mergeable (m (SBV [Concrete a])))
+  mkSing :: SingTy a -> Dict (Mergeable (m (SBV [Concrete a])))
   mkSing = \case
     SInteger -> Dict
     SBool    -> Dict
@@ -429,9 +429,9 @@ evalStrToIntBase bT sT = do
 
 evalObjAt
   :: (Analyzer m, SymWord a)
-  => Schema
+  => SObject obj
   -> TermOf m 'TyStr
-  -> TermOf m 'TyObject
+  -> TermOf m ('TyObject obj)
   -> EType
   -> m (S a)
 evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
@@ -475,10 +475,10 @@ evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
     relevantFields'
 
 evalObjAtO
-  :: forall m
+  :: forall m obj
    . Analyzer m
   => TermOf m 'TyStr
-  -> TermOf m 'TyObject
+  -> TermOf m ('TyObject obj)
   -> m Object
 evalObjAtO colNameT objT = do
     obj@(Object fields) <- evalO objT
@@ -498,7 +498,7 @@ evalObjAtO colNameT objT = do
 
 evalCoreO
   :: Analyzer m
-  => Core (TermOf m) 'TyObject -> m Object
+  => Core (TermOf m) ('TyObject ob) -> m (Object obj)
 evalCoreO (LiteralObject obj) = Object <$> traverse evalExistential obj
 evalCoreO (ObjAt _schema colNameT objT _retType) = evalObjAtO colNameT objT
 evalCoreO (ObjMerge objT1 objT2) = mappend <$> evalO objT1 <*> evalO objT2
@@ -540,12 +540,12 @@ evalCoreO ObjDrop{}      = throwErrorNoLoc "not yet implemented"
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential = \case
-  ESimple ty prop -> withShow ty $ withSymWord ty $ do
-    prop' <- eval prop
-    pure (EType ty, mkAVal prop')
-  EList (SList ty) prop -> withShow ty $ withSymWord ty $ do
+  Existential (SList ty) prop -> withShow ty $ withSymWord ty $ do
     vals  <- eval prop
     pure (EType ty, mkAVal vals)
-  EObject ty prop -> do
+  Existential (SObject ty) prop -> do
     prop' <- evalO prop
     pure (EObjectTy ty, AnObj prop')
+  Existential ty prop -> withShow ty $ withSymWord ty $ do
+    prop' <- eval prop
+    pure (EType ty, mkAVal prop')

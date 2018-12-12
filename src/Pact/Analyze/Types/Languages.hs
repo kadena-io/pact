@@ -562,10 +562,11 @@ instance
       Nothing   -> False
       Just Refl -> singEqOpen SBool f1 f2 && singEqOpen SBool g1 g2
         && singEqTm tya1 a1 a2
-  Where s1 tya1 a1 b1 c1 == Where s2 tya2 a2 b2 c2
-    = case singEq tya1 tya2 of
-      Nothing   -> False
-      Just Refl -> s1 == s2 && a1 == a2 && singEqOpen SBool b1 b2 && c1 == c2
+  -- TODO
+  -- Where s1 tya1 a1 b1 c1 == Where s2 tya2 a2 b2 c2
+  --   = case singEq tya1 tya2 of
+  --     Nothing   -> False
+  --     Just Refl -> s1 == s2 && a1 == a2 && singEqOpen SBool b1 b2 && c1 == c2
   Typeof ty1 a1 == Typeof ty2 a2 = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> singEqTm ty1 a1 a2

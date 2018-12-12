@@ -266,7 +266,7 @@ genCore BoundedBool = Gen.recursive Gen.choice [
        Gen.subtermM2
          (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $
            \elst1 elst2 -> case (elst1, elst2) of
-             (EList (SList lty1) l1, EList (SList lty2) l2) ->
+             (Existential (SList lty1) l1, Existential (SList lty2) l2) ->
                case singEq lty1 ty' of
                  Nothing   -> error "impossible"
                  Just Refl -> case singEq lty2 ty' of
@@ -302,19 +302,19 @@ genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
       _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
       \elst1 elst2 -> case (elst1, elst2) of
-      (Existential lty@(SList ty) l, ESimple SInteger i)
+      (Existential lty@(SList ty) l, Existential SInteger i)
         -> pure $ Existential lty $ Inj $ ListDrop ty i l
       _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
       \elst1 elst2 -> case (elst1, elst2) of
-      (Existential lty@(SList ty) l, ESimple SInteger i)
+      (Existential lty@(SList ty) l, Existential SInteger i)
         -> pure $ Existential lty $ Inj $ ListTake ty i l
       _ -> error (show (elst1, elst2))
   -- Note: we currently use bounded list checking so anything beyond 10 is
   -- pointless
   , Gen.subtermM2 (genCore (BoundedInt (0 ... 5))) (genCore elemBound) $
       \elst1 elst2 -> case (elst1, elst2) of
-      (ESimple SInteger i, ESimple ty a)
+      (Existential SInteger i, Existential ty a)
         -> pure $ Existential (SList ty) $ Inj $ MakeList ty i a
       _ -> error (show (elst1, elst2))
   -- LiteralList

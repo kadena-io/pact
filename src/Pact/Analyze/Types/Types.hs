@@ -157,3 +157,8 @@ type family IsList (ty :: Ty) :: Bool where
 type family IsObject (ty :: Ty) :: Bool where
   IsObject ('TyObject _) = 'True
   IsObject _             = 'False
+
+refineSimple :: SingTy a -> Maybe (SingTy a)
+refineSimple (SList _)   = Nothing
+refineSimple (SObject _) = Nothing
+refineSimple ty          = Just ty

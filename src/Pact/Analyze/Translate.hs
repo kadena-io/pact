@@ -1043,7 +1043,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Existential needleTy needle <- translateNode val
     collection'             <- translateNode collection
     case collection' of
-      ESimple SStr haystack -> case needleTy of
+      Existential SStr haystack -> case needleTy of
         SStr -> pure $ Existential SBool $ CoreTerm $ StrContains needle haystack
         _    -> throwError' $ TypeError node
       Existential (SList ty) haystack -> case singEq needleTy ty of
