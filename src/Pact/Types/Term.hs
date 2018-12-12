@@ -44,7 +44,7 @@ module Pact.Types.Term
    TableName(..),
    Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    interfaceCode, interfaceMeta, interfaceName, interfaceImports,
-   ModuleName(..),
+   ModuleName(..), mnName,
    Name(..),parseName,
    ConstVal(..),
    Use(..),
@@ -305,7 +305,7 @@ newtype TableName = TableName Text
 instance Show TableName where show (TableName s) = show s
 
 -- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
-newtype ModuleName = ModuleName Text
+newtype ModuleName = ModuleName { _mnName :: Text }
   deriving (Eq, Ord, Show, Pretty, Hashable, AsString, IsString, ToJSON, FromJSON)
 
 newtype DefName = DefName Text

@@ -168,16 +168,25 @@ revokeAllCapabilities = evalCapabilities .= []
 revokeCapability :: Capability -> Eval e ()
 revokeCapability c = evalCapabilities %= filter (/= c)
 
--- -- | Evaluate current namespace and append namespace
--- -- to module name
--- evalNamespace
---   :: Info
---   -> Maybe Namespace
---   -> Module
---   -> Eval e (Term Name)
--- evalNamespace info Nothing _ =
---   evalError info $ "Namespaces must be defined for all transactions"
--- evalNamespace _info _m m' = undefined
+-- | Evaluate current namespace and prepend namespace to the
+-- module name. This should be done before any lookups, as
+-- 'namespace.modulename' is the name we will associate
+-- with a module unless the namespace policy is defined
+-- otherwise
+evalNamespace :: Info -> Module -> Eval e Module
+evalNamespace info m = do
+  mNs <- use $ evalRefs . rsNamespace
+  case mNs of
+    Nothing ->
+      evalError info $ "Namespaces must be defined for all transactions"
+    Just (Namespace (NamespaceName n) _) ->
+      pure $ mangleName n m
+  where
+    mangleName ns m'@Module{} =
+      over (mName . mnName) (\n -> ns <> "." <> n) m'
+    mangleName ns i@Interface{} =
+      over (interfaceName . mnName) (\n -> ns <> "." <> n) i
+
 
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
@@ -185,8 +194,10 @@ eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) 
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
+    -- prepend namespace def to module name
+    mangledM <- evalNamespace i m
     -- enforce old module keysets
-    oldM <- readRow i Modules $ _mName m
+    oldM <- readRow i Modules $ _mName mangledM
     case oldM of
       Nothing -> return ()
       Just om ->
