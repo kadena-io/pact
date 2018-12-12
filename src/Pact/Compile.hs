@@ -195,7 +195,7 @@ topLevel = specialFormOrApp topLevelForm <|> literals <|> varAtom  where
     RLetStar -> return letsForm
     RModule -> return moduleForm
     RInterface -> return interface
-    _ -> expected "top-level form (use, let[*], module, interface, namespace)"
+    _ -> expected "top-level form (use, let[*], module, interface)"
 
 
 valueLevel :: Compile (Term Name)
@@ -416,14 +416,17 @@ moduleForm = do
 
 implements :: Compile ()
 implements = do
-  ifName <- _atomAtom <$> bareAtom
-  overModuleState msImplements ((ModuleName ifName):)
+  ifName <- (ModuleName . _atomAtom) <$> bareAtom
+  overModuleState msImplements (ifName:)
 
 
 interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
   m <- meta ModelAllowed
+  use (psUser . csModule) >>= \ci -> case ci of
+    Just {} -> syntaxError "invalid nested interface or module"
+    Nothing -> return ()
   info <- contextInfo
   let code = case info of
         Info Nothing -> "<code unavailable>"

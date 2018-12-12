@@ -386,11 +386,12 @@ solveConstraint info refName (Ref t) evalMap = do
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
-resolveRef _qn@(QName q n _) = do
+resolveRef qn@(QName q n _) = do
   dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
   case dsm of
     d@Just {} -> return d
-    Nothing -> evalError def $ "foobarresolve" -- preview (evalRefs . rsLoaded . ix qn) <$> get
+    -- TODO: stuart wanted to do something here
+    Nothing -> preview (evalRefs . rsLoaded . ix qn) <$> get
 resolveRef nn@(Name _ _) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
