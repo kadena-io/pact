@@ -70,7 +70,7 @@ instance Show (SingTy ty) where
     SKeySet   -> showString "SKeySet"
     SAny      -> showString "SAny"
     SList a   -> showParen (p > 10) $ showString "SList "   . showsPrec 11 a
-    -- showParen (p > 10) $ showString "SObject " . showsPrec 11 m
+    -- SObject m -> showParen (p > 10) $ showString "SObject " . showsPrec 11 m
     SObject _ -> showString "SObject"
 
 instance UserShow (SingTy ty) where

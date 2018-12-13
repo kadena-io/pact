@@ -147,8 +147,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- variable, or column
   Var :: VarId -> Text -> Core t a
 
-  Identity     :: SingTy a   -> t a      -> Core t a
-  Constantly   :: SingTy a   -> t a -> Existential t -> Core t a
+  Identity     :: SingTy a   -> t a        -> Core t a
+  Constantly   :: SingTy b   -> t a -> t b -> Core t a
 
   -- compose
   -- - f :: a -> b (free a)
@@ -350,8 +350,10 @@ eqCoreTm _ (Var a1 b1)                   (Var a2 b2)
   = a1 == a2 && b1 == b2
 eqCoreTm _ (Identity ty1 a1)             (Identity _ty2 a2)
   = singEqTm ty1 a1 a2
-eqCoreTm _ (Constantly ty1 a1 e1)        (Constantly _ty2 a2 e2)
-  = singEqTm ty1 a1 a2 && e1 == e2
+eqCoreTm ty (Constantly tyb1 a1 b1)      (Constantly tyb2 a2 b2)
+  = case singEq tyb1 tyb2 of
+    Nothing   -> False
+    Just Refl -> singEqTm ty a1 a2 && singEqTm tyb1 b1 b2
 eqCoreTm _ (Compose tya1 tyb1 tyc1 a1 b1 c1) (Compose tya2 tyb2 tyc2 a2 b2 c2)
   = fromMaybe False $ do
     Refl <- singEq tya1 tya2
@@ -495,13 +497,13 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   Sym a            -> showString "Sym "        . showsPrec 11 a
   Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
   Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . singShowsTm a 11 b
-  Constantly a b c ->
+  Constantly tyb a b ->
       showString "Constantly "
-    . showsPrec 11 a
+    . showsPrec 11 ty
     . showString " "
-    . singShowsTm a 11 b
+    . singShowsTm ty 11 a
     . showString " "
-    . showsPrec 11 c
+    . singShowsTm tyb 11 b
   Compose tya tyb tyc a b c ->
       showString "Compose "
     . showsPrec 11 tya
@@ -790,7 +792,7 @@ userShowCore ty _p = \case
   Sym s                    -> tShow s
   Var _vid name            -> name
   Identity ty' x           -> parenList [SIdentity, singUserShowTm ty' x]
-  Constantly ty' x y       -> parenList [SConstantly, singUserShowTm ty' x, userShowPrec 11 y]
+  Constantly tyb a b       -> parenList [SConstantly, singUserShowTm ty a, singUserShowTm tyb b]
   Compose _ tyb tyc _ b c  -> parenList [SCompose, singUserShowOpen tyb b, singUserShowOpen tyc c]
   StrConcat x y            -> parenList [SConcatenation, userShowTm x, userShowTm y]
   StrLength str            -> parenList [SStringLength, userShowTm str]

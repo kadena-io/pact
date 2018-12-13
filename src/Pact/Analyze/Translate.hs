@@ -1081,21 +1081,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Existential (SList ty) $ CoreTerm $ MakeList ty num' a'
 
   AST_NFun _node SIdentity [a] -> do
-    ea' <- translateNode a
-    pure $ case ea' of
-      Existential ty     a' -> Existential ty     $ CoreTerm $ Identity ty      a'
-      -- ESimple ty     a' -> ESimple ty     $ CoreTerm $ Identity ty      a'
-      -- EList   ty     a' -> EList   ty     $ CoreTerm $ Identity ty      a'
-      -- EObject schema a' -> EObject schema $ CoreTerm $ Identity SObject a'
+    Existential tya a' <- translateNode a
+    pure $ Existential tya $ CoreTerm $ Identity tya a'
 
   AST_NFun _node SConstantly [ a, b ] -> do
-    ea' <- translateNode a
-    b'  <- translateNode b
-    pure $ case ea' of
-      Existential ty     a' -> Existential ty     $ CoreTerm $ Constantly ty      a' b'
-      -- ESimple ty     a' -> ESimple ty     $ CoreTerm $ Constantly ty      a' b'
-      -- EList   ty     a' -> EList   ty     $ CoreTerm $ Constantly ty      a' b'
-      -- EObject schema a' -> EObject schema $ CoreTerm $ Constantly SObject a' b'
+    Existential tya a' <- translateNode a
+    Existential tyb b' <- translateNode b
+    pure $ Existential tya $ CoreTerm $ Constantly tyb a' b'
 
   AST_NFun _node SCompose [ f, g, a ] -> do
     Existential tya a' <- translateNode a

@@ -24,7 +24,7 @@ import           Pact.Analyze.Util
 -- for reasons that elude me.
 
 float :: SingTy a -> Prop a -> ([Quantifier], Prop a)
-float _ty p = case p of
+float ty p = case p of
   CoreProp Var{}                  -> ([], p)
   CoreProp Lit{}                  -> ([], p)
   CoreProp Sym{}                  -> ([], p)
@@ -41,15 +41,13 @@ float _ty p = case p of
   PropSpecific RowEnforced{}      -> ([], p)
   PropSpecific IntColumnDelta{}   -> ([], p)
   PropSpecific DecColumnDelta{}   -> ([], p)
-  PropSpecific (PropRead ty schema ba tn pRk)
-    -> PropSpecific . PropRead ty schema ba tn <$> singFloat pRk
+  PropSpecific (PropRead ty' schema ba tn pRk)
+    -> PropSpecific . PropRead ty' schema ba tn <$> singFloat pRk
 
   -- functions
-  CoreProp (Identity ty a) -> CoreProp . Identity ty <$> float ty a;
-  CoreProp (Constantly ty a b) -> CoreProp <$>
-    (Constantly ty
-      <$> float ty a
-      <*> pure b); {- TODO -}
+  CoreProp (Identity tya a) -> CoreProp . Identity tya <$> float tya a;
+  CoreProp (Constantly tyb a b) -> CoreProp <$>
+    (Constantly tyb <$> float ty a <*> float tyb b)
   CoreProp (Compose tya tyb tyc a b c) -> CoreProp <$> (Compose tya tyb tyc
     <$> float     tya a
     <*> floatOpen tyb b
@@ -93,7 +91,7 @@ float _ty p = case p of
 
   -- str
   CoreProp (StrConcat s1 s2) -> PStrConcat <$> singFloat s1 <*> singFloat s2
-  CoreProp (Typeof ty a) -> CoreProp . Typeof ty <$> float ty a
+  CoreProp (Typeof tya a) -> CoreProp . Typeof tya <$> float tya a
 
   -- time
   CoreProp (IntAddTime time int) -> PIntAddTime <$> singFloat time <*> singFloat int
@@ -101,16 +99,16 @@ float _ty p = case p of
 
   -- bool
   -- - quantification
-  PropSpecific (Forall uid name ty prop) ->
+  PropSpecific (Forall uid name ty' prop) ->
     let (qs, prop') = singFloat prop
-    in (Forall' uid name ty:qs, prop')
-  PropSpecific (Exists uid name ty prop) ->
+    in (Forall' uid name ty':qs, prop')
+  PropSpecific (Exists uid name ty' prop) ->
     let (qs, prop') = singFloat prop
-    in (Exists' uid name ty:qs, prop')
+    in (Exists' uid name ty':qs, prop')
 
   -- - comparison
-  CoreProp (Comparison ty op a b)
-    -> CoreProp ... Comparison ty op <$> float ty a <*> float ty b
+  CoreProp (Comparison ty' op a b)
+    -> CoreProp ... Comparison ty' op <$> float ty' a <*> float ty' b
   CoreProp (IntegerComparison op a b)
     -> CoreProp ... IntegerComparison op <$> singFloat a <*> singFloat b
   CoreProp (DecimalComparison op a b)
@@ -122,23 +120,23 @@ float _ty p = case p of
   CoreProp (BoolComparison op a b)
     -> CoreProp ... BoolComparison op <$> singFloat a <*> singFloat b
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> singFloat a <*> singFloat b
-  CoreProp (ObjectEqNeq ty op a b) -> PObjectEqNeq ty op <$> float ty a <*> float ty b
-  CoreProp (ListEqNeq ty op a b) ->
-    CoreProp <$> (ListEqNeq ty op <$> float (SList ty) a <*> float (SList ty) b)
+  CoreProp (ObjectEqNeq ty' op a b) -> PObjectEqNeq ty' op <$> float ty' a <*> float ty' b
+  CoreProp (ListEqNeq ty' op a b) ->
+    CoreProp <$> (ListEqNeq ty' op <$> float (SList ty') a <*> float (SList ty') b)
   CoreProp (StrContains needle haystack) -> CoreProp <$>
     (StrContains <$> singFloat needle <*> singFloat haystack)
-  CoreProp (ListContains ty needle haystack) ->
-    CoreProp <$> (ListContains ty <$> float ty needle <*> float (SList ty) haystack)
+  CoreProp (ListContains ty' needle haystack) ->
+    CoreProp <$> (ListContains ty' <$> float ty' needle <*> float (SList ty') haystack)
 
   -- - logical
   CoreProp (Logical AndOp [a, b]) -> PAnd <$> singFloat a <*> singFloat b
   CoreProp (Logical OrOp [a, b]) -> POr  <$> singFloat a <*> singFloat b
   CoreProp (Logical NotOp [a]) -> bimap (fmap flipQuantifier) PNot (singFloat a)
   CoreProp (Logical _ _) -> error ("ill-defined logical op: " ++ showTm p)
-  CoreProp (AndQ ty f g a) -> CoreProp <$>
-    (AndQ ty <$> singFloatOpen f <*> singFloatOpen g <*> float ty a)
-  CoreProp (OrQ ty f g a) -> CoreProp <$>
-    (OrQ ty <$> singFloatOpen f <*> singFloatOpen g <*> float ty a)
+  CoreProp (AndQ ty' f g a) -> CoreProp <$>
+    (AndQ ty' <$> singFloatOpen f <*> singFloatOpen g <*> float ty' a)
+  CoreProp (OrQ ty' f g a) -> CoreProp <$>
+    (OrQ ty' <$> singFloatOpen f <*> singFloatOpen g <*> float ty' a)
 
   PropSpecific (RowRead  tn pRk)  -> PropSpecific . RowRead   tn <$> singFloat pRk
   PropSpecific (RowWrite tn pRk)  -> PropSpecific . RowWrite  tn <$> singFloat pRk
@@ -146,26 +144,26 @@ float _ty p = case p of
     -> PropSpecific ... RowExists tn <$> singFloat pRk <*> pure beforeAfter
 
   -- lists
-  CoreProp (ListLength ty pLst)
-    -> CoreProp . ListLength ty <$> float (SList ty) pLst
-  CoreProp (ListAt ty a b) -> CoreProp <$>
-    (ListAt ty <$> singFloat a <*> float (SList ty) b)
-  CoreProp (ListReverse ty lst)  -> CoreProp . ListReverse ty <$> float (SList ty) lst
-  CoreProp (ListSort ty lst)     -> CoreProp . ListSort ty <$> float (SList ty) lst
-  CoreProp (ListDrop ty a b)
-    -> CoreProp <$> (ListDrop ty <$> singFloat a <*> float (SList ty) b)
-  CoreProp (ListTake ty a b)
-    -> CoreProp <$> (ListTake ty <$> singFloat a <*> float (SList ty) b)
-  CoreProp (ListConcat ty l1 l2)
-    -> CoreProp <$> (ListConcat ty <$> float (SList ty) l1 <*> float (SList ty) l2)
-  CoreProp (MakeList ty a b)
-    -> CoreProp <$> (MakeList ty <$> singFloat a <*> float ty b)
-  CoreProp (LiteralList ty as)
-    -> CoreProp <$> (LiteralList ty <$> traverse (float ty) as)
+  CoreProp (ListLength ty' pLst)
+    -> CoreProp . ListLength ty' <$> float (SList ty') pLst
+  CoreProp (ListAt ty' a b) -> CoreProp <$>
+    (ListAt ty' <$> singFloat a <*> float (SList ty') b)
+  CoreProp (ListReverse ty' lst)  -> CoreProp . ListReverse ty' <$> float (SList ty') lst
+  CoreProp (ListSort ty' lst)     -> CoreProp . ListSort ty' <$> float (SList ty') lst
+  CoreProp (ListDrop ty' a b)
+    -> CoreProp <$> (ListDrop ty' <$> singFloat a <*> float (SList ty') b)
+  CoreProp (ListTake ty' a b)
+    -> CoreProp <$> (ListTake ty' <$> singFloat a <*> float (SList ty') b)
+  CoreProp (ListConcat ty' l1 l2)
+    -> CoreProp <$> (ListConcat ty' <$> float (SList ty') l1 <*> float (SList ty') l2)
+  CoreProp (MakeList ty' a b)
+    -> CoreProp <$> (MakeList ty' <$> singFloat a <*> float ty' b)
+  CoreProp (LiteralList ty' as)
+    -> CoreProp <$> (LiteralList ty' <$> traverse (float ty') as)
   CoreProp (ListMap tya tyb b as) ->
        CoreProp <$> (ListMap tya tyb <$> floatOpen tyb b <*> float (SList tya) as)
-  CoreProp (ListFilter ty a b)
-    -> CoreProp <$> (ListFilter ty <$> singFloatOpen a <*> float (SList ty) b)
+  CoreProp (ListFilter ty' a b)
+    -> CoreProp <$> (ListFilter ty' <$> singFloatOpen a <*> float (SList ty') b)
   CoreProp (ListFold tya tyb (Open v1 nm1 a) b c) -> do
     a' <- floatOpen tya a
     b' <- float tya b
@@ -173,13 +171,13 @@ float _ty p = case p of
     pure $ CoreProp $ ListFold tya tyb (Open v1 nm1 a') b' c'
 
   -- objects
-  CoreProp (ObjAt ty str obj) -> PObjAt ty <$> singFloat str <*> float ty obj
-  CoreProp (ObjContains ty a b) -> CoreProp <$>
-    (ObjContains ty <$> singFloat a <*> float ty b)
-  CoreProp (ObjDrop ty keys obj) -> CoreProp <$>
-    (ObjDrop ty <$> singFloat keys <*> float ty obj)
-  CoreProp (ObjTake ty keys obj) -> CoreProp <$>
-    (ObjTake ty <$> singFloat keys <*> float ty obj)
+  CoreProp (ObjAt ty' str obj) -> PObjAt ty' <$> singFloat str <*> float ty' obj
+  CoreProp (ObjContains ty' a b) -> CoreProp <$>
+    (ObjContains ty' <$> singFloat a <*> float ty' b)
+  CoreProp (ObjDrop ty' keys obj) -> CoreProp <$>
+    (ObjDrop ty' <$> singFloat keys <*> float ty' obj)
+  CoreProp (ObjTake ty' keys obj) -> CoreProp <$>
+    (ObjTake ty' <$> singFloat keys <*> float ty' obj)
   CoreProp LiteralObject{} -> ([], p)
   CoreProp ObjMerge{}      -> ([], p)
   CoreProp (Where objty tya a b c) -> CoreProp <$>
@@ -191,15 +189,15 @@ float _ty p = case p of
     singFloatOpen = floatOpen sing
 
     floatOpen :: SingTy b -> Open a Prop b -> ([Quantifier], Open a Prop b)
-    floatOpen ty (Open v nm a) = Open v nm <$> float ty a
+    floatOpen ty' (Open v nm a) = Open v nm <$> float ty' a
 
     singFloat :: SingI a => Prop a -> ([Quantifier], Prop a)
     singFloat = float sing
 
     flipQuantifier :: Quantifier -> Quantifier
     flipQuantifier = \case
-      Forall' uid name ty -> Exists' uid name ty
-      Exists' uid name ty -> Forall' uid name ty
+      Forall' uid name ty' -> Exists' uid name ty'
+      Exists' uid name ty' -> Forall' uid name ty'
 
 reassembleFloated :: [Quantifier] -> Prop 'TyBool -> Prop 'TyBool
 reassembleFloated qs prop =
