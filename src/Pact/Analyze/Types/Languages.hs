@@ -789,8 +789,8 @@ userShowCore ty _p = \case
   Lit a                    -> userShowLit ty a
   Sym s                    -> tShow s
   Var _vid name            -> name
-  Identity ty' x            -> parenList [SIdentity, singUserShowTm ty' x]
-  Constantly ty' x y        -> parenList [SConstantly, singUserShowTm ty' x, userShowPrec 11 y]
+  Identity ty' x           -> parenList [SIdentity, singUserShowTm ty' x]
+  Constantly ty' x y       -> parenList [SConstantly, singUserShowTm ty' x, userShowPrec 11 y]
   Compose _ tyb tyc _ b c  -> parenList [SCompose, singUserShowOpen tyb b, singUserShowOpen tyc c]
   StrConcat x y            -> parenList [SConcatenation, userShowTm x, userShowTm y]
   StrLength str            -> parenList [SStringLength, userShowTm str]
@@ -801,7 +801,7 @@ userShowCore ty _p = \case
   Numerical tm             -> userShowNumerical ty tm
   IntAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
   DecAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
-  Comparison ty' op x y     -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
+  Comparison ty' op x y    -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
   IntegerComparison op x y -> parenList [userShow op, userShowTm x, userShowTm y]
   DecimalComparison op x y -> parenList [userShow op, userShowTm x, userShowTm y]
   TimeComparison op x y    -> parenList [userShow op, userShowTm x, userShowTm y]
@@ -817,18 +817,18 @@ userShowCore ty _p = \case
   LiteralObject _obj       -> "LiteralObject TODO" -- userShow obj
   Logical op args          -> parenList $ userShow op : fmap userShowTm args
 
-  ListEqNeq ty' op x y      -> parenList [userShow op, singUserShowTmList ty' x, singUserShowTmList ty' y]
-  ListAt ty' k lst          -> parenList [userShowTm k, singUserShowTmList ty' lst]
+  ListEqNeq ty' op x y     -> parenList [userShow op, singUserShowTmList ty' x, singUserShowTmList ty' y]
+  ListAt ty' k lst         -> parenList [userShowTm k, singUserShowTmList ty' lst]
   ListContains ty' needle haystack
     -> parenList [SContains, singUserShowTm ty' needle, singUserShowTmList ty' haystack]
-  ListLength ty' x          -> parenList [SListLength, singUserShowTmList ty' x]
-  ListReverse ty' lst       -> parenList [SReverse, singUserShowTmList ty' lst]
-  ListSort ty' lst          -> parenList [SSort, singUserShowTmList ty' lst]
-  ListDrop ty' n lst        -> parenList [SListDrop, userShowTm n, singUserShowTmList ty' lst]
-  ListTake ty' n lst        -> parenList [SListTake, userShowTm n, singUserShowTmList ty' lst]
-  ListConcat ty' x y        -> parenList [SConcatenation, singUserShowTmList ty' x, singUserShowTmList ty' y]
-  MakeList ty' x y          -> parenList [SMakeList, userShowTm x, singUserShowTm ty' y]
-  LiteralList ty' lst       -> singUserShowListTm ty' lst
+  ListLength ty' x         -> parenList [SListLength, singUserShowTmList ty' x]
+  ListReverse ty' lst      -> parenList [SReverse, singUserShowTmList ty' lst]
+  ListSort ty' lst         -> parenList [SSort, singUserShowTmList ty' lst]
+  ListDrop ty' n lst       -> parenList [SListDrop, userShowTm n, singUserShowTmList ty' lst]
+  ListTake ty' n lst       -> parenList [SListTake, userShowTm n, singUserShowTmList ty' lst]
+  ListConcat ty' x y       -> parenList [SConcatenation, singUserShowTmList ty' x, singUserShowTmList ty' y]
+  MakeList ty' x y         -> parenList [SMakeList, userShowTm x, singUserShowTm ty' y]
+  LiteralList ty' lst      -> singUserShowListTm ty' lst
   ListMap tya tyb b as -> parenList
     [ SMap
     , singUserShowOpen tyb b
