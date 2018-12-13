@@ -10,8 +10,7 @@
 module Pact.Analyze.Eval.Numerical where
 
 import           Data.Coerce             (Coercible)
-import           Data.SBV                (EqSymbolic ((.==)), SymWord, sDiv,
-                                          sMod, (.<))
+import           Data.SBV                (EqSymbolic ((.==)), sDiv, sMod, (.<))
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Types
@@ -87,10 +86,8 @@ evalIntArithOp op xT yT = do
 
 evalDecArithOp
   :: ( Analyzer m
-     , a' ~ Concrete a
-     , b' ~ Concrete b
-     , DecimalRepresentable a', Show a', SymWord a'
-     , DecimalRepresentable b', Show b', SymWord b'
+     , DecimalRepresentable (Concrete a)
+     , DecimalRepresentable (Concrete b)
      )
   => ArithOp
   -> TermOf m a
@@ -112,9 +109,10 @@ evalDecArithOp op xT yT = do
 -- In practice (a ~ Decimal) or (a ~ Integer).
 evalUnaryArithOp
   :: forall m a a'
-   . (Analyzer m
+   . ( Analyzer m
      , a' ~ Concrete a
-     , Show a', SymWord a', Coercible a' Integer)
+     , Coercible a' Integer
+     )
   => UnaryArithOp
   -> TermOf m a
   -> m (S a')

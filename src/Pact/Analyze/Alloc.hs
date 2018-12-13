@@ -4,7 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Pact.Analyze.Alloc
-  ( MonadAlloc (forAll, exists, free)
+  ( MonadAlloc (forAll, exists, free, singForAll, singExists, singFree)
   , Alloc
   , runAlloc
   ) where
@@ -17,26 +17,40 @@ import           Control.Monad.Trans         (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe   (MaybeT)
 import           Control.Monad.Writer.Strict (WriterT)
 import qualified Control.Monad.Writer.Lazy   as LW
-import           Data.SBV                    (Symbolic, SymWord)
-import qualified Data.SBV                    as SBV
+import           Data.SBV                    (Symbolic)
+-- import qualified Data.SBV                    as SBV
 
-import           Pact.Analyze.Types          (S, sansProv)
+import           Pact.Analyze.Types          (S, SingI(sing), SingTy, Concrete)
 
 -- | A restricted symbolic context in which only quantified variable allocation
 -- is permitted.
 class Monad m => MonadAlloc m where
-  forAll :: SymWord a => m (S a) -- ^ universally quantified
-  exists :: SymWord a => m (S a) -- ^ existentially quantified
-  free   :: SymWord a => m (S a) -- ^ quantified per the context of sat vs prove
+  forAll :: SingI a => m (S (Concrete a)) -- ^ universally quantified
+  exists :: SingI a => m (S (Concrete a)) -- ^ existentially quantified
+  free   :: SingI a => m (S (Concrete a)) -- ^ quantified per the context of sat vs prove
 
-  default forAll :: (MonadTrans t, MonadAlloc m', m ~ t m', SymWord a) => m (S a)
-  forAll = lift forAll
+  singForAll :: SingTy a -> m (S (Concrete a))
+  singExists :: SingTy a -> m (S (Concrete a))
+  singFree   :: SingTy a -> m (S (Concrete a))
 
-  default exists :: (MonadTrans t, MonadAlloc m', m ~ t m', SymWord a) => m (S a)
-  exists = lift exists
+  forAll = singForAll sing
+  exists = singExists sing
+  free   = singFree sing
 
-  default free :: (MonadTrans t, MonadAlloc m', m ~ t m', SymWord a) => m (S a)
-  free = lift free
+  default singForAll
+    :: (MonadTrans t, MonadAlloc m', m ~ t m')
+    => SingTy a -> m (S (Concrete a))
+  singForAll ty = lift (singForAll ty)
+
+  default singExists
+    :: (MonadTrans t, MonadAlloc m', m ~ t m')
+    => SingTy a -> m (S (Concrete a))
+  singExists ty = lift (singExists ty)
+
+  default singFree
+    :: (MonadTrans t, MonadAlloc m', m ~ t m')
+    => SingTy a -> m (S (Concrete a))
+  singFree   = lift . singFree
 
 instance MonadAlloc m             => MonadAlloc (ExceptT e m)
 instance MonadAlloc m             => MonadAlloc (MaybeT m)
@@ -55,6 +69,9 @@ newtype Alloc a = Alloc { runAlloc :: Symbolic a }
   deriving (Functor, Applicative, Monad)
 
 instance MonadAlloc Alloc where
-  forAll = Alloc $ sansProv <$> SBV.forall_
-  exists = Alloc $ sansProv <$> SBV.exists_
-  free   = Alloc $ sansProv <$> SBV.free_
+  -- withSymWord sing $ Alloc $ sansProv <$> SBV.forall_
+  -- withSymWord sing $ Alloc $ sansProv <$> SBV.exists_
+  -- withSymWord sing $ Alloc $ sansProv <$> SBV.free_
+  singForAll = error "TODO"
+  singExists = error "TODO"
+  singFree   = error "TODO"

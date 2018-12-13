@@ -386,15 +386,14 @@ inferPreProp preProp = case preProp of
         "expected integer or decimal, found " <> userShow (existentialType b')
 
   PreApp op'@(toOp comparisonOpP -> Just op) [a, b] -> do
-    a' <- inferPreProp a
-    b' <- inferPreProp b
-    let ret :: (ComparisonOp -> Prop a -> Prop a -> Prop 'TyBool)
-            -> Prop a -> Prop a -> PropCheck EProp
-        ret c aProp bProp = pure $ Existential SBool $ c op aProp bProp
-        eqNeqMsg :: Text -> Text
+    a''@(Existential aTy a') <- inferPreProp a
+    b''@(Existential bTy b') <- inferPreProp b
+    let eqNeqMsg :: Text -> Text
         eqNeqMsg nouns = nouns <> " only support equality (" <> SEquality <>
           ") / inequality (" <> SInequality <> ") checks"
-    case (a', b') of
+
+    -- special case for an empty list on either side
+    case (a'', b'') of
       -- cast ([] :: [*]) to any other list type
       (Existential (SList SAny) (CoreProp (LiteralList _ [])), Existential (SList ty) prop)
         | Just eqNeq <- toOp eqNeqP op'
@@ -406,40 +405,14 @@ inferPreProp preProp = case preProp of
         -> pure $ Existential SBool $ CoreProp $
           ListEqNeq ty eqNeq (CoreProp (LiteralList ty [])) prop
 
-      (Existential (SList aTy) aProp, Existential (SList bTy) bProp)
-        | Just eqNeq <- toOp eqNeqP op' -> case singEq aTy bTy of
-          Just Refl -> pure $ Existential SBool $ CoreProp $
-            ListEqNeq aTy eqNeq aProp bProp
-          Nothing -> typeError preProp aTy bTy
-
-      (Existential (SList _) _, Existential (SList _) _)
-        | Nothing <- toOp eqNeqP op' -> throwErrorIn preProp $ eqNeqMsg "lists"
-
---       TODO
---       (Existential (SObject _) aProp, Existential (SObject _) bProp) ->
---         case toOp eqNeqP op' of
---           Just eqNeq -> pure $ Existential SBool $ CoreProp $
---             ObjectEqNeq eqNeq aProp bProp
---           Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
-
-      (Existential aTy aProp, Existential bTy bProp) -> case singEq aTy bTy of
-        Just Refl -> case aTy of
-          SInteger -> ret (CoreProp .... IntegerComparison) aProp bProp
-          SDecimal -> ret (CoreProp .... DecimalComparison) aProp bProp
-          STime    -> ret (CoreProp .... TimeComparison)    aProp bProp
-          SBool    -> ret (CoreProp .... BoolComparison)    aProp bProp
-          SStr     -> ret (CoreProp .... StrComparison)     aProp bProp
-          SAny     -> throwErrorIn preProp $
-            "cannot compare objects of type " <> userShow aTy
-          SKeySet  -> case toOp eqNeqP op' of
-            Just eqNeq -> pure $ Existential SBool $ PKeySetEqNeq eqNeq aProp bProp
-            Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
-        Nothing -> typeError preProp aTy bTy
-
-      -- (_, _) -> throwErrorIn preProp $
-      --   "can't compare primitive types with objects (found " <>
-      --   userShow (existentialType a') <> " and " <>
-      --   userShow (existentialType b') <> ")"
+      _ -> case singEq aTy bTy of
+        Nothing   -> typeError preProp aTy bTy
+        Just Refl -> if
+          -- TODO: enable
+          | False -> throwErrorIn preProp $ eqNeqMsg "lists"
+          | False -> throwErrorIn preProp $ eqNeqMsg "objects"
+          | False -> throwErrorIn preProp $ eqNeqMsg "keysets"
+          | True -> pure $ Existential SBool $ CoreProp $ Comparison aTy op a' b'
 
   PreApp op'@(toOp logicalOpP -> Just op) args ->
     Existential SBool <$> case (op, args) of

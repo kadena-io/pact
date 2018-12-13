@@ -182,6 +182,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- monomorphized comparisons, the alternative is implementing Eq by hand
   -- here.
 
+  Comparison :: SingTy a -> ComparisonOp -> t a -> t a -> Core t 'TyBool
+
   -- | A 'ComparisonOp' expression over two 'Integer' expressions
   IntegerComparison :: ComparisonOp -> t 'TyInteger -> t 'TyInteger -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'Decimal' expressions
@@ -373,6 +375,10 @@ eqCoreTm _ (IntAddTime a1 b1)            (IntAddTime a2 b2)
   = eqTm a1 a2 && eqTm b1 b2
 eqCoreTm _ (DecAddTime a1 b1)            (DecAddTime a2 b2)
   = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (Comparison ty1 op1 a1 b1) (Comparison ty2 op2 a2 b2)
+  = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> op1 == op2 && singEqTm ty1 a1 a2 && singEqTm ty1 b1 b2
 eqCoreTm _ (IntegerComparison op1 a1 b1) (IntegerComparison op2 a2 b2)
   = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
 eqCoreTm _ (DecimalComparison op1 a1 b1) (DecimalComparison op2 a2 b2)
@@ -516,6 +522,15 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   Numerical a      -> showString "Numerical "    . showsNumerical ty a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showString " " . showsTm 11 b
   DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showString " " . showsTm 11 b
+  Comparison ty' op a b ->
+      showString "Comparison "
+    . showsPrec 11 ty'
+    . showString " "
+    . showsPrec 11 op
+    . showString " "
+    . singShowsTm ty' 11 a
+    . showString " "
+    . singShowsTm ty' 11 b
   IntegerComparison op a b ->
       showString "IntegerComparison "
     . showsPrec 11 op
@@ -786,6 +801,7 @@ userShowCore ty _p = \case
   Numerical tm             -> userShowNumerical ty tm
   IntAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
   DecAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
+  Comparison ty' op x y     -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
   IntegerComparison op x y -> parenList [userShow op, userShowTm x, userShowTm y]
   DecimalComparison op x y -> parenList [userShow op, userShowTm x, userShowTm y]
   TimeComparison op x y    -> parenList [userShow op, userShowTm x, userShowTm y]

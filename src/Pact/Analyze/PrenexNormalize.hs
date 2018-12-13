@@ -109,6 +109,8 @@ float _ty p = case p of
     in (Exists' uid name ty:qs, prop')
 
   -- - comparison
+  CoreProp (Comparison ty op a b)
+    -> CoreProp ... Comparison ty op <$> float ty a <*> float ty b
   CoreProp (IntegerComparison op a b)
     -> CoreProp ... IntegerComparison op <$> singFloat a <*> singFloat b
   CoreProp (DecimalComparison op a b)

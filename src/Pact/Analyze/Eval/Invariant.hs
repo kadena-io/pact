@@ -35,11 +35,10 @@ instance (Mergeable a) => Mergeable (InvariantCheck a) where
 
 instance Analyzer InvariantCheck where
   type TermOf InvariantCheck = Invariant
-  eval  (CoreInvariant tm)   = evalCore tm
-  evalO (CoreInvariant tm)   = evalCoreO tm
+  eval (CoreInvariant tm)    = evalCore tm
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err
-  getVar vid = view (located . at vid)
+  getVar vid        = view (located . at vid)
   withVar vid val m = local (located . at vid ?~ val) m
-  markFailure b = id %= (&&& SymbolicSuccess (bnot b))
+  markFailure b     = id %= (&&& SymbolicSuccess (bnot b))

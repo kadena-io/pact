@@ -36,10 +36,10 @@ import           Pact.Analyze.Alloc   (Alloc, free)
 import           Pact.Analyze.Types
 import qualified Pact.Analyze.Types.Map as SMap
 
-allocS :: SymWord a => Alloc (S a)
+allocS :: SingI a => Alloc (S (Concrete a))
 allocS = free
 
-allocSbv :: SymWord a => Alloc (SBV a)
+allocSbv :: SingI a => Alloc (SBV (Concrete a))
 allocSbv = _sSbv <$> allocS
 
 allocSchema :: Schema m -> Alloc UObject

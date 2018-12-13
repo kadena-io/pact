@@ -469,12 +469,12 @@ instance Show ESchema where
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
-varIdColumns :: Map Text a -> Map Text VarId
-varIdColumns m =
-  let sortedList = sortBy (compare `on` fst) (Map.toList m)
-      reindexedList =
-        zipWith (\index (name, _) -> (name, index)) [0..] sortedList
-  in Map.fromList reindexedList
+varIdColumns :: SMap.Map m -> Map Text VarId
+varIdColumns = error "TODO"
+  -- let sortedList = sortBy (compare `on` fst) (Map.toList m)
+  --     reindexedList =
+  --       zipWith (\index (name, _) -> (name, index)) [0..] sortedList
+  -- in Map.fromList reindexedList
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.

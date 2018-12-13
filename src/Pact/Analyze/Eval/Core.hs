@@ -6,31 +6,31 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE Rank2Types          #-}
+{-# options_ghc -fno-warn-redundant-constraints #-}
 module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
-import           Data.Constraint             (Dict (Dict), withDict)
-import           Data.Foldable               (foldrM)
-import qualified Data.Map.Strict             as Map
+-- import           Data.Foldable               (foldrM)
+-- import qualified Data.Map.Strict             as Map
 import           Data.Monoid                 ((<>))
 import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, false, ite, true, (|||),
-                                              bAny, unliteral, SBV, Mergeable, (&&&), (|||), literal)
-import           Data.SBV.List               ((.:))
-import qualified Data.SBV.List               as SBVL
-import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
-                                              bmapM, bzipWith, bfoldrM)
+                                              SymWord, false, true, (|||),
+                                              SBV, (&&&), (|||))
+-- import           Data.SBV.List               ((.:))
+-- import qualified Data.SBV.List               as SBVL
+-- import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
+--                                               bmapM, bzipWith, bfoldrM)
 import qualified Data.SBV.String             as SBVS
-import           Data.Text                   (Text)
+-- import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
-import           Pact.Analyze.Util
+-- import           Pact.Analyze.Util
 import qualified Pact.Native                 as Pact
 
 
@@ -86,9 +86,7 @@ evalDecAddTime timeT secsT = do
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
 evalComparisonOp
-  :: ( Analyzer m
-     , a' ~ Concrete a
-     , SymWord a', Show a')
+  :: (Analyzer m, SymWord (Concrete a))
   => ComparisonOp
   -> TermOf m a
   -> TermOf m a
@@ -105,9 +103,7 @@ evalComparisonOp op xT yT = do
     Neq -> x ./= y
 
 evalEqNeq
-  :: ( Analyzer m
-     , a' ~ Concrete a
-     , SymWord a', Show a')
+  :: Analyzer m
   => EqNeq
   -> TermOf m a
   -> TermOf m a
@@ -126,11 +122,19 @@ evalObjectEqNeq
   -> TermOf m ('TyObject obj)
   -> m (S Bool)
 evalObjectEqNeq op xT yT = do
-  x <- evalO xT
-  y <- evalO yT
+  x <- eval xT
+  y <- eval yT
   pure $ sansProv $ case op of
     Eq'  -> x .== y
     Neq' -> x ./= y
+
+singIte
+  :: (Analyzer m, a' ~ Concrete a)
+  => SingTy a -> SBV Bool -> m (S a') -> m (S a') -> m (S a')
+singIte = undefined
+
+singLiteral :: a' ~ Concrete a => SingTy a -> a' -> S a'
+singLiteral = undefined
 
 evalLogicalOp
   :: Analyzer m
@@ -139,10 +143,10 @@ evalLogicalOp
   -> m (S Bool)
 evalLogicalOp AndOp [a, b] = do
   a' <- eval a
-  ite (_sSbv a') (eval b) (pure false)
+  singIte SBool (_sSbv a') (eval b) (pure false)
 evalLogicalOp OrOp [a, b] = do
   a' <- eval a
-  ite (_sSbv a') (pure true) (eval b)
+  singIte SBool (_sSbv a') (pure true) (eval b)
 evalLogicalOp NotOp [a] = bnot <$> eval a
 evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
@@ -152,10 +156,8 @@ evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length te
 Nothing  ?? err = throwErrorNoLoc err
 infix 0 ??
 
-evalCore
-  :: (Analyzer m, SymWord (Concrete a))
-  => Core (TermOf m) a -> m (S (Concrete a))
-evalCore (Lit a)                           = pure (literalS a)
+evalCore :: Analyzer m => Core (TermOf m) a -> m (S (Concrete a))
+evalCore (Lit a)                           = pure (singLiteral (error "TODO") a)
 evalCore (Sym s)                           = pure s
 evalCore (Var vid name) = do
   mVal <- getVar vid
@@ -164,18 +166,12 @@ evalCore (Var vid name) = do
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
-evalCore (Identity ty a)                   = withShow ty $ eval a
-evalCore (Constantly tya a _)              = withShow tya $ eval a
-evalCore (Compose tya tyb tyc a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
-  tya' <- refineSimple tya ?? SimpleKindRequired
-  tyb' <- refineSimple tyb ?? SimpleKindRequired
-  tyc' <- refineSimple tyc ?? SimpleKindRequired
-  withShow tya' $ withSymWord tya' $
-    withShow tyb' $ withSymWord tyb' $
-      withShow tyc' $ do
-        a' <- eval a
-        b' <- withVar vida (mkAVal a') $ eval tmb
-        withVar vidb (mkAVal b') $ eval tmc
+evalCore (Identity _ a)     = eval a
+evalCore (Constantly _ a _) = eval a
+evalCore (Compose _ _ _ a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
+  a' <- eval a
+  b' <- withVar vida (mkAVal a') $ eval tmb
+  withVar vidb (mkAVal b') $ eval tmc
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
 evalCore (StrLength p)
   = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
@@ -184,25 +180,22 @@ evalCore (StrToIntBase b s)                = evalStrToIntBase b s
 evalCore (Numerical a)                     = evalNumerical a
 evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
-evalCore (IntegerComparison op x y)        = evalComparisonOp op x y
-evalCore (DecimalComparison op x y)        = evalComparisonOp op x y
-evalCore (TimeComparison op x y)           = evalComparisonOp op x y
-evalCore (StrComparison op x y)            = evalComparisonOp op x y
-evalCore (BoolComparison op x y)           = evalComparisonOp op x y
-evalCore (ObjectEqNeq op x y)              = evalObjectEqNeq  op x y
-evalCore (KeySetEqNeq      op x y)         = evalEqNeq        op x y
+-- evalCore (Comparison _ty op x y)           = evalComparisonOp op x y
+evalCore Comparison{} = throwErrorNoLoc "TODO: Comparison"
 evalCore (Logical op props)                = evalLogicalOp op props
-evalCore (ObjAt schema colNameT objT retType)
-  = evalObjAt schema colNameT objT retType
-evalCore ObjMerge{}
-  = error "object merge can not produce a simple value"
-evalCore LiteralObject {}
-  = error "literal object can't be an argument to evalCore"
-evalCore (ObjContains (Schema schema) key _obj) = do
-  key' <- eval key
-  pure $ sansProv $ bAny
-    (\testKey -> literalS (Str (T.unpack testKey)) .== key')
-    $ Map.keys schema
+evalCore ObjAt{} -- (ObjAt schema colNameT objT retType)
+  = throwErrorNoLoc "TODO: ObjAt"
+  -- = evalObjAt schema colNameT objT retType
+evalCore LiteralObject{} = throwErrorNoLoc "TODO: LiteralObject"
+-- evalCore (LiteralObject obj) = Object <$> traverse evalExistential obj
+evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
+-- evalCore (ObjMerge _ty objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
+evalCore ObjContains{} = throwErrorNoLoc "TODO: ObjContains"
+-- evalCore (ObjContains (Schema schema) key _obj) = do
+--   key' <- eval key
+--   pure $ sansProv $ bAny
+--     (\testKey -> literalS (Str (T.unpack testKey)) .== key')
+--     $ Map.keys schema
 evalCore (StrContains needle haystack) = do
   needle'   <- eval needle
   haystack' <- eval haystack
@@ -210,122 +203,117 @@ evalCore (StrContains needle haystack) = do
     _sSbv (coerceS @Str @String needle')
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
-evalCore (ListContains ty needle haystack) = withShow ty $ withSymWord ty $ do
-  S _ needle'   <- eval needle
-  S _ haystack' <- eval haystack
-  pure $ sansProv $
-    bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
-evalCore (ListEqNeq ty op a b) = withEq ty $ withSymWord ty $ withShow ty $ do
+evalCore ListContains{} = throwErrorNoLoc "TODO: ListContains"
+-- evalCore (ListContains ty needle haystack) = withSymWord ty $ do
+--   S _ needle'   <- eval needle
+--   S _ haystack' <- eval haystack
+--   pure $ sansProv $
+--     bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
+evalCore ListEqNeq{} = throwErrorNoLoc "TODO: ListEqNeq"
+-- evalCore (ListEqNeq ty op a b) = do
+--   S _ a' <- eval a
+--   S _ b' <- eval b
+
+--   let wrongLength = case op of
+--         Eq'  -> false
+--         Neq' -> true
+--       zipF = case op of
+--         Eq'  -> (.==)
+--         Neq' -> (./=)
+
+--   pure $ ite (SBVL.length a' .== SBVL.length b')
+--     (sansProv $ band listBound $ bzipWith listBound zipF a' b')
+--     wrongLength
+-- evalCore (ListAt ty i l) = do
+--   S _ i' <- eval i
+--   S _ l' <- eval l
+
+--   -- valid range [0..length l - 1]
+--   markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
+
+--   -- statically build a list of index comparisons
+--   pure $ sansProv $ SBVL.elemAt l' i'
+-- evalCore (ListLength ty l) = do
+--   S prov l' <- eval l
+--   pure $ S prov $ SBVL.length l'
+--
+-- evalCore (LiteralList ty xs) = do
+--   vals <- traverse (fmap _sSbv . eval) xs
+--   pure $ sansProv $ SBVL.implode vals
+--
+-- evalCore (ListDrop ty n list) = do
+--   S _ n'    <- eval n
+--   S _ list' <- eval list
+--
+--   -- if the index is positive, count from the start of the list, otherwise
+--   -- count from the end.
+--   pure $ sansProv $ ite (n' .>= 0)
+--     (SBVL.drop n' list')
+--     (SBVL.take (SBVL.length list' + n') list')
+--
+-- evalCore (ListTake ty n list) = do
+--   S _ n'    <- eval n
+--   S _ list' <- eval list
+--
+--   -- if the index is positive, count from the start of the list, otherwise
+--   -- count from the end.
+--   pure $ sansProv $ ite (n' .>= 0)
+--     (SBVL.take n' list')
+--     (SBVL.drop (SBVL.length list' + n') list')
+--
+-- evalCore (ListConcat ty p1 p2) = do
+--   S _ p1' <- eval p1
+--   S _ p2' <- eval p2
+--   pure $ sansProv $ SBVL.concat p1' p2'
+-- evalCore (ListReverse ty l) = do
+--   S prov l' <- eval l
+--   pure $ S prov $ breverse listBound l'
+-- evalCore (ListSort ty l) = do
+--   S prov l' <- eval l
+--   pure $ S prov $ bsort listBound l'
+-- evalCore (MakeList ty i a) = do
+--   S _ i' <- eval i
+--   S _ a' <- eval a
+--   case unliteral i' of
+--     Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
+--     Nothing  -> throwErrorNoLoc $ UnhandledTerm
+--       "make-list currently requires a statically determined length"
+-- evalCore (ListMap tya tyb (Open vid _ expr) as) = do
+--   S _ as' <- eval as
+--   bs <- bmapM listBound
+--     (\val -> _sSbv <$> withVar vid (mkAVal' val) (eval expr))
+--     as'
+--   pure $ sansProv bs
+-- evalCore (ListFilter tya (Open vid _ f) as) = do
+--   S _ as' <- eval as
+--   let bfilterM = bfoldrM listBound
+--         (\sbva svblst -> do
+--           S _ x' <- withVar vid (mkAVal' sbva) (eval f)
+--           pure $ ite x' (sbva .: svblst) svblst)
+--         (literal [])
+--   sansProv <$> bfilterM as'
+-- evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs) = do
+--   S _ a'  <- eval a
+--   S _ bs' <- eval bs
+--   result <- bfoldrM listBound
+--     (\sbvb sbva -> fmap _sSbv $
+--       withVar vid1 (mkAVal' sbvb) $
+--         withVar vid2 (mkAVal' sbva) $
+--           eval f)
+--     a' bs'
+--   pure $ sansProv result
+
+evalCore (AndQ _tya (Open vid1 _ f) (Open vid2 _ g) a) = do
   S _ a' <- eval a
-  S _ b' <- eval b
+  fv     <- withVar vid1 (mkAVal' a') $ eval f
+  gv     <- withVar vid2 (mkAVal' a') $ eval g
+  pure $ fv &&& gv
 
-  let wrongLength = case op of
-        Eq'  -> false
-        Neq' -> true
-      zipF = case op of
-        Eq'  -> (.==)
-        Neq' -> (./=)
-
-  pure $ ite (SBVL.length a' .== SBVL.length b')
-    (sansProv $ band listBound $ bzipWith listBound zipF a' b')
-    wrongLength
-evalCore (ListAt tyA i l) = do
-  S _ i' <- eval i
-  S _ l' <- withShow tyA $ eval l
-
-  -- valid range [0..length l - 1]
-  markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
-
-  -- statically build a list of index comparisons
-  pure $ sansProv $ SBVL.elemAt l' i'
-evalCore (ListLength ty l) = withShow ty $ withSymWord ty $ do
-  S prov l' <- eval l
-  pure $ S prov $ SBVL.length l'
-
-evalCore (LiteralList ty xs) = withShow ty $ withSymWord ty $ do
-  vals <- traverse (fmap _sSbv . eval) xs
-  pure $ sansProv $ SBVL.implode vals
-
-evalCore (ListDrop ty n list) = withShow ty $ withSymWord ty $ do
-  S _ n'    <- eval n
-  S _ list' <- eval list
-
-  -- if the index is positive, count from the start of the list, otherwise
-  -- count from the end.
-  pure $ sansProv $ ite (n' .>= 0)
-    (SBVL.drop n' list')
-    (SBVL.take (SBVL.length list' + n') list')
-
-evalCore (ListTake ty n list) = withShow ty $ withSymWord ty $ do
-  S _ n'    <- eval n
-  S _ list' <- eval list
-
-  -- if the index is positive, count from the start of the list, otherwise
-  -- count from the end.
-  pure $ sansProv $ ite (n' .>= 0)
-    (SBVL.take n' list')
-    (SBVL.drop (SBVL.length list' + n') list')
-
-evalCore (ListConcat ty p1 p2) = withShow ty $ withSymWord ty $ do
-  S _ p1' <- eval p1
-  S _ p2' <- eval p2
-  pure $ sansProv $ SBVL.concat p1' p2'
-evalCore (ListReverse ty l) = withShow ty $ withSymWord ty $ do
-  S prov l' <- eval l
-  pure $ S prov $ breverse listBound l'
-evalCore (ListSort ty l) = withShow ty $ withSymWord ty $ do
-  S prov l' <- eval l
-  pure $ S prov $ bsort listBound l'
-evalCore (MakeList ty i a) = withShow ty $ withSymWord ty $ do
-  S _ i' <- eval i
+evalCore (OrQ _tya (Open vid1 _ f) (Open vid2 _ g) a) = do
   S _ a' <- eval a
-  case unliteral i' of
-    Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
-    Nothing  -> throwErrorNoLoc $ UnhandledTerm
-      "make-list currently requires a statically determined length"
-evalCore (ListMap tya tyb (Open vid _ expr) as)
-  = withShow tyb $ withSymWord tyb $
-      withShow tya $ withSymWord tya $
-        withMergeableSbvList tyb $ do
-          S _ as' <- eval as
-          bs <- bmapM listBound
-            (\val -> _sSbv <$> withVar vid (mkAVal' val) (eval expr))
-            as'
-          pure $ sansProv bs
-evalCore (ListFilter tya (Open vid _ f) as)
-  = withShow tya $ withSymWord tya $ withMergeableSbvList tya $ do
-    S _ as' <- eval as
-    let bfilterM = bfoldrM listBound
-          (\sbva svblst -> do
-            S _ x' <- withVar vid (mkAVal' sbva) (eval f)
-            pure $ ite x' (sbva .: svblst) svblst)
-          (literal [])
-    sansProv <$> bfilterM as'
-evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
-  = withShow tya $ withShow tyb $ withSymWord tyb $ withMergeableSbv tya $ do
-    S _ a'  <- eval a
-    S _ bs' <- eval bs
-    result <- bfoldrM listBound
-      (\sbvb sbva -> fmap _sSbv $
-        withVar vid1 (mkAVal' sbvb) $
-          withVar vid2 (mkAVal' sbva) $
-            eval f)
-      a' bs'
-    pure $ sansProv result
-
-evalCore (AndQ tya (Open vid1 _ f) (Open vid2 _ g) a)
-  = withShow tya $ withSymWord tya $ do
-    S _ a' <- eval a
-    fv     <- withVar vid1 (mkAVal' a') $ eval f
-    gv     <- withVar vid2 (mkAVal' a') $ eval g
-    pure $ fv &&& gv
-
-evalCore (OrQ tya (Open vid1 _ f) (Open vid2 _ g) a)
-  = withShow tya $ withSymWord tya $ do
-    S _ a' <- eval a
-    fv     <- withVar vid1 (mkAVal' a') $ eval f
-    gv     <- withVar vid2 (mkAVal' a') $ eval g
-    pure $ fv ||| gv
+  fv     <- withVar vid1 (mkAVal' a') $ eval f
+  gv     <- withVar vid2 (mkAVal' a') $ eval g
+  pure $ fv ||| gv
 
 evalCore Where{} = throwErrorNoLoc "Not yet supported: where"
 
@@ -336,38 +324,21 @@ evalCore Where{} = throwErrorNoLoc "Not yet supported: where"
 evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
 evalCore ObjTake{}      = throwErrorNoLoc "not yet implemented"
 evalCore ObjDrop{}      = throwErrorNoLoc "not yet implemented"
+evalCore _ = throwErrorNoLoc "not yet implemented"
 
-withMergeableSbv
-  :: forall a b m.
-     (IsSimple a ~ 'True, Analyzer m)
-  => SingTy a -> (Mergeable (m (SBV (Concrete a))) => m b) -> m b
-withMergeableSbv = withDict . mkSing where
 
-  mkSing :: SingTy a -> Dict (Mergeable (m (SBV (Concrete a))))
-  mkSing = \case
-    SInteger -> Dict
-    SBool    -> Dict
-    SStr     -> Dict
-    STime    -> Dict
-    SDecimal -> Dict
-    SKeySet  -> Dict
-    SAny     -> Dict
 
-withMergeableSbvList
-  :: forall a b m.
-     (IsSimple a ~ 'True, Analyzer m)
-  => SingTy a -> (Mergeable (m (SBV [Concrete a])) => m b) -> m b
-withMergeableSbvList = withDict . mkSing where
-
-  mkSing :: SingTy a -> Dict (Mergeable (m (SBV [Concrete a])))
-  mkSing = \case
-    SInteger -> Dict
-    SBool    -> Dict
-    SStr     -> Dict
-    STime    -> Dict
-    SDecimal -> Dict
-    SKeySet  -> Dict
-    SAny     -> Dict
+-- evalCore (ObjDrop schema@(Schema schemaFields) keys _obj) = do
+--   keys' <- eval keys
+--   case unliteralS keys' of
+--     Nothing -> throwErrorNoLoc "Unable to statically determine keys to drop"
+--     Just literalKeys -> do
+--       fields <- for literalKeys $ \(Str key) -> do
+--         let retType = schemaFields ^?! ix (T.pack key)
+--         val <- withSymWord singTy $
+--           evalObjAt schema (Lit' (Str key)) obj retType
+--         pure (T.pack key, (retType, mkAVal val))
+--       pure $ Object $ Map.fromList fields
 
 evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)
 evalStrToInt sT = do
@@ -399,7 +370,7 @@ evalStrToIntBase bT sT = do
       let conText = T.pack conStr
       in foldr
            (\conBase rest ->
-             iteS (sansProv $ b .== literalS conBase)
+             singIte SInteger (b .== literalS conBase)
                (precompute conBase conText)
                rest)
            symbolicFailure
@@ -427,125 +398,59 @@ evalStrToIntBase bT sT = do
         Left _err -> symbolicFailure
         Right res -> pure (literalS res)
 
-evalObjAt
-  :: (Analyzer m, SymWord a)
-  => SObject obj
-  -> TermOf m 'TyStr
-  -> TermOf m ('TyObject obj)
-  -> EType
-  -> m (S a)
-evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
-  obj@(Object fields) <- evalO objT
+-- evalObjAt
+--   :: (Analyzer m, SymWord a)
+--   => SingTy obj
+--   -> TermOf m 'TyStr
+--   -> TermOf m ('TyObject obj)
+--   -> EType
+--   -> m (S a)
+-- -- evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
+-- evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
+--   obj@(Object fields) <- eval objT
 
-  -- Filter down to only fields which contain the type we're looking for
-  let relevantFields
-        = map fst
-        $ filter (\(_name, ty) -> ty == retType)
-        $ Map.toList schemaFields
+--   -- Filter down to only fields which contain the type we're looking for
+--   let relevantFields = [] -- TODO
+--         -- = map fst
+--         -- $ filter (\(_name, ty) -> ty == retType)
+--         -- $ Map.toList schemaFields
 
-  colName :: S Str <- eval colNameT
+--   colName :: S Str <- eval colNameT
 
-  firstName:relevantFields' <- case relevantFields of
-    [] -> throwErrorNoLoc $ AtHasNoRelevantFields retType schema
-    _  -> pure relevantFields
+--   firstName:relevantFields' <- case relevantFields of
+--     [] -> throwErrorNoLoc $ AtHasNoRelevantFields retType schema
+--     _  -> pure relevantFields
 
-  let getObjVal fieldName = case Map.lookup fieldName fields of
-        Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
+--   let getObjVal fieldName = case Map.lookup fieldName fields of
+--         Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
 
-        Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
+--         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
+--         Just (fieldType, AnObj subObj)     -> pure subObj
+--         Just (_fieldType, OpaqueVal)       -> throwErrorNoLoc OpaqueValEncountered
 
-        Just (fieldType, AnObj _subObj) -> throwErrorNoLoc $
-          ObjFieldOfWrongType fieldName fieldType
+--   firstVal <- getObjVal firstName
 
-        Just (_fieldType, OpaqueVal) -> throwErrorNoLoc OpaqueValEncountered
-
-  firstVal <- getObjVal firstName
-
-  -- Fold over each relevant field, building a sequence of `ite`s. We require
-  -- at least one matching field, ie firstVal. At first glance, this should
-  -- just be a `foldr1M`, but we want the type of accumulator and element to
-  -- differ, because elements are `String` `fieldName`s, while the accumulator
-  -- is an `SBV a`.
-  foldrM
-    (\fieldName rest -> do
-      val <- getObjVal fieldName
-      pure $ ite (colName .== literalS (Str (T.unpack fieldName))) val rest
-    )
-    firstVal
-    relevantFields'
-
-evalObjAtO
-  :: forall m obj
-   . Analyzer m
-  => TermOf m 'TyStr
-  -> TermOf m ('TyObject obj)
-  -> m Object
-evalObjAtO colNameT objT = do
-    obj@(Object fields) <- evalO objT
-    sCn <- eval colNameT
-
-    let getObjVal :: Text -> m Object
-        getObjVal fieldName = case Map.lookup fieldName fields of
-          Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
-          Just (fieldType, AVal _ _) -> throwErrorNoLoc $
-            ObjFieldOfWrongType fieldName fieldType
-          Just (_fieldType, AnObj subObj) -> pure subObj
-          Just (_fieldType, OpaqueVal) -> throwErrorNoLoc OpaqueValEncountered
-
-    case unliteralS (coerceS @Str @String sCn) of
-      Nothing -> throwErrorNoLoc "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
-      Just concreteColName -> getObjVal (T.pack concreteColName)
-
-evalCoreO
-  :: Analyzer m
-  => Core (TermOf m) ('TyObject ob) -> m (Object obj)
-evalCoreO (LiteralObject obj) = Object <$> traverse evalExistential obj
-evalCoreO (ObjAt _schema colNameT objT _retType) = evalObjAtO colNameT objT
-evalCoreO (ObjMerge objT1 objT2) = mappend <$> evalO objT1 <*> evalO objT2
-evalCoreO (Var vid name) = do
-  mVal <- getVar vid
-  case mVal of
-    Nothing            -> throwErrorNoLoc $ VarNotInScope name vid
-    Just (AVal _ val') -> throwErrorNoLoc $ AValUnexpectedlySVal val'
-    Just (AnObj obj)   -> pure obj
-    Just OpaqueVal     -> throwErrorNoLoc OpaqueValEncountered
-
--- TODO(joel): I don't think an object can appear here. Get more clarity on
--- this.
-evalCoreO (Lit obj)      = pure obj
-evalCoreO (Sym _)        = vacuousMatch "an object cannot be a symbolic value"
-evalCoreO (Identity _ a) = evalO a
-evalCoreO (Constantly _ a _) = evalO a
-evalCoreO Compose{}          = throwErrorNoLoc "not yet implemented"
--- evalCoreO (Compose _ _ _ (Open va _ tmb) (Open vb _ tmc)) = do
-
-evalCoreO (Numerical _)  = vacuousMatch "an object cannot be a numerical value"
-evalCoreO ListAt{}       = throwErrorNoLoc "not yet implemented"
-evalCoreO ListFold{}     = throwErrorNoLoc "not yet implemented"
-evalCoreO ObjTake{}      = throwErrorNoLoc "not yet implemented"
-evalCoreO ObjDrop{}      = throwErrorNoLoc "not yet implemented"
-
--- evalCoreO (ObjDrop schema@(Schema schemaFields) keys _obj) = do
---   keys' <- eval keys
---   case unliteralS keys' of
---     Nothing -> throwErrorNoLoc "Unable to statically determine keys to drop"
---     Just literalKeys -> do
---       fields <- for literalKeys $ \(Str key) -> do
---         let retType = schemaFields ^?! ix (T.pack key)
---         val <- withSymWord singTy $
---           evalObjAt schema (Lit' (Str key)) obj retType
---         pure (T.pack key, (retType, mkAVal val))
---       pure $ Object $ Map.fromList fields
-
+--   -- Fold over each relevant field, building a sequence of `ite`s. We require
+--   -- at least one matching field, ie firstVal. At first glance, this should
+--   -- just be a `foldr1M`, but we want the type of accumulator and element to
+--   -- differ, because elements are `String` `fieldName`s, while the accumulator
+--   -- is an `SBV a`.
+--   foldrM
+--     (\fieldName rest -> do
+--       val <- getObjVal fieldName
+--       pure $ ite (colName .== literalS (Str (T.unpack fieldName))) val rest
+--     )
+--     firstVal
+--     relevantFields'
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential = \case
-  Existential (SList ty) prop -> withShow ty $ withSymWord ty $ do
+  Existential (SList ty) prop -> do
     vals  <- eval prop
     pure (EType ty, mkAVal vals)
-  Existential (SObject ty) prop -> do
-    prop' <- evalO prop
-    pure (EObjectTy ty, AnObj prop')
-  Existential ty prop -> withShow ty $ withSymWord ty $ do
+  Existential (SObject _) _ -> throwErrorNoLoc "TODO: evalExistential"
+    -- prop' <- eval prop
+    -- pure (EObjectTy ty, AnObj prop')
+  Existential ty prop -> do
     prop' <- eval prop
     pure (EType ty, mkAVal prop')

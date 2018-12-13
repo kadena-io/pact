@@ -61,36 +61,13 @@ instance Wrapped SymbolicSuccess where
   type Unwrapped SymbolicSuccess = SBV Bool
   _Wrapped' = iso successBool SymbolicSuccess
 
-class ( MonadError AnalyzeFailure m
-      , S :*<: TermOf m
-      -- TODO: We only need Mergeable for Bool and Integer at the moment, but
-      -- really this should probably be done for all Mergeable values, perhaps
-      -- via QuantifiedConstraints, once we're on 8.6:
-      , Mergeable (m (S Bool))
-      , Mergeable (m (S Integer))
-      , Mergeable (m (SBV Integer))
-      , Mergeable (m (SBV Bool))
-      , Mergeable (m (SBV Str))
-      , Mergeable (m (SBV Decimal))
-      , Mergeable (m (SBV KeySet))
-      , Mergeable (m (SBV Time))
-      , Mergeable (m (SBV Any))
-      , Mergeable (m (SBV [Integer]))
-      , Mergeable (m (SBV [Bool   ]))
-      , Mergeable (m (SBV [Str    ]))
-      , Mergeable (m (SBV [Time   ]))
-      , Mergeable (m (SBV [Decimal]))
-      , Mergeable (m (SBV [KeySet ]))
-      , Mergeable (m (SBV [Any    ]))
-      )
-      => Analyzer m
-  where
-    type TermOf m   :: Ty -> *
-    eval            :: TermOf m a           -> m (S (Concrete a))
-    throwErrorNoLoc :: AnalyzeFailureNoLoc  -> m a
-    getVar          :: VarId                -> m (Maybe AVal)
-    withVar         :: VarId -> AVal -> m a -> m a
-    markFailure     :: SBV Bool             -> m ()
+class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
+  type TermOf m   :: Ty -> *
+  eval            :: TermOf m a           -> m (S (Concrete a))
+  throwErrorNoLoc :: AnalyzeFailureNoLoc  -> m a
+  getVar          :: VarId                -> m (Maybe AVal)
+  withVar         :: VarId -> AVal -> m a -> m a
+  markFailure     :: SBV Bool             -> m ()
 
 data AnalyzeEnv
   = AnalyzeEnv
@@ -143,8 +120,8 @@ mkAnalyzeEnv tables args tags info = do
 
   columnIds <- for tables $ \(Table tname ut _) ->
     case maybeTranslateUserType' ut of
-      Just (EType (SObject schema)) -> Just
-        (TableName (T.unpack tname), error "TODO") -- varIdColumns schema)
+      Just (EType (SObject ty)) -> Just
+        (TableName (T.unpack tname), varIdColumns ty)
       _ -> Nothing
 
   let columnIds' = TableMap (Map.fromList columnIds)

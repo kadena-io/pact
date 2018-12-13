@@ -9,12 +9,12 @@
 
 module Pact.Analyze.Eval.Term where
 
-import           Control.Applicative         (ZipList (..))
-import           Control.Lens                (At (at), Lens', iforM, iforM_,
+-- import           Control.Applicative         (ZipList (..))
+import           Control.Lens                (At (at), Lens', -- iforM, iforM_,
                                               preview, use, view, (%=), (%~),
-                                              (&), (+=), (.=), (.~), (<&>),
+                                              (&), {- (+=), -} (.=), (.~), (<&>),
                                               (?~), (^.), (^?), _1, _2, _Just)
-import           Control.Monad               (void, when)
+-- import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
@@ -26,8 +26,8 @@ import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||)),
                                               EqSymbolic ((.==)),
-                                              Mergeable (symbolicMerge), SBV,
-                                              SymArray (readArray), SymWord,
+                                              Mergeable (symbolicMerge), -- SBV,
+                                              SymArray (readArray), -- SymWord,
                                               false, ite, (.<))
 import qualified Data.SBV.String             as SBV
 import           Data.String                 (fromString)
@@ -39,8 +39,8 @@ import           Data.Traversable            (for)
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
-import qualified Pact.Types.Persistence      as Pact
-import           Pact.Types.Runtime          (tShow)
+-- import qualified Pact.Types.Persistence      as Pact
+-- import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
 
@@ -62,7 +62,6 @@ newtype Analyze a
 instance Analyzer Analyze where
   type TermOf Analyze = Term
   eval             = evalTerm
-  evalO            = evalTermO
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
@@ -228,106 +227,38 @@ applyInvariants tn aValFields addInvariants = do
 evalETerm :: ETerm -> Analyze AVal
 evalETerm tm = snd <$> evalExistential tm
 
-evalTermO :: Term 'TyObject -> Analyze Object
-evalTermO = \case
-  CoreTerm a -> evalCoreO a
+-- TODO
+-- validateWrite :: Pact.WriteType -> Schema ty -> Object ty -> Analyze ()
+-- validateWrite writeType sch@(Schema sm) obj@(Object om) = do
+--   -- For now we lump our three cases together:
+--   --   1. write field not in schema
+--   --   2. object and schema types don't match
+--   --   3. unexpected partial write
+--   let invalid = throwErrorNoLoc $ InvalidDbWrite writeType sch obj
 
-  Read tid tn (Schema fields) rowKey -> do
-    sRk <- symRowKey <$> evalTerm rowKey
-    tableRead tn .= true
-    rowReadCount tn sRk += 1
+--   iforM_ om $ \field (ety, _av) ->
+--     case field `Map.lookup` sm of
+--       Nothing -> invalid
+--       Just ety'
+--         | ety /= ety' -> invalid
+--         | otherwise   -> pure ()
 
-    readSucceeds <- use $ rowExists id tn sRk
-    tagAccessKey mtReads tid sRk readSucceeds
-    succeeds %= (&&& readSucceeds)
+--   let requiresFullWrite = writeType `elem` [Pact.Insert, Pact.Write]
 
-    aValFields <- iforM fields $ \fieldName fieldType -> do
-      let cn = ColumnName $ T.unpack fieldName
-      columnRead tn cn .= true
-      sDirty <- use $ cellWritten tn cn sRk
+--   when (requiresFullWrite && Map.size om /= Map.size sm) invalid
 
-      av <- case fieldType of
-        EType SInteger -> mkAVal <$> use (intCell     id tn cn sRk sDirty)
-        EType SBool    -> mkAVal <$> use (boolCell    id tn cn sRk sDirty)
-        EType SStr     -> mkAVal <$> use (stringCell  id tn cn sRk sDirty)
-        EType SDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
-        EType STime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
-        EType SKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
-        EType SAny     -> pure OpaqueVal
-
-        EType (SList SInteger) -> mkAVal <$> use (intListCell     id tn cn sRk sDirty)
-        EType (SList SBool   ) -> mkAVal <$> use (boolListCell    id tn cn sRk sDirty)
-        EType (SList SStr    ) -> mkAVal <$> use (stringListCell  id tn cn sRk sDirty)
-        EType (SList SDecimal) -> mkAVal <$> use (decimalListCell id tn cn sRk sDirty)
-        EType (SList STime   ) -> mkAVal <$> use (timeListCell    id tn cn sRk sDirty)
-        EType (SList SKeySet ) -> mkAVal <$> use (ksListCell      id tn cn sRk sDirty)
-        EType (SList SAny    ) -> pure OpaqueVal
-
-        --
-        -- TODO: if we add nested object support here, we need to install
-        --       the correct provenance into AVals all the way down into
-        --       sub-objects.
-        --
-        EObjectTy _    -> throwErrorNoLoc UnsupportedObjectInDbCell
-        EType SObject  -> throwErrorNoLoc UnsupportedObjectInDbCell
-
-      tagAccessCell mtReads tid fieldName av
-
-      pure (fieldType, av)
-
-    applyInvariants tn (snd <$> aValFields) (mapM_ addConstraint)
-
-    pure $ Object aValFields
-
-  Let _name vid retTid eterm body -> do
-    av <- evalETerm eterm
-    tagVarBinding vid av
-    local (scope.at vid ?~ av) $ do
-      obj <- evalTermO body
-      tagReturn retTid $ AnObj obj
-      pure obj
-
-  Sequence eterm objT -> evalETerm eterm *> evalTermO objT
-
-  IfThenElse cond (thenPath, then') (elsePath, else') -> do
-    reachable <- use purelyReachable
-    testPasses <- evalTerm cond
-    tagFork thenPath elsePath reachable testPasses
-    case unliteralS testPasses of
-      Just True  -> evalTermO then'
-      Just False -> evalTermO else'
-      Nothing    -> throwErrorNoLoc "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
-
-validateWrite :: Pact.WriteType -> Schema -> Object -> Analyze ()
-validateWrite writeType sch@(Schema sm) obj@(Object om) = do
-  -- For now we lump our three cases together:
-  --   1. write field not in schema
-  --   2. object and schema types don't match
-  --   3. unexpected partial write
-  let invalid = throwErrorNoLoc $ InvalidDbWrite writeType sch obj
-
-  iforM_ om $ \field (ety, _av) ->
-    case field `Map.lookup` sm of
-      Nothing -> invalid
-      Just ety'
-        | ety /= ety' -> invalid
-        | otherwise   -> pure ()
-
-  let requiresFullWrite = writeType `elem` [Pact.Insert, Pact.Write]
-
-  when (requiresFullWrite && Map.size om /= Map.size sm) invalid
-
-evalTerm :: (a' ~ Concrete a, Show a', SymWord a') => Term a -> Analyze (S a')
+evalTerm :: Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
 
-  IfThenElse cond (thenPath, then') (elsePath, else') -> do
-    reachable <- use purelyReachable
-    testPasses <- evalTerm cond
-    tagFork thenPath elsePath reachable testPasses
-    iteS testPasses
-      (evalTerm then')
-      (evalTerm else')
+--   TODO
+--   IfThenElse cond (thenPath, then') (elsePath, else') -> do
+--     reachable  <- use purelyReachable
+--     testPasses <- evalTerm cond
+--     tagFork thenPath elsePath reachable testPasses
+--     singIte SBool (_sSbv testPasses)
+--       (evalTerm then')
+--       (evalTerm else')
 
   -- TODO: check that the body of enforce is pure
   Enforce mTid cond -> do
@@ -365,9 +296,9 @@ evalTerm = \case
 
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
 
-  Write writeType tid tn schema rowKey objT -> do
-    obj@(Object fields) <- evalTermO objT
-    validateWrite writeType schema obj
+  {- TODO
+  Write _ty schema writeType tid tn rowKey objT -> do
+    obj@(Object fields) <- evalTerm objT
     sRk <- symRowKey <$> evalTerm rowKey
 
     thisRowExists <- use $ rowExists id tn sRk
@@ -433,8 +364,7 @@ evalTerm = \case
 
             EType SAny         -> void $ throwErrorNoLoc OpaqueValEncountered
             EType (SList SAny) -> void $ throwErrorNoLoc OpaqueValEncountered
-            EType SObject  -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
-            EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
+            EType (SObject _)  -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 
           pure aval'
 
@@ -452,6 +382,7 @@ evalTerm = \case
     -- TODO: make a constant on the pact side that this uses:
     --
     pure $ literalS "Write succeeded"
+-}
 
   Let _name vid retTid eterm body -> do
     av <- evalETerm eterm
@@ -483,9 +414,9 @@ evalTerm = \case
   Format formatStr args -> do
     formatStr' <- eval formatStr
     args' <- for args $ \case
-      ESimple SStr     str  -> Left          <$> eval str
-      ESimple SInteger int  -> Right . Left  <$> eval int
-      ESimple SBool    bool -> Right . Right <$> eval bool
+      Existential SStr     str  -> Left          <$> eval str
+      Existential SInteger int  -> Right . Left  <$> eval int
+      Existential SBool    bool -> Right . Right <$> eval bool
       etm                   -> throwErrorNoLoc $ fromString $ T.unpack $
         "We can only analyze calls to `format` formatting {string,integer,bool}" <>
         " (not " <> userShow etm <> ")"
@@ -521,15 +452,15 @@ evalTerm = \case
         notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
-      ESimple SStr tm -> eval tm <&> unliteralS >>= \case
+      Existential SStr tm -> eval tm <&> unliteralS >>= \case
         Nothing        -> throwError notStaticErr
         Just (Str str) -> pure $ sHash $ encodeUtf8 $ T.pack str
 
       -- Everything else is hashed by first converting it to JSON:
-      ESimple SInteger tm -> eval tm <&> unliteralS >>= \case
+      Existential SInteger tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
         Just int -> pure $ sHash $ toStrict $ Aeson.encode int
-      ESimple SBool tm -> eval tm <&> unliteralS >>= \case
+      Existential SBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
 
@@ -537,14 +468,13 @@ evalTerm = \case
       -- able to convert them back into Decimal.Decimal decimals (from SBV's
       -- Real representation). This is probably possible if we think about it
       -- hard enough.
-      ESimple SDecimal _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
+      Existential SDecimal _    -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
-      ESimple _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
-      EList{}            -> throwErrorNoLoc "We can't yet analyze calls to `hash on lists"
-      EObject _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
+      Existential (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash on lists"
+      Existential (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
+      Existential _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
-  n -> throwErrorNoLoc $ UnhandledTerm $ tShow n
-
+  _n -> throwErrorNoLoc $ UnhandledTerm "TODO" -- $ userShowTm n
 
 -- For now we only allow these three types to be formatted.
 --

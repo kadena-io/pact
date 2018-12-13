@@ -15,7 +15,7 @@ import           Pact.Analyze.Types
 data AnalyzeFailureNoLoc
   = AtHasNoRelevantFields EType ESchema
   | AValUnexpectedlySVal SBVI.SVal
-  | AValUnexpectedlyObj EType
+  | AValUnexpectedlyObj UObject
   | KeyNotPresent Text EType
   | MalformedLogicalOpExec LogicalOp Int
   | ObjFieldOfWrongType Text EType
