@@ -719,38 +719,35 @@ withShow = error "TODO" -- has @ShowConcrete
 withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
 withUserShow = error "TODO" -- has @UserShowConcrete
 
-withSMTValue
-  :: IsSimple a ~ 'True
-  => SingTy a -> (SMTValue (Concrete a) => b) -> b
-withSMTValue = withDict . singMkSMTValue
+withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> Maybe b
+withSMTValue ty f = (`withDict` f) <$> singMkSMTValue ty
   where
 
-    singMkSMTValue :: IsSimple a ~ 'True => SingTy a -> Dict (SMTValue (Concrete a))
+    singMkSMTValue :: SingTy a -> Maybe (Dict (SMTValue (Concrete a)))
     singMkSMTValue = \case
-      SInteger -> Dict
-      SBool    -> Dict
-      SStr     -> Dict
-      STime    -> Dict
-      SDecimal -> Dict
-      SKeySet  -> Dict
-      SAny     -> Dict
-      -- SList _ -> error ""
+      SInteger -> Just Dict
+      SBool    -> Just Dict
+      SStr     -> Just Dict
+      STime    -> Just Dict
+      SDecimal -> Just Dict
+      SKeySet  -> Just Dict
+      SAny     -> Just Dict
+      _        -> Nothing
 
-withSymWord
-  :: IsSimple a ~ 'True
-  => SingTy a -> (SymWord (Concrete a) => b) -> b
-withSymWord = withDict . singMkSymWord
+withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> Maybe b
+withSymWord ty f = (`withDict` f) <$> singMkSymWord ty
   where
 
-    singMkSymWord :: IsSimple a ~ 'True => SingTy a -> Dict (SymWord (Concrete a))
+    singMkSymWord :: SingTy a -> Maybe (Dict (SymWord (Concrete a)))
     singMkSymWord = \case
-      SInteger -> Dict
-      SBool    -> Dict
-      SStr     -> Dict
-      STime    -> Dict
-      SDecimal -> Dict
-      SKeySet  -> Dict
-      SAny     -> Dict
+      SInteger -> Just Dict
+      SBool    -> Just Dict
+      SStr     -> Just Dict
+      STime    -> Just Dict
+      SDecimal -> Just Dict
+      SKeySet  -> Just Dict
+      SAny     -> Just Dict
+      _        -> Nothing
 
 -- columnMapToSchema :: ColumnMap EType -> Schema
 -- columnMapToSchema

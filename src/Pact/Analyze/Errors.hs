@@ -31,6 +31,7 @@ data AnalyzeFailureNoLoc
   | UnsupportedObjectInDbCell
   | InvalidDbWrite Pact.WriteType ESchema EType
   | SimpleKindRequired
+  | NonSimpleComparison
   -- For cases we don't handle yet:
   | UnhandledTerm Text
   deriving (Eq, Show)
@@ -54,6 +55,7 @@ describeAnalyzeFailureNoLoc = \case
     -- these are likely user-facing errors
     FailureMessage msg -> msg
     SimpleKindRequired -> "we currently support only simple types for this operation"
+    NonSimpleComparison -> "SBV only supports comparisons on simple types (this should have been translated to them)"
     UnhandledTerm termText -> foundUnsupported termText
     VarNotInScope name vid -> "variable not in scope: " <> name <> " (vid " <> tShow vid <> ")"
     --

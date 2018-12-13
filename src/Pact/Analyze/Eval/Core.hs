@@ -86,21 +86,25 @@ evalDecAddTime timeT secsT = do
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
 evalComparisonOp
-  :: (Analyzer m, SymWord (Concrete a))
-  => ComparisonOp
+  :: forall m a.
+     Analyzer m
+  => SingTy a
+  -> ComparisonOp
   -> TermOf m a
   -> TermOf m a
   -> m (S Bool)
-evalComparisonOp op xT yT = do
+evalComparisonOp ty op xT yT = do
   x <- eval xT
   y <- eval yT
-  pure $ sansProv $ case op of
-    Gt  -> x .> y
-    Lt  -> x .< y
-    Gte -> x .>= y
-    Lte -> x .<= y
-    Eq  -> x .== y
-    Neq -> x ./= y
+  let f :: SymWord (Concrete a) => SBV Bool
+      f = case op of
+        Gt  -> x .> y
+        Lt  -> x .< y
+        Gte -> x .>= y
+        Lte -> x .<= y
+        Eq  -> x .== y
+        Neq -> x ./= y
+  sansProv <$> withSymWord ty f ?? NonSimpleComparison
 
 evalEqNeq
   :: Analyzer m
@@ -180,8 +184,7 @@ evalCore (StrToIntBase b s)                = evalStrToIntBase b s
 evalCore (Numerical a)                     = evalNumerical a
 evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
--- evalCore (Comparison _ty op x y)           = evalComparisonOp op x y
-evalCore Comparison{} = throwErrorNoLoc "TODO: Comparison"
+evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore ObjAt{} -- (ObjAt schema colNameT objT retType)
   = throwErrorNoLoc "TODO: ObjAt"
