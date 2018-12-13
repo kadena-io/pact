@@ -1,17 +1,12 @@
 pact-macos:
   script:
     - nix-build
-    - cp -LR result build-out
-    - chmod -R u+w build-out
+    - nix-build -A ghc.pact.doc
+    - scripts/collectArtifacts.sh
   artifacts:
     paths:
-    - build-out/
+    - public/
 
 pact-linux:
   script:
     - nix-build --argstr system x86_64-linux
-    - cp -LR result build-out
-    - chmod -R u+w build-out
-  artifacts:
-    paths:
-    - build-out/
