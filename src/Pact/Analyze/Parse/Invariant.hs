@@ -77,7 +77,8 @@ expToInvariant ty exp = case (ty, exp) of
     , CoreInvariant ... StrComparison op
       <$> expToInvariant SStr a     <*> expToInvariant SStr b
     , case toOp eqNeqP op' of
-      Just eqNeq -> CoreInvariant ... KeySetEqNeq eqNeq
+      -- enforce that users can only test (dis-)equality of keysets
+      Just _eqNeq -> CoreInvariant ... KeySetComparison op
         <$> expToInvariant SKeySet a
         <*> expToInvariant SKeySet b
       Nothing -> throwErrorIn exp $

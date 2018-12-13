@@ -36,6 +36,12 @@ module Pact.Analyze.Types.Languages
   , fromPact
   , valueToProp
 
+  , pattern IntegerComparison
+  , pattern DecimalComparison
+  , pattern TimeComparison
+  , pattern StrComparison
+  , pattern BoolComparison
+  , pattern KeySetComparison
   , pattern ILiteral
   , pattern ILogicalOp
   , pattern Inj
@@ -43,7 +49,6 @@ module Pact.Analyze.Types.Languages
   , pattern PObjAt
   , pattern PDecAddTime
   , pattern PIntAddTime
-  , pattern PKeySetEqNeq
   , pattern Lit'
   , pattern StrLit
   , pattern TextLit
@@ -172,28 +177,14 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- monomorphized comparisons, the alternative is implementing Eq by hand
   -- here.
 
+  -- | A 'ComparisonOp' expression over two expressions
+  --
+  -- Note: for bool and keyset this is a wider comparison than pact supports
   Comparison :: SingTy a -> ComparisonOp -> t a -> t a -> Core t 'TyBool
 
-  -- | A 'ComparisonOp' expression over two 'Integer' expressions
-  IntegerComparison :: ComparisonOp -> t 'TyInteger -> t 'TyInteger -> Core t 'TyBool
-  -- | A 'ComparisonOp' expression over two 'Decimal' expressions
-  DecimalComparison :: ComparisonOp -> t 'TyDecimal -> t 'TyDecimal -> Core t 'TyBool
-  -- | A 'ComparisonOp' expression over two 'Time' expressions
-  TimeComparison    :: ComparisonOp -> t 'TyTime    -> t 'TyTime    -> Core t 'TyBool
-  -- | A 'ComparisonOp' expression over two 'String' expressions
-  StrComparison     :: ComparisonOp -> t 'TyStr     -> t 'TyStr     -> Core t 'TyBool
-  -- | A 'ComparisonOp' expression over two 'Bool' expressions
-  --
-  -- note: this is more broad than the set ({=, !=}) of comparisons pact
-  -- supports on bools.
-  BoolComparison    :: ComparisonOp -> t 'TyBool    -> t 'TyBool    -> Core t 'TyBool
-
   -- object ops
-
-  KeySetEqNeq :: EqNeq -> t 'TyKeySet     -> t 'TyKeySet   -> Core t 'TyBool
   -- TODO: should be two tys
   ObjectEqNeq :: SingTy ('TyObject m) -> EqNeq -> t ('TyObject m) -> t ('TyObject m) -> Core t 'TyBool
-
   ObjAt       :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t a
   ObjContains :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t 'TyBool
   ObjDrop     :: SingTy ('TyObject m) -> t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
@@ -255,6 +246,30 @@ data Core (t :: Ty -> *) (a :: Ty) where
     -> t 'TyStr -> Open a t 'TyBool -> t ('TyObject m) -> Core t 'TyBool
 
   Typeof :: SingTy a -> t a -> Core t 'TyStr
+
+pattern IntegerComparison
+  :: ComparisonOp -> t 'TyInteger -> t 'TyInteger -> Core t 'TyBool
+pattern IntegerComparison op a b = Comparison SInteger op a b
+
+pattern DecimalComparison
+  :: ComparisonOp -> t 'TyDecimal -> t 'TyDecimal -> Core t 'TyBool
+pattern DecimalComparison op a b = Comparison SDecimal op a b
+
+pattern TimeComparison
+  :: ComparisonOp -> t 'TyTime -> t 'TyTime -> Core t 'TyBool
+pattern TimeComparison op a b = Comparison STime op a b
+
+pattern StrComparison
+  :: ComparisonOp -> t 'TyStr -> t 'TyStr -> Core t 'TyBool
+pattern StrComparison op a b = Comparison SStr op a b
+
+pattern BoolComparison
+  :: ComparisonOp -> t 'TyBool -> t 'TyBool -> Core t 'TyBool
+pattern BoolComparison op a b = Comparison SBool op a b
+
+pattern KeySetComparison
+  :: ComparisonOp -> t 'TyKeySet -> t 'TyKeySet -> Core t 'TyBool
+pattern KeySetComparison op a b = Comparison SKeySet op a b
 
 -- Note [Sing Functions]:
 --
@@ -361,18 +376,6 @@ eqCoreTm _ (Comparison ty1 op1 a1 b1) (Comparison ty2 op2 a2 b2)
   = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> op1 == op2 && singEqTm ty1 a1 a2 && singEqTm ty1 b1 b2
-eqCoreTm _ (IntegerComparison op1 a1 b1) (IntegerComparison op2 a2 b2)
-  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
-eqCoreTm _ (DecimalComparison op1 a1 b1) (DecimalComparison op2 a2 b2)
-  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
-eqCoreTm _ (TimeComparison op1 a1 b1)    (TimeComparison op2 a2 b2)
-  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
-eqCoreTm _ (StrComparison op1 a1 b1)     (StrComparison op2 a2 b2)
-  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
-eqCoreTm _ (BoolComparison op1 a1 b1)    (BoolComparison op2 a2 b2)
-  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
-eqCoreTm _ (KeySetEqNeq op1 a1 b1)       (KeySetEqNeq op2 a2 b2)
-  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
 eqCoreTm _ (ObjectEqNeq ty1 op1 a1 b1)   (ObjectEqNeq ty2 op2 a2 b2)
   = case singEq ty1 ty2 of
     Nothing   -> False
@@ -513,48 +516,6 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . singShowsTm ty' 11 a
     . showString " "
     . singShowsTm ty' 11 b
-  IntegerComparison op a b ->
-      showString "IntegerComparison "
-    . showsPrec 11 op
-    . showString " "
-    . showsTm 11 a
-    . showString " "
-    . showsTm 11 b
-  DecimalComparison op a b ->
-      showString "DecimalComparison "
-    . showsPrec 11 op
-    . showString " "
-    . showsTm 11 a
-    . showString " "
-    . showsTm 11 b
-  TimeComparison op a b ->
-      showString "TimeComparison "
-    . showsPrec 11 op
-    . showString " "
-    . showsTm 11 a
-    . showString " "
-    . showsTm 11 b
-  StrComparison op a b ->
-      showString "StrComparison "
-    . showsPrec 11 op
-    . showString " "
-    . showsTm 11 a
-    . showString " "
-    . showsTm 11 b
-  BoolComparison op a b ->
-      showString "BoolComparison "
-    . showsPrec 11 op
-    . showString " "
-    . showsTm 11 a
-    . showString " "
-    . showsTm 11 b
-  KeySetEqNeq op a b ->
-      showString "KeySetEqNeq "
-    . showsPrec 11 op
-    . showString " "
-    . showsTm 11 a
-    . showString " "
-    . showsTm 11 b
   ObjectEqNeq ty' op a b ->
       showString "ObjectEqNeq "
     . showsPrec 11 ty'
@@ -784,12 +745,6 @@ userShowCore ty _p = \case
   IntAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
   DecAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
   Comparison ty' op x y    -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
-  IntegerComparison op x y -> parenList [userShow op, userShowTm x, userShowTm y]
-  DecimalComparison op x y -> parenList [userShow op, userShowTm x, userShowTm y]
-  TimeComparison op x y    -> parenList [userShow op, userShowTm x, userShowTm y]
-  StrComparison op x y     -> parenList [userShow op, userShowTm x, userShowTm y]
-  BoolComparison op x y    -> parenList [userShow op, userShowTm x, userShowTm y]
-  KeySetEqNeq op x y       -> parenList [userShow op, userShowTm x, userShowTm y]
   ObjectEqNeq ty' op x y   -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
   ObjAt ty' k obj          -> parenList [userShowTm k, singUserShowTm ty' obj]
   ObjContains ty' k obj    -> parenList [SContains, userShowTm k, singUserShowTm ty' obj]
@@ -1074,9 +1029,6 @@ pattern PDecAddTime x y = CoreProp (DecAddTime x y)
 pattern PObjAt
   :: SingTy ('TyObject m) -> Prop 'TyStr -> Prop ('TyObject m) -> Prop t
 pattern PObjAt a b c = CoreProp (ObjAt a b c)
-
-pattern PKeySetEqNeq :: EqNeq -> Prop 'TyKeySet -> Prop 'TyKeySet -> Prop 'TyBool
-pattern PKeySetEqNeq op x y = CoreProp (KeySetEqNeq op x y)
 
 pattern PObjectEqNeq :: SingTy ('TyObject m) -> EqNeq -> Prop ('TyObject m) -> Prop ('TyObject m) -> Prop 'TyBool
 pattern PObjectEqNeq ty op x y = CoreProp (ObjectEqNeq ty op x y)

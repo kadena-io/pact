@@ -109,17 +109,6 @@ float ty p = case p of
   -- - comparison
   CoreProp (Comparison ty' op a b)
     -> CoreProp ... Comparison ty' op <$> float ty' a <*> float ty' b
-  CoreProp (IntegerComparison op a b)
-    -> CoreProp ... IntegerComparison op <$> singFloat a <*> singFloat b
-  CoreProp (DecimalComparison op a b)
-    -> CoreProp ... DecimalComparison op <$> singFloat a <*> singFloat b
-  CoreProp (TimeComparison op a b)
-    -> CoreProp ... TimeComparison op <$> singFloat a <*> singFloat b
-  CoreProp (StrComparison op a b)
-    -> CoreProp ... StrComparison op <$> singFloat a <*> singFloat b
-  CoreProp (BoolComparison op a b)
-    -> CoreProp ... BoolComparison op <$> singFloat a <*> singFloat b
-  CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> singFloat a <*> singFloat b
   CoreProp (ObjectEqNeq ty' op a b) -> PObjectEqNeq ty' op <$> float ty' a <*> float ty' b
   CoreProp (ListEqNeq ty' op a b) ->
     CoreProp <$> (ListEqNeq ty' op <$> float (SList ty') a <*> float (SList ty') b)

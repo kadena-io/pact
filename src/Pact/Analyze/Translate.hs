@@ -795,25 +795,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
       --     toOp eqNeqP fn
       --   pure $ Existential SBool $ inject $ ObjectEqNeq op' a' b'
 
-      (Existential ta a', Existential tb b') ->
-        case (ta, tb) of
-          (SInteger, SInteger) -> pure $
-            Existential SBool $ inject $ IntegerComparison op a' b'
-          (SDecimal, SDecimal) -> pure $
-            Existential SBool $ inject $ DecimalComparison op a' b'
-          (STime, STime) -> pure $
-            Existential SBool $ inject $ TimeComparison op a' b'
-          (SStr, SStr) -> pure $
-            Existential SBool $ inject $ StrComparison op a' b'
-          (SBool, SBool) -> pure $
-            Existential SBool $ inject $ BoolComparison op a' b'
-          (SKeySet, SKeySet) -> do
-            op' <- maybe (throwError' $ MalformedComparison fn args) pure $
-              toOp eqNeqP fn
-            pure $ Existential SBool $ inject $ KeySetEqNeq op' a' b'
-          (_, _) -> case singEq ta tb of
-            Just Refl -> throwError' $ MalformedComparison fn args
-            _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
+      (Existential ta a', Existential tb b') -> case singEq ta tb of
+        Nothing   -> throwError' $ TypeMismatch (EType ta) (EType tb)
+        Just Refl -> pure $ Existential SBool $ inject $ Comparison ta op a' b'
 
   AST_NFun_Basic fn@(toOp comparisonOpP -> Just _) args
     -> throwError' $ MalformedComparison fn args
