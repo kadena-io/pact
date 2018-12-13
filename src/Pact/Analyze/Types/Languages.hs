@@ -311,15 +311,6 @@ singShowsOpen ty (Open v nm a) = showParen true $
   . showString " "
   . singShowsTm' ty 11 a
 
-eqLit :: SingTy a -> Concrete a -> Concrete a -> Bool
-eqLit = error "TODO"
-
-showsLit :: SingTy a -> Concrete a -> ShowS
-showsLit = error "TODO"
-
-userShowLit :: SingTy a -> Concrete a -> Text
-userShowLit = error "TODO"
-
 -- eqNumerical :: IsTerm tm => Numerical tm a -> Numerical tm a -> Bool
 eqNumerical :: SingTy a -> Numerical tm a -> Numerical tm a -> Bool
 eqNumerical = error "TODO"
@@ -332,7 +323,7 @@ userShowNumerical = error "TODO"
 
 eqCoreTm :: IsTerm tm => SingTy ty -> Core tm ty -> Core tm ty -> Bool
 eqCoreTm ty (Lit a)                      (Lit b)
-  = eqLit ty a b
+  = withEq ty $ a == b
 eqCoreTm _ (Sym a)                       (Sym b)
   = a == b
 eqCoreTm _ (Var a1 b1)                   (Var a2 b2)
@@ -482,7 +473,7 @@ eqCoreTm _ _ _                          = False
 
 showsPrecCore :: IsTerm tm => SingTy a -> Int -> Core tm a -> ShowS
 showsPrecCore ty p core = showParen (p > 10) $ case core of
-  Lit a            -> showString "Lit "        . showsLit ty a
+  Lit a            -> showString "Lit "        . withShow ty (showsPrec 11 a)
   Sym a            -> showString "Sym "        . showsPrec 11 a
   Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
   Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . singShowsTm a 11 b
@@ -777,7 +768,7 @@ instance IsTerm tm => IsTerm (Core tm) where
 
 userShowCore :: IsTerm tm => SingTy ty -> Int -> Core tm ty -> Text
 userShowCore ty _p = \case
-  Lit a                    -> userShowLit ty a
+  Lit a                    -> withUserShow ty $ userShow a
   Sym s                    -> tShow s
   Var _vid name            -> name
   Identity ty' x           -> parenList [SIdentity, singUserShowTm ty' x]
