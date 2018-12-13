@@ -255,7 +255,6 @@ genCore BoundedBool = Gen.recursive Gen.choice [
        EType ty <- Gen.element
          -- TODO?: keyset
          [EType SInteger, EType SDecimal, EType SBool, EType SStr, EType STime]
-       Just ty' <- pure $ refineSimple ty
        let aSize = case ty of
              SInteger -> intSize
              SDecimal -> decSize
@@ -267,11 +266,11 @@ genCore BoundedBool = Gen.recursive Gen.choice [
          (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $
            \elst1 elst2 -> case (elst1, elst2) of
              (Existential (SList lty1) l1, Existential (SList lty2) l2) ->
-               case singEq lty1 ty' of
+               case singEq lty1 ty of
                  Nothing   -> error "impossible"
-                 Just Refl -> case singEq lty2 ty' of
+                 Just Refl -> case singEq lty2 ty of
                    Nothing   -> error "impossible"
-                   Just Refl -> mkBool $ ListEqNeq ty' op l1 l2
+                   Just Refl -> mkBool $ ListEqNeq ty op l1 l2
              _ -> error (show (elst1, elst2))
   , Gen.subtermM (genCore BoundedBool) $ \x ->
       mkBool $ Logical NotOp [extract x]
