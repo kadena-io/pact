@@ -22,8 +22,7 @@
 --
 
 module Pact.Types.Term
- (
-   Namespace(..), nsName, nsGuard,
+ ( Namespace(..), nsName, nsGuard,
    NamespaceName(..),
    Meta(..),mDocs,mModel,
    PublicKey(..),

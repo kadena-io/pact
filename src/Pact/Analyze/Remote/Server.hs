@@ -122,7 +122,7 @@ moduleNotFoundP = MP.string "<interactive>:"
                *> digitsP *> MP.char ':'
                *> digitsP *> MP.char ':'
                *> MP.string " Module \""
-               *> fmap (ModuleName . T.pack)) (MP.some $ MP.notChar '"')
+               *> fmap (ModuleName . T.pack) (MP.some $ MP.notChar '"')
                <* MP.string "\" not found"
   where
     digitsP :: MP.Parsec Void String ()

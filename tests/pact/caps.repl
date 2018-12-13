@@ -4,7 +4,6 @@
 (env-data { "kall": ["a" "b" "c"], "kadmin": ["admin"] })
 (define-keyset 'kall)
 (define-keyset 'kadmin)
-(define-namespace 'foo 'kall)
 (env-keys ["admin"])
 
 (module caps 'kadmin

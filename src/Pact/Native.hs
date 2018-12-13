@@ -259,27 +259,20 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
       [TLitString nsn] -> go i nsn
       _ -> argsError i as
 
-    go funApp ns = do
+    go fa ns = do
       let name = NamespaceName ns
-          info = _faInfo funApp
+          info = _faInfo fa
 
       mNs <- readRow info Namespaces name
       case mNs of
         Just ns' ->
-          setEnvNamespace funApp info ns' & success ("Namespace set: " <> ns)
+          setEnvNamespace fa ns' & success ("Namespace set: " <> ns)
         Nothing  -> evalError info $
-          "namespace: Namespace '" ++ asString' name ++ "' not defined"
+          "namespace: '" ++ asString' name ++ "' not defined"
 
-    setEnvNamespace funApp info ns@(Namespace _ g) = do
-      mNs <- use $ evalRefs . rsNamespace
-      case mNs of
-        Nothing -> do
-          -- enforce that the user has correct capabilities
-          enforceGuard funApp g
-          -- set refstate namespace to the namespace
-          (evalRefs . rsNamespace .= (Just ns))
-        Just (Namespace n' _) ->
-          evalError info $ "namespace already defined: " ++ asString' n'
+    setEnvNamespace fa ns@(Namespace _ g) = do
+      enforceGuard fa g >> (evalRefs . rsNamespace .=  (Just ns))
+
 
 langDefs :: NativeModule
 langDefs =
