@@ -85,16 +85,6 @@ import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util
 
--- showExistential
---   :: (forall ty. SingTy ty -> Int -> tm ty -> ShowS)
---   -> Int -> Existential tm -> ShowS
--- showExistential showsTm' p (Existential ty tm) = showsTm' ty p tm
-
--- userShowExistential
---   :: (forall ty. SingTy ty -> tm ty -> Text)
---   -> Existential tm -> Text
--- userShowExistential userShowTm' (Existential ty tm) = userShowTm' ty tm
-
 -- | Subtyping relation from "Data types a la carte".
 --
 -- This can be read as "subtype", where we can always 'inject' the subtype into
@@ -293,9 +283,9 @@ singEqOpen ty (Open v1 nm1 a1) (Open v2 nm2 a2)
 singUserShowTmList :: IsTerm tm => SingTy a -> tm ('TyList a) -> Text
 singUserShowTmList ty tm = singUserShowTm' (SList ty) tm
 
--- singUserShowListTm :: IsTerm tm => SingTy a -> [tm a] -> Text
-singUserShowListTm :: SingTy a -> [tm a] -> Text
-singUserShowListTm = error "TODO" -- singUserShowTm' ty tms
+singUserShowListTm :: IsTerm tm => SingTy a -> [tm a] -> Text
+singUserShowListTm ty tms =
+  "[" <> Text.intercalate ", " (singUserShowTm ty <$> tms) <> "]"
 
 singUserShowTm :: IsTerm tm => SingTy a -> tm a -> Text
 singUserShowTm = singUserShowTm'
@@ -309,7 +299,6 @@ singShowsTmList ty = singShowsTm' (SList ty)
 
 singShowsListTm :: IsTerm tm => SingTy a -> Int -> [tm a] -> ShowS
 singShowsListTm ty _ = showListWith (singShowsTm ty 0)
-  -- = "[" <> Text.intercalate ", " (singShowsTm ty <$> ts) <> "]"
 
 singShowsTm :: IsTerm tm => SingTy a -> Int -> tm a -> ShowS
 singShowsTm = singShowsTm'
