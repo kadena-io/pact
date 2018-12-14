@@ -10,4 +10,6 @@ mkdir -p public
 cp -LR result/ghc/pact/share/hpc/vanilla/html public/code-coverage
 mkdir -p public/docs
 cp -LR `find result-doc/share -name html`/* public/docs
+mkdir -p public/binaries
+cp -LR result/ghc/pact/bin/pact public/binaries/pact-macos
 chmod -R u+w public
