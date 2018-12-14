@@ -175,7 +175,7 @@ transaction which would contain an invocation of the function being tested. This
 means that properties like the following:
 
 ```lisp
-(defun ensured-positive (val:integer)
+(defun ensured-positive:integer (val:integer)
   @doc   "halts when passed a non-positive number"
   @model [(property (!= result 0))]
 
@@ -244,9 +244,9 @@ code path enforces the keyset:
     [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
      (property (when (== "create" action) (authorized-by 'super-admins)))]
 
-  (if (== action "create")
+  (if (= action "create")
     (create)
-    (if (== action "update")
+    (if (= action "update")
       (update)
       (incorrect-action action))))
 ```

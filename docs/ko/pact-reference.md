@@ -2810,7 +2810,7 @@ Pact 모듈의 모든 함수 정의에서는 다른 함수에 대한 모든 후�
 기본적으로 모든 속성은 테스트 중인 함수의 호출을 포함하여 트랜잭션이 성공적으로 완료될 때 예측이 됩니다. 따라서 아래와 같은 속성은
 
 ```lisp
-(defun ensured-positive (val:integer)
+(defun ensured-positive:integer (val:integer)
   @doc   "halts when passed a non-positive number"
   @model [(property (!= result 0))]
 
@@ -2859,14 +2859,14 @@ Pact에서는 키를 사전 정의된 이름(`define-keyset`로 정의)으로 �
 
 ```lisp
 (defun admins-only (action:string)
-  @doc   "Only admins or super-admins can call this function successfully.
+  @doc   "Only admins or super-admins can call this function successfully."
   @model
     [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
      (property (when (== "create" action) (authorized-by 'super-admins)))]
 
-  (if (== action "create")
+  (if (= action "create")
     (create)
-    (if (== action "update")
+    (if (= action "update")
       (update)
       (incorrect-action action))))
 ```

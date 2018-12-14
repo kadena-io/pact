@@ -191,7 +191,7 @@ tested. This means that properties like the following:
 
 .. code:: lisp
 
-   (defun ensured-positive (val:integer)
+   (defun ensured-positive:integer (val:integer)
      @doc   "halts when passed a non-positive number"
      @model [(property (!= result 0))]
 
@@ -259,14 +259,14 @@ possible code path enforces the keyset:
 .. code:: lisp
 
    (defun admins-only (action:string)
-     @doc   "Only admins or super-admins can call this function successfully.
+     @doc   "Only admins or super-admins can call this function successfully."
      @model
        [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
         (property (when (== "create" action) (authorized-by 'super-admins)))]
 
-     (if (== action "create")
+     (if (= action "create")
        (create)
-       (if (== action "update")
+       (if (= action "update")
          (update)
          (incorrect-action action))))
 

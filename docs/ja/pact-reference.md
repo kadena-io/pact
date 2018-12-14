@@ -3098,7 +3098,7 @@ Pact のプロパティ チェック言語は、標準のブール演算子で�
 例えば、以下のプロパティを考えてみましょう。
 
 ```lisp
-(defun ensured-positive (val:integer)
+(defun ensured-positive:integer (val:integer)
   @doc "halts when passed a non-positive number"
   @model (properties [(!= result 0)])
 
@@ -3135,9 +3135,9 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
           [(or (authorized-by 'admins) (authorized-by 'super-admins))
            (when (== "create" action) (authorized-by 'super-admins))])
 
-  (if (== action "create")
+  (if (= action "create")
       (create)
-    (if (== action "update")
+    (if (= action "update")
         (update)
       (incorrect-action action))))
 ```
