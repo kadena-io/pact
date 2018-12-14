@@ -2,7 +2,7 @@ pact-macos:
   script:
     - nix-build
     - nix-build -A ghc.pact.doc
-    - collectArtifacts.sh
+    - ./collectArtifacts.sh
   artifacts:
     paths:
     - public/
