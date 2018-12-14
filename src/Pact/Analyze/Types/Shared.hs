@@ -37,7 +37,9 @@ import           Data.Coerce                  (Coercible)
 import           Data.Constraint              (Dict (Dict), withDict)
 import           Data.Data                    (Data, Typeable)
 import           Data.Function                (on)
+import           Data.Kind                    (Type)
 import           Data.List                    (sortBy)
+import           Data.Maybe                   (isJust)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
@@ -61,6 +63,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
+import           GHC.TypeLits                 (Symbol)
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
@@ -72,12 +75,9 @@ import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
--- import           Pact.Analyze.Types.Map    (Map)
 import           Pact.Analyze.Types.Map (Mapping)
 import qualified Pact.Analyze.Types.Map as SMap
 
-import           GHC.TypeLits (Symbol)
-import           Data.Kind (Type)
 
 
 class IsTerm tm where
@@ -431,12 +431,9 @@ symRowKey = coerceS
 -- | Typed symbolic value.
 type TVal = (EType, AVal)
 
--- type family ConcreteMapping (m :: [Mapping Symbol a])
---     :: [Mapping Symbol (Concrete a)] where
---   ConcreteMapping [] = []
---   ConcreteMapping ((k ':-> v) ': m) = k ':-> Concrete v ': ConcreteMapping m
+newtype AConcrete a = AConcrete (Concrete a)
 
-newtype Object (m :: [Mapping Symbol Type]) = Object (SMap.Map m)
+newtype Object (m :: [Mapping Symbol Ty]) = Object (SMap.Map AConcrete m)
 
 -- instance Show (Object m) where
 --   show _ = "Object" -- TODO
@@ -446,35 +443,28 @@ newtype Object (m :: [Mapping Symbol Type]) = Object (SMap.Map m)
 --   Object (SMap.Ext SMap.Var v m) == Object (SMap.Ext SMap.Var v' m')
 --    = v == v' && m == m'
 
-newtype Schema (m :: [Mapping Symbol Ty]) = Schema (SMap.Map m)
-
--- instance Monoid Schema where
---   mempty = Schema Map.empty
-
---   -- NOTE: left-biased semantics of schemas for Pact's "object merging":
---   mappend = (<>)
+newtype Schema (m :: [Mapping Symbol Ty]) = Schema (SMap.Map Sing m)
 
 -- Note: this doesn't exactly match the pact syntax
-instance UserShow (Schema m) where
-  userShowPrec = error "TODO" -- userShowPrec d schema
+instance UserShow (Schema '[]) where
+  userShowPrec _ _ = "{}"
 
 data ESchema where
   ESchema :: SingTy ('TyObject m) -> Schema m -> ESchema
 
 instance Eq ESchema where
-  (==) = error "TODO"
+  -- Since this is a singleton, checking the types match is good enough
+  ESchema ty1 _ == ESchema ty2 _ = isJust $ singEq ty1 ty2
 
 instance Show ESchema where
   show = error "TODO"
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
-varIdColumns :: SMap.Map m -> Map Text VarId
-varIdColumns = error "TODO"
-  -- let sortedList = sortBy (compare `on` fst) (Map.toList m)
-  --     reindexedList =
-  --       zipWith (\index (name, _) -> (name, index)) [0..] sortedList
-  -- in Map.fromList reindexedList
+varIdColumns :: SMap.Map f m -> Map Text VarId
+varIdColumns smap = Map.fromList
+  $ zipWith (\index name -> (T.pack name, index)) [0..]
+  $ SMap.keys smap
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.

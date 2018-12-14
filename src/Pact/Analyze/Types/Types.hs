@@ -19,8 +19,10 @@ module Pact.Analyze.Types.Types where
 
 import           Data.Kind                   (Type)
 import           Data.Semigroup              ((<>))
-import           Data.Type.Equality          ((:~:) (Refl), apply)
-import           GHC.TypeLits (Symbol)
+import           Data.Text                   (pack, Text)
+import           Data.Type.Equality          ((:~:) (Refl), apply, TestEquality(testEquality))
+import           GHC.TypeLits                (Symbol, KnownSymbol, symbolVal)
+import           Type.Reflection (typeOf)
 
 import           Pact.Analyze.Types.Map
 import           Pact.Analyze.Types.UserShow
@@ -37,15 +39,16 @@ data Ty
   | TyList Ty
   | TyObject [ Mapping Symbol Ty ]
 
-type family ListElem (a :: Ty) where
-  ListElem ('TyList a) = a
-
-type TyTableName  = 'TyStr
-type TyColumnName = 'TyStr
-type TyRowKey     = 'TyStr
-type TyKeySetName = 'TyStr
-
 data family Sing :: k -> Type
+
+data instance Sing (n :: [Mapping Symbol Ty]) where
+  SNilMapping :: Sing ('[] :: [Mapping Symbol Ty])
+  SConsMapping
+    :: KnownSymbol k
+    => Sing k -> Sing v -> Sing n
+    -> Sing ((k ':-> v) ': n :: [Mapping Symbol Ty])
+
+type SingMapping (a :: [Mapping Symbol Ty]) = Sing a
 
 data instance Sing (a :: Ty) where
   SInteger ::           Sing 'TyInteger
@@ -56,9 +59,40 @@ data instance Sing (a :: Ty) where
   SKeySet  ::           Sing 'TyKeySet
   SAny     ::           Sing 'TyAny
   SList    :: Sing a -> Sing ('TyList a)
-  SObject  :: Map m  -> Sing ('TyObject m)
+  SObject  :: Sing a -> Sing ('TyObject a)
 
 type SingTy (a :: Ty) = Sing a
+
+type TyTableName  = 'TyStr
+type TyColumnName = 'TyStr
+type TyRowKey     = 'TyStr
+type TyKeySetName = 'TyStr
+
+singEq :: forall (a :: Ty) (b :: Ty). Sing a -> Sing b -> Maybe (a :~: b)
+singEq SInteger    SInteger    = Just Refl
+singEq SBool       SBool       = Just Refl
+singEq SStr        SStr        = Just Refl
+singEq STime       STime       = Just Refl
+singEq SDecimal    SDecimal    = Just Refl
+singEq SKeySet     SKeySet     = Just Refl
+singEq SAny        SAny        = Just Refl
+singEq (SList   a) (SList   b) = apply Refl <$> singEq a b
+singEq (SObject a) (SObject b) = apply Refl <$> singMappingEq a b
+singEq _           _           = Nothing
+
+singMappingEq
+  :: forall (a :: [Mapping Symbol Ty]) (b :: [Mapping Symbol Ty]).
+     Sing a -> Sing b -> Maybe (a :~: b)
+singMappingEq SNilMapping SNilMapping = Just Refl
+singMappingEq (SConsMapping k1 v1 n1) (SConsMapping k2 v2 n2) = do
+  Refl <- testEquality (typeOf k1) (typeOf k2)
+  Refl <- singEq v1 v2
+  Refl <- singMappingEq n1 n2
+  pure Refl
+singMappingEq _ _ = Nothing
+
+type family ListElem (a :: Ty) where
+  ListElem ('TyList a) = a
 
 instance Show (SingTy ty) where
   showsPrec p = \case
@@ -70,8 +104,17 @@ instance Show (SingTy ty) where
     SKeySet   -> showString "SKeySet"
     SAny      -> showString "SAny"
     SList a   -> showParen (p > 10) $ showString "SList "   . showsPrec 11 a
-    -- SObject m -> showParen (p > 10) $ showString "SObject " . showsPrec 11 m
-    SObject _ -> showString "SObject"
+    SObject m -> showParen (p > 10) $ showString "SObject [" . showsM m . showString "]"
+    where
+      showsM :: SingMapping a -> ShowS
+      showsM SNilMapping = showString ""
+      showsM (SConsMapping k v n)
+        = showString "("
+        . showString (symbolVal k)
+        . showString ", "
+        . shows v
+        . showString "), "
+        . showsM n
 
 instance UserShow (SingTy ty) where
   userShowPrec _ = \case
@@ -83,19 +126,16 @@ instance UserShow (SingTy ty) where
     SKeySet   -> "keyset"
     SAny      -> "*"
     SList a   -> "[" <> userShow a <> "]"
-    SObject _ -> "object" -- TODO: show fields
-
-singEq :: forall (a :: Ty) (b :: Ty). Sing a -> Sing b -> Maybe (a :~: b)
-singEq SInteger    SInteger    = Just Refl
-singEq SBool       SBool       = Just Refl
-singEq SStr        SStr        = Just Refl
-singEq STime       STime       = Just Refl
-singEq SDecimal    SDecimal    = Just Refl
-singEq SKeySet     SKeySet     = Just Refl
-singEq SAny        SAny        = Just Refl
-singEq (SList   a) (SList   b) = apply Refl <$> singEq a b
-singEq (SObject a) (SObject b) = apply Refl <$> mapEq  a b
-singEq _           _           = Nothing
+    SObject m -> "{ " <> userShowM m <> " }"
+    where
+      userShowM :: SingMapping a -> Text
+      userShowM SNilMapping = ""
+      userShowM (SConsMapping k v n)
+        = pack (symbolVal k)
+        <> " := "
+        <> pack (show v)
+        <> ", "
+        <> userShowM n
 
 singSimple :: Sing (a :: Ty) -> Maybe (Sing a)
 singSimple ty = case ty of
@@ -137,13 +177,16 @@ instance SingI a => SingI ('TyList a) where
   sing = SList sing
 
 instance SingI ('TyObject '[]) where
-  sing = SObject singMap
+  sing = SObject SNilMapping
 
-class SingMap m where
-  singMap :: Map m
+instance (KnownSymbol k, SingI v, SingI m)
+  => SingI ('TyObject ((k ':-> v) ': m)) where
+  sing = SObject (SConsMapping sing sing sing)
 
-instance SingMap '[] where
-  singMap = Empty
+data instance Sing (n :: Symbol) = KnownSymbol n => SSym
+
+instance KnownSymbol n => SingI n where
+  sing = SSym
 
 type family IsSimple (ty :: Ty) :: Bool where
   IsSimple ('TyList _)   = 'False

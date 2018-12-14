@@ -16,14 +16,15 @@ module Pact.Analyze.Types.Map (Mapping(..), Union, Unionable, union, Var(..), Ma
                       Lookup, Member, (:\), Split, split,
                       IsMember, lookp, Updatable, update,
                       IsMap, AsMap, asMap,
-                      Submap, submap, mapEq) where
+                      Submap, submap,
+                      keys, Show'(show')) where
 
 import GHC.TypeLits
 import Data.Type.Bool
 import Data.Type.Equality
 import Data.Type.Set (Cmp, Proxy(..), Flag(..), Sort, Filter, (:++))
 
-import Type.Reflection (typeOf)
+import Data.Kind       (Type)
 
 {- Throughout, type variables
    'k' ranges over "keys"
@@ -77,14 +78,14 @@ instance KnownSymbol k => Show (Var k) where
     show = symbolVal
 
 {-| A value-level heterogenously-typed Map (with type-level representation in terms of lists) -}
-data Map (n :: [Mapping Symbol k]) where
-    Empty :: Map '[]
-    Ext :: KnownSymbol k => Var k -> v -> Map m -> Map ((k :-> v) ': m)
+data Map (f :: kind -> Type) (n :: [Mapping Symbol kind]) where
+    Empty :: Map f '[]
+    Ext :: KnownSymbol k => Var k -> f v -> Map f m -> Map f ((k :-> v) ': m)
 
 {-| Membership test a type class (predicate) -}
-class IsMember v t m where
+class IsMember v (t :: kind) m where
   {-| Value-level lookup of elements from a map, via type class predicate -}
-  lookp :: Var v -> Map m -> t
+  lookp :: Var v -> Map f m -> f t
 
 instance {-# OVERLAPS #-} IsMember v t ((v ':-> t) ': m) where
   lookp _ (Ext _ x _) = x
@@ -92,17 +93,20 @@ instance {-# OVERLAPS #-} IsMember v t ((v ':-> t) ': m) where
 instance {-# OVERLAPPABLE #-} IsMember v t m => IsMember v t (x ': m) where
   lookp v (Ext _ _ m) = lookp v m
 
+keys :: Map f n -> [String]
+keys Empty = []
+keys (Ext k _ m) = symbolVal k : keys m
 
 {-| Updatability as a type class -}
 class Updatable v t m n where
   {-| Update a map with `m` at variable `v` with a value of type `t`
       to produce a map of type `n` -}
-  update :: Map m -> Var v -> t -> Map n
+  update :: Map f m -> Var v -> f t -> Map f n
 
 instance {-# OVERLAPS #-} Updatable v t ((v ':-> s) ': m) ((v ':-> t) ': m) where
   update (Ext v _ m) _ x = Ext v x m
 
-instance Updatable v t m n => Updatable v t ((w ':-> y) ': m) ((w ':-> y) ': n) where
+instance (Updatable v t m n) => Updatable v t ((w ':-> y) ': m) ((w ':-> y) ': n) where
   update (Ext w y m) v x = Ext w y (update m v x)
 
 -- instance Updatable v t '[] '[v ':-> t] where
@@ -119,49 +123,42 @@ type IsMap s = (s ~ Nub (Sort s))
 type AsMap s = Nub (Sort s)
 
 {-| At the value level, noramlise the list form to the map form -}
-asMap :: (Sortable s, Nubable (Sort s)) => Map s -> Map (AsMap s)
+asMap :: (Sortable s, Nubable (Sort s)) => Map f s -> Map f (AsMap s)
 asMap x = nub (quicksort x)
 
-instance Show (Map '[]) where
+instance Show (Map f '[]) where
     show Empty = "{}"
 
-instance (KnownSymbol k, Show v, Show' (Map s)) => Show (Map ((k :-> v) ': s)) where
+instance (KnownSymbol k, Show (f v), Show' (Map f s)) => Show (Map f ((k :-> v) ': s)) where
     show (Ext k v s) = "{" ++ show k ++ " :-> " ++ show v ++ show' s ++ "}"
 
 class Show' t where
     show' :: t -> String
-instance Show' (Map '[]) where
+instance Show' (Map f '[]) where
     show' Empty = ""
-instance (KnownSymbol k, Show v, Show' (Map s)) => Show' (Map ((k :-> v) ': s)) where
+instance (KnownSymbol k, Show (f v), Show' (Map f s)) => Show' (Map f ((k :-> v) ': s)) where
     show' (Ext k v s) = ", " ++ show k ++ " :-> " ++ show v ++ (show' s)
 
-instance Eq (Map '[]) where
+instance Eq (Map f '[]) where
     Empty == Empty = True
 
-instance (Eq v, Eq (Map s)) => Eq (Map ((k :-> v) ': s)) where
+instance (Eq (f v), Eq (Map f s)) => Eq (Map f ((k :-> v) ': s)) where
     (Ext Var v m) == (Ext Var v' m') = v == v' && m == m'
 
-instance Ord (Map '[]) where
+instance Ord (Map f '[]) where
     compare Empty Empty = EQ
 
-instance (Ord v, Ord (Map s)) => Ord (Map ((k :-> v) ': s)) where
+instance (Ord (f v), Ord (Map f s)) => Ord (Map f ((k :-> v) ': s)) where
     compare (Ext Var v m) (Ext Var v' m') = compare v v' `mappend` compare m m'
 
--- instance Show (Map n) where
---   show Empty = "{}"
---   show (Ext k v s) = "{" ++ show k ++ " :-> " ++ show v ++ show' s ++ "}"
-
--- instance Eq (Map n) where
---   (==) = error "TODO"
-
 {-| Union of two finite maps (normalising) -}
-union :: (Unionable s t) => Map s -> Map t -> Map (Union s t)
+union :: (Unionable s t) => Map f s -> Map f t -> Map f (Union s t)
 union s t = nub (quicksort (append s t))
 
 type Unionable s t = (Nubable (Sort (s :++ t)), Sortable (s :++ t))
 
 {-| Append of two finite maps (non normalising) -}
-append :: Map s -> Map t -> Map (s :++ t)
+append :: Map f s -> Map f t -> Map f (s :++ t)
 append Empty x = x
 append (Ext k v xs) ys = Ext k v (append xs ys)
 
@@ -170,7 +167,7 @@ type instance Cmp (k :-> v) (k' :-> v') = CmpSymbol k k'
 
 {-| Value-level quick sort that respects the type-level ordering -}
 class Sortable xs where
-    quicksort :: Map xs -> Map (Sort xs)
+    quicksort :: Map f xs -> Map f (Sort xs)
 
 instance Sortable '[] where
     quicksort Empty = Empty
@@ -187,7 +184,7 @@ instance (Sortable (Filter FMin (k :-> v) xs)
 
 {- Filter out the elements less-than or greater-than-or-equal to the pivot -}
 class FilterV (f::Flag) k v xs where
-    filterV :: Proxy f -> Var k -> v -> Map xs -> Map (Filter f (k :-> v) xs)
+    filterV :: Proxy f -> Var k -> g v -> Map g xs -> Map g (Filter f (k :-> v) xs)
 
 instance FilterV f k v '[] where
     filterV _ k v Empty      = Empty
@@ -210,7 +207,7 @@ class Combinable t t' where
     combine :: t -> t' -> Combine t t'
 
 class Nubable t where
-    nub :: Map t -> Map (Nub t)
+    nub :: Map f t -> Map f (Nub t)
 
 instance Nubable '[] where
     nub Empty = Empty
@@ -223,14 +220,14 @@ instance {-# OVERLAPPABLE #-}
               Nubable (f ': s)) => Nubable (e ': f ': s) where
     nub (Ext k v (Ext k' v' s)) = Ext k v (nub (Ext k' v' s))
 
-instance {-# OVERLAPS #-}
-       (Combinable v v', Nubable ((k :-> Combine v v') ': s))
-    => Nubable ((k :-> v) ': (k :-> v') ': s) where
-    nub (Ext k v (Ext k' v' s)) = nub (Ext k (combine v v') s)
+-- instance {-# OVERLAPS #-}
+--        (Combinable v v', Nubable ((k :-> Combine v v') ': s))
+--     => Nubable ((k :-> v) ': (k :-> v') ': s) where
+--     nub (Ext k v (Ext k' v' s)) = nub (Ext k (combine v v') s)
 
 
 class Conder g where
-    cond :: Proxy g -> Map s -> Map t -> Map (If g s t)
+    cond :: Proxy g -> Map f s -> Map f t -> Map f (If g s t)
 
 instance Conder True where
     cond _ s t = s
@@ -242,7 +239,7 @@ instance Conder False where
 {-| Splitting a union of maps, given the maps we want to split it into -}
 class Split s t st where
    -- where st ~ Union s t
-   split :: Map st -> (Map s, Map t)
+   split :: Map f st -> (Map f s, Map f t)
 
 instance Split '[] '[] '[] where
    split Empty = (Empty, Empty)
@@ -261,7 +258,7 @@ instance {-# OVERLAPS #-} (Split s t st) => Split s (x ': t) (x ': st) where
 
 {-| Construct a submap 's' from a supermap 't' -}
 class Submap s t where
-   submap :: Map t -> Map s
+   submap :: Map f t -> Map f s
 
 instance Submap '[] '[] where
    submap xs = Empty
@@ -271,23 +268,6 @@ instance {-# OVERLAPPABLE #-} Submap s t => Submap s (x ': t) where
 
 instance {-# OVERLAPS #-} Submap s t => Submap  (x ': s) (x ': t) where
    submap (Ext k v xs) = Ext k v (submap xs)
-
-kEq :: (KnownSymbol a, KnownSymbol b) => Var a -> Var b -> Maybe (a :~: b)
-kEq va vb = case testEquality (typeOf va) (typeOf vb) of
-  Nothing   -> Nothing
-  Just Refl -> Just Refl
-
-eq' :: a -> b -> Maybe (a :~: b)
-eq' = undefined
-
-mapEq :: Map a -> Map b -> Maybe (a :~: b)
-mapEq Empty Empty = Just Refl
-mapEq (Ext k1 v m) (Ext k2 v' m') = do
-  Refl <- kEq k1 k2
-  Refl <- eq' v v'
-  Refl <- mapEq m m'
-  pure Refl
-mapEq _ _ = Nothing
 
 type family TypeMap (f :: a -> b) (xs :: [a]) :: [b]
 type instance TypeMap t '[] = '[]

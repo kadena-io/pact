@@ -192,7 +192,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- TODO: should be two tys
   ObjMerge    :: SingTy ('TyObject m) -> t ('TyObject m)    -> t ('TyObject m) -> Core t ('TyObject m)
 
-  LiteralObject :: Map m -> Core t ('TyObject m)
+  LiteralObject :: Map AConcrete m -> Core t ('TyObject m)
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
