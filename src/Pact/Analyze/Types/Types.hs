@@ -50,6 +50,10 @@ data instance Sing (n :: [Mapping Symbol Ty]) where
 
 type SingMapping (a :: [Mapping Symbol Ty]) = Sing a
 
+mappingKeys :: SingMapping a -> [String]
+mappingKeys SNilMapping = []
+mappingKeys (SConsMapping k _ m) = symbolVal k : mappingKeys m
+
 data instance Sing (a :: Ty) where
   SInteger ::           Sing 'TyInteger
   SBool    ::           Sing 'TyBool

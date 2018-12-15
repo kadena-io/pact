@@ -45,6 +45,7 @@ allocSbv = _sSbv <$> allocS
 allocSchema :: Schema m -> Alloc UObject
 allocSchema (Schema m) = case m of
   SMap.Empty            -> pure $ UObject Map.empty
+  _ -> error "TODO"
   -- TODO
   -- SMap.Ext SMap.Var v m -> allocSchema m
 -- allocSchema (Schema fieldTys) = UObject <$>
@@ -52,8 +53,8 @@ allocSchema (Schema m) = case m of
 
 allocAVal :: EType -> Alloc AVal
 allocAVal = \case
-  EType (SObject ty) -> AnObj <$> allocSchema (Schema ty)
   _ -> error "TODO"
+  -- EType (SObject ty) -> AnObj <$> allocSchema (Schema ty)
   -- EType (SList ty :: SingTy ty) -> mkAVal <$>
   --   (withSymWord ty allocS :: Alloc (S [Concrete (ListElem ty)]))
   -- EType (ty :: SingTy ty) -> mkAVal <$>

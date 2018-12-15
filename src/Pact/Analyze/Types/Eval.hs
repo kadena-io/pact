@@ -121,7 +121,7 @@ mkAnalyzeEnv tables args tags info = do
   columnIds <- for tables $ \(Table tname ut _) ->
     case maybeTranslateUserType' ut of
       Just (EType (SObject ty)) -> Just
-        (TableName (T.unpack tname), varIdColumns ty)
+        (TableName (T.unpack tname), varIdColumns' ty)
       _ -> Nothing
 
   let columnIds' = TableMap (Map.fromList columnIds)

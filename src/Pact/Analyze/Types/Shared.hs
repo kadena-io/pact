@@ -466,6 +466,11 @@ varIdColumns smap = Map.fromList
   $ zipWith (\index name -> (T.pack name, index)) [0..]
   $ SMap.keys smap
 
+varIdColumns' :: SingMapping m -> Map Text VarId
+varIdColumns' smap = Map.fromList
+  $ zipWith (\index name -> (T.pack name, index)) [0..]
+  $ mappingKeys smap
+
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.
 varIdArgs :: [Pact.Arg a] -> [(Pact.Arg a, VarId)]
