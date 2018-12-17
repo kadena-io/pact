@@ -19,7 +19,7 @@ module Pact.Analyze.Types.Types where
 
 import           Data.Kind                   (Type)
 import           Data.Semigroup              ((<>))
-import           Data.Text                   (pack, Text)
+import           Data.Text                   (intercalate, pack, Text)
 import           Data.Type.Equality          ((:~:) (Refl), apply, TestEquality(testEquality))
 import           GHC.TypeLits                (Symbol, KnownSymbol, symbolVal)
 import           Type.Reflection (typeOf)
@@ -108,16 +108,16 @@ instance Show (SingTy ty) where
     SKeySet   -> showString "SKeySet"
     SAny      -> showString "SAny"
     SList a   -> showParen (p > 10) $ showString "SList "   . showsPrec 11 a
-    SObject m -> showParen (p > 10) $ showString "SObject [" . showsM m . showString "]"
+    SObject m -> showParen (p > 10) $ showString "SObject " . showsM m
     where
       showsM :: SingMapping a -> ShowS
-      showsM SNilMapping = showString ""
-      showsM (SConsMapping k v n)
-        = showString "("
+      showsM SNilMapping = showString "SNilMapping"
+      showsM (SConsMapping k v n) = showParen True $
+          showString "SConsMapping "
         . showString (symbolVal k)
-        . showString ", "
+        . showString " "
         . shows v
-        . showString "), "
+        . showString " "
         . showsM n
 
 instance UserShow (SingTy ty) where
@@ -130,28 +130,13 @@ instance UserShow (SingTy ty) where
     SKeySet   -> "keyset"
     SAny      -> "*"
     SList a   -> "[" <> userShow a <> "]"
-    SObject m -> "{ " <> userShowM m <> " }"
+    SObject m -> "{ " <> intercalate ", " (userShowM m) <> " }"
     where
-      userShowM :: SingMapping a -> Text
-      userShowM SNilMapping = ""
+      userShowM :: SingMapping a -> [Text]
+      userShowM SNilMapping = []
       userShowM (SConsMapping k v n)
-        = pack (symbolVal k)
-        <> " := "
-        <> pack (show v)
-        <> ", "
-        <> userShowM n
-
-singSimple :: Sing (a :: Ty) -> Maybe (Sing a)
-singSimple ty = case ty of
-  SInteger  -> Just ty
-  SBool     -> Just ty
-  SStr      -> Just ty
-  STime     -> Just ty
-  SDecimal  -> Just ty
-  SKeySet   -> Just ty
-  SAny      -> Just ty
-  SList{}   -> Nothing
-  SObject{} -> Nothing
+        = pack (symbolVal k) <> " := " <> pack (show v)
+        : userShowM n
 
 class SingI a where
   sing :: Sing a

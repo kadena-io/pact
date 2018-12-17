@@ -63,7 +63,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
-import           GHC.TypeLits                 (Symbol)
+import           GHC.TypeLits                 (Symbol, symbolVal)
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
@@ -431,23 +431,61 @@ symRowKey = coerceS
 -- | Typed symbolic value.
 type TVal = (EType, AVal)
 
-newtype AConcrete a = AConcrete (Concrete a)
+data AConcrete a = AConcrete !(Sing a) !(Concrete a)
 
 newtype Object (m :: [Mapping Symbol Ty]) = Object (SMap.Map AConcrete m)
 
--- instance Show (Object m) where
---   show _ = "Object" -- TODO
+instance UserShow (Object m) where
+  userShowPrec _ (Object m) = "{" <> T.intercalate ", " (userShowM m) <> "}"
+    where
+    userShowM :: SMap.Map AConcrete m' -> [Text]
+    userShowM SMap.Empty = []
+    userShowM (SMap.Ext k (AConcrete singv v) m')
+      = T.pack (symbolVal k) <> " := " <> withUserShow singv (userShow v)
+      : userShowM m'
 
--- instance Eq (Object m) where
---   Object SMap.Empty == Object SMap.Empty = True
---   Object (SMap.Ext SMap.Var v m) == Object (SMap.Ext SMap.Var v' m')
---    = v == v' && m == m'
+instance Show (Object m) where
+  showsPrec p (Object m) = showParen (p > 10) $ showString "Object " . showsM m
+    where showsM :: SMap.Map AConcrete m' -> ShowS
+          showsM SMap.Empty = showString "Empty"
+          showsM (SMap.Ext k (AConcrete singv v) m') = showParen True $
+              showString "Ext "
+            . showsPrec 11 k
+            . withShow singv (showsPrec 11 v)
+            . showsM m'
 
-newtype Schema (m :: [Mapping Symbol Ty]) = Schema (SMap.Map Sing m)
+instance Eq (Object m) where
+  Object m1 == Object m2 = eq m1 m2 where
+    eq :: SMap.Map AConcrete m' -> SMap.Map AConcrete m' -> Bool
+    eq SMap.Empty SMap.Empty = True
+    eq (SMap.Ext _ (AConcrete singv v1) m1') (SMap.Ext _ (AConcrete _ v2) m2')
+      = withEq singv (v1 == v2)
+      && eq m1' m2'
+
+-- | Wrapper for @SingTy@ so it can be used (unsaturated) as an argument to
+-- @SMap.Map@
+newtype ASingTy a = ASingTy (SingTy a)
+
+newtype Schema (m :: [Mapping Symbol Ty]) = Schema (SMap.Map ASingTy m)
 
 -- Note: this doesn't exactly match the pact syntax
-instance UserShow (Schema '[]) where
-  userShowPrec _ _ = "{}"
+instance UserShow (Schema m) where
+  userShowPrec _ (Schema m) = "{" <> T.intercalate ", " (userShowM m) <> "}"
+    where userShowM :: SMap.Map ASingTy m' -> [Text]
+          userShowM SMap.Empty = []
+          userShowM (SMap.Ext k (ASingTy singv) m')
+            = T.pack (symbolVal k) <> ": " <> userShow singv
+            : userShowM m'
+
+instance Show (Schema m) where
+  showsPrec p (Schema m) = showParen (p > 11) $ showString "Schema " . showM m
+    where showM :: SMap.Map ASingTy m' -> ShowS
+          showM SMap.Empty = showString "Empty"
+          showM (SMap.Ext k (ASingTy singv) m') = showParen True $
+              showString "Ext "
+            . showString (symbolVal k)
+            . showParen True (showString "ASingTy " . showsPrec 11 singv)
+            . showM m'
 
 data ESchema where
   ESchema :: SingTy ('TyObject m) -> Schema m -> ESchema
@@ -457,7 +495,11 @@ instance Eq ESchema where
   ESchema ty1 _ == ESchema ty2 _ = isJust $ singEq ty1 ty2
 
 instance Show ESchema where
-  show = error "TODO"
+  showsPrec p (ESchema ty schema) = showParen (p > 10) $
+      showString "ESchema "
+    . showsPrec 11 ty
+    . showString " "
+    . showsPrec 11 schema
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
@@ -684,7 +726,7 @@ type family Concrete (a :: Ty) = r | r -> a where
   Concrete 'TyKeySet     = KeySet
   Concrete 'TyAny        = Any
   Concrete ('TyList a)   = [Concrete a]
-  -- Concrete ('TyObject []) = Object '[]
+  Concrete ('TyObject ty) = Object ty
 
 -- Note [Supplying Dicts]:
 --
@@ -698,51 +740,88 @@ type family Concrete (a :: Ty) = r | r -> a where
 -- `EqConcrete`, `ShowConcrete`, and `UserShowConcrete` are defined just to
 -- make it possible to use `has` here.
 
-class    Eq       (Concrete a) => EqConcrete a where
-instance Eq       (Concrete a) => EqConcrete a where
-class    Show     (Concrete a) => ShowConcrete a where
-instance Show     (Concrete a) => ShowConcrete a where
-class    UserShow (Concrete a) => UserShowConcrete a where
-instance UserShow (Concrete a) => UserShowConcrete a where
-
 withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
-withEq = error "TODO" -- has @EqConcrete
+withEq = withDict . singMkEq
+  where
+
+    singMkEq :: SingTy a -> Dict (Eq (Concrete a))
+    singMkEq = \case
+      SInteger  -> Dict
+      SBool     -> Dict
+      SStr      -> Dict
+      STime     -> Dict
+      SDecimal  -> Dict
+      SKeySet   -> Dict
+      SAny      -> Dict
+      SList ty' -> withEq ty' Dict
+      SObject _ -> Dict
 
 withShow :: SingTy a -> (Show (Concrete a) => b) -> b
-withShow = error "TODO" -- has @ShowConcrete
+withShow = withDict . singMkShow
+  where
+
+    singMkShow :: SingTy a -> Dict (Show (Concrete a))
+    singMkShow = \case
+      SInteger  -> Dict
+      SBool     -> Dict
+      SStr      -> Dict
+      STime     -> Dict
+      SDecimal  -> Dict
+      SKeySet   -> Dict
+      SAny      -> Dict
+      SList ty' -> withShow ty' Dict
+      SObject _ -> Dict
 
 withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
-withUserShow = error "TODO" -- has @UserShowConcrete
-
-withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> Maybe b
-withSMTValue ty f = (`withDict` f) <$> singMkSMTValue ty
+withUserShow = withDict . singMkUserShow
   where
 
-    singMkSMTValue :: SingTy a -> Maybe (Dict (SMTValue (Concrete a)))
+    singMkUserShow :: SingTy a -> Dict (UserShow (Concrete a))
+    singMkUserShow = \case
+      SInteger  -> Dict
+      SBool     -> Dict
+      SStr      -> Dict
+      STime     -> Dict
+      SDecimal  -> Dict
+      SKeySet   -> Dict
+      SAny      -> Dict
+      SList ty' -> withUserShow ty' Dict
+      SObject _ -> Dict
+
+withTypeable :: SingTy a -> (Typeable (Concrete a) => b) -> b
+withTypeable = undefined
+
+withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
+withSMTValue = withDict . singMkSMTValue
+  where
+
+    singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
     singMkSMTValue = \case
-      SInteger -> Just Dict
-      SBool    -> Just Dict
-      SStr     -> Just Dict
-      STime    -> Just Dict
-      SDecimal -> Just Dict
-      SKeySet  -> Just Dict
-      SAny     -> Just Dict
-      _        -> Nothing
+      SInteger  -> Dict
+      SBool     -> Dict
+      SStr      -> Dict
+      STime     -> Dict
+      SDecimal  -> Dict
+      SKeySet   -> Dict
+      SAny      -> Dict
+      SList ty' -> withSMTValue ty' $ withTypeable ty' Dict
+      SObject _ -> error "TODO"
 
-withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> Maybe b
-withSymWord ty f = (`withDict` f) <$> singMkSymWord ty
+withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> b
+withSymWord = withDict . singMkSymWord
   where
 
-    singMkSymWord :: SingTy a -> Maybe (Dict (SymWord (Concrete a)))
+    singMkSymWord :: SingTy a -> Dict (SymWord (Concrete a))
     singMkSymWord = \case
-      SInteger -> Just Dict
-      SBool    -> Just Dict
-      SStr     -> Just Dict
-      STime    -> Just Dict
-      SDecimal -> Just Dict
-      SKeySet  -> Just Dict
-      SAny     -> Just Dict
-      _        -> Nothing
+      SInteger  -> Dict
+      SBool     -> Dict
+      SStr      -> Dict
+      STime     -> Dict
+      SDecimal  -> Dict
+      SKeySet   -> Dict
+      SAny      -> Dict
+      SList ty' -> withSymWord ty' Dict
+      SObject _ -> error "TODO"
 
 -- columnMapToSchema :: ColumnMap EType -> Schema
 -- columnMapToSchema

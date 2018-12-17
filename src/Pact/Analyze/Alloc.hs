@@ -18,9 +18,10 @@ import           Control.Monad.Trans.Maybe   (MaybeT)
 import           Control.Monad.Writer.Strict (WriterT)
 import qualified Control.Monad.Writer.Lazy   as LW
 import           Data.SBV                    (Symbolic)
--- import qualified Data.SBV                    as SBV
+import qualified Data.SBV                    as SBV
 
-import           Pact.Analyze.Types          (S, SingI(sing), SingTy, Concrete)
+import           Pact.Analyze.Types          (S, SingI(sing), SingTy, Concrete,
+                                              sansProv, withSymWord)
 
 -- | A restricted symbolic context in which only quantified variable allocation
 -- is permitted.
@@ -69,9 +70,6 @@ newtype Alloc a = Alloc { runAlloc :: Symbolic a }
   deriving (Functor, Applicative, Monad)
 
 instance MonadAlloc Alloc where
-  -- withSymWord sing $ Alloc $ sansProv <$> SBV.forall_
-  -- withSymWord sing $ Alloc $ sansProv <$> SBV.exists_
-  -- withSymWord sing $ Alloc $ sansProv <$> SBV.free_
-  singForAll = error "TODO"
-  singExists = error "TODO"
-  singFree   = error "TODO"
+  singForAll ty = Alloc $ withSymWord ty $ sansProv <$> SBV.forall_
+  singExists ty = Alloc $ withSymWord ty $ sansProv <$> SBV.exists_
+  singFree   ty = Alloc $ withSymWord ty $ sansProv <$> SBV.free_

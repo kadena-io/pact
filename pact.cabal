@@ -155,7 +155,6 @@ library
                      , vector-space >= 0.10.4 && < 0.14
                      , mmorph >= 1.0 && < 1.2
                      , constraints
-                     , constraints-extras
                      , type-level-sets >= 0.8.9.0
 
   if !impl(ghcjs)

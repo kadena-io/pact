@@ -104,7 +104,7 @@ evalComparisonOp ty op xT yT = do
         Lte -> x .<= y
         Eq  -> x .== y
         Neq -> x ./= y
-  sansProv <$> withSymWord ty f ?? NonSimpleComparison
+  pure $ sansProv $ withSymWord ty f
 
 evalEqNeq
   :: Analyzer m
