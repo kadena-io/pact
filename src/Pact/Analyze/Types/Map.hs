@@ -19,11 +19,10 @@ module Pact.Analyze.Types.Map (Mapping(..), Union, Unionable, union, Var(..), Ma
                       keys, Show'(show')) where
 
 import GHC.TypeLits
+import Data.Kind          (Type)
 import Data.Type.Bool
 import Data.Type.Equality
-import Data.Type.Set (Cmp, Proxy(..), Flag(..), Sort, Filter, (:++))
-
-import Data.Kind       (Type)
+import Data.Type.Set      (Cmp, Proxy(..), Flag(..), Sort, Filter, (:++))
 
 {- Throughout, type variables
    'k' ranges over "keys"
