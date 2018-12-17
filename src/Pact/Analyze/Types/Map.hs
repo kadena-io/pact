@@ -6,7 +6,6 @@ The implementation is similar to that shown in the paper.
              TypeFamilies, UndecidableInstances, MultiParamTypeClasses,
              FlexibleInstances, GADTs, FlexibleContexts, ScopedTypeVariables,
              ConstraintKinds, IncoherentInstances #-}
-{-# LANGUAGE TypeInType #-}
 {-# OPTIONS_GHC -fno-warn-unticked-promoted-constructors #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
