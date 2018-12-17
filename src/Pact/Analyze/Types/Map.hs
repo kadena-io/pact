@@ -268,7 +268,3 @@ instance {-# OVERLAPPABLE #-} Submap s t => Submap s (x ': t) where
 
 instance {-# OVERLAPS #-} Submap s t => Submap  (x ': s) (x ': t) where
    submap (Ext k v xs) = Ext k v (submap xs)
-
-type family TypeMap (f :: a -> b) (xs :: [a]) :: [b]
-type instance TypeMap t '[] = '[]
-type instance TypeMap t (x ': xs) = t x ': TypeMap t xs
