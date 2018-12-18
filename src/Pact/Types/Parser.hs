@@ -14,6 +14,7 @@ module Pact.Types.Parser
     PactParser(..)
   , symbols
   , qualified
+  , namespaced
   , style
   )
   where
@@ -51,3 +52,6 @@ style = IdentifierStyle "atom"
 
 qualified :: (Monad p, TokenParsing p) => p Text
 qualified = dot *> ident style
+
+namespaced :: (Monad p, TokenParsing p) => p Text
+namespaced = dot *> dot *> ident style

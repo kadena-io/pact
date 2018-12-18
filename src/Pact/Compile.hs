@@ -267,7 +267,7 @@ varAtom = do
     [] -> return $ Name _atomAtom _atomInfo
     [q] -> do
       when (q `elem` reserved) $ unexpected' "reserved word"
-      return $ QName (ModuleName q) _atomAtom _atomInfo
+      return $ QName (ModuleName q Nothing) _atomAtom _atomInfo
     _ -> expected "single qualifier"
   commit
   return $ TVar n _atomInfo
@@ -407,7 +407,7 @@ moduleForm = do
   let code = case i of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      modName = ModuleName modName'
+      modName = ModuleName modName' Nothing
       modHash = hash $ encodeUtf8 $ _unCode code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
@@ -416,8 +416,8 @@ moduleForm = do
 
 implements :: Compile ()
 implements = do
-  ifName <- (ModuleName . _atomAtom) <$> bareAtom
-  overModuleState msImplements (ifName:)
+  ifName <- _atomAtom <$> bareAtom
+  overModuleState msImplements ((ModuleName ifName Nothing):)
 
 
 interface :: Compile (Term Name)
@@ -431,7 +431,7 @@ interface = do
   let code = case info of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      iname = ModuleName iname'
+      iname = ModuleName iname' Nothing
       ihash = hash $ encodeUtf8 (_unCode code)
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
             bodyForm $ specialForm $ \r -> case r of
@@ -508,7 +508,7 @@ useForm :: Compile (Term Name)
 useForm = do
   modName <- (_atomAtom <$> userAtom) <|> str <|> expected "bare atom, string, symbol"
   i <- contextInfo
-  u <- Use (ModuleName modName) <$> optional hash' <*> pure i
+  u <- Use (ModuleName modName Nothing) <$> optional hash' <*> pure i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
   return $ TUse u i

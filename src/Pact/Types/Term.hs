@@ -43,7 +43,7 @@ module Pact.Types.Term
    TableName(..),
    Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    interfaceCode, interfaceMeta, interfaceName, interfaceImports,
-   ModuleName(..), mnName,
+   ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
    ConstVal(..),
    Use(..),
@@ -73,6 +73,7 @@ import Control.Arrow ((***),first)
 import Data.Functor.Classes
 import Bound
 import Data.Text (Text,pack,unpack)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Aeson
 import qualified Data.ByteString.UTF8 as BS
@@ -153,8 +154,6 @@ instance ToJSON KeySet where
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
 instance Show KeySetName where show (KeySetName s) = show s
-
-
 
 newtype PactId = PactId Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
@@ -304,8 +303,48 @@ newtype TableName = TableName Text
 instance Show TableName where show (TableName s) = show s
 
 -- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
-newtype ModuleName = ModuleName { _mnName :: Text }
-  deriving (Eq, Ord, Show, Pretty, Hashable, AsString, IsString, ToJSON, FromJSON)
+-- DESNote(emily): -XDerivingVia would eliminate many of these instances when we bump
+data ModuleName = ModuleName
+  { _mnName      :: Text
+  , _mnNamespace :: Maybe NamespaceName
+  } deriving (Eq, Ord)
+
+instance Hashable ModuleName where
+  hashWithSalt s (ModuleName n Nothing)   =
+    s `hashWithSalt` (0::Int) `hashWithSalt` n
+  hashWithSalt s (ModuleName n (Just ns)) =
+    s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
+
+instance Show ModuleName where
+  show (ModuleName n Nothing) = show n
+  show (ModuleName n (Just ns)) = show ns ++ "." ++ show n
+
+instance AsString ModuleName where
+  asString (ModuleName n Nothing) = n
+  asString (ModuleName n (Just (NamespaceName ns))) = ns <> "." <> n
+
+instance IsString ModuleName where
+  fromString = coalesce . T.splitOn "." . pack
+    where
+      coalesce l = case l of
+        [ns,n] -> ModuleName n (Just (NamespaceName ns))
+        [n]    -> ModuleName n Nothing
+        _      -> error "i seriously hope we don't get here"
+
+instance Pretty ModuleName where
+  pretty (ModuleName n Nothing) = pretty n
+  pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
+
+instance ToJSON ModuleName where
+  toJSON ModuleName{..} = object
+    [ "name"      .= _mnName
+    , "namespace" .= _mnNamespace
+    ]
+
+instance FromJSON ModuleName where
+  parseJSON = withObject "ModuleName" $ \o -> ModuleName
+    <$> o .:  "name"
+    <*> o .:? "namespace"
 
 newtype DefName = DefName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
@@ -333,7 +372,7 @@ parseName i = AP.parseOnly (nameParser i)
 nameParser :: (TokenParsing m, Monad m) => Info -> m Name
 nameParser i = do
   a <- ident style
-  try (qualified >>= \qn -> return (QName (ModuleName a) qn i) <?> "qualified name") <|>
+  try (qualified >>= \qn -> return (QName (ModuleName a Nothing) qn i) <?> "qualified name") <|>
     return (Name a i)
 
 instance Hashable Name where
@@ -434,7 +473,7 @@ instance (Show n) => Show (Def n) where
     maybeDelim " " (_mDocs _dMeta) ++ ")"
 
 newtype NamespaceName = NamespaceName Text
-  deriving (Eq, Ord, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty)
+  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty)
 
 data Namespace = Namespace
   { _nsName   :: NamespaceName

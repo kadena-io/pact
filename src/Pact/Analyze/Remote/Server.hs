@@ -90,9 +90,9 @@ validateRequest = do
         Just mod' -> Right $ ValidRequest modsMap mod'
         Nothing   -> Left $ ClientError $
           case modName of
-            ModuleName nm ->
+            ModuleName mn _ ->
               let names = HM.keys modsMap
-              in show nm ++ " not found in list of provided modules: "
+              in show mn ++ " not found in list of provided modules: "
                    ++ show names
 
 initializeRepl :: IO ReplState
@@ -122,7 +122,7 @@ moduleNotFoundP = MP.string "<interactive>:"
                *> digitsP *> MP.char ':'
                *> digitsP *> MP.char ':'
                *> MP.string " Module \""
-               *> fmap (ModuleName . T.pack) (MP.some $ MP.notChar '"')
+               *> fmap (\a -> ModuleName (T.pack a) Nothing) (MP.some $ MP.notChar '"')
                <* MP.string "\" not found"
   where
     digitsP :: MP.Parsec Void String ()
