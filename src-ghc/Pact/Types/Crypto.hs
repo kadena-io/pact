@@ -18,7 +18,7 @@ module Pact.Types.Crypto
   ( PublicKey, importPublic, exportPublic
   , PrivateKey, importPrivate, exportPrivate
   , Signature(..), exportSignature
-  , hashTx, verifyHashTx, initialHashTx, sign, valid
+  , hashTx, verifyHashTx, initialHashTx, sign
   , PPKScheme(..), SignatureAlgo(..), HashAlgo(..), AddressFormat(..)
   , hashLengthAsBS, hashLengthAsBase16, hashToB16Text
   ) where
@@ -156,55 +156,59 @@ verifyHashTx algo h b = if hashTx algo b == h
 initialHashTx :: HashAlgo -> Hash
 initialHashTx algo = hashTx algo mempty
 
-sign :: PPKScheme -> ByteString -> PrivateKey -> PublicKey -> Either String Signature
-sign (PPKScheme (_, hashAlgo, sigAlgo)) msg privKey pubKey =
-  case sigAlgo of
-    ED25519 -> do
-      edPriv <- toEd25519Private privKey
-      edPub <- toEd25519Public pubKey
-      let (Ed25519.Sig b) = Ed25519.sign hsh edPriv edPub
-      return $ Signature b
-  where (Hash hsh) = hashTx hashAlgo msg
+sign :: ByteString -> KeyPair -> Maybe Signature
+sign msg keys =
+  let (scheme,priv,pub) = exportKeyPair keys
+      (PPKScheme (_, hashAlgo, sigAlgo)) = scheme
+      (Hash hsh) = hashTx hashAlgo msg
+  in case (pub, priv, sigAlgo) of
+    (PubEd edPub, PrivEd edPriv, ED25519) ->
+      let (Ed25519.Sig b) = Ed25519.sign hsh edPriv edPub in
+      Just (Signature b)
 
-valid :: PPKScheme -> ByteString -> PublicKey -> Signature -> Either String Bool
+valid :: PPKScheme -> ByteString -> PublicKey -> Signature -> Bool
 valid (PPKScheme (_, hashAlgo, sigAlgo)) msg pubKey sig =
-  case sigAlgo of
-    ED25519 -> do
-      edPub <-  toEd25519Public pubKey
-      let edSig = Ed25519.Sig $ exportSignature sig
-      return $ Ed25519.valid hsh edPub edSig
-  where (Hash hsh) = hashTx hashAlgo msg
+  let (Hash hsh) = hashTx hashAlgo msg in
+  case (pubKey, sigAlgo) of
+    (PubEd edPub, ED25519) -> Ed25519.valid hsh edPub (Ed25519.Sig $ exportSignature sig)
+    _ -> False
 
+newtype PublicKeyBS = PublicKeyBS ByteString
+newtype PrivateKeyBS = PrivateKeyBS ByteString
 
-data PublicKey =  Pub SignatureAlgo ByteString
-data PrivateKey = Priv SignatureAlgo ByteString
+data PublicKey = PubEd Ed25519.PublicKey
+data PrivateKey = PrivEd Ed25519.PrivateKey
+
+data KeyPair = MakeKeyPair PPKScheme PrivateKey PublicKey
 
 importPublic :: SignatureAlgo -> ByteString -> Maybe PublicKey
 importPublic algo b = case algo of
-  ED25519 -> let b' = Ed25519.exportPublic <$> Ed25519.importPublic b
-             in (Pub algo) <$> b'
+  ED25519 -> PubEd <$> (Ed25519.importPublic b)
 
 importPrivate :: SignatureAlgo -> ByteString -> Maybe PrivateKey
 importPrivate algo b = case algo of
-  ED25519 -> let b' = Ed25519.exportPrivate <$> Ed25519.importPrivate b
-             in (Priv algo) <$> b'
+  ED25519 -> PrivEd <$> (Ed25519.importPrivate b)
+
+importKeyPair :: PPKScheme -> PublicKeyBS -> PrivateKeyBS -> Maybe KeyPair
+importKeyPair scheme pubBS privBS = do
+  let (PPKScheme (_, _, sigAlgo)) = scheme
+      (PublicKeyBS pub) = pubBS
+      (PrivateKeyBS priv) = privBS
+  pub' <- importPublic sigAlgo pub
+  priv' <- importPrivate sigAlgo priv
+  return $ MakeKeyPair scheme priv' pub'
 
 exportPublic :: PublicKey -> (SignatureAlgo, ByteString)
-exportPublic (Pub algo b) = (algo, b)
+exportPublic pub = case pub of
+  PubEd pe -> (ED25519, Ed25519.exportPublic pe)
 
 exportPrivate :: PrivateKey -> (SignatureAlgo, ByteString)
-exportPrivate (Priv algo b) = (algo, b)
+exportPrivate priv = case priv of
+  PrivEd pe -> (ED25519, Ed25519.exportPrivate pe)
 
-toEd25519Public :: PublicKey -> Either String Ed25519.PublicKey
-toEd25519Public (Pub _ b) = case (Ed25519.importPublic b) of
-  Nothing -> Left $ "Invalid Ed25519 Public Key: " ++ show b
-  Just edPub -> Right edPub
-
-toEd25519Private :: PrivateKey -> Either String Ed25519.PrivateKey
-toEd25519Private (Priv _ b) = case (Ed25519.importPrivate b) of
-  Nothing -> Left $ "Invalid Ed25519 Private Key: " ++ show b
-  Just edPriv -> Right edPriv
-
+exportKeyPair :: KeyPair -> (PPKScheme, PrivateKey, PublicKey)
+exportKeyPair pair = case pair of
+  MakeKeyPair edScheme edPriv edPub  -> (edScheme, edPriv, edPub)
 
 instance Eq PublicKey where
   b == b' = exportPublic b == exportPublic b'
@@ -220,6 +224,16 @@ instance FromJSON PublicKey where
     failMaybe (show typ ++ " Public key import failed: " ++ show key)
       (importPublic typ key)
 
+instance ParseText PublicKey where
+  parseText = undefined
+
+instance Show PublicKey where
+  show = undefined
+
+instance Show PrivateKey where
+  show = undefined
+
+
 instance Eq PrivateKey where
   b == b' = exportPrivate b == exportPrivate b'
 instance Ord PrivateKey where
@@ -233,6 +247,13 @@ instance FromJSON PrivateKey where
     key <- (o .: "key") >>= parseB16JSON
     failMaybe (show typ ++ " Private key import failed: " ++ show key)
       (importPrivate typ key)
+instance ToJSONKey PublicKey
+instance FromJSONKey PublicKey
+{--instance ParseText PrivateKey where
+  parseText s = do
+    s' <- parseB16Text s
+    failMaybe ("Private key import failed: " ++ show s) $ importPrivate s'
+  {-# INLINE parseText #-}--}
 
 instance Serialize PublicKey where
   put s = S.put algo >> S.putByteString b
