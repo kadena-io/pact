@@ -45,6 +45,7 @@ import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.DeepSeq
 import Data.Aeson as A
+import Data.Aeson.Types (parse)
 import Data.Maybe
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
@@ -85,15 +86,20 @@ instance (FromJSON a) => FromJSON (Command a) where
 
 instance NFData a => NFData (Command a)
 
-mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> Maybe Address -> Text -> a -> Command ByteString
+mkCommand :: ToJSON a => [KeyPair] -> Maybe Address -> Text -> a -> Command ByteString
 mkCommand creds addy nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce addy)
 
-mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
-mkCommand' creds env = Command env (sig <$> creds) hsh
-  where
-    hsh = hashTx Blake2b_512 env   -- hash associated with a Command, aka a Command's Request Key
-    sig (scheme, sk, pk) =
-      UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign scheme env sk pk)
+mkCommand' :: [KeyPair] -> ByteString -> Command ByteString
+mkCommand' creds env = makeCommand (makeSigs <$> creds)
+  where makeCommand sigs = Command env sigs hsh
+        hsh = hashTx Blake2b_512 env    -- hash associated with a Command, aka a Command's Request Key
+        makeSigs keyPair =
+          let (scheme,_,pk) = exportKeyPair keyPair
+              pk' = (toB16Text . snd) (exportPublic pk)
+              -- `sign` returns Maybe when Public Key, Private Key, and Signature Algorithm
+              -- do not match. This is impossible when using KeyPair data type.
+              sig = (toB16Text . exportSignature . fromJust) (sign env keyPair)
+          in (UserSig scheme pk' sig)
 
 
 verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
@@ -166,10 +172,16 @@ instance FromJSON UserSig where
 
 verifyUserSig :: ByteString -> UserSig -> Bool
 verifyUserSig msg UserSig{..} =
-  case (fromText _usPubKey,fromText _usSig) of
-    (Success pk,Success sig) -> valid _usScheme msg pk sig
-    _ -> False
-{-# INLINE verifyUserSig #-}
+  let (PPKScheme (_,_,sigAlgo)) = _usScheme
+      parsedPubKey = parse parseB16Text _usPubKey
+      parsedSig = fromText _usSig
+  in case (parsedPubKey, parsedSig) of
+       (Success pkBS,Success sig) ->
+         case (importPublic sigAlgo pkBS) of
+           Nothing -> False
+           Just pk -> valid _usScheme msg pk sig
+       _ -> False
+
 
 data CommandError = CommandError {
       _ceMsg :: String

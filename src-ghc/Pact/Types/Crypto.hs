@@ -18,7 +18,8 @@ module Pact.Types.Crypto
   ( PublicKey, importPublic, exportPublic
   , PrivateKey, importPrivate, exportPrivate
   , Signature(..), exportSignature
-  , hashTx, verifyHashTx, initialHashTx, sign
+  , KeyPair, importKeyPair, exportKeyPair, PublicKeyBS(..), PrivateKeyBS(..)
+  , hashTx, verifyHashTx, initialHashTx, sign, valid
   , PPKScheme(..), SignatureAlgo(..), HashAlgo(..), AddressFormat(..)
   , hashLengthAsBS, hashLengthAsBase16, hashToB16Text
   ) where
@@ -198,6 +199,7 @@ importKeyPair scheme pubBS privBS = do
   priv' <- importPrivate sigAlgo priv
   return $ MakeKeyPair scheme priv' pub'
 
+
 exportPublic :: PublicKey -> (SignatureAlgo, ByteString)
 exportPublic pub = case pub of
   PubEd pe -> (ED25519, Ed25519.exportPublic pe)
@@ -224,15 +226,6 @@ instance FromJSON PublicKey where
     failMaybe (show typ ++ " Public key import failed: " ++ show key)
       (importPublic typ key)
 
-instance ParseText PublicKey where
-  parseText = undefined
-
-instance Show PublicKey where
-  show = undefined
-
-instance Show PrivateKey where
-  show = undefined
-
 
 instance Eq PrivateKey where
   b == b' = exportPrivate b == exportPrivate b'
@@ -249,11 +242,6 @@ instance FromJSON PrivateKey where
       (importPrivate typ key)
 instance ToJSONKey PublicKey
 instance FromJSONKey PublicKey
-{--instance ParseText PrivateKey where
-  parseText s = do
-    s' <- parseB16Text s
-    failMaybe ("Private key import failed: " ++ show s) $ importPrivate s'
-  {-# INLINE parseText #-}--}
 
 instance Serialize PublicKey where
   put s = S.put algo >> S.putByteString b
