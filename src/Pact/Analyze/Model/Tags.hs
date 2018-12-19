@@ -56,9 +56,9 @@ allocAVal = \case
   _ -> error "TODO"
   -- EType (SObject ty) -> AnObj <$> allocSchema (Schema ty)
   -- EType (SList ty :: SingTy ty) -> mkAVal <$>
-  --   (withSymWord ty allocS :: Alloc (S [Concrete (ListElem ty)]))
+  --   (allocS :: Alloc (S [Concrete (ListElem ty)]))
   -- EType (ty :: SingTy ty) -> mkAVal <$>
-  --   (withSymWord ty allocS :: Alloc (S (Concrete ty)))
+  --   (allocS :: Alloc (S (Concrete ty)))
 
 allocTVal :: EType -> Alloc TVal
 allocTVal ety = (ety,) <$> allocAVal ety
@@ -182,14 +182,12 @@ saturateModel =
 
         -- TODO
         -- go (EType (SList ty :: SingTy t)) (AVal _mProv sval) =
-        --   withSymWord ty $ withSMTValue ty $
-        --     mkAVal' . SBV.literal
-        --       <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
+        --   mkAVal' . SBV.literal
+        --     <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
 
         -- go (EType (ty :: SingTy t)) (AVal _mProv sval) =
-        --   withSymWord ty $ withSMTValue ty $
-        --     mkAVal' . SBV.literal
-        --       <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
+        --   mkAVal' . SBV.literal
+        --     <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
 
         go a b = error $ "fetchTVal: impossible: " ++ show (a, b)
 

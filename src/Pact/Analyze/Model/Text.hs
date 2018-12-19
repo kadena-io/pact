@@ -48,10 +48,8 @@ showTVal (_ety, av) = case av of
   AVal _ _ -> "TODO: showTVal"
     -- EType (SObject _) -> error "showModel: impossible object type for AVal"
     -- EType (SList ty :: Sing t) ->
-    --   withUserShow ty $ withSymWord ty $
     --   showSbv (SBVI.SBV sval :: SBV (Concrete t))
     -- EType (ty :: Sing t) ->
-    --   withUserShow ty $ withSymWord ty $
     --   showSbv (SBVI.SBV sval :: SBV (Concrete t))
 
 showObject :: UObject -> Text

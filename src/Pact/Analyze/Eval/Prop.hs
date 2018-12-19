@@ -125,10 +125,9 @@ evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
 evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
-evalPropSpecific (Forall vid _name (EType (ty :: Types.SingTy ty)) p)
-  = do -- withSymWord ty $ do
-    var <- singForAll ty
-    local (scope.at vid ?~ mkAVal var) $ evalProp p
+evalPropSpecific (Forall vid _name (EType (ty :: Types.SingTy ty)) p) = do
+  var <- singForAll ty
+  local (scope.at vid ?~ mkAVal var) $ evalProp p
 evalPropSpecific (Forall vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
@@ -140,10 +139,9 @@ evalPropSpecific (Forall vid _name (QColumnOf tabName) prop) = do
     let colName' = ColumnName $ T.unpack colName
     in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
   pure $ foldr (&&&) true bools
-evalPropSpecific (Exists vid _name (EType (ty :: Types.SingTy ty)) p)
-  = do -- withSymWord ty $ do
-    var <- singExists ty
-    local (scope.at vid ?~ mkAVal var) $ evalProp p
+evalPropSpecific (Exists vid _name (EType (ty :: Types.SingTy ty)) p) = do
+  var <- singExists ty
+  local (scope.at vid ?~ mkAVal var) $ evalProp p
 evalPropSpecific (Exists vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
