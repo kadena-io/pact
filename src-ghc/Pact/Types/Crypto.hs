@@ -170,15 +170,12 @@ sign msg keys =
     (PubEd edPub, PrivEd edPriv, ED25519) ->
       let (Ed25519.Sig b) = Ed25519.sign hsh edPriv edPub in
       Just (Signature b)
-    _ -> Nothing -- TODO
 
 valid :: PPKScheme -> ByteString -> PublicKey -> Signature -> Bool
 valid (PPKScheme (_, hashAlgo, sigAlgo)) msg pubKey sig =
   let (Hash hsh) = hashTx hashAlgo msg in
   case (pubKey, sigAlgo) of
     (PubEd edPub, ED25519) -> Ed25519.valid hsh edPub (Ed25519.Sig $ exportSignature sig)
-    _ -> False -- TODO
-
 
 data PublicKey = PubEd Ed25519.PublicKey
   deriving (Show)

@@ -16,7 +16,7 @@ import Pact.Types.Command
 import Control.DeepSeq
 import Data.Maybe (fromJust)
 import Data.Aeson
-import Pact.Types.Crypto
+import Pact.Types.Crypto hiding (PublicKey)
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Interpreter

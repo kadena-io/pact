@@ -9,6 +9,7 @@ module Utils.TestRunner
   , runAll
   , flushDb
   , genKeys
+  , getPublicKeyBS
   , makeCheck
   , checkResult
   , threeStepPactCode
@@ -25,6 +26,7 @@ import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto
+import Pact.Types.Util (toB16JSON)
 
 
 import Data.Aeson hiding (Options)
@@ -142,6 +144,8 @@ genKeys = do
   (s,p) <- genKeyPair ED25519
   return $ ApiKeyPair s p (Just Chainweb)
 
+getPublicKeyBS :: ApiKeyPair -> Value
+getPublicKeyBS = toB16JSON . snd . exportPublic . _kpPublic
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect

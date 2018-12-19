@@ -81,7 +81,7 @@ data ApiReq = ApiReq {
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
   _ylCodeFile :: Maybe FilePath,
-  _ylApiKeyPair :: [ApiKeyPair],
+  _ylKeyPairs :: [ApiKeyPair],
   _ylNonce :: Maybe String,
   _ylFrom :: Maybe EntityName,
   _ylTo :: Maybe [EntityName]
@@ -128,7 +128,7 @@ mkApiReqExec ar@ApiReq{..} fp = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
-  ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylApiKeyPair _ylNonce
+  ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
 
 mkExec :: String -> Value -> Maybe Address -> [ApiKeyPair] -> Maybe String -> IO (Command Text)
 mkExec code mdata addy akps ridm = do
@@ -169,7 +169,7 @@ mkApiReqCont ar@ApiReq{..} fp = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
-  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy _ylApiKeyPair _ylNonce
+  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy _ylKeyPairs _ylNonce
 
 mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [ApiKeyPair]
   -> Maybe String -> IO (Command Text)
