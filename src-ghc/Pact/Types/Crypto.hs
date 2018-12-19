@@ -1,3 +1,5 @@
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -15,10 +17,10 @@
 -- PPK and hashing types.
 --
 module Pact.Types.Crypto
-  ( PublicKey, importPublic, exportPublic
-  , PrivateKey, importPrivate, exportPrivate
+  ( PublicKey, importPublic, exportPublic, fromTextPublic
+  , PrivateKey, importPrivate, exportPrivate, fromTextPrivate
   , Signature(..), exportSignature
-  , KeyPair, importKeyPair, exportKeyPair, PublicKeyBS(..), PrivateKeyBS(..)
+  , genKeyPair, KeyPair, importKeyPair, exportKeyPair
   , hashTx, verifyHashTx, initialHashTx, sign, valid
   , PPKScheme(..), SignatureAlgo(..), HashAlgo(..), AddressFormat(..)
   , hashLengthAsBS, hashLengthAsBase16, hashToB16Text
@@ -28,6 +30,7 @@ import Control.Applicative
 import Control.Monad.Reader
 import Control.DeepSeq
 
+import "crypto-api" Crypto.Random
 import qualified Crypto.Ed25519.Pure as Ed25519
 import qualified Crypto.Hash as H
 
@@ -40,6 +43,7 @@ import qualified Data.ByteArray as B
 import Data.Serialize as SZ
 import qualified Data.Serialize as S
 import Data.Maybe
+import Data.Text (Text)
 import Data.Text.Encoding
 
 import GHC.Generics
@@ -166,21 +170,23 @@ sign msg keys =
     (PubEd edPub, PrivEd edPriv, ED25519) ->
       let (Ed25519.Sig b) = Ed25519.sign hsh edPriv edPub in
       Just (Signature b)
+    _ -> Nothing -- TODO
 
 valid :: PPKScheme -> ByteString -> PublicKey -> Signature -> Bool
 valid (PPKScheme (_, hashAlgo, sigAlgo)) msg pubKey sig =
   let (Hash hsh) = hashTx hashAlgo msg in
   case (pubKey, sigAlgo) of
     (PubEd edPub, ED25519) -> Ed25519.valid hsh edPub (Ed25519.Sig $ exportSignature sig)
-    _ -> False
+    _ -> False -- TODO
 
-newtype PublicKeyBS = PublicKeyBS ByteString
-newtype PrivateKeyBS = PrivateKeyBS ByteString
 
 data PublicKey = PubEd Ed25519.PublicKey
+  deriving (Show)
 data PrivateKey = PrivEd Ed25519.PrivateKey
+  deriving (Show)
 
 data KeyPair = MakeKeyPair PPKScheme PrivateKey PublicKey
+  deriving (Show)
 
 importPublic :: SignatureAlgo -> ByteString -> Maybe PublicKey
 importPublic algo b = case algo of
@@ -190,14 +196,14 @@ importPrivate :: SignatureAlgo -> ByteString -> Maybe PrivateKey
 importPrivate algo b = case algo of
   ED25519 -> PrivEd <$> (Ed25519.importPrivate b)
 
-importKeyPair :: PPKScheme -> PublicKeyBS -> PrivateKeyBS -> Maybe KeyPair
-importKeyPair scheme pubBS privBS = do
-  let (PPKScheme (_, _, sigAlgo)) = scheme
-      (PublicKeyBS pub) = pubBS
-      (PrivateKeyBS priv) = privBS
-  pub' <- importPublic sigAlgo pub
-  priv' <- importPrivate sigAlgo priv
-  return $ MakeKeyPair scheme priv' pub'
+importKeyPair :: PPKScheme -> PublicKey -> PrivateKey -> Maybe KeyPair
+importKeyPair scheme pub priv =
+  let (sigPub, _) = exportPublic pub
+      (sigPriv, _) = exportPrivate priv
+      (PPKScheme (_, _, sigAlgo)) = scheme
+  in if (sigPub == sigPriv) && (sigPub == sigAlgo)
+     then Just $ MakeKeyPair scheme priv pub
+     else Nothing
 
 
 exportPublic :: PublicKey -> (SignatureAlgo, ByteString)
@@ -212,6 +218,29 @@ exportKeyPair :: KeyPair -> (PPKScheme, PrivateKey, PublicKey)
 exportKeyPair pair = case pair of
   MakeKeyPair edScheme edPriv edPub  -> (edScheme, edPriv, edPub)
 
+
+fromTextPublic :: SignatureAlgo -> Text -> Either String PublicKey
+fromTextPublic sigAlgo t = do
+  bs <- fromTextWith' parseB16Text t
+  failMaybe (show sigAlgo ++ " Public key import failed: " ++ show bs)
+              (importPublic sigAlgo bs)
+
+fromTextPrivate :: SignatureAlgo -> Text -> Either String PrivateKey
+fromTextPrivate sigAlgo t = do
+  bs <- fromTextWith' parseB16Text t
+  failMaybe (show sigAlgo ++ " Private key import failed: " ++ show bs)
+              (importPrivate sigAlgo bs)
+
+
+genKeyPair :: SignatureAlgo -> IO (PrivateKey, PublicKey)
+genKeyPair sigAlgo = case sigAlgo of
+  ED25519 -> do
+    g :: SystemRandom <- newGenIO
+    case Ed25519.generateKeyPair g of
+      Left _ -> error "Something went wrong in genKeyPairs"
+      Right (s,p,_) -> return $ ((PrivEd s), (PubEd p))
+
+
 instance Eq PublicKey where
   b == b' = exportPublic b == exportPublic b'
 instance Ord PublicKey where
@@ -222,10 +251,10 @@ instance ToJSON PublicKey where
 instance FromJSON PublicKey where
   parseJSON = A.withObject "PublicKey" $ \o -> do
     typ <- (o .: "type") >>= parseJSON
-    key <- (o .: "key") >>= parseB16JSON
-    failMaybe (show typ ++ " Public key import failed: " ++ show key)
-      (importPublic typ key)
-
+    key <- (o .: "key")
+    failEither $ fromTextPublic typ key
+instance ToJSONKey PublicKey
+instance FromJSONKey PublicKey
 
 instance Eq PrivateKey where
   b == b' = exportPrivate b == exportPrivate b'
@@ -237,11 +266,9 @@ instance ToJSON PrivateKey where
 instance FromJSON PrivateKey where
   parseJSON = A.withObject "PrivateKey" $ \o -> do
     typ <- (o .: "type") >>= parseJSON
-    key <- (o .: "key") >>= parseB16JSON
-    failMaybe (show typ ++ " Private key import failed: " ++ show key)
-      (importPrivate typ key)
-instance ToJSONKey PublicKey
-instance FromJSONKey PublicKey
+    key <- (o .: "key")
+    failEither $ fromTextPrivate typ key
+
 
 instance Serialize PublicKey where
   put s = S.put algo >> S.putByteString b

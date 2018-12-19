@@ -54,6 +54,9 @@ fromText' = resultToEither . fromText
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
 
+fromTextWith' :: (Text -> Parser a) -> Text -> Either String a
+fromTextWith' p t = resultToEither (parse p t)
+
 lensyOptions :: Int -> Options
 lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 
@@ -128,7 +131,10 @@ toB16Text s = decodeUtf8 $ B16.encode s
 failMaybe :: Monad m => String -> Maybe a -> m a
 failMaybe err m = maybe (fail err) return m
 
-
+failEither :: Monad m => Either String a -> m a
+failEither m = case m of
+  Left err -> fail err
+  Right r -> return r
 
 -- | Utility for unsafe parse of JSON
 unsafeFromJSON :: FromJSON a => Value -> a
