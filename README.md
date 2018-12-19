@@ -158,11 +158,7 @@ sudo systemctl restart nix-daemon.service
 
 Building with `nix-build` does a full rebuild every time, which is usually not
 what you want when developing. To do incremental builds, you need to enter a nix
-shell. To do that use the following command:
-
-```
-$ nix-shell -A shells.ghc
-```
+shell. To do that use the `nix-shell` command.
 
 This puts you in a shell that has all the necessary dependencies installed. Once
 inside this shell you can build as normal with cabal using `cabal build` or
@@ -188,7 +184,7 @@ nice for two reasons:
 To start the hoogle server, run this command from the project root directory.
 
 ```
-nix-shell -A shells.ghc --run 'hoogle server --local'
+nix-shell --run 'hoogle server --local'
 ```
 
 This runs hoogle locally on port 8080.  Running it this way, however, does not

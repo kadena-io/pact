@@ -1,4 +1,20 @@
-pact:
+pact-macos:
   script:
     - nix-build
+    - nix-build -A ghc.pact.doc
+    - ./collectArtifacts.sh
+  artifacts:
+    paths:
+    - public/
+
+pact-linux:
+  script:
     - nix-build --argstr system x86_64-linux
+
+pages:
+  stage: deploy
+  script:
+  - echo 'Nothing to do...'
+  artifacts:
+    paths:
+    - public/
