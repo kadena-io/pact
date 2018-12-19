@@ -45,8 +45,7 @@ import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.DeepSeq
 import Data.Aeson as A
-import Data.Aeson.Types (parse)
-import Data.Maybe
+import Data.Maybe (fromJust, fromMaybe)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize as SZ
@@ -173,13 +172,10 @@ instance FromJSON UserSig where
 verifyUserSig :: ByteString -> UserSig -> Bool
 verifyUserSig msg UserSig{..} =
   let (PPKScheme (_,_,sigAlgo)) = _usScheme
-      parsedPubKey = parse parseB16Text _usPubKey
+      parsedPubKey = fromTextPublic sigAlgo _usPubKey
       parsedSig = fromText _usSig
   in case (parsedPubKey, parsedSig) of
-       (Success pkBS,Success sig) ->
-         case (importPublic sigAlgo pkBS) of
-           Nothing -> False
-           Just pk -> valid _usScheme msg pk sig
+       (Right pk,Success sig) -> valid _usScheme msg pk sig
        _ -> False
 
 

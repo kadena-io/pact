@@ -18,7 +18,7 @@
 
 module Pact.ApiReq
     (
-     KeyPair(..)
+     ApiKeyPair(..)
     ,ApiReq(..)
     ,apiReq
     ,mkApiReq
@@ -33,6 +33,7 @@ import Prelude
 import System.Directory
 import System.FilePath
 import Data.Default (def)
+import Data.Maybe (fromMaybe)
 import Data.Aeson
 import GHC.Generics
 import qualified Data.Yaml as Y
@@ -42,8 +43,7 @@ import Data.Text.Encoding
 import Data.Thyme.Clock
 import qualified Data.Set as S
 
-import Crypto.Ed25519.Pure
-
+import Pact.Types.Crypto
 import Pact.Types.Util
 import Pact.Types.Command
 import Pact.Types.RPC
@@ -51,12 +51,25 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.API
 
 
-data KeyPair = KeyPair {
+data ApiKeyPair = ApiKeyPair {
   _kpSecret :: PrivateKey,
-  _kpPublic :: PublicKey
+  _kpPublic :: PublicKey,
+  _kpScheme :: Maybe AddressFormat
   } deriving (Eq,Show,Generic)
-instance ToJSON KeyPair where toJSON = lensyToJSON 3
-instance FromJSON KeyPair where parseJSON = lensyParseJSON 3
+instance ToJSON ApiKeyPair where
+  toJSON ApiKeyPair{..} =
+    let secret = (toB16JSON . snd . exportPrivate) _kpSecret
+        public = (toB16JSON . snd . exportPublic) _kpPublic
+    in object ["secret" .= secret, "public" .= public, "scheme" .= _kpScheme]
+instance FromJSON ApiKeyPair where
+  parseJSON = withObject "ApiKeyPair" $ \o -> do
+    secretText <- (o .: "secret")
+    publicText <- (o .: "public")
+    addr <- (o .:? "scheme")
+    let (PPKScheme (_, _, sigAlgo)) = addressToScheme $ fromMaybe def addr
+    secret <- failEither $ fromTextPrivate sigAlgo secretText
+    public <- failEither $ fromTextPublic sigAlgo publicText
+    return $ ApiKeyPair secret public addr
 
 data ApiReq = ApiReq {
   _ylType :: Maybe String,
@@ -68,7 +81,7 @@ data ApiReq = ApiReq {
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
   _ylCodeFile :: Maybe FilePath,
-  _ylKeyPairs :: [KeyPair],
+  _ylApiKeyPair :: [ApiKeyPair],
   _ylNonce :: Maybe String,
   _ylFrom :: Maybe EntityName,
   _ylTo :: Maybe [EntityName]
@@ -115,14 +128,17 @@ mkApiReqExec ar@ApiReq{..} fp = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
-  ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
+  ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylApiKeyPair _ylNonce
 
-mkExec :: String -> Value -> Maybe Address -> [KeyPair] -> Maybe String -> IO (Command Text)
-mkExec code mdata addy kps ridm = do
+mkExec :: String -> Value -> Maybe Address -> [ApiKeyPair] -> Maybe String -> IO (Command Text)
+mkExec code mdata addy akps ridm = do
+  keyPairs <- case (mkKeyPairs akps) of
+    Right kps -> return kps
+    Left err -> dieAR err
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    (map (\KeyPair {..} -> (def,_kpSecret,_kpPublic)) kps)
+    keyPairs
     addy
     (pack $ show rid)
     (Exec (ExecMsg (pack code) mdata))
@@ -153,19 +169,35 @@ mkApiReqCont ar@ApiReq{..} fp = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
+  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy _ylApiKeyPair _ylNonce
 
-  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy _ylKeyPairs _ylNonce
-
-mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [KeyPair]
+mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [ApiKeyPair]
   -> Maybe String -> IO (Command Text)
-mkCont txid step rollback mdata addy kps ridm = do
+mkCont txid step rollback mdata addy akps ridm = do
+  keyPairs <- case (mkKeyPairs akps) of
+    Right kps -> return kps
+    Left err -> dieAR err
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    (map (\KeyPair {..} -> (def,_kpSecret,_kpPublic)) kps)
+    keyPairs
     addy
     (pack $ show rid)
     (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
+
+mkKeyPairs :: [ApiKeyPair] -> Either String [KeyPair]
+mkKeyPairs keyPairs = traverse mkPair keyPairs
+  where mkPair ApiKeyPair{..} =
+          let scheme = addressToScheme $ fromMaybe def _kpScheme
+          in case (importKeyPair scheme _kpPublic _kpSecret) of
+               Just kp -> Right kp
+               Nothing -> Left $ "Public Key and or Private Key does not match scheme provided: "
+                       ++ "Received " ++ show scheme ++ " scheme but received the following key pair "
+                       ++ show _kpPublic ++ ",  " ++ show _kpSecret
+
+
+addressToScheme :: AddressFormat -> PPKScheme
+addressToScheme Chainweb = PPKScheme (Chainweb, def, def)
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
@@ -176,6 +208,7 @@ dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file key
   \  keyPairs: list of key pairs for signing (use pact -g to generate): [\n\
   \    public: base 16 public key \n\
   \    secret: base 16 secret key \n\
+  \    scheme: cryptographic scheme \n\
   \    ] \n\
   \  nonce: optional request nonce, will use current time if not provided \n\
   \  from: entity name for addressing private messages \n\

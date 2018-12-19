@@ -14,8 +14,9 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Pact.Types.Command
 import Control.DeepSeq
+import Data.Maybe (fromJust)
 import Data.Aeson
-import Pact.Types.Crypto (initialHashTx, HashAlgo(..))
+import Pact.Types.Crypto
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Interpreter
@@ -107,8 +108,14 @@ benchReadValue (TxTable _t) _k = rcp Nothing
 
 main :: IO ()
 main = do
-  !pub <- eitherDie $ fromText' "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
-  !priv <- eitherDie $ fromText' "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
+  let sigAlgo = ED25519
+      hashAlgo = Blake2b_512
+      addrFormat = Chainweb
+      scheme = PPKScheme (addrFormat, hashAlgo, sigAlgo)
+  !pub <- eitherDie $ fromTextPublic sigAlgo
+          "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
+  !priv <- eitherDie $ fromTextPrivate sigAlgo
+           "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
   !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
   initSchema pureDb
@@ -121,7 +128,7 @@ main = do
   !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue benchReadValue }
   !mpdbRS <- loadBenchModule mockPersistDb
   print =<< runPactExec mockPersistDb mpdbRS benchCmd
-  !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(def,pub,priv)]
+  !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(fromJust (importKeyPair scheme pub priv))]
               (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" Nothing))
 
   defaultMain [

@@ -1,6 +1,4 @@
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -26,9 +24,8 @@ import Pact.Server.Server (setupServer)
 import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
+import Pact.Types.Crypto
 
-import "crypto-api" Crypto.Random
-import Crypto.Ed25519.Pure
 
 import Data.Aeson hiding (Options)
 import Test.Hspec
@@ -140,13 +137,10 @@ flushDb = mapM_ deleteIfExists _logFiles
           isFile <- doesFileExist fp
           when isFile $ removeFile fp
 
-genKeys :: IO KeyPair
+genKeys :: IO ApiKeyPair
 genKeys = do
-  g :: SystemRandom <- newGenIO
-  case generateKeyPair g of
-    Left _ -> error "Something went wrong in genKeys"
-    Right (s,p,_) -> return $ KeyPair s p
-
+  (s,p) <- genKeyPair ED25519
+  return $ ApiKeyPair s p (Just Chainweb)
 
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
