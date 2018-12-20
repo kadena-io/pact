@@ -326,15 +326,96 @@ singShowsOpen ty (Open v nm a) = showParen true $
   . showString " "
   . singShowsTm' ty 11 a
 
--- eqNumerical :: IsTerm tm => Numerical tm a -> Numerical tm a -> Bool
-eqNumerical :: SingTy a -> Numerical tm a -> Numerical tm a -> Bool
-eqNumerical = error "TODO"
+eqNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Numerical tm a -> Bool
+eqNumerical _ty (DecArithOp op1 a1 b1) (DecArithOp op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ty (IntArithOp op1 a1 b1) (IntArithOp op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ty (DecUnaryArithOp op1 a1) (DecUnaryArithOp op2 a2)
+  = op1 == op2 && eqTm a1 a2
+eqNumerical _ty (IntUnaryArithOp op1 a1) (IntUnaryArithOp op2 a2)
+  = op1 == op2 && eqTm a1 a2
+eqNumerical _ty (DecIntArithOp op1 a1 b1) (DecIntArithOp op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ty (IntDecArithOp op1 a1 b1) (IntDecArithOp op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ty (ModOp a1 b1) (ModOp a2 b2)
+  = eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ty (RoundingLikeOp1 op1 a1) (RoundingLikeOp1 op2 a2)
+  = op1 == op2 && eqTm a1 a2
+eqNumerical _ty (RoundingLikeOp2 op1 a1 b1) (RoundingLikeOp2 op2 a2 b2)
+  = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ _ _ = False
 
-showsNumerical :: SingTy a -> Numerical tm a -> ShowS
-showsNumerical = error "TODO"
+showsNumerical :: IsTerm tm => SingTy a -> Int -> Numerical tm a -> ShowS
+showsNumerical _ty p tm = showParen (p > 10) $ case tm of
+  DecArithOp op a b ->
+      showString "DecArithOp "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  IntArithOp op a b ->
+      showString "IntArithOp "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  DecUnaryArithOp op a ->
+      showString "DecUnaryArithOp "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+  IntUnaryArithOp op a ->
+      showString "IntUnaryArithOp "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+  DecIntArithOp op a b ->
+      showString "DecIntArithOp "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  IntDecArithOp op a b ->
+      showString "IntDecArithOp "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  ModOp a b ->
+      showString "ModOp "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+  RoundingLikeOp1 op a ->
+      showString "RoundingLikeOp1 "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+  RoundingLikeOp2 op a b ->
+      showString "RoundingLikeOp2 "
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
 
-userShowNumerical :: SingTy a -> Numerical tm a -> Text
-userShowNumerical = error "TODO"
+userShowNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Text
+userShowNumerical _ty = \case
+  DecArithOp op a b      -> parenList [userShow op, userShowTm a, userShowTm b]
+  IntArithOp op a b      -> parenList [userShow op, userShowTm a, userShowTm b]
+  DecUnaryArithOp op a   -> parenList [userShow op, userShowTm a]
+  IntUnaryArithOp op a   -> parenList [userShow op, userShowTm a]
+  DecIntArithOp op a b   -> parenList [userShow op, userShowTm a, userShowTm b]
+  IntDecArithOp op a b   -> parenList [userShow op, userShowTm a, userShowTm b]
+  ModOp a b              -> parenList [userShowTm a, userShowTm b]
+  RoundingLikeOp1 op a   -> parenList [userShow op, userShowTm a]
+  RoundingLikeOp2 op a b -> parenList [userShow op, userShowTm a, userShowTm b]
 
 eqCoreTm :: IsTerm tm => SingTy ty -> Core tm ty -> Core tm ty -> Bool
 eqCoreTm ty (Lit a)                      (Lit b)
@@ -504,7 +585,7 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   StrToInt a       -> showString "StrToInt "     . showsTm 11 a
   StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showString " " . showsTm 11 b
   StrContains  a b -> showString "StrContains "  . showsTm 11 a . showString " " . showsTm 11 b
-  Numerical a      -> showString "Numerical "    . showsNumerical ty a
+  Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showString " " . showsTm 11 b
   DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showString " " . showsTm 11 b
   Comparison ty' op a b ->
@@ -1178,10 +1259,6 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     ReadInteger name     -> parenList ["read-integer", userShow name]
 -}
 
-instance Eq   (Concrete a) => Eq   (Term a) where
-  (==) = error "TODO"
-instance Show (Concrete a) => Show (Term a) where
-  show = error "TODO"
 -- deriving instance Eq   (Concrete a) => Eq   (Term a)
 -- deriving instance Show (Concrete a) => Show (Term a)
 

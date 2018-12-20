@@ -789,7 +789,20 @@ withUserShow = withDict . singMkUserShow
       SObject _ -> Dict
 
 withTypeable :: SingTy a -> (Typeable (Concrete a) => b) -> b
-withTypeable = undefined
+withTypeable = withDict . singMkTypeable
+  where
+
+    singMkTypeable :: SingTy a -> Dict (Typeable (Concrete a))
+    singMkTypeable = \case
+      SInteger    -> Dict
+      SBool       -> Dict
+      SStr        -> Dict
+      STime       -> Dict
+      SDecimal    -> Dict
+      SKeySet     -> Dict
+      SAny        -> Dict
+      SList   ty' -> withTypeable ty' Dict
+      SObject _   -> error "TODO"
 
 withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = withDict . singMkSMTValue
