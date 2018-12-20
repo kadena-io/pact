@@ -1,6 +1,11 @@
-pact-osx:
+pact-macos:
   script:
     - nix-build
+    - nix-build -A ghc.pact.doc
+    - ./collectArtifacts.sh
+  artifacts:
+    paths:
+    - public/
 
 pact-linux:
   script:
@@ -9,3 +14,11 @@ pact-linux:
 pact-linux-static:
   script:
     - nix-build static.nix --argstr system x86_64-linux
+
+pages:
+  stage: deploy
+  script:
+  - echo 'Nothing to do...'
+  artifacts:
+    paths:
+    - public/
