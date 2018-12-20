@@ -281,10 +281,8 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
   ls <- case _listList of
     _ : CommaExp : _ -> valueLevel `sepBy` sep Comma
     _                -> many valueLevel
-  let lty = case nub (map typeof ls) of
-              [Right ty] -> ty
-              _ -> TyAny
-  pure $ TList ls lty _listInfo
+  lty <- freshTyVar
+  return $ TList ls lty _listInfo
 
 objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
