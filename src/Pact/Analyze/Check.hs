@@ -81,7 +81,7 @@ import           Pact.Analyze.Model     (allocArgs, allocModelTags,
                                          saturateModel, showModel)
 import           Pact.Analyze.Parse     hiding (tableEnv)
 import           Pact.Analyze.Translate
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types     hiding (Map)
 import           Pact.Analyze.Util
 
 

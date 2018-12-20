@@ -40,7 +40,7 @@ import           Pact.Analyze.Eval.Invariant
 import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Eval.Prop
 import           Pact.Analyze.Eval.Term
-import           Pact.Analyze.Types          hiding (Core(Identity))
+import           Pact.Analyze.Types          hiding (Core(Identity), Map)
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 

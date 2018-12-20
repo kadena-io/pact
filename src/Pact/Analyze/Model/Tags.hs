@@ -33,8 +33,7 @@ import           Data.Traversable     (for)
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Alloc   (Alloc, free)
-import           Pact.Analyze.Types
-import qualified Pact.Analyze.Types.Map as SMap
+import           Pact.Analyze.Types   hiding (Map)
 
 allocS :: SingI a => Alloc (S (Concrete a))
 allocS = free
@@ -43,8 +42,7 @@ allocSbv :: SingI a => Alloc (SBV (Concrete a))
 allocSbv = _sSbv <$> allocS
 
 allocSchema :: Schema m -> Alloc UObject
-allocSchema (Schema m) = case m of
-  SMap.Empty            -> pure $ UObject Map.empty
+allocSchema (Schema _keys m) = case m of
   _ -> error "TODO"
   -- TODO
   -- SMap.Ext SMap.Var v m -> allocSchema m

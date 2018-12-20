@@ -13,7 +13,7 @@ import           Data.SBV                   (Mergeable(symbolicMerge),
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types         hiding (Map)
 import           Pact.Analyze.Types.Eval
 
 -- TODO Change SVal to AVal (allowing objects), update analyzer

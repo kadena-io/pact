@@ -37,8 +37,6 @@ import qualified Pact.Types.Term            as Pact
 
 import           Analyze.TimeGen
 
-import           Pact.Analyze.Types.Map (Map(..), Var(Var), Mapping((:->)))
-
 
 -- Note [EmptyInterval]: For both genDecimal and genInteger, it's possible that
 -- the range is too small to generate even one number. When this is true,

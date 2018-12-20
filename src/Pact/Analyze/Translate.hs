@@ -54,7 +54,7 @@ import           Pact.Types.Util            (tShow)
 import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var, col,
                                              list, obj, str, time)
 import           Pact.Analyze.Patterns
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types         hiding (Map)
 import           Pact.Analyze.Util
 
 

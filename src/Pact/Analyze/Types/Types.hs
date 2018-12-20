@@ -20,11 +20,8 @@ module Pact.Analyze.Types.Types where
 import           Data.Kind                   (Type)
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (intercalate, pack, Text)
-import           Data.Type.Equality          ((:~:) (Refl), apply, TestEquality(testEquality))
-import           GHC.TypeLits                (Symbol, KnownSymbol, symbolVal)
-import           Type.Reflection (typeOf)
+import           Data.Type.Equality          ((:~:) (Refl), apply)
 
-import           Pact.Analyze.Types.Map
 import           Pact.Analyze.Types.UserShow
 
 
@@ -37,22 +34,23 @@ data Ty
   | TyKeySet
   | TyAny
   | TyList Ty
-  | TyObject [ Mapping Symbol Ty ]
+  | TyObject [ Ty ]
 
 data family Sing :: k -> Type
 
-data instance Sing (n :: [Mapping Symbol Ty]) where
-  SNilMapping :: Sing ('[] :: [Mapping Symbol Ty])
-  SConsMapping
-    :: KnownSymbol k
-    => Sing k -> Sing v -> Sing n
-    -> Sing ((k ':-> v) ': n :: [Mapping Symbol Ty])
+data instance Sing (n :: [Ty]) where
+  SNil  ::                     Sing ('[]    :: [Ty])
+  SCons :: Sing v -> Sing n -> Sing (v ': n :: [Ty])
 
-type SingMapping (a :: [Mapping Symbol Ty]) = Sing a
+type SingList (a :: [Ty]) = Sing a
 
-mappingKeys :: SingMapping a -> [String]
-mappingKeys SNilMapping = []
-mappingKeys (SConsMapping k _ m) = symbolVal k : mappingKeys m
+-- type family Map (f :: Ty -> k) (xs :: [Ty]) where
+--    Map f '[]       = '[]
+--    Map f (x ': xs) = f x ': Map f xs
+
+data HListOf (f :: Ty -> *) (tys :: [Ty]) where
+  NilOf  ::                          HListOf f '[]
+  ConsOf :: f ty -> HListOf f tys -> HListOf f (ty ': tys)
 
 data instance Sing (a :: Ty) where
   SInteger ::           Sing 'TyInteger
@@ -81,19 +79,18 @@ singEq SDecimal    SDecimal    = Just Refl
 singEq SKeySet     SKeySet     = Just Refl
 singEq SAny        SAny        = Just Refl
 singEq (SList   a) (SList   b) = apply Refl <$> singEq a b
-singEq (SObject a) (SObject b) = apply Refl <$> singMappingEq a b
+singEq (SObject a) (SObject b) = apply Refl <$> singListEq a b
 singEq _           _           = Nothing
 
-singMappingEq
-  :: forall (a :: [Mapping Symbol Ty]) (b :: [Mapping Symbol Ty]).
+singListEq
+  :: forall (a :: [Ty]) (b :: [Ty]).
      Sing a -> Sing b -> Maybe (a :~: b)
-singMappingEq SNilMapping SNilMapping = Just Refl
-singMappingEq (SConsMapping k1 v1 n1) (SConsMapping k2 v2 n2) = do
-  Refl <- testEquality (typeOf k1) (typeOf k2)
+singListEq SNil SNil = Just Refl
+singListEq (SCons v1 n1) (SCons v2 n2) = do
   Refl <- singEq v1 v2
-  Refl <- singMappingEq n1 n2
+  Refl <- singListEq n1 n2
   pure Refl
-singMappingEq _ _ = Nothing
+singListEq _ _ = Nothing
 
 type family ListElem (a :: Ty) where
   ListElem ('TyList a) = a
@@ -110,15 +107,10 @@ instance Show (SingTy ty) where
     SList a   -> showParen (p > 10) $ showString "SList "   . showsPrec 11 a
     SObject m -> showParen (p > 10) $ showString "SObject " . showsM m
     where
-      showsM :: SingMapping a -> ShowS
-      showsM SNilMapping = showString "SNilMapping"
-      showsM (SConsMapping k v n) = showParen True $
-          showString "SConsMapping "
-        . showString (symbolVal k)
-        . showString " "
-        . shows v
-        . showString " "
-        . showsM n
+      showsM :: SingList a -> ShowS
+      showsM SNil = showString "SNil"
+      showsM (SCons v n) = showParen True $
+        showString "SCons " . shows v . showString " " . showsM n
 
 instance UserShow (SingTy ty) where
   userShowPrec _ = \case
@@ -132,11 +124,9 @@ instance UserShow (SingTy ty) where
     SList a   -> "[" <> userShow a <> "]"
     SObject m -> "{ " <> intercalate ", " (userShowM m) <> " }"
     where
-      userShowM :: SingMapping a -> [Text]
-      userShowM SNilMapping = []
-      userShowM (SConsMapping k v n)
-        = pack (symbolVal k) <> " := " <> pack (show v)
-        : userShowM n
+      userShowM :: SingList a -> [Text]
+      userShowM SNil        = []
+      userShowM (SCons v n) = pack (show v) : userShowM n
 
 class SingI a where
   sing :: Sing a
@@ -166,16 +156,10 @@ instance SingI a => SingI ('TyList a) where
   sing = SList sing
 
 instance SingI ('TyObject '[]) where
-  sing = SObject SNilMapping
+  sing = SObject SNil
 
-instance (KnownSymbol k, SingI v, SingI m)
-  => SingI ('TyObject ((k ':-> v) ': m)) where
-  sing = SObject (SConsMapping sing sing sing)
-
-data instance Sing (n :: Symbol) = KnownSymbol n => SSym
-
-instance KnownSymbol n => SingI n where
-  sing = SSym
+instance (SingI v, SingI m) => SingI ('TyObject (v ': m)) where
+  sing = SObject (SCons sing sing)
 
 type family IsSimple (ty :: Ty) :: Bool where
   IsSimple ('TyList _)   = 'False

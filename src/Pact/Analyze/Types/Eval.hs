@@ -44,7 +44,7 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Translate       (maybeTranslateUserType')
-import           Pact.Analyze.Types           hiding (tableName)
+import           Pact.Analyze.Types           hiding (tableName, Map)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
 
@@ -121,7 +121,7 @@ mkAnalyzeEnv tables args tags info = do
   columnIds <- for tables $ \(Table tname ut _) ->
     case maybeTranslateUserType' ut of
       Just (EType (SObject ty)) -> Just
-        (TableName (T.unpack tname), varIdColumns' ty)
+        (TableName (T.unpack tname), error "TODO (varIdColumns')" ty)
       _ -> Nothing
 
   let columnIds' = TableMap (Map.fromList columnIds)

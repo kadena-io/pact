@@ -82,7 +82,6 @@ import           Pact.Types.Persistence       (WriteType)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec, ks)
-import           Pact.Analyze.Types.Map (Map)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
@@ -192,7 +191,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- TODO: should be two tys
   ObjMerge    :: SingTy ('TyObject m) -> t ('TyObject m)    -> t ('TyObject m) -> Core t ('TyObject m)
 
-  LiteralObject :: Map AConcrete m -> Core t ('TyObject m)
+  LiteralObject :: Object m -> Core t ('TyObject m)
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand

@@ -27,7 +27,7 @@ import           Pact.Types.Typecheck       (UserType)
 import           Pact.Types.Util            (tShow)
 
 import           Pact.Analyze.Feature       hiding (Type, Var, ks, obj, str)
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types         hiding (Map)
 
 -- @PreProp@ stands between @Exp@ and @Prop@.
 --

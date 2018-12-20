@@ -40,7 +40,6 @@ import           Data.Function                (on)
 import           Data.Kind                    (Type)
 import           Data.List                    (sortBy)
 import           Data.Maybe                   (isJust)
-import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
                                                EqSymbolic, HasKind, Int64,
@@ -63,7 +62,6 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
-import           GHC.TypeLits                 (Symbol, symbolVal)
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
@@ -75,8 +73,6 @@ import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
-import           Pact.Analyze.Types.Map (Mapping)
-import qualified Pact.Analyze.Types.Map as SMap
 
 
 
@@ -431,61 +427,71 @@ symRowKey = coerceS
 -- | Typed symbolic value.
 type TVal = (EType, AVal)
 
-data AConcrete a = AConcrete !(Sing a) !(Concrete a)
+data AConcrete a = AConcrete !(SingTy a) !(Concrete a)
 
-newtype Object (m :: [Mapping Symbol Ty]) = Object (SMap.Map AConcrete m)
+data Object (m :: [Ty]) = Object ![String] !(HListOf AConcrete m)
 
 instance UserShow (Object m) where
-  userShowPrec _ (Object m) = "{" <> T.intercalate ", " (userShowM m) <> "}"
-    where
-    userShowM :: SMap.Map AConcrete m' -> [Text]
-    userShowM SMap.Empty = []
-    userShowM (SMap.Ext k (AConcrete singv v) m')
-      = T.pack (symbolVal k) <> " := " <> withUserShow singv (userShow v)
-      : userShowM m'
+  userShowPrec _ (Object keys vals)
+    = "{" <> T.intercalate ", " contents <> "}"
+      where
+      contents = zipWith
+        (\key val -> T.pack key <> " := " <> val)
+        keys
+        (userShowVals vals)
+
+      userShowVals :: HListOf AConcrete m' -> [Text]
+      userShowVals NilOf = []
+      userShowVals (ConsOf (AConcrete ty v) m')
+        = withUserShow ty (userShow v) : userShowVals m'
 
 instance Show (Object m) where
-  showsPrec p (Object m) = showParen (p > 10) $ showString "Object " . showsM m
-    where showsM :: SMap.Map AConcrete m' -> ShowS
-          showsM SMap.Empty = showString "Empty"
-          showsM (SMap.Ext k (AConcrete singv v) m') = showParen True $
-              showString "Ext "
-            . showsPrec 11 k
+  showsPrec p (Object keys vals) = showParen (p > 10) $
+    showString "Object " . showsPrec 11 keys . showString " " . showsVals vals
+    where showsVals :: HListOf AConcrete m' -> ShowS
+          showsVals NilOf = showString "NilO"
+          showsVals (ConsOf (AConcrete singv v) m') = showParen True $
+              showString "ConsOf "
             . withShow singv (showsPrec 11 v)
-            . showsM m'
+            . showString " "
+            . showsVals m'
 
 instance Eq (Object m) where
-  Object m1 == Object m2 = eq m1 m2 where
-    eq :: SMap.Map AConcrete m' -> SMap.Map AConcrete m' -> Bool
-    eq SMap.Empty SMap.Empty = True
-    eq (SMap.Ext _ (AConcrete singv v1) m1') (SMap.Ext _ (AConcrete _ v2) m2')
-      = withEq singv (v1 == v2)
-      && eq m1' m2'
+  Object keys1 vals1 == Object keys2 vals2
+    = keys1 == keys2 && eq vals1 vals2 where
+      eq :: HListOf AConcrete m' -> HListOf AConcrete m' -> Bool
+      eq NilOf NilOf = True
+      eq (ConsOf (AConcrete singv v1) m1') (ConsOf (AConcrete _ v2) m2')
+        = withEq singv (v1 == v2) && eq m1' m2'
 
 -- | Wrapper for @SingTy@ so it can be used (unsaturated) as an argument to
 -- @SMap.Map@
 newtype ASingTy a = ASingTy (SingTy a)
 
-newtype Schema (m :: [Mapping Symbol Ty]) = Schema (SMap.Map ASingTy m)
+data Schema (m :: [Ty]) = Schema ![String] !(HListOf ASingTy m)
 
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow (Schema m) where
-  userShowPrec _ (Schema m) = "{" <> T.intercalate ", " (userShowM m) <> "}"
-    where userShowM :: SMap.Map ASingTy m' -> [Text]
-          userShowM SMap.Empty = []
-          userShowM (SMap.Ext k (ASingTy singv) m')
-            = T.pack (symbolVal k) <> ": " <> userShow singv
-            : userShowM m'
+  userShowPrec _ (Schema keys tys) = "{" <> T.intercalate ", " contents <> "}"
+    where contents = zipWith
+            (\key ty -> T.pack key <> " : " <> ty)
+            keys
+            (userShowTys tys)
+
+          userShowTys :: HListOf ASingTy m' -> [Text]
+          userShowTys NilOf = []
+          userShowTys (ConsOf (ASingTy singv) m')
+            = userShow singv : userShowTys m'
 
 instance Show (Schema m) where
-  showsPrec p (Schema m) = showParen (p > 11) $ showString "Schema " . showM m
-    where showM :: SMap.Map ASingTy m' -> ShowS
-          showM SMap.Empty = showString "Empty"
-          showM (SMap.Ext k (ASingTy singv) m') = showParen True $
-              showString "Ext "
-            . showString (symbolVal k)
+  showsPrec p (Schema keys tys) = showParen (p > 11) $
+    showString "Schema " . showList keys . showString " " . showTys tys
+    where showTys :: HListOf ASingTy m' -> ShowS
+          showTys NilOf = showString "NilOf"
+          showTys (ConsOf (ASingTy singv) tys') = showParen True $
+              showString "ConsOf "
             . showParen True (showString "ASingTy " . showsPrec 11 singv)
-            . showM m'
+            . showTys tys'
 
 data ESchema where
   ESchema :: SingTy ('TyObject m) -> Schema m -> ESchema
@@ -501,17 +507,17 @@ instance Show ESchema where
     . showString " "
     . showsPrec 11 schema
 
--- | When given a column mapping, this function gives a canonical way to assign
--- var ids to each column. Also see 'varIdArgs'.
-varIdColumns :: SMap.Map f m -> Map Text VarId
-varIdColumns smap = Map.fromList
-  $ zipWith (\index name -> (T.pack name, index)) [0..]
-  $ SMap.keys smap
+-- -- | When given a column mapping, this function gives a canonical way to assign
+-- -- var ids to each column. Also see 'varIdArgs'.
+-- varIdColumns :: SMap.Map f m -> Map Text VarId
+-- varIdColumns smap = Map.fromList
+--   $ zipWith (\index name -> (T.pack name, index)) [0..]
+--   $ SMap.keys smap
 
-varIdColumns' :: SingMapping m -> Map Text VarId
-varIdColumns' smap = Map.fromList
-  $ zipWith (\index name -> (T.pack name, index)) [0..]
-  $ mappingKeys smap
+-- varIdColumns' :: SingList m -> Map Text VarId
+-- varIdColumns' smap = Map.fromList
+--   $ zipWith (\index name -> (T.pack name, index)) [0..]
+--   $ mappingKeys smap
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.
@@ -521,13 +527,13 @@ varIdArgs args =
   in zip sortedList [0..]
 
 -- | Untyped object
-newtype UObject = UObject (Map Text TVal)
+newtype UObject = UObject (Map.Map Text TVal)
   deriving (Eq, Show, Semigroup, Monoid)
 
 instance UserShow UObject where
   userShowPrec d (UObject m) = userShowPrec d (fmap snd m)
 
-objFields :: Lens' UObject (Map Text TVal)
+objFields :: Lens' UObject (Map.Map Text TVal)
 objFields = lens getter setter
   where
     getter (UObject fs)    = fs
@@ -802,7 +808,8 @@ withTypeable = withDict . singMkTypeable
       SKeySet     -> Dict
       SAny        -> Dict
       SList   ty' -> withTypeable ty' Dict
-      SObject _   -> error "TODO"
+      SObject SNil -> Dict
+      SObject (SCons ty' SNil) -> withTypeable ty' Dict
 
 withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = withDict . singMkSMTValue
@@ -845,7 +852,7 @@ withSymWord = withDict . singMkSymWord
 --   . _columnMap
 
 newtype ColumnMap a
-  = ColumnMap { _columnMap :: Map ColumnName a }
+  = ColumnMap { _columnMap :: Map.Map ColumnName a }
   deriving (Show, Functor, Foldable, Traversable, Semigroup, Monoid)
 
 instance Mergeable a => Mergeable (ColumnMap a) where
@@ -854,7 +861,7 @@ instance Mergeable a => Mergeable (ColumnMap a) where
     Map.intersectionWith (symbolicMerge force test) left right
 
 newtype TableMap a
-  = TableMap { _tableMap :: Map TableName a }
+  = TableMap { _tableMap :: Map.Map TableName a }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 instance Mergeable a => Mergeable (TableMap a) where
