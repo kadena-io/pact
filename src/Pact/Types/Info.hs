@@ -1,7 +1,7 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 -- |
 -- Module      :  Pact.Types.Info
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -34,9 +34,11 @@ import GHC.Generics (Generic)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Control.DeepSeq
+import Data.Data
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
+
 
 --import Pact.Types.Crypto (Hash(..))
 
@@ -44,7 +46,7 @@ import Pact.Types.Util
 data Parsed = Parsed {
   _pDelta :: Delta,
   _pLength :: Int
-  } deriving (Eq,Show,Ord,Generic)
+  } deriving (Eq,Show,Ord,Generic,Typeable,Data)
 
 instance NFData Parsed
 instance Default Parsed where def = Parsed mempty 0
@@ -53,7 +55,7 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString)
+  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString,Typeable,Data)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
   pretty (Code c) | T.compareLength c maxLen == GT =
@@ -63,9 +65,10 @@ instance Pretty Code where
 
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
-newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic)
-
+data Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic,Typeable,Data)
 instance NFData Info
+
+
 -- show instance uses Trifecta renderings
 instance Show Info where
     show (Info Nothing) = ""

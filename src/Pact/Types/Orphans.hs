@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      :  Pact.Types.Orphans
@@ -27,6 +29,8 @@ import qualified Data.Text as T
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Data.Default
 import Control.DeepSeq
+import Data.Data
+
 
 instance Serialize Micro
 instance Serialize NominalDiffTime
@@ -65,3 +69,6 @@ instance Default Text where def = ""
 instance Serialize Text where
   put = put . encodeUtf8
   get = decodeUtf8 <$> get
+
+deriving instance Typeable Decimal
+deriving instance Data Decimal

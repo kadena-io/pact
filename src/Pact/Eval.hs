@@ -180,12 +180,7 @@ evalNamespace info m = do
     Nothing ->
       evalError info $ "Namespaces must be defined for all transactions"
     Just (Namespace (NamespaceName n) _) ->
-      pure $ mangleName n m
-  where
-    mangleName ns m'@Module{} =
-      over (mName . mnName) (\n -> ns <> "." <> n) m'
-    mangleName ns i@Interface{} =
-      over (interfaceName . mnName) (\n -> ns <> "." <> n) i
+      pure $ plateModuleName (over mnName (\mn -> n <> "." <> mn)) m
 
 
 -- | Evaluate top-level term.
