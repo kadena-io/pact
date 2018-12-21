@@ -21,9 +21,9 @@ import           Data.Kind                   (Type)
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (intercalate, pack, Text)
 import           Data.Type.Equality          ((:~:) (Refl), apply)
+import           Data.Typeable               (Typeable)
 
 import           Pact.Analyze.Types.UserShow
-
 
 data Ty
   = TyInteger
@@ -40,7 +40,8 @@ data family Sing :: k -> Type
 
 data instance Sing (n :: [Ty]) where
   SNil  ::                     Sing ('[]    :: [Ty])
-  SCons :: Sing v -> Sing n -> Sing (v ': n :: [Ty])
+  SCons :: (Typeable v, SingI v)
+        => Sing v -> Sing n -> Sing (v ': n :: [Ty])
 
 type SingList (a :: [Ty]) = Sing a
 
@@ -62,6 +63,11 @@ data instance Sing (a :: Ty) where
   SAny     ::           Sing 'TyAny
   SList    :: Sing a -> Sing ('TyList a)
   SObject  :: Sing a -> Sing ('TyObject a)
+
+instance Eq (SingTy a) where
+  _ == _ = True
+instance Ord (SingTy a) where
+  compare _ _ = EQ
 
 type SingTy (a :: Ty) = Sing a
 
@@ -158,7 +164,7 @@ instance SingI a => SingI ('TyList a) where
 instance SingI ('TyObject '[]) where
   sing = SObject SNil
 
-instance (SingI v, SingI m) => SingI ('TyObject (v ': m)) where
+instance (Typeable v, SingI v, SingI m) => SingI ('TyObject (v ': m)) where
   sing = SObject (SCons sing sing)
 
 type family IsSimple (ty :: Ty) :: Bool where

@@ -52,8 +52,9 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
                                                forSome, forSome_, fromBool,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
-                                               (.<), (.==))
+                                               (.<), (.==), fromCW)
 import           Data.SBV.Control             (SMTValue (..))
+import           Data.SBV.Internals           (CWVal(..), CW(..), genMkSymVar, SVal(SVal), Kind(..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
 import qualified Data.Set                     as Set
@@ -68,12 +69,11 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
 import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, str,
-                                               time)
+                                               time, Constraint)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
-
 
 
 class IsTerm tm where
@@ -149,17 +149,17 @@ wrappedIntegerFromCW _ c = error $ "SymWord: Unexpected non-integer value: " ++ 
 
 mkConcreteString :: String -> SBV a
 mkConcreteString = SBVI.SBV
-                 . SBVI.SVal KString
+                 . SVal KString
                  . Left
-                 . SBVI.CW KString
-                 . SBVI.CWString
+                 . CW KString
+                 . CWString
 
 mkConcreteInteger :: Integer -> SBV a
 mkConcreteInteger = SBVI.SBV
-                  . SBVI.SVal KUnbounded
+                  . SVal KUnbounded
                   . Left
-                  . SBVI.CW KUnbounded
-                  . SBVI.CWInteger
+                  . CW KUnbounded
+                  . CWInteger
 
 newtype KeySetName
   = KeySetName Text
@@ -429,6 +429,11 @@ type TVal = (EType, AVal)
 
 data AConcrete a = AConcrete !(SingTy a) !(Concrete a)
 
+instance (Eq (SingTy a), Eq (Concrete a)) => Eq (AConcrete a) where
+  AConcrete _ a == AConcrete _ b = a == b
+instance (Ord (SingTy a), Ord (Concrete a)) => Ord (AConcrete a) where
+  AConcrete _ a `compare` AConcrete _ b = a `compare` b
+
 data Object (m :: [Ty]) = Object ![String] !(HListOf AConcrete m)
 
 instance UserShow (Object m) where
@@ -576,7 +581,7 @@ instance EqSymbolic AVal where
 
   _ .== _ = false
 
-mkS :: Maybe Provenance -> SBVI.SVal -> S a
+mkS :: Maybe Provenance -> SVal -> S a
 mkS mProv sval = S mProv (SBVI.SBV sval)
 
 literalS :: SymWord a => a -> S a
@@ -724,15 +729,19 @@ instance SMTValue KeySet where
   sexprToVal = fmap KeySet . sexprToVal
 
 type family Concrete (a :: Ty) = r | r -> a where
-  Concrete 'TyInteger    = Integer
-  Concrete 'TyBool       = Bool
-  Concrete 'TyStr        = Str
-  Concrete 'TyTime       = Time
-  Concrete 'TyDecimal    = Decimal
-  Concrete 'TyKeySet     = KeySet
-  Concrete 'TyAny        = Any
-  Concrete ('TyList a)   = [Concrete a]
+  Concrete 'TyInteger     = Integer
+  Concrete 'TyBool        = Bool
+  Concrete 'TyStr         = Str
+  Concrete 'TyTime        = Time
+  Concrete 'TyDecimal     = Decimal
+  Concrete 'TyKeySet      = KeySet
+  Concrete 'TyAny         = Any
+  Concrete ('TyList a)    = [Concrete a]
   Concrete ('TyObject ty) = Object ty
+
+type family ConcreteList (a :: [Ty]) = r | r -> a where
+  ConcreteList '[]         = '[]
+  ConcreteList (ty ': tys) = Concrete ty ': ConcreteList tys
 
 -- Note [Supplying Dicts]:
 --
@@ -808,8 +817,11 @@ withTypeable = withDict . singMkTypeable
       SKeySet     -> Dict
       SAny        -> Dict
       SList   ty' -> withTypeable ty' Dict
-      SObject SNil -> Dict
-      SObject (SCons ty' SNil) -> withTypeable ty' Dict
+      SObject tys -> withTypeableListDict tys Dict
+
+withTypeableListDict :: SingList tys -> (Typeable tys => b) -> b
+withTypeableListDict SNil f            = f
+withTypeableListDict (SCons _ty tys) f = withTypeableListDict tys f
 
 withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = withDict . singMkSMTValue
@@ -825,7 +837,21 @@ withSMTValue = withDict . singMkSMTValue
       SKeySet   -> Dict
       SAny      -> Dict
       SList ty' -> withSMTValue ty' $ withTypeable ty' Dict
-      SObject _ -> error "TODO"
+      SObject tys -> withSMTValueListDict tys Dict
+
+instance SMTValue (Object '[]) where
+  sexprToVal _ = Just $ Object [] NilOf
+
+instance (SMTValue (Concrete ty), SMTValue (Object tys))
+  => SMTValue (Object (ty ': tys)) where
+  -- recoverKindedValue :: Kind -> SExpr -> Maybe CW
+  -- sexprToVal = fmap fromCW . recoverKindedValue (kindOf (undefined :: Object (ty ': tys)))
+  -- sexprToVal :: SExpr -> Maybe a
+  sexprToVal = error "TODO"
+
+withSMTValueListDict :: SingList tys -> (SMTValue (Object tys) => b) -> b
+withSMTValueListDict SNil f           = f
+withSMTValueListDict (SCons ty tys) f = withSMTValue ty $ withSMTValueListDict tys f
 
 withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> b
 withSymWord = withDict . singMkSymWord
@@ -833,15 +859,66 @@ withSymWord = withDict . singMkSymWord
 
     singMkSymWord :: SingTy a -> Dict (SymWord (Concrete a))
     singMkSymWord = \case
-      SInteger  -> Dict
-      SBool     -> Dict
-      SStr      -> Dict
-      STime     -> Dict
-      SDecimal  -> Dict
-      SKeySet   -> Dict
-      SAny      -> Dict
-      SList ty' -> withSymWord ty' Dict
-      SObject _ -> error "TODO"
+      SInteger    -> Dict
+      SBool       -> Dict
+      SStr        -> Dict
+      STime       -> Dict
+      SDecimal    -> Dict
+      SKeySet     -> Dict
+      SAny        -> Dict
+      SList ty'   -> withSymWord ty' Dict
+      SObject tys -> withSymWordListDict tys Dict
+
+withSymWordListDict :: SingList tys -> (SymWord (Object tys) => b) -> b
+withSymWordListDict SNil f           = f
+withSymWordListDict (SCons ty tys) f
+  = withTypeableListDict tys $ withSymWord ty $ withSymWordListDict tys f
+
+instance Ord (Object '[]) where
+  compare _ _ = EQ
+
+instance HasKind (Object '[]) where
+  kindOf _ = KTuple []
+
+instance SymWord (Object '[]) where
+  mkSymWord = genMkSymVar $ KTuple []
+
+  literal (Object _ NilOf) =
+    let k = KTuple []
+    in SBVI.SBV . SVal k . Left . CW k $ CWTuple []
+
+  fromCW (CW _ (CWTuple [])) = Object [] NilOf
+  fromCW c = error $ "invalid (Object '[]): " ++ show c
+
+instance (Ord (Concrete ty), Ord (Object tys)) => Ord (Object (ty ': tys)) where
+  compare (Object (_k1:ks1) (ConsOf a tys1)) (Object (_k2:ks2) (ConsOf b tys2))
+    = compare a b <> compare (Object ks1 tys1) (Object ks2 tys2)
+  compare a b = error $ "malformed object(s): " ++ show a ++ " / " ++ show b
+
+instance (HasKind (Concrete ty), HasKind (Object tys)) => HasKind (Object (ty ': tys)) where
+  kindOf _ = case kindOf (undefined :: Object tys) of
+    KTuple ks -> KTuple $ kindOf (undefined :: Concrete ty) : ks
+    k         -> error $ "unexpected object kind: " ++ show k
+
+instance (SingI ty, Typeable ty, Typeable tys, SymWord (Concrete ty), SymWord (Object tys))
+  => SymWord (Object (ty ': tys)) where
+
+  mkSymWord = genMkSymVar (kindOf (undefined :: (Object (ty ': tys))))
+
+  literal (Object (_k:ks) (ConsOf (AConcrete _ x) xs)) = case literal x of
+    SBVI.SBV (SVal _ (Left (CW _ xval))) -> case literal (Object ks xs) of
+      SBVI.SBV (SVal (KTuple kxs) (Left (CW _ (CWTuple xsval)))) ->
+        let k = SBVI.KTuple (kindOf x : kxs)
+        in SBVI.SBV $ SVal k $ Left $ CW k $ CWTuple $ xval : xsval
+      _ -> error "SymWord.literal (Object (ty ': tys)): Cannot construct a literal value!"
+    _ -> error "SymWord.literal (Object (ty ': tys)): Cannot construct a literal value!"
+  literal o = error $ "malformed object: " ++ show o
+
+  fromCW (CW (KTuple (k:ks)) (CWTuple (x:xs))) =
+    case fromCW (CW (KTuple ks) (CWTuple xs)) of
+      Object keys vals
+        -> Object ("key":keys) (AConcrete sing (fromCW (CW k x)) `ConsOf` vals)
+  fromCW c = error $ "invalid (Object (ty ': tys)): " ++ show c
 
 -- columnMapToSchema :: ColumnMap EType -> Schema
 -- columnMapToSchema
