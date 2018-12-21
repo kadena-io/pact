@@ -28,11 +28,12 @@ import           Data.SBV             (SBV, SymWord)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
+import           Data.Text            (pack)
 import           Data.Traversable     (for)
 
 import qualified Pact.Types.Typecheck as TC
 
-import           Pact.Analyze.Alloc   (Alloc, free)
+import           Pact.Analyze.Alloc   (Alloc, free, singFree)
 import           Pact.Analyze.Types
 
 allocS :: SingI a => Alloc (S (Concrete a))
@@ -42,21 +43,15 @@ allocSbv :: SingI a => Alloc (SBV (Concrete a))
 allocSbv = _sSbv <$> allocS
 
 allocSchema :: Schema m -> Alloc UObject
-allocSchema (Schema _keys m) = case m of
-  _ -> error "TODO"
-  -- TODO
-  -- SMap.Ext SMap.Var v m -> allocSchema m
--- allocSchema (Schema fieldTys) = UObject <$>
---   for fieldTys (\ety -> (ety,) <$> allocAVal ety)
+allocSchema (Schema (k:ks) (ConsOf (ASingTy ty) tys)) = do
+  UObject m <- allocSchema $ Schema ks tys
+  let ety = EType ty
+  val <- allocAVal ety
+  pure $ UObject $ Map.insert (pack k) (ety, val) m
+allocSchema other = error $ "Malformed schema: " ++ show other
 
 allocAVal :: EType -> Alloc AVal
-allocAVal = \case
-  _ -> error "TODO"
-  -- EType (SObject ty) -> AnObj <$> allocSchema (Schema ty)
-  -- EType (SList ty :: SingTy ty) -> mkAVal <$>
-  --   (allocS :: Alloc (S [Concrete (ListElem ty)]))
-  -- EType (ty :: SingTy ty) -> mkAVal <$>
-  --   (allocS :: Alloc (S (Concrete ty)))
+allocAVal (EType ty) = mkAVal <$> singFree ty
 
 allocTVal :: EType -> Alloc TVal
 allocTVal ety = (ety,) <$> allocAVal ety
@@ -176,18 +171,11 @@ saturateModel =
     fetchTVal (ety, av) = (ety,) <$> go ety av
       where
         go :: EType -> AVal -> SBV.Query AVal
-        go (EType (SObject _)) (AnObj obj) = AnObj <$> fetchObject obj
-
-        -- TODO
-        -- go (EType (SList ty :: SingTy t)) (AVal _mProv sval) =
-        --   mkAVal' . SBV.literal
-        --     <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
-
-        -- go (EType (ty :: SingTy t)) (AVal _mProv sval) =
-        --   mkAVal' . SBV.literal
-        --     <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
-
-        go a b = error $ "fetchTVal: impossible: " ++ show (a, b)
+        go (EType (ty :: SingTy t)) (AVal _mProv sval)
+          = withSymWord ty $ withSMTValue ty $
+            mkAVal' . SBV.literal
+              <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
+        go _ OpaqueVal = pure OpaqueVal
 
     -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
     fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBV.Query (SBV a)

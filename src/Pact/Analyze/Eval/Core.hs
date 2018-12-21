@@ -168,7 +168,6 @@ evalCore (Var vid name) = do
   case mVal of
     Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
-    Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore (Identity _ a)     = eval a
 evalCore (Constantly _ a _) = eval a
@@ -428,7 +427,6 @@ evalStrToIntBase bT sT = do
 --         Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
 
 --         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
---         Just (fieldType, AnObj subObj)     -> pure subObj
 --         Just (_fieldType, OpaqueVal)       -> throwErrorNoLoc OpaqueValEncountered
 
 --   firstVal <- getObjVal firstName
@@ -447,13 +445,6 @@ evalStrToIntBase bT sT = do
 --     relevantFields'
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
-evalExistential = \case
-  Existential (SList ty) prop -> do
-    vals  <- eval prop
-    pure (EType ty, mkAVal vals)
-  Existential (SObject _) _ -> throwErrorNoLoc "TODO: evalExistential"
-    -- prop' <- eval prop
-    -- pure (EObjectTy ty, AnObj prop')
-  Existential ty prop -> do
-    prop' <- eval prop
-    pure (EType ty, mkAVal prop')
+evalExistential (Existential ty prop) = do
+  prop' <- eval prop
+  pure (EType ty, mkAVal prop')

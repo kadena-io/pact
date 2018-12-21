@@ -389,12 +389,7 @@ maybeTranslateType' f = \case
     ty <- maybeTranslateType' f a
     case ty of
       EType ty' -> pure $ EType $ SList ty'
-    -- case t of
-    --   EType t' -> singCase t'
-    --     (\Refl -> pure $ EType $ SList t')
-    --     (\Refl -> empty)
-    --     (\Refl -> empty)
-      _       -> empty
+      _         -> empty
   TyFun _          -> empty
 
 throwError'
@@ -472,13 +467,6 @@ translateArg (Named nm node _) = do
   ety <- translateType node
   pure (Arg (Unmunged nm) vid node ety)
 
--- translateSchema :: Node -> TranslateM Schema
--- translateSchema node = do
---   ty <- translateType node
---   case ty of
---     EType _primTy    -> throwError' $ NotConvertibleToSchema $ _aTy node
---     EObjectTy schema -> pure schema
-
 translateBinding :: Named Node -> TranslateM (Located Binding)
 translateBinding (Named unmunged' node _) = do
   vid <- genVarId
@@ -494,13 +482,9 @@ translateBody = \case
     throwError $ TranslateFailure info EmptyBody
   [ast]    -> translateNode ast
   ast:asts -> do
-    ast'  <- translateNode ast
-    asts' <- translateBody asts
-    pure $ case asts' of
-      Existential ty asts'' -> Existential ty $ Sequence ast' asts''
-      -- ESimple ty astsT -> ESimple ty $ Sequence ast' astsT
-      -- EObject ty astsO -> EObject ty $ Sequence ast' astsO
-      -- EList   ty astsL -> EList   ty $ Sequence ast' astsL
+    ast'                 <- translateNode ast
+    Existential ty asts' <- translateBody asts
+    pure $ Existential ty $ Sequence ast' asts'
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -535,7 +519,7 @@ translateObjBinding
   -> [AST Node]
   -> ETerm
   -> TranslateM ETerm
-translateObjBinding pairs _schema bodyA rhsT = do
+translateObjBinding pairs schema bodyA rhsT = do
   let bindingAs = fst $ unzip pairs
   bindingTs <- traverse translateBinding bindingAs
   cols <- for pairs $ \case
@@ -565,17 +549,12 @@ translateObjBinding pairs _schema bodyA rhsT = do
       wrapWithLets innerBody = Let "binding" objBindingId retTid rhsT $
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         foldl'
-          (\body (colName, _located -> Binding vid _ (Munged varName) varType) ->
+          (\body ( colName
+                 , Located _ (Binding vid _ (Munged varName) (EType ty))
+                 ) ->
             let colTerm = StrLit @Term colName
-                rhs = case varType of
-                  EType ty -> Existential ty $
-                    CoreTerm $ ObjAt (error "TODO") colTerm objVar
-                  -- EType ty -> singCase ty
-                  --   (\Refl -> ESimple ty  (CoreTerm (ObjAt schema colTerm objVar varType)))
-                  --   (\Refl -> EList   ty  (CoreTerm (ObjAt schema colTerm objVar varType)))
-                  --   (\Refl -> vacuousMatch "handled below")
-                  -- EObjectTy sch ->
-                  --   EObject sch (CoreTerm (ObjAt schema colTerm objVar varType))
+                rhs = Existential ty $
+                  CoreTerm $ ObjAt (schemaTy schema) colTerm objVar
             in Let varName vid retTid rhs body)
           innerBody
           (zip cols bindingTs)
@@ -604,21 +583,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
     translateLet (FunctionScope nm) bindings body
 
   AST_Var node -> do
-    mVar <- view $ teNodeVars.at node
-    ty   <- translateType node
+    mVar     <- view $ teNodeVars.at node
+    EType ty <- translateType node
     (Munged varName, vid) <- case mVar of
       Just x  -> pure x
       Nothing -> do
         vid <- genVarId
-        tsFoundVars %= cons (vid, "x", ty)
+        tsFoundVars %= cons (vid, "x", EType ty)
         pure (Munged "x", vid) -- TODO better name?
-    pure $ case ty of
-      EType ty' -> Existential ty' $ CoreTerm $ Var vid varName
-      -- EType ty'        -> singCase ty'
-      --   (\Refl -> ESimple ty' $ CoreTerm $ Var vid varName)
-      --   (\Refl -> EList   ty' $ CoreTerm $ Var vid varName)
-      --   (\Refl -> vacuousMatch "handled below")
-      -- EObjectTy schema -> EObject schema $ CoreTerm $ Var vid varName
+    pure $ Existential ty $ CoreTerm $ Var vid varName
 
   -- Int
   AST_NegativeLit l -> case l of
@@ -629,11 +602,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _          -> throwError' $ BadNegationType astNode
 
   AST_Lit l -> case l of
-    LInteger i -> pure $ Existential SInteger (Lit' i)
-    LBool b    -> pure $ Existential SBool (Lit' b)
-    LString s  -> pure $ Existential SStr (Lit' $ Str $ T.unpack s)
-    LDecimal d -> pure $ Existential SDecimal (Lit' (fromPact decimalIso d))
-    LTime t    -> pure $ Existential STime (Lit' (fromPact timeIso t))
+    LInteger i -> pure $ Existential SInteger $ Lit' i
+    LBool b    -> pure $ Existential SBool    $ Lit' b
+    LString s  -> pure $ Existential SStr     $ Lit' $ Str $ T.unpack s
+    LDecimal d -> pure $ Existential SDecimal $ Lit' $ fromPact decimalIso d
+    LTime t    -> pure $ Existential STime    $ Lit' $ fromPact timeIso t
 
   AST_NegativeVar node -> do
     Just (Munged name, vid) <- view $ teNodeVars.at node
@@ -773,31 +746,25 @@ translateNode astNode = withAstContext astNode $ case astNode of
     case (aT, bT) of
 
       (Existential (SList SAny) (EmptyList SAny), Existential (SList ty) lst) -> do
-        op' <- maybe (throwError' $ MalformedComparison fn args) pure $
-          toOp eqNeqP fn
+        op' <- toOp eqNeqP fn ?? MalformedComparison fn args
         pure $ Existential SBool $ CoreTerm $ ListEqNeq ty op' (EmptyList ty) lst
 
       (Existential (SList ty) lst, Existential (SList SAny) (EmptyList SAny)) -> do
-        op' <- maybe (throwError' $ MalformedComparison fn args) pure $
-          toOp eqNeqP fn
+        op' <- toOp eqNeqP fn ?? MalformedComparison fn args
         pure $ Existential SBool $ CoreTerm $ ListEqNeq ty op' lst (EmptyList ty)
 
-      (Existential (SList ta) a', Existential (SList tb) b') -> case singEq ta tb of
-        Just Refl -> do
-          op' <- maybe (throwError' $ MalformedComparison fn args) pure $
-            toOp eqNeqP fn
-          pure $ Existential SBool $ inject $ ListEqNeq ta op' a' b'
-        _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
+      (Existential (SList ta) a', Existential (SList tb) b') -> do
+        Refl <- singEq ta tb ?? TypeMismatch (EType ta) (EType tb)
+        op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
+        pure $ Existential SBool $ inject $ ListEqNeq ta op' a' b'
 
-      -- TODO
-      -- (Existential (SObject _) a', Existential (SObject _) b') -> do
-      --   op' <- maybe (throwError' $ MalformedComparison fn args) pure $
-      --     toOp eqNeqP fn
-      --   pure $ Existential SBool $ inject $ ObjectEqNeq op' a' b'
+      (Existential ta@SObject{} a', Existential tb@SObject{} b') -> do
+        op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
+        pure $ Existential SBool $ inject $ ObjectEqNeq ta tb op' a' b'
 
-      (Existential ta a', Existential tb b') -> case singEq ta tb of
-        Nothing   -> throwError' $ TypeMismatch (EType ta) (EType tb)
-        Just Refl -> pure $ Existential SBool $ inject $ Comparison ta op a' b'
+      (Existential ta a', Existential tb b') -> do
+        Refl <- singEq ta tb ?? TypeMismatch (EType ta) (EType tb)
+        pure $ Existential SBool $ inject $ Comparison ta op a' b'
 
   AST_NFun_Basic fn@(toOp comparisonOpP -> Just _) args
     -> throwError' $ MalformedComparison fn args
@@ -855,18 +822,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
   -- NOTE: We don't use a feature symbol here because + is overloaded across
   -- multiple (3) features.
   --
-  AST_NFun_Basic fn@"+" args@[a, b] -> do
-    aT <- translateNode a
-    bT <- translateNode b
+  AST_NFun node fn@"+" args@[a, b] -> do
+    EType retTy <- translateType node
+    aT          <- translateNode a
+    bT          <- translateNode b
     case (aT, bT) of
-      -- TODO
-      -- (Existential (SObject s1) o1, Existential (SObject s2) o2) ->
-      --   -- Feature 3: object merge
-      --   pure $ Existential (SObject (s1 <> s2)) $ inject $ ObjMerge o1 o2
-      (Existential (SList tyA) a', Existential (SList tyB) b') -> case singEq tyA tyB of
+      (Existential ty1@SObject{} o1, Existential ty2@SObject{} o2) -> do
+        -- Feature 3: object merge
+        pure $ Existential retTy $ inject $ ObjMerge ty1 ty2 o1 o2
+      (Existential (SList tyA) a', Existential (SList tyB) b') -> do
+        Refl <- singEq tyA tyB ?? MalformedArithOp fn args
         -- Feature 4: list concatenation
-        Just Refl -> pure $ Existential (SList tyA) $ inject $ ListConcat tyA a' b'
-        Nothing   -> throwError' $ MalformedArithOp fn args
+        pure $ Existential (SList tyA) $ inject $ ListConcat tyA a' b'
       (Existential tyA a', Existential tyB b') ->
         case (tyA, tyB) of
           -- Feature 1: string concatenation
@@ -899,13 +866,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Existential SStr a' <- translateNode a
     pure $ Existential SInteger $ CoreTerm $ StrLength a'
 
-  -- error "TODO"
-  -- AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
-  --   Existential SStr row'   <- translateNode row
-    -- Existential (SObject schema) obj' <- translateNode obj
-    -- tid                 <- tagWrite writeType node schema
-    -- pure $ Existential SStr $
-    --   Write writeType tid (TableName (T.unpack tn)) schema row' obj'
+--   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
+--     Existential SStr row'             <- translateNode row
+--     Existential (SObject schema) obj' <- translateNode obj
+--     tid                               <- tagWrite writeType node schema
+--     pure $ Existential SStr $
+--       Write schema _schema writeType tid (TableName (T.unpack tn)) row' obj'
 
   AST_If _ cond tBranch fBranch -> do
     Existential SBool cond' <- translateNode cond
@@ -920,9 +886,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     postFalse <- extendPath
     joinPaths [(postTrue, truePath), (postFalse, falsePath)]
     tsCurrentPath .= preTestPath -- reset to before conditional
-    case singEq ta tb of
-      Just Refl -> pure $ Existential ta $ IfThenElse cond' (truePath, a) (falsePath, b)
-      _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
+    Refl <- singEq ta tb ?? BranchesDifferentTypes (EType ta) (EType tb)
+    pure $ Existential ta $ IfThenElse cond' (truePath, a) (falsePath, b)
 
   AST_NFun _node "str-to-int" [s] -> do
     Existential SStr s' <- translateNode s
@@ -1019,8 +984,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_List node elems -> do
     elems' <- traverse translateNode elems
-    Existential ty litList
-      <- maybe (throwError' (TypeError node)) pure $ mkLiteralList elems'
+    Existential ty litList <- mkLiteralList elems' ?? TypeError node
     pure $ Existential ty $ CoreTerm litList
 
   AST_Contains node val collection -> do
@@ -1030,21 +994,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Existential SStr haystack -> case needleTy of
         SStr -> pure $ Existential SBool $ CoreTerm $ StrContains needle haystack
         _    -> throwError' $ TypeError node
-      Existential (SList ty) haystack -> case singEq needleTy ty of
-        Just Refl
-          -> pure $ Existential SBool $ CoreTerm $ ListContains ty needle haystack
-        Nothing -> throwError' $ TypeError node
+      Existential (SList ty) haystack -> do
+        Refl <- singEq needleTy ty ?? TypeError node
+        pure $ Existential SBool $ CoreTerm $ ListContains ty needle haystack
+      Existential (SObject schema) obj -> case needleTy of
+        SStr -> pure $ Existential SBool $ CoreTerm $ ObjContains (SObject schema) needle obj
+        _    -> throwError' $ TypeError node
       Existential _ _ -> throwError' $ TypeError node
-      -- TODO
-      -- Existential (SObject schema) obj -> case needleTy of
-      --   SStr -> pure $ Existential SBool $ CoreTerm $ ObjContains schema needle obj
-      --   _    -> throwError' $ TypeError node
-
-  -- TODO: object drop
-  AST_Drop _node num list -> do
-    Existential ty'@(SList elemTy) list'       <- translateNode list
-    Existential SInteger num' <- translateNode num
-    pure $ Existential ty' $ CoreTerm $ ListDrop elemTy num' list'
 
   AST_Reverse _node list -> do
     Existential ty'@(SList elemTy) list' <- translateNode list
@@ -1054,10 +1010,27 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Existential ty'@(SList elemTy) list' <- translateNode list
     pure $ Existential ty' $ CoreTerm $ ListSort elemTy list'
 
-  AST_Take _node num list -> do
-    Existential ty'@(SList elemTy) list' <- translateNode list
-    Existential SInteger num'          <- translateNode num
-    pure $ Existential ty' $ CoreTerm $ ListTake elemTy num' list'
+  AST_Drop node numOrKeys list -> do
+    elist <- translateNode list
+    case elist of
+      Existential ty'@(SList elemTy) list' -> do
+        Existential SInteger num <- translateNode numOrKeys
+        pure $ Existential ty' $ CoreTerm $ ListDrop elemTy num list'
+      Existential ty'@SObject{} obj -> do
+        Existential (SList SStr) keys <- translateNode numOrKeys
+        pure $ Existential ty' $ CoreTerm $ ObjDrop keys obj
+      _ -> throwError' $ TypeError node
+
+  AST_Take node numOrKeys list -> do
+    elist <- translateNode list
+    case elist of
+      Existential ty'@(SList elemTy) list' -> do
+        Existential SInteger num <- translateNode numOrKeys
+        pure $ Existential ty' $ CoreTerm $ ListTake elemTy num list'
+      Existential ty'@SObject{} obj -> do
+        Existential (SList SStr) keys <- translateNode numOrKeys
+        pure $ Existential ty' $ CoreTerm $ ObjTake keys obj
+      _ -> throwError' $ TypeError node
 
   AST_MakeList _node num a -> do
     Existential SInteger num' <- translateNode num
@@ -1096,30 +1069,22 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Existential bTy fun' <- translateNode fun
     (vid, varName, EType aType) <- captureOneFreeVar
 
-    aTy' <- requireSimple aType
-
     Existential (SList listTy) l' <- translateNode l
 
-    case singEq listTy aTy' of
-      Nothing   -> throwError' $ TypeError node
-      Just Refl -> pure $
-        Existential (SList bTy) $ CoreTerm $ ListMap aTy' bTy
-          (Open vid varName fun') l'
+    Refl <- singEq listTy aType ?? TypeError node
+    pure $ Existential (SList bTy) $ CoreTerm $
+      ListMap aType bTy (Open vid varName fun') l'
 
   AST_NFun node SFilter [ fun, l ] -> do
     expectNoFreeVars
     Existential SBool fun' <- translateNode fun
     (vid, varName, EType aType) <- captureOneFreeVar
 
-    aTy' <- requireSimple aType
-
     Existential (SList listTy) l' <- translateNode l
 
-    case singEq listTy aTy' of
-      Nothing   -> throwError' $ TypeError node
-      Just Refl -> pure $
-        Existential (SList aTy') $ CoreTerm $ ListFilter aTy'
-          (Open vid varName fun') l'
+    Refl <- singEq listTy aType ?? TypeError node
+    pure $ Existential (SList aType) $ CoreTerm $
+      ListFilter aType (Open vid varName fun') l'
 
   AST_NFun node SFold [ fun, a, l ] -> do
     expectNoFreeVars
@@ -1136,20 +1101,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
     [ (vidb, varNameb, EType tyb), (vida, varNamea, EType tya) ]
       <- captureTwoFreeVars
 
-    tya' <- requireSimple tya
-    tyb' <- requireSimple tyb
-
-    Existential aTy' a'         <- translateNode a
+    Existential aTy' a'           <- translateNode a
     Existential (SList listTy) l' <- translateNode l
 
-    case singEq aTy' tya' of
-      Nothing   -> throwError' $ TypeError node
-      Just Refl -> case singEq aTy' funTy of
-        Nothing   -> throwError' $ TypeError node
-        Just Refl -> case singEq listTy tyb' of
-          Nothing   -> throwError' $ TypeError node
-          Just Refl -> pure $ Existential tya' $ CoreTerm $ ListFold tya' tyb'
-            (Open vida varNamea (Open vidb varNameb fun')) a' l'
+    Refl <- singEq aTy' tya   ?? TypeError node
+    Refl <- singEq aTy' funTy ?? TypeError node
+    Refl <- singEq listTy tyb ?? TypeError node
+    pure $ Existential tya $ CoreTerm $
+      ListFold tya tyb (Open vida varNamea (Open vidb varNameb fun')) a' l'
 
   AST_NFun _ name [ f, g, a ]
     | name == SAndQ || name == SOrQ -> do
@@ -1171,19 +1130,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
 --     expectNoFreeVars
 --     Existential SBool fun' <- translateNode fun
 --     (vid, varName, EType freeTy) <- captureOneFreeVar
---     freeTy' <- requireSimple freeTy
 
 --     Existential (SObject objTy) obj' <- translateNode obj
 
 --     pure $ Existential SBool $ CoreTerm $
---       Where objTy freeTy' field' (Open vid varName fun') obj'
+--       Where objTy freeTy field' (Open vid varName fun') obj'
 
   AST_NFun _ STypeof [tm] -> do
-    etm <- translateNode tm
-    pure $ Existential SStr $ CoreTerm $ case etm of
-      Existential ty tm' -> Typeof ty      tm'
-      -- EList   ty tm' -> Typeof ty      tm'
-      -- EObject _  tm' -> Typeof SObject tm'
+    Existential ty tm' <- translateNode tm
+    pure $ Existential SStr $ CoreTerm $ Typeof ty tm'
 
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
@@ -1216,13 +1171,6 @@ expectNoFreeVars = do
     [] -> pure ()
     _  -> throwError' $ FreeVarInvariantViolation
       "invariant violation: free variable unexpectedly found"
-
--- TODO: this is weird now
-requireSimple :: SingTy a -> TranslateM (SingTy a)
-requireSimple ty = pure ty
--- requireSimple ty = case refineSimple ty of
---   Nothing  -> throwError' SimpleTypeRequired
---   Just ty' -> pure ty'
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph
 mkExecutionGraph vertex0 rootPath st = ExecutionGraph
@@ -1296,3 +1244,11 @@ translateNodeNoGraph node =
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $
          unTranslateM $ translateNode node
+
+-- | Throw a translation failure when Nothing
+(??)
+  :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
+  => Maybe a -> TranslateFailureNoLoc -> m a
+(Just a) ?? _   = pure a
+Nothing  ?? err = throwError' err
+infix 0 ??

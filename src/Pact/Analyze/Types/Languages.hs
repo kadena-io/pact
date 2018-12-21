@@ -55,7 +55,6 @@ module Pact.Analyze.Types.Languages
   , pattern PLogical
   , pattern PNot
   , pattern PNumerical
-  , pattern PObjectEqNeq
   , pattern POr
   , pattern PStrConcat
   , pattern PStrLength
@@ -182,14 +181,14 @@ data Core (t :: Ty -> *) (a :: Ty) where
   Comparison :: SingTy a -> ComparisonOp -> t a -> t a -> Core t 'TyBool
 
   -- object ops
-  -- TODO: should be two tys
-  ObjectEqNeq :: SingTy ('TyObject m) -> EqNeq -> t ('TyObject m) -> t ('TyObject m) -> Core t 'TyBool
+  ObjectEqNeq
+    :: SingTy ('TyObject m1) -> SingTy ('TyObject m2)
+    -> EqNeq -> t ('TyObject m1) -> t ('TyObject m2) -> Core t 'TyBool
   ObjAt       :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t a
   ObjContains :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t 'TyBool
-  ObjDrop     :: SingTy ('TyObject m) -> t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
-  ObjTake     :: SingTy ('TyObject m) -> t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
-  -- TODO: should be two tys
-  ObjMerge    :: SingTy ('TyObject m) -> t ('TyObject m)    -> t ('TyObject m) -> Core t ('TyObject m)
+  ObjDrop     :: t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
+  ObjTake     :: t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
+  ObjMerge    :: SingTy o1 -> SingTy o2 -> t o1 -> t o2 -> Core t o
 
   LiteralObject :: Object m -> Core t ('TyObject m)
 
@@ -456,10 +455,11 @@ eqCoreTm _ (Comparison ty1 op1 a1 b1) (Comparison ty2 op2 a2 b2)
   = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> op1 == op2 && singEqTm ty1 a1 a2 && singEqTm ty1 b1 b2
-eqCoreTm _ (ObjectEqNeq ty1 op1 a1 b1)   (ObjectEqNeq ty2 op2 a2 b2)
-  = case singEq ty1 ty2 of
-    Nothing   -> False
-    Just Refl -> op1 == op2 && singEqTm ty1 a1 a2 && singEqTm ty1 b1 b2
+eqCoreTm _ (ObjectEqNeq ty11 ty21 op1 a1 b1) (ObjectEqNeq ty12 ty22 op2 a2 b2)
+  = fromMaybe False $ do
+    Refl <- singEq ty11 ty12
+    Refl <- singEq ty21 ty22
+    pure $ op1 == op2 && singEqTm ty11 a1 a2 && singEqTm ty21 b1 b2
 eqCoreTm _ (ObjAt ty1 a1 b1)             (ObjAt ty2 a2 b2)
   = case singEq ty1 ty2 of
     Nothing   -> False
@@ -468,21 +468,17 @@ eqCoreTm _ (ObjContains ty1 a1 b1)       (ObjContains ty2 a2 b2)
   = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> eqTm a1 a2 && singEqTm ty1 b1 b2
-eqCoreTm _ (ObjDrop a1 b1 c1)            (ObjDrop a2 b2 c2)
-  = case singEq a1 a2 of
-  Nothing    -> False
-  Just Refl -> eqTm b1 b2 && singEqTm a1 c1 c2
-eqCoreTm _ (ObjTake a1 b1 c1)            (ObjTake a2 b2 c2)
-  = case singEq a1 a2 of
-  Nothing -> False
-  Just Refl -> eqTm b1 b2 && singEqTm a1 c1 c2
-eqCoreTm _ (ObjMerge ty1 a1 b1)          (ObjMerge ty2 a2 b2)
-  = case singEq ty1 ty2 of
-  Nothing   -> False
-  Just Refl -> singEqTm ty1 a1 a2 && singEqTm ty1 b1 b2
--- eqCoreTm _ (LiteralObject m1)            (LiteralObject m2)
-eqCoreTm _ LiteralObject{}            LiteralObject{}
-  = error "TODO" -- m1 == m2
+eqCoreTm ty (ObjDrop b1 c1)            (ObjDrop b2 c2)
+  = eqTm b1 b2 && singEqTm ty c1 c2
+eqCoreTm ty (ObjTake b1 c1)            (ObjTake b2 c2)
+  = eqTm b1 b2 && singEqTm ty c1 c2
+eqCoreTm _ (ObjMerge ty11 ty21 a1 b1)          (ObjMerge ty12 ty22 a2 b2)
+  = fromMaybe False $ do
+    Refl <- singEq ty11 ty12
+    Refl <- singEq ty21 ty22
+    pure $ singEqTm ty11 a1 a2 && singEqTm ty21 b1 b2
+eqCoreTm _ (LiteralObject m1)            (LiteralObject m2)
+  = m1 == m2
 eqCoreTm _ (Logical op1 args1)           (Logical op2 args2)
   = op1 == op2 && and (zipWith eqTm args1 args2)
 
@@ -596,15 +592,17 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . singShowsTm ty' 11 a
     . showString " "
     . singShowsTm ty' 11 b
-  ObjectEqNeq ty' op a b ->
+  ObjectEqNeq ty1 ty2 op a b ->
       showString "ObjectEqNeq "
-    . showsPrec 11 ty'
+    . showsPrec 11 ty1
+    . showString " "
+    . showsPrec 11 ty2
     . showString " "
     . showsPrec 11 op
     . showString " "
-    . singShowsTm ty' 11 a
+    . singShowsTm ty1 11 a
     . showString " "
-    . singShowsTm ty' 11 b
+    . singShowsTm ty2 11 b
 
   ObjAt ty' a b ->
       showString "ObjAt "
@@ -620,27 +618,25 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showsTm 11 a
     . showString " "
     . singShowsTm ty' 11 b
-  ObjDrop ty' b c ->
+  ObjDrop b c ->
       showString "ObjDrop "
-    . showsPrec 11 ty'
-    . showString " "
     . showsTm 11 b
     . showString " "
-    . singShowsTm ty' 11 c
-  ObjTake ty' b c ->
+    . singShowsTm ty 11 c
+  ObjTake b c ->
       showString "ObjTake "
-    . showsPrec 11 ty'
-    . showString " "
     . showsTm 11 b
     . showString " "
-    . singShowsTm ty' 11 c
-  ObjMerge ty' a b ->
+    . singShowsTm ty 11 c
+  ObjMerge ty1 ty2 a b ->
       showString "ObjMerge "
-    . showsPrec 11 ty'
+    . showsPrec 11 ty1
     . showString " "
-    . singShowsTm ty' 11 a
+    . showsPrec 11 ty2
     . showString " "
-    . singShowsTm ty' 11 b
+    . singShowsTm ty1 11 a
+    . showString " "
+    . singShowsTm ty2 11 b
   LiteralObject _ -> showString "LiteralObject " -- TODO . showsPrec 11 m
 
   Logical op args ->
@@ -825,12 +821,13 @@ userShowCore ty _p = \case
   IntAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
   DecAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
   Comparison ty' op x y    -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
-  ObjectEqNeq ty' op x y   -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
+  ObjectEqNeq ty1 ty2 op x y
+    -> parenList [userShow op, singUserShowTm ty1 x, singUserShowTm ty2 y]
   ObjAt ty' k obj          -> parenList [userShowTm k, singUserShowTm ty' obj]
   ObjContains ty' k obj    -> parenList [SContains, userShowTm k, singUserShowTm ty' obj]
-  ObjDrop ty' ks obj       -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty' obj]
-  ObjTake ty' ks obj       -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty' obj]
-  ObjMerge ty' x y         -> parenList [SObjectMerge, singUserShowTm ty' x, singUserShowTm ty' y]
+  ObjDrop ks obj           -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty obj]
+  ObjTake ks obj           -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty obj]
+  ObjMerge ty1 ty2 x y     -> parenList [SObjectMerge, singUserShowTm ty1 x, singUserShowTm ty2 y]
   LiteralObject _obj       -> "LiteralObject TODO" -- userShow obj
   Logical op args          -> parenList $ userShow op : fmap userShowTm args
 
@@ -1109,9 +1106,6 @@ pattern PDecAddTime x y = CoreProp (DecAddTime x y)
 pattern PObjAt
   :: SingTy ('TyObject m) -> Prop 'TyStr -> Prop ('TyObject m) -> Prop t
 pattern PObjAt a b c = CoreProp (ObjAt a b c)
-
-pattern PObjectEqNeq :: SingTy ('TyObject m) -> EqNeq -> Prop ('TyObject m) -> Prop ('TyObject m) -> Prop 'TyBool
-pattern PObjectEqNeq ty op x y = CoreProp (ObjectEqNeq ty op x y)
 
 pattern PLogical :: LogicalOp -> [Prop 'TyBool] -> Prop 'TyBool
 pattern PLogical op args = CoreProp (Logical op args)

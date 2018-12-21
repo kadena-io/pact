@@ -475,6 +475,13 @@ newtype ASingTy a = ASingTy (SingTy a)
 
 data Schema (m :: [Ty]) = Schema ![String] !(HListOf ASingTy m)
 
+schemaTy :: Schema tys -> SingTy ('TyObject tys)
+schemaTy (Schema _ hlist) = SObject $ hListTys hlist
+
+hListTys :: HListOf f tys -> Sing tys
+hListTys NilOf = SNil
+hListTys (ConsOf _ty _tys) = error "TODO" -- SCons sing (hListTys tys)
+
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow (Schema m) where
   userShowPrec _ (Schema keys tys) = "{" <> T.intercalate ", " contents <> "}"
@@ -547,14 +554,12 @@ objFields = lens getter setter
 -- | Untyped symbolic value.
 data AVal
   = AVal (Maybe Provenance) SBVI.SVal
-  | AnObj UObject
   | OpaqueVal
   deriving (Eq, Show)
 
 instance UserShow AVal where
   userShowPrec _ = \case
     AVal _ sVal -> tShow sVal
-    AnObj obj   -> userShow obj
     OpaqueVal   -> "[opaque]"
 
 instance EqSymbolic UObject where
@@ -571,8 +576,6 @@ instance EqSymbolic UObject where
 
 instance EqSymbolic AVal where
   AVal mProv sv .== AVal mProv' sv' = mkS mProv sv .== mkS mProv' sv'
-
-  AnObj o .== AnObj o' = o .== o'
 
   -- Not perfect; this would be better if we could easily produce an
   -- uninterpreted bool here. We can't though, because 'uninterpret' takes a

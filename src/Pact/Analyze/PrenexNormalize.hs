@@ -109,7 +109,8 @@ float ty p = case p of
   -- - comparison
   CoreProp (Comparison ty' op a b)
     -> CoreProp ... Comparison ty' op <$> float ty' a <*> float ty' b
-  CoreProp (ObjectEqNeq ty' op a b) -> PObjectEqNeq ty' op <$> float ty' a <*> float ty' b
+  CoreProp (ObjectEqNeq ty1 ty2 op a b)
+    -> CoreProp <$> (ObjectEqNeq ty1 ty2 op <$> float ty1 a <*> float ty2 b)
   CoreProp (ListEqNeq ty' op a b) ->
     CoreProp <$> (ListEqNeq ty' op <$> float (SList ty') a <*> float (SList ty') b)
   CoreProp (StrContains needle haystack) -> CoreProp <$>
@@ -163,10 +164,10 @@ float ty p = case p of
   CoreProp (ObjAt ty' str obj) -> PObjAt ty' <$> singFloat str <*> float ty' obj
   CoreProp (ObjContains ty' a b) -> CoreProp <$>
     (ObjContains ty' <$> singFloat a <*> float ty' b)
-  CoreProp (ObjDrop ty' keys obj) -> CoreProp <$>
-    (ObjDrop ty' <$> singFloat keys <*> float ty' obj)
-  CoreProp (ObjTake ty' keys obj) -> CoreProp <$>
-    (ObjTake ty' <$> singFloat keys <*> float ty' obj)
+  CoreProp (ObjDrop keys obj) -> CoreProp <$>
+    (ObjDrop <$> singFloat keys <*> float ty obj)
+  CoreProp (ObjTake keys obj) -> CoreProp <$>
+    (ObjTake <$> singFloat keys <*> float ty obj)
   CoreProp LiteralObject{} -> ([], p)
   CoreProp ObjMerge{}      -> ([], p)
   CoreProp (Where objty tya a b c) -> CoreProp <$>

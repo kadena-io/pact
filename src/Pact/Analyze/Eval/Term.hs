@@ -370,7 +370,6 @@ evalTerm = \case
 
             -- TODO: handle EObjectTy here
 
-        AnObj obj' -> throwErrorNoLoc $ AValUnexpectedlyObj obj'
         OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
     applyInvariants tn aValFields $ \invariants' ->

@@ -44,7 +44,6 @@ showS = showSbv . _sSbv
 showTVal :: TVal -> Text
 showTVal (_ety, av) = case av of
   OpaqueVal   -> "[opaque]"
-  AnObj obj   -> showObject obj
   AVal _ _ -> "TODO: showTVal"
     -- EType (SObject _) -> error "showModel: impossible object type for AVal"
     -- EType (SList ty :: Sing t) ->

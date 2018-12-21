@@ -8,15 +8,14 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import           Control.Lens               (Lens', at, {- iforM, -} ix, view, (%=),
-                                             (?~))
+import           Control.Lens               (Lens', at, ix, view, (%=), (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT (..))
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
                                              EqSymbolic ((.==)),
-                                             Mergeable (symbolicMerge), SBV)
+                                             Mergeable (symbolicMerge))
 import qualified Data.SBV.Internals         as SBVI
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
@@ -64,27 +63,24 @@ instance Analyzer Query where
 aval
   :: Analyzer m
   => (Maybe Provenance -> SBVI.SVal -> m a)
-  -> (UObject -> m a)
   -> AVal
   -> m a
-aval elimVal elimObj = \case
+aval elimVal = \case
   AVal mProv sval -> elimVal mProv sval
-  AnObj obj       -> elimObj obj
   OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
 expectVal :: Analyzer m => AVal -> m (S a)
-expectVal = aval (pure ... mkS) (throwErrorNoLoc . AValUnexpectedlyObj)
+expectVal = aval (pure ... mkS)
 
-expectObj :: Analyzer m => AVal -> m UObject
-expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
-  where
-    getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
-    getSVal = flip const
+-- expectObj :: Analyzer m => AVal -> m UObject
+-- expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
+--   where
+--     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
+--     getSVal = flip const
 
-expectList :: Analyzer m => AVal -> m (SBV [a])
-expectList = aval
-  (\_prov sval -> pure (SBVI.SBV sval))
-  (throwErrorNoLoc . AValUnexpectedlyObj)
+-- expectList :: Analyzer m => AVal -> m (SBV [a])
+-- expectList = aval
+--   (\_prov sval -> pure (SBVI.SBV sval))
 
 getLitTableName :: Prop TyTableName -> Query TableName
 getLitTableName (StrLit tn) = pure $ TableName tn
@@ -222,53 +218,53 @@ evalPropSpecific (RowEnforced tn cn pRk) = do
   cn' <- getLitColName cn
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
-evalPropSpecific PropRead{} = error "TODO"
---evalPropSpecific (PropRead _ty (Schema _fields) ba tn pRk) = do
---  (tn' :: TableName) <- getLitTableName (tn :: Prop TyTableName)
---  sRk <- evalProp pRk
---  let fields = error "TODO"
+evalPropSpecific (PropRead _ty (Schema fieldNames fields) ba tn pRk) = do
+  (tn' :: TableName) <- getLitTableName (tn :: Prop TyTableName)
+  sRk <- evalProp pRk
+  let fields' :: [EType]
+      fields' = error "TODO" fields
 
---  -- TODO: there is a lot of duplication between this and the corresponding
---  -- term evaluation code. It would be nice to consolidate these.
---  aValFields <- iforM fields $ \fieldName fieldType -> do
---    let cn = ColumnName $ T.unpack fieldName
+  -- TODO: there is a lot of duplication between this and the corresponding
+  -- term evaluation code. It would be nice to consolidate these.
+  (aValFields :: [(EType, AVal)]) <- for (zip fieldNames fields') $ \(fieldName, fieldType) -> do
+    let cn = ColumnName fieldName
 
---    av <- case fieldType of
---      EType SInteger -> mkAVal <$> view
---        (qeAnalyzeState.intCell     (beforeAfterLens ba) tn' cn sRk false)
---      EType SBool    -> mkAVal <$> view
---        (qeAnalyzeState.boolCell    (beforeAfterLens ba) tn' cn sRk false)
---      EType SStr     -> mkAVal <$> view
---        (qeAnalyzeState.stringCell  (beforeAfterLens ba) tn' cn sRk false)
---      EType SDecimal -> mkAVal <$> view
---        (qeAnalyzeState.decimalCell (beforeAfterLens ba) tn' cn sRk false)
---      EType STime    -> mkAVal <$> view
---        (qeAnalyzeState.timeCell    (beforeAfterLens ba) tn' cn sRk false)
---      EType SKeySet  -> mkAVal <$> view
---        (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk false)
+    av <- case fieldType of
+      EType SInteger -> mkAVal <$> view
+        (qeAnalyzeState.intCell     (beforeAfterLens ba) tn' cn sRk false)
+      EType SBool    -> mkAVal <$> view
+        (qeAnalyzeState.boolCell    (beforeAfterLens ba) tn' cn sRk false)
+      EType SStr     -> mkAVal <$> view
+        (qeAnalyzeState.stringCell  (beforeAfterLens ba) tn' cn sRk false)
+      EType SDecimal -> mkAVal <$> view
+        (qeAnalyzeState.decimalCell (beforeAfterLens ba) tn' cn sRk false)
+      EType STime    -> mkAVal <$> view
+        (qeAnalyzeState.timeCell    (beforeAfterLens ba) tn' cn sRk false)
+      EType SKeySet  -> mkAVal <$> view
+        (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk false)
 
---      EType (SList SInteger) -> mkAVal <$> view
---        (qeAnalyzeState.intListCell     (beforeAfterLens ba) tn' cn sRk false)
---      EType (SList SBool   ) -> mkAVal <$> view
---        (qeAnalyzeState.boolListCell    (beforeAfterLens ba) tn' cn sRk false)
---      EType (SList SStr    ) -> mkAVal <$> view
---        (qeAnalyzeState.stringListCell  (beforeAfterLens ba) tn' cn sRk false)
---      EType (SList SDecimal) -> mkAVal <$> view
---        (qeAnalyzeState.decimalListCell (beforeAfterLens ba) tn' cn sRk false)
---      EType (SList STime   ) -> mkAVal <$> view
---        (qeAnalyzeState.timeListCell    (beforeAfterLens ba) tn' cn sRk false)
---      EType (SList SKeySet ) -> mkAVal <$> view
---        (qeAnalyzeState.ksListCell      (beforeAfterLens ba) tn' cn sRk false)
+      EType (SList SInteger) -> mkAVal <$> view
+        (qeAnalyzeState.intListCell     (beforeAfterLens ba) tn' cn sRk false)
+      EType (SList SBool   ) -> mkAVal <$> view
+        (qeAnalyzeState.boolListCell    (beforeAfterLens ba) tn' cn sRk false)
+      EType (SList SStr    ) -> mkAVal <$> view
+        (qeAnalyzeState.stringListCell  (beforeAfterLens ba) tn' cn sRk false)
+      EType (SList SDecimal) -> mkAVal <$> view
+        (qeAnalyzeState.decimalListCell (beforeAfterLens ba) tn' cn sRk false)
+      EType (SList STime   ) -> mkAVal <$> view
+        (qeAnalyzeState.timeListCell    (beforeAfterLens ba) tn' cn sRk false)
+      EType (SList SKeySet ) -> mkAVal <$> view
+        (qeAnalyzeState.ksListCell      (beforeAfterLens ba) tn' cn sRk false)
 
---      EType SAny         -> pure OpaqueVal
---      EType (SList SAny) -> pure OpaqueVal
---      --
---      -- TODO: if we add nested object support here, we need to install
---      --       the correct provenance into AVals all the way down into
---      --       sub-objects.
---      --
---      EType (SObject _)  -> throwErrorNoLoc UnsupportedObjectInDbCell
+      EType SAny         -> pure OpaqueVal
+      EType (SList SAny) -> pure OpaqueVal
+      --
+      -- TODO: if we add nested object support here, we need to install
+      --       the correct provenance into AVals all the way down into
+      --       sub-objects.
+      --
+      EType (SObject _)  -> throwErrorNoLoc UnsupportedObjectInDbCell
 
---    pure (fieldType, av)
+    pure (fieldType, av)
 
---  pure $ Object aValFields
+  pure $ error "TODO" $ Object ["TODO"] (error "TODO" aValFields)
