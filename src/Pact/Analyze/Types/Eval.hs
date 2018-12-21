@@ -44,7 +44,7 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Translate       (maybeTranslateUserType')
-import           Pact.Analyze.Types           hiding (tableName, Map)
+import           Pact.Analyze.Types           hiding (tableName)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
 

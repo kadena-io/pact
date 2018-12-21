@@ -26,7 +26,7 @@ import qualified Pact.Types.Info            as Pact
 import qualified Pact.Types.Persistence     as Pact
 
 import           Pact.Analyze.Model.Graph   (linearize)
-import           Pact.Analyze.Types         hiding (Map)
+import           Pact.Analyze.Types
 
 indent1 :: Text -> Text
 indent1 = ("  " <>)

@@ -33,7 +33,7 @@ import           Data.Traversable     (for)
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Alloc   (Alloc, free)
-import           Pact.Analyze.Types   hiding (Map)
+import           Pact.Analyze.Types
 
 allocS :: SingI a => Alloc (S (Concrete a))
 allocS = free

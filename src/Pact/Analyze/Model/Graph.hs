@@ -17,7 +17,7 @@ import qualified Data.SBV           as SBV
 import           Data.Set           (Set)
 import qualified Data.Set           as Set
 
-import           Pact.Analyze.Types hiding (Map)
+import           Pact.Analyze.Types
 
 linearize :: Model 'Concrete -> ExecutionTrace
 linearize model = go traceEvents
