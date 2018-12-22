@@ -66,7 +66,7 @@ module Pact.Types.Term
    ) where
 
 
-import Control.Lens (makeLenses, over, ASetter')
+import Control.Lens (makeLenses, over)
 import Data.Data
 import Data.Data.Lens (biplate)
 import Control.Applicative
@@ -288,7 +288,16 @@ data NativeDFun = NativeDFun
   , _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
   } deriving (Typeable)
 
-instance Data NativeDFun
+nativeDFunCons :: Constr
+nativeDFunCons = mkConstr nativeDFunDataType "NativeDFun" [] Prefix
+nativeDFunDataType :: DataType
+nativeDFunDataType = mkDataType "Pact.Types.Term.NativeDFun" [nativeDFunCons]
+
+instance Data NativeDFun where
+  gunfold _ _ _ = error "Cannot `gunfold` NativeDFun"
+  toConstr (NativeDFun _ _) = nativeDFunCons
+  dataTypeOf _ = nativeDFunDataType
+
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a
 

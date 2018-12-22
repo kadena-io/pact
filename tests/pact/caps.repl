@@ -5,7 +5,8 @@
 (define-keyset 'kall)
 (define-keyset 'kadmin)
 (env-keys ["admin"])
-
+(define-namespace 'caps-repl (keyset-ref-guard 'kall))
+(namespace 'caps-repl)
 (module caps 'kadmin
 
   (defschema guards g:guard)
@@ -59,6 +60,7 @@
 
 (begin-tx)
 (use caps)
+
 
 (expect-failure "with-kall should fail w/o kall ks" (with-kall))
 

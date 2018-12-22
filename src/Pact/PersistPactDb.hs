@@ -283,4 +283,5 @@ createSchema e = runMVState e $ do
   createTable' userTableInfo
   createTable' keysetsTable
   createTable' modulesTable
+  createTable' namespacesTable
   doPersist P.commitTx
