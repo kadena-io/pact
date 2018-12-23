@@ -65,12 +65,12 @@ initDbEnv loggers funrec p = DbEnv {
   _txId = Nothing
   }
 
-data UserTableInfo = UserTableInfo {
-  utModule :: ModuleName,
-  utKeySet :: KeySetName
+data UserTableInfo = UserTableInfo
+  { utModule :: ModuleName
+  , utKeySet :: KeySetName
   } deriving (Eq,Show,Generic,Typeable)
-instance PactValue UserTableInfo
 
+instance PactValue UserTableInfo
 instance FromJSON UserTableInfo
 instance ToJSON UserTableInfo
 

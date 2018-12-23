@@ -242,7 +242,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
 
     writeNamespace info n g =
       writeRow info Write Namespaces n (Namespace n g)
-        & success "Namespace defined"
+        & success ("Namespace defined: " <> asString n)
 
 namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace

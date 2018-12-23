@@ -1,2 +1,0 @@
-module Pact.Types.Namespace
-  (

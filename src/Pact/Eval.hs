@@ -190,11 +190,7 @@ eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) 
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- prepend namespace def to module name
-    liftIO $ print m
-    use (evalRefs . rsNamespace) >>= liftIO . print
     mangledM <- evalNamespace i m
-    liftIO $ putStrLn "--------------------"
-    liftIO $ print mangledM
     -- enforce old module keysets
     oldM <- readRow i Modules $ _mName mangledM
     case oldM of
