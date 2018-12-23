@@ -3819,7 +3819,7 @@ Pact 모듈의 모든 함수 정의에서는 다른 함수에 대한 모든 후�
 
 .. code:: lisp
 
-   (defun ensured-positive (val:integer)
+   (defun ensured-positive:integer (val:integer)
      @doc   "halts when passed a non-positive number"
      @model [(property (!= result 0))]
 
@@ -3886,14 +3886,14 @@ Pact에서는 키를 사전 정의된 이름(\ ``define-keyset``\ 로 정의)으
 .. code:: lisp
 
    (defun admins-only (action:string)
-     @doc   "Only admins or super-admins can call this function successfully.
+     @doc   "Only admins or super-admins can call this function successfully."
      @model
        [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
         (property (when (== "create" action) (authorized-by 'super-admins)))]
 
-     (if (== action "create")
+     (if (= action "create")
        (create)
-       (if (== action "update")
+       (if (= action "update")
          (update)
          (incorrect-action action))))
 
