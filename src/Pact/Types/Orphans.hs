@@ -50,7 +50,6 @@ instance Serialize A.Value where
 
 instance NFData Delta
 
-
 -- | Atto DeltaParsing instance provides 'position' only (with no support for
 -- hidden chars like Trifecta).
 instance DeltaParsing AP.Parser where

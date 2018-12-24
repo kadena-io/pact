@@ -38,9 +38,8 @@ import Data.Data
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
-
-
 --import Pact.Types.Crypto (Hash(..))
+
 
 -- | Code location, length from parsing.
 data Parsed = Parsed {
@@ -66,9 +65,8 @@ instance Pretty Code where
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
 data Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic,Typeable,Data)
+
 instance NFData Info
-
-
 -- show instance uses Trifecta renderings
 instance Show Info where
     show (Info Nothing) = ""
@@ -84,7 +82,6 @@ instance Ord Info where
   _ <= Info Nothing = False
 
 instance Default Info where def = Info Nothing
-
 
 -- renderer for line number output.
 renderInfo :: Info -> String
