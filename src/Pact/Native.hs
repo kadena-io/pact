@@ -266,13 +266,9 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
       mNs <- readRow info Namespaces name
       case mNs of
         Just ns' ->
-          setEnvNamespace fa ns' & success ("Namespace set: " <> ns)
+          evalRefs . rsNamespace .= (Just ns') & success ("Namespace set to " <> ns)
         Nothing  -> evalError info $
           "namespace: '" ++ asString' name ++ "' not defined"
-
-    setEnvNamespace fa ns@(Namespace _ g) = do
-      enforceGuard fa g >> (evalRefs . rsNamespace .=  (Just ns))
-
 
 langDefs :: NativeModule
 langDefs =

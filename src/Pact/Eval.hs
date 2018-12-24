@@ -179,8 +179,8 @@ evalNamespace info m = do
   case mNs of
     Nothing ->
       evalError info $ "Namespaces must be defined for all transactions"
-    Just (Namespace (NamespaceName n) _) ->
-      pure $ plateModuleName (over mnName (\mn -> n <> "." <> mn)) m
+    Just (Namespace n@(NamespaceName nsn) _) ->
+      pure $ flip plateModuleName m $ \(ModuleName mn _) -> ModuleName (nsn <> "." <> mn) (Just n)
 
 
 -- | Evaluate top-level term.
