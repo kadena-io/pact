@@ -201,11 +201,11 @@ eval (TModule m@Module{} bod i) =
           Interface{..} -> evalError i $
             "Name overlap: module " ++ show (_mName om) ++ " overlaps with interface  " ++ show _interfaceName
     -- enforce new module keyset
-    enforceKeySetName i (_mKeySet m)
+    enforceKeySetName i (_mKeySet mangledM)
     -- build/install module from defs
-    (g,_defs) <- loadModule m bod i g0
-    writeRow i Write Modules (_mName m) m
-    return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
+    (g,_defs) <- loadModule mangledM bod i g0
+    writeRow i Write Modules (_mName mangledM) mangledM
+    return (g, msg $ pack $ "Loaded module " ++ show (_mName mangledM) ++ ", hash " ++ show (_mHash mangledM))
 eval (TModule m@Interface{} bod i) =
   topLevelCall i "interface" (GInterfaceDecl m) $ \gas -> do
      -- prepend namespace def to module name
@@ -219,9 +219,9 @@ eval (TModule m@Interface{} bod i) =
           Module{..} -> evalError i $
             "Name overlap: interface " ++ show (_interfaceName m) ++ " overlaps with module " ++ show _mName
           Interface{..} -> return ()
-    (g, _) <- loadModule m bod i gas
-    writeRow i Write Modules (_interfaceName m) m
-    return (g, msg $ pack $ "Loaded interface " ++ show (_interfaceName m))
+    (g, _) <- loadModule mangledI bod i gas
+    writeRow i Write Modules (_interfaceName mangledI) mangledI
+    return (g, msg $ pack $ "Loaded interface " ++ show (_interfaceName mangledI))
 eval t = enscope t >>= reduce
 
 evalUse :: Use -> Eval e ()

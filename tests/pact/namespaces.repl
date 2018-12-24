@@ -33,7 +33,7 @@
 (module test-module 'foo
   @doc "Inherited members should be accessed by their namespace"
 
-  (implements ns-sig)
+  (implements test.ns-sig)
 
   (defun test1-f1:bool ()
     true)
@@ -48,4 +48,4 @@
 (commit-tx)
 (begin-tx)
 
-(use test-module)
+(use test-impl.test-module)
