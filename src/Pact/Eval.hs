@@ -206,19 +206,22 @@ eval (TModule m@Module{} bod i) =
     (g,_defs) <- loadModule m bod i g0
     writeRow i Write Modules (_mName m) m
     return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
-eval (TModule m@Interface{..} bod i) =
+eval (TModule m@Interface{} bod i) =
   topLevelCall i "interface" (GInterfaceDecl m) $ \gas -> do
-    oldI <- readRow i Modules _interfaceName
+     -- prepend namespace def to module name
+    mangledI <- evalNamespace i m
+    -- enforce old module keysets
+    oldI <- readRow i Modules $ _interfaceName mangledI
     case oldI of
       Nothing -> return ()
       Just oi ->
         case oi of
           Module{..} -> evalError i $
-            "Name overlap: interface " ++ show _interfaceName ++ " overlaps with module " ++ show _mName
+            "Name overlap: interface " ++ show (_interfaceName m) ++ " overlaps with module " ++ show _mName
           Interface{..} -> return ()
     (g, _) <- loadModule m bod i gas
-    writeRow i Write Modules _interfaceName m
-    return (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)
+    writeRow i Write Modules (_interfaceName m) m
+    return (g, msg $ pack $ "Loaded interface " ++ show (_interfaceName m))
 eval t = enscope t >>= reduce
 
 evalUse :: Use -> Eval e ()

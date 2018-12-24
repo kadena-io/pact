@@ -5,8 +5,7 @@
 (define-keyset 'kall)
 (define-keyset 'kadmin)
 (env-keys ["admin"])
-(define-namespace 'caps-repl (keyset-ref-guard 'kall))
-(namespace 'caps-repl)
+
 (module caps 'kadmin
 
   (defschema guards g:guard)

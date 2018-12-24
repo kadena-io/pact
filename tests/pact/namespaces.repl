@@ -1,0 +1,51 @@
+(begin-tx)
+
+(env-data { "kall" : ["namespaces"] })
+(define-keyset 'kall)
+
+(define-namespace 'test (keyset-ref-guard 'kall))
+(namespace 'test)
+
+(interface ns-sig
+
+  @doc "All subterms of `ns-sig` should be prefixed by \
+       \the namespace \"test-1\""
+
+  (defun test1-f1:bool ())
+  (defun test1-f2:string (x:bool))
+  (defun test1-f3:decimal (x:bool y:string z:decimal))
+
+  ; simple defconsts
+  (defconst TEST1-C1 0)
+  (defconst TEST1-C2 "const 1")
+  (defconst TEST1-C3 2.0)
+)
+
+(commit-tx)
+(begin-tx)
+
+(env-data { "foo" : [] })
+(define-keyset 'foo)
+
+(define-namespace 'test-impl (keyset-ref-guard 'kall))
+(namespace 'test-impl)
+
+(module test-module 'foo
+  @doc "Inherited members should be accessed by their namespace"
+
+  (implements ns-sig)
+
+  (defun test1-f1:bool ()
+    true)
+
+  (defun test1-f2:string (x:bool)
+    (if (= x true) "foo" "bar"))
+
+  (defun test1-f3:decimal (x:bool y:string z:decimal)
+    0.0)
+)
+
+(commit-tx)
+(begin-tx)
+
+(use test-module)
