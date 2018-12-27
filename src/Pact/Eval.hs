@@ -49,6 +49,7 @@ import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Monad.Catch (throwM)
 import Data.List
+import Data.Data.Lens (biplate)
 import Control.Monad
 import Prelude
 import Bound
@@ -177,10 +178,18 @@ evalNamespace :: Info -> Module -> Eval e Module
 evalNamespace info m = do
   mNs <- use $ evalRefs . rsNamespace
   case mNs of
-    Nothing ->
-      evalError info $ "Namespaces must be defined for all transactions"
-    Just (Namespace n@(NamespaceName nsn) _) ->
-      pure $ flip plateModuleName m $ \(ModuleName mn _) -> ModuleName (nsn <> "." <> mn) (Just n)
+    Nothing -> do
+      policy <- view (eeNamespacePolicy . nsPolicy)
+      unless (policy mNs) $ evalError info $ "Definitions in default namespace are not authorized"
+      return m
+    Just (Namespace n _) ->
+      return $ over biplate (mangleModule n) m
+  where
+    mangleModule :: NamespaceName -> ModuleName -> ModuleName
+    mangleModule n mn@(ModuleName nn ns) =
+      case ns of
+        Nothing -> ModuleName nn (Just n)
+        Just {} -> mn
 
 
 -- | Evaluate top-level term.
@@ -343,7 +352,7 @@ evaluateConstraints info m evalMap =
       refData <- preview $ eeRefStore . rsModules . ix ifn
       case refData of
         Nothing -> evalError info $
-          "Interface implemented in module, but not defined: " ++ asString' ifn
+          "Interface not defined: " ++ asString' ifn
         Just (ModuleData Interface{..} irefs) -> do
           em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
@@ -384,12 +393,19 @@ solveConstraint info refName (Ref t) evalMap = do
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
-resolveRef qn@(QName q n _) = do
-  dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
+resolveRef (QName q n _) = do
+  let lookupQn q' n' = preview $ eeRefStore . rsModules . ix q' . mdRefMap . ix n'
+  dsm <- lookupQn q n
   case dsm of
     d@Just {} -> return d
-    -- TODO: stuart wanted to do something here
-    Nothing -> preview (evalRefs . rsLoaded . ix qn) <$> get
+    Nothing -> do
+      case (_mnNamespace q) of
+        Just {} -> pure Nothing -- explicit namespace not found
+        Nothing -> do
+          mNs <- use $ evalRefs . rsNamespace
+          case mNs of
+            Just ns -> lookupQn (set mnNamespace (Just $ _nsName ns) q) n
+            Nothing -> pure Nothing -- no explicit namespace or decalared namespace
 resolveRef nn@(Name _ _) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of

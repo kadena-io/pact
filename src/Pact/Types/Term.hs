@@ -61,14 +61,13 @@ module Pact.Types.Term
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
-   Gas(..),
-   plateModuleName
+   Gas(..)
    ) where
 
 
-import Control.Lens (makeLenses, over)
+import Control.Lens (makeLenses)
 import Data.Data
-import Data.Data.Lens (biplate)
+
 import Control.Applicative
 import Data.List
 import Control.Monad
@@ -90,9 +89,9 @@ import Data.Decimal
 import Data.Hashable
 import Data.Foldable
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>),dot)
 import qualified Data.Attoparsec.Text as AP
-import Text.Trifecta (try,ident,TokenParsing,(<?>))
+import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 import Control.DeepSeq
 import Data.Maybe
 import qualified Data.HashSet as HS
@@ -350,7 +349,7 @@ instance IsString ModuleName where
       coalesce l = case l of
         [ns,n] -> ModuleName n (Just (NamespaceName ns))
         [n]    -> ModuleName n Nothing
-        _      -> error "i seriously hope we don't get here"
+        _      -> ModuleName (pack . show $ l) (Just . NamespaceName $ "Err: malformed name")
 
 instance Pretty ModuleName where
   pretty (ModuleName n Nothing) = pretty n
@@ -387,14 +386,20 @@ instance FromJSON Name where
     Right n -> return n
 
 parseName :: Info -> Text -> Either String Name
-parseName i = AP.parseOnly (nameParser i)
+parseName i = AP.parseOnly (nameParser i <* eof)
 
 
 nameParser :: (TokenParsing m, Monad m) => Info -> m Name
 nameParser i = do
   a <- ident style
-  try (qualified >>= \qn -> return (QName (ModuleName a Nothing) qn i) <?> "qualified name") <|>
-    return (Name a i)
+  b <- optional (dot *> (ident style))
+  case b of
+    Nothing -> return (Name a i)
+    Just b' -> do
+      c <- optional (dot *> ident style)
+      case c of
+        Nothing -> return (QName (ModuleName a Nothing) b' i) <?> "qualified name"
+        Just c' -> return (QName (ModuleName b' (Just . NamespaceName $ a)) c' i)
 
 instance Hashable Name where
   hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
@@ -618,10 +623,6 @@ data Term n =
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq,Typeable,Data)
-
-
-plateModuleName :: (ModuleName -> ModuleName) -> Module -> Module
-plateModuleName = over biplate
 
 instance Show n => Show (Term n) where
     show TModule {..} =

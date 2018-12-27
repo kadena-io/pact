@@ -237,8 +237,8 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
 
     enforcePolicy info ns = do
       NamespacePolicy{..} <- view eeNamespacePolicy
-      if _nsPolicy ns then pure ()
-        else evalError info $ "Cannot enforce namespace policy"
+      if _nsPolicy (Just ns) then pure ()
+        else evalError info $ "Namespace definition not permitted"
 
     writeNamespace info n g =
       writeRow info Write Namespaces n (Namespace n g)
@@ -265,8 +265,9 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
 
       mNs <- readRow info Namespaces name
       case mNs of
-        Just ns' ->
-          evalRefs . rsNamespace .= (Just ns') & success ("Namespace set to " <> ns)
+        Just n@(Namespace ns' g) -> do
+          enforceGuard fa g
+          evalRefs . rsNamespace .= (Just n) & success ("Namespace set to " <> (asString ns'))
         Nothing  -> evalError info $
           "namespace: '" ++ asString' name ++ "' not defined"
 

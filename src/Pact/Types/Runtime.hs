@@ -34,7 +34,7 @@ module Pact.Types.Runtime
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
    Capability(..),CapAcquireResult(..),
-   NamespacePolicy(..),
+   NamespacePolicy(..), nsPolicy,
    defaultNamespacePolicy,
    module Pact.Types.Lang,
    module Pact.Types.Util,
@@ -76,8 +76,9 @@ data CapAcquireResult = NewlyAcquired|AlreadyAcquired
   deriving (Eq,Show)
 
 newtype NamespacePolicy = NamespacePolicy
-  { _nsPolicy :: Namespace -> Bool
+  { _nsPolicy :: Maybe Namespace -> Bool
   }
+makeLenses ''NamespacePolicy
 
 defaultNamespacePolicy :: NamespacePolicy
 defaultNamespacePolicy = NamespacePolicy $ const True

@@ -124,6 +124,9 @@ instance AsString Reserved where
 
 instance Show Reserved where show = unpack . asString
 
+checkReserved :: Text -> Compile ()
+checkReserved t = when (t `elem` reserved) $ unexpected' "reserved word"
+
 reserveds :: HM.HashMap Text Reserved
 reserveds = (`foldMap` [minBound .. maxBound]) $ \r -> HM.singleton (asString r) r
 
@@ -232,7 +235,7 @@ literals =
 userAtom :: Compile (AtomExp Info)
 userAtom = do
   a@AtomExp{..} <- bareAtom
-  when (_atomAtom `elem` reserved) $ unexpected' "reserved word"
+  checkReserved _atomAtom
   pure a
 
 
@@ -262,13 +265,16 @@ bindingForm = do
 varAtom :: Compile (Term Name)
 varAtom = do
   AtomExp{..} <- atom
-  when (_atomAtom `elem` reserved) $ unexpected' "reserved word"
+  checkReserved _atomAtom
   n <- case _atomQualifiers of
     [] -> return $ Name _atomAtom _atomInfo
     [q] -> do
-      when (q `elem` reserved) $ unexpected' "reserved word"
+      checkReserved q
       return $ QName (ModuleName q Nothing) _atomAtom _atomInfo
-    _ -> expected "single qualifier"
+    [ns,q] -> do
+      checkReserved ns >> checkReserved q
+      return $ QName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
+    _ -> expected "bareword or qualified atom"
   commit
   return $ TVar n _atomInfo
 
@@ -416,8 +422,12 @@ moduleForm = do
 
 implements :: Compile ()
 implements = do
-  ifName <- _atomAtom <$> bareAtom
-  overModuleState msImplements ((ModuleName ifName Nothing):)
+  AtomExp{..} <- atom
+  ifName <- case _atomQualifiers of
+              [] -> return $ ModuleName _atomAtom Nothing
+              [n] -> return $ ModuleName _atomAtom (Just (NamespaceName n))
+              _ -> expected "qualified or unqualified interface reference"
+  overModuleState msImplements (ifName:)
 
 
 interface :: Compile (Term Name)

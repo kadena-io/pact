@@ -3,7 +3,8 @@
 (env-data { "kall" : ["namespaces"] })
 (define-keyset 'kall)
 
-(define-namespace 'test (keyset-ref-guard 'kall))
+(env-keys ["namespaces"])
+(define-namespace 'test (read-keyset 'kall))
 (namespace 'test)
 
 (interface ns-sig
@@ -24,10 +25,10 @@
 (commit-tx)
 (begin-tx)
 
-(env-data { "foo" : [] })
+(env-data { "foo" : ["foo"] })
 (define-keyset 'foo)
-
-(define-namespace 'test-impl (keyset-ref-guard 'kall))
+(env-keys ["foo"])
+(define-namespace 'test-impl (read-keyset 'foo))
 (namespace 'test-impl)
 
 (module test-module 'foo
