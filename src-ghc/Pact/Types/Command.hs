@@ -11,6 +11,8 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 -- |
 -- Module      :  Pact.Types.Command
@@ -24,7 +26,10 @@
 module Pact.Types.Command
   ( Command(..),mkCommand,mkCommand'
   , ProcessedCommand(..)
-  , Address(..)
+  , Address(..),aFrom,aTo
+  , PrivateMeta(..),pmAddress
+  , PublicMeta(..),pmChainId,pmSender,pmGasLimit,pmGasPrice,pmFee
+  , HasPlafMeta(..)
   , Payload(..)
   , ParsedCode(..)
   , UserSig(..),usScheme,usPubKey,usSig
@@ -54,6 +59,7 @@ import Data.String
 import Data.Text hiding (filter, all)
 import Data.Hashable (Hashable)
 import qualified Data.Set as S
+import Data.Default (Default,def)
 
 
 import GHC.Generics
@@ -66,6 +72,11 @@ import Pact.Types.Hash
 import Pact.Parse
 import Pact.Types.RPC
 
+-- | Command is the signed, hashed envelope of a Pact execution instruction or command.
+-- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
+-- being the JSON serialization of 'Payload Text', where the 'Text' is the pact code; when
+-- executed this is parsed to 'ParsedCode'.
+-- Thus, 'Command (Payload ParsedCode)' is the fully executable specialization.
 data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
@@ -87,7 +98,9 @@ instance (FromJSON a) => FromJSON (Command a) where
 
 instance NFData a => NFData (Command a)
 
-mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> Maybe Address -> Text -> a -> Command ByteString
+mkCommand :: (ToJSON m, ToJSON c) =>
+             [(PPKScheme, PrivateKey, Base.PublicKey)] -> m ->
+             Text -> PactRPC c -> Command ByteString
 mkCommand creds addy nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce addy)
 
 mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
@@ -98,12 +111,12 @@ mkCommand' creds env = Command env (sig <$> creds) hsh
 
 
 
-verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
+verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
       (Right env', Right _, Nothing) -> ProcSucc $ orig { _cmdPayload = env' }
       (e, h, s) -> ProcFail $ "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
   where
-    ppcmdPayload' = traverse (traverse parsePact) =<< A.eitherDecodeStrict' _cmdPayload
+    ppcmdPayload' = traverse parsePact =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
     (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
@@ -115,19 +128,22 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     toErrStr (Left s) = s ++ "; "
 {-# INLINE verifyCommand #-}
 
-
-data ProcessedCommand a =
-  ProcSucc !(Command (Payload a)) |
+-- | Strict Either thing for attempting to desz a Command.
+data ProcessedCommand m a =
+  ProcSucc !(Command (Payload m a)) |
   ProcFail !String
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
-instance NFData a => NFData (ProcessedCommand a)
+instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
+-- | Pair parsed Pact expressions with the original text.
 data ParsedCode = ParsedCode {
   _pcCode :: !Text,
   _pcExps :: ![Exp Parsed]
   } deriving (Eq,Show,Generic)
 instance NFData ParsedCode
 
+
+-- | Confidential/Encrypted addressing info, for use in metadata on privacy-supporting platforms.
 data Address = Address {
     _aFrom :: EntityName
   , _aTo :: S.Set EntityName
@@ -137,15 +153,54 @@ instance Serialize Address
 instance ToJSON Address where toJSON = lensyToJSON 2
 instance FromJSON Address where parseJSON = lensyParseJSON 2
 
-data Payload a = Payload
-  { _pPayload :: !a
-  , _pNonce :: !Text
-  , _pAddress :: !(Maybe Address)
-  } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+data PrivateMeta = PrivateMeta
+  { _pmAddress :: Maybe Address
+  } deriving (Eq,Show,Generic)
+instance Default PrivateMeta where def = PrivateMeta def
+instance ToJSON PrivateMeta where toJSON = lensyToJSON 3
+instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
+instance NFData PrivateMeta
+instance Serialize PrivateMeta
 
-instance NFData a => NFData (Payload a)
-instance ToJSON a => ToJSON (Payload a) where toJSON = lensyToJSON 2
-instance FromJSON a => FromJSON (Payload a) where parseJSON = lensyParseJSON 2
+-- | Contains all necessary metadata for a Chainweb-style public chain.
+data PublicMeta = PublicMeta
+  { _pmChainId :: Text
+  , _pmSender :: Text
+  , _pmGasLimit :: ParsedInteger
+  , _pmGasPrice :: ParsedDecimal
+  , _pmFee :: ParsedDecimal
+  } deriving (Eq,Show,Generic)
+instance Default PublicMeta where def = PublicMeta "" "" 0 0 0
+instance ToJSON PublicMeta where toJSON = lensyToJSON 3
+instance FromJSON PublicMeta where parseJSON = lensyParseJSON 3
+instance NFData PublicMeta
+instance Serialize PublicMeta
+
+class HasPlafMeta a where
+  getPrivateMeta :: a -> PrivateMeta
+  getPublicMeta :: a -> PublicMeta
+
+instance HasPlafMeta PrivateMeta where
+  getPrivateMeta = id
+  getPublicMeta = const def
+
+instance HasPlafMeta PublicMeta where
+  getPrivateMeta = const def
+  getPublicMeta = id
+
+instance HasPlafMeta () where
+  getPrivateMeta = const def
+  getPublicMeta = const def
+
+-- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
+data Payload m c = Payload
+  { _pPayload :: !(PactRPC c)
+  , _pNonce :: !Text
+  , _pMeta :: !m
+  } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+instance (NFData a,NFData m) => NFData (Payload m a)
+instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where toJSON = lensyToJSON 2
+instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
 
 
@@ -213,11 +268,11 @@ data ExecutionMode =
 
 
 type ApplyCmd = ExecutionMode -> Command ByteString -> IO CommandResult
-type ApplyPPCmd a = ExecutionMode -> Command ByteString -> ProcessedCommand a -> IO CommandResult
+type ApplyPPCmd m a = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO CommandResult
 
-data CommandExecInterface a = CommandExecInterface
+data CommandExecInterface m a = CommandExecInterface
   { _ceiApplyCmd :: ApplyCmd
-  , _ceiApplyPPCmd :: ApplyPPCmd a
+  , _ceiApplyPPCmd :: ApplyPPCmd m a
   }
 
 
@@ -239,3 +294,6 @@ initialRequestKey = RequestKey initialHash
 makeLenses ''UserSig
 makeLenses ''CommandExecInterface
 makeLenses ''ExecutionMode
+makeLenses ''Address
+makeLenses ''PrivateMeta
+makeLenses ''PublicMeta
