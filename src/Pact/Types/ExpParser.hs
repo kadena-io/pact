@@ -36,6 +36,7 @@ module Pact.Types.ExpParser
   , enter, exit, context, contextInfo
   , current
   , atom, bareAtom, symbol
+  , qualifiedAtom
   , lit, lit', str
   , list, list', withList, withList'
   , sep
@@ -318,6 +319,15 @@ bareAtom :: ExpParse s (AtomExp Info)
 bareAtom = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
   (_:_) -> expected "unqualified atom"
   [] -> return a
+
+{-# INLINABLE qualifiedAtom #-}
+qualifiedAtom :: ExpParse s (AtomExp Info)
+qualifiedAtom = do
+  a@AtomExp{..} <- atom
+  case _atomQualifiers of
+    []  -> return a
+    [_] -> return a
+    _   -> expected "qualified atom"
 
 -- | Recognize a bare atom with expected text, committing.
 {-# INLINE symbol #-}

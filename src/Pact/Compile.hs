@@ -167,6 +167,16 @@ withModuleState ms0 act = do
 currentModuleName :: Compile ModuleName
 currentModuleName = _msName <$> moduleState
 
+-- | Construct a potentially namespaced module name from qualified atom
+-- Note: the use of 'userAtom' checks if reserved words are used.
+qualifiedModuleName :: Compile ModuleName
+qualifiedModuleName = do
+  AtomExp{..} <- userAtom
+  case _atomQualifiers of
+    []  -> return $ ModuleName _atomAtom Nothing
+    [n] -> return $ ModuleName _atomAtom (Just . NamespaceName $ n)
+    _   -> expected "qualified module name reference"
+
 freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
   c <- state (view (psUser . csFresh) &&& over (psUser . csFresh) succ)
@@ -219,7 +229,7 @@ moduleLevel = specialForm $ \r -> case r of
     RDefun -> returnl $ defunOrCap Defun
     RDefcap -> returnl $ defunOrCap Defcap
     RDefpact -> returnl defpact
-    RImplements -> return (implements >> return [])
+    RImplements -> return $ implements >> return []
     _ -> expected "module level form (use, def..., special form)"
     where returnl a = return (pure <$> a)
 
@@ -231,13 +241,12 @@ literals =
   <|> objectLiteral
 
 
--- | User-available atoms (excluding reserved words).
+-- | Qualified or unqualified user-available atoms (excluding reserved words).
 userAtom :: Compile (AtomExp Info)
 userAtom = do
-  a@AtomExp{..} <- bareAtom
+  a@AtomExp{..} <- qualifiedAtom
   checkReserved _atomAtom
   pure a
-
 
 app :: Compile (Term Name)
 app = do
@@ -422,12 +431,8 @@ moduleForm = do
 
 implements :: Compile ()
 implements = do
-  AtomExp{..} <- atom
-  ifName <- case _atomQualifiers of
-              [] -> return $ ModuleName _atomAtom Nothing
-              [n] -> return $ ModuleName _atomAtom (Just (NamespaceName n))
-              _ -> expected "qualified or unqualified interface reference"
-  overModuleState msImplements (ifName:)
+  ifn <- qualifiedModuleName
+  overModuleState msImplements (ifn:)
 
 
 interface :: Compile (Term Name)
@@ -516,9 +521,9 @@ letsForm = do
 
 useForm :: Compile (Term Name)
 useForm = do
-  modName <- (_atomAtom <$> userAtom) <|> str <|> expected "bare atom, string, symbol"
-  i <- contextInfo
-  u <- Use (ModuleName modName Nothing) <$> optional hash' <*> pure i
+  mn <- qualifiedModuleName
+  i  <- contextInfo
+  u  <- Use mn <$> optional hash' <*> pure i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
   return $ TUse u i

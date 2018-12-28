@@ -17,9 +17,8 @@
   (defun test1-f3:decimal (x:bool y:string z:decimal))
 
   ; simple defconsts
-  (defconst TEST1-C1 0)
-  (defconst TEST1-C2 "const 1")
-  (defconst TEST1-C3 2.0)
+  (defconst TEST1-C1 true)
+  (defconst TEST1-C2 "bar")
 )
 
 (commit-tx)
@@ -37,10 +36,10 @@
   (implements test.ns-sig)
 
   (defun test1-f1:bool ()
-    true)
+    test.ns-sig.TEST1-C1)
 
   (defun test1-f2:string (x:bool)
-    (if (= x true) "foo" "bar"))
+    (if (= x true) "foo" test.ns-sig.TEST1-C2))
 
   (defun test1-f3:decimal (x:bool y:string z:decimal)
     0.0)

@@ -191,7 +191,6 @@ evalNamespace info m = do
         Nothing -> ModuleName nn (Just n)
         Just {} -> mn
 
-
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
@@ -239,6 +238,7 @@ evalUse (Use mn h i) = do
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just md -> do
+
       case view mdModule md of
         Module{..} ->
           case h of

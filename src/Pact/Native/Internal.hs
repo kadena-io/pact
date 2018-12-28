@@ -51,7 +51,7 @@ import Pact.Types.Native
 import Pact.Gas
 
 success :: Functor m => Text -> m a -> m (Term Name)
-success = fmap . const . toTerm
+success t = fmap $ const (toTerm t)
 
 
 colsToList

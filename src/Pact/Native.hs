@@ -241,8 +241,8 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
         else evalError info $ "Namespace definition not permitted"
 
     writeNamespace info n g =
+      success ("Namespace defined: " <> asString n) $
       writeRow info Write Namespaces n (Namespace n g)
-        & success ("Namespace defined: " <> asString n)
 
 namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
@@ -267,7 +267,8 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
       case mNs of
         Just n@(Namespace ns' g) -> do
           enforceGuard fa g
-          evalRefs . rsNamespace .= (Just n) & success ("Namespace set to " <> (asString ns'))
+          success ("Namespace set to " <> (asString ns')) $
+            evalRefs . rsNamespace .= (Just n)
         Nothing  -> evalError info $
           "namespace: '" ++ asString' name ++ "' not defined"
 
