@@ -82,7 +82,7 @@ true
 *namespace*&nbsp;`string` *guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
 
 
-Create a namespace called NAMESPACE for a given GUARD. All expressions that occur in a     given transaction will be tied to NAMESPACE, and may be accessed using the toplevel       call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then  the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in  its place.                                                                                
+Create a namespace called NAMESPACE for a given GUARD. All expressions that occur in a given transaction will be tied to NAMESPACE, and may be accessed using the toplevel call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in its place. 
 ```lisp
 (define-namespace 'my-namespace (read-keyset 'my-keyset))
 ```
@@ -289,7 +289,7 @@ pact> (map (+ 1) [1 2 3])
 *namespace*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set the current namespace to NAMESPACE. All expressions that occur in a current  transaction will be contained in the namespace NAMESPACE, and once committed,   may be accessed via their fully qualified name, which will include the name-    space. For example, if Alice were to define an interface named AbstractBob in   the namespace Carl, then it would be referenced by the name Carl.AbstractBob.   
+Set the current namespace to NAMESPACE. All expressions that occur in a current transaction will be contained in the namespace NAMESPACE, and once committed, may be accessed via their fully qualified name, which will include the name-  space. For example, if Alice were to define an interface named AbstractBob in the namespace Carl, then it would be referenced by the name Carl.AbstractBob. 
 ```lisp
 (namespace 'my-namespace)
 ```
