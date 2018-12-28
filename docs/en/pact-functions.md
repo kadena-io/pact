@@ -82,7 +82,7 @@ true
 *namespace*&nbsp;`string` *guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
 
 
-Create a namespace called NAMESPACE for a given GUARD. All expressions that occur in a     given transaction will be tied to NAMESPACE, and may be accessed using the toplevel       call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then  the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in  its place.                                                                                (define-namespace 'my-namespace (read-keyset 'my-guard))`
+Create a namespace called NAMESPACE for a given GUARD. All expressions that occur in a     given transaction will be tied to NAMESPACE, and may be accessed using the toplevel       call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then  the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in  its place.                                                                                (define-namespace 'my-namespace (read-keyset 'my-keyset))`
 
 Top level only: this function will fail if used in module code.
 

@@ -31,7 +31,11 @@ runRegression p = do
   createUserTable' v user1 "someModule" "someKeyset"
   assertEquals' "output of commit 2"
     [TxLog "SYS_usertables" "user1" $
-     object [("utModule" .= String "someModule"),("utKeySet" .= String "someKeyset")]
+     object [("utModule" .= object
+              [ ("name" .= String "someModule")
+              , ("namespace" .= Null)
+              ])
+              , ("utKeySet" .= String "someKeyset")]
      ]
     (commit v)
   t3 <- begin v t2
@@ -57,7 +61,7 @@ runRegression p = do
               ,("blessed" .= ([]::[Text]))
               ,("keyset" .= String "mod-admin-keyset")
               ,("interfaces" .= ([]::[Text]))
-              ,("name" .= String "mod1")
+              ,("name" .= object [ ("name" .= String "mod1"), ("namespace" .= Null)])
               ,("code" .= String "code")
               ,("meta" .= object [("model" .= ([] :: [Text]))
                                  ,("docs" .= Null)])]
