@@ -13,7 +13,7 @@
      (resume { "a-result" := ar }
              (+ ar "->B")))))
 (commit-tx)
-(use 'yieldtest)
+(use yieldtest)
 
 (env-entity "B")
 (tester "stu")
