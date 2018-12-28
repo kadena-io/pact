@@ -219,7 +219,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
   \ call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
   \ the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
   \ its place.                                                                               \
-  \ (define-namespace 'my-namespace (read-keyset 'my-keyset))`"
+  \ `(define-namespace 'my-namespace (read-keyset 'my-keyset))`"
   where
     defineNamespace :: RNativeFun e
     defineNamespace i as = case as of
@@ -253,7 +253,7 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
   \ may be accessed via their fully qualified name, which will include the name-   \
   \ space. For example, if Alice were to define an interface named AbstractBob in  \
   \ the namespace Carl, then it would be referenced by the name Carl.AbstractBob.  \
-  \ (namespace 'my-namespace)`"
+  \ `(namespace 'my-namespace)`"
   where
     namespace :: RNativeFun e
     namespace i as = case as of
