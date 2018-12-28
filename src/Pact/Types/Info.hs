@@ -64,7 +64,7 @@ instance Pretty Code where
 
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
-data Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic,Typeable,Data)
+newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic,Typeable,Data)
 
 instance NFData Info
 -- show instance uses Trifecta renderings

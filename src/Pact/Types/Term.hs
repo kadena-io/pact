@@ -135,7 +135,7 @@ instance ToJSON PublicKey where
   toJSON = toJSON . decodeUtf8 . _pubKey
 instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
 
--- | KeySet pairs keys with a predicate function name.yes
+-- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet {
       _ksKeys :: ![PublicKey]
     , _ksPredFun :: !Name
@@ -293,7 +293,7 @@ nativeDFunDataType :: DataType
 nativeDFunDataType = mkDataType "Pact.Types.Term.NativeDFun" [nativeDFunCons]
 
 instance Data NativeDFun where
-  gunfold _ _ _ = error "Cannot `gunfold` NativeDFun"
+  gunfold _ _ _ = error "Cannot `gunfold` NativeDFun - native functions are not data"
   toConstr (NativeDFun _ _) = nativeDFunCons
   dataTypeOf _ = nativeDFunDataType
 

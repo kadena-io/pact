@@ -168,7 +168,6 @@ currentModuleName :: Compile ModuleName
 currentModuleName = _msName <$> moduleState
 
 -- | Construct a potentially namespaced module name from qualified atom
--- Note: the use of 'userAtom' checks if reserved words are used.
 qualifiedModuleName :: Compile ModuleName
 qualifiedModuleName = do
   AtomExp{..} <- atom
