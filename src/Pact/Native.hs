@@ -214,12 +214,12 @@ readDecimalDef = defRNative "read-decimal" readDecimal
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
-  "Create a namespace called NAMESPACE for a given GUARD. All expressions that occur in a    \
-  \ given transaction will be tied to NAMESPACE, and may be accessed using the toplevel      \
-  \ call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
-  \ the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
-  \ its place.                                                                               \
-  \ `(define-namespace 'my-namespace (read-keyset 'my-keyset))`"
+  "Create a namespace called NAMESPACE for a given GUARD. All expressions that occur in a \
+  \given transaction will be tied to NAMESPACE, and may be accessed using the toplevel \
+  \call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
+  \the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
+  \its place. \
+  \`$(define-namespace 'my-namespace (read-keyset 'my-keyset))`"
   where
     defineNamespace :: RNativeFun e
     defineNamespace i as = case as of
@@ -249,11 +249,11 @@ namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
   (funType tTyString [("namespace", tTyString)])
   "Set the current namespace to NAMESPACE. All expressions that occur in a current \
-  \ transaction will be contained in the namespace NAMESPACE, and once committed,  \
-  \ may be accessed via their fully qualified name, which will include the name-   \
-  \ space. For example, if Alice were to define an interface named AbstractBob in  \
-  \ the namespace Carl, then it would be referenced by the name Carl.AbstractBob.  \
-  \ `(namespace 'my-namespace)`"
+  \transaction will be contained in the namespace NAMESPACE, and once committed, \
+  \may be accessed via their fully qualified name, which will include the name-  \
+  \space. For example, if Alice were to define an interface named AbstractBob in \
+  \the namespace Carl, then it would be referenced by the name Carl.AbstractBob. \
+  \`$(namespace 'my-namespace)`"
   where
     namespace :: RNativeFun e
     namespace i as = case as of
