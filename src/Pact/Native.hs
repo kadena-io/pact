@@ -219,7 +219,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
   \ call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
   \ the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
   \ its place.                                                                               \
-  \ (define-namespace 'my-namespace (read-keyset 'my-guard))`"
+  \ (define-namespace 'my-namespace (read-keyset 'my-keyset))`"
   where
     defineNamespace :: RNativeFun e
     defineNamespace i as = case as of
