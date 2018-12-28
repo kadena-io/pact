@@ -59,6 +59,9 @@
   (implements alice.alice-contract)
   (implements bob.bob-contract)
 
+  (defschema s foo:string)
+  (deftable t:{s})
+
   (defun f:bool ()
     @doc "Alice's flag"
     alice.alice-contract.C1)
@@ -82,3 +85,5 @@
 (begin-tx)
 
 (use carl.carl-module)
+(expect "alice's triple reference" true alice.alice-contract.C1)
+(expect "qualified module name in table" "carl.carl-module" (at 'module (describe-table carl.carl-module.t)))

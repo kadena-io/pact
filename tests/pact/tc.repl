@@ -127,7 +127,7 @@
 
 (commit-tx)
 
-(use 'tctest)
+(use tctest)
 (expect-failure "missing fields" (tc-add-person { "name": "Mary" }))
 (expect-failure "bad field"
                 (tc-add-person { "name": "Mary",

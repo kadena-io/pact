@@ -40,8 +40,8 @@ loadModuleData rs mn = case preview (rsModules . ix mn) rs of
 compareModelSpec :: Spec
 compareModelSpec = describe "Module models" $ do
   rs  <- runIO $ loadRefStore "tests/pact/signatures.repl"
-  md  <- runIO $ loadModuleData rs (ModuleName "model-test1-impl")
-  ifd <- runIO $ loadModuleData rs (ModuleName "model-test1")
+  md  <- runIO $ loadModuleData rs (ModuleName "model-test1-impl" Nothing)
+  ifd <- runIO $ loadModuleData rs (ModuleName "model-test1" Nothing)
 
   let mModels    = _mModel . _mMeta . _mdModule $ md
       iModels    = _mModel . _interfaceMeta . _mdModule $ ifd

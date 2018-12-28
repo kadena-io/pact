@@ -211,7 +211,7 @@ eval (TModule m@Module{} bod i) =
     -- enforce new module keyset
     enforceKeySetName i (_mKeySet mangledM)
     -- build/install module from defs
-    (g,_defs) <- loadModule mangledM bod i g0
+    g <- loadModule mangledM bod i g0
     writeRow i Write Modules (_mName mangledM) mangledM
     return (g, msg $ pack $ "Loaded module " ++ show (_mName mangledM) ++ ", hash " ++ show (_mHash mangledM))
 eval (TModule m@Interface{} bod i) =
@@ -227,7 +227,7 @@ eval (TModule m@Interface{} bod i) =
           Module{..} -> evalError i $
             "Name overlap: interface " ++ show (_interfaceName m) ++ " overlaps with module " ++ show _mName
           Interface{..} -> return ()
-    (g, _) <- loadModule mangledI bod i gas
+    g <- loadModule mangledI bod i gas
     writeRow i Write Modules (_interfaceName mangledI) mangledI
     return (g, msg $ pack $ "Loaded interface " ++ show (_interfaceName mangledI))
 eval t = enscope t >>= reduce
@@ -238,7 +238,6 @@ evalUse (Use mn h i) = do
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just md -> do
-
       case view mdModule md of
         Module{..} ->
           case h of
@@ -253,10 +252,20 @@ evalUse (Use mn h i) = do
 
       installModule md
 
+mangleDefs :: ModuleName -> Term Name -> Term Name
+mangleDefs mn term = modifyMn term
+  where
+    modifyMn = case term of
+      TDef{}    -> set (tDef . dModule) mn
+      TConst{}  -> set tModule mn
+      TSchema{} -> set tModule mn
+      TTable{}  -> set tModule mn
+      _         -> id
+
 -- | Make table of module definitions for storage in namespace/RefStore.
-loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
+loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e Gas
 loadModule m@Module{..} bod1 mi g0 = do
-  (g1,modDefs1) <-
+  (g1,mdefs) <-
     case instantiate' bod1 of
       (TList bd _ _bi) -> do
         let doDef (g,rs) t = do
@@ -275,12 +284,12 @@ loadModule m@Module{..} bod1 mi g0 = do
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
   mapM_ evalUse _mImports
-  evaluatedDefs <- evaluateDefs mi modDefs1
+  evaluatedDefs <- evaluateDefs mi (fmap (mangleDefs _mName) mdefs)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   let md = ModuleData m' solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _mName md
-  return (g1, modDefs1)
+  return g1
 loadModule i@Interface{..} body info gas0 = do
   (gas1,idefs) <- case instantiate' body of
     (TList bd _ _bi) -> do
@@ -299,11 +308,11 @@ loadModule i@Interface{..} body info gas0 = do
       second HM.fromList <$> foldM doDef (gas0,[]) bd
     t -> evalError (_tInfo t) "Malformed interface"
   mapM_ evalUse _interfaceImports
-  evaluatedDefs <- evaluateDefs info idefs
+  evaluatedDefs <- evaluateDefs info (fmap (mangleDefs _interfaceName) idefs)
   let md = ModuleData i evaluatedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
-  return (gas1, idefs)
+  return gas1
 
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
