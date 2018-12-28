@@ -31,11 +31,9 @@ runRegression p = do
   createUserTable' v user1 "someModule" "someKeyset"
   assertEquals' "output of commit 2"
     [TxLog "SYS_usertables" "user1" $
-     object [("utModule" .= object
-              [ ("name" .= String "someModule")
-              , ("namespace" .= Null)
-              ])
-              , ("utKeySet" .= String "someKeyset")]
+     object [ ("utModule" .= object [ ("name" .= String "someModule"), ("namespace" .= Null)])
+            , ("utKeySet" .= String "someKeyset")
+            ]
      ]
     (commit v)
   t3 <- begin v t2
