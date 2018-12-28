@@ -171,7 +171,8 @@ currentModuleName = _msName <$> moduleState
 -- Note: the use of 'userAtom' checks if reserved words are used.
 qualifiedModuleName :: Compile ModuleName
 qualifiedModuleName = do
-  AtomExp{..} <- userAtom
+  AtomExp{..} <- atom
+  checkReserved _atomAtom
   case _atomQualifiers of
     []  -> return $ ModuleName _atomAtom Nothing
     [n] -> return $ ModuleName _atomAtom (Just . NamespaceName $ n)
@@ -244,7 +245,7 @@ literals =
 -- | Qualified or unqualified user-available atoms (excluding reserved words).
 userAtom :: Compile (AtomExp Info)
 userAtom = do
-  a@AtomExp{..} <- qualifiedAtom
+  a@AtomExp{..} <- bareAtom
   checkReserved _atomAtom
   pure a
 

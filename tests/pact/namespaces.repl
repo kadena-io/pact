@@ -1,51 +1,84 @@
+;; This is an example of using namespaces for simple modules,
+;; showcasing how to declare them, as well as use qualified
+;; names to access declared constructs.
 (begin-tx)
 
-(env-data { "kall" : ["namespaces"] })
-(define-keyset 'kall)
+(env-data
+  { "alice-keys" : ["alice"]
+  , "bob-keys"   : ["bob"]
+  })
 
-(env-keys ["namespaces"])
-(define-namespace 'test (read-keyset 'kall))
-(namespace 'test)
+(define-keyset 'alice-keys)
+(define-keyset 'bob-keys)
+(env-keys ["alice", "bob"])
 
-(interface ns-sig
+; Define namespace using a keyset guard
+(define-namespace 'alice (read-keyset 'alice-keys))
+(define-namespace 'bob (read-keyset 'bob-keys))
 
-  @doc "All subterms of `ns-sig` should be prefixed by \
-       \the namespace \"test-1\""
+; Set tx namespace to 'alice'
+(namespace 'alice)
 
-  (defun test1-f1:bool ())
-  (defun test1-f2:string (x:bool))
-  (defun test1-f3:decimal (x:bool y:string z:decimal))
+(interface alice-contract
 
-  ; simple defconsts
-  (defconst TEST1-C1 true)
-  (defconst TEST1-C2 "bar")
+  @doc "this contract is for alice, and occurs in the \
+       \namespace 'alice'"
+
+  (defun f:bool ())
+  (defun g:string (x:bool))
+
+  ; simple constants
+  (defconst C1 true)
+  (defconst C2 "bar")
+)
+
+; now bob gets his own namespace in the tx
+(namespace 'bob)
+
+(interface bob-contract
+  @doc "this contract is for bob, and occurs in the \
+       \namespace 'bob'"
+
+  (defun h:decimal (x:bool z:decimal))
+  (defun i:string ())
 )
 
 (commit-tx)
 (begin-tx)
 
-(env-data { "foo" : ["foo"] })
-(define-keyset 'foo)
-(env-keys ["foo"])
-(define-namespace 'test-impl (read-keyset 'foo))
-(namespace 'test-impl)
+(env-data { "carl-keys" : ["carl"] })
+(define-keyset 'carl-keys)
+(env-keys ["carl"])
 
-(module test-module 'foo
-  @doc "Inherited members should be accessed by their namespace"
+(define-namespace 'carl (read-keyset 'carl-keys))
+(namespace 'carl)
 
-  (implements test.ns-sig)
+(module carl-module 'carl-keys
+  @doc "lets implement alice's and bob's contracts"
 
-  (defun test1-f1:bool ()
-    test.ns-sig.TEST1-C1)
+  (implements alice.alice-contract)
+  (implements bob.bob-contract)
 
-  (defun test1-f2:string (x:bool)
-    (if (= x true) "foo" test.ns-sig.TEST1-C2))
+  (defun f:bool ()
+    @doc "Alice's flag"
+    alice.alice-contract.C1)
 
-  (defun test1-f3:decimal (x:bool y:string z:decimal)
-    0.0)
+  (defun g:string (x:bool)
+    @doc "do something simple or default to alice's constant"
+
+    if x
+      "something simple"
+      i)
+
+  (defun h:decimal (x:bool z:decimal)
+    @doc "Bob's decision"
+    (if x z (- z)))
+
+  (defun i:string ()
+    alice.alice-contract.C2)
 )
 
 (commit-tx)
 (begin-tx)
 
-(use test-impl.test-module)
+(use carl.carl-module)
