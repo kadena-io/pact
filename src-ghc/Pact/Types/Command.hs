@@ -240,13 +240,16 @@ instance ToJSON CommandError where
                  , "error" .= m ] ++
         maybe [] ((:[]) . ("detail" .=)) d
 
-newtype CommandSuccess a = CommandSuccess { _csData :: a }
+newtype CommandSuccess a = CommandSuccess { _csData :: a } deriving (Eq, Show)
 
 instance (ToJSON a) => ToJSON (CommandSuccess a) where
     toJSON (CommandSuccess a) =
         object [ "status" .= ("success" :: String)
                , "data" .= a ]
 
+instance (FromJSON a) => FromJSON (CommandSuccess a) where
+    parseJSON = withObject "CommandSuccess" $ \o ->
+        CommandSuccess <$> o .: "data"
 
 data CommandResult = CommandResult {
   _crReqKey :: RequestKey,

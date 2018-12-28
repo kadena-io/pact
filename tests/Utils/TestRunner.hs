@@ -20,6 +20,8 @@ module Utils.TestRunner
   , pactWithYield
   , pactWithYieldErr
   , pactWithSameNameYield
+  , startServer
+  , stopServer
   ) where
 
 import Pact.Server.Server (setupServer)

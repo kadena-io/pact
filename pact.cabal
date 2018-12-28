@@ -107,6 +107,7 @@ library
       Pact.PersistPactDb.Regression
       Pact.ReplTools
       Pact.Server.ApiServer
+      Pact.Server.Client
       Pact.Server.History.Persistence
       Pact.Server.History.Service
       Pact.Server.History.Types
@@ -181,6 +182,8 @@ library
       , snap-server
       , statistics >= 0.13.3 && < 0.15
       , yaml
+      , servant
+      , servant-client
 
   if !impl(ghcjs) && !os(windows)
     build-depends: unix
@@ -261,6 +264,7 @@ test-suite hspec
       , http-client
       , wreq
       , snap-server
+      , servant-client
     other-modules:
         DocgenSpec
       , PactTestsSpec
@@ -277,3 +281,4 @@ test-suite hspec
       , Analyze.Gen
       , Analyze.TimeGen
       , Analyze.Translate
+      , ClientSpec
