@@ -78,7 +78,7 @@ setupEvalEnv
   -> GasEnv
   -> NamespacePolicy
   -> EvalEnv e
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv nsPolicy =
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv np =
   EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mdSigs msgData
@@ -91,7 +91,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv nsPolicy =
   , _eePurity = PImpure
   , _eeHash = mdHash msgData
   , _eeGasEnv = gasEnv
-  , _eeNamespacePolicy = nsPolicy
+  , _eeNamespacePolicy = np
   }
   where modeToTx (Transactional t) = Just t
         modeToTx Local = Nothing
