@@ -167,7 +167,7 @@ instance Show SchemaType where
 instance Pretty SchemaType where pretty = text . show
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
-   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData,Typeable,Data)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData,Typeable,Data)
 instance Show TypeVarName where show = unpack . _typeVarName
 
 -- | Type variables are namespaced for value types and schema types.
