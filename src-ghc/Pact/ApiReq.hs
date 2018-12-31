@@ -149,12 +149,12 @@ mkApiReqCont ar@ApiReq{..} fp = do
 
 mkCont :: TxId -> Int -> Bool  -> Value -> PublicMeta -> [KeyPair]
   -> Maybe String -> IO (Command Text)
-mkCont txid step rollback mdata addy kps ridm = do
+mkCont txid step rollback mdata pubMeta kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
     (map (\KeyPair {..} -> (ED25519,_kpSecret,_kpPublic)) kps)
-    addy
+    pubMeta
     (pack $ show rid)
     (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
 

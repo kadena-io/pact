@@ -99,7 +99,7 @@ instance NFData a => NFData (Command a)
 mkCommand :: (ToJSON m, ToJSON c) =>
              [(PPKScheme, PrivateKey, Base.PublicKey)] -> m ->
              Text -> PactRPC c -> Command ByteString
-mkCommand creds addy nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce addy)
+mkCommand creds meta nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce meta)
 
 mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
 mkCommand' creds env = Command env (sig <$> creds) hsh
@@ -126,7 +126,7 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     toErrStr (Left s) = s ++ "; "
 {-# INLINE verifyCommand #-}
 
--- | Strict Either thing for attempting to desz a Command.
+-- | Strict Either thing for attempting to deserialize a Command.
 data ProcessedCommand m a =
   ProcSucc !(Command (Payload m a)) |
   ProcFail !String
