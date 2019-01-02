@@ -420,50 +420,48 @@ symRowKey = coerceS
 -- | Typed symbolic value.
 type TVal = (EType, AVal)
 
-data AConcrete a = AConcrete !(SingTy a) !(Concrete a)
+data ConcreteCol a = ConcreteCol !(SingTy a) !String !(Concrete a)
 
-instance (Eq (SingTy a), Eq (Concrete a)) => Eq (AConcrete a) where
-  AConcrete _ a == AConcrete _ b = a == b
-instance (Ord (SingTy a), Ord (Concrete a)) => Ord (AConcrete a) where
-  AConcrete _ a `compare` AConcrete _ b = a `compare` b
+instance (Eq (SingTy a), Eq (Concrete a)) => Eq (ConcreteCol a) where
+  ConcreteCol _ sa a == ConcreteCol _ sb b = sa == sb && a == b
+instance (Ord (SingTy a), Ord (Concrete a)) => Ord (ConcreteCol a) where
+  ConcreteCol _ sa a `compare` ConcreteCol _ sb b
+    = sa `compare` sb <> a `compare` b
 
-data Object (m :: [Ty]) = Object ![String] !(HListOf AConcrete m)
+data Object (m :: [Ty]) = Object !(HListOf ConcreteCol m)
 
 data EObject where
   EObject :: SingList m -> Object m -> EObject
 
 instance UserShow (Object m) where
-  userShowPrec _ (Object keys vals)
-    = "{" <> T.intercalate ", " contents <> "}"
+  userShowPrec _ (Object vals)
+    = "{" <> T.intercalate ", " (userShowVals vals) <> "}"
       where
-      contents = zipWith
-        (\key val -> T.pack key <> " := " <> val)
-        keys
-        (userShowVals vals)
-
-      userShowVals :: HListOf AConcrete m' -> [Text]
+      userShowVals :: HListOf ConcreteCol m' -> [Text]
       userShowVals NilOf = []
-      userShowVals (ConsOf (AConcrete ty v) m')
-        = withUserShow ty (userShow v) : userShowVals m'
+      userShowVals (ConsOf (ConcreteCol ty k v) m')
+        = T.pack k <> " := " <> withUserShow ty (userShow v) : userShowVals m'
 
 instance Show (Object m) where
-  showsPrec p (Object keys vals) = showParen (p > 10) $
-    showString "Object " . showsPrec 11 keys . showString " " . showsVals vals
-    where showsVals :: HListOf AConcrete m' -> ShowS
-          showsVals NilOf = showString "NilO"
-          showsVals (ConsOf (AConcrete singv v) m') = showParen True $
+  showsPrec p (Object vals) = showParen (p > 10) $
+    showString "Object " . showsVals vals
+    where showsVals :: HListOf ConcreteCol m' -> ShowS
+          showsVals NilOf = showString "NilOf"
+          showsVals (ConsOf (ConcreteCol singv k v) m') = showParen True $
               showString "ConsOf "
+            . showString k
+            . showString " "
             . withShow singv (showsPrec 11 v)
             . showString " "
             . showsVals m'
 
 instance Eq (Object m) where
-  Object keys1 vals1 == Object keys2 vals2
-    = keys1 == keys2 && eq vals1 vals2 where
-      eq :: HListOf AConcrete m' -> HListOf AConcrete m' -> Bool
-      eq NilOf NilOf = True
-      eq (ConsOf (AConcrete singv v1) m1') (ConsOf (AConcrete _ v2) m2')
-        = withEq singv (v1 == v2) && eq m1' m2'
+  Object vals1 == Object vals2 = eq vals1 vals2 where
+    eq :: HListOf ConcreteCol m' -> HListOf ConcreteCol m' -> Bool
+    eq NilOf NilOf = True
+    eq (ConsOf (ConcreteCol singv k1 v1) m1')
+       (ConsOf (ConcreteCol _     k2 v2) m2')
+      = k1 == k2 && withEq singv (v1 == v2) && eq m1' m2'
 
 -- | Wrapper for @SingTy@ so it can be used (unsaturated) as an argument to
 -- @SMap.Map@
@@ -834,7 +832,7 @@ withSMTValue = withDict . singMkSMTValue
       SObject tys -> withSMTValueListDict tys Dict
 
 instance SMTValue (Object '[]) where
-  sexprToVal _ = Just $ Object [] NilOf
+  sexprToVal _ = Just $ Object NilOf
 
 instance (SMTValue (Concrete ty), SMTValue (Object tys))
   => SMTValue (Object (ty ': tys)) where
@@ -877,17 +875,16 @@ instance HasKind (Object '[]) where
 instance SymWord (Object '[]) where
   mkSymWord = genMkSymVar $ KTuple []
 
-  literal (Object _ NilOf) =
+  literal (Object NilOf) =
     let k = KTuple []
     in SBVI.SBV . SVal k . Left . CW k $ CWTuple []
 
-  fromCW (CW _ (CWTuple [])) = Object [] NilOf
+  fromCW (CW _ (CWTuple [])) = Object NilOf
   fromCW c = error $ "invalid (Object '[]): " ++ show c
 
 instance (Ord (Concrete ty), Ord (Object tys)) => Ord (Object (ty ': tys)) where
-  compare (Object (_k1:ks1) (ConsOf a tys1)) (Object (_k2:ks2) (ConsOf b tys2))
-    = compare a b <> compare (Object ks1 tys1) (Object ks2 tys2)
-  compare a b = error $ "malformed object(s): " ++ show a ++ " / " ++ show b
+  compare (Object (ConsOf a tys1)) (Object (ConsOf b tys2))
+    = compare a b <> compare (Object tys1) (Object tys2)
 
 instance (HasKind (Concrete ty), HasKind (Object tys)) => HasKind (Object (ty ': tys)) where
   kindOf _ = case kindOf (undefined :: Object tys) of
@@ -899,19 +896,18 @@ instance (SingI ty, Typeable ty, Typeable tys, SymWord (Concrete ty), SymWord (O
 
   mkSymWord = genMkSymVar (kindOf (undefined :: (Object (ty ': tys))))
 
-  literal (Object (_k:ks) (ConsOf (AConcrete _ x) xs)) = case literal x of
-    SBVI.SBV (SVal _ (Left (CW _ xval))) -> case literal (Object ks xs) of
+  literal (Object (ConsOf (ConcreteCol _ _k x) xs)) = case literal x of
+    SBVI.SBV (SVal _ (Left (CW _ xval))) -> case literal (Object xs) of
       SBVI.SBV (SVal (KTuple kxs) (Left (CW _ (CWTuple xsval)))) ->
         let k = SBVI.KTuple (kindOf x : kxs)
         in SBVI.SBV $ SVal k $ Left $ CW k $ CWTuple $ xval : xsval
       _ -> error "SymWord.literal (Object (ty ': tys)): Cannot construct a literal value!"
     _ -> error "SymWord.literal (Object (ty ': tys)): Cannot construct a literal value!"
-  literal o = error $ "malformed object: " ++ show o
 
   fromCW (CW (KTuple (k:ks)) (CWTuple (x:xs))) =
     case fromCW (CW (KTuple ks) (CWTuple xs)) of
-      Object keys vals
-        -> Object ("key":keys) (AConcrete sing (fromCW (CW k x)) `ConsOf` vals)
+      Object vals
+        -> Object (ConcreteCol sing "key" (fromCW (CW k x)) `ConsOf` vals)
   fromCW c = error $ "invalid (Object (ty ': tys)): " ++ show c
 
 -- columnMapToSchema :: ColumnMap EType -> Schema

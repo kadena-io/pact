@@ -401,14 +401,13 @@ evalStrToIntBase bT sT = do
         Right res -> pure (literalS res)
 
 relevantFields :: (Typeable a, SingI a) => SingTy a -> Object obj -> EObject
-relevantFields _ obj@(Object [] NilOf) = EObject SNil obj
-relevantFields targetTy (Object (name:names) (ConsOf (AConcrete vTy v) vals))
-  = case relevantFields targetTy (Object names vals) of
-      EObject ty obj'@(Object names' vals') -> case singEq targetTy vTy of
-        Nothing -> EObject ty obj'
+relevantFields _ obj@(Object NilOf) = EObject SNil obj
+relevantFields targetTy (Object (ConsOf (ConcreteCol vTy name v) vals))
+  = case relevantFields targetTy (Object vals) of
+      EObject ty obj'@(Object vals') -> case singEq targetTy vTy of
+        Nothing   -> EObject ty obj'
         Just Refl -> EObject (SCons sing ty) $
-          Object (name:names') (ConsOf (AConcrete vTy v) vals')
-relevantFields _ _ = error "relevantFields: malformed object"
+          Object (ConsOf (ConcreteCol vTy name v) vals')
 
 evalObjAt
   :: Analyzer m

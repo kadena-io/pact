@@ -257,4 +257,4 @@ evalPropSpecific (PropRead _ty (Schema fieldNames fields) ba tn pRk) = do
 
     pure (fieldType, av)
 
-  pure $ error "TODO" $ Object ["TODO"] (error "TODO" aValFields)
+  pure $ error "TODO" $ Object (error "TODO" aValFields)
