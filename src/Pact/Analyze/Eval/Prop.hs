@@ -205,15 +205,15 @@ evalPropSpecific (RowEnforced tn cn pRk) = do
   cn' <- getLitColName cn
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
-evalPropSpecific (PropRead _ty (Schema fieldNames fields) ba tn pRk) = do
+evalPropSpecific (PropRead _ty (Schema fields) ba tn pRk) = do
   (tn' :: TableName) <- getLitTableName (tn :: Prop TyTableName)
   sRk <- evalProp pRk
-  let fields' :: [EType]
+  let fields' :: [(String, EType)]
       fields' = error "TODO" fields
 
   -- TODO: there is a lot of duplication between this and the corresponding
   -- term evaluation code. It would be nice to consolidate these.
-  (aValFields :: [(EType, AVal)]) <- for (zip fieldNames fields') $ \(fieldName, fieldType) -> do
+  (aValFields :: [(EType, AVal)]) <- for fields' $ \(fieldName, fieldType) -> do
     let cn = ColumnName fieldName
 
     av <- case fieldType of

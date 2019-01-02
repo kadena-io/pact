@@ -189,10 +189,9 @@ evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
   = evalObjAt schema colNameT objT (error "TODO")
-evalCore LiteralObject{} = throwErrorNoLoc "TODO: LiteralObject"
--- evalCore (LiteralObject obj) = Object <$> traverse evalExistential obj
+evalCore (LiteralObject ty obj) = withSymWord ty $ pure $ literalS obj
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
--- evalCore (ObjMerge _ty objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
+-- evalCore (ObjMerge ty1 ty2 objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
 evalCore ObjContains{} = throwErrorNoLoc "TODO: ObjContains"
 -- evalCore (ObjContains (Schema schema) key _obj) = do
 --   key' <- eval key
@@ -416,10 +415,10 @@ evalObjAt
   -> TermOf m obj
   -> SingTy a
   -> m (S (Concrete a))
-evalObjAt = undefined
-
+evalObjAt = error "TODO"
 -- evalObjAt schema colNameT objT retType = do
---   obj@(Object fieldNames fields) <- eval objT
+--   obj <- eval objT
+--   -- obj@(Object fields) <- eval objT
 
 --   -- Filter down to only fields which contain the type we're looking for
 --   let correctTypeFields = relevantFields retType obj
@@ -430,7 +429,7 @@ evalObjAt = undefined
 --     [] -> throwErrorNoLoc $ AtHasNoRelevantFields (EType retType) schema
 --     _  -> pure correctTypeFields
 
---   let getObjVal fieldName = case _lookup fieldName fields of
+--   let getObjVal fieldName = case _lookup fieldName _fields of
 --         Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
 
 --         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval

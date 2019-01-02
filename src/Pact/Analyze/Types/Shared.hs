@@ -465,12 +465,12 @@ instance Eq (Object m) where
 
 -- | Wrapper for @SingTy@ so it can be used (unsaturated) as an argument to
 -- @SMap.Map@
-newtype ASingTy a = ASingTy (SingTy a)
+data ColumnTy a = ColumnTy !String !(SingTy a)
 
-data Schema (m :: [Ty]) = Schema ![String] !(HListOf ASingTy m)
+data Schema (m :: [Ty]) = Schema !(HListOf ColumnTy m)
 
 schemaTy :: Schema tys -> SingTy ('TyObject tys)
-schemaTy (Schema _ hlist) = SObject $ hListTys hlist
+schemaTy (Schema hlist) = SObject $ hListTys hlist
 
 hListTys :: HListOf f tys -> Sing tys
 hListTys NilOf = SNil
@@ -478,25 +478,24 @@ hListTys (ConsOf _ty _tys) = error "TODO" -- SCons sing (hListTys tys)
 
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow (Schema m) where
-  userShowPrec _ (Schema keys tys) = "{" <> T.intercalate ", " contents <> "}"
-    where contents = zipWith
-            (\key ty -> T.pack key <> " : " <> ty)
-            keys
-            (userShowTys tys)
-
-          userShowTys :: HListOf ASingTy m' -> [Text]
+  userShowPrec _ (Schema tys) = "{" <> T.intercalate ", " (userShowTys tys) <> "}"
+    where userShowTys :: HListOf ColumnTy m' -> [Text]
           userShowTys NilOf = []
-          userShowTys (ConsOf (ASingTy singv) m')
-            = userShow singv : userShowTys m'
+          userShowTys (ConsOf (ColumnTy key singv) m')
+            = T.pack key <> " : " <> userShow singv : userShowTys m'
 
 instance Show (Schema m) where
-  showsPrec p (Schema keys tys) = showParen (p > 11) $
-    showString "Schema " . showList keys . showString " " . showTys tys
-    where showTys :: HListOf ASingTy m' -> ShowS
+  showsPrec p (Schema tys) = showParen (p > 11) $
+    showString "Schema " . showString " " . showTys tys
+    where showTys :: HListOf ColumnTy m' -> ShowS
           showTys NilOf = showString "NilOf"
-          showTys (ConsOf (ASingTy singv) tys') = showParen True $
+          showTys (ConsOf (ColumnTy key singv) tys') = showParen True $
               showString "ConsOf "
-            . showParen True (showString "ASingTy " . showsPrec 11 singv)
+            . showParen True (
+                showString "ColumnTy "
+              . showsPrec 11 key
+              . showString " "
+              . showsPrec 11 singv)
             . showTys tys'
 
 data ESchema where
@@ -734,18 +733,6 @@ type family Concrete (a :: Ty) = r | r -> a where
 type family ConcreteList (a :: [Ty]) = r | r -> a where
   ConcreteList '[]         = '[]
   ConcreteList (ty ': tys) = Concrete ty ': ConcreteList tys
-
--- Note [Supplying Dicts]:
---
--- withEq, withShow, and withUserShow are straightforward uses of `has` because
--- they apply to all types.
---
--- However, withSMTValue and withSymWord only apply to simple types, the
--- ArgDict instance doesn't apply, and we need to supply the dictionaries for
--- only simple types.
---
--- `EqConcrete`, `ShowConcrete`, and `UserShowConcrete` are defined just to
--- make it possible to use `has` here.
 
 withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
 withEq = withDict . singMkEq
