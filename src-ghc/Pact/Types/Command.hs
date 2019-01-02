@@ -11,6 +11,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 -- |
 -- Module      :  Pact.Types.Command
@@ -45,7 +46,7 @@ import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.DeepSeq
 import Data.Aeson as A
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize as SZ
@@ -53,12 +54,14 @@ import Data.String
 import Data.Text hiding (filter, all)
 import Data.Hashable (Hashable)
 import qualified Data.Set as S
+import qualified Crypto.Ed25519.Pure as Ed25519
+import qualified Crypto.Hash as H
 
 
 import GHC.Generics
 import Prelude
 
-import Pact.Types.Runtime
+import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Orphans ()
 import Pact.Types.Crypto as Base
 import Pact.Parse
@@ -85,21 +88,17 @@ instance (FromJSON a) => FromJSON (Command a) where
 
 instance NFData a => NFData (Command a)
 
-mkCommand :: ToJSON a => [KeyPair] -> Maybe Address -> Text -> a -> Command ByteString
+mkCommand :: (Scheme (SPPKScheme s), ToJSON a) => [KeyPair s] -> Maybe Address -> Text -> a -> Command ByteString
 mkCommand creds addy nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce addy)
 
-mkCommand' :: [KeyPair] -> ByteString -> Command ByteString
+mkCommand' :: (Scheme (SPPKScheme s)) => [KeyPair s] -> ByteString -> Command ByteString
 mkCommand' creds env = makeCommand (makeSigs <$> creds)
   where makeCommand sigs = Command env sigs hsh
-        hsh = hashTx Blake2b_512 env    -- hash associated with a Command, aka a Command's Request Key
-        makeSigs keyPair =
-          let (scheme,_,pk) = exportKeyPair keyPair
-              pk' = (toB16Text . snd) (exportPublic pk)
-              -- `sign` returns Maybe when Public Key, Private Key, and Signature Algorithm
-              -- do not match. This is impossible when using KeyPair data type.
-              sig = (toB16Text . exportSignature . fromJust) (sign env keyPair)
-          in (UserSig scheme pk' sig)
-
+        hsh = hashTx H.Blake2b_512 env    -- hash associated with a Command, aka a Command's Request Key
+        makeSigs KeyPair{..} =
+          let pubBS = toB16Text $ exportPublic _kpScheme _kpPublicKey
+              sig = toB16Text $ exportSignature _kpScheme $ sign _kpScheme env _kpPublicKey _kpPrivateKey
+          in (UserSig (toScheme _kpScheme) pubBS sig)
 
 verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
@@ -110,7 +109,7 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
     (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdPayload u)) <$> _cmdSigs
-    ppcmdHash' = verifyHashTx Blake2b_512 _cmdHash _cmdPayload
+    ppcmdHash' = verifyHashTx H.Blake2b_512 _cmdHash _cmdPayload
     mSigIssue = if all snd ppcmdSigs' then Nothing
       else Just $ "Invalid sig(s) found: " ++ show (A.encode . fst <$> filter (not.snd) ppcmdSigs')
     toErrStr :: Either String a -> String
@@ -170,13 +169,14 @@ instance FromJSON UserSig where
 
 
 verifyUserSig :: ByteString -> UserSig -> Bool
-verifyUserSig msg UserSig{..} =
-  let (PPKScheme (_,_,sigAlgo)) = _usScheme
-      parsedPubKey = fromTextPublic sigAlgo _usPubKey
-      parsedSig = fromText _usSig
-  in case (parsedPubKey, parsedSig) of
-       (Right pk,Success sig) -> valid _usScheme msg pk sig
-       _ -> False
+verifyUserSig msg UserSig{..} = 
+  let (pubParsed, sigParsed, scheme) = case _usScheme of
+        ED25519 -> (fromText _usPubKey :: A.Result (Ed25519.PublicKey),
+                    fromText _usSig :: A.Result (Ed25519.Signature),
+                    SED25519)
+  in case (pubParsed, sigParsed) of
+    (Success pub, Success sig) -> valid scheme msg pub sig
+    _ -> False
 
 
 data CommandError = CommandError {
@@ -234,7 +234,7 @@ instance Show RequestKey where
   show (RequestKey rk) = show rk
 
 initialRequestKey :: RequestKey
-initialRequestKey = RequestKey $ initialHashTx Blake2b_512
+initialRequestKey = RequestKey $ initialHashTx H.Blake2b_512
 
 
 

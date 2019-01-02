@@ -50,25 +50,23 @@ import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.API
 
+data SomeX = forall n . SomeX (SPPKScheme n)
 
 data ApiKeyPair = ApiKeyPair {
-  _kpSecret :: PrivateKey,
-  _kpPublic :: PublicKey,
-  _kpScheme :: Maybe AddressFormat
-  } deriving (Eq,Show,Generic)
+  _kpSecret :: ByteString,
+  _kpPublic :: ByteString,
+  _kpScheme :: Maybe PPKScheme
+  } deriving (Eq, Show, Generic)
 instance ToJSON ApiKeyPair where
   toJSON ApiKeyPair{..} =
-    let secret = (toB16JSON . snd . exportPrivate) _kpSecret
-        public = (toB16JSON . snd . exportPublic) _kpPublic
-    in object ["secret" .= secret, "public" .= public, "scheme" .= _kpScheme]
+     object ["secret" .= (toB16JSON . secret),
+             "public" .= (toB16JSON . public),
+             "scheme" .= _kpScheme]
 instance FromJSON ApiKeyPair where
   parseJSON = withObject "ApiKeyPair" $ \o -> do
-    secretText <- (o .: "secret")
-    publicText <- (o .: "public")
     addr <- (o .:? "scheme")
-    let (PPKScheme (_, _, sigAlgo)) = addressToScheme $ fromMaybe def addr
-    secret <- failEither $ fromTextPrivate sigAlgo secretText
-    public <- failEither $ fromTextPublic sigAlgo publicText
+    secret <- (o .: "secret")
+    public <- (o .: "public")
     return $ ApiKeyPair secret public addr
 
 data ApiReq = ApiReq {
@@ -194,10 +192,6 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
                Nothing -> Left $ "Public Key and or Private Key does not match scheme provided: "
                        ++ "Received " ++ show scheme ++ " scheme but received the following key pair "
                        ++ show _kpPublic ++ ",  " ++ show _kpSecret
-
-
-addressToScheme :: AddressFormat -> PPKScheme
-addressToScheme Chainweb = PPKScheme (Chainweb, def, def)
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
