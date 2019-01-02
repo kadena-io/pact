@@ -1171,7 +1171,8 @@ data Term (a :: Ty) where
   -- TODO(joel): In principle this could be pure and applied to all the
   -- languages. Unfortunately, we can't add this to props because `Query` has
   -- `Symbolic` in its stack, so it can't do an `ite`.
-  IfThenElse      :: Term 'TyBool -> (Path, Term a) -> (Path, Term a) -> Term a
+  -- TODO(joel): the above no longer applies!
+  IfThenElse      :: SingTy a -> Term 'TyBool -> (Path, Term a) -> (Path, Term a) -> Term a
 
   -- Variable binding
   Let             :: Text -> VarId -> TagId -> ETerm -> Term a -> Term a

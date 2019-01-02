@@ -251,14 +251,13 @@ evalTerm :: Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
 
---   TODO
---   IfThenElse cond (thenPath, then') (elsePath, else') -> do
---     reachable  <- use purelyReachable
---     testPasses <- evalTerm cond
---     tagFork thenPath elsePath reachable testPasses
---     singIte SBool (_sSbv testPasses)
---       (evalTerm then')
---       (evalTerm else')
+  IfThenElse ty cond (thenPath, then') (elsePath, else') -> do
+    reachable  <- use purelyReachable
+    testPasses <- evalTerm cond
+    tagFork thenPath elsePath reachable testPasses
+    singIte ty (_sSbv testPasses)
+      (evalTerm then')
+      (evalTerm else')
 
   -- TODO: check that the body of enforce is pure
   Enforce mTid cond -> do

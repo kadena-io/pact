@@ -122,20 +122,13 @@ instance IsTerm tm => UserShow (Existential tm) where
 
 transformExistential
   :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
-transformExistential f term = case term of
-  Existential ty term' -> Existential ty (f term')
-  -- ESimple ty  term' -> ESimple ty  (f term')
-  -- EObject sch term' -> EObject sch (f term')
-  -- EList   ty  term' -> EList   ty  (f term')
+transformExistential f (Existential ty term') = Existential ty (f term')
 
 mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
 mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
 existentialType (Existential ety _) = EType ety
--- existentialType (ESimple ety _) = EType ety
--- existentialType (EList   ety _) = EType ety
--- existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
 
@@ -436,6 +429,9 @@ instance (Ord (SingTy a), Ord (Concrete a)) => Ord (AConcrete a) where
 
 data Object (m :: [Ty]) = Object ![String] !(HListOf AConcrete m)
 
+data EObject where
+  EObject :: SingList m -> Object m -> EObject
+
 instance UserShow (Object m) where
   userShowPrec _ (Object keys vals)
     = "{" <> T.intercalate ", " contents <> "}"
@@ -630,7 +626,6 @@ data QKind = QType | QAny
 
 data Quantifiable :: QKind -> Type where
   EType     :: SingTy a -> Quantifiable q
-  -- EObjectTy :: Schema      -> Quantifiable q
   QTable    ::                Quantifiable 'QAny
   QColumnOf :: TableName   -> Quantifiable 'QAny
 
@@ -640,7 +635,6 @@ instance Eq (Quantifiable q) where
   EType a == EType b = case singEq a b of
     Just Refl -> True
     Nothing   -> False
-  -- EObjectTy a == EObjectTy b = a == b
   QTable      == QTable      = True
   QColumnOf a == QColumnOf b = a == b
   _           == _           = False
@@ -652,15 +646,12 @@ type EType = Quantifiable 'QType
 type QType = Quantifiable 'QAny
 
 coerceQType :: EType -> QType
-coerceQType = \case
-  EType ty         -> EType ty
-  -- EObjectTy schema -> EObjectTy schema
+coerceQType (EType ty) = EType ty
 
 downcastQType :: QType -> Maybe EType
 downcastQType = \case
-  EType ty         -> Just $ EType ty
-  -- EObjectTy schema -> Just $ EObjectTy schema
-  _                -> Nothing
+  EType ty -> Just $ EType ty
+  _        -> Nothing
 
 -- | Unique variable IDs
 --
@@ -953,7 +944,6 @@ instance Mergeable a => Mergeable (TableMap a) where
 instance UserShow (Quantifiable q) where
   userShowPrec d = \case
     EType ty     -> userShowPrec d ty
-    -- EObjectTy ty -> userShowPrec d ty
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> userShow tn <> ")"
 

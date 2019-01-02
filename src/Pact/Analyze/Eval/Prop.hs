@@ -69,19 +69,6 @@ aval elimVal = \case
   AVal mProv sval -> elimVal mProv sval
   OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
-expectVal :: Analyzer m => AVal -> m (S a)
-expectVal = aval (pure ... mkS)
-
--- expectObj :: Analyzer m => AVal -> m UObject
--- expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
---   where
---     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
---     getSVal = flip const
-
--- expectList :: Analyzer m => AVal -> m (SBV [a])
--- expectList = aval
---   (\_prov sval -> pure (SBVI.SBV sval))
-
 getLitTableName :: Prop TyTableName -> Query TableName
 getLitTableName (StrLit tn) = pure $ TableName tn
 getLitTableName (CoreProp (Var vid name)) = do
@@ -120,7 +107,7 @@ beforeAfterLens = \case
 evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
-evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
+evalPropSpecific Result  = aval (pure ... mkS) =<< view qeAnalyzeResult
 evalPropSpecific (Forall vid _name (EType (ty :: Types.SingTy ty)) p) = do
   var <- singForAll ty
   local (scope.at vid ?~ mkAVal var) $ evalProp p
@@ -258,6 +245,9 @@ evalPropSpecific (PropRead _ty (Schema fieldNames fields) ba tn pRk) = do
 
       EType SAny         -> pure OpaqueVal
       EType (SList SAny) -> pure OpaqueVal
+
+      EType (SList _) -> error "TODO"
+
       --
       -- TODO: if we add nested object support here, we need to install
       --       the correct provenance into AVals all the way down into

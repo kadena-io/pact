@@ -17,14 +17,16 @@ import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                               SymWord, false, true, (|||),
-                                              SBV, (&&&), (|||))
+                                              SBV, (&&&), (|||), ite, unliteral)
 -- import           Data.SBV.List               ((.:))
--- import qualified Data.SBV.List               as SBVL
--- import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
---                                               bmapM, bzipWith, bfoldrM)
+import qualified Data.SBV.List               as SBVL
+import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
+                                              bzipWith, {- bmapM, bfoldrM -})
 import qualified Data.SBV.String             as SBVS
 -- import           Data.Text                   (Text)
 import qualified Data.Text                   as T
+import           Data.Type.Equality          ((:~:)(Refl))
+import           Data.Typeable               (Typeable)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
@@ -185,9 +187,8 @@ evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
 evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
-evalCore ObjAt{} -- (ObjAt schema colNameT objT retType)
-  = throwErrorNoLoc "TODO: ObjAt"
-  -- = evalObjAt schema colNameT objT retType
+evalCore (ObjAt schema colNameT objT)
+  = evalObjAt schema colNameT objT (error "TODO")
 evalCore LiteralObject{} = throwErrorNoLoc "TODO: LiteralObject"
 -- evalCore (LiteralObject obj) = Object <$> traverse evalExistential obj
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
@@ -205,88 +206,88 @@ evalCore (StrContains needle haystack) = do
     _sSbv (coerceS @Str @String needle')
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
-evalCore ListContains{} = throwErrorNoLoc "TODO: ListContains"
--- evalCore (ListContains ty needle haystack) = withSymWord ty $ do
---   S _ needle'   <- eval needle
---   S _ haystack' <- eval haystack
---   pure $ sansProv $
---     bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
-evalCore ListEqNeq{} = throwErrorNoLoc "TODO: ListEqNeq"
--- evalCore (ListEqNeq ty op a b) = do
---   S _ a' <- eval a
---   S _ b' <- eval b
+evalCore (ListContains ty needle haystack) = withSymWord ty $ do
+  S _ needle'   <- eval needle
+  S _ haystack' <- eval haystack
+  pure $ sansProv $
+    bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
+evalCore (ListEqNeq ty op a b) = withSymWord ty $ do
+  S _ a' <- eval a
+  S _ b' <- eval b
 
---   let wrongLength = case op of
---         Eq'  -> false
---         Neq' -> true
---       zipF = case op of
---         Eq'  -> (.==)
---         Neq' -> (./=)
+  let wrongLength = case op of
+        Eq'  -> false
+        Neq' -> true
+      zipF = case op of
+        Eq'  -> (.==)
+        Neq' -> (./=)
 
---   pure $ ite (SBVL.length a' .== SBVL.length b')
---     (sansProv $ band listBound $ bzipWith listBound zipF a' b')
---     wrongLength
--- evalCore (ListAt ty i l) = do
---   S _ i' <- eval i
---   S _ l' <- eval l
+  pure $ ite (SBVL.length a' .== SBVL.length b')
+    (sansProv $ band listBound $ bzipWith listBound zipF a' b')
+    wrongLength
+evalCore (ListAt ty i l) = withSymWord ty $ do
+  S _ i' <- eval i
+  S _ l' <- eval l
 
---   -- valid range [0..length l - 1]
---   markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
+  -- valid range [0..length l - 1]
+  markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
 
---   -- statically build a list of index comparisons
---   pure $ sansProv $ SBVL.elemAt l' i'
--- evalCore (ListLength ty l) = do
---   S prov l' <- eval l
---   pure $ S prov $ SBVL.length l'
---
--- evalCore (LiteralList ty xs) = do
---   vals <- traverse (fmap _sSbv . eval) xs
---   pure $ sansProv $ SBVL.implode vals
---
--- evalCore (ListDrop ty n list) = do
---   S _ n'    <- eval n
---   S _ list' <- eval list
---
---   -- if the index is positive, count from the start of the list, otherwise
---   -- count from the end.
---   pure $ sansProv $ ite (n' .>= 0)
---     (SBVL.drop n' list')
---     (SBVL.take (SBVL.length list' + n') list')
---
--- evalCore (ListTake ty n list) = do
---   S _ n'    <- eval n
---   S _ list' <- eval list
---
---   -- if the index is positive, count from the start of the list, otherwise
---   -- count from the end.
---   pure $ sansProv $ ite (n' .>= 0)
---     (SBVL.take n' list')
---     (SBVL.drop (SBVL.length list' + n') list')
---
--- evalCore (ListConcat ty p1 p2) = do
---   S _ p1' <- eval p1
---   S _ p2' <- eval p2
---   pure $ sansProv $ SBVL.concat p1' p2'
--- evalCore (ListReverse ty l) = do
---   S prov l' <- eval l
---   pure $ S prov $ breverse listBound l'
--- evalCore (ListSort ty l) = do
---   S prov l' <- eval l
---   pure $ S prov $ bsort listBound l'
--- evalCore (MakeList ty i a) = do
---   S _ i' <- eval i
---   S _ a' <- eval a
---   case unliteral i' of
---     Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
---     Nothing  -> throwErrorNoLoc $ UnhandledTerm
---       "make-list currently requires a statically determined length"
--- evalCore (ListMap tya tyb (Open vid _ expr) as) = do
+  -- statically build a list of index comparisons
+  pure $ sansProv $ SBVL.elemAt l' i'
+evalCore (ListLength ty l) = withSymWord ty $ do
+  S prov l' <- eval l
+  pure $ S prov $ SBVL.length l'
+
+evalCore (LiteralList ty xs) = withSymWord ty $ do
+  vals <- traverse (fmap _sSbv . eval) xs
+  pure $ sansProv $ SBVL.implode vals
+
+evalCore (ListDrop ty n list) = withSymWord ty $ do
+  S _ n'    <- eval n
+  S _ list' <- eval list
+
+  -- if the index is positive, count from the start of the list, otherwise
+  -- count from the end.
+  pure $ sansProv $ ite (n' .>= 0)
+    (SBVL.drop n' list')
+    (SBVL.take (SBVL.length list' + n') list')
+
+evalCore (ListTake ty n list) = withSymWord ty $ do
+  S _ n'    <- eval n
+  S _ list' <- eval list
+
+  -- if the index is positive, count from the start of the list, otherwise
+  -- count from the end.
+  pure $ sansProv $ ite (n' .>= 0)
+    (SBVL.take n' list')
+    (SBVL.drop (SBVL.length list' + n') list')
+
+evalCore (ListConcat ty p1 p2) = withSymWord ty $ do
+  S _ p1' <- eval p1
+  S _ p2' <- eval p2
+  pure $ sansProv $ SBVL.concat p1' p2'
+evalCore (ListReverse ty l) = withSymWord ty $ do
+  S prov l' <- eval l
+  pure $ S prov $ breverse listBound l'
+evalCore (ListSort ty l) = withSymWord ty $ do
+  S prov l' <- eval l
+  pure $ S prov $ bsort listBound l'
+evalCore (MakeList ty i a) = withSymWord ty $ do
+  S _ i' <- eval i
+  S _ a' <- eval a
+  case unliteral i' of
+    Just i'' -> pure $ sansProv $ SBVL.implode $ replicate (fromInteger i'') a'
+    Nothing  -> throwErrorNoLoc $ UnhandledTerm
+      "make-list currently requires a statically determined length"
+
+-- evalCore (ListMap tya tyb (Open vid _ expr) as) = withSymWord tya $ withSymWord tyb $ do
 --   S _ as' <- eval as
 --   bs <- bmapM listBound
 --     (\val -> _sSbv <$> withVar vid (mkAVal' val) (eval expr))
 --     as'
 --   pure $ sansProv bs
--- evalCore (ListFilter tya (Open vid _ f) as) = do
+
+-- evalCore (ListFilter tya (Open vid _ f) as) = withSymWord tya $ do
 --   S _ as' <- eval as
 --   let bfilterM = bfoldrM listBound
 --         (\sbva svblst -> do
@@ -294,7 +295,8 @@ evalCore ListEqNeq{} = throwErrorNoLoc "TODO: ListEqNeq"
 --           pure $ ite x' (sbva .: svblst) svblst)
 --         (literal [])
 --   sansProv <$> bfilterM as'
--- evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs) = do
+
+-- evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs) = withSymWord tya $ withSymWord tyb $ do
 --   S _ a'  <- eval a
 --   S _ bs' <- eval bs
 --   result <- bfoldrM listBound
@@ -317,11 +319,9 @@ evalCore (OrQ _tya (Open vid1 _ f) (Open vid2 _ g) a) = do
   gv     <- withVar vid2 (mkAVal' a') $ eval g
   pure $ fv ||| gv
 
-evalCore Where{} = throwErrorNoLoc "Not yet supported: where"
-
--- evalCore (Where schema tya key (Open vid _ f) obj) = withSymWord tya $ do
---   S _ v <- evalObjAt schema key obj (EType tya)
---   withVar vid (mkAVal' v) $ eval f
+evalCore (Where schema tya key (Open vid _ f) obj) = withSymWord tya $ do
+  S _ v <- evalObjAt schema key obj tya
+  withVar vid (mkAVal' v) $ eval f
 
 evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
 evalCore ObjTake{}      = throwErrorNoLoc "not yet implemented"
@@ -400,30 +400,38 @@ evalStrToIntBase bT sT = do
         Left _err -> symbolicFailure
         Right res -> pure (literalS res)
 
--- evalObjAt
---   :: (Analyzer m, SymWord a)
---   => SingTy obj
---   -> TermOf m 'TyStr
---   -> TermOf m ('TyObject obj)
---   -> EType
---   -> m (S a)
--- -- evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
--- evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
---   obj@(Object fields) <- eval objT
+relevantFields :: (Typeable a, SingI a) => SingTy a -> Object obj -> EObject
+relevantFields _ obj@(Object [] NilOf) = EObject SNil obj
+relevantFields targetTy (Object (name:names) (ConsOf (AConcrete vTy v) vals))
+  = case relevantFields targetTy (Object names vals) of
+      EObject ty obj'@(Object names' vals') -> case singEq targetTy vTy of
+        Nothing -> EObject ty obj'
+        Just Refl -> EObject (SCons sing ty) $
+          Object (name:names') (ConsOf (AConcrete vTy v) vals')
+relevantFields _ _ = error "relevantFields: malformed object"
+
+evalObjAt
+  :: Analyzer m
+  => SingTy obj
+  -> TermOf m 'TyStr
+  -> TermOf m obj
+  -> SingTy a
+  -> m (S (Concrete a))
+evalObjAt = undefined
+
+-- evalObjAt schema colNameT objT retType = do
+--   obj@(Object fieldNames fields) <- eval objT
 
 --   -- Filter down to only fields which contain the type we're looking for
---   let relevantFields = [] -- TODO
---         -- = map fst
---         -- $ filter (\(_name, ty) -> ty == retType)
---         -- $ Map.toList schemaFields
+--   let correctTypeFields = relevantFields retType obj
 
 --   colName :: S Str <- eval colNameT
 
---   firstName:relevantFields' <- case relevantFields of
---     [] -> throwErrorNoLoc $ AtHasNoRelevantFields retType schema
---     _  -> pure relevantFields
+--   firstName:relevantFields' <- case correctTypeFields of
+--     [] -> throwErrorNoLoc $ AtHasNoRelevantFields (EType retType) schema
+--     _  -> pure correctTypeFields
 
---   let getObjVal fieldName = case Map.lookup fieldName fields of
+--   let getObjVal fieldName = case _lookup fieldName fields of
 --         Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
 
 --         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval

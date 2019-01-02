@@ -887,7 +887,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     joinPaths [(postTrue, truePath), (postFalse, falsePath)]
     tsCurrentPath .= preTestPath -- reset to before conditional
     Refl <- singEq ta tb ?? BranchesDifferentTypes (EType ta) (EType tb)
-    pure $ Existential ta $ IfThenElse cond' (truePath, a) (falsePath, b)
+    pure $ Existential ta $ IfThenElse ta cond' (truePath, a) (falsePath, b)
 
   AST_NFun _node "str-to-int" [s] -> do
     Existential SStr s' <- translateNode s

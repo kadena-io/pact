@@ -16,7 +16,6 @@ import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 
--- TODO Change SVal to AVal (allowing objects), update analyzer
 newtype InvariantCheck a = InvariantCheck
   { unInvariantCheck :: StateT SymbolicSuccess
     (ReaderT
