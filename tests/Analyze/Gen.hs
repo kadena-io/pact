@@ -512,7 +512,7 @@ genTermSpecific' boundedTy = scale 8 $ Gen.choice
        Existential tyt1 t1 <- genTerm boundedTy
        Existential tyt2 t2 <- genTerm boundedTy
        case singEq tyt1 tyt2 of
-         Just Refl -> pure $ Existential tyt1 $ IfThenElse b (Path 0, t1) (Path 0, t2)
+         Just Refl -> pure $ Existential tyt1 $ IfThenElse tyt1 b (Path 0, t1) (Path 0, t2)
          Nothing   -> error "t1 and t2 must have the same type"
   ]
 

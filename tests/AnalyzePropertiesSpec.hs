@@ -27,16 +27,11 @@ import           Analyze.Translate
 -- evaluations give the same result (including the same exception, if the
 -- program throws).
 testDualEvaluation :: ETerm -> GenState -> PropertyT IO ()
-testDualEvaluation etm@(ESimple ty _tm) gState
+testDualEvaluation etm@(Existential ty _tm) gState
   = testDualEvaluation' etm ty gState
-testDualEvaluation etm@(EList (SList ty) _tm) gState
-  = testDualEvaluation' etm ty gState
-testDualEvaluation EObject{} _ = do
-  footnote "can't property test evaluation of objects"
-  failure
 
 testDualEvaluation'
-  :: ETerm -> SingTy 'SimpleK a -> GenState -> PropertyT IO ()
+  :: ETerm -> SingTy a -> GenState -> PropertyT IO ()
 testDualEvaluation' etm ty gState = do
   -- evaluate via pact, convert to analyze term
   mPactVal <- liftIO $ pactEval etm gState
@@ -62,31 +57,32 @@ testDualEvaluation' etm ty gState = do
     (Right pactVal, Right analyzeVal) -> do
       Just etm' <- lift $ fromPactVal (EType ty) pactVal
       case etm' of
-        ESimple ty' (CoreTerm (Lit pactSval)) -> do
-          ESimple ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
+        Existential ty' (CoreTerm (Lit pactSval)) -> do
+          Existential ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
 
           -- compare results
           case singEq ty' ty'' of
             Just Refl -> withEq ty' $ withShow ty' $ sval' === pactSval
             Nothing   -> EType ty' === EType ty'' -- this'll fail
 
-        EList ty' (CoreTerm (LiteralList lty svals)) -> do
+        Existential ty' (CoreTerm (LiteralList lty svals)) -> do
           -- compare results
           case analyzeVal of
-            EList ty'' (CoreTerm (LiteralList lty' svals')) -> case singEq lty lty' of
-              Just Refl -> if length svals > 10
-                then discard
-                else withEq lty $ withShow lty $ svals' === svals
-              Nothing   ->
-                if singEqB lty SAny && withEq lty (svals == []) && withEq lty' (svals' == [])
-                then success
-                else EType ty' === EType ty'' -- this'll fail
+            -- TODO
+            -- Existential ty'' (CoreTerm (LiteralList lty' svals')) -> case singEq lty lty' of
+            --   Just Refl -> if length svals > 10
+            --     then discard
+            --     else withEq lty $ withShow lty $ svals' === svals
+            --   Nothing   ->
+            --     if singEqB lty SAny && withEq lty (svals == []) && withEq lty' (svals' == [])
+            --     then success
+            --     else EType ty' === EType ty'' -- this'll fail
             _ -> do
               footnote $ "l: " ++ show etm'
               footnote $ "r: " ++ show analyzeVal
               failure
 
-        EObject _ _ -> do
+        Existential _ (CoreTerm (LiteralObject _ _obj)) -> do
           footnote "can't property test evaluation of objects"
           failure
 
@@ -112,11 +108,8 @@ prop_round_trip_term = property $ do
   (etm, gState) <- safeGenAnyTerm
 
   etm' <- lift $ runMaybeT $ case etm of
-    ESimple ty _tm ->
+    Existential ty _tm ->
       (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
-    EList ty _tm ->
-      (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
-    _ -> error ""
 
   etm' === Just etm
 

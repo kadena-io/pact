@@ -190,7 +190,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ObjTake     :: t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
   ObjMerge    :: SingTy o1 -> SingTy o2 -> t o1 -> t o2 -> Core t o
 
-  LiteralObject :: Object m -> Core t ('TyObject m)
+  -- TODO(joel): combine with `Lit`?
+  LiteralObject :: SingTy ('TyObject m) -> Object m -> Core t ('TyObject m)
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
@@ -477,7 +478,7 @@ eqCoreTm _ (ObjMerge ty11 ty21 a1 b1)          (ObjMerge ty12 ty22 a2 b2)
     Refl <- singEq ty11 ty12
     Refl <- singEq ty21 ty22
     pure $ singEqTm ty11 a1 a2 && singEqTm ty21 b1 b2
-eqCoreTm _ (LiteralObject m1)            (LiteralObject m2)
+eqCoreTm _ (LiteralObject _ m1)            (LiteralObject _ m2)
   = m1 == m2
 eqCoreTm _ (Logical op1 args1)           (Logical op2 args2)
   = op1 == op2 && and (zipWith eqTm args1 args2)
@@ -637,7 +638,7 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . singShowsTm ty1 11 a
     . showString " "
     . singShowsTm ty2 11 b
-  LiteralObject _ -> showString "LiteralObject " -- TODO . showsPrec 11 m
+  LiteralObject _ _ -> showString "LiteralObject " -- TODO . showsPrec 11 m
 
   Logical op args ->
       showString "Logical "
@@ -828,7 +829,7 @@ userShowCore ty _p = \case
   ObjDrop ks obj           -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty obj]
   ObjTake ks obj           -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty obj]
   ObjMerge ty1 ty2 x y     -> parenList [SObjectMerge, singUserShowTm ty1 x, singUserShowTm ty2 y]
-  LiteralObject _obj       -> "LiteralObject TODO" -- userShow obj
+  LiteralObject _ _obj       -> "LiteralObject TODO" -- userShow obj
   Logical op args          -> parenList $ userShow op : fmap userShowTm args
 
   ListEqNeq ty' op x y     -> parenList [userShow op, singUserShowTmList ty' x, singUserShowTmList ty' y]

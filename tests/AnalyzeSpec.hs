@@ -962,10 +962,10 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ Inj Success
 
     let schema = Schema $
-          Map.fromList [("name", EType SStr), ("balance", EType SInteger)]
-        ety    = EType SStr
+          ConsOf (ColumnTy "name" SStr) (ConsOf (ColumnTy "balance" SInteger) NilOf)
+        -- ety    = EType SStr
     expectPass code $ Valid $ CoreProp $ StrComparison Eq
-      (PObjAt schema (Lit' "name") (Inj Result) ety)
+      (PObjAt schema (Lit' "name") (Inj Result))
       (Lit' "stu" :: Prop 'TyStr)
 
   describe "at.object-in-object" $
@@ -1928,7 +1928,7 @@ spec = describe "analyze" $ do
           :: Map Text VarId
           -> Map VarId EType
           -> TableEnv
-          -> SingTy k a
+          -> SingTy a
           -> Text
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
@@ -1938,7 +1938,7 @@ spec = describe "analyze" $ do
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
-        textToProp :: SingTy k a -> Text -> Either String (Prop a)
+        textToProp :: SingTy a -> Text -> Either String (Prop a)
         textToProp = textToProp'
           (Map.singleton "result" 0)
           (Map.singleton 0 (EType SAny))
@@ -1963,7 +1963,7 @@ spec = describe "analyze" $ do
           (Map.singleton 0 (EType SAny))
           (TableMap mempty)
 
-        textToPropTableEnv :: TableEnv -> SingTy k a -> Text -> Either String (Prop a)
+        textToPropTableEnv :: TableEnv -> SingTy a -> Text -> Either String (Prop a)
         textToPropTableEnv tableEnv = textToProp'
           (Map.singleton "result" 0)
           (Map.singleton 0 (EType SAny))
@@ -2010,8 +2010,8 @@ spec = describe "analyze" $ do
             Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
           ety = EType SInteger
           litPair = CoreProp $ LiteralObject $ Map.fromList
-            [ ("x", ESimple SInteger (Lit' 0))
-            , ("y", ESimple SInteger (Lit' 1))
+            [ ("x", Existential SInteger (Lit' 0))
+            , ("y", Existential SInteger (Lit' 1))
             ]
 
           nestedObj = CoreProp $ LiteralObject $
@@ -2026,7 +2026,7 @@ spec = describe "analyze" $ do
 
       inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
         `shouldBe`
-        Right (ESimple SInteger (PObjAt pairSchema (Lit' "x") litPair ety))
+        Right (Existential SInteger (PObjAt pairSchema (Lit' "x") litPair ety))
 
       inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
         `shouldBe`
@@ -2036,7 +2036,7 @@ spec = describe "analyze" $ do
       inferProp'' "(forall (x:string y:string) (= x y))"
         `shouldBe`
         Right
-          (ESimple SBool
+          (Existential SBool
             (Inj $ Forall (VarId 1) "x" (EType SStr)
               (Inj $ Forall (VarId 2) "y" (EType SStr)
                 (CoreProp $ StrComparison Eq
@@ -2093,8 +2093,8 @@ spec = describe "analyze" $ do
 
       textToProp   SBool "abort"   `shouldBe` Right Abort'
       textToProp   SBool "success" `shouldBe` Right Success'
-      inferProp''  "abort"         `shouldBe` Right (ESimple SBool Abort')
-      inferProp''  "success"       `shouldBe` Right (ESimple SBool Success')
+      inferProp''  "abort"         `shouldBe` Right (Existential SBool Abort')
+      inferProp''  "success"       `shouldBe` Right (Existential SBool Success')
 
       textToProp'' SBool "result"  `shouldBe` Right Result'
       textToProp'' SInteger  "result"  `shouldBe` Right Result'
@@ -2104,7 +2104,7 @@ spec = describe "analyze" $ do
       inferProp'' "(forall (table:table) (not (table-written table)))"
         `shouldBe`
         Right
-          (ESimple SBool
+          (Existential SBool
             $ Inj $ Forall (VarId 1) "table" QTable
               $ PNot $ Inj $ TableWrite $
                 CoreProp $ Var (VarId 1) "table")
@@ -2118,7 +2118,7 @@ spec = describe "analyze" $ do
         |]
         `shouldBe`
         Right
-          (ESimple SBool
+          (Existential SBool
             (Inj $ Forall (VarId 1) "table" QTable
               (Inj $ Forall (VarId 2) "column" (QColumnOf "table")
                 (Inj (ColumnWritten

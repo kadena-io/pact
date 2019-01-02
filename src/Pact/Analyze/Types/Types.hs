@@ -88,6 +88,11 @@ singEq (SList   a) (SList   b) = apply Refl <$> singEq a b
 singEq (SObject a) (SObject b) = apply Refl <$> singListEq a b
 singEq _           _           = Nothing
 
+singEqB :: forall (a :: Ty) (b :: Ty). Sing a -> Sing b -> Bool
+singEqB a b = case singEq a b of
+  Just Refl -> True
+  Nothing   -> False
+
 singListEq
   :: forall (a :: [Ty]) (b :: [Ty]).
      Sing a -> Sing b -> Maybe (a :~: b)

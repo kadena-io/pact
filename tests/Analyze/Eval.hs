@@ -21,7 +21,6 @@ import qualified Data.Map.Strict          as Map
 import           Data.SBV                 (literal, unliteral, writeArray)
 import qualified Data.SBV.Internals       as SBVI
 import qualified Data.Text                as T
-import           Data.Type.Equality
 
 import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
@@ -88,11 +87,9 @@ pactEval etm gState = (do
 
 -- Evaluate a term symbolically
 analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
-analyzeEval etm@(ESimple ty _tm) gs = analyzeEval' etm ty gs
-analyzeEval etm@(EList   ty _tm) gs = analyzeEval' etm ty gs
-analyzeEval EObject{} _             = pure (Left "TODO: analyzeEval EObject")
+analyzeEval etm@(Existential ty _tm) gs = analyzeEval' etm ty gs
 
-analyzeEval' :: ETerm -> SingTy k a -> GenState -> IO (Either String ETerm)
+analyzeEval' :: ETerm -> SingTy a -> GenState -> IO (Either String ETerm)
 analyzeEval' etm ty (GenState _ keysets decimals) = do
   -- analyze setup
   let tables = []
@@ -129,20 +126,9 @@ analyzeEval' etm ty (GenState _ keysets decimals) = do
     Nothing -> pure $ Left $ "couldn't unliteral lasSucceeds"
     Just False -> pure $ Left "fails"
     Just True -> case analyzeVal of
-      AVal _ sval -> singCase ty
-        (\Refl -> pure $ case withSymWord ty (unliteral (SBVI.SBV sval)) of
-          Just sval' -> Right $ ESimple ty $ CoreTerm $ Lit sval'
-          Nothing    -> Left $ "couldn't unliteral: " ++ show sval)
-        (\Refl ->
-          let elemTy = listElem ty
-          in case singEq (SList elemTy) ty of
-               Nothing -> error "impossible"
-               Just Refl -> pure $
-                 case withSymWord elemTy (unliteral (SBVI.SBV sval)) of
-                   Just sval' -> Right $ EList ty $ CoreTerm $
-                     LiteralList elemTy $ CoreTerm . Lit <$> sval'
-                   Nothing    -> Left $ "couldn't unliteral: " ++ show sval)
-        (\Refl -> error "objects are not yet supported")
+      AVal _ sval -> pure $ case withSymWord ty (unliteral (SBVI.SBV sval)) of
+        Just sval' -> Right $ Existential ty $ CoreTerm $ Lit sval'
+        Nothing    -> Left $ "couldn't unliteral: " ++ show sval
       _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
 
 -- Generate a pact evaluation environment given the keysets and decimals used
