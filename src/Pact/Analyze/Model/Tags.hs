@@ -43,7 +43,7 @@ allocSbv :: SingI a => Alloc (SBV (Concrete a))
 allocSbv = _sSbv <$> allocS
 
 allocSchema :: Schema m -> Alloc UObject
-allocSchema (Schema (ConsOf (ColumnTy k ty) tys)) = do
+allocSchema (Schema (ConsOf _k (ColumnTy k ty) tys)) = do
   UObject m <- allocSchema $ Schema tys
   let ety = EType ty
   val <- allocAVal ety

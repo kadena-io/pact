@@ -9,6 +9,7 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PolyKinds                  #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
@@ -18,10 +19,12 @@
 module Pact.Analyze.Types.Types where
 
 import           Data.Kind                   (Type)
+import           Data.Maybe                  (isJust)
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (intercalate, pack, Text)
 import           Data.Type.Equality          ((:~:) (Refl), apply)
-import           Data.Typeable               (Typeable)
+import           Data.Typeable               (Typeable, Proxy(Proxy))
+import           GHC.TypeLits
 
 import           Pact.Analyze.Types.UserShow
 
@@ -34,24 +37,31 @@ data Ty
   | TyKeySet
   | TyAny
   | TyList Ty
-  | TyObject [ Ty ]
+  | TyObject [ (Symbol, Ty) ]
 
 data family Sing :: k -> Type
 
-data instance Sing (n :: [Ty]) where
-  SNil  ::                     Sing ('[]    :: [Ty])
-  SCons :: (Typeable v, SingI v)
-        => Sing v -> Sing n -> Sing (v ': n :: [Ty])
+data instance Sing (sym :: Symbol) where
+  SSymbol :: KnownSymbol sym => Sing sym
 
-type SingList (a :: [Ty]) = Sing a
+type SingSymbol (x :: Symbol) = Sing x
+
+data instance Sing (n :: [(Symbol, Ty)]) where
+  SNil  :: Sing ('[] :: [(Symbol, Ty)])
+  SCons :: (Typeable v, SingI v, KnownSymbol k)
+        => SingSymbol k -> Sing v -> Sing n
+        -> Sing ('(k, v) ': n :: [(Symbol, Ty)])
+
+type SingList (a :: [(Symbol, Ty)]) = Sing a
 
 -- type family Map (f :: Ty -> k) (xs :: [Ty]) where
 --    Map f '[]       = '[]
 --    Map f (x ': xs) = f x ': Map f xs
 
-data HListOf (f :: Ty -> *) (tys :: [Ty]) where
-  NilOf  ::                          HListOf f '[]
-  ConsOf :: f ty -> HListOf f tys -> HListOf f (ty ': tys)
+data HListOf (f :: Ty -> *) (tys :: [(Symbol, Ty)]) where
+  NilOf  ::                                      HListOf f '[]
+  ConsOf :: KnownSymbol sym =>
+            Sing sym -> f ty -> HListOf f tys -> HListOf f ('(sym, ty) ': tys)
 
 data instance Sing (a :: Ty) where
   SInteger ::           Sing 'TyInteger
@@ -89,15 +99,24 @@ singEq (SObject a) (SObject b) = apply Refl <$> singListEq a b
 singEq _           _           = Nothing
 
 singEqB :: forall (a :: Ty) (b :: Ty). Sing a -> Sing b -> Bool
-singEqB a b = case singEq a b of
-  Just Refl -> True
-  Nothing   -> False
+singEqB a b = isJust $ singEq a b
+
+eqSym :: forall (a :: Symbol) (b :: Symbol).
+  (KnownSymbol a, KnownSymbol b)
+  => SingSymbol a -> SingSymbol b -> Maybe (a :~: b)
+eqSym _ _ = sameSymbol (Proxy @a) (Proxy @b)
+
+eqSymB :: forall (a :: Symbol) (b :: Symbol).
+  (KnownSymbol a, KnownSymbol b)
+  => SingSymbol a -> SingSymbol b -> Bool
+eqSymB a b = isJust $ eqSym a b
 
 singListEq
-  :: forall (a :: [Ty]) (b :: [Ty]).
+  :: forall (a :: [(Symbol, Ty)]) (b :: [(Symbol, Ty)]).
      Sing a -> Sing b -> Maybe (a :~: b)
 singListEq SNil SNil = Just Refl
-singListEq (SCons v1 n1) (SCons v2 n2) = do
+singListEq (SCons k1 v1 n1) (SCons k2 v2 n2) = do
+  Refl <- eqSym k1 k2
   Refl <- singEq v1 v2
   Refl <- singListEq n1 n2
   pure Refl
@@ -120,8 +139,13 @@ instance Show (SingTy ty) where
     where
       showsM :: SingList a -> ShowS
       showsM SNil = showString "SNil"
-      showsM (SCons v n) = showParen True $
-        showString "SCons " . shows v . showString " " . showsM n
+      showsM (SCons k v n) = showParen True $
+          showString "SCons "
+        . showString (symbolVal k)
+        . showString " "
+        . shows v
+        . showString " "
+        . showsM n
 
 instance UserShow (SingTy ty) where
   userShowPrec _ = \case
@@ -137,7 +161,9 @@ instance UserShow (SingTy ty) where
     where
       userShowM :: SingList a -> [Text]
       userShowM SNil        = []
-      userShowM (SCons v n) = pack (show v) : userShowM n
+      userShowM (SCons k v n) =
+        ("(" <> pack (symbolVal k) <> ", " <> pack (show v) <> ")")
+        : userShowM n
 
 class SingI a where
   sing :: Sing a
@@ -169,8 +195,9 @@ instance SingI a => SingI ('TyList a) where
 instance SingI ('TyObject '[]) where
   sing = SObject SNil
 
-instance (Typeable v, SingI v, SingI m) => SingI ('TyObject (v ': m)) where
-  sing = SObject (SCons sing sing)
+instance (Typeable v, SingI v, SingI m, KnownSymbol k)
+  => SingI ('TyObject ('(k, v) ': m)) where
+  sing = SObject (SCons SSymbol sing sing)
 
 type family IsSimple (ty :: Ty) :: Bool where
   IsSimple ('TyList _)   = 'False

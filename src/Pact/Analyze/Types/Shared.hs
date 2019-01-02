@@ -63,6 +63,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
+import           GHC.TypeLits
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
@@ -428,7 +429,7 @@ instance (Ord (SingTy a), Ord (Concrete a)) => Ord (ConcreteCol a) where
   ConcreteCol _ sa a `compare` ConcreteCol _ sb b
     = sa `compare` sb <> a `compare` b
 
-data Object (m :: [Ty]) = Object !(HListOf ConcreteCol m)
+data Object (m :: [(Symbol, Ty)]) = Object !(HListOf ConcreteCol m)
 
 data EObject where
   EObject :: SingList m -> Object m -> EObject
@@ -439,17 +440,17 @@ instance UserShow (Object m) where
       where
       userShowVals :: HListOf ConcreteCol m' -> [Text]
       userShowVals NilOf = []
-      userShowVals (ConsOf (ConcreteCol ty k v) m')
-        = T.pack k <> " := " <> withUserShow ty (userShow v) : userShowVals m'
+      userShowVals (ConsOf k (ConcreteCol ty _ v) m')
+        = T.pack (symbolVal k) <> " := " <> withUserShow ty (userShow v) : userShowVals m'
 
 instance Show (Object m) where
   showsPrec p (Object vals) = showParen (p > 10) $
     showString "Object " . showsVals vals
     where showsVals :: HListOf ConcreteCol m' -> ShowS
           showsVals NilOf = showString "NilOf"
-          showsVals (ConsOf (ConcreteCol singv k v) m') = showParen True $
+          showsVals (ConsOf k (ConcreteCol singv _ v) m') = showParen True $
               showString "ConsOf "
-            . showString k
+            . showString (symbolVal k)
             . showString " "
             . withShow singv (showsPrec 11 v)
             . showString " "
@@ -459,41 +460,42 @@ instance Eq (Object m) where
   Object vals1 == Object vals2 = eq vals1 vals2 where
     eq :: HListOf ConcreteCol m' -> HListOf ConcreteCol m' -> Bool
     eq NilOf NilOf = True
-    eq (ConsOf (ConcreteCol singv k1 v1) m1')
-       (ConsOf (ConcreteCol _     k2 v2) m2')
-      = k1 == k2 && withEq singv (v1 == v2) && eq m1' m2'
+    eq (ConsOf k1 (ConcreteCol singv _ v1) m1')
+       (ConsOf k2 (ConcreteCol _     _ v2) m2')
+      = eqSymB k1 k2 && withEq singv (v1 == v2) && eq m1' m2'
 
 -- | Wrapper for @SingTy@ so it can be used (unsaturated) as an argument to
 -- @SMap.Map@
 data ColumnTy a = ColumnTy !String !(SingTy a)
 
-data Schema (m :: [Ty]) = Schema !(HListOf ColumnTy m)
+data Schema (m :: [(Symbol, Ty)]) = Schema !(HListOf ColumnTy m)
 
 schemaTy :: Schema tys -> SingTy ('TyObject tys)
 schemaTy (Schema hlist) = SObject $ hListTys hlist
 
 hListTys :: HListOf f tys -> Sing tys
 hListTys NilOf = SNil
-hListTys (ConsOf _ty _tys) = error "TODO" -- SCons sing (hListTys tys)
+hListTys (ConsOf _k _ty _tys) = error "TODO" -- SCons sing (hListTys tys)
 
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow (Schema m) where
   userShowPrec _ (Schema tys) = "{" <> T.intercalate ", " (userShowTys tys) <> "}"
     where userShowTys :: HListOf ColumnTy m' -> [Text]
           userShowTys NilOf = []
-          userShowTys (ConsOf (ColumnTy key singv) m')
-            = T.pack key <> " : " <> userShow singv : userShowTys m'
+          userShowTys (ConsOf key (ColumnTy _ singv) m')
+            = T.pack (symbolVal key) <> " : " <> userShow singv : userShowTys m'
 
 instance Show (Schema m) where
   showsPrec p (Schema tys) = showParen (p > 11) $
     showString "Schema " . showString " " . showTys tys
     where showTys :: HListOf ColumnTy m' -> ShowS
           showTys NilOf = showString "NilOf"
-          showTys (ConsOf (ColumnTy key singv) tys') = showParen True $
+          showTys (ConsOf key (ColumnTy _ singv) tys') = showParen True $
               showString "ConsOf "
+            . showString "TODO"
             . showParen True (
                 showString "ColumnTy "
-              . showsPrec 11 key
+              . showsPrec 11 (symbolVal key)
               . showString " "
               . showsPrec 11 singv)
             . showTys tys'
@@ -800,7 +802,7 @@ withTypeable = withDict . singMkTypeable
 
 withTypeableListDict :: SingList tys -> (Typeable tys => b) -> b
 withTypeableListDict SNil f            = f
-withTypeableListDict (SCons _ty tys) f = withTypeableListDict tys f
+withTypeableListDict (SCons _k _ty tys) f = withTypeableListDict tys f
 
 withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = withDict . singMkSMTValue
@@ -822,15 +824,16 @@ instance SMTValue (Object '[]) where
   sexprToVal _ = Just $ Object NilOf
 
 instance (SMTValue (Concrete ty), SMTValue (Object tys))
-  => SMTValue (Object (ty ': tys)) where
+  => SMTValue (Object ('(k, ty) ': tys)) where
   -- recoverKindedValue :: Kind -> SExpr -> Maybe CW
   -- sexprToVal = fmap fromCW . recoverKindedValue (kindOf (undefined :: Object (ty ': tys)))
   -- sexprToVal :: SExpr -> Maybe a
   sexprToVal = error "TODO"
 
 withSMTValueListDict :: SingList tys -> (SMTValue (Object tys) => b) -> b
-withSMTValueListDict SNil f           = f
-withSMTValueListDict (SCons ty tys) f = withSMTValue ty $ withSMTValueListDict tys f
+withSMTValueListDict SNil f = f
+withSMTValueListDict (SCons _k ty tys) f
+  = withSMTValue ty $ withSMTValueListDict tys f
 
 withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> b
 withSymWord = withDict . singMkSymWord
@@ -849,8 +852,8 @@ withSymWord = withDict . singMkSymWord
       SObject tys -> withSymWordListDict tys Dict
 
 withSymWordListDict :: SingList tys -> (SymWord (Object tys) => b) -> b
-withSymWordListDict SNil f           = f
-withSymWordListDict (SCons ty tys) f
+withSymWordListDict SNil f = f
+withSymWordListDict (SCons _k ty tys) f
   = withTypeableListDict tys $ withSymWord ty $ withSymWordListDict tys f
 
 instance Ord (Object '[]) where
@@ -869,33 +872,33 @@ instance SymWord (Object '[]) where
   fromCW (CW _ (CWTuple [])) = Object NilOf
   fromCW c = error $ "invalid (Object '[]): " ++ show c
 
-instance (Ord (Concrete ty), Ord (Object tys)) => Ord (Object (ty ': tys)) where
-  compare (Object (ConsOf a tys1)) (Object (ConsOf b tys2))
+instance (Ord (Concrete ty), Ord (Object tys)) => Ord (Object ('(k, ty) ': tys)) where
+  compare (Object (ConsOf _ a tys1)) (Object (ConsOf _ b tys2))
     = compare a b <> compare (Object tys1) (Object tys2)
 
-instance (HasKind (Concrete ty), HasKind (Object tys)) => HasKind (Object (ty ': tys)) where
+instance (HasKind (Concrete ty), HasKind (Object tys)) => HasKind (Object ('(k, ty) ': tys)) where
   kindOf _ = case kindOf (undefined :: Object tys) of
     KTuple ks -> KTuple $ kindOf (undefined :: Concrete ty) : ks
     k         -> error $ "unexpected object kind: " ++ show k
 
-instance (SingI ty, Typeable ty, Typeable tys, SymWord (Concrete ty), SymWord (Object tys))
-  => SymWord (Object (ty ': tys)) where
+instance (SingI ty, Typeable ty, Typeable tys, SymWord (Concrete ty), SymWord (Object tys), KnownSymbol k)
+  => SymWord (Object ('(k, ty) ': tys)) where
 
-  mkSymWord = genMkSymVar (kindOf (undefined :: (Object (ty ': tys))))
+  mkSymWord = genMkSymVar (kindOf (undefined :: (Object ('(k, ty) ': tys))))
 
-  literal (Object (ConsOf (ConcreteCol _ _k x) xs)) = case literal x of
+  literal (Object (ConsOf _k (ConcreteCol _ _ x) xs)) = case literal x of
     SBVI.SBV (SVal _ (Left (CW _ xval))) -> case literal (Object xs) of
       SBVI.SBV (SVal (KTuple kxs) (Left (CW _ (CWTuple xsval)))) ->
         let k = SBVI.KTuple (kindOf x : kxs)
         in SBVI.SBV $ SVal k $ Left $ CW k $ CWTuple $ xval : xsval
-      _ -> error "SymWord.literal (Object (ty ': tys)): Cannot construct a literal value!"
-    _ -> error "SymWord.literal (Object (ty ': tys)): Cannot construct a literal value!"
+      _ -> error "SymWord.literal (Object ('(k, ty) ': tys)): Cannot construct a literal value!"
+    _ -> error "SymWord.literal (Object ('(k, ty) ': tys)): Cannot construct a literal value!"
 
   fromCW (CW (KTuple (k:ks)) (CWTuple (x:xs))) =
     case fromCW (CW (KTuple ks) (CWTuple xs)) of
       Object vals
-        -> Object (ConcreteCol sing "key" (fromCW (CW k x)) `ConsOf` vals)
-  fromCW c = error $ "invalid (Object (ty ': tys)): " ++ show c
+        -> Object $ ConsOf SSymbol (ConcreteCol sing "key" (fromCW (CW k x))) vals
+  fromCW c = error $ "invalid (Object ('(k, ty) ': tys)): " ++ show c
 
 -- columnMapToSchema :: ColumnMap EType -> Schema
 -- columnMapToSchema
