@@ -93,27 +93,19 @@
   (defconst TBOOL true)
 )
 
-(commit-tx)
-(begin-tx)
-
 (env-data { "test-keys" : ["test"] })
 (define-keyset 'test-keys)
 (env-keys ["test"])
 
-(module test-module 'test-keys
+(module global-module 'test-keys
   @doc "biplate test impl"
 
-  (implements test-sig)
-
-  (defschema test s:string)
-  (deftable test-table:{test})
-
-  (defun f:bool ()
+  (defun global:bool ()
     true)
-
-  (defun g:bool ()
-    test-sig.TBOOL)
 )
+
+(commit-tx)
+(begin-tx)
 
 (define-namespace 'test (read-keyset 'test-keys))
 (namespace 'test)
@@ -122,6 +114,7 @@
   @doc "biplate test impl"
 
   (implements test-sig)
+  (use global-module)
 
   (defschema test s:string)
   (deftable test-table:{test})
@@ -133,9 +126,19 @@
     test-sig.TBOOL)
 )
 
+(interface test-iface
+  (defun tif ()))
+
 
 (commit-tx)
 
 (use carl.carl-module)
 (expect "alice's triple reference" true alice.alice-contract.C1)
 (expect "qualified module name in table" "carl.carl-module" (at 'module (describe-table carl.carl-module.t)))
+
+(namespace 'test)
+(module m2 'test-keys
+  (use test-module)
+  (implements test-iface)
+  (defun tif () 1)
+)

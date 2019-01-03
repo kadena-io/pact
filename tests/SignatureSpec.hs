@@ -71,22 +71,3 @@ loadModuleData fp mn = do
   case preview (rsModules . ix mn) rs of
     Just md -> pure md
     Nothing -> die def $ "Could not load module data: " ++ show mn
-
-loadModuleData' :: RefStore -> ModuleName -> IO ModuleData
-loadModuleData' rs mn = case preview (rsModules . ix mn) rs of
-  Just md -> pure md
-  Nothing -> die def $ "Could not load module data: " ++ show mn
-
-loadModule :: FilePath -> ModuleName -> IO MOdule
-loadModule fp mn = do
-  md <- loadModuleData fp mn
-  case preview mdModule md of
-    Just m  -> pure m
-    Nothing -> die def $ "Could not load module: " ++ mn
-
-loadModule' :: RefStore -> ModuleName -> IO Module
-loadModule' rs mn = do
-  md <- loadModuleData' rs mn
-  case preview mdModule md of
-    Just m  -> pure m
-    Nothing -> die def $ "Could not load module: " ++ mn

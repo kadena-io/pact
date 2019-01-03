@@ -335,7 +335,7 @@ instance Hashable ModuleName where
     s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
 
 instance Show ModuleName where
-  show (ModuleName n _) = show n
+  show = unpack . asString
 
 instance AsString ModuleName where
   asString (ModuleName n Nothing) = n

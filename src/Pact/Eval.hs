@@ -49,7 +49,6 @@ import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Monad.Catch (throwM)
 import Data.List
-import Data.Data.Lens (biplate)
 import Control.Monad
 import Prelude
 import Bound
@@ -183,7 +182,7 @@ evalNamespace info m = do
       unless (policy mNs) $ evalError info $ "Definitions in default namespace are not authorized"
       return m
     Just (Namespace n _) ->
-      return $ over biplate (mangleModuleName n) m
+      return $ over (case m of Module {} -> mName; _ -> interfaceName) (mangleModuleName n) m
   where
     mangleModuleName :: NamespaceName -> ModuleName -> ModuleName
     mangleModuleName n mn@(ModuleName nn ns) =
@@ -234,9 +233,9 @@ eval t = enscope t >>= reduce
 
 evalUse :: Use -> Eval e ()
 evalUse (Use mn h i) = do
-  mm <- preview $ eeRefStore . rsModules . ix mn
+  mm <- resolveName mn
   case mm of
-    Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
+    Nothing -> evalError i $ "evalUse: Module " ++ show mn ++ " not found"
     Just md -> do
       case view mdModule md of
         Module{..} ->
@@ -358,7 +357,7 @@ evaluateConstraints info m evalMap =
   foldM evaluateConstraint (m, evalMap) $ _mInterfaces m
   where
     evaluateConstraint (m', refMap) ifn = do
-      refData <- preview $ eeRefStore . rsModules . ix ifn
+      refData <- resolveName ifn
       case refData of
         Nothing -> evalError info $
           "Interface not defined: " ++ asString' ifn
@@ -400,6 +399,20 @@ solveConstraint info refName (Ref t) evalMap = do
           -- the model concatenation step: we reinsert the ref back into the map with new models
           pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
+
+resolveName :: ModuleName -> Eval e (Maybe ModuleData)
+resolveName mn = do
+  md <- preview $ eeRefStore . rsModules . ix mn
+  case md of
+    Just _ -> return md
+    Nothing -> do
+      case (_mnNamespace mn) of
+        Just {} -> pure Nothing -- explicit namespace not found
+        Nothing -> do
+          mNs <- use $ evalRefs . rsNamespace
+          case mNs of
+            Just ns -> preview $ eeRefStore . rsModules . ix (set mnNamespace (Just . _nsName $ ns) mn)
+            Nothing -> pure Nothing
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef (QName q n _) = do

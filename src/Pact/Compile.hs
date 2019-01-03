@@ -174,7 +174,9 @@ qualifiedModuleName = do
   checkReserved _atomAtom
   case _atomQualifiers of
     []  -> return $ ModuleName _atomAtom Nothing
-    [n] -> return $ ModuleName _atomAtom (Just . NamespaceName $ n)
+    [n] -> do
+      checkReserved n
+      return $ ModuleName _atomAtom (Just . NamespaceName $ n)
     _   -> expected "qualified module name reference"
 
 freshTyVar :: Compile (Type (Term Name))
