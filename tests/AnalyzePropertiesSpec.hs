@@ -19,7 +19,6 @@ import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Translate      (maybeTranslateType)
 import           Pact.Analyze.Types          hiding (Object)
-import           Pact.Analyze.Types.Languages (singEqTm)
 
 import           Analyze.Eval
 import           Analyze.Gen

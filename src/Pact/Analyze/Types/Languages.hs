@@ -551,12 +551,6 @@ eqCoreTm _ (Typeof ty1 a1) (Typeof ty2 a2)
 
 eqCoreTm _ _ _                          = False
 
--- instance
---   ( Show (Concrete a)
---   , Show (Existential tm)
---   , IsTerm tm
---   ) => Show (Core tm a) where
-
 showsPrecCore :: IsTerm tm => SingTy a -> Int -> Core tm a -> ShowS
 showsPrecCore ty p core = showParen (p > 10) $ case core of
   Lit a            -> showString "Lit "        . withShow ty (showsPrec 11 a)
@@ -809,7 +803,6 @@ instance IsTerm tm => IsTerm (Core tm) where
   singShowsTm'    = singShowsTm
   singUserShowTm' = singUserShowTm
 
-
 userShowCore :: IsTerm tm => SingTy ty -> Int -> Core tm ty -> Text
 userShowCore ty _p = \case
   Lit a                    -> withUserShow ty $ userShow a
@@ -974,17 +967,9 @@ data PropSpecific (a :: Ty) where
 
   PropRead :: SingTy ('TyObject m) -> BeforeOrAfter -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
 
--- instance Eq   (Concrete a) => Eq   (PropSpecific a) where -- TODO
--- instance Show (Concrete a) => Show (PropSpecific a) where -- TODO
-
-
 data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
-
--- deriving instance Eq   (Concrete a) => Eq   (Prop a)
--- deriving instance Show (Concrete a) => Show (Prop a)
--- instance UserShow (Concrete a) => UserShow (Prop a) where -- TODO
 
 instance UserShow (PropSpecific a) where
   userShowPrec _d = \case
@@ -1011,11 +996,6 @@ instance UserShow (PropSpecific a) where
     RowEnforced tn cn rk    -> parenList [SRowEnforced, userShowTm tn, userShowTm cn, userShowTm rk]
     RowExists tn rk ba      -> parenList [SRowExists, userShowTm tn, userShowTm rk, userShow ba]
     PropRead _ty ba tn rk   -> parenList [SPropRead, userShowTm tn, userShowTm rk, userShow ba]
-
--- instance UserShow (Concrete a) => UserShow (Prop a) where
---   userShowPrec d = \case
---     PropSpecific p -> userShowPrec d p
---     CoreProp     p -> userShowPrec d p
 
 instance S :*<: Prop where
   inject' = CoreProp . Sym
@@ -1136,9 +1116,6 @@ pattern PNot a = CoreProp (Logical NotOp [a])
 -- constructions as 'Core'.
 newtype Invariant a = CoreInvariant (Core Invariant a)
 
--- deriving instance Eq   (Concrete a) => Eq   (Invariant a)
--- deriving instance Show (Concrete a) => Show (Invariant a)
-
 instance Core Invariant :<: Invariant where
   inject                    = CoreInvariant
   project (CoreInvariant a) = Just a
@@ -1154,9 +1131,6 @@ instance S :*<: Invariant where
   project' = \case
     CoreInvariant (Sym a) -> Just a
     _                     -> Nothing
-
--- instance UserShow (Concrete a) => UserShow (Invariant a) where
---   userShowPrec d (CoreInvariant a) = error "UserShow (Core Invariant)" -- userShowPrec d a
 
 type EInvariant = Existential Invariant
 
@@ -1260,9 +1234,6 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     ReadInteger name     -> parenList ["read-integer", userShow name]
 -}
 
--- deriving instance Eq   (Concrete a) => Eq   (Term a)
--- deriving instance Show (Concrete a) => Show (Term a)
-
 instance S :*<: Term where
   inject' = CoreTerm . Sym
   project' = \case
@@ -1299,5 +1270,41 @@ instance Num (Term 'TyDecimal) where
 
 valueToProp :: ETerm -> Either String EProp
 valueToProp = \case
-  Existential ty (CoreTerm (Lit l)) -> Right $ Existential ty (CoreProp (Lit l))
+  Existential ty (CoreTerm (Lit l))
+    -> Right $ Existential ty (CoreProp (Lit l))
   Existential _ _ -> Left "can only convert (simple) values terms to props"
+
+-- Note [instances]:
+-- The following nine instances seem like they should be
+--
+--     instance (IsTerm tm, SingI ty) => UserShow (tm ty) where
+--
+-- Unfortunately, that's a nightmare in terms of overlap. So we implement an
+-- instance for each term type.
+
+instance SingI ty => UserShow (Term ty) where
+  userShowPrec _ = singUserShowTm sing
+
+instance SingI ty => UserShow (Prop ty) where
+  userShowPrec _ = singUserShowTm sing
+
+instance SingI ty => UserShow (Invariant ty) where
+  userShowPrec _ = singUserShowTm sing
+
+instance SingI ty => Show (Term ty) where
+  showsPrec = singShowsTm sing
+
+instance SingI ty => Show (Prop ty) where
+  showsPrec = singShowsTm sing
+
+instance SingI ty => Show (Invariant ty) where
+  showsPrec = singShowsTm sing
+
+instance SingI ty => Eq (Term ty) where
+  (==) = singEqTm sing
+
+instance SingI ty => Eq (Prop ty) where
+  (==) = singEqTm sing
+
+instance SingI ty => Eq (Invariant ty) where
+  (==) = singEqTm sing
