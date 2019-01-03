@@ -40,7 +40,7 @@ testModuleNames mn mn' = do
       mn `shouldBe` mn'
       ifs `shouldBe` ifs'
       imports `shouldBe` imports'
-    compareModules (Interface ifn _ _) (Interface ifn' _ _) =
+    compareModules (Interface ifn _ _ _) (Interface ifn' _ _ _) =
       ifn `shouldBe` ifn'
     compareModules _ _ = die def $ "Cannot compare incompatible module types"
 

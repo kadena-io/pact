@@ -35,7 +35,7 @@ module Pact.Types.Runtime
    KeyPredBuiltins(..),keyPredBuiltins,
    Capability(..),CapAcquireResult(..),
    NamespacePolicy(..), nsPolicy,
-   defaultNamespacePolicy,
+   permissiveNamespacePolicy,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -430,7 +430,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     purity
     _eeHash
     _eeGasEnv
-    defaultNamespacePolicy
+    permissiveNamespacePolicy
 
 
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))

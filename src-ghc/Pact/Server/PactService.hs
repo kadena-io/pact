@@ -101,7 +101,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet _cmdSigs
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv defaultNamespacePolicy
+                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv permissiveNamespacePolicy
   pr <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec (erInput pr)) (erExec pr)
   let newPacts = case newCmdPact of
