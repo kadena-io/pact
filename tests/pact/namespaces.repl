@@ -84,6 +84,58 @@
 (commit-tx)
 (begin-tx)
 
+;; Used as part of NamespaceSpec test making sure
+;; namespaces propagate down the term tree
+(interface test-sig
+  @doc "test for biplate"
+
+  (defun f:bool ())
+  (defconst TBOOL true)
+)
+
+(commit-tx)
+(begin-tx)
+
+(env-data { "test-keys" : ["test"] })
+(define-keyset 'test-keys)
+(env-keys ["test"])
+
+(module test-module 'test-keys
+  @doc "biplate test impl"
+
+  (implements test-sig)
+
+  (defschema test s:string)
+  (deftable test-table:{test})
+
+  (defun f:bool ()
+    true)
+
+  (defun g:bool ()
+    test-sig.TBOOL)
+)
+
+(define-namespace 'test (read-keyset 'test-keys))
+(namespace 'test)
+
+(module test-module 'test-keys
+  @doc "biplate test impl"
+
+  (implements test-sig)
+
+  (defschema test s:string)
+  (deftable test-table:{test})
+
+  (defun f:bool ()
+    true)
+
+  (defun g:bool ()
+    test-sig.TBOOL)
+)
+
+
+(commit-tx)
+
 (use carl.carl-module)
 (expect "alice's triple reference" true alice.alice-contract.C1)
 (expect "qualified module name in table" "carl.carl-module" (at 'module (describe-table carl.carl-module.t)))

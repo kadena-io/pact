@@ -23,20 +23,6 @@ import Pact.Types.Term (Module(..), ModuleName(..),
 spec :: Spec
 spec = compareModelSpec
 
-
-loadRefStore :: FilePath -> IO RefStore
-loadRefStore fp = do
-  (r,s) <- execScript' Quiet fp
-  either (die def) (const (return ())) r
-  case preview (rEnv . eeRefStore) s of
-    Just md -> return md
-    Nothing -> die def $ "Could not load module data from " ++ show fp
-
-loadModuleData :: RefStore -> ModuleName -> IO ModuleData
-loadModuleData rs mn = case preview (rsModules . ix mn) rs of
-  Just md -> pure md
-  Nothing -> die def $ "Could not load module data: " ++ show mn
-
 compareModelSpec :: Spec
 compareModelSpec = describe "Module models" $ do
   rs  <- runIO $ loadRefStore "tests/pact/signatures.repl"
@@ -70,3 +56,37 @@ aggregateFunctionModels ModuleData{..} =
 -- 'Info', and only compares relevant terms.
 expEquality :: Exp Info -> Exp Info -> Bool
 expEquality e1 e2 = ((def :: Info) <$ e1) == ((def :: Info) <$ e2)
+
+loadRefStore :: FilePath -> IO RefStore
+loadRefStore fp = do
+  (r,s) <- execScript' Quiet fp
+  either (die def) (const (return ())) r
+  case preview (rEnv . eeRefStore) s of
+    Just md -> return md
+    Nothing -> die def $ "Could not load module data from " ++ show fp
+
+loadModuleData :: FilePath -> ModuleName -> IO ModuleData
+loadModuleData fp mn = do
+  rs <- loadRefStore fp
+  case preview (rsModules . ix mn) rs of
+    Just md -> pure md
+    Nothing -> die def $ "Could not load module data: " ++ show mn
+
+loadModuleData' :: RefStore -> ModuleName -> IO ModuleData
+loadModuleData' rs mn = case preview (rsModules . ix mn) rs of
+  Just md -> pure md
+  Nothing -> die def $ "Could not load module data: " ++ show mn
+
+loadModule :: FilePath -> ModuleName -> IO MOdule
+loadModule fp mn = do
+  md <- loadModuleData fp mn
+  case preview mdModule md of
+    Just m  -> pure m
+    Nothing -> die def $ "Could not load module: " ++ mn
+
+loadModule' :: RefStore -> ModuleName -> IO Module
+loadModule' rs mn = do
+  md <- loadModuleData' rs mn
+  case preview mdModule md of
+    Just m  -> pure m
+    Nothing -> die def $ "Could not load module: " ++ mn

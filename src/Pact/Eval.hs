@@ -183,10 +183,10 @@ evalNamespace info m = do
       unless (policy mNs) $ evalError info $ "Definitions in default namespace are not authorized"
       return m
     Just (Namespace n _) ->
-      return $ over biplate (mangleModule n) m
+      return $ over biplate (mangleModuleName n) m
   where
-    mangleModule :: NamespaceName -> ModuleName -> ModuleName
-    mangleModule n mn@(ModuleName nn ns) =
+    mangleModuleName :: NamespaceName -> ModuleName -> ModuleName
+    mangleModuleName n mn@(ModuleName nn ns) =
       case ns of
         Nothing -> ModuleName nn (Just n)
         Just {} -> mn

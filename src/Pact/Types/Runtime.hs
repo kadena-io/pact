@@ -80,8 +80,8 @@ newtype NamespacePolicy = NamespacePolicy
   }
 makeLenses ''NamespacePolicy
 
-defaultNamespacePolicy :: NamespacePolicy
-defaultNamespacePolicy = NamespacePolicy $ const True
+permissiveNamespacePolicy :: NamespacePolicy
+permissiveNamespacePolicy = NamespacePolicy $ const True
 
 data StackFrame = StackFrame {
       _sfName :: !Text
@@ -222,7 +222,6 @@ makeLenses ''EvalEnv
 -- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      -- TODO: Name -> Text
       _rsLoaded :: HM.HashMap Name Ref
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName Module

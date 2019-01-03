@@ -287,15 +287,10 @@ data NativeDFun = NativeDFun
   , _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
   } deriving (Typeable)
 
-nativeDFunCons :: Constr
-nativeDFunCons = mkConstr nativeDFunDataType "NativeDFun" [] Prefix
-nativeDFunDataType :: DataType
-nativeDFunDataType = mkDataType "Pact.Types.Term.NativeDFun" [nativeDFunCons]
-
 instance Data NativeDFun where
   gunfold _ _ _ = error "Cannot `gunfold` NativeDFun - native functions are not data"
-  toConstr (NativeDFun _ _) = nativeDFunCons
-  dataTypeOf _ = nativeDFunDataType
+  toConstr (NativeDFun _ _) = mkConstr nativeDFunDataType "NativeDFun" [] Prefix
+  dataTypeOf _ = mkDataType "Pact.Types.Term.NativeDFun" [mkConstr nativeDFunDataType "NativeDFun" [] Prefix]
 
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a
@@ -463,7 +458,7 @@ instance ToJSON Module where
     , "code" .= _mCode
     , "hash" .= _mHash
     , "blessed" .= _mBlessed
-    , "interfaces" .= _mInterfaces
+    , "interfaces" .= _mInterface
     ]
   toJSON Interface{..} = object
     [ "name" .= _interfaceName

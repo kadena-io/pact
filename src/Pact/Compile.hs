@@ -241,7 +241,7 @@ literals =
   <|> objectLiteral
 
 
--- | Qualified or unqualified user-available atoms (excluding reserved words).
+-- | Bare atoms (excluding reserved words).
 userAtom :: Compile (AtomExp Info)
 userAtom = do
   a@AtomExp{..} <- bareAtom

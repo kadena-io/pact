@@ -214,11 +214,9 @@ readDecimalDef = defRNative "read-decimal" readDecimal
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
-  "Create a namespace called NAMESPACE for a given GUARD. All expressions that occur in a \
-  \given transaction will be tied to NAMESPACE, and may be accessed using the toplevel \
-  \call (namespace NAMESPACE) when GUARD is in scope. If NAMESPACE is already defined, then \
-  \the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in \
-  \its place. \
+  "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
+  \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
+  \and GUARD will be rotated in its place. \
   \`$(define-namespace 'my-namespace (read-keyset 'my-keyset))`"
   where
     defineNamespace :: RNativeFun e
@@ -238,8 +236,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
 
     enforcePolicy info ns = do
       NamespacePolicy{..} <- view eeNamespacePolicy
-      if _nsPolicy (Just ns) then pure ()
-        else evalError info $ "Namespace definition not permitted"
+      unless (_nsPolicy . Just $ ns) $ evalError info "Namespace definition not permitted"
 
     writeNamespace info n g =
       success ("Namespace defined: " <> asString n) $
