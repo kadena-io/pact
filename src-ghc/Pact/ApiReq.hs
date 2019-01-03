@@ -18,8 +18,8 @@
 
 module Pact.ApiReq
     (
-     ApiKeyPair(..)
-    ,ApiReq(..)
+     --ApiKeyPair(..)
+    ApiReq(..)
     ,apiReq
     ,mkApiReq
     ,mkExec
@@ -50,9 +50,9 @@ import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.API
 
-data SomeX = forall n . SomeX (SPPKScheme n)
+--data SomeX = forall n . SomeX (SPPKScheme n)
 
-data ApiKeyPair = ApiKeyPair {
+{--data ApiKeyPair = ApiKeyPair {
   _kpSecret :: ByteString,
   _kpPublic :: ByteString,
   _kpScheme :: Maybe PPKScheme
@@ -68,7 +68,7 @@ instance FromJSON ApiKeyPair where
     secret <- (o .: "secret")
     public <- (o .: "public")
     return $ ApiKeyPair secret public addr
-
+--}
 data ApiReq = ApiReq {
   _ylType :: Maybe String,
   _ylTxId :: Maybe TxId,
@@ -79,7 +79,7 @@ data ApiReq = ApiReq {
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
   _ylCodeFile :: Maybe FilePath,
-  _ylKeyPairs :: [ApiKeyPair],
+  _ylKeyPairs :: [SomeKeyPair],
   _ylNonce :: Maybe String,
   _ylFrom :: Maybe EntityName,
   _ylTo :: Maybe [EntityName]
@@ -128,15 +128,15 @@ mkApiReqExec ar@ApiReq{..} fp = do
     _ -> dieAR "Must specify to AND from if specifying addresses"
   ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
 
-mkExec :: String -> Value -> Maybe Address -> [ApiKeyPair] -> Maybe String -> IO (Command Text)
+mkExec :: String -> Value -> Maybe Address -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
 mkExec code mdata addy akps ridm = do
-  keyPairs <- case (mkKeyPairs akps) of
+  {--keyPairs <- case (mkKeyPairs akps) of
     Right kps -> return kps
-    Left err -> dieAR err
+    Left err -> dieAR err--}
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    keyPairs
+    akps
     addy
     (pack $ show rid)
     (Exec (ExecMsg (pack code) mdata))
@@ -169,21 +169,22 @@ mkApiReqCont ar@ApiReq{..} fp = do
     _ -> dieAR "Must specify to AND from if specifying addresses"
   ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy _ylKeyPairs _ylNonce
 
-mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [ApiKeyPair]
+mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [SomeKeyPair]
   -> Maybe String -> IO (Command Text)
 mkCont txid step rollback mdata addy akps ridm = do
-  keyPairs <- case (mkKeyPairs akps) of
+  {--keyPairs <- case (mkKeyPairs akps) of
     Right kps -> return kps
-    Left err -> dieAR err
+    Left err -> dieAR err--}
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    keyPairs
+    akps
     addy
     (pack $ show rid)
     (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
 
-mkKeyPairs :: [ApiKeyPair] -> Either String [KeyPair]
+
+{--mkKeyPairs :: [ApiKeyPair] -> Either String [KeyPair]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
   where mkPair ApiKeyPair{..} =
           let scheme = addressToScheme $ fromMaybe def _kpScheme
@@ -192,7 +193,7 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
                Nothing -> Left $ "Public Key and or Private Key does not match scheme provided: "
                        ++ "Received " ++ show scheme ++ " scheme but received the following key pair "
                        ++ show _kpPublic ++ ",  " ++ show _kpSecret
-
+--}
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
   \  code: Transaction code \n\

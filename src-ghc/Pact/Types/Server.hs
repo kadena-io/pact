@@ -59,18 +59,17 @@ import Data.HashMap.Strict (HashMap)
 import Prelude
 
 import Pact.Types.Runtime as Pact
-import Pact.Types.Crypto (PPKScheme(..), AddressFormat(..))
+import Pact.Types.Crypto (formatPublicKey)
 import Pact.Types.Orphans ()
 import Pact.Types.SQLite
 import Pact.Types.Command
 import Pact.Types.Logger
+import Pact.Types.Util
 import Pact.Interpreter
 
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
 userSigToPactPubKey UserSig{..} =
-  let (PPKScheme (format,_,_)) = _usScheme
-  in case format of
-    Chainweb -> Pact.PublicKey $ encodeUtf8 _usPubKey
+  Pact.PublicKey $ encodeUtf8 $ formatPublicKey _usScheme (fromTextWith' parseB16Text _usPubKey)
 
 userSigsToPactKeySet :: [UserSig] -> S.Set Pact.PublicKey
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey

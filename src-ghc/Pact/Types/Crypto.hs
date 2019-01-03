@@ -19,7 +19,7 @@
 --
 module Pact.Types.Crypto
   ( hashTx, verifyHashTx, initialHashTx
-  ,  PPKScheme(..), SPPKScheme(..), KeyPair(..), SomeKeyPair(..), toScheme, Scheme(..)
+  , PPKScheme(..), SPPKScheme(..), KeyPair(..), SomeKeyPair(..), toScheme, Scheme(..)
   , hashLengthAsBS, hashLengthAsBase16, hashToB16Text
   ) where
 
@@ -29,6 +29,7 @@ import Control.DeepSeq
 
 import "crypto-api" Crypto.Random
 import qualified Crypto.Ed25519.Pure as Ed25519
+import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.Hash as H
 
 import Data.Aeson as A
@@ -62,7 +63,7 @@ initialHashTx :: (H.HashAlgorithm a) => a -> Hash
 initialHashTx algo = hashTx algo mempty
 
 class Scheme a where
-  type PublicKey a
+  --type PublicKey a
   type PrivateKey a
   type Signature a
   type PayloadHash a
@@ -74,7 +75,7 @@ class Scheme a where
   exportSignature :: a -> Signature a -> ByteString
   sign :: a -> ByteString -> PublicKey a -> PrivateKey a -> Signature a
   valid :: a -> ByteString -> PublicKey a -> Signature a -> Bool
-  formatPublicKey :: a -> PublicKey a -> ByteString
+  formatPublicKey :: a -> ByteString -> ByteString
   genKey :: a -> IO (PrivateKey a, PublicKey a)
 
 data PPKScheme = ED25519 | ETH
@@ -95,52 +96,108 @@ instance Serialize PPKScheme
 data SPPKScheme :: PPKScheme -> Type where
   SED25519 :: SPPKScheme 'ED25519
   SETH :: SPPKScheme 'ETH
+--data SomePPKScheme = forall n . SomePPKScheme (SPPKScheme n)
+
 
 data KeyPair a = KeyPair
   { _kpScheme :: SPPKScheme a
   , _kpPublicKey :: PublicKey (SPPKScheme a)
   , _kpPrivateKey :: PrivateKey (SPPKScheme a)
   }
-
 data SomeKeyPair = forall n . SomeKeyPair (KeyPair n)
-instance FromJSON (SomeKeyPair) where
+instance Scheme (SPPKScheme n) where
+  --type PublicKey (SPPKScheme n) = Ed25519.PublicKey
+  type PrivateKey (SPPKScheme n) = Ed25519.PrivateKey
+  type Signature (SPPKScheme n) = Ed25519.Signature
+  type PayloadHash (SPPKScheme n) = H.Blake2b_512
+  payloadHash = payloadHash
+  importPublic = importPublic
+  importPrivate _ bs = undefined
+  exportPublic = exportPublic'
+  exportPrivate _ priv = undefined
+  exportSignature _ _ = undefined
+  sign scheme msg priv pub = undefined
+  valid scheme msg pub sig = undefined
+  formatPublicKey _ p = undefined
+  genKey _ = undefined
+
+type family PublicKey a where
+  PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
+  PublicKey (SPPKScheme 'ETH) = Ed25519.PublicKey
+
+exportPublic' :: (SPPKScheme a) -> PublicKey (SPPKScheme a) -> ByteString
+exportPublic' = undefined
+
+instance Eq SomeKeyPair where
+  k1 == k2 = undefined
+instance Show SomeKeyPair where
+  show = undefined
+  
+instance ToJSON SomeKeyPair where
+  toJSON = undefined
+instance FromJSON SomeKeyPair where
     parseJSON = withObject "SomeKeyPair" $ \o -> do
-      addr <- (o .:? "scheme")
-      secret <- (o .: "secret")
-      public <- (o .: "public")
-      sAddr <- maybe "ED25519" return addr
-      case (sAddr :: String) of
-          "ED25519" -> return $ SomeKeyPair $ KeyPair SED25519 public secret
-          "ETH" -> return $ SomeKeyPair $ KeyPair SETH public secret
+      addr <- (o .: "scheme")
+      case (addr :: String) of
+          "ED25519" -> do
+            esecret :: PrivateKey (SPPKScheme 'ED25519) <- (o .: "secret")
+            epublic :: PublicKey (SPPKScheme 'ED25519) <- (o .: "public")
+            return $ SomeKeyPair $ KeyPair SED25519 epublic esecret
+          "ETH" -> do
+            etsecret :: PrivateKey ((SPPKScheme 'ETH)) <- (o .: "secret")
+            etpublic :: PublicKey ((SPPKScheme 'ETH)) <- (o .: "public")
+            return $ SomeKeyPair $ KeyPair SETH etpublic etsecret
 
 toScheme :: SPPKScheme a -> PPKScheme
 toScheme SED25519 = ED25519
 toScheme SETH = ETH
 
-instance Scheme (SPPKScheme 'ED25519) where
+{--instance Scheme (SPPKScheme 'ED25519) where
   type PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
   type PrivateKey (SPPKScheme 'ED25519) = Ed25519.PrivateKey
   type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
   type PayloadHash (SPPKScheme 'ED25519) = H.Blake2b_512
+  
   payloadHash _ = H.Blake2b_512
   importPublic _ bs = Ed25519.importPublic bs
   importPrivate _ bs = Ed25519.importPrivate bs
-  exportPublic _ pub = Ed25519.exportPublic pub
+  --exportPublic _ pub = Ed25519.exportPublic pub
   exportPrivate _ priv = Ed25519.exportPrivate priv
   exportSignature _ (Ed25519.Sig bs) = bs
   sign scheme msg priv pub =
-    let (Hash hsh) = hashTx (payloadHash scheme) msg
+    let (Hash hsh) = hashTx H.Blake2b_512 msg
     in Ed25519.sign hsh pub priv
   valid scheme msg pub sig =
-     let (Hash hsh) = hashTx (payloadHash scheme) msg
+     let (Hash hsh) = hashTx H.Blake2b_512 msg
      in Ed25519.valid hsh pub sig
   formatPublicKey _ p = Ed25519.exportPublic p
   genKey _ = do
     g :: SystemRandom <- newGenIO
     case Ed25519.generateKeyPair g of
       Left _ -> error "Something went wrong in genKeyPairs"
-      Right (s,p,_) -> return (s,p)
+      Right (s,p,_) -> return (s,p)--}
 
+{--instance Scheme (SPPKScheme 'ETH) where
+  type PublicKey (SPPKScheme 'ETH) = ECDSA.PublicKey
+  type PrivateKey (SPPKScheme 'ETH) = ECDSA.PrivateKey
+  type Signature (SPPKScheme 'ETH) = ECDSA.Signature
+  type PayloadHash (SPPKScheme 'ETH) = H.Blake2b_512
+  payloadHash _ = H.Blake2b_512
+  importPublic _ bs = undefined
+  importPrivate _ bs = undefined
+  exportPublic _ pub = undefined
+  exportPrivate _ priv = undefined
+  exportSignature _ _ = undefined
+  sign scheme msg priv pub = undefined
+  valid scheme msg pub sig = undefined
+  formatPublicKey _ p = undefined
+  genKey _ = undefined
+
+instance FromJSON ECDSA.PrivateKey where
+  parseJSON = undefined
+--}
+instance FromJSON ECDSA.PublicKey where
+  parseJSON = undefined
 
 instance ToJSON ByteString where
   toJSON = String . decodeUtf8

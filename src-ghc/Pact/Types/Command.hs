@@ -88,15 +88,16 @@ instance (FromJSON a) => FromJSON (Command a) where
 
 instance NFData a => NFData (Command a)
 
-mkCommand :: (Scheme (SPPKScheme s), ToJSON a) => [KeyPair s] -> Maybe Address -> Text -> a -> Command ByteString
+mkCommand :: (ToJSON a) => [SomeKeyPair] -> Maybe Address -> Text -> a -> Command ByteString
 mkCommand creds addy nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce addy)
 
-mkCommand' :: (Scheme (SPPKScheme s)) => [KeyPair s] -> ByteString -> Command ByteString
+mkCommand' :: [SomeKeyPair] -> ByteString -> Command ByteString
 mkCommand' creds env = makeCommand (makeSigs <$> creds)
   where makeCommand sigs = Command env sigs hsh
         hsh = hashTx H.Blake2b_512 env    -- hash associated with a Command, aka a Command's Request Key
-        makeSigs KeyPair{..} =
-          let pubBS = toB16Text $ exportPublic _kpScheme _kpPublicKey
+        makeSigs (SomeKeyPair kp) =
+          let KeyPair{..} = kp
+              pubBS = toB16Text $ exportPublic _kpScheme _kpPublicKey
               sig = toB16Text $ exportSignature _kpScheme $ sign _kpScheme env _kpPublicKey _kpPrivateKey
           in (UserSig (toScheme _kpScheme) pubBS sig)
 
