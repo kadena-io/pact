@@ -68,7 +68,6 @@ testDualEvaluation' etm ty gState = do
         Existential ty' (CoreTerm (LiteralList lty svals)) -> do
           -- compare results
           case analyzeVal of
-            -- TODO
             -- Existential ty'' (CoreTerm (LiteralList lty' svals')) -> case singEq lty lty' of
             --   Just Refl -> if length svals > 10
             --     then discard

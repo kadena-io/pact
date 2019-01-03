@@ -966,7 +966,7 @@ data PropSpecific (a :: Ty) where
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
 
-  PropRead :: SingTy ('TyObject m) -> Schema m -> BeforeOrAfter -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
+  PropRead :: SingTy ('TyObject m) -> BeforeOrAfter -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
 
 -- instance Eq   (Concrete a) => Eq   (PropSpecific a) where -- TODO
 -- instance Show (Concrete a) => Show (PropSpecific a) where -- TODO
@@ -975,6 +975,15 @@ data PropSpecific (a :: Ty) where
 data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
+
+instance Show (Prop a) where
+  show _ = "TODO"
+  -- showsPrec p = \case
+  --   PropSpecific tm -> showsPrec p tm
+  --   CoreProp     tm -> showsPrec p tm
+
+instance Eq (Prop a) where
+  _ == _ = error "TODO"
 
 -- deriving instance Eq   (Concrete a) => Eq   (Prop a)
 -- deriving instance Show (Concrete a) => Show (Prop a)
@@ -1004,7 +1013,7 @@ instance UserShow (PropSpecific a) where
     KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
     RowEnforced tn cn rk    -> parenList [SRowEnforced, userShowTm tn, userShowTm cn, userShowTm rk]
     RowExists tn rk ba      -> parenList [SRowExists, userShowTm tn, userShowTm rk, userShow ba]
-    PropRead _ty _sch ba tn rk  -> parenList [SPropRead, userShowTm tn, userShowTm rk, userShow ba]
+    PropRead _ty ba tn rk   -> parenList [SPropRead, userShowTm tn, userShowTm rk, userShow ba]
 
 -- instance UserShow (Concrete a) => UserShow (Prop a) where
 --   userShowPrec d = \case

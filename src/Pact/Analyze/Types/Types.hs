@@ -199,6 +199,13 @@ instance (Typeable v, SingI v, SingI m, KnownSymbol k)
   => SingI ('TyObject ('(k, v) ': m)) where
   sing = SObject (SCons SSymbol sing sing)
 
+instance SingI ('[] :: [(Symbol, Ty)]) where
+  sing = SNil
+
+instance (KnownSymbol k, Typeable v, SingI v, SingI kvs)
+  => SingI (('(k, v) ': kvs) :: [(Symbol, Ty)]) where
+  sing = SCons SSymbol sing sing
+
 type family IsSimple (ty :: Ty) :: Bool where
   IsSimple ('TyList _)   = 'False
   IsSimple ('TyObject _) = 'False

@@ -205,7 +205,7 @@ evalPropSpecific (RowEnforced tn cn pRk) = do
   cn' <- getLitColName cn
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
-evalPropSpecific (PropRead _ty (Schema fields) ba tn pRk) = do
+evalPropSpecific (PropRead (SObject fields) ba tn pRk) = do
   (tn' :: TableName) <- getLitTableName (tn :: Prop TyTableName)
   sRk <- evalProp pRk
   let fields' :: [(String, EType)]

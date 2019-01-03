@@ -401,12 +401,12 @@ evalStrToIntBase bT sT = do
 
 relevantFields :: (Typeable a, SingI a) => SingTy a -> Object obj -> EObject
 relevantFields _ obj@(Object NilOf) = EObject SNil obj
-relevantFields targetTy (Object (ConsOf key (ConcreteCol vTy name v) vals))
+relevantFields targetTy (Object (ConsOf key (ConcreteCol vTy v) vals))
   = case relevantFields targetTy (Object vals) of
       EObject ty obj'@(Object vals') -> case singEq targetTy vTy of
         Nothing   -> EObject ty obj'
         Just Refl -> EObject (SCons key sing ty) $
-          Object (ConsOf key (ConcreteCol vTy name v) vals')
+          Object (ConsOf key (ConcreteCol vTy v) vals')
 
 evalObjAt
   :: Analyzer m

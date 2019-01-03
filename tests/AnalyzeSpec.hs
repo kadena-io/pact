@@ -961,9 +961,10 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ Inj Success
 
-    let schema = Schema $
-          ConsOf (ColumnTy "name" SStr) (ConsOf (ColumnTy "balance" SInteger) NilOf)
-        -- ety    = EType SStr
+    let schema = SObject $
+          SCons (SSymbol @"name") SStr $
+            SCons (SSymbol @"balance") SInteger $
+              SNil
     expectPass code $ Valid $ CoreProp $ StrComparison Eq
       (PObjAt schema (Lit' "name") (Inj Result))
       (Lit' "stu" :: Prop 'TyStr)
@@ -1263,7 +1264,7 @@ spec = describe "analyze" $ do
                       (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
                     _ -> fail "Failed pattern match"
 
-                let negativeWrite (Object m) = case m Map.! "balance" of
+                let negativeWrite (UObject m) = case m Map.! "balance" of
                       (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
                       _                   -> False
 
@@ -2006,31 +2007,39 @@ spec = describe "analyze" $ do
         Left "in (+ 0 1), unexpected argument types for (+): integer and integer"
 
     it "infers prop objects" $ do
-      let pairSchema = Schema $
-            Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
-          ety = EType SInteger
-          litPair = CoreProp $ LiteralObject $ Map.fromList
-            [ ("x", Existential SInteger (Lit' 0))
-            , ("y", Existential SInteger (Lit' 1))
-            ]
+      -- let pairSchema = Schema $
+      --       Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
+      let pairSchema = SObject $
+            SCons (SSymbol @"x") SInteger $
+              SCons (SSymbol @"y") SInteger $
+                SNil
+          litPair = Object $
+            ConsOf (SSymbol @"x") (ConcreteCol sing 0) $
+            ConsOf (SSymbol @"y") (ConcreteCol sing 1) $
+            NilOf
+          litPairProp = CoreProp $ LiteralObject pairSchema litPair
 
-          nestedObj = CoreProp $ LiteralObject $
-            Map.singleton "foo" (EObject pairSchema litPair)
+          nestedObj = CoreProp $ LiteralObject
+            nestedSchema
+            (Object $ ConsOf (SSymbol @"foo") (ConcreteCol sing litPair) NilOf)
+            -- Map.singleton "foo" (EObject pairSchema litPair)
 
-          nestedSchema = Schema $
-            Map.singleton "foo" (EObjectTy pairSchema)
+          nestedSchema =
+            SObject $ SCons (SSymbol @"foo") pairSchema SNil
+           -- Schema $
+           --  Map.singleton "foo" (EObjectTy pairSchema)
 
       inferProp'' "{ 'x: 0, 'y: 1 }"
         `shouldBe`
-        Right (EObject pairSchema litPair)
+        Right (Existential pairSchema litPairProp)
 
       inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
         `shouldBe`
-        Right (Existential SInteger (PObjAt pairSchema (Lit' "x") litPair ety))
+        Right (Existential SInteger (PObjAt pairSchema (Lit' "x") litPairProp))
 
       inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
         `shouldBe`
-        Right (EObject nestedSchema nestedObj)
+        Right (Existential nestedSchema nestedObj)
 
     it "infers forall / exists" $ do
       inferProp'' "(forall (x:string y:string) (= x y))"
@@ -2248,8 +2257,11 @@ spec = describe "analyze" $ do
 
   describe "UserShow" $
     it "schema looks okay" $ do
-      let schema = Schema $
-            Map.fromList [("name", EType SStr), ("balance", EType SInteger)]
+      let schema = SObject $
+            SCons (SSymbol @"name") SStr $
+              SCons (SSymbol @"balance") SInteger
+                SNil
+       -- Schema $ Map.fromList [("name", EType SStr), ("balance", EType SInteger)]
       userShow schema `shouldBe` "{ balance: integer, name: string }"
 
   describe "at-properties verify" $ do
@@ -2533,10 +2545,11 @@ spec = describe "analyze" $ do
               (write accounts acct { 'balance: 100 })))
           |]
     let acct           = PVar 1 "acct"
-        schema         = Schema $ Map.singleton "balance" $ EType SInteger
-        readBalance ba = PObjAt schema "balance"
-          (PropSpecific $ PropRead ba schema "accounts" acct)
-          (EType SInteger)
+        objTy         = -- Schema $ Map.singleton "balance" $ EType SInteger
+          SObject $
+            SCons (SSymbol @"balance") SInteger SNil
+        readBalance ba = PObjAt objTy "balance"
+          (PropSpecific $ PropRead objTy ba "accounts" acct)
         exists ba      = PropSpecific (RowExists "accounts" acct ba)
 
     expectPass code7 $ Valid $
