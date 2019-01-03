@@ -246,10 +246,10 @@ namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
   (funType tTyString [("namespace", tTyString)])
   "Set the current namespace to NAMESPACE. All expressions that occur in a current \
-  \transaction will be contained in NAMESPACE, and once committed, mayy be accessed \
-  \via their fully qualified name, which will include the namespace. For example, \
-  \if Alice were to define an interface named AbstractBob in the namespace Carl, \
-  \then it would be referenced by the name Carl.AbstractBob. \
+  \transaction will be contained in NAMESPACE, and once committed, may be accessed \
+  \via their fully qualified name, which will include the namespace. Subsequent \
+  \namespace calls in the same tx will set a new namespace for all declarations \
+  \until either the next namespace declaration, or the end of the tx. \
   \`$(namespace 'my-namespace)`"
   where
     namespace :: RNativeFun e
