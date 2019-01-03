@@ -1,9 +1,12 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      :  Pact.Compile
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -19,6 +22,7 @@ module Pact.Parse
     ,parseExprs
     ,number
     ,PactParser(unPactParser)
+    ,ParsedInteger(..),ParsedDecimal(..)
     )
 
 where
@@ -33,10 +37,15 @@ import Data.Decimal
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (digitToInt)
 import Data.Text (Text)
+import qualified Data.Aeson as A
+import GHC.Generics (Generic)
+import Data.Serialize (Serialize)
+import Control.DeepSeq (NFData)
 
 import Pact.Types.Exp
 import Pact.Types.Parser
 import Pact.Types.Info
+
 
 
 -- | Main parser for Pact expressions.
@@ -105,6 +114,41 @@ exprs = some expr
 -- Unnecessary with Atto's 'parseOnly'.
 exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [Exp Parsed]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
+
+
+
+-- | JSON serialization for 'readDecimal' and public meta info;
+-- accepts both a String version (parsed as a Pact decimal) or
+-- a Number.
+newtype ParsedDecimal = ParsedDecimal Decimal
+  deriving (Eq,Show,Ord,Num,Real,Fractional,Generic,NFData,Serialize)
+instance A.FromJSON ParsedDecimal where
+  parseJSON (A.String s) =
+    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
+                        Right (LDecimal d) -> return d
+                        Right (LInteger i) -> return (fromIntegral i)
+                        _ -> fail $ "Failure parsing decimal string: " ++ show s
+  parseJSON (A.Number n) = return $ ParsedDecimal (fromRational $ toRational n)
+  parseJSON v = fail $ "Failure parsing decimal: " ++ show v
+instance A.ToJSON ParsedDecimal where
+  toJSON (ParsedDecimal d) = A.Number $ fromRational $ toRational d
+
+
+-- | JSON serialization for 'readInteger' and public meta info;
+-- accepts both a String version (parsed as a Pact integer) or
+-- a Number.
+newtype ParsedInteger = ParsedInteger Integer
+  deriving (Eq,Show,Ord,Num,Real,Enum,Integral,Generic,NFData,Serialize)
+instance A.FromJSON ParsedInteger where
+  parseJSON (A.String s) =
+    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
+                        Right (LInteger i) -> return i
+                        _ -> fail $ "Failure parsing integer string: " ++ show s
+  parseJSON (A.Number n) = return $ ParsedInteger (round n)
+  parseJSON v = fail $ "Failure parsing integer: " ++ show v
+instance A.ToJSON ParsedInteger where
+  toJSON (ParsedInteger i) = A.Number (fromIntegral i)
+
 
 -- | "Production" parser: atto, parse multiple exps.
 parseExprs :: Text -> Either String [Exp Parsed]

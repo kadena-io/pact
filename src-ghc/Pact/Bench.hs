@@ -56,7 +56,9 @@ benchCompile es = bgroup "compile" $ (`map` es) $
 
 benchVerify :: [(String,Command ByteString)] -> Benchmark
 benchVerify cs = bgroup "verify" $ (`map` cs) $
-  \(bname,c) -> bench bname $ nf verifyCommand c
+  \(bname,c) ->
+    bench bname $
+      nf (verifyCommand :: Command ByteString -> ProcessedCommand () ParsedCode) c
 
 eitherDie :: Either String a -> IO a
 eitherDie = either (throwIO . userError) (return $!)
@@ -122,7 +124,7 @@ main = do
   !mpdbRS <- loadBenchModule mockPersistDb
   print =<< runPactExec mockPersistDb mpdbRS benchCmd
   !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
-              (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" Nothing))
+              (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" ()))
 
   defaultMain [
     benchParse,

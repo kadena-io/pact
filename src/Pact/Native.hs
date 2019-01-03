@@ -47,7 +47,6 @@ import Safe
 import Control.Arrow hiding (app)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
-import Data.Decimal
 import Data.List
 import Data.Function (on)
 import Data.ByteString.Lazy (toStrict)
@@ -447,27 +446,6 @@ readMsg i [TLitString key] = parseMsgKey i "read-msg" key
 readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
 readMsg i as = argsError i as
 
--- | One-off type for 'readDecimal', not exported.
-newtype ParsedDecimal = ParsedDecimal Decimal
-instance FromJSON ParsedDecimal where
-  parseJSON (String s) =
-    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
-                        Right (LDecimal d) -> return d
-                        Right (LInteger i) -> return (fromIntegral i)
-                        _ -> fail $ "Failure parsing decimal string: " ++ show s
-  parseJSON (Number n) = return $ ParsedDecimal (fromRational $ toRational n)
-  parseJSON v = fail $ "Failure parsing integer: " ++ show v
-
-
--- | One-off type for 'readInteger', not exported.
-newtype ParsedInteger = ParsedInteger Integer
-instance FromJSON ParsedInteger where
-  parseJSON (String s) =
-    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
-                        Right (LInteger i) -> return i
-                        _ -> fail $ "Failure parsing integer string: " ++ show s
-  parseJSON (Number n) = return $ ParsedInteger (round n)
-  parseJSON v = fail $ "Failure parsing integer: " ++ show v
 
 readInteger :: RNativeFun e
 readInteger i [TLitString key] = do
