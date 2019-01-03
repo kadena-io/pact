@@ -145,7 +145,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
-                        _ceGasEnv defaultNamespacePolicy
+                        _ceGasEnv permissiveNamespacePolicy
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
 
           -- Update pacts state
