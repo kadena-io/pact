@@ -66,6 +66,12 @@ module Pact.Analyze.Types.Languages
   , eqCoreTm
   , showsPrecCore
   , userShowCore
+
+  , singEqTm
+  , singEqListTm
+  , singShowsTm
+  , singUserShowTm
+  , singUserShowListTm
   ) where
 
 import           Data.Maybe                   (fromMaybe)
@@ -975,15 +981,6 @@ data PropSpecific (a :: Ty) where
 data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
-
-instance Show (Prop a) where
-  show _ = "TODO"
-  -- showsPrec p = \case
-  --   PropSpecific tm -> showsPrec p tm
-  --   CoreProp     tm -> showsPrec p tm
-
-instance Eq (Prop a) where
-  _ == _ = error "TODO"
 
 -- deriving instance Eq   (Concrete a) => Eq   (Prop a)
 -- deriving instance Show (Concrete a) => Show (Prop a)

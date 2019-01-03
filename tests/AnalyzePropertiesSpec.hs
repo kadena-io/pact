@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module AnalyzePropertiesSpec where
@@ -8,14 +9,17 @@ import           Control.Monad               ((<=<))
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Trans.Class   (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe   (MaybeT (runMaybeT))
+import           Data.Text                   (unpack)
 import           Data.Type.Equality          ((:~:) (Refl))
 import           HaskellWorks.Hspec.Hedgehog
 import           Hedgehog                    hiding (Update)
+import           Hedgehog.Internal.Property  (failWith)
 import qualified Hedgehog.Gen                as Gen
 import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Translate      (maybeTranslateType)
 import           Pact.Analyze.Types          hiding (Object)
+import           Pact.Analyze.Types.Languages (singEqTm)
 
 import           Analyze.Eval
 import           Analyze.Gen
@@ -68,14 +72,19 @@ testDualEvaluation' etm ty gState = do
         Existential ty' (CoreTerm (LiteralList lty svals)) -> do
           -- compare results
           case analyzeVal of
-            -- Existential ty'' (CoreTerm (LiteralList lty' svals')) -> case singEq lty lty' of
-            --   Just Refl -> if length svals > 10
-            --     then discard
-            --     else withEq lty $ withShow lty $ svals' === svals
-            --   Nothing   ->
-            --     if singEqB lty SAny && withEq lty (svals == []) && withEq lty' (svals' == [])
-            --     then success
-            --     else EType ty' === EType ty'' -- this'll fail
+            Existential ty'' (CoreTerm (LiteralList lty' svals')) -> case singEq lty lty' of
+              Just Refl -> if
+                | length svals > 10             -> discard
+                | singEqListTm lty svals' svals -> success
+                | otherwise                     -> failWith Nothing $ unlines
+                  [ "━━━ Not Equal ━━━"
+                  , unpack $ singUserShowListTm lty svals
+                  , unpack $ singUserShowListTm lty svals'
+                  ]
+              Nothing   ->
+                if singEqB lty SAny && singEqListTm lty svals [] && singEqListTm lty' svals' []
+                then success
+                else EType ty' === EType ty'' -- this'll fail
             _ -> do
               footnote $ "l: " ++ show etm'
               footnote $ "r: " ++ show analyzeVal

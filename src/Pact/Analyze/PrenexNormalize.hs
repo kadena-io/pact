@@ -196,13 +196,13 @@ reassembleFloated qs prop =
         Exists' uid name ty -> PropSpecific (Exists uid name ty acc)
   in foldr mkQuantifiedProp prop qs
 
--- We first use @floatBoolQuantifiers@ to remove all quantifiers from the
--- @Prop@ (modifying them as necessary, then put them back in place on the
--- outside of the syntax tree.
+-- We first use @float SBool@ to remove all quantifiers from the @Prop@
+-- (modifying them as necessary, then put them back in place on the outside of
+-- the syntax tree.
 --
 -- The only interesting cases are those for @Forall@, @Exists@, and @PNot@. In
 -- the first two cases, we capture the quantifier to float it up. In the @PNot@
 -- case, we flip all the quantifiers found inside the @PNot@ as we lift them
 -- over it.
 prenexConvert :: Prop 'TyBool -> Prop 'TyBool
-prenexConvert = uncurry reassembleFloated . float SBool -- floatBoolQuantifiers
+prenexConvert = uncurry reassembleFloated . float SBool
