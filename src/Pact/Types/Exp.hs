@@ -56,11 +56,11 @@ import Pact.Types.Type
 
 
 data Literal =
-  LString { _lString :: !Text } |
-  LInteger { _lInteger :: !Integer } |
-  LDecimal { _lDecimal :: !Decimal } |
-  LBool { _lBool :: !Bool } |
-  LTime { _lTime :: !UTCTime }
+    LString { _lString :: !Text } |
+    LInteger { _lInteger :: !Integer } |
+    LDecimal { _lDecimal :: !Decimal } |
+    LBool { _lBool :: !Bool } |
+    LTime { _lTime :: !UTCTime }
         deriving (Eq,Generic,Ord)
 
 instance Serialize Literal
