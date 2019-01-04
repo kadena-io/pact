@@ -235,7 +235,7 @@ evalUse :: Use -> Eval e ()
 evalUse (Use mn h i) = do
   mm <- resolveName mn
   case mm of
-    Nothing -> evalError i $ "evalUse: Module " ++ show mn ++ " not found"
+    Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just md -> do
       case view mdModule md of
         Module{..} ->
