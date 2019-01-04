@@ -86,6 +86,8 @@ evalIntArithOp op xT yT = do
 
 evalDecArithOp
   :: ( Analyzer m
+     , SingI a
+     , SingI b
      , DecimalRepresentable (Concrete a)
      , DecimalRepresentable (Concrete b)
      )
@@ -112,6 +114,7 @@ evalUnaryArithOp
    . ( Analyzer m
      , a' ~ Concrete a
      , Coercible a' Integer
+     , SingI a
      )
   => UnaryArithOp
   -> TermOf m a

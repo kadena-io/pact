@@ -247,7 +247,7 @@ evalETerm tm = snd <$> evalExistential tm
 
 --   when (requiresFullWrite && Map.size om /= Map.size sm) invalid
 
-evalTerm :: Term a -> Analyze (S (Concrete a))
+evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
 

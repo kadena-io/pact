@@ -62,11 +62,6 @@ module Pact.Analyze.Types.Languages
 
   , mkLiteralList
 
-  -- TEMP
-  , eqCoreTm
-  , showsPrecCore
-  , userShowCore
-
   , singEqTm
   , singEqListTm
   , singShowsTm
@@ -110,6 +105,12 @@ pattern Inj :: sub :<: sup => sub a -> sup a
 pattern Inj a <- (project -> Just a) where
   Inj a = inject a
 
+-- | Modified subtyping relation
+--
+-- This can be read as "subtype-with-an-asterisk". This is for relations where
+-- the type on the left is indexed by a *concrete* type. For example, @S
+-- Integer@ is injectable into @Term TyInteger@ because @Integer ~ Concrete
+-- TyInteger@.
 class (sub :: * -> *) :*<: (sup :: Ty -> *) where
   inject'  :: sub (Concrete a) -> sup a
   project' :: sup a            -> Maybe (sub (Concrete a))
@@ -783,26 +784,6 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showString " "
     . singShowsTm tya 11 a
 
-instance IsTerm Term where
-  singEqTm'       = singEqTm
-  singShowsTm'    = singShowsTm
-  singUserShowTm' = singUserShowTm
-
-instance IsTerm Prop where
-  singEqTm'       = singEqTm
-  singShowsTm'    = singShowsTm
-  singUserShowTm' = singUserShowTm
-
-instance IsTerm Invariant where
-  singEqTm'       = singEqTm
-  singShowsTm'    = singShowsTm
-  singUserShowTm' = singUserShowTm
-
-instance IsTerm tm => IsTerm (Core tm) where
-  singEqTm'       = singEqTm
-  singShowsTm'    = singShowsTm
-  singUserShowTm' = singUserShowTm
-
 userShowCore :: IsTerm tm => SingTy ty -> Int -> Core tm ty -> Text
 userShowCore ty _p = \case
   Lit a                    -> withUserShow ty $ userShow a
@@ -966,6 +947,9 @@ data PropSpecific (a :: Ty) where
   RowEnforced      :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
 
   PropRead :: SingTy ('TyObject m) -> BeforeOrAfter -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
+
+deriving instance SingI a => Show (PropSpecific a)
+deriving instance SingI a => Eq   (PropSpecific a)
 
 data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
@@ -1194,45 +1178,195 @@ data Term (a :: Ty) where
   ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr -> Term 'TyTime
   Hash            :: ETerm                              -> Term 'TyStr
 
-{-
-instance UserShow (Concrete a) => UserShow (Term a) where
-  userShowPrec _ = \case
-    CoreTerm tm                -> userShow tm
-    IfThenElse x (_, y) (_, z) -> parenList ["if", userShow x, userShow y, userShow z]
-    Let var _ _ x y            -> parenList ["let", userShow var, userShow x, userShow y]
-    Sequence x y               -> Text.unlines [userShow x, userShow y]
+showsTerm :: SingTy ty -> Int -> Term ty -> ShowS
+showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
+  CoreTerm tm' -> showString "CoreTerm " . showsTm 11 tm'
+  IfThenElse ty' x y z ->
+      showString "IfThenElse "
+    . showsPrec 11 ty'
+    . showChar ' '
+    . showsPrec 11 x
+    . showChar ' '
+    . showsPrec 11 y
+    . showChar ' '
+    . showsPrec 11 z
+  Let a b c d e ->
+      showString "Let "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+    . showChar ' '
+    . showsPrec 11 c
+    . showChar ' '
+    . showsPrec 11 d
+    . showChar ' '
+    . showsPrec 11 e
+  Sequence x y ->
+      showString "Sequence "
+    . showsPrec 11 x
+    . showChar ' '
+    . showsPrec 11 y
+  EnforceOne a -> showString "EnforceOne " . showsPrec 11 a
+  Enforce a b ->
+      showString "Enforce "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
 
-    EnforceOne (Left _)        -> parenList
-      [ "enforce-one"
-      , "\"(generated enforce-one)\""
-      , userShow ([] :: [Integer])
-      ]
-    EnforceOne (Right x)       -> parenList
-      [ "enforce-one"
-      , "\"(generated enforce-one)\""
-      , userShow $ fmap snd x
-      ]
+  KsAuthorized a b ->
+      showString "KsAuthorized "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+  NameAuthorized a b ->
+      showString "NameAuthorized "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
 
-    Enforce _ (KsAuthorized _ x)   -> parenList ["enforce-keyset", userShow x]
-    Enforce _ (NameAuthorized _ x) -> parenList ["enforce-keyset", userShow x]
-    Enforce _ x                    -> parenList ["enforce", userShow x]
-    KsAuthorized   _ _
-      -> error "KsAuthorized should only appear inside of an Enforce"
-    NameAuthorized _ _
-      -> error "NameAuthorized should only appear inside of an Enforce"
+  Read a b c d e ->
+      showString "Read "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+    . showChar ' '
+    . showsPrec 11 c
+    . showChar ' '
+    . showsPrec 11 d
+    . showChar ' '
+    . showsPrec 11 e
 
-    Read _ _ _ tab x       -> parenList ["read", userShow tab, userShow x]
-    Write ty _ _ _ tab x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty y]
-    PactVersion          -> parenList ["pact-version"]
-    Format x y           -> parenList ["format", userShow x, userShow y]
-    FormatTime x y       -> parenList ["format", userShow x, userShow y]
-    ParseTime Nothing y  -> parenList ["parse-time", userShow y]
-    ParseTime (Just x) y -> parenList ["parse-time", userShow x, userShow y]
-    Hash x               -> parenList ["hash", userShow x]
-    ReadKeySet name      -> parenList ["read-keyset", userShow name]
-    ReadDecimal name     -> parenList ["read-decimal", userShow name]
-    ReadInteger name     -> parenList ["read-integer", userShow name]
--}
+  Write a b c d e f g -> withSing a $
+      showString "Write "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+    . showChar ' '
+    . showsPrec 11 c
+    . showChar ' '
+    . showsPrec 11 d
+    . showChar ' '
+    . showsPrec 11 e
+    . showChar ' '
+    . showsPrec 11 f
+    . showChar ' '
+    . showsPrec 11 g
+
+  PactVersion -> showString "PactVersion"
+  Format a b ->
+      showString "Format "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+
+  ParseTime a b ->
+      showString "ParseTime "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+  FormatTime a b ->
+      showString "FormatTime "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+  Hash a -> showString "Hash " . showsPrec 11 a
+  ReadKeySet  name -> showString "ReadKeySet " . showsPrec 11 name
+  ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
+  ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
+
+showsProp :: SingTy ty -> Int -> Prop ty -> ShowS
+showsProp ty p = withSing ty $ \case
+  PropSpecific tm -> showsPrec p tm
+  CoreProp     tm -> showsPrecCore ty p tm
+
+eqProp :: SingTy ty -> Prop ty -> Prop ty -> Bool
+eqProp ty (CoreProp     a) (CoreProp     b) = eqCoreTm ty a b
+eqProp ty (PropSpecific a) (PropSpecific b) = withSing ty $ a == b
+eqProp _  _                _                = False
+
+userShowTerm :: SingTy ty -> Int -> Term ty -> Text
+userShowTerm ty p = \case
+  CoreTerm tm -> userShowCore ty p tm
+  IfThenElse ty' x (_, y) (_, z) -> parenList
+    [ "if"
+    , userShowTm x
+    , singUserShowTm ty' y
+    , singUserShowTm ty' z
+    ]
+  Let var _ _ x y -> parenList
+    [ "let"
+    , userShow var
+    , userShow x
+    , userShowTerm ty 0 y
+    ]
+  Sequence x y -> Text.unlines [userShow x, userShowTerm ty 0 y]
+
+  EnforceOne (Left _)        -> parenList
+    [ "enforce-one"
+    , "\"(generated enforce-one)\""
+    , userShow ([] :: [Integer])
+    ]
+  EnforceOne (Right x)       -> parenList
+    [ "enforce-one"
+    , "\"(generated enforce-one)\""
+    , userShow $ fmap snd x
+    ]
+
+  Enforce _ (KsAuthorized _ x)   -> parenList ["enforce-keyset", userShow x]
+  Enforce _ (NameAuthorized _ x) -> parenList ["enforce-keyset", userShow x]
+  Enforce _ x                    -> parenList ["enforce", userShow x]
+  KsAuthorized   _ _
+    -> error "KsAuthorized should only appear inside of an Enforce"
+  NameAuthorized _ _
+    -> error "NameAuthorized should only appear inside of an Enforce"
+
+  Read _ _ _ tab x       -> parenList ["read", userShow tab, userShow x]
+  Write ty' _ _ _ tab x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty' y]
+  PactVersion          -> parenList ["pact-version"]
+  Format x y           -> parenList ["format", userShow x, userShow y]
+  FormatTime x y       -> parenList ["format", userShow x, userShow y]
+  ParseTime Nothing y  -> parenList ["parse-time", userShow y]
+  ParseTime (Just x) y -> parenList ["parse-time", userShow x, userShow y]
+  Hash x               -> parenList ["hash", userShow x]
+  ReadKeySet name      -> parenList ["read-keyset", userShow name]
+  ReadDecimal name     -> parenList ["read-decimal", userShow name]
+  ReadInteger name     -> parenList ["read-integer", userShow name]
+
+eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
+eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm' ty a1 a2
+eqTerm ty (IfThenElse _ty1 a1 (b1, c1) (d1, e1))
+          (IfThenElse _ty2 a2 (b2, c2) (d2, e2))
+  = eqTm a1 a2 && b1 == b2 && singEqTm ty c1 c2 && d1 == d2 && singEqTm ty e1 e2
+eqTerm ty (Let a1 b1 c1 d1 e1) (Let a2 b2 c2 d2 e2)
+  = a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && singEqTm ty e1 e2
+eqTerm ty (Sequence a1 b1) (Sequence a2 b2)
+  = a1 == a2 && singEqTm ty b1 b2
+eqTerm _ty (Enforce a1 b1) (Enforce a2 b2)
+  = a1 == a2 && b1 == b2
+eqTerm _ty (EnforceOne a) (EnforceOne b)
+  = a == b
+eqTerm _ty (ReadKeySet a) (ReadKeySet b)
+  = a == b
+eqTerm _ty (ReadDecimal a) (ReadDecimal b)
+  = a == b
+eqTerm _ty (ReadInteger a) (ReadInteger b)
+  = a == b
+eqTerm _ty (KsAuthorized a1 b1) (KsAuthorized a2 b2)
+  = a1 == a2 && b1 == b2
+eqTerm _ty (NameAuthorized a1 b1) (NameAuthorized a2 b2)
+  = a1 == a2 && b1 == b2
+eqTerm _ty (Read _ _ a1 b1 c1) (Read _ _ a2 b2 c2)
+  = a1 == a2 && b1 == b2 && c1 == c2
+eqTerm _ty (Write ty1 _ a1 b1 c1 d1 e1) (Write ty2 _ a2 b2 c2 d2 e2)
+  = case singEq ty1 ty2 of
+      Nothing   -> False
+      Just Refl -> a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && singEqTm ty1 e1 e2
+eqTerm _ty PactVersion PactVersion = True
+eqTerm _ty (Format a1 b1) (Format a2 b2) = a1 == a2 && b1 == b2
+eqTerm _ty (FormatTime a1 b1) (FormatTime a2 b2) = a1 == a2 && b1 == b2
+eqTerm _ty (ParseTime a1 b1) (ParseTime a2 b2) = a1 == a2 && b1 == b2
+eqTerm _ty (Hash a1) (Hash a2) = a1 == a2
+eqTerm _ _ _ = False
 
 instance S :*<: Term where
   inject' = CoreTerm . Sym
@@ -1308,3 +1442,25 @@ instance SingI ty => Eq (Prop ty) where
 
 instance SingI ty => Eq (Invariant ty) where
   (==) = singEqTm sing
+
+instance IsTerm Term where
+  singEqTm'          = eqTerm
+  singShowsTm'       = showsTerm
+  singUserShowTm' ty = userShowTerm ty 0
+
+instance IsTerm Prop where
+  singEqTm'          = eqProp
+  singShowsTm'       = showsProp
+  singUserShowTm' ty = \case
+    PropSpecific tm -> userShowPrec 0 tm
+    CoreProp     tm -> singUserShowTm' ty tm
+
+instance IsTerm Invariant where
+  singEqTm' ty (CoreInvariant tm1) (CoreInvariant tm2) = singEqTm' ty tm1 tm2
+  singShowsTm' ty p (CoreInvariant tm)                 = singShowsTm' ty p tm
+  singUserShowTm' ty (CoreInvariant tm)                = singUserShowTm' ty tm
+
+instance IsTerm tm => IsTerm (Core tm) where
+  singEqTm'          = eqCoreTm
+  singShowsTm'       = showsPrecCore
+  singUserShowTm' ty = userShowCore ty 0

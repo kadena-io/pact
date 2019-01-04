@@ -484,7 +484,7 @@ schemaTy (Schema hlist) = SObject $ hListTys hlist
 
 hListTys :: HListOf f tys -> Sing tys
 hListTys NilOf = SNil
-hListTys (ConsOf _k _ty _tys) = error "TODO" -- SCons sing (hListTys tys)
+hListTys (ConsOf sym _ty tys) = SCons sym sing (hListTys tys)
 
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow (Schema m) where
@@ -745,6 +745,36 @@ type family ConcreteList (a :: [Ty]) = r | r -> a where
   ConcreteList '[]         = '[]
   ConcreteList (ty ': tys) = Concrete ty ': ConcreteList tys
 
+-- | 'withSing' is emblematic of a tradeoff we deal with repeatedly in
+-- evaluation. We must _always_ maintain evidence that _all_ of the types we
+-- deal with are in the closed universe we know how to deal with. Sometimes
+-- it's easiest to pass this information explicitly, as @SingTy a@. Other times
+-- it's easiest to pass it implicitly, as (constraint) @SingI a@. It's easy to
+-- go from a constraint to an explicit singleton type, just use 'sing'.
+-- 'withSing' allows us to go the other way as well.
+--
+--     explicit -- withSing -> implicit
+--
+--     SingTy a <--- sing ---- SingI a
+withSing :: SingTy a -> (SingI a => b) -> b
+withSing = withDict . singMkSing where
+
+    singMkSing :: SingTy a -> Dict (SingI a)
+    singMkSing = \case
+      SInteger    -> Dict
+      SBool       -> Dict
+      SStr        -> Dict
+      STime       -> Dict
+      SDecimal    -> Dict
+      SKeySet     -> Dict
+      SAny        -> Dict
+      SList ty'   -> withSing ty' Dict
+      SObject tys -> withSingListDict tys Dict
+
+    withSingListDict :: SingList tys -> (SingI tys => b) -> b
+    withSingListDict SNil f               = f
+    withSingListDict (SCons _k _ty tys) f = withSingListDict tys f
+
 withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
 withEq = withDict . singMkEq
   where
@@ -829,20 +859,25 @@ withSMTValue = withDict . singMkSMTValue
       SList ty' -> withSMTValue ty' $ withTypeable ty' Dict
       SObject tys -> withSMTValueListDict tys Dict
 
+    withSMTValueListDict :: SingList tys -> (SMTValue (Object tys) => b) -> b
+    withSMTValueListDict SNil f = f
+    withSMTValueListDict (SCons _k ty tys) f
+      = withSMTValue ty $ withSMTValueListDict tys f
+
 instance SMTValue (Object '[]) where
   sexprToVal _ = Just $ Object NilOf
 
-instance (SMTValue (Concrete ty), SMTValue (Object tys))
-  => SMTValue (Object ('(k, ty) ': tys)) where
-  -- recoverKindedValue :: Kind -> SExpr -> Maybe CW
-  -- sexprToVal = fmap fromCW . recoverKindedValue (kindOf (undefined :: Object (ty ': tys)))
-  -- sexprToVal :: SExpr -> Maybe a
+instance
+  ( SMTValue (Concrete ty)
+  , SMTValue (Object tys)
+  , KnownSymbol k
+  , SingI ty
+  , Typeable ty
+  ) => SMTValue (Object ('(k, ty) ': tys)) where
   sexprToVal = error "TODO"
-
-withSMTValueListDict :: SingList tys -> (SMTValue (Object tys) => b) -> b
-withSMTValueListDict SNil f = f
-withSMTValueListDict (SCons _k ty tys) f
-  = withSMTValue ty $ withSMTValueListDict tys f
+  -- sexprToVal sexpr = case sexprToVal sexpr of
+  --   Nothing             -> Nothing
+  --   Just (a, Object as) -> Just $ Object $ ConsOf SSymbol (ConcreteCol sing a) as
 
 withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> b
 withSymWord = withDict . singMkSymWord

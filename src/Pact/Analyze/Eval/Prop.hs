@@ -95,7 +95,7 @@ getLitColName (PropSpecific Result)
 getLitColName CoreProp{} = throwErrorNoLoc "Core values can't be column names"
 
 
-evalProp :: Prop a -> Query (S (Concrete a))
+evalProp :: SingI a => Prop a -> Query (S (Concrete a))
 evalProp (CoreProp tm)    = evalCore tm
 evalProp (PropSpecific a) = evalPropSpecific a
 

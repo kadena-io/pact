@@ -63,11 +63,11 @@ instance Wrapped SymbolicSuccess where
 
 class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
   type TermOf m   :: Ty -> *
-  eval            :: TermOf m a           -> m (S (Concrete a))
-  throwErrorNoLoc :: AnalyzeFailureNoLoc  -> m a
-  getVar          :: VarId                -> m (Maybe AVal)
-  withVar         :: VarId -> AVal -> m a -> m a
-  markFailure     :: SBV Bool             -> m ()
+  eval            :: SingI a => TermOf m a -> m (S (Concrete a))
+  throwErrorNoLoc :: AnalyzeFailureNoLoc   -> m a
+  getVar          :: VarId                 -> m (Maybe AVal)
+  withVar         :: VarId -> AVal -> m a  -> m a
+  markFailure     :: SBV Bool              -> m ()
 
 data AnalyzeEnv
   = AnalyzeEnv

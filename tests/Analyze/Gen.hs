@@ -565,13 +565,13 @@ bob   = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"
 
 genEnv :: GenEnv
 genEnv = GenEnv
-  (error "TODO")
-  -- [("accounts", ESchema (SObject [ "balance" :-> TyInteger, "name" :-> TyStr ])
-  --   $ Schema
-  --     $ Ext (Var :: Var "balance") TyInteger
-  --     $ Ext (Var :: Var "name")    TyStr
-  --     $ Empty
-  --   )]
+  [("accounts", ESchema (SObject [ "balance" :-> TyInteger, "name" :-> TyStr ])
+    _
+    -- $ Schema
+    --   $ Ext (Var :: Var "balance") TyInteger
+    --   $ Ext (Var :: Var "name")    TyStr
+    --   $ Empty
+    )]
   [ (Pact.KeySet [alice, bob] (Name "keys-all" dummyInfo), KeySet 0)
   , (Pact.KeySet [alice, bob] (Name "keys-any" dummyInfo), KeySet 1)
   , (Pact.KeySet [alice, bob] (Name "keys-2" dummyInfo), KeySet 2)

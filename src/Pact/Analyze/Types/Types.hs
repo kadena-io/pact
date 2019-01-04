@@ -60,7 +60,7 @@ type SingList (a :: [(Symbol, Ty)]) = Sing a
 
 data HListOf (f :: Ty -> *) (tys :: [(Symbol, Ty)]) where
   NilOf  ::                                      HListOf f '[]
-  ConsOf :: KnownSymbol sym =>
+  ConsOf :: (KnownSymbol sym, SingI ty, Typeable ty) =>
             Sing sym -> f ty -> HListOf f tys -> HListOf f ('(sym, ty) ': tys)
 
 data instance Sing (a :: Ty) where
@@ -192,12 +192,8 @@ instance SingI 'TyAny where
 instance SingI a => SingI ('TyList a) where
   sing = SList sing
 
-instance SingI ('TyObject '[]) where
-  sing = SObject SNil
-
-instance (Typeable v, SingI v, SingI m, KnownSymbol k)
-  => SingI ('TyObject ('(k, v) ': m)) where
-  sing = SObject (SCons SSymbol sing sing)
+instance SingI lst => SingI ('TyObject lst) where
+  sing = SObject sing
 
 instance SingI ('[] :: [(Symbol, Ty)]) where
   sing = SNil

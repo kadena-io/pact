@@ -96,8 +96,8 @@ evalComparisonOp
   -> TermOf m a
   -> m (S Bool)
 evalComparisonOp ty op xT yT = do
-  x <- eval xT
-  y <- eval yT
+  x <- withSing ty $ eval xT
+  y <- withSing ty $ eval yT
   let f :: SymWord (Concrete a) => SBV Bool
       f = case op of
         Gt  -> x .> y
@@ -108,39 +108,36 @@ evalComparisonOp ty op xT yT = do
         Neq -> x ./= y
   pure $ sansProv $ withSymWord ty f
 
-evalEqNeq
-  :: Analyzer m
-  => EqNeq
-  -> TermOf m a
-  -> TermOf m a
-  -> m (S Bool)
-evalEqNeq op xT yT = do
-  x <- eval xT
-  y <- eval yT
-  pure $ sansProv $ case op of
-    Eq'  -> x .== y
-    Neq' -> x ./= y
+-- evalEqNeq
+--   :: Analyzer m
+--   => EqNeq
+--   -> TermOf m a
+--   -> TermOf m a
+--   -> m (S Bool)
+-- evalEqNeq op xT yT = do
+--   x <- eval xT
+--   y <- eval yT
+--   pure $ sansProv $ case op of
+--     Eq'  -> x .== y
+--     Neq' -> x ./= y
 
-evalObjectEqNeq
-  :: Analyzer m
-  => EqNeq
-  -> TermOf m ('TyObject obj)
-  -> TermOf m ('TyObject obj)
-  -> m (S Bool)
-evalObjectEqNeq op xT yT = do
-  x <- eval xT
-  y <- eval yT
-  pure $ sansProv $ case op of
-    Eq'  -> x .== y
-    Neq' -> x ./= y
+-- evalObjectEqNeq
+--   :: Analyzer m
+--   => EqNeq
+--   -> TermOf m ('TyObject obj)
+--   -> TermOf m ('TyObject obj)
+--   -> m (S Bool)
+-- evalObjectEqNeq op xT yT = do
+--   x <- eval xT
+--   y <- eval yT
+--   pure $ sansProv $ case op of
+--     Eq'  -> x .== y
+--     Neq' -> x ./= y
 
 singIte
   :: (Analyzer m, a' ~ Concrete a)
   => SingTy a -> SBV Bool -> m (S a') -> m (S a') -> m (S a')
-singIte = undefined
-
-singLiteral :: a' ~ Concrete a => SingTy a -> a' -> S a'
-singLiteral = undefined
+singIte = error "TODO"
 
 evalLogicalOp
   :: Analyzer m
@@ -162,9 +159,11 @@ evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length te
 Nothing  ?? err = throwErrorNoLoc err
 infix 0 ??
 
-evalCore :: Analyzer m => Core (TermOf m) a -> m (S (Concrete a))
-evalCore (Lit a)                           = pure (singLiteral (error "TODO") a)
-evalCore (Sym s)                           = pure s
+evalCore :: forall m a.
+  (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
+evalCore (Lit a)
+  = withSymWord (sing :: SingTy a) $ pure $ literalS a
+evalCore (Sym s) = pure s
 evalCore (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -173,9 +172,9 @@ evalCore (Var vid name) = do
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore (Identity _ a)     = eval a
 evalCore (Constantly _ a _) = eval a
-evalCore (Compose _ _ _ a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
-  a' <- eval a
-  b' <- withVar vida (mkAVal a') $ eval tmb
+evalCore (Compose tya tyb _ a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
+  a' <- withSing tya $ eval a
+  b' <- withVar vida (mkAVal a') $ withSing tyb $ eval tmb
   withVar vidb (mkAVal b') $ eval tmc
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
 evalCore (StrLength p)
@@ -206,13 +205,13 @@ evalCore (StrContains needle haystack) = do
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
 evalCore (ListContains ty needle haystack) = withSymWord ty $ do
-  S _ needle'   <- eval needle
-  S _ haystack' <- eval haystack
+  S _ needle'   <- withSing ty $ eval needle
+  S _ haystack' <- withSing ty $ eval haystack
   pure $ sansProv $
     bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
 evalCore (ListEqNeq ty op a b) = withSymWord ty $ do
-  S _ a' <- eval a
-  S _ b' <- eval b
+  S _ a' <- withSing ty $ eval a
+  S _ b' <- withSing ty $ eval b
 
   let wrongLength = case op of
         Eq'  -> false
@@ -233,15 +232,15 @@ evalCore (ListAt ty i l) = withSymWord ty $ do
 
   -- statically build a list of index comparisons
   pure $ sansProv $ SBVL.elemAt l' i'
-evalCore (ListLength ty l) = withSymWord ty $ do
+evalCore (ListLength ty l) = withSymWord ty $ withSing ty $ do
   S prov l' <- eval l
   pure $ S prov $ SBVL.length l'
 
-evalCore (LiteralList ty xs) = withSymWord ty $ do
+evalCore (LiteralList ty xs) = withSymWord ty $ withSing ty $ do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv $ SBVL.implode vals
 
-evalCore (ListDrop ty n list) = withSymWord ty $ do
+evalCore (ListDrop ty n list) = withSymWord ty $ withSing ty $ do
   S _ n'    <- eval n
   S _ list' <- eval list
 
@@ -251,7 +250,7 @@ evalCore (ListDrop ty n list) = withSymWord ty $ do
     (SBVL.drop n' list')
     (SBVL.take (SBVL.length list' + n') list')
 
-evalCore (ListTake ty n list) = withSymWord ty $ do
+evalCore (ListTake ty n list) = withSymWord ty $ withSing ty $ do
   S _ n'    <- eval n
   S _ list' <- eval list
 
@@ -261,17 +260,17 @@ evalCore (ListTake ty n list) = withSymWord ty $ do
     (SBVL.take n' list')
     (SBVL.drop (SBVL.length list' + n') list')
 
-evalCore (ListConcat ty p1 p2) = withSymWord ty $ do
+evalCore (ListConcat ty p1 p2) = withSymWord ty $ withSing ty $ do
   S _ p1' <- eval p1
   S _ p2' <- eval p2
   pure $ sansProv $ SBVL.concat p1' p2'
-evalCore (ListReverse ty l) = withSymWord ty $ do
+evalCore (ListReverse ty l) = withSymWord ty $ withSing ty $ do
   S prov l' <- eval l
   pure $ S prov $ breverse listBound l'
-evalCore (ListSort ty l) = withSymWord ty $ do
+evalCore (ListSort ty l) = withSymWord ty $ withSing ty $ do
   S prov l' <- eval l
   pure $ S prov $ bsort listBound l'
-evalCore (MakeList ty i a) = withSymWord ty $ do
+evalCore (MakeList ty i a) = withSymWord ty $ withSing ty $ do
   S _ i' <- eval i
   S _ a' <- eval a
   case unliteral i' of
@@ -306,14 +305,14 @@ evalCore (MakeList ty i a) = withSymWord ty $ do
 --     a' bs'
 --   pure $ sansProv result
 
-evalCore (AndQ _tya (Open vid1 _ f) (Open vid2 _ g) a) = do
-  S _ a' <- eval a
+evalCore (AndQ tya (Open vid1 _ f) (Open vid2 _ g) a) = do
+  S _ a' <- withSing tya $ eval a
   fv     <- withVar vid1 (mkAVal' a') $ eval f
   gv     <- withVar vid2 (mkAVal' a') $ eval g
   pure $ fv &&& gv
 
-evalCore (OrQ _tya (Open vid1 _ f) (Open vid2 _ g) a) = do
-  S _ a' <- eval a
+evalCore (OrQ tya (Open vid1 _ f) (Open vid2 _ g) a) = do
+  S _ a' <- withSing tya $ eval a
   fv     <- withVar vid1 (mkAVal' a') $ eval f
   gv     <- withVar vid2 (mkAVal' a') $ eval g
   pure $ fv ||| gv
@@ -452,5 +451,5 @@ evalObjAt = error "TODO"
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential (Existential ty prop) = do
-  prop' <- eval prop
+  prop' <- withSing ty $ eval prop
   pure (EType ty, mkAVal prop')
