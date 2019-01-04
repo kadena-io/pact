@@ -67,6 +67,7 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
   getVar          :: VarId                 -> m (Maybe AVal)
   withVar         :: VarId -> AVal -> m a  -> m a
   markFailure     :: SBV Bool              -> m ()
+  analyzerIte     :: Mergeable a => SBV Bool -> m a -> m a -> m a
 
 data AnalyzeEnv
   = AnalyzeEnv

@@ -30,6 +30,7 @@ import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
 import           Data.Text            (pack)
 import           Data.Traversable     (for)
+import           GHC.TypeLits         (symbolVal)
 
 import qualified Pact.Types.Typecheck as TC
 
@@ -42,13 +43,13 @@ allocS = free
 allocSbv :: SingI a => Alloc (SBV (Concrete a))
 allocSbv = _sSbv <$> allocS
 
-allocSchema :: Schema m -> Alloc UObject
-allocSchema (Schema (ConsOf _k (ColumnTy k ty) tys)) = do
-  UObject m <- allocSchema $ Schema tys
+allocSchema :: SingTy ('TyObject m) -> Alloc UObject
+allocSchema (SObject SNil) = pure $ UObject Map.empty
+allocSchema (SObject (SCons k ty tys)) = do
+  UObject m <- allocSchema $ SObject tys
   let ety = EType ty
   val <- allocAVal ety
-  pure $ UObject $ Map.insert (pack k) (ety, val) m
-allocSchema other = error $ "Malformed schema: " ++ show other
+  pure $ UObject $ Map.insert (pack (symbolVal k)) (ety, val) m
 
 allocAVal :: EType -> Alloc AVal
 allocAVal (EType ty) = mkAVal <$> singFree ty
@@ -103,7 +104,7 @@ allocModelTags argsMap locatedTm graph = ModelTags
       :: Traversal' TraceEvent (ESchema, Located TagId)
       -> Alloc (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
-      for (toListOf (traverse.p) events) $ \(ESchema _ schema, Located info tid) -> do
+      for (toListOf (traverse.p) events) $ \(ESchema schema, Located info tid) -> do
         srk <- allocS
         obj <- allocSchema schema
         suc <- allocSbv

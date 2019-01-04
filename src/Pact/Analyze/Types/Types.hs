@@ -24,7 +24,7 @@ import           Data.Semigroup              ((<>))
 import           Data.Text                   (intercalate, pack, Text)
 import           Data.Type.Equality          ((:~:) (Refl), apply)
 import           Data.Typeable               (Typeable, Proxy(Proxy))
-import           GHC.TypeLits
+import           GHC.TypeLits                (Symbol, KnownSymbol, symbolVal, sameSymbol)
 
 import           Pact.Analyze.Types.UserShow
 

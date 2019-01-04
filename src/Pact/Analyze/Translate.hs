@@ -515,7 +515,7 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
 
 translateObjBinding
   :: [(Named Node, AST Node)]
-  -> Schema m
+  -> SingTy ('TyObject m)
   -> [AST Node]
   -> ETerm
   -> TranslateM ETerm
@@ -554,7 +554,7 @@ translateObjBinding pairs schema bodyA rhsT = do
                  ) ->
             let colTerm = StrLit @Term colName
                 rhs = Existential ty $
-                  CoreTerm $ ObjAt (schemaTy schema) colTerm objVar
+                  CoreTerm $ ObjAt schema colTerm objVar
             in Let varName vid retTid rhs body)
           innerBody
           (zip cols bindingTs)

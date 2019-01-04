@@ -1007,12 +1007,12 @@ instance Numerical Prop :<: Prop where
 instance IsString (Prop 'TyStr) where
   fromString = Lit' . fromString
 
--- instance Boolean (Prop 'TyBool) where
---   true      = Lit' True
---   false     = Lit' False
---   bnot p    = CoreProp $ Logical NotOp [p]
---   p1 &&& p2 = PAnd p1 p2
---   p1 ||| p2 = POr  p1 p2
+instance Boolean (Prop 'TyBool) where
+  sTrue     = Lit' True
+  sFalse    = Lit' False
+  sNot p    = CoreProp $ Logical NotOp [p]
+  p1 .&& p2 = PAnd p1 p2
+  p1 .|| p2 = POr  p1 p2
 
 instance Num (Prop 'TyInteger) where
   fromInteger = Lit' . fromInteger
@@ -1164,9 +1164,9 @@ data Term (a :: Ty) where
   NameAuthorized  :: TagId -> Term 'TyStr -> Term 'TyBool
 
   -- Table access
-  Read            :: SingTy ('TyObject m) -> Schema m -> TagId -> TableName
+  Read            :: SingTy ('TyObject m) -> TagId -> TableName
     -> Term 'TyStr -> Term ('TyObject m)
-  Write           :: SingTy ('TyObject m) -> Schema m
+  Write           :: SingTy ('TyObject m)
     -> WriteType -> TagId -> TableName
     -> Term 'TyStr -> Term ('TyObject m) -> Term 'TyStr
 
@@ -1223,7 +1223,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showChar ' '
     . showsPrec 11 b
 
-  Read a b c d e ->
+  Read a b c d ->
       showString "Read "
     . showsPrec 11 a
     . showChar ' '
@@ -1232,10 +1232,8 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 c
     . showChar ' '
     . showsPrec 11 d
-    . showChar ' '
-    . showsPrec 11 e
 
-  Write a b c d e f g -> withSing a $
+  Write a b c d e f -> withSing a $
       showString "Write "
     . showsPrec 11 a
     . showChar ' '
@@ -1248,8 +1246,6 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 e
     . showChar ' '
     . showsPrec 11 f
-    . showChar ' '
-    . showsPrec 11 g
 
   PactVersion -> showString "PactVersion"
   Format a b ->
@@ -1319,8 +1315,8 @@ userShowTerm ty p = \case
   NameAuthorized _ _
     -> error "NameAuthorized should only appear inside of an Enforce"
 
-  Read _ _ _ tab x       -> parenList ["read", userShow tab, userShow x]
-  Write ty' _ _ _ tab x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty' y]
+  Read _ _ tab x       -> parenList ["read", userShow tab, userShow x]
+  Write ty' _ _ tab x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty' y]
   PactVersion          -> parenList ["pact-version"]
   Format x y           -> parenList ["format", userShow x, userShow y]
   FormatTime x y       -> parenList ["format", userShow x, userShow y]
@@ -1354,9 +1350,9 @@ eqTerm _ty (KsAuthorized a1 b1) (KsAuthorized a2 b2)
   = a1 == a2 && b1 == b2
 eqTerm _ty (NameAuthorized a1 b1) (NameAuthorized a2 b2)
   = a1 == a2 && b1 == b2
-eqTerm _ty (Read _ _ a1 b1 c1) (Read _ _ a2 b2 c2)
+eqTerm _ty (Read _ a1 b1 c1) (Read _ a2 b2 c2)
   = a1 == a2 && b1 == b2 && c1 == c2
-eqTerm _ty (Write ty1 _ a1 b1 c1 d1 e1) (Write ty2 _ a2 b2 c2 d2 e2)
+eqTerm _ty (Write ty1 a1 b1 c1 d1 e1) (Write ty2 a2 b2 c2 d2 e2)
   = case singEq ty1 ty2 of
       Nothing   -> False
       Just Refl -> a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && singEqTm ty1 e1 e2

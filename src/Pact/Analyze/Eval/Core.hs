@@ -134,9 +134,9 @@ evalComparisonOp ty op xT yT = do
 --     Neq' -> x ./= y
 
 singIte
-  :: (Analyzer m, a' ~ Concrete a)
+  :: (Analyzer m, a' ~ Concrete a, SingI a)
   => SingTy a -> SBV Bool -> m (S a') -> m (S a') -> m (S a')
-singIte = error "TODO"
+singIte ty a b c = withSymWord ty $ analyzerIte a b c
 
 evalLogicalOp
   :: Analyzer m
@@ -189,8 +189,10 @@ evalCore (ObjAt schema colNameT objT)
   = evalObjAt schema colNameT objT (error "TODO")
 evalCore (LiteralObject ty obj) = withSymWord ty $ pure $ literalS obj
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
+-- error "TODO"
 -- evalCore (ObjMerge ty1 ty2 objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
 evalCore ObjContains{} = throwErrorNoLoc "TODO: ObjContains"
+-- error "TODO"
 -- evalCore (ObjContains (Schema schema) key _obj) = do
 --   key' <- eval key
 --   pure $ sansProv $ bAny
@@ -277,6 +279,7 @@ evalCore (MakeList ty i a) = withSymWord ty $ withSing ty $ do
     Nothing  -> throwErrorNoLoc $ UnhandledTerm
       "make-list currently requires a statically determined length"
 
+-- error "TODO"
 -- evalCore (ListMap tya tyb (Open vid _ expr) as) = withSymWord tya $ withSymWord tyb $ do
 --   S _ as' <- eval as
 --   bs <- bmapM listBound
@@ -284,6 +287,7 @@ evalCore (MakeList ty i a) = withSymWord ty $ withSing ty $ do
 --     as'
 --   pure $ sansProv bs
 
+-- error "TODO"
 -- evalCore (ListFilter tya (Open vid _ f) as) = withSymWord tya $ do
 --   S _ as' <- eval as
 --   let bfilterM = bfoldrM listBound
@@ -293,6 +297,7 @@ evalCore (MakeList ty i a) = withSymWord ty $ withSing ty $ do
 --         (literal [])
 --   sansProv <$> bfilterM as'
 
+-- error "TODO"
 -- evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs) = withSymWord tya $ withSymWord tyb $ do
 --   S _ a'  <- eval a
 --   S _ bs' <- eval bs
@@ -325,8 +330,7 @@ evalCore ObjTake{}      = throwErrorNoLoc "not yet implemented"
 evalCore ObjDrop{}      = throwErrorNoLoc "not yet implemented"
 evalCore _ = throwErrorNoLoc "not yet implemented"
 
-
-
+-- error "TODO"
 -- evalCore (ObjDrop schema@(Schema schemaFields) keys _obj) = do
 --   keys' <- eval keys
 --   case unliteralS keys' of

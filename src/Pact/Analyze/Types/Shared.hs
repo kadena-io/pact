@@ -474,55 +474,17 @@ instance Eq (Object m) where
        (ConsOf k2 (ConcreteCol _     v2) m2')
       = eqSymB k1 k2 && withEq singv (v1 == v2) && eq m1' m2'
 
--- | Wrapper for @SingTy@ so it can be used (unsaturated) as an argument to
--- @SMap.Map@
-data ColumnTy a = ColumnTy !String !(SingTy a)
-
-data Schema (m :: [(Symbol, Ty)]) = Schema !(HListOf ColumnTy m)
-
-schemaTy :: Schema tys -> SingTy ('TyObject tys)
-schemaTy (Schema hlist) = SObject $ hListTys hlist
-
-hListTys :: HListOf f tys -> Sing tys
-hListTys NilOf = SNil
-hListTys (ConsOf sym _ty tys) = SCons sym sing (hListTys tys)
-
--- Note: this doesn't exactly match the pact syntax
-instance UserShow (Schema m) where
-  userShowPrec _ (Schema tys) = "{" <> T.intercalate ", " (userShowTys tys) <> "}"
-    where userShowTys :: HListOf ColumnTy m' -> [Text]
-          userShowTys NilOf = []
-          userShowTys (ConsOf key (ColumnTy _ singv) m')
-            = T.pack (symbolVal key) <> " : " <> userShow singv : userShowTys m'
-
-instance Show (Schema m) where
-  showsPrec p (Schema tys) = showParen (p > 11) $
-    showString "Schema " . showString " " . showTys tys
-    where showTys :: HListOf ColumnTy m' -> ShowS
-          showTys NilOf = showString "NilOf"
-          showTys (ConsOf key (ColumnTy _ singv) tys') = showParen True $
-              showString "ConsOf "
-            . showString "TODO"
-            . showParen True (
-                showString "ColumnTy "
-              . showsPrec 11 (symbolVal key)
-              . showString " "
-              . showsPrec 11 singv)
-            . showTys tys'
-
 data ESchema where
-  ESchema :: SingTy ('TyObject m) -> Schema m -> ESchema
+  ESchema :: SingTy ('TyObject m) -> ESchema
 
 instance Eq ESchema where
   -- Since this is a singleton, checking the types match is good enough
-  ESchema ty1 _ == ESchema ty2 _ = isJust $ singEq ty1 ty2
+  ESchema ty1 == ESchema ty2 = isJust $ singEq ty1 ty2
 
 instance Show ESchema where
-  showsPrec p (ESchema ty schema) = showParen (p > 10) $
+  showsPrec p (ESchema ty) = showParen (p > 10) $
       showString "ESchema "
     . showsPrec 11 ty
-    . showString " "
-    . showsPrec 11 schema
 
 -- -- | When given a column mapping, this function gives a canonical way to assign
 -- -- var ids to each column. Also see 'varIdArgs'.
