@@ -10,6 +10,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+
 -- |
 -- Module      :  Pact.Types.Exp
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -54,13 +55,13 @@ import Pact.Types.Info
 import Pact.Types.Type
 
 
-data Literal
-  = LString { _lString :: !Text }
-  | LInteger { _lInteger :: !Integer }
-  | LDecimal { _lDecimal :: !Decimal }
-  | LBool { _lBool :: !Bool }
-  | LTime { _lTime :: !UTCTime }
-  deriving (Eq,Generic,Ord)
+data Literal =
+  LString { _lString :: !Text } |
+  LInteger { _lInteger :: !Integer } |
+  LDecimal { _lDecimal :: !Decimal } |
+  LBool { _lBool :: !Bool } |
+  LTime { _lTime :: !UTCTime }
+        deriving (Eq,Generic,Ord)
 
 instance Serialize Literal
 instance NFData Literal

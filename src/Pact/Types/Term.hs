@@ -311,7 +311,6 @@ newtype TableName = TableName Text
 instance Show TableName where show (TableName s) = show s
 
 -- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
--- DESNote(emily): -XDerivingVia would eliminate many of these instances when we bump
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
