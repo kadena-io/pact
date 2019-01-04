@@ -1,0 +1,92 @@
+;; Object semanticdb-project-database-file
+;; SEMANTICDB Tags save file
+(semanticdb-project-database-file "semanticdb-project-database-file"
+  :tables
+  (list
+    (semanticdb-table "semanticdb-table"
+      :major-mode pact-mode
+      :tags 
+        '( ("begin-tx" code nil nil [163 173])
+            ("env-data" code nil nil [175 245])
+            ("alice-keys" variable
+               (nil :constant-flag
+                :type "keyset")
+                nil [247 274])
+            ("bob-keys" variable
+               (nil :constant-flag
+                :type "keyset")
+                nil [275 300])
+            ("env-keys" code nil nil [301 328])
+            ("define-namespace" code nil nil [370 421])
+            ("define-namespace" code nil nil [422 469])
+            ("namespace" code nil nil [501 519])
+            ("interface" code nil nil [521 746])
+            ("namespace" code nil nil [791 807])
+            ("interface" code nil nil [809 975])
+            ("commit-tx" code nil nil [977 988])
+            ("begin-tx" code nil nil [989 999])
+            ("env-data" code nil nil [1001 1038])
+            ("carl-keys" variable
+               (nil :constant-flag
+                :type "keyset")
+                nil [1039 1065])
+            ("env-keys" code nil nil [1066 1085])
+            ("define-namespace" code nil nil [1087 1136])
+            ("namespace" code nil nil [1137 1154])
+            ("i:string" function nil nil [1650 1697])
+            ("h:decimal" function (:arguments ("x:bool" "z:decimal")) nil [1565 1646])
+            ("g:string" function (:arguments ("x:bool")) nil [1431 1561])
+            ("f:bool" function nil nil [1358 1427])
+            ("deftable" code nil nil [1338 1354])
+            ("defschema" code nil nil [1311 1335])
+            ("implements" code nil nil [1278 1307])
+            ("implements" code nil nil [1242 1275])
+            ("commit-tx" code nil nil [1701 1712])
+            ("begin-tx" code nil nil [1713 1723])
+            ("interface" code nil nil [1818 1910])
+            ("env-data" code nil nil [1912 1949])
+            ("test-keys" variable
+               (nil :constant-flag
+                :type "keyset")
+                nil [1950 1976])
+            ("env-keys" code nil nil [1977 1996])
+            ("global:bool" function nil nil [2061 2092])
+            ("commit-tx" code nil nil [2096 2107])
+            ("begin-tx" code nil nil [2108 2118])
+            ("define-namespace" code nil nil [2120 2169])
+            ("namespace" code nil nil [2170 2187])
+            ("g:bool" function nil nil [2387 2423])
+            ("f:bool" function nil nil [2357 2383])
+            ("deftable" code nil nil [2325 2353])
+            ("defschema" code nil nil [2297 2322])
+            ("global-module" include nil nil [2274 2293])
+            ("implements" code nil nil [2250 2271])
+            ("global-module" include nil nil [2274 2293])
+            ("defschema" code nil nil [2297 2322])
+            ("deftable" code nil nil [2325 2353])
+            ("f:bool" function nil nil [2357 2383])
+            ("g:bool" function nil nil [2387 2423])
+            ("tif" function nil nil [2451 2465])
+            ("commit-tx" code nil nil [2469 2480])
+            ("carl.carl-module" include nil nil [2482 2504])
+            ("expect" code nil nil [2505 2569])
+            ("expect" code nil nil [2570 2679])
+            ("namespace" code nil nil [2681 2698])
+            ("tif" function nil nil [2769 2785])
+            ("implements" code nil nil [2743 2766])
+            ("test-module" include nil nil [2723 2740])
+            ("tif" function nil nil [2769 2785])
+            ("implements" code nil nil [2743 2766])
+            ("tif" function nil nil [2769 2785])
+            ("implements" code nil nil [2743 2766])
+            ("test-module" include nil nil [2723 2740])
+            ("m2f" function nil nil [2769 2785])
+            ("test-module" include nil nil [2723 2740]))          
+      :file "namespaces.repl"
+      :pointmax 2788
+      :fsize 2787
+      :lastmodtime '(23598 40158 384974 141000)
+      :unmatched-syntax nil))
+  :file "!Users!emilypi!kadena!pact!tests!pact!semantic.cache"
+  :semantic-tag-version "2.0"
+  :semanticdb-version "2.2")

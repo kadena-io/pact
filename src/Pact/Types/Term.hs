@@ -65,8 +65,6 @@ module Pact.Types.Term
 
 
 import Control.Lens (makeLenses)
-import Data.Data
-
 import Control.Applicative
 import Data.List
 import Control.Monad

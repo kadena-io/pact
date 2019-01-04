@@ -49,7 +49,6 @@ import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
 import Data.Serialize (Serialize)
-import Data.Data
 
 import Pact.Types.Info
 import Pact.Types.Type

@@ -65,9 +65,8 @@ loadRefStore fp = do
     Just md -> return md
     Nothing -> die def $ "Could not load module data from " ++ show fp
 
-loadModuleData :: FilePath -> ModuleName -> IO ModuleData
-loadModuleData fp mn = do
-  rs <- loadRefStore fp
+loadModuleData :: RefStore -> ModuleName -> IO ModuleData
+loadModuleData rs mn =
   case preview (rsModules . ix mn) rs of
     Just md -> pure md
     Nothing -> die def $ "Could not load module data: " ++ show mn
