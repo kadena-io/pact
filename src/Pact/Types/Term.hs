@@ -437,7 +437,7 @@ data Module
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
   , _interfaceImports :: [Use]
-  } deriving (Eq, Generic, Typeable, Data)
+  } deriving Eq
 
 instance Show Module where
   show m = case m of
@@ -493,7 +493,7 @@ newtype NamespaceName = NamespaceName Text
 data Namespace = Namespace
   { _nsName   :: NamespaceName
   , _nsGuard  :: Guard
-  } deriving (Eq, Generic)
+  } deriving Eq
 
 instance Show Namespace where
   show Namespace{..} = "(namespace " ++ asString' _nsName ++ ")"

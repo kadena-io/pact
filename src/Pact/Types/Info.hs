@@ -33,7 +33,6 @@ import GHC.Generics (Generic)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Control.DeepSeq
-import Data.Data
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util

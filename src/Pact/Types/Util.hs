@@ -5,7 +5,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 -- |
 -- Module      :  Pact.Types.Util
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -31,8 +30,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Concurrent
 import Control.Lens
 import Control.DeepSeq
-import Data.Typeable
-import Data.Data
+
 import Data.Hashable (Hashable)
 import Data.Serialize (Serialize)
 import qualified Data.Serialize as S
@@ -68,7 +66,7 @@ lensyParseJSON
 lensyParseJSON n = genericParseJSON (lensyOptions n)
 
 newtype Hash = Hash { unHash :: ByteString }
-  deriving (Eq, Ord, Generic, Hashable, Typeable, Data)
+  deriving (Eq, Ord, Generic, Hashable)
 instance Show Hash where
   show (Hash h) = show $ B16.encode h
 instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)

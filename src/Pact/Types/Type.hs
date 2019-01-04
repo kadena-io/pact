@@ -41,7 +41,6 @@ import Prelude
 import Data.Functor.Classes
 import Data.Aeson
 import Data.String
-import Data.Data
 
 import Data.Thyme.Format.Aeson ()
 import GHC.Generics (Generic)

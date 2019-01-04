@@ -28,7 +28,6 @@ import qualified Data.Text as T
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Data.Default
 import Control.DeepSeq
-import Data.Data
 
 
 instance Serialize Micro
