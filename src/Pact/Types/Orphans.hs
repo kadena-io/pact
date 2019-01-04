@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      :  Pact.Types.Orphans
@@ -29,7 +28,6 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Data.Default
 import Control.DeepSeq
 
-
 instance Serialize Micro
 instance Serialize NominalDiffTime
 instance Serialize UTCTime
@@ -47,6 +45,7 @@ instance Serialize A.Value where
     {-# INLINE get #-}
 
 instance NFData Delta
+
 
 -- | Atto DeltaParsing instance provides 'position' only (with no support for
 -- hidden chars like Trifecta).

@@ -11,7 +11,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE StandaloneDeriving #-}
+
 -- |
 -- Module      :  Pact.Types.Term
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -406,7 +406,7 @@ data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe Hash)
   , _uInfo :: !Info
-  } deriving (Eq,Generic)
+  } deriving (Eq)
 instance Show Use where
   show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
 

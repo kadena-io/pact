@@ -4,6 +4,7 @@
 (env-data { "kall": ["a" "b" "c"], "kadmin": ["admin"] })
 (define-keyset 'kall)
 (define-keyset 'kadmin)
+
 (env-keys ["admin"])
 
 (module caps 'kadmin
@@ -59,7 +60,6 @@
 
 (begin-tx)
 (use caps)
-
 
 (expect-failure "with-kall should fail w/o kall ks" (with-kall))
 

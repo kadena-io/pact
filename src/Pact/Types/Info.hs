@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
+
 -- |
 -- Module      :  Pact.Types.Info
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -36,8 +37,8 @@ import Control.DeepSeq
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
---import Pact.Types.Crypto (Hash(..))
 
+--import Pact.Types.Crypto (Hash(..))
 
 -- | Code location, length from parsing.
 data Parsed = Parsed {
@@ -80,6 +81,7 @@ instance Ord Info where
   _ <= Info Nothing = False
 
 instance Default Info where def = Info Nothing
+
 
 -- renderer for line number output.
 renderInfo :: Info -> String

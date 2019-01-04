@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE CPP #-}
+
 -- |
 -- Module      :  Pact.Types.Util
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -30,7 +31,6 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Concurrent
 import Control.Lens
 import Control.DeepSeq
-
 import Data.Hashable (Hashable)
 import Data.Serialize (Serialize)
 import qualified Data.Serialize as S

@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      :  Pact.Types.Type
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -41,7 +42,6 @@ import Prelude
 import Data.Functor.Classes
 import Data.Aeson
 import Data.String
-
 import Data.Thyme.Format.Aeson ()
 import GHC.Generics (Generic)
 import Data.Hashable
