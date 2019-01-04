@@ -5,7 +5,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 -- |
 -- Module      :  Pact.Types.Type
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -59,7 +58,7 @@ import Pact.Types.Info
 
 
 newtype TypeName = TypeName Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Typeable,Data)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData)
 instance Show TypeName where show (TypeName s) = show s
 
 -- | Pair a name and a type (arguments, bindings etc)
@@ -67,7 +66,7 @@ data Arg o = Arg {
   _aName :: Text,
   _aType :: Type o,
   _aInfo :: Info
-  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Typeable,Data)
+  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
 instance NFData o => NFData (Arg o)
 instance Show o => Show (Arg o) where show (Arg n t _) = unpack n ++ ":" ++ show t
@@ -81,7 +80,7 @@ instance Eq1 Arg where
 data FunType o = FunType {
   _ftArgs :: [Arg o],
   _ftReturn :: Type o
-  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Typeable,Data)
+  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
 instance NFData o => NFData (FunType o)
 instance Show o => Show (FunType o) where
@@ -107,7 +106,7 @@ data GuardType
   | GTyPact
   | GTyUser
   | GTyModule
-  deriving (Eq,Ord,Generic,Typeable,Data)
+  deriving (Eq,Ord,Generic)
 
 instance NFData GuardType
 
@@ -121,7 +120,7 @@ data PrimType =
   TyString |
   TyValue |
   TyGuard (Maybe GuardType)
-  deriving (Eq,Ord,Generic,Typeable,Data)
+  deriving (Eq,Ord,Generic)
 
 instance NFData PrimType
 
@@ -157,7 +156,7 @@ data SchemaType =
   TyTable |
   TyObject |
   TyBinding
-  deriving (Eq,Ord,Generic,Typeable,Data)
+  deriving (Eq,Ord,Generic)
 
 instance NFData SchemaType
 instance Show SchemaType where
@@ -167,14 +166,14 @@ instance Show SchemaType where
 instance Pretty SchemaType where pretty = text . show
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData,Typeable,Data)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
 instance Show TypeVarName where show = unpack . _typeVarName
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
   TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
   SchemaVar { _tvName :: TypeVarName }
-  deriving (Functor,Foldable,Traversable,Generic,Typeable,Data)
+  deriving (Functor,Foldable,Traversable,Generic)
 
 instance NFData v => NFData (TypeVar v)
 instance Eq (TypeVar v) where
@@ -211,7 +210,7 @@ data Type v =
   TySchema { _tySchema :: SchemaType, _tySchemaType :: Type v } |
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v }
-    deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Typeable,Data)
+    deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
 instance Eq1 Type where
   liftEq _ TyAny TyAny = True

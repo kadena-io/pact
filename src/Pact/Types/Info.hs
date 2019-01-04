@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 -- |
@@ -45,7 +44,7 @@ import Pact.Types.Util
 data Parsed = Parsed {
   _pDelta :: Delta,
   _pLength :: Int
-  } deriving (Eq,Show,Ord,Generic,Typeable,Data)
+  } deriving (Eq,Show,Ord,Generic)
 
 instance NFData Parsed
 instance Default Parsed where def = Parsed mempty 0
@@ -54,7 +53,7 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString,Typeable,Data)
+  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
   pretty (Code c) | T.compareLength c maxLen == GT =
@@ -64,7 +63,7 @@ instance Pretty Code where
 
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
-newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic,Typeable,Data)
+newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic)
 
 instance NFData Info
 -- show instance uses Trifecta renderings

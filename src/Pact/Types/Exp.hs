@@ -10,7 +10,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 -- |
 -- Module      :  Pact.Types.Exp
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -62,7 +61,7 @@ data Literal
   | LDecimal { _lDecimal :: !Decimal }
   | LBool { _lBool :: !Bool }
   | LTime { _lTime :: !UTCTime }
-  deriving (Eq,Generic,Ord,Typeable,Data)
+  deriving (Eq,Generic,Ord)
 
 instance Serialize Literal
 instance NFData Literal
@@ -100,7 +99,7 @@ litToPrim LDecimal {} = TyDecimal
 litToPrim LBool {} = TyBool
 litToPrim LTime {} = TyTime
 
-data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum,Typeable,Data)
+data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
 instance NFData ListDelimiter
 
 listDelims :: ListDelimiter -> (Text,Text)
@@ -111,7 +110,7 @@ listDelims Braces = ("{","}")
 enlist :: ListDelimiter -> ((Text,Text) -> a) -> a
 enlist d f = f (listDelims d)
 
-data Separator = Colon|ColonEquals|Comma deriving (Eq,Ord,Generic,Bounded,Enum,Typeable,Data)
+data Separator = Colon|ColonEquals|Comma deriving (Eq,Ord,Generic,Bounded,Enum)
 instance NFData Separator
 instance Show Separator where
   show Colon = ":"
@@ -122,7 +121,7 @@ instance Show Separator where
 data LiteralExp i = LiteralExp
   { _litLiteral :: !Literal
   , _litInfo :: !i
-  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Typeable,Data)
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (LiteralExp i) where show LiteralExp{..} = show _litLiteral
 instance HasInfo (LiteralExp Info) where
   getInfo = _litInfo
@@ -132,7 +131,7 @@ data AtomExp i = AtomExp
   { _atomAtom :: !Text
   , _atomQualifiers :: ![Text]
   , _atomInfo :: i
-  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Typeable,Data)
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (AtomExp i) where
   show AtomExp{..} = intercalate "." (map unpack $ _atomQualifiers ++ [_atomAtom])
 instance HasInfo (AtomExp Info) where
@@ -143,7 +142,7 @@ data ListExp i = ListExp
   { _listList :: ![(Exp i)]
   , _listDelimiter :: !ListDelimiter
   , _listInfo :: !i
-  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Typeable,Data)
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (ListExp i) where
   show ListExp{..} =
     enlist _listDelimiter $ \(o,c) ->
@@ -155,7 +154,7 @@ instance NFData i => NFData (ListExp i)
 data SeparatorExp i = SeparatorExp
   { _sepSeparator :: !Separator
   , _sepInfo :: !i
-  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Typeable,Data)
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (SeparatorExp i) where show (SeparatorExp{..}) = show _sepSeparator
 instance HasInfo (SeparatorExp Info) where
   getInfo = _sepInfo
@@ -168,7 +167,7 @@ data Exp i =
   EAtom (AtomExp i) |
   EList (ListExp i) |
   ESeparator (SeparatorExp i)
-  deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Typeable,Data)
+  deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 
 instance NFData i => NFData (Exp i)
 instance HasInfo (Exp Info) where

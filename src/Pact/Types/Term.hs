@@ -11,7 +11,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
 -- |
 -- Module      :  Pact.Types.Term
@@ -110,7 +109,7 @@ import Pact.Types.Exp
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
   , _mModel :: ![Exp Info]   -- ^ models
-  } deriving (Eq, Show, Generic, Typeable, Data)
+  } deriving (Eq, Show, Generic)
 
 instance ToJSON Meta where
   toJSON Meta {..} = object
@@ -125,7 +124,7 @@ instance Monoid Meta where
   mempty = Meta Nothing []
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
-  deriving (Eq,Ord,Generic,IsString,AsString,Typeable,Data)
+  deriving (Eq,Ord,Generic,IsString,AsString)
 
 instance Serialize PublicKey
 instance NFData PublicKey
@@ -139,7 +138,7 @@ instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
 data KeySet = KeySet {
       _ksKeys :: ![PublicKey]
     , _ksPredFun :: !Name
-    } deriving (Eq,Generic,Typeable,Data)
+    } deriving (Eq,Generic)
 instance Show KeySet where
   show (KeySet ks f) =
     "KeySet { keys: " ++ show ks ++ ", pred: " ++ show f ++ " }"
@@ -157,17 +156,17 @@ instance ToJSON KeySet where
 
 
 newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Typeable,Data)
+    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
 instance Show KeySetName where show (KeySetName s) = show s
 
 newtype PactId = PactId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default,Typeable,Data)
+    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
 instance Show PactId where show (PactId s) = show s
 
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
   , _pgName :: !Text
-  } deriving (Eq,Generic,Typeable,Data)
+  } deriving (Eq,Generic)
 
 instance Show PactGuard where
   show PactGuard{..} =
@@ -179,7 +178,7 @@ instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 data ModuleGuard = ModuleGuard
   { _mgModuleName :: !ModuleName
   , _mgName :: !Text
-  } deriving (Eq,Generic,Typeable,Data)
+  } deriving (Eq,Generic)
 
 instance Show ModuleGuard where
   show ModuleGuard{..} =
@@ -191,7 +190,7 @@ instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 data UserGuard = UserGuard
   { _ugData :: !(Term Name) -- TODO when Term is safe, use "object" type
   , _ugPredFun :: !Name
-  } deriving (Eq,Generic,Typeable,Data)
+  } deriving (Eq,Generic)
 
 instance Show UserGuard where
   show UserGuard{..} =
@@ -206,7 +205,7 @@ data Guard
   | GKeySetRef KeySetName
   | GModule ModuleGuard
   | GUser UserGuard
-  deriving (Eq,Typeable,Data)
+  deriving (Eq)
 
 instance Show Guard where
   show (GPact g) = show g
@@ -234,7 +233,7 @@ data DefType
   = Defun
   | Defpact
   | Defcap
-  deriving (Eq,Show,Generic,Typeable,Data)
+  deriving (Eq,Show,Generic)
 
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
@@ -242,7 +241,7 @@ defTypeRep Defpact = "defpact"
 defTypeRep Defcap = "defcap"
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,AsString,Typeable,Data)
+    deriving (Eq,Ord,IsString,ToJSON,AsString)
 instance Show NativeDefName where show (NativeDefName s) = show s
 
 -- | Capture function application metadata
@@ -285,15 +284,7 @@ instance Monoid Gas where
 data NativeDFun = NativeDFun
   { _nativeName :: NativeDefName
   , _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
-  } deriving (Typeable)
-
-nativeDFunDataType :: DataType
-nativeDFunDataType = mkDataType "Pact.Types.Term.NativeDFun" [mkConstr nativeDFunDataType "NativeDFun" [] Prefix]
-
-instance Data NativeDFun where
-  gunfold _ _ _ = error "Cannot `gunfold` NativeDFun - native functions are not data"
-  toConstr (NativeDFun _ _) = mkConstr nativeDFunDataType "NativeDFun" [] Prefix
-  dataTypeOf _ = nativeDFunDataType
+  }
 
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a
@@ -304,7 +295,7 @@ data BindType n =
   BindLet |
   -- | Schema-style binding, with string value for key
   BindSchema { _bType :: n }
-  deriving (Eq,Functor,Foldable,Traversable,Ord,Typeable,Data)
+  deriving (Eq,Functor,Foldable,Traversable,Ord)
 instance (Show n) => Show (BindType n) where
   show BindLet = "let"
   show (BindSchema b) = "bind" ++ show b
@@ -318,7 +309,7 @@ instance Eq1 BindType where
   liftEq _ _ _ = False
 
 newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Typeable,Data)
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
 instance Show TableName where show (TableName s) = show s
 
 -- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
@@ -326,7 +317,7 @@ instance Show TableName where show (TableName s) = show s
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
-  } deriving (Eq, Ord, Generic, Typeable, Data)
+  } deriving (Eq, Ord, Generic)
 
 instance Hashable ModuleName where
   hashWithSalt s (ModuleName n Nothing)   =
@@ -365,14 +356,14 @@ instance FromJSON ModuleName where
     <*> o .:? "namespace"
 
 newtype DefName = DefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Typeable,Data)
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show DefName where show (DefName s) = show s
 
 -- | A named reference from source.
 data Name
   = QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info }
   | Name { _nName :: Text, _nInfo :: Info }
-  deriving (Generic,Typeable,Data)
+  deriving (Generic)
 
 instance Show Name where
   show (QName q n _) = asString' q ++ "." ++ unpack n
@@ -417,7 +408,7 @@ data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe Hash)
   , _uInfo :: !Info
-  } deriving (Eq,Generic,Typeable,Data)
+  } deriving (Eq,Generic)
 instance Show Use where
   show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
 
@@ -425,7 +416,7 @@ data App t = App
   { _appFun :: !t
   , _appArgs :: ![t]
   , _appInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq,Typeable,Data)
+  } deriving (Functor,Foldable,Traversable,Eq)
 instance Show n => Show (App n) where
   show App{..} = "(" ++ unwords (show _appFun:map show _appArgs) ++ ")"
 
@@ -488,7 +479,7 @@ data Def n = Def
   , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
   , _dInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq,Typeable,Data)
+  } deriving (Functor,Foldable,Traversable,Eq)
 instance (Show n) => Show (Def n) where
   show Def{..} = "(" ++ unwords
     [ defTypeRep _dDefType
@@ -497,7 +488,7 @@ instance (Show n) => Show (Def n) where
     maybeDelim " " (_mDocs _dMeta) ++ ")"
 
 newtype NamespaceName = NamespaceName Text
-  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, Typeable, Data)
+  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic)
 
 data Namespace = Namespace
   { _nsName   :: NamespaceName
@@ -522,7 +513,7 @@ data ConstVal n =
   CVRaw { _cvRaw :: !n } |
   CVEval { _cvRaw :: !n
          , _cvEval :: !n }
-  deriving (Eq,Functor,Foldable,Traversable,Generic,Typeable,Data)
+  deriving (Eq,Functor,Foldable,Traversable,Generic)
 
 instance Show o => Show (ConstVal o) where
   show (CVRaw r) = show r
@@ -620,7 +611,7 @@ data Term n =
     , _tMeta :: !Meta
     , _tInfo :: !Info
     }
-    deriving (Functor,Foldable,Traversable,Eq,Typeable,Data)
+    deriving (Functor,Foldable,Traversable,Eq)
 
 instance Show n => Show (Term n) where
     show TModule {..} =

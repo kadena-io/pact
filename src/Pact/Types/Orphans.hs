@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
@@ -68,6 +67,3 @@ instance Default Text where def = ""
 instance Serialize Text where
   put = put . encodeUtf8
   get = decodeUtf8 <$> get
-
-deriving instance Typeable Decimal
-deriving instance Data Decimal
