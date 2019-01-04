@@ -9,6 +9,7 @@ module Pact.Analyze.Util where
 
 import           Control.Lens         (Iso, Snoc (_Snoc), iso, makeLenses,
                                        prism)
+import qualified Data.SBV             as SBV
 import qualified Data.Default         as Default
 import qualified Data.Foldable        as Foldable
 import           Pact.Types.Lang      (Info (_iInfo), Parsed)
@@ -105,3 +106,50 @@ instance Snoc (SnocList a) (SnocList b) a b where
 
 snocConsList :: Iso (SnocList a) (SnocList b) [a] [b]
 snocConsList = iso Foldable.toList snocList
+
+infixl 6 .<+>       -- xor
+infixr 3 .&&, .~&   -- and, nand
+infixr 2 .||, .~|   -- or, nor
+infixr 1 .=>, .<=>  -- implies, iff
+
+class Boolean b where
+  sTrue  :: b
+  sFalse :: b
+  sNot   :: b -> b
+  (.&&)  :: b -> b -> b
+  (.||)  :: b -> b -> b
+  (.~&)  :: b -> b -> b
+  (.~|)  :: b -> b -> b
+  (.<+>) :: b -> b -> b
+  (.=>)  :: b -> b -> b
+  (.<=>) :: b -> b -> b
+  fromBool :: Bool -> b
+
+  sFalse         = sNot sTrue
+  a .|| b        = sNot (sNot a .&& sNot b)
+  a .~& b        = sNot (a .&& b)
+  a .~| b        = sNot (a .|| b)
+  a .<+> b       = (a .&& sNot b) .|| (sNot a .&& b)
+  a .<=> b       = (a .&& b) .|| (sNot a .&& sNot b)
+  a .=> b        = sNot a .|| b
+  fromBool True  = sTrue
+  fromBool False = sFalse
+
+instance Boolean Bool where
+  sTrue  = True
+  sFalse = False
+  sNot   = not
+  (.&&)  = (&&)
+
+instance Boolean (SBV.SBV Bool) where
+  sTrue    = SBV.sTrue
+  sFalse   = SBV.sFalse
+  sNot     = SBV.sNot
+  (.&&)    = (SBV..&&)
+  (.||)    = (SBV..||)
+  (.~&)    = (SBV..~&)
+  (.~|)    = (SBV..~|)
+  (.<+>)   = (SBV..<+>)
+  (.=>)    = (SBV..=>)
+  (.<=>)   = (SBV..<=>)
+  fromBool = SBV.fromBool

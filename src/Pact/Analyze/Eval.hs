@@ -26,8 +26,7 @@ import           Control.Monad.State.Strict  (runStateT)
 import           Control.Monad.Trans.Class   (lift)
 import           Data.Functor.Identity       (Identity (Identity, runIdentity))
 import           Data.Map.Strict             (Map)
-import           Data.SBV                    (Boolean ((==>)), SBV, Symbolic,
-                                              true)
+import           Data.SBV                    (SBV, Symbolic)
 import qualified Data.SBV                    as SBV
 import           Data.String                 (fromString)
 
@@ -54,7 +53,7 @@ analyzeCheck = \case
     assumingSuccess :: S Bool -> Query (S Bool)
     assumingSuccess p = do
       success <- view (qeAnalyzeState.succeeds)
-      pure $ success ==> p
+      pure $ success .=> p
 
 -- | A convenience to treat a nested 'TableMap', '[]', and tuple as a single
 -- functor instead of three.
@@ -69,7 +68,7 @@ analyzeInvariants = assumingSuccess =<< invariantsHold''
     assumingSuccess :: InvariantsF (S Bool) -> Query (InvariantsF (S Bool))
     assumingSuccess ps = do
       success <- view (qeAnalyzeState.succeeds)
-      pure $ (success ==>) <$> ps
+      pure $ (success .=>) <$> ps
 
     invariantsHold :: Query (TableMap (ZipList (Located (SBV Bool))))
     invariantsHold = view (qeAnalyzeState.maintainsInvariants)
@@ -100,7 +99,7 @@ runAnalysis' query tables args tm rootPath tags info = do
   let state0 = mkInitialAnalyzeState tables
 
       analysis = do
-        tagSubpathStart rootPath true
+        tagSubpathStart rootPath sTrue
         res <- evalETerm tm
         tagResult res
         pure res
@@ -117,7 +116,7 @@ runAnalysis' query tables args tm rootPath tags info = do
       ksProvs = state1 ^. globalState.gasKsProvenances
 
   (results, querySucceeds)
-    <- hoist runAlloc $ runReaderT (runStateT (queryAction query) true) qEnv
+    <- hoist runAlloc $ runReaderT (runStateT (queryAction query) sTrue) qEnv
   pure $ results <&> \prop -> AnalysisResult querySucceeds (_sSbv prop) ksProvs
 
 runPropertyAnalysis

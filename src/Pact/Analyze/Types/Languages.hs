@@ -70,7 +70,6 @@ module Pact.Analyze.Types.Languages
   ) where
 
 import           Data.Maybe                   (fromMaybe)
-import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as Text
@@ -325,7 +324,7 @@ singShowsTm :: IsTerm tm => SingTy a -> Int -> tm a -> ShowS
 singShowsTm = singShowsTm'
 
 singShowsOpen :: IsTerm tm => SingTy a -> Open x tm a -> ShowS
-singShowsOpen ty (Open v nm a) = showParen true $
+singShowsOpen ty (Open v nm a) = showParen True $
     showsPrec 11 v
   . showString " "
   . showsPrec 11 nm
@@ -1008,12 +1007,12 @@ instance Numerical Prop :<: Prop where
 instance IsString (Prop 'TyStr) where
   fromString = Lit' . fromString
 
-instance Boolean (Prop 'TyBool) where
-  true      = Lit' True
-  false     = Lit' False
-  bnot p    = CoreProp $ Logical NotOp [p]
-  p1 &&& p2 = PAnd p1 p2
-  p1 ||| p2 = POr  p1 p2
+-- instance Boolean (Prop 'TyBool) where
+--   true      = Lit' True
+--   false     = Lit' False
+--   bnot p    = CoreProp $ Logical NotOp [p]
+--   p1 &&& p2 = PAnd p1 p2
+--   p1 ||| p2 = POr  p1 p2
 
 instance Num (Prop 'TyInteger) where
   fromInteger = Lit' . fromInteger

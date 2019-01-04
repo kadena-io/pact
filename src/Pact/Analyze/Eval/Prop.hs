@@ -13,8 +13,7 @@ import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT (..))
 import qualified Data.Map.Strict            as Map
-import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
-                                             EqSymbolic ((.==)),
+import           Data.SBV                   (EqSymbolic ((.==)),
                                              Mergeable (symbolicMerge))
 import qualified Data.SBV.Internals         as SBVI
 import           Data.String                (IsString (fromString))
@@ -58,7 +57,7 @@ instance Analyzer Query where
     throwError $ AnalyzeFailure info err
   getVar vid        = view (scope . at vid)
   withVar vid val m = local (scope . at vid ?~ val) m
-  markFailure b     = id %= (&&& SymbolicSuccess (bnot b))
+  markFailure b     = id %= (.&& SymbolicSuccess (sNot b))
 
 aval
   :: Analyzer m
@@ -106,7 +105,7 @@ beforeAfterLens = \case
 
 evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
-evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
+evalPropSpecific Abort   = sNot <$> evalPropSpecific Success
 evalPropSpecific Result  = aval (pure ... mkS) =<< view qeAnalyzeResult
 evalPropSpecific (Forall vid _name (EType (ty :: Types.SingTy ty)) p) = do
   var <- singForAll ty
@@ -115,13 +114,13 @@ evalPropSpecific (Forall vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
     local (qeTableScope . at vid ?~ tableName) (evalProp prop)
-  pure $ foldr (&&&) true bools
+  pure $ foldr (.&&) sTrue bools
 evalPropSpecific (Forall vid _name (QColumnOf tabName) prop) = do
   columns <- view (analyzeEnv . aeColumnIds . ix tabName)
   bools <- for (Map.keys columns) $ \colName ->
     let colName' = ColumnName $ T.unpack colName
     in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
-  pure $ foldr (&&&) true bools
+  pure $ foldr (.&&) sTrue bools
 evalPropSpecific (Exists vid _name (EType (ty :: Types.SingTy ty)) p) = do
   var <- singExists ty
   local (scope.at vid ?~ mkAVal var) $ evalProp p
@@ -129,13 +128,13 @@ evalPropSpecific (Exists vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
     local (qeTableScope . at vid ?~ tableName) (evalProp prop)
-  pure $ foldr (|||) false bools
+  pure $ foldr (.||) sFalse bools
 evalPropSpecific (Exists vid _name (QColumnOf tabName) prop) = do
   columns <- view (analyzeEnv . aeColumnIds . ix tabName)
   bools <- for (Map.keys columns) $ \colName ->
     let colName' = ColumnName $ T.unpack colName
     in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
-  pure $ foldr (|||) false bools
+  pure $ foldr (.||) sFalse bools
 
 -- DB properties
 evalPropSpecific (TableRead tn) = do
@@ -218,30 +217,30 @@ evalPropSpecific (PropRead (SObject fields) ba tn pRk) = do
 
     av <- case fieldType of
       EType SInteger -> mkAVal <$> view
-        (qeAnalyzeState.intCell     (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.intCell     (beforeAfterLens ba) tn' cn sRk sFalse)
       EType SBool    -> mkAVal <$> view
-        (qeAnalyzeState.boolCell    (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.boolCell    (beforeAfterLens ba) tn' cn sRk sFalse)
       EType SStr     -> mkAVal <$> view
-        (qeAnalyzeState.stringCell  (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.stringCell  (beforeAfterLens ba) tn' cn sRk sFalse)
       EType SDecimal -> mkAVal <$> view
-        (qeAnalyzeState.decimalCell (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.decimalCell (beforeAfterLens ba) tn' cn sRk sFalse)
       EType STime    -> mkAVal <$> view
-        (qeAnalyzeState.timeCell    (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.timeCell    (beforeAfterLens ba) tn' cn sRk sFalse)
       EType SKeySet  -> mkAVal <$> view
-        (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk sFalse)
 
       EType (SList SInteger) -> mkAVal <$> view
-        (qeAnalyzeState.intListCell     (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.intListCell     (beforeAfterLens ba) tn' cn sRk sFalse)
       EType (SList SBool   ) -> mkAVal <$> view
-        (qeAnalyzeState.boolListCell    (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.boolListCell    (beforeAfterLens ba) tn' cn sRk sFalse)
       EType (SList SStr    ) -> mkAVal <$> view
-        (qeAnalyzeState.stringListCell  (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.stringListCell  (beforeAfterLens ba) tn' cn sRk sFalse)
       EType (SList SDecimal) -> mkAVal <$> view
-        (qeAnalyzeState.decimalListCell (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.decimalListCell (beforeAfterLens ba) tn' cn sRk sFalse)
       EType (SList STime   ) -> mkAVal <$> view
-        (qeAnalyzeState.timeListCell    (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.timeListCell    (beforeAfterLens ba) tn' cn sRk sFalse)
       EType (SList SKeySet ) -> mkAVal <$> view
-        (qeAnalyzeState.ksListCell      (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.ksListCell      (beforeAfterLens ba) tn' cn sRk sFalse)
 
       EType SAny         -> pure OpaqueVal
       EType (SList SAny) -> pure OpaqueVal

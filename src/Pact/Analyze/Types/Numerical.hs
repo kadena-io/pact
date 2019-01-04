@@ -20,8 +20,8 @@ import           Control.Lens                (Iso', Prism', from, iso, view)
 import           Data.Coerce                 (Coercible)
 import qualified Data.Decimal                as Decimal
 import           Data.SBV                    (HasKind (kindOf), SDivisible (..),
-                                              SymWord (..), bnot, oneIf, (&&&),
-                                              (.==), (.>), (.^), (|||))
+                                              SymWord (..), sNot, oneIf, (.&&),
+                                              (.==), (.>), (.^), (.||))
 import           Data.SBV.Control            (SMTValue (sexprToVal))
 import           Data.SBV.Dynamic            (svAbs, svPlus, svTimes, svUNeg)
 import           Data.SBV.Internals          (CW (..), CWVal (CWInteger),
@@ -151,12 +151,12 @@ roundingDiv num denom =
 
       exactlyBetweenNumbers = abs fractionalPart * 2 .== abs denom
       roundsUp              = abs fractionalPart * 2 .>  abs denom
-      wholePartIsOdd        = bnot $ wholePart `sMod` 2 .== 0
+      wholePartIsOdd        = sNot $ wholePart `sMod` 2 .== 0
 
     -- We're working in the space of integers 10^255 times bigger than the
     -- decimals they represent. Possibly add an adjustment to jump to the next
     -- decimal, then convert to a decimal.
-  in wholePart + oneIf (roundsUp ||| exactlyBetweenNumbers &&& wholePartIsOdd)
+  in wholePart + oneIf (roundsUp .|| exactlyBetweenNumbers .&& wholePartIsOdd)
 
 instance SymbolicDecimal (SBV Decimal) where
   type IntegerOf (SBV Decimal) = SBV Integer

@@ -13,14 +13,13 @@ import           Control.Lens                (over)
 -- import           Data.Foldable               (foldrM)
 -- import qualified Data.Map.Strict             as Map
 import           Data.Monoid                 ((<>))
-import           Data.SBV                    (Boolean (bnot, false, true),
-                                              EqSymbolic ((./=), (.==)),
+import           Data.SBV                    (EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, false, true, (|||),
-                                              SBV, (&&&), (|||), ite, unliteral)
+                                              SymWord,
+                                              SBV, ite, unliteral)
 -- import           Data.SBV.List               ((.:))
 import qualified Data.SBV.List               as SBVL
-import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
+import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
                                               bzipWith, {- bmapM, bfoldrM -})
 import qualified Data.SBV.String             as SBVS
 -- import           Data.Text                   (Text)
@@ -32,7 +31,7 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
--- import           Pact.Analyze.Util
+import           Pact.Analyze.Util           (Boolean(..))
 import qualified Pact.Native                 as Pact
 
 
@@ -146,11 +145,11 @@ evalLogicalOp
   -> m (S Bool)
 evalLogicalOp AndOp [a, b] = do
   a' <- eval a
-  singIte SBool (_sSbv a') (eval b) (pure false)
+  singIte SBool (_sSbv a') (eval b) (pure sFalse)
 evalLogicalOp OrOp [a, b] = do
   a' <- eval a
-  singIte SBool (_sSbv a') (pure true) (eval b)
-evalLogicalOp NotOp [a] = bnot <$> eval a
+  singIte SBool (_sSbv a') (pure sTrue) (eval b)
+evalLogicalOp NotOp [a] = sNot <$> eval a
 evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 -- | Throw an analyze failure when Nothing
@@ -208,14 +207,14 @@ evalCore (ListContains ty needle haystack) = withSymWord ty $ do
   S _ needle'   <- withSing ty $ eval needle
   S _ haystack' <- withSing ty $ eval haystack
   pure $ sansProv $
-    bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
+    bfoldr listBound (\cell rest -> cell .== needle' .|| rest) sFalse haystack'
 evalCore (ListEqNeq ty op a b) = withSymWord ty $ do
   S _ a' <- withSing ty $ eval a
   S _ b' <- withSing ty $ eval b
 
   let wrongLength = case op of
-        Eq'  -> false
-        Neq' -> true
+        Eq'  -> sFalse
+        Neq' -> sTrue
       zipF = case op of
         Eq'  -> (.==)
         Neq' -> (./=)
@@ -228,7 +227,7 @@ evalCore (ListAt ty i l) = withSymWord ty $ do
   S _ l' <- eval l
 
   -- valid range [0..length l - 1]
-  markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
+  markFailure $ i' .< 0 .|| i' .>= SBVL.length l'
 
   -- statically build a list of index comparisons
   pure $ sansProv $ SBVL.elemAt l' i'
@@ -309,13 +308,13 @@ evalCore (AndQ tya (Open vid1 _ f) (Open vid2 _ g) a) = do
   S _ a' <- withSing tya $ eval a
   fv     <- withVar vid1 (mkAVal' a') $ eval f
   gv     <- withVar vid2 (mkAVal' a') $ eval g
-  pure $ fv &&& gv
+  pure $ fv .&& gv
 
 evalCore (OrQ tya (Open vid1 _ f) (Open vid2 _ g) a) = do
   S _ a' <- withSing tya $ eval a
   fv     <- withVar vid1 (mkAVal' a') $ eval f
   gv     <- withVar vid2 (mkAVal' a') $ eval g
-  pure $ fv ||| gv
+  pure $ fv .|| gv
 
 evalCore (Where schema tya key (Open vid _ f) obj) = withSymWord tya $ do
   S _ v <- evalObjAt schema key obj tya
@@ -390,7 +389,7 @@ evalStrToIntBase bT sT = do
 
   where
     symbolicFailure = do
-      markFailure true
+      markFailure sTrue
       pure (literalS 0)
 
     precompute base conText =

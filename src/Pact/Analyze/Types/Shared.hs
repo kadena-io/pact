@@ -41,18 +41,18 @@ import           Data.Kind                    (Type)
 import           Data.List                    (sortBy)
 import           Data.Maybe                   (isJust)
 import qualified Data.Map.Strict              as Map
-import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
-                                               EqSymbolic, HasKind, Int64,
+import           Data.SBV.Trans               (MProvable (..))
+import           Data.SBV                     (EqSymbolic, HasKind, Int64,
                                                Kind (KString, KUnbounded),
                                                Mergeable (symbolicMerge),
-                                               OrdSymbolic, Provable (forAll),
+                                               OrdSymbolic,
                                                SBV,
                                                SDivisible (sDivMod, sQuotRem),
-                                               SymWord, Symbolic, forAll_,
-                                               forSome, forSome_, fromBool,
+                                               SymWord, Symbolic,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
                                                (.<), (.==), fromCW)
+import qualified Data.SBV                     as SBV
 import           Data.SBV.Control             (SMTValue (..))
 import           Data.SBV.Internals           (CWVal(..), CW(..), genMkSymVar, SVal(SVal), Kind(..))
 import qualified Data.SBV.Internals           as SBVI
@@ -75,6 +75,7 @@ import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
+import           Pact.Analyze.Util            (Boolean(..))
 
 
 class IsTerm tm where
@@ -336,11 +337,11 @@ instance SymWord a => OrdSymbolic (S a) where
 -- transformation to a symbolic value, we are no longer working with the value
 -- that was sourced from the database.
 instance Boolean (S Bool) where
-  true            = sansProv true
-  false           = sansProv false
-  bnot (S _ x)    = sansProv $ bnot x
-  S _ x &&& S _ y = sansProv $ x &&& y
-  S _ x ||| S _ y = sansProv $ x ||| y
+  sTrue           = sansProv SBV.sTrue
+  sFalse          = sansProv SBV.sFalse
+  sNot (S _ x)    = sansProv $ SBV.sNot x
+  S _ x .&& S _ y = sansProv $ x SBV..&& y
+  S _ x .|| S _ y = sansProv $ x SBV..|| y
 
 instance IsString (S String) where
   fromString = sansProv . fromString
@@ -395,7 +396,7 @@ instance SDivisible (S Integer) where
 
 type PredicateS = Symbolic (S Bool)
 
-instance Provable PredicateS where
+instance MProvable IO PredicateS where
   forAll_   = fmap _sSbv
   forAll _  = fmap _sSbv
   forSome_  = fmap _sSbv
@@ -572,11 +573,11 @@ instance EqSymbolic UObject where
         ks' = Map.keysSet fields'
     in if ks == ks'
        then Set.foldl'
-              (\acc key -> acc &&&
+              (\acc key -> acc .&&
                 ((fields Map.! key) .== (fields' Map.! key)))
-              true
+              sTrue
               ks
-       else false
+       else sFalse
 
 instance EqSymbolic AVal where
   AVal mProv sv .== AVal mProv' sv' = mkS mProv sv .== mkS mProv' sv'
@@ -584,9 +585,9 @@ instance EqSymbolic AVal where
   -- Not perfect; this would be better if we could easily produce an
   -- uninterpreted bool here. We can't though, because 'uninterpret' takes a
   -- String that must be unique for each allocation.
-  OpaqueVal .== OpaqueVal = false
+  OpaqueVal .== OpaqueVal = sFalse
 
-  _ .== _ = false
+  _ .== _ = sFalse
 
 mkS :: Maybe Provenance -> SVal -> S a
 mkS mProv sval = S mProv (SBVI.SBV sval)
@@ -874,10 +875,9 @@ instance
   , SingI ty
   , Typeable ty
   ) => SMTValue (Object ('(k, ty) ': tys)) where
-  sexprToVal = error "TODO"
-  -- sexprToVal sexpr = case sexprToVal sexpr of
-  --   Nothing             -> Nothing
-  --   Just (a, Object as) -> Just $ Object $ ConsOf SSymbol (ConcreteCol sing a) as
+  sexprToVal sexpr = case sexprToVal sexpr of
+    Nothing             -> Nothing
+    Just (a, Object as) -> Just $ Object $ ConsOf SSymbol (ConcreteCol sing a) as
 
 withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> b
 withSymWord = withDict . singMkSymWord

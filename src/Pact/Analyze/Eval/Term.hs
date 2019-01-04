@@ -24,11 +24,10 @@ import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||)),
-                                              EqSymbolic ((.==)),
+import           Data.SBV                    (EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), -- SBV,
                                               SymArray (readArray), -- SymWord,
-                                              false, ite, (.<))
+                                              ite, (.<))
 import qualified Data.SBV.String             as SBV
 import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
@@ -67,10 +66,10 @@ instance Analyzer Analyze where
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
   withVar vid val m = local (scope . at vid ?~ val) m
-  markFailure b = succeeds %= (&&& sansProv (bnot b))
+  markFailure b = succeeds %= (.&& sansProv (sNot b))
 
 addConstraint :: S Bool -> Analyze ()
-addConstraint b = modify' $ latticeState.lasConstraints %~ (&&& b)
+addConstraint b = modify' $ latticeState.lasConstraints %~ (.&& b)
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s ->
@@ -154,8 +153,8 @@ tagSubpathStart p active = do
 
 tagFork :: Path -> Path -> S Bool -> S Bool -> Analyze ()
 tagFork pathL pathR reachable lPasses = do
-  tagSubpathStart pathL $ reachable &&& lPasses
-  tagSubpathStart pathR $ reachable &&& bnot lPasses
+  tagSubpathStart pathL $ reachable .&& lPasses
+  tagSubpathStart pathR $ reachable .&& sNot lPasses
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
@@ -188,7 +187,7 @@ ksAuthorized sKs = do
   -- here.
   case sKs ^? sProv._Just._FromCell of
     Just (OriginatingCell tn sCn sRk sDirty) ->
-      cellEnforced tn sCn sRk %= (||| bnot sDirty)
+      cellEnforced tn sCn sRk %= (.|| sNot sDirty)
     Nothing ->
       pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
@@ -213,7 +212,7 @@ applyInvariants tn aValFields addInvariants = do
     (Just invariants', Just columnIds) -> do
       let aValFields' = reindex columnIds aValFields
       invariants'' <- for invariants' $ \(Located info invariant) ->
-        case runReaderT (runStateT (unInvariantCheck (eval invariant)) true)
+        case runReaderT (runStateT (unInvariantCheck (eval invariant)) sTrue)
                         (Located info aValFields') of
           -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
@@ -263,13 +262,13 @@ evalTerm = \case
   Enforce mTid cond -> do
     cond' <- evalTerm cond
     maybe (pure ()) (`tagAssert` cond') mTid
-    succeeds %= (&&& cond')
-    pure true
+    succeeds %= (.&& cond')
+    pure sTrue
 
   EnforceOne (Left tid) -> do
-    tagAssert tid false -- in this case (of an empty list), we always fail.
-    succeeds .= false
-    pure true           -- <- this value doesn't matter.
+    tagAssert tid sFalse -- in this case (of an empty list), we always fail.
+    succeeds .= sFalse
+    pure sTrue           -- <- this value doesn't matter.
 
   -- TODO: check that each cond is pure. checking that @Enforce@ terms are pure
   -- does *NOT* suffice; we can have arbitrary expressions in an @enforce-one@
@@ -279,18 +278,18 @@ evalTerm = \case
 
     (result, anySucceeded) <- foldlM
       (\(prevRes, earlierSuccess) ((failTag, passTag), cond) -> do
-        succeeds .= true
+        succeeds .= sTrue
         res <- evalTerm cond
         currentSucceeded <- use succeeds
-        tagFork passTag failTag (bnot earlierSuccess) currentSucceeded
+        tagFork passTag failTag (sNot earlierSuccess) currentSucceeded
 
         pure $ iteS earlierSuccess
-          (prevRes, true)
+          (prevRes, sTrue)
           (res,     currentSucceeded))
-      (true, false)
+      (sTrue, sFalse)
       conds
 
-    succeeds .= (initSucceeds &&& anySucceeded)
+    succeeds .= (initSucceeds .&& anySucceeded)
     pure result
 
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
@@ -302,11 +301,11 @@ evalTerm = \case
 
     thisRowExists <- use $ rowExists id tn sRk
     let writeSucceeds = case writeType of
-          Pact.Insert -> bnot thisRowExists
-          Pact.Write  -> true
+          Pact.Insert -> sNot thisRowExists
+          Pact.Write  -> sTrue
           Pact.Update -> thisRowExists
-    succeeds %= (&&& writeSucceeds)
-    rowExists id tn sRk .= true
+    succeeds %= (.&& writeSucceeds)
+    rowExists id tn sRk .= sTrue
 
     tableWritten tn .= writeSucceeds
     rowWriteCount tn sRk += 1
@@ -314,8 +313,8 @@ evalTerm = \case
 
     aValFields <- iforM fields $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
-      cellWritten tn cn sRk .= true
-      columnWritten tn cn   .= true
+      cellWritten tn cn sRk .= sTrue
+      columnWritten tn cn   .= sTrue
       tagAccessCell mtWrites tid colName aval'
 
       case aval' of
@@ -332,7 +331,7 @@ evalTerm = \case
                 -> Analyze ()
               writeDelta plus minus mkCellL mkCellDeltaL mkColDeltaL = do
                 let cell :: Lens' EvalAnalyzeState (S t)
-                    cell = mkCellL tn cn sRk true
+                    cell = mkCellL tn cn sRk sTrue
                 let next = mkS mProv sVal
 
                 -- (only) in the case of an insert, we know the cell did not
@@ -348,18 +347,18 @@ evalTerm = \case
 
           case fieldType of
             EType SInteger -> writeDelta (+) (-) (intCell id) intCellDelta intColumnDelta
-            EType SBool    -> boolCell   id tn cn sRk true .= mkS mProv sVal
+            EType SBool    -> boolCell   id tn cn sRk sTrue .= mkS mProv sVal
             EType SDecimal -> writeDelta (+) (-) (decimalCell id) decCellDelta decColumnDelta
-            EType STime    -> timeCell   id tn cn sRk true .= mkS mProv sVal
-            EType SStr     -> stringCell id tn cn sRk true .= mkS mProv sVal
-            EType SKeySet  -> ksCell     id tn cn sRk true .= mkS mProv sVal
+            EType STime    -> timeCell   id tn cn sRk sTrue .= mkS mProv sVal
+            EType SStr     -> stringCell id tn cn sRk sTrue .= mkS mProv sVal
+            EType SKeySet  -> ksCell     id tn cn sRk sTrue .= mkS mProv sVal
 
-            EType (SList SInteger) -> intListCell     id tn cn sRk true .= mkS mProv sVal
-            EType (SList SBool   ) -> boolListCell    id tn cn sRk true .= mkS mProv sVal
-            EType (SList SDecimal) -> decimalListCell id tn cn sRk true .= mkS mProv sVal
-            EType (SList STime   ) -> timeListCell    id tn cn sRk true .= mkS mProv sVal
-            EType (SList SStr    ) -> stringListCell  id tn cn sRk true .= mkS mProv sVal
-            EType (SList SKeySet ) -> ksListCell      id tn cn sRk true .= mkS mProv sVal
+            EType (SList SInteger) -> intListCell     id tn cn sRk sTrue .= mkS mProv sVal
+            EType (SList SBool   ) -> boolListCell    id tn cn sRk sTrue .= mkS mProv sVal
+            EType (SList SDecimal) -> decimalListCell id tn cn sRk sTrue .= mkS mProv sVal
+            EType (SList STime   ) -> timeListCell    id tn cn sRk sTrue .= mkS mProv sVal
+            EType (SList SStr    ) -> stringListCell  id tn cn sRk sTrue .= mkS mProv sVal
+            EType (SList SKeySet ) -> ksListCell      id tn cn sRk sTrue .= mkS mProv sVal
 
             EType SAny         -> void $ throwErrorNoLoc OpaqueValEncountered
             EType (SList SAny) -> void $ throwErrorNoLoc OpaqueValEncountered
@@ -373,7 +372,7 @@ evalTerm = \case
 
     applyInvariants tn aValFields $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
-          fs = ZipList $ (\s -> fmap (_sSbv s &&&)) <$> invariants'
+          fs = ZipList $ (\s -> fmap (_sSbv s .&&)) <$> invariants'
       in maintainsInvariants . at tn . _Just %= (fs <*>)
 
     --
@@ -440,7 +439,7 @@ evalTerm = \case
     case (unliteralS formatStr', unliteralS timeStr') of
       (Just (Str formatStr''), Just (Str timeStr'')) ->
         case parseTime defaultTimeLocale formatStr'' timeStr'' of
-          Nothing   -> succeeds .= false >> pure 0
+          Nothing   -> succeeds .= sFalse >> pure 0
           Just time -> pure $ literalS $ fromPact timeIso time
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
 

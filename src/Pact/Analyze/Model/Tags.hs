@@ -184,7 +184,7 @@ saturateModel =
     fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBV.Query (S a)
     fetchS = traverseOf s2Sbv fetchSbv
 
-    fetchObject :: UObject -> SBVI.Query UObject
+    fetchObject :: UObject -> SBVI.QueryT IO UObject
     fetchObject (UObject fields) = UObject <$> traverse fetchTVal fields
 
     fetchAccess :: Access -> SBV.Query Access

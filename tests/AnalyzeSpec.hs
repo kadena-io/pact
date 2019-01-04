@@ -23,7 +23,7 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (fromJust, isJust)
-import           Data.SBV                     (Boolean (bnot, true, (&&&), (<=>), (==>)),
+import           Data.SBV                     (sNot, sTrue, (.&&), (<=>), (==>),
                                                isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)

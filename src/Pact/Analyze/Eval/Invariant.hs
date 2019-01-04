@@ -8,13 +8,13 @@ import           Control.Monad.Reader       (MonadReader, ReaderT, local)
 import           Control.Monad.State.Strict (MonadState,
                                              StateT(StateT, runStateT))
 import           Data.Map.Strict            (Map)
-import           Data.SBV                   (Mergeable(symbolicMerge),
-                                             bnot, (&&&))
+import           Data.SBV                   (Mergeable(symbolicMerge))
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
+import           Pact.Analyze.Util
 
 newtype InvariantCheck a = InvariantCheck
   { unInvariantCheck :: StateT SymbolicSuccess
@@ -40,4 +40,4 @@ instance Analyzer InvariantCheck where
     throwError $ AnalyzeFailure info err
   getVar vid        = view (located . at vid)
   withVar vid val m = local (located . at vid ?~ val) m
-  markFailure b     = id %= (&&& SymbolicSuccess (bnot b))
+  markFailure b     = id %= (.&& SymbolicSuccess (sNot b))

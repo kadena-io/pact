@@ -11,20 +11,19 @@ module Pact.Analyze.LegacySFunArray
   ) where
 
 import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.Reader   (ask)
 import           Data.SBV               hiding (SFunArray)
 import           Data.SBV.Internals     (SymArray (..), registerKind)
 
 -- | Declare a new functional symbolic array. Note that a read from an
 -- uninitialized cell will result in an error.
 declNewSFunArray
-  :: forall a b.
-     (HasKind a, HasKind b)
+  :: forall a b m.
+     (HasKind a, HasKind b, MonadSymbolic m)
   => Maybe String
   -> Maybe (SBV b)
-  -> Symbolic (SFunArray a b)
+  -> m (SFunArray a b)
 declNewSFunArray mbNm mDef = do
-  st <- ask
+  st <- symbolicEnv
   liftIO $ mapM_ (registerKind st) [kindOf (undefined :: a), kindOf (undefined :: b)]
   return $ SFunArray handleNotFound
   where handleNotFound = case mDef of

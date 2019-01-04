@@ -25,10 +25,9 @@ import           Control.Monad.Reader         (MonadReader)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
-import           Data.SBV                     (Boolean (bnot, true, (&&&)),
-                                               HasKind, Mergeable, SBV, SBool,
+import           Data.SBV                     (HasKind, Mergeable, SBV, SBool,
                                                SymArray (readArray, writeArray),
-                                               SymWord, false, uninterpret)
+                                               SymWord, uninterpret)
 import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
@@ -53,9 +52,9 @@ newtype SymbolicSuccess = SymbolicSuccess { successBool :: SBV Bool }
   deriving (Show, Generic, Mergeable)
 
 instance Boolean SymbolicSuccess where
-  true = SymbolicSuccess true
-  bnot = SymbolicSuccess . bnot . successBool
-  SymbolicSuccess x &&& SymbolicSuccess y = SymbolicSuccess (x &&& y)
+  sTrue = SymbolicSuccess sTrue
+  sNot = SymbolicSuccess . sNot . successBool
+  SymbolicSuccess x .&& SymbolicSuccess y = SymbolicSuccess (x .&& y)
 
 instance Wrapped SymbolicSuccess where
   type Unwrapped SymbolicSuccess = SBV Bool
@@ -268,13 +267,13 @@ mkQueryEnv env state cv0 cv1 result =
 mkInitialAnalyzeState :: [Table] -> EvalAnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
     { _latticeState = LatticeAnalyzeState
-        { _lasSucceeds            = true
-        , _lasPurelyReachable     = true
+        { _lasSucceeds            = SymbolicSuccess sTrue
+        , _lasPurelyReachable     = sTrue
         , _lasMaintainsInvariants = mkMaintainsInvariants
-        , _lasTablesRead          = mkSFunArray $ const false
-        , _lasTablesWritten       = mkSFunArray $ const false
-        , _lasColumnsRead         = mkTableColumnMap (const True) false
-        , _lasColumnsWritten      = mkTableColumnMap (const True) false
+        , _lasTablesRead          = mkSFunArray $ const sFalse
+        , _lasTablesWritten       = mkSFunArray $ const sFalse
+        , _lasColumnsRead         = mkTableColumnMap (const True) sFalse
+        , _lasColumnsWritten      = mkTableColumnMap (const True) sFalse
         , _lasIntCellDeltas       = intCellDeltas
         , _lasDecCellDeltas       = decCellDeltas
         , _lasIntColumnDeltas     = intColumnDeltas
@@ -283,7 +282,7 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasRowsWritten         = mkPerTableSFunArray 0
         , _lasCellsEnforced       = cellsEnforced
         , _lasCellsWritten        = cellsWritten
-        , _lasConstraints         = true
+        , _lasConstraints         = sansProv sTrue
         , _lasExtra               = CellValues
           { _cvTableCells          = mkSymbolicCells tables
           , _cvRowExists           = mkRowExists
@@ -303,8 +302,8 @@ mkInitialAnalyzeState tables = AnalyzeState
     intColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyInteger) 0
     decColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyDecimal) (fromInteger 0)
     cellsEnforced
-      = mkTableColumnMap (== TyPrim Pact.TyKeySet) (mkSFunArray (const false))
-    cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
+      = mkTableColumnMap (== TyPrim Pact.TyKeySet) (mkSFunArray (const sFalse))
+    cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const sFalse))
 
     mkTableColumnMap
       :: (Pact.Type Pact.UserType -> Bool) -- ^ Include this column in the mapping?
@@ -327,7 +326,7 @@ mkInitialAnalyzeState tables = AnalyzeState
 
     mkMaintainsInvariants = TableMap $ Map.fromList $
       tables <&> \Table { _tableName, _tableInvariants } ->
-        (TableName (T.unpack _tableName), ZipList $ const true <$$> _tableInvariants)
+        (TableName (T.unpack _tableName), ZipList $ const sTrue <$$> _tableInvariants)
 
     mkRowExists = TableMap $ Map.fromList $ tableNames <&> \tn@(TableName tn')
       -> (tn, mkFreeArray $ "row_exists__" <> T.pack tn')
