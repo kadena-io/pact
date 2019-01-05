@@ -12,22 +12,13 @@ import           Control.Lens         (Iso, Snoc (_Snoc), iso, makeLenses,
 import qualified Data.SBV             as SBV
 import qualified Data.Default         as Default
 import qualified Data.Foldable        as Foldable
+import           GHC.Stack            (HasCallStack)
 import           Pact.Types.Lang      (Info (_iInfo), Parsed)
 import           Pact.Types.Typecheck (AST (_aNode), Node (_aId), _tiInfo)
 
-(<$$>) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
-(<$$>) = fmap . fmap
-
-(<&&>) :: (Functor f, Functor g) => f (g a) -> (a -> b) -> f (g b)
-(<&&>) = flip (<$$>)
-
 -- | Function composition that consumes two args instead of one
 (...) :: (a -> b) -> (x -> y -> a) -> x -> y -> b
-(...) = (<$$>)
-
--- | Function composition that consumes three args instead of one
-(....) :: (a -> b) -> (x -> y -> z -> a) -> x -> y -> z -> b
-(....) = fmap . fmap . fmap
+(...) = fmap . fmap
 
 for2
   :: (Traversable s, Traversable t, Applicative f)
@@ -59,7 +50,7 @@ dummyParsed = Default.def
 dummyInfo :: Info
 dummyInfo = Default.def
 
-vacuousMatch :: String -> a
+vacuousMatch :: HasCallStack => String -> a
 vacuousMatch msg = error $ "vacuous match: " ++ msg
 
 -- * SnocList

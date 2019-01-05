@@ -327,7 +327,7 @@ mkInitialAnalyzeState tables = AnalyzeState
 
     mkMaintainsInvariants = TableMap $ Map.fromList $
       tables <&> \Table { _tableName, _tableInvariants } ->
-        (TableName (T.unpack _tableName), ZipList $ const sTrue <$$> _tableInvariants)
+        (TableName (T.unpack _tableName), ZipList $ fmap (const sTrue) <$> _tableInvariants)
 
     mkRowExists = TableMap $ Map.fromList $ tableNames <&> \tn@(TableName tn')
       -> (tn, mkFreeArray $ "row_exists__" <> T.pack tn')

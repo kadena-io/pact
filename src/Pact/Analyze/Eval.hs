@@ -74,10 +74,10 @@ analyzeInvariants = assumingSuccess =<< invariantsHold''
     invariantsHold = view (qeAnalyzeState.maintainsInvariants)
 
     invariantsHold' :: Query (InvariantsF (SBV Bool))
-    invariantsHold' = InvariantsF <$> (getZipList <$$> invariantsHold)
+    invariantsHold' = InvariantsF <$> (fmap getZipList <$> invariantsHold)
 
     invariantsHold'' :: Query (InvariantsF (S Bool))
-    invariantsHold'' = sansProv <$$> invariantsHold'
+    invariantsHold'' = fmap sansProv <$> invariantsHold'
 
 -- | Helper to run either property or invariant analysis
 runAnalysis'
