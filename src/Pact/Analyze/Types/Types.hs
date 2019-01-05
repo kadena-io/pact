@@ -48,7 +48,7 @@ type SingSymbol (x :: Symbol) = Sing x
 
 data instance Sing (n :: [(Symbol, Ty)]) where
   SNil  :: Sing ('[] :: [(Symbol, Ty)])
-  SCons :: (Typeable v, SingI v, KnownSymbol k)
+  SCons :: (SingI v, KnownSymbol k)
         => SingSymbol k -> Sing v -> Sing n
         -> Sing ('(k, v) ': n :: [(Symbol, Ty)])
 
@@ -198,7 +198,7 @@ instance SingI lst => SingI ('TyObject lst) where
 instance SingI ('[] :: [(Symbol, Ty)]) where
   sing = SNil
 
-instance (KnownSymbol k, Typeable v, SingI v, SingI kvs)
+instance (KnownSymbol k, SingI v, SingI kvs)
   => SingI (('(k, v) ': kvs) :: [(Symbol, Ty)]) where
   sing = SCons SSymbol sing sing
 

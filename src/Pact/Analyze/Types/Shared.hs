@@ -40,6 +40,7 @@ import           Data.Function                (on)
 import           Data.Kind                    (Type)
 import           Data.List                    (sortBy)
 import           Data.Maybe                   (isJust)
+import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.SBV.Trans               (MProvable (..))
 import           Data.SBV                     (EqSymbolic, HasKind, Int64,
@@ -486,17 +487,14 @@ instance Show ESchema where
       showString "ESchema "
     . showsPrec 11 ty
 
--- -- | When given a column mapping, this function gives a canonical way to assign
--- -- var ids to each column. Also see 'varIdArgs'.
--- varIdColumns :: SMap.Map f m -> Map Text VarId
--- varIdColumns smap = Map.fromList
---   $ zipWith (\index name -> (T.pack name, index)) [0..]
---   $ SMap.keys smap
-
--- varIdColumns' :: SingList m -> Map Text VarId
--- varIdColumns' smap = Map.fromList
---   $ zipWith (\index name -> (T.pack name, index)) [0..]
---   $ mappingKeys smap
+-- | When given a column mapping, this function gives a canonical way to assign
+-- var ids to each column. Also see 'varIdArgs'.
+varIdColumns :: Sing (m :: [ (Symbol, Ty) ]) -> Map Text VarId
+varIdColumns = Map.fromList . snd . varIdColumns' where
+  varIdColumns' :: Sing (m :: [ (Symbol, Ty) ]) -> (VarId, [(Text, VarId)])
+  varIdColumns' SNil = (0, [])
+  varIdColumns' (SCons k _ty tys) = case varIdColumns' tys of
+    (i, tys') -> (succ i, (T.pack (symbolVal k), i) : tys')
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.
@@ -596,9 +594,9 @@ isConcreteS = isConcrete . _sSbv
 data QKind = QType | QAny
 
 data Quantifiable :: QKind -> Type where
-  EType     :: SingTy a -> Quantifiable q
-  QTable    ::                Quantifiable 'QAny
-  QColumnOf :: TableName   -> Quantifiable 'QAny
+  EType     :: SingTy a  -> Quantifiable q
+  QTable    ::              Quantifiable 'QAny
+  QColumnOf :: TableName -> Quantifiable 'QAny
 
 deriving instance Show (Quantifiable q)
 
@@ -786,11 +784,11 @@ withUserShow = withDict . singMkUserShow
       SList ty' -> withUserShow ty' Dict
       SObject _ -> Dict
 
-withTypeable :: SingTy a -> (Typeable (Concrete a) => b) -> b
+withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable = withDict . singMkTypeable
   where
 
-    singMkTypeable :: SingTy a -> Dict (Typeable (Concrete a))
+    singMkTypeable :: SingTy a -> Dict (Typeable a, Typeable (Concrete a))
     singMkTypeable = \case
       SInteger    -> Dict
       SBool       -> Dict
@@ -803,8 +801,8 @@ withTypeable = withDict . singMkTypeable
       SObject tys -> withTypeableListDict tys Dict
 
 withTypeableListDict :: SingList tys -> (Typeable tys => b) -> b
-withTypeableListDict SNil f            = f
-withTypeableListDict (SCons _k _ty tys) f = withTypeableListDict tys f
+withTypeableListDict SNil f              = f
+withTypeableListDict (SCons _k ty tys) f = withTypeableListDict tys $ withTypeable ty f
 
 withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = withDict . singMkSMTValue
@@ -825,7 +823,7 @@ withSMTValue = withDict . singMkSMTValue
     withSMTValueListDict :: SingList tys -> (SMTValue (Object tys) => b) -> b
     withSMTValueListDict SNil f = f
     withSMTValueListDict (SCons _k ty tys) f
-      = withSMTValue ty $ withSMTValueListDict tys f
+      = withTypeable ty $ withSMTValue ty $ withSMTValueListDict tys f
 
 instance SMTValue (Object '[]) where
   sexprToVal _ = Just $ Object NilOf
@@ -860,7 +858,8 @@ withSymWord = withDict . singMkSymWord
 withSymWordListDict :: SingList tys -> (SymWord (Object tys) => b) -> b
 withSymWordListDict SNil f = f
 withSymWordListDict (SCons _k ty tys) f
-  = withTypeableListDict tys $ withSymWord ty $ withSymWordListDict tys f
+  = withTypeable ty $ withTypeableListDict tys $ withSymWord ty $
+    withSymWordListDict tys f
 
 instance Ord (Object '[]) where
   compare _ _ = EQ

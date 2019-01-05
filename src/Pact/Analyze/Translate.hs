@@ -342,9 +342,14 @@ unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
 unionPreferring = Map.union
 
 maybeTranslateUserType :: Pact.UserType -> Maybe QType
-maybeTranslateUserType (Pact.Schema _ _ _fields _) = undefined
-  -- fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
-  --   \(Pact.Arg name ty _info) -> (name, maybeTranslateType ty)
+maybeTranslateUserType (Pact.Schema _ _ [] _) = Just $ EType $ SObject SNil
+maybeTranslateUserType (Pact.Schema a b (Pact.Arg _ ty _:tys) c)
+  = case maybeTranslateUserType (Pact.Schema a b tys c) of
+    Just (EType (SObject tys')) -> case maybeTranslateType ty of
+      Nothing -> Nothing
+      Just (EType ty') -> withSing ty' $
+        Just $ EType $ SObject $ SCons (SSymbol @"TODO") ty' tys'
+    _ -> Nothing
 
 maybeTranslateUserType' :: Pact.UserType -> Maybe EType
 maybeTranslateUserType' = maybeTranslateUserType >=> downcastQType

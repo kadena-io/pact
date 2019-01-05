@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
@@ -28,9 +29,9 @@ import           Data.SBV             (SBV, SymWord)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
-import           Data.Text            (pack)
+import           Data.Text            (Text, pack)
 import           Data.Traversable     (for)
-import           GHC.TypeLits         (symbolVal)
+import           GHC.TypeLits         (Symbol, symbolVal)
 
 import qualified Pact.Types.Typecheck as TC
 
@@ -44,12 +45,14 @@ allocSbv :: SingI a => Alloc (SBV (Concrete a))
 allocSbv = _sSbv <$> allocS
 
 allocSchema :: SingTy ('TyObject m) -> Alloc UObject
-allocSchema (SObject SNil) = pure $ UObject Map.empty
-allocSchema (SObject (SCons k ty tys)) = do
-  UObject m <- allocSchema $ SObject tys
-  let ety = EType ty
-  val <- allocAVal ety
-  pure $ UObject $ Map.insert (pack (symbolVal k)) (ety, val) m
+allocSchema (SObject tys) = UObject <$> allocSchema' tys where
+  allocSchema' :: Sing (m :: [ (Symbol, Ty) ]) -> Alloc (Map.Map Text TVal)
+  allocSchema' SNil = pure Map.empty
+  allocSchema' (SCons k ty tys') = do
+    let ety = EType ty
+    m   <- allocSchema' tys'
+    val <- allocAVal ety
+    pure $ Map.insert (pack (symbolVal k)) (ety, val) m
 
 allocAVal :: EType -> Alloc AVal
 allocAVal (EType ty) = mkAVal <$> singFree ty
