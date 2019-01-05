@@ -94,7 +94,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet _cmdSigs
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv
+                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv permissiveNamespacePolicy
   pr <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec (erInput pr)) (erExec pr)
   let newPacts = case newCmdPact of
@@ -138,7 +138,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
-                        _ceGasEnv
+                        _ceGasEnv permissiveNamespacePolicy
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
 
           -- Update pacts state

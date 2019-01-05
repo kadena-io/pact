@@ -30,8 +30,7 @@
 (create-table stuff)
 
 (commit-tx)
-
-(use 'dbtest)
+(use dbtest)
 (begin-tx)
 (use dbtest)
 (insert persons ID_A ROW_A)

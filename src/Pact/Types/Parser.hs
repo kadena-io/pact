@@ -13,7 +13,6 @@ module Pact.Types.Parser
   (
     PactParser(..)
   , symbols
-  , qualified
   , style
   )
   where
@@ -26,7 +25,6 @@ import Prelude
 import qualified Data.HashSet as HS
 import Text.Parser.Token.Highlight
 import Text.Parser.Token.Style
-import Data.Text (Text)
 
 newtype PactParser p a = PactParser { unPactParser :: p a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, DeltaParsing)
@@ -48,6 +46,3 @@ style = IdentifierStyle "atom"
         (HS.fromList ["true","false"])
         Symbol
         ReservedIdentifier
-
-qualified :: (Monad p, TokenParsing p) => p Text
-qualified = dot *> ident style

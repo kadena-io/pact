@@ -61,8 +61,7 @@ data Literal =
     LDecimal { _lDecimal :: !Decimal } |
     LBool { _lBool :: !Bool } |
     LTime { _lTime :: !UTCTime }
-          deriving (Eq,Generic,Ord)
-
+        deriving (Eq,Generic,Ord)
 
 instance Serialize Literal
 instance NFData Literal

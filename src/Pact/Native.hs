@@ -210,6 +210,64 @@ readDecimalDef = defRNative "read-decimal" readDecimal
       return $ toTerm a'
     readDecimal i as = argsError i as
 
+defineNamespaceDef :: NativeDef
+defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
+  (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
+  "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
+  \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
+  \and GUARD will be rotated in its place. \
+  \`$(define-namespace 'my-namespace (read-keyset 'my-keyset))`"
+  where
+    defineNamespace :: RNativeFun e
+    defineNamespace i as = case as of
+      [TLitString nsn, TGuard g _] -> go i nsn g
+      _ -> argsError i as
+
+    go fi nsn g = do
+      let name = NamespaceName nsn
+          info = _faInfo fi
+      mOldNs <- readRow info Namespaces name
+      case mOldNs of
+        Just ns'@(Namespace _ g') ->
+          -- if namespace is defined, enforce old guard and rotate if policy allows
+          enforceGuard fi g' >> enforcePolicy info ns' >> writeNamespace info name g
+        Nothing -> writeNamespace info name g
+
+    enforcePolicy info ns = do
+      NamespacePolicy{..} <- view eeNamespacePolicy
+      unless (_nsPolicy . Just $ ns) $ evalError info "Namespace definition not permitted"
+
+    writeNamespace info n g =
+      success ("Namespace defined: " <> asString n) $
+      writeRow info Write Namespaces n (Namespace n g)
+
+namespaceDef :: NativeDef
+namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
+  (funType tTyString [("namespace", tTyString)])
+  "Set the current namespace to NAMESPACE. All expressions that occur in a current \
+  \transaction will be contained in NAMESPACE, and once committed, may be accessed \
+  \via their fully qualified name, which will include the namespace. Subsequent \
+  \namespace calls in the same tx will set a new namespace for all declarations \
+  \until either the next namespace declaration, or the end of the tx. \
+  \`$(namespace 'my-namespace)`"
+  where
+    namespace :: RNativeFun e
+    namespace i as = case as of
+      [TLitString nsn] -> go i nsn
+      _ -> argsError i as
+
+    go fa ns = do
+      let name = NamespaceName ns
+          info = _faInfo fa
+
+      mNs <- readRow info Namespaces name
+      case mNs of
+        Just n@(Namespace ns' g) -> do
+          enforceGuard fa g
+          success ("Namespace set to " <> (asString ns')) $
+            evalRefs . rsNamespace .= (Just n)
+        Nothing  -> evalError info $
+          "namespace: '" ++ asString' name ++ "' not defined"
 
 langDefs :: NativeModule
 langDefs =
@@ -332,9 +390,10 @@ langDefs =
      "Lazily ignore arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
-
     ,strToIntDef
     ,hashDef
+    ,defineNamespaceDef
+    ,namespaceDef
     ])
     where b = mkTyVar "b" []
           c = mkTyVar "c" []

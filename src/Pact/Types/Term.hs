@@ -22,7 +22,8 @@
 --
 
 module Pact.Types.Term
- (
+ ( Namespace(..), nsName, nsGuard,
+   NamespaceName(..),
    Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..),
@@ -42,7 +43,7 @@ module Pact.Types.Term
    TableName(..),
    Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    interfaceCode, interfaceMeta, interfaceName, interfaceImports,
-   ModuleName(..),
+   ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
    ConstVal(..),
    Use(..),
@@ -72,6 +73,7 @@ import Control.Arrow ((***),first)
 import Data.Functor.Classes
 import Bound
 import Data.Text (Text,pack,unpack)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Aeson
 import qualified Data.ByteString.UTF8 as BS
@@ -84,9 +86,9 @@ import Data.Decimal
 import Data.Hashable
 import Data.Foldable
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>),dot)
 import qualified Data.Attoparsec.Text as AP
-import Text.Trifecta (try,ident,TokenParsing,(<?>))
+import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 import Control.DeepSeq
 import Data.Maybe
 import qualified Data.HashSet as HS
@@ -104,11 +106,13 @@ import Pact.Types.Exp
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
-  , _mModel :: ![Exp Info]   -- ^ model
+  , _mModel :: ![Exp Info]   -- ^ models
   } deriving (Eq, Show, Generic)
+
 instance ToJSON Meta where
   toJSON Meta {..} = object
     [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
+
 instance Default Meta where def = Meta def def
 
 instance Semigroup Meta where
@@ -117,7 +121,9 @@ instance Semigroup Meta where
 instance Monoid Meta where
   mempty = Meta Nothing []
 
-newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
+newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
+  deriving (Eq,Ord,Generic,IsString,AsString)
+
 instance Serialize PublicKey
 instance NFData PublicKey
 instance FromJSON PublicKey where
@@ -150,8 +156,6 @@ instance ToJSON KeySet where
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
 instance Show KeySetName where show (KeySetName s) = show s
-
-
 
 newtype PactId = PactId Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
@@ -223,7 +227,12 @@ instance FromJSON Guard where
     (GKeySetRef <$> parseJSON v) <|>
     (GModule <$> parseJSON v)
 
-data DefType = Defun | Defpact | Defcap deriving (Eq,Show)
+data DefType
+  = Defun
+  | Defpact
+  | Defcap
+  deriving (Eq,Show,Generic)
+
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
@@ -270,10 +279,11 @@ instance Semigroup Gas where
 instance Monoid Gas where
   mempty = 0
 
-data NativeDFun = NativeDFun {
-      _nativeName :: NativeDefName,
-      _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
-    }
+data NativeDFun = NativeDFun
+  { _nativeName :: NativeDefName
+  , _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
+  }
+
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a
 
@@ -301,19 +311,56 @@ newtype TableName = TableName Text
 instance Show TableName where show (TableName s) = show s
 
 -- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
-newtype ModuleName = ModuleName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
-instance Show ModuleName where show (ModuleName s) = show s
+data ModuleName = ModuleName
+  { _mnName      :: Text
+  , _mnNamespace :: Maybe NamespaceName
+  } deriving (Eq, Ord, Generic)
+
+instance Hashable ModuleName where
+  hashWithSalt s (ModuleName n Nothing)   =
+    s `hashWithSalt` (0::Int) `hashWithSalt` n
+  hashWithSalt s (ModuleName n (Just ns)) =
+    s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
+
+instance Show ModuleName where
+  show = unpack . asString
+
+instance AsString ModuleName where
+  asString (ModuleName n Nothing) = n
+  asString (ModuleName n (Just (NamespaceName ns))) = ns <> "." <> n
+
+instance IsString ModuleName where
+  fromString = coalesce . T.splitOn "." . pack
+    where
+      coalesce l = case l of
+        [ns,n] -> ModuleName n (Just (NamespaceName ns))
+        [n]    -> ModuleName n Nothing
+        _      -> ModuleName (pack . show $ l) (Just . NamespaceName $ "Err: malformed name")
+
+instance Pretty ModuleName where
+  pretty (ModuleName n Nothing) = pretty n
+  pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
+
+instance ToJSON ModuleName where
+  toJSON ModuleName{..} = object
+    [ "name"      .= _mnName
+    , "namespace" .= _mnNamespace
+    ]
+
+instance FromJSON ModuleName where
+  parseJSON = withObject "ModuleName" $ \o -> ModuleName
+    <$> o .:  "name"
+    <*> o .:? "namespace"
 
 newtype DefName = DefName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show DefName where show (DefName s) = show s
 
 -- | A named reference from source.
-data Name =
-    QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info } |
-    Name { _nName :: Text, _nInfo :: Info }
-         deriving (Generic)
+data Name
+  = QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info }
+  | Name { _nName :: Text, _nInfo :: Info }
+  deriving (Generic)
 
 instance Show Name where
   show (QName q n _) = asString' q ++ "." ++ unpack n
@@ -325,14 +372,20 @@ instance FromJSON Name where
     Right n -> return n
 
 parseName :: Info -> Text -> Either String Name
-parseName i = AP.parseOnly (nameParser i)
+parseName i = AP.parseOnly (nameParser i <* eof)
 
 
 nameParser :: (TokenParsing m, Monad m) => Info -> m Name
 nameParser i = do
   a <- ident style
-  try (qualified >>= \qn -> return (QName (ModuleName a) qn i) <?> "qualified name") <|>
-    return (Name a i)
+  b <- optional (dot *> (ident style))
+  case b of
+    Nothing -> return (Name a i)
+    Just b' -> do
+      c <- optional (dot *> ident style)
+      case c of
+        Nothing -> return (QName (ModuleName a Nothing) b' i) <?> "qualified name"
+        Just c' -> return (QName (ModuleName b' (Just . NamespaceName $ a)) c' i)
 
 instance Hashable Name where
   hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
@@ -366,45 +419,27 @@ instance Show n => Show (App n) where
 
 -- TODO: We need a more expressive, safer ADT for this.
 data Module
- = Module
- { _mName :: !ModuleName
- , _mKeySet :: !KeySetName
- , _mMeta :: !Meta
- , _mCode :: !Code
- , _mHash :: !Hash
- , _mBlessed :: !(HS.HashSet Hash)
- , _mInterfaces :: [ModuleName]
- , _mImports :: [Use]
- }
- | Interface
- { _interfaceName :: !ModuleName
- , _interfaceCode :: !Code
- , _interfaceMeta :: !Meta
- , _interfaceImports :: [Use]
- } deriving Eq
+  = Module
+  { _mName :: !ModuleName
+  , _mKeySet :: !KeySetName
+  , _mMeta :: !Meta
+  , _mCode :: !Code
+  , _mHash :: !Hash
+  , _mBlessed :: !(HS.HashSet Hash)
+  , _mInterfaces :: [ModuleName]
+  , _mImports :: [Use]
+  }
+  | Interface
+  { _interfaceName :: !ModuleName
+  , _interfaceCode :: !Code
+  , _interfaceMeta :: !Meta
+  , _interfaceImports :: [Use]
+  } deriving Eq
 
 instance Show Module where
   show m = case m of
     Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
     Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
-
-data Def n = Def
-  { _dDefName :: !DefName
-  , _dModule :: !ModuleName
-  , _dDefType :: !DefType
-  , _dFunType :: !(FunType (Term n))
-  , _dDefBody :: !(Scope Int Term n)
-  , _dMeta :: !Meta
-  , _dInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq)
-instance (Show n) => Show (Def n) where
-  show Def{..} = "(" ++ unwords
-    [ defTypeRep _dDefType
-    , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
-    , "(" ++ unwords (map show (_ftArgs _dFunType)) ++ ")"] ++
-    maybeDelim " " (_mDocs _dMeta) ++ ")"
-
-
 
 instance ToJSON Module where
   toJSON Module{..} = object
@@ -432,6 +467,44 @@ instance FromJSON Module where
     <*> (HS.fromList <$> o .: "blessed")
     <*> o .: "interfaces"
     <*> pure []
+
+data Def n = Def
+  { _dDefName :: !DefName
+  , _dModule :: !ModuleName
+  , _dDefType :: !DefType
+  , _dFunType :: !(FunType (Term n))
+  , _dDefBody :: !(Scope Int Term n)
+  , _dMeta :: !Meta
+  , _dInfo :: !Info
+  } deriving (Functor,Foldable,Traversable,Eq)
+instance (Show n) => Show (Def n) where
+  show Def{..} = "(" ++ unwords
+    [ defTypeRep _dDefType
+    , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
+    , "(" ++ unwords (map show (_ftArgs _dFunType)) ++ ")"] ++
+    maybeDelim " " (_mDocs _dMeta) ++ ")"
+
+newtype NamespaceName = NamespaceName Text
+  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic)
+
+data Namespace = Namespace
+  { _nsName   :: NamespaceName
+  , _nsGuard  :: Guard
+  } deriving Eq
+
+instance Show Namespace where
+  show Namespace{..} = "(namespace " ++ asString' _nsName ++ ")"
+
+instance FromJSON Namespace where
+  parseJSON = withObject "Namespace" $ \o -> Namespace
+    <$> o .: "name"
+    <*> o .: "guard"
+
+instance ToJSON Namespace where
+  toJSON Namespace{..} = object
+    [ "name"   .= _nsName
+    , "guard"  .= _nsGuard
+    ]
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
@@ -765,8 +838,10 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 
 
 makeLenses ''Term
+makeLenses ''Namespace
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
 makeLenses ''App
 makeLenses ''Def
+makeLenses ''ModuleName

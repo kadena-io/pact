@@ -77,6 +77,19 @@ true
 ```
 
 
+### define-namespace {#define-namespace}
+
+*namespace*&nbsp;`string` *guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
+
+
+Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in its place. 
+```lisp
+(define-namespace 'my-namespace (read-keyset 'my-keyset))
+```
+
+Top level only: this function will fail if used in module code.
+
+
 ### drop {#drop}
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
@@ -269,6 +282,19 @@ Apply APP to each element in LIST, returning a new list of results.
 pact> (map (+ 1) [1 2 3])
 [2 3 4]
 ```
+
+
+### namespace {#namespace}
+
+*namespace*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Set the current namespace to NAMESPACE. All expressions that occur in a current transaction will be contained in NAMESPACE, and once committed, may be accessed via their fully qualified name, which will include the namespace. Subsequent namespace calls in the same tx will set a new namespace for all declarations until either the next namespace declaration, or the end of the tx. 
+```lisp
+(namespace 'my-namespace)
+```
+
+Top level only: this function will fail if used in module code.
 
 
 ### pact-id {#pact-id}

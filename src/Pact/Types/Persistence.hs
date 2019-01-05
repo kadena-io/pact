@@ -229,12 +229,14 @@ data Domain k v where
   UserTables :: !TableName -> Domain RowKey (Columns Persistable)
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName Module
+  Namespaces :: Domain NamespaceName Namespace
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
 instance AsString (Domain k v) where
     asString (UserTables t) = asString t
-    asString KeySets = "SYS:KeySets"
-    asString Modules = "SYS:Modules"
+    asString KeySets    = "SYS:KeySets"
+    asString Modules    = "SYS:Modules"
+    asString Namespaces = "SYS:Namespaces"
 
 -- | Transaction record.
 -- Backends are expected to return "user-visible" values
