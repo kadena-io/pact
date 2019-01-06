@@ -95,11 +95,13 @@ mkCommand' :: [SomeKeyPair] -> ByteString -> Command ByteString
 mkCommand' creds env = makeCommand (makeSigs <$> creds)
   where makeCommand sigs = Command env sigs hsh
         hsh = hashTx H.Blake2b_512 env    -- hash associated with a Command, aka a Command's Request Key
-        makeSigs (SomeKeyPair kp) =
-          let KeyPair{..} = kp
-              pubBS = toB16Text $ exportPublic _kpScheme _kpPublicKey
-              sig = toB16Text $ exportSignature _kpScheme $ sign _kpScheme env _kpPublicKey _kpPrivateKey
-          in (UserSig (toScheme _kpScheme) pubBS sig)
+        makeSigs (SomeKeyPair kp) = mkUserSig kp env
+         
+
+mkUserSig :: KeyPair a -> ByteString -> UserSig
+mkUserSig KeyPair{..} env = (UserSig (toScheme _kpScheme) pubBS sig)
+  where pubBS = toB16Text $ exportPublic _kpScheme _kpPublicKey
+        sig = toB16Text $ exportSignature _kpScheme $ sign _kpScheme env _kpPublicKey _kpPrivateKey
 
 verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
