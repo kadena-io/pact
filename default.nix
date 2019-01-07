@@ -10,6 +10,7 @@ in
     name = "pact";
     overrides = self: super: with pkgs.haskell.lib;
       let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
+          whenGhcjs = f: p: if self.ghc.isGhcjs or false then (f p) else p;
        in {
             pact = doCoverage (addBuildDepend super.pact pkgs.z3);
             haskeline = guardGhcjs super.haskeline;
@@ -26,6 +27,22 @@ in
             lens-aeson = dontCheck super.lens-aeson;
             # test suite for this is failing on ghcjs:
             hw-hspec-hedgehog = dontCheck super.hw-hspec-hedgehog;
+
+            bsb-http-chunked = whenGhcjs dontCheck super.bsb-http-chunked;
+            Glob = whenGhcjs dontCheck super.Glob;
+            http2 = whenGhcjs dontCheck super.http2;
+            http-date = whenGhcjs dontCheck super.http-date;
+            http-media = whenGhcjs dontCheck super.http-media;
+            iproute = whenGhcjs dontCheck super.iproute;
+            markdown-unlit = whenGhcjs dontCheck super.markdown-unlit;
+            mockery = whenGhcjs dontCheck super.mockery;
+            silently = whenGhcjs dontCheck super.silently;
+            servant = whenGhcjs dontCheck super.servant;
+            servant-client = whenGhcjs dontCheck super.servant-client;
+            servant-server = whenGhcjs dontCheck super.servant-server;
+            unix-time = whenGhcjs dontCheck super.unix-time;
+            wai-app-static = whenGhcjs dontCheck super.wai-app-static;
+            wai-extra = whenGhcjs dontCheck super.wai-extra;
 
             algebraic-graphs = dontCheck super.algebraic-graphs;
 
