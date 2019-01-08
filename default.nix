@@ -6,7 +6,15 @@ let rp = builtins.fetchTarball {
 };
 
 in
-  (import rp { inherit system; }).project ({ pkgs, ... }: {
+  (import rp { inherit system; }).project ({ pkgs, ... }:
+  let gitignore = pkgs.callPackage (pkgs.fetchFromGitHub {
+        owner = "siers";
+        repo = "nix-gitignore";
+        rev = "4f2d85f2f1aa4c6bff2d9fcfd3caad443f35476e";
+        sha256 = "1vzfi3i3fpl8wqs1yq95jzdi6cpaby80n8xwnwa8h2jvcw3j7kdz";
+      }) {};
+  in
+  {
     name = "pact";
     overrides = self: super: with pkgs.haskell.lib;
       let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
@@ -76,10 +84,7 @@ in
             }) {});
           };
     packages = {
-      pact = builtins.filterSource
-        (path: type: !(builtins.elem (baseNameOf path)
-           ["result" "dist" "dist-ghcjs" ".git" ".stack-work"]))
-        ./.;
+      pact = gitignore.gitignoreSource [] ./.;
     };
     shellToolOverrides = ghc: super: {
       z3 = pkgs.z3;
