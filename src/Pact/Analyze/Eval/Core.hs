@@ -417,7 +417,7 @@ evalObjAt
   -> TermOf m obj
   -> SingTy a
   -> m (S (Concrete a))
-evalObjAt = error "TODO"
+evalObjAt _ _ _ _ = throwErrorNoLoc "TODO (evalObjAt)"
 -- evalObjAt schema colNameT objT retType = do
 --   obj <- eval objT
 --   -- obj@(Object fields) <- eval objT

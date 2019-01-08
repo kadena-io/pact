@@ -28,7 +28,7 @@ import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
-                                              SymArray (readArray), SymWord,
+                                              SymArray (readArray), -- SymWord,
                                               ite, (.<))
 import qualified Data.SBV.String             as SBV
 import           Data.String                 (fromString)
@@ -286,50 +286,50 @@ writeFields
   -> Analyze ()
 writeFields _ _ _ _ _ (SObject SNil) = pure ()
 
-writeFields writeType tid tn sRk sObj (SObject (SCons sym fieldType subObjTy)) = do
+writeFields _writeType _tid tn sRk _sObj (SObject (SCons sym _fieldType _subObjTy)) = do
   let fieldName  = symbolVal sym
-      tFieldName = T.pack fieldName
+      -- tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
   cellWritten tn cn sRk .= sTrue
   columnWritten tn cn   .= sTrue
-  tagAccessCell mtWrites tid tFieldName aval'
+  -- tagAccessCell mtWrites tid tFieldName aval'
 
-  case aval' of
-    AVal mProv sVal -> do
-      -- Note: The reason for taking `plus` and `minus` as arguments is to
-      -- avoid overlapping instances. GHC is willing to pick `+` and `-`
-      -- for each of the two instantiations of this function.
-      let writeDelta
-            :: forall ty ty'. (SymWord ty', Num ty', Concrete ty ~ ty')
-            => SingTy ty
-            -> (S ty' -> S ty' -> S ty') -> (S ty' -> S ty' -> S ty')
-            -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S ty'))
-            -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S ty'))
-            -> Analyze ()
-          writeDelta ty plus minus mkCellDeltaL mkColDeltaL = do
-            let cell :: Lens' EvalAnalyzeState (S ty')
-                cell = typedCell ty id tn cn sRk sTrue
-                next = mkS mProv sVal
+  -- case aval' of
+  --   AVal mProv sVal -> do
+  --     -- Note: The reason for taking `plus` and `minus` as arguments is to
+  --     -- avoid overlapping instances. GHC is willing to pick `+` and `-`
+  --     -- for each of the two instantiations of this function.
+  --     let writeDelta
+  --           :: forall ty ty'. (SymWord ty', Num ty', Concrete ty ~ ty')
+  --           => SingTy ty
+  --           -> (S ty' -> S ty' -> S ty') -> (S ty' -> S ty' -> S ty')
+  --           -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S ty'))
+  --           -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S ty'))
+  --           -> Analyze ()
+  --         writeDelta ty plus minus mkCellDeltaL mkColDeltaL = do
+  --           let cell :: Lens' EvalAnalyzeState (S ty')
+  --               cell = typedCell ty id tn cn sRk sTrue
+  --               next = mkS mProv sVal
 
-            -- (only) in the case of an insert, we know the cell did not
-            -- previously exist
-            prev <- if writeType == Pact.Insert
-              then pure (literalS 0)
-              else use cell
+  --           -- (only) in the case of an insert, we know the cell did not
+  --           -- previously exist
+  --           prev <- if writeType == Pact.Insert
+  --             then pure (literalS 0)
+  --             else use cell
 
-            cell .= next
-            let diff = next `minus` prev
-            mkCellDeltaL tn cn sRk %= plus diff
-            mkColDeltaL  tn cn     %= plus diff
+  --           cell .= next
+  --           let diff = next `minus` prev
+  --           mkCellDeltaL tn cn sRk %= plus diff
+  --           mkColDeltaL  tn cn     %= plus diff
 
-      case fieldType of
-        SInteger -> writeDelta SInteger (+) (-) intCellDelta intColumnDelta
-        SDecimal -> writeDelta SDecimal (+) (-) decCellDelta decColumnDelta
-        _        -> typedCell fieldType id tn cn sRk sTrue .= mkS mProv sVal
+  --     case fieldType of
+  --       SInteger -> writeDelta SInteger (+) (-) intCellDelta intColumnDelta
+  --       SDecimal -> writeDelta SDecimal (+) (-) decCellDelta decColumnDelta
+  --       _        -> typedCell fieldType id tn cn sRk sTrue .= mkS mProv sVal
 
-      pure aval'
+  --     pure aval'
 
-    OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
+    -- OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
 evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case

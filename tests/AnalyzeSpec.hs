@@ -663,58 +663,58 @@ spec = describe "analyze" $ do
 --    expectPass code $ Valid $ Inj (RowWrite "tokens" (PVar 1 "acct"))
 --                          .=> Inj (RowEnforced "tokens" "ks" (PVar 1 "acct"))
 
---  describe "enforce-keyset.row-level.write-count" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "enforce-keyset.row-level.write-count" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string ()
---              (write tokens 'joel { 'balance: 10 })
---              (write tokens 'joel { 'balance: 100 }))
---          |]
---    expectPass code $ Valid $
---      CoreProp $ IntegerComparison Eq
---        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 2
---    expectPass code $ Valid $ PNot $
---      CoreProp $ IntegerComparison Eq
---        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 1
---    expectPass code $ Valid $ PNot $
---      CoreProp $ IntegerComparison Eq
---        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 3
---    expectPass code $ Valid $
---      CoreProp $ IntegerComparison Eq
---        (Inj (RowReadCount "tokens" (Lit' "joel"))) 0
+            (defun test:string ()
+              (write tokens 'joel { 'balance: 10 })
+              (write tokens 'joel { 'balance: 100 }))
+          |]
+    expectPass code $ Valid $
+      CoreProp $ IntegerComparison Eq
+        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 2
+    expectPass code $ Valid $ PNot $
+      CoreProp $ IntegerComparison Eq
+        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 1
+    expectPass code $ Valid $ PNot $
+      CoreProp $ IntegerComparison Eq
+        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 3
+    expectPass code $ Valid $
+      CoreProp $ IntegerComparison Eq
+        (Inj (RowReadCount "tokens" (Lit' "joel"))) 0
 
---  describe "enforce-keyset.row-level.write.invalidation" $ do
---    let code =
---          [text|
---            (defschema token-row
---              name:string
---              balance:integer
---              ks:keyset)
---            (deftable tokens:{token-row})
+  describe "enforce-keyset.row-level.write.invalidation" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer
+              ks:keyset)
+            (deftable tokens:{token-row})
 
---            (defun test:bool (acct:string user-controlled:keyset)
---              ;; Overwrite existing keyset:
---              (update tokens acct {"ks": user-controlled})
---              ;; Then standard row-level keyset enforcement occurs:
---              (with-read tokens acct { "ks" := ks, "balance" := bal }
---                (let ((new-bal (+ bal 1)))
---                  (update tokens acct {"balance": new-bal})
---                  (enforce-keyset ks)
---                  new-bal)))
---          |]
---    -- When a user overwrites an existing keyset and then enforces *that* new
---    -- keyset, we don't consider the row to have been enforced due to
---    -- invalidation:
---    --
---    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
---      Inj (RowRead "tokens" (PVar 1 "row")) .=>
---        Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
---    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
---      Inj (RowWrite "tokens" (PVar 1 "row")) .=>
---        Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
+            (defun test:bool (acct:string user-controlled:keyset)
+              ;; Overwrite existing keyset:
+              (update tokens acct {"ks": user-controlled})
+              ;; Then standard row-level keyset enforcement occurs:
+              (with-read tokens acct { "ks" := ks, "balance" := bal }
+                (let ((new-bal (+ bal 1)))
+                  (update tokens acct {"balance": new-bal})
+                  (enforce-keyset ks)
+                  new-bal)))
+          |]
+    -- When a user overwrites an existing keyset and then enforces *that* new
+    -- keyset, we don't consider the row to have been enforced due to
+    -- invalidation:
+    --
+    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      Inj (RowRead "tokens" (PVar 1 "row")) .=>
+        Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
+    expectFail code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      Inj (RowWrite "tokens" (PVar 1 "row")) .=>
+        Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
   -- describe "call-by-value semantics for inlining" $ do
   --   let code =
@@ -2812,21 +2812,21 @@ spec = describe "analyze" $ do
 --          |]
 --    expectVerified code
 
---  describe "and?" $ do
---    let code = [text|
---          (defun test:bool ()
---            @model [(property (= result false))]
---            (and? (> 20) (> 10) 15))
---          |]
---    expectVerified code
+  describe "and?" $ do
+    let code = [text|
+          (defun test:bool ()
+            @model [(property (= result false))]
+            (and? (> 20) (> 10) 15))
+          |]
+    expectVerified code
 
---  describe "or?" $ do
---    let code = [text|
---          (defun test:bool ()
---            @model [(property (= result true))]
---            (or? (> 20) (> 10) 15))
---          |]
---    expectVerified code
+  describe "or?" $ do
+    let code = [text|
+          (defun test:bool ()
+            @model [(property (= result true))]
+            (or? (> 20) (> 10) 15))
+          |]
+    expectVerified code
 
 --  describe "where" $
 --    it "works" $

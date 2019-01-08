@@ -76,6 +76,7 @@ import qualified Data.Text                    as Text
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 import           Text.Show                    (showListWith)
+import           GHC.TypeLits                 (symbolVal)
 
 import           Pact.Types.Persistence       (WriteType)
 import           Pact.Types.Util              (tShow)
@@ -296,6 +297,43 @@ singEqListTm ty t1 t2 = and $ zipWith (singEqTm' ty) t1 t2
 singEqTm :: IsTerm tm => SingTy a -> tm a -> tm a -> Bool
 singEqTm = singEqTm'
 
+singEqObject
+  :: IsTerm tm
+  => SingTy ('TyObject a) -> Object tm a -> Object tm a -> Bool
+singEqObject (SObject SNil) (Object _) (Object _) = True
+singEqObject
+  (SObject (SCons _ colty objTy))
+  (Object (ConsOf _ (Column _ v1) obj1))
+  (Object (ConsOf _ (Column _ v2) obj2))
+  = singEqTm colty v1 v2 &&
+    singEqObject (SObject objTy) (Object obj1) (Object obj2)
+singEqObject _ _ _ = False
+
+-- This is currently a pretty loose definition
+singShowsObject
+  :: IsTerm tm
+  => SingTy ('TyObject a) -> Object tm a -> ShowS
+singShowsObject (SObject SNil) (Object NilOf) = showString "NilOf"
+singShowsObject
+  (SObject (SCons _ _ objty))
+  (Object (ConsOf _ (Column vTy v) obj))
+    = showString "ConsOf SSymbol "
+    . singShowsTm vTy 11 v
+    . showChar ' '
+    . singShowsObject (SObject objty) (Object obj)
+singShowsObject _ _ = error "malformed object"
+
+singUserShowObject
+  :: IsTerm tm
+  => SingTy ('TyObject a) -> Object tm a -> [Text]
+singUserShowObject (SObject SNil) (Object NilOf) = [""]
+singUserShowObject
+  (SObject (SCons _ _ objty))
+  (Object (ConsOf k (Column vTy v) obj))
+    = (Text.pack (symbolVal k) <> ": " <> singUserShowTm vTy v)
+      : singUserShowObject (SObject objty) (Object obj)
+singUserShowObject _ _ = error "malformed object"
+
 singEqOpen :: IsTerm tm => SingTy a -> Open x tm a -> Open x tm a -> Bool
 singEqOpen ty (Open v1 nm1 a1) (Open v2 nm2 a2)
   = singEqTm' ty a1 a2 && v1 == v2 && nm1 == nm2
@@ -484,8 +522,8 @@ eqCoreTm _ (ObjMerge ty11 ty21 a1 b1)          (ObjMerge ty12 ty22 a2 b2)
     Refl <- singEq ty11 ty12
     Refl <- singEq ty21 ty22
     pure $ singEqTm ty11 a1 a2 && singEqTm ty21 b1 b2
-eqCoreTm _ (LiteralObject _ _m1)            (LiteralObject _ _m2)
-  = error "TODO" -- m1 == m2
+eqCoreTm ty (LiteralObject _ m1)            (LiteralObject _ m2)
+  = singEqObject ty m1 m2
 eqCoreTm _ (Logical op1 args1)           (Logical op2 args2)
   = op1 == op2 && and (zipWith eqTm args1 args2)
 
@@ -638,13 +676,13 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . singShowsTm ty1 11 a
     . showString " "
     . singShowsTm ty2 11 b
-  LiteralObject _ _ -> showString "LiteralObject " -- TODO . showsPrec 11 m
+  LiteralObject ty' obj
+    -> showString "LiteralObject " . singShowsObject ty' obj
 
   Logical op args ->
       showString "Logical "
     . showsPrec 11 op
     . showString " "
-    . showString "TODO"
     . showListWith (singShowsTm SBool 0) args
 
   ListEqNeq ty' op a b ->
@@ -808,7 +846,7 @@ userShowCore ty _p = \case
   ObjDrop ks obj           -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty obj]
   ObjTake ks obj           -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty obj]
   ObjMerge ty1 ty2 x y     -> parenList [SObjectMerge, singUserShowTm ty1 x, singUserShowTm ty2 y]
-  LiteralObject _ _obj       -> "LiteralObject TODO" -- userShow obj
+  LiteralObject ty' obj    -> "{ " <> Text.intercalate ", " (singUserShowObject ty' obj) <> " }"
   Logical op args          -> parenList $ userShow op : fmap userShowTm args
 
   ListEqNeq ty' op x y     -> parenList [userShow op, singUserShowTmList ty' x, singUserShowTmList ty' y]
