@@ -34,6 +34,7 @@ import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe, isNothing)
+import           Data.Proxy                 (Proxy)
 -- import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
@@ -41,6 +42,7 @@ import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
+import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..), Type (TyFun, TyPrim, TySchema, TyUser, TyVar))
@@ -348,6 +350,7 @@ maybeTranslateUserType (Pact.Schema a b (Pact.Arg _ ty _:tys) c)
     Just (EType (SObject tys')) -> case maybeTranslateType ty of
       Nothing -> Nothing
       Just (EType ty') -> withSing ty' $
+        -- error "TODO"
         Just $ EType $ SObject $ SCons (SSymbol @"TODO") ty' tys'
     _ -> Nothing
 
@@ -575,6 +578,22 @@ translateObjBinding pairs schema bodyA rhsT = do
     withNewScope ObjectScope bindingTs retTid $
       withNodeVars nodeVars $
         translateBody bodyA
+
+-- Note: there is a very similar @mkLiteralObject@ in @Analyze.Parse.Prop@.
+-- These could probably be combined.
+mkLiteralObject :: [(Text, ETerm)] -> TranslateM (Existential (Core Term))
+mkLiteralObject [] = pure $
+  let ty = SObject SNil
+  in Existential ty (LiteralObject ty (Object NilOf))
+mkLiteralObject ((name, Existential ty tm) : tms) = do
+  Existential (SObject objTy) (LiteralObject _ (Object obj)) <- mkLiteralObject tms
+  case someSymbolVal (T.unpack name) of
+    SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
+      let sym = SSymbol @k
+          objTy' = SObject (SCons sym ty objTy)
+      in Existential objTy' $
+           LiteralObject objTy' $
+             Object $ ConsOf sym (Column ty tm) obj
 
 pattern EmptyList :: SingTy a -> Term ('TyList a)
 pattern EmptyList ty = CoreTerm (LiteralList ty [])
@@ -871,12 +890,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Existential SStr a' <- translateNode a
     pure $ Existential SInteger $ CoreTerm $ StrLength a'
 
---   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
---     Existential SStr row'             <- translateNode row
---     Existential (SObject schema) obj' <- translateNode obj
---     tid                               <- tagWrite writeType node schema
---     pure $ Existential SStr $
---       Write schema _schema writeType tid (TableName (T.unpack tn)) row' obj'
+  AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
+    Existential SStr row'            <- translateNode row
+    Existential objTy@SObject{} obj' <- translateNode obj
+    tid                              <- tagWrite writeType node $ ESchema objTy
+    pure $ Existential SStr $
+      Write objTy writeType tid (TableName (T.unpack tn)) row' obj'
 
   AST_If _ cond tBranch fBranch -> do
     Existential SBool cond' <- translateNode cond
@@ -905,21 +924,20 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _node "pact-version" [] -> pure $ Existential SStr PactVersion
 
-  -- TODO
-  -- AST_WithRead node table key bindings schemaNode body -> do
-  --   schema            <- translateType schemaNode
-  --   Existential SStr key' <- translateNode key
-  --   tid               <- tagRead node schema
-  --   let readT = Existential (SObject schema) $
-  --         Read tid (TableName (T.unpack table)) schema key'
-  --   withNodeContext node $
-  --     translateObjBinding bindings schema body readT
+  AST_WithRead node table key bindings schemaNode body -> do
+    EType objTy@SObject{} <- translateType schemaNode
+    Existential SStr key' <- translateNode key
+    tid                   <- tagRead node $ ESchema objTy
+    let readT = Existential objTy $
+          Read objTy tid (TableName (T.unpack table)) key'
+    withNodeContext node $
+      translateObjBinding bindings objTy body readT
 
-  -- AST_Bind node objectA bindings schemaNode body -> do
-  --   schema  <- translateType schemaNode
-  --   objectT <- translateNode objectA
-  --   withNodeContext node $
-  --     translateObjBinding bindings schema body objectT
+  AST_Bind node objectA bindings schemaNode body -> do
+    EType objTy@SObject{} <- translateType schemaNode
+    objectT               <- translateNode objectA
+    withNodeContext node $
+      translateObjBinding bindings objTy body objectT
 
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
@@ -935,13 +953,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
         _ -> throwError' $ MonadFailure $
           "Unexpected type for seconds in add-time " ++ show ty
 
---   TODO
---   AST_Read node table key -> do
---     Existential SStr key' <- translateNode key
---     schema <- translateType node
---     tid <- tagRead node schema
---     pure $ Existential (SObject schema) $ Read tid (TableName (T.unpack table)) schema key'
+  AST_Read node table key -> do
+    Existential SStr key' <- translateNode key
+    EType objTy@SObject{} <- translateType node
+    tid                   <- tagRead node $ ESchema objTy
+    pure $ Existential objTy $ Read objTy tid (TableName (T.unpack table)) key'
 
+--   error "TODO"
 --   -- Note: this won't match if the columns are not a list literal
 --   AST_ReadCols node table key columns -> do
 --     Existential SStr key' <- translateNode key
@@ -956,34 +974,28 @@ translateNode astNode = withAstContext astNode $ case astNode of
 --     pure $ Existential (SObject schema) $
 --       Read tid (TableName (T.unpack table)) schema key'
 
---   AST_At node index obj -> do
---     obj' <- translateNode obj
---     ty   <- translateType node
---     case obj' of
---       Existential (SObject schema) obj'' -> do
---         Existential SStr colName <- translateNode index
---         pure $ case ty of
---           EType ty' -> Existential ty' $ CoreTerm $ ObjAt schema colName obj'' ty
---             -- (\Refl ->
---             -- (\Refl -> EList   ty' $ CoreTerm $ ObjAt schema colName obj'' ty)
---             -- (\Refl -> vacuousMatch "handled below")
---           -- EObjectTy schema'
---             -- -> EObject schema' $ CoreTerm $ ObjAt schema colName obj'' ty
---       Existential (SList listOfTy) list -> do
---         Existential SInteger index' <- translateNode index
---         pure $ Existential listOfTy $ CoreTerm $ ListAt listOfTy index' list
---       _ -> throwError' $ TypeError node
+  AST_At node index obj -> do
+    obj'     <- translateNode obj
+    EType ty <- translateType node
+    case obj' of
+      Existential (SObject schema) obj'' -> do
+        Existential SStr colName <- translateNode index
+        pure $ Existential ty $ CoreTerm $ ObjAt (SObject schema) colName obj''
+      Existential (SList listOfTy) list -> do
+        Existential SInteger index' <- translateNode index
+        pure $ Existential listOfTy $ CoreTerm $ ListAt listOfTy index' list
+      _ -> throwError' $ TypeError node
 
---   AST_Obj node kvs -> do
---     kvs' <- for kvs $ \(k, v) -> do
---       k' <- case k of
---         AST_Lit (LString t) -> pure t
---         -- TODO: support non-const keys
---         _                   -> throwError' $ NonConstKey k
---       v' <- translateNode v
---       pure (k', v')
---     schema <- translateType node
---     pure $ Existential (SObject schema) $ CoreTerm $ LiteralObject $ Map.fromList kvs'
+  AST_Obj _node kvs -> do
+    kvs' <- for kvs $ \(k, v) -> do
+      k' <- case k of
+        AST_Lit (LString t) -> pure t
+        -- TODO: support non-const keys
+        _                   -> throwError' $ NonConstKey k
+      v' <- translateNode v
+      pure (k', v')
+    Existential objTy litObj <- mkLiteralObject kvs'
+    pure $ Existential objTy $ CoreTerm litObj
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
 

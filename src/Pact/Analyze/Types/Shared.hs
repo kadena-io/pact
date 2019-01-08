@@ -19,7 +19,6 @@
 
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE PolyKinds                  #-}
-{-# LANGUAGE TypeInType                 #-}
 {-# LANGUAGE TypeFamilyDependencies     #-}
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
@@ -33,7 +32,7 @@ import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                (&))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
-import           Data.Coerce                  (Coercible)
+import           Data.Coerce                  (Coercible, coerce)
 import           Data.Constraint              (Dict (Dict), withDict)
 import           Data.Data                    (Data, Typeable)
 import           Data.Function                (on)
@@ -42,14 +41,14 @@ import           Data.List                    (sortBy)
 import           Data.Maybe                   (isJust)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
-import           Data.SBV.Trans               (MProvable (..))
+import           Data.SBV.Trans               (MProvable (..), mkSymWord)
 import           Data.SBV                     (EqSymbolic, HasKind, Int64,
                                                Kind (KString, KUnbounded),
                                                Mergeable (symbolicMerge),
                                                OrdSymbolic,
                                                SBV,
                                                SDivisible (sDivMod, sQuotRem),
-                                               SymWord, Symbolic,
+                                               SymWord(..), Symbolic,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
                                                (.<), (.==), fromCW)
@@ -423,57 +422,59 @@ symRowKey = coerceS
 -- | Typed symbolic value.
 type TVal = (EType, AVal)
 
-data ConcreteCol a = ConcreteCol !(SingTy a) !(Concrete a)
+data Column tm a where
+  Column :: IsTerm tm => !(SingTy a) -> !(tm a) -> Column tm a
 
-instance (Eq (SingTy a), Eq (Concrete a)) => Eq (ConcreteCol a) where
-  ConcreteCol _ a == ConcreteCol _ b = a == b
-instance (Ord (SingTy a), Ord (Concrete a)) => Ord (ConcreteCol a) where
-  ConcreteCol _ a `compare` ConcreteCol _ b = a `compare` b
+instance (Eq (SingTy a), Eq (tm a)) => Eq (Column tm a) where
+  Column _ a == Column _ b = a == b
+instance (Ord (SingTy a), Ord (tm a)) => Ord (Column tm a) where
+  Column _ a `compare` Column _ b = a `compare` b
 
-data Object (m :: [(Symbol, Ty)]) = Object !(HListOf ConcreteCol m)
+data Object (tm :: Ty -> *) (m :: [(Symbol, Ty)])
+  = Object !(HListOf (Column tm) m)
 
-objectLookup :: Object m -> String -> Maybe (Existential ConcreteCol)
+objectLookup :: Object tm m -> String -> Maybe (Existential (Column tm))
 objectLookup (Object cols) name = objectLookup' cols where
   objectLookup'
-    :: forall m. HListOf ConcreteCol m -> Maybe (Existential ConcreteCol)
+    :: forall tm m. HListOf (Column tm) m -> Maybe (Existential (Column tm))
   objectLookup' NilOf = Nothing
-  objectLookup' (ConsOf k c@(ConcreteCol ty _) cols')
+  objectLookup' (ConsOf k c@(Column ty _) cols')
     = if symbolVal k == name
       then Just $ Existential ty c
       else objectLookup' cols'
 
-data EObject where
-  EObject :: SingList m -> Object m -> EObject
+data EObject tm where
+  EObject :: SingList m -> Object tm m -> EObject tm
 
-instance UserShow (Object m) where
+instance UserShow (tm ('TyObject m)) => UserShow (Object tm m) where
   userShowPrec _ (Object vals)
     = "{" <> T.intercalate ", " (userShowVals vals) <> "}"
       where
-      userShowVals :: HListOf ConcreteCol m' -> [Text]
+      userShowVals :: HListOf (Column tm) m' -> [Text]
       userShowVals NilOf = []
-      userShowVals (ConsOf k (ConcreteCol ty v) m')
-        = T.pack (symbolVal k) <> " := " <> withUserShow ty (userShow v) : userShowVals m'
+      userShowVals (ConsOf k (Column ty v) m')
+        = T.pack (symbolVal k) <> " := " <> singUserShowTm' ty v : userShowVals m'
 
-instance Show (Object m) where
+instance Show (tm ('TyObject m)) => Show (Object tm m) where
   showsPrec p (Object vals) = showParen (p > 10) $
     showString "Object " . showsVals vals
-    where showsVals :: HListOf ConcreteCol m' -> ShowS
+    where showsVals :: HListOf (Column tm) m' -> ShowS
           showsVals NilOf = showString "NilOf"
-          showsVals (ConsOf k (ConcreteCol singv v) m') = showParen True $
+          showsVals (ConsOf k (Column singv v) m') = showParen True $
               showString "ConsOf "
             . showString (symbolVal k)
             . showString " "
-            . withShow singv (showsPrec 11 v)
+            . singShowsTm' singv 11 v
             . showString " "
             . showsVals m'
 
-instance Eq (Object m) where
+instance Eq (tm ('TyObject m)) => Eq (Object tm m) where
   Object vals1 == Object vals2 = eq vals1 vals2 where
-    eq :: HListOf ConcreteCol m' -> HListOf ConcreteCol m' -> Bool
+    eq :: HListOf (Column tm) m' -> HListOf (Column tm) m' -> Bool
     eq NilOf NilOf = True
-    eq (ConsOf k1 (ConcreteCol singv v1) m1')
-       (ConsOf k2 (ConcreteCol _     v2) m2')
-      = eqSymB k1 k2 && withEq singv (v1 == v2) && eq m1' m2'
+    eq (ConsOf k1 (Column singv v1) m1')
+       (ConsOf k2 (Column _     v2) m2')
+      = eqSymB k1 k2 && singEqTm' singv v1 v2 && eq m1' m2'
 
 data ESchema where
   ESchema :: SingTy ('TyObject m) -> ESchema
@@ -700,7 +701,45 @@ type family Concrete (a :: Ty) = r | r -> a where
   Concrete 'TyKeySet      = KeySet
   Concrete 'TyAny         = Any
   Concrete ('TyList a)    = [Concrete a]
-  Concrete ('TyObject ty) = Object ty
+  Concrete ('TyObject ty) = Object AConcrete ty
+
+newtype AConcrete ty = AConcrete (Concrete ty)
+
+instance (Eq (Concrete ty)) => Eq (AConcrete ty) where
+  AConcrete a == AConcrete b = a == b
+
+instance (Show (Concrete ty)) => Show (AConcrete ty) where
+  showsPrec p (AConcrete a) = showParen (p > 10) $
+    showString "AConcrete " . showsPrec 11 a
+
+instance (UserShow (Concrete ty)) => UserShow (AConcrete ty) where
+  userShowPrec p (AConcrete a) = userShowPrec p a
+
+instance SMTValue (Concrete ty) => SMTValue (AConcrete ty) where
+  sexprToVal = fmap AConcrete . sexprToVal
+
+instance IsTerm AConcrete where
+  singEqTm' ty (AConcrete a) (AConcrete b) = withEq ty $ a == b
+  singShowsTm' ty p tm = withShow ty $ showsPrec p tm
+  singUserShowTm' ty tm = withUserShow ty $ userShowPrec 0 tm
+
+instance Ord (Concrete ty) => Ord (AConcrete ty) where
+  compare (AConcrete a) (AConcrete b) = compare a b
+
+instance HasKind (Concrete ty) => HasKind (AConcrete ty) where
+  kindOf (AConcrete a) = kindOf a
+
+instance
+  ( Typeable ty
+  , SymWord (Concrete ty)
+  , SingI ty
+  ) => SymWord (AConcrete ty) where
+  mkSymWord q name = coerce @(SBV (Concrete ty)) @(SBV (AConcrete ty))
+    <$> withSymWord (sing :: SingTy ty) (mkSymWord q name)
+  literal (AConcrete a) = coerce $ literal a
+  fromCW    = AConcrete . fromCW
+
+-- newtype ASymbolic ty = ASymbolic (S (Concrete ty))
 
 type family ConcreteList (a :: [Ty]) = r | r -> a where
   ConcreteList '[]         = '[]
@@ -820,24 +859,24 @@ withSMTValue = withDict . singMkSMTValue
       SList ty' -> withSMTValue ty' $ withTypeable ty' Dict
       SObject tys -> withSMTValueListDict tys Dict
 
-    withSMTValueListDict :: SingList tys -> (SMTValue (Object tys) => b) -> b
+    withSMTValueListDict :: SingList tys -> (SMTValue (Object AConcrete tys) => b) -> b
     withSMTValueListDict SNil f = f
     withSMTValueListDict (SCons _k ty tys) f
       = withTypeable ty $ withSMTValue ty $ withSMTValueListDict tys f
 
-instance SMTValue (Object '[]) where
+instance SMTValue (Object AConcrete '[]) where
   sexprToVal _ = Just $ Object NilOf
 
 instance
   ( SMTValue (Concrete ty)
-  , SMTValue (Object tys)
+  , SMTValue (Object AConcrete tys)
   , KnownSymbol k
   , SingI ty
   , Typeable ty
-  ) => SMTValue (Object ('(k, ty) ': tys)) where
+  ) => SMTValue (Object AConcrete ('(k, ty) ': tys)) where
   sexprToVal sexpr = case sexprToVal sexpr of
     Nothing             -> Nothing
-    Just (a, Object as) -> Just $ Object $ ConsOf SSymbol (ConcreteCol sing a) as
+    Just (a, Object as) -> Just $ Object $ ConsOf SSymbol (Column sing a) as
 
 withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> b
 withSymWord = withDict . singMkSymWord
@@ -855,19 +894,19 @@ withSymWord = withDict . singMkSymWord
       SList ty'   -> withSymWord ty' Dict
       SObject tys -> withSymWordListDict tys Dict
 
-withSymWordListDict :: SingList tys -> (SymWord (Object tys) => b) -> b
+withSymWordListDict :: SingList tys -> (SymWord (Object AConcrete tys) => b) -> b
 withSymWordListDict SNil f = f
 withSymWordListDict (SCons _k ty tys) f
   = withTypeable ty $ withTypeableListDict tys $ withSymWord ty $
     withSymWordListDict tys f
 
-instance Ord (Object '[]) where
+instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
   compare _ _ = EQ
 
-instance HasKind (Object '[]) where
+instance HasKind (Object tm '[]) where
   kindOf _ = KTuple []
 
-instance SymWord (Object '[]) where
+instance (Eq (tm ('TyObject '[])), Typeable tm) => SymWord (Object tm '[]) where
   mkSymWord = genMkSymVar $ KTuple []
 
   literal (Object NilOf) =
@@ -877,33 +916,49 @@ instance SymWord (Object '[]) where
   fromCW (CW _ (CWTuple [])) = Object NilOf
   fromCW c = error $ "invalid (Object '[]): " ++ show c
 
-instance (Ord (Concrete ty), Ord (Object tys)) => Ord (Object ('(k, ty) ': tys)) where
+instance
+  ( Ord (tm ty)
+  , Ord (Object tm tys)
+  , Eq (tm ('TyObject ('(k, ty) : tys)))
+  ) => Ord (Object tm ('(k, ty) ': tys)) where
   compare (Object (ConsOf _ a tys1)) (Object (ConsOf _ b tys2))
     = compare a b <> compare (Object tys1) (Object tys2)
 
-instance (HasKind (Concrete ty), HasKind (Object tys)) => HasKind (Object ('(k, ty) ': tys)) where
-  kindOf _ = case kindOf (undefined :: Object tys) of
-    KTuple ks -> KTuple $ kindOf (undefined :: Concrete ty) : ks
+instance
+  ( HasKind (tm ty)
+  , HasKind (Object tm tys)
+  ) => HasKind (Object tm ('(k, ty) ': tys)) where
+  kindOf _ = case kindOf (undefined :: Object tm tys) of
+    KTuple ks -> KTuple $ kindOf (undefined :: tm ty) : ks
     k         -> error $ "unexpected object kind: " ++ show k
 
-instance (SingI ty, Typeable ty, Typeable tys, SymWord (Concrete ty), SymWord (Object tys), KnownSymbol k)
-  => SymWord (Object ('(k, ty) ': tys)) where
+instance
+  ( SingI ty
+  , Typeable ty
+  , Typeable tys
+  , SymWord (tm ty)
+  , SymWord (Object tm tys)
+  , KnownSymbol k
+  , Eq (tm ('TyObject ('(k, ty) : tys)))
+  , Typeable tm
+  , IsTerm tm
+  ) => SymWord (Object tm ('(k, ty) ': tys)) where
 
-  mkSymWord = genMkSymVar (kindOf (undefined :: (Object ('(k, ty) ': tys))))
+  mkSymWord = genMkSymVar (kindOf (undefined :: (Object tm ('(k, ty) ': tys))))
 
-  literal (Object (ConsOf _k (ConcreteCol _ x) xs)) = case literal x of
+  literal (Object (ConsOf _k (Column _ x) xs)) = case literal x of
     SBVI.SBV (SVal _ (Left (CW _ xval))) -> case literal (Object xs) of
       SBVI.SBV (SVal (KTuple kxs) (Left (CW _ (CWTuple xsval)))) ->
         let k = SBVI.KTuple (kindOf x : kxs)
         in SBVI.SBV $ SVal k $ Left $ CW k $ CWTuple $ xval : xsval
-      _ -> error "SymWord.literal (Object ('(k, ty) ': tys)): Cannot construct a literal value!"
-    _ -> error "SymWord.literal (Object ('(k, ty) ': tys)): Cannot construct a literal value!"
+      _ -> error "SymWord.literal (Object tm ('(k, ty) ': tys)): Cannot construct a literal value!"
+    _ -> error "SymWord.literal (Object tm ('(k, ty) ': tys)): Cannot construct a literal value!"
 
   fromCW (CW (KTuple (k:ks)) (CWTuple (x:xs))) =
     case fromCW (CW (KTuple ks) (CWTuple xs)) of
       Object vals
-        -> Object $ ConsOf SSymbol (ConcreteCol sing (fromCW (CW k x))) vals
-  fromCW c = error $ "invalid (Object ('(k, ty) ': tys)): " ++ show c
+        -> Object $ ConsOf SSymbol (Column sing (fromCW (CW k x))) vals
+  fromCW c = error $ "invalid (Object tm ('(k, ty) ': tys)): " ++ show c
 
 -- columnMapToSchema :: ColumnMap EType -> Schema
 -- columnMapToSchema

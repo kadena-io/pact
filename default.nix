@@ -51,14 +51,6 @@ in
             hlint = self.callHackage "hlint" "2.0.14" {};
             # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-            # type-level-sets 0.8.9.0
-            type-level-sets = pkgs.haskell.lib.dontCheck (self.callCabal2nix "type-level-sets" (pkgs.fetchFromGitHub {
-              owner = "dorchard";
-              repo = "type-level-sets";
-              rev = "3c4d979354716993f1502eca82df1c9a5854441d";
-              sha256 = "0jh8lq3h37xhbgparf1giii8lph3vyd7p59qhdp9hgfkj0qsdx93";
-            }) {});
-
             # sbv with a patch to disable "unsupported query call" until it's fixed upstream
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "joelburget";

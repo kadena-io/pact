@@ -187,7 +187,7 @@ evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
   = evalObjAt schema colNameT objT (error "TODO")
-evalCore (LiteralObject ty obj) = withSymWord ty $ pure $ literalS obj
+evalCore (LiteralObject ty _obj) = withSymWord ty $ pure $ error "TODO" -- literalS obj
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
 -- error "TODO"
 -- evalCore (ObjMerge ty1 ty2 objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
@@ -401,14 +401,14 @@ evalStrToIntBase bT sT = do
         Left _err -> symbolicFailure
         Right res -> pure (literalS res)
 
-relevantFields :: (Typeable a, SingI a) => SingTy a -> Object obj -> EObject
+relevantFields :: (Typeable a, SingI a) => SingTy a -> Object tm obj -> EObject tm
 relevantFields _ obj@(Object NilOf) = EObject SNil obj
-relevantFields targetTy (Object (ConsOf key (ConcreteCol vTy v) vals))
+relevantFields targetTy (Object (ConsOf key (Column vTy v) vals))
   = case relevantFields targetTy (Object vals) of
       EObject ty obj'@(Object vals') -> case singEq targetTy vTy of
         Nothing   -> EObject ty obj'
         Just Refl -> EObject (SCons key sing ty) $
-          Object (ConsOf key (ConcreteCol vTy v) vals')
+          Object (ConsOf key (Column vTy v) vals')
 
 evalObjAt
   :: Analyzer m

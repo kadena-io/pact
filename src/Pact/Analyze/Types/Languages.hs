@@ -197,7 +197,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ObjMerge    :: SingTy o1 -> SingTy o2 -> t o1 -> t o2 -> Core t o
 
   -- TODO(joel): combine with `Lit`?
-  LiteralObject :: SingTy ('TyObject m) -> Object m -> Core t ('TyObject m)
+  LiteralObject :: SingTy ('TyObject m) -> Object t m -> Core t ('TyObject m)
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
@@ -484,8 +484,8 @@ eqCoreTm _ (ObjMerge ty11 ty21 a1 b1)          (ObjMerge ty12 ty22 a2 b2)
     Refl <- singEq ty11 ty12
     Refl <- singEq ty21 ty22
     pure $ singEqTm ty11 a1 a2 && singEqTm ty21 b1 b2
-eqCoreTm _ (LiteralObject _ m1)            (LiteralObject _ m2)
-  = m1 == m2
+eqCoreTm _ (LiteralObject _ _m1)            (LiteralObject _ _m2)
+  = error "TODO" -- m1 == m2
 eqCoreTm _ (Logical op1 args1)           (Logical op2 args2)
   = op1 == op2 && and (zipWith eqTm args1 args2)
 

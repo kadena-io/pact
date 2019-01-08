@@ -7,14 +7,16 @@
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 
+{-# options_ghc -fdefer-type-errors #-}
+
 module Pact.Analyze.Eval.Term where
 
--- import           Control.Applicative         (ZipList (..))
-import           Control.Lens                (At (at), Lens', -- iforM, iforM_,
+import           Control.Applicative         (ZipList (..))
+import           Control.Lens                (At (at), Lens',
                                               preview, use, view, (%=), (%~),
-                                              (&), {- (+=), -} (.=), (.~), (<&>),
+                                              (&), (+=), (.=), (.~), (<&>),
                                               (?~), (^.), (^?), _1, _2, _Just)
--- import           Control.Monad               (void, when)
+import           Control.Monad               (void) -- , when)
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
@@ -25,8 +27,8 @@ import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==)),
-                                              Mergeable (symbolicMerge), -- SBV,
-                                              SymArray (readArray), -- SymWord,
+                                              Mergeable (symbolicMerge), SBV,
+                                              SymArray (readArray), SymWord,
                                               ite, (.<))
 import qualified Data.SBV.String             as SBV
 import           Data.String                 (fromString)
@@ -35,11 +37,11 @@ import qualified Data.Text                   as T
 import           Data.Text.Encoding          (encodeUtf8)
 import           Data.Thyme                  (formatTime, parseTime)
 import           Data.Traversable            (for)
+import           GHC.TypeLits
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
--- import qualified Pact.Types.Persistence      as Pact
--- import           Pact.Types.Runtime          (tShow)
+import qualified Pact.Types.Persistence      as Pact
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
 
@@ -227,7 +229,7 @@ applyInvariants tn aValFields addInvariants = do
 evalETerm :: ETerm -> Analyze AVal
 evalETerm tm = snd <$> evalExistential tm
 
--- TODO
+-- error "TODO"
 -- validateWrite :: Pact.WriteType -> Schema ty -> Object ty -> Analyze ()
 -- validateWrite writeType sch@(Schema sm) obj@(Object om) = do
 --   -- For now we lump our three cases together:
@@ -246,6 +248,113 @@ evalETerm tm = snd <$> evalExistential tm
 --   let requiresFullWrite = writeType `elem` [Pact.Insert, Pact.Write]
 
 --   when (requiresFullWrite && Map.size om /= Map.size sm) invalid
+
+readFields
+  :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
+  -> Analyze (S (Object AConcrete ty), Map Text AVal)
+readFields _tn _sRk _tid (SObject SNil)
+  = pure (literalS $ Object NilOf, Map.empty)
+
+readFields tn sRk tid (SObject (SCons sym fieldType subObjTy)) = do
+  let fieldName = symbolVal sym
+      tFieldName = T.pack fieldName
+      cn = ColumnName fieldName
+  columnRead tn cn .= sTrue
+  sDirty <- use $ cellWritten tn cn sRk
+  av     <- readField tn cn sRk sDirty fieldType
+  tagAccessCell mtReads tid tFieldName av
+  (obj', avs) <- readFields tn sRk tid (SObject subObjTy)
+  pure (undefined obj', Map.insert tFieldName av avs)
+
+readField
+  :: TableName -> ColumnName -> S RowKey -> S Bool -> SingTy ty -> Analyze AVal
+readField tn cn sRk sDirty = \case
+  SInteger -> mkAVal <$> use (intCell     id tn cn sRk sDirty)
+  SBool    -> mkAVal <$> use (boolCell    id tn cn sRk sDirty)
+  SStr     -> mkAVal <$> use (stringCell  id tn cn sRk sDirty)
+  SDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
+  STime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
+  SKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
+  SAny     -> pure OpaqueVal
+  --
+  -- TODO: if we add nested object support here, we need to install
+  --       the correct provenance into AVals all the way down into
+  --       sub-objects.
+  --
+  SObject{} -> throwErrorNoLoc UnsupportedObjectInDbCell
+  -- TODO
+  SList{}   -> throwErrorNoLoc UnsupportedObjectInDbCell
+
+aValsOfObj :: SingTy ('TyObject ty) -> S (Object AConcrete ty) -> Map Text AVal
+aValsOfObj = undefined
+
+writeFields
+  :: Pact.WriteType -> TagId
+  -> TableName -> S RowKey -> S (Object AConcrete ty) -> SingTy ('TyObject ty)
+  -> Analyze ()
+writeFields _ _ _ _ _ (SObject SNil) = pure ()
+
+writeFields writeType tid tn sRk sObj (SObject (SCons sym fieldType subObjTy)) = do
+  let fieldName  = symbolVal sym
+      tFieldName = T.pack fieldName
+      cn         = ColumnName fieldName
+  cellWritten tn cn sRk .= sTrue
+  columnWritten tn cn   .= sTrue
+  tagAccessCell mtWrites tid tFieldName aval'
+
+  case aval' of
+    AVal mProv sVal -> do
+      -- Note: The reason for taking `plus` and `minus` as arguments is to
+      -- avoid overlapping instances. GHC is willing to pick `+` and `-`
+      -- for each of the two instantiations of this function.
+      let writeDelta
+            :: forall t. (SymWord t, Num t)
+            => (S t -> S t -> S t) -> (S t -> S t -> S t)
+            -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' EvalAnalyzeState (S t))
+            -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S t))
+            -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S t))
+            -> Analyze ()
+          writeDelta plus minus mkCellL mkCellDeltaL mkColDeltaL = do
+            let cell :: Lens' EvalAnalyzeState (S t)
+                cell = mkCellL tn cn sRk sTrue
+            let next = mkS mProv sVal
+
+            -- (only) in the case of an insert, we know the cell did not
+            -- previously exist
+            prev <- if writeType == Pact.Insert
+              then pure (literalS 0)
+              else use cell
+
+            cell .= next
+            let diff = next `minus` prev
+            mkCellDeltaL tn cn sRk %= plus diff
+            mkColDeltaL  tn cn     %= plus diff
+
+      case fieldType of
+        SInteger -> writeDelta (+) (-) (intCell id) intCellDelta intColumnDelta
+        SBool    -> boolCell   id tn cn sRk sTrue .= mkS mProv sVal
+        SDecimal -> writeDelta (+) (-) (decimalCell id) decCellDelta decColumnDelta
+        STime    -> timeCell   id tn cn sRk sTrue .= mkS mProv sVal
+        SStr     -> stringCell id tn cn sRk sTrue .= mkS mProv sVal
+        SKeySet  -> ksCell     id tn cn sRk sTrue .= mkS mProv sVal
+
+        SList SInteger -> intListCell     id tn cn sRk sTrue .= mkS mProv sVal
+        SList SBool    -> boolListCell    id tn cn sRk sTrue .= mkS mProv sVal
+        SList SDecimal -> decimalListCell id tn cn sRk sTrue .= mkS mProv sVal
+        SList STime    -> timeListCell    id tn cn sRk sTrue .= mkS mProv sVal
+        SList SStr     -> stringListCell  id tn cn sRk sTrue .= mkS mProv sVal
+        SList SKeySet  -> ksListCell      id tn cn sRk sTrue .= mkS mProv sVal
+
+        SAny       -> void $ throwErrorNoLoc OpaqueValEncountered
+        SList SAny -> void $ throwErrorNoLoc OpaqueValEncountered
+        SObject _  -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
+        SList _ -> pure () -- error "TODO"
+
+      pure aval'
+
+        -- TODO: handle EObjectTy here
+
+    OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
 evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
@@ -295,9 +404,24 @@ evalTerm = \case
 
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
 
-  {- TODO
-  Write _ty schema writeType tid tn rowKey objT -> do
-    obj@(Object fields) <- evalTerm objT
+  Read objTy tid tn rowKey -> do
+    sRk <- symRowKey <$> evalTerm rowKey
+    tableRead tn .= sTrue
+    rowReadCount tn sRk += 1
+
+    readSucceeds <- use $ rowExists id tn sRk
+    tagAccessKey mtReads tid sRk readSucceeds
+    succeeds %= (.&& readSucceeds)
+
+    (sObj, aValFields) <- readFields tn sRk tid objTy
+
+    applyInvariants tn aValFields $ mapM_ addConstraint
+
+    pure sObj
+
+  Write schema writeType tid tn rowKey objT -> do
+    obj <- withSing schema $ evalTerm objT
+    -- validateWrite writeType schema obj
     sRk <- symRowKey <$> evalTerm rowKey
 
     thisRowExists <- use $ rowExists id tn sRk
@@ -312,65 +436,9 @@ evalTerm = \case
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk writeSucceeds
 
-    aValFields <- iforM fields $ \colName (fieldType, aval') -> do
-      let cn = ColumnName (T.unpack colName)
-      cellWritten tn cn sRk .= sTrue
-      columnWritten tn cn   .= sTrue
-      tagAccessCell mtWrites tid colName aval'
+    writeFields writeType tid tn sRk obj schema
 
-      case aval' of
-        AVal mProv sVal -> do
-          -- Note: The reason for taking `plus` and `minus` as arguments is to
-          -- avoid overlapping instances. GHC is willing to pick `+` and `-`
-          -- for each of the two instantiations of this function.
-          let writeDelta
-                :: forall t. (SymWord t, Num t)
-                => (S t -> S t -> S t) -> (S t -> S t -> S t)
-                -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' EvalAnalyzeState (S t))
-                -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S t))
-                -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S t))
-                -> Analyze ()
-              writeDelta plus minus mkCellL mkCellDeltaL mkColDeltaL = do
-                let cell :: Lens' EvalAnalyzeState (S t)
-                    cell = mkCellL tn cn sRk sTrue
-                let next = mkS mProv sVal
-
-                -- (only) in the case of an insert, we know the cell did not
-                -- previously exist
-                prev <- if writeType == Pact.Insert
-                  then pure (literalS 0)
-                  else use cell
-
-                cell .= next
-                let diff = next `minus` prev
-                mkCellDeltaL tn cn sRk %= plus diff
-                mkColDeltaL  tn cn     %= plus diff
-
-          case fieldType of
-            EType SInteger -> writeDelta (+) (-) (intCell id) intCellDelta intColumnDelta
-            EType SBool    -> boolCell   id tn cn sRk sTrue .= mkS mProv sVal
-            EType SDecimal -> writeDelta (+) (-) (decimalCell id) decCellDelta decColumnDelta
-            EType STime    -> timeCell   id tn cn sRk sTrue .= mkS mProv sVal
-            EType SStr     -> stringCell id tn cn sRk sTrue .= mkS mProv sVal
-            EType SKeySet  -> ksCell     id tn cn sRk sTrue .= mkS mProv sVal
-
-            EType (SList SInteger) -> intListCell     id tn cn sRk sTrue .= mkS mProv sVal
-            EType (SList SBool   ) -> boolListCell    id tn cn sRk sTrue .= mkS mProv sVal
-            EType (SList SDecimal) -> decimalListCell id tn cn sRk sTrue .= mkS mProv sVal
-            EType (SList STime   ) -> timeListCell    id tn cn sRk sTrue .= mkS mProv sVal
-            EType (SList SStr    ) -> stringListCell  id tn cn sRk sTrue .= mkS mProv sVal
-            EType (SList SKeySet ) -> ksListCell      id tn cn sRk sTrue .= mkS mProv sVal
-
-            EType SAny         -> void $ throwErrorNoLoc OpaqueValEncountered
-            EType (SList SAny) -> void $ throwErrorNoLoc OpaqueValEncountered
-            EType (SObject _)  -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
-
-          pure aval'
-
-            -- TODO: handle EObjectTy here
-
-        OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
-
+    let aValFields = aValsOfObj schema obj -- Map.empty -- error "TODO"
     applyInvariants tn aValFields $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
           fs = ZipList $ (\s -> fmap (_sSbv s .&&)) <$> invariants'
@@ -380,7 +448,6 @@ evalTerm = \case
     -- TODO: make a constant on the pact side that this uses:
     --
     pure $ literalS "Write succeeded"
--}
 
   Let _name vid retTid eterm body -> do
     av <- evalETerm eterm
@@ -471,8 +538,6 @@ evalTerm = \case
       Existential (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash on lists"
       Existential (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
       Existential _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
-
-  _n -> throwErrorNoLoc $ UnhandledTerm "TODO" -- $ userShowTm n
 
 -- For now we only allow these three types to be formatted.
 --

@@ -33,6 +33,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
 import           GHC.Generics                 (Generic)
+import           GHC.Stack                    (HasCallStack)
 
 import           Pact.Types.Lang              (Info)
 import           Pact.Types.Runtime           (Type (TyPrim))
@@ -445,16 +446,21 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 tableWritten :: TableName -> Lens' (AnalyzeState a) (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 
-columnWritten :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Bool)
+columnWritten
+  :: HasCallStack
+  => TableName -> ColumnName -> Lens' (AnalyzeState a) (S Bool)
 columnWritten tn cn = latticeState.lasColumnsWritten.singular (ix tn).
   singular (ix cn).sbv2S
 
-columnRead :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Bool)
+columnRead
+  :: HasCallStack
+  => TableName -> ColumnName -> Lens' (AnalyzeState a) (S Bool)
 columnRead tn cn = latticeState.lasColumnsRead.singular (ix tn).
   singular (ix cn).sbv2S
 
 intCellDelta
-  :: TableName
+  :: HasCallStack
+  => TableName
   -> ColumnName
   -> S RowKey
   -> Lens' (AnalyzeState a) (S Integer)
@@ -462,31 +468,41 @@ intCellDelta tn cn sRk = latticeState.lasIntCellDeltas.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
 decCellDelta
-  :: TableName
+  :: HasCallStack
+  => TableName
   -> ColumnName
   -> S RowKey
   -> Lens' (AnalyzeState a) (S Decimal)
 decCellDelta tn cn sRk = latticeState.lasDecCellDeltas.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
-intColumnDelta :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Integer)
+intColumnDelta
+  :: HasCallStack
+  => TableName -> ColumnName -> Lens' (AnalyzeState a) (S Integer)
 intColumnDelta tn cn = latticeState.lasIntColumnDeltas.singular (ix tn).
   singular (ix cn)
 
-decColumnDelta :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Decimal)
+decColumnDelta
+  :: HasCallStack
+  => TableName -> ColumnName -> Lens' (AnalyzeState a) (S Decimal)
 decColumnDelta tn cn = latticeState.lasDecColumnDeltas.singular (ix tn).
   singular (ix cn)
 
-rowReadCount :: TableName -> S RowKey -> Lens' (AnalyzeState a) (S Integer)
+rowReadCount
+  :: HasCallStack
+  => TableName -> S RowKey -> Lens' (AnalyzeState a) (S Integer)
 rowReadCount tn sRk = latticeState.lasRowsRead.singular (ix tn).
   symArrayAt sRk.sbv2S
 
-rowWriteCount :: TableName -> S RowKey -> Lens' (AnalyzeState a) (S Integer)
+rowWriteCount
+  :: HasCallStack
+  => TableName -> S RowKey -> Lens' (AnalyzeState a) (S Integer)
 rowWriteCount tn sRk = latticeState.lasRowsWritten.singular (ix tn).
   symArrayAt sRk.sbv2S
 
 rowExists
-  :: Lens' a CellValues
+  :: HasCallStack
+  => Lens' a CellValues
   -> TableName
   -> S RowKey
   -> Lens' (AnalyzeState a) (S Bool)
@@ -494,7 +510,8 @@ rowExists cellValues tn sRk = latticeState.lasExtra.cellValues.
   cvRowExists.singular (ix tn).symArrayAt sRk.sbv2S
 
 cellEnforced
-  :: TableName
+  :: HasCallStack
+  => TableName
   -> ColumnName
   -> S RowKey
   -> Lens' (AnalyzeState a) (S Bool)
@@ -502,7 +519,8 @@ cellEnforced tn cn sRk = latticeState.lasCellsEnforced.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
 cellWritten
-  :: TableName
+  :: HasCallStack
+  => TableName
   -> ColumnName
   -> S RowKey
   -> Lens' (AnalyzeState a) (S Bool)
@@ -518,12 +536,19 @@ type CellLens a b
   -> Lens' (AnalyzeState a) (S b)
 
 typedCell
-  :: SymWord b
+  :: (HasCallStack, SymWord b)
   => Lens' SymbolicCells (ColumnMap (SFunArray RowKey b))
   -> CellLens a b
-typedCell colMap cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
-  cvTableCells.singular (ix tn).colMap.singular (ix cn).
-  symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+typedCell colMap cellValues tn cn sRk sDirty
+  = latticeState
+  . lasExtra
+  . cellValues
+  . cvTableCells
+  . singular (ix tn)
+  . colMap
+  . singular (ix cn)
+  . symArrayAt sRk
+  . sbv2SFrom (fromCell tn cn sRk sDirty)
 
 intCell :: CellLens a Integer
 intCell = typedCell scIntValues

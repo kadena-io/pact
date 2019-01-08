@@ -6,7 +6,9 @@
 {-# LANGUAGE MultiWayIf            #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE ViewPatterns          #-}
 
 module Pact.Analyze.Parse.Prop
@@ -47,12 +49,14 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust)
+import           Data.Proxy                   (Proxy)
 import qualified Data.Set                     as Set
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
 import           Data.Type.Equality           ((:~:) (Refl))
+import           GHC.TypeLits
 import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
@@ -253,6 +257,26 @@ inferVar vid name prop = do
     Just QTable             -> error "Table names cannot be vars"
     Just QColumnOf{}        -> error "Column names cannot be vars"
 
+-- Note: there is a very similar @mkLiteralObject@ in @Analyze.Translate@.
+-- These could probably be combined.
+mkLiteralObject :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
+mkLiteralObject [] = pure $ Existential (SObject SNil) $
+  LiteralObject (SObject SNil) (Object NilOf)
+mkLiteralObject ((name, preProp) : tups) = do
+  tups' <- mkLiteralObject tups
+  case tups' of
+    Existential (SObject objTy) (LiteralObject _ (Object objProp)) -> do
+      eProp <- inferPreProp preProp
+      case eProp of
+        Existential ty prop -> case someSymbolVal (T.unpack name) of
+          SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
+            let sym    = SSymbol @k
+                objTy' = SObject (SCons sym ty objTy)
+            in Existential objTy' $
+                 LiteralObject objTy' $
+                   Object $ ConsOf sym (Column ty prop) objProp
+    Existential _ _ -> throwErrorT $ "unexpected non-literal object: " <> tShow tups'
+
 --
 -- NOTE: because we have a lot of cases here and we are using pattern synonyms
 -- in conjunction with view patterns for feature symbols (see
@@ -325,7 +349,7 @@ inferPreProp preProp = case preProp of
       (Existential SInteger ix'', Existential (SList ty) lst)
         -> pure $ Existential ty $ CoreProp $ ListAt ty ix'' lst
 
---       TODO
+--       error "TODO"
 --       (Existential SStr (TextLit ix''), Existential objty@(SObject tyMap) objProp)
 --         -> case tyMap ^? Lens.ix ix'' of
 --           Nothing -> throwErrorIn preProp $
@@ -336,7 +360,7 @@ inferPreProp preProp = case preProp of
         "expected object or list (with key " <> tShow ix' <>
         ") but found type " <> userShow ty
 
-  -- TODO
+  -- error "TODO"
   -- PrePropRead tn rk ba -> do
   --   tn' <- parseTableName tn
   --   case tn' of
@@ -347,14 +371,18 @@ inferPreProp preProp = case preProp of
   --       case cm of
   --         Just cm' -> do
   --           let schema = columnMapToSchema cm'
-  --           pure $ EObject schema $ PropSpecific $ PropRead ba' schema tn' rk'
+  --           pure $ Existential schema $ PropSpecific $ PropRead ba' schema tn' rk'
   --         Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn
   --     _ -> throwErrorT $ "table name (" <> userShow tn <> ") must be a literal"
 
-  -- PreLiteralObject obj -> do
-  --   obj' <- traverse inferPreProp obj
-  --   let schema = Schema $ fmap existentialType obj'
-  --   pure $ EObject schema $ CoreProp $ LiteralObject obj'
+  PreLiteralObject obj -> do
+    obj' <- mkLiteralObject (Map.toList obj)
+    case obj' of
+      Existential schema obj'' -> pure $ Existential schema $ CoreProp obj''
+      -- $ LiteralObject schema obj'
+    -- obj' <- traverse inferPreProp obj
+    -- let schema = undefined -- Schema $ fmap existentialType obj'
+    -- pure $ Existential schema $ CoreProp $ LiteralObject schema obj'
 
   -- applications:
   --

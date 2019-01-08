@@ -162,7 +162,7 @@ instance UserShow (SingTy ty) where
       userShowM :: SingList a -> [Text]
       userShowM SNil        = []
       userShowM (SCons k v n) =
-        ("(" <> pack (symbolVal k) <> ", " <> pack (show v) <> ")")
+        (pack (symbolVal k) <> ": " <> userShow v)
         : userShowM n
 
 class SingI a where
