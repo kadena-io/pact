@@ -31,6 +31,7 @@ type ApiV1API =
 type PactServerAPI =
        "api" :> "v1" :> ApiV1API
   :<|> "verify" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+  :<|> "version" :> Get '[PlainText] Text
 
 pactServerAPI :: Proxy PactServerAPI
 pactServerAPI = Proxy

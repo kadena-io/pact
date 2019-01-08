@@ -31,6 +31,7 @@ import Control.Monad.Trans.Except
 import Control.Arrow
 
 import Data.Aeson hiding (defaultOptions, Result(..))
+import Data.Aeson.Types (parseMaybe)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString.Char8 as BS
@@ -49,12 +50,14 @@ import Snap.Util.CORS
 import Snap.Core
 import Snap.Http.Server as Snap
 import Network.Wai.Handler.Warp (run)
+-- import Network.Wai.Middleware.Cors
 
 import Pact.Analyze.Remote.Server (verify)
 import Pact.Server.API
 import Pact.Types.Command
 import Pact.Types.API
 import Pact.Types.Server
+import Pact.Types.Version
 
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
@@ -80,10 +83,21 @@ runApiServer :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int ->
 runApiServer histChan inbChan logFn port _logDir = do
   logFn $ "[api] starting on port " ++ show port
   let conf' = ApiEnv logFn histChan inbChan
-  run port $ serve pactServerAPI (servantServer conf')
+  run port $ {- cors (const policy) $ -} serve pactServerAPI (servantServer conf')
+  -- where
+  --   policy = Just CorsResourcePolicy
+  --     { corsOrigins = Nothing
+  --     , corsMethods = ["GET", "POST"]
+  --     , corsRequestHeaders = ["authorization", "content-type"]
+  --     , corsExposedHeaders = Nothing
+  --     , corsMaxAge = Just $ 60*60*24 -- one day
+  --     , corsVaryOrigin = False
+  --     , corsRequireOrigin = False
+  --     , corsIgnoreFailures = False
+  --     }
 
 servantServer :: ApiEnv -> Server PactServerAPI
-servantServer conf = apiV1Server conf :<|> verifyHandler
+servantServer conf = apiV1Server conf :<|> verifyHandler :<|> versionHandler
 
 apiV1Server :: ApiEnv -> Server ApiV1API
 apiV1Server conf = hoistServer apiV1API nt (sendHandler :<|> pollHandler :<|> listenHandler :<|> localHandler)
@@ -130,10 +144,15 @@ localHandler commandText = do
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
-  pure $ ApiSuccess (CommandSuccess r)
+  case parseMaybe parseJSON r of
+    Just v@CommandSuccess{} -> pure $ ApiSuccess v
+    Nothing -> die' "command could not be run locally"
 
 verifyHandler :: Value -> Handler Value
 verifyHandler _value = undefined
+
+versionHandler :: Handler T.Text
+versionHandler = pure pactVersion
 
 api :: Api ()
 api = Snap.Core.route [

@@ -186,6 +186,7 @@ library
       , snap-core
       , snap-server
       , statistics >= 0.13.3 && < 0.15
+      , wai-cors
       , warp
       , yaml
 

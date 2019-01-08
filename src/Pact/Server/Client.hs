@@ -12,6 +12,7 @@ module Pact.Server.Client
   , listen
   , local
   , verify
+  , version
   ) where
 
 import Data.Aeson
@@ -28,6 +29,7 @@ poll :: Poll -> ClientM (ApiResponse PollResponses)
 listen :: ListenerRequest -> ClientM (ApiResponse ApiResult)
 local :: Command Text -> ClientM (ApiResponse (CommandSuccess Value))
 verify :: Value -> ClientM Value
+version :: ClientM Text
 
-(send :<|> poll :<|> listen :<|> local) :<|> verify =
+(send :<|> poll :<|> listen :<|> local) :<|> verify :<|> version =
   client pactServerAPI
