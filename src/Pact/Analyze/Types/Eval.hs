@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
@@ -25,14 +26,15 @@ import           Control.Monad.Reader         (MonadReader)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
-import           Data.SBV                     (HasKind, Mergeable, SBV, SBool,
+import           Data.SBV                     (HasKind, Mergeable(symbolicMerge), SBV, SBool,
                                                SymArray (readArray, writeArray),
                                                SymWord, uninterpret)
 import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
-import           GHC.Generics                 (Generic)
+import           Data.Type.Equality           ((:~:)(Refl))
+import           GHC.Generics                 hiding (S)
 import           GHC.Stack                    (HasCallStack)
 
 import           Pact.Types.Lang              (Info)
@@ -43,7 +45,7 @@ import qualified Pact.Types.Typecheck         as Pact
 import           Pact.Analyze.Errors
 import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
 import           Pact.Analyze.Orphans         ()
-import           Pact.Analyze.Translate       (maybeTranslateUserType')
+import           Pact.Analyze.Translate       (maybeTranslateUserType', maybeTranslateType)
 import           Pact.Analyze.Types           hiding (tableName)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
@@ -145,27 +147,43 @@ data QueryEnv
     , _qeColumnScope   :: Map VarId ColumnName
     }
 
-data SymbolicCells
-  = SymbolicCells
-    { _scIntValues     :: ColumnMap (SFunArray RowKey Integer)
-    , _scBoolValues    :: ColumnMap (SFunArray RowKey Bool)
-    , _scStringValues  :: ColumnMap (SFunArray RowKey Str)
-    , _scDecimalValues :: ColumnMap (SFunArray RowKey Decimal)
-    , _scTimeValues    :: ColumnMap (SFunArray RowKey Time)
-    , _scKsValues      :: ColumnMap (SFunArray RowKey KeySet)
+data ESFunArray where
+  ESFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> ESFunArray
 
-    , _scIntLists      :: ColumnMap (SFunArray RowKey [Integer])
-    , _scBoolLists     :: ColumnMap (SFunArray RowKey [Bool])
-    , _scStringLists   :: ColumnMap (SFunArray RowKey [Str])
-    , _scDecimalLists  :: ColumnMap (SFunArray RowKey [Decimal])
-    , _scTimeLists     :: ColumnMap (SFunArray RowKey [Time])
-    , _scKsLists       :: ColumnMap (SFunArray RowKey [KeySet])
+instance Show ESFunArray where
+  showsPrec p (ESFunArray ty sfunarr) = showParen (p > 10) $
+      showString "ESFunArray "
+    . showsPrec 11 ty
+    . showChar ' '
+    . withHasKind ty (showsPrec 11 sfunarr)
 
-    -- TODO: opaque blobs
-    }
-  deriving (Generic, Show)
+data SymbolicCells = SymbolicCells { _scValues :: ColumnMap ESFunArray }
+  deriving (Show)
 
-deriving instance Mergeable SymbolicCells
+eArrayAt :: forall a.
+  SingTy a -> S RowKey -> Lens' ESFunArray (SBV (Concrete a))
+eArrayAt ty (S _ symKey) = lens getter setter where
+
+  getter :: ESFunArray -> SBV (Concrete a)
+  getter (ESFunArray ty' arr) = case singEq ty ty' of
+    Just Refl -> readArray arr symKey
+    Nothing   -> error "TODO: eArrayAt: bad getter access"
+
+  setter :: ESFunArray -> SBV (Concrete a) -> ESFunArray
+  setter (ESFunArray ty' arr) val = case singEq ty ty' of
+    Just Refl -> withSymWord ty $ ESFunArray ty $ writeArray arr symKey val
+    Nothing   -> error "TODO: eArrayAt: bad setter access"
+
+instance Mergeable ESFunArray where
+  symbolicMerge force test (ESFunArray ty1 arr1) (ESFunArray ty2 arr2)
+    = case singEq ty1 ty2 of
+      Nothing   -> error "mismatched types when merging two ESFunArrays"
+      Just Refl -> withSymWord ty1 $
+        ESFunArray ty1 $ symbolicMerge force test arr1 arr2
+
+instance Mergeable SymbolicCells where
+  symbolicMerge force test (SymbolicCells left) (SymbolicCells right)
+    = SymbolicCells $ symbolicMerge force test left right
 
 -- In evaluation, we have one copy of @CellValues@, which we update as cells
 -- are written. For querying we have two copies, representing the db state
@@ -347,32 +365,19 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
       (\colName cells ty ->
         let col      = ColumnName $ T.unpack colName
 
-            mkArray :: forall a. HasKind a => SFunArray RowKey a
-            mkArray  = mkFreeArray $ "cells__" <> tableName <> "__" <> colName
+            mkArray :: SingTy a -> ESFunArray
+            mkArray sTy = withHasKind sTy $ ESFunArray sTy $ mkFreeArray $
+              "cells__" <> tableName <> "__" <> colName
 
-        in cells & case ty of
-             TyPrim Pact.TyInteger -> scIntValues    .at col ?~ mkArray
-             TyPrim Pact.TyBool    -> scBoolValues   .at col ?~ mkArray
-             TyPrim Pact.TyDecimal -> scDecimalValues.at col ?~ mkArray
-             TyPrim Pact.TyTime    -> scTimeValues   .at col ?~ mkArray
-             TyPrim Pact.TyString  -> scStringValues .at col ?~ mkArray
-             TyPrim Pact.TyKeySet  -> scKsValues     .at col ?~ mkArray
-
-             Pact.TyList (TyPrim Pact.TyInteger) -> scIntLists    .at col ?~ mkArray
-             Pact.TyList (TyPrim Pact.TyBool   ) -> scBoolLists   .at col ?~ mkArray
-             Pact.TyList (TyPrim Pact.TyDecimal) -> scDecimalLists.at col ?~ mkArray
-             Pact.TyList (TyPrim Pact.TyTime   ) -> scTimeLists   .at col ?~ mkArray
-             Pact.TyList (TyPrim Pact.TyString ) -> scStringLists .at col ?~ mkArray
-             Pact.TyList (TyPrim Pact.TyKeySet ) -> scKsLists     .at col ?~ mkArray
-
+        in cells & case maybeTranslateType ty of
+             Just (EType sTy) -> scValues . at col ?~ mkArray sTy
              --
              -- TODO: we should Left here. this means that mkSymbolicCells and
              --       mkInitialAnalyzeState should both return Either.
              --
-             _ -> id
+             Nothing -> id
       )
-      (SymbolicCells mempty mempty mempty mempty mempty mempty
-                     mempty mempty mempty mempty mempty mempty)
+      (SymbolicCells mempty)
       fields
 
 mkSVal :: SBV a -> SBVI.SVal
@@ -535,56 +540,17 @@ type CellLens a b
   -> S Bool
   -> Lens' (AnalyzeState a) (S b)
 
-typedCell
-  :: (HasCallStack, SymWord b)
-  => Lens' SymbolicCells (ColumnMap (SFunArray RowKey b))
-  -> CellLens a b
-typedCell colMap cellValues tn cn sRk sDirty
-  = latticeState
+typedCell :: HasCallStack => SingTy b -> CellLens a (Concrete b)
+typedCell ty cellValues tn cn sRk sDirty =
+    latticeState
   . lasExtra
   . cellValues
   . cvTableCells
   . singular (ix tn)
-  . colMap
+  . scValues
   . singular (ix cn)
-  . symArrayAt sRk
+  . eArrayAt ty sRk
   . sbv2SFrom (fromCell tn cn sRk sDirty)
-
-intCell :: CellLens a Integer
-intCell = typedCell scIntValues
-
-boolCell :: CellLens a Bool
-boolCell = typedCell scBoolValues
-
-stringCell :: CellLens a Str
-stringCell = typedCell scStringValues
-
-decimalCell :: CellLens a Decimal
-decimalCell = typedCell scDecimalValues
-
-timeCell :: CellLens a Time
-timeCell = typedCell scTimeValues
-
-ksCell :: CellLens a KeySet
-ksCell = typedCell scKsValues
-
-intListCell :: CellLens a [Integer]
-intListCell = typedCell scIntLists
-
-boolListCell :: CellLens a [Bool]
-boolListCell = typedCell scBoolLists
-
-stringListCell :: CellLens a [Str]
-stringListCell = typedCell scStringLists
-
-decimalListCell :: CellLens a [Decimal]
-decimalListCell = typedCell scDecimalLists
-
-timeListCell :: CellLens a [Time]
-timeListCell = typedCell scTimeLists
-
-ksListCell :: CellLens a [KeySet]
-ksListCell = typedCell scKsLists
 
 symArrayAt
   :: forall array k v

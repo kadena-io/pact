@@ -864,6 +864,27 @@ withSMTValue = withDict . singMkSMTValue
     withSMTValueListDict (SCons _k ty tys) f
       = withTypeable ty $ withSMTValue ty $ withSMTValueListDict tys f
 
+withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
+withHasKind = withDict . singMkHasKind
+  where
+
+    singMkHasKind :: SingTy a -> Dict (HasKind (Concrete a))
+    singMkHasKind = \case
+      SInteger  -> Dict
+      SBool     -> Dict
+      SStr      -> Dict
+      STime     -> Dict
+      SDecimal  -> Dict
+      SKeySet   -> Dict
+      SAny      -> Dict
+      SList ty' -> withHasKind ty' $ withTypeable ty' Dict
+      SObject tys -> withHasKindListDict tys Dict
+
+    withHasKindListDict :: SingList tys -> (HasKind (Object AConcrete tys) => b) -> b
+    withHasKindListDict SNil f = f
+    withHasKindListDict (SCons _k ty tys) f
+      = withTypeable ty $ withHasKind ty $ withHasKindListDict tys f
+
 instance SMTValue (Object AConcrete '[]) where
   sexprToVal _ = Just $ Object NilOf
 

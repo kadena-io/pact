@@ -217,43 +217,14 @@ evalPropSpecific (PropRead (SObject fields) ba tn pRk) = do
     let cn = ColumnName fieldName
 
     av <- case fieldType of
-      EType SInteger -> mkAVal <$> view
-        (qeAnalyzeState.intCell     (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType SBool    -> mkAVal <$> view
-        (qeAnalyzeState.boolCell    (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType SStr     -> mkAVal <$> view
-        (qeAnalyzeState.stringCell  (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType SDecimal -> mkAVal <$> view
-        (qeAnalyzeState.decimalCell (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType STime    -> mkAVal <$> view
-        (qeAnalyzeState.timeCell    (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType SKeySet  -> mkAVal <$> view
-        (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk sFalse)
+      EType ty -> mkAVal <$> view
+        (qeAnalyzeState.typedCell ty (beforeAfterLens ba) tn' cn sRk sFalse)
 
-      EType (SList SInteger) -> mkAVal <$> view
-        (qeAnalyzeState.intListCell     (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType (SList SBool   ) -> mkAVal <$> view
-        (qeAnalyzeState.boolListCell    (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType (SList SStr    ) -> mkAVal <$> view
-        (qeAnalyzeState.stringListCell  (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType (SList SDecimal) -> mkAVal <$> view
-        (qeAnalyzeState.decimalListCell (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType (SList STime   ) -> mkAVal <$> view
-        (qeAnalyzeState.timeListCell    (beforeAfterLens ba) tn' cn sRk sFalse)
-      EType (SList SKeySet ) -> mkAVal <$> view
-        (qeAnalyzeState.ksListCell      (beforeAfterLens ba) tn' cn sRk sFalse)
-
-      EType SAny         -> pure OpaqueVal
-      EType (SList SAny) -> pure OpaqueVal
-
-      EType (SList _) -> error "TODO"
-
-      --
-      -- TODO: if we add nested object support here, we need to install
-      --       the correct provenance into AVals all the way down into
-      --       sub-objects.
-      --
-      EType (SObject _)  -> throwErrorNoLoc UnsupportedObjectInDbCell
+     -- TODO: do we still need to do this?
+     -- TODO: if we add nested object support here, we need to install
+     --       the correct provenance into AVals all the way down into
+     --       sub-objects.
+     --
 
     pure (fieldType, av)
 

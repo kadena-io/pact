@@ -16,7 +16,7 @@ import           Control.Lens                (At (at), Lens',
                                               preview, use, view, (%=), (%~),
                                               (&), (+=), (.=), (.~), (<&>),
                                               (?~), (^.), (^?), _1, _2, _Just)
-import           Control.Monad               (void) -- , when)
+-- import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
@@ -264,29 +264,21 @@ readFields tn sRk tid (SObject (SCons sym fieldType subObjTy)) = do
   av     <- readField tn cn sRk sDirty fieldType
   tagAccessCell mtReads tid tFieldName av
   (obj', avs) <- readFields tn sRk tid (SObject subObjTy)
-  pure (undefined obj', Map.insert tFieldName av avs)
+  pure (error "TODO" obj', Map.insert tFieldName av avs)
 
 readField
   :: TableName -> ColumnName -> S RowKey -> S Bool -> SingTy ty -> Analyze AVal
-readField tn cn sRk sDirty = \case
-  SInteger -> mkAVal <$> use (intCell     id tn cn sRk sDirty)
-  SBool    -> mkAVal <$> use (boolCell    id tn cn sRk sDirty)
-  SStr     -> mkAVal <$> use (stringCell  id tn cn sRk sDirty)
-  SDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
-  STime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
-  SKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
-  SAny     -> pure OpaqueVal
-  --
-  -- TODO: if we add nested object support here, we need to install
-  --       the correct provenance into AVals all the way down into
-  --       sub-objects.
-  --
-  SObject{} -> throwErrorNoLoc UnsupportedObjectInDbCell
-  -- TODO
-  SList{}   -> throwErrorNoLoc UnsupportedObjectInDbCell
+readField tn cn sRk sDirty ty
+  = mkAVal <$> use (typedCell ty id tn cn sRk sDirty)
+ --
+ -- TODO: do we still need to do this?
+ -- TODO: if we add nested object support here, we need to install
+ --       the correct provenance into AVals all the way down into
+ --       sub-objects.
+ --
 
 aValsOfObj :: SingTy ('TyObject ty) -> S (Object AConcrete ty) -> Map Text AVal
-aValsOfObj = undefined
+aValsOfObj = error "TODO"
 
 writeFields
   :: Pact.WriteType -> TagId
@@ -308,16 +300,16 @@ writeFields writeType tid tn sRk sObj (SObject (SCons sym fieldType subObjTy)) =
       -- avoid overlapping instances. GHC is willing to pick `+` and `-`
       -- for each of the two instantiations of this function.
       let writeDelta
-            :: forall t. (SymWord t, Num t)
-            => (S t -> S t -> S t) -> (S t -> S t -> S t)
-            -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' EvalAnalyzeState (S t))
-            -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S t))
-            -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S t))
+            :: forall ty ty'. (SymWord ty', Num ty', Concrete ty ~ ty')
+            => SingTy ty
+            -> (S ty' -> S ty' -> S ty') -> (S ty' -> S ty' -> S ty')
+            -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S ty'))
+            -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S ty'))
             -> Analyze ()
-          writeDelta plus minus mkCellL mkCellDeltaL mkColDeltaL = do
-            let cell :: Lens' EvalAnalyzeState (S t)
-                cell = mkCellL tn cn sRk sTrue
-            let next = mkS mProv sVal
+          writeDelta ty plus minus mkCellDeltaL mkColDeltaL = do
+            let cell :: Lens' EvalAnalyzeState (S ty')
+                cell = typedCell ty id tn cn sRk sTrue
+                next = mkS mProv sVal
 
             -- (only) in the case of an insert, we know the cell did not
             -- previously exist
@@ -331,28 +323,11 @@ writeFields writeType tid tn sRk sObj (SObject (SCons sym fieldType subObjTy)) =
             mkColDeltaL  tn cn     %= plus diff
 
       case fieldType of
-        SInteger -> writeDelta (+) (-) (intCell id) intCellDelta intColumnDelta
-        SBool    -> boolCell   id tn cn sRk sTrue .= mkS mProv sVal
-        SDecimal -> writeDelta (+) (-) (decimalCell id) decCellDelta decColumnDelta
-        STime    -> timeCell   id tn cn sRk sTrue .= mkS mProv sVal
-        SStr     -> stringCell id tn cn sRk sTrue .= mkS mProv sVal
-        SKeySet  -> ksCell     id tn cn sRk sTrue .= mkS mProv sVal
-
-        SList SInteger -> intListCell     id tn cn sRk sTrue .= mkS mProv sVal
-        SList SBool    -> boolListCell    id tn cn sRk sTrue .= mkS mProv sVal
-        SList SDecimal -> decimalListCell id tn cn sRk sTrue .= mkS mProv sVal
-        SList STime    -> timeListCell    id tn cn sRk sTrue .= mkS mProv sVal
-        SList SStr     -> stringListCell  id tn cn sRk sTrue .= mkS mProv sVal
-        SList SKeySet  -> ksListCell      id tn cn sRk sTrue .= mkS mProv sVal
-
-        SAny       -> void $ throwErrorNoLoc OpaqueValEncountered
-        SList SAny -> void $ throwErrorNoLoc OpaqueValEncountered
-        SObject _  -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
-        SList _ -> pure () -- error "TODO"
+        SInteger -> writeDelta SInteger (+) (-) intCellDelta intColumnDelta
+        SDecimal -> writeDelta SDecimal (+) (-) decCellDelta decColumnDelta
+        _        -> typedCell fieldType id tn cn sRk sTrue .= mkS mProv sVal
 
       pure aval'
-
-        -- TODO: handle EObjectTy here
 
     OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
