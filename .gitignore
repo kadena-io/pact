@@ -21,3 +21,4 @@ log/
 /result
 public
 .ghc.environment.*
+.dir-locals.el
