@@ -5,7 +5,8 @@
 
 
 module Pact.Server.API
-  ( PactServerAPI
+  ( ApiV1API
+  , PactServerAPI
   , pactServerAPI
   ) where
 
@@ -16,19 +17,19 @@ import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
 
+type ApiV1API =
+  (    "send" :> ReqBody '[JSON] SubmitBatch :>
+    Post '[JSON] (ApiResponse RequestKeys)
+  :<|> "poll" :> ReqBody '[JSON] Poll :>
+    Post '[JSON] (ApiResponse PollResponses)
+  :<|> "listen" :> ReqBody '[JSON] ListenerRequest :>
+    Post '[JSON] (ApiResponse ApiResult)
+  :<|> "local" :> ReqBody '[JSON] (Command Text) :>
+    Post '[JSON] (ApiResponse (CommandSuccess Value))
+  )
+
 type PactServerAPI =
-       "api" :> "v1" :>
-      (    "send" :> ReqBody '[JSON] SubmitBatch :>
-        Post '[JSON] (ApiResponse RequestKeys)
-      :<|> "private" :> ReqBody '[JSON] SubmitBatch :>
-        Post '[JSON] (ApiResponse RequestKeys)
-      :<|> "poll" :> ReqBody '[JSON] Poll :>
-        Post '[JSON] (ApiResponse PollResponses)
-      :<|> "listen" :> ReqBody '[JSON] ListenerRequest :>
-        Post '[JSON] (ApiResponse ApiResult)
-      :<|> "local" :> ReqBody '[JSON] (Command Text) :>
-        Post '[JSON] (ApiResponse (CommandSuccess Value))
-      )
+       "api" :> "v1" :> ApiV1API
   :<|> "verify" :> ReqBody '[JSON] Value :> Post '[JSON] Value
 
 pactServerAPI :: Proxy PactServerAPI

@@ -181,9 +181,12 @@ library
       , memory
       , safe-exceptions >= 0.1.5.0 && < 0.2
       , sbv >= 7.9 && < 7.10
+      , servant-server
+      -- , servant-snap
       , snap-core
       , snap-server
       , statistics >= 0.13.3 && < 0.15
+      , warp
       , yaml
 
   if !impl(ghcjs) && !os(windows)

@@ -27,6 +27,9 @@ in
             lens-aeson = dontCheck super.lens-aeson;
             # test suite for this is failing on ghcjs:
             hw-hspec-hedgehog = dontCheck super.hw-hspec-hedgehog;
+            # heist = doJailbreak super.heist;
+            # snap = doJailbreak super.snap;
+            # servant-snap = dontCheck (doJailbreak super.servant-snap);
 
             bsb-http-chunked = whenGhcjs dontCheck super.bsb-http-chunked;
             Glob = whenGhcjs dontCheck super.Glob;
