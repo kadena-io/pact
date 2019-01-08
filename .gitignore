@@ -20,3 +20,4 @@ log/
 /.pact-history
 /result
 public
+.ghc.environment.*
