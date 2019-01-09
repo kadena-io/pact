@@ -55,8 +55,8 @@ in
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "joelburget";
               repo = "sbv";
-              rev = "441a6e34837cf5481222b696aa83b82e6d7ce325";
-              sha256 = "0dpbpnmzin7i9vd4zqwyxqw0iizfd2iw0rz59ag0zxhhakxpazzp";
+              rev = "0ea850393e8890bdf3971278441365d527deaa5d";
+              sha256 = "0k0g4rkaidx0aw17kv22axf1cnlm9bmpd7g5bby5pg9b3wfw27jz";
             }) {});
 
             # need crackNum 2.3

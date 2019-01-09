@@ -1392,105 +1392,105 @@ spec = describe "analyze" $ do
 
 --    expectPass code $ Valid Success'
 
---  describe "let" $ do
---    describe "sanity" $ do
---      describe "1" $
---        let code =
---              [text|
---                (defun test:bool (x:integer)
---                  (let ((y x)
---                        (z (+ 10 x)))
---                    (enforce (> z y) "z <= y")
---                    true))
---              |]
---        in expectPass code $ Valid $ sNot Abort'
+  describe "let" $ do
+    describe "sanity" $ do
+      describe "1" $
+        let code =
+              [text|
+                (defun test:bool (x:integer)
+                  (let ((y x)
+                        (z (+ 10 x)))
+                    (enforce (> z y) "z <= y")
+                    true))
+              |]
+        in expectPass code $ Valid $ sNot Abort'
 
---      describe "2" $
---        let code =
---              [text|
---                (defun test:bool (x:integer)
---                  (let ((y x)
---                        (z (+ 10 x)))
---                    (enforce (< z y) "z >= y")
---                    true))
---              |]
---        in expectPass code $ Valid Abort'
+      describe "2" $
+        let code =
+              [text|
+                (defun test:bool (x:integer)
+                  (let ((y x)
+                        (z (+ 10 x)))
+                    (enforce (< z y) "z >= y")
+                    true))
+              |]
+        in expectPass code $ Valid Abort'
 
---    describe "let*.sanity" $
---        let code =
---              [text|
---                (defun test:bool (x:integer)
---                  (let* ((x 2)
---                         (y (* x 10)))
---                   (enforce (= 22 (+ x y)) "x + y != 22")))
---              |]
---        in expectPass code $ Valid $ sNot Abort'
+    describe "let*.sanity" $
+        let code =
+              [text|
+                (defun test:bool (x:integer)
+                  (let* ((x 2)
+                         (y (* x 10)))
+                   (enforce (= 22 (+ x y)) "x + y != 22")))
+              |]
+        in expectPass code $ Valid $ sNot Abort'
 
---    describe "nested" $
---        let code =
---              [text|
---                (defun test:bool (x:integer)
---                  (let ((x (let ((y 2)) y))
---                        (y (let ((x 3)) x)))
---                    (let ((z (let ((w 1)) (+ (+ x y) w))))
---                      (enforce (= 6 z) "2 + 3 + 1 != 6"))))
---              |]
---        in expectPass code $ Valid $ sNot Abort'
+    describe "nested" $
+        let code =
+              [text|
+                (defun test:bool (x:integer)
+                  (let ((x (let ((y 2)) y))
+                        (y (let ((x 3)) x)))
+                    (let ((z (let ((w 1)) (+ (+ x y) w))))
+                      (enforce (= 6 z) "2 + 3 + 1 != 6"))))
+              |]
+        in expectPass code $ Valid $ sNot Abort'
 
---  describe "time" $
---    let code =
---          [text|
---            (defun test:bool ()
---              (let ((startTime:time (time "2016-07-22T12:00:00Z")))
---                (enforce
---                  (= (add-time startTime (days 1))
---                     (time "2016-07-23T12:00:00Z"))
---                  "one day later")
---                (enforce
---                  (= (add-time startTime (hours 1))
---                     (time "2016-07-22T13:00:00Z"))
---                  "one hour later")
---                (enforce
---                  (= (add-time startTime (minutes 1))
---                     (time "2016-07-22T12:01:00Z"))
---                  "one minute later")
+  describe "time" $
+    let code =
+          [text|
+            (defun test:bool ()
+              (let ((startTime:time (time "2016-07-22T12:00:00Z")))
+                (enforce
+                  (= (add-time startTime (days 1))
+                     (time "2016-07-23T12:00:00Z"))
+                  "one day later")
+                (enforce
+                  (= (add-time startTime (hours 1))
+                     (time "2016-07-22T13:00:00Z"))
+                  "one hour later")
+                (enforce
+                  (= (add-time startTime (minutes 1))
+                     (time "2016-07-22T12:01:00Z"))
+                  "one minute later")
 
---                (enforce
---                  (= (add-time (time "2016-07-22T12:00:00Z") (days 1.5))
---                     (time "2016-07-24T00:00:00Z"))
---                  "1.5 days later")
---                (enforce
---                  (= (add-time (time "2016-07-22T12:00:00Z") (hours 1.5))
---                     (time "2016-07-22T13:30:00Z"))
---                  "1.5 hours later")
---                (enforce
---                  (= (add-time (time "2016-07-22T12:00:00Z") (minutes 1.5))
---                     (time "2016-07-22T12:01:30Z"))
---                  "1.5 minutes later")
---                (enforce
---                  (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
---                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
---                  "0.001002 seconds later")
+                (enforce
+                  (= (add-time (time "2016-07-22T12:00:00Z") (days 1.5))
+                     (time "2016-07-24T00:00:00Z"))
+                  "1.5 days later")
+                (enforce
+                  (= (add-time (time "2016-07-22T12:00:00Z") (hours 1.5))
+                     (time "2016-07-22T13:30:00Z"))
+                  "1.5 hours later")
+                (enforce
+                  (= (add-time (time "2016-07-22T12:00:00Z") (minutes 1.5))
+                     (time "2016-07-22T12:01:30Z"))
+                  "1.5 minutes later")
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.001002 seconds later")
 
---                (enforce
---                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010023)
---                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
---                  "0.0010023 s = 0.001002 s")
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010023)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.0010023 s = 0.001002 s")
 
---                ; Pact rounds tenths of milliseconds using the banker's method
---                ; (same as its treatment of decimals). ie it rounds to the
---                ; nearest even.
---                (enforce
---                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010025)
---                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
---                  "0.0010025 s = 0.001002 s")
---                (enforce
---                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010035)
---                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001004"))
---                  "0.0010035 s = 0.001004 s")
---              ))
---          |]
---    in expectPass code $ Valid $ sNot Abort'
+                ; Pact rounds tenths of milliseconds using the banker's method
+                ; (same as its treatment of decimals). ie it rounds to the
+                ; nearest even.
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010025)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.0010025 s = 0.001002 s")
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010035)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001004"))
+                  "0.0010035 s = 0.001004 s")
+              ))
+          |]
+    in expectPass code $ Valid $ sNot Abort'
 
   describe "str-to-int" $ do
     describe "without specified base" $ do
@@ -1692,69 +1692,69 @@ spec = describe "analyze" $ do
           |]
     in expectPass code $ Valid $ sNot Abort'
 
---  describe "schema-invariants" $ do
---    let code =
---          [text|
---            (defschema ints-row
---              @doc "doc"
---              @model
---                [ (invariant (> pos 0))
---                  (invariant (< neg 0))
---                ]
---              pos:integer
---              neg:integer)
---            (deftable ints:{ints-row} "Table of positive and negative integers")
+  describe "schema-invariants" $ do
+    let code =
+          [text|
+            (defschema ints-row
+              @doc "doc"
+              @model
+                [ (invariant (> pos 0))
+                  (invariant (< neg 0))
+                ]
+              pos:integer
+              neg:integer)
+            (deftable ints:{ints-row} "Table of positive and negative integers")
 
---            (defun test:bool ()
---              (with-read ints "any index" { "pos" := pos, "neg" := neg }
---                (enforce (> pos 0) "is not positive")
---                (enforce (< neg 0) "is not negative")
---                ))
---          |]
+            (defun test:bool ()
+              (with-read ints "any index" { "pos" := pos, "neg" := neg }
+                (enforce (> pos 0) "is not positive")
+                (enforce (< neg 0) "is not negative")
+                ))
+          |]
 
---    expectVerified code
---    expectPass code $ Valid $
---      PropSpecific (RowExists "ints" "any index" Before) .=> Success'
+    expectVerified code
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before) .=> Success'
 
---  describe "schema-invariants.not-equals" $ do
---    let code =
---          [text|
---            (defschema ints-row
---              @doc   "doc"
---              @model [(invariant (!= nonzero 0))]
---              nonzero:integer)
---            (deftable ints:{ints-row})
+  describe "schema-invariants.not-equals" $ do
+    let code =
+          [text|
+            (defschema ints-row
+              @doc   "doc"
+              @model [(invariant (!= nonzero 0))]
+              nonzero:integer)
+            (deftable ints:{ints-row})
 
---            (defun test:bool ()
---              (with-read ints "any index" { "nonzero" := nz }
---                (enforce (or (> nz 0) (< nz 0)) "is zero")))
---          |]
+            (defun test:bool ()
+              (with-read ints "any index" { "nonzero" := nz }
+                (enforce (or (> nz 0) (< nz 0)) "is zero")))
+          |]
 
---    expectVerified code
---    expectPass code $ Valid $
---      PropSpecific (RowExists "ints" "any index" Before)
---      .=>
---      Success'
+    expectVerified code
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before)
+      .=>
+      Success'
 
---  describe "schema-invariants.equals" $ do
---    let code =
---          [text|
---            (defschema ints-row
---              @doc   "doc"
---              @model [(invariant (= zero 0))]
---              zero:integer)
---            (deftable ints:{ints-row})
+  describe "schema-invariants.equals" $ do
+    let code =
+          [text|
+            (defschema ints-row
+              @doc   "doc"
+              @model [(invariant (= zero 0))]
+              zero:integer)
+            (deftable ints:{ints-row})
 
---            (defun test:bool ()
---              (with-read ints "any index" { "zero" := z }
---                (enforce (= z 0) "is not zero")))
---          |]
+            (defun test:bool ()
+              (with-read ints "any index" { "zero" := z }
+                (enforce (= z 0) "is not zero")))
+          |]
 
---    expectVerified code
---    expectPass code $ Valid $
---      PropSpecific (RowExists "ints" "any index" Before)
---      .=>
---      Success'
+    expectVerified code
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before)
+      .=>
+      Success'
 
   describe "format-time / parse-time" $ do
     let code =
@@ -1829,41 +1829,41 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
---  describe "enforce-keyset.row-level.read" $ do
---    let code =
---          [text|
---            (defschema central-bank-schema
---              @doc   "central bank"
---              @model
---                [ (invariant (= 1000000 (+ reserve circulation)))
---                  (invariant (>= reserve 0))
---                  (invariant (>= circulation 0))
---                ]
---              reserve:integer
---              circulation:integer)
---            (deftable central-bank-table:{central-bank-schema})
+  describe "enforce-keyset.row-level.read" $ do
+    let code =
+          [text|
+            (defschema central-bank-schema
+              @doc   "central bank"
+              @model
+                [ (invariant (= 1000000 (+ reserve circulation)))
+                  (invariant (>= reserve 0))
+                  (invariant (>= circulation 0))
+                ]
+              reserve:integer
+              circulation:integer)
+            (deftable central-bank-table:{central-bank-schema})
 
---            (defun test (amt:integer)
---              "Issue some amount of currency"
+            (defun test (amt:integer)
+              "Issue some amount of currency"
 
---              (let*
---                ((before (read central-bank-table "singleton"))
---                 (new-reserve     (- (at 'reserve before)     amt))
---                 (new-circulation (+ (at 'circulation before) amt))
---                )
+              (let*
+                ((before (read central-bank-table "singleton"))
+                 (new-reserve     (- (at 'reserve before)     amt))
+                 (new-circulation (+ (at 'circulation before) amt))
+                )
 
---                (enforce (> amt 0) "")
---                (enforce (>= new-reserve 0) "")
+                (enforce (> amt 0) "")
+                (enforce (>= new-reserve 0) "")
 
---                (update central-bank-table "singleton" {
---                  'reserve: new-reserve,
---                  'circulation: new-circulation
---                })))
---          |]
+                (update central-bank-table "singleton" {
+                  'reserve: new-reserve,
+                  'circulation: new-circulation
+                })))
+          |]
 
---    expectVerified code
---    expectPass code $ Satisfiable Abort'
---    expectPass code $ Satisfiable Success'
+    expectVerified code
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
 
   describe "prenex conversion" $ do
     -- These test a somewhat irrelevant implementation detail -- the specific
@@ -1920,220 +1920,220 @@ spec = describe "analyze" $ do
       `shouldBe`
       allA1 ty (CoreProp (ListAt SBool 0 (CoreProp (LiteralList SBool [ a1 ]))))
 
---  describe "prop parse / typecheck" $ do
---    let parseExprs' :: Text -> Either String [Exp Info]
---        parseExprs' t = parseExprs t & traverse . traverse . traverse .~ dummyInfo
+  describe "prop parse / typecheck" $ do
+    let parseExprs' :: Text -> Either String [Exp Info]
+        parseExprs' t = parseExprs t & traverse . traverse . traverse .~ dummyInfo
 
---    let textToProp'
---          :: Map Text VarId
---          -> Map VarId EType
---          -> TableEnv
---          -> SingTy a
---          -> Text
---          -> Either String (Prop a)
---        textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
---          Right [exp'] ->
---            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
---              HM.empty ty exp'
---          Left err -> Left err
---          _        -> Left "Error: unexpected result from parseExprs"
+    let textToProp'
+          :: Map Text VarId
+          -> Map VarId EType
+          -> TableEnv
+          -> SingTy a
+          -> Text
+          -> Either String (Prop a)
+        textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
+          Right [exp'] ->
+            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
+              HM.empty ty exp'
+          Left err -> Left err
+          _        -> Left "Error: unexpected result from parseExprs"
 
---        textToProp :: SingTy a -> Text -> Either String (Prop a)
---        textToProp = textToProp'
---          (Map.singleton "result" 0)
---          (Map.singleton 0 (EType SAny))
---          (TableMap mempty)
+        textToProp :: SingTy a -> Text -> Either String (Prop a)
+        textToProp = textToProp'
+          (Map.singleton "result" 0)
+          (Map.singleton 0 (EType SAny))
+          (TableMap mempty)
 
---        inferProp'
---          :: Map Text VarId
---          -> Map VarId EType
---          -> TableEnv
---          -> Text
---          -> Either String EProp
---        inferProp' env1 env2 tableEnv t = case parseExprs' t of
---          Right [exp'] ->
---            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
---              HM.empty exp'
---          Left err -> Left err
---          _        -> Left "Error: unexpected result from parseExprs"
+        inferProp'
+          :: Map Text VarId
+          -> Map VarId EType
+          -> TableEnv
+          -> Text
+          -> Either String EProp
+        inferProp' env1 env2 tableEnv t = case parseExprs' t of
+          Right [exp'] ->
+            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
+              HM.empty exp'
+          Left err -> Left err
+          _        -> Left "Error: unexpected result from parseExprs"
 
---        inferProp'' :: Text -> Either String EProp
---        inferProp'' = inferProp'
---          (Map.singleton "result" 0)
---          (Map.singleton 0 (EType SAny))
---          (TableMap mempty)
+        inferProp'' :: Text -> Either String EProp
+        inferProp'' = inferProp'
+          (Map.singleton "result" 0)
+          (Map.singleton 0 (EType SAny))
+          (TableMap mempty)
 
---        textToPropTableEnv :: TableEnv -> SingTy a -> Text -> Either String (Prop a)
---        textToPropTableEnv tableEnv = textToProp'
---          (Map.singleton "result" 0)
---          (Map.singleton 0 (EType SAny))
---          tableEnv
+        textToPropTableEnv :: TableEnv -> SingTy a -> Text -> Either String (Prop a)
+        textToPropTableEnv tableEnv = textToProp'
+          (Map.singleton "result" 0)
+          (Map.singleton 0 (EType SAny))
+          tableEnv
 
---        singletonTableEnv :: TableName -> ColumnName -> EType -> TableEnv
---        singletonTableEnv a b ty = TableMap $ Map.singleton a $
---            ColumnMap $ Map.singleton b ty
+        singletonTableEnv :: TableName -> ColumnName -> EType -> TableEnv
+        singletonTableEnv a b ty = TableMap $ Map.singleton a $
+            ColumnMap $ Map.singleton b ty
 
---    it "infers column-delta" $ do
---      let tableEnv = singletonTableEnv "a" "b" (EType SInteger)
---      textToPropTableEnv tableEnv SBool "(> (column-delta a 'b) 0)"
---        `shouldBe`
---        Right (CoreProp $ IntegerComparison Gt (Inj (IntColumnDelta "a" "b")) 0)
+    it "infers column-delta" $ do
+      let tableEnv = singletonTableEnv "a" "b" (EType SInteger)
+      textToPropTableEnv tableEnv SBool "(> (column-delta a 'b) 0)"
+        `shouldBe`
+        Right (CoreProp $ IntegerComparison Gt (Inj (IntColumnDelta "a" "b")) 0)
 
---      let tableEnv' = singletonTableEnv "a" "b" (EType SDecimal)
---      textToPropTableEnv tableEnv' SBool "(> (column-delta a 'b) 0.0)"
---        `shouldBe`
---        Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
+      let tableEnv' = singletonTableEnv "a" "b" (EType SDecimal)
+      textToPropTableEnv tableEnv' SBool "(> (column-delta a 'b) 0.0)"
+        `shouldBe`
+        Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
 
---      textToPropTableEnv tableEnv' SBool "(> (column-delta a \"b\") 0.0)"
---        `shouldBe`
---        Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
+      textToPropTableEnv tableEnv' SBool "(> (column-delta a \"b\") 0.0)"
+        `shouldBe`
+        Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
 
---    it "checks +" $ do
---      textToProp SStr "(+ \"a\" \"b\")"
---        `shouldBe`
---        Right (PStrConcat (Lit' "a") (Lit' "b"))
+    it "checks +" $ do
+      textToProp SStr "(+ \"a\" \"b\")"
+        `shouldBe`
+        Right (PStrConcat (Lit' "a") (Lit' "b"))
 
---      textToProp SInteger "(+ 0 1)"
---        `shouldBe`
---        Right (Inj (IntArithOp Add 0 1 :: Numerical Prop 'TyInteger))
+      textToProp SInteger "(+ 0 1)"
+        `shouldBe`
+        Right (Inj (IntArithOp Add 0 1 :: Numerical Prop 'TyInteger))
 
---      textToProp SDecimal "(+ 0.0 1.0)"
---        `shouldBe`
---        Right (Inj (DecArithOp Add 0 1 :: Numerical Prop 'TyDecimal))
+      textToProp SDecimal "(+ 0.0 1.0)"
+        `shouldBe`
+        Right (Inj (DecArithOp Add 0 1 :: Numerical Prop 'TyDecimal))
 
---      textToProp SDecimal "(+ 0 1)"
---        `shouldBe`
---        Left "in (+ 0 1), unexpected argument types for (+): integer and integer"
+      textToProp SDecimal "(+ 0 1)"
+        `shouldBe`
+        Left "in (+ 0 1), unexpected argument types for (+): integer and integer"
 
---    it "infers prop objects" $ do
---      -- let pairSchema = Schema $
---      --       Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
---      let pairSchema = SObject $
---            SCons (SSymbol @"x") SInteger $
---              SCons (SSymbol @"y") SInteger $
---                SNil
---          litPair = Object $
---            ConsOf (SSymbol @"x") (Column sing 0) $
---            ConsOf (SSymbol @"y") (Column sing 1) $
---            NilOf
---          litPairProp = CoreProp $ LiteralObject pairSchema litPair
+    it "infers prop objects" $ do
+      -- let pairSchema = Schema $
+      --       Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
+      let pairSchema = SObject $
+            SCons (SSymbol @"x") SInteger $
+              SCons (SSymbol @"y") SInteger $
+                SNil
+          litPair = Object $
+            ConsOf (SSymbol @"x") (Column sing 0) $
+            ConsOf (SSymbol @"y") (Column sing 1) $
+            NilOf
+          litPairProp = CoreProp $ LiteralObject pairSchema litPair
 
---          nestedObj = CoreProp $ LiteralObject
---            nestedSchema
---            (Object $ ConsOf (SSymbol @"foo")
---              (Column sing (CoreProp (LiteralObject sing litPair)))
---              NilOf)
---            -- Map.singleton "foo" (EObject pairSchema litPair)
+          nestedObj = CoreProp $ LiteralObject
+            nestedSchema
+            (Object $ ConsOf (SSymbol @"foo")
+              (Column sing (CoreProp (LiteralObject sing litPair)))
+              NilOf)
+            -- Map.singleton "foo" (EObject pairSchema litPair)
 
---          nestedSchema =
---            SObject $ SCons (SSymbol @"foo") pairSchema SNil
---           -- Schema $
---           --  Map.singleton "foo" (EObjectTy pairSchema)
+          nestedSchema =
+            SObject $ SCons (SSymbol @"foo") pairSchema SNil
+           -- Schema $
+           --  Map.singleton "foo" (EObjectTy pairSchema)
 
---      inferProp'' "{ 'x: 0, 'y: 1 }"
---        `shouldBe`
---        Right (Existential pairSchema litPairProp)
+      inferProp'' "{ 'x: 0, 'y: 1 }"
+        `shouldBe`
+        Right (Existential pairSchema litPairProp)
 
---      inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
---        `shouldBe`
---        Right (Existential SInteger (PObjAt pairSchema (Lit' "x") litPairProp))
+      inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
+        `shouldBe`
+        Right (Existential SInteger (PObjAt pairSchema (Lit' "x") litPairProp))
 
---      inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
---        `shouldBe`
---        Right (Existential nestedSchema nestedObj)
+      inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
+        `shouldBe`
+        Right (Existential nestedSchema nestedObj)
 
---    it "infers forall / exists" $ do
---      inferProp'' "(forall (x:string y:string) (= x y))"
---        `shouldBe`
---        Right
---          (Existential SBool
---            (Inj $ Forall (VarId 1) "x" (EType SStr)
---              (Inj $ Forall (VarId 2) "y" (EType SStr)
---                (CoreProp $ StrComparison Eq
---                  (PVar (VarId 1) "x" :: Prop 'TyStr)
---                  (PVar (VarId 2) "y")))))
+    it "infers forall / exists" $ do
+      inferProp'' "(forall (x:string y:string) (= x y))"
+        `shouldBe`
+        Right
+          (Existential SBool
+            (Inj $ Forall (VarId 1) "x" (EType SStr)
+              (Inj $ Forall (VarId 2) "y" (EType SStr)
+                (CoreProp $ StrComparison Eq
+                  (PVar (VarId 1) "x" :: Prop 'TyStr)
+                  (PVar (VarId 2) "y")))))
 
---      let tableEnv = singletonTableEnv "accounts" "balance" $ EType SInteger
---      textToPropTableEnv
---        tableEnv
---        SBool
---        "(not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))"
---        `shouldBe`
---        Right (PNot
---          (Inj $ Exists (VarId 1) "row" (EType SStr)
---            (CoreProp $ IntegerComparison Eq
---              (Inj $ IntCellDelta "accounts" "balance" (PVar (VarId 1) "row"))
---              2)))
+      let tableEnv = singletonTableEnv "accounts" "balance" $ EType SInteger
+      textToPropTableEnv
+        tableEnv
+        SBool
+        "(not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))"
+        `shouldBe`
+        Right (PNot
+          (Inj $ Exists (VarId 1) "row" (EType SStr)
+            (CoreProp $ IntegerComparison Eq
+              (Inj $ IntCellDelta "accounts" "balance" (PVar (VarId 1) "row"))
+              2)))
 
---    it "parses row-enforced / vars" $ do
---      let env1 = Map.singleton "from" (VarId 1)
---          env2 = Map.singleton (VarId 1) (EType SStr)
---          tableEnv = singletonTableEnv "accounts" "ks" $ EType SKeySet
---      textToProp' env1 env2 tableEnv SBool "(row-enforced accounts 'ks from)"
---      `shouldBe`
---      Right (Inj $ RowEnforced
---        (TableNameLit "accounts")
---        (ColumnNameLit "ks")
---        (PVar (VarId 1) "from"))
+    it "parses row-enforced / vars" $ do
+      let env1 = Map.singleton "from" (VarId 1)
+          env2 = Map.singleton (VarId 1) (EType SStr)
+          tableEnv = singletonTableEnv "accounts" "ks" $ EType SKeySet
+      textToProp' env1 env2 tableEnv SBool "(row-enforced accounts 'ks from)"
+      `shouldBe`
+      Right (Inj $ RowEnforced
+        (TableNameLit "accounts")
+        (ColumnNameLit "ks")
+        (PVar (VarId 1) "from"))
 
---    it "parses column properties" $
---      let tableEnv = singletonTableEnv "accounts" "balance" $ EType SInteger
---      in textToPropTableEnv tableEnv SBool "(= (column-delta accounts 'balance) 0)"
---           `shouldBe`
---           Right (CoreProp $ IntegerComparison Eq (Inj $ IntColumnDelta "accounts" "balance") 0)
+    it "parses column properties" $
+      let tableEnv = singletonTableEnv "accounts" "balance" $ EType SInteger
+      in textToPropTableEnv tableEnv SBool "(= (column-delta accounts 'balance) 0)"
+           `shouldBe`
+           Right (CoreProp $ IntegerComparison Eq (Inj $ IntColumnDelta "accounts" "balance") 0)
 
---    it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
---      let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType SKeySet
---      in textToPropTableEnv tableEnv SBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
---         `shouldBe`
---         Right (PLogical OrOp
---           [ PLogical NotOp [
---               PLogical NotOp [Inj $ KsNameAuthorized "accounts-admin-keyset"]
---             ]
---           , Abort'
---           ])
+    it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
+      let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType SKeySet
+      in textToPropTableEnv tableEnv SBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
+         `shouldBe`
+         Right (PLogical OrOp
+           [ PLogical NotOp [
+               PLogical NotOp [Inj $ KsNameAuthorized "accounts-admin-keyset"]
+             ]
+           , Abort'
+           ])
 
---    it "handles special identifiers" $ do
---      -- convert to prop in the environment holding only bindings for `result`
---      let textToProp'' ty = textToProp'
---            (Map.singleton "result" 0)
---            (Map.singleton 0 (EType ty))
---            (TableMap mempty)
---            ty
+    it "handles special identifiers" $ do
+      -- convert to prop in the environment holding only bindings for `result`
+      let textToProp'' ty = textToProp'
+            (Map.singleton "result" 0)
+            (Map.singleton 0 (EType ty))
+            (TableMap mempty)
+            ty
 
---      textToProp   SBool "abort"   `shouldBe` Right Abort'
---      textToProp   SBool "success" `shouldBe` Right Success'
---      inferProp''  "abort"         `shouldBe` Right (Existential SBool Abort')
---      inferProp''  "success"       `shouldBe` Right (Existential SBool Success')
+      textToProp   SBool "abort"   `shouldBe` Right Abort'
+      textToProp   SBool "success" `shouldBe` Right Success'
+      inferProp''  "abort"         `shouldBe` Right (Existential SBool Abort')
+      inferProp''  "success"       `shouldBe` Right (Existential SBool Success')
 
---      textToProp'' SBool "result"  `shouldBe` Right Result'
---      textToProp'' SInteger  "result"  `shouldBe` Right Result'
---      textToProp'' SStr  "result"  `shouldBe` Right Result'
+      textToProp'' SBool "result"  `shouldBe` Right Result'
+      textToProp'' SInteger  "result"  `shouldBe` Right Result'
+      textToProp'' SStr  "result"  `shouldBe` Right Result'
 
---    it "parses quantified tables" $
---      inferProp'' "(forall (table:table) (not (table-written table)))"
---        `shouldBe`
---        Right
---          (Existential SBool
---            $ Inj $ Forall (VarId 1) "table" QTable
---              $ PNot $ Inj $ TableWrite $
---                CoreProp $ Var (VarId 1) "table")
+    it "parses quantified tables" $
+      inferProp'' "(forall (table:table) (not (table-written table)))"
+        `shouldBe`
+        Right
+          (Existential SBool
+            $ Inj $ Forall (VarId 1) "table" QTable
+              $ PNot $ Inj $ TableWrite $
+                CoreProp $ Var (VarId 1) "table")
 
---    it "parses quantified columns" $ do
---      pendingWith "parsing quantified table names"
---      inferProp'' [text|
---        (forall (table:table)
---          (forall (column:(column-of table))
---            (column-written table column)))
---        |]
---        `shouldBe`
---        Right
---          (Existential SBool
---            (Inj $ Forall (VarId 1) "table" QTable
---              (Inj $ Forall (VarId 2) "column" (QColumnOf "table")
---                (Inj (ColumnWritten
---                  (CoreProp (Var (VarId 1) "table"))
---                  (CoreProp (Var (VarId 2) "column")))))))
+    it "parses quantified columns" $ do
+      pendingWith "parsing quantified table names"
+      inferProp'' [text|
+        (forall (table:table)
+          (forall (column:(column-of table))
+            (column-written table column)))
+        |]
+        `shouldBe`
+        Right
+          (Existential SBool
+            (Inj $ Forall (VarId 1) "table" QTable
+              (Inj $ Forall (VarId 2) "column" (QColumnOf "table")
+                (Inj (ColumnWritten
+                  (CoreProp (Var (VarId 1) "table"))
+                  (CoreProp (Var (VarId 2) "column")))))))
 
   describe "UserShow (PreProp)" $ do
     it "renders literals how you would expect" $ do
@@ -2264,81 +2264,81 @@ spec = describe "analyze" $ do
                 SNil
       userShow schema `shouldBe` "{ name: string, balance: integer }"
 
---  describe "at-properties verify" $ do
---    let code = [text|
---          (defschema user
---            @doc "user info"
---            @model
---              [
---                (invariant (>= (length first) 2))
---                (invariant (>= (length last) 2))
---                (invariant (=  (length ssn) 9))
---                (invariant (>= balance 0))
---              ]
---            first:string
---            last:string
---            ssn:string
---            balance:integer
---            )
+  describe "at-properties verify" $ do
+    let code = [text|
+          (defschema user
+            @doc "user info"
+            @model
+              [
+                (invariant (>= (length first) 2))
+                (invariant (>= (length last) 2))
+                (invariant (=  (length ssn) 9))
+                (invariant (>= balance 0))
+              ]
+            first:string
+            last:string
+            ssn:string
+            balance:integer
+            )
 
---          (defun test:object{user} (first:string last:string ssn:string balance:integer)
---            @doc "make a user"
---            @model
---              [ (property (= (at 'first result) first))
---                (property (= (at 'last result) last))
---                (property (= (at 'ssn result) ssn))
---                (property (= (at 'balance result) balance))
---              ]
---             { 'first:first, 'last:last, 'ssn:ssn, 'balance:balance })
---          |]
+          (defun test:object{user} (first:string last:string ssn:string balance:integer)
+            @doc "make a user"
+            @model
+              [ (property (= (at 'first result) first))
+                (property (= (at 'last result) last))
+                (property (= (at 'ssn result) ssn))
+                (property (= (at 'balance result) balance))
+              ]
+             { 'first:first, 'last:last, 'ssn:ssn, 'balance:balance })
+          |]
 
---    expectVerified code
+    expectVerified code
 
---  describe "user-defined properties verify" $ do
---    let code = [text|
---          (defun test:string (from:string to:string)
---            @model
---              [ (property (my-column-delta 0))
---                (property conserves-balance)
---                (property conserves-balance2)
---              ]
---            (enforce (!= from to) "sender and receive must not be the same")
---            (with-read accounts from { "balance" := from-bal }
---              (with-read accounts to { "balance" := to-bal }
---                (update accounts from { "balance": (- from-bal 1) })
---                (update accounts to   { "balance": (+ to-bal 1) }))))
---          |]
---    expectVerified code
+  describe "user-defined properties verify" $ do
+    let code = [text|
+          (defun test:string (from:string to:string)
+            @model
+              [ (property (my-column-delta 0))
+                (property conserves-balance)
+                (property conserves-balance2)
+              ]
+            (enforce (!= from to) "sender and receive must not be the same")
+            (with-read accounts from { "balance" := from-bal }
+              (with-read accounts to { "balance" := to-bal }
+                (update accounts from { "balance": (- from-bal 1) })
+                (update accounts to   { "balance": (+ to-bal 1) }))))
+          |]
+    expectVerified code
 
---    let code' model = [text|
---          (defun test:string (from:string to:string)
---            @model $model
---            (enforce (!= from to) "sender and receive must not be the same")
---            (with-read accounts from { "balance" := from-bal }
---              (with-read accounts to { "balance" := to-bal }
---                ; (update accounts from { "balance": (- from-bal 1) })
---                (update accounts to   { "balance": (+ to-bal 1) }))))
---          |]
---    expectFalsified $ code' "[(property conserves-balance)]"
---    expectFalsified $ code' "[(property conserves-balance2)]"
---    expectFalsified $ code' "[(property (my-column-delta 0))]"
---    expectVerified  $ code' "[(property (my-column-delta 1))]"
+    let code' model = [text|
+          (defun test:string (from:string to:string)
+            @model $model
+            (enforce (!= from to) "sender and receive must not be the same")
+            (with-read accounts from { "balance" := from-bal }
+              (with-read accounts to { "balance" := to-bal }
+                ; (update accounts from { "balance": (- from-bal 1) })
+                (update accounts to   { "balance": (+ to-bal 1) }))))
+          |]
+    expectFalsified $ code' "[(property conserves-balance)]"
+    expectFalsified $ code' "[(property conserves-balance2)]"
+    expectFalsified $ code' "[(property (my-column-delta 0))]"
+    expectVerified  $ code' "[(property (my-column-delta 1))]"
 
---  -- user-defined properties can't be recursive
---  describe "user-defined properties can't be recursive" $ do
---    let code = [text|
---          (defun test:string (from:string to:string)
---            @model [(property bad-recursive-prop)]
---            "foo")
---          |]
---    expectFalsified code
+  -- user-defined properties can't be recursive
+  describe "user-defined properties can't be recursive" $ do
+    let code = [text|
+          (defun test:string (from:string to:string)
+            @model [(property bad-recursive-prop)]
+            "foo")
+          |]
+    expectFalsified code
 
---    let code' = [text|
---          (defun test:string (from:string to:string)
---            @model [(property (bad-recursive-prop2 0))]
---            "foo")
---          |]
---    expectFalsified code'
+    let code' = [text|
+          (defun test:string (from:string to:string)
+            @model [(property (bad-recursive-prop2 0))]
+            "foo")
+          |]
+    expectFalsified code'
 
 --  describe "execution trace" $ do
 --    let read, write, assert {-auth,-} :: TraceEvent -> Bool
