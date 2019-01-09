@@ -109,32 +109,6 @@ evalComparisonOp ty op xT yT = do
         Neq -> x ./= y
   pure $ sansProv $ withSymWord ty f
 
--- evalEqNeq
---   :: Analyzer m
---   => EqNeq
---   -> TermOf m a
---   -> TermOf m a
---   -> m (S Bool)
--- evalEqNeq op xT yT = do
---   x <- eval xT
---   y <- eval yT
---   pure $ sansProv $ case op of
---     Eq'  -> x .== y
---     Neq' -> x ./= y
-
--- evalObjectEqNeq
---   :: Analyzer m
---   => EqNeq
---   -> TermOf m ('TyObject obj)
---   -> TermOf m ('TyObject obj)
---   -> m (S Bool)
--- evalObjectEqNeq op xT yT = do
---   x <- eval xT
---   y <- eval yT
---   pure $ sansProv $ case op of
---     Eq'  -> x .== y
---     Neq' -> x ./= y
-
 singIte
   :: forall m a a'. (Analyzer m, a' ~ Concrete a, SingI a)
   => SingTy a -> SBV Bool -> m (S a') -> m (S a') -> m (S a')

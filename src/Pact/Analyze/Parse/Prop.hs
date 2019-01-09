@@ -250,13 +250,8 @@ inferVar vid name prop = do
   case varTy of
     Nothing -> throwErrorT $ "couldn't find property variable " <> name
     Just (EType varTy') -> pure $ Existential varTy' prop
-      -- (\Refl -> pure (ESimple varTy' prop))
-      -- (\Refl -> pure (EList varTy' prop))
-      -- (\Refl -> throwErrorT
-      --   "impossible: objects cannot occur here -- please report this as a bug")
-    -- Just (EObjectTy schema) -> pure (EObject schema prop)
-    Just QTable             -> error "Table names cannot be vars"
-    Just QColumnOf{}        -> error "Column names cannot be vars"
+    Just QTable         -> error "Table names cannot be vars"
+    Just QColumnOf{}    -> error "Column names cannot be vars"
 
 -- Note: there is a very similar @mkLiteralObject@ in @Analyze.Translate@.
 -- These could probably be combined.
