@@ -65,21 +65,16 @@ showVar (Located _ (Unmunged nm, tval)) = nm <> " := " <> showTVal tval
 
 data ExpectPresent = ExpectPresent | ExpectNotPresent
 
-showDbAccessSuccess :: SBV Bool -> ExpectPresent -> Text
-showDbAccessSuccess successSbv expectPresent = case SBV.unliteral successSbv of
-  Nothing    -> "[ERROR:symbolic]"
-  Just True  -> "succeeds"
-  Just False -> case expectPresent of
-    ExpectPresent    -> "fails because the row was not present"
-    ExpectNotPresent -> "fails because the was already present"
-
 --
 -- TODO: this should display the table name
 --
 showRead :: Located Access -> Text
-showRead (Located _ (Access srk obj suc))
-  = "read " <> showObject obj <> " for key " <> showS srk <> " "
-  <> showDbAccessSuccess suc ExpectPresent
+showRead (Located _ (Access srk obj suc)) = case SBV.unliteral suc of
+  Nothing -> "[ERROR:symbolic]"
+  Just True
+    -> "read " <> showObject obj <> " for key " <> showS srk <> " succeeds"
+  Just False
+    -> "read for key " <> showS srk <> " fails because the row was not present"
 
 --
 -- TODO: this should display the table name
@@ -96,6 +91,14 @@ showWrite writeType (Located _ (Access srk obj suc))
           Pact.Write  -> error "invariant violation: write should never fail"
     in writeTypeT <> " " <> showObject obj <> " to key " <> showS srk <> " "
        <> showDbAccessSuccess suc expectPresent
+
+showDbAccessSuccess :: SBV Bool -> ExpectPresent -> Text
+showDbAccessSuccess successSbv expectPresent = case SBV.unliteral successSbv of
+  Nothing    -> "[ERROR:symbolic]"
+  Just True  -> "succeeds"
+  Just False -> case expectPresent of
+    ExpectPresent    -> "fails because the row was not present"
+    ExpectNotPresent -> "fails because the was already present"
 
 showKsn :: S KeySetName -> Text
 showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
