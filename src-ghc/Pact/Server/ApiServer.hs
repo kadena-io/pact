@@ -52,7 +52,7 @@ import Snap.Http.Server as Snap
 import Network.Wai.Handler.Warp (run)
 -- import Network.Wai.Middleware.Cors
 
-import Pact.Analyze.Remote.Server (verify)
+import Pact.Analyze.Remote.Server (verify, verifyHandler)
 import Pact.Server.API
 import Pact.Types.Command
 import Pact.Types.API
@@ -147,9 +147,6 @@ localHandler commandText = do
   case parseMaybe parseJSON r of
     Just v@CommandSuccess{} -> pure $ ApiSuccess v
     Nothing -> die' "command could not be run locally"
-
-verifyHandler :: Value -> Handler Value
-verifyHandler _value = undefined
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion

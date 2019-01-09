@@ -1,6 +1,9 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types        #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | HTTP Server for GHCJS to use verification from the browser (where we can't
 -- run sbv).
@@ -8,15 +11,19 @@ module Pact.Analyze.Remote.Server
   ( runServer
   , v1App
   , verify
+  , verifyHandler
+  , runServantServer
   ) where
 
 import           Control.Lens               ((^.), (.~), (&))
 import           Control.Monad              (void)
-import           Control.Monad.Except       (ExceptT(..), runExceptT)
+import           Control.Monad.Except       (ExceptT(..), runExceptT,
+                                             withExceptT)
 import           Control.Monad.State.Strict (StateT(..))
 import           Control.Monad.IO.Class     (liftIO)
 import qualified Data.Aeson                 as A
-import           Data.Bifunctor             (first)
+-- import           Data.Bifunctor             (first)
+import qualified Data.ByteString.Lazy.Char8 as BSL8
 import           Data.Default               (def)
 import           Data.Foldable              (traverse_)
 import qualified Data.HashMap.Strict        as HM
@@ -24,6 +31,8 @@ import           Data.Monoid                ((<>))
 import           Data.String                (IsString, fromString)
 import qualified Data.Text                  as T
 import           Data.Void                  (Void)
+import           Network.Wai.Handler.Warp   (run)
+import           Servant
 import           Snap.Core                  (Snap)
 import qualified Snap.Core                  as Snap
 import qualified Snap.Http.Server           as Snap
@@ -44,9 +53,14 @@ import           Pact.Types.Term           (Module(_mName, _mCode),
                                             ModuleName(..), Name(..),
                                             KeySet(..))
 
+type VerifyAPI = "verify" :> ReqBody '[JSON] Request :> Post '[JSON] Response
+
 -- | Convenience function for launching a verification server.
 runServer :: Snap.Config Snap a -> IO ()
 runServer cfg = Snap.httpServe cfg v1App
+
+runServantServer :: Int -> IO ()
+runServantServer port = run port $ serve (Proxy :: Proxy VerifyAPI) verifyHandler
 
 -- | A Snap verification app for mounting in another app, or to be served.
 v1App :: Snap ()
@@ -60,7 +74,11 @@ v1App = Snap.route
 -- whether verification actually ends up succeeding or not.
 verify :: Snap ()
 verify = do
-  eValidReq <- validateRequest
+  payload <- Snap.readRequestBody $ 1024 * 1024 -- max 1MiB
+  let payload' = A.eitherDecode payload
+  eValidReq <- case validateRequest <$> payload' of
+    Left str -> pure $ Left (ClientError str)
+    Right eValidReq' -> liftIO $ runExceptT eValidReq'
 
   case eValidReq of
     Left clientErr -> do
@@ -74,16 +92,18 @@ verify = do
       Snap.modifyResponse $ Snap.setHeader "Content-Type" "application/json"
       Snap.writeLBS $ A.encode outputLines
 
+verifyHandler :: Request -> Handler Response
+verifyHandler req = do
+  validReq <- Handler $ withExceptT makeServantErr $ validateRequest req
+  liftIO $ runVerification validReq
+  where
+    makeServantErr (ClientError str) = err400 { errBody = BSL8.pack str }
+
 data ValidRequest
   = ValidRequest (HM.HashMap ModuleName ModuleData) ModuleData
 
-validateRequest :: Snap (Either ClientError ValidRequest)
-validateRequest = do
-  payload <- Snap.readRequestBody $ 1024 * 1024 -- max 1MiB
-  runExceptT $ do
-    Request mods modName <- ExceptT $ pure $
-      first ClientError $ A.eitherDecode payload
-
+validateRequest :: Request -> ExceptT ClientError IO ValidRequest
+validateRequest (Request mods modName) = do
     modsMap <- ExceptT $ liftIO $ loadModules mods
     ExceptT $ pure $
       case HM.lookup modName modsMap of

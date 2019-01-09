@@ -13,6 +13,7 @@ module Pact.Server.API
 import Data.Aeson
 import Data.Proxy
 import Servant.API
+import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
@@ -30,7 +31,7 @@ type ApiV1API =
 
 type PactServerAPI =
        "api" :> "v1" :> ApiV1API
-  :<|> "verify" :> ReqBody '[JSON] Value :> Post '[JSON] Value
+  :<|> "verify" :> ReqBody '[JSON] Analyze.Request :> Post '[JSON] Analyze.Response
   :<|> "version" :> Get '[PlainText] Text
 
 pactServerAPI :: Proxy PactServerAPI
