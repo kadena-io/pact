@@ -22,7 +22,7 @@ import qualified Data.SBV.List               as SBVL
 import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
                                               bzipWith, bmapM, bfoldrM)
 import qualified Data.SBV.String             as SBVS
-import           Data.SBV.Tuple              (field1, field2)
+import           Data.SBV.Tuple              (field1, field2, mkPair)
 -- import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:)(Refl))
@@ -189,7 +189,15 @@ evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
   = evalObjAt schema colNameT objT (sing :: SingTy a)
-evalCore (LiteralObject ty _obj) = withSymWord ty $ pure $ error "TODO" -- literalS obj
+evalCore (LiteralObject (SObject SNil) (Object NilOf)) = pure $ literalS ()
+evalCore
+  (LiteralObject
+    (SObject (SCons _ ty tys))
+    (Object (ConsOf _ (Column _ val) vals)))
+  = withSing (SObject tys) $ withSymWord ty $ withSymWord (SObject tys) $ do
+    S _ val'  <- eval val
+    S _ vals' <- evalCore $ LiteralObject (SObject tys) (Object vals)
+    pure $ sansProv $ mkPair val' vals'
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
 -- error "TODO"
 -- evalCore (ObjMerge ty1 ty2 objT1 objT2) = mappend <$> eval objT1 <*> eval objT2

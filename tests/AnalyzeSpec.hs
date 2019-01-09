@@ -617,51 +617,51 @@ spec = describe "analyze" $ do
       Inj (RowRead "tokens" (PVar 1 "row")) .=>
         Inj (RowEnforced "tokens" "ks2" (PVar 1 "row"))
 
---  describe "enforce-keyset.row-level.write" $ do
---    let code =
---          [text|
---            (defschema token-row
---              name:string
---              balance:integer
---              ks:keyset)
---            (deftable tokens:{token-row})
+  describe "enforce-keyset.row-level.write" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer
+              ks:keyset)
+            (deftable tokens:{token-row})
 
---            (defun test:integer (acct:string)
---              (with-read tokens acct { "ks" := ks, "balance" := bal }
---                (let ((new-bal (+ bal 1)))
---                  (update tokens acct {"balance": new-bal})
---                  (enforce-keyset ks)
---                  new-bal)))
---          |]
---    expectPass code $ Satisfiable Abort'
---    expectPass code $ Satisfiable $ Inj Success
---    expectPass code $ Valid $ Inj Success .=>
---      Inj (Exists 1 "row" (EType SStr)
---        (Inj (RowWrite "tokens" (PVar 1 "row"))))
---    expectPass code $ Valid $ Inj Success .=>
---      Inj (Exists 1 "row" (EType SStr)
---        (CoreProp $ IntegerComparison Eq
---          (Inj (RowWriteCount "tokens" (PVar 1 "row"))) 1))
---    expectPass code $ Valid $ Inj Success .=>
---      Inj (Exists 1 "row" (EType SStr)
---        (Inj (RowRead "tokens" (PVar 1 "row"))))
---    expectPass code $ Valid $ Inj Success .=>
---      Inj (Exists 1 "row" (EType SStr)
---        (CoreProp $ IntegerComparison Eq
---          (Inj (RowReadCount "tokens" (PVar 1 "row"))) 1))
---    expectPass code $ Valid $ Inj Success .=>
---      Inj (Exists 1 "row" (EType SStr)
---        (Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))))
---    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
---      sNot $ Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
---    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
---      Inj (RowRead "tokens" (PVar 1 "row")) .=>
---        Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
---    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
---      Inj (RowWrite "tokens" (PVar 1 "row")) .=>
---        Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
---    expectPass code $ Valid $ Inj (RowWrite "tokens" (PVar 1 "acct"))
---                          .=> Inj (RowEnforced "tokens" "ks" (PVar 1 "acct"))
+            (defun test:integer (acct:string)
+              (with-read tokens acct { "ks" := ks, "balance" := bal }
+                (let ((new-bal (+ bal 1)))
+                  (update tokens acct {"balance": new-bal})
+                  (enforce-keyset ks)
+                  new-bal)))
+          |]
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable $ Inj Success
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (Exists 1 "row" (EType SStr)
+        (Inj (RowWrite "tokens" (PVar 1 "row"))))
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (Exists 1 "row" (EType SStr)
+        (CoreProp $ IntegerComparison Eq
+          (Inj (RowWriteCount "tokens" (PVar 1 "row"))) 1))
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (Exists 1 "row" (EType SStr)
+        (Inj (RowRead "tokens" (PVar 1 "row"))))
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (Exists 1 "row" (EType SStr)
+        (CoreProp $ IntegerComparison Eq
+          (Inj (RowReadCount "tokens" (PVar 1 "row"))) 1))
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (Exists 1 "row" (EType SStr)
+        (Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))))
+    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
+      sNot $ Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      Inj (RowRead "tokens" (PVar 1 "row")) .=>
+        Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      Inj (RowWrite "tokens" (PVar 1 "row")) .=>
+        Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
+    expectPass code $ Valid $ Inj (RowWrite "tokens" (PVar 1 "acct"))
+                          .=> Inj (RowEnforced "tokens" "ks" (PVar 1 "acct"))
 
   describe "enforce-keyset.row-level.write-count" $ do
     let code =
@@ -917,29 +917,29 @@ spec = describe "analyze" $ do
       .=>
       PropSpecific (RowExists "tokens" "stu" After)
 
---  describe "table-read.one-read" $ do
---    let code =
---          [text|
---            (defschema token-row
---              name:string
---              balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-read.one-read" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:bool ()
---              (insert tokens "stu" {"balance": 5, "name": "stu"})
---              (let ((stu (read tokens "stu")))
---                (enforce (= (at 'name stu) "stu") "name is stu")
---                (enforce (= (at 'balance stu) 5) "balance is 5")
---                )
---              )
---          |]
---    expectPass code $ Valid $
---       PNot (PropSpecific (RowExists "tokens" "stu" Before))
---       .=> sNot Abort'
---    expectPass code $ Valid $
---       Success'
---       .=>
---       PropSpecific (RowExists "tokens" "stu" After)
+            (defun test:bool ()
+              (insert tokens "stu" {"balance": 5, "name": "stu"})
+              (let ((stu (read tokens "stu")))
+                (enforce (= (at 'name stu) "stu") "name is stu")
+                (enforce (= (at 'balance stu) 5) "balance is 5")
+                )
+              )
+          |]
+    expectPass code $ Valid $
+       PNot (PropSpecific (RowExists "tokens" "stu" Before))
+       .=> sNot Abort'
+    expectPass code $ Valid $
+       Success'
+       .=>
+       PropSpecific (RowExists "tokens" "stu" After)
 
 --  describe "at.dynamic-key" $ do
 --    let code =
@@ -1030,126 +1030,126 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ Inj $ TableRead "tokens"
     expectPass code $ Valid $ sNot $ Inj $ TableRead "other"
 
---  describe "table-written.insert" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-written.insert" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string ()
---              (insert tokens "stu" {"balance": 5}))
---          |]
---    expectPass code $ Valid $ Inj (TableWrite "tokens") .=> Success'
---    expectPass code $ Valid $ sNot $ Inj $ TableWrite "other"
---    expectPass code $ Valid $
---      Success' .=> PNot (Inj (RowExists "tokens" "stu" Before))
---    expectPass code $ Valid $
---      Success' .=> Inj (RowExists "tokens" "stu" After)
+            (defun test:string ()
+              (insert tokens "stu" {"balance": 5}))
+          |]
+    expectPass code $ Valid $ Inj (TableWrite "tokens") .=> Success'
+    expectPass code $ Valid $ sNot $ Inj $ TableWrite "other"
+    expectPass code $ Valid $
+      Success' .=> PNot (Inj (RowExists "tokens" "stu" Before))
+    expectPass code $ Valid $
+      Success' .=> Inj (RowExists "tokens" "stu" After)
 
---  describe "table-written.insert.partial" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-written.insert.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string ()
---              (insert tokens "stu" {}))
---          |]
---    expectFail code $ Satisfiable (Inj Success)
+            (defun test:string ()
+              (insert tokens "stu" {}))
+          |]
+    expectFail code $ Satisfiable (Inj Success)
 
---  describe "table-written.update" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-written.update" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string ()
---              (update tokens "stu" {"balance": 5}))
---          |]
---    expectPass code $ Valid $ Success' .=> Inj (TableWrite "tokens")
+            (defun test:string ()
+              (update tokens "stu" {"balance": 5}))
+          |]
+    expectPass code $ Valid $ Success' .=> Inj (TableWrite "tokens")
 
---  describe "table-written.update.partial" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-written.update.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string ()
---              (update tokens "stu" {}))
---          |]
---    expectPass code $ Valid $
---      Success' .=> PropSpecific (RowExists "tokens" "stu" Before)
+            (defun test:string ()
+              (update tokens "stu" {}))
+          |]
+    expectPass code $ Valid $
+      Success' .=> PropSpecific (RowExists "tokens" "stu" Before)
 
---  describe "table-written.write" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-written.write" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string ()
---              (write tokens "stu" {"balance": 5}))
---          |]
---    expectPass code $ Valid $ Inj $ TableWrite "tokens"
+            (defun test:string ()
+              (write tokens "stu" {"balance": 5}))
+          |]
+    expectPass code $ Valid $ Inj $ TableWrite "tokens"
 
---  describe "table-written.write.partial" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-written.write.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string ()
---              (write tokens "stu" {}))
---          |]
---    expectFail code $ Satisfiable (Inj Success)
+            (defun test:string ()
+              (write tokens "stu" {}))
+          |]
+    expectFail code $ Satisfiable (Inj Success)
 
---  describe "table-written.conditional" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-written.conditional" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string (x:bool)
---              (if x
---                (insert tokens "stu" {"balance": 5})
---                "didn't write"))
---          |]
---    expectPass code $ Satisfiable $ Inj $ TableWrite "tokens"
---    expectPass code $ Satisfiable $ sNot $ Inj $ TableWrite "tokens"
---    expectPass code $ Valid $ sNot $ Inj $ TableWrite "other"
+            (defun test:string (x:bool)
+              (if x
+                (insert tokens "stu" {"balance": 5})
+                "didn't write"))
+          |]
+    expectPass code $ Satisfiable $ Inj $ TableWrite "tokens"
+    expectPass code $ Satisfiable $ sNot $ Inj $ TableWrite "tokens"
+    expectPass code $ Valid $ sNot $ Inj $ TableWrite "other"
 
---  describe "table-written.conditional" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-written.conditional" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:string (x:bool)
---              ;; returns bool:
---              (enforce x "x must be true")
---              ;; returns string:
---              (if x
---                "didn't write"
---                (insert tokens "stu" {"balance": 5})))
---          |]
---    expectPass code $ Valid $
---      Inj Success .=> sNot (Inj (TableWrite "tokens"))
+            (defun test:string (x:bool)
+              ;; returns bool:
+              (enforce x "x must be true")
+              ;; returns string:
+              (if x
+                "didn't write"
+                (insert tokens "stu" {"balance": 5})))
+          |]
+    expectPass code $ Valid $
+      Inj Success .=> sNot (Inj (TableWrite "tokens"))
 
---  describe "conserves-mass.integer" $ do
---    let code =
---          [text|
---            (defun test:string (from:string to:string amount:integer)
---              "Transfer money between accounts"
---              (let ((from-bal (at 'balance (read accounts from)))
---                    (to-bal   (at 'balance (read accounts to))))
---                (enforce (> amount 0)         "Non-positive amount")
---                (enforce (>= from-bal amount) "Insufficient Funds")
---                (enforce (!= from to)         "Sender is the recipient")
---                (update accounts from { "balance": (- from-bal amount) })
---                (update accounts to   { "balance": (+ to-bal amount) })))
---          |]
+  describe "conserves-mass.integer" $ do
+    let code =
+          [text|
+            (defun test:string (from:string to:string amount:integer)
+              "Transfer money between accounts"
+              (let ((from-bal (at 'balance (read accounts from)))
+                    (to-bal   (at 'balance (read accounts to))))
+                (enforce (> amount 0)         "Non-positive amount")
+                (enforce (>= from-bal amount) "Insufficient Funds")
+                (enforce (!= from to)         "Sender is the recipient")
+                (update accounts from { "balance": (- from-bal amount) })
+                (update accounts to   { "balance": (+ to-bal amount) })))
+          |]
 
---    expectPass code $ Valid $
---      Inj Success .=> intConserves "accounts" "balance"
+    expectPass code $ Valid $
+      Inj Success .=> intConserves "accounts" "balance"
 
   describe "conserves-mass.integer.insert" $ do
     let code =
@@ -1162,164 +1162,164 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Inj Success .=> intConserves "accounts" "balance"
 
---  describe "conserves-mass.integer.without-uniqueness" $ do
---    let code =
---          [text|
---            (defun test:string (from:string to:string amount:integer)
---              "Transfer money between accounts"
---              (let ((from-bal (at 'balance (read accounts from)))
---                    (to-bal   (at 'balance (read accounts to))))
---                (enforce (> amount 0)         "Non-positive amount")
---                (enforce (>= from-bal amount) "Insufficient Funds")
---                ;; << NOTE: no (!= from to) here. >>
---                (update accounts from { "balance": (- from-bal amount) })
---                (update accounts to   { "balance": (+ to-bal amount) })))
---          |]
+  describe "conserves-mass.integer.without-uniqueness" $ do
+    let code =
+          [text|
+            (defun test:string (from:string to:string amount:integer)
+              "Transfer money between accounts"
+              (let ((from-bal (at 'balance (read accounts from)))
+                    (to-bal   (at 'balance (read accounts to))))
+                (enforce (> amount 0)         "Non-positive amount")
+                (enforce (>= from-bal amount) "Insufficient Funds")
+                ;; << NOTE: no (!= from to) here. >>
+                (update accounts from { "balance": (- from-bal amount) })
+                (update accounts to   { "balance": (+ to-bal amount) })))
+          |]
 
---    expectPass code $ Satisfiable $ Inj Success .&& intConserves "accounts" "balance"
---    expectPass code $ Satisfiable $ Inj Success .&& sNot (intConserves "accounts" "balance")
+    expectPass code $ Satisfiable $ Inj Success .&& intConserves "accounts" "balance"
+    expectPass code $ Satisfiable $ Inj Success .&& sNot (intConserves "accounts" "balance")
 
---  describe "conserves-mass.decimal" $ do
---    let code =
---          [text|
---            (defschema account2
---              @doc   "accounts schema"
---              @model [(invariant (>= balance 0.0))]
---              balance:decimal)
---            (deftable accounts2:{account2})
+  describe "conserves-mass.decimal" $ do
+    let code =
+          [text|
+            (defschema account2
+              @doc   "accounts schema"
+              @model [(invariant (>= balance 0.0))]
+              balance:decimal)
+            (deftable accounts2:{account2})
 
---            (defun test:string (from:string to:string amount:decimal)
---              (let ((from-bal (at 'balance (read accounts2 from)))
---                    (to-bal   (at 'balance (read accounts2 to))))
---                (enforce (> amount 0.0)       "Non-positive amount")
---                (enforce (>= from-bal amount) "Insufficient Funds")
---                (enforce (!= from to)         "Sender is the recipient")
---                (update accounts2 from { "balance": (- from-bal amount) })
---                (update accounts2 to   { "balance": (+ to-bal amount) })))
---          |]
+            (defun test:string (from:string to:string amount:decimal)
+              (let ((from-bal (at 'balance (read accounts2 from)))
+                    (to-bal   (at 'balance (read accounts2 to))))
+                (enforce (> amount 0.0)       "Non-positive amount")
+                (enforce (>= from-bal amount) "Insufficient Funds")
+                (enforce (!= from to)         "Sender is the recipient")
+                (update accounts2 from { "balance": (- from-bal amount) })
+                (update accounts2 to   { "balance": (+ to-bal amount) })))
+          |]
 
---    expectVerified code
---    expectPass code $ Valid $ Inj Success .=> decConserves "accounts2" "balance"
+    expectVerified code
+    expectPass code $ Valid $ Inj Success .=> decConserves "accounts2" "balance"
 
---  describe "conserves-mass.decimal.insert" $ do
---    let code =
---          [text|
---            (defschema account2
---              @doc   "accounts schema"
---              @model [(invariant (>= balance 0.0))]
---              balance:decimal)
---            (deftable accounts2:{account2})
+  describe "conserves-mass.decimal.insert" $ do
+    let code =
+          [text|
+            (defschema account2
+              @doc   "accounts schema"
+              @model [(invariant (>= balance 0.0))]
+              balance:decimal)
+            (deftable accounts2:{account2})
 
---            (defun test:string ()
---              "create a new account with 0 balance"
---              (insert accounts2 "stu" { "balance": 0.0 }))
---          |]
+            (defun test:string ()
+              "create a new account with 0 balance"
+              (insert accounts2 "stu" { "balance": 0.0 }))
+          |]
 
---    expectPass code $ Valid $
---      Inj Success .=> decConserves "accounts2" "balance"
+    expectPass code $ Valid $
+      Inj Success .=> decConserves "accounts2" "balance"
 
---  describe "conserves-mass.decimal.failing-invariant" $ do
---    let code =
---          [text|
---            (defschema account
---              @doc   "accounts schema"
---              @model [(invariant (>= balance 0.0))]
---              balance:decimal)
---            (deftable accounts:{account})
+  describe "conserves-mass.decimal.failing-invariant" $ do
+    let code =
+          [text|
+            (defschema account
+              @doc   "accounts schema"
+              @model [(invariant (>= balance 0.0))]
+              balance:decimal)
+            (deftable accounts:{account})
 
---            (defun test:string (from:string to:string amount:decimal)
---              (let ((from-bal (at 'balance (read accounts from)))
---                    (to-bal   (at 'balance (read accounts to))))
---                ; (enforce (> amount 0.0)       "Non-positive amount")
---                (enforce (>= from-bal amount) "Insufficient Funds")
---                (enforce (!= from to)         "Sender is the recipient")
---                (update accounts from { "balance": (- from-bal amount) })
---                (update accounts to   { "balance": (+ to-bal amount) })))
---          |]
+            (defun test:string (from:string to:string amount:decimal)
+              (let ((from-bal (at 'balance (read accounts from)))
+                    (to-bal   (at 'balance (read accounts to))))
+                ; (enforce (> amount 0.0)       "Non-positive amount")
+                (enforce (>= from-bal amount) "Insufficient Funds")
+                (enforce (!= from to)         "Sender is the recipient")
+                (update accounts from { "balance": (- from-bal amount) })
+                (update accounts to   { "balance": (+ to-bal amount) })))
+          |]
 
---    eModuleData <- runIO $ compile $ wrapNoTable code
---    case eModuleData of
---      Left err -> it "failed to compile" $ expectationFailure (show err)
---      Right moduleData -> do
---        results <- runIO $
---          verifyModule (HM.fromList [("test", moduleData)]) moduleData
---        case results of
---          Left failure -> it "unexpectedly failed verification" $
---            expectationFailure $ show failure
---          Right (ModuleChecks propResults invariantResults _) -> do
---            it "should have no prop results" $
---              propResults `shouldBe` HM.singleton "test" []
+    eModuleData <- runIO $ compile $ wrapNoTable code
+    case eModuleData of
+      Left err -> it "failed to compile" $ expectationFailure (show err)
+      Right moduleData -> do
+        results <- runIO $
+          verifyModule (HM.fromList [("test", moduleData)]) moduleData
+        case results of
+          Left failure -> it "unexpectedly failed verification" $
+            expectationFailure $ show failure
+          Right (ModuleChecks propResults invariantResults _) -> do
+            it "should have no prop results" $
+              propResults `shouldBe` HM.singleton "test" []
 
---            case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
---              -- see https://github.com/Z3Prover/z3/issues/1819
---              [CheckFailure _ (SmtFailure (SortMismatch msg))] ->
---                it "...nevermind..." $ pendingWith msg
---              [CheckFailure _ (SmtFailure (Invalid model))] -> do
---                let (Model args ModelTags{_mtWrites} ksProvs _) = model
+            case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
+              -- see https://github.com/Z3Prover/z3/issues/1819
+              [CheckFailure _ (SmtFailure (SortMismatch msg))] ->
+                it "...nevermind..." $ pendingWith msg
+              [CheckFailure _ (SmtFailure (Invalid model))] -> do
+                let (Model args ModelTags{_mtWrites} ksProvs _) = model
 
---                it "should have a negative amount" $
---                  case find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse of
---                    Just (Located _ (_, (_, AVal _prov amount))) ->
---                      (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
---                    _ -> fail "Failed pattern match"
+                it "should have a negative amount" $
+                  case find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse of
+                    Just (Located _ (_, (_, AVal _prov amount))) ->
+                      (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
+                    _ -> fail "Failed pattern match"
 
---                let negativeWrite (UObject m) = case m Map.! "balance" of
---                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
---                      _                   -> False
+                let negativeWrite (UObject m) = case m Map.! "balance" of
+                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                      _                   -> False
 
---                balanceWrite <- pure $ find negativeWrite
---                  $ _mtWrites ^.. traverse . located . accObject
+                balanceWrite <- pure $ find negativeWrite
+                  $ _mtWrites ^.. traverse . located . accObject
 
---                it "should have a negative write" $
---                  balanceWrite `shouldSatisfy` isJust
+                it "should have a negative write" $
+                  balanceWrite `shouldSatisfy` isJust
 
---                it "should have no keyset provenance" $ do
---                  ksProvs `shouldBe` Map.empty
+                it "should have no keyset provenance" $ do
+                  ksProvs `shouldBe` Map.empty
 
---              other -> runIO $ HUnit.assertFailure $ show other
+              other -> runIO $ HUnit.assertFailure $ show other
 
---  describe "cell-delta.integer" $ do
---    let code =
---          [text|
---            (defun test:string ()
---              @model
---                [ (property
---                    (not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))
---                  )
---                ]
---              (with-read accounts "bob" { "balance" := old-bob }
---                (update accounts "bob" { "balance": (+ old-bob 2) })
+  describe "cell-delta.integer" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model
+                [ (property
+                    (not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))
+                  )
+                ]
+              (with-read accounts "bob" { "balance" := old-bob }
+                (update accounts "bob" { "balance": (+ old-bob 2) })
 
---                ; This overwrites the previous value:
---                (update accounts "bob" { "balance": (+ old-bob 3) })
---                ))
---          |]
+                ; This overwrites the previous value:
+                (update accounts "bob" { "balance": (+ old-bob 3) })
+                ))
+          |]
 
---    expectVerified code
+    expectVerified code
 
---    expectPass code $ Valid $ sNot $ Inj $ Exists 1 "row" (EType SStr) $
---      CoreProp $ IntegerComparison Eq
---        (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
+    expectPass code $ Valid $ sNot $ Inj $ Exists 1 "row" (EType SStr) $
+      CoreProp $ IntegerComparison Eq
+        (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
 
---    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
---      CoreProp (StrComparison Neq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
---        .=>
---        CoreProp (IntegerComparison Eq
---          (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      CoreProp (StrComparison Neq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
+        .=>
+        CoreProp (IntegerComparison Eq
+          (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
 
---    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
---      CoreProp (StrComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
---        .=>
---        CoreProp (IntegerComparison Eq
---          (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      CoreProp (StrComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
+        .=>
+        CoreProp (IntegerComparison Eq
+          (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
---    expectPass code $ Valid $ Inj $ Exists 1 "row" (EType SStr) $
---      CoreProp (IntegerComparison Eq
---        (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
+    expectPass code $ Valid $ Inj $ Exists 1 "row" (EType SStr) $
+      CoreProp (IntegerComparison Eq
+        (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
---    expectPass code $ Valid $
---      CoreProp (IntegerComparison Eq
---        (Inj (IntCellDelta "accounts" "balance" (Lit' "bob"))) 3)
+    expectPass code $ Valid $
+      CoreProp (IntegerComparison Eq
+        (Inj (IntCellDelta "accounts" "balance" (Lit' "bob"))) 3)
 
   describe "with-read" $ do
     let code =
@@ -1333,64 +1333,64 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Inj (RowExists "accounts" (PVar 1 "acct") Before) .=> Success'
 
---  describe "with-read.nested" $ do
---    let code =
---          [text|
---            (defun test:bool (acct:string)
---              (update accounts acct { "balance": 0 })
---              (with-read accounts acct { "balance" := bal }
---                (update accounts acct { "balance": 10 })
---                (with-read accounts acct { "balance" := bal }
---                  (enforce (= bal 10) "Shadowing failed"))))
---          |]
+  describe "with-read.nested" $ do
+    let code =
+          [text|
+            (defun test:bool (acct:string)
+              (update accounts acct { "balance": 0 })
+              (with-read accounts acct { "balance" := bal }
+                (update accounts acct { "balance": 10 })
+                (with-read accounts acct { "balance" := bal }
+                  (enforce (= bal 10) "Shadowing failed"))))
+          |]
 
---    expectPass code $ Valid $
---      Inj (RowExists "accounts" (PVar 1 "acct") Before) .=> Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" (PVar 1 "acct") Before) .=> Success'
 
---  describe "with-read.overlapping-names" $ do
---    let code =
---          [text|
---            (defschema owner "Pet owner" cats:integer dogs:integer)
---            (deftable owners:{owner} "Table of pet owners")
+  describe "with-read.overlapping-names" $ do
+    let code =
+          [text|
+            (defschema owner "Pet owner" cats:integer dogs:integer)
+            (deftable owners:{owner} "Table of pet owners")
 
---            (defun test:integer ()
---              (let ((o "bob")
---                    (cats 2)
---                    (dogs 3))
---                (insert owners o {"dogs": dogs, "cats": cats})
---                (with-read owners o { "cats" := num, "dogs" := num }
---                  (enforce (= num cats) "First binding wasn't used")
---                  num)))
---          |]
+            (defun test:integer ()
+              (let ((o "bob")
+                    (cats 2)
+                    (dogs 3))
+                (insert owners o {"dogs": dogs, "cats": cats})
+                (with-read owners o { "cats" := num, "dogs" := num }
+                  (enforce (= num cats) "First binding wasn't used")
+                  num)))
+          |]
 
---    expectPass code $ Valid $
---      PNot (Inj (RowExists "owners" "bob" Before)) .=> Success'
+    expectPass code $ Valid $
+      PNot (Inj (RowExists "owners" "bob" Before)) .=> Success'
 
---  describe "bind.from-read" $ do
---    let code =
---          [text|
---            (defun test:integer ()
---              (update accounts "bob" { "balance": 10 })
---              (let ((obj:object{account} (read accounts "bob")))
---                (bind obj { "balance" := bal }
---                  (enforce (= bal 10) "Bind failed")
---                  bal)))
---          |]
+  describe "bind.from-read" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              (update accounts "bob" { "balance": 10 })
+              (let ((obj:object{account} (read accounts "bob")))
+                (bind obj { "balance" := bal }
+                  (enforce (= bal 10) "Bind failed")
+                  bal)))
+          |]
 
---    expectPass code $ Valid $
---      Inj (RowExists "accounts" "bob" Before) .=> Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" "bob" Before) .=> Success'
 
---  describe "bind.from-literal" $ do
---    let code =
---          [text|
---            (defun test:integer ()
---              (let ((acct:object{account} { "balance": 10 }))
---                (bind acct { "balance" := bal }
---                  (enforce (= bal 10) "Bind failed")
---                  bal)))
---          |]
+  describe "bind.from-literal" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              (let ((acct:object{account} { "balance": 10 }))
+                (bind acct { "balance" := bal }
+                  (enforce (= bal 10) "Bind failed")
+                  bal)))
+          |]
 
---    expectPass code $ Valid Success'
+    expectPass code $ Valid Success'
 
   describe "let" $ do
     describe "sanity" $ do
@@ -2340,89 +2340,89 @@ spec = describe "analyze" $ do
           |]
     expectFalsified code'
 
---  describe "execution trace" $ do
---    let read, write, assert {-auth,-} :: TraceEvent -> Bool
---        read   = isRight . matching _TraceRead
---        write  = isRight . matching _TraceWrite
---        assert = isRight . matching _TraceAssert
---        -- auth= isRight . matching _TraceAuth
---        path   = isRight . matching _TraceSubpathStart
---        push   = isRight . matching _TracePushScope
---        pop    = isRight . matching _TracePopScope
+  describe "execution trace" $ do
+    let read, write, assert {-auth,-} :: TraceEvent -> Bool
+        read   = isRight . matching _TraceRead
+        write  = isRight . matching _TraceWrite
+        assert = isRight . matching _TraceAssert
+        -- auth= isRight . matching _TraceAuth
+        path   = isRight . matching _TraceSubpathStart
+        push   = isRight . matching _TracePushScope
+        pop    = isRight . matching _TracePopScope
 
---        match :: [a -> Bool] -> [a] -> Bool
---        tests `match` items
---          | length items == length tests
---          = and $ uncurry ($) <$> zip tests items
---          | otherwise
---          = False
+        match :: [a -> Bool] -> [a] -> Bool
+        tests `match` items
+          | length items == length tests
+          = and $ uncurry ($) <$> zip tests items
+          | otherwise
+          = False
 
---        expectTrace :: Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
---        expectTrace code prop tests = do
---          res <- runIO $ runCheck (wrap code "") $ Valid prop
---          it "produces the correct trace" $
---            case res of
---              Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
---                let trace = _etEvents (Model.linearize model)
---                unless (tests `match` trace) $ HUnit.assertFailure $
---                  "trace doesn't match:\n\n" ++ show trace
---              _ ->
---                HUnit.assertFailure "unexpected lack of falsifying model"
+        expectTrace :: Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
+        expectTrace code prop tests = do
+          res <- runIO $ runCheck (wrap code "") $ Valid prop
+          it "produces the correct trace" $
+            case res of
+              Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
+                let trace = _etEvents (Model.linearize model)
+                unless (tests `match` trace) $ HUnit.assertFailure $
+                  "trace doesn't match:\n\n" ++ show trace
+              _ ->
+                HUnit.assertFailure "unexpected lack of falsifying model"
 
---    describe "is a linearized trace of events" $ do
---      let code =
---            [text|
---              (defun test:string (from:string to:string amount:integer)
---                "Transfer money between accounts"
---                (let ((from-bal (at 'balance (read accounts from)))
---                      (to-bal   (at 'balance (read accounts to))))
---                  (enforce (> amount 0)         "Non-positive amount")
---                  (enforce (>= from-bal amount) "Insufficient Funds")
---                  ;; NOTE: this is disabled:
---                  ; (enforce (!= from to)         "Sender is the recipient")
---                  (update accounts from { "balance": (- from-bal amount) })
---                  (update accounts to   { "balance": (+ to-bal amount) })))
---            |]
+    describe "is a linearized trace of events" $ do
+      let code =
+            [text|
+              (defun test:string (from:string to:string amount:integer)
+                "Transfer money between accounts"
+                (let ((from-bal (at 'balance (read accounts from)))
+                      (to-bal   (at 'balance (read accounts to))))
+                  (enforce (> amount 0)         "Non-positive amount")
+                  (enforce (>= from-bal amount) "Insufficient Funds")
+                  ;; NOTE: this is disabled:
+                  ; (enforce (!= from to)         "Sender is the recipient")
+                  (update accounts from { "balance": (- from-bal amount) })
+                  (update accounts to   { "balance": (+ to-bal amount) })))
+            |]
 
---      expectTrace code
---        (sNot Success')
---        [push, read, read, push, assert, assert, write, write, pop, pop]
+      expectTrace code
+        (sNot Success')
+        [push, read, read, push, assert, assert, write, write, pop, pop]
 
---    describe "doesn't include events excluded by a conditional" $ do
---      let code =
---            [text|
---              (defun test:string ()
---                (if false
---                  (insert accounts "stu" {"balance": 5}) ; impossible
---                  "didn't write"))
---            |]
---      expectTrace code (Lit' False) [push, {- else -} path, pop]
+    describe "doesn't include events excluded by a conditional" $ do
+      let code =
+            [text|
+              (defun test:string ()
+                (if false
+                  (insert accounts "stu" {"balance": 5}) ; impossible
+                  "didn't write"))
+            |]
+      expectTrace code (Lit' False) [push, {- else -} path, pop]
 
---    describe "doesn't include events after a failed enforce" $ do
---      let code =
---            [text|
---              (defun test:integer ()
---                (write accounts "test" {"balance": 5})
---                (enforce false)
---                (at 'balance (read accounts "test")))
---            |]
---      expectTrace code Success' [push, write, assert]
+    describe "doesn't include events after a failed enforce" $ do
+      let code =
+            [text|
+              (defun test:integer ()
+                (write accounts "test" {"balance": 5})
+                (enforce false)
+                (at 'balance (read accounts "test")))
+            |]
+      expectTrace code Success' [push, write, assert]
 
---    describe "doesn't include cases after a successful enforce-one case" $ do
---      let code =
---            [text|
---              (defun test:bool ()
---                (enforce-one ""
---                  [(enforce false)
---                   true
---                   (enforce false)
---                  ]))
---            |]
---      expectTrace code (sNot Success')
---        [push, assert, {- failure -} path, {- success -} path, pop]
+    describe "doesn't include cases after a successful enforce-one case" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce-one ""
+                  [(enforce false)
+                   true
+                   (enforce false)
+                  ]))
+            |]
+      expectTrace code (sNot Success')
+        [push, assert, {- failure -} path, {- success -} path, pop]
 
---    it "doesn't include events after the first failure in an enforce-one case" $
---      pendingWith "use of resumptionPath"
+    it "doesn't include events after the first failure in an enforce-one case" $
+      pendingWith "use of resumptionPath"
 
   describe "references to module constants" $ do
     expectVerified [text|
@@ -2433,37 +2433,37 @@ spec = describe "analyze" $ do
         FOO)
       |]
 
---  describe "module-scoped properties verify" $ do
---    let okay = [text|
---          (defun okay:string (from:string to:string)
---            (enforce (!= from to) "sender and receive must not be the same")
---            (with-read accounts from { "balance" := from-bal }
---              (with-read accounts to { "balance" := to-bal }
---                (update accounts from { "balance": (- from-bal 1) })
---                (update accounts to   { "balance": (+ to-bal 1) }))))
---          |]
---        bad = [text|
---          (defun bad:string ()
---            (with-read accounts "joel" { "balance" := bal }
---              (update accounts "joel" { "balance": (+ bal 1000000000) })))
---          |]
---        conservesBalance = "(property conserves-balance)"
+  describe "module-scoped properties verify" $ do
+    let okay = [text|
+          (defun okay:string (from:string to:string)
+            (enforce (!= from to) "sender and receive must not be the same")
+            (with-read accounts from { "balance" := from-bal }
+              (with-read accounts to { "balance" := to-bal }
+                (update accounts from { "balance": (- from-bal 1) })
+                (update accounts to   { "balance": (+ to-bal 1) }))))
+          |]
+        bad = [text|
+          (defun bad:string ()
+            (with-read accounts "joel" { "balance" := bal }
+              (update accounts "joel" { "balance": (+ bal 1000000000) })))
+          |]
+        conservesBalance = "(property conserves-balance)"
 
---    expectVerified'  conservesBalance okay
---    expectFalsified' conservesBalance bad
---    expectFalsified' conservesBalance $ T.unlines [ bad, okay ]
---    expectFalsified' conservesBalance $ T.unlines [ okay, bad ]
+    expectVerified'  conservesBalance okay
+    expectFalsified' conservesBalance bad
+    expectFalsified' conservesBalance $ T.unlines [ bad, okay ]
+    expectFalsified' conservesBalance $ T.unlines [ okay, bad ]
 
---    expectVerified' "(property conserves-balance {'except: [bad]})" $
---      T.unlines [ okay, bad ]
---    expectVerified' "(property conserves-balance {'only:   [good]})" $
---      T.unlines [ okay, bad ]
+    expectVerified' "(property conserves-balance {'except: [bad]})" $
+      T.unlines [ okay, bad ]
+    expectVerified' "(property conserves-balance {'only:   [good]})" $
+      T.unlines [ okay, bad ]
 
---    expectVerified'  "(property conserves-balance {'except: []})" okay
---    expectFalsified' "(property conserves-balance {'except: []})" bad
+    expectVerified'  "(property conserves-balance {'except: []})" okay
+    expectFalsified' "(property conserves-balance {'except: []})" bad
 
---    expectVerified'  "(property conserves-balance {'only:   []    })" bad
---    expectFalsified' "(property conserves-balance {'only:   [bad]})" bad
+    expectVerified'  "(property conserves-balance {'only:   []    })" bad
+    expectFalsified' "(property conserves-balance {'only:   [bad]})" bad
 
   describe "read (property)" $ do
     let code1 = [text|
@@ -2473,105 +2473,105 @@ spec = describe "analyze" $ do
           |]
     expectVerified code1
 
---    -- reading from a different account
---    let code2 = [text|
---          (defun test:object{account} (acct:string)
---            @model [(property (= result (read accounts acct 'before)))]
---            (read accounts 'brian))
---          |]
---    expectFalsified code2
+    -- reading from a different account
+    let code2 = [text|
+          (defun test:object{account} (acct:string)
+            @model [(property (= result (read accounts acct 'before)))]
+            (read accounts 'brian))
+          |]
+    expectFalsified code2
 
---    let code3 = [text|
---          (defun test:string (acct:string)
---            @model
---              [ (property
---                  (= 100
---                    (at 'balance (read accounts acct 'after))))
---              ]
---            (write accounts acct { 'balance: 100 }))
---          |]
---    expectVerified code3
+    let code3 = [text|
+          (defun test:string (acct:string)
+            @model
+              [ (property
+                  (= 100
+                    (at 'balance (read accounts acct 'after))))
+              ]
+            (write accounts acct { 'balance: 100 }))
+          |]
+    expectVerified code3
 
---    -- writing to a different account
---    let code4 = [text|
---          (defun test:string (acct:string)
---            @model
---              [ (property
---                  (= 100
---                    (at 'balance (read accounts acct 'after))))
---              ]
---            (write accounts acct { 'balance: 0 }))
---          |]
---    expectFalsified code4
+    -- writing to a different account
+    let code4 = [text|
+          (defun test:string (acct:string)
+            @model
+              [ (property
+                  (= 100
+                    (at 'balance (read accounts acct 'after))))
+              ]
+            (write accounts acct { 'balance: 0 }))
+          |]
+    expectFalsified code4
 
---    let code5 = [text|
---          (defun test:string (acct:string)
---            @model
---              [ (property
---                  (=
---                    (+ (at 'balance (read accounts acct 'before)) 100)
---                       (at 'balance (read accounts acct 'after))))
---              ]
---            (with-read accounts acct { 'balance := bal }
---              (write accounts acct { 'balance: (+ 100 bal) })))
---          |]
---    expectVerified code5
+    let code5 = [text|
+          (defun test:string (acct:string)
+            @model
+              [ (property
+                  (=
+                    (+ (at 'balance (read accounts acct 'before)) 100)
+                       (at 'balance (read accounts acct 'after))))
+              ]
+            (with-read accounts acct { 'balance := bal }
+              (write accounts acct { 'balance: (+ 100 bal) })))
+          |]
+    expectVerified code5
 
---    -- writing to a different account
---    let code6 = [text|
---          (defun test:string (acct:string)
---            @model
---              [ (property
---                  (=
---                    (+ (at 'balance (read accounts acct 'before)) 100)
---                       (at 'balance (read accounts acct 'after))))
---              ]
---            (with-read accounts acct { 'balance := bal }
---              (write accounts 'brian { 'balance: (+ 100 bal) })))
---          |]
---    expectFalsified code6
+    -- writing to a different account
+    let code6 = [text|
+          (defun test:string (acct:string)
+            @model
+              [ (property
+                  (=
+                    (+ (at 'balance (read accounts acct 'before)) 100)
+                       (at 'balance (read accounts acct 'after))))
+              ]
+            (with-read accounts acct { 'balance := bal }
+              (write accounts 'brian { 'balance: (+ 100 bal) })))
+          |]
+    expectFalsified code6
 
---    let code7 = [text|
---          (defun test:string (acct:string)
---            @model
---              [ (property
---                  (=
---                    (+ (at 'balance (read accounts acct 'before)) 100)
---                       (at 'balance (read accounts acct 'after))))
---              ]
---            (write accounts acct { 'balance: 0 })
---            (with-read accounts acct { 'balance := bal }
---              (enforce (> bal 0))
---              (write accounts acct { 'balance: 100 })))
---          |]
---    let acct           = PVar 1 "acct"
---        objTy         = -- Schema $ Map.singleton "balance" $ EType SInteger
---          SObject $
---            SCons (SSymbol @"balance") SInteger SNil
---        readBalance ba = PObjAt objTy "balance"
---          (PropSpecific $ PropRead objTy ba "accounts" acct)
---        exists ba      = PropSpecific (RowExists "accounts" acct ba)
+    let code7 = [text|
+          (defun test:string (acct:string)
+            @model
+              [ (property
+                  (=
+                    (+ (at 'balance (read accounts acct 'before)) 100)
+                       (at 'balance (read accounts acct 'after))))
+              ]
+            (write accounts acct { 'balance: 0 })
+            (with-read accounts acct { 'balance := bal }
+              (enforce (> bal 0))
+              (write accounts acct { 'balance: 100 })))
+          |]
+    let acct           = PVar 1 "acct"
+        objTy         = -- Schema $ Map.singleton "balance" $ EType SInteger
+          SObject $
+            SCons (SSymbol @"balance") SInteger SNil
+        readBalance ba = PObjAt objTy "balance"
+          (PropSpecific $ PropRead objTy ba "accounts" acct)
+        exists ba      = PropSpecific (RowExists "accounts" acct ba)
 
---    expectPass code7 $ Valid $
---      Success'
---      .=>
---      PAnd (exists Before) (exists After)
+    expectPass code7 $ Valid $
+      Success'
+      .=>
+      PAnd (exists Before) (exists After)
 
---    expectPass code7 $ Valid $
---      Success'
---      -- TODO: this arrow should point both ways
---      .=>
---      Inj (IntegerComparison Eq (readBalance After) 100)
+    expectPass code7 $ Valid $
+      Success'
+      -- TODO: this arrow should point both ways
+      .=>
+      Inj (IntegerComparison Eq (readBalance After) 100)
 
---    -- this should hold in general (for any contract)
---    expectPass code7 $ Valid $ exists Before .=> exists After
+    -- this should hold in general (for any contract)
+    expectPass code7 $ Valid $ exists Before .=> exists After
 
---    -- TODO:
---    -- this could be generalized to a property that should hold in general
---    -- expectPass code7 $ Valid $
---    --   Abort'
---    --   .=>
---    --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))
+    -- TODO:
+    -- this could be generalized to a property that should hold in general
+    -- expectPass code7 $ Valid $
+    --   Abort'
+    --   .=>
+    --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))
 
   describe "list literals" $ do
     let code0 model = [text|
