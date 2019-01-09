@@ -50,17 +50,18 @@ data GenEnv = GenEnv
   }
 
 data GenState = GenState
-  { _idGen         :: !TagId
-  , _txKeySets  :: !(Map.Map String (Pact.KeySet, KeySet))
-  , _txDecimals :: !(Map.Map String Decimal)
-  , _txIntegers :: !(Map.Map String Integer)
+  { _idGen            :: !TagId
+  , _registryKeySets  :: !(Map.Map String (Pact.KeySet, KeySet))
+  , _txKeySets        :: !(Map.Map String (Pact.KeySet, KeySet))
+  , _txDecimals       :: !(Map.Map String Decimal)
+  , _txIntegers       :: !(Map.Map String Integer)
   } deriving Show
 
 makeLenses ''GenEnv
 makeLenses ''GenState
 
 emptyGenState :: GenState
-emptyGenState = GenState 0 Map.empty Map.empty Map.empty
+emptyGenState = GenState 0 Map.empty Map.empty Map.empty Map.empty
 
 -- Explicitly shrink the size parameter to generate smaller terms.
 scale :: MonadGen m => Size -> m a -> m a

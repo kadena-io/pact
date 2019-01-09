@@ -26,9 +26,9 @@ import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
 import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
-import           Pact.Analyze.Types.Eval  (aeTxDecimals, aeTxIntegers,
-                                           aeTxKeySets, mkAnalyzeEnv,
-                                           mkInitialAnalyzeState)
+import           Pact.Analyze.Types.Eval  (aeRegistryKeySets, aeTxDecimals,
+                                           aeTxIntegers, aeTxKeySets,
+                                           mkAnalyzeEnv, mkInitialAnalyzeState)
 import           Pact.Analyze.Util        (dummyInfo)
 
 import           Pact.Eval                (reduce)
@@ -91,7 +91,7 @@ analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
 analyzeEval etm@(Existential ty _tm) gs = analyzeEval' etm ty gs
 
 analyzeEval' :: ETerm -> SingTy a -> GenState -> IO (Either String ETerm)
-analyzeEval' etm ty (GenState _ keysets decimals integers) = do
+analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
   -- analyze setup
   let tables = []
       args   = Map.empty
@@ -104,25 +104,42 @@ analyzeEval' etm ty (GenState _ keysets decimals integers) = do
 
   Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
 
-  -- TODO: also write aeKsAuths
   let writeArray' k v env = writeArray env k v
+
+      --
+      -- TODO: need to hook this up to authorized-by (NameAuthorized) support
+      --
+      withRegistryKeySets = flip (foldr
+          (\(k, v) -> aeRegistryKeySets
+            %~ writeArray' (literal (KeySetName (T.pack k))) (literal v)))
+        (Map.toList (fmap snd registryKSs))
+
+      --
+      -- TODO: handle aeKsAuths
+      --
+      withKsAuths = id
 
       withTxKeySets = flip (foldr
           (\(k, v) -> aeTxKeySets
             %~ writeArray' (literal (KeySetName (T.pack k))) (literal v)))
-        (Map.toList (fmap snd keysets))
+        (Map.toList (fmap snd txKSs))
 
       withDecimals = flip (foldr
           (\(k, v) -> aeTxDecimals %~ writeArray' (literal (Str k)) (literal v)))
-        (Map.toList decimals)
+        (Map.toList txDecs)
 
       withIntegers = flip (foldr
           (\(k, v) -> aeTxIntegers %~ writeArray' (literal (Str k)) (literal v)))
-        (Map.toList integers)
+        (Map.toList txInts)
+
+      --
+      -- TODO: add read-msg support here
+      --
+      withStrings = id
 
   -- evaluate via analyze
   (analyzeVal, las)
-    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) (aEnv & withTxKeySets & withDecimals & withIntegers) state0 of
+    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) (aEnv & withRegistryKeySets & withKsAuths & withTxKeySets & withDecimals & withIntegers & withStrings) state0 of
       Right (analyzeVal, las, ()) -> pure (analyzeVal, las)
       Left err                    -> error $ describeAnalyzeFailure err
 
@@ -139,16 +156,19 @@ analyzeEval' etm ty (GenState _ keysets decimals integers) = do
 -- in the generated term. This generates an environment with just keysets and
 -- decimals.
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
-mkEvalEnv (GenState _ keysets decimals integers) = do
+mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts) = do
   evalEnv <- liftIO initPureEvalEnv
-  let keysets' = HM.fromList
-        $ fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
-        $ Map.toList keysets
-      decimals' = HM.fromList
+  let xformKsMap = HM.fromList
+        . fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
+        . Map.toList
+
+      registryKSs' = xformKsMap registryKSs
+      txKSs' = xformKsMap txKSs
+      txDecs' = HM.fromList
         $ fmap (\(k, v) -> (T.pack k, toJSON (show (toPact decimalIso v))))
-        $ Map.toList decimals
-      integers' = HM.fromList
+        $ Map.toList txDecs
+      txInts' = HM.fromList
         $ fmap (\(k, v) -> (T.pack k, toJSON v))
-        $ Map.toList integers
-      body = Object $ HM.unions [keysets', decimals', integers']
+        $ Map.toList txInts
+      body = Object $ HM.unions [registryKSs', txKSs', txDecs', txInts']
   pure $ evalEnv & eeMsgBody .~ body
