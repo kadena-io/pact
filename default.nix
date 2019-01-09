@@ -27,9 +27,6 @@ in
             lens-aeson = dontCheck super.lens-aeson;
             # test suite for this is failing on ghcjs:
             hw-hspec-hedgehog = dontCheck super.hw-hspec-hedgehog;
-            # heist = doJailbreak super.heist;
-            # snap = doJailbreak super.snap;
-            # servant-snap = dontCheck (doJailbreak super.servant-snap);
 
             bsb-http-chunked = whenGhcjs dontCheck super.bsb-http-chunked;
             Glob = whenGhcjs dontCheck super.Glob;
@@ -46,6 +43,13 @@ in
             unix-time = whenGhcjs dontCheck super.unix-time;
             wai-app-static = whenGhcjs dontCheck super.wai-app-static;
             wai-extra = whenGhcjs dontCheck super.wai-extra;
+
+            foundation = pkgs.lib.flip whenGhcjs super.foundation (package: overrideCabal package (drv: {
+              postPatch = (drv.postPatch or "") + pkgs.lib.optionalString (system == "x86_64-darwin") ''
+                substituteInPlace foundation.cabal --replace 'if os(linux)' 'if os(linux) && !impl(ghcjs)'
+                substituteInPlace foundation.cabal --replace 'if os(osx)' 'if os(linux) && impl(ghcjs)'
+              '';
+            }));
 
             algebraic-graphs = dontCheck super.algebraic-graphs;
 
