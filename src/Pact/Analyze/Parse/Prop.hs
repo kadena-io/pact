@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE MultiWayIf            #-}
@@ -61,7 +62,7 @@ import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                PrimType (..), SchemaVar, TList,
-                                               TableName, Type)
+                                               TableName, Type, TyObject)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)
@@ -277,6 +278,14 @@ mkLiteralObject ((name, preProp) : tups) = do
                    Object $ ConsOf sym (Column ty prop) objProp
     Existential _ _ -> throwErrorT $ "unexpected non-literal object: " <> tShow tups'
 
+-- | Look up the type of a given key in an object schema
+lookupKeyInType :: String -> Sing (schema :: [(Symbol, Ty)]) -> Maybe EType
+lookupKeyInType _name SNil = Nothing
+lookupKeyInType name (SCons k ty tys) =
+  if symbolVal k == name
+    then Just $ EType ty
+    else lookupKeyInType name tys
+
 --
 -- NOTE: because we have a lot of cases here and we are using pattern synonyms
 -- in conjunction with view patterns for feature symbols (see
@@ -349,12 +358,12 @@ inferPreProp preProp = case preProp of
       (Existential SInteger ix'', Existential (SList ty) lst)
         -> pure $ Existential ty $ CoreProp $ ListAt ty ix'' lst
 
---       error "TODO"
---       (Existential SStr (TextLit ix''), Existential objty@(SObject tyMap) objProp)
---         -> case tyMap ^? Lens.ix ix'' of
---           Nothing -> throwErrorIn preProp $
---             "could not find expected key " <> ix''
---           Just ety@(EType ty) -> Existential ty $ PObjAt objty (TextLit ix'') objProp ety
+      (Existential SStr (StrLit ix''), Existential objty@(SObject schema) objProp)
+        -> case lookupKeyInType ix'' schema of
+          Nothing -> throwErrorIn preProp $
+            "could not find expected key " <> T.pack ix''
+          Just (EType ty) -> pure $
+            Existential ty $ PObjAt objty (StrLit ix'') objProp
 
       (_, Existential ty _) -> throwErrorIn preProp $
         "expected object or list (with key " <> tShow ix' <>
@@ -379,10 +388,6 @@ inferPreProp preProp = case preProp of
     obj' <- mkLiteralObject (Map.toList obj)
     case obj' of
       Existential schema obj'' -> pure $ Existential schema $ CoreProp obj''
-      -- $ LiteralObject schema obj'
-    -- obj' <- traverse inferPreProp obj
-    -- let schema = undefined -- Schema $ fmap existentialType obj'
-    -- pure $ Existential schema $ CoreProp $ LiteralObject schema obj'
 
   -- applications:
   --
