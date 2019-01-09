@@ -457,9 +457,10 @@ evalTerm = \case
       tagReturn retTid $ mkAVal res
       pure res
 
-  ReadKeySet  str -> resolveKeySet  =<< symKsName <$> evalTerm str
-  ReadDecimal str -> resolveDecimal =<< evalTerm str
-  ReadInteger str -> resolveInteger =<< evalTerm str
+  -- Read values from tx metadata
+  ReadKeySet  str -> readKeySet  =<< symKsName <$> evalTerm str
+  ReadDecimal str -> readDecimal =<< evalTerm str
+  ReadInteger str -> readInteger =<< evalTerm str
 
   KsAuthorized tid ksT -> do
     ks <- evalTerm ksT
@@ -469,7 +470,7 @@ evalTerm = \case
 
   NameAuthorized tid str -> do
     ksn <- symKsName <$> evalTerm str
-    ks <- resolveKeySet ksn
+    ks <- readKeySet ksn -- TODO: use registry
     authorized <- nameAuthorized ksn
     tagAuth tid ks authorized
     pure authorized

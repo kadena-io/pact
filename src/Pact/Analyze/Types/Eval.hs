@@ -576,25 +576,28 @@ nameAuthorized
   => S KeySetName
   -> m (S Bool)
 nameAuthorized sKsn = fmap sansProv $
-  readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
+  readArray <$> view ksAuths <*> (_sSbv <$> readKeySet sKsn) -- TODO: use registry
 
-resolveKeySet
+-- | Reads a named keyset from tx metadata
+readKeySet
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S KeySetName
   -> m (S KeySet)
-resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
+readKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
 
-resolveDecimal
+-- | Reads a named decimal from tx metadata
+readDecimal
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S Str
   -> m (S Decimal)
-resolveDecimal sDn = fmap sansProv $
+readDecimal sDn = fmap sansProv $
   readArray <$> view envDecimals <*> pure (_sSbv sDn)
 
-resolveInteger
+-- | Reads a named integer from tx metadata
+readInteger
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S Str
   -> m (S Integer)
-resolveInteger sSn = fmap sansProv $
+readInteger sSn = fmap sansProv $
   readArray <$> view envIntegers <*> pure (_sSbv sSn)
