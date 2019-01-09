@@ -18,7 +18,6 @@ import           Control.Monad.Except       (ExceptT(..), runExceptT,
 import           Control.Monad.State.Strict (StateT(..))
 import           Control.Monad.IO.Class     (liftIO)
 import qualified Data.Aeson                 as A
--- import           Data.Bifunctor             (first)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import           Data.Default               (def)
 import           Data.Foldable              (traverse_)

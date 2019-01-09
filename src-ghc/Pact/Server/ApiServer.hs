@@ -43,7 +43,7 @@ import qualified Data.HashMap.Strict as HM
 
 import Servant
 import Network.Wai.Handler.Warp (run)
--- import Network.Wai.Middleware.Cors
+import Network.Wai.Middleware.Cors
 
 import Pact.Analyze.Remote.Server (verifyHandler)
 import Pact.Server.API
@@ -65,24 +65,25 @@ runApiServer :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int ->
 runApiServer histChan inbChan logFn port _logDir = do
   logFn $ "[api] starting on port " ++ show port
   let conf' = ApiEnv logFn histChan inbChan
-  run port $ {- cors (const policy) $ -} serve pactServerAPI (servantServer conf')
-  -- where
-  --   policy = Just CorsResourcePolicy
-  --     { corsOrigins = Nothing
-  --     , corsMethods = ["GET", "POST"]
-  --     , corsRequestHeaders = ["authorization", "content-type"]
-  --     , corsExposedHeaders = Nothing
-  --     , corsMaxAge = Just $ 60*60*24 -- one day
-  --     , corsVaryOrigin = False
-  --     , corsRequireOrigin = False
-  --     , corsIgnoreFailures = False
-  --     }
+  run port $ cors (const policy) $ serve pactServerAPI (servantServer conf')
+  where
+    policy = Just CorsResourcePolicy
+      { corsOrigins = Nothing
+      , corsMethods = ["GET", "POST"]
+      , corsRequestHeaders = ["authorization", "content-type"]
+      , corsExposedHeaders = Nothing
+      , corsMaxAge = Just $ 60*60*24 -- one day
+      , corsVaryOrigin = False
+      , corsRequireOrigin = False
+      , corsIgnoreFailures = False
+      }
 
 servantServer :: ApiEnv -> Server PactServerAPI
 servantServer conf = apiV1Server conf :<|> verifyHandler :<|> versionHandler
 
 apiV1Server :: ApiEnv -> Server ApiV1API
-apiV1Server conf = hoistServer apiV1API nt (sendHandler :<|> pollHandler :<|> listenHandler :<|> localHandler)
+apiV1Server conf = hoistServer apiV1API nt
+  (sendHandler :<|> pollHandler :<|> listenHandler :<|> localHandler)
   where
     apiV1API = Proxy :: Proxy ApiV1API
     nt :: forall a. ApiT a -> Handler a
