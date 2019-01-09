@@ -535,64 +535,64 @@ spec = describe "analyze" $ do
   -- TODO: test use of read-integer from property once possible
   --
 
---  describe "enforce-keyset.row-level.read" $ do
---    let code =
---          [text|
---            (defschema token-row
---              name:string
---              balance:integer
---              ks:keyset)
---            (deftable tokens:{token-row})
+  describe "enforce-keyset.row-level.read" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer
+              ks:keyset)
+            (deftable tokens:{token-row})
 
---            (defun test:integer (acct:string)
---              (with-read tokens acct { "ks" := ks, "balance" := bal }
---                (enforce-keyset ks)
---                bal))
---          |]
---    expectPass code $ Satisfiable Abort'
---    expectPass code $ Satisfiable (Inj Success)
---    expectPass code $ Valid $ sNot $ Inj $ Exists 1 "row" (EType SStr) $
---      Inj $ RowWrite "tokens" (PVar 1 "row")
---    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
---      CoreProp $ IntegerComparison Eq
---        (Inj (RowWriteCount "tokens" (PVar 1 "row"))) 0
---    expectPass code $ Valid $ Inj Success .=>
---      Inj (Exists 1 "row" (EType SStr) (Inj $ RowRead "tokens" (PVar 1 "row")))
---    expectPass code $ Valid $ Inj Success .=>
---      Inj (Exists 1 "row" (EType SStr)
---        (CoreProp $ IntegerComparison Eq
---          (Inj (RowReadCount "tokens" (PVar 1 "row"))) 1))
---    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
---      Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
---    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
---      sNot $ Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
---    expectPass code $ Valid $ Inj Success .=> (Inj $ Forall 1 "row" (EType SStr) $
---      Inj (RowRead "tokens" (PVar 1 "row")) .=>
---        Inj (RowEnforced "tokens" "ks" (PVar 1 "row")))
---    expectPass code $ Valid $ Inj Success .=>
---      Inj (RowEnforced "tokens" "ks" (PVar 1 "acct"))
+            (defun test:integer (acct:string)
+              (with-read tokens acct { "ks" := ks, "balance" := bal }
+                (enforce-keyset ks)
+                bal))
+          |]
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable (Inj Success)
+    expectPass code $ Valid $ sNot $ Inj $ Exists 1 "row" (EType SStr) $
+      Inj $ RowWrite "tokens" (PVar 1 "row")
+    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
+      CoreProp $ IntegerComparison Eq
+        (Inj (RowWriteCount "tokens" (PVar 1 "row"))) 0
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (Exists 1 "row" (EType SStr) (Inj $ RowRead "tokens" (PVar 1 "row")))
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (Exists 1 "row" (EType SStr)
+        (CoreProp $ IntegerComparison Eq
+          (Inj (RowReadCount "tokens" (PVar 1 "row"))) 1))
+    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
+      Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
+    expectPass code $ Satisfiable $ Inj $ Exists 1 "row" (EType SStr) $
+      sNot $ Inj $ RowEnforced "tokens" "ks" (PVar 1 "row")
+    expectPass code $ Valid $ Inj Success .=> (Inj $ Forall 1 "row" (EType SStr) $
+      Inj (RowRead "tokens" (PVar 1 "row")) .=>
+        Inj (RowEnforced "tokens" "ks" (PVar 1 "row")))
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (RowEnforced "tokens" "ks" (PVar 1 "acct"))
 
---  describe "enforce-keyset.row-level.read.syntax" $ do
---    let code =
---          [text|
---            (defschema token-row
---              name:string
---              balance:integer
---              ks:keyset)
---            (deftable tokens:{token-row})
+  describe "enforce-keyset.row-level.read.syntax" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer
+              ks:keyset)
+            (deftable tokens:{token-row})
 
---            (defun test:integer (acct:string)
---              @doc   "test"
---              @model
---                [(property (forall (row:string) (row-enforced "tokens" "ks" row)))]
---              (with-read tokens acct { "ks" := ks, "balance" := bal }
---                (enforce-keyset ks)
---                bal))
---          |]
+            (defun test:integer (acct:string)
+              @doc   "test"
+              @model
+                [(property (forall (row:string) (row-enforced "tokens" "ks" row)))]
+              (with-read tokens acct { "ks" := ks, "balance" := bal }
+                (enforce-keyset ks)
+                bal))
+          |]
 
---    -- TODO: come up with better tests. Right now this just tests that this
---    -- parses correctly.
---    expectPass code $ Satisfiable Abort'
+    -- TODO: come up with better tests. Right now this just tests that this
+    -- parses correctly.
+    expectPass code $ Satisfiable Abort'
 
   describe "enforce-keyset.row-level.multiple-keysets" $ do
     let code =
@@ -716,21 +716,21 @@ spec = describe "analyze" $ do
       Inj (RowWrite "tokens" (PVar 1 "row")) .=>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
-  -- describe "call-by-value semantics for inlining" $ do
-  --   let code =
-  --         [text|
-  --           (defun id:string (s:string)
-  --             s
-  --             s)
+  describe "call-by-value semantics for inlining" $ do
+    let code =
+          [text|
+            (defun id:string (s:string)
+              s
+              s)
 
-  --           (defun test:string ()
-  --             @model [(property (my-column-delta 1))]
-  --             (id
-  --               (write accounts "bob"
-  --                 {"balance": (+ 1 (at 'balance (read accounts "bob")))})
-  --               ))
-  --         |]
-  --   expectVerified code
+            (defun test:string ()
+              @model [(property (my-column-delta 1))]
+              (id
+                (write accounts "bob"
+                  {"balance": (+ 1 (at 'balance (read accounts "bob")))})
+                ))
+          |]
+    expectVerified code
 
   describe "enforce-one.1" $ do
     let code =
@@ -1017,18 +1017,18 @@ spec = describe "analyze" $ do
 --          |]
 --    in expectVerified code
 
---  describe "table-read" $ do
---    let code =
---          [text|
---            (defschema token-row balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-read" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:integer ()
---              (with-read tokens "stu" {"balance" := bal}
---                bal))
---          |]
---    expectPass code $ Valid $ Inj $ TableRead "tokens"
---    expectPass code $ Valid $ sNot $ Inj $ TableRead "other"
+            (defun test:integer ()
+              (with-read tokens "stu" {"balance" := bal}
+                bal))
+          |]
+    expectPass code $ Valid $ Inj $ TableRead "tokens"
+    expectPass code $ Valid $ sNot $ Inj $ TableRead "other"
 
 --  describe "table-written.insert" $ do
 --    let code =
@@ -1321,17 +1321,17 @@ spec = describe "analyze" $ do
 --      CoreProp (IntegerComparison Eq
 --        (Inj (IntCellDelta "accounts" "balance" (Lit' "bob"))) 3)
 
---  describe "with-read" $ do
---    let code =
---          [text|
---            (defun test:bool (acct:string)
---              (update accounts acct { "balance": 10 })
---              (with-read accounts acct { "balance" := bal }
---                (enforce (= bal 10) "Read after write failed")))
---          |]
+  describe "with-read" $ do
+    let code =
+          [text|
+            (defun test:bool (acct:string)
+              (update accounts acct { "balance": 10 })
+              (with-read accounts acct { "balance" := bal }
+                (enforce (= bal 10) "Read after write failed")))
+          |]
 
---    expectPass code $ Valid $
---      Inj (RowExists "accounts" (PVar 1 "acct") Before) .=> Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" (PVar 1 "acct") Before) .=> Success'
 
 --  describe "with-read.nested" $ do
 --    let code =
@@ -2153,108 +2153,108 @@ spec = describe "analyze" $ do
         `shouldBe`
         "(exists (bar:bool) (not bar))"
 
---  describe "table quantification" $ do
---    let code =
---          [text|
---            (defschema simple-schema balance:integer)
---            (deftable simple-table:{simple-schema})
+  describe "table quantification" $ do
+    let code =
+          [text|
+            (defschema simple-schema balance:integer)
+            (deftable simple-table:{simple-schema})
 
---            (defschema additional-schema name:string)
---            (deftable additional-table:{additional-schema})
+            (defschema additional-schema name:string)
+            (deftable additional-table:{additional-schema})
 
---            (defun test1:integer ()
---              @doc   "don't touch a table"
---              @model
---                [ (property (forall (table:table) (not (table-written table))))
---                  (property (forall (table:table) (not (table-read table))))
---                ]
---              1)
+            (defun test1:integer ()
+              @doc   "don't touch a table"
+              @model
+                [ (property (forall (table:table) (not (table-written table))))
+                  (property (forall (table:table) (not (table-read table))))
+                ]
+              1)
 
---            (defun test2:string ()
---              @doc "write a table"
---              @model
---                [
---                  (property (exists (table:table) (table-written table)))
---                  (property (forall (table:table) (not (table-read table))))
---                ]
---              (insert simple-table "joel" { 'balance : 5 }))
+            (defun test2:string ()
+              @doc "write a table"
+              @model
+                [
+                  (property (exists (table:table) (table-written table)))
+                  (property (forall (table:table) (not (table-read table))))
+                ]
+              (insert simple-table "joel" { 'balance : 5 }))
 
---            (defun test3:object{simple-schema} ()
---              @doc   "read a table"
---              @model
---                [
---                  (property (forall (table:table) (not (table-written table))))
---                  (property (exists (table:table) (table-read table)))
---                ]
---              (read simple-table "joel"))
+            (defun test3:object{simple-schema} ()
+              @doc   "read a table"
+              @model
+                [
+                  (property (forall (table:table) (not (table-written table))))
+                  (property (exists (table:table) (table-read table)))
+                ]
+              (read simple-table "joel"))
 
---          |]
+          |]
 
---    expectVerified code
+    expectVerified code
 
---  describe "column quantification" $ do
---    let code =
---          [text|
---            (defschema simple-schema balance:integer)
---            (deftable simple-table:{simple-schema})
+  describe "column quantification" $ do
+    let code =
+          [text|
+            (defschema simple-schema balance:integer)
+            (deftable simple-table:{simple-schema})
 
---            (defun test1:integer ()
---              @doc   "don't touch a column"
---              @model
---                [
---                  (property (forall (column:(column-of simple-table))
---                    (not (column-written simple-table column))))
---                  ; ^- equisatisfiable -v
---                  (property (not (exists (column:(column-of simple-table))
---                    (column-written simple-table column))))
+            (defun test1:integer ()
+              @doc   "don't touch a column"
+              @model
+                [
+                  (property (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column))))
+                  ; ^- equisatisfiable -v
+                  (property (not (exists (column:(column-of simple-table))
+                    (column-written simple-table column))))
 
---                  (property (forall (column:(column-of simple-table))
---                    (not (column-read simple-table column))))
---                  ; ^- equisatisfiable -v
---                  (property (not (exists (column:(column-of simple-table))
---                    (column-read simple-table column))))
---                ]
---              1)
+                  (property (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column))))
+                  ; ^- equisatisfiable -v
+                  (property (not (exists (column:(column-of simple-table))
+                    (column-read simple-table column))))
+                ]
+              1)
 
---            (defun test2:string ()
---              @doc "write a column"
---              @model
---                [
---                  (property (exists (column:(column-of simple-table))
---                    (column-written simple-table column)))
---                  ; ^- equisatisfiable -v
---                  (property (not (forall (column:(column-of simple-table))
---                    (not (column-written simple-table column)))))
+            (defun test2:string ()
+              @doc "write a column"
+              @model
+                [
+                  (property (exists (column:(column-of simple-table))
+                    (column-written simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (property (not (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column)))))
 
---                  (property (forall (column:(column-of simple-table))
---                    (not (column-read simple-table column))))
---                  ; ^- equisatisfiable -v
---                  (property (not (exists (column:(column-of simple-table))
---                    (column-read simple-table column))))
---                ]
---              (insert simple-table "joel" { 'balance : 5 }))
+                  (property (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column))))
+                  ; ^- equisatisfiable -v
+                  (property (not (exists (column:(column-of simple-table))
+                    (column-read simple-table column))))
+                ]
+              (insert simple-table "joel" { 'balance : 5 }))
 
---            (defun test3:object{simple-schema} ()
---              @doc   "read a column"
---              @model
---                [
---                  (property (forall (column:(column-of simple-table))
---                    (not (column-written simple-table column))))
---                  ; ^- equisatisfiable -v
---                  (property (not (exists (column:(column-of simple-table))
---                    (column-written simple-table column))))
+            (defun test3:object{simple-schema} ()
+              @doc   "read a column"
+              @model
+                [
+                  (property (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column))))
+                  ; ^- equisatisfiable -v
+                  (property (not (exists (column:(column-of simple-table))
+                    (column-written simple-table column))))
 
---                  (property (exists (column:(column-of simple-table))
---                    (column-read simple-table column)))
---                  ; ^- equisatisfiable -v
---                  (property (not (forall (column:(column-of simple-table))
---                    (not (column-read simple-table column)))))
---                ]
---              (read simple-table "joel"))
+                  (property (exists (column:(column-of simple-table))
+                    (column-read simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (property (not (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column)))))
+                ]
+              (read simple-table "joel"))
 
---          |]
+          |]
 
---    expectVerified code
+    expectVerified code
 
   describe "UserShow" $
     it "schema looks okay" $ do
@@ -2424,14 +2424,14 @@ spec = describe "analyze" $ do
 --    it "doesn't include events after the first failure in an enforce-one case" $
 --      pendingWith "use of resumptionPath"
 
---  describe "references to module constants" $ do
---    expectVerified [text|
---      (defconst FOO "FOO")
+  describe "references to module constants" $ do
+    expectVerified [text|
+      (defconst FOO "FOO")
 
---      (defun test:string ()
---        @model [(property (= result FOO))]
---        FOO)
---      |]
+      (defun test:string ()
+        @model [(property (= result FOO))]
+        FOO)
+      |]
 
 --  describe "module-scoped properties verify" $ do
 --    let okay = [text|
@@ -2465,13 +2465,13 @@ spec = describe "analyze" $ do
 --    expectVerified'  "(property conserves-balance {'only:   []    })" bad
 --    expectFalsified' "(property conserves-balance {'only:   [bad]})" bad
 
---  describe "read (property)" $ do
---    let code1 = [text|
---          (defun test:object{account} (acct:string)
---            @model [(property (= result (read accounts acct 'before)))]
---            (read accounts acct))
---          |]
---    expectVerified code1
+  describe "read (property)" $ do
+    let code1 = [text|
+          (defun test:object{account} (acct:string)
+            @model [(property (= result (read accounts acct 'before)))]
+            (read accounts acct))
+          |]
+    expectVerified code1
 
 --    -- reading from a different account
 --    let code2 = [text|

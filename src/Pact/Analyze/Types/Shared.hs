@@ -33,7 +33,7 @@ import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
 import           Data.Constraint              (Dict (Dict), withDict)
-import           Data.Data                    (Data, Typeable)
+import           Data.Data                    (Data, Typeable, Proxy)
 import           Data.Function                (on)
 import           Data.Kind                    (Type)
 import           Data.List                    (sortBy)
@@ -691,7 +691,7 @@ instance HasKind KeySet where
 instance SMTValue KeySet where
   sexprToVal = fmap KeySet . sexprToVal
 
-type family Concrete (a :: Ty) where -- = r | r -> a where
+type family Concrete (a :: Ty) where
   Concrete 'TyInteger     = Integer
   Concrete 'TyBool        = Bool
   Concrete 'TyStr         = Str
@@ -702,7 +702,7 @@ type family Concrete (a :: Ty) where -- = r | r -> a where
   Concrete ('TyList a)    = [Concrete a]
   Concrete ('TyObject ty) = ConcreteObj ty
 
-type family ConcreteObj (a :: [(Symbol, Ty)]) where -- = r | r -> a where
+type family ConcreteObj (a :: [(Symbol, Ty)]) where
   ConcreteObj '[]               = ()
   ConcreteObj ('(k', v) ': kvs) = (Concrete v, ConcreteObj kvs)
 
@@ -742,7 +742,7 @@ instance
   literal (AConcrete a) = coerce $ literal a
   fromCW    = AConcrete . fromCW
 
--- newtype ASymbolic ty = ASymbolic (S (Concrete ty))
+newtype AnSBV ty = AnSBV (SBV (Concrete ty))
 
 type family ConcreteList (a :: [Ty]) where
   ConcreteList '[]         = '[]
@@ -985,14 +985,6 @@ instance
         -> Object $ ConsOf SSymbol (Column sing (fromCW (CW k x))) vals
   fromCW c = error $ "invalid (Object tm ('(k, ty) ': tys)): " ++ show c
 
--- columnMapToSchema :: ColumnMap EType -> Schema
--- columnMapToSchema
---   = Schema
---   . Map.fromList
---   . fmap (\(ColumnName name, ety) -> (fromString name, ety))
---   . Map.toList
---   . _columnMap
-
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map.Map ColumnName a }
   deriving (Show, Functor, Foldable, Traversable, Semigroup, Monoid)
@@ -1001,6 +993,21 @@ instance Mergeable a => Mergeable (ColumnMap a) where
   symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $
     -- intersection is fine here; we know each map has all tables:
     Map.intersectionWith (symbolicMerge force test) left right
+
+columnMapToSchema :: ColumnMap EType -> EType
+columnMapToSchema (ColumnMap colMap) = go (Map.toList colMap) where
+  go [] = EType (SObject SNil)
+  go ((ColumnName colName, EType ty) : tys) = case go tys of
+    EType (SObject tys') -> case someSymbolVal colName of
+      SomeSymbol (_ :: Proxy k) -> withSing ty $
+        EType $ SObject $ SCons (SSymbol @k) ty tys'
+    _ -> error "TODO"
+  go _ = error "TODO"
+  -- = Schema
+  -- . Map.fromList
+  -- . fmap (\(ColumnName name, ety) -> (fromString name, ety))
+  -- . Map.toList
+  -- . _columnMap
 
 newtype TableMap a
   = TableMap { _tableMap :: Map.Map TableName a }

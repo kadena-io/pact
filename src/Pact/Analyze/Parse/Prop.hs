@@ -360,20 +360,20 @@ inferPreProp preProp = case preProp of
         "expected object or list (with key " <> tShow ix' <>
         ") but found type " <> userShow ty
 
-  -- error "TODO"
-  -- PrePropRead tn rk ba -> do
-  --   tn' <- parseTableName tn
-  --   case tn' of
-  --     StrLit litTn -> do
-  --       rk' <- checkPreProp SStr rk
-  --       ba' <- parseBeforeAfter ba
-  --       cm  <- view $ tableEnv . at (TableName litTn)
-  --       case cm of
-  --         Just cm' -> do
-  --           let schema = columnMapToSchema cm'
-  --           pure $ Existential schema $ PropSpecific $ PropRead ba' schema tn' rk'
-  --         Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn
-  --     _ -> throwErrorT $ "table name (" <> userShow tn <> ") must be a literal"
+  PrePropRead tn rk ba -> do
+    tn' <- parseTableName tn
+    case tn' of
+      StrLit litTn -> do
+        rk' <- checkPreProp SStr rk
+        ba' <- parseBeforeAfter ba
+        cm  <- view $ tableEnv . at (TableName litTn)
+        case cm of
+          Just cm' -> case columnMapToSchema cm' of
+            EType objTy@(SObject _schema) -> pure $
+              Existential objTy $ PropSpecific $ PropRead objTy ba' tn' rk'
+            _ -> error "TODO"
+          Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn
+      _ -> throwErrorT $ "table name (" <> userShow tn <> ") must be a literal"
 
   PreLiteralObject obj -> do
     obj' <- mkLiteralObject (Map.toList obj)

@@ -13,18 +13,22 @@ import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT (..))
 import qualified Data.Map.Strict            as Map
+import           Data.Proxy                 (Proxy)
 import           Data.SBV                   (EqSymbolic ((.==)),
-                                             Mergeable (symbolicMerge))
+                                             Mergeable (symbolicMerge), literal)
 import qualified Data.SBV.Internals         as SBVI
+import           Data.SBV.Tuple             (mkPair)
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
+import           Data.Type.Equality         ((:~:)(Refl))
+import           GHC.TypeLits               (SomeSymbol(..), Symbol, symbolVal, someSymbolVal)
 
 import           Pact.Analyze.Alloc         (Alloc, MonadAlloc, singExists, singForAll)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Orphans       ()
-import           Pact.Analyze.Types         hiding (tableName)
+import           Pact.Analyze.Types         hiding (tableName, objFields)
 import qualified Pact.Analyze.Types         as Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
@@ -205,15 +209,15 @@ evalPropSpecific (RowEnforced tn cn pRk) = do
   cn' <- getLitColName cn
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
-evalPropSpecific (PropRead (SObject fields) ba tn pRk) = do
+evalPropSpecific (PropRead objTy@(SObject fields) ba tn pRk) = do
   (tn' :: TableName) <- getLitTableName (tn :: Prop TyTableName)
   sRk <- evalProp pRk
   let fields' :: [(String, EType)]
-      fields' = error "TODO" fields
+      fields' = objFields fields
 
   -- TODO: there is a lot of duplication between this and the corresponding
   -- term evaluation code. It would be nice to consolidate these.
-  (aValFields :: [(EType, AVal)]) <- for fields' $ \(fieldName, fieldType) -> do
+  (aValFields :: [(String, EType, AVal)]) <- for fields' $ \(fieldName, fieldType) -> do
     let cn = ColumnName fieldName
 
     av <- case fieldType of
@@ -226,6 +230,26 @@ evalPropSpecific (PropRead (SObject fields) ba tn pRk) = do
      --       sub-objects.
      --
 
-    pure (fieldType, av)
+    pure (fieldName, fieldType, av)
 
-  pure $ error "TODO" $ Object (error "TODO" aValFields)
+  case assembleObj aValFields of
+    Existential ty (AnSBV obj) -> case singEq ty objTy of
+      Nothing   -> error "TODO"
+      Just Refl -> pure $ sansProv obj
+
+assembleObj :: [(String, EType, AVal)] -> Existential AnSBV
+assembleObj [] = Existential (SObject SNil) (AnSBV (literal ()))
+assembleObj ((name, EType ty, AVal _prov sval) : tys)
+  = case someSymbolVal name of
+    SomeSymbol (_ :: Proxy k) -> case assembleObj tys of
+      Existential objTy@(SObject schema) (AnSBV obj)
+        -> withSing ty $ withSymWord ty $ withSymWord objTy $
+          Existential
+            (SObject (SCons (SSymbol @k) ty schema))
+            (AnSBV (mkPair (SBVI.SBV sval) obj))
+      _ -> error "impossible (we always return an SObject)"
+assembleObj ((_, _, OpaqueVal) : _) = error "TODO"
+
+objFields :: Sing (schema :: [(Symbol, Ty)]) -> [(String, EType)]
+objFields SNil = []
+objFields (SCons k ty tys) = (symbolVal k, EType ty) : objFields tys
