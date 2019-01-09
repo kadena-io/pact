@@ -2667,35 +2667,35 @@ spec = describe "analyze" $ do
           |]
     expectVerified code5
 
---  describe "list at" $ do
---    -- next two tests disabled pending https://github.com/kadena-io/pact/issues/312
---    -- let code5 = [text|
---    --       (defun test:integer (a:integer b:integer c:integer)
---    --         @model [(property (= result a))]
---    --         (at 0 [a b c]))
---    --       |]
---    -- expectVerified code5
+  describe "list at" $ do
+    -- next two tests disabled pending https://github.com/kadena-io/pact/issues/312
+    -- let code5 = [text|
+    --       (defun test:integer (a:integer b:integer c:integer)
+    --         @model [(property (= result a))]
+    --         (at 0 [a b c]))
+    --       |]
+    -- expectVerified code5
 
---    -- let code6 = [text|
---    --       (defun test:integer (a:integer b:integer c:integer)
---    --         (at 2 [a b c]))
---    --       |]
---    -- expectPass code6 $ Valid Abort'
+    -- let code6 = [text|
+    --       (defun test:integer (a:integer b:integer c:integer)
+    --         (at 2 [a b c]))
+    --       |]
+    -- expectPass code6 $ Valid Abort'
 
---    let code6' = [text|
---          (defun test:integer (ix:integer)
---            @model [(property (= result ix))]
---            (at ix [0 1 2]))
---          |]
---    expectVerified code6'
---    expectPass code6' $ Satisfiable Abort'
+    let code6' = [text|
+          (defun test:integer (ix:integer)
+            @model [(property (= result ix))]
+            (at ix [0 1 2]))
+          |]
+    expectVerified code6'
+    expectPass code6' $ Satisfiable Abort'
 
---    let code6'' = [text|
---          (defun test:integer (list:[integer])
---            @model [(property (= result (at 2 list)))]
---            (at 2 list))
---          |]
---    expectVerified code6''
+    let code6'' = [text|
+          (defun test:integer (list:[integer])
+            @model [(property (= result (at 2 list)))]
+            (at 2 list))
+          |]
+    expectVerified code6''
 
   describe "string contains" $ do
     let code7 = [text|
@@ -2705,112 +2705,112 @@ spec = describe "analyze" $ do
           |]
     expectVerified code7
 
---  describe "list contains" $ do
---    let code8 model = [text|
---          (defun test:bool (a:integer b:integer c:integer)
---            @model $model
---            (contains a [a b c]))
---          |]
---    expectVerified  $ code8 "[(property (= result true))]"
---    expectFalsified $ code8 "[(property (= result false))]"
+  describe "list contains" $ do
+    let code8 model = [text|
+          (defun test:bool (a:integer b:integer c:integer)
+            @model $model
+            (contains a [a b c]))
+          |]
+    expectVerified  $ code8 "[(property (= result true))]"
+    expectFalsified $ code8 "[(property (= result false))]"
 
---  describe "list concat" $ do
---    let code9 model = [text|
---          (defun test:[integer] (a:integer b:integer c:integer)
---            @model $model
---            (+ [a b] [c]))
---          |]
---    expectFalsified $ code9 "[(property (= result [a b]))]"
---    expectVerified  $ code9 "[(property (= result (+ [a] [b c])))]"
+  describe "list concat" $ do
+    let code9 model = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
+            @model $model
+            (+ [a b] [c]))
+          |]
+    expectFalsified $ code9 "[(property (= result [a b]))]"
+    expectVerified  $ code9 "[(property (= result (+ [a] [b c])))]"
 
---  describe "list reverse" $ do
---    let code10 = [text|
---          (defun test:[integer] (a:integer b:integer c:integer)
---            @model [(property (= result (reverse [a b c])))]
---            [c b a])
---          |]
---    expectVerified code10
+  describe "list reverse" $ do
+    let code10 = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
+            @model [(property (= result (reverse [a b c])))]
+            [c b a])
+          |]
+    expectVerified code10
 
---  describe "list sort" $ do
---    let code11 = [text|
---          (defun min:integer (x:integer y:integer)
---            (if (< x y) x y))
+  describe "list sort" $ do
+    let code11 = [text|
+          (defun min:integer (x:integer y:integer)
+            (if (< x y) x y))
 
---          (defun test:integer (a:integer b:integer c:integer)
---            @model [(property (= result (at 0 (sort [a b c]))))]
---            (min a (min b c)))
---          |]
---    expectVerified code11
+          (defun test:integer (a:integer b:integer c:integer)
+            @model [(property (= result (at 0 (sort [a b c]))))]
+            (min a (min b c)))
+          |]
+    expectVerified code11
 
---  describe "identity" $ do
---    let code = [text|
---          (defun test:integer ()
---            @model []
---            (identity 1))
---          |]
---    expectVerified code
+  describe "identity" $ do
+    let code = [text|
+          (defun test:integer ()
+            @model []
+            (identity 1))
+          |]
+    expectVerified code
 
---  describe "list map" $ do
---    let code1 = [text|
---          (defun test:[integer] ()
---            @model [(property (= result [1 2 3]))]
---            (map (identity) [1 2 3]))
---          |]
---    expectVerified code1
+  describe "list map" $ do
+    let code1 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [1 2 3]))]
+            (map (identity) [1 2 3]))
+          |]
+    expectVerified code1
 
---    let code2 = [text|
---          (defun test:[integer] ()
---            @model [(property (= result [2 3 4]))]
---            (map (+ 1) [1 2 3]))
---          |]
---    expectVerified code2
+    let code2 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [2 3 4]))]
+            (map (+ 1) [1 2 3]))
+          |]
+    expectVerified code2
 
---    let code3 = [text|
---          (defun test:[integer] ()
---            @model [(property (= result [1 1 1]))]
---            (map (constantly 1) [1 2 3]))
---          |]
---    expectVerified code3
+    let code3 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [1 1 1]))]
+            (map (constantly 1) [1 2 3]))
+          |]
+    expectVerified code3
 
---    describe "constantly" $ do
---      let code4 = [text|
---            (defun test:[integer] ()
---              @model [(property (= result [2 2 2]))]
---              (map (compose (constantly 1) (+ 1)) [1 2 3]))
---            |]
---      expectVerified code4
+    describe "constantly" $ do
+      let code4 = [text|
+            (defun test:[integer] ()
+              @model [(property (= result [2 2 2]))]
+              (map (compose (constantly 1) (+ 1)) [1 2 3]))
+            |]
+      expectVerified code4
 
---      it "ignores multiple variables" $ pendingWith "implementation"
+      it "ignores multiple variables" $ pendingWith "implementation"
 
---    let code5 = [text|
---          (defun test:[integer] ()
---            @model [(property (= result [1 1 1]))]
---            (map (compose (+ 1) (constantly 1)) [1 2 3]))
---          |]
---    expectVerified code5
+    let code5 = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [1 1 1]))]
+            (map (compose (+ 1) (constantly 1)) [1 2 3]))
+          |]
+    expectVerified code5
 
---  describe "list filter" $ do
---    let code = [text|
---          (defun test:[integer] ()
---            @model [(property (= result [2 3 4]))]
---            (filter (> 5) [2 6 3 7 4 8]))
---          |]
---    expectVerified code
+  describe "list filter" $ do
+    let code = [text|
+          (defun test:[integer] ()
+            @model [(property (= result [2 3 4]))]
+            (filter (> 5) [2 6 3 7 4 8]))
+          |]
+    expectVerified code
 
---    let code' = [text|
---          (defun test:[string] ()
---            @model [(property (= result ["dog" "has" "fleas"]))]
---            (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"]))
---          |]
---    expectVerified code'
+    let code' = [text|
+          (defun test:[string] ()
+            @model [(property (= result ["dog" "has" "fleas"]))]
+            (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"]))
+          |]
+    expectVerified code'
 
---  describe "list fold" $ do
---    let code = [text|
---          (defun test:integer ()
---            @model [(property (= result 115))]
---            (fold (+) 0 [100 10 5]))
---          |]
---    expectVerified code
+  describe "list fold" $ do
+    let code = [text|
+          (defun test:integer ()
+            @model [(property (= result 115))]
+            (fold (+) 0 [100 10 5]))
+          |]
+    expectVerified code
 
   describe "and?" $ do
     let code = [text|

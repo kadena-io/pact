@@ -14,7 +14,7 @@ import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT (..))
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (EqSymbolic ((.==)),
-                                             Mergeable (symbolicMerge), ite)
+                                             Mergeable (symbolicMerge))
 import qualified Data.SBV.Internals         as SBVI
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
@@ -58,7 +58,7 @@ instance Analyzer Query where
   getVar vid        = view (scope . at vid)
   withVar vid val m = local (scope . at vid ?~ val) m
   markFailure b     = id %= (.&& SymbolicSuccess (sNot b))
-  analyzerIte       = ite
+  withMergeableAnalyzer ty f = withSymWord ty f
 
 aval
   :: Analyzer m

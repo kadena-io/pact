@@ -16,11 +16,11 @@ import           Data.Monoid                 ((<>))
 import           Data.SBV                    (EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                               SymWord,
-                                              SBV, ite, unliteral)
--- import           Data.SBV.List               ((.:))
+                                              SBV, ite, unliteral, literal)
+import           Data.SBV.List               ((.:))
 import qualified Data.SBV.List               as SBVL
 import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
-                                              bzipWith, {- bmapM, bfoldrM -})
+                                              bzipWith, bmapM, bfoldrM)
 import qualified Data.SBV.String             as SBVS
 import           Data.SBV.Tuple              (field1, field2)
 -- import           Data.Text                   (Text)
@@ -136,9 +136,9 @@ evalComparisonOp ty op xT yT = do
 --     Neq' -> x ./= y
 
 singIte
-  :: (Analyzer m, a' ~ Concrete a, SingI a)
+  :: forall m a a'. (Analyzer m, a' ~ Concrete a, SingI a)
   => SingTy a -> SBV Bool -> m (S a') -> m (S a') -> m (S a')
-singIte ty a b c = withSymWord ty $ analyzerIte a b c
+singIte ty a b c = withSymWord ty $ withMergeableAnalyzer @m ty $ ite a b c
 
 evalLogicalOp
   :: Analyzer m
@@ -281,35 +281,37 @@ evalCore (MakeList ty i a) = withSymWord ty $ withSing ty $ do
     Nothing  -> throwErrorNoLoc $ UnhandledTerm
       "make-list currently requires a statically determined length"
 
--- error "TODO"
--- evalCore (ListMap tya tyb (Open vid _ expr) as) = withSymWord tya $ withSymWord tyb $ do
---   S _ as' <- eval as
---   bs <- bmapM listBound
---     (\val -> _sSbv <$> withVar vid (mkAVal' val) (eval expr))
---     as'
---   pure $ sansProv bs
+evalCore (ListMap tya tyb (Open vid _ expr) as)
+  = withSymWord tya $ withSymWord tyb $ withSing tya $ withSing tyb $
+    withMergeableAnalyzer @m (SList tyb) $ do
+  S _ as' <- eval as
+  bs <- bmapM listBound
+    (\val -> _sSbv <$> withVar vid (mkAVal' val) (eval expr))
+    as'
+  pure $ sansProv bs
 
--- error "TODO"
--- evalCore (ListFilter tya (Open vid _ f) as) = withSymWord tya $ do
---   S _ as' <- eval as
---   let bfilterM = bfoldrM listBound
---         (\sbva svblst -> do
---           S _ x' <- withVar vid (mkAVal' sbva) (eval f)
---           pure $ ite x' (sbva .: svblst) svblst)
---         (literal [])
---   sansProv <$> bfilterM as'
+evalCore (ListFilter tya (Open vid _ f) as)
+  = withSymWord tya $ withMergeableAnalyzer @m (SList tya) $ do
+  S _ as' <- eval as
+  let bfilterM = bfoldrM listBound
+        (\sbva svblst -> do
+          S _ x' <- withVar vid (mkAVal' sbva) (eval f)
+          pure $ ite x' (sbva .: svblst) svblst)
+        (literal [])
+  sansProv <$> bfilterM as'
 
--- error "TODO"
--- evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs) = withSymWord tya $ withSymWord tyb $ do
---   S _ a'  <- eval a
---   S _ bs' <- eval bs
---   result <- bfoldrM listBound
---     (\sbvb sbva -> fmap _sSbv $
---       withVar vid1 (mkAVal' sbvb) $
---         withVar vid2 (mkAVal' sbva) $
---           eval f)
---     a' bs'
---   pure $ sansProv result
+evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
+  = withSymWord tya $ withSymWord tyb $ withSing tyb $
+    withMergeableAnalyzer @m tya $ do
+  S _ a'  <- eval a
+  S _ bs' <- eval bs
+  result <- bfoldrM listBound
+    (\sbvb sbva -> fmap _sSbv $
+      withVar vid1 (mkAVal' sbvb) $
+        withVar vid2 (mkAVal' sbva) $
+          eval f)
+    a' bs'
+  pure $ sansProv result
 
 evalCore (AndQ tya (Open vid1 _ f) (Open vid2 _ g) a) = do
   S _ a' <- withSing tya $ eval a
@@ -428,7 +430,8 @@ evalObjAt objTy@(SObject schema) colNameT obj retType
     let go :: SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
         go SNil _ = throwErrorNoLoc "TODO (evalObjAt couldn't find field)"
         go (SCons sym colTy schema') obj'
-          = withSymWord (SObject schema') $ withSymWord colTy $ analyzerIte
+          = withSymWord (SObject schema') $ withSymWord colTy $
+            withMergeableAnalyzer @m retType $ ite
             (needColName .== literalS (Str (symbolVal sym)))
             (case singEq colTy retType of
               Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"

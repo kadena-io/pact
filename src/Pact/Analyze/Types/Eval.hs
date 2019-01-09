@@ -14,6 +14,8 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 module Pact.Analyze.Types.Eval where
 
 import           Control.Applicative          (ZipList (..))
@@ -70,7 +72,12 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
   getVar          :: VarId                 -> m (Maybe AVal)
   withVar         :: VarId -> AVal -> m a  -> m a
   markFailure     :: SBV Bool              -> m ()
-  analyzerIte     :: Mergeable a => SBV Bool -> m a -> m a -> m a
+  withMergeableAnalyzer
+    :: SingTy a
+    -> (( Mergeable (m (S (Concrete a)))
+        , Mergeable (m (SBV (Concrete a)))
+        ) => b)
+    -> b
 
 data AnalyzeEnv
   = AnalyzeEnv

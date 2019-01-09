@@ -71,7 +71,7 @@ instance Analyzer Analyze where
   getVar vid = view (scope . at vid)
   withVar vid val m = local (scope . at vid ?~ val) m
   markFailure b = succeeds %= (.&& sansProv (sNot b))
-  analyzerIte   = ite
+  withMergeableAnalyzer ty f = withSymWord ty f
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint b = modify' $ latticeState.lasConstraints %~ (.&& b)
@@ -258,8 +258,8 @@ readFields _tn _sRk _tid (SObject SNil) = pure (literalS (), Map.empty)
 readFields tn sRk tid (SObject (SCons sym fieldType subSchema)) = do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
-      cn = ColumnName fieldName
-      subObjTy = SObject subSchema
+      cn         = ColumnName fieldName
+      subObjTy   = SObject subSchema
   columnRead tn cn .= sTrue
   sDirty <- use $ cellWritten tn cn sRk
   av     <- readField tn cn sRk sDirty fieldType
