@@ -22,10 +22,12 @@ import qualified Data.SBV.List               as SBVL
 import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
                                               bzipWith, {- bmapM, bfoldrM -})
 import qualified Data.SBV.String             as SBVS
+import           Data.SBV.Tuple              (field1, field2)
 -- import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:)(Refl))
 import           Data.Typeable               (Typeable)
+import           GHC.TypeLits                (symbolVal)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
@@ -186,7 +188,7 @@ evalCore (DecAddTime time secs)            = evalDecAddTime time secs
 evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
-  = evalObjAt schema colNameT objT (error "TODO")
+  = evalObjAt schema colNameT objT (sing :: SingTy a)
 evalCore (LiteralObject ty _obj) = withSymWord ty $ pure $ error "TODO" -- literalS obj
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
 -- error "TODO"
@@ -411,46 +413,30 @@ relevantFields targetTy (Object (ConsOf key (Column vTy v) vals))
           Object (ConsOf key (Column vTy v) vals')
 
 evalObjAt
-  :: Analyzer m
-  => SingTy obj
+  :: forall a m schema.
+     Analyzer m
+  => SingTy ('TyObject schema)
   -> TermOf m 'TyStr
-  -> TermOf m obj
+  -> TermOf m ('TyObject schema)
   -> SingTy a
   -> m (S (Concrete a))
-evalObjAt _ _ _ _ = throwErrorNoLoc "TODO (evalObjAt)"
--- evalObjAt schema colNameT objT retType = do
---   obj <- eval objT
---   -- obj@(Object fields) <- eval objT
+evalObjAt objTy@(SObject schema) colNameT obj retType
+  = withSymWord retType $ withSing objTy $ do
+    needColName <- eval colNameT
+    S _ objVal  <- eval obj
 
---   -- Filter down to only fields which contain the type we're looking for
---   let correctTypeFields = relevantFields retType obj
+    let go :: SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
+        go SNil _ = throwErrorNoLoc "TODO (evalObjAt couldn't find field)"
+        go (SCons sym colTy schema') obj'
+          = withSymWord (SObject schema') $ withSymWord colTy $ analyzerIte
+            (needColName .== literalS (Str (symbolVal sym)))
+            (case singEq colTy retType of
+              Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
+              Just Refl -> pure $ field1 obj'
+            )
+            (go schema' (field2 obj'))
 
---   colName :: S Str <- eval colNameT
-
---   firstName:relevantFields' <- case correctTypeFields of
---     [] -> throwErrorNoLoc $ AtHasNoRelevantFields (EType retType) schema
---     _  -> pure correctTypeFields
-
---   let getObjVal fieldName = case _lookup fieldName _fields of
---         Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
-
---         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
---         Just (_fieldType, OpaqueVal)       -> throwErrorNoLoc OpaqueValEncountered
-
---   firstVal <- getObjVal firstName
-
---   -- Fold over each relevant field, building a sequence of `ite`s. We require
---   -- at least one matching field, ie firstVal. At first glance, this should
---   -- just be a `foldr1M`, but we want the type of accumulator and element to
---   -- differ, because elements are `String` `fieldName`s, while the accumulator
---   -- is an `SBV a`.
---   foldrM
---     (\fieldName rest -> do
---       val <- getObjVal fieldName
---       pure $ ite (colName .== literalS (Str (T.unpack fieldName))) val rest
---     )
---     firstVal
---     relevantFields'
+    sansProv <$> go schema objVal
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential (Existential ty prop) = do

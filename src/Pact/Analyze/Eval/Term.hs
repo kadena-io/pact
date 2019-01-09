@@ -30,7 +30,9 @@ import           Data.SBV                    (EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), -- SymWord,
                                               ite, (.<))
+import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.String             as SBV
+import           Data.SBV.Tuple              (mkPair)
 import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -251,20 +253,22 @@ evalETerm tm = snd <$> evalExistential tm
 
 readFields
   :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
-  -> Analyze (S (Object AConcrete ty), Map Text AVal)
-readFields _tn _sRk _tid (SObject SNil)
-  = pure (literalS $ Object NilOf, Map.empty)
-
-readFields tn sRk tid (SObject (SCons sym fieldType subObjTy)) = do
-  let fieldName = symbolVal sym
+  -> Analyze (S (ConcreteObj ty), Map Text AVal)
+readFields _tn _sRk _tid (SObject SNil) = pure (literalS (), Map.empty)
+readFields tn sRk tid (SObject (SCons sym fieldType subSchema)) = do
+  let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn = ColumnName fieldName
+      subObjTy = SObject subSchema
   columnRead tn cn .= sTrue
   sDirty <- use $ cellWritten tn cn sRk
   av     <- readField tn cn sRk sDirty fieldType
   tagAccessCell mtReads tid tFieldName av
-  (obj', avs) <- readFields tn sRk tid (SObject subObjTy)
-  pure (error "TODO" obj', Map.insert tFieldName av avs)
+  case av of
+    OpaqueVal -> error "TODO (readFields OpaqueVal)"
+    AVal _prov sval -> withSymWord fieldType $ withSymWord subObjTy $ do
+      (S _ obj', avs) <- readFields tn sRk tid subObjTy
+      pure (sansProv $ mkPair (SBVI.SBV sval) obj', Map.insert tFieldName av avs)
 
 readField
   :: TableName -> ColumnName -> S RowKey -> S Bool -> SingTy ty -> Analyze AVal
@@ -277,12 +281,12 @@ readField tn cn sRk sDirty ty
  --       sub-objects.
  --
 
-aValsOfObj :: SingTy ('TyObject ty) -> S (Object AConcrete ty) -> Map Text AVal
-aValsOfObj = error "TODO"
+aValsOfObj :: SingTy ('TyObject ty) -> S (ConcreteObj ty) -> Map Text AVal
+aValsOfObj _ _ = Map.empty -- error "TODO"
 
 writeFields
   :: Pact.WriteType -> TagId
-  -> TableName -> S RowKey -> S (Object AConcrete ty) -> SingTy ('TyObject ty)
+  -> TableName -> S RowKey -> S (ConcreteObj ty) -> SingTy ('TyObject ty)
   -> Analyze ()
 writeFields _ _ _ _ _ (SObject SNil) = pure ()
 
@@ -413,7 +417,7 @@ evalTerm = \case
 
     writeFields writeType tid tn sRk obj schema
 
-    let aValFields = aValsOfObj schema obj -- Map.empty -- error "TODO"
+    let aValFields = aValsOfObj schema obj
     applyInvariants tn aValFields $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
           fs = ZipList $ (\s -> fmap (_sSbv s .&&)) <$> invariants'

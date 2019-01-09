@@ -3,8 +3,13 @@
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
 module Pact.Analyze.Alloc
-  ( MonadAlloc (forAll, exists, free, singForAll, singExists, singFree)
+  ( MonadAlloc (singForAll, singExists, singFree)
+  , forAll, exists, free
   , Alloc
   , runAlloc
   ) where
@@ -26,17 +31,10 @@ import           Pact.Analyze.Types          (S, SingI(sing), SingTy, Concrete,
 -- | A restricted symbolic context in which only quantified variable allocation
 -- is permitted.
 class Monad m => MonadAlloc m where
-  forAll :: SingI a => m (S (Concrete a)) -- ^ universally quantified
-  exists :: SingI a => m (S (Concrete a)) -- ^ existentially quantified
-  free   :: SingI a => m (S (Concrete a)) -- ^ quantified per the context of sat vs prove
 
-  singForAll :: SingTy a -> m (S (Concrete a))
-  singExists :: SingTy a -> m (S (Concrete a))
-  singFree   :: SingTy a -> m (S (Concrete a))
-
-  forAll = singForAll sing
-  exists = singExists sing
-  free   = singFree sing
+  singForAll :: SingTy a -> m (S (Concrete a)) -- ^ universally quantified
+  singExists :: SingTy a -> m (S (Concrete a)) -- ^ existentially quantified
+  singFree   :: SingTy a -> m (S (Concrete a)) -- ^ quantified per the context of sat vs prove
 
   default singForAll
     :: (MonadTrans t, MonadAlloc m', m ~ t m')
@@ -52,6 +50,15 @@ class Monad m => MonadAlloc m where
     :: (MonadTrans t, MonadAlloc m', m ~ t m')
     => SingTy a -> m (S (Concrete a))
   singFree   = lift . singFree
+
+forAll :: forall a m. (MonadAlloc m, SingI a) => m (S (Concrete a))
+forAll = singForAll (sing @a)
+
+exists :: forall a m. (MonadAlloc m, SingI a) => m (S (Concrete a))
+exists = singExists (sing @a)
+
+free :: forall a m. (MonadAlloc m, SingI a) => m (S (Concrete a))
+free = singFree (sing @a)
 
 instance MonadAlloc m             => MonadAlloc (ExceptT e m)
 instance MonadAlloc m             => MonadAlloc (MaybeT m)

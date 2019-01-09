@@ -894,28 +894,28 @@ spec = describe "analyze" $ do
       expectPass code $ Valid $ PVar 1 "x" .=> Inj Success
       expectPass code $ Valid $ PNot (PVar 1 "x") .=> PNot (Inj Success)
 
---  describe "table-read.multiple-read" $ do
---    let code =
---          [text|
---            (defschema token-row
---              name:string
---              balance:integer)
---            (deftable tokens:{token-row})
+  describe "table-read.multiple-read" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer)
+            (deftable tokens:{token-row})
 
---            (defun test:bool ()
---              (insert tokens "stu" {"balance": 5, "name": "stu"})
---              (let ((stu-name    (at 'name    (read tokens "stu")))
---                    (stu-balance (at 'balance (read tokens "stu"))))
---                (enforce (= stu-name "stu") "name is stu")
---                (enforce (= stu-balance 5) "balance is 5")))
---          |]
---    expectPass code $ Valid $
---      PNot (PropSpecific (RowExists "tokens" "stu" Before))
---      .=> Success'
---    expectPass code $ Valid $
---      Success'
---      .=>
---      PropSpecific (RowExists "tokens" "stu" After)
+            (defun test:bool ()
+              (insert tokens "stu" {"balance": 5, "name": "stu"})
+              (let ((stu-name    (at 'name    (read tokens "stu")))
+                    (stu-balance (at 'balance (read tokens "stu"))))
+                (enforce (= stu-name "stu") "name is stu")
+                (enforce (= stu-balance 5) "balance is 5")))
+          |]
+    expectPass code $ Valid $
+      PNot (PropSpecific (RowExists "tokens" "stu" Before))
+      .=> Success'
+    expectPass code $ Valid $
+      Success'
+      .=>
+      PropSpecific (RowExists "tokens" "stu" After)
 
 --  describe "table-read.one-read" $ do
 --    let code =

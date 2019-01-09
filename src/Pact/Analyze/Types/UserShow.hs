@@ -53,3 +53,10 @@ instance UserShow a => UserShow (Map Text a) where
 instance UserShow a => UserShow [a] where
   userShowPrec _ l =
     "[" <> T.intercalate ", " (fmap (userShowPrec 0) l) <> "]"
+
+instance UserShow () where
+  userShowPrec _ _ = "()"
+
+instance (UserShow a, UserShow b) => UserShow (a, b) where
+  userShowPrec _ (a, b) = "(" <> userShow a <> ", " <> userShow b <> ")"
+

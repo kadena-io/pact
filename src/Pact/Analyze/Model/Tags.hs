@@ -11,6 +11,8 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE ViewPatterns        #-}
 
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
 -- | 'Symbolic' allocation of quantified variables for arguments and tags,
 -- for use prior to evaluation; and functions to saturate and show models from
 -- Z3 post-evaluation.
@@ -38,11 +40,11 @@ import qualified Pact.Types.Typecheck as TC
 import           Pact.Analyze.Alloc   (Alloc, free, singFree)
 import           Pact.Analyze.Types
 
-allocS :: SingI a => Alloc (S (Concrete a))
-allocS = free
+allocS :: forall a. SingI a => Alloc (S (Concrete a))
+allocS = free @a
 
-allocSbv :: SingI a => Alloc (SBV (Concrete a))
-allocSbv = _sSbv <$> allocS
+allocSbv :: forall a. SingI a => Alloc (SBV (Concrete a))
+allocSbv = _sSbv <$> allocS @a
 
 allocSchema :: SingTy ('TyObject m) -> Alloc UObject
 allocSchema (SObject tys) = UObject <$> allocSchema' tys where
@@ -108,9 +110,9 @@ allocModelTags argsMap locatedTm graph = ModelTags
       -> Alloc (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
       for (toListOf (traverse.p) events) $ \(ESchema schema, Located info tid) -> do
-        srk <- allocS
+        srk <- allocS @TyRowKey
         obj <- allocSchema schema
-        suc <- allocSbv
+        suc <- allocSbv @'TyBool
         pure (tid, Located info (Access srk obj suc))
 
     allocReads :: Alloc (Map TagId (Located Access))
@@ -128,12 +130,13 @@ allocModelTags argsMap locatedTm graph = ModelTags
     allocAsserts :: Alloc (Map TagId (Located (SBV Bool)))
     allocAsserts = fmap Map.fromList $
       for (toListOf (traverse._TraceAssert._2) events) $ \(Located info tid) ->
-        (tid,) . Located info <$> allocSbv
+        (tid,) . Located info <$> allocSbv @'TyBool
 
     allocAuths :: Alloc (Map TagId (Located Authorization))
     allocAuths = fmap Map.fromList $
       for (toListOf (traverse._TraceAuth._2) events) $ \(Located info tid) ->
-        (tid,) . Located info <$> (Authorization <$> allocS <*> allocSbv)
+        (tid,) . Located info <$>
+          (Authorization <$> allocS @'TyKeySet <*> allocSbv @'TyBool)
 
     allocResult :: Alloc (TagId, Located TVal)
     allocResult = do
@@ -148,7 +151,7 @@ allocModelTags argsMap locatedTm graph = ModelTags
     allocPaths = do
       let rootPath = _egRootPath graph
           paths    = rootPath : toListOf (traverse._TraceSubpathStart) events
-      Map.fromList <$> for paths (\p -> (p,) <$> allocSbv)
+      Map.fromList <$> for paths (\p -> (p,) <$> allocSbv @'TyBool)
 
     allocReturns :: Alloc (Map TagId TVal)
     allocReturns = fmap Map.fromList $

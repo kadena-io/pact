@@ -345,13 +345,13 @@ unionPreferring = Map.union
 
 maybeTranslateUserType :: Pact.UserType -> Maybe QType
 maybeTranslateUserType (Pact.Schema _ _ [] _) = Just $ EType $ SObject SNil
-maybeTranslateUserType (Pact.Schema a b (Pact.Arg _ ty _:tys) c)
+maybeTranslateUserType (Pact.Schema a b (Pact.Arg name ty _:tys) c)
   = case maybeTranslateUserType (Pact.Schema a b tys c) of
     Just (EType (SObject tys')) -> case maybeTranslateType ty of
       Nothing -> Nothing
-      Just (EType ty') -> withSing ty' $
-        -- error "TODO"
-        Just $ EType $ SObject $ SCons (SSymbol @"TODO") ty' tys'
+      Just (EType ty') -> withSing ty' $ case someSymbolVal (T.unpack name) of
+        SomeSymbol (_ :: Proxy sym) ->
+          Just $ EType $ SObject $ SCons (SSymbol @sym) ty' tys'
     _ -> Nothing
 
 maybeTranslateUserType' :: Pact.UserType -> Maybe EType

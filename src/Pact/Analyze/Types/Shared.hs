@@ -19,7 +19,6 @@
 
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE PolyKinds                  #-}
-{-# LANGUAGE TypeFamilyDependencies     #-}
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
@@ -692,7 +691,7 @@ instance HasKind KeySet where
 instance SMTValue KeySet where
   sexprToVal = fmap KeySet . sexprToVal
 
-type family Concrete (a :: Ty) = r | r -> a where
+type family Concrete (a :: Ty) where -- = r | r -> a where
   Concrete 'TyInteger     = Integer
   Concrete 'TyBool        = Bool
   Concrete 'TyStr         = Str
@@ -701,7 +700,11 @@ type family Concrete (a :: Ty) = r | r -> a where
   Concrete 'TyKeySet      = KeySet
   Concrete 'TyAny         = Any
   Concrete ('TyList a)    = [Concrete a]
-  Concrete ('TyObject ty) = Object AConcrete ty
+  Concrete ('TyObject ty) = ConcreteObj ty
+
+type family ConcreteObj (a :: [(Symbol, Ty)]) where -- = r | r -> a where
+  ConcreteObj '[]               = ()
+  ConcreteObj ('(k', v) ': kvs) = (Concrete v, ConcreteObj kvs)
 
 newtype AConcrete ty = AConcrete (Concrete ty)
 
@@ -741,7 +744,7 @@ instance
 
 -- newtype ASymbolic ty = ASymbolic (S (Concrete ty))
 
-type family ConcreteList (a :: [Ty]) = r | r -> a where
+type family ConcreteList (a :: [Ty]) where
   ConcreteList '[]         = '[]
   ConcreteList (ty ': tys) = Concrete ty ': ConcreteList tys
 
@@ -781,15 +784,17 @@ withEq = withDict . singMkEq
 
     singMkEq :: SingTy a -> Dict (Eq (Concrete a))
     singMkEq = \case
-      SInteger  -> Dict
-      SBool     -> Dict
-      SStr      -> Dict
-      STime     -> Dict
-      SDecimal  -> Dict
-      SKeySet   -> Dict
-      SAny      -> Dict
-      SList ty' -> withEq ty' Dict
-      SObject _ -> Dict
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SKeySet      -> Dict
+      SAny         -> Dict
+      SList ty'    -> withEq ty' Dict
+      SObject SNil -> Dict
+      SObject (SCons _ ty' tys)
+        -> withEq ty' $ withDict (singMkEq (SObject tys)) Dict
 
 withShow :: SingTy a -> (Show (Concrete a) => b) -> b
 withShow = withDict . singMkShow
@@ -797,15 +802,17 @@ withShow = withDict . singMkShow
 
     singMkShow :: SingTy a -> Dict (Show (Concrete a))
     singMkShow = \case
-      SInteger  -> Dict
-      SBool     -> Dict
-      SStr      -> Dict
-      STime     -> Dict
-      SDecimal  -> Dict
-      SKeySet   -> Dict
-      SAny      -> Dict
-      SList ty' -> withShow ty' Dict
-      SObject _ -> Dict
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SKeySet      -> Dict
+      SAny         -> Dict
+      SList ty'    -> withShow ty' Dict
+      SObject SNil -> Dict
+      SObject (SCons _ ty' tys)
+        -> withShow ty' $ withDict (singMkShow (SObject tys)) Dict
 
 withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
 withUserShow = withDict . singMkUserShow
@@ -813,15 +820,17 @@ withUserShow = withDict . singMkUserShow
 
     singMkUserShow :: SingTy a -> Dict (UserShow (Concrete a))
     singMkUserShow = \case
-      SInteger  -> Dict
-      SBool     -> Dict
-      SStr      -> Dict
-      STime     -> Dict
-      SDecimal  -> Dict
-      SKeySet   -> Dict
-      SAny      -> Dict
-      SList ty' -> withUserShow ty' Dict
-      SObject _ -> Dict
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SKeySet      -> Dict
+      SAny         -> Dict
+      SList ty'    -> withUserShow ty' Dict
+      SObject SNil -> Dict
+      SObject (SCons _ ty' tys)
+        -> withUserShow ty' $ withDict (singMkUserShow (SObject tys)) Dict
 
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable = withDict . singMkTypeable
@@ -829,19 +838,24 @@ withTypeable = withDict . singMkTypeable
 
     singMkTypeable :: SingTy a -> Dict (Typeable a, Typeable (Concrete a))
     singMkTypeable = \case
-      SInteger    -> Dict
-      SBool       -> Dict
-      SStr        -> Dict
-      STime       -> Dict
-      SDecimal    -> Dict
-      SKeySet     -> Dict
-      SAny        -> Dict
-      SList   ty' -> withTypeable ty' Dict
-      SObject tys -> withTypeableListDict tys Dict
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SKeySet      -> Dict
+      SAny         -> Dict
+      SList   ty'  -> withTypeable ty' Dict
+      SObject SNil -> Dict
+      SObject (SCons _ ty' tys)
+        -> withTypeable ty' $ withTypeableListDict tys $ Dict
 
-withTypeableListDict :: SingList tys -> (Typeable tys => b) -> b
-withTypeableListDict SNil f              = f
-withTypeableListDict (SCons _k ty tys) f = withTypeableListDict tys $ withTypeable ty f
+    withTypeableListDict
+      :: SingList tys -> ((Typeable tys, Typeable (ConcreteObj tys)) => b) -> b
+    withTypeableListDict SNil f
+      = f
+    withTypeableListDict (SCons _k ty tys) f
+      = withTypeableListDict tys $ withTypeable ty f
 
 withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = withDict . singMkSMTValue
@@ -857,12 +871,9 @@ withSMTValue = withDict . singMkSMTValue
       SKeySet   -> Dict
       SAny      -> Dict
       SList ty' -> withSMTValue ty' $ withTypeable ty' Dict
-      SObject tys -> withSMTValueListDict tys Dict
-
-    withSMTValueListDict :: SingList tys -> (SMTValue (Object AConcrete tys) => b) -> b
-    withSMTValueListDict SNil f = f
-    withSMTValueListDict (SCons _k ty tys) f
-      = withTypeable ty $ withSMTValue ty $ withSMTValueListDict tys f
+      SObject SNil -> Dict
+      SObject (SCons _ ty' tys)
+        -> withSMTValue ty' $ withDict (singMkSMTValue (SObject tys)) Dict
 
 withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
 withHasKind = withDict . singMkHasKind
@@ -878,12 +889,9 @@ withHasKind = withDict . singMkHasKind
       SKeySet   -> Dict
       SAny      -> Dict
       SList ty' -> withHasKind ty' $ withTypeable ty' Dict
-      SObject tys -> withHasKindListDict tys Dict
-
-    withHasKindListDict :: SingList tys -> (HasKind (Object AConcrete tys) => b) -> b
-    withHasKindListDict SNil f = f
-    withHasKindListDict (SCons _k ty tys) f
-      = withTypeable ty $ withHasKind ty $ withHasKindListDict tys f
+      SObject SNil -> Dict
+      SObject (SCons _ ty' tys)
+        -> withHasKind ty' $ withDict (singMkHasKind (SObject tys)) Dict
 
 instance SMTValue (Object AConcrete '[]) where
   sexprToVal _ = Just $ Object NilOf
@@ -913,13 +921,9 @@ withSymWord = withDict . singMkSymWord
       SKeySet     -> Dict
       SAny        -> Dict
       SList ty'   -> withSymWord ty' Dict
-      SObject tys -> withSymWordListDict tys Dict
-
-withSymWordListDict :: SingList tys -> (SymWord (Object AConcrete tys) => b) -> b
-withSymWordListDict SNil f = f
-withSymWordListDict (SCons _k ty tys) f
-  = withTypeable ty $ withTypeableListDict tys $ withSymWord ty $
-    withSymWordListDict tys f
+      SObject SNil -> Dict
+      SObject (SCons _ ty' tys)
+        -> withSymWord ty' $ withDict (singMkSymWord (SObject tys)) Dict
 
 instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
   compare _ _ = EQ
