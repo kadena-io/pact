@@ -26,8 +26,8 @@ import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
 import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
-import           Pact.Analyze.Types.Eval  (aeDecimals, aeKeySets, mkAnalyzeEnv,
-                                           mkInitialAnalyzeState)
+import           Pact.Analyze.Types.Eval  (aeTxDecimals, aeTxKeySets,
+                                           mkAnalyzeEnv, mkInitialAnalyzeState)
 import           Pact.Analyze.Util        (dummyInfo)
 
 import           Pact.Eval                (reduce)
@@ -107,13 +107,13 @@ analyzeEval' etm ty (GenState _ keysets decimals) = do
   let writeArray' k v env = writeArray env k v
 
       -- Update the analysis env with keysets
-      aEnv' = foldr (\(k, v) -> aeKeySets
+      aEnv' = foldr (\(k, v) -> aeTxKeySets
           %~ writeArray' (literal (KeySetName (T.pack k))) (literal v))
         aEnv (Map.toList (fmap snd keysets))
 
       -- ... and decimals
       aEnv'' = foldr
-          (\(k, v) -> aeDecimals %~ writeArray' (literal (Str k)) (literal v))
+          (\(k, v) -> aeTxDecimals %~ writeArray' (literal (Str k)) (literal v))
         aEnv' (Map.toList decimals)
 
   -- evaluate via analyze

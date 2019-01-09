@@ -470,7 +470,7 @@ evalTerm = \case
 
   NameAuthorized tid str -> do
     ksn <- symKsName <$> evalTerm str
-    ks <- readKeySet ksn -- TODO: use registry
+    ks <- resolveKeySet ksn
     authorized <- nameAuthorized ksn
     tagAuth tid ks authorized
     pure authorized

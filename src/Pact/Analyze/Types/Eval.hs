@@ -81,15 +81,15 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope     :: !(Map VarId AVal)              -- used as a stack
-    , _aeKeySets   :: !(SFunArray KeySetName KeySet) -- read-only
-    , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
-    , _aeDecimals  :: !(SFunArray Str Decimal)    -- read-only
-    , _aeIntegers  :: !(SFunArray Str Integer)    -- read-only
-    , _invariants  :: !(TableMap [Located (Invariant 'TyBool)])
-    , _aeColumnIds :: !(TableMap (Map Text VarId))
-    , _aeModelTags :: !(ModelTags 'Symbolic)
-    , _aeInfo      :: !Info
+    { _aeScope      :: !(Map VarId AVal)              -- used as a stack
+    , _aeTxKeySets  :: !(SFunArray KeySetName KeySet) -- read-only
+    , _aeKsAuths    :: !(SFunArray KeySet Bool)       -- read-only
+    , _aeTxDecimals :: !(SFunArray Str Decimal)       -- read-only
+    , _aeTxIntegers :: !(SFunArray Str Integer)       -- read-only
+    , _invariants   :: !(TableMap [Located (Invariant 'TyBool)])
+    , _aeColumnIds  :: !(TableMap (Map Text VarId))
+    , _aeModelTags  :: !(ModelTags 'Symbolic)
+    , _aeInfo       :: !Info
     }
 
 instance Show AnalyzeEnv where
@@ -97,13 +97,13 @@ instance Show AnalyzeEnv where
     $ showString "AnalyzeEnv "
     . showsPrec 11 _aeScope
     . showString " "
-    . showsPrec 11 _aeKeySets
+    . showsPrec 11 _aeTxKeySets
     . showString " "
     . showsPrec 11 _aeKsAuths
     . showString " "
-    . showsPrec 11 _aeDecimals
+    . showsPrec 11 _aeTxDecimals
     . showString " "
-    . showsPrec 11 _aeIntegers
+    . showsPrec 11 _aeTxIntegers
     . showString " "
     -- . showsPrec 11 _invariants TODO
     . showsPrec 11 _aeColumnIds
@@ -119,10 +119,10 @@ mkAnalyzeEnv
   -> Info
   -> Maybe AnalyzeEnv
 mkAnalyzeEnv tables args tags info = do
-  let keySets'    = mkFreeArray "envKeySets"
+  let keySets     = mkFreeArray "txKeySets"
       keySetAuths = mkFreeArray "keySetAuths"
-      decimals    = mkFreeArray "envDecimals"
-      integers    = mkFreeArray "envIntegers"
+      decimals    = mkFreeArray "txDecimals"
+      integers    = mkFreeArray "txIntegers"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -136,7 +136,7 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args keySets' keySetAuths decimals integers invariants'
+  pure $ AnalyzeEnv args keySets keySetAuths decimals integers invariants'
     columnIds' tags info
 
 mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
@@ -397,17 +397,17 @@ class HasAnalyzeEnv a where
   scope :: Lens' a (Map VarId AVal)
   scope = analyzeEnv.aeScope
 
-  keySets :: Lens' a (SFunArray KeySetName KeySet)
-  keySets = analyzeEnv.aeKeySets
+  txKeySets :: Lens' a (SFunArray KeySetName KeySet)
+  txKeySets = analyzeEnv.aeTxKeySets
 
   ksAuths :: Lens' a (SFunArray KeySet Bool)
   ksAuths = analyzeEnv.aeKsAuths
 
-  envDecimals :: Lens' a (SFunArray Str Decimal)
-  envDecimals = analyzeEnv.aeDecimals
+  txDecimals :: Lens' a (SFunArray Str Decimal)
+  txDecimals = analyzeEnv.aeTxDecimals
 
-  envIntegers :: Lens' a (SFunArray Str Integer)
-  envIntegers = analyzeEnv.aeIntegers
+  txIntegers :: Lens' a (SFunArray Str Integer)
+  txIntegers = analyzeEnv.aeTxIntegers
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
@@ -571,33 +571,53 @@ symArrayAt (S _ symKey) = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
+-- | Resolve a named keyset from the keyset registry (not tx metadata)
+resolveKeySet
+  :: (MonadReader r m, HasAnalyzeEnv r)
+  => S KeySetName
+  -> m (S KeySet)
+--
+-- TODO change to use new store
+--
+resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
+  readArray <$> view txKeySets <*> pure (_sSbv sKsn)
+
 nameAuthorized
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S KeySetName
   -> m (S Bool)
 nameAuthorized sKsn = fmap sansProv $
-  readArray <$> view ksAuths <*> (_sSbv <$> readKeySet sKsn) -- TODO: use registry
+  readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
 
--- | Reads a named keyset from tx metadata
+-- | Reads a named keyset from tx metadata (not the keyset registry)
 readKeySet
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S KeySetName
   -> m (S KeySet)
-readKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
-  readArray <$> view keySets <*> pure (_sSbv sKsn)
+--
+-- TODO: add provenance for tx metadata
+--
+readKeySet sKsn = fmap sansProv $
+  readArray <$> view txKeySets <*> pure (_sSbv sKsn)
 
 -- | Reads a named decimal from tx metadata
 readDecimal
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S Str
   -> m (S Decimal)
+--
+-- TODO: add provenance for tx metadata
+--
 readDecimal sDn = fmap sansProv $
-  readArray <$> view envDecimals <*> pure (_sSbv sDn)
+  readArray <$> view txDecimals <*> pure (_sSbv sDn)
 
 -- | Reads a named integer from tx metadata
 readInteger
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S Str
   -> m (S Integer)
+--
+-- TODO: add provenance for tx metadata
+--
 readInteger sSn = fmap sansProv $
-  readArray <$> view envIntegers <*> pure (_sSbv sSn)
+  readArray <$> view txIntegers <*> pure (_sSbv sSn)
