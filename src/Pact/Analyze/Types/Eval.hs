@@ -539,17 +539,17 @@ cellWritten
 cellWritten tn cn sRk = latticeState.lasCellsWritten.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
-type CellLens a b
-  =  Lens' a CellValues
+typedCell
+  :: HasCallStack
+  => SingTy b
+  -> Lens' a CellValues
   -> TableName
   -> ColumnName
   -> S RowKey
   -> S Bool
-  -> Lens' (AnalyzeState a) (S b)
-
-typedCell :: HasCallStack => SingTy b -> CellLens a (Concrete b)
-typedCell ty cellValues tn cn sRk sDirty =
-    latticeState
+  -> Lens' (AnalyzeState a) (S (Concrete b))
+typedCell ty cellValues tn cn sRk sDirty
+  = latticeState
   . lasExtra
   . cellValues
   . cvTableCells
