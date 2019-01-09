@@ -26,8 +26,9 @@ import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
 import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
-import           Pact.Analyze.Types.Eval  (aeTxDecimals, aeTxKeySets,
-                                           mkAnalyzeEnv, mkInitialAnalyzeState)
+import           Pact.Analyze.Types.Eval  (aeTxDecimals, aeTxIntegers,
+                                           aeTxKeySets, mkAnalyzeEnv,
+                                           mkInitialAnalyzeState)
 import           Pact.Analyze.Util        (dummyInfo)
 
 import           Pact.Eval                (reduce)
@@ -90,7 +91,7 @@ analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
 analyzeEval etm@(Existential ty _tm) gs = analyzeEval' etm ty gs
 
 analyzeEval' :: ETerm -> SingTy a -> GenState -> IO (Either String ETerm)
-analyzeEval' etm ty (GenState _ keysets decimals) = do
+analyzeEval' etm ty (GenState _ keysets decimals integers) = do
   -- analyze setup
   let tables = []
       args   = Map.empty
@@ -106,19 +107,22 @@ analyzeEval' etm ty (GenState _ keysets decimals) = do
   -- TODO: also write aeKsAuths
   let writeArray' k v env = writeArray env k v
 
-      -- Update the analysis env with keysets
-      aEnv' = foldr (\(k, v) -> aeTxKeySets
-          %~ writeArray' (literal (KeySetName (T.pack k))) (literal v))
-        aEnv (Map.toList (fmap snd keysets))
+      withTxKeySets = flip (foldr
+          (\(k, v) -> aeTxKeySets
+            %~ writeArray' (literal (KeySetName (T.pack k))) (literal v)))
+        (Map.toList (fmap snd keysets))
 
-      -- ... and decimals
-      aEnv'' = foldr
-          (\(k, v) -> aeTxDecimals %~ writeArray' (literal (Str k)) (literal v))
-        aEnv' (Map.toList decimals)
+      withDecimals = flip (foldr
+          (\(k, v) -> aeTxDecimals %~ writeArray' (literal (Str k)) (literal v)))
+        (Map.toList decimals)
+
+      withIntegers = flip (foldr
+          (\(k, v) -> aeTxIntegers %~ writeArray' (literal (Str k)) (literal v)))
+        (Map.toList integers)
 
   -- evaluate via analyze
   (analyzeVal, las)
-    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv'' state0 of
+    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) (aEnv & withTxKeySets & withDecimals & withIntegers) state0 of
       Right (analyzeVal, las, ()) -> pure (analyzeVal, las)
       Left err                    -> error $ describeAnalyzeFailure err
 
@@ -135,7 +139,7 @@ analyzeEval' etm ty (GenState _ keysets decimals) = do
 -- in the generated term. This generates an environment with just keysets and
 -- decimals.
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
-mkEvalEnv (GenState _ keysets decimals) = do
+mkEvalEnv (GenState _ keysets decimals integers) = do
   evalEnv <- liftIO initPureEvalEnv
   let keysets' = HM.fromList
         $ fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
@@ -143,5 +147,8 @@ mkEvalEnv (GenState _ keysets decimals) = do
       decimals' = HM.fromList
         $ fmap (\(k, v) -> (T.pack k, toJSON (show (toPact decimalIso v))))
         $ Map.toList decimals
-      body = Object $ keysets' `HM.union` decimals'
+      integers' = HM.fromList
+        $ fmap (\(k, v) -> (T.pack k, toJSON v))
+        $ Map.toList integers
+      body = Object $ HM.unions [keysets', decimals', integers']
   pure $ evalEnv & eeMsgBody .~ body

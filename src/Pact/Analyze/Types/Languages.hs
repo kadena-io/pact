@@ -1195,7 +1195,7 @@ data Term (a :: Ty) where
   ReadDecimal     :: Term 'TyStr -> Term 'TyDecimal
   ReadInteger     :: Term 'TyStr -> Term 'TyInteger
 
-  -- TODO: ReadInteger, ReadMsg
+  -- TODO: ReadMsg
 
   -- Keyset access
   KsAuthorized    :: TagId -> Term 'TyKeySet -> Term 'TyBool

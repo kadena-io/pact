@@ -51,15 +51,16 @@ data GenEnv = GenEnv
 
 data GenState = GenState
   { _idGen         :: !TagId
-  , _namedKeysets  :: !(Map.Map String (Pact.KeySet, KeySet))
-  , _namedDecimals :: !(Map.Map String Decimal)
+  , _txKeySets  :: !(Map.Map String (Pact.KeySet, KeySet))
+  , _txDecimals :: !(Map.Map String Decimal)
+  , _txIntegers :: !(Map.Map String Integer)
   } deriving Show
 
 makeLenses ''GenEnv
 makeLenses ''GenState
 
 emptyGenState :: GenState
-emptyGenState = GenState 0 Map.empty Map.empty
+emptyGenState = GenState 0 Map.empty Map.empty Map.empty
 
 -- Explicitly shrink the size parameter to generate smaller terms.
 scale :: MonadGen m => Size -> m a -> m a
@@ -357,7 +358,7 @@ genTerm size = scale 2 $ Gen.choice [genCore size, genTermSpecific size]
 genTermSpecific
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => BoundedType -> m ETerm
-genTermSpecific size@BoundedInt{} = Gen.choice
+genTermSpecific size@(BoundedInt len) = Gen.choice
   [ do
       base      <- Gen.int    (Range.linear 2 16)
       formatted <- Gen.string (Range.exponential 1 128) (genBaseChar base)
@@ -367,6 +368,7 @@ genTermSpecific size@BoundedInt{} = Gen.choice
   , do
       formatted <- Gen.string (Range.exponential 1 128) (genBaseChar 10)
       pure $ Existential SInteger $ CoreTerm $ StrToInt $ Lit' $ Str formatted
+  , Existential SInteger . ReadInteger . StrLit <$> genIntegerName len
   , genTermSpecific' size
   ]
 genTermSpecific BoundedBool       = Gen.choice
@@ -471,6 +473,17 @@ genTagId = do
   idGen %= succ
   use idGen
 
+--
+-- TODO: in these gen* functions, consider instituing a chance to fail to
+-- update the appropriate map; this would generate test cases where the user
+-- performs e.g. (read-integer "foo") when the tx metadata does not contain the
+-- requested key. it would be nice if we knew that concrete and symbolic
+-- evaluators coincided here. one challenge is that there is no way to
+-- currently tell the symbolic evaluator that we *know* the tx environment does
+-- not have a certain key -- it assumes the key exists, and, if it wasn't
+-- supplied a priori, the value for that key will simply be /free/.
+--
+
 genKeySetName
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
   => m String
@@ -480,7 +493,7 @@ genKeySetName = do
   keysets   <- view envKeysets
   keyset    <- Gen.element keysets
   let k = show nat
-  namedKeysets . at k ?= keyset
+  txKeySets . at k ?= keyset
   pure k
 
 genDecimalName
@@ -491,7 +504,18 @@ genDecimalName size = do
   TagId nat <- use idGen
   d         <- genDecimal size
   let k = show nat
-  namedDecimals . at k ?= d
+  txDecimals . at k ?= d
+  pure k
+
+genIntegerName
+  :: (MonadGen m, MonadState GenState m)
+  => NumBound -> m String
+genIntegerName size = do
+  idGen %= succ
+  TagId nat <- use idGen
+  i         <- genInteger size
+  let k = show nat
+  txIntegers . at k ?= i
   pure k
 
 genNatural :: MonadGen m => Range Natural -> m Natural
