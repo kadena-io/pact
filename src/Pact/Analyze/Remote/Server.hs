@@ -1,17 +1,13 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types        #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE TypeOperators     #-}
 
 -- | HTTP Server for GHCJS to use verification from the browser (where we can't
 -- run sbv).
 module Pact.Analyze.Remote.Server
-  ( runServer
-  , v1App
-  , verify
-  , verifyHandler
+  ( verifyHandler
   , runServantServer
   ) where
 
@@ -33,9 +29,6 @@ import qualified Data.Text                  as T
 import           Data.Void                  (Void)
 import           Network.Wai.Handler.Warp   (run)
 import           Servant
-import           Snap.Core                  (Snap)
-import qualified Snap.Core                  as Snap
-import qualified Snap.Http.Server           as Snap
 import qualified Text.Megaparsec            as MP
 import qualified Text.Megaparsec.Char       as MP
 
@@ -55,42 +48,11 @@ import           Pact.Types.Term           (Module(_mName, _mCode),
 
 type VerifyAPI = "verify" :> ReqBody '[JSON] Request :> Post '[JSON] Response
 
--- | Convenience function for launching a verification server.
-runServer :: Snap.Config Snap a -> IO ()
-runServer cfg = Snap.httpServe cfg v1App
+verifyAPI :: Proxy VerifyAPI
+verifyAPI = Proxy
 
 runServantServer :: Int -> IO ()
-runServantServer port = run port $ serve (Proxy :: Proxy VerifyAPI) verifyHandler
-
--- | A Snap verification app for mounting in another app, or to be served.
-v1App :: Snap ()
-v1App = Snap.route
-  [ ("verify", Snap.method Snap.POST verify)
-  ]
-
--- | This method only returns a 4xx client error when the request can't be
--- validated. If we can produce a 'ValidRequest' then we will return with a
--- 200, containing the message that should be displayed in the client's REPL,
--- whether verification actually ends up succeeding or not.
-verify :: Snap ()
-verify = do
-  payload <- Snap.readRequestBody $ 1024 * 1024 -- max 1MiB
-  let payload' = A.eitherDecode payload
-  eValidReq <- case validateRequest <$> payload' of
-    Left str -> pure $ Left (ClientError str)
-    Right eValidReq' -> liftIO $ runExceptT eValidReq'
-
-  case eValidReq of
-    Left clientErr -> do
-      Snap.modifyResponse $ Snap.setResponseCode 400
-      Snap.modifyResponse $ Snap.setHeader "Content-Type" "application/json"
-      Snap.writeLBS $ A.encode clientErr
-
-    Right validReq -> do
-      outputLines <- liftIO $ runVerification validReq
-      Snap.modifyResponse $ Snap.setResponseCode 200
-      Snap.modifyResponse $ Snap.setHeader "Content-Type" "application/json"
-      Snap.writeLBS $ A.encode outputLines
+runServantServer port = run port $ serve verifyAPI verifyHandler
 
 verifyHandler :: Request -> Handler Response
 verifyHandler req = do

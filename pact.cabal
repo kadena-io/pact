@@ -182,9 +182,6 @@ library
       , safe-exceptions >= 0.1.5.0 && < 0.2
       , sbv >= 7.9 && < 7.10
       , servant-server
-      -- , servant-snap
-      , snap-core
-      , snap-server
       , statistics >= 0.13.3 && < 0.15
       , wai-cors
       , warp
@@ -268,7 +265,6 @@ test-suite hspec
       , crypto-api
       , http-client
       , wreq
-      , snap-server
       , servant-client
     other-modules:
         DocgenSpec
