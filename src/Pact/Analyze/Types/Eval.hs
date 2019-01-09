@@ -81,21 +81,24 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope      :: !(Map VarId AVal)              -- used as a stack
-    , _aeKsAuths    :: !(SFunArray KeySet Bool)       -- read-only
-    , _aeTxKeySets  :: !(SFunArray KeySetName KeySet) -- read-only
-    , _aeTxDecimals :: !(SFunArray Str Decimal)       -- read-only
-    , _aeTxIntegers :: !(SFunArray Str Integer)       -- read-only
-    , _invariants   :: !(TableMap [Located (Invariant 'TyBool)])
-    , _aeColumnIds  :: !(TableMap (Map Text VarId))
-    , _aeModelTags  :: !(ModelTags 'Symbolic)
-    , _aeInfo       :: !Info
+    { _aeScope           :: !(Map VarId AVal)              -- used as a stack
+    , _aeRegistryKeySets :: !(SFunArray KeySetName KeySet) -- read-only
+    , _aeKsAuths         :: !(SFunArray KeySet Bool)       -- read-only
+    , _aeTxKeySets       :: !(SFunArray KeySetName KeySet) -- read-only
+    , _aeTxDecimals      :: !(SFunArray Str Decimal)       -- read-only
+    , _aeTxIntegers      :: !(SFunArray Str Integer)       -- read-only
+    , _invariants        :: !(TableMap [Located (Invariant 'TyBool)])
+    , _aeColumnIds       :: !(TableMap (Map Text VarId))
+    , _aeModelTags       :: !(ModelTags 'Symbolic)
+    , _aeInfo            :: !Info
     }
 
 instance Show AnalyzeEnv where
   showsPrec p AnalyzeEnv{..} = showParen (p > 10)
     $ showString "AnalyzeEnv "
     . showsPrec 11 _aeScope
+    . showString " "
+    . showsPrec 11 _aeRegistryKeySets
     . showString " "
     . showsPrec 11 _aeKsAuths
     . showString " "
@@ -119,10 +122,11 @@ mkAnalyzeEnv
   -> Info
   -> Maybe AnalyzeEnv
 mkAnalyzeEnv tables args tags info = do
-  let keySets     = mkFreeArray "txKeySets"
-      keySetAuths = mkFreeArray "keySetAuths"
-      decimals    = mkFreeArray "txDecimals"
-      integers    = mkFreeArray "txIntegers"
+  let registryKeySets = mkFreeArray "registryKeySets"
+      keySetAuths     = mkFreeArray "keySetAuths"
+      txKeySets       = mkFreeArray "txKeySets"
+      txDecimals      = mkFreeArray "txDecimals"
+      txIntegers      = mkFreeArray "txIntegers"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -136,7 +140,7 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args keySetAuths keySets decimals integers invariants'
+  pure $ AnalyzeEnv args registryKeySets keySetAuths txKeySets txDecimals txIntegers invariants'
     columnIds' tags info
 
 mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
@@ -397,11 +401,14 @@ class HasAnalyzeEnv a where
   scope :: Lens' a (Map VarId AVal)
   scope = analyzeEnv.aeScope
 
-  txKeySets :: Lens' a (SFunArray KeySetName KeySet)
-  txKeySets = analyzeEnv.aeTxKeySets
+  registryKeySets :: Lens' a (SFunArray KeySetName KeySet)
+  registryKeySets = analyzeEnv.aeRegistryKeySets
 
   ksAuths :: Lens' a (SFunArray KeySet Bool)
   ksAuths = analyzeEnv.aeKsAuths
+
+  txKeySets :: Lens' a (SFunArray KeySetName KeySet)
+  txKeySets = analyzeEnv.aeTxKeySets
 
   txDecimals :: Lens' a (SFunArray Str Decimal)
   txDecimals = analyzeEnv.aeTxDecimals
@@ -576,11 +583,8 @@ resolveKeySet
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S KeySetName
   -> m (S KeySet)
---
--- TODO change to use new store
---
 resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
-  readArray <$> view txKeySets <*> pure (_sSbv sKsn)
+  readArray <$> view registryKeySets <*> pure (_sSbv sKsn)
 
 nameAuthorized
   :: (MonadReader r m, HasAnalyzeEnv r)

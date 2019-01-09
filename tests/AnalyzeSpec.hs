@@ -498,14 +498,11 @@ spec = describe "analyze" $ do
   describe "enforce-keyset.value" $ do
     let code =
           [text|
-            (defun test:bool ()
-              (enforce-keyset (read-keyset (+ "k" "s"))))
+            (defun test:bool (ks:keyset)
+              (enforce-keyset ks))
           |]
     expectPass code $ Satisfiable Abort'
-    expectPass code $ Satisfiable (Inj Success)
-    expectPass code $ Valid $ sNot (Inj (KsNameAuthorized "ks")) .=> Abort'
-
-    expectFail code $ Valid $ sNot (Inj (KsNameAuthorized "different-ks")) .=> Abort'
+    expectPass code $ Satisfiable Success'
 
   describe "read-decimal" $ do
     let code =
