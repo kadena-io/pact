@@ -82,8 +82,8 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
 data AnalyzeEnv
   = AnalyzeEnv
     { _aeScope      :: !(Map VarId AVal)              -- used as a stack
-    , _aeTxKeySets  :: !(SFunArray KeySetName KeySet) -- read-only
     , _aeKsAuths    :: !(SFunArray KeySet Bool)       -- read-only
+    , _aeTxKeySets  :: !(SFunArray KeySetName KeySet) -- read-only
     , _aeTxDecimals :: !(SFunArray Str Decimal)       -- read-only
     , _aeTxIntegers :: !(SFunArray Str Integer)       -- read-only
     , _invariants   :: !(TableMap [Located (Invariant 'TyBool)])
@@ -97,9 +97,9 @@ instance Show AnalyzeEnv where
     $ showString "AnalyzeEnv "
     . showsPrec 11 _aeScope
     . showString " "
-    . showsPrec 11 _aeTxKeySets
-    . showString " "
     . showsPrec 11 _aeKsAuths
+    . showString " "
+    . showsPrec 11 _aeTxKeySets
     . showString " "
     . showsPrec 11 _aeTxDecimals
     . showString " "
@@ -136,7 +136,7 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args keySets keySetAuths decimals integers invariants'
+  pure $ AnalyzeEnv args keySetAuths keySets decimals integers invariants'
     columnIds' tags info
 
 mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
