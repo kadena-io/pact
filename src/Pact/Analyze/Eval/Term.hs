@@ -68,9 +68,9 @@ instance Analyzer Analyze where
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
-  getVar vid = view (scope . at vid)
-  withVar vid val m = local (scope . at vid ?~ val) m
-  markFailure b = succeeds %= (.&& sansProv (sNot b))
+  getVar vid                 = view (scope . at vid)
+  withVar vid val m          = local (scope . at vid ?~ val) m
+  markFailure b              = succeeds %= (.&& sansProv (sNot b))
   withMergeableAnalyzer ty f = withSymWord ty f
 
 addConstraint :: S Bool -> Analyze ()
@@ -231,17 +231,22 @@ applyInvariants tn aValFields addInvariants = do
 evalETerm :: ETerm -> Analyze AVal
 evalETerm tm = snd <$> evalExistential tm
 
--- error "TODO"
--- validateWrite :: Pact.WriteType -> Schema ty -> Object ty -> Analyze ()
--- validateWrite writeType sch@(Schema sm) obj@(Object om) = do
+validateWrite
+  :: Pact.WriteType
+  -> SingTy ('TyObject schema)
+  -> Object Term schema
+  -> Analyze ()
+validateWrite _ _ _ = pure () -- error "TODO"
+
+-- validateWrite writeType objTy@(SObject schema) obj@(Object om) = do
 --   -- For now we lump our three cases together:
 --   --   1. write field not in schema
 --   --   2. object and schema types don't match
 --   --   3. unexpected partial write
---   let invalid = throwErrorNoLoc $ InvalidDbWrite writeType sch obj
+--   let invalid = throwErrorNoLoc $ InvalidDbWrite writeType objTy obj
 
 --   iforM_ om $ \field (ety, _av) ->
---     case field `Map.lookup` sm of
+--     case field `Map.lookup` schema of
 --       Nothing -> invalid
 --       Just ety'
 --         | ety /= ety' -> invalid
@@ -249,7 +254,7 @@ evalETerm tm = snd <$> evalExistential tm
 
 --   let requiresFullWrite = writeType `elem` [Pact.Insert, Pact.Write]
 
---   when (requiresFullWrite && Map.size om /= Map.size sm) invalid
+--   when (requiresFullWrite && Map.size om /= Map.size schema) invalid
 
 readFields
   :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
@@ -275,14 +280,22 @@ readField
 readField tn cn sRk sDirty ty
   = mkAVal <$> use (typedCell ty id tn cn sRk sDirty)
  --
- -- TODO: do we still need to do this?
+ -- TODO: do we still need to do this?:
  -- TODO: if we add nested object support here, we need to install
  --       the correct provenance into AVals all the way down into
  --       sub-objects.
  --
 
-aValsOfObj :: SingTy ('TyObject ty) -> S (ConcreteObj ty) -> Map Text AVal
-aValsOfObj _ _ = Map.empty -- error "TODO"
+aValsOfObj
+  :: Sing (schema :: [(Symbol, Ty)])
+  -> SBV (ConcreteObj schema)
+  -> Map Text AVal
+aValsOfObj SNil _ = Map.empty
+aValsOfObj (SCons sym fieldTy fields) obj
+  = withSymWord fieldTy $ withSymWord (SObject fields) $
+  let k = T.pack (symbolVal sym)
+      SBVI.SBV sval = field1 obj
+  in Map.insert k (AVal Nothing sval) $ aValsOfObj fields (field2 obj)
 
 writeFields
   :: Pact.WriteType -> TagId -> TableName -> S RowKey
@@ -399,9 +412,9 @@ evalTerm = \case
 
     pure sObj
 
-  Write schema writeType tid tn rowKey objT -> do
-    obj <- withSing schema $ evalTerm objT
-    -- validateWrite writeType schema obj
+  Write objTy@(SObject schema) writeType tid tn rowKey objT -> do
+    obj <- withSing objTy $ evalTerm objT
+    -- validateWrite writeType objTy obj
     sRk <- symRowKey <$> evalTerm rowKey
 
     thisRowExists <- use $ rowExists id tn sRk
@@ -416,9 +429,9 @@ evalTerm = \case
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk writeSucceeds
 
-    writeFields writeType tid tn sRk obj schema
+    writeFields writeType tid tn sRk obj objTy
 
-    let aValFields = aValsOfObj schema obj
+    let aValFields = aValsOfObj schema (_sSbv obj)
     applyInvariants tn aValFields $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
           fs = ZipList $ (\s -> fmap (_sSbv s .&&)) <$> invariants'

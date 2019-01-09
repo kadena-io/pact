@@ -1204,7 +1204,8 @@ data Term (a :: Ty) where
   -- Table access
   Read            :: SingTy ('TyObject m) -> TagId -> TableName
     -> Term 'TyStr -> Term ('TyObject m)
-  Write           :: SingTy ('TyObject m)
+  Write
+    :: SingTy ('TyObject m)
     -> WriteType -> TagId -> TableName
     -> Term 'TyStr -> Term ('TyObject m) -> Term 'TyStr
 

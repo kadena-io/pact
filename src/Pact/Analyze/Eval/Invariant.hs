@@ -38,7 +38,7 @@ instance Analyzer InvariantCheck where
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err
-  getVar vid        = view (located . at vid)
-  withVar vid val m = local (located . at vid ?~ val) m
-  markFailure b     = id %= (.&& SymbolicSuccess (sNot b))
+  getVar vid                 = view (located . at vid)
+  withVar vid val m          = local (located . at vid ?~ val) m
+  markFailure b              = id %= (.&& SymbolicSuccess (sNot b))
   withMergeableAnalyzer ty f = withSymWord ty f
