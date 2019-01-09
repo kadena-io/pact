@@ -968,17 +968,17 @@ spec = describe "analyze" $ do
 --      (PObjAt schema (Lit' "name") (Inj Result))
 --      (Lit' "stu" :: Prop 'TyStr)
 
---  describe "at.object-in-object" $
---    let code =
---          [text|
---            (defschema inner   name:string)
---            (defschema wrapper wrapped:object{inner})
+  describe "at.object-in-object" $
+    let code =
+          [text|
+            (defschema inner   name:string)
+            (defschema wrapper wrapped:object{inner})
 
---            (defun test:object{inner} ()
---              (let ((obj:object{wrapper} {"wrapped": {"name": "pact"}}))
---                (at "wrapped" obj)))
---          |]
---    in expectPass code $ Valid $ sNot Abort'
+            (defun test:object{inner} ()
+              (let ((obj:object{wrapper} {"wrapped": {"name": "pact"}}))
+                (at "wrapped" obj)))
+          |]
+    in expectPass code $ Valid $ sNot Abort'
 
 --  describe "object-equality" $
 --    let code =
