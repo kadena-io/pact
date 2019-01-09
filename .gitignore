@@ -20,3 +20,5 @@ log/
 /.pact-history
 /result
 public
+.ghc.environment.*
+.dir-locals.el
