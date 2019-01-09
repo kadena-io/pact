@@ -2,7 +2,7 @@
 {-# LANGUAGE QuasiQuotes       #-}
 
 -- | Tests remote verification on the server side (i.e. no GHCJS involvement)
-module RemoteVerifySpec where
+module RemoteVerifySpec (spec) where
 
 import Control.Concurrent
 import Control.Exception (finally)
