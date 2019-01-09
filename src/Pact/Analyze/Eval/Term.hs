@@ -236,9 +236,16 @@ validateWrite
   -> SingTy ('TyObject schema)
   -> Object Term schema
   -> Analyze ()
-validateWrite _ _ _ = pure () -- error "TODO"
+validateWrite _writeType (SObject schema) (Object om)
+  = validateWrite' schema om where
+
+  validateWrite'
+    :: SingList schema -> HListOf (Column Term) schema -> Analyze ()
+  validateWrite' SNil NilOf = pure ()
+  validateWrite' _    _     = error "TODO"
 
 -- validateWrite writeType objTy@(SObject schema) obj@(Object om) = do
+
 --   -- For now we lump our three cases together:
 --   --   1. write field not in schema
 --   --   2. object and schema types don't match
