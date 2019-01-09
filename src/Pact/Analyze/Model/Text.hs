@@ -17,7 +17,7 @@ import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (SBV, SymWord)
 import qualified Data.SBV                   as SBV
--- import qualified Data.SBV.Internals         as SBVI
+import qualified Data.SBV.Internals         as SBVI
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
@@ -42,14 +42,11 @@ showS :: (UserShow a, SymWord a) => S a -> Text
 showS = showSbv . _sSbv
 
 showTVal :: TVal -> Text
-showTVal (_ety, av) = case av of
+showTVal (ety, av) = case av of
   OpaqueVal   -> "[opaque]"
-  AVal _ _ -> "TODO: showTVal"
-    -- EType (SObject _) -> error "showModel: impossible object type for AVal"
-    -- EType (SList ty :: Sing t) ->
-    --   showSbv (SBVI.SBV sval :: SBV (Concrete t))
-    -- EType (ty :: Sing t) ->
-    --   showSbv (SBVI.SBV sval :: SBV (Concrete t))
+  AVal _ sval -> case ety of
+    EType (ty :: SingTy ty) -> withUserShow ty $ withSymWord ty $
+      showSbv (SBVI.SBV sval :: SBV (Concrete ty))
 
 showObject :: UObject -> Text
 showObject (UObject m) = "{ "
