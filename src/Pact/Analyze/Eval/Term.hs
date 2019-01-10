@@ -29,7 +29,7 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              ite, (.<))
+                                              ite, literal, (.<))
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.String             as SBV
 import           Data.SBV.Tuple              (mkPair, field1, field2)
@@ -266,7 +266,8 @@ validateWrite _writeType (SObject schema) (Object om)
 readFields
   :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
   -> Analyze (S (ConcreteObj ty), Map Text AVal)
-readFields _tn _sRk _tid (SObject SNil) = pure (literalS (), Map.empty)
+readFields _tn _sRk _tid (SObject SNil) =
+  pure (withProv (FromRow Map.empty) (literal ()), Map.empty)
 readFields tn sRk tid (SObject (SCons sym fieldType subSchema)) = do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
@@ -278,9 +279,13 @@ readFields tn sRk tid (SObject (SCons sym fieldType subSchema)) = do
   tagAccessCell mtReads tid tFieldName av
   case av of
     OpaqueVal -> error "TODO (readFields OpaqueVal)"
-    AVal _prov sval -> withSymWord fieldType $ withSymWord subObjTy $ do
-      (S _ obj', avs) <- readFields tn sRk tid subObjTy
-      pure (sansProv $ mkPair (SBVI.SBV sval) obj', Map.insert tFieldName av avs)
+    AVal (Just (FromCell oc)) sval -> withSymWord fieldType $ withSymWord subObjTy $ do
+      (S (Just (FromRow ocMap)) obj', avs) <- readFields tn sRk tid subObjTy
+      pure ( withProv (FromRow $ Map.insert cn oc ocMap) $
+               mkPair (SBVI.SBV sval) obj'
+           , Map.insert tFieldName av avs
+           )
+    AVal _ _ -> error "impossible: unexpected type of cell provenance in readFields"
 
 readField
   :: TableName -> ColumnName -> S RowKey -> S Bool -> SingTy ty -> Analyze AVal

@@ -11,7 +11,7 @@ module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
 -- import           Data.Foldable               (foldrM)
--- import qualified Data.Map.Strict             as Map
+import qualified Data.Map.Strict             as Map
 import           Data.Monoid                 ((<>))
 import           Data.SBV                    (EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
@@ -407,7 +407,7 @@ evalObjAt
 evalObjAt objTy@(SObject schema) colNameT obj retType
   = withSymWord retType $ withSing objTy $ do
     needColName <- eval colNameT
-    S _ objVal  <- eval obj
+    S mObjProv objVal <- eval obj
 
     let go :: SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
         go SNil _ = throwErrorNoLoc "TODO (evalObjAt couldn't find field)"
@@ -421,7 +421,15 @@ evalObjAt objTy@(SObject schema) colNameT obj retType
             )
             (go schema' (field2 obj'))
 
-    sansProv <$> go schema objVal
+        mProv :: Maybe Provenance
+        mProv = do
+          FromRow ocMap <- mObjProv
+          -- NOTE: We can only propagate the provenance from the row- to the
+          -- cell-level if we know the column name statically:
+          Str cnStr <- unliteralS needColName
+          FromCell <$> Map.lookup (ColumnName cnStr) ocMap
+
+    S mProv <$> go schema objVal
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential (Existential ty prop) = do

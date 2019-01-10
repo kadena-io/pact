@@ -298,6 +298,7 @@ data OriginatingCell
 
 data Provenance
   = FromCell    OriginatingCell
+  | FromRow     (Map ColumnName OriginatingCell)
   | FromNamedKs (S KeySetName)
   | FromInput   Unmunged
   deriving (Eq, Show)

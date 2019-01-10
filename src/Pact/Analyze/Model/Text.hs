@@ -135,6 +135,8 @@ showAuth recov mProv (_located -> Authorization srk sbool) =
     ksDescription = case mProv of
       Nothing ->
         "unknown " <> ks
+      Just (FromRow _) ->
+        error "impossible: FromRow provenance on keyset"
       Just (FromCell (OriginatingCell tn cn sRk _)) ->
         ks <> " from database at ("
           <> userShow tn <> ", "
