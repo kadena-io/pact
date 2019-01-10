@@ -532,6 +532,27 @@ spec = describe "analyze" $ do
   -- TODO: test use of read-integer from property once possible
   --
 
+  describe "enforce-keyset.row-level.at" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer
+              ks:keyset)
+            (deftable tokens:{token-row})
+
+            (defun test:integer (acct:string)
+              (let* ((obj (read tokens acct))
+                     (ks  (at 'ks      obj))
+                     (bal (at 'balance obj))
+                    )
+                (enforce-keyset ks)
+                bal
+                ))
+          |]
+    expectPass code $ Valid $ Inj Success .=>
+      Inj (RowEnforced "tokens" "ks" (PVar 1 "acct"))
+
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|
