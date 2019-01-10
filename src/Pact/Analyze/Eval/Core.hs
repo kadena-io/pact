@@ -134,6 +134,15 @@ evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length te
 Nothing  ?? err = throwErrorNoLoc err
 infix 0 ??
 
+-- traverseObj :: Object tm ty -> m a -> (String -> Existential tm -> a -> m a) -> m a
+traverseObj
+  :: SingTy ('TyObject schema)
+  -> S (ConcreteObj schema)
+  -> m a
+  -> (String -> Existential tm -> a -> m a)
+  -> m a
+traverseObj = undefined
+
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)
@@ -175,13 +184,11 @@ evalCore
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
 -- error "TODO"
 -- evalCore (ObjMerge ty1 ty2 objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
-evalCore ObjContains{} = throwErrorNoLoc "TODO: ObjContains"
--- error "TODO"
--- evalCore (ObjContains (Schema schema) key _obj) = do
---   key' <- eval key
---   pure $ sansProv $ bAny
---     (\testKey -> literalS (Str (T.unpack testKey)) .== key')
---     $ Map.keys schema
+evalCore (ObjContains objTy key obj) = withSing objTy $ do
+  key' <- eval key
+  obj' <- eval obj
+  traverseObj objTy obj' (pure sFalse) $ \testKey _v prev -> pure $
+    prev .|| sansProv (literalS (Str testKey) .== key')
 evalCore (StrContains needle haystack) = do
   needle'   <- eval needle
   haystack' <- eval haystack
