@@ -36,6 +36,8 @@ import Data.Serialize (Serialize)
 import qualified Data.Serialize as S
 
 
+class Export a where
+  export :: a -> ByteString
 
 class ParseText a where
   parseText :: Text -> Parser a

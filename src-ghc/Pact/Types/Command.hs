@@ -98,10 +98,10 @@ mkCommand' creds env = makeCommand (makeSigs <$> creds)
         makeSigs (SomeKeyPair kp) = mkUserSig kp env
          
 
-mkUserSig :: KeyPair a -> ByteString -> UserSig
-mkUserSig KeyPair{..} env = (UserSig (toScheme _kpScheme) pubBS sig)
-  where pubBS = toB16Text $ exportPublic _kpScheme _kpPublicKey
-        sig = toB16Text $ exportSignature _kpScheme $ sign _kpScheme env _kpPublicKey _kpPrivateKey
+mkUserSig :: (Scheme a) => KeyPair a -> ByteString -> UserSig
+mkUserSig KeyPair{..} env = (UserSig (toPPKScheme _kpScheme) pubBS sig)
+  where pubBS = toB16Text $ export _kpPublicKey
+        sig = toB16Text $ export $ sign _kpScheme env _kpPublicKey _kpPrivateKey
 
 verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
@@ -172,13 +172,14 @@ instance FromJSON UserSig where
 
 
 verifyUserSig :: ByteString -> UserSig -> Bool
-verifyUserSig msg UserSig{..} = 
-  let (pubParsed, sigParsed, scheme) = case _usScheme of
-        ED25519 -> (fromText _usPubKey :: A.Result (Ed25519.PublicKey),
-                    fromText _usSig :: A.Result (Ed25519.Signature),
-                    SED25519)
-  in case (pubParsed, sigParsed) of
-    (Success pub, Success sig) -> valid scheme msg pub sig
+verifyUserSig msg UserSig{..} = verifyUserSig' (toScheme _usScheme) msg (PubT _usPubKey) (SigT _usSig)
+
+verifyUserSig' :: SomeScheme -> ByteString -> PublicKeyText -> SignatureText -> Bool
+verifyUserSig' (SomeScheme scheme) msg (PubT pT) (SigT sT) =
+  let pParsed = fromText pT
+      sParsed = fromText sT
+  in case (pParsed, sParsed) of
+    (Success p, Success s) -> valid scheme msg p s
     _ -> False
 
 
