@@ -954,7 +954,10 @@ instance
   ( HasKind (tm ty)
   , HasKind (Object tm tys)
   ) => HasKind (Object tm ('(k, ty) ': tys)) where
-  kindOf _ = KTuple [ kindOf (undefined :: tm ty), kindOf (undefined :: Object tm tys) ]
+  kindOf _ = KTuple
+    [ kindOf (undefined :: tm ty)
+    , kindOf (undefined :: Object tm tys)
+    ]
 
 instance
   ( SingI ty

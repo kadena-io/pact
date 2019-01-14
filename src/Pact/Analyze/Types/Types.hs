@@ -59,9 +59,9 @@ type SingList (a :: [(Symbol, Ty)]) = Sing a
 --    Map f (x ': xs) = f x ': Map f xs
 
 data HListOf (f :: Ty -> *) (tys :: [(Symbol, Ty)]) where
-  NilOf  ::                                      HListOf f '[]
-  ConsOf :: (KnownSymbol sym, SingI ty, Typeable ty) =>
-            Sing sym -> f ty -> HListOf f tys -> HListOf f ('(sym, ty) ': tys)
+  NilOf  :: HListOf f '[]
+  ConsOf :: (KnownSymbol sym, SingI ty, Typeable ty)
+         => Sing sym -> f ty -> HListOf f tys -> HListOf f ('(sym, ty) ': tys)
 
 data instance Sing (a :: Ty) where
   SInteger ::           Sing 'TyInteger
