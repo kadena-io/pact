@@ -148,9 +148,16 @@ instance
     where less = filterV (Proxy @'FMin)
           more = filterV (Proxy @'FMax)
 
+-- section: Normalization
+
 type Normalize t = Nub (Sort t)
 
 type IsNormalized t = t ~ Nub (Sort t)
+
+normalize
+  :: (Sortable t, Nubable (Sort t))
+  => SingList t -> SingList (Normalize t)
+normalize = nub . quicksort
 
 -- section: Union
 
@@ -160,3 +167,14 @@ type Union s t = Nub (Sort (s :++ t))
 
 union :: Unionable s t => SingList s -> SingList t -> SingList (Union s t)
 union s t = nub (quicksort (s ++ t))
+
+-- section: Sort for HListOf
+
+-- sortList :: SingList t -> SingList (Normalize t)
+-- sortList = normalize
+
+sortHList
+  :: (Sortable t, Nubable (Sort t))
+  => HListOf f t
+  -> HListOf f (Normalize t)
+sortHList = error "TODO"

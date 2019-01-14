@@ -49,19 +49,20 @@ type SingSymbol (x :: Symbol) = Sing x
 data instance Sing (n :: [(Symbol, Ty)]) where
   SNil  :: Sing ('[] :: [(Symbol, Ty)])
   SCons :: (SingI v, KnownSymbol k)
-        => SingSymbol k -> Sing v -> Sing n
+        => SingSymbol k
+        -> Sing v
+        -> Sing n
         -> Sing ('(k, v) ': n :: [(Symbol, Ty)])
 
 type SingList (a :: [(Symbol, Ty)]) = Sing a
 
--- type family Map (f :: Ty -> k) (xs :: [Ty]) where
---    Map f '[]       = '[]
---    Map f (x ': xs) = f x ': Map f xs
-
-data HListOf (f :: Ty -> *) (tys :: [(Symbol, Ty)]) where
+data HListOf (f :: Ty -> Type) (tys :: [(Symbol, Ty)]) where
   NilOf  :: HListOf f '[]
-  ConsOf :: (KnownSymbol sym, SingI ty, Typeable ty)
-         => Sing sym -> f ty -> HListOf f tys -> HListOf f ('(sym, ty) ': tys)
+  ConsOf :: (SingI ty, KnownSymbol k, Typeable ty)
+         => Sing k
+         -> f ty
+         -> HListOf f tys
+         -> HListOf f ('(k, ty) ': tys)
 
 data instance Sing (a :: Ty) where
   SInteger ::           Sing 'TyInteger

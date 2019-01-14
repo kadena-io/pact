@@ -253,13 +253,28 @@ inferVar vid name prop = do
     Just QTable         -> error "Table names cannot be vars"
     Just QColumnOf{}    -> error "Column names cannot be vars"
 
+mkLiteralObject :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
+mkLiteralObject cols = do
+  cols' <- traverse mkLiteral cols
+  mkLiteralObject'' cols'
+
+mkLiteral
+  :: (Text, PreProp) -> PropCheck (SomeSymbol, Existential Prop)
+mkLiteral (name, preProp)
+  = (someSymbolVal (T.unpack name),) <$> inferPreProp preProp
+
+mkLiteralObject''
+  :: [(SomeSymbol, Existential Prop)] -> PropCheck (Existential (Core Prop))
+mkLiteralObject'' [] = pure $ Some (SObject SNil) $
+  LiteralObject (SObject SNil) (Object NilOf)
+
 -- Note: there is a very similar @mkLiteralObject@ in @Analyze.Translate@.
 -- These could probably be combined.
-mkLiteralObject :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
-mkLiteralObject [] = pure $ Some (SObject SNil) $
+mkLiteralObjectOld :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
+mkLiteralObjectOld [] = pure $ Some (SObject SNil) $
   LiteralObject (SObject SNil) (Object NilOf)
-mkLiteralObject ((name, preProp) : tups) = do
-  tups' <- mkLiteralObject tups
+mkLiteralObjectOld ((name, preProp) : tups) = do
+  tups' <- mkLiteralObjectOld tups
   case tups' of
     Some (SObject objTy) (LiteralObject _ (Object objProp)) -> do
       eProp <- inferPreProp preProp
