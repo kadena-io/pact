@@ -233,20 +233,19 @@ evalPropSpecific (PropRead objTy@(SObject fields) ba tn pRk) = do
     pure (fieldName, fieldType, av)
 
   case assembleObj aValFields of
-    Existential ty (AnSBV obj) -> case singEq ty objTy of
+    Some ty (AnSBV obj) -> case singEq ty objTy of
       Nothing   -> error "TODO"
       Just Refl -> pure $ sansProv obj
 
 assembleObj :: [(String, EType, AVal)] -> Existential AnSBV
-assembleObj [] = Existential (SObject SNil) (AnSBV (literal ()))
+assembleObj [] = Some (SObject SNil) (AnSBV (literal ()))
 assembleObj ((name, EType ty, AVal _prov sval) : tys)
   = case someSymbolVal name of
     SomeSymbol (_ :: Proxy k) -> case assembleObj tys of
-      Existential objTy@(SObject schema) (AnSBV obj)
-        -> withSing ty $ withSymVal ty $ withSymVal objTy $
-          Existential
-            (SObject (SCons (SSymbol @k) ty schema))
-            (AnSBV (tuple (SBVI.SBV sval, obj)))
+      Some objTy@(SObject schema) (AnSBV obj)
+        -> withSing ty $ withSymVal ty $ withSymVal objTy $ Some
+          (SObject (SCons (SSymbol @k) ty schema))
+          (AnSBV (tuple (SBVI.SBV sval, obj)))
       _ -> error "impossible (we always return an SObject)"
 assembleObj ((_, _, OpaqueVal) : _) = error "TODO"
 

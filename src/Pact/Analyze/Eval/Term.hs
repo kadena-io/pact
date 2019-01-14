@@ -486,9 +486,9 @@ evalTerm = \case
   Format formatStr args -> do
     formatStr' <- eval formatStr
     args' <- for args $ \case
-      Existential SStr     str  -> Left          <$> eval str
-      Existential SInteger int  -> Right . Left  <$> eval int
-      Existential SBool    bool -> Right . Right <$> eval bool
+      Some SStr     str  -> Left          <$> eval str
+      Some SInteger int  -> Right . Left  <$> eval int
+      Some SBool    bool -> Right . Right <$> eval bool
       etm                   -> throwErrorNoLoc $ fromString $ T.unpack $
         "We can only analyze calls to `format` formatting {string,integer,bool}" <>
         " (not " <> userShow etm <> ")"
@@ -524,15 +524,15 @@ evalTerm = \case
         notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
-      Existential SStr tm -> eval tm <&> unliteralS >>= \case
+      Some SStr tm -> eval tm <&> unliteralS >>= \case
         Nothing        -> throwError notStaticErr
         Just (Str str) -> pure $ sHash $ encodeUtf8 $ T.pack str
 
       -- Everything else is hashed by first converting it to JSON:
-      Existential SInteger tm -> eval tm <&> unliteralS >>= \case
+      Some SInteger tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
         Just int -> pure $ sHash $ toStrict $ Aeson.encode int
-      Existential SBool tm -> eval tm <&> unliteralS >>= \case
+      Some SBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
 
@@ -540,11 +540,11 @@ evalTerm = \case
       -- able to convert them back into Decimal.Decimal decimals (from SBV's
       -- Real representation). This is probably possible if we think about it
       -- hard enough.
-      Existential SDecimal _    -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
+      Some SDecimal _    -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
-      Existential (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash` on lists"
-      Existential (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
-      Existential _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
+      Some (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash` on lists"
+      Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
+      Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
 -- For now we only allow these three types to be formatted.
 --

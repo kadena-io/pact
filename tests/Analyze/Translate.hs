@@ -43,150 +43,150 @@ toPactTm :: ETerm -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
 toPactTm = \case
   -- core terms:
 
-  Existential SDecimal (Inj (DecArithOp op x y)) ->
-    mkApp (arithOpToDef op) [Existential SDecimal x, Existential SDecimal y]
+  Some SDecimal (Inj (DecArithOp op x y)) ->
+    mkApp (arithOpToDef op) [Some SDecimal x, Some SDecimal y]
 
-  Existential SDecimal (Inj (DecUnaryArithOp op x)) ->
-    mkApp (unaryArithOpToDef op) [Existential SDecimal x]
+  Some SDecimal (Inj (DecUnaryArithOp op x)) ->
+    mkApp (unaryArithOpToDef op) [Some SDecimal x]
 
-  Existential SInteger (Inj (IntArithOp op x y)) ->
-    mkApp (arithOpToDef op) [Existential SInteger x, Existential SInteger y]
+  Some SInteger (Inj (IntArithOp op x y)) ->
+    mkApp (arithOpToDef op) [Some SInteger x, Some SInteger y]
 
-  Existential SInteger (Inj (IntUnaryArithOp op x)) ->
-    mkApp (unaryArithOpToDef op) [Existential SInteger x]
+  Some SInteger (Inj (IntUnaryArithOp op x)) ->
+    mkApp (unaryArithOpToDef op) [Some SInteger x]
 
-  Existential SInteger (Inj (RoundingLikeOp1 op x)) ->
-    mkApp (roundingLikeOpToDef op) [Existential SDecimal x]
+  Some SInteger (Inj (RoundingLikeOp1 op x)) ->
+    mkApp (roundingLikeOpToDef op) [Some SDecimal x]
 
-  Existential SDecimal (Inj (RoundingLikeOp2 op x y)) ->
-    mkApp (roundingLikeOpToDef op) [Existential SDecimal x, Existential SInteger y]
+  Some SDecimal (Inj (RoundingLikeOp2 op x y)) ->
+    mkApp (roundingLikeOpToDef op) [Some SDecimal x, Some SInteger y]
 
-  Existential SDecimal (Inj (DecIntArithOp op x y)) ->
-    mkApp (arithOpToDef op) [Existential SDecimal x, Existential SInteger y]
+  Some SDecimal (Inj (DecIntArithOp op x y)) ->
+    mkApp (arithOpToDef op) [Some SDecimal x, Some SInteger y]
 
-  Existential SDecimal (Inj (IntDecArithOp op x y)) ->
-    mkApp (arithOpToDef op) [Existential SInteger x, Existential SDecimal y]
+  Some SDecimal (Inj (IntDecArithOp op x y)) ->
+    mkApp (arithOpToDef op) [Some SInteger x, Some SDecimal y]
 
-  Existential SInteger (Inj (ModOp x y)) ->
-    mkApp modDef [Existential SInteger x, Existential SInteger y]
+  Some SInteger (Inj (ModOp x y)) ->
+    mkApp modDef [Some SInteger x, Some SInteger y]
 
-  Existential SInteger (Inj (StrLength x)) ->
-    mkApp lengthDef [Existential SStr x]
+  Some SInteger (Inj (StrLength x)) ->
+    mkApp lengthDef [Some SStr x]
 
-  Existential SStr (Inj (StrConcat x y)) ->
-    mkApp addDef [Existential SStr x, Existential SStr y]
+  Some SStr (Inj (StrConcat x y)) ->
+    mkApp addDef [Some SStr x, Some SStr y]
 
-  Existential SInteger (Inj (StrToInt s)) ->
-    mkApp strToIntDef [Existential SStr s]
+  Some SInteger (Inj (StrToInt s)) ->
+    mkApp strToIntDef [Some SStr s]
 
-  Existential SInteger (Inj (StrToIntBase b s)) ->
-    mkApp strToIntDef [Existential SInteger b, Existential SStr s]
+  Some SInteger (Inj (StrToIntBase b s)) ->
+    mkApp strToIntDef [Some SInteger b, Some SStr s]
 
-  Existential SBool (Inj (IntegerComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Existential SInteger x, Existential SInteger y]
+  Some SBool (Inj (IntegerComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [Some SInteger x, Some SInteger y]
 
-  Existential SBool (Inj (DecimalComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Existential SDecimal x, Existential SDecimal y]
+  Some SBool (Inj (DecimalComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [Some SDecimal x, Some SDecimal y]
 
-  Existential SBool (Inj (StrComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Existential SStr x, Existential SStr y]
+  Some SBool (Inj (StrComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [Some SStr x, Some SStr y]
 
-  Existential SBool (Inj (BoolComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Existential SBool x, Existential SBool y]
+  Some SBool (Inj (BoolComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [Some SBool x, Some SBool y]
 
-  Existential SBool (Inj (TimeComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Existential STime x, Existential STime y]
+  Some SBool (Inj (TimeComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [Some STime x, Some STime y]
 
-  Existential STime (Inj (IntAddTime x y)) ->
-    mkApp defAddTime [Existential STime x, Existential SInteger y]
+  Some STime (Inj (IntAddTime x y)) ->
+    mkApp defAddTime [Some STime x, Some SInteger y]
 
-  Existential STime (Inj (DecAddTime x y)) ->
-    mkApp defAddTime [Existential STime x, Existential SDecimal y]
+  Some STime (Inj (DecAddTime x y)) ->
+    mkApp defAddTime [Some STime x, Some SDecimal y]
 
-  Existential SBool (Inj (Logical op args)) ->
-    mkApp (logicalOpToDef op) (Existential SBool <$> args)
+  Some SBool (Inj (Logical op args)) ->
+    mkApp (logicalOpToDef op) (Some SBool <$> args)
 
-  Existential SInteger     (CoreTerm (Lit x))
+  Some SInteger     (CoreTerm (Lit x))
     -> pure $ TLiteral (LInteger x) dummyInfo
-  Existential SDecimal (CoreTerm (Lit x))
+  Some SDecimal (CoreTerm (Lit x))
     -> pure $ TLiteral (LDecimal (toPact decimalIso x)) dummyInfo
-  Existential SStr     (TextLit x)
+  Some SStr     (TextLit x)
     -> pure $ TLiteral (LString x) dummyInfo
-  Existential SBool    (CoreTerm (Lit x))
+  Some SBool    (CoreTerm (Lit x))
     -> pure $ TLiteral (LBool x) dummyInfo
-  Existential STime    (CoreTerm (Lit x))
+  Some STime    (CoreTerm (Lit x))
     -> pure $ TLiteral (LTime (toPact timeIso x)) dummyInfo
 
-  Existential SKeySet  (CoreTerm (Lit (KeySet x))) -> do
+  Some SKeySet  (CoreTerm (Lit (KeySet x))) -> do
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
       Just (ks, _) -> pure $ Pact.TKeySet ks dummyInfo
       Nothing      -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
-  Existential SBool (Enforce _ x)
-    -> mkApp enforceDef [Existential SBool x, Existential SStr $ CoreTerm $ Lit "(enforce)"]
-  Existential SBool (EnforceOne Left{})
-    -> mkApp' enforceOneDef (Existential SStr $ CoreTerm $ Lit "(enforce-one)") []
+  Some SBool (Enforce _ x)
+    -> mkApp enforceDef [Some SBool x, Some SStr $ CoreTerm $ Lit "(enforce)"]
+  Some SBool (EnforceOne Left{})
+    -> mkApp' enforceOneDef (Some SStr $ CoreTerm $ Lit "(enforce-one)") []
 
-  Existential SBool (EnforceOne (Right xs)) -> mkApp' enforceOneDef
-    (Existential SStr $ CoreTerm $ Lit "(enforce-one)")
-    (Existential SBool . snd <$> xs)
+  Some SBool (EnforceOne (Right xs)) -> mkApp' enforceOneDef
+    (Some SStr $ CoreTerm $ Lit "(enforce-one)")
+    (Some SBool . snd <$> xs)
 
-  -- Existential SBool (KsAuthorized x)
-  -- Existential SBool (NameAuthorized x)
+  -- Some SBool (KsAuthorized x)
+  -- Some SBool (NameAuthorized x)
 
-  Existential SStr PactVersion -> mkApp pactVersionDef []
-  Existential SStr (Format template vals)
-    -> mkApp' formatDef (Existential SStr template) vals
-  Existential SStr (FormatTime x y)
-    -> mkApp defFormatTime [Existential SStr x, Existential STime y]
-  Existential SStr (Hash x) -> mkApp hashDef [x]
+  Some SStr PactVersion -> mkApp pactVersionDef []
+  Some SStr (Format template vals)
+    -> mkApp' formatDef (Some SStr template) vals
+  Some SStr (FormatTime x y)
+    -> mkApp defFormatTime [Some SStr x, Some STime y]
+  Some SStr (Hash x) -> mkApp hashDef [x]
 
-  Existential SKeySet (ReadKeySet x) -> mkApp readKeysetDef [Existential SStr x]
+  Some SKeySet (ReadKeySet x) -> mkApp readKeysetDef [Some SStr x]
 
-  Existential SDecimal (ReadDecimal x) -> mkApp readDecimalDef [Existential SStr x]
+  Some SDecimal (ReadDecimal x) -> mkApp readDecimalDef [Some SStr x]
 
-  Existential STime (ParseTime Nothing x) ->
-    mkApp timeDef [Existential SStr x]
+  Some STime (ParseTime Nothing x) ->
+    mkApp timeDef [Some SStr x]
 
-  Existential STime (ParseTime (Just x) y) ->
-    mkApp parseTimeDef [Existential SStr x, Existential SStr y]
+  Some STime (ParseTime (Just x) y) ->
+    mkApp parseTimeDef [Some SStr x, Some SStr y]
 
-  -- Existential ty (Sequence etm tm) -> do
+  -- Some ty (Sequence etm tm) -> do
   --   t1 <- toPactTm etm
-  --   t2 <- toPactTm (Existential ty tm)
+  --   t2 <- toPactTm (Some ty tm)
   --   pure $ TList [t1, t2] (Pact.TyList Pact.TyAny) dummyInfo
 
---   Existential ty (Let name _vid etm bodyTm) -> do
+--   Some ty (Let name _vid etm bodyTm) -> do
 --     t1 <- toPactTm etm
---     t2 <- toPactTm (Existential ty bodyTm)
+--     t2 <- toPactTm (Some ty bodyTm)
 --     pure $ TBinding [(Pact.Arg name undefined dummyInfo, t1)]
 --       t2 undefined dummyInfo
 
-  Existential ty (IfThenElse _ t1 (_, t2) (_, t3)) ->
-    mkApp ifDef [Existential SBool t1, Existential ty t2, Existential ty t3]
+  Some ty (IfThenElse _ t1 (_, t2) (_, t3)) ->
+    mkApp ifDef [Some SBool t1, Some ty t2, Some ty t3]
 
-  Existential SBool (CoreTerm (ListEqNeq ty op l1 l2)) ->
-    mkApp (eqNeqOpToDef op) [ Existential (SList ty) l1, Existential (SList ty) l2 ]
+  Some SBool (CoreTerm (ListEqNeq ty op l1 l2)) ->
+    mkApp (eqNeqOpToDef op) [ Some (SList ty) l1, Some (SList ty) l2 ]
 
-  Existential ty (CoreTerm (ListReverse _ lst)) ->
-    mkApp reverseDef [ Existential ty lst ]
+  Some ty (CoreTerm (ListReverse _ lst)) ->
+    mkApp reverseDef [ Some ty lst ]
 
-  Existential ty (CoreTerm (ListSort _ lst)) ->
-    mkApp sortDef [ Existential ty lst ]
+  Some ty (CoreTerm (ListSort _ lst)) ->
+    mkApp sortDef [ Some ty lst ]
 
-  Existential ty (CoreTerm (ListConcat _ l1 l2)) ->
-    mkApp addDef [ Existential ty l1, Existential ty l2 ]
+  Some ty (CoreTerm (ListConcat _ l1 l2)) ->
+    mkApp addDef [ Some ty l1, Some ty l2 ]
 
-  Existential ty (CoreTerm (ListDrop _ i l2)) ->
-    mkApp dropDef [ Existential SInteger i, Existential ty l2 ]
+  Some ty (CoreTerm (ListDrop _ i l2)) ->
+    mkApp dropDef [ Some SInteger i, Some ty l2 ]
 
-  Existential ty (CoreTerm (ListTake _ i l2)) ->
-    mkApp takeDef [ Existential SInteger i, Existential ty l2 ]
+  Some ty (CoreTerm (ListTake _ i l2)) ->
+    mkApp takeDef [ Some SInteger i, Some ty l2 ]
 
-  Existential (SList ty) (CoreTerm (MakeList _ i a)) ->
-    mkApp makeListDef [ Existential SInteger i, Existential ty a ]
+  Some (SList ty) (CoreTerm (MakeList _ i a)) ->
+    mkApp makeListDef [ Some SInteger i, Some ty a ]
 
   tm -> error $ "TODO: toPactTm " ++ show tm
 

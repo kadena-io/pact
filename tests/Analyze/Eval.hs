@@ -88,7 +88,7 @@ pactEval etm gState = (do
 
 -- Evaluate a term symbolically
 analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
-analyzeEval etm@(Existential ty _tm) gs = analyzeEval' etm ty gs
+analyzeEval etm@(Some ty _tm) gs = analyzeEval' etm ty gs
 
 analyzeEval' :: ETerm -> SingTy a -> GenState -> IO (Either String ETerm)
 analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
@@ -148,7 +148,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
     Just False -> pure $ Left "fails"
     Just True -> case analyzeVal of
       AVal _ sval -> pure $ case withSymVal ty (unliteral (SBVI.SBV sval)) of
-        Just sval' -> Right $ Existential ty $ CoreTerm $ Lit sval'
+        Just sval' -> Right $ Some ty $ CoreTerm $ Lit sval'
         Nothing    -> Left $ "couldn't unliteral: " ++ show sval
       _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
 

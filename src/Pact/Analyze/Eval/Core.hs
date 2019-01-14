@@ -443,6 +443,6 @@ evalObjAt objTy@(SObject schema) colNameT obj retType
     S mProv <$> go schema objVal
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
-evalExistential (Existential ty prop) = do
+evalExistential (Some ty prop) = do
   prop' <- withSing ty $ eval prop
   pure (EType ty, mkAVal prop')

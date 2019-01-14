@@ -1071,16 +1071,16 @@ instance Num (Prop 'TyDecimal) where
 type EProp = Existential Prop
 
 mkLiteralList :: [Existential tm] -> Maybe (Existential (Core tm))
-mkLiteralList [] = Just $ Existential (SList SAny) (LiteralList SAny [])
-mkLiteralList xs@(Existential ty0 _ : _) = foldr
+mkLiteralList [] = Just $ Some (SList SAny) (LiteralList SAny [])
+mkLiteralList xs@(Some ty0 _ : _) = foldr
   (\case
-    Existential ty y -> \case
+    Some ty y -> \case
       Nothing -> Nothing
-      Just (Existential (SList ty') (LiteralList _ty ys)) -> case singEq ty ty' of
+      Just (Some (SList ty') (LiteralList _ty ys)) -> case singEq ty ty' of
         Nothing   -> Nothing
-        Just Refl -> Just (Existential (SList ty') (LiteralList ty' (y:ys)))
+        Just Refl -> Just (Some (SList ty') (LiteralList ty' (y:ys)))
       _ -> error "impossible")
-  (Just (Existential (SList ty0) (LiteralList ty0 [])))
+  (Just (Some (SList ty0) (LiteralList ty0 [])))
   xs
 
 pattern Lit' :: forall tm ty. Core tm :<: tm => Concrete ty -> tm ty
@@ -1440,9 +1440,9 @@ instance Num (Term 'TyDecimal) where
 
 valueToProp :: ETerm -> Either String EProp
 valueToProp = \case
-  Existential ty (CoreTerm (Lit l))
-    -> Right $ Existential ty (CoreProp (Lit l))
-  Existential _ _ -> Left "can only convert (simple) values terms to props"
+  Some ty (CoreTerm (Lit l))
+    -> Right $ Some ty (CoreProp (Lit l))
+  Some _ _ -> Left "can only convert (simple) values terms to props"
 
 -- Note [instances]:
 -- The following nine instances seem like they should be

@@ -30,7 +30,7 @@ import           Analyze.Translate
 -- evaluations give the same result (including the same exception, if the
 -- program throws).
 testDualEvaluation :: ETerm -> GenState -> PropertyT IO ()
-testDualEvaluation etm@(Existential ty _tm) gState
+testDualEvaluation etm@(Some ty _tm) gState
   = testDualEvaluation' etm ty gState
 
 testDualEvaluation'
@@ -60,18 +60,18 @@ testDualEvaluation' etm ty gState = do
     (Right pactVal, Right analyzeVal) -> do
       Just etm' <- lift $ fromPactVal (EType ty) pactVal
       case etm' of
-        Existential ty' (CoreTerm (Lit pactSval)) -> do
-          Existential ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
+        Some ty' (CoreTerm (Lit pactSval)) -> do
+          Some ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
 
           -- compare results
           case singEq ty' ty'' of
             Just Refl -> withEq ty' $ withShow ty' $ sval' === pactSval
             Nothing   -> EType ty' === EType ty'' -- this'll fail
 
-        Existential ty' (CoreTerm (LiteralList lty svals)) -> do
+        Some ty' (CoreTerm (LiteralList lty svals)) -> do
           -- compare results
           case analyzeVal of
-            Existential ty'' (CoreTerm (LiteralList lty' svals')) -> case singEq lty lty' of
+            Some ty'' (CoreTerm (LiteralList lty' svals')) -> case singEq lty lty' of
               Just Refl -> if
                 | length svals > 10             -> discard
                 | singEqListTm lty svals' svals -> success
@@ -89,7 +89,7 @@ testDualEvaluation' etm ty gState = do
               footnote $ "r: " ++ show analyzeVal
               failure
 
-        Existential _ (CoreTerm (LiteralObject _ _obj)) -> do
+        Some _ (CoreTerm (LiteralObject _ _obj)) -> do
           footnote "can't property test evaluation of objects"
           failure
 
@@ -115,7 +115,7 @@ prop_round_trip_term = property $ do
   (etm, gState) <- safeGenAnyTerm
 
   etm' <- lift $ runMaybeT $ case etm of
-    Existential ty _tm ->
+    Some ty _tm ->
       (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
 
   etm' === Just etm

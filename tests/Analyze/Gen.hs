@@ -132,13 +132,13 @@ unaryArithSize op size = case op of
   Signum -> error "not yet implemented: we don't symbolically interpret this operator"
 
 mkInt :: MonadGen m => Core Analyze.Term 'TyInteger -> m ETerm
-mkInt = pure . Existential SInteger . Inj
+mkInt = pure . Some SInteger . Inj
 
 mkDec :: MonadGen m => Numerical Analyze.Term 'TyDecimal -> m ETerm
-mkDec = pure . Existential SDecimal . Inj . Numerical
+mkDec = pure . Some SDecimal . Inj . Numerical
 
 mkBool :: MonadGen m => Core Analyze.Term 'TyBool -> m ETerm
-mkBool = pure . Existential SBool . Inj
+mkBool = pure . Some SBool . Inj
 
 -- | When we know what type we'll be receiving from an existential we can
 -- unsafely extract it.
@@ -147,39 +147,39 @@ class Extract a where
 
 instance Extract 'TyInteger where
   extract = \case
-    Existential SInteger x -> x
+    Some SInteger x -> x
     other -> error (show other)
 
 instance Extract 'TyDecimal where
   extract = \case
-    Existential SDecimal x -> x
+    Some SDecimal x -> x
     other -> error (show other)
 
 instance Extract 'TyStr where
   extract = \case
-    Existential SStr x -> x
+    Some SStr x -> x
     other -> error (show other)
 
 instance Extract 'TyBool where
   extract = \case
-    Existential SBool x -> x
+    Some SBool x -> x
     other -> error (show other)
 
 instance Extract 'TyTime where
   extract = \case
-    Existential STime x -> x
+    Some STime x -> x
     other -> error (show other)
 
 instance Extract 'TyKeySet where
   extract = \case
-    Existential SKeySet x -> x
+    Some SKeySet x -> x
     other -> error (show other)
 
 -- TODO: cover Var, objects
 -- TODO: we might want to reweight these by using `Gen.frequency`.
 genCore :: MonadGen m => BoundedType -> m ETerm
 genCore (BoundedInt size) = Gen.recursive Gen.choice [
-    Existential SInteger . Lit' <$> genInteger size
+    Some SInteger . Lit' <$> genInteger size
   ] $ scale 4 <$> [
     Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 1e3))) $
       \x y -> mkInt $ Numerical $ ModOp (extract x) (extract y)
@@ -197,7 +197,7 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
   , Gen.subtermM (genCore strSize) $ mkInt . StrLength . extract
   ]
 genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
-    Existential SDecimal . Lit' <$> genDecimal size
+    Some SDecimal . Lit' <$> genDecimal size
   ] $ scale 4 <$> [
     do op <- genArithOp
        let (size1, size2) = arithSize op size
@@ -222,17 +222,17 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
   ]
 genCore (BoundedString len) = Gen.recursive Gen.choice [
-    Existential SStr . StrLit
+    Some SStr . StrLit
       -- TODO: unicode (SBV has trouble with some unicode characters)
       <$> Gen.string (Range.exponential 1 len) Gen.latin1
   ] [
     scale 4 $ Gen.subtermM2
       (genCore (BoundedString (len `div` 2)))
       (genCore (BoundedString (len `div` 2))) $ \x y ->
-        pure $ Existential SStr $ Inj $ StrConcat (extract x) (extract y)
+        pure $ Some SStr $ Inj $ StrConcat (extract x) (extract y)
   ]
 genCore BoundedBool = Gen.recursive Gen.choice [
-    Existential SBool . Lit' <$> Gen.bool
+    Some SBool . Lit' <$> Gen.bool
   ] $ scale 4 <$> [
     do op <- genComparisonOp
        Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y -> do
@@ -266,7 +266,7 @@ genCore BoundedBool = Gen.recursive Gen.choice [
        Gen.subtermM2
          (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $
            \elst1 elst2 -> case (elst1, elst2) of
-             (Existential (SList lty1) l1, Existential (SList lty2) l2) ->
+             (Some (SList lty1) l1, Some (SList lty2) l2) ->
                case singEq lty1 ty of
                  Nothing   -> error "impossible"
                  Just Refl -> case singEq lty2 ty of
@@ -277,45 +277,45 @@ genCore BoundedBool = Gen.recursive Gen.choice [
       mkBool $ Logical NotOp [extract x]
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
-    Existential STime . Lit' <$> Gen.enumBounded -- Gen.int64
+    Some STime . Lit' <$> Gen.enumBounded -- Gen.int64
   ] $ scale 4 <$> [
     Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedInt 1e9)) $ \x y ->
-      pure $ Existential STime $ Inj $ IntAddTime (extract x) (extract y)
+      pure $ Some STime $ Inj $ IntAddTime (extract x) (extract y)
   , Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedDecimal 1e9)) $ \x y ->
-      pure $ Existential STime $ Inj $ DecAddTime (extract x) (extract y)
+      pure $ Some STime $ Inj $ DecAddTime (extract x) (extract y)
   ]
-genCore BoundedKeySet = Existential SKeySet . Lit' . KeySet
+genCore BoundedKeySet = Some SKeySet . Lit' . KeySet
   <$> genInteger (0 ... 2)
 genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
   -- EqNeq, At, Contains
   [ Gen.subtermM (genCore bound) $ \case
-      Existential lty@(SList ty) lst -> pure $ Existential lty $ Inj $ ListReverse ty lst
+      Some lty@(SList ty) lst -> pure $ Some lty $ Inj $ ListReverse ty lst
       other -> error (show other)
   , Gen.subtermM (genCore bound) $ \case
-      Existential lty@(SList ty) lst -> pure $ Existential lty $ Inj $ ListSort ty lst
+      Some lty@(SList ty) lst -> pure $ Some lty $ Inj $ ListSort ty lst
       other -> error (show other)
   , Gen.subtermM2 (genCore bound) (genCore bound) $ \elst1 elst2 ->
     case (elst1, elst2) of
-      (Existential lty@(SList ty) l1, Existential lty2 l2) -> case singEq lty lty2 of
+      (Some lty@(SList ty) l1, Some lty2 l2) -> case singEq lty lty2 of
         Nothing   -> error "impossible"
-        Just Refl -> pure $ Existential lty $ Inj $ ListConcat ty l1 l2
+        Just Refl -> pure $ Some lty $ Inj $ ListConcat ty l1 l2
       _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
       \elst1 elst2 -> case (elst1, elst2) of
-      (Existential lty@(SList ty) l, Existential SInteger i)
-        -> pure $ Existential lty $ Inj $ ListDrop ty i l
+      (Some lty@(SList ty) l, Some SInteger i)
+        -> pure $ Some lty $ Inj $ ListDrop ty i l
       _ -> error (show (elst1, elst2))
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
       \elst1 elst2 -> case (elst1, elst2) of
-      (Existential lty@(SList ty) l, Existential SInteger i)
-        -> pure $ Existential lty $ Inj $ ListTake ty i l
+      (Some lty@(SList ty) l, Some SInteger i)
+        -> pure $ Some lty $ Inj $ ListTake ty i l
       _ -> error (show (elst1, elst2))
   -- Note: we currently use bounded list checking so anything beyond 10 is
   -- pointless
   , Gen.subtermM2 (genCore (BoundedInt (0 ... 5))) (genCore elemBound) $
       \elst1 elst2 -> case (elst1, elst2) of
-      (Existential SInteger i, Existential ty a)
-        -> pure $ Existential (SList ty) $ Inj $ MakeList ty i a
+      (Some SInteger i, Some ty a)
+        -> pure $ Some (SList ty) $ Inj $ MakeList ty i a
       _ -> error (show (elst1, elst2))
   -- LiteralList
   -- , Gen.subtermM
@@ -363,37 +363,37 @@ genTermSpecific size@(BoundedInt len) = Gen.choice
   [ do
       base      <- Gen.int    (Range.linear 2 16)
       formatted <- Gen.string (Range.exponential 1 128) (genBaseChar base)
-      pure $ Existential SInteger $ CoreTerm $ StrToIntBase
+      pure $ Some SInteger $ CoreTerm $ StrToIntBase
         (Lit' (fromIntegral base :: Integer))
         (Lit' (Str formatted))
   , do
       formatted <- Gen.string (Range.exponential 1 128) (genBaseChar 10)
-      pure $ Existential SInteger $ CoreTerm $ StrToInt $ Lit' $ Str formatted
-  , Existential SInteger . ReadInteger . StrLit <$> genIntegerName len
+      pure $ Some SInteger $ CoreTerm $ StrToInt $ Lit' $ Str formatted
+  , Some SInteger . ReadInteger . StrLit <$> genIntegerName len
   , genTermSpecific' size
   ]
 genTermSpecific BoundedBool       = Gen.choice
   [
   -- TODO: temporarily disabled pending
   -- https://github.com/kadena-io/pact/issues/207
-  -- [ Existential SBool . Enforce (Just 0) . extract <$> genTerm BoundedBool
+  -- [ Some SBool . Enforce (Just 0) . extract <$> genTerm BoundedBool
   -- , do xs <- Gen.list (Range.linear 0 4) (genTerm BoundedBool)
-  --      pure $ Existential SBool $ EnforceOne $ case xs of
+  --      pure $ Some SBool $ EnforceOne $ case xs of
   --        [] -> Left 0
   --        _  -> Right $ fmap (((Path 0, Path 0),) . extract) xs
 
   -- TODO(joel): cover these
   -- , do tagId <- genTagId
-  --      Existential SBool . KsAuthorized tagId . extract <$> genTerm BoundedKeySet
+  --      Some SBool . KsAuthorized tagId . extract <$> genTerm BoundedKeySet
   -- , do tagId <- genTagId
-  --      Existential SBool . NameAuthorized tagId . extract <$> genTerm strSize
+  --      Some SBool . NameAuthorized tagId . extract <$> genTerm strSize
 
   -- HACK(joel): Right now we "dilute" this choice with literal bools.
   -- Otherwise this tends to hang forever. Fix this properly (why does scale
   -- not work?).
-    Existential SBool . Lit' <$> Gen.bool
-  , Existential SBool . Lit' <$> Gen.bool
-  , Existential SBool . Lit' <$> Gen.bool
+    Some SBool . Lit' <$> Gen.bool
+  , Some SBool . Lit' <$> Gen.bool
+  , Some SBool . Lit' <$> Gen.bool
   , genTermSpecific' BoundedBool
   ]
 genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
@@ -405,7 +405,7 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
   --      tagId <- genTagId
   --      Write writeType tagId table schema
   -- Write
-  [ pure $ Existential SStr PactVersion
+  [ pure $ Some SStr PactVersion
   , do
        let genFormattableTerm = Gen.choice
              [ genTerm intSize
@@ -430,34 +430,34 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
               str <- Gen.element ["{} {} {}", "{} / {} / {}", "{} - {} - {}"]
               pure (Lit' str, [tm1, tm2, tm3])
          ]
-       pure $ Existential SStr $ Format str tms
+       pure $ Some SStr $ Format str tms
   , scale 4 $ do
        -- just generate literal format strings here so this tests something
        -- interesting
-       format           <- genFormat
-       Existential STime t2 <- genTerm BoundedTime
-       pure $ Existential SStr $ FormatTime (StrLit (showTimeFormat format)) t2
+       format        <- genFormat
+       Some STime t2 <- genTerm BoundedTime
+       pure $ Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
   , let genHashableTerm = Gen.choice
           [ genTerm intSize
           , genTerm strSize
           , genTerm BoundedBool
           ]
-    in Existential SStr . Hash <$> genHashableTerm
+    in Some SStr . Hash <$> genHashableTerm
   , genTermSpecific' size
   ]
 genTermSpecific BoundedKeySet = scale 2 $
-  Existential SKeySet . ReadKeySet . StrLit <$> genKeySetName
+  Some SKeySet . ReadKeySet . StrLit <$> genKeySetName
 genTermSpecific (BoundedDecimal len) = scale 2 $
-  Existential SDecimal . ReadDecimal . StrLit <$> genDecimalName len
+  Some SDecimal . ReadDecimal . StrLit <$> genDecimalName len
 genTermSpecific BoundedTime = scale 8 $ Gen.choice
   [ do
        format  <- genFormat
        timeStr <- genTimeOfFormat format
-       pure $ Existential STime $ ParseTime (Just (StrLit (showTimeFormat format))) $
+       pure $ Some STime $ ParseTime (Just (StrLit (showTimeFormat format))) $
          StrLit timeStr
   , do
        timeStr <- genTimeOfFormat standardTimeFormat
-       pure $ Existential STime $ ParseTime Nothing $ StrLit timeStr
+       pure $ Some STime $ ParseTime Nothing $ StrLit timeStr
   ]
 genTermSpecific (BoundedList _)
   = error "There are no term-specific list constructors"
@@ -531,14 +531,14 @@ genTermSpecific' boundedTy = scale 8 $ Gen.choice
   -- TODO: Let
   -- [ do
   --      eTm <- genAnyTerm
-  --      Existential ty tm <- genTerm boundedTy
-  --      pure $ Existential ty $ Sequence eTm tm
+  --      Some ty tm <- genTerm boundedTy
+  --      pure $ Some ty $ Sequence eTm tm
   [ do
-       Existential SBool b <- genTerm BoundedBool
-       Existential tyt1 t1 <- genTerm boundedTy
-       Existential tyt2 t2 <- genTerm boundedTy
+       Some SBool b <- genTerm BoundedBool
+       Some tyt1 t1 <- genTerm boundedTy
+       Some tyt2 t2 <- genTerm boundedTy
        case singEq tyt1 tyt2 of
-         Just Refl -> pure $ Existential tyt1 $ IfThenElse tyt1 b (Path 0, t1) (Path 0, t2)
+         Just Refl -> pure $ Some tyt1 $ IfThenElse tyt1 b (Path 0, t1) (Path 0, t2)
          Nothing   -> error "t1 and t2 must have the same type"
   ]
 
@@ -571,17 +571,17 @@ safeGenAnyTerm = (do
 genFormatTime :: Gen (ETerm, GenState)
 genFormatTime = do
   format <- genFormat
-  (Existential STime t2, gState) <- runReaderT
+  (Some STime t2, gState) <- runReaderT
     (runStateT (genTerm BoundedTime) emptyGenState)
     genEnv
-  let etm = Existential SStr $ FormatTime (StrLit (showTimeFormat format)) t2
+  let etm = Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
   pure (etm, gState)
 
 genParseTime :: Gen (ETerm, GenState)
 genParseTime = do
   format  <- genFormat
   timeStr <- genTimeOfFormat format
-  let etm = Existential STime $ ParseTime (Just (StrLit (showTimeFormat format))) $
+  let etm = Some STime $ ParseTime (Just (StrLit (showTimeFormat format))) $
         StrLit timeStr
   pure (etm, emptyGenState)
 

@@ -491,8 +491,8 @@ translateBody = \case
   [ast]    -> translateNode ast
   ast:asts -> do
     ast'                 <- translateNode ast
-    Existential ty asts' <- translateBody asts
-    pure $ Existential ty $ Sequence ast' asts'
+    Some ty asts' <- translateBody asts
+    pure $ Some ty $ Sequence ast' asts'
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -561,8 +561,7 @@ translateObjBinding pairs schema bodyA rhsT = do
                  , Located _ (Binding vid _ (Munged varName) (EType ty))
                  ) ->
             let colTerm = StrLit @Term colName
-                rhs = Existential ty $
-                  CoreTerm $ ObjAt schema colTerm objVar
+                rhs = Some ty $ CoreTerm $ ObjAt schema colTerm objVar
             in Let varName vid retTid rhs body)
           innerBody
           (zip cols bindingTs)
@@ -584,14 +583,14 @@ translateObjBinding pairs schema bodyA rhsT = do
 mkLiteralObject :: [(Text, ETerm)] -> TranslateM (Existential (Core Term))
 mkLiteralObject [] = pure $
   let ty = SObject SNil
-  in Existential ty (LiteralObject ty (Object NilOf))
-mkLiteralObject ((name, Existential ty tm) : tms) = do
-  Existential (SObject objTy) (LiteralObject _ (Object obj)) <- mkLiteralObject tms
+  in Some ty (LiteralObject ty (Object NilOf))
+mkLiteralObject ((name, Some ty tm) : tms) = do
+  Some (SObject objTy) (LiteralObject _ (Object obj)) <- mkLiteralObject tms
   case someSymbolVal (T.unpack name) of
     SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
       let sym = SSymbol @k
           objTy' = SObject (SCons sym ty objTy)
-      in Existential objTy' $
+      in Some objTy' $
            LiteralObject objTy' $
              Object $ ConsOf sym (Column ty tm) obj
 
@@ -615,94 +614,94 @@ translateNode astNode = withAstContext astNode $ case astNode of
         vid <- genVarId
         tsFoundVars %= cons (vid, "x", EType ty)
         pure (Munged "x", vid) -- TODO better name?
-    pure $ Existential ty $ CoreTerm $ Var vid varName
+    pure $ Some ty $ CoreTerm $ Var vid varName
 
   -- Int
   AST_NegativeLit l -> case l of
-    LInteger i -> pure $ Existential SInteger $ inject @(Numerical Term) $
+    LInteger i -> pure $ Some SInteger $ inject @(Numerical Term) $
       IntUnaryArithOp Negate $ Lit' i
-    LDecimal d -> pure $ Existential SDecimal $ inject @(Numerical Term) $
+    LDecimal d -> pure $ Some SDecimal $ inject @(Numerical Term) $
       DecUnaryArithOp Negate $ Lit' $ fromPact decimalIso d
     _          -> throwError' $ BadNegationType astNode
 
   AST_Lit l -> case l of
-    LInteger i -> pure $ Existential SInteger $ Lit' i
-    LBool b    -> pure $ Existential SBool    $ Lit' b
-    LString s  -> pure $ Existential SStr     $ Lit' $ Str $ T.unpack s
-    LDecimal d -> pure $ Existential SDecimal $ Lit' $ fromPact decimalIso d
-    LTime t    -> pure $ Existential STime    $ Lit' $ fromPact timeIso t
+    LInteger i -> pure $ Some SInteger $ Lit' i
+    LBool b    -> pure $ Some SBool    $ Lit' b
+    LString s  -> pure $ Some SStr     $ Lit' $ Str $ T.unpack s
+    LDecimal d -> pure $ Some SDecimal $ Lit' $ fromPact decimalIso d
+    LTime t    -> pure $ Some STime    $ Lit' $ fromPact timeIso t
 
   AST_NegativeVar node -> do
     Just (Munged name, vid) <- view $ teNodeVars.at node
     EType ty <- translateType node
     case ty of
-      SInteger     -> pure $ Existential SInteger $ inject $ IntUnaryArithOp Negate $
+      SInteger     -> pure $ Some SInteger $ inject $ IntUnaryArithOp Negate $
         CoreTerm $ Var vid name
-      SDecimal -> pure $ Existential SDecimal $ inject $ DecUnaryArithOp Negate $
+      SDecimal -> pure $ Some SDecimal $ inject $ DecUnaryArithOp Negate $
         CoreTerm $ Var vid name
       _        -> throwError' $ BadNegationType astNode
 
   AST_Format formatStr vars -> do
-    Existential SStr formatStr' <- translateNode formatStr
+    Some SStr formatStr' <- translateNode formatStr
     vars' <- for vars translateNode
-    pure $ Existential SStr $ Format formatStr' vars'
+    pure $ Some SStr $ Format formatStr' vars'
 
   AST_FormatTime formatStr time -> do
-    Existential SStr formatStr' <- translateNode formatStr
-    Existential STime time'     <- translateNode time
-    pure $ Existential SStr $ FormatTime formatStr' time'
+    Some SStr formatStr' <- translateNode formatStr
+    Some STime time'     <- translateNode time
+    pure $ Some SStr $ FormatTime formatStr' time'
 
   AST_ParseTime formatStr timeStr -> do
-    Existential SStr formatStr' <- translateNode formatStr
-    Existential SStr timeStr'   <- translateNode timeStr
-    pure $ Existential STime $ ParseTime (Just formatStr') timeStr'
+    Some SStr formatStr' <- translateNode formatStr
+    Some SStr timeStr'   <- translateNode timeStr
+    pure $ Some STime $ ParseTime (Just formatStr') timeStr'
 
   AST_Time timeStr -> do
-    Existential SStr timeStr' <- translateNode timeStr
-    pure $ Existential STime $ ParseTime Nothing timeStr'
+    Some SStr timeStr' <- translateNode timeStr
+    pure $ Some STime $ ParseTime Nothing timeStr'
 
   AST_Hash val -> do
     val' <- translateNode val
-    pure $ Existential SStr $ Hash val'
+    pure $ Some SStr $ Hash val'
 
   AST_ReadKeyset nameA -> do
-    Existential SStr nameT <- translateNode nameA
-    return $ Existential SKeySet $ ReadKeySet nameT
+    Some SStr nameT <- translateNode nameA
+    return $ Some SKeySet $ ReadKeySet nameT
 
   AST_ReadDecimal nameA -> do
-    Existential SStr nameT <- translateNode nameA
-    return $ Existential SDecimal $ ReadDecimal nameT
+    Some SStr nameT <- translateNode nameA
+    return $ Some SDecimal $ ReadDecimal nameT
 
   AST_ReadInteger nameA -> do
-    Existential SStr nameT <- translateNode nameA
-    return $ Existential SInteger $ ReadInteger nameT
+    Some SStr nameT <- translateNode nameA
+    return $ Some SInteger $ ReadInteger nameT
 
   AST_ReadMsg _ -> throwError' $ NoReadMsg astNode
 
   AST_Enforce _ cond -> do
-    Existential SBool condTerm <- translateNode cond
+    Some SBool condTerm <- translateNode cond
     tid <- tagAssert $ cond ^. aNode
-    pure $ Existential SBool $ Enforce (Just tid) condTerm
+    pure $ Some SBool $ Enforce (Just tid) condTerm
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim Pact.TyString)
     -> do
-      Existential SStr ksnT <- translateNode ksA
+      Some SStr ksnT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ Existential SBool $ Enforce Nothing $ NameAuthorized tid ksnT
+      return $ Some SBool $ Enforce Nothing $ NameAuthorized tid ksnT
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim Pact.TyKeySet)
     -> do
-      Existential SKeySet ksT <- translateNode ksA
+      Some SKeySet ksT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ Existential SBool $ Enforce Nothing $ KsAuthorized tid ksT
+      return $ Some SBool $ Enforce Nothing $ KsAuthorized tid ksT
 
   AST_EnforceOne node [] -> do
     -- we just emit an event equivalent to one for `(enforce false)` in this
     -- case:
     tid <- tagAssert node
-    return $ Existential SBool $ EnforceOne $ Left tid
+    return $ Some SBool $ EnforceOne $ Left tid
 
   AST_EnforceOne _ casesA@(_:_) -> do
     let n = length casesA -- invariant: n > 0
@@ -724,71 +723,71 @@ translateNode astNode = withAstContext astNode $ case astNode of
     (terms, vertices) <- fmap unzip $
       for (zip3 casesA newPaths recovs) $ \(caseA, mNewPath, recov) -> do
         maybe (pure ()) startSubpath mNewPath
-        Existential SBool caseT <- withNestedRecoverability recov $
+        Some SBool caseT <- withNestedRecoverability recov $
           translateNode caseA
         postVertex <- extendPath
         pure (caseT, postVertex)
 
     joinPaths $ zip vertices successPaths
     tsCurrentPath .= preEnforcePath
-    return $ Existential SBool $ EnforceOne $ Right $ zip pathPairs terms
+    return $ Some SBool $ EnforceOne $ Right $ zip pathPairs terms
 
   AST_Days days -> do
-    Existential daysTy days' <- translateNode days
+    Some daysTy days' <- translateNode days
     case daysTy of
-      SInteger -> pure $ Existential SInteger $ inject $ IntArithOp Mul (60 * 60 * 24) days'
-      SDecimal -> pure $ Existential SDecimal $ inject $ DecArithOp Mul (60 * 60 * 24) days'
+      SInteger -> pure $ Some SInteger $ inject $ IntArithOp Mul (60 * 60 * 24) days'
+      SDecimal -> pure $ Some SDecimal $ inject $ DecArithOp Mul (60 * 60 * 24) days'
       _        -> throwError' $ BadTimeType astNode
 
   AST_Hours hours -> do
-    Existential hoursTy hours' <- translateNode hours
+    Some hoursTy hours' <- translateNode hours
     case hoursTy of
-      SInteger -> pure $ Existential SInteger $ inject $ IntArithOp Mul (60 * 60) hours'
-      SDecimal -> pure $ Existential SDecimal $ inject $ DecArithOp Mul (60 * 60) hours'
+      SInteger -> pure $ Some SInteger $ inject $ IntArithOp Mul (60 * 60) hours'
+      SDecimal -> pure $ Some SDecimal $ inject $ DecArithOp Mul (60 * 60) hours'
       _        -> throwError' $ BadTimeType astNode
 
   AST_Minutes minutes -> do
-    Existential minutesTy minutes' <- translateNode minutes
+    Some minutesTy minutes' <- translateNode minutes
     case minutesTy of
-      SInteger -> pure $ Existential SInteger $ inject $ IntArithOp Mul 60 minutes'
-      SDecimal -> pure $ Existential SDecimal $ inject $ DecArithOp Mul 60 minutes'
+      SInteger -> pure $ Some SInteger $ inject $ IntArithOp Mul 60 minutes'
+      SDecimal -> pure $ Some SDecimal $ inject $ DecArithOp Mul 60 minutes'
       _        -> throwError' $ BadTimeType astNode
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
       <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
-    -> pure $ Existential STime $ Lit' $ fromPact timeIso timeLit'
+    -> pure $ Some STime $ Lit' $ fromPact timeIso timeLit'
 
   AST_NFun_Basic SModulus [a, b] ->  do
-    Existential SInteger a' <- translateNode a
-    Existential SInteger b' <- translateNode b
-    pure (Existential SInteger (inject $ ModOp a' b'))
+    Some SInteger a' <- translateNode a
+    Some SInteger b' <- translateNode b
+    pure (Some SInteger (inject $ ModOp a' b'))
 
   AST_NFun_Basic fn@(toOp comparisonOpP -> Just op) args@[a, b] -> do
     aT <- translateNode a
     bT <- translateNode b
     case (aT, bT) of
 
-      (Existential (SList SAny) (EmptyList SAny), Existential (SList ty) lst) -> do
+      (Some (SList SAny) (EmptyList SAny), Some (SList ty) lst) -> do
         op' <- toOp eqNeqP fn ?? MalformedComparison fn args
-        pure $ Existential SBool $ CoreTerm $ ListEqNeq ty op' (EmptyList ty) lst
+        pure $ Some SBool $ CoreTerm $ ListEqNeq ty op' (EmptyList ty) lst
 
-      (Existential (SList ty) lst, Existential (SList SAny) (EmptyList SAny)) -> do
+      (Some (SList ty) lst, Some (SList SAny) (EmptyList SAny)) -> do
         op' <- toOp eqNeqP fn ?? MalformedComparison fn args
-        pure $ Existential SBool $ CoreTerm $ ListEqNeq ty op' lst (EmptyList ty)
+        pure $ Some SBool $ CoreTerm $ ListEqNeq ty op' lst (EmptyList ty)
 
-      (Existential (SList ta) a', Existential (SList tb) b') -> do
+      (Some (SList ta) a', Some (SList tb) b') -> do
         Refl <- singEq ta tb ?? TypeMismatch (EType ta) (EType tb)
         op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
-        pure $ Existential SBool $ inject $ ListEqNeq ta op' a' b'
+        pure $ Some SBool $ inject $ ListEqNeq ta op' a' b'
 
-      (Existential ta@SObject{} a', Existential tb@SObject{} b') -> do
+      (Some ta@SObject{} a', Some tb@SObject{} b') -> do
         op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
-        pure $ Existential SBool $ inject $ ObjectEqNeq ta tb op' a' b'
+        pure $ Some SBool $ inject $ ObjectEqNeq ta tb op' a' b'
 
-      (Existential ta a', Existential tb b') -> do
+      (Some ta a', Some tb b') -> do
         Refl <- singEq ta tb ?? TypeMismatch (EType ta) (EType tb)
-        pure $ Existential SBool $ inject $ Comparison ta op a' b'
+        pure $ Some SBool $ inject $ Comparison ta op a' b'
 
   AST_NFun_Basic fn@(toOp comparisonOpP -> Just _) args
     -> throwError' $ MalformedComparison fn args
@@ -796,19 +795,19 @@ translateNode astNode = withAstContext astNode $ case astNode of
   -- logical: not, and, or
 
   AST_NFun_Basic SLogicalNegation [a] -> do
-    Existential SBool a' <- translateNode a
-    pure $ Existential SBool $ inject $ Logical NotOp [a']
+    Some SBool a' <- translateNode a
+    pure $ Some SBool $ inject $ Logical NotOp [a']
 
   AST_NFun_Basic fn args@[a, b]
     | fn == SLogicalConjunction || fn == SLogicalDisjunction -> do
-      Existential tyA a' <- translateNode a
-      Existential tyB b' <- translateNode b
+      Some tyA a' <- translateNode a
+      Some tyB b' <- translateNode b
       case (tyA, tyB) of
         (SBool, SBool) -> case fn of
           SLogicalConjunction -> pure $
-            Existential SBool $ inject $ Logical AndOp [a', b']
+            Some SBool $ inject $ Logical AndOp [a', b']
           SLogicalDisjunction -> pure $
-            Existential SBool $ inject $ Logical OrOp [a', b']
+            Some SBool $ inject $ Logical OrOp [a', b']
           _     -> error "impossible"
         _ -> throwError' $ MalformedLogicalOp fn args
 
@@ -818,28 +817,28 @@ translateNode astNode = withAstContext astNode $ case astNode of
   -- arithmetic
 
   AST_NFun_Basic fn@(toOp roundingLikeOpP -> Just op) args@[a, b] -> do
-      Existential tyA a' <- translateNode a
-      Existential tyB b' <- translateNode b
+      Some tyA a' <- translateNode a
+      Some tyB b' <- translateNode b
       case (tyA, tyB, op) of
         (SDecimal, SInteger, Round)   -> pure $
-          Existential SDecimal $ inject $ RoundingLikeOp2 op a' b'
+          Some SDecimal $ inject $ RoundingLikeOp2 op a' b'
         (SDecimal, SInteger, Ceiling) -> pure $
-          Existential SDecimal $ inject $ RoundingLikeOp2 op a' b'
+          Some SDecimal $ inject $ RoundingLikeOp2 op a' b'
         (SDecimal, SInteger, Floor)   -> pure $
-          Existential SDecimal $ inject $ RoundingLikeOp2 op a' b'
+          Some SDecimal $ inject $ RoundingLikeOp2 op a' b'
         _ -> throwError' $ MalformedArithOp fn args
 
   AST_NFun_Basic fn@(toOp roundingLikeOpP -> Just op) args@[a] -> do
-      Existential ty a' <- translateNode a
+      Some ty a' <- translateNode a
       case ty of
-        SDecimal -> pure $ Existential SInteger $ inject $ RoundingLikeOp1 op a'
+        SDecimal -> pure $ Some SInteger $ inject $ RoundingLikeOp1 op a'
         _        -> throwError' $ MalformedArithOp fn args
 
   AST_NFun_Basic fn@(toOp unaryArithOpP -> Just op) args@[a] -> do
-      Existential ty a' <- translateNode a
+      Some ty a' <- translateNode a
       case ty of
-        SInteger -> pure $ Existential SInteger $ inject $ IntUnaryArithOp op a'
-        SDecimal -> pure $ Existential SDecimal $ inject $ DecUnaryArithOp op a'
+        SInteger -> pure $ Some SInteger $ inject $ IntUnaryArithOp op a'
+        SDecimal -> pure $ Some SDecimal $ inject $ DecUnaryArithOp op a'
         _        -> throwError' $ MalformedArithOp fn args
 
   --
@@ -851,84 +850,84 @@ translateNode astNode = withAstContext astNode $ case astNode of
     aT          <- translateNode a
     bT          <- translateNode b
     case (aT, bT) of
-      (Existential ty1@SObject{} o1, Existential ty2@SObject{} o2) -> do
+      (Some ty1@SObject{} o1, Some ty2@SObject{} o2) -> do
         -- Feature 3: object merge
-        pure $ Existential retTy $ inject $ ObjMerge ty1 ty2 o1 o2
-      (Existential (SList tyA) a', Existential (SList tyB) b') -> do
+        pure $ Some retTy $ inject $ ObjMerge ty1 ty2 o1 o2
+      (Some (SList tyA) a', Some (SList tyB) b') -> do
         Refl <- singEq tyA tyB ?? MalformedArithOp fn args
         -- Feature 4: list concatenation
-        pure $ Existential (SList tyA) $ inject $ ListConcat tyA a' b'
-      (Existential tyA a', Existential tyB b') ->
+        pure $ Some (SList tyA) $ inject $ ListConcat tyA a' b'
+      (Some tyA a', Some tyB b') ->
         case (tyA, tyB) of
           -- Feature 1: string concatenation
-          (SStr, SStr)         -> pure $ Existential SStr $ inject $ StrConcat a' b'
+          (SStr, SStr)         -> pure $ Some SStr $ inject $ StrConcat a' b'
           -- Feature 2: arithmetic addition
-          (SInteger, SInteger) -> pure $ Existential SInteger $ inject $ IntArithOp Add a' b'
-          (SDecimal, SDecimal) -> pure $ Existential SDecimal $ inject $ DecArithOp Add a' b'
-          (SInteger, SDecimal) -> pure $ Existential SDecimal $ inject $ IntDecArithOp Add a' b'
-          (SDecimal, SInteger) -> pure $ Existential SDecimal $ inject $ DecIntArithOp Add a' b'
+          (SInteger, SInteger) -> pure $ Some SInteger $ inject $ IntArithOp Add a' b'
+          (SDecimal, SDecimal) -> pure $ Some SDecimal $ inject $ DecArithOp Add a' b'
+          (SInteger, SDecimal) -> pure $ Some SDecimal $ inject $ IntDecArithOp Add a' b'
+          (SDecimal, SInteger) -> pure $ Some SDecimal $ inject $ DecIntArithOp Add a' b'
           _ -> throwError' $ MalformedArithOp fn args
 
   AST_NFun_Basic fn@(toOp arithOpP -> Just op) args@[a, b] -> do
-      Existential tyA a' <- translateNode a
-      Existential tyB b' <- translateNode b
+      Some tyA a' <- translateNode a
+      Some tyB b' <- translateNode b
       case (tyA, tyB) of
         (SInteger, SInteger)         -> pure $
-          Existential SInteger $ inject $ IntArithOp op a' b'
+          Some SInteger $ inject $ IntArithOp op a' b'
         (SDecimal, SDecimal) -> pure $
-          Existential SDecimal $ inject $ DecArithOp op a' b'
+          Some SDecimal $ inject $ DecArithOp op a' b'
         (SInteger, SDecimal)     -> pure $
-          Existential SDecimal $ inject $ IntDecArithOp op a' b'
+          Some SDecimal $ inject $ IntDecArithOp op a' b'
         (SDecimal, SInteger)     -> pure $
-          Existential SDecimal $ inject $ DecIntArithOp op a' b'
+          Some SDecimal $ inject $ DecIntArithOp op a' b'
         _ -> throwError' $ MalformedArithOp fn args
 
   AST_NFun_Basic fn@(toOp arithOpP -> Just _) args
     -> throwError' $ MalformedArithOp fn args
 
   AST_NFun _node "length" [a] -> do
-    Existential SStr a' <- translateNode a
-    pure $ Existential SInteger $ CoreTerm $ StrLength a'
+    Some SStr a' <- translateNode a
+    pure $ Some SInteger $ CoreTerm $ StrLength a'
 
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
-    Existential SStr row'            <- translateNode row
-    Existential objTy@SObject{} obj' <- translateNode obj
+    Some SStr row'            <- translateNode row
+    Some objTy@SObject{} obj' <- translateNode obj
     tid                              <- tagWrite writeType node $ ESchema objTy
-    pure $ Existential SStr $
+    pure $ Some SStr $
       Write objTy writeType tid (TableName (T.unpack tn)) row' obj'
 
   AST_If _ cond tBranch fBranch -> do
-    Existential SBool cond' <- translateNode cond
-    preTestPath <- use tsCurrentPath
-    postTest <- extendPath
-    truePath <- startNewSubpath
-    Existential ta a <- translateNode tBranch
-    postTrue <- extendPath
+    Some SBool cond' <- translateNode cond
+    preTestPath      <- use tsCurrentPath
+    postTest         <- extendPath
+    truePath         <- startNewSubpath
+    Some ta a        <- translateNode tBranch
+    postTrue         <- extendPath
     tsPathHead .= postTest -- reset to before true branch
     falsePath <- startNewSubpath
-    Existential tb b <- translateNode fBranch
+    Some tb b <- translateNode fBranch
     postFalse <- extendPath
     joinPaths [(postTrue, truePath), (postFalse, falsePath)]
     tsCurrentPath .= preTestPath -- reset to before conditional
     Refl <- singEq ta tb ?? BranchesDifferentTypes (EType ta) (EType tb)
-    pure $ Existential ta $ IfThenElse ta cond' (truePath, a) (falsePath, b)
+    pure $ Some ta $ IfThenElse ta cond' (truePath, a) (falsePath, b)
 
   AST_NFun _node "str-to-int" [s] -> do
-    Existential SStr s' <- translateNode s
-    pure $ Existential SInteger $ CoreTerm $ StrToInt s'
+    Some SStr s' <- translateNode s
+    pure $ Some SInteger $ CoreTerm $ StrToInt s'
 
   AST_NFun _node "str-to-int" [b, s] -> do
-    Existential SInteger b' <- translateNode b
-    Existential SStr s'     <- translateNode s
-    pure $ Existential SInteger $ CoreTerm $ StrToIntBase b' s'
+    Some SInteger b' <- translateNode b
+    Some SStr s'     <- translateNode s
+    pure $ Some SInteger $ CoreTerm $ StrToIntBase b' s'
 
-  AST_NFun _node "pact-version" [] -> pure $ Existential SStr PactVersion
+  AST_NFun _node "pact-version" [] -> pure $ Some SStr PactVersion
 
   AST_WithRead node table key bindings schemaNode body -> do
     EType objTy@SObject{} <- translateType schemaNode
-    Existential SStr key' <- translateNode key
+    Some SStr key' <- translateNode key
     tid                   <- tagRead node $ ESchema objTy
-    let readT = Existential objTy $
+    let readT = Some objTy $
           Read objTy tid (TableName (T.unpack table)) key'
     withNodeContext node $
       translateObjBinding bindings objTy body readT
@@ -942,27 +941,27 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
       seconds ^. aNode . aTy == TyPrim Pact.TyDecimal -> do
-      Existential STime time' <- translateNode time
-      Existential ty seconds' <- translateNode seconds
+      Some STime time' <- translateNode time
+      Some ty seconds' <- translateNode seconds
 
       case ty of
         SInteger ->
-          pure $ Existential STime $ CoreTerm $ IntAddTime time' seconds'
+          pure $ Some STime $ CoreTerm $ IntAddTime time' seconds'
         SDecimal ->
-          pure $ Existential STime $ CoreTerm $ DecAddTime time' seconds'
+          pure $ Some STime $ CoreTerm $ DecAddTime time' seconds'
         _ -> throwError' $ MonadFailure $
           "Unexpected type for seconds in add-time " ++ show ty
 
   AST_Read node table key -> do
-    Existential SStr key' <- translateNode key
+    Some SStr key'        <- translateNode key
     EType objTy@SObject{} <- translateType node
     tid                   <- tagRead node $ ESchema objTy
-    pure $ Existential objTy $ Read objTy tid (TableName (T.unpack table)) key'
+    pure $ Some objTy $ Read objTy tid (TableName (T.unpack table)) key'
 
 --   error "TODO"
 --   -- Note: this won't match if the columns are not a list literal
 --   AST_ReadCols node table key columns -> do
---     Existential SStr key' <- translateNode key
+--     Some SStr key' <- translateNode key
 --     (Schema fields) <- translateType node
 --     columns' <- fmap Set.fromList $ for columns $ \case
 --       AST_Lit (LString col) -> pure col
@@ -971,19 +970,19 @@ translateNode astNode = withAstContext astNode $ case astNode of
 --           Map.filterWithKey (\k _ -> k `Set.member` columns') fields
 
 --     tid <- tagRead node schema
---     pure $ Existential (SObject schema) $
+--     pure $ Some (SObject schema) $
 --       Read tid (TableName (T.unpack table)) schema key'
 
   AST_At node index obj -> do
     obj'     <- translateNode obj
     EType ty <- translateType node
     case obj' of
-      Existential (SObject schema) obj'' -> do
-        Existential SStr colName <- translateNode index
-        pure $ Existential ty $ CoreTerm $ ObjAt (SObject schema) colName obj''
-      Existential (SList listOfTy) list -> do
-        Existential SInteger index' <- translateNode index
-        pure $ Existential listOfTy $ CoreTerm $ ListAt listOfTy index' list
+      Some (SObject schema) obj'' -> do
+        Some SStr colName <- translateNode index
+        pure $ Some ty $ CoreTerm $ ObjAt (SObject schema) colName obj''
+      Some (SList listOfTy) list -> do
+        Some SInteger index' <- translateNode index
+        pure $ Some listOfTy $ CoreTerm $ ListAt listOfTy index' list
       _ -> throwError' $ TypeError node
 
   AST_Obj _node kvs -> do
@@ -994,118 +993,118 @@ translateNode astNode = withAstContext astNode $ case astNode of
         _                   -> throwError' $ NonConstKey k
       v' <- translateNode v
       pure (k', v')
-    Existential objTy litObj <- mkLiteralObject kvs'
-    pure $ Existential objTy $ CoreTerm litObj
+    Some objTy litObj <- mkLiteralObject kvs'
+    pure $ Some objTy $ CoreTerm litObj
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
 
   AST_List node elems -> do
     elems' <- traverse translateNode elems
-    Existential ty litList <- mkLiteralList elems' ?? TypeError node
-    pure $ Existential ty $ CoreTerm litList
+    Some ty litList <- mkLiteralList elems' ?? TypeError node
+    pure $ Some ty $ CoreTerm litList
 
   AST_Contains node val collection -> do
-    Existential needleTy needle <- translateNode val
+    Some needleTy needle <- translateNode val
     collection'             <- translateNode collection
     case collection' of
-      Existential SStr haystack -> case needleTy of
-        SStr -> pure $ Existential SBool $ CoreTerm $ StrContains needle haystack
+      Some SStr haystack -> case needleTy of
+        SStr -> pure $ Some SBool $ CoreTerm $ StrContains needle haystack
         _    -> throwError' $ TypeError node
-      Existential (SList ty) haystack -> do
+      Some (SList ty) haystack -> do
         Refl <- singEq needleTy ty ?? TypeError node
-        pure $ Existential SBool $ CoreTerm $ ListContains ty needle haystack
-      Existential (SObject schema) obj -> case needleTy of
-        SStr -> pure $ Existential SBool $ CoreTerm $ ObjContains (SObject schema) needle obj
+        pure $ Some SBool $ CoreTerm $ ListContains ty needle haystack
+      Some (SObject schema) obj -> case needleTy of
+        SStr -> pure $ Some SBool $ CoreTerm $ ObjContains (SObject schema) needle obj
         _    -> throwError' $ TypeError node
-      Existential _ _ -> throwError' $ TypeError node
+      Some _ _ -> throwError' $ TypeError node
 
   AST_Reverse _node list -> do
-    Existential ty'@(SList elemTy) list' <- translateNode list
-    pure $ Existential ty' $ CoreTerm $ ListReverse elemTy list'
+    Some ty'@(SList elemTy) list' <- translateNode list
+    pure $ Some ty' $ CoreTerm $ ListReverse elemTy list'
 
   AST_Sort _node list -> do
-    Existential ty'@(SList elemTy) list' <- translateNode list
-    pure $ Existential ty' $ CoreTerm $ ListSort elemTy list'
+    Some ty'@(SList elemTy) list' <- translateNode list
+    pure $ Some ty' $ CoreTerm $ ListSort elemTy list'
 
   AST_Drop node numOrKeys list -> do
     elist <- translateNode list
     case elist of
-      Existential ty'@(SList elemTy) list' -> do
-        Existential SInteger num <- translateNode numOrKeys
-        pure $ Existential ty' $ CoreTerm $ ListDrop elemTy num list'
-      Existential ty'@SObject{} obj -> do
-        Existential (SList SStr) keys <- translateNode numOrKeys
-        pure $ Existential ty' $ CoreTerm $ ObjDrop keys obj
+      Some ty'@(SList elemTy) list' -> do
+        Some SInteger num <- translateNode numOrKeys
+        pure $ Some ty' $ CoreTerm $ ListDrop elemTy num list'
+      Some ty'@SObject{} obj -> do
+        Some (SList SStr) keys <- translateNode numOrKeys
+        pure $ Some ty' $ CoreTerm $ ObjDrop keys obj
       _ -> throwError' $ TypeError node
 
   AST_Take node numOrKeys list -> do
     elist <- translateNode list
     case elist of
-      Existential ty'@(SList elemTy) list' -> do
-        Existential SInteger num <- translateNode numOrKeys
-        pure $ Existential ty' $ CoreTerm $ ListTake elemTy num list'
-      Existential ty'@SObject{} obj -> do
-        Existential (SList SStr) keys <- translateNode numOrKeys
-        pure $ Existential ty' $ CoreTerm $ ObjTake keys obj
+      Some ty'@(SList elemTy) list' -> do
+        Some SInteger num <- translateNode numOrKeys
+        pure $ Some ty' $ CoreTerm $ ListTake elemTy num list'
+      Some ty'@SObject{} obj -> do
+        Some (SList SStr) keys <- translateNode numOrKeys
+        pure $ Some ty' $ CoreTerm $ ObjTake keys obj
       _ -> throwError' $ TypeError node
 
   AST_MakeList _node num a -> do
-    Existential SInteger num' <- translateNode num
-    Existential ty       a'   <- translateNode a
-    pure $ Existential (SList ty) $ CoreTerm $ MakeList ty num' a'
+    Some SInteger num' <- translateNode num
+    Some ty       a'   <- translateNode a
+    pure $ Some (SList ty) $ CoreTerm $ MakeList ty num' a'
 
   AST_NFun _node SIdentity [a] -> do
-    Existential tya a' <- translateNode a
-    pure $ Existential tya $ CoreTerm $ Identity tya a'
+    Some tya a' <- translateNode a
+    pure $ Some tya $ CoreTerm $ Identity tya a'
 
   AST_NFun _node SConstantly [ a, b ] -> do
-    Existential tya a' <- translateNode a
-    Existential tyb b' <- translateNode b
-    pure $ Existential tya $ CoreTerm $ Constantly tyb a' b'
+    Some tya a' <- translateNode a
+    Some tyb b' <- translateNode b
+    pure $ Some tya $ CoreTerm $ Constantly tyb a' b'
 
   AST_NFun _node SCompose [ f, g, a ] -> do
-    Existential tya a' <- translateNode a
-    avarLst        <- use tsFoundVars
+    Some tya a' <- translateNode a
+    avarLst     <- use tsFoundVars
     tsFoundVars .= []
 
-    Existential tyb f' <- translateNode f
-    (avid, _, _)   <- captureOneFreeVar
+    Some tyb f'  <- translateNode f
+    (avid, _, _) <- captureOneFreeVar
 
-    Existential tyc g' <- translateNode g
-    (bvid, _, _)   <- captureOneFreeVar
+    Some tyc g'  <- translateNode g
+    (bvid, _, _) <- captureOneFreeVar
 
     -- important: we captured a, so we need to leave it free (by restoring
     -- tsFoundVars)
     tsFoundVars .= avarLst
 
-    pure $ Existential tyc $ CoreTerm $
+    pure $ Some tyc $ CoreTerm $
       Compose tya tyb tyc a' (Open avid "a" f') (Open bvid "b" g')
 
   AST_NFun node SMap [ fun, l ] -> do
     expectNoFreeVars
-    Existential bTy fun' <- translateNode fun
+    Some bTy fun' <- translateNode fun
     (vid, varName, EType aType) <- captureOneFreeVar
 
-    Existential (SList listTy) l' <- translateNode l
+    Some (SList listTy) l' <- translateNode l
 
     Refl <- singEq listTy aType ?? TypeError node
-    pure $ Existential (SList bTy) $ CoreTerm $
+    pure $ Some (SList bTy) $ CoreTerm $
       ListMap aType bTy (Open vid varName fun') l'
 
   AST_NFun node SFilter [ fun, l ] -> do
     expectNoFreeVars
-    Existential SBool fun' <- translateNode fun
+    Some SBool fun' <- translateNode fun
     (vid, varName, EType aType) <- captureOneFreeVar
 
-    Existential (SList listTy) l' <- translateNode l
+    Some (SList listTy) l' <- translateNode l
 
     Refl <- singEq listTy aType ?? TypeError node
-    pure $ Existential (SList aType) $ CoreTerm $
+    pure $ Some (SList aType) $ CoreTerm $
       ListFilter aType (Open vid varName fun') l'
 
   AST_NFun node SFold [ fun, a, l ] -> do
     expectNoFreeVars
-    Existential funTy fun' <- translateNode fun
+    Some funTy fun' <- translateNode fun
 
     -- Note: The order of these variables is important. `a` should be the first
     -- variable we encounter when traversing `fun` (and `b` the second) because
@@ -1118,44 +1117,44 @@ translateNode astNode = withAstContext astNode $ case astNode of
     [ (vidb, varNameb, EType tyb), (vida, varNamea, EType tya) ]
       <- captureTwoFreeVars
 
-    Existential aTy' a'           <- translateNode a
-    Existential (SList listTy) l' <- translateNode l
+    Some aTy' a'           <- translateNode a
+    Some (SList listTy) l' <- translateNode l
 
     Refl <- singEq aTy' tya   ?? TypeError node
     Refl <- singEq aTy' funTy ?? TypeError node
     Refl <- singEq listTy tyb ?? TypeError node
-    pure $ Existential tya $ CoreTerm $
+    pure $ Some tya $ CoreTerm $
       ListFold tya tyb (Open vida varNamea (Open vidb varNameb fun')) a' l'
 
   AST_NFun _ name [ f, g, a ]
     | name == SAndQ || name == SOrQ -> do
     expectNoFreeVars
-    Existential SBool f' <- translateNode f
+    Some SBool f' <- translateNode f
     (fvid, fvarName, _) <- captureOneFreeVar
 
-    Existential SBool g' <- translateNode g
+    Some SBool g' <- translateNode g
     (gvid, gvarName, _) <- captureOneFreeVar
 
-    Existential aTy' a' <- translateNode a
+    Some aTy' a' <- translateNode a
 
-    pure $ Existential SBool $ CoreTerm $ (if name == "and?" then AndQ else OrQ)
+    pure $ Some SBool $ CoreTerm $ (if name == "and?" then AndQ else OrQ)
       aTy' (Open fvid fvarName f') (Open gvid gvarName g') a'
 
   -- AST_NFun _ SWhere [ field, fun, obj ] -> do
-  --   Existential SStr field' <- translateNode field
+  --   Some SStr field' <- translateNode field
 
 --     expectNoFreeVars
---     Existential SBool fun' <- translateNode fun
+--     Some SBool fun' <- translateNode fun
 --     (vid, varName, EType freeTy) <- captureOneFreeVar
 
---     Existential (SObject objTy) obj' <- translateNode obj
+--     Some (SObject objTy) obj' <- translateNode obj
 
---     pure $ Existential SBool $ CoreTerm $
+--     pure $ Some SBool $ CoreTerm $
 --       Where objTy freeTy field' (Open vid varName fun') obj'
 
   AST_NFun _ STypeof [tm] -> do
-    Existential ty tm' <- translateNode tm
-    pure $ Existential SStr $ CoreTerm $ Typeof ty tm'
+    Some ty tm' <- translateNode tm
+    pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode

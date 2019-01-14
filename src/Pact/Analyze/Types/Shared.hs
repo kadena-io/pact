@@ -108,28 +108,28 @@ instance Mergeable a => Mergeable (Located a) where
     Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
 data Existential (tm :: Ty -> Type) where
-  Existential :: SingTy a -> tm a -> Existential tm
+  Some :: SingTy a -> tm a -> Existential tm
 
 instance IsTerm tm => Eq (Existential tm) where
-  Existential tya a == Existential tyb b = case singEq tya tyb of
+  Some tya a == Some tyb b = case singEq tya tyb of
     Nothing   -> False
     Just Refl -> singEqTm' tya a b
 
 instance IsTerm tm => Show (Existential tm) where
-  showsPrec p (Existential ty tm) = singShowsTm' ty p tm
+  showsPrec p (Some ty tm) = singShowsTm' ty p tm
 
 instance IsTerm tm => UserShow (Existential tm) where
-  userShowPrec _ (Existential ty tm) = singUserShowTm' ty tm
+  userShowPrec _ (Some ty tm) = singUserShowTm' ty tm
 
 transformExistential
   :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
-transformExistential f (Existential ty term') = Existential ty (f term')
+transformExistential f (Some ty term') = Some ty (f term')
 
 mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
 mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
-existentialType (Existential ety _) = EType ety
+existentialType (Some ety _) = EType ety
 
 -- TODO: could implement this stuff generically or add newtype-awareness
 
@@ -440,7 +440,7 @@ objectLookup (Object cols) name = objectLookup' cols where
   objectLookup' NilOf = Nothing
   objectLookup' (ConsOf k c@(Column ty _) cols')
     = if symbolVal k == name
-      then Just $ Existential ty c
+      then Just $ Some ty c
       else objectLookup' cols'
 
 data EObject tm where
