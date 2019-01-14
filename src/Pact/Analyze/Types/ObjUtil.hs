@@ -49,13 +49,13 @@ data Flag = FMin | FMax
 type family Filter (f :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ])
   :: [ (Symbol, Ty) ] where
   Filter f p '[] = '[]
-  Filter 'FMin p ( '(k, x) ': xs)
+  Filter 'FMin p ('(k, x) ': xs)
     = If (CmpSymbol k p == 'LT)
-         ( '(k, x) ': Filter 'FMin p xs)
+         ('(k, x) ': Filter 'FMin p xs)
          (Filter 'FMin p xs)
-  Filter 'FMax p ( '(k, x) ': xs)
+  Filter 'FMax p ('(k, x) ': xs)
     = If (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ)
-         ( '(k, x) ': Filter 'FMax p xs)
+         ('(k, x) ': Filter 'FMax p xs)
          (Filter 'FMax p xs)
 
 class Conder g where
@@ -80,7 +80,7 @@ instance
   , SingI x
   , Typeable x
   , KnownSymbol k
-  ) => FilterV 'FMin p ( '(k, x) ': xs) where
+  ) => FilterV 'FMin p ('(k, x) ': xs) where
     filterV f p (SingList (SCons k x xs))
       = cond (Proxy @(CmpSymbol k p == 'LT))
              (SCons' k x (filterV f p (SingList xs)))
@@ -92,7 +92,7 @@ instance
   , SingI x
   , Typeable x
   , KnownSymbol k
-  ) => FilterV 'FMax p ( '(k, x) ': xs) where
+  ) => FilterV 'FMax p ('(k, x) ': xs) where
     filterV f p (SingList (SCons k x xs))
       = cond (Proxy @(CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ))
              (SCons' k x (filterV f p (SingList xs)))
@@ -132,7 +132,7 @@ instance {-# OVERLAPS #-}
 -- | Type-level quick sort for normalising the representation of sets
 type family Sort (xs :: [ (Symbol, Ty) ]) :: [ (Symbol, Ty) ] where
   Sort '[] = '[]
-  Sort ( '(k, x) ': xs)
+  Sort ('(k, x) ': xs)
     = Sort (Filter 'FMin k xs) :++ '[ '(k, x) ] :++ Sort (Filter 'FMax k xs)
 
 -- | Value-level quick sort that respects the type-level ordering
@@ -150,7 +150,7 @@ instance
   , SingI x
   , Typeable x
   , KnownSymbol p
-  ) => Sortable ( '(p, x) ': xs) where
+  ) => Sortable ('(p, x) ': xs) where
   quicksort (SingList (SCons k p xs)) =
     quicksort (less k xs') ++ SCons' k p SNil' ++ quicksort (more k xs')
     where less = filterV (Proxy @'FMin)
@@ -176,14 +176,3 @@ type Union s t = Nub (Sort (s :++ t))
 
 union :: Unionable s t => SingList s -> SingList t -> SingList (Union s t)
 union s t = nub (quicksort (s ++ t))
-
--- section: Sort for HListOf
-
--- sortList :: SingList t -> SingList (Normalize t)
--- sortList = normalize
-
--- sortHList
---   :: (Sortable t, Nubable (Sort t))
---   => HListOf f t
---   -> HListOf f (Normalize t)
--- sortHList = error "TODO"
