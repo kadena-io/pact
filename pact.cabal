@@ -86,6 +86,7 @@ library
       Pact.Analyze.Types.Languages
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical
+      Pact.Analyze.Types.ObjUtil
       Pact.Analyze.Types.Shared
       Pact.Analyze.Types.Types
       Pact.Analyze.Types.UserShow
