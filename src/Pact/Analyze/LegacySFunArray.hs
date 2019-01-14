@@ -60,5 +60,5 @@ instance SymArray SFunArray where
   mergeArrays t (SFunArray g)   (SFunArray h) = SFunArray (\x -> ite t (g x) (h x))
   newArrayInState                             = undefined
 
-instance SymWord b => Mergeable (SFunArray a b) where
+instance SymVal b => Mergeable (SFunArray a b) where
   symbolicMerge _ = mergeArrays

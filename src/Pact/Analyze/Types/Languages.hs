@@ -1202,8 +1202,10 @@ data Term (a :: Ty) where
   NameAuthorized  :: TagId -> Term 'TyStr -> Term 'TyBool
 
   -- Table access
-  Read            :: SingTy ('TyObject m) -> TagId -> TableName
-    -> Term 'TyStr -> Term ('TyObject m)
+  Read
+    :: SingTy ('TyObject m)
+    -> TagId -> TableName -> Term 'TyStr
+    -> Term ('TyObject m)
   Write
     :: SingTy ('TyObject m)
     -> WriteType -> TagId -> TableName

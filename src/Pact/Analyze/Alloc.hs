@@ -26,7 +26,7 @@ import           Data.SBV                    (Symbolic)
 import qualified Data.SBV                    as SBV
 
 import           Pact.Analyze.Types          (S, SingI(sing), SingTy, Concrete,
-                                              sansProv, withSymWord)
+                                              sansProv, withSymVal)
 
 -- | A restricted symbolic context in which only quantified variable allocation
 -- is permitted.
@@ -77,6 +77,6 @@ newtype Alloc a = Alloc { runAlloc :: Symbolic a }
   deriving (Functor, Applicative, Monad)
 
 instance MonadAlloc Alloc where
-  singForAll ty = Alloc $ withSymWord ty $ sansProv <$> SBV.forall_
-  singExists ty = Alloc $ withSymWord ty $ sansProv <$> SBV.exists_
-  singFree   ty = Alloc $ withSymWord ty $ sansProv <$> SBV.free_
+  singForAll ty = Alloc $ withSymVal ty $ sansProv <$> SBV.forall_
+  singExists ty = Alloc $ withSymVal ty $ sansProv <$> SBV.exists_
+  singFree   ty = Alloc $ withSymVal ty $ sansProv <$> SBV.free_

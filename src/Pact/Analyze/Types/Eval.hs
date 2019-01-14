@@ -30,7 +30,7 @@ import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
 import           Data.SBV                     (HasKind, Mergeable(symbolicMerge), SBV, SBool,
                                                SymArray (readArray, writeArray),
-                                               SymWord, uninterpret)
+                                               SymVal, uninterpret)
 import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
@@ -143,7 +143,7 @@ mkAnalyzeEnv tables args tags info = do
   pure $ AnalyzeEnv args registryKeySets keySetAuths txKeySets txDecimals txIntegers invariants'
     columnIds' tags info
 
-mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
+mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
 
 sbvIdentifier :: Text -> Text
@@ -182,14 +182,14 @@ eArrayAt ty (S _ symKey) = lens getter setter where
 
   setter :: ESFunArray -> SBV (Concrete a) -> ESFunArray
   setter (ESFunArray ty' arr) val = case singEq ty ty' of
-    Just Refl -> withSymWord ty $ ESFunArray ty $ writeArray arr symKey val
+    Just Refl -> withSymVal ty $ ESFunArray ty $ writeArray arr symKey val
     Nothing   -> error "TODO: eArrayAt: bad setter access"
 
 instance Mergeable ESFunArray where
   symbolicMerge force test (ESFunArray ty1 arr1) (ESFunArray ty2 arr2)
     = case singEq ty1 ty2 of
       Nothing   -> error "mismatched types when merging two ESFunArrays"
-      Just Refl -> withSymWord ty1 $
+      Just Refl -> withSymVal ty1 $
         ESFunArray ty1 $ symbolicMerge force test arr1 arr2
 
 instance Mergeable SymbolicCells where
@@ -568,7 +568,7 @@ typedCell ty cellValues tn cn sRk sDirty
 
 symArrayAt
   :: forall array k v
-   . (SymWord v, SymArray array)
+   . (SymVal v, SymArray array)
   => S k -> Lens' (array k v) (SBV v)
 symArrayAt (S _ symKey) = lens getter setter
   where

@@ -41,4 +41,4 @@ instance Analyzer InvariantCheck where
   getVar vid                 = view (located . at vid)
   withVar vid val m          = local (located . at vid ?~ val) m
   markFailure b              = id %= (.&& SymbolicSuccess (sNot b))
-  withMergeableAnalyzer ty f = withSymWord ty f
+  withMergeableAnalyzer ty f = withSymVal ty f

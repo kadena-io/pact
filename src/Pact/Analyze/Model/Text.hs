@@ -15,7 +15,7 @@ import           Control.Lens               (Lens', at, ifoldr, view, (^.))
 import           Control.Monad.State.Strict (State, evalState, get, modify)
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
-import           Data.SBV                   (SBV, SymWord)
+import           Data.SBV                   (SBV, SymVal)
 import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Internals         as SBVI
 import           Data.Text                  (Text)
@@ -35,17 +35,17 @@ indent :: Natural -> Text -> Text
 indent 0     = id
 indent times = indent (pred times) . indent1
 
-showSbv :: (UserShow a, SymWord a) => SBV a -> Text
+showSbv :: (UserShow a, SymVal a) => SBV a -> Text
 showSbv sbv = maybe "[ERROR:symbolic]" userShow (SBV.unliteral sbv)
 
-showS :: (UserShow a, SymWord a) => S a -> Text
+showS :: (UserShow a, SymVal a) => S a -> Text
 showS = showSbv . _sSbv
 
 showTVal :: TVal -> Text
 showTVal (ety, av) = case av of
   OpaqueVal   -> "[opaque]"
   AVal _ sval -> case ety of
-    EType (ty :: SingTy ty) -> withUserShow ty $ withSymWord ty $
+    EType (ty :: SingTy ty) -> withUserShow ty $ withSymVal ty $
       showSbv (SBVI.SBV sval :: SBV (Concrete ty))
 
 showObject :: UObject -> Text

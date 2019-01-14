@@ -15,14 +15,14 @@ import qualified Data.Map.Strict             as Map
 import           Data.Monoid                 ((<>))
 import           Data.SBV                    (EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord,
-                                              SBV, ite, unliteral, literal)
+                                              SymVal,
+                                              SBV, ite, unliteral, literal, uninterpret)
 import           Data.SBV.List               ((.:))
 import qualified Data.SBV.List               as SBVL
 import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
                                               bzipWith, bmapM, bfoldrM)
 import qualified Data.SBV.String             as SBVS
-import           Data.SBV.Tuple              (field1, field2, mkPair)
+import           Data.SBV.Tuple              ((^.), _1, _2, tuple)
 -- import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:)(Refl))
@@ -36,6 +36,7 @@ import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util           (Boolean(..))
 import qualified Pact.Native                 as Pact
 
+import GHC.Stack
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -99,7 +100,7 @@ evalComparisonOp
 evalComparisonOp ty op xT yT = do
   x <- withSing ty $ eval xT
   y <- withSing ty $ eval yT
-  let f :: SymWord (Concrete a) => SBV Bool
+  let f :: SymVal (Concrete a) => SBV Bool
       f = case op of
         Gt  -> x .> y
         Lt  -> x .< y
@@ -107,12 +108,12 @@ evalComparisonOp ty op xT yT = do
         Lte -> x .<= y
         Eq  -> x .== y
         Neq -> x ./= y
-  pure $ sansProv $ withSymWord ty f
+  pure $ sansProv $ withSymVal ty f
 
 singIte
   :: forall m a a'. (Analyzer m, a' ~ Concrete a, SingI a)
   => SingTy a -> SBV Bool -> m (S a') -> m (S a') -> m (S a')
-singIte ty a b c = withSymWord ty $ withMergeableAnalyzer @m ty $ ite a b c
+singIte ty a b c = withSymVal ty $ withMergeableAnalyzer @m ty $ ite a b c
 
 evalLogicalOp
   :: Analyzer m
@@ -146,7 +147,7 @@ traverseObj = undefined
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)
-  = withSymWord (sing :: SingTy a) $ pure $ literalS a
+  = withSymVal (sing :: SingTy a) $ pure $ literalS a
 evalCore (Sym s) = pure s
 evalCore (Var vid name) = do
   mVal <- getVar vid
@@ -177,10 +178,10 @@ evalCore
   (LiteralObject
     (SObject (SCons _ ty tys))
     (Object (ConsOf _ (Column _ val) vals)))
-  = withSing (SObject tys) $ withSymWord ty $ withSymWord (SObject tys) $ do
+  = withSing (SObject tys) $ withSymVal ty $ withSymVal (SObject tys) $ do
     S _ val'  <- eval val
     S _ vals' <- evalCore $ LiteralObject (SObject tys) (Object vals)
-    pure $ sansProv $ mkPair val' vals'
+    pure $ sansProv $ tuple (val', vals')
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
 -- error "TODO"
 -- evalCore (ObjMerge ty1 ty2 objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
@@ -196,12 +197,12 @@ evalCore (StrContains needle haystack) = do
     _sSbv (coerceS @Str @String needle')
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
-evalCore (ListContains ty needle haystack) = withSymWord ty $ do
+evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
   S _ haystack' <- withSing ty $ eval haystack
   pure $ sansProv $
     bfoldr listBound (\cell rest -> cell .== needle' .|| rest) sFalse haystack'
-evalCore (ListEqNeq ty op a b) = withSymWord ty $ do
+evalCore (ListEqNeq ty op a b) = withSymVal ty $ do
   S _ a' <- withSing ty $ eval a
   S _ b' <- withSing ty $ eval b
 
@@ -215,7 +216,7 @@ evalCore (ListEqNeq ty op a b) = withSymWord ty $ do
   pure $ ite (SBVL.length a' .== SBVL.length b')
     (sansProv $ band listBound $ bzipWith listBound zipF a' b')
     wrongLength
-evalCore (ListAt ty i l) = withSymWord ty $ do
+evalCore (ListAt ty i l) = withSymVal ty $ do
   S _ i' <- eval i
   S _ l' <- eval l
 
@@ -224,15 +225,15 @@ evalCore (ListAt ty i l) = withSymWord ty $ do
 
   -- statically build a list of index comparisons
   pure $ sansProv $ SBVL.elemAt l' i'
-evalCore (ListLength ty l) = withSymWord ty $ withSing ty $ do
+evalCore (ListLength ty l) = withSymVal ty $ withSing ty $ do
   S prov l' <- eval l
   pure $ S prov $ SBVL.length l'
 
-evalCore (LiteralList ty xs) = withSymWord ty $ withSing ty $ do
+evalCore (LiteralList ty xs) = withSymVal ty $ withSing ty $ do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv $ SBVL.implode vals
 
-evalCore (ListDrop ty n list) = withSymWord ty $ withSing ty $ do
+evalCore (ListDrop ty n list) = withSymVal ty $ withSing ty $ do
   S _ n'    <- eval n
   S _ list' <- eval list
 
@@ -242,7 +243,7 @@ evalCore (ListDrop ty n list) = withSymWord ty $ withSing ty $ do
     (SBVL.drop n' list')
     (SBVL.take (SBVL.length list' + n') list')
 
-evalCore (ListTake ty n list) = withSymWord ty $ withSing ty $ do
+evalCore (ListTake ty n list) = withSymVal ty $ withSing ty $ do
   S _ n'    <- eval n
   S _ list' <- eval list
 
@@ -252,17 +253,17 @@ evalCore (ListTake ty n list) = withSymWord ty $ withSing ty $ do
     (SBVL.take n' list')
     (SBVL.drop (SBVL.length list' + n') list')
 
-evalCore (ListConcat ty p1 p2) = withSymWord ty $ withSing ty $ do
+evalCore (ListConcat ty p1 p2) = withSymVal ty $ withSing ty $ do
   S _ p1' <- eval p1
   S _ p2' <- eval p2
   pure $ sansProv $ SBVL.concat p1' p2'
-evalCore (ListReverse ty l) = withSymWord ty $ withSing ty $ do
+evalCore (ListReverse ty l) = withSymVal ty $ withSing ty $ do
   S prov l' <- eval l
   pure $ S prov $ breverse listBound l'
-evalCore (ListSort ty l) = withSymWord ty $ withSing ty $ do
+evalCore (ListSort ty l) = withSymVal ty $ withSing ty $ do
   S prov l' <- eval l
   pure $ S prov $ bsort listBound l'
-evalCore (MakeList ty i a) = withSymWord ty $ withSing ty $ do
+evalCore (MakeList ty i a) = withSymVal ty $ withSing ty $ do
   S _ i' <- eval i
   S _ a' <- eval a
   case unliteral i' of
@@ -271,7 +272,7 @@ evalCore (MakeList ty i a) = withSymWord ty $ withSing ty $ do
       "make-list currently requires a statically determined length"
 
 evalCore (ListMap tya tyb (Open vid _ expr) as)
-  = withSymWord tya $ withSymWord tyb $ withSing tya $ withSing tyb $
+  = withSymVal tya $ withSymVal tyb $ withSing tya $ withSing tyb $
     withMergeableAnalyzer @m (SList tyb) $ do
   S _ as' <- eval as
   bs <- bmapM listBound
@@ -280,7 +281,7 @@ evalCore (ListMap tya tyb (Open vid _ expr) as)
   pure $ sansProv bs
 
 evalCore (ListFilter tya (Open vid _ f) as)
-  = withSymWord tya $ withMergeableAnalyzer @m (SList tya) $ do
+  = withSymVal tya $ withMergeableAnalyzer @m (SList tya) $ do
   S _ as' <- eval as
   let bfilterM = bfoldrM listBound
         (\sbva svblst -> do
@@ -290,7 +291,7 @@ evalCore (ListFilter tya (Open vid _ f) as)
   sansProv <$> bfilterM as'
 
 evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
-  = withSymWord tya $ withSymWord tyb $ withSing tyb $
+  = withSymVal tya $ withSymVal tyb $ withSing tyb $
     withMergeableAnalyzer @m tya $ do
   S _ a'  <- eval a
   S _ bs' <- eval bs
@@ -314,7 +315,7 @@ evalCore (OrQ tya (Open vid1 _ f) (Open vid2 _ g) a) = do
   gv     <- withVar vid2 (mkAVal' a') $ eval g
   pure $ fv .|| gv
 
-evalCore (Where schema tya key (Open vid _ f) obj) = withSymWord tya $ do
+evalCore (Where schema tya key (Open vid _ f) obj) = withSymVal tya $ do
   S _ v <- evalObjAt schema key obj tya
   withVar vid (mkAVal' v) $ eval f
 
@@ -331,7 +332,7 @@ evalCore _ = throwErrorNoLoc "not yet implemented"
 --     Just literalKeys -> do
 --       fields <- for literalKeys $ \(Str key) -> do
 --         let retType = schemaFields ^?! ix (T.pack key)
---         val <- withSymWord singTy $
+--         val <- withSymVal singTy $
 --           evalObjAt schema (Lit' (Str key)) obj retType
 --         pure (T.pack key, (retType, mkAVal val))
 --       pure $ Object $ Map.fromList fields
@@ -405,28 +406,31 @@ relevantFields targetTy (Object (ConsOf key (Column vTy v) vals))
 
 evalObjAt
   :: forall a m schema.
-     Analyzer m
+     (Analyzer m, HasCallStack)
   => SingTy ('TyObject schema)
   -> TermOf m 'TyStr
   -> TermOf m ('TyObject schema)
   -> SingTy a
   -> m (S (Concrete a))
 evalObjAt objTy@(SObject schema) colNameT obj retType
-  = withSymWord retType $ withSing objTy $ do
+  = withSymVal retType $ withSing objTy $ do
     needColName <- eval colNameT
     S mObjProv objVal <- eval obj
 
-    let go :: SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
-        go SNil _ = throwErrorNoLoc "TODO (evalObjAt couldn't find field)"
+    let go :: HasCallStack
+           => SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
+        go SNil _ = do
+          markFailure sTrue
+          pure $ uninterpret "notfound"
         go (SCons sym colTy schema') obj'
-          = withSymWord (SObject schema') $ withSymWord colTy $
+          = withSymVal (SObject schema') $ withSymVal colTy $
             withMergeableAnalyzer @m retType $ ite
             (needColName .== literalS (Str (symbolVal sym)))
             (case singEq colTy retType of
-              Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
-              Just Refl -> pure $ field1 obj'
+               Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
+               Just Refl -> pure $ obj' ^. _1
             )
-            (go schema' (field2 obj'))
+            (go schema' (_2 obj'))
 
         mProv :: Maybe Provenance
         mProv = do

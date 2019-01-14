@@ -17,7 +17,7 @@ import           Data.Proxy                 (Proxy)
 import           Data.SBV                   (EqSymbolic ((.==)),
                                              Mergeable (symbolicMerge), literal)
 import qualified Data.SBV.Internals         as SBVI
-import           Data.SBV.Tuple             (mkPair)
+import           Data.SBV.Tuple             (tuple)
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
@@ -62,7 +62,7 @@ instance Analyzer Query where
   getVar vid        = view (scope . at vid)
   withVar vid val m = local (scope . at vid ?~ val) m
   markFailure b     = id %= (.&& SymbolicSuccess (sNot b))
-  withMergeableAnalyzer ty f = withSymWord ty f
+  withMergeableAnalyzer ty f = withSymVal ty f
 
 aval
   :: Analyzer m
@@ -243,10 +243,10 @@ assembleObj ((name, EType ty, AVal _prov sval) : tys)
   = case someSymbolVal name of
     SomeSymbol (_ :: Proxy k) -> case assembleObj tys of
       Existential objTy@(SObject schema) (AnSBV obj)
-        -> withSing ty $ withSymWord ty $ withSymWord objTy $
+        -> withSing ty $ withSymVal ty $ withSymVal objTy $
           Existential
             (SObject (SCons (SSymbol @k) ty schema))
-            (AnSBV (mkPair (SBVI.SBV sval) obj))
+            (AnSBV (tuple (SBVI.SBV sval, obj)))
       _ -> error "impossible (we always return an SObject)"
 assembleObj ((_, _, OpaqueVal) : _) = error "TODO"
 

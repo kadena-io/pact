@@ -27,7 +27,7 @@ import           Control.Lens         (Traversal', toListOf, traverseOf,
 import           Control.Monad        ((>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
-import           Data.SBV             (SBV, SymWord)
+import           Data.SBV             (SBV, SymVal)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
@@ -179,16 +179,16 @@ saturateModel =
       where
         go :: EType -> AVal -> SBV.Query AVal
         go (EType (ty :: SingTy t)) (AVal _mProv sval)
-          = withSymWord ty $ withSMTValue ty $
+          = withSymVal ty $ withSMTValue ty $
             mkAVal' . SBV.literal
               <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
         go _ OpaqueVal = pure OpaqueVal
 
     -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
-    fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBV.Query (SBV a)
+    fetchSbv :: (SymVal a, SBV.SMTValue a) => SBV a -> SBV.Query (SBV a)
     fetchSbv = fmap SBV.literal . SBV.getValue
 
-    fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBV.Query (S a)
+    fetchS :: (SymVal a, SBV.SMTValue a) => S a -> SBV.Query (S a)
     fetchS = traverseOf s2Sbv fetchSbv
 
     fetchObject :: UObject -> SBVI.QueryT IO UObject

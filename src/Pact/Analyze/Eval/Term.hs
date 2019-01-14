@@ -28,11 +28,12 @@ import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
-                                              SymArray (readArray), SymWord,
+                                              SymArray (readArray), SymVal,
                                               ite, literal, (.<))
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.String             as SBV
-import           Data.SBV.Tuple              (mkPair, field1, field2)
+import           Data.SBV.Tuple              (tuple)
+import qualified Data.SBV.Tuple              as SBVT
 import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -71,7 +72,7 @@ instance Analyzer Analyze where
   getVar vid                 = view (scope . at vid)
   withVar vid val m          = local (scope . at vid ?~ val) m
   markFailure b              = succeeds %= (.&& sansProv (sNot b))
-  withMergeableAnalyzer ty f = withSymWord ty f
+  withMergeableAnalyzer ty f = withSymVal ty f
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint b = modify' $ latticeState.lasConstraints %~ (.&& b)
@@ -279,10 +280,10 @@ readFields tn sRk tid (SObject (SCons sym fieldType subSchema)) = do
   tagAccessCell mtReads tid tFieldName av
   case av of
     OpaqueVal -> error "TODO (readFields OpaqueVal)"
-    AVal (Just (FromCell oc)) sval -> withSymWord fieldType $ withSymWord subObjTy $ do
+    AVal (Just (FromCell oc)) sval -> withSymVal fieldType $ withSymVal subObjTy $ do
       (S (Just (FromRow ocMap)) obj', avs) <- readFields tn sRk tid subObjTy
       pure ( withProv (FromRow $ Map.insert cn oc ocMap) $
-               mkPair (SBVI.SBV sval) obj'
+               tuple (SBVI.SBV sval, obj')
            , Map.insert tFieldName av avs
            )
     AVal _ _ -> error "impossible: unexpected type of cell provenance in readFields"
@@ -304,10 +305,10 @@ aValsOfObj
   -> Map Text AVal
 aValsOfObj SNil _ = Map.empty
 aValsOfObj (SCons sym fieldTy fields) obj
-  = withSymWord fieldTy $ withSymWord (SObject fields) $
+  = withSymVal fieldTy $ withSymVal (SObject fields) $
   let k = T.pack (symbolVal sym)
-      SBVI.SBV sval = field1 obj
-  in Map.insert k (AVal Nothing sval) $ aValsOfObj fields (field2 obj)
+      SBVI.SBV sval = obj SBVT.^. SBVT._1
+  in Map.insert k (AVal Nothing sval) $ aValsOfObj fields (obj SBVT.^. SBVT._2)
 
 writeFields
   :: Pact.WriteType -> TagId -> TableName -> S RowKey
@@ -316,11 +317,11 @@ writeFields
 writeFields _ _ _ _ _ (SObject SNil) = pure ()
 
 writeFields writeType tid tn sRk (S mProv obj) (SObject (SCons sym fieldType subObjTy))
-  = withSymWord fieldType $ withSymWord (SObject subObjTy) $ do
+  = withSymVal fieldType $ withSymVal (SObject subObjTy) $ do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
-      SBVI.SBV sVal = field1 obj
+      SBVI.SBV sVal = obj SBVT.^. SBVT._1
 
   cellWritten tn cn sRk .= sTrue
   columnWritten tn cn   .= sTrue
@@ -330,7 +331,7 @@ writeFields writeType tid tn sRk (S mProv obj) (SObject (SCons sym fieldType sub
   -- avoid overlapping instances. GHC is willing to pick `+` and `-`
   -- for each of the two instantiations of this function.
   let writeDelta
-        :: forall ty ty'. (SymWord ty', Num ty', Concrete ty ~ ty')
+        :: forall ty ty'. (SymVal ty', Num ty', Concrete ty ~ ty')
         => SingTy ty
         -> (S ty' -> S ty' -> S ty') -> (S ty' -> S ty' -> S ty')
         -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S ty'))
@@ -357,7 +358,7 @@ writeFields writeType tid tn sRk (S mProv obj) (SObject (SCons sym fieldType sub
     SDecimal -> writeDelta SDecimal (+) (-) decCellDelta decColumnDelta
     _        -> typedCell fieldType id tn cn sRk sTrue .= mkS mProv sVal
 
-  writeFields writeType tid tn sRk (S mProv (field2 obj)) (SObject subObjTy)
+  writeFields writeType tid tn sRk (S mProv (obj SBVT.^. SBVT._2)) (SObject subObjTy)
 
   -- OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
@@ -541,8 +542,8 @@ evalTerm = \case
       -- hard enough.
       Existential SDecimal _    -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
-      Existential (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash on lists"
-      Existential (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
+      Existential (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash` on lists"
+      Existential (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Existential _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
 -- For now we only allow these three types to be formatted.

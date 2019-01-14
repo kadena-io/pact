@@ -20,13 +20,13 @@ import           Control.Lens                (Iso', Prism', from, iso, view)
 import           Data.Coerce                 (Coercible)
 import qualified Data.Decimal                as Decimal
 import           Data.SBV                    (HasKind (kindOf), SDivisible (..),
-                                              SymWord (..), sNot, oneIf, (.&&),
+                                              SymVal (..), sNot, oneIf, (.&&),
                                               (.==), (.>), (.^), (.||))
 import           Data.SBV.Control            (SMTValue (sexprToVal))
 import           Data.SBV.Dynamic            (svAbs, svPlus, svTimes, svUNeg)
-import           Data.SBV.Internals          (CW (..), CWVal (CWInteger),
+import           Data.SBV.Internals          (CV (..), CVal (CInteger),
                                               SBV (SBV), SVal (SVal),
-                                              genMkSymVar, normCW)
+                                              genMkSymVar, normCV)
 import qualified Data.SBV.Internals          as SBVI
 import           Data.Text                   (Text)
 import           GHC.Real                    ((%))
@@ -63,15 +63,15 @@ decimalIso = PactIso $ iso mkDecimal unMkDecimal
     mkDecimal (Decimal.Decimal places mantissa)
       = lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
 
-forceConcrete :: SymWord a => SBV a -> a
+forceConcrete :: SymVal a => SBV a -> a
 forceConcrete sbva = case unliteral sbva of
   Just result -> result
   Nothing     -> error "this computation must be concrete"
 
-liftSBV :: (SymWord a, SymWord b) => (SBV a -> SBV b) -> a -> b
+liftSBV :: (SymVal a, SymVal b) => (SBV a -> SBV b) -> a -> b
 liftSBV f = forceConcrete . f . literal
 
-liftSBV2 :: (SymWord a, SymWord b, SymWord c)
+liftSBV2 :: (SymVal a, SymVal b, SymVal c)
   => (SBV a -> SBV b -> SBV c)
   -> a -> b -> c
 liftSBV2 f a b = forceConcrete $ f (literal a) (literal b)
@@ -191,11 +191,11 @@ unsafeCoerceSBV :: SBV a -> SBV b
 unsafeCoerceSBV = SBVI.SBV . SBVI.unSBV
 
 instance HasKind Decimal where kindOf _ = SBVI.KUnbounded
-instance SymWord Decimal where
-  mkSymWord  = genMkSymVar SBVI.KUnbounded
-  literal a  = SBV . SVal SBVI.KUnbounded . Left . normCW $ CW SBVI.KUnbounded (CWInteger (unDecimal a))
-  fromCW (CW _ (CWInteger x)) = Decimal x
-  fromCW x = error $ "in instance SymWord Decimal: expected CWInteger, found: " ++ show x
+instance SymVal Decimal where
+  mkSymVal  = genMkSymVar SBVI.KUnbounded
+  literal a = SBV . SVal SBVI.KUnbounded . Left . normCV $ CV SBVI.KUnbounded (CInteger (unDecimal a))
+  fromCV (CV _ (CInteger x)) = Decimal x
+  fromCV x = error $ "in instance SymVal Decimal: expected CWInteger, found: " ++ show x
 
 instance SMTValue Decimal where sexprToVal = fmap Decimal . sexprToVal
 

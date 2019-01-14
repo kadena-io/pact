@@ -147,7 +147,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
     Nothing -> pure $ Left $ "couldn't unliteral lasSucceeds"
     Just False -> pure $ Left "fails"
     Just True -> case analyzeVal of
-      AVal _ sval -> pure $ case withSymWord ty (unliteral (SBVI.SBV sval)) of
+      AVal _ sval -> pure $ case withSymVal ty (unliteral (SBVI.SBV sval)) of
         Just sval' -> Right $ Existential ty $ CoreTerm $ Lit sval'
         Nothing    -> Left $ "couldn't unliteral: " ++ show sval
       _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal

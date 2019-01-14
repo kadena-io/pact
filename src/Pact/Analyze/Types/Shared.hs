@@ -40,20 +40,20 @@ import           Data.List                    (sortBy)
 import           Data.Maybe                   (isJust)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
-import           Data.SBV.Trans               (MProvable (..), mkSymWord)
+import           Data.SBV.Trans               (MProvable (..), mkSymVal)
 import           Data.SBV                     (EqSymbolic, HasKind, Int64,
                                                Kind (KString, KUnbounded),
                                                Mergeable (symbolicMerge),
                                                OrdSymbolic,
                                                SBV,
                                                SDivisible (sDivMod, sQuotRem),
-                                               SymWord(..), Symbolic,
+                                               SymVal(..), Symbolic,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
-                                               (.<), (.==), fromCW)
+                                               (.<), (.==), fromCV)
 import qualified Data.SBV                     as SBV
 import           Data.SBV.Control             (SMTValue (..))
-import           Data.SBV.Internals           (CWVal(..), CW(..), genMkSymVar, SVal(SVal), Kind(..))
+import           Data.SBV.Internals           (CVal(..), CV(..), genMkSymVar, SVal(SVal), Kind(..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
 import qualified Data.Set                     as Set
@@ -133,27 +133,27 @@ existentialType (Existential ety _) = EType ety
 
 -- TODO: could implement this stuff generically or add newtype-awareness
 
-wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
-wrappedStringFromCW construct (SBVI.CW _ (SBVI.CWString s)) = construct s
-wrappedStringFromCW _ c = error $ "SymWord: Unexpected non-string value: " ++ show c
+wrappedStringFromCV :: (String -> a) -> SBVI.CV -> a
+wrappedStringFromCV construct (SBVI.CV _ (SBVI.CString s)) = construct s
+wrappedStringFromCV _ c = error $ "SymVal: Unexpected non-string value: " ++ show c
 
-wrappedIntegerFromCW :: (Integer -> a) -> SBVI.CW -> a
-wrappedIntegerFromCW construct (SBVI.CW _ (SBVI.CWInteger i)) = construct i
-wrappedIntegerFromCW _ c = error $ "SymWord: Unexpected non-integer value: " ++ show c
+wrappedIntegerFromCV :: (Integer -> a) -> SBVI.CV -> a
+wrappedIntegerFromCV construct (SBVI.CV _ (SBVI.CInteger i)) = construct i
+wrappedIntegerFromCV _ c = error $ "SymVal: Unexpected non-integer value: " ++ show c
 
 mkConcreteString :: String -> SBV a
 mkConcreteString = SBVI.SBV
                  . SVal KString
                  . Left
-                 . CW KString
-                 . CWString
+                 . CV KString
+                 . SBVI.CString
 
 mkConcreteInteger :: Integer -> SBV a
 mkConcreteInteger = SBVI.SBV
                   . SVal KUnbounded
                   . Left
-                  . CW KUnbounded
-                  . CWInteger
+                  . CV KUnbounded
+                  . CInteger
 
 newtype KeySetName
   = KeySetName Text
@@ -161,10 +161,10 @@ newtype KeySetName
 
 instance Show KeySetName where show (KeySetName s) = show s
 
-instance SymWord KeySetName where
-  mkSymWord = SBVI.genMkSymVar KString
+instance SymVal KeySetName where
+  mkSymVal = SBVI.genMkSymVar KString
   literal (KeySetName t) = mkConcreteString $ T.unpack t
-  fromCW = wrappedStringFromCW $ KeySetName . T.pack
+  fromCV = wrappedStringFromCV $ KeySetName . T.pack
 
 instance HasKind KeySetName where
   kindOf _ = KString
@@ -179,10 +179,10 @@ newtype TableName
   = TableName String
   deriving (Eq, Ord, Show)
 
-instance SymWord TableName where
-  mkSymWord = SBVI.genMkSymVar KString
+instance SymVal TableName where
+  mkSymVal = SBVI.genMkSymVar KString
   literal (TableName s) = mkConcreteString s
-  fromCW = wrappedStringFromCW TableName
+  fromCV = wrappedStringFromCV TableName
 
 instance HasKind TableName where
   kindOf _ = KString
@@ -194,10 +194,10 @@ newtype ColumnName
   = ColumnName String
   deriving (Eq, Ord, Show)
 
-instance SymWord ColumnName where
-  mkSymWord = SBVI.genMkSymVar KString
+instance SymVal ColumnName where
+  mkSymVal = SBVI.genMkSymVar KString
   literal (ColumnName s) = mkConcreteString s
-  fromCW = wrappedStringFromCW ColumnName
+  fromCV = wrappedStringFromCV ColumnName
 
 instance HasKind ColumnName where
   kindOf _ = KString
@@ -208,10 +208,10 @@ instance IsString ColumnName where
 newtype Str = Str String
   deriving (Eq, Ord, Show, SMTValue, HasKind, Typeable, IsString)
 
-instance SymWord Str where
-  mkSymWord = SBVI.genMkSymVar KString
+instance SymVal Str where
+  mkSymVal = SBVI.genMkSymVar KString
   literal (Str s) = mkConcreteString s
-  fromCW = wrappedStringFromCW Str
+  fromCV = wrappedStringFromCV Str
 
 instance UserShow Str where
   userShowPrec _ (Str str) = "\"" <> T.pack str <> "\""
@@ -317,7 +317,7 @@ sansProv = S Nothing
 withProv :: Provenance -> SBV a -> S a
 withProv prov sym = S (Just prov) sym
 
-instance (SymWord a) => Mergeable (S a) where
+instance (SymVal a) => Mergeable (S a) where
   symbolicMerge f t (S mProv1 x) (S mProv2 y)
     | mProv1 == mProv2 = S mProv1 $ symbolicMerge f t x y
     | otherwise        = sansProv $ symbolicMerge f t x y
@@ -329,7 +329,7 @@ instance (SymWord a) => Mergeable (S a) where
 instance EqSymbolic (S a) where
   S _ x .== S _ y = x .== y
 
-instance SymWord a => OrdSymbolic (S a) where
+instance SymVal a => OrdSymbolic (S a) where
   S _ x .< S _ y = x .< y
 
 -- We don't care about preserving the provenance value here as we are most
@@ -362,7 +362,7 @@ instance SymbolicDecimal (S Decimal) where
 -- exactly the same as the one below, do not be deceived, it is not. In this
 -- instance `*` resolves to `*` from `instance Num (SBV Decimal)`, which has an
 -- `rShift255D`. In the instance below, `*` resolves to `*` from `*` from
--- `instance (Ord a, Num a, SymWord a) => Num (SBV a)`, included in sbv, which
+-- `instance (Ord a, Num a, SymVal a) => Num (SBV a)`, included in sbv, which
 -- does to include the shift. *This instance must be selected for decimals*.
 instance {-# OVERLAPPING #-} Num (S Decimal) where
   S _ x + S _ y  = sansProv $ x + y
@@ -372,7 +372,7 @@ instance {-# OVERLAPPING #-} Num (S Decimal) where
   fromInteger i  = sansProv $ fromInteger i
   negate (S _ x) = sansProv $ negate x
 
-instance (Num a, SymWord a) => Num (S a) where
+instance (Num a, SymVal a) => Num (S a) where
   S _ x + S _ y  = sansProv $ x + y
   S _ x * S _ y  = sansProv $ x * y
   abs (S _ x)    = sansProv $ abs x
@@ -386,7 +386,7 @@ instance {-# OVERLAPPING #-} Fractional (S Decimal) where
   fromRational  = literalS . fromRational
   S _ x / S _ y = sansProv $ x / y
 
-instance (Fractional a, SymWord a) => Fractional (S a) where
+instance (Fractional a, SymVal a) => Fractional (S a) where
   fromRational = literalS . fromRational
   S _ x / S _ y = sansProv $ x / y
 
@@ -553,10 +553,10 @@ instance EqSymbolic AVal where
 mkS :: Maybe Provenance -> SVal -> S a
 mkS mProv sval = S mProv (SBVI.SBV sval)
 
-literalS :: SymWord a => a -> S a
+literalS :: SymVal a => a -> S a
 literalS = sansProv . literal
 
-unliteralS :: SymWord a => S a -> Maybe a
+unliteralS :: SymVal a => S a -> Maybe a
 unliteralS = unliteral . _sSbv
 
 sbv2SFrom :: Provenance -> Iso (SBV a) (SBV b) (S a) (S b)
@@ -581,15 +581,15 @@ iteS :: Mergeable a => S Bool -> a -> a -> a
 iteS sbool = ite (_sSbv sbool)
 
 fromIntegralS
-  :: forall a b. (Integral a, SymWord a, Num b, SymWord b)
+  :: forall a b. (Integral a, SymVal a, Num b, SymVal b)
   => S a
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral
 
-oneIfS :: (Num a, SymWord a) => S Bool -> S a
+oneIfS :: (Num a, SymVal a) => S Bool -> S a
 oneIfS = over s2Sbv oneIf
 
-isConcreteS :: SymWord a => S a -> Bool
+isConcreteS :: SymVal a => S a -> Bool
 isConcreteS = isConcrete . _sSbv
 
 data QKind = QType | QAny
@@ -674,17 +674,17 @@ instance UserShow Any where
   userShowPrec _ Any = "*"
 
 instance HasKind Any
-instance SymWord Any
+instance SymVal Any
 instance SMTValue Any
 
 newtype KeySet
   = KeySet Integer
   deriving (Eq, Ord, Data, Show, Read, UserShow)
 
-instance SymWord KeySet where
-  mkSymWord = SBVI.genMkSymVar KUnbounded
+instance SymVal KeySet where
+  mkSymVal = SBVI.genMkSymVar KUnbounded
   literal (KeySet s) = mkConcreteInteger s
-  fromCW = wrappedIntegerFromCW KeySet
+  fromCV = wrappedIntegerFromCV KeySet
 
 instance HasKind KeySet where
   kindOf _ = KUnbounded
@@ -735,13 +735,13 @@ instance HasKind (Concrete ty) => HasKind (AConcrete ty) where
 
 instance
   ( Typeable ty
-  , SymWord (Concrete ty)
+  , SymVal (Concrete ty)
   , SingI ty
-  ) => SymWord (AConcrete ty) where
-  mkSymWord q name = coerce @(SBV (Concrete ty)) @(SBV (AConcrete ty))
-    <$> withSymWord (sing :: SingTy ty) (mkSymWord q name)
+  ) => SymVal (AConcrete ty) where
+  mkSymVal q name = coerce @(SBV (Concrete ty)) @(SBV (AConcrete ty))
+    <$> withSymVal (sing :: SingTy ty) (mkSymVal q name)
   literal (AConcrete a) = coerce $ literal a
-  fromCW    = AConcrete . fromCW
+  fromCV    = AConcrete . fromCV
 
 newtype AnSBV ty = AnSBV (SBV (Concrete ty))
 
@@ -908,12 +908,12 @@ instance
     Nothing             -> Nothing
     Just (a, Object as) -> Just $ Object $ ConsOf SSymbol (Column sing a) as
 
-withSymWord :: SingTy a -> (SymWord (Concrete a) => b) -> b
-withSymWord = withDict . singMkSymWord
+withSymVal :: SingTy a -> (SymVal (Concrete a) => b) -> b
+withSymVal = withDict . singMkSymVal
   where
 
-    singMkSymWord :: SingTy a -> Dict (SymWord (Concrete a))
-    singMkSymWord = \case
+    singMkSymVal :: SingTy a -> Dict (SymVal (Concrete a))
+    singMkSymVal = \case
       SInteger    -> Dict
       SBool       -> Dict
       SStr        -> Dict
@@ -921,10 +921,10 @@ withSymWord = withDict . singMkSymWord
       SDecimal    -> Dict
       SKeySet     -> Dict
       SAny        -> Dict
-      SList ty'   -> withSymWord ty' Dict
+      SList ty'   -> withSymVal ty' Dict
       SObject SNil -> Dict
       SObject (SCons _ ty' tys)
-        -> withSymWord ty' $ withDict (singMkSymWord (SObject tys)) Dict
+        -> withSymVal ty' $ withDict (singMkSymVal (SObject tys)) Dict
 
 instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
   compare _ _ = EQ
@@ -932,15 +932,15 @@ instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
 instance HasKind (Object tm '[]) where
   kindOf _ = KTuple []
 
-instance (Eq (tm ('TyObject '[])), Typeable tm) => SymWord (Object tm '[]) where
-  mkSymWord = genMkSymVar $ KTuple []
+instance (Eq (tm ('TyObject '[])), Typeable tm) => SymVal (Object tm '[]) where
+  mkSymVal = genMkSymVar $ KTuple []
 
   literal (Object NilOf) =
     let k = KTuple []
-    in SBVI.SBV . SVal k . Left . CW k $ CWTuple []
+    in SBVI.SBV . SVal k . Left . CV k $ CTuple []
 
-  fromCW (CW _ (CWTuple [])) = Object NilOf
-  fromCW c = error $ "invalid (Object '[]): " ++ show c
+  fromCV (CV _ (CTuple [])) = Object NilOf
+  fromCV c = error $ "invalid (Object '[]): " ++ show c
 
 instance
   ( Ord (tm ty)
@@ -954,37 +954,35 @@ instance
   ( HasKind (tm ty)
   , HasKind (Object tm tys)
   ) => HasKind (Object tm ('(k, ty) ': tys)) where
-  kindOf _ = case kindOf (undefined :: Object tm tys) of
-    KTuple ks -> KTuple $ kindOf (undefined :: tm ty) : ks
-    k         -> error $ "unexpected object kind: " ++ show k
+  kindOf _ = KTuple [ kindOf (undefined :: tm ty), kindOf (undefined :: Object tm tys) ]
 
 instance
   ( SingI ty
   , Typeable ty
   , Typeable tys
-  , SymWord (tm ty)
-  , SymWord (Object tm tys)
+  , SymVal (tm ty)
+  , SymVal (Object tm tys)
   , KnownSymbol k
   , Eq (tm ('TyObject ('(k, ty) : tys)))
   , Typeable tm
   , IsTerm tm
-  ) => SymWord (Object tm ('(k, ty) ': tys)) where
+  ) => SymVal (Object tm ('(k, ty) ': tys)) where
 
-  mkSymWord = genMkSymVar (kindOf (undefined :: (Object tm ('(k, ty) ': tys))))
+  mkSymVal = genMkSymVar (kindOf (undefined :: Object tm ('(k, ty) ': tys)))
 
   literal (Object (ConsOf _k (Column _ x) xs)) = case literal x of
-    SBVI.SBV (SVal _ (Left (CW _ xval))) -> case literal (Object xs) of
-      SBVI.SBV (SVal (KTuple kxs) (Left (CW _ (CWTuple xsval)))) ->
-        let k = SBVI.KTuple (kindOf x : kxs)
-        in SBVI.SBV $ SVal k $ Left $ CW k $ CWTuple $ xval : xsval
-      _ -> error "SymWord.literal (Object tm ('(k, ty) ': tys)): Cannot construct a literal value!"
-    _ -> error "SymWord.literal (Object tm ('(k, ty) ': tys)): Cannot construct a literal value!"
+    SBVI.SBV (SVal kx (Left (CV _ xval))) -> case literal (Object xs) of
+      SBVI.SBV (SVal kxs (Left (CV _ xsval))) ->
+        let k = KTuple [kx, kxs]
+        in SBVI.SBV $ SVal k $ Left $ CV k $ CTuple [xval, xsval]
+      _ -> error "SymVal.literal (Object tm ('(k, ty) ': tys)): Cannot construct a literal value!"
+    _ -> error "SymVal.literal (Object tm ('(k, ty) ': tys)): Cannot construct a literal value!"
 
-  fromCW (CW (KTuple (k:ks)) (CWTuple (x:xs))) =
-    case fromCW (CW (KTuple ks) (CWTuple xs)) of
+  fromCV (CV (KTuple (k:ks)) (CTuple [x, xs])) =
+    case fromCV (CV (KTuple ks) xs) of
       Object vals
-        -> Object $ ConsOf SSymbol (Column sing (fromCW (CW k x))) vals
-  fromCW c = error $ "invalid (Object tm ('(k, ty) ': tys)): " ++ show c
+        -> Object $ ConsOf SSymbol (Column sing (fromCV (CV k x))) vals
+  fromCV c = error $ "invalid (Object tm ('(k, ty) ': tys)): " ++ show c
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map.Map ColumnName a }
