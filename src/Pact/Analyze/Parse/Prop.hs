@@ -50,7 +50,7 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust)
-import           Data.Proxy                   (Proxy)
+-- import           Data.Proxy                   (Proxy)
 import qualified Data.Set                     as Set
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
@@ -265,36 +265,37 @@ mkLiteral (name, preProp)
 
 mkLiteralObject''
   :: [(SomeSymbol, Existential Prop)] -> PropCheck (Existential (Core Prop))
-mkLiteralObject'' [] = pure $ Some (SObject SNil) $
-  LiteralObject (SObject SNil) (Object NilOf)
+mkLiteralObject'' [] = pure $ Some (SObject SNil') $
+  LiteralObject (SObject SNil') (Object SNil)
+mkLiteralObject'' _ = error "TODO"
 
--- Note: there is a very similar @mkLiteralObject@ in @Analyze.Translate@.
--- These could probably be combined.
-mkLiteralObjectOld :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
-mkLiteralObjectOld [] = pure $ Some (SObject SNil) $
-  LiteralObject (SObject SNil) (Object NilOf)
-mkLiteralObjectOld ((name, preProp) : tups) = do
-  tups' <- mkLiteralObjectOld tups
-  case tups' of
-    Some (SObject objTy) (LiteralObject _ (Object objProp)) -> do
-      eProp <- inferPreProp preProp
-      case eProp of
-        Some ty prop -> case someSymbolVal (T.unpack name) of
-          SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
-            let sym    = SSymbol @k
-                objTy' = SObject (SCons sym ty objTy)
-            in Some objTy' $
-                 LiteralObject objTy' $
-                   Object $ ConsOf sym (Column ty prop) objProp
-    Some _ _ -> throwErrorT $ "unexpected non-literal object: " <> tShow tups'
+-- -- Note: there is a very similar @mkLiteralObject@ in @Analyze.Translate@.
+-- -- These could probably be combined.
+-- mkLiteralObjectOld :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
+-- mkLiteralObjectOld [] = pure $ Some (SObject SNil') $
+--   LiteralObject (SObject SNil') (Object SNil)
+-- mkLiteralObjectOld ((name, preProp) : tups) = do
+--   tups' <- mkLiteralObjectOld tups
+--   case tups' of
+--     Some (SObject objTy) (LiteralObject _ (Object objProp)) -> do
+--       eProp <- inferPreProp preProp
+--       case eProp of
+--         Some ty prop -> case someSymbolVal (T.unpack name) of
+--           SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
+--             let sym    = SSymbol @k
+--                 objTy' = SObject (SCons' sym ty objTy)
+--             in Some objTy' $
+--                  LiteralObject objTy' $
+--                    Object $ SCons sym (Column ty prop) objProp
+--     Some _ _ -> throwErrorT $ "unexpected non-literal object: " <> tShow tups'
 
 -- | Look up the type of a given key in an object schema
 lookupKeyInType :: String -> Sing (schema :: [(Symbol, Ty)]) -> Maybe EType
-lookupKeyInType _name SNil = Nothing
-lookupKeyInType name (SCons k ty tys) =
+lookupKeyInType _name (SingList SNil) = Nothing
+lookupKeyInType name (SingList (SCons k ty tys)) =
   if symbolVal k == name
     then Just $ EType ty
-    else lookupKeyInType name tys
+    else lookupKeyInType name (SingList tys)
 
 --
 -- NOTE: because we have a lot of cases here and we are using pattern synonyms

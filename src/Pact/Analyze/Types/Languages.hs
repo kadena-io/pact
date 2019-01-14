@@ -300,38 +300,39 @@ singEqTm = singEqTm'
 singEqObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> Object tm a -> Bool
-singEqObject (SObject SNil) (Object _) (Object _) = True
+singEqObject (SObject (SingList SNil)) (Object _) (Object _) = True
 singEqObject
-  (SObject (SCons _ colty objTy))
-  (Object (ConsOf _ (Column _ v1) obj1))
-  (Object (ConsOf _ (Column _ v2) obj2))
+  (SObject (SingList (SCons _ colty objTy)))
+  (Object (SCons _ (Column _ v1) obj1))
+  (Object (SCons _ (Column _ v2) obj2))
   = singEqTm colty v1 v2 &&
-    singEqObject (SObject objTy) (Object obj1) (Object obj2)
+    singEqObject (SObject (SingList objTy)) (Object obj1) (Object obj2)
 singEqObject _ _ _ = False
 
 -- This is currently a pretty loose definition
 singShowsObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> ShowS
-singShowsObject (SObject SNil) (Object NilOf) = showString "NilOf"
+singShowsObject (SObject (SingList SNil)) (Object SNil)
+  = showString "SNil'"
 singShowsObject
-  (SObject (SCons _ _ objty))
-  (Object (ConsOf _ (Column vTy v) obj))
-    = showString "ConsOf SSymbol "
+  (SObject (SingList (SCons _ _ objty)))
+  (Object (SCons _ (Column vTy v) obj))
+    = showString "SCons' SSymbol "
     . singShowsTm vTy 11 v
     . showChar ' '
-    . singShowsObject (SObject objty) (Object obj)
+    . singShowsObject (SObject (SingList objty)) (Object obj)
 singShowsObject _ _ = error "malformed object"
 
 singUserShowObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> [Text]
-singUserShowObject (SObject SNil) (Object NilOf) = [""]
+singUserShowObject (SObject (SingList SNil)) (Object SNil) = [""]
 singUserShowObject
-  (SObject (SCons _ _ objty))
-  (Object (ConsOf k (Column vTy v) obj))
+  (SObject (SingList (SCons _ _ objty)))
+  (Object (SCons k (Column vTy v) obj))
     = (Text.pack (symbolVal k) <> ": " <> singUserShowTm vTy v)
-      : singUserShowObject (SObject objty) (Object obj)
+      : singUserShowObject (SObject (SingList objty)) (Object obj)
 singUserShowObject _ _ = error "malformed object"
 
 singEqOpen :: IsTerm tm => SingTy a -> Open x tm a -> Open x tm a -> Bool

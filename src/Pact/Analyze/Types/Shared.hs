@@ -431,14 +431,14 @@ instance (Ord (SingTy a), Ord (tm a)) => Ord (Column tm a) where
   Column _ a `compare` Column _ b = a `compare` b
 
 data Object (tm :: Ty -> *) (m :: [(Symbol, Ty)])
-  = Object !(HListOf (Column tm) m)
+  = Object !(HList (Column tm) m)
 
 objectLookup :: Object tm m -> String -> Maybe (Existential (Column tm))
 objectLookup (Object cols) name = objectLookup' cols where
   objectLookup'
-    :: forall tm m. HListOf (Column tm) m -> Maybe (Existential (Column tm))
-  objectLookup' NilOf = Nothing
-  objectLookup' (ConsOf k c@(Column ty _) cols')
+    :: forall tm m. HList (Column tm) m -> Maybe (Existential (Column tm))
+  objectLookup' SNil = Nothing
+  objectLookup' (SCons k c@(Column ty _) cols')
     = if symbolVal k == name
       then Just $ Some ty c
       else objectLookup' cols'
@@ -450,18 +450,18 @@ instance UserShow (tm ('TyObject m)) => UserShow (Object tm m) where
   userShowPrec _ (Object vals)
     = "{" <> T.intercalate ", " (userShowVals vals) <> "}"
       where
-      userShowVals :: HListOf (Column tm) m' -> [Text]
-      userShowVals NilOf = []
-      userShowVals (ConsOf k (Column ty v) m')
+      userShowVals :: HList (Column tm) m' -> [Text]
+      userShowVals SNil = []
+      userShowVals (SCons k (Column ty v) m')
         = T.pack (symbolVal k) <> " := " <> singUserShowTm' ty v : userShowVals m'
 
 instance Show (tm ('TyObject m)) => Show (Object tm m) where
   showsPrec p (Object vals) = showParen (p > 10) $
     showString "Object " . showsVals vals
-    where showsVals :: HListOf (Column tm) m' -> ShowS
-          showsVals NilOf = showString "NilOf"
-          showsVals (ConsOf k (Column singv v) m') = showParen True $
-              showString "ConsOf "
+    where showsVals :: HList (Column tm) m' -> ShowS
+          showsVals SNil = showString "SNil"
+          showsVals (SCons k (Column singv v) m') = showParen True $
+              showString "SCons "
             . showString (symbolVal k)
             . showString " "
             . singShowsTm' singv 11 v
@@ -470,10 +470,10 @@ instance Show (tm ('TyObject m)) => Show (Object tm m) where
 
 instance Eq (tm ('TyObject m)) => Eq (Object tm m) where
   Object vals1 == Object vals2 = eq vals1 vals2 where
-    eq :: HListOf (Column tm) m' -> HListOf (Column tm) m' -> Bool
-    eq NilOf NilOf = True
-    eq (ConsOf k1 (Column singv v1) m1')
-       (ConsOf k2 (Column _     v2) m2')
+    eq :: HList (Column tm) m' -> HList (Column tm) m' -> Bool
+    eq SNil SNil = True
+    eq (SCons k1 (Column singv v1) m1')
+       (SCons k2 (Column _     v2) m2')
       = eqSymB k1 k2 && singEqTm' singv v1 v2 && eq m1' m2'
 
 data ESchema where
@@ -493,9 +493,10 @@ instance Show ESchema where
 varIdColumns :: Sing (m :: [ (Symbol, Ty) ]) -> Map Text VarId
 varIdColumns = Map.fromList . snd . varIdColumns' where
   varIdColumns' :: Sing (m :: [ (Symbol, Ty) ]) -> (VarId, [(Text, VarId)])
-  varIdColumns' SNil = (0, [])
-  varIdColumns' (SCons k _ty tys) = case varIdColumns' tys of
-    (i, tys') -> (succ i, (T.pack (symbolVal k), i) : tys')
+  varIdColumns' (SingList SNil) = (0, [])
+  varIdColumns' (SingList (SCons k _ty tys))
+    = case varIdColumns' (SingList tys) of
+      (i, tys') -> (succ i, (T.pack (symbolVal k), i) : tys')
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.
@@ -765,19 +766,19 @@ withSing = withDict . singMkSing where
 
     singMkSing :: SingTy a -> Dict (SingI a)
     singMkSing = \case
-      SInteger    -> Dict
-      SBool       -> Dict
-      SStr        -> Dict
-      STime       -> Dict
-      SDecimal    -> Dict
-      SKeySet     -> Dict
-      SAny        -> Dict
-      SList ty'   -> withSing ty' Dict
-      SObject tys -> withSingListDict tys Dict
+      SInteger               -> Dict
+      SBool                  -> Dict
+      SStr                   -> Dict
+      STime                  -> Dict
+      SDecimal               -> Dict
+      SKeySet                -> Dict
+      SAny                   -> Dict
+      SList ty'              -> withSing ty' Dict
+      SObject (SingList tys) -> withHListDict tys Dict
 
-    withSingListDict :: SingList tys -> (SingI tys => b) -> b
-    withSingListDict SNil f               = f
-    withSingListDict (SCons _k _ty tys) f = withSingListDict tys f
+    withHListDict :: HList Sing tys -> (SingI tys => b) -> b
+    withHListDict SNil f               = f
+    withHListDict (SCons _k _ty tys) f = withHListDict tys f
 
 withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
 withEq = withDict . singMkEq
@@ -793,9 +794,10 @@ withEq = withDict . singMkEq
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withEq ty' Dict
-      SObject SNil -> Dict
-      SObject (SCons _ ty' tys)
-        -> withEq ty' $ withDict (singMkEq (SObject tys)) Dict
+      SObject (SingList SNil)
+        -> Dict
+      SObject (SingList (SCons _ ty' tys))
+        -> withEq ty' $ withDict (singMkEq (SObject (SingList tys))) Dict
 
 withShow :: SingTy a -> (Show (Concrete a) => b) -> b
 withShow = withDict . singMkShow
@@ -811,9 +813,10 @@ withShow = withDict . singMkShow
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withShow ty' Dict
-      SObject SNil -> Dict
-      SObject (SCons _ ty' tys)
-        -> withShow ty' $ withDict (singMkShow (SObject tys)) Dict
+      SObject (SingList SNil)
+        -> Dict
+      SObject (SingList (SCons _ ty' tys))
+        -> withShow ty' $ withDict (singMkShow (SObject (SingList tys))) Dict
 
 withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
 withUserShow = withDict . singMkUserShow
@@ -829,9 +832,11 @@ withUserShow = withDict . singMkUserShow
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withUserShow ty' Dict
-      SObject SNil -> Dict
-      SObject (SCons _ ty' tys)
-        -> withUserShow ty' $ withDict (singMkUserShow (SObject tys)) Dict
+      SObject (SingList SNil)
+        -> Dict
+      SObject (SingList (SCons _ ty' tys))
+        -> withUserShow ty' $
+           withDict (singMkUserShow (SObject (SingList tys))) Dict
 
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable = withDict . singMkTypeable
@@ -847,12 +852,13 @@ withTypeable = withDict . singMkTypeable
       SKeySet      -> Dict
       SAny         -> Dict
       SList   ty'  -> withTypeable ty' Dict
-      SObject SNil -> Dict
-      SObject (SCons _ ty' tys)
-        -> withTypeable ty' $ withTypeableListDict tys $ Dict
+      SObject (SingList tys)
+        -> withTypeableListDict tys $ Dict
 
     withTypeableListDict
-      :: SingList tys -> ((Typeable tys, Typeable (ConcreteObj tys)) => b) -> b
+      :: HList Sing tys
+      -> ((Typeable tys, Typeable (ConcreteObj tys)) => b)
+      -> b
     withTypeableListDict SNil f
       = f
     withTypeableListDict (SCons _k ty tys) f
@@ -872,9 +878,11 @@ withSMTValue = withDict . singMkSMTValue
       SKeySet   -> Dict
       SAny      -> Dict
       SList ty' -> withSMTValue ty' $ withTypeable ty' Dict
-      SObject SNil -> Dict
-      SObject (SCons _ ty' tys)
-        -> withSMTValue ty' $ withDict (singMkSMTValue (SObject tys)) Dict
+      SObject (SingList SNil)
+        -> Dict
+      SObject (SingList (SCons _ ty' tys))
+        -> withSMTValue ty' $
+           withDict (singMkSMTValue (SObject (SingList tys))) Dict
 
 withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
 withHasKind = withDict . singMkHasKind
@@ -890,12 +898,14 @@ withHasKind = withDict . singMkHasKind
       SKeySet   -> Dict
       SAny      -> Dict
       SList ty' -> withHasKind ty' $ withTypeable ty' Dict
-      SObject SNil -> Dict
-      SObject (SCons _ ty' tys)
-        -> withHasKind ty' $ withDict (singMkHasKind (SObject tys)) Dict
+      SObject (SingList SNil)
+        -> Dict
+      SObject (SingList (SCons _ ty' tys))
+        -> withHasKind ty' $
+           withDict (singMkHasKind (SObject (SingList tys))) Dict
 
 instance SMTValue (Object AConcrete '[]) where
-  sexprToVal _ = Just $ Object NilOf
+  sexprToVal _ = Just $ Object SNil
 
 instance
   ( SMTValue (Concrete ty)
@@ -906,7 +916,7 @@ instance
   ) => SMTValue (Object AConcrete ('(k, ty) ': tys)) where
   sexprToVal sexpr = case sexprToVal sexpr of
     Nothing             -> Nothing
-    Just (a, Object as) -> Just $ Object $ ConsOf SSymbol (Column sing a) as
+    Just (a, Object as) -> Just $ Object $ SCons SSymbol (Column sing a) as
 
 withSymVal :: SingTy a -> (SymVal (Concrete a) => b) -> b
 withSymVal = withDict . singMkSymVal
@@ -922,9 +932,11 @@ withSymVal = withDict . singMkSymVal
       SKeySet     -> Dict
       SAny        -> Dict
       SList ty'   -> withSymVal ty' Dict
-      SObject SNil -> Dict
-      SObject (SCons _ ty' tys)
-        -> withSymVal ty' $ withDict (singMkSymVal (SObject tys)) Dict
+      SObject (SingList SNil)
+        -> Dict
+      SObject (SingList (SCons _ ty' tys))
+        -> withSymVal ty' $
+           withDict (singMkSymVal (SObject (SingList tys))) Dict
 
 instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
   compare _ _ = EQ
@@ -935,11 +947,11 @@ instance HasKind (Object tm '[]) where
 instance (Eq (tm ('TyObject '[])), Typeable tm) => SymVal (Object tm '[]) where
   mkSymVal = genMkSymVar $ KTuple []
 
-  literal (Object NilOf) =
+  literal (Object SNil) =
     let k = KTuple []
     in SBVI.SBV . SVal k . Left . CV k $ CTuple []
 
-  fromCV (CV _ (CTuple [])) = Object NilOf
+  fromCV (CV _ (CTuple [])) = Object SNil
   fromCV c = error $ "invalid (Object '[]): " ++ show c
 
 instance
@@ -947,7 +959,7 @@ instance
   , Ord (Object tm tys)
   , Eq (tm ('TyObject ('(k, ty) : tys)))
   ) => Ord (Object tm ('(k, ty) ': tys)) where
-  compare (Object (ConsOf _ a tys1)) (Object (ConsOf _ b tys2))
+  compare (Object (SCons _ a tys1)) (Object (SCons _ b tys2))
     = compare a b <> compare (Object tys1) (Object tys2)
 
 instance
@@ -973,7 +985,7 @@ instance
 
   mkSymVal = genMkSymVar (kindOf (undefined :: Object tm ('(k, ty) ': tys)))
 
-  literal (Object (ConsOf _k (Column _ x) xs)) = case literal x of
+  literal (Object (SCons _k (Column _ x) xs)) = case literal x of
     SBVI.SBV (SVal kx (Left (CV _ xval))) -> case literal (Object xs) of
       SBVI.SBV (SVal kxs (Left (CV _ xsval))) ->
         let k = KTuple [kx, kxs]
@@ -984,7 +996,7 @@ instance
   fromCV (CV (KTuple (k:ks)) (CTuple [x, xs])) =
     case fromCV (CV (KTuple ks) xs) of
       Object vals
-        -> Object $ ConsOf SSymbol (Column sing (fromCV (CV k x))) vals
+        -> Object $ SCons SSymbol (Column sing (fromCV (CV k x))) vals
   fromCV c = error $ "invalid (Object tm ('(k, ty) ': tys)): " ++ show c
 
 newtype ColumnMap a
@@ -998,11 +1010,11 @@ instance Mergeable a => Mergeable (ColumnMap a) where
 
 columnMapToSchema :: ColumnMap EType -> EType
 columnMapToSchema (ColumnMap colMap) = go (Map.toList colMap) where
-  go [] = EType (SObject SNil)
+  go [] = EType (SObject SNil')
   go ((ColumnName colName, EType ty) : tys) = case go tys of
     EType (SObject tys') -> case someSymbolVal colName of
-      SomeSymbol (_ :: Proxy k) -> withSing ty $
-        EType $ SObject $ SCons (SSymbol @k) ty tys'
+      SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $
+        EType $ SObject $ SCons' (SSymbol @k) ty tys'
     _ -> error "TODO"
   go _ = error "TODO"
   -- = Schema

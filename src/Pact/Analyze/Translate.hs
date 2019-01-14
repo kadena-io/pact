@@ -344,14 +344,15 @@ unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
 unionPreferring = Map.union
 
 maybeTranslateUserType :: Pact.UserType -> Maybe QType
-maybeTranslateUserType (Pact.Schema _ _ [] _) = Just $ EType $ SObject SNil
+maybeTranslateUserType (Pact.Schema _ _ [] _) = Just $ EType $ SObject SNil'
 maybeTranslateUserType (Pact.Schema a b (Pact.Arg name ty _:tys) c)
   = case maybeTranslateUserType (Pact.Schema a b tys c) of
     Just (EType (SObject tys')) -> case maybeTranslateType ty of
       Nothing -> Nothing
-      Just (EType ty') -> withSing ty' $ case someSymbolVal (T.unpack name) of
-        SomeSymbol (_ :: Proxy sym) ->
-          Just $ EType $ SObject $ SCons (SSymbol @sym) ty' tys'
+      Just (EType ty') -> withSing ty' $ withTypeable ty' $
+        case someSymbolVal (T.unpack name) of
+          SomeSymbol (_ :: Proxy sym) ->
+            Just $ EType $ SObject $ SCons' (SSymbol @sym) ty' tys'
     _ -> Nothing
 
 maybeTranslateUserType' :: Pact.UserType -> Maybe EType
@@ -582,17 +583,17 @@ translateObjBinding pairs schema bodyA rhsT = do
 -- These could probably be combined.
 mkLiteralObject :: [(Text, ETerm)] -> TranslateM (Existential (Core Term))
 mkLiteralObject [] = pure $
-  let ty = SObject SNil
-  in Some ty (LiteralObject ty (Object NilOf))
+  let ty = SObject SNil'
+  in Some ty (LiteralObject ty (Object SNil))
 mkLiteralObject ((name, Some ty tm) : tms) = do
   Some (SObject objTy) (LiteralObject _ (Object obj)) <- mkLiteralObject tms
   case someSymbolVal (T.unpack name) of
     SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
       let sym = SSymbol @k
-          objTy' = SObject (SCons sym ty objTy)
+          objTy' = SObject (SCons' sym ty objTy)
       in Some objTy' $
            LiteralObject objTy' $
-             Object $ ConsOf sym (Column ty tm) obj
+             Object $ SCons sym (Column ty tm) obj
 
 pattern EmptyList :: SingTy a -> Term ('TyList a)
 pattern EmptyList ty = CoreTerm (LiteralList ty [])

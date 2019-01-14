@@ -241,9 +241,9 @@ validateWrite _writeType (SObject schema) (Object om)
   = validateWrite' schema om where
 
   validateWrite'
-    :: SingList schema -> HListOf (Column Term) schema -> Analyze ()
-  validateWrite' SNil NilOf = pure ()
-  validateWrite' _    _     = error "TODO"
+    :: SingList schema -> HList (Column Term) schema -> Analyze ()
+  validateWrite' (SingList SNil) SNil = pure ()
+  validateWrite' _               _    = error "TODO"
 
 -- validateWrite writeType objTy@(SObject schema) obj@(Object om) = do
 
@@ -267,13 +267,13 @@ validateWrite _writeType (SObject schema) (Object om)
 readFields
   :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
   -> Analyze (S (ConcreteObj ty), Map Text AVal)
-readFields _tn _sRk _tid (SObject SNil) =
+readFields _tn _sRk _tid (SObject (SingList SNil)) =
   pure (withProv (FromRow Map.empty) (literal ()), Map.empty)
-readFields tn sRk tid (SObject (SCons sym fieldType subSchema)) = do
+readFields tn sRk tid (SObject (SingList (SCons sym fieldType subSchema))) = do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
-      subObjTy   = SObject subSchema
+      subObjTy   = SObject $ SingList subSchema
   columnRead tn cn .= sTrue
   sDirty <- use $ cellWritten tn cn sRk
   av     <- readField tn cn sRk sDirty fieldType
@@ -303,21 +303,23 @@ aValsOfObj
   :: Sing (schema :: [(Symbol, Ty)])
   -> SBV (ConcreteObj schema)
   -> Map Text AVal
-aValsOfObj SNil _ = Map.empty
-aValsOfObj (SCons sym fieldTy fields) obj
-  = withSymVal fieldTy $ withSymVal (SObject fields) $
+aValsOfObj (SingList SNil) _ = Map.empty
+aValsOfObj (SingList (SCons sym fieldTy fields)) obj
+  = withSymVal fieldTy $ withSymVal (SObject (SingList fields)) $
   let k = T.pack (symbolVal sym)
       SBVI.SBV sval = obj SBVT.^. SBVT._1
-  in Map.insert k (AVal Nothing sval) $ aValsOfObj fields (obj SBVT.^. SBVT._2)
+  in Map.insert k (AVal Nothing sval) $
+       aValsOfObj (SingList fields) (obj SBVT.^. SBVT._2)
 
 writeFields
   :: Pact.WriteType -> TagId -> TableName -> S RowKey
   -> S (ConcreteObj ty) -> SingTy ('TyObject ty)
   -> Analyze ()
-writeFields _ _ _ _ _ (SObject SNil) = pure ()
+writeFields _ _ _ _ _ (SObject (SingList SNil)) = pure ()
 
-writeFields writeType tid tn sRk (S mProv obj) (SObject (SCons sym fieldType subObjTy))
-  = withSymVal fieldType $ withSymVal (SObject subObjTy) $ do
+writeFields writeType tid tn sRk (S mProv obj)
+  (SObject (SingList (SCons sym fieldType subObjTy)))
+  = withSymVal fieldType $ withSymVal (SObject (SingList subObjTy)) $ do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
@@ -358,7 +360,8 @@ writeFields writeType tid tn sRk (S mProv obj) (SObject (SCons sym fieldType sub
     SDecimal -> writeDelta SDecimal (+) (-) decCellDelta decColumnDelta
     _        -> typedCell fieldType id tn cn sRk sTrue .= mkS mProv sVal
 
-  writeFields writeType tid tn sRk (S mProv (obj SBVT.^. SBVT._2)) (SObject subObjTy)
+  writeFields writeType tid tn sRk (S mProv (obj SBVT.^. SBVT._2))
+    (SObject (SingList subObjTy))
 
   -- OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 

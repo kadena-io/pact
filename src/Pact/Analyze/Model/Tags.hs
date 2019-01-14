@@ -49,10 +49,10 @@ allocSbv = _sSbv <$> allocS @a
 allocSchema :: SingTy ('TyObject m) -> Alloc UObject
 allocSchema (SObject tys) = UObject <$> allocSchema' tys where
   allocSchema' :: Sing (m :: [ (Symbol, Ty) ]) -> Alloc (Map.Map Text TVal)
-  allocSchema' SNil = pure Map.empty
-  allocSchema' (SCons k ty tys') = do
+  allocSchema' (SingList SNil) = pure Map.empty
+  allocSchema' (SingList (SCons k ty tys')) = do
     let ety = EType ty
-    m   <- allocSchema' tys'
+    m   <- allocSchema' $ SingList tys'
     val <- allocAVal ety
     pure $ Map.insert (pack (symbolVal k)) (ety, val) m
 

@@ -8,6 +8,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -15,6 +16,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 module Pact.Analyze.Types.Types where
 
@@ -47,33 +49,43 @@ data instance Sing (sym :: Symbol) where
 type SingSymbol (x :: Symbol) = Sing x
 
 data instance Sing (n :: [(Symbol, Ty)]) where
-  SNil  :: Sing ('[] :: [(Symbol, Ty)])
-  SCons :: (SingI v, KnownSymbol k)
-        => SingSymbol k
-        -> Sing v
-        -> Sing n
-        -> Sing ('(k, v) ': n :: [(Symbol, Ty)])
+  SingList :: HList Sing n -> Sing n
 
 type SingList (a :: [(Symbol, Ty)]) = Sing a
 
-data HListOf (f :: Ty -> Type) (tys :: [(Symbol, Ty)]) where
-  NilOf  :: HListOf f '[]
-  ConsOf :: (SingI ty, KnownSymbol k, Typeable ty)
+data HList (f :: Ty -> Type) (tys :: [(Symbol, Ty)]) where
+  SNil  :: HList f '[]
+  SCons :: (SingI ty, KnownSymbol k, Typeable ty)
          => Sing k
          -> f ty
-         -> HListOf f tys
-         -> HListOf f ('(k, ty) ': tys)
+         -> HList f tys
+         -> HList f ('(k, ty) ': tys)
+
+pattern SNil' :: SingList '[]
+pattern SNil' = SingList SNil
+
+unSingList :: Sing n -> HList Sing n
+unSingList (SingList hlist) = hlist
+
+pattern UnSingList :: Sing n -> HList Sing n
+pattern UnSingList l <- (SingList -> l) where
+  UnSingList l = unSingList l
+
+pattern SCons'
+  :: (SingI v, KnownSymbol k, Typeable v)
+  => SingSymbol k -> Sing v -> SingList tys -> SingList ('(k, v) ': tys)
+pattern SCons' k v vs = SingList (SCons k v (UnSingList vs))
 
 data instance Sing (a :: Ty) where
-  SInteger ::           Sing 'TyInteger
-  SBool    ::           Sing 'TyBool
-  SStr     ::           Sing 'TyStr
-  STime    ::           Sing 'TyTime
-  SDecimal ::           Sing 'TyDecimal
-  SKeySet  ::           Sing 'TyKeySet
-  SAny     ::           Sing 'TyAny
-  SList    :: Sing a -> Sing ('TyList a)
-  SObject  :: Sing a -> Sing ('TyObject a)
+  SInteger ::               Sing 'TyInteger
+  SBool    ::               Sing 'TyBool
+  SStr     ::               Sing 'TyStr
+  STime    ::               Sing 'TyTime
+  SDecimal ::               Sing 'TyDecimal
+  SKeySet  ::               Sing 'TyKeySet
+  SAny     ::               Sing 'TyAny
+  SList    :: Sing a     -> Sing ('TyList a)
+  SObject  :: SingList a -> Sing ('TyObject a)
 
 instance Eq (SingTy a) where
   _ == _ = True
@@ -114,12 +126,12 @@ eqSymB a b = isJust $ eqSym a b
 
 singListEq
   :: forall (a :: [(Symbol, Ty)]) (b :: [(Symbol, Ty)]).
-     Sing a -> Sing b -> Maybe (a :~: b)
-singListEq SNil SNil = Just Refl
-singListEq (SCons k1 v1 n1) (SCons k2 v2 n2) = do
+     SingList a -> SingList b -> Maybe (a :~: b)
+singListEq (SingList SNil) (SingList SNil) = Just Refl
+singListEq (SingList (SCons k1 v1 n1)) (SingList (SCons k2 v2 n2)) = do
   Refl <- eqSym k1 k2
   Refl <- singEq v1 v2
-  Refl <- singListEq n1 n2
+  Refl <- singListEq (SingList n1) (SingList n2)
   pure Refl
 singListEq _ _ = Nothing
 
@@ -136,17 +148,18 @@ instance Show (SingTy ty) where
     SKeySet   -> showString "SKeySet"
     SAny      -> showString "SAny"
     SList a   -> showParen (p > 10) $ showString "SList "   . showsPrec 11 a
-    SObject m -> showParen (p > 10) $ showString "SObject " . showsM m
+    SObject (SingList m)
+      -> showParen (p > 10) $ showString "SObject " . showsHList m
     where
-      showsM :: SingList a -> ShowS
-      showsM SNil = showString "SNil"
-      showsM (SCons k v n) = showParen True $
+      showsHList :: HList Sing a -> ShowS
+      showsHList SNil = showString "SNil"
+      showsHList (SCons k v n) = showParen True $
           showString "SCons "
         . showString (symbolVal k)
         . showString " "
         . shows v
         . showString " "
-        . showsM n
+        . showsHList n
 
 instance UserShow (SingTy ty) where
   userShowPrec _ = \case
@@ -158,13 +171,14 @@ instance UserShow (SingTy ty) where
     SKeySet   -> "keyset"
     SAny      -> "*"
     SList a   -> "[" <> userShow a <> "]"
-    SObject m -> "{ " <> intercalate ", " (userShowM m) <> " }"
+    SObject (SingList m)
+      -> "{ " <> intercalate ", " (userShowHList m) <> " }"
     where
-      userShowM :: SingList a -> [Text]
-      userShowM SNil        = []
-      userShowM (SCons k v n) =
+      userShowHList :: HList Sing a -> [Text]
+      userShowHList SNil        = []
+      userShowHList (SCons k v n) =
         (pack (symbolVal k) <> ": " <> userShow v)
-        : userShowM n
+        : userShowHList n
 
 class SingI a where
   sing :: Sing a
@@ -197,11 +211,11 @@ instance SingI lst => SingI ('TyObject lst) where
   sing = SObject sing
 
 instance SingI ('[] :: [(Symbol, Ty)]) where
-  sing = SNil
+  sing = SingList SNil
 
-instance (KnownSymbol k, SingI v, SingI kvs)
+instance (KnownSymbol k, SingI v, Typeable v, SingI kvs)
   => SingI (('(k, v) ': kvs) :: [(Symbol, Ty)]) where
-  sing = SCons SSymbol sing sing
+  sing = SingList (SCons SSymbol sing (unSingList sing))
 
 type family IsSimple (ty :: Ty) :: Bool where
   IsSimple ('TyList _)   = 'False

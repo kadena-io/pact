@@ -13,10 +13,10 @@
 {-# LANGUAGE UndecidableInstances  #-}
 module Pact.Analyze.Types.ObjUtil where
 
-import Data.Proxy         (Proxy(Proxy))
+import Data.Typeable      (Typeable, Proxy(Proxy))
 import Data.Type.Bool     (If, type (||))
 import Data.Type.Equality (type (==))
-import GHC.TypeLits       (Symbol, CmpSymbol)
+import GHC.TypeLits       (Symbol, CmpSymbol, KnownSymbol)
 import Prelude            hiding ((++))
 
 import Pact.Analyze.Types.Types
@@ -35,8 +35,9 @@ infixr 5 :++
 
 -- | Singleton list append
 (++) :: SingList s -> SingList t -> SingList (s :++ t)
-SNil         ++ x  = x
-SCons k v xs ++ ys = SCons k v (xs ++ ys)
+SingList SNil           ++ x  = x
+SingList (SCons k v xs) ++ ys
+  = SingList (SCons k v (unSingList (SingList xs ++ ys)))
 
 infixr 5 ++
 
@@ -71,25 +72,31 @@ class FilterV (f :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ]) where
   filterV :: Proxy f -> Sing p -> SingList xs -> SingList (Filter f p xs)
 
 instance FilterV f p '[] where
-  filterV _ _ SNil = SNil
+  filterV _ _ (SingList SNil) = SNil'
 
 instance
   ( Conder (CmpSymbol k p == 'LT)
   , FilterV 'FMin p xs
+  , SingI x
+  , Typeable x
+  , KnownSymbol k
   ) => FilterV 'FMin p ( '(k, x) ': xs) where
-    filterV f p (SCons k x xs)
+    filterV f p (SingList (SCons k x xs))
       = cond (Proxy @(CmpSymbol k p == 'LT))
-             (SCons k x (filterV f p xs))
-             (filterV f p xs)
+             (SCons' k x (filterV f p (SingList xs)))
+             (filterV f p (SingList xs))
 
 instance
   ( Conder (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ)
   , FilterV 'FMax p xs
+  , SingI x
+  , Typeable x
+  , KnownSymbol k
   ) => FilterV 'FMax p ( '(k, x) ': xs) where
-    filterV f p (SCons k x xs)
+    filterV f p (SingList (SCons k x xs))
       = cond (Proxy @(CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ))
-             (SCons k x (filterV f p xs))
-             (filterV f p xs)
+             (SCons' k x (filterV f p (SingList xs)))
+             (filterV f p (SingList xs))
 
 -- section: Nub
 
@@ -105,22 +112,20 @@ class Nubable t where
   nub :: SingList t -> SingList (Nub t)
 
 instance Nubable '[] where
-  nub SNil = SNil
+  nub (SingList SNil) = SNil'
 
 instance Nubable '[e] where
-  nub (SCons k v SNil) = SCons k v SNil
-  nub _                = error "impossible"
+  nub (SingList (SCons k v SNil)) = SCons' k v SNil'
 
 instance Nubable (e ': s) => Nubable (e ': e ': s) where
-  nub (SCons _ _ (SCons k v s)) = nub (SCons k v s)
-  nub _                         = error "impossible"
+  nub (SingList (SCons _ _ (SCons k v s))) = nub (SCons' k v (SingList s))
 
 instance {-# OVERLAPS #-}
   ( Nub (e ': f ': s) ~ (e ': Nub (f ': s))
   , Nubable (f ': s)
   ) => Nubable (e ': f ': s) where
-  nub (SCons k1 v1 (SCons k2 v2 s)) = SCons k1 v1 (nub (SCons k2 v2 s))
-  nub _                             = error "impossible"
+  nub (SingList (SCons k1 v1 (SCons k2 v2 s)))
+    = SCons' k1 v1 (nub (SCons' k2 v2 (SingList s)))
 
 -- section: Sort
 
@@ -135,18 +140,22 @@ class Sortable t where
   quicksort :: SingList t -> SingList (Sort t)
 
 instance Sortable '[] where
-  quicksort SNil = SNil
+  quicksort (SingList SNil) = SNil'
 
 instance
   ( Sortable (Filter 'FMin p xs)
   , Sortable (Filter 'FMax p xs)
   , FilterV 'FMin p xs
   , FilterV 'FMax p xs
+  , SingI x
+  , Typeable x
+  , KnownSymbol p
   ) => Sortable ( '(p, x) ': xs) where
-  quicksort (SCons k p xs) =
-    quicksort (less k xs) ++ SCons k p SNil ++ quicksort (more k xs)
+  quicksort (SingList (SCons k p xs)) =
+    quicksort (less k xs') ++ SCons' k p SNil' ++ quicksort (more k xs')
     where less = filterV (Proxy @'FMin)
           more = filterV (Proxy @'FMax)
+          xs'  = SingList xs
 
 -- section: Normalization
 
@@ -173,8 +182,8 @@ union s t = nub (quicksort (s ++ t))
 -- sortList :: SingList t -> SingList (Normalize t)
 -- sortList = normalize
 
-sortHList
-  :: (Sortable t, Nubable (Sort t))
-  => HListOf f t
-  -> HListOf f (Normalize t)
-sortHList = error "TODO"
+-- sortHList
+--   :: (Sortable t, Nubable (Sort t))
+--   => HListOf f t
+--   -> HListOf f (Normalize t)
+-- sortHList = error "TODO"

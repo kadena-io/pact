@@ -173,15 +173,18 @@ evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
   = evalObjAt schema colNameT objT (sing :: SingTy a)
-evalCore (LiteralObject (SObject SNil) (Object NilOf)) = pure $ literalS ()
+evalCore (LiteralObject (SObject (SingList SNil)) (Object SNil))
+  = pure $ literalS ()
 evalCore
   (LiteralObject
-    (SObject (SCons _ ty tys))
-    (Object (ConsOf _ (Column _ val) vals)))
-  = withSing (SObject tys) $ withSymVal ty $ withSymVal (SObject tys) $ do
-    S _ val'  <- eval val
-    S _ vals' <- evalCore $ LiteralObject (SObject tys) (Object vals)
-    pure $ sansProv $ tuple (val', vals')
+    (SObject (SingList (SCons _ ty tys)))
+    (Object (SCons _ (Column _ val) vals)))
+  = do
+    let objTy = SObject (SingList tys)
+    withSing objTy $ withSymVal ty $ withSymVal objTy $ do
+      S _ val'  <- eval val
+      S _ vals' <- evalCore $ LiteralObject objTy (Object vals)
+      pure $ sansProv $ tuple (val', vals')
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
 -- error "TODO"
 -- evalCore (ObjMerge ty1 ty2 objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
@@ -396,13 +399,13 @@ evalStrToIntBase bT sT = do
         Right res -> pure (literalS res)
 
 relevantFields :: (Typeable a, SingI a) => SingTy a -> Object tm obj -> EObject tm
-relevantFields _ obj@(Object NilOf) = EObject SNil obj
-relevantFields targetTy (Object (ConsOf key (Column vTy v) vals))
+relevantFields _ obj@(Object SNil) = EObject SNil' obj
+relevantFields targetTy (Object (SCons key (Column vTy v) vals))
   = case relevantFields targetTy (Object vals) of
       EObject ty obj'@(Object vals') -> case singEq targetTy vTy of
         Nothing   -> EObject ty obj'
-        Just Refl -> EObject (SCons key sing ty) $
-          Object (ConsOf key (Column vTy v) vals')
+        Just Refl -> EObject (SCons' key sing ty) $
+          Object (SCons key (Column vTy v) vals')
 
 evalObjAt
   :: forall a m schema.
@@ -419,18 +422,18 @@ evalObjAt objTy@(SObject schema) colNameT obj retType
 
     let go :: HasCallStack
            => SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
-        go SNil _ = do
+        go (SingList SNil) _ = do
           markFailure sTrue
           pure $ uninterpret "notfound"
-        go (SCons sym colTy schema') obj'
-          = withSymVal (SObject schema') $ withSymVal colTy $
+        go (SingList (SCons sym colTy schema')) obj'
+          = withSymVal (SObject (SingList schema')) $ withSymVal colTy $
             withMergeableAnalyzer @m retType $ ite
             (needColName .== literalS (Str (symbolVal sym)))
             (case singEq colTy retType of
                Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
                Just Refl -> pure $ obj' ^. _1
             )
-            (go schema' (_2 obj'))
+            (go (SingList schema') (_2 obj'))
 
         mProv :: Maybe Provenance
         mProv = do
