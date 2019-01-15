@@ -92,6 +92,7 @@ data TranslateFailureNoLoc
   | TypeError Node
   | FreeVarInvariantViolation Text
   | UnhandledType Node (Pact.Type Pact.UserType)
+  | SortLiteralObjError String (Existential (Core Term))
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -122,6 +123,7 @@ describeTranslateFailureNoLoc = \case
   TypeError node -> "\"impossible\" post-typechecker type error in node: " <> tShow node
   FreeVarInvariantViolation msg -> msg
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
+  SortLiteralObjError msg tm -> T.pack $ msg ++ show tm
 
 data TranslateEnv
   = TranslateEnv
@@ -580,14 +582,20 @@ translateObjBinding pairs schema bodyA rhsT = do
       withNodeVars nodeVars $
         translateBody bodyA
 
--- Note: there is a very similar @mkLiteralObject@ in @Analyze.Parse.Prop@.
--- These could probably be combined.
 mkLiteralObject :: [(Text, ETerm)] -> TranslateM (Existential (Core Term))
-mkLiteralObject [] = pure $
+mkLiteralObject = mkUnsortedLiteralObject >=> sortLiteralObject
+  (fmap throwError' . SortLiteralObjError)
+
+-- Note: there is a very similar @mkUnsortedLiteralObject@ in
+-- @Analyze.Parse.Prop@. These could probably be combined.
+mkUnsortedLiteralObject
+  :: [(Text, ETerm)] -> TranslateM (Existential (Core Term))
+mkUnsortedLiteralObject [] = pure $
   let ty = SObject SNil'
   in Some ty (LiteralObject ty (Object SNil))
-mkLiteralObject ((name, Some ty tm) : tms) = do
-  Some (SObject objTy) (LiteralObject _ (Object obj)) <- mkLiteralObject tms
+mkUnsortedLiteralObject ((name, Some ty tm) : tms) = do
+  Some (SObject objTy) (LiteralObject _ (Object obj))
+    <- mkUnsortedLiteralObject tms
   case someSymbolVal (T.unpack name) of
     SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
       let sym = SSymbol @k
