@@ -1,0 +1,144 @@
+;; This is an example of using namespaces for simple modules,
+;; showcasing how to declare them, as well as use qualified
+;; names to access declared constructs.
+(begin-tx)
+
+(env-data
+  { "alice-keys" : ["alice"]
+  , "bob-keys"   : ["bob"]
+  })
+
+(define-keyset 'alice-keys)
+(define-keyset 'bob-keys)
+(env-keys ["alice", "bob"])
+
+; Define namespace using a keyset guard
+(define-namespace 'alice (read-keyset 'alice-keys))
+(define-namespace 'bob (read-keyset 'bob-keys))
+
+; Set tx namespace to 'alice'
+(namespace 'alice)
+
+(interface alice-contract
+
+  @doc "this contract is for alice, and occurs in the \
+       \namespace 'alice'"
+
+  (defun f:bool ())
+  (defun g:string (x:bool))
+
+  ; simple constants
+  (defconst C1 true)
+  (defconst C2 "bar")
+)
+
+; now bob gets his own namespace in the tx
+(namespace 'bob)
+
+(interface bob-contract
+  @doc "this contract is for bob, and occurs in the \
+       \namespace 'bob'"
+
+  (defun h:decimal (x:bool z:decimal))
+  (defun i:string ())
+)
+
+(commit-tx)
+(begin-tx)
+
+(env-data { "carl-keys" : ["carl"] })
+(define-keyset 'carl-keys)
+(env-keys ["carl"])
+
+(define-namespace 'carl (read-keyset 'carl-keys))
+(namespace 'carl)
+
+(module carl-module 'carl-keys
+  @doc "lets implement alice's and bob's contracts"
+
+  (implements alice.alice-contract)
+  (implements bob.bob-contract)
+
+  (defschema s foo:string)
+  (deftable t:{s})
+
+  (defun f:bool ()
+    @doc "Alice's flag"
+    alice.alice-contract.C1)
+
+  (defun g:string (x:bool)
+    @doc "do something simple or default to alice's constant"
+
+    if x
+      "something simple"
+      i)
+
+  (defun h:decimal (x:bool z:decimal)
+    @doc "Bob's decision"
+    (if x z (- z)))
+
+  (defun i:string ()
+    alice.alice-contract.C2)
+)
+
+(commit-tx)
+(begin-tx)
+
+;; Used as part of NamespaceSpec test making sure
+;; namespaces propagate down the term tree
+(interface test-sig
+  @doc "test for biplate"
+
+  (defun f:bool ())
+  (defconst TBOOL true)
+)
+
+(env-data { "test-keys" : ["test"] })
+(define-keyset 'test-keys)
+(env-keys ["test"])
+
+(module global-module 'test-keys
+  @doc "biplate test impl"
+
+  (defun global:bool ()
+    true)
+)
+
+(commit-tx)
+(begin-tx)
+
+(define-namespace 'test (read-keyset 'test-keys))
+(namespace 'test)
+
+(module test-module 'test-keys
+  @doc "biplate test impl"
+
+  (implements test-sig)
+  (use global-module)
+
+  (defschema test s:string)
+  (deftable test-table:{test})
+
+  (defun f:bool ()
+    true)
+
+  (defun g:bool ()
+    test-sig.TBOOL)
+)
+
+(interface test-iface
+  (defun tif ()))
+
+
+(commit-tx)
+
+(use carl.carl-module)
+(expect "alice's triple reference" true alice.alice-contract.C1)
+(expect "qualified module name in table" "carl.carl-module" (at 'module (describe-table carl.carl-module.t)))
+
+(namespace 'test)
+(module m2 'test-keys
+  (use test-module)
+  (implements test-iface)
+  (defun tif () 1)
+)

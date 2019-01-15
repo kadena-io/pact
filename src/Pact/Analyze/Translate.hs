@@ -381,7 +381,7 @@ maybeTranslateType' f = \case
   TyPrim Pact.TyInteger -> pure $ EType SInteger
   TyPrim Pact.TyString  -> pure $ EType SStr
   TyPrim Pact.TyTime    -> pure $ EType STime
-  TyPrim Pact.TyKeySet  -> pure $ EType SKeySet
+  TyPrim (Pact.TyGuard (Just Pact.GTyKeySet)) -> pure $ EType SKeySet
 
   -- Pretend any and an unknown var are the same -- we can't analyze either of
   -- them.
@@ -400,6 +400,7 @@ maybeTranslateType' f = \case
       EType ty' -> pure $ EType $ SList ty'
       _         -> empty
   TyFun _          -> empty
+  TyPrim (TyGuard _) -> empty
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -692,7 +693,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       return $ Some SBool $ Enforce Nothing $ NameAuthorized tid ksnT
 
   AST_EnforceKeyset ksA
-    | ksA ^? aNode.aTy == Just (TyPrim Pact.TyKeySet)
+    | ksA ^? aNode.aTy == Just (TyPrim $ Pact.TyGuard $ Just Pact.GTyKeySet)
     -> do
       Some SKeySet ksT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode

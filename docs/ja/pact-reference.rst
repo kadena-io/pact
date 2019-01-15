@@ -50,15 +50,15 @@ Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite
 
 .. code:: js
 
-    {
-        "nonce": "[ナンス値 (すべての呼び出しにおいてユニークな値)]",
-        "payload": {
-            "exec": {
-                "code": "[実行する pact コード]",
-                "data": { /* ユーザーのデータ */ }
-            }
-        }
-    }
+   {
+       "nonce": "[ナンス値 (すべての呼び出しにおいてユニークな値)]",
+       "payload": {
+           "exec": {
+               "code": "[実行する pact コード]",
+               "data": { /* ユーザーのデータ */ }
+           }
+       }
+   }
 
 メッセージをアセンブルするときには、この JSON が “文字列化” され、
 ``cmd`` フィールドに指定されている必要があります。 `pact
@@ -94,17 +94,17 @@ JSON の文字列であることがわかります。
 
 .. code:: js
 
-    {
-        "nonce": "[ナンス値 (すべての呼び出しにおいてユニークな値)]",
-        "payload": {
-            "cont": {
-                "txid": [インスタンス化される pact コードが含まれるトランザクション id]
-                "rollback": [true *or* false],
-                "step": [継続する、またはロールバックするステップの ID]
-                "data": { /* ユーザーのデータ */ }
-            }
-        }
-    }
+   {
+       "nonce": "[ナンス値 (すべての呼び出しにおいてユニークな値)]",
+       "payload": {
+           "cont": {
+               "txid": [インスタンス化される pact コードが含まれるトランザクション id]
+               "rollback": [true *or* false],
+               "step": [継続する、またはロールバックするステップの ID]
+               "data": { /* ユーザーのデータ */ }
+           }
+       }
+   }
 
 エンドポイント
 --------------
@@ -125,35 +125,35 @@ http://localhost:8080/api/v1/send に送信します。
 
 .. code:: js
 
-    {
-        "cmds": [
-            {
-                "hash": "[base16 の blake2 ハッシュ]",
-                "sigs": [
-                    {
-                        "sig": "[‘hash' に一致するプライベートキーによる署名]",
-                        "pubKey": "[base16 のパブリックキー]",
-                        "scheme": "ED25519" /* 任意 (デフォルトは ED25519) */
-                    }
-                ]
-                "cmd": "[JSON 化されたトランザクションコード]"
-            }
-            // ... 次のコマンド
-        ]
-    }
+   {
+       "cmds": [
+           {
+               "hash": "[base16 の blake2 ハッシュ]",
+               "sigs": [
+                   {
+                       "sig": "[‘hash' に一致するプライベートキーによる署名]",
+                       "pubKey": "[base16 のパブリックキー]",
+                       "scheme": "ED25519" /* 任意 (デフォルトは ED25519) */
+                   }
+               ]
+               "cmd": "[JSON 化されたトランザクションコード]"
+           }
+           // ... 次のコマンド
+       ]
+   }
 
 レスポンス JSON:
 
 .. code:: js
 
-    {
-      "status": "success|failure",
-      "response": {
-        "requestKeys": [
-          "[成功の証明としてリクエストで用いたハッシュ]"
-        ]
-      }
-    }
+   {
+     "status": "success|failure",
+     "response": {
+       "requestKeys": [
+         "[成功の証明としてリクエストで用いたハッシュ]"
+       ]
+     }
+   }
 
 /private
 ~~~~~~~~
@@ -167,34 +167,34 @@ http://localhost:8080/api/v1/send に送信します。
 
 .. code:: js
 
-    {
-        "cmds": [
-            {
-                "hash": "[base16 の blake2 ハッシュ]",
-                "sigs": [
-                    {
-                        "sig": "[‘hash' に一致するプライベートキーによる署名]",
-                        "pubKey": "[base16 のパブリックキー]",
-                        "scheme": "ED25519" /* 任意 (デフォルトは ED25519)*/
-                    }
-                ]
-                "cmd": "[JSON化 されたトランザクションコード]"
-            }
-        ]
-    }
+   {
+       "cmds": [
+           {
+               "hash": "[base16 の blake2 ハッシュ]",
+               "sigs": [
+                   {
+                       "sig": "[‘hash' に一致するプライベートキーによる署名]",
+                       "pubKey": "[base16 のパブリックキー]",
+                       "scheme": "ED25519" /* 任意 (デフォルトは ED25519)*/
+                   }
+               ]
+               "cmd": "[JSON化 されたトランザクションコード]"
+           }
+       ]
+   }
 
 レスポンス JSON:
 
 .. code:: js
 
-    {
-      "status": "success|failure",
-      "response": {
-        "requestKeys": [
-          "[成功の証明としてリクエストで用いたハッシュ]"
-        ]
-      }
-    }
+   {
+     "status": "success|failure",
+     "response": {
+       "requestKeys": [
+         "[成功の証明としてリクエストで用いたハッシュ]"
+       ]
+     }
+   }
 
 /poll
 ~~~~~
@@ -205,28 +205,28 @@ http://localhost:8080/api/v1/send に送信します。
 
 .. code:: json
 
-    {
-      "requestKeys": [
-        "[クエリしたいコマンドのハッシュ]"
-      ]
-    }
+   {
+     "requestKeys": [
+       "[クエリしたいコマンドのハッシュ]"
+     ]
+   }
 
 レスポンス JSON:
 
 .. code:: js
 
-    {
-        "status": "success|failure",
-        "response": {
-            "[コマンドのハッシュ]": {
-                "result": {
-                    "status": "success|failure",
-                    "data": /* トランザクション実行のデータ */
-                },
-                "txId": /* トランザクションのID (トランザクションの履歴などのクエリに使用) */
-            }
-        }
-    }
+   {
+       "status": "success|failure",
+       "response": {
+           "[コマンドのハッシュ]": {
+               "result": {
+                   "status": "success|failure",
+                   "data": /* トランザクション実行のデータ */
+               },
+               "txId": /* トランザクションのID (トランザクションの履歴などのクエリに使用) */
+           }
+       }
+   }
 
 /listen
 ~~~~~~~
@@ -237,24 +237,24 @@ http://localhost:8080/api/v1/send に送信します。
 
 .. code:: js
 
-    {
-      "listen": "[コマンドのハッシュ]"
-    }
+   {
+     "listen": "[コマンドのハッシュ]"
+   }
 
 レスポンス JSON:
 
 .. code:: js
 
-    {
-        "status": "success|failure",
-        "response": {
-            "result": {
-                "status": "success|failure",
-                "data": /* トランザクション実行のデータ */
-            },
-            "txId": /* トランザクションのID (トランザクションの履歴などのクエリに使用) */
-        }
-    }
+   {
+       "status": "success|failure",
+       "response": {
+           "result": {
+               "status": "success|failure",
+               "data": /* トランザクション実行のデータ */
+           },
+           "txId": /* トランザクションのID (トランザクションの履歴などのクエリに使用) */
+       }
+   }
 
 /local
 ~~~~~~
@@ -269,29 +269,29 @@ JSON データについては、\ `cmd
 
 .. code:: js
 
-    {
-        "hash": "[base16 の blake2 ハッシュ]",
-        "sigs": [
-            {
-                "sig": "[‘hash' に一致するプライベートキーによる署名]",
-                "pubKey": "[base16のパブリックキー]",
-                "scheme": "ED25519" /* 任意 (デフォルトは ED25519)*/
-            }
-        ]
-        "cmd": "[stringified transaction JSON]"
-    }
+   {
+       "hash": "[base16 の blake2 ハッシュ]",
+       "sigs": [
+           {
+               "sig": "[‘hash' に一致するプライベートキーによる署名]",
+               "pubKey": "[base16のパブリックキー]",
+               "scheme": "ED25519" /* 任意 (デフォルトは ED25519)*/
+           }
+       ]
+       "cmd": "[stringified transaction JSON]"
+   }
 
 レスポンス JSON:
 
 .. code:: js
 
-    {
-        "status": "success|failure",
-        "response": {
-            "status": "success|failure",
-            "data": /*トランザクション実行のデータ*/
-        }
-    }
+   {
+       "status": "success|failure",
+       "response": {
+           "status": "success|failure",
+           "data": /*トランザクション実行のデータ*/
+       }
+   }
 
 API リクエスト フォーマッター
 -----------------------------
@@ -307,29 +307,29 @@ JSON をフォーマットできます。 出力は Postman などの POST
 
 .. code:: yaml
 
-    code: "(+ 1 2)"
-    data:
-      name: Stuart
-      language: Pact
-    keyPairs:
-      - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
-        secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+   code: "(+ 1 2)"
+   data:
+     name: Stuart
+     language: Pact
+   keyPairs:
+     - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+       secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
 
 このファイルは、 ``pact`` に入力されて、次のような有効な API
 リクエストを取得できます。
 
 ::
 
-    $ pact -a tests/apireq.yaml -l
-    {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
+   $ pact -a tests/apireq.yaml -l
+   {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
 
 以下に、curl にパイプし、ポート 8080 で実行されている pact
 サーバーに接続する例を示します。
 
 ::
 
-    $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
-    {"status":"success","response":{"status":"success","data":3}}
+   $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
+   {"status":"success","response":{"status":"success","data":3}}
 
 .. _request-yaml:
 
@@ -345,35 +345,35 @@ yaml ファイルは、\ `exec <#exec-payload>`__ ペイロードを記述しま
 
 .. code:: yaml
 
-    code: トランザクションコード
-    codeFile: トランザクションコードのファイル
-    data: JSON 化されたトランザクションデータ
-    dataFile: JSON 化されたトランザクションデータのファイル
-    keyPairs: 署名のためのキーペア (発生させるには pact -g): [
-      public: base 16 のパブリックキー
-      secret: base 16 のプライベートキー
-      ]
-    nonce: 任意のナンス (提供しない場合は現在時刻が使われる)
-    from: プライベートメッセージ用のエンティティ名
-    to: プライベートメッセージ用のエンティティ名
+   code: トランザクションコード
+   codeFile: トランザクションコードのファイル
+   data: JSON 化されたトランザクションデータ
+   dataFile: JSON 化されたトランザクションデータのファイル
+   keyPairs: 署名のためのキーペア (発生させるには pact -g): [
+     public: base 16 のパブリックキー
+     secret: base 16 のプライベートキー
+     ]
+   nonce: 任意のナンス (提供しない場合は現在時刻が使われる)
+   from: プライベートメッセージ用のエンティティ名
+   to: プライベートメッセージ用のエンティティ名
 
 継続リクエスト yaml では次のキーを指定できます。
 
 .. code:: yaml
 
-    type: "cont"
-    txId: pact のトランザクション ID (整数)
-    step: 次のステップのID (整数)
-    rollback: この pact はロールバック可能かどうか (ブール)
-    data: トランザクションデータの JSON
-    dataFile: トランザクションデータの JSON のファイル
-    keyPairs: 署名のためのキーペア (発生させるにはpact -g): [
-     public: base 16 のパブリックキー
-     secret: base 16 のプライベートキー
-     ]
-    nonce: 任意のナンス (提供しない場合は現在時刻が使われる)
-    from: プライベートメッセージ用のエンティティ名
-    to: プライベートメッセージ用のエンティティ名
+   type: "cont"
+   txId: pact のトランザクション ID (整数)
+   step: 次のステップのID (整数)
+   rollback: この pact はロールバック可能かどうか (ブール)
+   data: トランザクションデータの JSON
+   dataFile: トランザクションデータの JSON のファイル
+   keyPairs: 署名のためのキーペア (発生させるにはpact -g): [
+    public: base 16 のパブリックキー
+    secret: base 16 のプライベートキー
+    ]
+   nonce: 任意のナンス (提供しない場合は現在時刻が使われる)
+   from: プライベートメッセージ用のエンティティ名
+   to: プライベートメッセージ用のエンティティ名
 
 .. _concepts:
 
@@ -553,19 +553,19 @@ Pact 2.3 以降の Pact
 
 .. code:: lisp
 
-    ;; 給料が 90000 以上の開発者を選び、年齢によって並び替えます
+   ;; 給料が 90000 以上の開発者を選び、年齢によって並び替えます
 
-    (reverse (sort ['age]
-      (select 'employees ['first-name,'last-name,'age]
-        (and? (where 'title (= "Programmer"))
-              (where 'salary (< 90000))))))
+   (reverse (sort ['age]
+     (select 'employees ['first-name,'last-name,'age]
+       (and? (where 'title (= "Programmer"))
+             (where 'salary (< 90000))))))
 
-    ;; 'filter' でも同じクエリが可能です
+   ;; 'filter' でも同じクエリが可能です
 
-    (reverse (sort ['age]
-      (filter (and? (where 'title (= "Programmer"))
-                    (where 'salary (< 90000)))
-              employees)))
+   (reverse (sort ['age]
+     (filter (and? (where 'title (= "Programmer"))
+                   (where 'salary (< 90000)))
+             employees)))
 
 トランザクション環境において、Pact のデータベース操作は、1
 行単位の読み書きに最適化されています。
@@ -678,19 +678,19 @@ Pact では、Bitcoin スクリプトと同様、パブリックキー認証が�
 
 .. code:: js
 
-    {
-        "fully-specified-with-native-pred":
-          { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
+   {
+       "fully-specified-with-native-pred":
+         { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
 
-        "fully-specified-with-qual-custom":
-          { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred":
-          "my-module.custom-pred" },
+       "fully-specified-with-qual-custom":
+         { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred":
+         "my-module.custom-pred" },
 
-        "keysonly":
-          { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* デフォルトは "keys-all" */
+       "keysonly":
+         { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* デフォルトは "keys-all" */
 
-        "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* "keys-all" 述語のキーセットを作成 */
-    }
+       "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* "keys-all" 述語のキーセットを作成 */
+   }
 
 .. _keyset-predicates:
 
@@ -749,13 +749,13 @@ API として位置付けることができます。
 
 .. code:: lisp
 
-    (defun create-account (id)
-      (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
+   (defun create-account (id)
+     (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
 
-    (defun read-balance (id)
-      (with-read accounts id { "balance":= bal, "keyset":= ks }
-        (enforce-keyset ks)
-        (format "Your balance is {}" [bal])))
+   (defun read-balance (id)
+     (with-read accounts id { "balance":= bal, "keyset":= ks }
+       (enforce-keyset ks)
+       (format "Your balance is {}" [bal])))
 
 この例では、 ``create-account`` が `read-keyset <#read-keyset>`__
 を使用してメッセージのペイロードからキーセット定義を読み取り、テーブルに
@@ -862,20 +862,20 @@ Pact 言語は、ブロックチェーンでのビジネス
 
 .. code:: lisp
 
-    (accounts.transfer "Acct1" "Acct2" 100.00)
+   (accounts.transfer "Acct1" "Acct2" 100.00)
 
 または次のように、メッセージ JSON
 ペイロードから値を読み取ることもできます。
 
 .. code:: lisp
 
-    (defun transfer-msg ()
-      (transfer (read-msg "from") (read-msg "to")
-      (read-decimal "amount")))
+   (defun transfer-msg ()
+     (transfer (read-msg "from") (read-msg "to")
+     (read-decimal "amount")))
 
-    ...
+   ...
 
-    (accounts.transfer-msg)
+   (accounts.transfer-msg)
 
 後者では、トランザクション時に解釈されるコードが少ないため、実行速度が少し早くなります。
 
@@ -951,9 +951,9 @@ Pact には、関数型プログラミングで最もよく使われる
 
 .. code:: lisp
 
-    (map (+ 2) [1 2 3])
+   (map (+ 2) [1 2 3])
 
-    (fold (+) "" ["Concatenate" " " "me"])
+   (fold (+) "" ["Concatenate" " " "me"])
 
 Pact にはまた `compose <#compose>`__
 の関数が用意されており、他の関数型言語と同様に複数の関数適用を許可します。
@@ -1179,8 +1179,8 @@ Pact は、モジュールと他の Pact
 
 ::
 
-    pact> (at "hash" (describe-module 'accounts))
-    "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+   pact> (at "hash" (describe-module 'accounts))
+   "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
 
 ``use`` を使用したモジュール バージョンの固定
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1218,11 +1218,11 @@ Pact
 
 .. code:: lisp
 
-    (module provider 'keyset
-      (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-      (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
-      ...
-    )
+   (module provider 'keyset
+     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+     ...
+   )
 
 これを “provider” というモジュールの最新の形とし、指定されたハッシュは
 “provider” の古いバージョンに一致します。
@@ -1260,18 +1260,18 @@ Pact
 
 ::
 
-    pact> "a string"
-    "a string"
+   pact> "a string"
+   "a string"
 
 文字列はまた、空白の前後にバックスラッシュを挿入することで、複数行にわたって記述することができます
 (REPL ではできません)。
 
 .. code:: lisp
 
-    (defun id (a)
-     "Identity function. \
-     \Argument is returned."
-     a)
+   (defun id (a)
+    "Identity function. \
+    \Argument is returned."
+    a)
 
 .. _symbols:
 
@@ -1285,8 +1285,8 @@ Pact
 
 ::
 
-    pact> 'a-symbol
-    "a-symbol"
+   pact> 'a-symbol
+   "a-symbol"
 
 .. _integers:
 
@@ -1297,11 +1297,11 @@ Pact
 
 ::
 
-    pact> 12345
-    12345
+   pact> 12345
+   12345
 
-    pact> -922337203685477580712387461234
-    -922337203685477580712387461234
+   pact> -922337203685477580712387461234
+   -922337203685477580712387461234
 
 .. _decimals:
 
@@ -1312,11 +1312,11 @@ Pact
 
 ::
 
-    pact> 100.25
-    100.25
+   pact> 100.25
+   100.25
 
-    pact> -356452.234518728287461023856582382983746
-    -356452.234518728287461023856582382983746
+   pact> -356452.234518728287461023856582382983746
+   -356452.234518728287461023856582382983746
 
 .. _booleans:
 
@@ -1327,8 +1327,8 @@ Pact
 
 ::
 
-    pact> (and true false)
-    false
+   pact> (and true false)
+   false
 
 .. _lists:
 
@@ -1341,17 +1341,17 @@ Pact
 
 ::
 
-    pact> [1 2 3]
-    [1 2 3]
+   pact> [1 2 3]
+   [1 2 3]
 
-    pact> [1,2,3]
-    [1 2 3]
+   pact> [1,2,3]
+   [1 2 3]
 
-    pact> (typeof [1 2 3])
-    "[integer]"
+   pact> (typeof [1 2 3])
+   "[integer]"
 
-    pact> (typeof [1 2 true])
-    "list"
+   pact> (typeof [1 2 true])
+   "list"
 
 .. _objects:
 
@@ -1365,8 +1365,8 @@ Pact
 
 ::
 
-    pact> { "foo": (+ 1 2), "bar": "baz" }
-    (TObject [("foo",3),("bar","baz")])
+   pact> { "foo": (+ 1 2), "bar": "baz" }
+   (TObject [("foo",3),("bar","baz")])
 
 .. _bindings:
 
@@ -1380,9 +1380,9 @@ Pact
 
 .. code:: lisp
 
-    (defun check-balance (id)
-      (with-read accounts id { "balance" := bal }
-        (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
+   (defun check-balance (id)
+     (with-read accounts id { "balance" := bal }
+       (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
 
 型の指定
 --------
@@ -1412,8 +1412,8 @@ Pact
 
 ::
 
-    table:{accounts}
-    object:{person}
+   table:{accounts}
+   object:{person}
 
 型指定の対象
 ~~~~~~~~~~~~
@@ -1423,14 +1423,14 @@ Pact
 
 .. code:: lisp
 
-    (defun prefix:string (pfx:string str:string) (+ pfx str))
+   (defun prefix:string (pfx:string str:string) (+ pfx str))
 
 let 変数
 ^^^^^^^^
 
 .. code:: lisp
 
-    (let ((a:integer 1) (b:integer 2)) (+ a b))
+   (let ((a:integer 1) (b:integer 2)) (+ a b))
 
 テーブルとオブジェクト
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -1439,16 +1439,16 @@ let 変数
 
 .. code:: lisp
 
-    (deftable accounts:{account})
+   (deftable accounts:{account})
 
-    (defun get-order:{order} (id) (read orders id))
+   (defun get-order:{order} (id) (read orders id))
 
 定数
 ^^^^
 
 .. code:: lisp
 
-    (defconst PENNY:decimal 0.1)
+   (defconst PENNY:decimal 0.1)
 
 .. _special-forms:
 
@@ -1463,9 +1463,9 @@ let 変数
 
 .. code:: lisp
 
-    (defun average (a b)
-      "take the average of a and b"
-      (/ (+ a b) 2))
+   (defun average (a b)
+     "take the average of a and b"
+     (/ (+ a b) 2))
 
 ただしここでは、ドキュメント文字列以外のメタデータも指定できます。
 ``@model`` を加えれば、コードの正確性を自動的に確認してくれる
@@ -1473,10 +1473,10 @@ let 変数
 
 .. code:: lisp
 
-    (defun average (a b)
-      @doc "take the average of a and b"
-      @model (property (= (+ a b) (* 2 result)))
-      (/ (+ a b) 2))
+   (defun average (a b)
+     @doc "take the average of a and b"
+     @model (property (= (+ a b) (* 2 result)))
+     (/ (+ a b) 2))
 
 やはり、 ``foo`` も ``@doc foo`` の略した形です。
 将来的には、使用できるメタデータの種類が追加される予定です。
@@ -1488,7 +1488,7 @@ bless
 
 .. code:: lisp
 
-    (bless HASH)
+   (bless HASH)
 
 モジュール宣言内で、HASH によってそのモジュールの前のバージョンを
 ”ブレス” し、データベースのアクセス許可を設定します。
@@ -1496,18 +1496,18 @@ bless
 
 .. code:: lisp
 
-    (module provider 'keyset
-      (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-      (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
-      ...
-    )
+   (module provider 'keyset
+     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+     ...
+   )
 
 defun
 ~~~~~
 
 .. code:: lisp
 
-    (defun NAME ARGLIST [DOC-OR-META] BODY...)
+   (defun NAME ARGLIST [DOC-OR-META] BODY...)
 
 NAME を関数として定義し、ARGLIST を引数として指定し、オプションで
 DOC-OR-META を指定します。 引数は、1 つ以上の式である BODY
@@ -1515,36 +1515,36 @@ DOC-OR-META を指定します。 引数は、1 つ以上の式である BODY
 
 .. code:: lisp
 
-    (defun add3 (a b c) (+ a (+ b c)))
+   (defun add3 (a b c) (+ a (+ b c)))
 
-    (defun scale3 (a b c s)
-      "multiply sum of A B C times s"
-      (* s (add3 a b c)))
+   (defun scale3 (a b c s)
+     "multiply sum of A B C times s"
+     (* s (add3 a b c)))
 
 defconst
 ~~~~~~~~
 
 .. code:: lisp
 
-    (defconst NAME VALUE [DOC-OR-META])
+   (defconst NAME VALUE [DOC-OR-META])
 
 NAME を VALUE として定義し、オプションで DOC-OR-META を指定します。
 値はモジュールのロード時に評価され記録されます。
 
 .. code:: lisp
 
-    (defconst COLOR_RED="#FF0000" "Red in hex")
+   (defconst COLOR_RED="#FF0000" "Red in hex")
 
-    (defconst COLOR_GRN="#00FF00" "Green in hex")
+   (defconst COLOR_GRN="#00FF00" "Green in hex")
 
-    (defconst PI 3.14159265 "Pi to 8 decimals")
+   (defconst PI 3.14159265 "Pi to 8 decimals")
 
 defpact
 ~~~~~~~
 
 .. code:: lisp
 
-    (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
+   (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 
 NAME を、“pact”、つまり複数ステップ計算として定義します。
 `defun <#defun>`__
@@ -1556,38 +1556,38 @@ NAME を、“pact”、つまり複数ステップ計算として定義しま�
 
 .. code:: lisp
 
-    (defpact payment (payer payer-entity payee payee-entity amount)
-      (step-with-rollback payer-entity
-        (debit payer amount)
-        (credit payer amount))
-      (step payee-entity
-        (credit payee amount)))
+   (defpact payment (payer payer-entity payee payee-entity amount)
+     (step-with-rollback payer-entity
+       (debit payer amount)
+       (credit payer amount))
+     (step payee-entity
+       (credit payee amount)))
 
 defschema
 ~~~~~~~~~
 
 .. code:: lisp
 
-    (defschema NAME [DOC-OR-META] FIELDS...)
+   (defschema NAME [DOC-OR-META] FIELDS...)
 
 NAME を、FIELDS のリストを指定する “スキーマ” として定義します。
 各フィールドは、 ``FIELDNAME[:FIELDTYPE]`` の形式です。
 
 .. code:: lisp
 
-    (defschema accounts
-      "Schema for accounts table".
-      balance:decimal
-      amount:decimal
-      ccy:string
-      data)
+   (defschema accounts
+     "Schema for accounts table".
+     balance:decimal
+     amount:decimal
+     ccy:string
+     data)
 
 deftable
 ~~~~~~~~
 
 .. code:: lisp
 
-    (deftable NAME[:SCHEMA] [DOC-OR-META])
+   (deftable NAME[:SCHEMA] [DOC-OR-META])
 
 NAME を、データベース関数で使用される “テーブル” として定義します。
 テーブルは、\ `create-table <#create-table>`__
@@ -1598,7 +1598,7 @@ let
 
 .. code:: lisp
 
-    (let (BINDPAIR [BINDPAIR [...]]) BODY)
+   (let (BINDPAIR [BINDPAIR [...]]) BODY)
 
 BINDPAIR 内の変数を BODY のスコープ内にバインドします。 BINDPAIR
 内の変数は、同じ ``let``
@@ -1607,10 +1607,10 @@ BINDPAIR 内の変数を BODY のスコープ内にバインドします。 BIND
 
 .. code:: lisp
 
-    (let ((x 2)
-          (y 5))
-      (* x y))
-    > 10
+   (let ((x 2)
+         (y 5))
+     (* x y))
+   > 10
 
 .. _letstar:
 
@@ -1619,7 +1619,7 @@ let\*
 
 .. code:: lisp
 
-    (let* (BINDPAIR [BINDPAIR [...]]) BODY)
+   (let* (BINDPAIR [BINDPAIR [...]]) BODY)
 
 BINDPAIR 内の変数を BODY の範囲内にバインドします。 変数は、同じ ``let``
 で以前に宣言された BINDPAIRS を参照できます。 ``let*``
@@ -1629,18 +1629,18 @@ BINDPAIR 内の変数を BODY の範囲内にバインドします。 変数は�
 
 .. code:: lisp
 
-    (let* ((x 2)
-           (y (* x 10)))
-      (+ x y))
-    > 22
+   (let* ((x 2)
+          (y (* x 10)))
+     (+ x y))
+   > 22
 
 step
 ~~~~
 
 .. code:: lisp
 
-    (step EXPR)
-    (step ENTITY EXPR)
+   (step EXPR)
+   (step ENTITY EXPR)
 
 `defpact <#defpact>`__
 内のステップは、前のステップが前のトランザクションで実行され、後のステップが後のトランザクションで実行されるように定義します。
@@ -1653,8 +1653,8 @@ step-with-rollback
 
 .. code:: lisp
 
-    (step-with-rollback EXPR ROLLBACK-EXPR)
-    (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
+   (step-with-rollback EXPR ROLLBACK-EXPR)
+   (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
 
 `defpact <#defpact>`__ 内でステップを定義します。 `step <#step>`__
 に似ていますが、ROLLBACK-EXPR を指定する点が異なります。 ENTITY
@@ -1669,8 +1669,8 @@ use
 
 .. code:: lisp
 
-    (use MODULE)
-    (use MODULE HASH)
+   (use MODULE)
+   (use MODULE HASH)
 
 既存の MODULE を名前空間にインポートします。
 コードファイルの一番上、またはモジュール宣言内でのみ使えます。 MODULE
@@ -1682,16 +1682,16 @@ use
 
 .. code:: lisp
 
-    (use accounts)
-    (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
-    "Write succeeded"
+   (use accounts)
+   (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+   "Write succeeded"
 
 module
 ~~~~~~
 
 .. code:: lisp
 
-    (module NAME KEYSET [DOC-OR-META] DEFS...)
+   (module NAME KEYSET [DOC-OR-META] DEFS...)
 
 キーセット KEYSET によってガードされたモジュール NAME
 を定義してブロックチェーンにインストールします。 オプションで
@@ -1700,21 +1700,21 @@ DOC-OR-META を指定できます。 DEFS には、\ `defun <#defun>`__ 式ま�
 
 .. code:: lisp
 
-    (module accounts 'accounts-admin
-      "Module for interacting with accounts"
+   (module accounts 'accounts-admin
+     "Module for interacting with accounts"
 
-      (defun create-account (id bal)
-        "Create account ID with initial balance BAL"
-        (insert accounts id { "balance": bal }))
+     (defun create-account (id bal)
+       "Create account ID with initial balance BAL"
+       (insert accounts id { "balance": bal }))
 
-      (defun transfer (from to amount)
-        "Transfer AMOUNT from FROM to TO"
-        (with-read accounts from { "balance": fbal }
-          (enforce (<= amount fbal) "Insufficient funds")
-          (with-read accounts to { "balance": tbal }
-            (update accounts from { "balance": (- fbal amount) })
-            (update accounts to { "balance": (+ tbal amount) }))))
-      )
+     (defun transfer (from to amount)
+       "Transfer AMOUNT from FROM to TO"
+       (with-read accounts from { "balance": fbal }
+         (enforce (<= amount fbal) "Insufficient funds")
+         (with-read accounts to { "balance": tbal }
+           (update accounts from { "balance": (- fbal amount) })
+           (update accounts to { "balance": (+ tbal amount) }))))
+     )
 
 .. _expression:
 
@@ -1765,20 +1765,20 @@ S 式はかっこで囲って作成されます。
 
 ::
 
-    pact> accounts.transfer
-    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT
-    from SRC to DEST\")"
+   pact> accounts.transfer
+   "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT
+   from SRC to DEST\")"
 
-    pact> transfer
-    Eval failure:
-    transfer<EOF>: Cannot resolve transfer
+   pact> transfer
+   Eval failure:
+   transfer<EOF>: Cannot resolve transfer
 
-    pact> (use 'accounts)
-    "Using \"accounts\""
+   pact> (use 'accounts)
+   "Using \"accounts\""
 
-    pact> transfer
-    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT
-    from SRC to DEST\")"
+   pact> transfer
+   "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT
+   from SRC to DEST\")"
 
 参照は ``use``
 よりも高速に解決できるため、トランザクションでは参照の方が適切です。
@@ -1918,24 +1918,24 @@ ISO8601
 
 ::
 
-    pact> (format-time "%Y-%m-/%d/T%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
-    "2016-07-23T13:30:45+00:00"
+   pact> (format-time "%Y-%m-/%d/T%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
+   "2016-07-23T13:30:45+00:00"
 
 RFC822
 ~~~~~~
 
 ::
 
-    pact> (format-time "%a, %\_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
-    "Sat, 23 Jul 2016 13:30:45 UTC"
+   pact> (format-time "%a, %\_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
+   "Sat, 23 Jul 2016 13:30:45 UTC"
 
 YYYY-MM-DD hh:mm:ss.000000
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
-    pact> (format-time "%Y-%m-/%d/ %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
-    "2016-07-23 13:30:45.001002"
+   pact> (format-time "%Y-%m-/%d/ %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
+   "2016-07-23 13:30:45.001002"
 
 データベースのシリアル化形式
 ============================
@@ -1991,12 +1991,12 @@ JSON/Javascript で、何をもって “大きな整数” とするかは議�
 
 .. code:: js
 
-    /* small integers are just a number */
-    1
+   /* small integers are just a number */
+   1
 
-    /* large integers are objects */
-    { "_P_int": "123..." /* integer string representation */
-    }
+   /* large integers are objects */
+   { "_P_int": "123..." /* integer string representation */
+   }
 
 小数
 ~~~~
@@ -2006,16 +2006,16 @@ JSON/Javascript で、何をもって “大きな整数” とするかは議�
 
 .. code:: js
 
-    { "_P_decp": 4 /* decimal places */
-    , "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
-    }
+   { "_P_decp": 4 /* decimal places */
+   , "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
+   }
 
 仮数の値は、上記の整数形式を使用します。
 小数に関する資料に記載されているとおり、値は次のように計算できます。
 
 ::
 
-    MANTISSA / (10 ^ PLACES)
+   MANTISSA / (10 ^ PLACES)
 
 ブール
 ~~~~~~
@@ -2035,9 +2035,9 @@ JSON オブジェクトに格納されます。
 
 .. code:: js
 
-    { "_P_timed": 234 /* "modified julian day value */
-    , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
-    }
+   { "_P_timed": 234 /* "modified julian day value */
+   , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
+   }
 
 MJD
 の変換に関する推奨事項は、\ `こちら <https://stackoverflow.com/questions/11889553/convert-modified-julian-date-to-utc>`__\ を参照してください。
@@ -2050,8 +2050,8 @@ JSON 値/blob
 
 .. code:: js
 
-    { "_P_val": { "foo": "bar" } /* unmodified user JSON object */
-    }
+   { "_P_val": { "foo": "bar" } /* unmodified user JSON object */
+   }
 
 キーセット
 ~~~~~~~~~~
@@ -2060,9 +2060,9 @@ JSON 値/blob
 
 .. code:: js
 
-    { "_P_keys": ["key1","key2"] /* public key string representations */
-    , "_P_pred": "keys-all" /* predicate function name */
-    }
+   { "_P_keys": ["key1","key2"] /* public key string representations */
+   , "_P_pred": "keys-all" /* predicate function name */
+   }
 
 モジュール (ユーザー) テーブル
 ------------------------------
@@ -2102,10 +2102,10 @@ Pact コードで指定された各モジュール テーブルに対して、�
 
 .. code:: js
 
-    { "table": "name"  /* user-visible table name (not backend table name) */
-    , "key": "123"     /* update string key */
-    , "value": { ... } /* The new JSON row value. Entire row is captured.*/
-    }
+   { "table": "name"  /* user-visible table name (not backend table name) */
+   , "key": "123"     /* update string key */
+   , "value": { ... } /* The new JSON row value. Entire row is captured.*/
+   }
 
 JSON の行の値には、ユーザー データ
 テーブルと同じエンコーディングが使用されます。
@@ -2132,11 +2132,11 @@ at
 
 ::
 
-    pact> (at 1 [1 2 3])
-    2
+   pact> (at 1 [1 2 3])
+   2
 
-    pact> (at "bar" { "foo": 1, "bar": 2 })
-    2
+   pact> (at "bar" { "foo": 1, "bar": 2 })
+   2
 
 bind
 ~~~~
@@ -2149,8 +2149,8 @@ SRC を評価し、BINDING
 
 ::
 
-    pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
-    1
+   pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
+   1
 
 compose
 ~~~~~~~
@@ -2163,8 +2163,8 @@ X の演算を VALUE に対して行い、Y の演算を X の結果に対して
 
 ::
 
-    pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]
+   pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
+   ["dog" "has" "fleas"]
 
 constantly
 ~~~~~~~~~~
@@ -2180,8 +2180,8 @@ constantly
 
 ::
 
-    pact> (filter (constantly true) [1 2 3])
-    [1 2 3]
+   pact> (filter (constantly true) [1 2 3])
+   [1 2 3]
 
 contains
 ~~~~~~~~
@@ -2197,14 +2197,14 @@ KEY エントリがあるかどうかをテストします。
 
 ::
 
-    pact> (contains 2 [1 2 3])
-    true
+   pact> (contains 2 [1 2 3])
+   true
 
-    pact> (contains 'name { 'name: "Ted", 'age: 72 })
-    true
+   pact> (contains 'name { 'name: "Ted", 'age: 72 })
+   true
 
-    pact> (contains "foo" "foobar")
-    true
+   pact> (contains "foo" "foobar")
+   true
 
 drop
 ~~~~
@@ -2220,14 +2220,14 @@ COUNT の数の値を LIST (または文字列) から除くか、KEYS
 
 ::
 
-    pact> (drop 2 "vwxyz")
-    "xyz"
+   pact> (drop 2 "vwxyz")
+   "xyz"
 
-    pact> (drop (- 2) [1 2 3 4 5])
-    [1 2 3]
+   pact> (drop (- 2) [1 2 3 4 5])
+   [1 2 3]
 
-    pact> (drop ['name] { 'name: "Vlad", 'active: false})
-    {"active": false}
+   pact> (drop ['name] { 'name: "Vlad", 'active: false})
+   {"active": false}
 
 enforce
 ~~~~~~~
@@ -2239,8 +2239,8 @@ TEST が false である場合、MSG を返してトランザクションが失�
 
 ::
 
-    pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-    <interactive>:0:0: Chaos reigns
+   pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
+   <interactive>:0:0: Chaos reigns
 
 enforce-one
 ~~~~~~~~~~~
@@ -2253,8 +2253,8 @@ TESTS を順番に実行します
 
 ::
 
-    pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
-    true
+   pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
+   true
 
 enforce-pact-version
 ~~~~~~~~~~~~~~~~~~~~
@@ -2270,8 +2270,8 @@ MIN-VERSION 以上、または MAX-VERSION 以下のランタイム pact
 
 ::
 
-    pact> (enforce-pact-version "2.3")
-    true
+   pact> (enforce-pact-version "2.3")
+   true
 
 filter
 ~~~~~~
@@ -2283,8 +2283,8 @@ True の場合に元の値が残されます。
 
 ::
 
-    pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]
+   pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
+   ["dog" "has" "fleas"]
 
 fold
 ~~~~
@@ -2296,8 +2296,8 @@ INIT から始め、 要素に APP を適用して LIST を絞り込んでいき
 
 ::
 
-    pact> (fold (+) 0 [100 10 5])
-    115
+   pact> (fold (+) 0 [100 10 5])
+   115
 
 format
 ~~~~~~
@@ -2308,8 +2308,8 @@ format
 
 ::
 
-    pact> (format "My {} has {}" ["dog" "fleas"])
-    "My dog has fleas"
+   pact> (format "My {} has {}" ["dog" "fleas"])
+   "My dog has fleas"
 
 hash
 ~~~~
@@ -2321,11 +2321,11 @@ VALUE の BLAKE 2b 512 ビット ハッシュを計算します。
 
 ::
 
-    pact> (hash "hello")
-    "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+   pact> (hash "hello")
+   "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
 
-    pact> (hash { 'foo: 1 })
-    "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
+   pact> (hash { 'foo: 1 })
+   "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
 
 identity
 ~~~~~~~~
@@ -2336,8 +2336,8 @@ identity
 
 ::
 
-    pact> (map (identity) [1 2 3])
-    [1 2 3]
+   pact> (map (identity) [1 2 3])
+   [1 2 3]
 
 if
 ~~
@@ -2349,8 +2349,8 @@ COND をテストし、True の場合は THEN を、それ以外の場合は ELS
 
 ::
 
-    pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
-    "Sanity prevails"
+   pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
+   "Sanity prevails"
 
 length
 ~~~~~~
@@ -2362,14 +2362,14 @@ X の長さを計算します。 X
 
 ::
 
-    pact> (length [1 2 3])
-    3
+   pact> (length [1 2 3])
+   3
 
-    pact> (length "abcdefgh")
-    8
+   pact> (length "abcdefgh")
+   8
 
-    pact> (length { "a": 1, "b": 2 })
-    2
+   pact> (length { "a": 1, "b": 2 })
+   2
 
 list
 ~~~~
@@ -2381,8 +2381,8 @@ ELEMS からリストを作成します。 Pact 2.1.1 以降では非推奨で�
 
 ::
 
-    pact> (list 1 2 3)
-    [1 2 3]
+   pact> (list 1 2 3)
+   [1 2 3]
 
 list-modules
 ~~~~~~~~~~~~
@@ -2400,8 +2400,8 @@ VALUE を LENGTH 回繰り返してリストを作成します。
 
 ::
 
-    pact> (make-list 5 true)
-    [true true true true true]
+   pact> (make-list 5 true)
+   [true true true true true]
 
 map
 ~~~
@@ -2412,8 +2412,8 @@ LIST の要素に APP を適用し、新しいリストを返します。
 
 ::
 
-    pact> (map (+ 1) [1 2 3])
-    [2 3 4]
+   pact> (map (+ 1) [1 2 3])
+   [2 3 4]
 
 pact-id
 ~~~~~~~
@@ -2432,8 +2432,8 @@ pact-version
 
 ::
 
-    pact> (pact-version)
-    "2.5.0"
+   pact> (pact-version)
+   "2.6.1"
 
 read-decimal
 ~~~~~~~~~~~~
@@ -2444,8 +2444,8 @@ read-decimal
 
 .. code:: lisp
 
-    (defun exec ()
-      (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+   (defun exec ()
+     (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
 
 read-integer
 ~~~~~~~~~~~~
@@ -2456,7 +2456,7 @@ read-integer
 
 .. code:: lisp
 
-    (read-integer "age")
+   (read-integer "age")
 
 read-msg
 ~~~~~~~~
@@ -2472,8 +2472,8 @@ object の規則に従って pact 型に強制します。
 
 .. code:: lisp
 
-    (defun exec ()
-      (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+   (defun exec ()
+     (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
 
 remove
 ~~~~~~
@@ -2484,8 +2484,8 @@ KEY のエントリを OBJECT から削除します。
 
 ::
 
-    pact> (remove "bar" { "foo": 1, "bar": 2 })
-    {"foo": 1}
+   pact> (remove "bar" { "foo": 1, "bar": 2 })
+   {"foo": 1}
 
 resume
 ~~~~~~
@@ -2504,8 +2504,8 @@ reverse
 
 ::
 
-    pact> (reverse [1 2 3])
-    [3 2 1]
+   pact> (reverse [1 2 3])
+   [3 2 1]
 
 sort
 ~~~~
@@ -2519,11 +2519,11 @@ FIELDS リストを使用して並べ替えます。
 
 ::
 
-    pact> (sort [3 1 2])
-    [1 2 3]
+   pact> (sort [3 1 2])
+   [1 2 3]
 
-    pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
-    [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
+   pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
+   [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
 
 str-to-int
 ~~~~~~~~~~
@@ -2538,11 +2538,11 @@ BASEは最低２、最大１６でなければなりません。
 
 .. code:: lisp
 
-    pact> (str-to-int 16 "123456")
-    1193046
+   pact> (str-to-int 16 "123456")
+   1193046
 
-    pact> (str-to-int "abcdef123456")
-    1123455123456
+   pact> (str-to-int "abcdef123456")
+   1123455123456
 
 take
 ~~~~
@@ -2558,14 +2558,14 @@ COUNT の数の値を LIST (または文字列) から取得するか、KEYS
 
 ::
 
-    pact> (take 2 "abcd")
-    "ab"
+   pact> (take 2 "abcd")
+   "ab"
 
-    pact> (take (- 3) [1 2 3 4 5])
-    [3 4 5]
+   pact> (take (- 3) [1 2 3 4 5])
+   [3 4 5]
 
-    pact> (take ['name] { 'name: "Vlad", 'active: false})
-    {"name": "Vlad"}
+   pact> (take ['name] { 'name: "Vlad", 'active: false})
+   {"name": "Vlad"}
 
 tx-hash
 ~~~~~~~
@@ -2576,8 +2576,8 @@ tx-hash
 
 ::
 
-    pact> (tx-hash)
-    "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
+   pact> (tx-hash)
+   "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
 
 typeof
 ~~~~~~
@@ -2588,8 +2588,8 @@ X の型を文字列として返します。
 
 ::
 
-    pact> (typeof "hello")
-    "string"
+   pact> (typeof "hello")
+   "string"
 
 where
 ~~~~~
@@ -2602,8 +2602,8 @@ where
 
 ::
 
-    pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
-    [{"name": "Juan", "age": 15}]
+   pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
+   [{"name": "Juan", "age": 15}]
 
 yield
 ~~~~~
@@ -2618,7 +2618,7 @@ OBJECT をイールドします。 イールドされたオブジェクトは、
 
 .. code:: lisp
 
-    (yield { "amount": 100.0 })
+   (yield { "amount": 100.0 })
 
 .. _Database:
 
@@ -2634,7 +2634,7 @@ create-table
 
 .. code:: lisp
 
-    (create-table accounts)
+   (create-table accounts)
 
 describe-keyset
 ~~~~~~~~~~~~~~~
@@ -2654,7 +2654,7 @@ MODULE のメタデータを取得します。
 
 .. code:: lisp
 
-    (describe-module 'my-module)
+   (describe-module 'my-module)
 
 describe-table
 ~~~~~~~~~~~~~~
@@ -2667,7 +2667,7 @@ TABLE のメタデータを取得します。
 
 .. code:: lisp
 
-    (describe-table accounts)
+   (describe-table accounts)
 
 insert
 ~~~~~~
@@ -2680,7 +2680,7 @@ TABLE の KEY に OBJECT 列データのエントリを書き込みます。 KEY
 
 .. code:: lisp
 
-    (insert 'accounts { "balance": 0.0, "note": "Created account."})
+   (insert accounts id { "balance": 0.0, "note": "Created account."})
 
 keylog
 ~~~~~~
@@ -2695,7 +2695,7 @@ TXID 以降のトランザクションで TABLE の KEY
 
 .. code:: lisp
 
-    (keylog 'accounts "Alice" 123485945)
+   (keylog accounts "Alice" 123485945)
 
 keys
 ~~~~
@@ -2706,7 +2706,7 @@ TABLE のすべてのキーを返します。
 
 .. code:: lisp
 
-    (keys 'accounts)
+   (keys accounts)
 
 read
 ~~~~
@@ -2721,7 +2721,7 @@ COLUMNS (指定されている場合) を返します。
 
 .. code:: lisp
 
-    (read 'accounts id ['balance 'ccy])
+   (read accounts id ['balance 'ccy])
 
 select
 ~~~~~~
@@ -2737,9 +2737,9 @@ select
 
 .. code:: lisp
 
-    (select people ['firstName, 'lastName] (where 'name (= "Fatima")))
+   (select people ['firstName, 'lastName] (where 'name (= "Fatima")))
 
-    (select people (where 'age (> 30)))
+   (select people (where 'age (> 30)))
 
 txids
 ~~~~~
@@ -2750,7 +2750,7 @@ TABLE の TXID 以上のすべての txid 値を返します。
 
 .. code:: lisp
 
-    (txids accounts 123849535)
+   (txids accounts 123849535)
 
 txlog
 ~~~~~
@@ -2761,7 +2761,7 @@ txlog
 
 .. code:: lisp
 
-    (txlog 'accounts 123485945)
+   (txlog accounts 123485945)
 
 update
 ~~~~~~
@@ -2774,7 +2774,7 @@ TABLE の KEY に OBJECT 列データを書き込みます。 KEY
 
 .. code:: lisp
 
-    (update 'accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+   (update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 
 with-default-read
 ~~~~~~~~~~~~~~~~~
@@ -2789,8 +2789,8 @@ TABLE から KEY の行を読み取り、列を BINDING
 
 .. code:: lisp
 
-    (with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
-      (format "Balance for {} is {} {}" [id bal ccy]))
+   (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
+     (format "Balance for {} is {} {}" [id bal ccy]))
 
 with-read
 ~~~~~~~~~
@@ -2803,8 +2803,8 @@ TABLE から KEY の行を読み取り、列を BINDING
 
 .. code:: lisp
 
-    (with-read 'accounts id { "balance":= bal, "ccy":= ccy }
-      (format "Balance for {} is {} {}" [id bal ccy]))
+   (with-read accounts id { "balance":= bal, "ccy":= ccy }
+     (format "Balance for {} is {} {}" [id bal ccy]))
 
 write
 ~~~~~
@@ -2816,7 +2816,7 @@ TABLE の KEY に OBJECT 列データを書き込みます。
 
 .. code:: lisp
 
-    (write 'accounts { "balance": 100.0 })
+   (write accounts id { "balance": 100.0 })
 
 .. _Time:
 
@@ -2834,8 +2834,8 @@ SECONDS を TIME に追加します。 SECONDS は整数または小数です。
 
 ::
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") 15)
-    "2016-07-22T12:00:15Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") 15)
+   "2016-07-22T12:00:15Z"
 
 days
 ~~~~
@@ -2848,8 +2848,8 @@ days
 
 ::
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
-    "2016-07-23T12:00:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
+   "2016-07-23T12:00:00Z"
 
 diff-time
 ~~~~~~~~~
@@ -2860,8 +2860,8 @@ TIME1 と TIME2 の差を秒数で計算します。
 
 ::
 
-    pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
-    23400
+   pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
+   23400
 
 format-time
 ~~~~~~~~~~~
@@ -2873,8 +2873,8 @@ FORMAT を使用して TIME の形式を設定します。
 
 ::
 
-    pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
-    "2016-07-22"
+   pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
+   "2016-07-22"
 
 hours
 ~~~~~
@@ -2887,8 +2887,8 @@ hours
 
 ::
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
-    "2016-07-22T13:00:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
+   "2016-07-22T13:00:00Z"
 
 minutes
 ~~~~~~~
@@ -2901,8 +2901,8 @@ minutes
 
 ::
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
-    "2016-07-22T12:01:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
+   "2016-07-22T12:01:00Z"
 
 parse-time
 ~~~~~~~~~~
@@ -2914,8 +2914,8 @@ FORMAT を使用して UTCVAL から時刻を作成します。
 
 ::
 
-    pact> (parse-time "%F" "2016-09-12")
-    "2016-09-12T00:00:00Z"
+   pact> (parse-time "%F" "2016-09-12")
+   "2016-09-12T00:00:00Z"
 
 time
 ~~~~
@@ -2927,8 +2927,8 @@ ISO8601 形式 (%Y-%m-%dT%H:%M:%SZ) を使用して UTCVAL
 
 ::
 
-    pact> (time "2016-07-22T11:26:35Z")
-    "2016-07-22T11:26:35Z"
+   pact> (time "2016-07-22T11:26:35Z")
+   "2016-07-22T11:26:35Z"
 
 .. _Operators:
 
@@ -2948,8 +2948,8 @@ X が Y と等しくない場合、True です。
 
 ::
 
-    pact> (!= "hello" "goodbye")
-    true
+   pact> (!= "hello" "goodbye")
+   true
 
 .. _star:
 
@@ -2966,11 +2966,11 @@ X に Y を乗じます。
 
 ::
 
-    pact> (* 0.5 10.0)
-    5
+   pact> (* 0.5 10.0)
+   5
 
-    pact> (* 3 5)
-    15
+   pact> (* 3 5)
+   15
 
 .. _plus:
 
@@ -2991,20 +2991,20 @@ X に Y を乗じます。
 
 ::
 
-    pact> (+ 1 2)
-    3
+   pact> (+ 1 2)
+   3
 
-    pact> (+ 5.0 0.5)
-    5.5
+   pact> (+ 5.0 0.5)
+   5.5
 
-    pact> (+ "every" "body")
-    "everybody"
+   pact> (+ "every" "body")
+   "everybody"
 
-    pact> (+ [1 2] [3 4])
-    [1 2 3 4]
+   pact> (+ [1 2] [3 4])
+   [1 2 3 4]
 
-    pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-    {"bar": 2, "foo": 100}
+   pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
+   {"bar": 2, "foo": 100}
 
 .. _minus:
 
@@ -3023,11 +3023,11 @@ X の符号を反転するか、X から Y を引きます。
 
 ::
 
-    pact> (- 1.0)
-    -1.0
+   pact> (- 1.0)
+   -1.0
 
-    pact> (- 3 2)
-    1
+   pact> (- 3 2)
+   1
 
 .. _slash:
 
@@ -3044,11 +3044,11 @@ X を Y で割ります。
 
 ::
 
-    pact> (/ 10.0 2.0)
-    5
+   pact> (/ 10.0 2.0)
+   5
 
-    pact> (/ 8 3)
-    2
+   pact> (/ 8 3)
+   2
 
 .. _lt:
 
@@ -3062,14 +3062,14 @@ X < Y の場合、True です。
 
 ::
 
-    pact> (< 1 3)
-    true
+   pact> (< 1 3)
+   true
 
-    pact> (< 5.24 2.52)
-    false
+   pact> (< 5.24 2.52)
+   false
 
-    pact> (< "abc" "def")
-    true
+   pact> (< "abc" "def")
+   true
 
 .. _lteq:
 
@@ -3083,14 +3083,14 @@ X <= Y の場合、True です。
 
 ::
 
-    pact> (<= 1 3)
-    true
+   pact> (<= 1 3)
+   true
 
-    pact> (<= 5.24 2.52)
-    false
+   pact> (<= 5.24 2.52)
+   false
 
-    pact> (<= "abc" "def")
-    true
+   pact> (<= "abc" "def")
+   true
 
 .. _eq:
 
@@ -3105,14 +3105,14 @@ X が Y に等しい場合、True です。
 
 ::
 
-    pact> (= [1 2 3] [1 2 3])
-    true
+   pact> (= [1 2 3] [1 2 3])
+   true
 
-    pact> (= 'foo "foo")
-    true
+   pact> (= 'foo "foo")
+   true
 
-    pact> (= { 1: 2 } { 1: 2})
-    true
+   pact> (= { 1: 2 } { 1: 2})
+   true
 
 .. _gt:
 
@@ -3126,14 +3126,14 @@ X > Y の場合、True です。
 
 ::
 
-    pact> (> 1 3)
-    false
+   pact> (> 1 3)
+   false
 
-    pact> (> 5.24 2.52)
-    true
+   pact> (> 5.24 2.52)
+   true
 
-    pact> (> "abc" "def")
-    false
+   pact> (> "abc" "def")
+   false
 
 .. _gteq:
 
@@ -3147,14 +3147,14 @@ X >= Y の場合、True です。
 
 ::
 
-    pact> (>= 1 3)
-    false
+   pact> (>= 1 3)
+   false
 
-    pact> (>= 5.24 2.52)
-    true
+   pact> (>= 5.24 2.52)
+   true
 
-    pact> (>= "abc" "def")
-    false
+   pact> (>= "abc" "def")
+   false
 
 .. _hat:
 
@@ -3171,8 +3171,8 @@ X の Y 乗です。
 
 ::
 
-    pact> (\^ 2 3)
-    8
+   pact> (\^ 2 3)
+   8
 
 abs
 ~~~
@@ -3185,8 +3185,8 @@ X の絶対値です。
 
 ::
 
-    pact> (abs (- 10 23))
-    13
+   pact> (abs (- 10 23))
+   13
 
 and
 ~~~
@@ -3197,8 +3197,8 @@ and
 
 ::
 
-    pact> (and true false)
-    false
+   pact> (and true false)
+   false
 
 .. _and-qm:
 
@@ -3212,8 +3212,8 @@ VALUE を A と B に適用した結果に論理積を行います。
 
 ::
 
-    pact> (and? (> 20) (> 10) 15)
-    false
+   pact> (and? (> 20) (> 10) 15)
+   false
 
 ceiling
 ~~~~~~~
@@ -3226,11 +3226,11 @@ ceiling
 
 ::
 
-    pact> (ceiling 3.5)
-    4
+   pact> (ceiling 3.5)
+   4
 
-    pact> (ceiling 100.15234 2)
-    100.16
+   pact> (ceiling 100.15234 2)
+   100.16
 
 exp
 ~~~
@@ -3241,8 +3241,8 @@ X の指数関数です。
 
 ::
 
-    pact> (round (exp 3) 6)
-    20.085537
+   pact> (round (exp 3) 6)
+   20.085537
 
 floor
 ~~~~~
@@ -3255,11 +3255,11 @@ floor
 
 ::
 
-    pact> (floor 3.5)
-    3
+   pact> (floor 3.5)
+   3
 
-    pact> (floor 100.15234 2)
-    100.15
+   pact> (floor 100.15234 2)
+   100.15
 
 ln
 ~~
@@ -3270,8 +3270,8 @@ X の自然対数です。
 
 ::
 
-    pact> (round (ln 60) 6)
-    4.094345
+   pact> (round (ln 60) 6)
+   4.094345
 
 log
 ~~~
@@ -3286,8 +3286,8 @@ Y を底とした X の対数です。
 
 ::
 
-    pact> (log 2 256)
-    8
+   pact> (log 2 256)
+   8
 
 mod
 ~~~
@@ -3298,8 +3298,8 @@ X モジュロ Y です。
 
 ::
 
-    pact> (mod 13 8)
-    5
+   pact> (mod 13 8)
+   5
 
 not
 ~~~
@@ -3310,8 +3310,8 @@ not
 
 ::
 
-    pact> (not (> 1 2))
-    true
+   pact> (not (> 1 2))
+   true
 
 .. _not-qm:
 
@@ -3324,8 +3324,8 @@ VALUE に対し APP関数を適用した結果を論理否定します。
 
 ::
 
-    pact> (not? (> 20) 15)
-    false
+   pact> (not? (> 20) 15)
+   false
 
 or
 ~~
@@ -3336,8 +3336,8 @@ or
 
 ::
 
-    pact> (or true false)
-    true
+   pact> (or true false)
+   true
 
 .. _or-qm:
 
@@ -3351,8 +3351,8 @@ VALUE を A と B に適用した結果に論理和を行います。
 
 ::
 
-    pact> (or? (> 20) (> 10) 15)
-    true
+   pact> (or? (> 20) (> 10) 15)
+   true
 
 round
 ~~~~~
@@ -3365,11 +3365,11 @@ round
 
 ::
 
-    pact> (round 3.5)
-    4
+   pact> (round 3.5)
+   4
 
-    pact> (round 100.15234 2)
-    100.15
+   pact> (round 100.15234 2)
+   100.15
 
 sqrt
 ~~~~
@@ -3380,8 +3380,8 @@ X の平方根。
 
 ::
 
-    pact> (sqrt 25)
-    5
+   pact> (sqrt 25)
+   5
 
 .. _Keysets:
 
@@ -3398,7 +3398,7 @@ KEYSET を使用して NAME というキーセットを定義します。 キー
 
 .. code:: lisp
 
-    (define-keyset 'admin-keyset (read-keyset "keyset"))
+   (define-keyset 'admin-keyset (read-keyset "keyset"))
 
 enforce-keyset
 ~~~~~~~~~~~~~~
@@ -3411,9 +3411,8 @@ BODY の実行前に、メッセージ キーに対して KEYSET-OR-NAME
 
 .. code:: lisp
 
-    (with-keyset 'admin-keyset ...)
-
-    (with-keyset (read-keyset "keyset") ...)
+   (enforce-keyset 'admin-keyset)
+   (enforce-keyset row-guard)
 
 keys-2
 ~~~~~~
@@ -3425,8 +3424,8 @@ keys-2
 
 ::
 
-    pact> (keys-2 3 1)
-    false
+   pact> (keys-2 3 1)
+   false
 
 keys-all
 ~~~~~~~~
@@ -3437,8 +3436,8 @@ keys-all
 
 ::
 
-    pact> (keys-all 3 3)
-    true
+   pact> (keys-all 3 3)
+   true
 
 keys-any
 ~~~~~~~~
@@ -3450,8 +3449,8 @@ keys-any
 
 ::
 
-    pact> (keys-any 10 1)
-    true
+   pact> (keys-any 10 1)
+   true
 
 read-keyset
 ~~~~~~~~~~~
@@ -3464,7 +3463,7 @@ read-keyset
 
 .. code:: lisp
 
-    (read-keyset "admin-keyset")
+   (read-keyset "admin-keyset")
 
 .. _repl-lib:
 
@@ -3486,7 +3485,7 @@ begin-tx
 
 .. code:: lisp
 
-    (begin-tx "load module")
+   (begin-tx "load module")
 
 bench
 ~~~~~
@@ -3497,7 +3496,7 @@ EXPRS のベンチマークを実行します。
 
 .. code:: lisp
 
-    (bench (+ 1 2))
+   (bench (+ 1 2))
 
 commit-tx
 ~~~~~~~~~
@@ -3508,7 +3507,7 @@ commit-tx
 
 .. code:: lisp
 
-    (commit-tx)
+   (commit-tx)
 
 env-data
 ~~~~~~~~
@@ -3522,8 +3521,8 @@ env-data
 
 ::
 
-    pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
-    "Setting transaction data"
+   pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
+   "Setting transaction data"
 
 env-entity
 ~~~~~~~~~~
@@ -3537,9 +3536,9 @@ REPL 内で機密 ENTITY ID を設定するか、引数を指定せずに設定�
 
 .. code:: lisp
 
-    (env-entity "my-org")
+   (env-entity "my-org")
 
-    (env-entity)
+   (env-entity)
 
 env-gas
 ~~~~~~~
@@ -3581,8 +3580,8 @@ env-hash
 
 ::
 
-    pact> (env-hash (hash "hello"))
-    "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+   pact> (env-hash (hash "hello"))
+   "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
 
 env-keys
 ~~~~~~~~
@@ -3593,8 +3592,8 @@ env-keys
 
 ::
 
-    pact> (env-keys ["my-key" "admin-key"])
-    "Setting transaction keys"
+   pact> (env-keys ["my-key" "admin-key"])
+   "Setting transaction keys"
 
 env-step
 ~~~~~~~~
@@ -3617,9 +3616,9 @@ RESUME では、“resume” によって読み取る値を設定します。 �
 
 ::
 
-    (env-step 1)
+   (env-step 1)
 
-    (env-step 0 true)
+   (env-step 0 true)
 
 expect
 ~~~~~~
@@ -3630,8 +3629,8 @@ ACTUAL を評価し、それが EXPECTED に等しいことを確認します。
 
 ::
 
-    pact> (expect "Sanity prevails."4 (+ 2 2))
-    "Expect: success: Sanity prevails."
+   pact> (expect "Sanity prevails."4 (+ 2 2))
+   "Expect: success: Sanity prevails."
 
 expect-failure
 ~~~~~~~~~~~~~~
@@ -3642,8 +3641,8 @@ EXP を評価し、エラーの時のみ成功します。
 
 ::
 
-    pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
-    "Expect failure: success: Enforce fails on false"
+   pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
+   "Expect failure: success: Enforce fails on false"
 
 json
 ~~~~
@@ -3655,8 +3654,8 @@ pact 式 EXP を JSON 値としてエンコードします。 Pact 値は、API
 
 ::
 
-    pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
-    [{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
+   pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
+   [{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
 
 load
 ~~~~
@@ -3670,7 +3669,7 @@ FILE をロードして評価します。 オプションの RESET が true の�
 
 .. code:: lisp
 
-    (load "accounts.repl")
+   (load "accounts.repl")
 
 pact-state
 ~~~~~~~~~~
@@ -3686,7 +3685,7 @@ pact-state
 
 .. code:: lisp
 
-    (pact-state)
+   (pact-state)
 
 print
 ~~~~~
@@ -3704,7 +3703,7 @@ rollback-tx
 
 .. code:: lisp
 
-    (rollback-tx)
+   (rollback-tx)
 
 sig-keyset
 ~~~~~~~~~~
@@ -3789,19 +3788,19 @@ types）への第一歩となります。
 
 .. code:: lisp
 
-    (defun read-account (id)
-      @doc "Read data for account ID"
-      @model (properties [(authorized-by 'admins)])
+   (defun read-account (id)
+     @doc "Read data for account ID"
+     @model (properties [(authorized-by 'admins)])
 
-      (enforce-admin)
-      (read 'accounts id ['balance 'ccy 'amount]))
+     (enforce-admin)
+     (read accounts id ['balance 'ccy 'amount]))
 
 ここでプロパティが、角かっこで囲って指定されていますが、これは、Pact
 で複数のプロパティを同時に定義できるためです。
 
 .. code:: lisp
 
-    (properties [p1 p2 p3 ...])
+   (properties [p1 p2 p3 ...])
 
 次に、スキーマの不変条件の例を見てみましょう。
 次のスキーマを持つテーブルでプロパティ
@@ -3810,12 +3809,12 @@ types）への第一歩となります。
 
 .. code:: lisp
 
-    (defschema tokens
-      @doc "token schema"
-      @model (invariants [(> balance 0)])
+   (defschema tokens
+     @doc "token schema"
+     @model (invariants [(> balance 0)])
 
-      username:string
-      balance:integer)
+     username:string
+     balance:integer)
 
 プロパティ チェッカーのしくみ
 -----------------------------
@@ -3850,7 +3849,7 @@ Pact
 
 .. code:: lisp
 
-    (verify 'module-name)
+   (verify 'module-name)
 
 これによりコードの型チェックが実行され、それが正常に完了すると、すべての不変条件とプロパティがチェックされます。
 
@@ -3865,11 +3864,11 @@ Pact
 
 .. code:: lisp
 
-    (defun negate:integer (x:integer)
-      @doc "negate a number"
-      @model (properties [(= result (* -1 x))])
+   (defun negate:integer (x:integer)
+     @doc "negate a number"
+     @model (properties [(= result (* -1 x))])
 
-      (* x -1))
+     (* x -1))
 
 ここではまた、標準の算術演算子が、整数と小数に対して通常の Pact
 コードと同様に機能していることがわかります。
@@ -3878,13 +3877,13 @@ Pact
 
 .. code:: lisp
 
-    (defun abs:integer (x:integer)
-      @doc "absolute value"
-      @model (properties [(>= result 0)])
+   (defun abs:integer (x:integer)
+     @doc "absolute value"
+     @model (properties [(>= result 0)])
 
-      (if (< x 0)
-          (negate x)
-        x))
+     (if (< x 0)
+         (negate x)
+       x))
 
 ブール演算子
 ~~~~~~~~~~~~
@@ -3896,16 +3895,16 @@ Pact のプロパティ チェック言語は、標準のブール演算子で�
 
 .. code:: lisp
 
-    (defun negate:integer (x:integer)
-      @doc "negate a number"
-      @model (properties
-              [(when (< x 0) (> result 0))
-               (when (> x 0) (< result 0))
-               (and
-                 (when (< x 0) (> result 0))
-                 (when (> x 0) (< result 0)))])
+   (defun negate:integer (x:integer)
+     @doc "negate a number"
+     @model (properties
+             [(when (< x 0) (> result 0))
+              (when (> x 0) (< result 0))
+              (and
+                (when (< x 0) (> result 0))
+                (when (> x 0) (< result 0)))])
 
-      (* x -1))
+     (* x -1))
 
 トランザクションの中止と成功
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3915,12 +3914,12 @@ Pact のプロパティ チェック言語は、標準のブール演算子で�
 
 .. code:: lisp
 
-    (defun ensured-positive (val:integer)
-      @doc "halts when passed a non-positive number"
-      @model (properties [(!= result 0)])
+   (defun ensured-positive:integer (val:integer)
+     @doc "halts when passed a non-positive number"
+     @model (properties [(!= result 0)])
 
-      (enforce (> val 0) "val is not positive")
-      val)
+     (enforce (> val 0) "val is not positive")
+     val)
 
 このプロパティは、 ``enforce`` を使用することで成功します。
 
@@ -3961,17 +3960,17 @@ Pact では、キーは定義済みの名前 (``define-keyset`` で定義)
 
 .. code:: lisp
 
-    (defun admins-only (action:string)
-      @doc "Only admins or super-admins can call this function successfully."
-      @model (properties
-              [(or (authorized-by 'admins) (authorized-by 'super-admins))
-               (when (== "create" action) (authorized-by 'super-admins))])
+   (defun admins-only (action:string)
+     @doc "Only admins or super-admins can call this function successfully."
+     @model (properties
+             [(or (authorized-by 'admins) (authorized-by 'super-admins))
+              (when (== "create" action) (authorized-by 'super-admins))])
 
-      (if (== action "create")
-          (create)
-        (if (== action "update")
-            (update)
-          (incorrect-action action))))
+     (if (= action "create")
+         (create)
+       (if (= action "update")
+           (update)
+         (incorrect-action action))))
 
 行レベルのキーセット施行の一般的なパターンとして、テーブルの行ごとにユーザーが割り当てられ、
 各ユーザーの行にキーセットが格納されて、行の変更時に認証されることがあります。
@@ -3985,7 +3984,7 @@ Pact では、キーは定義済みの名前 (``define-keyset`` で定義)
 
 .. code:: lisp
 
-    (row-enforced 'accounts 'ks name)
+   (row-enforced 'accounts 'ks name)
 
 ``row-enforced``
 の実際の使用例については、以下の「単純な残高の移動の例」および「全称限定子と存在限定子」についてのセクションを参照してください。
@@ -4018,7 +4017,7 @@ Pact では、キーは定義済みの名前 (``define-keyset`` で定義)
 
 .. code:: lisp
 
-    (conserves-mass 'accounts 'balance)
+   (conserves-mass 'accounts 'balance)
 
 このプロパティの使用例については、以下の「単純な残高の移動の例」を参照してください。
 
@@ -4030,20 +4029,20 @@ Pact では、キーは定義済みの名前 (``define-keyset`` で定義)
 
 .. code:: lisp
 
-    (= 0 (column-delta 'accounts 'balance))
+   (= 0 (column-delta 'accounts 'balance))
 
 ``column-delta``
 はまた、列の値が一定の割合で増加を続けていることを確認するために使用することもできます。
 
 .. code:: lisp
 
-    (>= 0 (column-delta 'accounts 'balance))
+   (>= 0 (column-delta 'accounts 'balance))
 
 もしくはトランザクション時に、設定された量だけ増加していることも確認できます。
 
 .. code:: lisp
 
-    (= 1 (column-delta 'accounts 'balance))
+   (= 1 (column-delta 'accounts 'balance))
 
 ``column-delta`` は、トランザクションの前後 (``after - before``)
 の列の増加についてのみ定義されています。
@@ -4063,10 +4062,10 @@ Pact では、キーは定義済みの名前 (``define-keyset`` で定義)
 
 .. code:: lisp
 
-    (properties
-     [(forall (key:string)
-         (when (row-written 'accounts key)
-           (row-enforced 'accounts 'ks key)))])
+   (properties
+    [(forall (key:string)
+        (when (row-written 'accounts key)
+          (row-enforced 'accounts 'ks key)))])
 
 このプロパティは、この関数によって書き込み可能なすべての行に対して、列
 ks にあるキーセットをそれらの行に施行することを示しています。
@@ -4075,9 +4074,9 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (properties
-     [(exists (key:string)
-        (row-read 'accounts key))])
+   (properties
+    [(exists (key:string)
+       (row-read 'accounts key))])
 
 全称限定子と存在限定子は、いずれも型アノテーションが必要であることに注意してください。
 
@@ -4088,28 +4087,28 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (defmodule accounts
-     @model
-       [(defproperty conserves-mass
-          (= (column-delta 'accounts 'balance) 0.0))
+   (defmodule accounts
+    @model
+      [(defproperty conserves-mass
+         (= (column-delta 'accounts 'balance) 0.0))
 
-        (defproperty auth-required
-          (authorized-by 'accounts-admin-keyset))]
+       (defproperty auth-required
+         (authorized-by 'accounts-admin-keyset))]
 
-     ; ...
+    ; ...
 
-     )
+    )
 
 次にプロパティ名で参照して、この定義を関数レベルで使用します。
 
 .. code:: lisp
 
-    (defun read-account (id)
-     @model (property auth-required)
+   (defun read-account (id)
+    @model (property auth-required)
 
-     ; ...
+    ; ...
 
-     )
+    )
 
 単純な残高の移動の例
 --------------------
@@ -4119,13 +4118,13 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (defschema account
-      @doc "user accounts with balances"
+   (defschema account
+     @doc "user accounts with balances"
 
-      balance:integer
-      ks:keyset)
+     balance:integer
+     ks:keyset)
 
-    (deftable accounts:{account})
+   (deftable accounts:{account})
 
 以下は、2
 つの口座間で残高を移動するコードで、一見正しいようですがいくつかバグがあります。
@@ -4133,27 +4132,27 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc "Transfer money between accounts"
-      @model (properties [(row-enforced 'accounts 'ks from)])
+   (defun transfer (from:string to:string amount:integer)
+     @doc "Transfer money between accounts"
+     @model (properties [(row-enforced 'accounts 'ks from)])
 
-      (with-read accounts *from* { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (update accounts *from* { "balance": (- from-bal amount) })
-          (update accounts to { "balance": (+ to-bal amount) }))))
+     (with-read accounts *from* { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (update accounts *from* { "balance": (- from-bal amount) })
+         (update accounts to { "balance": (+ to-bal amount) }))))
 
 まず残高が 0 未満にならないという不変条件を追加します。
 
 .. code:: lisp
 
-    (defschema account
-      @doc "user accounts with balances"
-      @model (invariants [(>= balance 0)])
+   (defschema account
+     @doc "user accounts with balances"
+     @model (invariants [(>= balance 0)])
 
-      balance:integer
-      ks:keyset)
+     balance:integer
+     ks:keyset)
 
 次に、 ``verify``
 を使用してこのモジュールのすべてのプロパティをチェックすると、
@@ -4165,17 +4164,17 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc "Transfer money between accounts"
-      @model (properties [(row-enforced 'accounts 'ks from)])
+   (defun transfer (from:string to:string amount:integer)
+     @doc "Transfer money between accounts"
+     @model (properties [(row-enforced 'accounts 'ks from)])
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (enforce (> amount 0) "Non-positive amount")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (enforce (> amount 0) "Non-positive amount")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to { "balance": (+ to-bal amount) }))))
 
 この時点でプロパティ
 チェッカーによって、このコードの妥当性が検証されます。
@@ -4184,19 +4183,19 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc "Transfer money between accounts"
-      @model (properties
-              [(row-enforced 'accounts 'ks from)
-               (conserves-mass 'accounts 'balance)])
+   (defun transfer (from:string to:string amount:integer)
+     @doc "Transfer money between accounts"
+     @model (properties
+             [(row-enforced 'accounts 'ks from)
+              (conserves-mass 'accounts 'balance)])
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (enforce (> amount 0) "Non-positive amount")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (enforce (> amount 0) "Non-positive amount")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to { "balance": (+ to-bal amount) }))))
 
 ここで ``verify`` を実行すると、プロパティ
 チェッカーが再度バグを発見し、 ``from`` と ``to``
@@ -4210,9 +4209,9 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (update accounts "alice" { "balance": (- previous-balance amount) })
+   (update accounts "alice" { "balance": (- previous-balance amount) })
 
-    (update accounts "alice" { "balance": (+ previous-balance amount) })
+   (update accounts "alice" { "balance": (+ previous-balance amount) })
 
 このシナリオでは、2 番目の ``update`` 呼び出しが
 ``(+ previous-balance amount)``
@@ -4224,20 +4223,20 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-     @doc "Transfer money between accounts"
-     @model (properties
-             [(row-enforced 'accounts 'ks from)
-              (conserves-mass 'accounts 'balance)])
+   (defun transfer (from:string to:string amount:integer)
+    @doc "Transfer money between accounts"
+    @model (properties
+            [(row-enforced 'accounts 'ks from)
+             (conserves-mass 'accounts 'balance)])
 
-     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-       (with-read accounts to { 'balance := to-bal }
-         (enforce-keyset from-ks)
-         (enforce (>= from-bal amount) "Insufficient Funds")
-         (enforce (> amount 0) "Non-positive amount")
-         (enforce (!= from to) "Sender is the recipient")
-         (update accounts from { "balance": (- from-bal amount) })
-         (update accounts to { "balance": (+ to-bal amount) }))))
+    (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+      (with-read accounts to { 'balance := to-bal }
+        (enforce-keyset from-ks)
+        (enforce (>= from-bal amount) "Insufficient Funds")
+        (enforce (> amount 0) "Non-positive amount")
+        (enforce (!= from to) "Sender is the recipient")
+        (update accounts from { "balance": (- from-bal amount) })
+        (update accounts to { "balance": (+ to-bal amount) }))))
 
 ここでプロパティ
 チェッカーを実行すると、以下のすべてが真実であることが検証されます。
@@ -4267,7 +4266,7 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (+ x y)
+   (+ x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4285,7 +4284,7 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (- x y)
+   (- x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4303,7 +4302,7 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (* x y)
+   (* x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4321,7 +4320,7 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (/ x y)
+   (/ x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4339,7 +4338,7 @@ ks にあるキーセットをそれらの行に施行することを示して�
 
 .. code:: lisp
 
-    (^ x y)
+   (^ x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4357,7 +4356,7 @@ log
 
 .. code:: lisp
 
-    (log b x)
+   (log b x)
 
 -  入力: b、 *a* 型
 -  入力: x、 *a* 型
@@ -4375,7 +4374,7 @@ log
 
 .. code:: lisp
 
-    (- x)
+   (- x)
 
 -  入力: x、 *a* 型
 -  戻り値: *a* 型
@@ -4392,7 +4391,7 @@ sqrt
 
 ::
 
-    (sqrt x)
+   (sqrt x)
 
 -  入力: x、 *a* 型
 -  戻り値: *a* 型
@@ -4409,7 +4408,7 @@ ln
 
 .. code:: lisp
 
-    (ln x)
+   (ln x)
 
 -  入力: x、 *a* 型
 -  戻り値: *a* 型
@@ -4426,7 +4425,7 @@ exp
 
 .. code:: lisp
 
-    (exp x)
+   (exp x)
 
 -  入力: x、 *a* 型
 -  戻り値: *a* 型
@@ -4443,7 +4442,7 @@ abs
 
 .. code:: lisp
 
-    (abs x)
+   (abs x)
 
 -  入力: x、 *a* 型
 -  戻り値: *a* 型
@@ -4460,14 +4459,14 @@ round
 
 .. code:: lisp
 
-    (round x)
+   (round x)
 
 -  入力: x、decimal 型
 -  戻り値: integer 型
 
 .. code:: lisp
 
-    (round x prec)
+   (round x prec)
 
 -  入力: x、decimal 型
 -  入力: prec、integer 型
@@ -4484,14 +4483,14 @@ ceiling
 
 .. code:: lisp
 
-    (ceiling x)
+   (ceiling x)
 
 -  入力: x、decimal 型
 -  戻り値: integer 型
 
 .. code:: lisp
 
-    (ceiling x prec)
+   (ceiling x prec)
 
 -  入力: x、decimal 型
 -  入力: prec、integer 型
@@ -4508,14 +4507,14 @@ floor
 
 .. code:: lisp
 
-    (floor x)
+   (floor x)
 
 -  入力: x、decimal 型
 -  戻り値: integer 型
 
 .. code:: lisp
 
-    (floor x prec)
+   (floor x prec)
 
 -  入力: x、decimal 型
 -  入力: prec、integer 型
@@ -4532,7 +4531,7 @@ mod
 
 .. code:: lisp
 
-    (mod x y)
+   (mod x y)
 
 -  入力: x、integer 型
 -  入力: y、integer 型
@@ -4552,7 +4551,7 @@ mod
 
 .. code:: lisp
 
-    (> x y)
+   (> x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4570,7 +4569,7 @@ x > y の場合、 True です
 
 .. code:: lisp
 
-    (< x y)
+   (< x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4588,7 +4587,7 @@ x < y の場合、True です
 
 .. code:: lisp
 
-    (>= x y)
+   (>= x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4606,7 +4605,7 @@ x >= y の場合、 True です
 
 .. code:: lisp
 
-    (<= x y)
+   (<= x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4624,7 +4623,7 @@ x <= y の場合、 True です
 
 .. code:: lisp
 
-    (= x y)
+   (= x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4643,7 +4642,7 @@ x = y の場合、 True です。
 
 .. code:: lisp
 
-    (!= x y)
+   (!= x y)
 
 -  入力: x、 *a* 型
 -  入力: y、 *a* 型
@@ -4662,7 +4661,7 @@ and
 
 .. code:: lisp
 
-    (and x y)
+   (and x y)
 
 -  入力: x、bool 型
 -  入力: y、bool 型
@@ -4679,7 +4678,7 @@ or
 
 .. code:: lisp
 
-    (or x y)
+   (or x y)
 
 -  入力: x、bool 型
 -  入力: y、bool 型
@@ -4696,7 +4695,7 @@ not
 
 .. code:: lisp
 
-    (not x)
+   (not x)
 
 -  入力: x、bool 型
 -  戻り値: bool 型
@@ -4710,7 +4709,7 @@ when
 
 .. code:: lisp
 
-    (when x y)
+   (when x y)
 
 -  入力: x、bool 型
 -  入力: y、bool 型
@@ -4730,7 +4729,7 @@ at
 
 .. code:: lisp
 
-    (at k o)
+   (at k o)
 
 -  入力: k、string 型
 -  入力: o、object 型
@@ -4747,7 +4746,7 @@ at
 
 .. code:: lisp
 
-    (+ x y)
+   (+ x y)
 
 -  入力: x、object 型
 -  入力: y、object 型
@@ -4767,7 +4766,7 @@ length
 
 .. code:: lisp
 
-    (length s)
+   (length s)
 
 -  入力: s、string 型
 -  戻り値: integer 型
@@ -4783,7 +4782,7 @@ length
 
 .. code:: lisp
 
-    (+ s t)
+   (+ s t)
 
 -  入力: s、string 型
 -  入力: t、string 型
@@ -4803,7 +4802,7 @@ add-time
 
 .. code:: lisp
 
-    (add-time t s)
+   (add-time t s)
 
 -  入力: t、time 型
 -  入力: s、 *a* 型
@@ -4822,7 +4821,7 @@ forall
 
 .. code:: lisp
 
-    (forall (x:string) y)
+   (forall (x:string) y)
 
 -  バインド: x、 *a* 型
 -  入力: y、 *r* 型
@@ -4839,7 +4838,7 @@ exists
 
 .. code:: lisp
 
-    (exists (x:string) y)
+   (exists (x:string) y)
 
 -  バインド: x、 *a* 型
 -  入力: y、 *r* 型
@@ -4859,7 +4858,7 @@ abort
 
 .. code:: lisp
 
-    abort
+   abort
 
 -  bool 型
 
@@ -4876,7 +4875,7 @@ success
 
 .. code:: lisp
 
-    success
+   success
 
 -  bool 型
 
@@ -4894,7 +4893,7 @@ result
 
 .. code:: lisp
 
-    result
+   result
 
 -  *r* 型
 -  説明: *r* は任意の型
@@ -4911,7 +4910,7 @@ table-written
 
 .. code:: lisp
 
-    (table-written t)
+   (table-written t)
 
 -  入力: t、 *a* 型
 -  戻り値: bool 型
@@ -4926,7 +4925,7 @@ table-read
 
 .. code:: lisp
 
-    (table-read t)
+   (table-read t)
 
 -  入力: t、 *a* 型
 -  戻り値: bool 型
@@ -4941,7 +4940,7 @@ cell-delta
 
 .. code:: lisp
 
-    (cell-delta t c r)
+   (cell-delta t c r)
 
 -  入力: t、 *a* 型
 -  入力: c、 *b* 型
@@ -4960,7 +4959,7 @@ column-delta
 
 .. code:: lisp
 
-    (column-delta t c)
+   (column-delta t c)
 
 -  入力: t、 *a* 型
 -  入力: c、 *b* 型
@@ -4978,7 +4977,7 @@ column-written
 
 .. code:: lisp
 
-    (column-written t c)
+   (column-written t c)
 
 -  入力: t、 *a* 型
 -  入力: c、 *b* 型
@@ -4995,7 +4994,7 @@ column-read
 
 .. code:: lisp
 
-    (column-read t c)
+   (column-read t c)
 
 -  入力: t、 *a* 型
 -  入力: c、 *b* 型
@@ -5012,7 +5011,7 @@ row-read
 
 .. code:: lisp
 
-    (row-read t r)
+   (row-read t r)
 
 -  入力: t、 *a* 型
 -  入力: r、string 型
@@ -5028,7 +5027,7 @@ row-written
 
 .. code:: lisp
 
-    (row-written t r)
+   (row-written t r)
 
 -  入力: t、 *a* 型
 -  入力: r、string 型
@@ -5044,7 +5043,7 @@ row-read-count
 
 .. code:: lisp
 
-    (row-read-count t r)
+   (row-read-count t r)
 
 -  入力: t、 *a* 型
 -  入力: r、string 型
@@ -5060,7 +5059,7 @@ row-write-count
 
 .. code:: lisp
 
-    (row-write-count t r)
+   (row-write-count t r)
 
 -  入力: t、 *a* 型
 -  入力: r、string 型
@@ -5079,7 +5078,7 @@ authorized-by
 
 .. code:: lisp
 
-    (authorized-by k)
+   (authorized-by k)
 
 -  入力: k、string 型
 -  戻り値: bool 型
@@ -5093,7 +5092,7 @@ row-enforced
 
 .. code:: lisp
 
-    (row-enforced t c r)
+   (row-enforced t c r)
 
 -  入力: t、 *a* 型
 -  入力: c、 *b* 型

@@ -124,13 +124,29 @@
   ;;not tc per se but runtime type enforce error
   (defun rtc-empty-string-list:[string] (input:[string]) input)
 
+  (defun tc-at-literal-typed-list:integer (a:integer)
+    (at 0 [a]))
+
+  (defun tc-format-heterogenous:string ()
+    (format "{} {} {}" [1 1.0 true]))
+
+  (defun fails-literal-typed-list:integer (a:integer)
+    (at 0 [a 1 true]))
+
+  (defun tc-list-assumes-literal-type:[integer] ()
+    [1 2 3])
+
+  (defun fails-list-literal-type:[integer] ()
+    [1.0 2.0])
+
+
 )
 
 (create-table persons)
 
 (commit-tx)
 
-(use 'tctest)
+(use tctest)
 (expect-failure "missing fields" (tc-add-person { "name": "Mary" }))
 (expect-failure "bad field"
                 (tc-add-person { "name": "Mary",

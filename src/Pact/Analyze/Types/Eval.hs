@@ -333,7 +333,7 @@ mkInitialAnalyzeState tables = AnalyzeState
     intColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyInteger) 0
     decColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyDecimal) (fromInteger 0)
     cellsEnforced
-      = mkTableColumnMap (== TyPrim Pact.TyKeySet) (mkSFunArray (const sFalse))
+      = mkTableColumnMap (== TyPrim (Pact.TyGuard $ Just Pact.GTyKeySet)) (mkSFunArray (const sFalse))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const sFalse))
 
     mkTableColumnMap

@@ -157,7 +157,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
 -- decimals.
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
 mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts) = do
-  evalEnv <- liftIO initPureEvalEnv
+  evalEnv <- liftIO $ initPureEvalEnv Nothing
   let xformKsMap = HM.fromList
         . fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
         . Map.toList

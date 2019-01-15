@@ -56,7 +56,9 @@ benchCompile es = bgroup "compile" $ (`map` es) $
 
 benchVerify :: [(String,Command ByteString)] -> Benchmark
 benchVerify cs = bgroup "verify" $ (`map` cs) $
-  \(bname,c) -> bench bname $ nf verifyCommand c
+  \(bname,c) ->
+    bench bname $
+      nf (verifyCommand :: Command ByteString -> ProcessedCommand () ParsedCode) c
 
 eitherDie :: Either String a -> IO a
 eitherDie = either (throwIO . userError) (return $!)
@@ -72,7 +74,7 @@ loadBenchModule db = do
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
            initialHash
-  erRefStore <$> evalExec (setupEvalEnv db entity (Transactional 1) md initRefStore freeGasEnv) pc
+  erRefStore <$> evalExec (setupEvalEnv db entity (Transactional 1) md initRefStore freeGasEnv permissiveNamespacePolicy) pc
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
@@ -83,7 +85,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData initialHash) refStore freeGasEnv) pc
+  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData initialHash) refStore freeGasEnv permissiveNamespacePolicy) pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
@@ -122,7 +124,7 @@ main = do
   !mpdbRS <- loadBenchModule mockPersistDb
   print =<< runPactExec mockPersistDb mpdbRS benchCmd
   !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
-              (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" Nothing))
+              (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" ()))
 
   defaultMain [
     benchParse,

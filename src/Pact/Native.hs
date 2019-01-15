@@ -58,7 +58,6 @@ import Safe hiding (atDef)
 import Control.Arrow hiding (app)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
-import Data.Decimal
 import Data.List
 import Data.Function (on)
 import Data.ByteString.Lazy (toStrict)
@@ -71,6 +70,7 @@ import Pact.Native.Internal
 import Pact.Native.Time
 import Pact.Native.Ops
 import Pact.Native.Keysets
+import Pact.Native.Capabilities
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
@@ -83,7 +83,8 @@ natives = [
   dbDefs,
   timeDefs,
   opDefs,
-  keyDefs]
+  keyDefs,
+  capDefs]
 
 
 -- | Production native modules as a dispatch map.
@@ -127,7 +128,7 @@ enforceOneDef =
   where
 
     enforceOne :: NativeFun e
-    enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $
+    enforceOne i as@[msg,TList conds _ _] = runReadOnly (_faInfo i) $
       gasUnreduced i as $ do
         msg' <- reduce msg >>= \m -> case m of
           TLitString s -> return s
@@ -223,6 +224,65 @@ readDecimalDef = defRNative "read-decimal" readDecimal
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
   "Reverse LIST. `(reverse [1 2 3])`"
+
+defineNamespaceDef :: NativeDef
+defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
+  (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
+  "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
+  \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
+  \and GUARD will be rotated in its place. \
+  \`$(define-namespace 'my-namespace (read-keyset 'my-keyset))`"
+  where
+    defineNamespace :: RNativeFun e
+    defineNamespace i as = case as of
+      [TLitString nsn, TGuard g _] -> go i nsn g
+      _ -> argsError i as
+
+    go fi nsn g = do
+      let name = NamespaceName nsn
+          info = _faInfo fi
+      mOldNs <- readRow info Namespaces name
+      case mOldNs of
+        Just ns'@(Namespace _ g') ->
+          -- if namespace is defined, enforce old guard and rotate if policy allows
+          enforceGuard fi g' >> enforcePolicy info ns' >> writeNamespace info name g
+        Nothing -> writeNamespace info name g
+
+    enforcePolicy info ns = do
+      NamespacePolicy{..} <- view eeNamespacePolicy
+      unless (_nsPolicy . Just $ ns) $ evalError info "Namespace definition not permitted"
+
+    writeNamespace info n g =
+      success ("Namespace defined: " <> asString n) $
+      writeRow info Write Namespaces n (Namespace n g)
+
+namespaceDef :: NativeDef
+namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
+  (funType tTyString [("namespace", tTyString)])
+  "Set the current namespace to NAMESPACE. All expressions that occur in a current \
+  \transaction will be contained in NAMESPACE, and once committed, may be accessed \
+  \via their fully qualified name, which will include the namespace. Subsequent \
+  \namespace calls in the same tx will set a new namespace for all declarations \
+  \until either the next namespace declaration, or the end of the tx. \
+  \`$(namespace 'my-namespace)`"
+  where
+    namespace :: RNativeFun e
+    namespace i as = case as of
+      [TLitString nsn] -> go i nsn
+      _ -> argsError i as
+
+    go fa ns = do
+      let name = NamespaceName ns
+          info = _faInfo fa
+
+      mNs <- readRow info Namespaces name
+      case mNs of
+        Just n@(Namespace ns' g) -> do
+          enforceGuard fa g
+          success ("Namespace set to " <> (asString ns')) $
+            evalRefs . rsNamespace .= (Just n)
+        Nothing  -> evalError info $
+          "namespace: '" ++ asString' name ++ "' not defined"
 
 sortDef :: NativeDef
 sortDef = defRNative "sort" sort'
@@ -366,9 +426,10 @@ langDefs =
      "Lazily ignore arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
-
     ,strToIntDef
     ,hashDef
+    ,defineNamespaceDef
+    ,namespaceDef
     ])
     where d = mkTyVar "d" []
           row = mkSchemaVar "row"
@@ -397,7 +458,7 @@ c = mkTyVar "c" []
 
 map' :: NativeFun e
 map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply' app . pure)
+           TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply (_tApp app) . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
 
@@ -417,7 +478,7 @@ reverse' i as = argsError i as
 fold' :: NativeFun e
 fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
-                         foldM (\r a' -> apply' app [r,a']) initv' ls
+                         foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
            t -> evalError' i $ "fold: expecting list: " ++ abbrev t
 fold' i as = argsError' i as
 
@@ -426,7 +487,7 @@ filter' :: NativeFun e
 filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls lt _ -> ((\b' -> TList b' lt def) . concat) <$>
                          forM ls (\a' -> do
-                           t <- apply' app [a']
+                           t <- apply (_tApp app) [a']
                            case t of
                              (TLiteral (LBool True) _) -> return [a']
                              _ -> return []) -- hmm, too permissive here, select is stricter
@@ -478,8 +539,8 @@ remove i as = argsError i as
 compose :: NativeFun e
 compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
   v' <- reduce v
-  a' <- apply' appA [v']
-  apply' appB [a']
+  a' <- apply (_tApp appA) [v']
+  apply (_tApp appB) [a']
 compose i as = argsError' i as
 
 
@@ -490,27 +551,6 @@ readMsg i [TLitString key] = parseMsgKey i "read-msg" key
 readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
 readMsg i as = argsError i as
 
--- | One-off type for 'readDecimal', not exported.
-newtype ParsedDecimal = ParsedDecimal Decimal
-instance FromJSON ParsedDecimal where
-  parseJSON (String s) =
-    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
-                        Right (LDecimal d) -> return d
-                        Right (LInteger i) -> return (fromIntegral i)
-                        _ -> fail $ "Failure parsing decimal string: " ++ show s
-  parseJSON (Number n) = return $ ParsedDecimal (fromRational $ toRational n)
-  parseJSON v = fail $ "Failure parsing integer: " ++ show v
-
-
--- | One-off type for 'readInteger', not exported.
-newtype ParsedInteger = ParsedInteger Integer
-instance FromJSON ParsedInteger where
-  parseJSON (String s) =
-    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
-                        Right (LInteger i) -> return i
-                        _ -> fail $ "Failure parsing integer string: " ++ show s
-  parseJSON (Number n) = return $ ParsedInteger (round n)
-  parseJSON v = fail $ "Failure parsing integer: " ++ show v
 
 readInteger :: RNativeFun e
 readInteger i [TLitString key] = do
@@ -520,9 +560,7 @@ readInteger i as = argsError i as
 
 
 pactId :: RNativeFun e
-pactId i [] = use evalPactExec >>= \pe -> case pe of
-  Nothing -> evalError' i "pact-id: not in pact execution"
-  Just PactExec{..} -> return $ toTerm _pePactId
+pactId i [] = toTerm <$> getPactId i
 pactId i as = argsError i as
 
 bind :: NativeFun e
@@ -571,7 +609,7 @@ resume i as = argsError' i as
 
 where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
-  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply' app [v]
+  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
 where' i as = argsError' i as
 
@@ -582,7 +620,7 @@ sort' _ [TList{..}] = case nub (map typeof _tList) of
   [ty] -> case ty of
     Right rty@(TyPrim pty) -> case pty of
       TyValue -> badTy (show ty)
-      TyKeySet -> badTy (show ty)
+      TyGuard{} -> badTy (show ty)
       _ -> do
         sl <- forM _tList $ \e -> case firstOf tLiteral e of
           Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ show e

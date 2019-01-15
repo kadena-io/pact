@@ -119,6 +119,7 @@ instance PactValue a => PactValue [a]
 instance PactValue Module
 instance PactValue KeySet
 instance PactValue Value
+instance PactValue Namespace
 
 data Persister s = Persister {
   createTable :: forall k . PactKey k => Table k -> Persist s ()

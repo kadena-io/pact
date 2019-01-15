@@ -32,13 +32,14 @@ import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
 import Data.Text.Encoding
 import Data.Maybe
-#if !defined(ghcjs_HOST_OS)
+#if defined(ghcjs_HOST_OS)
+import qualified Pact.Analyze.Remote.Client as RemoteClient
+#else
 import Control.Monad.State.Strict (get)
 import Criterion
 import Criterion.Types
 import qualified Data.Map as M
-import qualified Data.Text as Text
-import Pact.Analyze.Check
+import qualified Pact.Analyze.Check as Check
 import Statistics.Types (Estimate(..))
 #endif
 import Pact.Typechecker
@@ -54,13 +55,13 @@ import Pact.Types.Logger
 import Pact.Repl.Types
 
 
-initLibState :: Loggers -> IO LibState
-initLibState loggers = do
+initLibState :: Loggers -> Maybe String -> IO LibState
+initLibState loggers verifyUri = do
   m <- newMVar (DbEnv def persister
                 (newLogger loggers "Repl")
                 def def)
   createSchema m
-  return (LibState m Noop def def)
+  return (LibState m Noop def def verifyUri)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -95,6 +96,10 @@ replDefs = ("Repl",
       ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
        "Clears any previous pact execution state. `$(env-step 1)` `$(env-step 0 true)`")
+     ,defZRNative "env-pactid" envPactId
+      (funType tTyString [] <>
+       funType tTyString [("id",tTyString)])
+       "Query environment pact id, or set to ID."
      ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
       ("Inspect state from previous pact execution. Returns object with fields " <>
       "'yield': yield result or 'false' if none; 'step': executed step; " <>
@@ -126,9 +131,7 @@ replDefs = ("Repl",
        "Set environment gas price to PRICE."
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        "Update gas model to charge constant RATE."
-#if !defined(ghcjs_HOST_OS)
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
-#endif
 
      ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
       "Encode pact expression EXP as a JSON value. " <>
@@ -187,6 +190,10 @@ setop v = setLibState $ set rlsOp v
 setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
+{-
+overenv :: Setter' (EvalEnv LibState) a -> (a -> a) -> Eval LibState ()
+overenv l f = setop $ UpdateEnv $ Endo (over l f)
+-}
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
@@ -223,6 +230,16 @@ setstep i as = case as of
     setstep' s = do
       setenv eePactStep s
       evalPactExec .= Nothing
+
+envPactId :: RNativeFun LibState
+envPactId i as = view eePactStep >>= \psm -> case psm of
+  Nothing -> evalError' i "no pact state set currently"
+  Just ps@PactStep{..} -> case as of
+    [] -> return $ toTerm _psPactId
+    [TLitString pid] -> do
+      setenv eePactStep $ Just $ set psPactId (PactId pid) ps
+      return $ tStr $ "Setting pact id to " <> tShow pid
+    _ -> argsError i as
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
@@ -329,7 +346,7 @@ tc i as = case as of
   _ -> argsError i as
   where
     go modname dbg = do
-      mdm <- HM.lookup (ModuleName modname) <$> view (eeRefStore . rsModules)
+      mdm <- HM.lookup (ModuleName modname Nothing) <$> view (eeRefStore . rsModules)
       case mdm of
         Nothing -> evalError' i $ "No such module: " ++ show modname
         Just md -> do
@@ -343,39 +360,26 @@ tc i as = case as of
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
-#if !defined(ghcjs_HOST_OS)
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
     modules <- view (eeRefStore . rsModules)
-    let mdm = HM.lookup (ModuleName modName) modules
+    let mdm = HM.lookup (ModuleName modName Nothing) modules
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        modResult <- liftIO $ verifyModule modules md
-        -- TODO: build describeModuleResult
-        case modResult of
-          Left (ModuleParseFailure failure)  -> setop $ TcErrors
-            [Text.unpack $ describeParseFailure failure]
-          Left (ModuleCheckFailure checkFailure) -> setop $ TcErrors
-            [Text.unpack $ describeCheckFailure checkFailure]
-          Left (TypeTranslationFailure msg ty) -> setop $ TcErrors
-            [Text.unpack $ msg <> ": " <> tShow ty]
-          Left (InvalidRefType) -> setop $ TcErrors
-            ["Invalid reference type given to typechecker."]
-          Left (FailedConstTranslation msg) -> setop $ TcErrors
-            [msg]
-          Right (ModuleChecks propResults invariantResults warnings) -> setop $ TcErrors $
-            let propResults'      = propResults      ^.. traverse . each
-                invariantResults' = invariantResults ^.. traverse . traverse . each
-            in fmap Text.unpack $
-                 (describeCheckResult <$> propResults' <> invariantResults') <>
-                 [describeVerificationWarnings warnings]
-
-        return (tStr "")
+#if defined(ghcjs_HOST_OS)
+        uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
+        renderedLines <- liftIO $
+          RemoteClient.verifyModule modules md uri
+#else
+        modResult <- liftIO $ Check.verifyModule modules md
+        let renderedLines = Check.renderVerifiedModule modResult
+#endif
+        -- setop $ TcErrors $ Text.unpack <$> renderedLines
+        return (tStr $ mconcat renderedLines)
 
   _ -> argsError i as
-#endif
 
 json' :: RNativeFun LibState
 json' _ [a] = return $ TValue (toJSON a) def

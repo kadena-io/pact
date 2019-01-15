@@ -50,11 +50,11 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 import Data.String
 import Data.List
 import Data.Maybe (isJust)
-import Control.Compactable (traverseMaybe)
 
 
 import Pact.Types.Typecheck
-import Pact.Types.Runtime
+import Pact.Types.Runtime hiding (App,appInfo)
+import qualified Pact.Types.Runtime as Term
 import Pact.Types.Native
 
 die :: MonadThrow m => Info -> String -> m a
@@ -144,10 +144,13 @@ solveOverloads = do
 
   overs <- use tcOverloads >>=
            traverse (traverse (\i -> (i,) . fst <$> lookupAst "solveOverloads" (_aId (_aNode i))))
+  oids <- use tcOverloadOrder
 
-  let runSolve os = forM os $ \o@Overload {..} -> case _oSolved of
-        Just {} -> return o
-        Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType o) Nothing _oTypes
+  let runSolve os = fmap M.fromList $ forM oids $ \oid -> case M.lookup oid os of
+        Nothing -> die def $ "Internal error, unknown overload id: " ++ show oid
+        Just o@Overload {..} -> fmap (oid,) $ case _oSolved of
+          Just {} -> return o
+          Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType o) Nothing _oTypes
 
       rptSolve os = runSolve os >>= \os' -> if os' == os then return os' else rptSolve os'
 
@@ -257,41 +260,82 @@ asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " +
 
 -- | Visitor to inspect Objects and Bindings to validate schemas,
 -- "pushing down" the field types to associate with field ASTs.
+-- Also handles validating lists, as this seems like the right phase for that too.
 applySchemas :: Visitor TC Node
 applySchemas Pre ast = case ast of
+
   (Object n ps) -> findSchema n $ \sch -> do
-    debug $ "applySchemas: " ++ show (n,sch)
-    pmap <- M.fromList <$> forM ps
-      (\(k,v) -> (,) <$> asPrimString k <*> ((v,_aId (_aNode k),) <$> lookupTy (_aNode v)))
-    validateSchema sch pmap
+    debug $ "applySchemas [object]: " ++ show (n,sch)
+    pmap <- forM ps $ \(k,v) -> do
+      kstr <- asPrimString k
+      vt' <- lookupAndResolveTy (_aNode v)
+      return (kstr,(v,_aId (_aNode k),vt'))
+    validateSchema sch (M.fromList pmap)
     return ast
+
   (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch -> do
-    debug $ "applySchemas: " ++ show (n,sch)
-    pmap <- M.fromList <$> traverseMaybe lookupNode bs
-    validateSchema sch pmap
+    debug $ "applySchemas [binding]: " ++ show (n,sch)
+    pmapM <- forM bs $ \(Named _ node ni,bv) -> case bv of
+      Prim _ (PrimLit (LString bn)) -> do
+        vt' <- lookupAndResolveTy node
+        return $ Just (bn,(Var node,ni,vt'))
+      _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
+    case sequence pmapM of
+      Just pmap -> validateSchema sch (M.fromList pmap)
+      Nothing -> return () -- error already tracked above
     return ast
+
+  (List n ls) -> lookupAndResolveTy n >>= \ltym -> case ltym of
+    (TyList TyAny) -> do
+      debug $ "Skipping TC on specified heterogenous list for node: " ++ show n
+      return ast
+    (TyList lty) -> do
+      debug ("validateList: " ++ show lty)
+      validateList n lty ls
+      return ast
+    _ -> return ast
+
   _ -> return ast
+
   where
+    -- Given map of object text key to (value,key id,value ty) ...
+    validateSchema :: UserType -> M.Map Text (AST Node, TcId, Type UserType) -> TC ()
     validateSchema sch pmap = do
+      -- smap: lookup from field name to ty
       let smap = M.fromList <$> (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+      -- over each object field ...
       forM_ (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
+        -- validate field exists ...
         Nothing -> addFailure ki $ "Invalid field in schema object: " ++ show k
+        -- unify field value ty ...
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
+          -- associate unified ty with value node.
           Just u -> assocAstTy (_aNode v) (either id id u)
 
-    -- TODO Handle the type mismatch in some other way? `TC` does have a MonadThrow instance.
-    lookupNode (Named _ node ni, Prim _ (PrimLit (LString bn))) = Just . (bn,) . (Var node,ni,) <$> lookupTy node
-    lookupNode _ = pure Nothing
+    lookupAndResolveTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 
-    lookupTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
-
+    -- Resolve schema ty if possible and act on it, otherwise skip.
+    findSchema :: Node -> (UserType -> TC (AST Node)) -> TC (AST Node)
     findSchema n act = do
-      ty <- lookupTy n
+      ty <- lookupAndResolveTy n
       case ty of
         (TySchema _ (TyUser sch)) -> act sch
         _ -> return ast
+
+    validateList :: Node -> Type UserType -> [AST Node] -> TC ()
+    validateList n lty ls = forM_ ls $ \a -> do
+        aty <- lookupAndResolveTy $ _aNode a
+        case unifyTypes lty aty of
+          Nothing -> addFailure (_aId (_aNode a)) $ "Unable to unify list member type: " ++ show (lty,aty,a)
+          Just (Left uty) -> assocAstTy (_aNode a) uty
+          Just (Right uty) -> assocAstTy n (TyList uty)
+
+
 applySchemas Post a = return a
+
+
+
 
 -- | Visitor to process Apps of native funs.
 -- For non-overloads, associate fun tys with app args and result.
@@ -341,6 +385,9 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
               assocAstTy bn $ _ftReturn mangledFunType
               -- assoc schema with last ft arg
               assocAstTy sn (_aType (last (toList $ _ftArgs mangledFunType)))
+            (List _ln ll) -> do -- TODO, for with-capability
+              -- assoc app return with last of body
+              assocAstTy (_aNode $ last ll) $ _ftReturn mangledFunType
             sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
           -- TODO the following is dodgy, schema may not be resolved.
           ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty)]) -> asPrimString field >>= \fld -> case uty of
@@ -358,6 +405,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
                 | otherwise = Nothing
           oload = Overload _fName (argOvers <> M.singleton RetVar a) fts' Nothing ospec
       tcOverloads %= M.insert (_aId i) oload
+      tcOverloadOrder %= (_aId i:)
   return a
 processNatives _ a = return a
 
@@ -413,7 +461,7 @@ inlineAppArgs appNode defunType defunArgs defunBody args = do
       substitute sub = walkAST (substAppDefun (Just sub))
 
   body' <- forM defunBody $ \bodyExpr -> foldM (flip substitute) bodyExpr subs
-  return $ [Binding letNode letBindings body' bindType]
+  return [Binding letNode letBindings body' bindType]
 
 -- | Visitor to process Apps of user defuns.
 -- We want to a) replace AST nodes with the app arg ASTs,
@@ -502,6 +550,9 @@ assocTy ai av ty = do
               -- RH is tyvar tracking type. Unify and update tracked type.
               unifyTypes' ai aty tvtys $ \r' ->
                 (tcVarToTypes . at tv . _Just) .= either id id r'
+        TyList TyAny -> do
+          debug $ "assocTy: specified heterogenous list, " ++ show aty ++ " <= " ++ show ty
+          tcVarToTypes . at av . _Just .= ty
         _ -> debug $ "assocTy: noop: " ++ show (aty,ty)
     Right u -> do
       -- Associated ty is most specialized, simply update record for AST type.
@@ -568,6 +619,10 @@ unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
   (TyAny,_) -> Just (Right r)
   (_,TyAny) -> Just (Left l)
+  (TyPrim (TyGuard gl), TyPrim (TyGuard gr)) -> case (gl,gr) of
+    (Just _, Nothing) -> Just (Left l)
+    (Nothing, Just _) -> Just (Right r)
+    _ -> Just (Right r) -- equality already covered above, and Nothing/Nothing ok
   (TyVar v,s) -> unifyVar Left Right v s
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam a b
@@ -651,13 +706,13 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
-  let fn = asString _tModule <> "." <> asString _tDefName
-  args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
+  let fn = asString (_dModule _tDef) <> "." <> asString (_dDefName _tDef)
+  args <- forM (_ftArgs (_dFunType _tDef)) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
     Named n <$> trackNode t' an <*> pure an
-  tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) _tDefBody
-  funType <- traverse toUserType _tFunType
+  tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) (_dDefBody _tDef)
+  funType <- traverse toUserType (_dFunType _tDef)
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
@@ -681,11 +736,11 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left Direct {}) -> die i "Native in value context"
   (Right t) -> return t
 
-toAST TApp {..} = do
-  fun <- toFun _tAppFun
-  i <- freshId _tInfo $ _fName fun
+toAST (TApp Term.App{..} _) = do
+  fun <- toFun _appFun
+  i <- freshId _appInfo $ _fName fun
   n <- trackIdNode i
-  args <- mapM toAST _tAppArgs
+  args <- mapM toAST _appArgs
   let mkApp fun' args' = return $ App n fun' args'
   case fun of
     FDefun {..} -> do
@@ -698,7 +753,7 @@ toAST TApp {..} = do
       fun' <- case special of
         Just Select -> case NE.filter ((== argCount) . length . _ftArgs) (_fTypes fun) of
           ft@[_] -> return $ set fTypes (NE.fromList ft) fun
-          _ -> die _tInfo $ "arg count mismatch, expected: " ++ show (_fTypes fun)
+          _ -> die _appInfo $ "arg count mismatch, expected: " ++ show (_fTypes fun)
         _ -> return fun
       args' <- if NE.length (_fTypes fun') > 1 then return args else do
         let funType = NE.head (_fTypes fun')
@@ -717,12 +772,13 @@ toAST TApp {..} = do
         Nothing -> mkApp fun' args'
         Just sf -> do
           let specialBind = do
-                args'' <- notEmpty _tInfo "Expected >1 arg" (init args')
+                args'' <- notEmpty _appInfo "Expected >1 arg" (init args')
                 mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') args''
           case sf of
             Bind -> specialBind
             WithRead -> specialBind
             WithDefaultRead -> specialBind
+            WithCapability -> specialBind
             _ -> mkApp fun' args'
 
 toAST TBinding {..} = do
@@ -759,7 +815,7 @@ toAST TObject {..} = do
   Object <$> (trackNode ty =<< freshId _tInfo "object")
     <*> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
-toAST TKeySet {..} = trackPrim _tInfo TyKeySet (PrimKeySet _tKeySet)
+toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
 toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
@@ -813,7 +869,7 @@ bindArgs i args b =
 mkTop :: Term (Either Ref (AST Node)) -> TC (TopLevel Node)
 mkTop t@TDef {..} = do
   debug $ "===== Fun: " ++ abbrev t
-  TopFun <$> toFun t <*> pure _tMeta
+  TopFun <$> toFun t <*> pure (_dMeta _tDef)
 mkTop t@TConst {..} = do
   debug $ "===== Const: " ++ abbrev t
   TopConst _tInfo (asString _tModule <> "." <> _aName _tConstArg) <$>
@@ -829,12 +885,15 @@ mkTop t@TSchema {..} = do
 mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrev t
 
 
--- | Recursively find the "leaf type" for a type which could be a var,
--- or have a parameterized type in it.
+-- | Recursively compute the "leaf type" where
+-- vars are resolved to non-vars, if possible;
+-- schemas/lists are specialized.
+-- Recursive references are detected and error out.
 resolveTy :: Type UserType -> TC (Type UserType)
 resolveTy rt = do
   v2Ty <- use tcVarToTypes
-  let resolv tv@(TyVar v) =
+  let resolv :: Type UserType -> State [Type UserType] (Maybe (Type UserType))
+      resolv tv@(TyVar v) =
         case M.lookup v v2Ty of
           Just t | t /= tv -> go t
                  | otherwise -> return (Just tv)

@@ -30,13 +30,13 @@
 (create-table stuff)
 
 (commit-tx)
-
-(use 'dbtest)
+(use dbtest)
 (begin-tx)
 (use dbtest)
 (insert persons ID_A ROW_A)
 (expect-failure "dupe key should fail" (insert persons ID_A ROW_A))
 (commit-tx)
+(begin-tx)
 (use dbtest)
 (expect "keys works" [ID_A] (keys persons))
 (expect "txids works" [2] (txids persons 2))
@@ -56,8 +56,10 @@
 
 (expect "read-persons works w/o admin key" ROW_A (read-persons ID_A))
 (expect "read-persons2 works w/o admin key" ROW_A (dbtest2.read-persons2 ID_A))
+(commit-tx)
 
-
+(begin-tx)
+(use dbtest)
 (expect-failure "insert protected by admin key" (insert persons "foo" ROW_A))
 (expect-failure "keys protected by admin key" (keys persons))
 (expect-failure "txids protected by admin key" (txids persons 0))

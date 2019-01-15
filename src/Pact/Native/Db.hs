@@ -102,13 +102,13 @@ dbDefs =
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
-     (writeDocs "." "(write accounts { \"balance\": 100.0 })")
+     (writeDocs "." "(write accounts id { \"balance\": 100.0 })")
     ,defRNative "insert" (write Insert) writeArgs
      (writeDocs ", failing if data already exists for KEY."
-     "(insert accounts { \"balance\": 0.0, \"note\": \"Created account.\" })")
+     "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
     ,defRNative "update" (write Update) writeArgs
      (writeDocs ", failing if data does not exist for KEY."
-      "(update accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
+      "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog accounts 123485945)`"
@@ -146,7 +146,7 @@ descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
-  mods <- view (eeRefStore . rsModules . at (ModuleName t))
+  mods <- view $ eeRefStore . rsModules . at (ModuleName t Nothing)
   case _mdModule <$> mods of
     Just m ->
       case m of
@@ -244,7 +244,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
         Just row -> do
           g <- gasPostRead i gPrev row
           let obj = columnsToObject tblTy row
-          result <- apply' app [obj]
+          result <- apply (_tApp app) [obj]
           fmap (g,) $ case result of
             (TLiteral (LBool include) _)
               | include -> case cols' of
@@ -350,15 +350,8 @@ createTable' i [t@TTable {..}] = do
 createTable' i as = argsError i as
 
 guardTable :: Show n => FunApp -> Term n -> Eval e ()
-guardTable i TTable {..} = do
-  let findMod _ r@Just {} = r
-      findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
-  r <- foldr findMod Nothing . reverse <$> use evalCallStack
-  case r of
-    (Just mn) | mn == _tModule -> enforceBlessedHashes i _tModule _tHash
-    _ -> do
-      m <- getModule (_faInfo i) _tModule
-      enforceKeySetName (_faInfo i) (_mKeySet m)
+guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModule $
+  enforceBlessedHashes i _tModule _tHash
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " ++ show t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()

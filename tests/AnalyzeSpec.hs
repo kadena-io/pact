@@ -124,7 +124,7 @@ renderTestFailure = \case
 
 compile :: Text -> IO (Either TestFailure ModuleData)
 compile code = do
-  replState0 <- initReplState StringEval
+  replState0 <- initReplState StringEval Nothing
   (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
   pure $ case eTerm of
     Left err -> Left $ ReplError err

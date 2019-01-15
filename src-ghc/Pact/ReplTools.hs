@@ -55,7 +55,7 @@ completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
     unName (Name    name _) = name
 
     nameOfModule :: ModuleName -> Text
-    nameOfModule (ModuleName name) = name
+    nameOfModule (ModuleName name _) = name
 
 replSettings :: (MonadIO m, MonadState ReplState m) => Settings m
 replSettings = Settings
@@ -64,7 +64,7 @@ replSettings = Settings
   True -- automatically add each line to history
 
 generalRepl :: ReplMode -> IO (Either () (Term Name))
-generalRepl m = initReplState m >>= \s -> case m of
+generalRepl m = initReplState m Nothing >>= \s -> case m of
   Interactive -> evalStateT
     (runInputT replSettings (withInterrupt (haskelineLoop [] Nothing)))
     (setReplLib s)

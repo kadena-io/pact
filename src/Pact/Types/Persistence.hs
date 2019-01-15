@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
@@ -122,30 +123,50 @@ valueCodec = Codec enc dec
     {-# INLINE dec #-}
     field = "_P_val"
 
-keysetCodec :: Codec KeySet
-keysetCodec = Codec enc dec
+guardCodec :: Codec Guard
+guardCodec = Codec enc dec
   where
-    enc (KeySet ks p) = object [ keyf .= ks, predf .= p ]
+    enc (GKeySet (KeySet ks p)) = object [ keyf .= ks, predf .= p ]
+    enc (GKeySetRef n) = object [ keyNamef .= n ]
+    enc (GPact (PactGuard{..})) =
+      object [ pactNamef .= _pgName, pactIdf .= _pgPactId ]
+    enc (GModule (ModuleGuard{..})) =
+      object [ modModNamef .= _mgModuleName, modNamef .= _mgName ]
+    enc (GUser (UserGuard{..})) =
+      object [ userDataf .= _ugData, userPredf .= _ugPredFun ]
+      -- TODO ^^^ is too loose, needs better object type of only persistables
     {-# INLINE enc #-}
-    dec  = withObject "KeySet" $ \o -> KeySet <$> o .: keyf <*> o .: predf
+    dec = withObject "Guard" $ \o ->
+      (GKeySet <$> (KeySet <$> o .: keyf <*> o .: predf)) <|>
+      (GKeySetRef <$> o .: keyNamef) <|>
+      (GPact <$> (PactGuard <$> o .: pactIdf <*> o .: pactNamef)) <|>
+      (GModule <$> (ModuleGuard <$> o .: modModNamef <*> o .: modNamef)) <|>
+      (GUser <$> (UserGuard <$> o .: userDataf <*> o .: userPredf))
     {-# INLINE dec #-}
     keyf = "_P_keys"
     predf = "_P_pred"
+    keyNamef = "_P_ksn"
+    pactNamef = "_P_gpn"
+    pactIdf = "_P_gpi"
+    modModNamef = "_P_mmn"
+    modNamef = "_P_mn"
+    userDataf = "_P_gud"
+    userPredf = "_P_gup"
 
 
 -- | Represent Pact 'Term' values that can be stored in a database.
 data Persistable =
     PLiteral Literal |
-    PKeySet KeySet |
+    PGuard Guard |
     PValue Value
     deriving (Eq,Generic)
 instance Show Persistable where
     show (PLiteral l) = show l
-    show (PKeySet k) = show k
+    show (PGuard k) = show k
     show (PValue v) = BSL.toString $ encode v
 instance ToTerm Persistable where
     toTerm (PLiteral l) = toTerm l
-    toTerm (PKeySet k) = toTerm k
+    toTerm (PGuard k) = toTerm k
     toTerm (PValue v) = toTerm v
 instance ToJSON Persistable where
     toJSON (PLiteral (LString s)) = String s
@@ -153,7 +174,7 @@ instance ToJSON Persistable where
     toJSON (PLiteral (LInteger n)) = encoder integerCodec n
     toJSON (PLiteral (LDecimal d)) = encoder decimalCodec d
     toJSON (PLiteral (LTime t)) = encoder timeCodec t
-    toJSON (PKeySet k) = encoder keysetCodec k
+    toJSON (PGuard k) = encoder guardCodec k
     toJSON (PValue v) = encoder valueCodec v
 instance FromJSON Persistable where
     parseJSON (String s) = return (PLiteral (LString s))
@@ -163,18 +184,18 @@ instance FromJSON Persistable where
                             (PLiteral . LDecimal <$> decoder decimalCodec v) <|>
                             (PLiteral . LTime <$> decoder timeCodec v) <|>
                             (PValue <$> decoder valueCodec v) <|>
-                            (PKeySet <$> decoder keysetCodec v)
+                            (PGuard <$> decoder guardCodec v)
     parseJSON Null = return (PValue Null)
     parseJSON va@Array {} = return (PValue va)
 
 class ToPersistable t where
   toPersistable :: t -> Persistable
 instance ToPersistable Literal where toPersistable = PLiteral
-instance ToPersistable KeySet where toPersistable = PKeySet
+instance ToPersistable Guard where toPersistable = PGuard
 instance ToPersistable Value where toPersistable = PValue
 instance Show n => ToPersistable (Term n) where
   toPersistable (TLiteral v _) = toPersistable v
-  toPersistable (TKeySet ks _) = toPersistable ks
+  toPersistable (TGuard ks _) = toPersistable ks
   toPersistable (TValue v _) = toPersistable v
   toPersistable t = toPersistable (toJSON t)
 
@@ -208,12 +229,14 @@ data Domain k v where
   UserTables :: !TableName -> Domain RowKey (Columns Persistable)
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName Module
+  Namespaces :: Domain NamespaceName Namespace
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
 instance AsString (Domain k v) where
     asString (UserTables t) = asString t
-    asString KeySets = "SYS:KeySets"
-    asString Modules = "SYS:Modules"
+    asString KeySets    = "SYS:KeySets"
+    asString Modules    = "SYS:Modules"
+    asString Namespaces = "SYS:Namespaces"
 
 -- | Transaction record.
 -- Backends are expected to return "user-visible" values
