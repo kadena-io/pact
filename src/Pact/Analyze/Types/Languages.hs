@@ -35,6 +35,7 @@ module Pact.Analyze.Types.Languages
   , toPact
   , fromPact
   , valueToProp
+  , sortLiteralObject
 
   , pattern IntegerComparison
   , pattern DecimalComparison
@@ -84,6 +85,7 @@ import           Pact.Types.Util              (tShow)
 import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec, ks)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.ObjUtil   (quicksort)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
@@ -252,6 +254,18 @@ data Core (t :: Ty -> *) (a :: Ty) where
     -> t 'TyStr -> Open a t 'TyBool -> t ('TyObject m) -> Core t 'TyBool
 
   Typeof :: SingTy a -> t a -> Core t 'TyStr
+
+sortLiteralObject
+  :: Applicative m
+  => (forall a. String -> Existential (Core tm) -> m a)
+  -> Existential (Core tm)
+  -> m (Existential (Core tm))
+sortLiteralObject err = \case
+  Some objTy (LiteralObject _ (Object obj)) -> withSortable objTy $ do
+    let obj'  = quicksort obj
+        retTy = SObject $ eraseList obj'
+    pure $ Some retTy $ LiteralObject retTy $ Object obj'
+  notObj -> err "sortLiteralObject: this must be an object: " notObj
 
 pattern IntegerComparison
   :: ComparisonOp -> t 'TyInteger -> t 'TyInteger -> Core t 'TyBool

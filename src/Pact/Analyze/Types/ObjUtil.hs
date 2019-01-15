@@ -34,10 +34,9 @@ type family (:++) (x :: [ k ]) (y :: [ k ]) :: [ k ] where
 infixr 5 :++
 
 -- | Singleton list append
-(++) :: SingList s -> SingList t -> SingList (s :++ t)
-SingList SNil           ++ x  = x
-SingList (SCons k v xs) ++ ys
-  = SingList (SCons k v (unSingList (SingList xs ++ ys)))
+(++) :: HList f s -> HList f t -> HList f (s :++ t)
+SNil           ++ x  = x
+(SCons k v xs) ++ ys = SCons k v (xs ++ ys)
 
 infixr 5 ++
 
@@ -59,7 +58,7 @@ type family Filter (f :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ])
          (Filter 'FMax p xs)
 
 class Conder g where
-  cond :: Proxy g -> SingList s -> SingList t -> SingList (If g s t)
+  cond :: Proxy g -> HList f s -> HList f t -> HList f (If g s t)
 
 instance Conder 'True where
   cond _ s _ = s
@@ -68,11 +67,11 @@ instance Conder 'False where
   cond _ _ t = t
 
 -- | Filter out the elements less-than or greater-than-or-equal to the pivot
-class FilterV (f :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ]) where
-  filterV :: Proxy f -> Sing p -> SingList xs -> SingList (Filter f p xs)
+class FilterV (flag :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ]) where
+  filterV :: Proxy flag -> Sing p -> HList f xs -> HList f (Filter flag p xs)
 
-instance FilterV f p '[] where
-  filterV _ _ (SingList SNil) = SNil'
+instance FilterV flag p '[] where
+  filterV _ _ SNil = SNil
 
 instance
   ( Conder (CmpSymbol k p == 'LT)
@@ -81,10 +80,10 @@ instance
   , Typeable x
   , KnownSymbol k
   ) => FilterV 'FMin p ('(k, x) ': xs) where
-    filterV f p (SingList (SCons k x xs))
+    filterV flag p (SCons k x xs)
       = cond (Proxy @(CmpSymbol k p == 'LT))
-             (SCons' k x (filterV f p (SingList xs)))
-             (filterV f p (SingList xs))
+             (SCons k x (filterV flag p xs))
+             (filterV flag p xs)
 
 instance
   ( Conder (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ)
@@ -93,10 +92,10 @@ instance
   , Typeable x
   , KnownSymbol k
   ) => FilterV 'FMax p ('(k, x) ': xs) where
-    filterV f p (SingList (SCons k x xs))
+    filterV flag p (SCons k x xs)
       = cond (Proxy @(CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ))
-             (SCons' k x (filterV f p (SingList xs)))
-             (filterV f p (SingList xs))
+             (SCons k x (filterV flag p xs))
+             (filterV flag p xs)
 
 -- section: Nub
 
@@ -109,23 +108,23 @@ type family Nub (t :: [ k ]) :: [ k ] where
 
 -- | Value-level counterpart to the type-level 'Nub'
 class Nubable t where
-  nub :: SingList t -> SingList (Nub t)
+  nub :: HList f t -> HList f (Nub t)
 
 instance Nubable '[] where
-  nub (SingList SNil) = SNil'
+  nub SNil = SNil
 
 instance Nubable '[e] where
-  nub (SingList (SCons k v SNil)) = SCons' k v SNil'
+  nub (SCons k v SNil) = SCons k v SNil
 
 instance Nubable (e ': s) => Nubable (e ': e ': s) where
-  nub (SingList (SCons _ _ (SCons k v s))) = nub (SCons' k v (SingList s))
+  nub (SCons _ _ (SCons k v s)) = nub (SCons k v s)
 
 instance {-# OVERLAPS #-}
   ( Nub (e ': f ': s) ~ (e ': Nub (f ': s))
   , Nubable (f ': s)
   ) => Nubable (e ': f ': s) where
-  nub (SingList (SCons k1 v1 (SCons k2 v2 s)))
-    = SCons' k1 v1 (nub (SCons' k2 v2 (SingList s)))
+  nub (SCons k1 v1 (SCons k2 v2 s))
+    = SCons k1 v1 (nub (SCons k2 v2 s))
 
 -- section: Sort
 
@@ -137,10 +136,10 @@ type family Sort (xs :: [ (Symbol, Ty) ]) :: [ (Symbol, Ty) ] where
 
 -- | Value-level quick sort that respects the type-level ordering
 class Sortable t where
-  quicksort :: SingList t -> SingList (Sort t)
+  quicksort :: HList f t -> HList f (Sort t)
 
 instance Sortable '[] where
-  quicksort (SingList SNil) = SNil'
+  quicksort SNil = SNil
 
 instance
   ( Sortable (Filter 'FMin p xs)
@@ -151,11 +150,10 @@ instance
   , Typeable x
   , KnownSymbol p
   ) => Sortable ('(p, x) ': xs) where
-  quicksort (SingList (SCons k p xs)) =
-    quicksort (less k xs') ++ SCons' k p SNil' ++ quicksort (more k xs')
+  quicksort (SCons k p xs) =
+    quicksort (less k xs) ++ SCons k p SNil ++ quicksort (more k xs)
     where less = filterV (Proxy @'FMin)
           more = filterV (Proxy @'FMax)
-          xs'  = SingList xs
 
 -- section: Normalization
 
@@ -165,7 +163,7 @@ type IsNormalized t = t ~ Nub (Sort t)
 
 normalize
   :: (Sortable t, Nubable (Sort t))
-  => SingList t -> SingList (Normalize t)
+  => HList f t -> HList f (Normalize t)
 normalize = nub . quicksort
 
 -- section: Union
@@ -174,5 +172,32 @@ type Unionable s t = (Sortable (s :++ t), Nubable (Sort (s :++ t)))
 
 type Union s t = Nub (Sort (s :++ t))
 
-union :: Unionable s t => SingList s -> SingList t -> SingList (Union s t)
+union :: Unionable s t => HList f s -> HList f t -> HList f (Union s t)
 union s t = nub (quicksort (s ++ t))
+
+-- section: Insert
+
+-- type family Insert (x :: (Symbol, Ty)) (xs :: [ (Symbol, Ty) ]) :: [ (Symbol, Ty) ] where
+--   Insert y '[] = '[y]
+--   Insert '(ky, vy) ('(kx, vx) ': xs) = If
+--     (CmpSymbol ky kx == 'LT)
+--     ('(ky, vy) ': '(kx, vx) ': xs)
+--     ('(kx, vx) ': Insert '(ky, vy) xs)
+
+-- class InsertV (k :: Symbol) (v :: Ty) (xs :: [ (Symbol, Ty) ]) where
+--   insert :: Sing k -> Sing v -> SingList xs -> SingList ('(k, v) ': xs)
+
+-- instance (SingI v, Typeable v, KnownSymbol k) => InsertV k v '[] where
+--   insert k v _ = SingList (SCons k v SNil)
+
+-- instance
+--   ( SingI v
+--   , Typeable v
+--   , KnownSymbol k
+--   , Conder (CmpSymbol k k' == 'LT)
+--   , InsertV k v kvs
+--   ) => InsertV k v ('(k', v') ': kvs) where
+--   insert k v (SingList (SCons k' v' kvs))
+--     = cond (Proxy @(CmpSymbol k k' == 'LT))
+--            (SingList (SCons k v (SCons k' v' kvs)))
+--            (SingList (SCons k' v' (UnSingList (insert k v (SingList kvs)))))

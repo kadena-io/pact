@@ -61,7 +61,8 @@ import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
-import           Data.Type.Equality           ((:~:) (Refl))
+import           Data.Type.Bool               (If, type (||))
+import           Data.Type.Equality           ((:~:) (Refl), type (==))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
 
@@ -72,6 +73,7 @@ import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, str,
                                                time, Constraint)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.ObjUtil   hiding ((++))
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util            (Boolean(..))
@@ -779,6 +781,71 @@ withSing = withDict . singMkSing where
     withHListDict :: HList Sing tys -> (SingI tys => b) -> b
     withHListDict SNil f               = f
     withHListDict (SCons _k _ty tys) f = withHListDict tys f
+
+withSortable :: SingTy ('TyObject a) -> (Sortable a => b) -> b
+withSortable = withDict . singMkSortable where
+  singMkSortable
+    :: SingTy ('TyObject a)
+    -> Dict (Sortable a)
+  singMkSortable (SObject (SingList SNil)) = Dict
+  singMkSortable (SObject (SingList (SCons p _ty tys)))
+    = withDict (singMkStuff p (SObject (SingList tys))) Dict
+
+  singMkStuff
+    :: SingSymbol p
+    -> SingTy ('TyObject xs)
+    -> Dict
+       ( Sortable (Filter 'FMin p xs)
+       , Sortable (Filter 'FMax p xs)
+       , FilterV 'FMin p xs
+       , FilterV 'FMax p xs
+       )
+  singMkStuff _p (SObject (SingList SNil)) = Dict
+  singMkStuff p (SObject (SingList (SCons p' ty tys)))
+    = withDict (singMkStuff p' (SObject (SingList tys))) $
+      withDict (singMkStuffMin p' p ty (SingList tys)) $
+      withDict (singMkStuffMax p' p ty (SingList tys)) $
+      withDict (singMkConderMin p' p) $
+      withDict (singMkConderMax p' p) $
+      withDict (singMkFilterMin p (SingList tys)) $
+      withDict (singMkFilterMax p (SingList tys)) $
+      Dict
+
+  singMkStuffMin
+    :: Sing k -> Sing p -> Sing ty -> Sing tys
+    -> Dict (Sortable
+      (If (CmpSymbol k p == 'LT)
+          ('(k, ty) ': Filter 'FMin p tys)
+          (Filter 'FMin p tys)))
+  singMkStuffMin _ _ _ _ = undefined
+
+  singMkStuffMax
+    :: Sing k -> Sing p -> Sing ty -> Sing tys
+    -> Dict (Sortable
+      (If (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ)
+          ('(k, ty) ': Filter 'FMax p tys)
+          (Filter 'FMax p tys)))
+  singMkStuffMax = undefined
+
+  singMkConderMin
+    :: Sing k -> Sing p
+    -> Dict (Conder (CmpSymbol k p == 'LT))
+  singMkConderMin k p = Dict
+
+  singMkConderMax
+    :: Sing k -> Sing p
+    -> Dict (Conder (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ))
+  singMkConderMax = undefined
+
+  singMkFilterMin
+    :: Sing p -> Sing tys
+    -> Dict (FilterV 'FMin p tys)
+  singMkFilterMin = undefined
+
+  singMkFilterMax
+    :: Sing p -> Sing tys
+    -> Dict (FilterV 'FMax p tys)
+  singMkFilterMax = undefined
 
 withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
 withEq = withDict . singMkEq

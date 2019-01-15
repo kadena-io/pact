@@ -41,7 +41,7 @@ import           Control.Applicative
 import           Control.Lens                 (at, toListOf, view, (%~), (&),
                                                (.~), (?~))
 import qualified Control.Lens                 as Lens
-import           Control.Monad                (unless, when)
+import           Control.Monad                (unless, when, (>=>))
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (asks, local, runReaderT)
 import           Control.Monad.State.Strict   (evalStateT)
@@ -50,7 +50,7 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust)
--- import           Data.Proxy                   (Proxy)
+import           Data.Proxy                   (Proxy)
 import qualified Data.Set                     as Set
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
@@ -254,40 +254,29 @@ inferVar vid name prop = do
     Just QColumnOf{}    -> error "Column names cannot be vars"
 
 mkLiteralObject :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
-mkLiteralObject cols = do
-  cols' <- traverse mkLiteral cols
-  mkLiteralObject'' cols'
+mkLiteralObject = mkUnsortedLiteralObject >=> sortLiteralObject
+  (\msg tm -> throwError $ msg <> show tm)
 
-mkLiteral
-  :: (Text, PreProp) -> PropCheck (SomeSymbol, Existential Prop)
-mkLiteral (name, preProp)
-  = (someSymbolVal (T.unpack name),) <$> inferPreProp preProp
-
-mkLiteralObject''
-  :: [(SomeSymbol, Existential Prop)] -> PropCheck (Existential (Core Prop))
-mkLiteralObject'' [] = pure $ Some (SObject SNil') $
+-- Note: there is a very similar @mkUnsortedLiteralObject@ in
+-- @Analyze.Translate@. These could probably be combined.
+mkUnsortedLiteralObject
+  :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
+mkUnsortedLiteralObject [] = pure $ Some (SObject SNil') $
   LiteralObject (SObject SNil') (Object SNil)
-mkLiteralObject'' _ = error "TODO"
-
--- -- Note: there is a very similar @mkLiteralObject@ in @Analyze.Translate@.
--- -- These could probably be combined.
--- mkLiteralObjectOld :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
--- mkLiteralObjectOld [] = pure $ Some (SObject SNil') $
---   LiteralObject (SObject SNil') (Object SNil)
--- mkLiteralObjectOld ((name, preProp) : tups) = do
---   tups' <- mkLiteralObjectOld tups
---   case tups' of
---     Some (SObject objTy) (LiteralObject _ (Object objProp)) -> do
---       eProp <- inferPreProp preProp
---       case eProp of
---         Some ty prop -> case someSymbolVal (T.unpack name) of
---           SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
---             let sym    = SSymbol @k
---                 objTy' = SObject (SCons' sym ty objTy)
---             in Some objTy' $
---                  LiteralObject objTy' $
---                    Object $ SCons sym (Column ty prop) objProp
---     Some _ _ -> throwErrorT $ "unexpected non-literal object: " <> tShow tups'
+mkUnsortedLiteralObject ((name, preProp) : tups) = do
+  tups' <- mkUnsortedLiteralObject tups
+  case tups' of
+    Some (SObject objTy) (LiteralObject _ (Object objProp)) -> do
+      eProp <- inferPreProp preProp
+      case eProp of
+        Some ty prop -> case someSymbolVal (T.unpack name) of
+          SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $
+            let sym    = SSymbol @k
+                objTy' = SObject (SCons' sym ty objTy)
+            in pure $ Some objTy' $
+                 LiteralObject objTy' $
+                   Object $ SCons sym (Column ty prop) objProp
+    Some _ _ -> throwErrorT $ "unexpected non-literal object: " <> tShow tups'
 
 -- | Look up the type of a given key in an object schema
 lookupKeyInType :: String -> Sing (schema :: [(Symbol, Ty)]) -> Maybe EType

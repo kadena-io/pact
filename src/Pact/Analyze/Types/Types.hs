@@ -64,12 +64,13 @@ data HList (f :: Ty -> Type) (tys :: [(Symbol, Ty)]) where
 pattern SNil' :: SingList '[]
 pattern SNil' = SingList SNil
 
-unSingList :: Sing n -> HList Sing n
-unSingList (SingList hlist) = hlist
-
 pattern UnSingList :: Sing n -> HList Sing n
 pattern UnSingList l <- (SingList -> l) where
-  UnSingList l = unSingList l
+  UnSingList (SingList l) = l
+
+eraseList :: HList f m -> SingList m
+eraseList SNil          = SNil'
+eraseList (SCons k _ l) = SCons' k sing (eraseList l)
 
 pattern SCons'
   :: (SingI v, KnownSymbol k, Typeable v)
@@ -215,17 +216,17 @@ instance SingI ('[] :: [(Symbol, Ty)]) where
 
 instance (KnownSymbol k, SingI v, Typeable v, SingI kvs)
   => SingI (('(k, v) ': kvs) :: [(Symbol, Ty)]) where
-  sing = SingList (SCons SSymbol sing (unSingList sing))
+  sing = SingList (SCons SSymbol sing (UnSingList sing))
 
-type family IsSimple (ty :: Ty) :: Bool where
-  IsSimple ('TyList _)   = 'False
-  IsSimple ('TyObject _) = 'False
-  IsSimple _             = 'True
+-- type family IsSimple (ty :: Ty) :: Bool where
+--   IsSimple ('TyList _)   = 'False
+--   IsSimple ('TyObject _) = 'False
+--   IsSimple _             = 'True
 
-type family IsList (ty :: Ty) :: Bool where
-  IsList ('TyList _) = 'True
-  IsList _           = 'False
+-- type family IsList (ty :: Ty) :: Bool where
+--   IsList ('TyList _) = 'True
+--   IsList _           = 'False
 
-type family IsObject (ty :: Ty) :: Bool where
-  IsObject ('TyObject _) = 'True
-  IsObject _             = 'False
+-- type family IsObject (ty :: Ty) :: Bool where
+--   IsObject ('TyObject _) = 'True
+--   IsObject _             = 'False
