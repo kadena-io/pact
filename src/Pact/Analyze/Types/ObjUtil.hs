@@ -3,6 +3,7 @@
 {-# LANGUAGE ExplicitNamespaces    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds             #-}
@@ -13,7 +14,7 @@
 {-# LANGUAGE UndecidableInstances  #-}
 module Pact.Analyze.Types.ObjUtil where
 
-import Data.Typeable      (Typeable, Proxy(Proxy))
+import Data.Typeable      (Typeable)
 import Data.Type.Bool     (If, type (||))
 import Data.Type.Equality (type (==))
 import GHC.TypeLits       (Symbol, CmpSymbol, KnownSymbol)
@@ -44,6 +45,18 @@ infixr 5 ++
 
 data Flag = FMin | FMax
 
+data instance Sing (f :: Flag) where
+  SFMin :: Sing 'FMin
+  SFMax :: Sing 'FMax
+
+type SingFlag (f :: Flag) = Sing f
+
+instance SingI 'FMin where
+  sing = SFMin
+
+instance SingI 'FMax where
+  sing = SFMax
+
 -- | Type-level filter elements less-than or greater-than-or-equal to the pivot
 type family Filter (f :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ])
   :: [ (Symbol, Ty) ] where
@@ -57,8 +70,8 @@ type family Filter (f :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ])
          ('(k, x) ': Filter 'FMax p xs)
          (Filter 'FMax p xs)
 
-class Conder g where
-  cond :: Proxy g -> HList f s -> HList f t -> HList f (If g s t)
+class Conder (g :: Bool) where
+  cond :: SingBool g -> HList f s -> HList f t -> HList f (If g s t)
 
 instance Conder 'True where
   cond _ s _ = s
@@ -68,7 +81,7 @@ instance Conder 'False where
 
 -- | Filter out the elements less-than or greater-than-or-equal to the pivot
 class FilterV (flag :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ]) where
-  filterV :: Proxy flag -> Sing p -> HList f xs -> HList f (Filter flag p xs)
+  filterV :: Sing flag -> Sing p -> HList f xs -> HList f (Filter flag p xs)
 
 instance FilterV flag p '[] where
   filterV _ _ SNil = SNil
@@ -81,7 +94,7 @@ instance
   , KnownSymbol k
   ) => FilterV 'FMin p ('(k, x) ': xs) where
     filterV flag p (SCons k x xs)
-      = cond (Proxy @(CmpSymbol k p == 'LT))
+      = cond (sing @(CmpSymbol k p == 'LT))
              (SCons k x (filterV flag p xs))
              (filterV flag p xs)
 
@@ -93,7 +106,7 @@ instance
   , KnownSymbol k
   ) => FilterV 'FMax p ('(k, x) ': xs) where
     filterV flag p (SCons k x xs)
-      = cond (Proxy @(CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ))
+      = cond (sing @(CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ))
              (SCons k x (filterV flag p xs))
              (filterV flag p xs)
 
@@ -152,8 +165,8 @@ instance
   ) => Sortable ('(p, x) ': xs) where
   quicksort (SCons k p xs) =
     quicksort (less k xs) ++ SCons k p SNil ++ quicksort (more k xs)
-    where less = filterV (Proxy @'FMin)
-          more = filterV (Proxy @'FMax)
+    where less = filterV (sing @'FMin)
+          more = filterV (sing @'FMax)
 
 -- section: Normalization
 

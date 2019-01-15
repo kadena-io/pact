@@ -43,6 +43,12 @@ data Ty
 
 data family Sing :: k -> Type
 
+data instance Sing (b :: Bool) where
+  STrue :: Sing 'True
+  SFalse :: Sing 'False
+
+type SingBool (b :: Bool) = Sing b
+
 data instance Sing (sym :: Symbol) where
   SSymbol :: KnownSymbol sym => Sing sym
 
@@ -217,6 +223,12 @@ instance SingI ('[] :: [(Symbol, Ty)]) where
 instance (KnownSymbol k, SingI v, Typeable v, SingI kvs)
   => SingI (('(k, v) ': kvs) :: [(Symbol, Ty)]) where
   sing = SingList (SCons SSymbol sing (UnSingList sing))
+
+instance SingI 'True where
+  sing = STrue
+
+instance SingI 'False where
+  sing = SFalse
 
 -- type family IsSimple (ty :: Ty) :: Bool where
 --   IsSimple ('TyList _)   = 'False
