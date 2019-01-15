@@ -70,6 +70,8 @@ type family Filter (f :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ])
          ('(k, x) ': Filter 'FMax p xs)
          (Filter 'FMax p xs)
 
+
+
 class Conder (g :: Bool) where
   cond :: SingBool g -> HList f s -> HList f t -> HList f (If g s t)
 
@@ -88,6 +90,7 @@ instance FilterV flag p '[] where
 
 instance
   ( Conder (CmpSymbol k p == 'LT)
+  , SingI (CmpSymbol k p == 'LT)
   , FilterV 'FMin p xs
   , SingI x
   , Typeable x
@@ -100,6 +103,7 @@ instance
 
 instance
   ( Conder (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ)
+  , SingI ((CmpSymbol k p == 'GT) || (CmpSymbol k p == 'EQ))
   , FilterV 'FMax p xs
   , SingI x
   , Typeable x
