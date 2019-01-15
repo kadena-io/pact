@@ -23,7 +23,7 @@ shouldMatch results checks = mapM_ match checks
           let apiRes = HM.lookup _arcReqKey results
           checkResult _arcIsFailure _arcExpect apiRes
 
-makeExecCmd :: ApiKeyPair -> String -> IO (Command Text)
+makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
 makeExecCmd keyPairs code =
   mkExec code (object ["admin-keyset" .= [getPublicKeyBS keyPairs]]) Nothing [keyPairs] Nothing
 

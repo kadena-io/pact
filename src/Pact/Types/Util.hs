@@ -56,9 +56,6 @@ fromText' = resultToEither . fromText
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
 
-fromTextWith' :: (Text -> Parser a) -> Text -> Either String a
-fromTextWith' p t = resultToEither (parse p t)
-
 lensyOptions :: Int -> Options
 lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 

@@ -5,6 +5,7 @@
 
 module Utils.TestRunner
   ( ApiResultCheck (..)
+  , SomeKeyPair(..)
   , testDir
   , runAll
   , flushDb
@@ -22,11 +23,10 @@ module Utils.TestRunner
   ) where
 
 import Pact.Server.Server (setupServer)
-import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto
-import Pact.Types.Util (toB16JSON)
+import Pact.Types.Util (Export(..), toB16JSON)
 
 
 import Data.Aeson hiding (Options)
@@ -139,13 +139,15 @@ flushDb = mapM_ deleteIfExists _logFiles
           isFile <- doesFileExist fp
           when isFile $ removeFile fp
 
-genKeys :: IO ApiKeyPair
+genKeys :: IO SomeKeyPair
 genKeys = do
-  (s,p) <- genKeyPair ED25519
-  return $ ApiKeyPair s p (Just Chainweb)
+  kp <- genKeyPair defaultScheme
+  return $ SomeKeyPair kp
 
-getPublicKeyBS :: ApiKeyPair -> Value
-getPublicKeyBS = toB16JSON . snd . exportPublic . _kpPublic
+getPublicKeyBS :: SomeKeyPair -> Value
+getPublicKeyBS (SomeKeyPair kp) = some
+  where KeyPair{..} = kp
+        some = toB16JSON $ export _kpPublicKey
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect

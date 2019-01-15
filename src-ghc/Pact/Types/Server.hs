@@ -68,10 +68,7 @@ import Pact.Interpreter
 
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
 userSigToPactPubKey UserSig{..} =
-  let pactPubKey = case _usScheme of
-        Crypto.ED25519 -> Crypto.formatPublicKey Crypto.SED25519 _usPubKey
-        Crypto.ETH -> Crypto.formatPublicKey Crypto.SETH _usPubKey
-  in Pact.PublicKey $ encodeUtf8 $ pactPubKey
+  Pact.PublicKey $ encodeUtf8 $ (Crypto.formatPublicKey _usScheme _usPubKey)
 
 userSigsToPactKeySet :: [UserSig] -> S.Set Pact.PublicKey
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey

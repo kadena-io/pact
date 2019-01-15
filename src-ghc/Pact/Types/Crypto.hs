@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies, GADTs, DataKinds #-}
 
@@ -18,9 +18,10 @@
 --
 module Pact.Types.Crypto
   ( hashTx, verifyHashTx, initialHashTx
-  , InitScheme(..), PPKScheme(..), SomeScheme(..), defaultScheme, Scheme(..)
-  , KeyPair(..), SomeKeyPair(..), PublicKeyText(..), PrivateKeyText, SignatureText(..)
-  , importKeyPair, genKeyPair
+  , PPKScheme(..), SPPKScheme, SomeScheme(..)
+  , InitScheme(..), Scheme(..), defaultScheme, formatPublicKey
+  , KeyPair(..), SomeKeyPair(..), importKeyPair
+  , PublicKeyText(..), PrivateKeyText(..), SignatureText(..)
   , hashLengthAsBS, hashLengthAsBase16, hashToB16Text
   ) where
 
@@ -31,7 +32,6 @@ import Control.DeepSeq
 
 import "crypto-api" Crypto.Random
 import qualified Crypto.Ed25519.Pure as Ed25519
-import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.Hash as H
 
 import Data.Aeson as A
@@ -72,37 +72,19 @@ initialHashTx algo = hashTx algo mempty
 
 --------- SCHEME ---------
 
-data PPKScheme = ED25519 | ETH | BTC
+data PPKScheme = ED25519
   deriving (Show, Eq, Ord, Generic)
 
-instance NFData PPKScheme
-instance ToJSON PPKScheme where
-  toJSON ED25519 = "ED25519"
-  toJSON ETH = "ETH"
-instance FromJSON PPKScheme where
-  parseJSON = withText "PPKScheme" $ \s -> case s of
-    "ED25519" -> return ED25519
-    "ETH" -> return ETH
-    _ -> fail $ "Unsupported PPKScheme: " ++ show s
-  {-# INLINE parseJSON #-}
-instance Serialize PPKScheme
 
-
-
-
+-- Run-time witness to PPKScheme kind
 data SPPKScheme (a :: PPKScheme) = MakeScheme
-data SomeScheme = forall a. Scheme a => SomeScheme (SPPKScheme a)
+data SomeScheme = SED25519 (SPPKScheme 'ED25519)
 
-defaultScheme :: SPPKScheme 'ED25519
-defaultScheme = MakeScheme
 
 
 
 class InitScheme s where
   toScheme :: s -> SomeScheme
-instance InitScheme PPKScheme where
-  toScheme ppk = SomeScheme $ case ppk of
-    ED25519 -> MakeScheme :: SPPKScheme 'ED25519
 
 
 
@@ -117,6 +99,62 @@ class (Export (PublicKey a), Export (Signature a),
   hashPayload :: SPPKScheme a -> ByteString -> ByteString
   sign :: SPPKScheme a -> ByteString -> PublicKey a -> PrivateKey a -> Signature a
   valid :: SPPKScheme a -> ByteString -> PublicKey a -> Signature a -> Bool
+  genKeyPair :: SPPKScheme a -> IO (KeyPair a)
+
+
+
+
+--------- KEY PAIR ---------
+
+newtype PublicKeyText = PubT { _pktPublic :: T.Text}
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+newtype PrivateKeyText = PrivT { _pktSecret :: T.Text}
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+newtype SignatureText = SigT T.Text deriving (Eq, Show, Generic)
+
+
+
+data KeyPair (a :: PPKScheme) = KeyPair
+  { _kpScheme :: SPPKScheme a
+  , _kpPublicKey :: PublicKey a
+  , _kpPrivateKey :: PrivateKey a
+  }
+data SomeKeyPair = forall a. (Scheme a) => SomeKeyPair (KeyPair a)
+
+
+
+importKeyPair :: (Scheme a, Monad m) =>
+                 SPPKScheme a -> PublicKeyText -> PrivateKeyText -> m (KeyPair a)
+importKeyPair scheme (PubT pubText) (PrivT privText) = do
+  pub <- failEither (fromText' pubText)
+  priv <- failEither (fromText' privText)
+  return $ KeyPair scheme pub priv
+
+
+
+
+--------- SCHEME INSTANCES AND FUNCTIONS ---------
+
+instance NFData PPKScheme
+instance ToJSON PPKScheme where
+  toJSON ED25519 = "ED25519"
+instance FromJSON PPKScheme where
+  parseJSON = withText "PPKScheme" $ \s -> case s of
+    "ED25519" -> return ED25519
+    _ -> fail $ "Unsupported PPKScheme: " ++ show s
+  {-# INLINE parseJSON #-}
+instance Serialize PPKScheme
+instance InitScheme PPKScheme where
+  toScheme ED25519 = SED25519 MakeScheme
+
+
+
+
+defaultScheme :: SPPKScheme 'ED25519
+defaultScheme = MakeScheme
+
+formatPublicKey :: PPKScheme -> T.Text -> T.Text
+formatPublicKey _ p = p
 
 
 
@@ -131,56 +169,11 @@ instance Scheme 'ED25519 where
     where Hash hsh = hashTx H.Blake2b_512 msg
   sign s msg pub priv = Ed25519.sign (hashPayload s msg) priv pub
   valid s msg pub sig = Ed25519.valid (hashPayload s msg) pub sig
-
-
-{--
-instance Scheme 'ETH where
-  type PublicKey 'ETH = ECDSA.PublicKey
-  type PrivateKey 'ETH = Ed25519.PrivateKey
-  type Signature 'ETH = ECDSA.Signature
-
-  hashPayload _ msg = hsh
-    where Hash hsh = hashTx H.Blake2b_512 msg
-  sign s msg pub priv = undefined
-  valid s msg pub sig = undefined
---}
-
-
-
-
---------- KEY PAIR ---------
-
-newtype PublicKeyText = PubT T.Text
-newtype PrivateKeyText = PrivT T.Text
-newtype SignatureText = SigT T.Text
-
-
-data KeyPair (a :: PPKScheme) = KeyPair
-  { _kpScheme :: SPPKScheme a
-  , _kpPublicKey :: PublicKey a
-  , _kpPrivateKey :: PrivateKey a
-  }
-data SomeKeyPair = forall a. (Scheme a) => SomeKeyPair (KeyPair a)
-
-
-
-importKeyPair :: (Scheme a, Monad m) =>
-                 (SPPKScheme a) -> PublicKeyText -> PrivateKeyText -> m (KeyPair a)
-importKeyPair scheme (PubT pubText) (PrivT privText) = do
-  pub <- failEither (fromText' pubText)
-  priv <- failEither (fromText' privText)
-  return $ KeyPair scheme pub priv
-
-
-
-
-genKeyPair :: PPKScheme -> IO SomeKeyPair
-genKeyPair ED25519 = do
-  let scheme = MakeScheme :: SPPKScheme 'ED25519
-  g :: SystemRandom <- newGenIO
-  case Ed25519.generateKeyPair g of
-    Left _ -> error "Something went wrong in genKeyPairs"
-    Right (s,p,_) -> return $ SomeKeyPair $ KeyPair scheme p s
+  genKeyPair scheme = do
+    g :: SystemRandom <- newGenIO
+    case Ed25519.generateKeyPair g of
+      Left _ -> error "Something went wrong in genKeyPairs"
+      Right (s,p,_) -> return $ KeyPair scheme p s
 
 
 
@@ -205,19 +198,12 @@ instance Eq Ed25519.PublicKey where
   b == b' = (export b) == (export b')
 instance Ord Ed25519.PublicKey where
   b <= b' = (export b) <= (export b')
-instance ToJSON Ed25519.PublicKey where
-  toJSON = toB16JSON . export
-instance FromJSON Ed25519.PublicKey where
-  parseJSON = withText "PublicKey" parseText
-  {-# INLINE parseJSON #-}
 instance ParseText Ed25519.PublicKey where
   parseText s = do
     s' <- parseB16Text s
     failMaybe ("ED25519 Public Key import failed: " ++ show s)
       (Ed25519.importPublic s')
   {-# INLINE parseText #-}
-instance ToJSONKey Ed25519.PublicKey
-instance FromJSONKey Ed25519.PublicKey
 instance Serialize Ed25519.PublicKey where
   put s = S.putByteString (export s)
   get = maybe (fail "Invalid ED25519 Public Key") return =<<
@@ -227,15 +213,11 @@ instance Export (Ed25519.PublicKey) where
 
 
 
+
 instance Eq Ed25519.PrivateKey where
   b == b' = (export b) == (export b')
 instance Ord Ed25519.PrivateKey where
   b <= b' = (export b) <= (export b')
-instance ToJSON Ed25519.PrivateKey where
-  toJSON = toB16JSON . export
-instance FromJSON Ed25519.PrivateKey where
-  parseJSON = withText "PrivateKey" parseText
-  {-# INLINE parseJSON #-}
 instance ParseText Ed25519.PrivateKey where
   parseText s = do
     s' <- parseB16Text s
@@ -250,30 +232,16 @@ instance Export (Ed25519.PrivateKey) where
   export = Ed25519.exportPrivate
 
 
+
+
 deriving instance Eq Ed25519.Signature
 deriving instance Ord Ed25519.Signature
 instance Serialize Ed25519.Signature where
   put (Ed25519.Sig s) = S.put s
   get = Ed25519.Sig <$> (S.get >>= S.getByteString)
-instance ToJSON Ed25519.Signature where
-  toJSON (Ed25519.Sig s) = toB16JSON s
-instance FromJSON Ed25519.Signature where
-  parseJSON = withText "Signature" parseText
-  {-# INLINE parseJSON #-}
 instance ParseText Ed25519.Signature where
   parseText s = Ed25519.Sig <$> parseB16Text s
   {-# INLINE parseText #-}
 instance Export Ed25519.Signature where
   export (Ed25519.Sig bs) = bs
-
-
-
-
---------- ECDSA INSTANCES ---------
-
-instance FromJSON ECDSA.PrivateKey where
-  parseJSON = undefined
-
-instance FromJSON ECDSA.PublicKey where
-  parseJSON = undefined
 

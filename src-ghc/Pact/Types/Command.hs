@@ -54,7 +54,6 @@ import Data.String
 import Data.Text hiding (filter, all)
 import Data.Hashable (Hashable)
 import qualified Data.Set as S
-import qualified Crypto.Ed25519.Pure as Ed25519
 import qualified Crypto.Hash as H
 
 
@@ -97,11 +96,12 @@ mkCommand' creds env = makeCommand (makeSigs <$> creds)
         hsh = hashTx H.Blake2b_512 env    -- hash associated with a Command, aka a Command's Request Key
         makeSigs (SomeKeyPair kp) = mkUserSig kp env
          
-
 mkUserSig :: (Scheme a) => KeyPair a -> ByteString -> UserSig
 mkUserSig KeyPair{..} env = (UserSig (toPPKScheme _kpScheme) pubBS sig)
   where pubBS = toB16Text $ export _kpPublicKey
         sig = toB16Text $ export $ sign _kpScheme env _kpPublicKey _kpPrivateKey
+
+
 
 verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
@@ -172,10 +172,12 @@ instance FromJSON UserSig where
 
 
 verifyUserSig :: ByteString -> UserSig -> Bool
-verifyUserSig msg UserSig{..} = verifyUserSig' (toScheme _usScheme) msg (PubT _usPubKey) (SigT _usSig)
+verifyUserSig msg UserSig{..} =
+  case (toScheme _usScheme) of
+    SED25519 s -> verifyUserSig' s msg (PubT _usPubKey) (SigT _usSig)
 
-verifyUserSig' :: SomeScheme -> ByteString -> PublicKeyText -> SignatureText -> Bool
-verifyUserSig' (SomeScheme scheme) msg (PubT pT) (SigT sT) =
+verifyUserSig' :: (Scheme s) => SPPKScheme s -> ByteString -> PublicKeyText -> SignatureText -> Bool
+verifyUserSig' scheme msg (PubT pT) (SigT sT) =
   let pParsed = fromText pT
       sParsed = fromText sT
   in case (pParsed, sParsed) of

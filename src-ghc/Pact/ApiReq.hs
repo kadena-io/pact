@@ -18,12 +18,13 @@
 
 module Pact.ApiReq
     (
-     --ApiKeyPair(..)
-    ApiReq(..)
+     ApiKeyPair(..)
+    ,ApiReq(..)
     ,apiReq
     ,mkApiReq
     ,mkExec
     ,mkCont
+    ,mkKeyPairs
     ) where
 
 import Control.Monad.State.Strict
@@ -32,8 +33,7 @@ import Data.List
 import Prelude
 import System.Directory
 import System.FilePath
-import Data.Default (def)
-import Data.Maybe (fromMaybe)
+
 import Data.Aeson
 import GHC.Generics
 import qualified Data.Yaml as Y
@@ -50,25 +50,14 @@ import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.API
 
---data SomeX = forall n . SomeX (SPPKScheme n)
-
-{--data ApiKeyPair = ApiKeyPair {
-  _kpSecret :: ByteString,
-  _kpPublic :: ByteString,
-  _kpScheme :: Maybe PPKScheme
+data ApiKeyPair = ApiKeyPair {
+  _akpSecret :: PrivateKeyText,
+  _akpPublic :: PublicKeyText,
+  _akpScheme :: Maybe PPKScheme
   } deriving (Eq, Show, Generic)
-instance ToJSON ApiKeyPair where
-  toJSON ApiKeyPair{..} =
-     object ["secret" .= (toB16JSON . secret),
-             "public" .= (toB16JSON . public),
-             "scheme" .= _kpScheme]
-instance FromJSON ApiKeyPair where
-  parseJSON = withObject "ApiKeyPair" $ \o -> do
-    addr <- (o .:? "scheme")
-    secret <- (o .: "secret")
-    public <- (o .: "public")
-    return $ ApiKeyPair secret public addr
---}
+instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
+instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
+
 data ApiReq = ApiReq {
   _ylType :: Maybe String,
   _ylTxId :: Maybe TxId,
@@ -79,7 +68,7 @@ data ApiReq = ApiReq {
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
   _ylCodeFile :: Maybe FilePath,
-  _ylKeyPairs :: [SomeKeyPair],
+  _ylKeyPairs :: [ApiKeyPair],
   _ylNonce :: Maybe String,
   _ylFrom :: Maybe EntityName,
   _ylTo :: Maybe [EntityName]
@@ -100,15 +89,16 @@ mkApiReq :: FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
 mkApiReq fp = do
   ar@ApiReq {..} <- either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
+  kps <- mkKeyPairs _ylKeyPairs
   case _ylType of
-    Just "exec" -> mkApiReqExec ar fp
-    Just "cont" -> mkApiReqCont ar fp
-    Nothing     -> mkApiReqExec ar fp -- Default
+    Just "exec" -> mkApiReqExec ar kps fp
+    Just "cont" -> mkApiReqCont ar kps fp
+    Nothing     -> mkApiReqExec ar kps fp -- Default
     _      -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
 
 
-mkApiReqExec :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
-mkApiReqExec ar@ApiReq{..} fp = do
+mkApiReqExec :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReqExec ar@ApiReq{..} kps fp = do
   (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
@@ -126,23 +116,20 @@ mkApiReqExec ar@ApiReq{..} fp = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
-  ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
+  ((ar,code,cdata,addy),) <$> mkExec code cdata addy kps _ylNonce
 
 mkExec :: String -> Value -> Maybe Address -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
-mkExec code mdata addy akps ridm = do
-  {--keyPairs <- case (mkKeyPairs akps) of
-    Right kps -> return kps
-    Left err -> dieAR err--}
+mkExec code mdata addy kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    akps
+    kps
     addy
     (pack $ show rid)
     (Exec (ExecMsg (pack code) mdata))
 
-mkApiReqCont :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
-mkApiReqCont ar@ApiReq{..} fp = do
+mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReqCont ar@ApiReq{..} kps fp = do
   txId <- case _ylTxId of
     Just t  -> return t
     Nothing -> dieAR "Expected a 'txid' entry"
@@ -167,14 +154,11 @@ mkApiReqCont ar@ApiReq{..} fp = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
-  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy _ylKeyPairs _ylNonce
+  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy kps _ylNonce
 
 mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [SomeKeyPair]
   -> Maybe String -> IO (Command Text)
 mkCont txid step rollback mdata addy akps ridm = do
-  {--keyPairs <- case (mkKeyPairs akps) of
-    Right kps -> return kps
-    Left err -> dieAR err--}
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
@@ -184,16 +168,22 @@ mkCont txid step rollback mdata addy akps ridm = do
     (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
 
 
-{--mkKeyPairs :: [ApiKeyPair] -> Either String [KeyPair]
+mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPair]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
   where mkPair ApiKeyPair{..} =
-          let scheme = addressToScheme $ fromMaybe def _kpScheme
-          in case (importKeyPair scheme _kpPublic _kpSecret) of
-               Just kp -> Right kp
-               Nothing -> Left $ "Public Key and or Private Key does not match scheme provided: "
-                       ++ "Received " ++ show scheme ++ " scheme but received the following key pair "
-                       ++ show _kpPublic ++ ",  " ++ show _kpSecret
---}
+          let res = case (toScheme <$> _akpScheme) of
+                      Nothing -> mkKeyPairs' defaultScheme _akpPublic _akpSecret
+                      Just (SED25519 sed) -> mkKeyPairs' sed _akpPublic _akpSecret
+          in either dieAR return res
+
+mkKeyPairs' :: (Scheme a) => SPPKScheme a -> PublicKeyText -> PrivateKeyText -> Either String SomeKeyPair
+mkKeyPairs' scheme pubT privT = do
+  case (importKeyPair scheme pubT privT) of
+    Just kp -> Right $ SomeKeyPair kp
+    Nothing -> Left $ "Public Key and or Private Key does not match scheme provided: "
+               ++ "Received " ++ show (toPPKScheme scheme) ++ " scheme but received the following key pair "
+               ++ show pubT ++ ",  " ++ show privT
+
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
   \  code: Transaction code \n\
