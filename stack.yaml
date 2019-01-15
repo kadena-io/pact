@@ -22,4 +22,4 @@ extra-deps:
   # temporarily using a patched fork of sbv to disable "unsupported query call"
   # until it's fixed upstream
   - git: https://github.com/joelburget/sbv.git
-    commit: d0aa9ec13819838b85d16309f629cd36500e7c5c
+    commit: 8d13e26255178c5ee5b5b3fad97873ff214d7470
