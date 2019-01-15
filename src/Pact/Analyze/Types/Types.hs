@@ -44,7 +44,7 @@ data Ty
 data family Sing :: k -> Type
 
 data instance Sing (b :: Bool) where
-  STrue :: Sing 'True
+  STrue  :: Sing 'True
   SFalse :: Sing 'False
 
 type SingBool (b :: Bool) = Sing b
