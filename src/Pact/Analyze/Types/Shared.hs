@@ -830,7 +830,7 @@ withSortable = withDict . singMkSortable where
   singMkConderMin
     :: Sing k -> Sing p
     -> Dict (Conder (CmpSymbol k p == 'LT))
-  singMkConderMin k p = Dict
+  singMkConderMin _ _ = undefined -- Dict
 
   singMkConderMax
     :: Sing k -> Sing p
