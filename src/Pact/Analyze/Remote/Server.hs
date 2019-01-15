@@ -21,7 +21,7 @@ import           Data.Default               (def)
 import           Data.Foldable              (traverse_)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Monoid                ((<>))
-import           Data.String                (IsString)
+import           Data.String                (IsString, fromString)
 import qualified Data.Text                  as T
 import           Data.Void                  (Void)
 import           Snap.Core                  (Snap)
@@ -89,11 +89,7 @@ validateRequest = do
       case HM.lookup modName modsMap of
         Just mod' -> Right $ ValidRequest modsMap mod'
         Nothing   -> Left $ ClientError $
-          case modName of
-            ModuleName nm ->
-              let names = HM.keys modsMap
-              in show nm ++ " not found in list of provided modules: "
-                   ++ show names
+          show modName ++ " not found in list of provided modules: " ++ show (HM.keys modsMap)
 
 initializeRepl :: IO ReplState
 initializeRepl = do
@@ -121,9 +117,9 @@ moduleNotFoundP :: MP.Parsec Void String ModuleName
 moduleNotFoundP = MP.string "<interactive>:"
                *> digitsP *> MP.char ':'
                *> digitsP *> MP.char ':'
-               *> MP.string " Module \""
-               *> fmap (ModuleName . T.pack) (MP.some $ MP.notChar '"')
-               <* MP.string "\" not found"
+               *> MP.string " Module "
+               *> fmap fromString (MP.some $ MP.notChar ' ')
+               <* MP.string " not found"
   where
     digitsP :: MP.Parsec Void String ()
     digitsP = void $ MP.some MP.digitChar

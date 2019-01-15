@@ -48,7 +48,6 @@ import Pact.Analyze.Remote.Server (verify)
 import Pact.Types.Command
 import Pact.Types.API
 import Pact.Types.Server
-import Pact.Types.RPC
 
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
@@ -70,27 +69,19 @@ runApiServer histChan inbChan logFn port logDir = do
 
 api :: Api ()
 api = route [
-       ("send",sendBatch True)
-      ,("private",sendBatch False)
+       ("send",sendBatch)
+      --,("private",sendBatch False)
       ,("poll",poll)
       ,("listen",registerListener)
       ,("local",sendLocal)
       ]
 
-sendBatch :: Bool -> Api ()
-sendBatch public = do
+sendBatch :: Api ()
+sendBatch = do
   (SubmitBatch cmds) <- readJSON
   when (null cmds) $ die "Empty Batch"
   crs <- forM cmds $ \c -> do
     cr@(_,Command{..}) <- buildCmdRpc c
-    --liftIO $ print cr
-    case eitherDecodeStrict' _cmdPayload of
-      Left e -> die $ "JSON payload decode failed: " ++ show e
-      Right (Payload{..} :: Payload (PactRPC T.Text)) -> case (public,_pAddress) of
-        (True,Nothing) -> return ()
-        (True,_) -> die "Send public: payload must not have address"
-        (False,Just {}) -> return ()
-        (False,_) -> die "Send private: payload must have address"
     return cr
   rks <- mapM queueCmds $ group 8000 crs
   writeResponse $ ApiSuccess $ RequestKeys $ concat rks

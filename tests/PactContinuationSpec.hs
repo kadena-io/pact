@@ -10,6 +10,7 @@ import Data.Aeson hiding (Options)
 import qualified Network.HTTP.Client as HTTP
 import Network.Wreq
 import Control.Lens ((&), (.~))
+import Data.Default (def)
 
 import Pact.ApiReq
 import Pact.Types.API
@@ -25,7 +26,7 @@ shouldMatch results checks = mapM_ match checks
 
 makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
 makeExecCmd keyPairs code =
-  mkExec code (object ["admin-keyset" .= [getPublicKeyBS keyPairs]]) Nothing [keyPairs] Nothing
+  mkExec code (object ["admin-keyset" .= [getPublicKeyBS keyPairs]]) def [keyPairs] Nothing
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
@@ -82,7 +83,7 @@ testPactContinuation opts = before_ flushDb $ after_ flushDb $ do
 testSimpleServerCmd :: Options -> IO (Maybe ApiResult)
 testSimpleServerCmd opts = do
   simpleKeys <- genKeys
-  cmd <- mkExec  "(+ 1 2)" Null Nothing
+  cmd <- mkExec  "(+ 1 2)" Null def
              [simpleKeys] (Just "test1")
   allResults <- runAll opts [cmd]
   return $ HM.lookup (RequestKey (_cmdHash cmd)) allResults
@@ -96,8 +97,8 @@ testCorrectNextStep opts = do
 
   moduleCmd       <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  checkStateCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
+  contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  checkStateCmd   <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test4")
   allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
@@ -118,8 +119,8 @@ testIncorrectNextStep opts = do
 
   moduleCmd         <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd    <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  incorrectStepCmd  <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test3")
-  checkStateCmd     <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
+  incorrectStepCmd  <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test3")
+  checkStateCmd     <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test4")
   allResults        <- runAll opts [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -140,9 +141,9 @@ testLastStep opts = do
 
   moduleCmd        <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStep1Cmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  contNextStep2Cmd <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
-  checkStateCmd    <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
+  contNextStep1Cmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  contNextStep2Cmd <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
+  checkStateCmd    <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
   allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStep1Cmd,
                               contNextStep2Cmd, checkStateCmd]
 
@@ -166,8 +167,8 @@ testErrStep opts = do
 
   moduleCmd        <- makeExecCmdWith (T.unpack (errorStepPactCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contErrStepCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  checkStateCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
+  contErrStepCmd   <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   allResults       <- runAll opts [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -210,9 +211,9 @@ testCorrectRollbackStep opts = do
   
   moduleCmd       <- makeExecCmdWith (T.unpack (pactWithRollbackCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  rollbackStepCmd <- mkCont (TxId 1) 1 True Null Nothing [adminKeys] (Just "test4") -- rollback = True
-  checkStateCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
+  contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  rollbackStepCmd <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4") -- rollback = True
+  checkStateCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
   allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
                              rollbackStepCmd, checkStateCmd]
 
@@ -236,9 +237,9 @@ testIncorrectRollbackStep opts = do
   
   moduleCmd       <- makeExecCmdWith (T.unpack (pactWithRollbackCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  incorrectRbCmd  <- mkCont (TxId 1) 2 True Null Nothing [adminKeys] (Just "test4")
-  checkStateCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
+  contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  incorrectRbCmd  <- mkCont (TxId 1) 2 True Null def [adminKeys] (Just "test4")
+  checkStateCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
   allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
                              incorrectRbCmd, checkStateCmd]
 
@@ -262,9 +263,9 @@ testRollbackErr opts = do
 
   moduleCmd        <- makeExecCmdWith (T.unpack (pactWithRollbackErrCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  rollbackErrCmd   <- mkCont (TxId 1) 1 True Null Nothing [adminKeys] (Just "test4")
-  checkStateCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
+  contNextStepCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  rollbackErrCmd   <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4")
+  checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
   allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
                               rollbackErrCmd, checkStateCmd]
 
@@ -287,9 +288,9 @@ testNoRollbackFunc opts = do
 
   moduleCmd        <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  noRollbackCmd    <- mkCont (TxId 1) 1 True Null Nothing [adminKeys] (Just "test4")
-  checkStateCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
+  contNextStepCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  noRollbackCmd    <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4")
+  checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
   allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
                               noRollbackCmd, checkStateCmd]
 
@@ -331,9 +332,9 @@ testValidYield opts = do
   moduleCmd          <- makeExecCmdWith (T.unpack (pactWithYield moduleName))
   executePactCmd     <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")")
                         -- pact takes an input                 
-  resumeAndYieldCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  resumeOnlyCmd      <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
-  checkStateCmd      <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
+  resumeAndYieldCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  resumeOnlyCmd      <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
+  checkStateCmd      <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
   allResults         <- runAll opts [moduleCmd, executePactCmd, resumeAndYieldCmd,
                                 resumeOnlyCmd, checkStateCmd]
 
@@ -357,9 +358,9 @@ testNoYield opts = do
 
   moduleCmd      <- makeExecCmdWith (T.unpack (pactWithYieldErr moduleName))
   executePactCmd <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
-  noYieldStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  resumeErrCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test3")
-  checkStateCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test5")
+  noYieldStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  resumeErrCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test3")
+  checkStateCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test5")
   allResults     <- runAll opts [moduleCmd, executePactCmd, noYieldStepCmd,
                            resumeErrCmd, checkStateCmd]
 
@@ -383,9 +384,9 @@ testResetYield opts = do
 
   moduleCmd        <- makeExecCmdWith (T.unpack (pactWithSameNameYield moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  yieldSameKeyCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
-  resumeStepCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
-  checkStateCmd    <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
+  yieldSameKeyCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
+  resumeStepCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
+  checkStateCmd    <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
   allResults       <- runAll opts [moduleCmd, executePactCmd, yieldSameKeyCmd,
                               resumeStepCmd, checkStateCmd]
 

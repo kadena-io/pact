@@ -65,12 +65,12 @@ initDbEnv loggers funrec p = DbEnv {
   _txId = Nothing
   }
 
-data UserTableInfo = UserTableInfo {
-  utModule :: ModuleName,
-  utKeySet :: KeySetName
+data UserTableInfo = UserTableInfo
+  { utModule :: ModuleName
+  , utKeySet :: KeySetName
   } deriving (Eq,Show,Generic,Typeable)
-instance PactValue UserTableInfo
 
+instance PactValue UserTableInfo
 instance FromJSON UserTableInfo
 instance ToJSON UserTableInfo
 
@@ -90,6 +90,8 @@ keysetsTable :: TableId
 keysetsTable = "SYS_keysets"
 modulesTable :: TableId
 modulesTable = "SYS_modules"
+namespacesTable :: TableId
+namespacesTable = "SYS_namespaces"
 userTableInfo :: TableId
 userTableInfo = "SYS_usertables"
 
@@ -112,14 +114,16 @@ pactdb :: PactDb (DbEnv p)
 pactdb = PactDb
   { _readRow = \d k e ->
        case d of
-           KeySets -> readSysTable e (DataTable keysetsTable) (asString k)
-           Modules -> readSysTable e (DataTable modulesTable) (asString k)
+           KeySets    -> readSysTable e (DataTable keysetsTable) (asString k)
+           Modules    -> readSysTable e (DataTable modulesTable) (asString k)
+           Namespaces -> readSysTable e (DataTable namespacesTable) (asString k)
            (UserTables t) -> readUserTable e t k
 
  , _writeRow = \wt d k v e ->
        case d of
-           KeySets -> writeSys e wt keysetsTable k v
-           Modules -> writeSys e wt modulesTable k v
+           KeySets    -> writeSys e wt keysetsTable k v
+           Modules    -> writeSys e wt modulesTable k v
+           Namespaces -> writeSys e wt namespacesTable k v
            (UserTables t) -> writeUser e wt t k v
 
  , _keys = \tn e -> runMVState e
@@ -176,8 +180,9 @@ getLogs :: FromJSON v => Domain k v -> TxId -> MVState p [TxLog v]
 getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn d) (fromIntegral tid))
   where
     tn :: Domain k v -> TxTable
-    tn KeySets = TxTable keysetsTable
-    tn Modules = TxTable modulesTable
+    tn KeySets    = TxTable keysetsTable
+    tn Modules    = TxTable modulesTable
+    tn Namespaces = TxTable namespacesTable
     tn (UserTables t) = userTxRecord t
     convLog tl = case fromJSON (_txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " ++ s
@@ -278,4 +283,5 @@ createSchema e = runMVState e $ do
   createTable' userTableInfo
   createTable' keysetsTable
   createTable' modulesTable
+  createTable' namespacesTable
   doPersist P.commitTx

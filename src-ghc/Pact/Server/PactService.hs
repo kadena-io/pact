@@ -20,8 +20,6 @@ import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Reader
 import qualified Data.Map.Strict as M
-import qualified Data.Set as S
-import Control.Lens (view)
 
 import Data.Aeson as A
 import Data.Maybe (fromMaybe)
@@ -32,23 +30,23 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
 import Pact.Types.Logger
 import Pact.Gas
+import Pact.Parse (ParsedDecimal(..))
 
 import Pact.Interpreter
 
-initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (PactRPC ParsedCode))
+initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode)
 initPactService CommandConfig {..} loggers = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
-      gasLimit = fromMaybe 0 _ccGasLimit
       gasRate = fromMaybe 0 _ccGasRate
-      gasEnv = (GasEnv (fromIntegral gasLimit) 0.0 (constGasModel (fromIntegral gasRate)))
+      gasModel = constGasModel (fromIntegral gasRate)
       mkCEI p@PactDbEnv {..} = do
         cmdVar <- newMVar (CommandState initRefStore M.empty)
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
-          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccEntity p cmdVar gasEnv eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasEnv }
+          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccEntity p cmdVar gasModel eMode cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasModel }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -58,10 +56,14 @@ initPactService CommandConfig {..} loggers = do
       mkSQLiteEnv logger True sqlc loggers >>= mkCEI
 
 
-applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState -> GasEnv -> ExecutionMode -> Command a ->
-            ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
+applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState ->
+            GasModel -> ExecutionMode -> Command a ->
+            ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
 applyCmd _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
-applyCmd logger conf dbv cv gasEnv exMode _ (ProcSucc cmd) = do
+applyCmd logger conf dbv cv gasModel exMode _ (ProcSucc cmd) = do
+  let pubMeta = _pMeta $ _cmdPayload cmd
+      (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
+      gasEnv = GasEnv (fromIntegral $ _pmGasLimit pubMeta) (GasPrice gasPrice) gasModel
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv logger gasEnv) $ runPayload cmd
   case r of
     Right cr -> do
@@ -79,20 +81,11 @@ exToTx :: ExecutionMode -> Maybe TxId
 exToTx (Transactional t) = Just t
 exToTx Local = Nothing
 
-runPayload :: Command (Payload (PactRPC ParsedCode)) -> CommandM p CommandResult
-runPayload c@Command{..} = do
-  let runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm c
-      runRpc (Continuation ym) = applyContinuation (cmdToRequestKey c) ym c
-      Payload{..} = _cmdPayload
-  case _pAddress of
-    Just Address{..} -> do
-      -- simulate fake blinding if not addressed to this entity or no entity specified
-      ent <- view ceEntity
-      mode <- view ceMode
-      case ent of
-        Just entName | entName == _aFrom || (entName `S.member` _aTo) -> runRpc _pPayload
-        _ -> return $ jsonResult mode (cmdToRequestKey c) $ CommandError "Private" Nothing
-    Nothing -> runRpc _pPayload
+runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p CommandResult
+runPayload c@Command{..} = case (_pPayload _cmdPayload) of
+  Exec pm -> applyExec (cmdToRequestKey c) pm c
+  Continuation ym -> applyContinuation (cmdToRequestKey c) ym c
+
 
 applyExec :: RequestKey -> ExecMsg ParsedCode -> Command a -> CommandM p CommandResult
 applyExec rk (ExecMsg parsedCode edata) Command{..} = do
@@ -101,7 +94,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet _cmdSigs
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv
+                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv permissiveNamespacePolicy
   pr <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec (erInput pr)) (erExec pr)
   let newPacts = case newCmdPact of
@@ -145,7 +138,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
-                        _ceGasEnv
+                        _ceGasEnv permissiveNamespacePolicy
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
 
           -- Update pacts state
@@ -153,7 +146,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
             Left (SomeException ex) -> throwM ex
             Right EvalResult{..} -> do
               exec@PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
-                                   return erExec         
+                                   return erExec
               if _cmRollback
                 then rollbackUpdate env msg state
                 else continuationUpdate env msg state pact exec
@@ -162,7 +155,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
 rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
 rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
   -- if step doesn't have a rollback function, no error thrown. Therefore, pact will be deleted
-  -- from state. 
+  -- from state.
   let newState = CommandState _csRefStore $ M.delete _cmTxId _csPacts
   liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: rollbackUpdate: reaping pact "
     ++ show _cmTxId
@@ -172,7 +165,7 @@ continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandPact -> 
 continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} PactExec{..} = do
   let nextStep = _cmStep + 1
       isLast = nextStep >= _cpStepCount
-      updateState pacts = CommandState _csRefStore pacts -- never loading modules during continuations 
+      updateState pacts = CommandState _csRefStore pacts -- never loading modules during continuations
 
   if isLast
     then do
@@ -183,4 +176,4 @@ continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} P
       let newPact = CommandPact _cpTxId _cpContinuation _cpStepCount _cmStep _peYield
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
         ++ show _cmTxId ++ ": " ++ show newPact
-      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert _cmTxId newPact _csPacts 
+      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert _cmTxId newPact _csPacts

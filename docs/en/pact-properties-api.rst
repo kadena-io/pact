@@ -24,7 +24,7 @@ Numerical operators
 
 .. code:: lisp
 
-    (+ x y)
+   (+ x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -42,7 +42,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (- x y)
+   (- x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -60,7 +60,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (* x y)
+   (* x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -78,7 +78,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (/ x y)
+   (/ x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -96,7 +96,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (^ x y)
+   (^ x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -114,7 +114,7 @@ log
 
 .. code:: lisp
 
-    (log b x)
+   (log b x)
 
 -  takes ``b``: *a*
 -  takes ``x``: *a*
@@ -132,7 +132,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (- x)
+   (- x)
 
 -  takes ``x``: *a*
 -  produces *a*
@@ -149,7 +149,7 @@ sqrt
 
 .. code:: lisp
 
-    (sqrt x)
+   (sqrt x)
 
 -  takes ``x``: *a*
 -  produces *a*
@@ -166,7 +166,7 @@ ln
 
 .. code:: lisp
 
-    (ln x)
+   (ln x)
 
 -  takes ``x``: *a*
 -  produces *a*
@@ -183,7 +183,7 @@ exp
 
 .. code:: lisp
 
-    (exp x)
+   (exp x)
 
 -  takes ``x``: *a*
 -  produces *a*
@@ -201,7 +201,7 @@ abs
 
 .. code:: lisp
 
-    (abs x)
+   (abs x)
 
 -  takes ``x``: *a*
 -  produces *a*
@@ -218,14 +218,14 @@ round
 
 .. code:: lisp
 
-    (round x)
+   (round x)
 
 -  takes ``x``: ``decimal``
 -  produces ``integer``
 
 .. code:: lisp
 
-    (round x prec)
+   (round x prec)
 
 -  takes ``x``: ``decimal``
 -  takes ``prec``: ``integer``
@@ -243,14 +243,14 @@ ceiling
 
 .. code:: lisp
 
-    (ceiling x)
+   (ceiling x)
 
 -  takes ``x``: ``decimal``
 -  produces ``integer``
 
 .. code:: lisp
 
-    (ceiling x prec)
+   (ceiling x prec)
 
 -  takes ``x``: ``decimal``
 -  takes ``prec``: ``integer``
@@ -268,14 +268,14 @@ floor
 
 .. code:: lisp
 
-    (floor x)
+   (floor x)
 
 -  takes ``x``: ``decimal``
 -  produces ``integer``
 
 .. code:: lisp
 
-    (floor x prec)
+   (floor x prec)
 
 -  takes ``x``: ``decimal``
 -  takes ``prec``: ``integer``
@@ -293,7 +293,7 @@ mod
 
 .. code:: lisp
 
-    (mod x y)
+   (mod x y)
 
 -  takes ``x``: ``integer``
 -  takes ``y``: ``integer``
@@ -315,7 +315,7 @@ Logical operators
 
 .. code:: lisp
 
-    (> x y)
+   (> x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -333,7 +333,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (< x y)
+   (< x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -351,7 +351,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (>= x y)
+   (>= x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -369,7 +369,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (<= x y)
+   (<= x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -387,7 +387,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (= x y)
+   (= x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -406,7 +406,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (!= x y)
+   (!= x y)
 
 -  takes ``x``: *a*
 -  takes ``y``: *a*
@@ -425,7 +425,7 @@ and
 
 .. code:: lisp
 
-    (and x y)
+   (and x y)
 
 -  takes ``x``: ``bool``
 -  takes ``y``: ``bool``
@@ -442,7 +442,7 @@ or
 
 .. code:: lisp
 
-    (or x y)
+   (or x y)
 
 -  takes ``x``: ``bool``
 -  takes ``y``: ``bool``
@@ -459,7 +459,7 @@ not
 
 .. code:: lisp
 
-    (not x)
+   (not x)
 
 -  takes ``x``: ``bool``
 -  produces ``bool``
@@ -475,7 +475,7 @@ when
 
 .. code:: lisp
 
-    (when x y)
+   (when x y)
 
 -  takes ``x``: ``bool``
 -  takes ``y``: ``bool``
@@ -497,7 +497,7 @@ at
 
 .. code:: lisp
 
-    (at k o)
+   (at k o)
 
 -  takes ``k``: ``string``
 -  takes ``o``: ``object``
@@ -514,7 +514,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (+ x y)
+   (+ x y)
 
 -  takes ``x``: ``object``
 -  takes ``y``: ``object``
@@ -536,7 +536,7 @@ length
 
 .. code:: lisp
 
-    (length s)
+   (length s)
 
 -  takes ``s``: ``string``
 -  produces ``integer``
@@ -552,7 +552,7 @@ Supported in either invariants or properties.
 
 .. code:: lisp
 
-    (+ s t)
+   (+ s t)
 
 -  takes ``s``: ``string``
 -  takes ``t``: ``string``
@@ -569,14 +569,14 @@ str-to-int
 
 .. code:: lisp
 
-    (str-to-int s)
+   (str-to-int s)
 
 -  takes ``s``: ``string``
 -  produces ``integer``
 
 .. code:: lisp
 
-    (str-to-int b s)
+   (str-to-int b s)
 
 -  takes ``b``: ``integer``
 -  takes ``s``: ``string``
@@ -598,7 +598,7 @@ add-time
 
 .. code:: lisp
 
-    (add-time t s)
+   (add-time t s)
 
 -  takes ``t``: ``time``
 -  takes ``s``: *a*
@@ -621,7 +621,7 @@ forall
 
 .. code:: lisp
 
-    (forall (x:string) y)
+   (forall (x:string) y)
 
 -  binds ``x``: *a*
 -  takes ``y``: *r*
@@ -640,7 +640,7 @@ exists
 
 .. code:: lisp
 
-    (exists (x:string) y)
+   (exists (x:string) y)
 
 -  binds ``x``: *a*
 -  takes ``y``: *r*
@@ -659,7 +659,7 @@ column-of
 
 .. code:: lisp
 
-    (column-of t)
+   (column-of t)
 
 -  takes ``t``: ``table``
 -  produces ``type``
@@ -682,7 +682,7 @@ abort
 
 .. code:: lisp
 
-    abort
+   abort
 
 -  of type ``bool``
 
@@ -701,7 +701,7 @@ success
 
 .. code:: lisp
 
-    success
+   success
 
 -  of type ``bool``
 
@@ -720,7 +720,7 @@ result
 
 .. code:: lisp
 
-    result
+   result
 
 -  of type *r*
 -  where *r* is *any type*
@@ -741,7 +741,7 @@ table-written
 
 .. code:: lisp
 
-    (table-written t)
+   (table-written t)
 
 -  takes ``t``: *a*
 -  produces ``bool``
@@ -758,7 +758,7 @@ table-read
 
 .. code:: lisp
 
-    (table-read t)
+   (table-read t)
 
 -  takes ``t``: *a*
 -  produces ``bool``
@@ -775,7 +775,7 @@ cell-delta
 
 .. code:: lisp
 
-    (cell-delta t c r)
+   (cell-delta t c r)
 
 -  takes ``t``: *a*
 -  takes ``c``: *b*
@@ -796,7 +796,7 @@ column-delta
 
 .. code:: lisp
 
-    (column-delta t c)
+   (column-delta t c)
 
 -  takes ``t``: *a*
 -  takes ``c``: *b*
@@ -817,7 +817,7 @@ column-written
 
 .. code:: lisp
 
-    (column-written t c)
+   (column-written t c)
 
 -  takes ``t``: *a*
 -  takes ``c``: *b*
@@ -836,7 +836,7 @@ column-read
 
 .. code:: lisp
 
-    (column-read t c)
+   (column-read t c)
 
 -  takes ``t``: *a*
 -  takes ``c``: *b*
@@ -855,7 +855,7 @@ row-read
 
 .. code:: lisp
 
-    (row-read t r)
+   (row-read t r)
 
 -  takes ``t``: *a*
 -  takes ``r``: ``string``
@@ -873,7 +873,7 @@ row-written
 
 .. code:: lisp
 
-    (row-written t r)
+   (row-written t r)
 
 -  takes ``t``: *a*
 -  takes ``r``: ``string``
@@ -891,7 +891,7 @@ row-read-count
 
 .. code:: lisp
 
-    (row-read-count t r)
+   (row-read-count t r)
 
 -  takes ``t``: *a*
 -  takes ``r``: ``string``
@@ -909,7 +909,7 @@ row-write-count
 
 .. code:: lisp
 
-    (row-write-count t r)
+   (row-write-count t r)
 
 -  takes ``t``: *a*
 -  takes ``r``: ``string``
@@ -927,7 +927,7 @@ row-exists
 
 .. code:: lisp
 
-    (row-exists t r time)
+   (row-exists t r time)
 
 -  takes ``t``: *a*
 -  takes ``r``: ``string``
@@ -946,7 +946,7 @@ read
 
 .. code:: lisp
 
-    (read t r)
+   (read t r)
 
 -  takes ``t``: *a*
 -  takes ``r``: ``string``
@@ -970,7 +970,7 @@ authorized-by
 
 .. code:: lisp
 
-    (authorized-by k)
+   (authorized-by k)
 
 -  takes ``k``: ``string``
 -  produces ``bool``
@@ -986,7 +986,7 @@ row-enforced
 
 .. code:: lisp
 
-    (row-enforced t c r)
+   (row-enforced t c r)
 
 -  takes ``t``: *a*
 -  takes ``c``: *b*

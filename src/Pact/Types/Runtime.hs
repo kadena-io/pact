@@ -23,17 +23,19 @@ module Pact.Types.Runtime
    ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
-   RefState(..),rsLoaded,rsLoadedModules,rsNewModules,
+   RefState(..),rsLoaded,rsLoadedModules,rsNewModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
    Capability(..),CapAcquireResult(..),
+   NamespacePolicy(..), nsPolicy,
+   permissiveNamespacePolicy,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -72,6 +74,14 @@ data Capability
 
 data CapAcquireResult = NewlyAcquired|AlreadyAcquired
   deriving (Eq,Show)
+
+newtype NamespacePolicy = NamespacePolicy
+  { _nsPolicy :: Maybe Namespace -> Bool
+  }
+makeLenses ''NamespacePolicy
+
+permissiveNamespacePolicy :: NamespacePolicy
+permissiveNamespacePolicy = NamespacePolicy $ const True
 
 data StackFrame = StackFrame {
       _sfName :: !Text
@@ -202,6 +212,8 @@ data EvalEnv e = EvalEnv {
     , _eeHash :: Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
+      -- | Namespace Policy
+    , _eeNamespacePolicy :: NamespacePolicy
     } -- deriving (Eq,Show)
 makeLenses ''EvalEnv
 
@@ -209,15 +221,17 @@ makeLenses ''EvalEnv
 
 -- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.
 data RefState = RefState {
-      -- | Namespace-local defs.
+      -- | Imported Module-local defs and natives.
       _rsLoaded :: HM.HashMap Name Ref
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName Module
       -- | Modules that were compiled and loaded in this tx.
     , _rsNewModules :: HM.HashMap ModuleName ModuleData
+      -- | Current Namespace
+    , _rsNamespace :: Maybe Namespace
     } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty HM.empty
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty Nothing
 
 -- | Update for newly-loaded modules and interfaces.
 updateRefStore :: RefState -> RefStore -> RefStore
@@ -416,6 +430,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     purity
     _eeHash
     _eeGasEnv
+    permissiveNamespacePolicy
 
 
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))

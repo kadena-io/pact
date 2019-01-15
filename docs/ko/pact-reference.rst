@@ -48,17 +48,17 @@ JSON 을
 
 .. code:: javascript
 
-    {
-      "nonce": "[nonce value, needs to be unique for every call]",
-      "payload": {
-        "exec": {
-          "code": "[pact code to be executed]",
-          "data": {
-            /* arbitrary user data to accompany code */
-          }
-        }
-      }
-    }
+   {
+     "nonce": "[nonce value, needs to be unique for every call]",
+     "payload": {
+       "exec": {
+         "code": "[pact code to be executed]",
+         "data": {
+           /* arbitrary user data to accompany code */
+         }
+       }
+     }
+   }
 
 메시지를 어셈블링할 때 이 JSON 은 “문자열화”되어 ``cmd`` 필드에
 제공되어야 합니다. Pact 도구의 `API 요청
@@ -93,19 +93,19 @@ JSON 을
 
 .. code:: javascript
 
-    {
-      "nonce": "[nonce value, needs to be unique for every call]",
-      "payload": {
-        "cont": {
-          "txid": [transaction id where pact instantiated]
-          "rollback": [true or false],
-          "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
-          "data": {
-            /* arbitrary user data to accompany step code */
-          }
-        }
-      }
-    }
+   {
+     "nonce": "[nonce value, needs to be unique for every call]",
+     "payload": {
+       "cont": {
+         "txid": [transaction id where pact instantiated]
+         "rollback": [true or false],
+         "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
+         "data": {
+           /* arbitrary user data to accompany step code */
+         }
+       }
+     }
+   }
 
 엔드포인트
 ----------
@@ -125,35 +125,35 @@ http://localhost:8080/api/v1/send\ 로 전송됩니다.
 
 .. code:: javascript
 
-    {
-      "cmds": [
-      {
-        "hash": "[blake2 hash in base16 of 'cmd' string value]",
-        "sigs": [
-          {
-            "sig": "[crypto signature by secret key of 'hash' value]",
-            "pubKey": "[base16-format of public key of signing keypair]",
-            "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-          }
-        ]
-        "cmd": "[stringified transaction JSON]"
-      }
-      // ... more commands
-      ]
-    }
+   {
+     "cmds": [
+     {
+       "hash": "[blake2 hash in base16 of 'cmd' string value]",
+       "sigs": [
+         {
+           "sig": "[crypto signature by secret key of 'hash' value]",
+           "pubKey": "[base16-format of public key of signing keypair]",
+           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+         }
+       ]
+       "cmd": "[stringified transaction JSON]"
+     }
+     // ... more commands
+     ]
+   }
 
 응답 JSON:
 
 ::
 
-    {
-      "status": "success|failure",
-      "response": {
-        "requestKeys": [
-          "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
-        ]
-      }
-    }
+   {
+     "status": "success|failure",
+     "response": {
+       "requestKeys": [
+         "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+       ]
+     }
+   }
 
 /private
 ~~~~~~~~
@@ -167,34 +167,34 @@ http://localhost:8080/api/v1/send\ 로 전송됩니다.
 
 .. code:: javascript
 
-    {
-      "cmds": [
-      {
-        "hash": "[blake2 hash in base16 of 'cmd' string value]",
-        "sigs": [
-          {
-            "sig": "[crypto signature by secret key of 'hash' value]",
-            "pubKey": "[base16-format of public key of signing keypair]",
-            "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-          }
-        ]
-        "cmd": "[stringified transaction JSON]"
-      }
-      ]
-    }
+   {
+     "cmds": [
+     {
+       "hash": "[blake2 hash in base16 of 'cmd' string value]",
+       "sigs": [
+         {
+           "sig": "[crypto signature by secret key of 'hash' value]",
+           "pubKey": "[base16-format of public key of signing keypair]",
+           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+         }
+       ]
+       "cmd": "[stringified transaction JSON]"
+     }
+     ]
+   }
 
 응답 JSON:
 
 ::
 
-    {
-      "status": "success|failure",
-      "response": {
-        "requestKeys": [
-          "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
-        ]
-      }
-    }
+   {
+     "status": "success|failure",
+     "response": {
+       "requestKeys": [
+         "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+       ]
+     }
+   }
 
 /poll
 ~~~~~
@@ -205,28 +205,28 @@ http://localhost:8080/api/v1/send\ 로 전송됩니다.
 
 ::
 
-    {
-      "requestKeys": [
-        "[hash from desired commands to poll]"
-      ]
-    }
+   {
+     "requestKeys": [
+       "[hash from desired commands to poll]"
+     ]
+   }
 
 응답 JSON:
 
 ::
 
-    {
-      "status": "success|failure",
-      "response": {
-        "[command hash]": {
-          "result": {
-            "status": "success|failure",
-            "data": /* data from Pact execution represented as JSON */
-          },
-          "txId": /* integer transaction id, for use in querying history etc */
-        }
-      }
-    }
+   {
+     "status": "success|failure",
+     "response": {
+       "[command hash]": {
+         "result": {
+           "status": "success|failure",
+           "data": /* data from Pact execution represented as JSON */
+         },
+         "txId": /* integer transaction id, for use in querying history etc */
+       }
+     }
+   }
 
 /listen
 ~~~~~~~
@@ -238,24 +238,24 @@ http://localhost:8080/api/v1/send\ 로 전송됩니다.
 
 ::
 
-    {
-      "listen": "[command hash]"
-    }
+   {
+     "listen": "[command hash]"
+   }
 
 응답 JSON:
 
 ::
 
-    {
-      "status": "success|failure",
-      "response": {
-        "result": {
-          "status": "success|failure",
-          "data": /* data from Pact execution represented as JSON */
-        },
-        "txId": /* integer transaction id, for use in querying history etc */
-      }
-    }
+   {
+     "status": "success|failure",
+     "response": {
+       "result": {
+         "status": "success|failure",
+         "data": /* data from Pact execution represented as JSON */
+       },
+       "txId": /* integer transaction id, for use in querying history etc */
+     }
+   }
 
 /local
 ~~~~~~
@@ -270,29 +270,29 @@ http://localhost:8080/api/v1/send\ 로 전송됩니다.
 
 ::
 
-    {
-      "hash": "[blake2 hash in base16 of 'cmd' value]",
-      "sigs": [
-        {
-          "sig": "[crypto signature by secret key of 'hash' value]",
-          "pubKey": "[base16-format of public key of signing keypair]",
-          "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-        }
-      ]
-      "cmd": "[stringified transaction JSON]"
-    }
+   {
+     "hash": "[blake2 hash in base16 of 'cmd' value]",
+     "sigs": [
+       {
+         "sig": "[crypto signature by secret key of 'hash' value]",
+         "pubKey": "[base16-format of public key of signing keypair]",
+         "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+       }
+     ]
+     "cmd": "[stringified transaction JSON]"
+   }
 
 응답 JSON:
 
 ::
 
-    {
-      "status": "success|failure",
-      "response": {
-        "status": "success|failure",
-        "data": /* data from Pact execution represented as JSON */
-      }
-    }
+   {
+     "status": "success|failure",
+     "response": {
+       "status": "success|failure",
+       "data": /* data from Pact execution represented as JSON */
+     }
+   }
 
 API 요청 포맷터
 ---------------
@@ -306,28 +306,28 @@ Postman 혹은 ``curl``\ 과 같은 POST 도구와 사용할 수 있습니다.
 
 ::
 
-    code: "(+ 1 2)"
-    data:
-      name: Stuart
-      language: Pact
-    keyPairs:
-      - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
-        secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+   code: "(+ 1 2)"
+   data:
+     name: Stuart
+     language: Pact
+   keyPairs:
+     - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+       secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
 
 를 ``pact``\ 에 제공해서 유효한 API 요청을 얻을 수 있습니다.
 
 ::
 
-    $ pact -a tests/apireq.yaml -l
-    {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
+   $ pact -a tests/apireq.yaml -l
+   {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
 
 아래 코드는 포트 8080 에서 실행 중인 Pact 서버에 일치하는 curl 으로
 파이핑을 하는 예입니다.
 
 ::
 
-    $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
-    {"status":"success","response":{"status":"success","data":3}}
+   $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
+   {"status":"success","response":{"status":"success","data":3}}
 
 .. _request-yaml:
 
@@ -342,35 +342,35 @@ Postman 혹은 ``curl``\ 과 같은 POST 도구와 사용할 수 있습니다.
 
 .. code:: yaml
 
-      code: Transaction code
-      codeFile: Transaction code file
-      data: JSON transaction data
-      dataFile: JSON transaction data file
-      keyPairs: list of key pairs for signing (use pact -g to generate): [
-        public: base 16 public key
-        secret: base 16 secret key
-        ]
-      nonce: optional request nonce, will use current time if not provided
-      from: entity name for addressing private messages
-      to: entity names for addressing private messages
+     code: Transaction code
+     codeFile: Transaction code file
+     data: JSON transaction data
+     dataFile: JSON transaction data file
+     keyPairs: list of key pairs for signing (use pact -g to generate): [
+       public: base 16 public key
+       secret: base 16 secret key
+       ]
+     nonce: optional request nonce, will use current time if not provided
+     from: entity name for addressing private messages
+     to: entity names for addressing private messages
 
 진행 타입의 요청 YAML 파일은 다음 키를 가져옵니다.
 
 .. code:: yaml
 
-      type: "cont"
-      txId: Integer transaction id of pact
-      step: Integer next step of a pact
-      rollback: Boolean for rollingback a pact
-      data: JSON transaction data
-      dataFile: JSON transaction data file
-      keyPairs: list of key pairs for signing (use pact -g to generate): [
-        public: base 16 public key
-        secret: base 16 secret key
-        ]
-      nonce: optional request nonce, will use current time if not provided
-      from: entity name for addressing private messages
-      to: entity names for addressing private messages
+     type: "cont"
+     txId: Integer transaction id of pact
+     step: Integer next step of a pact
+     rollback: Boolean for rollingback a pact
+     data: JSON transaction data
+     dataFile: JSON transaction data file
+     keyPairs: list of key pairs for signing (use pact -g to generate): [
+       public: base 16 public key
+       secret: base 16 secret key
+       ]
+     nonce: optional request nonce, will use current time if not provided
+     from: entity name for addressing private messages
+     to: entity names for addressing private messages
 
 .. _concepts:
 
@@ -450,10 +450,9 @@ Pact 2.2 에서는 모듈 선언 내에 ``use`` 문을 발행할 수 있습니�
 테이블 생성
 ^^^^^^^^^^^
 
-테이블은 모듈과 동시에
-`생성 <pact-functions.html#create-table>`__\ 됩니다. 테이블은 모듈에서
-*정의* 가 되지만 모듈보다 “나중에” *생성* 되기 때문에 테이블을 반드시
-재생성하지 않고도 모듈을 재정의할 수 있습니다.
+테이블은 모듈과 동시에 `생성 <#create-table>`__\ 됩니다. 테이블은
+모듈에서 *정의* 가 되지만 모듈보다 “나중에” *생성* 되기 때문에 테이블을
+반드시 재생성하지 않고도 모듈을 재정의할 수 있습니다.
 
 모듈과 테이블의 관계는 중요합니다 `테이블 보호
 참조 <#module-table-guards>`__.
@@ -532,27 +531,26 @@ Key-Row 모델
 
 Pact 2.3 에서는 Pact 가 테이블에서 여러 행을 선택할 수 있도록 강력한
 쿼리 메커니즘을 제공합니다. SQL 과 시각적으로는 유사하지만
-`select <pact-functions.html#select>`__ 및
-`where <pact-functions.html#where>`__ 연산이 테이블에 *스트리밍
+`select <#select>`__ 및 `where <#where>`__ 연산이 테이블에 *스트리밍
 인터페이스* 를 제공합니다. 테이블에서는 사용자가 필터 함수를 제공한
-다음, `sort <pact-functions.html#sort>`__ 및 기타 함수를 사용하여 리스트
-데이터 구조로서 행 집합을 사용합니다.
+다음, `sort <#sort>`__ 및 기타 함수를 사용하여 리스트 데이터 구조로서 행
+집합을 사용합니다.
 
 .. code:: lisp
 
-    ;; the following selects Programmers with salaries >= 90000 and sorts by age descending
+   ;; the following selects Programmers with salaries >= 90000 and sorts by age descending
 
-    (reverse (sort ['age]
-      (select 'employees ['first-name,'last-name,'age]
-        (and? (where 'title (= "Programmer"))
-              (where 'salary (< 90000))))))
+   (reverse (sort ['age]
+     (select 'employees ['first-name,'last-name,'age]
+       (and? (where 'title (= "Programmer"))
+             (where 'salary (< 90000))))))
 
-    ;; the same query could be performed on a list with 'filter':
+   ;; the same query could be performed on a list with 'filter':
 
-    (reverse (sort ['age]
-      (filter (and? (where 'title (= "Programmer"))
-                    (where 'salary (< 90000)))
-              employees)))
+   (reverse (sort ['age]
+     (filter (and? (where 'title (= "Programmer"))
+                   (where 'salary (< 90000)))
+             employees)))
 
 트랜잭셔널 설정에서 Pact 데이터베이스 상호 작용은 단일 행 읽기 및 쓰기
 작업에 대해 최적화되기 때문에 이러한 쿼리의 성능이 저하되고 컴퓨팅
@@ -571,10 +569,10 @@ NULL 값 없음
 
 Pact의 경우 데이터베이스 메타포에서 NULL 값이라는 개념이 없습니다. Row
 값이 발견되지 않으면 데이터베이스 결과에 대한 컴퓨팅을 위한 메인 함수인
-`with-read <pact-functions.html#with-read>`__\ 에 오류가 발생합니다.
-작성자는 모든 트랜잭션 읽기 작업에 대한 값이 존재하는지 확인해야 합니다.
-이는 *전체성* 을 보장하고 NULL 값을 둘러싼 불필요하고 안전하지 않은 제어
-흐름을 피하기 위한 보안 기능입니다.
+`with-read <#with-read>`__\ 에 오류가 발생합니다. 작성자는 모든 트랜잭션
+읽기 작업에 대한 값이 존재하는지 확인해야 합니다. 이는 *전체성* 을
+보장하고 NULL 값을 둘러싼 불필요하고 안전하지 않은 제어 흐름을 피하기
+위한 보안 기능입니다.
 
 .. _dbversions:
 
@@ -622,13 +620,13 @@ Pact 2.0 에서는 Pact 가 비록 선택 사항이기는 하지만 명시적 �
 모듈에서의 정적 타입 추론 (Static Type Inference)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Pact 해석기는 `typecheck <pact-functions.html#typecheck>`__ REPL 명령을
-통해 모듈을 분석하고 모든 변수, 함수 애플리케이션 또는 상수 정의에 있어
-타입 추론을 시도합니다. 프로젝트 REPL 스크립트에서 이 명령을 사용하면
-개발자가 타입체킹을 성공적으로 할 수 있기 때문에 “충분한 타입들”을
-추가할 수 있습니다. 타입체킹을 완벽하게 성공하기 위해서는 모든 테이블에
-스키마를 제공하고 애매하거나 과부하 상태의 기본 함수를 호출하는 보조
-함수에 인수 타입을 제공해야 합니다.
+Pact 해석기는 `typecheck <#typecheck>`__ REPL 명령을 통해 모듈을
+분석하고 모든 변수, 함수 애플리케이션 또는 상수 정의에 있어 타입 추론을
+시도합니다. 프로젝트 REPL 스크립트에서 이 명령을 사용하면 개발자가
+타입체킹을 성공적으로 할 수 있기 때문에 “충분한 타입들”을 추가할 수
+있습니다. 타입체킹을 완벽하게 성공하기 위해서는 모든 테이블에 스키마를
+제공하고 애매하거나 과부하 상태의 기본 함수를 호출하는 보조 함수에 인수
+타입을 제공해야 합니다.
 
 정형 검증 (Formal Verification)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -654,28 +652,27 @@ Pact는 비트코인 스크립트의 영향을 받아 스마트 컨트랙트 실
 키셋 정의
 ~~~~~~~~~
 
-키셋은 메시지 페이로드에서 정의를
-`읽어 <pact-functions.html#read-keyset>`__
-`정의됩니다 <pact-functions.html#define-keyset>`__.키셋은 퍼블릭 키
-리스트와 *키셋 predicate* 으로 이루어져 있습니다.
+키셋은 메시지 페이로드에서 정의를 `읽어 <#read-keyset>`__
+`정의됩니다 <#define-keyset>`__.키셋은 퍼블릭 키 리스트와 *키셋
+predicate* 으로 이루어져 있습니다.
 
 유효한 키셋 JSON 제작 예시:
 
 .. code:: javascript
 
-    /* examples of valid keysets */
-    {
-      "fully-specified-with-native-pred":
-        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
+   /* examples of valid keysets */
+   {
+     "fully-specified-with-native-pred":
+       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
 
-      "fully-specified-with-qual-custom":
-        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "my-module.custom-pred" },
+     "fully-specified-with-qual-custom":
+       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "my-module.custom-pred" },
 
-      "keysonly":
-        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* defaults to "keys-all" pred */
+     "keysonly":
+       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* defaults to "keys-all" pred */
 
-      "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
-    }
+     "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
+   }
 
 .. _keyset-predicates:
 
@@ -692,14 +689,12 @@ Pact는 비트코인 스크립트의 영향을 받아 스마트 컨트랙트 실
 시그니처” 컨트랙트 (펀드 퍼블릭에 최소 두 개의 시그니처가 필요)의 강력한
 기능입니다.
 
-Pact 에는 `keys-all <pact-functions.html#keys-all>`__,
-`keys-any <pact-functions.html#keys-any>`__,
-`keys-2 <pact-functions.html#keys-2>`__ 같은 키셋 predicate 이
-기본적으로 포함되어 있습니다. 모듈 작성자는 자유롭게 추가 predicate 을
-정의할 수 있습니다.
+Pact 에는 `keys-all <#keys-all>`__, `keys-any <#keys-any>`__,
+`keys-2 <#keys-2>`__ 같은 키셋 predicate 이 기본적으로 포함되어
+있습니다. 모듈 작성자는 자유롭게 추가 predicate 을 정의할 수 있습니다.
 
 키셋 predicate 이 지정되어 있지 않은 경우에는
-`keys-all <pact-functions.html#keys-all>`__\ 으로 기본 설정됩니다.
+`keys-all <#keys-all>`__\ 으로 기본 설정됩니다.
 
 .. _keyrotation:
 
@@ -715,14 +710,13 @@ Pact 에는 `keys-all <pact-functions.html#keys-all>`__,
 모듈 테이블 보호
 ~~~~~~~~~~~~~~~~
 
-테이블을 `생성 <pact-functions.html#create-table>`__\ 할 때 모듈 이름도
-반드시 지정해야 합니다. 이 메커니즘에서는 `data-access
-함수 <pact-functions.html#database>`__\ 를 통한 테이블 직접 액세스가
-모듈의 관리자 키셋에 의해 권한이 부여되도록 모듈별로 테이블이 “보호”
-또는 “캡슐화” 됩니다. 한편 *모듈 함수 내* 에서는 테이블 액세스가
-자유롭습니다. 이 기능은 컨트랙트서 작성자가 데이터 액세스를 자유롭게
-설계하도록 도와주고, 모듈을 주 “사용자” 데이터 액세스 API 로 소중하게
-다룰 수 있게 해줍니다.
+테이블을 `생성 <#create-table>`__\ 할 때 모듈 이름도 반드시 지정해야
+합니다. 이 메커니즘에서는 `data-access 함수 <#database>`__\ 를 통한
+테이블 직접 액세스가 모듈의 관리자 키셋에 의해 권한이 부여되도록
+모듈별로 테이블이 “보호” 또는 “캡슐화” 됩니다. 한편 *모듈 함수 내*
+에서는 테이블 액세스가 자유롭습니다. 이 기능은 컨트랙트서 작성자가
+데이터 액세스를 자유롭게 설계하도록 도와주고, 모듈을 주 “사용자” 데이터
+액세스 API 로 소중하게 다룰 수 있게 해줍니다.
 
 .. _rowlevelkeysets:
 
@@ -734,20 +728,19 @@ Row-level 키셋
 
 .. code:: lisp
 
-    (defun create-account (id)
-      (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
+   (defun create-account (id)
+     (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
 
-    (defun read-balance (id)
-      (with-read accounts id { "balance":= bal, "keyset":= ks }
-        (enforce-keyset ks)
-        (format "Your balance is {}" [bal])))
+   (defun read-balance (id)
+     (with-read accounts id { "balance":= bal, "keyset":= ks }
+       (enforce-keyset ks)
+       (format "Your balance is {}" [bal])))
 
 이 예시에서 ``create-account``\ 는 테이블에 “키셋” 형태로 저장할 수
-있도록 `read-keyset <pact-functions.html#read-keyset>`__\ 을 사용해
-메시지 페이로드로부터 키셋 정의를 읽어들입니다. ``read-balance``\ 는
-먼저 `enforce-keyset <pact-functions.html#enforce-keyset>`__\ 을 사용해
-키셋을 적용함으로써 해당 소유자의 키셋은 나머지만 읽을 수 있도록
-허용합니다.
+있도록 `read-keyset <#read-keyset>`__\ 을 사용해 메시지 페이로드로부터
+키셋 정의를 읽어들입니다. ``read-balance``\ 는 먼저
+`enforce-keyset <#enforce-keyset>`__\ 을 사용해 키셋을 적용함으로써 해당
+소유자의 키셋은 나머지만 읽을 수 있도록 허용합니다.
 
 .. _computation:
 
@@ -763,11 +756,10 @@ Row-level 키셋
 
 Pact는 튜링 불완전성을 보이기 때문에 재귀가 발생하지 않고(재귀는 실행
 전에 감지되고 오류를 발생) 무한대 루프가 불가능합니다. Pact는
-`맵(map) <pact-functions.html#map>`__,
-`폴드(fold) <pact-functions.html#fold>`__ 및
-`필터(filter) <pact-functions.html#filter>`__\ 를 통해 리스트 구조에
-대한 연산을 지원하지만, 무한대 리스트를 정의할 수 없다는 점에서 반드시
-유계되는 것은 아닙니다.
+`맵(map) <#map>`__, `폴드(fold) <#fold>`__ 및
+`필터(filter) <#filter>`__\ 를 통해 리스트 구조에 대한 연산을
+지원하지만, 무한대 리스트를 정의할 수 없다는 점에서 반드시 유계되는 것은
+아닙니다.
 
 튜링 불완전성 덕분에 Pact 모듈 로딩 시 모든 참조를 미리 결정할 수
 있으며, 이는 곧 조회 테이블에서 함수를 처리하는 대신에 함수 정의를 콜
@@ -783,10 +775,9 @@ Pact에서는 `let 표현식 <#let>`__ 및 `바인딩 <#bindings>`__\ 에서 변
 선언이 가능합니다. 변수는 변경이 불가능하기 때문에 현장에서 재할당 또는
 수정을 할 수 없습니다.
 
-일반적인 변수 선언은 `with-read <pact-functions.html#with-read>`__
-함수에서 이루어지며 이름에 따라 열 값에 변수를 할당합니다.
-`bind <pact-functions.html#bind>`__ 함수는 객체에 이와 동일한 기능을
-제공합니다.
+일반적인 변수 선언은 `with-read <#with-read>`__ 함수에서 이루어지며
+이름에 따라 열 값에 변수를 할당합니다. `bind <#bind>`__ 함수는 객체에
+이와 동일한 기능을 제공합니다.
 
 모듈 전역 상수 값은 `defconst <#defconst>`__\ 를 통해 선언이 가능합니다.
 
@@ -849,17 +840,17 @@ Pact는 블록체인에 비즈니스 이벤트를 신속하게 기록하기 유�
 
 ::
 
-    (accounts.transfer "Acct1" "Acct2" 100.00)
+   (accounts.transfer "Acct1" "Acct2" 100.00)
 
 또는 메시지 JSON 페이로드에서 값을 읽어올 수 있습니다.
 
 ::
 
-    (defun transfer-msg ()
-      (transfer (read-msg "from") (read-msg "to")
-                (read-decimal "amount")))
-    ...
-    (accounts.transfer-msg)
+   (defun transfer-msg ()
+     (transfer (read-msg "from") (read-msg "to")
+               (read-decimal "amount")))
+   ...
+   (accounts.transfer-msg)
 
 후자의 경우, 트랜잭션 시 해석할 코드 수가 적으므로 실행 속도가 약간 더
 빠릅니다.
@@ -880,8 +871,8 @@ Pact는 블록체인에 비즈니스 이벤트를 신속하게 기록하기 유�
 Control Flow
 ~~~~~~~~~~~~
 
-Pact는 `if <pact-functions.html#if>`__, 바운드 루핑 및 함수
-애플리케이션을 통해 조건문을 지원합니다.
+Pact는 `if <#if>`__, 바운드 루핑 및 함수 애플리케이션을 통해 조건문을
+지원합니다.
 
 .. _evilif:
 
@@ -904,46 +895,43 @@ enforce 사용
 ^^^^^^^^^^^^
 
 “if”는 비즈니스 로직 불변식을 적용하는 데 사용해서는 안 됩니다. 대신에
-`enforce <pact-functions.html#enforce>`__\ 를 선택해서 트랜잭션을
-실패시키는 것이 좋습니다
+`enforce <#enforce>`__\ 를 선택해서 트랜잭션을 실패시키는 것이 좋습니다
 
 실제로 실패는 Pact 에서 허용되는 유일한 *비 로컬 종료* 입니다. 이것을
 보더라도 Pact 가 *전체성* 에 중점을 두고 있다는 것을 알 수 있습니다.
 
-`enforce-one <pact-functions.html#enforce-one>`__\ (Pact 2.3 에 새롭게
-추가)을 사용하면 하나가 통과되면 전체 표현식이 통과되도록 적용 리스트를
-테스트할 수 있습니다. 이는 Pact 에서 “예외 포착”을 보여주는 유일한
-예입니다. 예외 포착의 경우 적용이 실패하면 다음 테스트가 실행되고
-테스트를 통과하면 쇼트 서킷이 이루어집니다.
+`enforce-one <#enforce-one>`__\ (Pact 2.3 에 새롭게 추가)을 사용하면
+하나가 통과되면 전체 표현식이 통과되도록 적용 리스트를 테스트할 수
+있습니다. 이는 Pact 에서 “예외 포착”을 보여주는 유일한 예입니다. 예외
+포착의 경우 적용이 실패하면 다음 테스트가 실행되고 테스트를 통과하면
+쇼트 서킷이 이루어집니다.
 
 내장된 키셋 사용
 ^^^^^^^^^^^^^^^^
 
-`keys-all <pact-functions.html#keys-all>`__,
-`keys-any <pact-functions.html#keys-any>`__,
-`keys-2 <pact-functions.html#keys-2>`__ 같이 내장된 키셋 함수는 신속한
-실행을 위해 해석기에 하드 코딩됩니다. 사용자 지정 키셋의 경우 런타임 시
-결정이 필요하기 때문에 속도가 저하됩니다.
+`keys-all <#keys-all>`__, `keys-any <#keys-any>`__, `keys-2 <#keys-2>`__
+같이 내장된 키셋 함수는 신속한 실행을 위해 해석기에 하드 코딩됩니다.
+사용자 지정 키셋의 경우 런타임 시 결정이 필요하기 때문에 속도가
+저하됩니다.
 
 .. _fp:
 
 함수형 개념
 ~~~~~~~~~~~
 
-Pact 에는 `맵(map) <pact-functions.html#map>`__,
-`폴드(fold) <pact-functions.html#fold>`__ 및
-`필터(filter) <pact-functions.html#filter>`__\ 와 같은 함수형 프로그래밍
-“최고 인기 기법”이 포함되어 있습니다. 이들은 모두 `부분
+Pact 에는 `맵(map) <#map>`__, `폴드(fold) <#fold>`__ 및
+`필터(filter) <#filter>`__\ 와 같은 함수형 프로그래밍 “최고 인기 기법”이
+포함되어 있습니다. 이들은 모두 `부분
 애플리케이션 <#partial-application>`__\ 을 채택하고 있어서 함수를
 연속적으로 실행하도록 리스트 항목이 애플리케이션 인수에 추가됩니다.
 
 .. code:: lisp
 
-    (map (+ 2) [1 2 3])
-    (fold (+) "" ["Concatenate" " " "me"])
+   (map (+ 2) [1 2 3])
+   (fold (+) "" ["Concatenate" " " "me"])
 
-또한 Pact는 `compose <pact-functions.html#compose>`__\ 를 가지고 있어서
-함수형 스타일으로 애플리케이션을 “체인 연결”할 수 있습니다.
+또한 Pact는 `compose <#compose>`__\ 를 가지고 있어서 함수형 스타일으로
+애플리케이션을 “체인 연결”할 수 있습니다.
 
 .. _pure:
 
@@ -971,10 +959,9 @@ Pact 가 LISP 구문을 사용하는 목적은 런타임 표현을 직접 코드
 ~~~~~~~~~~~~~
 
 Pact에서는 JSON 페이로드 및 시그니처를 통해 메시지에 코드가 도달합니다.
-메시지 데이터는 `read-msg <pact-functions.html#read-msg>`__ 및 관련
-함수를 사용해 읽는 반면, 시그니처는 직접 읽기 또는 쓰기가 불가능합니다.
-따라서 이들은 `키셋 Predicate <#keysetpredicates>`__ 적용 과정에서
-평가됩니다.
+메시지 데이터는 `read-msg <#read-msg>`__ 및 관련 함수를 사용해 읽는
+반면, 시그니처는 직접 읽기 또는 쓰기가 불가능합니다. 따라서 이들은 `키셋
+Predicate <#keysetpredicates>`__ 적용 과정에서 평가됩니다.
 
 .. _json:
 
@@ -983,8 +970,8 @@ JSON 지원
 
 Pact 트랜잭션에서 반환된 값들은 JSON 값으로 직접 표현됩니다.
 
-`read-msg <pact-functions.html#read-msg>`__\ 를 통해 메시지에서 값을
-읽을 때 Pact는 다음과 같이 JSON 타입을 강제 변환합니다.
+`read-msg <#read-msg>`__\ 를 통해 메시지에서 값을 읽을 때 Pact는 다음과
+같이 JSON 타입을 강제 변환합니다.
 
 -  문자열 -> 문자열
 -  숫자 -> 정수(반올림)
@@ -993,8 +980,7 @@ Pact 트랜잭션에서 반환된 값들은 JSON 값으로 직접 표현됩니�
 -  array -> list
 -  Null -> JSON 값
 
-10진수는 문자열로 표현되고
-`read-decimal <pact-functions.html#read-decimal>`__\ 을 사용해
+10진수는 문자열로 표현되고 `read-decimal <#read-decimal>`__\ 을 사용해
 읽어들입니다.
 
 .. _confidentiality:
@@ -1056,9 +1042,8 @@ Pacts는 종료 및 재진입 지정이 여러 프라이빗 *coroutine* 함수�
 Pacts는 함수 정의와 비슷하게 인수로 정의됩니다. 그러나 인수 값은 초기
 스텝을 실행할 때만 평가되며, 이후 인수 값은 후속 스텝에서 변경되지 않은
 상태로 계속 사용될 수 있습니다. 후속 스텝들에게 새 값을 공유하기 위해
-해당 스텝에서 값을 `yield <pact-functions.html#yield>`__\ 한 뒤 후속
-스텝에서 `resume <pact-functions.html#resume>`__ 바인딩 폼을 사용해
-복구할 할 수 있습니다.
+해당 스텝에서 값을 `yield <#yield>`__\ 한 뒤 후속 스텝에서
+`resume <#resume>`__ 바인딩 폼을 사용해 복구할 할 수 있습니다.
 
 Pacts는 프라이빗과 퍼블릭 두 가지 맥락 중 하나에서 실행되도록
 설계되었습니다. 프라이빗 Pacts는 해당 스텝을 실행하기 위해 단일 엔터티를
@@ -1108,8 +1093,7 @@ CONTINUATION 명령을 자동으로 전송합니다.
 Yield 및 Resume
 ~~~~~~~~~~~~~~~
 
-`yield <pact-functions.html#yield>`__ 및
-`resume <pact-functions.html#resume>`__\ 을 사용하여 한 스텝에서 다음
+`yield <#yield>`__ 및 `resume <#resume>`__\ 을 사용하여 한 스텝에서 다음
 스텝으로 값을 양도(yield)하고 재개(resume)할 수 있습니다. Public Pact의
 경우, 이 값은 블록체인 Pact 범위 내에 유지되기 때문에 위조가
 불가능합니다. Private Pact의 경우, 이 값은 실행된 엔터티에서 RESUME
@@ -1118,25 +1102,23 @@ Yield 및 Resume
 Pact 실행 범위 및 ``pact-id``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Pact 가 시작될 때마다 `pact-id <pact-functions.html#pact-id>`__ 함수를
-사용해 검색이 가능한 고유 ID 가 부여됩니다. 이 함수는 현재 실행 중인
-Pact의 ID 를 반환하거나 Pact 범위 내에서 실행 중이 아닌 경우에는 실패를
-반환합니다. 이러한 메커니즘은 키셋 및 시그니처 사용과 비슷하게 리소스에
-대한 액세스를 보호하는 데 사용할 수 있습니다. 이 메커니즘의 전형적인
-용도는 해당 Pact의 맥락 내에서만 사용이 가능한 에스크로 계정을
-생성함으로써 다양한 사용 사례에서 신뢰할 수 있는 제 3 자가 필요하지
-않도록 하는 것입니다.
+Pact 가 시작될 때마다 `pact-id <#pact-id>`__ 함수를 사용해 검색이 가능한
+고유 ID 가 부여됩니다. 이 함수는 현재 실행 중인 Pact의 ID 를 반환하거나
+Pact 범위 내에서 실행 중이 아닌 경우에는 실패를 반환합니다. 이러한
+메커니즘은 키셋 및 시그니처 사용과 비슷하게 리소스에 대한 액세스를
+보호하는 데 사용할 수 있습니다. 이 메커니즘의 전형적인 용도는 해당
+Pact의 맥락 내에서만 사용이 가능한 에스크로 계정을 생성함으로써 다양한
+사용 사례에서 신뢰할 수 있는 제 3 자가 필요하지 않도록 하는 것입니다.
 
 Pacts 테스트
 ~~~~~~~~~~~~
 
-`env-entity <pact-functions.html#env-entity>`__,
-`env-step <pact-functions.html#env-step>`__ 및
-`pact-state <pact-functions.html#pact-state>`__ REPL 함수를 사용해 REPL
-스크립트에서 Pact를 테스트하여 Pact 실행을 시뮬레이션할 수 있습니다.
-진행 타입의 요청 `continuation Request <#request-yaml>`__ YAML 파일을
-``cont`` 페이로드가 포함된 API 요청으로 포맷팅하여 Pact 서버 API 에서
-Pact 실행을 시뮬레이션할 수도 있습니다.
+`env-entity <#env-entity>`__, `env-step <#env-step>`__ 및
+`pact-state <#pact-state>`__ REPL 함수를 사용해 REPL 스크립트에서 Pact를
+테스트하여 Pact 실행을 시뮬레이션할 수 있습니다. 진행 타입의 요청
+`continuation Request <#request-yaml>`__ YAML 파일을 ``cont`` 페이로드가
+포함된 API 요청으로 포맷팅하여 Pact 서버 API 에서 Pact 실행을
+시뮬레이션할 수도 있습니다.
 
 .. _dependency-management:
 
@@ -1151,13 +1133,13 @@ Pact는 다른 Pact 모듈에 대한 모듈의 종속 요소를 관리할 수 �
 
 로드가 완료된 Pact 모듈은 모듈의 소스 코드 텍스트에서 컴퓨팅된 해시와
 연결됩니다. 이러한 모듈 해시는 해당 모듈의 버전을 고유하게 식별합니다.
-`describe-module <pact-functions.html#describe-module>`__\ 을 통해 모듈
-해시를 검토할 수 있습니다.
+`describe-module <#describe-module>`__\ 을 통해 모듈 해시를 검토할 수
+있습니다.
 
 ::
 
-    pact> (at "hash" (describe-module 'accounts))
-    "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+   pact> (at "hash" (describe-module 'accounts))
+   "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
 
 ``use``\ 를 통한 모듈 버전 고정
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1194,11 +1176,11 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 .. code:: lisp
 
-    (module provider 'keyset
-      (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-      (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
-      ...
-    )
+   (module provider 'keyset
+     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+     ...
+   )
 
 위의 블레스된 해시들은 해당 모듈의 이전 버전 해시들이며 이 해시들이
 종속된 업스트림 코드들은 그대로 작동합니다. 하지만 블레스되지 않은
@@ -1238,18 +1220,18 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 ::
 
-    pact> "a string"
-    "a string"
+   pact> "a string"
+   "a string"
 
 또한 문자열은 공백 앞뒤에 백슬래시 기호를 넣어서(양방향은 아님) 다중
 라인을 지원합니다.
 
 .. code:: lisp
 
-    (defun id (a)
-      "Identity function. \
-      \Argument is returned."
-      a)
+   (defun id (a)
+     "Identity function. \
+     \Argument is returned."
+     a)
 
 .. _symbols:
 
@@ -1265,8 +1247,8 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 ::
 
-    pact> 'a-symbol
-    "a-symbol"
+   pact> 'a-symbol
+   "a-symbol"
 
 .. _integers:
 
@@ -1278,10 +1260,10 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 ::
 
-    pact> 12345
-    12345
-    pact> -922337203685477580712387461234
-    -922337203685477580712387461234
+   pact> 12345
+   12345
+   pact> -922337203685477580712387461234
+   -922337203685477580712387461234
 
 .. _decimals:
 
@@ -1292,10 +1274,10 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 ::
 
-    pact> 100.25
-    100.25
-    pact> -356452.234518728287461023856582382983746
-    -356452.234518728287461023856582382983746
+   pact> 100.25
+   100.25
+   pact> -356452.234518728287461023856582382983746
+   -356452.234518728287461023856582382983746
 
 .. _booleans:
 
@@ -1306,8 +1288,8 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 ::
 
-    pact> (and true false)
-    false
+   pact> (and true false)
+   false
 
 .. _lists:
 
@@ -1319,14 +1301,14 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 ::
 
-    pact> [1 2 3]
-    [1 2 3]
-    pact> [1,2,3]
-    [1 2 3]
-    pact> (typeof [1 2 3])
-    "[integer]"
-    pact> (typeof [1 2 true])
-    "list"
+   pact> [1 2 3]
+   [1 2 3]
+   pact> [1,2,3]
+   [1 2 3]
+   pact> (typeof [1 2 3])
+   "[integer]"
+   pact> (typeof [1 2 true])
+   "list"
 
 .. _objects:
 
@@ -1339,8 +1321,8 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 ::
 
-    pact> { "foo": (+ 1 2), "bar": "baz" }
-    (TObject [("foo",3),("bar","baz")])
+   pact> { "foo": (+ 1 2), "bar": "baz" }
+   (TObject [("foo",3),("bar","baz")])
 
 .. _bindings:
 
@@ -1349,17 +1331,15 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 바인딩은 역시 중괄호를 사용해 만든 딕셔너리와 비슷한 양식으로, ``:=``
 연산자를 사용해 변수에 데이터베이스 결과를 연결합니다. 이들은
-`with-read <pact-functions.html#with-read>`__,
-`with-default-read <pact-functions.html#with-default-read>`__,
-`bind <pact-functions.html#bind>`__ 및
-`resume <pact-functions.html#resume>`__\ 에서 한 행에 명명된 열들과 한
+`with-read <#with-read>`__, `with-default-read <#with-default-read>`__,
+`bind <#bind>`__ 및 `resume <#resume>`__\ 에서 한 행에 명명된 열들과 한
 객체의 값들에 변수를 할당하는 데 사용됩니다.
 
 .. code:: lisp
 
-    (defun check-balance (id)
-      (with-read accounts id { "balance" := bal }
-        (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
+   (defun check-balance (id)
+     (with-read accounts id { "balance" := bal }
+       (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
 
 타입 지정자
 -----------
@@ -1389,8 +1369,8 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 .. code:: lisp
 
-    table:{accounts}
-    object:{person}
+   table:{accounts}
+   object:{person}
 
 타입을 가질 수 있는 형태
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1400,14 +1380,14 @@ Pact에서는 모듈이 로드될 때 모든 사용자 코드 레퍼런스를 �
 
 .. code:: lisp
 
-    (defun prefix:string (pfx:string str:string) (+ pfx str))
+   (defun prefix:string (pfx:string str:string) (+ pfx str))
 
 let 변수
 ^^^^^^^^
 
 .. code:: lisp
 
-    (let ((a:integer 1) (b:integer 2)) (+ a b))
+   (let ((a:integer 1) (b:integer 2)) (+ a b))
 
 테이블 및 객체
 ^^^^^^^^^^^^^^
@@ -1416,16 +1396,16 @@ let 변수
 
 .. code:: lisp
 
-    (deftable accounts:{account})
+   (deftable accounts:{account})
 
-    (defun get-order:{order} (id) (read orders id))
+   (defun get-order:{order} (id) (read orders id))
 
 상수 (Consts)
 ^^^^^^^^^^^^^
 
 .. code:: lisp
 
-    (defconst PENNY:decimal 0.1)
+   (defconst PENNY:decimal 0.1)
 
 .. _special-forms:
 
@@ -1440,9 +1420,9 @@ let 변수
 
 .. code:: lisp
 
-    (defun average (a b)
-      "take the average of a and b"
-      (/ (+ a b) 2))
+   (defun average (a b)
+     "take the average of a and b"
+     (/ (+ a b) 2))
 
 또 다른 방법으로는 ``@`` 접두사를 통해 메타데이터를 지정할 수 있습니다.
 지원하는 메타데이터에는 ``@doc`` 또는 ``@model``\ 이 있으며 Pact
@@ -1450,10 +1430,10 @@ let 변수
 
 .. code:: lisp
 
-    (defun average (a b)
-      @doc   "take the average of a and b"
-      @model (property (= (+ a b) (* 2 result)))
-      (/ (+ a b) 2))
+   (defun average (a b)
+     @doc   "take the average of a and b"
+     @model (property (= (+ a b) (* 2 result)))
+     (/ (+ a b) 2))
 
 사실 ``"foo"``\ 라는 다큐멘테이션용 문자열은 ``@doc "foo"``\ 을 줄인것에
 불과합니다.
@@ -1466,7 +1446,7 @@ bless
 
 ::
 
-    (bless HASH)
+   (bless HASH)
 
 모듈 선언 내에서 HASH 로 식별되는 해당 모듈의 이전 버전을 블레스합니다.
 블레스 메커니즘에 대한 내용은 `종속 요소
@@ -1474,52 +1454,52 @@ bless
 
 .. code:: lisp
 
-    (module provider 'keyset
-      (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-      (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
-      ...
-    )
+   (module provider 'keyset
+     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+     ...
+   )
 
 defun
 ~~~~~
 
 .. code:: lisp
 
-    (defun NAME ARGLIST [DOC-OR-META] BODY...)
+   (defun NAME ARGLIST [DOC-OR-META] BODY...)
 
 DOC-OR-META 옵션을 통해 ARGLIST 인수를 수락하도록 NAME 을 함수로
 정의합니다. 인수는 BODY 의 범위 내, 즉 하나 이상의 표현식에 있습니다.
 
 .. code:: lisp
 
-    (defun add3 (a b c) (+ a (+ b c)))
+   (defun add3 (a b c) (+ a (+ b c)))
 
-    (defun scale3 (a b c s)
-      "multiply sum of A B C times s"
-      (* s (add3 a b c)))
+   (defun scale3 (a b c s)
+     "multiply sum of A B C times s"
+     (* s (add3 a b c)))
 
 defconst
 ~~~~~~~~
 
 .. code:: lisp
 
-    (defconst NAME VALUE [DOC-OR-META])
+   (defconst NAME VALUE [DOC-OR-META])
 
 DOC-OR-META 옵션을 통해 NAME 을 VALUE 로 정의합니다. 모듈 로드 시 값이
 평가되고 “메모이제이션”됩니다.
 
 .. code:: lisp
 
-    (defconst COLOR_RED="#FF0000" "Red in hex")
-    (defconst COLOR_GRN="#00FF00" "Green in hex")
-    (defconst PI 3.14159265 "Pi to 8 decimals")
+   (defconst COLOR_RED="#FF0000" "Red in hex")
+   (defconst COLOR_GRN="#00FF00" "Green in hex")
+   (defconst PI 3.14159265 "Pi to 8 decimals")
 
 defpact
 ~~~~~~~
 
 ::
 
-    (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
+   (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 
 별개의 트랜잭션을 위해 고안된 멀티스텝 계산인 *pact* 로 NAME 을
 정의합니다. `defun <#defun>`__\ 와 동일하지만 바디는 엄격한 순서에 따라
@@ -1530,50 +1510,49 @@ defpact
 
 .. code:: lisp
 
-    (defpact payment (payer payer-entity payee
-                      payee-entity amount)
-      (step-with-rollback payer-entity
-        (debit payer amount)
-        (credit payer amount))
-      (step payee-entity
-        (credit payee amount)))
+   (defpact payment (payer payer-entity payee
+                     payee-entity amount)
+     (step-with-rollback payer-entity
+       (debit payer amount)
+       (credit payer amount))
+     (step payee-entity
+       (credit payee amount)))
 
 defschema
 ~~~~~~~~~
 
 ::
 
-    (defschema NAME [DOC-OR-META] FIELDS...)
+   (defschema NAME [DOC-OR-META] FIELDS...)
 
 NAME 을 FIELDS 로 이루어진 *스키마* 로 정의합니다. 각 필드는
 ``FIELDNAME[:FIELDTYPE]``\ 의 타입을 가지고 있습니다.
 
 .. code:: lisp
 
-    (defschema accounts
-      "Schema for accounts table".
-      balance:decimal
-      amount:decimal
-      ccy:string
-      data)
+   (defschema accounts
+     "Schema for accounts table".
+     balance:decimal
+     amount:decimal
+     ccy:string
+     data)
 
 deftable
 ~~~~~~~~
 
 ::
 
-    (deftable NAME[:SCHEMA] [DOC-OR-META])
+   (deftable NAME[:SCHEMA] [DOC-OR-META])
 
 NAME 을 데이터베이스 함수에 사용되는 *테이블* 으로 정의합니다. 테이블은
-여전히 `create-table <pact-functions.html#create-table>`__\ 으로
-생성해야 합니다.
+여전히 `create-table <#create-table>`__\ 으로 생성해야 합니다.
 
 let
 ~~~
 
 ::
 
-    (let (BINDPAIR [BINDPAIR [...]]) BODY)
+   (let (BINDPAIR [BINDPAIR [...]]) BODY)
 
 BINDPAIR 의 변수들이 BODY 안의 범위에 있도록 바인딩합니다. BINDPAIR 내의
 변수들은 같은 let 바인딩(이 경우에는 `let\* <#letstar>`__)에서 이전에
@@ -1581,10 +1560,10 @@ BINDPAIR 의 변수들이 BODY 안의 범위에 있도록 바인딩합니다. BI
 
 .. code:: lisp
 
-    (let ((x 2)
-          (y 5))
-      (* x y))
-    > 10
+   (let ((x 2)
+         (y 5))
+     (* x y))
+   > 10
 
 .. _letstar:
 
@@ -1593,7 +1572,7 @@ let\*
 
 ::
 
-    (let* (BINDPAIR [BINDPAIR [...]]) BODY)
+   (let* (BINDPAIR [BINDPAIR [...]]) BODY)
 
 BINDPAIR 의 변수들이 BODY 의 범위에 있도록 바인딩합니다. 변수는 같은 let
 에서 이전에 선언한 BINDPAIR 를 참조할 수 있습니다. ``let*``\ 은 컴파일
@@ -1602,18 +1581,18 @@ BINDPAIR 의 변수들이 BODY 의 범위에 있도록 바인딩합니다. 변�
 
 .. code:: lisp
 
-    (let* ((x 2)
-           (y (* x 10)))
-      (+ x y))
-    > 22
+   (let* ((x 2)
+          (y (* x 10)))
+     (+ x y))
+   > 22
 
 step
 ~~~~
 
 ::
 
-    (step EXPR)
-    (step ENTITY EXPR)
+   (step EXPR)
+   (step ENTITY EXPR)
 
 이전 스텝들은 이전 트랜잭션에서, 이후 스텝들은 이후 트랜잭션에서 실행이
 되도록 `defpact <#defpact>`__ 내에서 스텝을 정의합니다. ENTITY 인수의
@@ -1626,8 +1605,8 @@ step-with-rollback
 
 ::
 
-    (step-with-rollback EXPR ROLLBACK-EXPR)
-    (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
+   (step-with-rollback EXPR ROLLBACK-EXPR)
+   (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
 
 `defpact <#defpact>`__ 내에서 `스텝 <#step>`__\ 을 정의합니다. 이는
 스텝과 비슷하지만 ROLLBACK-EXPR 을 지정합니다. ENTITY 가 있으면 후속
@@ -1641,28 +1620,28 @@ use
 
 ::
 
-    (use MODULE)
-    (use MODULE HASH)
+   (use MODULE)
+   (use MODULE HASH)
 
 기존 MODULE 을 네임스페이스로 가져옵니다. 최상위 수준에서, 또는 모듈
 선언 내에서만 사용이 가능합니다. MODULE 은 문자열, 기호 또는 원자(드문
 경우)가 될 수 있습니다. HASH 를 통해 모듈 해시가 HASH 와 일치하는지
 확인합니다(일치하지 않는 경우에는 실패).
-`describe-module <pact-functions.html#describe-module>`__\ 을 사용해
-체인에서 로드된 모듈의 해시를 쿼리합니다.
+`describe-module <#describe-module>`__\ 을 사용해 체인에서 로드된 모듈의
+해시를 쿼리합니다.
 
 .. code:: lisp
 
-    (use accounts)
-    (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
-    "Write succeeded"
+   (use accounts)
+   (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+   "Write succeeded"
 
 module
 ~~~~~~
 
 ::
 
-    (module NAME KEYSET [DOC-OR-META] DEFS...)
+   (module NAME KEYSET [DOC-OR-META] DEFS...)
 
 DOC-OR-META 옵션을 통해 모듈 NAME(키셋 KEYSET 에 의해 보호)을 정의 및
 설치합니다. DEFS 는 반드시 `defun <#defun>`__ 또는
@@ -1670,21 +1649,21 @@ DOC-OR-META 옵션을 통해 모듈 NAME(키셋 KEYSET 에 의해 보호)을 정
 
 .. code:: lisp
 
-    (module accounts 'accounts-admin
-      "Module for interacting with accounts"
+   (module accounts 'accounts-admin
+     "Module for interacting with accounts"
 
-      (defun create-account (id bal)
-       "Create account ID with initial balance BAL"
-       (insert accounts id { "balance": bal }))
+     (defun create-account (id bal)
+      "Create account ID with initial balance BAL"
+      (insert accounts id { "balance": bal }))
 
-      (defun transfer (from to amount)
-       "Transfer AMOUNT from FROM to TO"
-       (with-read accounts from { "balance": fbal }
-        (enforce (<= amount fbal) "Insufficient funds")
-         (with-read accounts to { "balance": tbal }
-          (update accounts from { "balance": (- fbal amount) })
-          (update accounts to { "balance": (+ tbal amount) }))))
-    )
+     (defun transfer (from to amount)
+      "Transfer AMOUNT from FROM to TO"
+      (with-read accounts from { "balance": fbal }
+       (enforce (<= amount fbal) "Insufficient funds")
+        (with-read accounts to { "balance": tbal }
+         (update accounts from { "balance": (- fbal amount) })
+         (update accounts to { "balance": (+ tbal amount) }))))
+   )
 
 .. _expression:
 
@@ -1736,17 +1715,17 @@ functions) <#functional-concepts>`__\ 에서만 지원되고, 그 외의 경우�
 
 ::
 
-    pact> accounts.transfer
-    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
-    SRC to DEST\")"
-    pact> transfer
-    Eval failure:
-    transfer<EOF>: Cannot resolve transfer
-    pact> (use 'accounts)
-    "Using \"accounts\""
-    pact> transfer
-    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
-    SRC to DEST\")"
+   pact> accounts.transfer
+   "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
+   SRC to DEST\")"
+   pact> transfer
+   Eval failure:
+   transfer<EOF>: Cannot resolve transfer
+   pact> (use 'accounts)
+   "Using \"accounts\""
+   pact> transfer
+   "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
+   SRC to DEST\")"
 
 레퍼런스가 더 빨리 귀결을 한다는 점에서 트랜잭션에서는 ``use`` 보다
 레퍼런스가 선호됩니다. 하지만 모듈 정의에서는 가독성이 좋은 ``use``\ 가
@@ -1757,9 +1736,9 @@ functions) <#functional-concepts>`__\ 에서만 지원되고, 그 외의 경우�
 
 Pact는 신속한 시간 값 계산을 위해 Haskell `thyme
 라이브러리 <http://hackage.haskell.org/package/thyme>`__\ 를 활용합니다.
-`parse-time <pact-functions.html#parse-time>`__ 및
-`format-time <pact-functions.html#format-time>`__ 함수는 다음과 같이
-몇몇 확장자와 함께 GNU ``strftime``\ 에서 파생된 타입 코드를 수락합니다.
+`parse-time <#parse-time>`__ 및 `format-time <#format-time>`__ 함수는
+다음과 같이 몇몇 확장자와 함께 GNU ``strftime``\ 에서 파생된 타입 코드를
+수락합니다.
 
 ``%%`` - 리터럴 ``"%"``
 
@@ -1879,10 +1858,10 @@ Pact는 신속한 시간 값 계산을 위해 Haskell `thyme
 ------------------------
 
 기본 형식은 UTC ISO8601 날짜+시간 타입인 “%Y-%m-%dT%H:%M:%SZ”으로,
-`time <pact-functions.html#id4>`__ 함수에서 허용하는 타입입니다. 시간
-객체는 내부적으로 최대 마이크로세컨드의 분해능을 지원하지만 Pact
-해석기에서 JSON 으로 반환된 값이 기본 타입으로 직렬화됩니다. 더 높은
-분해능을 원할 때는 ``%v`` 및 관련 함수로 시간을 명시적으로 포맷팅합니다.
+`time <#id4>`__ 함수에서 허용하는 타입입니다. 시간 객체는 내부적으로
+최대 마이크로세컨드의 분해능을 지원하지만 Pact 해석기에서 JSON 으로
+반환된 값이 기본 타입으로 직렬화됩니다. 더 높은 분해능을 원할 때는
+``%v`` 및 관련 함수로 시간을 명시적으로 포맷팅합니다.
 
 예시
 ----
@@ -1892,24 +1871,24 @@ ISO8601
 
 ::
 
-    pact> (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
-    "2016-07-23T13:30:45+00:00"
+   pact> (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
+   "2016-07-23T13:30:45+00:00"
 
 RFC822
 ~~~~~~
 
 ::
 
-    pact> (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
-    "Sat, 23 Jul 2016 13:30:45 UTC"
+   pact> (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
+   "Sat, 23 Jul 2016 13:30:45 UTC"
 
 YYYY-MM-DD hh:mm:ss.000000
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
-    pact> (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
-    "2016-07-23 13:30:45.001002"
+   pact> (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
+   "2016-07-23 13:30:45.001002"
 
 데이터베이스 직렬화 포맷 (Database Serialization Format)
 ========================================================
@@ -1966,11 +1945,11 @@ JSON/Javascript 에서 무엇을 “큰 정수”로 간주할 것이냐에 대�
 
 .. code:: javascript
 
-    /* small integers are just a number */
-    1
-    /* large integers are objects */
-    { "_P_int": "123..." /* integer string representation */
-    }
+   /* small integers are just a number */
+   1
+   /* large integers are objects */
+   { "_P_int": "123..." /* integer string representation */
+   }
 
 10진수
 ~~~~~~
@@ -1981,16 +1960,16 @@ JSON/Javascript 에서 무엇을 “큰 정수”로 간주할 것이냐에 대�
 
 .. code:: javascript
 
-    { "_P_decp": 4     /* decimal places */
-    , "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
-    }
+   { "_P_decp": 4     /* decimal places */
+   , "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
+   }
 
 mantissa 값은 위에서 설명한 정수 타입을 사용합니다. 10진수 문서에
 설명되어 있듯이 이 값은 다음과 같이 계산할 수 있습니다.
 
 ::
 
-    MANTISSA / (10 ^ PLACES)
+   MANTISSA / (10 ^ PLACES)
 
 부울
 ~~~~
@@ -2010,9 +1989,9 @@ mantissa 값은 위에서 설명한 정수 타입을 사용합니다. 10진수 �
 
 .. code:: javascript
 
-    { "_P_timed": 234 /* "modified julian day value */
-    , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
-    }
+   { "_P_timed": 234 /* "modified julian day value */
+   , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
+   }
 
 MJD 변환을 위한 제안 사항은
 `여기 <https://stackoverflow.com/questions/11889553/convert-modified-julian-date-to-utc>`__\ 에서
@@ -2025,8 +2004,8 @@ JSON 값/Blob
 
 .. code:: javascript
 
-    { "_P_val": { "foo": "bar" } /* unmodified user JSON object */
-    }
+   { "_P_val": { "foo": "bar" } /* unmodified user JSON object */
+   }
 
 키셋
 ~~~~
@@ -2035,9 +2014,9 @@ JSON 값/Blob
 
 .. code:: javascript
 
-    { "_P_keys": ["key1","key2"] /* public key string representations */
-    , "_P_pred": "keys-all"      /* predicate function name */
-    }
+   { "_P_keys": ["key1","key2"] /* public key string representations */
+   , "_P_pred": "keys-all"      /* predicate function name */
+   }
 
 모듈(사용자) 테이블
 -------------------
@@ -2075,9 +2054,9 @@ Pact 코드에 지정된 각 모듈 테이블에서 “데이터 테이블”과
 
 .. code:: javascript
 
-    { "table": "name"  /* user-visible table name (not backend table name) */
-    , "key": "123"     /* update string key */
-    , "value": { ... } /* The new JSON row value. Entire row is captured. */
+   { "table": "name"  /* user-visible table name (not backend table name) */
+   , "key": "123"     /* update string key */
+   , "value": { ... } /* The new JSON row value. Entire row is captured. */
 
 JSON 행 값은 사용자 데이터 테이블에서 확인한 것과 같은 인코딩을
 사용합니다.
@@ -2103,10 +2082,10 @@ IDX 에서 LIST 를 인덱싱하거나 OBJECT 에서 키 IDX 를 통해 값을 �
 
 .. code:: lisp
 
-    pact> (at 1 [1 2 3])
-    2
-    pact> (at "bar" { "foo": 1, "bar": 2 })
-    2
+   pact> (at 1 [1 2 3])
+   2
+   pact> (at "bar" { "foo": 1, "bar": 2 })
+   2
 
 bind
 ~~~~
@@ -2118,8 +2097,8 @@ bind
 
 .. code:: lisp
 
-    pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
-    1
+   pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
+   1
 
 compose
 ~~~~~~~
@@ -2131,8 +2110,8 @@ X 는 VALUE 에서, Y 는 X 의 결과에서 작동하도록 X 와 Y 를 작성�
 
 .. code:: lisp
 
-    pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]
+   pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
+   ["dog" "has" "fleas"]
 
 constantly
 ~~~~~~~~~~
@@ -2148,8 +2127,8 @@ constantly
 
 .. code:: lisp
 
-    pact> (filter (constantly true) [1 2 3])
-    [1 2 3]
+   pact> (filter (constantly true) [1 2 3])
+   [1 2 3]
 
 contains
 ~~~~~~~~
@@ -2165,12 +2144,12 @@ LIST 또는 STRING 에 VALUE 가 포함되어 있는지, 또는 OBJECT 에 KEY �
 
 .. code:: lisp
 
-    pact> (contains 2 [1 2 3])
-    true
-    pact> (contains 'name { 'name: "Ted", 'age: 72 })
-    true
-    pact> (contains "foo" "foobar")
-    true
+   pact> (contains 2 [1 2 3])
+   true
+   pact> (contains 'name { 'name: "Ted", 'age: 72 })
+   true
+   pact> (contains "foo" "foobar")
+   true
 
 drop
 ~~~~
@@ -2185,12 +2164,12 @@ LIST(또는 문자열)에서 COUNT 값을, OBJECT 에서 KEYS 에 키를 가지�
 
 .. code:: lisp
 
-    pact> (drop 2 "vwxyz")
-    "xyz"
-    pact> (drop (- 2) [1 2 3 4 5])
-    [1 2 3]
-    pact> (drop ['name] { 'name: "Vlad", 'active: false})
-    {"active": false}
+   pact> (drop 2 "vwxyz")
+   "xyz"
+   pact> (drop (- 2) [1 2 3 4 5])
+   [1 2 3]
+   pact> (drop ['name] { 'name: "Vlad", 'active: false})
+   {"active": false}
 
 enforce
 ~~~~~~~
@@ -2202,8 +2181,8 @@ enforce
 
 .. code:: lisp
 
-    pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-    <interactive>:0:0: Chaos reigns
+   pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
+   <interactive>:0:0: Chaos reigns
 
 enforce-one
 ~~~~~~~~~~~
@@ -2215,8 +2194,8 @@ enforce-one
 
 .. code:: lisp
 
-    pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
-    true
+   pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
+   true
 
 enforce-pact-version
 ~~~~~~~~~~~~~~~~~~~~
@@ -2231,8 +2210,8 @@ MIN-VERSION 이상 또는 MAX-VERSION 이하로 런타임 Pact 버전을 적용�
 
 .. code:: lisp
 
-    pact> (enforce-pact-version "2.3")
-    true
+   pact> (enforce-pact-version "2.3")
+   true
 
 최상위 수준에서만 사용 가능: 모듈 코드에 적용 시 실패합니다.
 
@@ -2246,8 +2225,8 @@ filter
 
 .. code:: lisp
 
-    pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]
+   pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
+   ["dog" "has" "fleas"]
 
 fold
 ~~~~
@@ -2260,8 +2239,8 @@ INIT 를 시작으로 마지막 결과 와 요소에 APP 을 적용하여 LIST �
 
 .. code:: lisp
 
-    pact> (fold (+) 0 [100 10 5])
-    115
+   pact> (fold (+) 0 [100 10 5])
+   115
 
 format
 ~~~~~~
@@ -2272,8 +2251,8 @@ format
 
 .. code:: lisp
 
-    pact> (format "My {} has {}" ["dog" "fleas"])
-    "My dog has fleas"
+   pact> (format "My {} has {}" ["dog" "fleas"])
+   "My dog has fleas"
 
 hash
 ~~~~
@@ -2285,10 +2264,10 @@ VALUE 의 BLAKE2b 512-비트 해시를 계산합니다. 문자열은 직접 변�
 
 .. code:: lisp
 
-    pact> (hash "hello")
-    "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
-    pact> (hash { 'foo: 1 })
-    "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
+   pact> (hash "hello")
+   "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+   pact> (hash { 'foo: 1 })
+   "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
 
 identity
 ~~~~~~~~
@@ -2299,8 +2278,8 @@ identity
 
 .. code:: lisp
 
-    pact> (map (identity) [1 2 3])
-    [1 2 3]
+   pact> (map (identity) [1 2 3])
+   [1 2 3]
 
 if
 ~~
@@ -2312,8 +2291,8 @@ COND 를 테스트해서 true 이면 THEN 을 평가하고 그렇지 않으면 E
 
 .. code:: lisp
 
-    pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
-    "Sanity prevails"
+   pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
+   "Sanity prevails"
 
 length
 ~~~~~~
@@ -2324,12 +2303,12 @@ X(리스트, 문자열 또는 객체 타입)의 길이를 계산합니다.
 
 .. code:: lisp
 
-    pact> (length [1 2 3])
-    3
-    pact> (length "abcdefgh")
-    8
-    pact> (length { "a": 1, "b": 2 })
-    2
+   pact> (length [1 2 3])
+   3
+   pact> (length "abcdefgh")
+   8
+   pact> (length { "a": 1, "b": 2 })
+   2
 
 list
 ~~~~
@@ -2341,8 +2320,8 @@ ELEMS 에서 리스트를 생성합니다. Pact 2.1.1 에서는 사용이 중단
 
 .. code:: lisp
 
-    pact> (list 1 2 3)
-    [1 2 3]
+   pact> (list 1 2 3)
+   [1 2 3]
 
 list-modules
 ~~~~~~~~~~~~
@@ -2362,8 +2341,8 @@ VALUE 를 LENGTH 만큼 반복하여 리스트를 생성합니다.
 
 .. code:: lisp
 
-    pact> (make-list 5 true)
-    [true true true true true]
+   pact> (make-list 5 true)
+   [true true true true true]
 
 map
 ~~~
@@ -2374,8 +2353,8 @@ LIST 의 각 요소에 APP 을 적용하여 결과 리스트를 반환합니다.
 
 .. code:: lisp
 
-    pact> (map (+ 1) [1 2 3])
-    [2 3 4]
+   pact> (map (+ 1) [1 2 3])
+   [2 3 4]
 
 pact-id
 ~~~~~~~
@@ -2394,8 +2373,8 @@ pact-version
 
 .. code:: lisp
 
-    pact> (pact-version)
-    "2.6.0"
+   pact> (pact-version)
+   "2.6.1"
 
 최상위 수준에서만 사용 가능: 모듈 코드에 적용 시 실패합니다.
 
@@ -2409,8 +2388,8 @@ read-decimal
 
 .. code:: lisp
 
-    (defun exec ()
-       (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+   (defun exec ()
+      (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
 
 read-integer
 ~~~~~~~~~~~~
@@ -2422,7 +2401,7 @@ read-integer
 
 .. code:: lisp
 
-    (read-integer "age")
+   (read-integer "age")
 
 read-msg
 ~~~~~~~~
@@ -2439,8 +2418,8 @@ read-msg
 
 .. code:: lisp
 
-    (defun exec ()
-       (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+   (defun exec ()
+      (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
 
 remove
 ~~~~~~
@@ -2451,8 +2430,8 @@ OBJECT 에서 KEY 에 대한 항목을 제거합니다.
 
 .. code:: lisp
 
-    pact> (remove "bar" { "foo": 1, "bar": 2 })
-    {"foo": 1}
+   pact> (remove "bar" { "foo": 1, "bar": 2 })
+   {"foo": 1}
 
 resume
 ~~~~~~
@@ -2470,8 +2449,8 @@ reverse
 
 .. code:: lisp
 
-    pact> (reverse [1 2 3])
-    [3 2 1]
+   pact> (reverse [1 2 3])
+   [3 2 1]
 
 sort
 ~~~~
@@ -2485,10 +2464,10 @@ sort
 
 .. code:: lisp
 
-    pact> (sort [3 1 2])
-    [1 2 3]
-    pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
-    [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
+   pact> (sort [3 1 2])
+   [1 2 3]
+   pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
+   [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
 
 str-to-int
 ~~~~~~~~~~
@@ -2503,10 +2482,10 @@ STR_VAL 의 정수 값을 명시되지 않았다면 10진수, 명시되었다면
 
 .. code:: lisp
 
-    pact> (str-to-int 16 "abcdef123456")
-    188900967593046
-    pact> (str-to-int "123456")
-    123456
+   pact> (str-to-int 16 "abcdef123456")
+   188900967593046
+   pact> (str-to-int "123456")
+   123456
 
 take
 ~~~~
@@ -2521,12 +2500,12 @@ LIST(또는 문자열)에서 COUNT 값을, OBJECT 에서 KEYS 에 키를 가지�
 
 .. code:: lisp
 
-    pact> (take 2 "abcd")
-    "ab"
-    pact> (take (- 3) [1 2 3 4 5])
-    [3 4 5]
-    pact> (take ['name] { 'name: "Vlad", 'active: false})
-    {"name": "Vlad"}
+   pact> (take 2 "abcd")
+   "ab"
+   pact> (take (- 3) [1 2 3 4 5])
+   [3 4 5]
+   pact> (take ['name] { 'name: "Vlad", 'active: false})
+   {"name": "Vlad"}
 
 tx-hash
 ~~~~~~~
@@ -2537,8 +2516,8 @@ tx-hash
 
 .. code:: lisp
 
-    pact> (tx-hash)
-    "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
+   pact> (tx-hash)
+   "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
 
 typeof
 ~~~~~~
@@ -2549,8 +2528,8 @@ X 의 타입을 문자열 형태로 반환합니다.
 
 .. code:: lisp
 
-    pact> (typeof "hello")
-    "string"
+   pact> (typeof "hello")
+   "string"
 
 where
 ~~~~~
@@ -2563,8 +2542,8 @@ where
 
 .. code:: lisp
 
-    pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
-    [{"name": "Juan", "age": 15}]
+   pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
+   [{"name": "Juan", "age": 15}]
 
 yield
 ~~~~~
@@ -2578,7 +2557,7 @@ yield
 
 .. code:: lisp
 
-    (yield { "amount": 100.0 })
+   (yield { "amount": 100.0 })
 
 .. _Database:
 
@@ -2594,7 +2573,7 @@ create-table
 
 .. code:: lisp
 
-    (create-table accounts)
+   (create-table accounts)
 
 최상위 수준에서만 사용 가능: 모듈 코드에 적용 시 실패합니다.
 
@@ -2617,7 +2596,7 @@ MODULE 을 위한 메타데이터를 얻습니다. ‘name’, ‘hash’, ‘bl
 
 .. code:: lisp
 
-    (describe-module 'my-module)
+   (describe-module 'my-module)
 
 최상위 수준에서만 사용 가능: 모듈 코드에 적용 시 실패합니다.
 
@@ -2631,7 +2610,7 @@ TABLE 을 위한 메타데이터를 얻습니다. ‘name’, ‘hash’, ‘ble
 
 .. code:: lisp
 
-    (describe-table accounts)
+   (describe-table accounts)
 
 최상위 수준에서만 사용 가능: 모듈 코드에 적용 시 실패합니다.
 
@@ -2646,7 +2625,7 @@ TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 �
 
 .. code:: lisp
 
-    (insert accounts "Alice" { "balance": 0.0, "note": "Created account." })
+   (insert accounts id { "balance": 0.0, "note": "Created account." })
 
 keylog
 ~~~~~~
@@ -2659,7 +2638,7 @@ txid 로 인덱싱된 객체 리스트에서 TXID 당시 또는 이후의 트랜
 
 .. code:: lisp
 
-    (keylog accounts "Alice" 123485945)
+   (keylog accounts "Alice" 123485945)
 
 keys
 ~~~~
@@ -2670,7 +2649,7 @@ TABLE 에서 모든 키를 반환합니다.
 
 .. code:: lisp
 
-    (keys accounts)
+   (keys accounts)
 
 read
 ~~~~
@@ -2685,7 +2664,7 @@ COLUMNS 가 지정된 경우에 지정된 열만 포함한 행을 읽어들입�
 
 .. code:: lisp
 
-    (read accounts id ['balance 'ccy])
+   (read accounts id ['balance 'ccy])
 
 select
 ~~~~~~
@@ -2701,8 +2680,8 @@ select
 
 .. code:: lisp
 
-    (select people ['firstName,'lastName] (where 'name (= "Fatima")))
-    (select people (where 'age (> 30)))
+   (select people ['firstName,'lastName] (where 'name (= "Fatima")))
+   (select people (where 'age (> 30)))
 
 txids
 ~~~~~
@@ -2713,7 +2692,7 @@ TABLE 에서 TXID 값보다 크거나 같은 모든 txid 값을 반환합니다
 
 .. code:: lisp
 
-    (txids accounts 123849535)
+   (txids accounts 123849535)
 
 txlog
 ~~~~~
@@ -2724,7 +2703,7 @@ txlog
 
 .. code:: lisp
 
-    (txlog accounts 123485945)
+   (txlog accounts 123485945)
 
 update
 ~~~~~~
@@ -2737,7 +2716,7 @@ TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 �
 
 .. code:: lisp
 
-    (update accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+   (update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 
 with-default-read
 ~~~~~~~~~~~~~~~~~
@@ -2751,8 +2730,8 @@ TABLE 에서 KEY 에 대한 행을 읽어들이고 후속 바디 문에 대해 B
 
 .. code:: lisp
 
-    (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
-       (format "Balance for {} is {} {}" [id bal ccy]))
+   (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
+      (format "Balance for {} is {} {}" [id bal ccy]))
 
 with-read
 ~~~~~~~~~
@@ -2765,8 +2744,8 @@ TABLE 에서 KEY 에 대한 행을 읽어들이고 후속 바디 문에 대해 B
 
 .. code:: lisp
 
-    (with-read accounts id { "balance":= bal, "ccy":= ccy }
-       (format "Balance for {} is {} {}" [id bal ccy]))
+   (with-read accounts id { "balance":= bal, "ccy":= ccy }
+      (format "Balance for {} is {} {}" [id bal ccy]))
 
 write
 ~~~~~
@@ -2778,7 +2757,7 @@ TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다.
 
 .. code:: lisp
 
-    (write accounts { "balance": 100.0 })
+   (write accounts id { "balance": 100.0 })
 
 .. _Time:
 
@@ -2797,8 +2776,8 @@ TIME 에 SECONDS 를 추가합니다. SECONDS 는 정수 또는 10진수일 수
 
 .. code:: lisp
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") 15)
-    "2016-07-22T12:00:15Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") 15)
+   "2016-07-22T12:00:15Z"
 
 days
 ~~~~
@@ -2811,8 +2790,8 @@ N 일, ‘add-time’과 함께 사용됩니다.
 
 .. code:: lisp
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
-    "2016-07-23T12:00:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
+   "2016-07-23T12:00:00Z"
 
 diff-time
 ~~~~~~~~~
@@ -2823,8 +2802,8 @@ TIME1 과 TIME2 간의 차이(초)를 계산합니다.
 
 .. code:: lisp
 
-    pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
-    23400
+   pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
+   23400
 
 format-time
 ~~~~~~~~~~~
@@ -2832,12 +2811,12 @@ format-time
 *format* ``string`` *time* ``time`` *→* ``string``
 
 FORMAT 을 사용해 TIME 을 포맷팅합니다. 지원되는 형식은 `“시간 형식”
-문서 <pact-reference.html#time-formats>`__\ 를 참조하세요.
+문서 <#time-formats>`__\ 를 참조하세요.
 
 .. code:: lisp
 
-    pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
-    "2016-07-22"
+   pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
+   "2016-07-22"
 
 hours
 ~~~~~
@@ -2850,8 +2829,8 @@ N 시간, ‘add-time’과 함께 사용됩니다
 
 .. code:: lisp
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
-    "2016-07-22T13:00:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
+   "2016-07-22T13:00:00Z"
 
 minutes
 ~~~~~~~
@@ -2864,8 +2843,8 @@ N 분, ‘add-time’과 함께 사용됩니다
 
 .. code:: lisp
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
-    "2016-07-22T12:01:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
+   "2016-07-22T12:01:00Z"
 
 parse-time
 ~~~~~~~~~~
@@ -2873,12 +2852,12 @@ parse-time
 *format* ``string`` *utcval* ``string`` *→* ``time``
 
 FORMAT 을 사용해 UTCVAL 의 시간을 구성합니다. 지원되는 형식은 `“시간
-형식” 문서 <pact-reference.html#time-formats>`__\ 를 참조하세요.
+형식” 문서 <#time-formats>`__\ 를 참조하세요.
 
 .. code:: lisp
 
-    pact> (parse-time "%F" "2016-09-12")
-    "2016-09-12T00:00:00Z"
+   pact> (parse-time "%F" "2016-09-12")
+   "2016-09-12T00:00:00Z"
 
 time
 ~~~~
@@ -2889,8 +2868,8 @@ ISO8601 타입(%Y-%m-%dT%H:%M:%SZ)을 사용해 UTCVAL 의 시간을 구성합�
 
 .. code:: lisp
 
-    pact> (time "2016-07-22T11:26:35Z")
-    "2016-07-22T11:26:35Z"
+   pact> (time "2016-07-22T11:26:35Z")
+   "2016-07-22T11:26:35Z"
 
 .. _Operators:
 
@@ -2910,8 +2889,8 @@ X 가 Y 와 같지 않으면 true 입니다.
 
 .. code:: lisp
 
-    pact> (!= "hello" "goodbye")
-    true
+   pact> (!= "hello" "goodbye")
+   true
 
 .. _star:
 
@@ -2928,10 +2907,10 @@ X 와 Y 를 곱합니다.
 
 .. code:: lisp
 
-    pact> (* 0.5 10.0)
-    5
-    pact> (* 3 5)
-    15
+   pact> (* 0.5 10.0)
+   5
+   pact> (* 3 5)
+   15
 
 .. _plus:
 
@@ -2952,16 +2931,16 @@ X 와 Y 를 곱합니다.
 
 .. code:: lisp
 
-    pact> (+ 1 2)
-    3
-    pact> (+ 5.0 0.5)
-    5.5
-    pact> (+ "every" "body")
-    "everybody"
-    pact> (+ [1 2] [3 4])
-    [1 2 3 4]
-    pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-    {"bar": 2, "foo": 100}
+   pact> (+ 1 2)
+   3
+   pact> (+ 5.0 0.5)
+   5.5
+   pact> (+ "every" "body")
+   "everybody"
+   pact> (+ [1 2] [3 4])
+   [1 2 3 4]
+   pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
+   {"bar": 2, "foo": 100}
 
 .. _minus:
 
@@ -2980,10 +2959,10 @@ X 를 부정하거나 X 에서 Y 를 뺍니다.
 
 .. code:: lisp
 
-    pact> (- 1.0)
-    -1.0
-    pact> (- 3 2)
-    1
+   pact> (- 1.0)
+   -1.0
+   pact> (- 3 2)
+   1
 
 .. _slash:
 
@@ -3000,10 +2979,10 @@ X 를 Y 로 나눕니다.
 
 .. code:: lisp
 
-    pact> (/ 10.0 2.0)
-    5
-    pact> (/ 8 3)
-    2
+   pact> (/ 10.0 2.0)
+   5
+   pact> (/ 8 3)
+   2
 
 .. _lt:
 
@@ -3017,12 +2996,12 @@ X 가 Y 보다 작을 경우 true 입니다.
 
 .. code:: lisp
 
-    pact> (< 1 3)
-    true
-    pact> (< 5.24 2.52)
-    false
-    pact> (< "abc" "def")
-    true
+   pact> (< 1 3)
+   true
+   pact> (< 5.24 2.52)
+   false
+   pact> (< "abc" "def")
+   true
 
 .. _lteq:
 
@@ -3036,12 +3015,12 @@ X 가 Y 보다 작거나 같을 경우 true 입니다.
 
 .. code:: lisp
 
-    pact> (<= 1 3)
-    true
-    pact> (<= 5.24 2.52)
-    false
-    pact> (<= "abc" "def")
-    true
+   pact> (<= 1 3)
+   true
+   pact> (<= 5.24 2.52)
+   false
+   pact> (<= "abc" "def")
+   true
 
 .. _eq:
 
@@ -3056,12 +3035,12 @@ X 가 Y 와 같을 경우 true 입니다.
 
 .. code:: lisp
 
-    pact> (= [1 2 3] [1 2 3])
-    true
-    pact> (= 'foo "foo")
-    true
-    pact> (= { 1: 2 } { 1: 2})
-    true
+   pact> (= [1 2 3] [1 2 3])
+   true
+   pact> (= 'foo "foo")
+   true
+   pact> (= { 1: 2 } { 1: 2})
+   true
 
 .. _gt:
 
@@ -3075,12 +3054,12 @@ X 가 Y 보다 클 경우 true 입니다.
 
 .. code:: lisp
 
-    pact> (> 1 3)
-    false
-    pact> (> 5.24 2.52)
-    true
-    pact> (> "abc" "def")
-    false
+   pact> (> 1 3)
+   false
+   pact> (> 5.24 2.52)
+   true
+   pact> (> "abc" "def")
+   false
 
 .. _gteq:
 
@@ -3094,12 +3073,12 @@ X 가 Y 와 크거나 같을 경우 true 입니다.
 
 .. code:: lisp
 
-    pact> (>= 1 3)
-    false
-    pact> (>= 5.24 2.52)
-    true
-    pact> (>= "abc" "def")
-    false
+   pact> (>= 1 3)
+   false
+   pact> (>= 5.24 2.52)
+   true
+   pact> (>= "abc" "def")
+   false
 
 .. _hat:
 
@@ -3116,8 +3095,8 @@ X 의 Y 승을 구합니다.
 
 .. code:: lisp
 
-    pact> (^ 2 3)
-    8
+   pact> (^ 2 3)
+   8
 
 abs
 ~~~
@@ -3130,8 +3109,8 @@ X 의 절대 값입니다.
 
 .. code:: lisp
 
-    pact> (abs (- 10 23))
-    13
+   pact> (abs (- 10 23))
+   13
 
 and
 ~~~
@@ -3142,8 +3121,8 @@ and
 
 .. code:: lisp
 
-    pact> (and true false)
-    false
+   pact> (and true false)
+   false
 
 and? {#and?}
 ~~~~~~~~~~~~
@@ -3156,8 +3135,8 @@ A 와 B 에 VALUE 를 적용한 결과에 논리식 ’and’를 적용합니다
 
 .. code:: lisp
 
-    pact> (and? (> 20) (> 10) 15)
-    false
+   pact> (and? (> 20) (> 10) 15)
+   false
 
 ceiling
 ~~~~~~~
@@ -3171,10 +3150,10 @@ ceiling
 
 .. code:: lisp
 
-    pact> (ceiling 3.5)
-    4
-    pact> (ceiling 100.15234 2)
-    100.16
+   pact> (ceiling 3.5)
+   4
+   pact> (ceiling 100.15234 2)
+   100.16
 
 exp
 ~~~
@@ -3185,8 +3164,8 @@ X 의 거듭제곱입니다.
 
 .. code:: lisp
 
-    pact> (round (exp 3) 6)
-    20.085537
+   pact> (round (exp 3) 6)
+   20.085537
 
 floor
 ~~~~~
@@ -3200,10 +3179,10 @@ floor
 
 .. code:: lisp
 
-    pact> (floor 3.5)
-    3
-    pact> (floor 100.15234 2)
-    100.15
+   pact> (floor 3.5)
+   3
+   pact> (floor 100.15234 2)
+   100.15
 
 ln
 ~~
@@ -3214,8 +3193,8 @@ X 의 자연 로그입니다.
 
 .. code:: lisp
 
-    pact> (round (ln 60) 6)
-    4.094345
+   pact> (round (ln 60) 6)
+   4.094345
 
 log
 ~~~
@@ -3230,8 +3209,8 @@ log
 
 .. code:: lisp
 
-    pact> (log 2 256)
-    8
+   pact> (log 2 256)
+   8
 
 mod
 ~~~
@@ -3242,8 +3221,8 @@ X 모듈로 Y 입니다.
 
 .. code:: lisp
 
-    pact> (mod 13 8)
-    5
+   pact> (mod 13 8)
+   5
 
 not
 ~~~
@@ -3254,8 +3233,8 @@ not
 
 .. code:: lisp
 
-    pact> (not (> 1 2))
-    true
+   pact> (not (> 1 2))
+   true
 
 not? {#not?}
 ~~~~~~~~~~~~
@@ -3266,8 +3245,8 @@ APP 에 VALUE 를 적용한 결과에 논리식 ’not’을 적용합니다.
 
 .. code:: lisp
 
-    pact> (not? (> 20) 15)
-    false
+   pact> (not? (> 20) 15)
+   false
 
 or
 ~~
@@ -3278,8 +3257,8 @@ or
 
 .. code:: lisp
 
-    pact> (or true false)
-    true
+   pact> (or true false)
+   true
 
 or? {#or?}
 ~~~~~~~~~~
@@ -3292,8 +3271,8 @@ A 와 B 에 VALUE 를 적용한 결과에 논리식 ’or’을 적용합니다.
 
 .. code:: lisp
 
-    pact> (or? (> 20) (> 10) 15)
-    true
+   pact> (or? (> 20) (> 10) 15)
+   true
 
 round
 ~~~~~
@@ -3307,10 +3286,10 @@ round
 
 .. code:: lisp
 
-    pact> (round 3.5)
-    4
-    pact> (round 100.15234 2)
-    100.15
+   pact> (round 3.5)
+   4
+   pact> (round 100.15234 2)
+   100.15
 
 sqrt
 ~~~~
@@ -3321,8 +3300,8 @@ X 의 제곱근입니다.
 
 .. code:: lisp
 
-    pact> (sqrt 25)
-    5
+   pact> (sqrt 25)
+   5
 
 .. _Keysets:
 
@@ -3339,7 +3318,7 @@ KEYSET 에서 키셋을 NAME 으로 정의합니다. 키셋 NAME 이 이미 존�
 
 .. code:: lisp
 
-    (define-keyset 'admin-keyset (read-keyset "keyset"))
+   (define-keyset 'admin-keyset (read-keyset "keyset"))
 
 최상위 수준에서만 사용 가능: 모듈 코드에 적용 시 실패합니다.
 
@@ -3354,8 +3333,8 @@ BODY 를 실행하기 전에 메시지 키에 대해 KEYSET-OR-NAME 을 enforce 
 
 .. code:: lisp
 
-    (with-keyset 'admin-keyset ...)
-    (with-keyset (read-keyset "keyset") ...)
+   (enforce-keyset 'admin-keyset)
+   (enforce-keyset row-guard)
 
 keys-2
 ~~~~~~
@@ -3366,8 +3345,8 @@ keys-2
 
 .. code:: lisp
 
-    pact> (keys-2 3 1)
-    false
+   pact> (keys-2 3 1)
+   false
 
 keys-all
 ~~~~~~~~
@@ -3378,8 +3357,8 @@ keys-all
 
 .. code:: lisp
 
-    pact> (keys-all 3 3)
-    true
+   pact> (keys-all 3 3)
+   true
 
 keys-any
 ~~~~~~~~
@@ -3390,8 +3369,8 @@ keys-any
 
 .. code:: lisp
 
-    pact> (keys-any 10 1)
-    true
+   pact> (keys-any 10 1)
+   true
 
 read-keyset
 ~~~~~~~~~~~
@@ -3403,7 +3382,7 @@ KEY 를 읽어들입니다. PREDFUN 은 키 predicate으로 귀결되어야 합�
 
 .. code:: lisp
 
-    (read-keyset "admin-keyset")
+   (read-keyset "admin-keyset")
 
 .. _repl-lib:
 
@@ -3425,7 +3404,7 @@ begin-tx
 
 .. code:: lisp
 
-    (begin-tx "load module")
+   (begin-tx "load module")
 
 bench
 ~~~~~
@@ -3436,7 +3415,7 @@ EXPRS 의 실행을 벤치마킹합니다.
 
 .. code:: lisp
 
-    (bench (+ 1 2))
+   (bench (+ 1 2))
 
 commit-tx
 ~~~~~~~~~
@@ -3447,7 +3426,7 @@ commit-tx
 
 .. code:: lisp
 
-    (commit-tx)
+   (commit-tx)
 
 env-data
 ~~~~~~~~
@@ -3460,8 +3439,8 @@ env-data
 
 .. code:: lisp
 
-    pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
-    "Setting transaction data"
+   pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
+   "Setting transaction data"
 
 env-entity
 ~~~~~~~~~~
@@ -3475,8 +3454,8 @@ env-entity
 
 .. code:: lisp
 
-    (env-entity "my-org")
-    (env-entity)
+   (env-entity "my-org")
+   (env-entity)
 
 env-gas
 ~~~~~~~
@@ -3518,8 +3497,8 @@ env-hash
 
 .. code:: lisp
 
-    pact> (env-hash (hash "hello"))
-    "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+   pact> (env-hash (hash "hello"))
+   "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
 
 env-keys
 ~~~~~~~~
@@ -3530,8 +3509,8 @@ env-keys
 
 .. code:: lisp
 
-    pact> (env-keys ["my-key" "admin-key"])
-    "Setting transaction keys"
+   pact> (env-keys ["my-key" "admin-key"])
+   "Setting transaction keys"
 
 env-step
 ~~~~~~~~
@@ -3552,8 +3531,8 @@ Pact 스텝의 상태를 설정합니다. 인수가 없는 경우 스텝의 설�
 
 .. code:: lisp
 
-    (env-step 1)
-    (env-step 0 true)
+   (env-step 1)
+   (env-step 0 true)
 
 expect
 ~~~~~~
@@ -3564,8 +3543,8 @@ ACTUAL 을 평가하고 EXPECTED 와 동일한지 검증합니다.
 
 .. code:: lisp
 
-    pact> (expect "Sanity prevails." 4 (+ 2 2))
-    "Expect: success: Sanity prevails."
+   pact> (expect "Sanity prevails." 4 (+ 2 2))
+   "Expect: success: Sanity prevails."
 
 expect-failure
 ~~~~~~~~~~~~~~
@@ -3576,8 +3555,8 @@ EXP 를 평가하고 오류가 발생한 경우에만 계속 진행합니다.
 
 .. code:: lisp
 
-    pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
-    "Expect failure: success: Enforce fails on false"
+   pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
+   "Expect failure: success: Enforce fails on false"
 
 json
 ~~~~
@@ -3589,8 +3568,8 @@ Pact 표현식 EXP 를 JSON 값으로 인코딩합니다. Pact 값은 API 출력
 
 .. code:: lisp
 
-    pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
-    [{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
+   pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
+   [{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
 
 load
 ~~~~
@@ -3604,7 +3583,7 @@ FILE 을 로드 및 평가하며 선택적인 RESET 값이 true 인 경우 미�
 
 .. code:: lisp
 
-    (load "accounts.repl")
+   (load "accounts.repl")
 
 pact-state
 ~~~~~~~~~~
@@ -3617,7 +3596,7 @@ pact-state
 
 .. code:: lisp
 
-    (pact-state)
+   (pact-state)
 
 print
 ~~~~~
@@ -3635,7 +3614,7 @@ rollback-tx
 
 .. code:: lisp
 
-    (rollback-tx)
+   (rollback-tx)
 
 sig-keyset
 ~~~~~~~~~~
@@ -3716,19 +3695,19 @@ Pact 프로그램에 대한 지원을 계속해서 넓혀 나아가 결국은 �
 
 .. code:: lisp
 
-    (defun read-account (id)
-      @doc   "Read data for account ID"
-      @model [(property (authorized-by 'admins))]
+   (defun read-account (id)
+     @doc   "Read data for account ID"
+     @model [(property (authorized-by 'admins))]
 
-      (enforce-admin)
-      (read 'accounts id ['balance 'ccy 'amount]))
+     (enforce-admin)
+     (read 'accounts id ['balance 'ccy 'amount]))
 
 Pact에서는 여러 개의 속성을 동시에 정의할 수 있기 때문에 하나의 속성을
 묶을 수 있는 대괄호 집합이 있습니다.
 
 .. code:: lisp
 
-    [p1 p2 p3 ...]
+   [p1 p2 p3 ...]
 
 다음으로 스미카 불변식의 예를 살펴보겠습니다. 다음과 같은 스키마를 가진
 모든 테이블의 경우, 속성 검사기가 성공을 거두는 경우에는 가능한 모든
@@ -3736,12 +3715,12 @@ Pact에서는 여러 개의 속성을 동시에 정의할 수 있기 때문에 �
 
 .. code:: lisp
 
-    (defschema tokens
-      @doc   "token schema"
-      @model [(invariant (> balance 0))]
+   (defschema tokens
+     @doc   "token schema"
+     @model [(invariant (> balance 0))]
 
-      username:string
-      balance:integer)
+     username:string
+     balance:integer)
 
 어떻게 작용합니까?
 ------------------
@@ -3774,7 +3753,7 @@ Pact 모듈의 모든 함수 정의에서는 다른 함수에 대한 모든 후�
 
 .. code:: lisp
 
-    (verify 'module-name)
+   (verify 'module-name)
 
 이렇게 하면 코드를 타입체킹 후 통과 할 경우 모든 불변식과 속성을 검사할
 수 있습니다.
@@ -3790,11 +3769,11 @@ Pact 모듈의 모든 함수 정의에서는 다른 함수에 대한 모든 후�
 
 .. code:: lisp
 
-    (defun negate:integer (x:integer)
-      @doc   "negate a number"
-      @model [(property (= result (* -1 x)))]
+   (defun negate:integer (x:integer)
+     @doc   "negate a number"
+     @model [(property (= result (* -1 x)))]
 
-      (* x -1))
+     (* x -1))
 
 여기에서 정수 및 10진수에 대한 표준 산술 연산자는 일반적인 Pact
 코드에서처럼 작동한다는 것을 알 수 있습니다.
@@ -3803,13 +3782,13 @@ Pact 모듈의 모든 함수 정의에서는 다른 함수에 대한 모든 후�
 
 .. code:: lisp
 
-    (defun abs:integer (x:integer)
-      @doc   "absolute value"
-      @model [(property (>= result 0))]
+   (defun abs:integer (x:integer)
+     @doc   "absolute value"
+     @model [(property (>= result 0))]
 
-      (if (< x 0)
-        (negate x)
-        x))
+     (if (< x 0)
+       (negate x)
+       x))
 
 부울 연산자
 ~~~~~~~~~~~
@@ -3821,16 +3800,16 @@ Pact 모듈의 모든 함수 정의에서는 다른 함수에 대한 모든 후�
 
 .. code:: lisp
 
-    (defun negate:integer (x:integer)
-      @doc   "negate a number"
-      @model
-        [(property (when (< x 0) (> result 0)))
-         (property (when (> x 0) (< result 0)))
-         (property (and
-           (when (< x 0) (> result 0))
-           (when (> x 0) (< result 0))))]
+   (defun negate:integer (x:integer)
+     @doc   "negate a number"
+     @model
+       [(property (when (< x 0) (> result 0)))
+        (property (when (> x 0) (< result 0)))
+        (property (and
+          (when (< x 0) (> result 0))
+          (when (> x 0) (< result 0))))]
 
-      (* x -1))
+     (* x -1))
 
 트랜잭션 중단 및 성공
 ~~~~~~~~~~~~~~~~~~~~~
@@ -3840,12 +3819,12 @@ Pact 모듈의 모든 함수 정의에서는 다른 함수에 대한 모든 후�
 
 .. code:: lisp
 
-    (defun ensured-positive (val:integer)
-      @doc   "halts when passed a non-positive number"
-      @model [(property (!= result 0))]
+   (defun ensured-positive:integer (val:integer)
+     @doc   "halts when passed a non-positive number"
+     @model [(property (!= result 0))]
 
-      (enforce (> val 0) "val is not positive")
-      val)
+     (enforce (> val 0) "val is not positive")
+     val)
 
 는 ``enforce``\ 를 사용하기 때문에 통과합니다.
 
@@ -3906,17 +3885,17 @@ Pact에서는 키를 사전 정의된 이름(\ ``define-keyset``\ 로 정의)으
 
 .. code:: lisp
 
-    (defun admins-only (action:string)
-      @doc   "Only admins or super-admins can call this function successfully.
-      @model
-        [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
-         (property (when (== "create" action) (authorized-by 'super-admins)))]
+   (defun admins-only (action:string)
+     @doc   "Only admins or super-admins can call this function successfully."
+     @model
+       [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
+        (property (when (== "create" action) (authorized-by 'super-admins)))]
 
-      (if (== action "create")
-        (create)
-        (if (== action "update")
-          (update)
-          (incorrect-action action))))
+     (if (= action "create")
+       (create)
+       (if (= action "update")
+         (update)
+         (incorrect-action action))))
 
 Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용자에 대해
 하나의 행을 가지고 있고 각 사용자의 행에는 행 수정 시 권한이 부여된
@@ -3929,7 +3908,7 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (row-enforced 'accounts 'ks name)
+   (row-enforced 'accounts 'ks name)
 
 실행 중인 ``row-enforced``\ 에 대한 몇 가지 예는 “간단한 잔액 이체 예”와
 아래의 “전체 및 존재 정량화” 섹션을 참조하세요.
@@ -3961,7 +3940,7 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (conserves-mass 'accounts 'balance)
+   (conserves-mass 'accounts 'balance)
 
 이 속성을 사용하는 예는 아래의 “간단한 잔액 이체 예”를 참조하세요
 
@@ -3972,19 +3951,19 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (= 0 (column-delta 'accounts 'balance))
+   (= 0 (column-delta 'accounts 'balance))
 
 또한 ``column-delta``\ 을 사용하면 열이 단조 증가하거나
 
 .. code:: lisp
 
-    (>= 0 (column-delta 'accounts 'balance))
+   (>= 0 (column-delta 'accounts 'balance))
 
 트랜잭션 동안 정해진 금액까지 증가하도록 보장할 수 있습니다.
 
 .. code:: lisp
 
-    (= 1 (column-delta 'accounts 'balance))
+   (= 1 (column-delta 'accounts 'balance))
 
 ``column-delta``\ 는 트랜잭션 전부터 후까지 정해진 금액까지 증가하도록
 정의되었습니다.(예: ``after - before``) – 변경의 절대 값이 아님. 따라서
@@ -4003,10 +3982,10 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (property
-      (forall (key:string)
-       (when (row-written 'accounts key)
-         (row-enforced 'accounts 'ks key))))
+   (property
+     (forall (key:string)
+      (when (row-written 'accounts key)
+        (row-enforced 'accounts 'ks key))))
 
 이 속성은 해당 함수에 의해 쓰여지기 가능한 모든 행에서 열 ``ks``\ 의
 키셋을 해당 행에 대해 enforce 해야 한다는 것을 말해줍니다.
@@ -4017,9 +3996,9 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (property
-      (exists (key:string)
-        (row-read 'accounts key)))
+   (property
+     (exists (key:string)
+       (row-read 'accounts key)))
 
 보편적 및 존재적 정량화를 모두 원할 경우에는 타입 주석이 필요합니다.
 
@@ -4030,25 +4009,25 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (defmodule accounts
-      @model
-        [(defproperty conserves-mass
-           (= (column-delta 'accounts 'balance) 0.0))
-         (defproperty auth-required
-           (authorized-by 'accounts-admin-keyset))]
+   (defmodule accounts
+     @model
+       [(defproperty conserves-mass
+          (= (column-delta 'accounts 'balance) 0.0))
+        (defproperty auth-required
+          (authorized-by 'accounts-admin-keyset))]
 
-      ; ...
-      )
+     ; ...
+     )
 
 그리고 속성의 이름을 참조하여 함수 수준에서 속성을 사용할 수 있습니다.
 
 .. code:: lisp
 
-    (defun read-account (id)
-      @model [(property auth-required)]
+   (defun read-account (id)
+     @model [(property auth-required)]
 
-      ; ...
-      )
+     ; ...
+     )
 
 간단한 잔액 이체 예제
 ---------------------
@@ -4058,13 +4037,13 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (defschema account
-      @doc "user accounts with balances"
+   (defschema account
+     @doc "user accounts with balances"
 
-      balance:integer
-      ks:keyset)
+     balance:integer
+     ks:keyset)
 
-    (deftable accounts:{account})
+   (deftable accounts:{account})
 
 두 계정 간의 잔액 이체를 위한 다음 코드는 처음 보기에는 문제가 없어
 보이지만, 사실상 많은 버그가 존재합니다. 이러한 버그는 다른 속성의
@@ -4072,27 +4051,27 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc   "Transfer money between accounts"
-      @model [(property (row-enforced 'accounts 'ks from))]
+   (defun transfer (from:string to:string amount:integer)
+     @doc   "Transfer money between accounts"
+     @model [(property (row-enforced 'accounts 'ks from))]
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to   { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to   { "balance": (+ to-bal amount) }))))
 
 잔액이 0 미만으로 떨어지지 않도록 불변식을 추가해 보겠습니다.
 
 .. code:: lisp
 
-    (defschema account
-      @doc   "user accounts with balances"
-      @model [(invariant (>= balance 0))]
+   (defschema account
+     @doc   "user accounts with balances"
+     @model [(invariant (>= balance 0))]
 
-      balance:integer
-      ks:keyset)
+     balance:integer
+     ks:keyset)
 
 이제 ``verify``\ 를 사용해 이 모듈의 모든 속성을 검증할 때 Pact의 속성
 검사기가 ``amount``\ 에 ``-1``\ 을 적용하는 방식으로 양수인 잔액
@@ -4103,17 +4082,17 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc   "Transfer money between accounts"
-      @model [(property (row-enforced 'accounts 'ks from))]
+   (defun transfer (from:string to:string amount:integer)
+     @doc   "Transfer money between accounts"
+     @model [(property (row-enforced 'accounts 'ks from))]
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (enforce (> amount 0)         "Non-positive amount")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to   { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (enforce (> amount 0)         "Non-positive amount")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to   { "balance": (+ to-bal amount) }))))
 
 이 시점에서 속성 검사기가 코드의 유효성을 검사하지만, 해당 함수가 토큰의
 생성 또는 훼손을 할 수 없도록 또 다른 속성인
@@ -4121,19 +4100,19 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc   "Transfer money between accounts"
-      @model
-        [(property (row-enforced 'accounts 'ks from))
-         (property (conserves-mass 'accounts 'balance))]
+   (defun transfer (from:string to:string amount:integer)
+     @doc   "Transfer money between accounts"
+     @model
+       [(property (row-enforced 'accounts 'ks from))
+        (property (conserves-mass 'accounts 'balance))]
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (enforce (> amount 0)         "Non-positive amount")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to   { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (enforce (> amount 0)         "Non-positive amount")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to   { "balance": (+ to-bal amount) }))))
 
 이때 ``verify``\ 를 실행하면 속성 검사기가 다시 버그를 찾아냅니다.
 ``from`` 및 ``to``\ 가 같은 계정으로 설정이 되면 속성 조작이 가능합니다.
@@ -4146,8 +4125,8 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (update accounts "alice" { "balance": (- previous-balance amount) })
-    (update accounts "alice" { "balance": (+ previous-balance amount) })
+   (update accounts "alice" { "balance": (- previous-balance amount) })
+   (update accounts "alice" { "balance": (+ previous-balance amount) })
 
 이 시나리오에서 두 번째 ``update`` 호출은 첫 번째 호출을 완벽하게
 덮어쓰기 합니다(로). Alice 는 무료로 ``amount`` 토큰을 생성했습니다!
@@ -4157,20 +4136,20 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc   "Transfer money between accounts"
-      @model
-        [(property (row-enforced 'accounts 'ks from))
-         (property (conserves-mass 'accounts 'balance))]
+   (defun transfer (from:string to:string amount:integer)
+     @doc   "Transfer money between accounts"
+     @model
+       [(property (row-enforced 'accounts 'ks from))
+        (property (conserves-mass 'accounts 'balance))]
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (enforce (> amount 0)         "Non-positive amount")
-          (enforce (!= from to)         "Sender is the recipient")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to   { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (enforce (> amount 0)         "Non-positive amount")
+         (enforce (!= from to)         "Sender is the recipient")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to   { "balance": (+ to-bal amount) }))))
 
 최종적으로 속성 검사기는 다음이 모두 true 인지 확인합니다.
 
@@ -4203,7 +4182,7 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (+ x y)
+   (+ x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4221,7 +4200,7 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (- x y)
+   (- x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4239,7 +4218,7 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (* x y)
+   (* x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4257,7 +4236,7 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (/ x y)
+   (/ x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4275,7 +4254,7 @@ Row-level 키셋 적용의 일반적인 패턴에서는 테이블이 각 사용�
 
 .. code:: lisp
 
-    (^ x y)
+   (^ x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4293,7 +4272,7 @@ log
 
 .. code:: lisp
 
-    (log b x)
+   (log b x)
 
 -  ``b``\ 는 *a*\ 의 타입을 가집니다.
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
@@ -4311,7 +4290,7 @@ log
 
 .. code:: lisp
 
-    (- x)
+   (- x)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  *a*\ 의 타입을 가진 값을 산출합니다.
@@ -4328,7 +4307,7 @@ sqrt
 
 .. code:: lisp
 
-    (sqrt x)
+   (sqrt x)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  *a*\ 의 타입을 가진 값을 산출합니다.
@@ -4345,7 +4324,7 @@ ln
 
 .. code:: lisp
 
-    (ln x)
+   (ln x)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  *a*\ 의 타입을 가진 값을 산출합니다.
@@ -4362,7 +4341,7 @@ exp
 
 .. code:: lisp
 
-    (exp x)
+   (exp x)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  *a*\ 의 타입을 가진 값을 산출합니다.
@@ -4379,7 +4358,7 @@ abs
 
 .. code:: lisp
 
-    (abs x)
+   (abs x)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  *a*\ 의 타입을 가진 값을 산출합니다.
@@ -4396,14 +4375,14 @@ round
 
 .. code:: lisp
 
-    (round x)
+   (round x)
 
 -  ``x``\ 는 ``decimal``\ 의 타입을 가집니다.
 -  ``string``\ 의 타입을 가진 값을 산출합니다.
 
 .. code:: lisp
 
-    (round x prec)
+   (round x prec)
 
 -  ``x``\ 는 ``decimal``\ 의 타입을 가집니다.
 -  ``prec``\ 는 ``string``\ 의 타입을 가집니다.
@@ -4421,14 +4400,14 @@ ceiling
 
 .. code:: lisp
 
-    (ceiling x)
+   (ceiling x)
 
 -  ``x``\ 는 ``decimal``\ 의 타입을 가집니다.
 -  ``string``\ 의 타입을 가진 값을 산출합니다.
 
 .. code:: lisp
 
-    (ceiling x prec)
+   (ceiling x prec)
 
 -  ``x``\ 는 ``decimal``\ 의 타입을 가집니다.
 -  ``prec``\ 는 ``string``\ 의 타입을 가집니다.
@@ -4446,14 +4425,14 @@ floor
 
 .. code:: lisp
 
-    (floor x)
+   (floor x)
 
 -  ``x``\ 는 ``decimal``\ 의 타입을 가집니다.
 -  ``string``\ 의 타입을 가진 값을 산출합니다.
 
 .. code:: lisp
 
-    (floor x prec)
+   (floor x prec)
 
 -  ``x``\ 는 ``decimal``\ 의 타입을 가집니다.
 -  ``prec``\ 는 ``string``\ 의 타입을 가집니다.
@@ -4471,7 +4450,7 @@ mod
 
 .. code:: lisp
 
-    (mod x y)
+   (mod x y)
 
 -  ``x``\ 는 ``string``\ 의 타입을 가집니다.
 -  ``y``\ 는 ``string``\ 의 타입을 가집니다.
@@ -4493,7 +4472,7 @@ mod
 
 .. code:: lisp
 
-    (> x y)
+   (> x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4511,7 +4490,7 @@ mod
 
 .. code:: lisp
 
-    (< x y)
+   (< x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4529,7 +4508,7 @@ mod
 
 .. code:: lisp
 
-    (>= x y)
+   (>= x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4547,7 +4526,7 @@ mod
 
 .. code:: lisp
 
-    (<= x y)
+   (<= x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4565,7 +4544,7 @@ mod
 
 .. code:: lisp
 
-    (= x y)
+   (= x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4584,7 +4563,7 @@ mod
 
 .. code:: lisp
 
-    (!= x y)
+   (!= x y)
 
 -  ``x``\ 는 *a*\ 의 타입을 가집니다.
 -  ``y``\ 는 *a*\ 의 타입을 가집니다.
@@ -4603,7 +4582,7 @@ and
 
 .. code:: lisp
 
-    (and x y)
+   (and x y)
 
 -  ``x``\ 는 ``bool``\ 의 타입을 가집니다.
 -  ``y``\ 는 ``bool``\ 의 타입을 가집니다.
@@ -4620,7 +4599,7 @@ or
 
 .. code:: lisp
 
-    (or x y)
+   (or x y)
 
 -  ``x``\ 는 ``bool``\ 의 타입을 가집니다.
 -  ``y``\ 는 ``bool``\ 의 타입을 가집니다.
@@ -4637,7 +4616,7 @@ not
 
 .. code:: lisp
 
-    (not x)
+   (not x)
 
 -  ``x``\ 는 ``bool``\ 의 타입을 가집니다.
 -  ``bool``\ 의 타입을 가진 값을 산출합니다.
@@ -4653,7 +4632,7 @@ when
 
 .. code:: lisp
 
-    (when x y)
+   (when x y)
 
 -  ``x``\ 는 ``bool``\ 의 타입을 가집니다.
 -  ``y``\ 는 ``bool``\ 의 타입을 가집니다.
@@ -4675,7 +4654,7 @@ at
 
 .. code:: lisp
 
-    (at k o)
+   (at k o)
 
 -  ``k``\ 는\ ``string``\ 의 타입을 가집니다.
 -  ``o``\ 는 ``object``\ 의 타입을 가집니다.
@@ -4692,7 +4671,7 @@ at
 
 .. code:: lisp
 
-    (+ x y)
+   (+ x y)
 
 -  ``x``\ 는 ``object``\ 의 타입을 가집니다.
 -  ``y``\ 는 ``object``\ 의 타입을 가집니다.
@@ -4714,7 +4693,7 @@ length
 
 .. code:: lisp
 
-    (length s)
+   (length s)
 
 -  ``s``\ 는 ``string``\ 의 타입을 가집니다.
 -  ``string``\ 의 타입을 가진 값을 산출합니다.
@@ -4730,7 +4709,7 @@ length
 
 .. code:: lisp
 
-    (+ s t)
+   (+ s t)
 
 -  ``s``\ 는 ``string``\ 의 타입을 가집니다.
 -  ``t``\ 는 ``string``\ 의 타입을 가집니다.
@@ -4747,14 +4726,14 @@ str-to-int
 
 .. code:: lisp
 
-    (str-to-int s)
+   (str-to-int s)
 
 -  ``s``\ 는 ``string``\ 의 타입을 가집니다.
 -  ``string``\ 의 타입을 가진 값을 산출합니다.
 
 .. code:: lisp
 
-    (str-to-int b s)
+   (str-to-int b s)
 
 -  ``b``\ 는 ``integer``\ 의 타입을 가집니다.
 -  ``s``\ 는 ``string``\ 의 타입을 가집니다.
@@ -4776,7 +4755,7 @@ add-time
 
 .. code:: lisp
 
-    (add-time t s)
+   (add-time t s)
 
 -  ``t``\ 은 ``time``\ 의 타입을 가집니다.
 -  ``s``\ 는 *a* 의 타입을 가집니다.
@@ -4799,7 +4778,7 @@ forall
 
 .. code:: lisp
 
-    (forall (x:string) y)
+   (forall (x:string) y)
 
 -  *a*\ 의 타입을 가진 ``x``\ 를 바인딩합니다.
 -  ``y``\ 는 *r* 의 타입을 가집니다.
@@ -4818,7 +4797,7 @@ exists
 
 .. code:: lisp
 
-    (exists (x:string) y)
+   (exists (x:string) y)
 
 -  *a*\ 의 타입을 가진 ``x``\ 를 바인딩합니다.
 -  ``y``\ 는 *r* 의 타입을 가집니다.
@@ -4836,7 +4815,7 @@ column-of
 
 .. code:: lisp
 
-    (column-of t)
+   (column-of t)
 
 -  ``t``\ 는 ``table``\ 의 타입을 가집니다.
 -  ``type``\ 의 타입을 가진 값을 산출합니다.
@@ -4859,7 +4838,7 @@ abort
 
 .. code:: lisp
 
-    abort
+   abort
 
 -  ``bool``\ 의 타입을 가집니다.
 
@@ -4877,7 +4856,7 @@ success
 
 .. code:: lisp
 
-    success
+   success
 
 -  ``bool``\ 의 타입을 가집니다.
 
@@ -4895,7 +4874,7 @@ result
 
 .. code:: lisp
 
-    result
+   result
 
 -  *r* 의 타입을 가집니다.
 -  이때 *r* 은 *any type* 의 타입을 가집니다.
@@ -4903,8 +4882,6 @@ result
 테스트 중인 함수의 반환 값.
 
 속성에서만 지원됩니다.
-
-.. _Database:
 
 데이터베이스 연산자
 -------------------
@@ -4916,7 +4893,7 @@ table-written
 
 .. code:: lisp
 
-    (table-written t)
+   (table-written t)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``bool``\ 의 타입을 가진 값을 산출합니다.
@@ -4933,7 +4910,7 @@ table-read
 
 .. code:: lisp
 
-    (table-read t)
+   (table-read t)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``bool``\ 의 타입을 가진 값을 산출합니다.
@@ -4950,7 +4927,7 @@ cell-delta
 
 .. code:: lisp
 
-    (cell-delta t c r)
+   (cell-delta t c r)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``c``\ 는 *b* 의 타입을 가집니다.
@@ -4971,7 +4948,7 @@ column-delta
 
 .. code:: lisp
 
-    (column-delta t c)
+   (column-delta t c)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``c``\ 는 *b* 의 타입을 가집니다.
@@ -4991,7 +4968,7 @@ column-written
 
 .. code:: lisp
 
-    (column-written t c)
+   (column-written t c)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``c``\ 는 *b* 의 타입을 가집니다.
@@ -5010,7 +4987,7 @@ column-read
 
 .. code:: lisp
 
-    (column-read t c)
+   (column-read t c)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``c``\ 는 *b* 의 타입을 가집니다.
@@ -5029,7 +5006,7 @@ row-read
 
 .. code:: lisp
 
-    (row-read t r)
+   (row-read t r)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``r``\ 은 ``string``\ 의 타입을 가집니다.
@@ -5047,7 +5024,7 @@ row-written
 
 .. code:: lisp
 
-    (row-written t r)
+   (row-written t r)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``r``\ 은 ``string``\ 의 타입을 가집니다.
@@ -5065,7 +5042,7 @@ row-read-count
 
 .. code:: lisp
 
-    (row-read-count t r)
+   (row-read-count t r)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``r``\ 은 ``string``\ 의 타입을 가집니다.
@@ -5083,7 +5060,7 @@ row-write-count
 
 .. code:: lisp
 
-    (row-write-count t r)
+   (row-write-count t r)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``r``\ 은 ``string``\ 의 타입을 가집니다.
@@ -5101,7 +5078,7 @@ row-exists
 
 .. code:: lisp
 
-    (row-exists t r time)
+   (row-exists t r time)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``r``\ 은 ``string``\ 의 타입을 가집니다.
@@ -5120,7 +5097,7 @@ read
 
 .. code:: lisp
 
-    (read t r)
+   (read t r)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``r``\ 은 ``string``\ 의 타입을 가집니다.
@@ -5144,7 +5121,7 @@ authorized-by
 
 .. code:: lisp
 
-    (authorized-by k)
+   (authorized-by k)
 
 -  ``k``\ 는\ ``string``\ 의 타입을 가집니다.
 -  ``bool``\ 의 타입을 가진 값을 산출합니다.
@@ -5160,7 +5137,7 @@ row-enforced
 
 .. code:: lisp
 
-    (row-enforced t c r)
+   (row-enforced t c r)
 
 -  ``t``\ 는 *a* 의 타입을 가집니다.
 -  ``c``\ 는 *b* 의 타입을 가집니다.

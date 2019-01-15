@@ -87,8 +87,7 @@ evalCommitTx i = do
     Just {} -> commitTx i
 {-# INLINE evalCommitTx #-}
 
-
-enforceKeySetName ::  Info -> KeySetName ->  Eval e ()
+enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " ++ show mksn) return =<< readRow mi KeySets mksn
   runPure $ enforceKeySet mi (Just mksn) ks
@@ -169,6 +168,27 @@ revokeAllCapabilities = evalCapabilities .= []
 revokeCapability :: Capability -> Eval e ()
 revokeCapability c = evalCapabilities %= filter (/= c)
 
+-- | Evaluate current namespace and prepend namespace to the
+-- module name. This should be done before any lookups, as
+-- 'namespace.modulename' is the name we will associate
+-- with a module unless the namespace policy is defined
+-- otherwise
+evalNamespace :: Info -> Module -> Eval e Module
+evalNamespace info m = do
+  mNs <- use $ evalRefs . rsNamespace
+  case mNs of
+    Nothing -> do
+      policy <- view (eeNamespacePolicy . nsPolicy)
+      unless (policy mNs) $ evalError info $ "Definitions in default namespace are not authorized"
+      return m
+    Just (Namespace n _) ->
+      return $ over (case m of Module {} -> mName; _ -> interfaceName) (mangleModuleName n) m
+  where
+    mangleModuleName :: NamespaceName -> ModuleName -> ModuleName
+    mangleModuleName n mn@(ModuleName nn ns) =
+      case ns of
+        Nothing -> ModuleName nn (Just n)
+        Just {} -> mn
 
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
@@ -176,8 +196,10 @@ eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) 
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
+    -- prepend namespace def to module name
+    mangledM <- evalNamespace i m
     -- enforce old module keysets
-    oldM <- readRow i Modules (_mName m)
+    oldM <- readRow i Modules $ _mName mangledM
     case oldM of
       Nothing -> return ()
       Just om ->
@@ -186,29 +208,32 @@ eval (TModule m@Module{} bod i) =
           Interface{..} -> evalError i $
             "Name overlap: module " ++ show (_mName om) ++ " overlaps with interface  " ++ show _interfaceName
     -- enforce new module keyset
-    enforceKeySetName i (_mKeySet m)
+    enforceKeySetName i (_mKeySet mangledM)
     -- build/install module from defs
-    (g,_defs) <- loadModule m bod i g0
-    writeRow i Write Modules (_mName m) m
-    return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
-eval (TModule m@Interface{..} bod i) =
+    g <- loadModule mangledM bod i g0
+    writeRow i Write Modules (_mName mangledM) mangledM
+    return (g, msg $ pack $ "Loaded module " ++ show (_mName mangledM) ++ ", hash " ++ show (_mHash mangledM))
+eval (TModule m@Interface{} bod i) =
   topLevelCall i "interface" (GInterfaceDecl m) $ \gas -> do
-    oldI <- readRow i Modules _interfaceName
+     -- prepend namespace def to module name
+    mangledI <- evalNamespace i m
+    -- enforce old module keysets
+    oldI <- readRow i Modules $ _interfaceName mangledI
     case oldI of
       Nothing -> return ()
       Just oi ->
         case oi of
           Module{..} -> evalError i $
-            "Name overlap: interface " ++ show _interfaceName ++ " overlaps with module " ++ show _mName
+            "Name overlap: interface " ++ show (_interfaceName m) ++ " overlaps with module " ++ show _mName
           Interface{..} -> return ()
-    (g, _) <- loadModule m bod i gas
-    writeRow i Write Modules _interfaceName m
-    return (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)
+    g <- loadModule mangledI bod i gas
+    writeRow i Write Modules (_interfaceName mangledI) mangledI
+    return (g, msg $ pack $ "Loaded interface " ++ show (_interfaceName mangledI))
 eval t = enscope t >>= reduce
 
 evalUse :: Use -> Eval e ()
 evalUse (Use mn h i) = do
-  mm <- preview $ eeRefStore . rsModules . ix mn
+  mm <- resolveName mn
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just md -> do
@@ -226,10 +251,20 @@ evalUse (Use mn h i) = do
 
       installModule md
 
+mangleDefs :: ModuleName -> Term Name -> Term Name
+mangleDefs mn term = modifyMn term
+  where
+    modifyMn = case term of
+      TDef{}    -> set (tDef . dModule) mn
+      TConst{}  -> set tModule mn
+      TSchema{} -> set tModule mn
+      TTable{}  -> set tModule mn
+      _         -> id
+
 -- | Make table of module definitions for storage in namespace/RefStore.
-loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
+loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e Gas
 loadModule m@Module{..} bod1 mi g0 = do
-  (g1,modDefs1) <-
+  (g1,mdefs) <-
     case instantiate' bod1 of
       (TList bd _ _bi) -> do
         let doDef (g,rs) t = do
@@ -248,12 +283,12 @@ loadModule m@Module{..} bod1 mi g0 = do
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
   mapM_ evalUse _mImports
-  evaluatedDefs <- evaluateDefs mi modDefs1
+  evaluatedDefs <- evaluateDefs mi (fmap (mangleDefs _mName) mdefs)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   let md = ModuleData m' solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _mName md
-  return (g1, modDefs1)
+  return g1
 loadModule i@Interface{..} body info gas0 = do
   (gas1,idefs) <- case instantiate' body of
     (TList bd _ _bi) -> do
@@ -272,11 +307,11 @@ loadModule i@Interface{..} body info gas0 = do
       second HM.fromList <$> foldM doDef (gas0,[]) bd
     t -> evalError (_tInfo t) "Malformed interface"
   mapM_ evalUse _interfaceImports
-  evaluatedDefs <- evaluateDefs info idefs
+  evaluatedDefs <- evaluateDefs info (fmap (mangleDefs _interfaceName) idefs)
   let md = ModuleData i evaluatedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
-  return (gas1, idefs)
+  return gas1
 
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
@@ -319,15 +354,13 @@ evaluateConstraints
 evaluateConstraints info Interface{} _ =
   evalError info "Unexpected: interface found in module position while solving constraints"
 evaluateConstraints info m evalMap =
-  -- we would like the lazy semantics of foldr to shortcircuit the solver
-  foldr evaluateConstraint (pure (m, evalMap)) (_mInterfaces m)
+  foldM evaluateConstraint (m, evalMap) $ _mInterfaces m
   where
-    evaluateConstraint ifn em = do
-      (m',refMap) <- em
-      refData <- preview $ eeRefStore . rsModules . ix ifn
+    evaluateConstraint (m', refMap) ifn = do
+      refData <- resolveName ifn
       case refData of
         Nothing -> evalError info $
-          "Interface implemented in module, but not defined: " ++ asString' ifn
+          "Interface not defined: " ++ asString' ifn
         Just (ModuleData Interface{..} irefs) -> do
           em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
@@ -356,24 +389,45 @@ solveConstraint info refName (Ref t) evalMap = do
     Just (Ref s) ->
       case (t, s) of
         (TDef (Def _n _mn dt (FunType args rty) _ m _) _,
-          TDef (Def _n' _mn' dt' (FunType args' rty') b m' i) _) -> do
+          TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _) _) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
-          -- the model concatenation step: we must reinsert the ref back into the map with new models
-          -- TODO yuck, should be lensing here
-          pure $ HM.insert refName (Ref $ TDef (Def _n' _mn' dt' (FunType args' rty') b (m <> m') i) i) em
+          -- the model concatenation step: we reinsert the ref back into the map with new models
+          pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
+resolveName :: ModuleName -> Eval e (Maybe ModuleData)
+resolveName mn = do
+  md <- preview $ eeRefStore . rsModules . ix mn
+  case md of
+    Just _ -> return md
+    Nothing -> do
+      case (_mnNamespace mn) of
+        Just {} -> pure Nothing -- explicit namespace not found
+        Nothing -> do
+          mNs <- use $ evalRefs . rsNamespace
+          case mNs of
+            Just ns -> preview $ eeRefStore . rsModules . ix (set mnNamespace (Just . _nsName $ ns) mn)
+            Nothing -> pure Nothing
+
 resolveRef :: Name -> Eval e (Maybe Ref)
-resolveRef qn@(QName q n _) = do
-  dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
+resolveRef (QName q n _) = do
+  let lookupQn q' n' = preview $ eeRefStore . rsModules . ix q' . mdRefMap . ix n'
+  dsm <- lookupQn q n
   case dsm of
     d@Just {} -> return d
-    Nothing -> preview (evalRefs . rsLoaded . ix qn) <$> get
+    Nothing -> do
+      case (_mnNamespace q) of
+        Just {} -> pure Nothing -- explicit namespace not found
+        Nothing -> do
+          mNs <- use $ evalRefs . rsNamespace
+          case mNs of
+            Just ns -> lookupQn (set mnNamespace (Just $ _nsName ns) q) n
+            Nothing -> pure Nothing -- no explicit namespace or decalared namespace
 resolveRef nn@(Name _ _) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of

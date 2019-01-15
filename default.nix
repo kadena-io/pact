@@ -1,4 +1,4 @@
-{ rpRef ? "f3ff81d519b226752c83eefd4df6718539c3efdc", rpSha ?  "1ijxfwl36b9b2j4p9j3bv8vf7qfi570m1c5fjyvyac0gy0vi5g8j" }:
+{ rpRef ? "f3ff81d519b226752c83eefd4df6718539c3efdc", rpSha ?  "1ijxfwl36b9b2j4p9j3bv8vf7qfi570m1c5fjyvyac0gy0vi5g8j", system ? builtins.currentSystem }:
 
 let rp = builtins.fetchTarball {
   url = "https://github.com/reflex-frp/reflex-platform/archive/${rpRef}.tar.gz";
@@ -6,31 +6,39 @@ let rp = builtins.fetchTarball {
 };
 
 in
-  (import rp {}).project ({ pkgs, ... }: {
+  (import rp { inherit system; }).project ({ pkgs, ... }:
+  let gitignore = pkgs.callPackage (pkgs.fetchFromGitHub {
+        owner = "siers";
+        repo = "nix-gitignore";
+        rev = "4f2d85f2f1aa4c6bff2d9fcfd3caad443f35476e";
+        sha256 = "1vzfi3i3fpl8wqs1yq95jzdi6cpaby80n8xwnwa8h2jvcw3j7kdz";
+      }) {};
+  in
+  {
     name = "pact";
-    overrides = self: super:
+    overrides = self: super: with pkgs.haskell.lib;
       let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
        in {
-            pact = pkgs.haskell.lib.addBuildDepend super.pact pkgs.z3;
+            pact = doCoverage (addBuildDepend super.pact pkgs.z3);
             haskeline = guardGhcjs super.haskeline;
 
             # tests for extra were failing due to an import clash (`isWindows`)
-            extra = pkgs.haskell.lib.dontCheck super.extra;
+            extra = dontCheck super.extra;
             # tests try to use ghc-pkg and cabal (https://github.com/sol/doctest/issues/213)
-            doctest = guardGhcjs (pkgs.haskell.lib.dontCheck (self.callHackage "doctest" "0.16.0" {}));
+            doctest = guardGhcjs (dontCheck (self.callHackage "doctest" "0.16.0" {}));
             # these want to use doctest, which doesn't work on ghcjs
-            bytes = pkgs.haskell.lib.dontCheck super.bytes;
-            intervals = pkgs.haskell.lib.dontCheck super.intervals;
-            bound = pkgs.haskell.lib.dontCheck super.bound;
-            trifecta = pkgs.haskell.lib.dontCheck super.trifecta;
-            lens-aeson = pkgs.haskell.lib.dontCheck super.lens-aeson;
+            bytes = dontCheck super.bytes;
+            intervals = dontCheck super.intervals;
+            bound = dontCheck super.bound;
+            trifecta = dontCheck super.trifecta;
+            lens-aeson = dontCheck super.lens-aeson;
             # test suite for this is failing on ghcjs:
-            hw-hspec-hedgehog = pkgs.haskell.lib.dontCheck super.hw-hspec-hedgehog;
+            hw-hspec-hedgehog = dontCheck super.hw-hspec-hedgehog;
 
-            algebraic-graphs = pkgs.haskell.lib.dontCheck super.algebraic-graphs;
+            algebraic-graphs = dontCheck super.algebraic-graphs;
 
             # Needed to get around a requirement on `hspec-discover`.
-            megaparsec = pkgs.haskell.lib.dontCheck super.megaparsec;
+            megaparsec = dontCheck super.megaparsec;
 
             hedgehog = self.callCabal2nix "hedgehog" (pkgs.fetchFromGitHub {
               owner = "hedgehogqa";
@@ -42,7 +50,7 @@ in
             # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
             # sbv >= 7.9
-            sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
+            sbv = dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "LeventErkok";
               repo = "sbv";
               rev = "3dc60340634c82f39f6c5dca2b3859d10925cfdf";
@@ -50,7 +58,7 @@ in
             }) {});
 
             # Our own custom fork
-            thyme = pkgs.haskell.lib.dontCheck (self.callCabal2nix "thyme" (pkgs.fetchFromGitHub {
+            thyme = dontCheck (self.callCabal2nix "thyme" (pkgs.fetchFromGitHub {
               owner = "kadena-io";
               repo = "thyme";
               rev = "6ee9fcb026ebdb49b810802a981d166680d867c9";
@@ -67,7 +75,7 @@ in
 
             # aeson 1.4.2
             aeson = (if self.ghc.isGhcjs or false
-              then (pkgs.lib.flip pkgs.haskell.lib.addBuildDepend self.hashable-time)
+              then (pkgs.lib.flip addBuildDepend self.hashable-time)
               else pkgs.lib.id) (self.callCabal2nix "aeson" (pkgs.fetchFromGitHub {
               owner = "bos";
               repo = "aeson";
@@ -76,10 +84,7 @@ in
             }) {});
           };
     packages = {
-      pact = builtins.filterSource
-        (path: type: !(builtins.elem (baseNameOf path)
-           ["result" "dist" "dist-ghcjs" ".git" ".stack-work"]))
-        ./.;
+      pact = gitignore.gitignoreSource [] ./.;
     };
     shellToolOverrides = ghc: super: {
       z3 = pkgs.z3;

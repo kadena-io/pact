@@ -41,7 +41,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.Text (Text,pack)
 import Data.Text.Encoding
 import Data.Thyme.Clock
-import qualified Data.Set as S
+import Data.Default (def)
 
 import Pact.Types.Crypto
 import Pact.Types.Util
@@ -69,9 +69,7 @@ data ApiReq = ApiReq {
   _ylCode :: Maybe String,
   _ylCodeFile :: Maybe FilePath,
   _ylKeyPairs :: [ApiKeyPair],
-  _ylNonce :: Maybe String,
-  _ylFrom :: Maybe EntityName,
-  _ylTo :: Maybe [EntityName]
+  _ylNonce :: Maybe String
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
@@ -85,7 +83,7 @@ apiReq fp local = do
     BSL.putStrLn $ encode $ SubmitBatch [exec]
   return ()
 
-mkApiReq :: FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReq fp = do
   ar@ApiReq {..} <- either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
@@ -97,7 +95,8 @@ mkApiReq fp = do
     _      -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
 
 
-mkApiReqExec :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+
+mkApiReqExec :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqExec ar@ApiReq{..} kps fp = do
   (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
@@ -111,33 +110,30 @@ mkApiReqExec ar@ApiReq{..} kps fp = do
                           eitherDecode
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
-    return (code,cdata)  
-  addy <- case (_ylTo,_ylFrom) of
-    (Just t,Just f) -> return $ Just (Address f (S.fromList t))
-    (Nothing,Nothing) -> return Nothing
-    _ -> dieAR "Must specify to AND from if specifying addresses"
-  ((ar,code,cdata,addy),) <$> mkExec code cdata addy kps _ylNonce
+    return (code,cdata)
+  let pubMeta = def
+  ((ar,code,cdata,pubMeta),) <$> mkExec code cdata pubMeta kps _ylNonce
 
-mkExec :: String -> Value -> Maybe Address -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
-mkExec code mdata addy kps ridm = do
+mkExec :: String -> Value -> PublicMeta -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
+mkExec code mdata pubMeta kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
     kps
-    addy
+    pubMeta
     (pack $ show rid)
     (Exec (ExecMsg (pack code) mdata))
 
-mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqCont ar@ApiReq{..} kps fp = do
   txId <- case _ylTxId of
     Just t  -> return t
     Nothing -> dieAR "Expected a 'txid' entry"
-    
+
   step <- case _ylStep of
     Just s  -> return s
     Nothing -> dieAR "Expected a 'step' entry"
-    
+
   rollback <- case _ylRollback of
     Just r  -> return r
     Nothing -> dieAR "Expected a 'rollback' entry"
@@ -149,21 +145,18 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           eitherDecode
       (Nothing,Nothing) -> return Null
-      _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither" 
-  addy <- case (_ylTo,_ylFrom) of
-    (Just t,Just f) -> return $ Just (Address f (S.fromList t))
-    (Nothing,Nothing) -> return Nothing
-    _ -> dieAR "Must specify to AND from if specifying addresses"
-  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy kps _ylNonce
+      _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
+  let pubMeta = def
+  ((ar,"",cdata,pubMeta),) <$> mkCont txId step rollback cdata pubMeta kps _ylNonce
 
-mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [SomeKeyPair]
+mkCont :: TxId -> Int -> Bool  -> Value -> PublicMeta -> [SomeKeyPair]
   -> Maybe String -> IO (Command Text)
-mkCont txid step rollback mdata addy akps ridm = do
+mkCont txid step rollback mdata pubMeta kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
-    akps
-    addy
+    kps
+    pubMeta
     (pack $ show rid)
     (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
 
@@ -196,6 +189,4 @@ dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file key
   \    scheme: cryptographic scheme \n\
   \    ] \n\
   \  nonce: optional request nonce, will use current time if not provided \n\
-  \  from: entity name for addressing private messages \n\
-  \  to: entity names for addressing private messages \n\
   \Error message: " ++ errMsg

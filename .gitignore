@@ -19,3 +19,6 @@ log/
 /deleteme.sqllite
 /.pact-history
 /result
+public
+.ghc.environment.*
+.dir-locals.el

@@ -19,10 +19,10 @@ Index LIST at IDX, or get value with key IDX from OBJECT.
 
 .. code:: lisp
 
-    pact> (at 1 [1 2 3])
-    2
-    pact> (at "bar" { "foo": 1, "bar": 2 })
-    2
+   pact> (at 1 [1 2 3])
+   2
+   pact> (at "bar" { "foo": 1, "bar": 2 })
+   2
 
 bind
 ~~~~
@@ -34,8 +34,8 @@ over subsequent body statements.
 
 .. code:: lisp
 
-    pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
-    1
+   pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
+   1
 
 compose
 ~~~~~~~
@@ -48,8 +48,8 @@ X.
 
 .. code:: lisp
 
-    pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]
+   pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
+   ["dog" "has" "fleas"]
 
 constantly
 ~~~~~~~~~~
@@ -65,8 +65,8 @@ Lazily ignore arguments IGNORE\* and return VALUE.
 
 .. code:: lisp
 
-    pact> (filter (constantly true) [1 2 3])
-    [1 2 3]
+   pact> (filter (constantly true) [1 2 3])
+   [1 2 3]
 
 contains
 ~~~~~~~~
@@ -81,12 +81,12 @@ Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry.
 
 .. code:: lisp
 
-    pact> (contains 2 [1 2 3])
-    true
-    pact> (contains 'name { 'name: "Ted", 'age: 72 })
-    true
-    pact> (contains "foo" "foobar")
-    true
+   pact> (contains 2 [1 2 3])
+   true
+   pact> (contains 'name { 'name: "Ted", 'age: 72 })
+   true
+   pact> (contains "foo" "foobar")
+   true
 
 drop
 ~~~~
@@ -101,12 +101,12 @@ from OBJECT. If COUNT is negative, drop from end.
 
 .. code:: lisp
 
-    pact> (drop 2 "vwxyz")
-    "xyz"
-    pact> (drop (- 2) [1 2 3 4 5])
-    [1 2 3]
-    pact> (drop ['name] { 'name: "Vlad", 'active: false})
-    {"active": false}
+   pact> (drop 2 "vwxyz")
+   "xyz"
+   pact> (drop (- 2) [1 2 3 4 5])
+   [1 2 3]
+   pact> (drop ['name] { 'name: "Vlad", 'active: false})
+   {"active": false}
 
 enforce
 ~~~~~~~
@@ -118,8 +118,8 @@ returns true.
 
 .. code:: lisp
 
-    pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-    <interactive>:0:0: Chaos reigns
+   pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
+   <interactive>:0:0: Chaos reigns
 
 enforce-one
 ~~~~~~~~~~~
@@ -131,8 +131,8 @@ fail transaction. Short-circuits on first success.
 
 .. code:: lisp
 
-    pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
-    true
+   pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
+   true
 
 enforce-pact-version
 ~~~~~~~~~~~~~~~~~~~~
@@ -148,8 +148,8 @@ from the left, such that ‘2’, ‘2.2’, and ‘2.2.3’ would all allow
 
 .. code:: lisp
 
-    pact> (enforce-pact-version "2.3")
-    true
+   pact> (enforce-pact-version "2.3")
+   true
 
 Top level only: this function will fail if used in module code.
 
@@ -163,8 +163,8 @@ original value is kept.
 
 .. code:: lisp
 
-    pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]
+   pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
+   ["dog" "has" "fleas"]
 
 fold
 ~~~~
@@ -177,8 +177,8 @@ starting with INIT.
 
 .. code:: lisp
 
-    pact> (fold (+) 0 [100 10 5])
-    115
+   pact> (fold (+) 0 [100 10 5])
+   115
 
 format
 ~~~~~~
@@ -189,8 +189,8 @@ Interpolate VARS into TEMPLATE using {}.
 
 .. code:: lisp
 
-    pact> (format "My {} has {}" ["dog" "fleas"])
-    "My dog has fleas"
+   pact> (format "My {} has {}" ["dog" "fleas"])
+   "My dog has fleas"
 
 hash
 ~~~~
@@ -202,10 +202,10 @@ while other values are converted using their JSON representation.
 
 .. code:: lisp
 
-    pact> (hash "hello")
-    "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
-    pact> (hash { 'foo: 1 })
-    "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
+   pact> (hash "hello")
+   "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+   pact> (hash { 'foo: 1 })
+   "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
 
 identity
 ~~~~~~~~
@@ -216,8 +216,8 @@ Return provided value.
 
 .. code:: lisp
 
-    pact> (map (identity) [1 2 3])
-    [1 2 3]
+   pact> (map (identity) [1 2 3])
+   [1 2 3]
 
 if
 ~~
@@ -228,8 +228,8 @@ Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE.
 
 .. code:: lisp
 
-    pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
-    "Sanity prevails"
+   pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
+   "Sanity prevails"
 
 length
 ~~~~~~
@@ -240,12 +240,12 @@ Compute length of X, which can be a list, a string, or an object.
 
 .. code:: lisp
 
-    pact> (length [1 2 3])
-    3
-    pact> (length "abcdefgh")
-    8
-    pact> (length { "a": 1, "b": 2 })
-    2
+   pact> (length [1 2 3])
+   3
+   pact> (length "abcdefgh")
+   8
+   pact> (length { "a": 1, "b": 2 })
+   2
 
 list
 ~~~~
@@ -257,8 +257,8 @@ support.
 
 .. code:: lisp
 
-    pact> (list 1 2 3)
-    [1 2 3]
+   pact> (list 1 2 3)
+   [1 2 3]
 
 list-modules
 ~~~~~~~~~~~~
@@ -278,8 +278,8 @@ Create list by repeating VALUE LENGTH times.
 
 .. code:: lisp
 
-    pact> (make-list 5 true)
-    [true true true true true]
+   pact> (make-list 5 true)
+   [true true true true true]
 
 map
 ~~~
@@ -290,8 +290,8 @@ Apply APP to each element in LIST, returning a new list of results.
 
 .. code:: lisp
 
-    pact> (map (+ 1) [1 2 3])
-    [2 3 4]
+   pact> (map (+ 1) [1 2 3])
+   [2 3 4]
 
 pact-id
 ~~~~~~~
@@ -309,8 +309,8 @@ Obtain current pact build version.
 
 .. code:: lisp
 
-    pact> (pact-version)
-    "2.6.0"
+   pact> (pact-version)
+   "2.6.1"
 
 Top level only: this function will fail if used in module code.
 
@@ -324,8 +324,8 @@ decimal.
 
 .. code:: lisp
 
-    (defun exec ()
-       (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+   (defun exec ()
+      (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
 
 read-integer
 ~~~~~~~~~~~~
@@ -337,7 +337,7 @@ integer.
 
 .. code:: lisp
 
-    (read-integer "age")
+   (read-integer "age")
 
 read-msg
 ~~~~~~~~
@@ -353,8 +353,8 @@ object. However, top-level values are provided as a ‘value’ JSON type.
 
 .. code:: lisp
 
-    (defun exec ()
-       (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+   (defun exec ()
+      (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
 
 remove
 ~~~~~~
@@ -365,8 +365,8 @@ Remove entry for KEY from OBJECT.
 
 .. code:: lisp
 
-    pact> (remove "bar" { "foo": 1, "bar": 2 })
-    {"foo": 1}
+   pact> (remove "bar" { "foo": 1, "bar": 2 })
+   {"foo": 1}
 
 resume
 ~~~~~~
@@ -385,8 +385,8 @@ Reverse LIST.
 
 .. code:: lisp
 
-    pact> (reverse [1 2 3])
-    [3 2 1]
+   pact> (reverse [1 2 3])
+   [3 2 1]
 
 sort
 ~~~~
@@ -400,10 +400,10 @@ FIELDS list.
 
 .. code:: lisp
 
-    pact> (sort [3 1 2])
-    [1 2 3]
-    pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
-    [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
+   pact> (sort [3 1 2])
+   [1 2 3]
+   pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
+   [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
 
 str-to-int
 ~~~~~~~~~~
@@ -418,10 +418,10 @@ between 2 and 16. Each digit must be in the correct range for the base.
 
 .. code:: lisp
 
-    pact> (str-to-int 16 "abcdef123456")
-    188900967593046
-    pact> (str-to-int "123456")
-    123456
+   pact> (str-to-int 16 "abcdef123456")
+   188900967593046
+   pact> (str-to-int "123456")
+   123456
 
 take
 ~~~~
@@ -436,12 +436,12 @@ from OBJECT. If COUNT is negative, take from end.
 
 .. code:: lisp
 
-    pact> (take 2 "abcd")
-    "ab"
-    pact> (take (- 3) [1 2 3 4 5])
-    [3 4 5]
-    pact> (take ['name] { 'name: "Vlad", 'active: false})
-    {"name": "Vlad"}
+   pact> (take 2 "abcd")
+   "ab"
+   pact> (take (- 3) [1 2 3 4 5])
+   [3 4 5]
+   pact> (take ['name] { 'name: "Vlad", 'active: false})
+   {"name": "Vlad"}
 
 tx-hash
 ~~~~~~~
@@ -452,8 +452,8 @@ Obtain hash of current transaction as a string.
 
 .. code:: lisp
 
-    pact> (tx-hash)
-    "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
+   pact> (tx-hash)
+   "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
 
 typeof
 ~~~~~~
@@ -464,8 +464,8 @@ Returns type of X as string.
 
 .. code:: lisp
 
-    pact> (typeof "hello")
-    "string"
+   pact> (typeof "hello")
+   "string"
 
 where
 ~~~~~
@@ -477,8 +477,8 @@ Utility for use in ‘filter’ and ‘select’ applying APP to FIELD in VALUE.
 
 .. code:: lisp
 
-    pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
-    [{"name": "Juan", "age": 15}]
+   pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
+   [{"name": "Juan", "age": 15}]
 
 yield
 ~~~~~
@@ -491,7 +491,7 @@ to in ‘resume’; nested objects are converted to opaque JSON values.
 
 .. code:: lisp
 
-    (yield { "amount": 100.0 })
+   (yield { "amount": 100.0 })
 
 .. _Database:
 
@@ -507,7 +507,7 @@ Create table TABLE.
 
 .. code:: lisp
 
-    (create-table accounts)
+   (create-table accounts)
 
 Top level only: this function will fail if used in module code.
 
@@ -530,7 +530,7 @@ Get metadata for MODULE. Returns an object with ‘name’, ‘hash’,
 
 .. code:: lisp
 
-    (describe-module 'my-module)
+   (describe-module 'my-module)
 
 Top level only: this function will fail if used in module code.
 
@@ -544,7 +544,7 @@ Get metadata for TABLE. Returns an object with ‘name’, ‘hash’,
 
 .. code:: lisp
 
-    (describe-table accounts)
+   (describe-table accounts)
 
 Top level only: this function will fail if used in module code.
 
@@ -559,7 +559,7 @@ already exists for KEY.
 
 .. code:: lisp
 
-    (insert accounts { "balance": 0.0, "note": "Created account." })
+   (insert accounts id { "balance": 0.0, "note": "Created account." })
 
 keylog
 ~~~~~~
@@ -572,7 +572,7 @@ list of objects indexed by txid.
 
 .. code:: lisp
 
-    (keylog accounts "Alice" 123485945)
+   (keylog accounts "Alice" 123485945)
 
 keys
 ~~~~
@@ -583,7 +583,7 @@ Return all keys in TABLE.
 
 .. code:: lisp
 
-    (keys accounts)
+   (keys accounts)
 
 read
 ~~~~
@@ -598,7 +598,7 @@ COLUMNS if specified.
 
 .. code:: lisp
 
-    (read accounts id ['balance 'ccy])
+   (read accounts id ['balance 'ccy])
 
 select
 ~~~~~~
@@ -614,8 +614,8 @@ get a boolean determining inclusion.
 
 .. code:: lisp
 
-    (select people ['firstName,'lastName] (where 'name (= "Fatima")))
-    (select people (where 'age (> 30)))
+   (select people ['firstName,'lastName] (where 'name (= "Fatima")))
+   (select people (where 'age (> 30)))
 
 txids
 ~~~~~
@@ -626,7 +626,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 
 .. code:: lisp
 
-    (txids accounts 123849535)
+   (txids accounts 123849535)
 
 txlog
 ~~~~~
@@ -637,7 +637,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 .. code:: lisp
 
-    (txlog accounts 123485945)
+   (txlog accounts 123485945)
 
 update
 ~~~~~~
@@ -650,7 +650,7 @@ not exist for KEY.
 
 .. code:: lisp
 
-    (update accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+   (update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 
 with-default-read
 ~~~~~~~~~~~~~~~~~
@@ -664,8 +664,8 @@ from DEFAULTS, an object with matching key names.
 
 .. code:: lisp
 
-    (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
-       (format "Balance for {} is {} {}" [id bal ccy]))
+   (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
+      (format "Balance for {} is {} {}" [id bal ccy]))
 
 with-read
 ~~~~~~~~~
@@ -678,8 +678,8 @@ BINDINGS over subsequent body statements.
 
 .. code:: lisp
 
-    (with-read accounts id { "balance":= bal, "ccy":= ccy }
-       (format "Balance for {} is {} {}" [id bal ccy]))
+   (with-read accounts id { "balance":= bal, "ccy":= ccy }
+      (format "Balance for {} is {} {}" [id bal ccy]))
 
 write
 ~~~~~
@@ -691,7 +691,7 @@ Write entry in TABLE for KEY of OBJECT column data.
 
 .. code:: lisp
 
-    (write accounts { "balance": 100.0 })
+   (write accounts id { "balance": 100.0 })
 
 .. _Time:
 
@@ -709,8 +709,8 @@ Add SECONDS to TIME; SECONDS can be integer or decimal.
 
 .. code:: lisp
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") 15)
-    "2016-07-22T12:00:15Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") 15)
+   "2016-07-22T12:00:15Z"
 
 days
 ~~~~
@@ -723,8 +723,8 @@ N days, for use with ‘add-time’
 
 .. code:: lisp
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
-    "2016-07-23T12:00:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
+   "2016-07-23T12:00:00Z"
 
 diff-time
 ~~~~~~~~~
@@ -735,8 +735,8 @@ Compute difference between TIME1 and TIME2 in seconds.
 
 .. code:: lisp
 
-    pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
-    23400
+   pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
+   23400
 
 format-time
 ~~~~~~~~~~~
@@ -748,8 +748,8 @@ docs <pact-reference.html#time-formats>`__ for supported formats.
 
 .. code:: lisp
 
-    pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
-    "2016-07-22"
+   pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
+   "2016-07-22"
 
 hours
 ~~~~~
@@ -762,8 +762,8 @@ N hours, for use with ‘add-time’
 
 .. code:: lisp
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
-    "2016-07-22T13:00:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
+   "2016-07-22T13:00:00Z"
 
 minutes
 ~~~~~~~
@@ -776,8 +776,8 @@ N minutes, for use with ‘add-time’.
 
 .. code:: lisp
 
-    pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
-    "2016-07-22T12:01:00Z"
+   pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
+   "2016-07-22T12:01:00Z"
 
 parse-time
 ~~~~~~~~~~
@@ -789,8 +789,8 @@ docs <pact-reference.html#time-formats>`__ for supported formats.
 
 .. code:: lisp
 
-    pact> (parse-time "%F" "2016-09-12")
-    "2016-09-12T00:00:00Z"
+   pact> (parse-time "%F" "2016-09-12")
+   "2016-09-12T00:00:00Z"
 
 time
 ~~~~
@@ -801,8 +801,8 @@ Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
 
 .. code:: lisp
 
-    pact> (time "2016-07-22T11:26:35Z")
-    "2016-07-22T11:26:35Z"
+   pact> (time "2016-07-22T11:26:35Z")
+   "2016-07-22T11:26:35Z"
 
 .. _Operators:
 
@@ -822,8 +822,8 @@ True if X does not equal Y.
 
 .. code:: lisp
 
-    pact> (!= "hello" "goodbye")
-    true
+   pact> (!= "hello" "goodbye")
+   true
 
 .. _star:
 
@@ -840,10 +840,10 @@ Multiply X by Y.
 
 .. code:: lisp
 
-    pact> (* 0.5 10.0)
-    5
-    pact> (* 3 5)
-    15
+   pact> (* 0.5 10.0)
+   5
+   pact> (* 3 5)
+   15
 
 .. _plus:
 
@@ -864,16 +864,16 @@ Add numbers, concatenate strings/lists, or merge objects.
 
 .. code:: lisp
 
-    pact> (+ 1 2)
-    3
-    pact> (+ 5.0 0.5)
-    5.5
-    pact> (+ "every" "body")
-    "everybody"
-    pact> (+ [1 2] [3 4])
-    [1 2 3 4]
-    pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-    {"bar": 2, "foo": 100}
+   pact> (+ 1 2)
+   3
+   pact> (+ 5.0 0.5)
+   5.5
+   pact> (+ "every" "body")
+   "everybody"
+   pact> (+ [1 2] [3 4])
+   [1 2 3 4]
+   pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
+   {"bar": 2, "foo": 100}
 
 .. _minus:
 
@@ -892,10 +892,10 @@ Negate X, or subtract Y from X.
 
 .. code:: lisp
 
-    pact> (- 1.0)
-    -1.0
-    pact> (- 3 2)
-    1
+   pact> (- 1.0)
+   -1.0
+   pact> (- 3 2)
+   1
 
 .. _slash:
 
@@ -912,10 +912,10 @@ Divide X by Y.
 
 .. code:: lisp
 
-    pact> (/ 10.0 2.0)
-    5
-    pact> (/ 8 3)
-    2
+   pact> (/ 10.0 2.0)
+   5
+   pact> (/ 8 3)
+   2
 
 .. _lt:
 
@@ -929,12 +929,12 @@ True if X < Y.
 
 .. code:: lisp
 
-    pact> (< 1 3)
-    true
-    pact> (< 5.24 2.52)
-    false
-    pact> (< "abc" "def")
-    true
+   pact> (< 1 3)
+   true
+   pact> (< 5.24 2.52)
+   false
+   pact> (< "abc" "def")
+   true
 
 .. _lteq:
 
@@ -948,12 +948,12 @@ True if X <= Y.
 
 .. code:: lisp
 
-    pact> (<= 1 3)
-    true
-    pact> (<= 5.24 2.52)
-    false
-    pact> (<= "abc" "def")
-    true
+   pact> (<= 1 3)
+   true
+   pact> (<= 5.24 2.52)
+   false
+   pact> (<= "abc" "def")
+   true
 
 .. _eq:
 
@@ -968,12 +968,12 @@ True if X equals Y.
 
 .. code:: lisp
 
-    pact> (= [1 2 3] [1 2 3])
-    true
-    pact> (= 'foo "foo")
-    true
-    pact> (= { 1: 2 } { 1: 2})
-    true
+   pact> (= [1 2 3] [1 2 3])
+   true
+   pact> (= 'foo "foo")
+   true
+   pact> (= { 1: 2 } { 1: 2})
+   true
 
 .. _gt:
 
@@ -987,12 +987,12 @@ True if X > Y.
 
 .. code:: lisp
 
-    pact> (> 1 3)
-    false
-    pact> (> 5.24 2.52)
-    true
-    pact> (> "abc" "def")
-    false
+   pact> (> 1 3)
+   false
+   pact> (> 5.24 2.52)
+   true
+   pact> (> "abc" "def")
+   false
 
 .. _gteq:
 
@@ -1006,12 +1006,12 @@ True if X >= Y.
 
 .. code:: lisp
 
-    pact> (>= 1 3)
-    false
-    pact> (>= 5.24 2.52)
-    true
-    pact> (>= "abc" "def")
-    false
+   pact> (>= 1 3)
+   false
+   pact> (>= 5.24 2.52)
+   true
+   pact> (>= "abc" "def")
+   false
 
 .. _hat:
 
@@ -1028,8 +1028,8 @@ Raise X to Y power.
 
 .. code:: lisp
 
-    pact> (^ 2 3)
-    8
+   pact> (^ 2 3)
+   8
 
 abs
 ~~~
@@ -1042,8 +1042,8 @@ Absolute value of X.
 
 .. code:: lisp
 
-    pact> (abs (- 10 23))
-    13
+   pact> (abs (- 10 23))
+   13
 
 and
 ~~~
@@ -1054,8 +1054,8 @@ Boolean logic with short-circuit.
 
 .. code:: lisp
 
-    pact> (and true false)
-    false
+   pact> (and true false)
+   false
 
 and? {#and?}
 ~~~~~~~~~~~~
@@ -1068,8 +1068,8 @@ short-circuit.
 
 .. code:: lisp
 
-    pact> (and? (> 20) (> 10) 15)
-    false
+   pact> (and? (> 20) (> 10) 15)
+   false
 
 ceiling
 ~~~~~~~
@@ -1083,10 +1083,10 @@ decimal.
 
 .. code:: lisp
 
-    pact> (ceiling 3.5)
-    4
-    pact> (ceiling 100.15234 2)
-    100.16
+   pact> (ceiling 3.5)
+   4
+   pact> (ceiling 100.15234 2)
+   100.16
 
 exp
 ~~~
@@ -1097,8 +1097,8 @@ Exp of X.
 
 .. code:: lisp
 
-    pact> (round (exp 3) 6)
-    20.085537
+   pact> (round (exp 3) 6)
+   20.085537
 
 floor
 ~~~~~
@@ -1112,10 +1112,10 @@ decimal.
 
 .. code:: lisp
 
-    pact> (floor 3.5)
-    3
-    pact> (floor 100.15234 2)
-    100.15
+   pact> (floor 3.5)
+   3
+   pact> (floor 100.15234 2)
+   100.15
 
 ln
 ~~
@@ -1126,8 +1126,8 @@ Natural log of X.
 
 .. code:: lisp
 
-    pact> (round (ln 60) 6)
-    4.094345
+   pact> (round (ln 60) 6)
+   4.094345
 
 log
 ~~~
@@ -1142,8 +1142,8 @@ Log of Y base X.
 
 .. code:: lisp
 
-    pact> (log 2 256)
-    8
+   pact> (log 2 256)
+   8
 
 mod
 ~~~
@@ -1154,8 +1154,8 @@ X modulo Y.
 
 .. code:: lisp
 
-    pact> (mod 13 8)
-    5
+   pact> (mod 13 8)
+   5
 
 not
 ~~~
@@ -1166,8 +1166,8 @@ Boolean logic.
 
 .. code:: lisp
 
-    pact> (not (> 1 2))
-    true
+   pact> (not (> 1 2))
+   true
 
 not? {#not?}
 ~~~~~~~~~~~~
@@ -1178,8 +1178,8 @@ Apply logical ‘not’ to the results of applying VALUE to APP.
 
 .. code:: lisp
 
-    pact> (not? (> 20) 15)
-    false
+   pact> (not? (> 20) 15)
+   false
 
 or
 ~~
@@ -1190,8 +1190,8 @@ Boolean logic with short-circuit.
 
 .. code:: lisp
 
-    pact> (or true false)
-    true
+   pact> (or true false)
+   true
 
 or? {#or?}
 ~~~~~~~~~~
@@ -1204,8 +1204,8 @@ short-circuit.
 
 .. code:: lisp
 
-    pact> (or? (> 20) (> 10) 15)
-    true
+   pact> (or? (> 20) (> 10) 15)
+   true
 
 round
 ~~~~~
@@ -1219,10 +1219,10 @@ precision as decimal.
 
 .. code:: lisp
 
-    pact> (round 3.5)
-    4
-    pact> (round 100.15234 2)
-    100.15
+   pact> (round 3.5)
+   4
+   pact> (round 100.15234 2)
+   100.15
 
 sqrt
 ~~~~
@@ -1233,8 +1233,8 @@ Square root of X.
 
 .. code:: lisp
 
-    pact> (sqrt 25)
-    5
+   pact> (sqrt 25)
+   5
 
 .. _Keysets:
 
@@ -1246,28 +1246,32 @@ define-keyset
 
 *name* ``string`` *keyset* ``string`` *→* ``string``
 
-Define keyset as NAME with KEYSET. If keyset NAME already exists, keyset
-will be enforced before updating to new value.
+*name* ``string`` *→* ``string``
+
+Define keyset as NAME with KEYSET, or if unspecified, read NAME from
+message payload as keyset, similarly to ‘read-keyset’. If keyset NAME
+already exists, keyset will be enforced before updating to new value.
 
 .. code:: lisp
 
-    (define-keyset 'admin-keyset (read-keyset "keyset"))
+   (define-keyset 'admin-keyset (read-keyset "keyset"))
 
 Top level only: this function will fail if used in module code.
 
 enforce-keyset
 ~~~~~~~~~~~~~~
 
-*keyset-or-name* ``<k[string,keyset]>`` *→* ``bool``
+*guard* ``guard`` *→* ``bool``
 
-Special form to enforce KEYSET-OR-NAME against message keys before
-running BODY. KEYSET-OR-NAME can be a symbol of a keyset name or a
-keyset object.
+*keysetname* ``string`` *→* ``bool``
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired
+predicate logic.
 
 .. code:: lisp
 
-    (with-keyset 'admin-keyset ...)
-    (with-keyset (read-keyset "keyset") ...)
+   (enforce-keyset 'admin-keyset)
+   (enforce-keyset row-guard)
 
 keys-2
 ~~~~~~
@@ -1278,8 +1282,8 @@ Keyset predicate function to match at least 2 keys in keyset.
 
 .. code:: lisp
 
-    pact> (keys-2 3 1)
-    false
+   pact> (keys-2 3 1)
+   false
 
 keys-all
 ~~~~~~~~
@@ -1290,8 +1294,8 @@ Keyset predicate function to match all keys in keyset.
 
 .. code:: lisp
 
-    pact> (keys-all 3 3)
-    true
+   pact> (keys-all 3 3)
+   true
 
 keys-any
 ~~~~~~~~
@@ -1302,8 +1306,8 @@ Keyset predicate function to match any (at least 1) key in keyset.
 
 .. code:: lisp
 
-    pact> (keys-any 10 1)
-    true
+   pact> (keys-any 10 1)
+   true
 
 read-keyset
 ~~~~~~~~~~~
@@ -1315,7 +1319,98 @@ PREDFUN }). PREDFUN should resolve to a keys predicate.
 
 .. code:: lisp
 
-    (read-keyset "admin-keyset")
+   (read-keyset "admin-keyset")
+
+.. _Capabilities:
+
+Capabilities
+------------
+
+create-module-guard
+~~~~~~~~~~~~~~~~~~~
+
+*name* ``string`` *→* ``guard``
+
+Defines a guard by NAME that enforces the current module admin
+predicate.
+
+create-pact-guard
+~~~~~~~~~~~~~~~~~
+
+*name* ``string`` *→* ``guard``
+
+Defines a guard predicate by NAME that captures the results of
+‘pact-id’. At enforcement time, the success condition is that at that
+time ‘pact-id’ must return the same value. In effect this ensures that
+the guard will only succeed within the multi-transaction identified by
+the pact id.
+
+create-user-guard
+~~~~~~~~~~~~~~~~~
+
+*data* ``<a>`` *predfun* ``string`` *→* ``guard``
+
+Defines a custom guard predicate, where DATA will be passed to PREDFUN
+at time of enforcement. PREDFUN is a valid name in the declaring
+environment. PREDFUN must refer to a pure function or enforcement will
+fail at runtime.
+
+enforce-guard
+~~~~~~~~~~~~~
+
+*guard* ``guard`` *→* ``bool``
+
+*keysetname* ``string`` *→* ``bool``
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired
+predicate logic.
+
+.. code:: lisp
+
+   (enforce-guard 'admin-keyset)
+   (enforce-guard row-guard)
+
+keyset-ref-guard
+~~~~~~~~~~~~~~~~
+
+*keyset-ref* ``string`` *→* ``guard``
+
+Creates a guard for the keyset registered as KEYSET-REF with
+‘define-keyset’. Concrete keysets are themselves guard types; this
+function is specifically to store references alongside other guards in
+the database, etc.
+
+require-capability
+~~~~~~~~~~~~~~~~~~
+
+*capability* ``( -> bool)`` *→* ``bool``
+
+Specifies and tests for existing grant of CAPABILITY, failing if not
+found in environment.
+
+.. code:: lisp
+
+   (require-capability (TRANSFER src dest))
+
+with-capability
+~~~~~~~~~~~~~~~
+
+*capability* ``( -> bool)`` *body* ``list`` *→* ``<a>``
+
+Specifies and requests grant of CAPABILITY which is an application of a
+‘defcap’ production. Given the unique token specified by this
+application, ensure that the token is granted in the environment during
+execution of BODY. ‘with-capability’ can only be called in the same
+module that declares the corresponding ‘defcap’, otherwise module-admin
+rights are required. If token is not present, the CAPABILITY is applied,
+with successful completion resulting in the installation/granting of the
+token, which will then be revoked upon completion of BODY. Nested
+‘with-capability’ calls for the same token will detect the presence of
+the token, and will not re-apply CAPABILITY, but simply execute BODY.
+
+.. code:: lisp
+
+   (with-capability (update-users id) (update users id { salary: new-salary }))
 
 .. _repl-lib:
 
@@ -1337,7 +1432,7 @@ Begin transaction with optional NAME.
 
 .. code:: lisp
 
-    (begin-tx "load module")
+   (begin-tx "load module")
 
 bench
 ~~~~~
@@ -1348,7 +1443,7 @@ Benchmark execution of EXPRS.
 
 .. code:: lisp
 
-    (bench (+ 1 2))
+   (bench (+ 1 2))
 
 commit-tx
 ~~~~~~~~~
@@ -1359,7 +1454,7 @@ Commit transaction.
 
 .. code:: lisp
 
-    (commit-tx)
+   (commit-tx)
 
 env-data
 ~~~~~~~~
@@ -1372,8 +1467,8 @@ coerced to JSON.
 
 .. code:: lisp
 
-    pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
-    "Setting transaction data"
+   pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
+   "Setting transaction data"
 
 env-entity
 ~~~~~~~~~~
@@ -1387,8 +1482,8 @@ Clears any previous pact execution state.
 
 .. code:: lisp
 
-    (env-entity "my-org")
-    (env-entity)
+   (env-entity "my-org")
+   (env-entity)
 
 env-gas
 ~~~~~~~
@@ -1429,8 +1524,8 @@ Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash.
 
 .. code:: lisp
 
-    pact> (env-hash (hash "hello"))
-    "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+   pact> (env-hash (hash "hello"))
+   "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
 
 env-keys
 ~~~~~~~~
@@ -1441,8 +1536,17 @@ Set transaction signature KEYS.
 
 .. code:: lisp
 
-    pact> (env-keys ["my-key" "admin-key"])
-    "Setting transaction keys"
+   pact> (env-keys ["my-key" "admin-key"])
+   "Setting transaction keys"
+
+env-pactid
+~~~~~~~~~~
+
+*→* ``string``
+
+*id* ``string`` *→* ``string``
+
+Query environment pact id, or set to ID.
 
 env-step
 ~~~~~~~~
@@ -1463,8 +1567,8 @@ any previous pact execution state.
 
 .. code:: lisp
 
-    (env-step 1)
-    (env-step 0 true)
+   (env-step 1)
+   (env-step 0 true)
 
 expect
 ~~~~~~
@@ -1475,8 +1579,8 @@ Evaluate ACTUAL and verify that it equals EXPECTED.
 
 .. code:: lisp
 
-    pact> (expect "Sanity prevails." 4 (+ 2 2))
-    "Expect: success: Sanity prevails."
+   pact> (expect "Sanity prevails." 4 (+ 2 2))
+   "Expect: success: Sanity prevails."
 
 expect-failure
 ~~~~~~~~~~~~~~
@@ -1487,8 +1591,8 @@ Evaluate EXP and succeed only if it throws an error.
 
 .. code:: lisp
 
-    pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
-    "Expect failure: success: Enforce fails on false"
+   pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
+   "Expect failure: success: Enforce fails on false"
 
 json
 ~~~~
@@ -1501,8 +1605,8 @@ output.
 
 .. code:: lisp
 
-    pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
-    [{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
+   pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
+   [{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
 
 load
 ~~~~
@@ -1516,7 +1620,7 @@ RESET is true.
 
 .. code:: lisp
 
-    (load "accounts.repl")
+   (load "accounts.repl")
 
 pact-state
 ~~~~~~~~~~
@@ -1529,7 +1633,7 @@ Inspect state from previous pact execution. Returns object with fields
 
 .. code:: lisp
 
-    (pact-state)
+   (pact-state)
 
 print
 ~~~~~
@@ -1547,7 +1651,7 @@ Rollback transaction.
 
 .. code:: lisp
 
-    (rollback-tx)
+   (rollback-tx)
 
 sig-keyset
 ~~~~~~~~~~
