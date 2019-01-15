@@ -29,7 +29,7 @@ import Pact.Analyze.Types.Types
 
 -- | Type-level list append
 type family (:++) (x :: [ k ]) (y :: [ k ]) :: [ k ] where
-  '[] :++ ys = ys
+  '[]       :++ ys = ys
   (x ': xs) :++ ys = x ': (xs :++ ys)
 
 infixr 5 :++

@@ -817,7 +817,8 @@ withSortable = withDict . singMkSortable where
       (If (CmpSymbol k p == 'LT)
           ('(k, ty) ': Filter 'FMin p tys)
           (Filter 'FMin p tys)))
-  singMkStuffMin _ _ _ _ = undefined
+  singMkStuffMin = error "TODO: sing"
+  -- singMkStuffMin k p ty (SingList SNil) = Dict
 
   singMkStuffMax
     :: Sing k -> Sing p -> Sing ty -> Sing tys
@@ -825,12 +826,12 @@ withSortable = withDict . singMkSortable where
       (If (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ)
           ('(k, ty) ': Filter 'FMax p tys)
           (Filter 'FMax p tys)))
-  singMkStuffMax = undefined
+  singMkStuffMax = error "TODO: sing"
 
   singMkConderMin
     :: Sing k -> Sing p
     -> Dict (Conder (CmpSymbol k p == 'LT))
-  singMkConderMin _ _ = undefined -- Dict
+  singMkConderMin = error "TODO: sing"
 
   singMkConderMax
     :: Sing k -> Sing p
@@ -840,12 +841,18 @@ withSortable = withDict . singMkSortable where
   singMkFilterMin
     :: Sing p -> Sing tys
     -> Dict (FilterV 'FMin p tys)
-  singMkFilterMin = undefined
+  singMkFilterMin _ (SingList SNil) = Dict
+  singMkFilterMin p (SingList (SCons k _ tys'))
+    = withDict (singMkConderMin k p)
+    $ withDict (singMkFilterMin p (SingList tys')) Dict
 
   singMkFilterMax
     :: Sing p -> Sing tys
     -> Dict (FilterV 'FMax p tys)
-  singMkFilterMax = undefined
+  singMkFilterMax _ (SingList SNil) = Dict
+  singMkFilterMax p (SingList (SCons k _ tys'))
+    = withDict (singMkConderMax k p)
+    $ withDict (singMkFilterMax p (SingList tys')) Dict
 
 withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
 withEq = withDict . singMkEq
