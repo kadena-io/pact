@@ -323,7 +323,6 @@ singEqObject
     singEqObject (SObject (SingList objTy)) (Object obj1) (Object obj2)
 singEqObject _ _ _ = False
 
--- This is currently a pretty loose definition
 singShowsObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> ShowS
@@ -331,8 +330,10 @@ singShowsObject (SObject (SingList SNil)) (Object SNil)
   = showString "SNil'"
 singShowsObject
   (SObject (SingList (SCons _ _ objty)))
-  (Object (SCons _ (Column vTy v) obj))
-    = showString "SCons' SSymbol "
+  (Object (SCons k (Column vTy v) obj))
+    = showString "SCons' (SSymbol @\""
+    . showString (symbolVal k)
+    . showString "\") "
     . singShowsTm vTy 11 v
     . showChar ' '
     . singShowsObject (SObject (SingList objty)) (Object obj)
@@ -691,8 +692,10 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . singShowsTm ty1 11 a
     . showString " "
     . singShowsTm ty2 11 b
-  LiteralObject ty' obj
-    -> showString "LiteralObject " . singShowsObject ty' obj
+  LiteralObject ty' obj ->
+      showString "LiteralObject ("
+    . singShowsObject ty' obj
+    . showChar ')'
 
   Logical op args ->
       showString "Logical "

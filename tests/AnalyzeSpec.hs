@@ -51,6 +51,8 @@ import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+mkSObject :: Sing schema -> Sing ('TyObject (Normalize schema))
+mkSObject = SObject . eraseList . normalize . UnSingList
 
 wrap :: Text -> Text -> Text
 wrap code model =
@@ -959,32 +961,32 @@ spec = describe "analyze" $ do
        .=>
        PropSpecific (RowExists "tokens" "stu" After)
 
---   describe "at.dynamic-key" $ do
---     let code =
---           [text|
---             (defschema token-row
---               name:string
---               balance:integer)
+  describe "at.dynamic-key" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer)
 
---             (defun test:object{token-row} ()
---               (let* ((stu:object{token-row} {"balance": 5, "name": "stu"})
---                      (k-start "bal")
---                      (k-end "ance")
---                      (val:integer (at (+ k-start k-end) stu)))
---                 (enforce (= val 5) "balance is 5")
---                 stu
---                 )
---               )
---           |]
---     expectPass code $ Valid $ Inj Success
+            (defun test:object{token-row} ()
+              (let* ((stu:object{token-row} {"balance": 5, "name": "stu"})
+                     (k-start "bal")
+                     (k-end "ance")
+                     (val:integer (at (+ k-start k-end) stu)))
+                (enforce (= val 5) "balance is 5")
+                stu
+                )
+              )
+          |]
+    expectPass code $ Valid $ Inj Success
 
---     let schema = SObject $
---           SCons (SSymbol @"name") SStr $
---             SCons (SSymbol @"balance") SInteger $
---               SNil
---     expectPass code $ Valid $ CoreProp $ StrComparison Eq
---       (PObjAt schema (Lit' "name") (Inj Result))
---       (Lit' "stu" :: Prop 'TyStr)
+    let schema = mkSObject $
+          SCons' (SSymbol @"name") SStr $
+            SCons' (SSymbol @"balance") SInteger $
+              SNil'
+    expectPass code $ Valid $ CoreProp $ StrComparison Eq
+      (PObjAt schema (Lit' "name") (Inj Result))
+      (Lit' "stu" :: Prop 'TyStr)
 
   describe "at.object-in-object" $
     let code =
@@ -2026,7 +2028,7 @@ spec = describe "analyze" $ do
     it "infers prop objects" $ do
       -- let pairSchema = Schema $
       --       Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
-      let pairSchema = SObject $
+      let pairSchema = mkSObject $
             SCons' (SSymbol @"x") SInteger $
               SCons' (SSymbol @"y") SInteger $
                 SNil'
@@ -2044,7 +2046,7 @@ spec = describe "analyze" $ do
             -- Map.singleton "foo" (EObject pairSchema litPair)
 
           nestedSchema =
-            SObject $ SCons' (SSymbol @"foo") pairSchema SNil'
+            mkSObject $ SCons' (SSymbol @"foo") pairSchema SNil'
            -- Schema $
            --  Map.singleton "foo" (EObjectTy pairSchema)
 
@@ -2276,11 +2278,11 @@ spec = describe "analyze" $ do
 
   describe "UserShow" $
     it "schema looks okay" $ do
-      let schema = SObject $
+      let schema = mkSObject $
             SCons' (SSymbol @"name") SStr $
               SCons' (SSymbol @"balance") SInteger
                 SNil'
-      userShow schema `shouldBe` "{ name: string, balance: integer }"
+      userShow schema `shouldBe` "{ balance: integer, name: string }"
 
   describe "at-properties verify" $ do
     let code = [text|
@@ -2564,7 +2566,7 @@ spec = describe "analyze" $ do
           |]
     let acct           = PVar 1 "acct"
         objTy         = -- Schema $ Map.singleton "balance" $ EType SInteger
-          SObject $
+          mkSObject $
             SCons' (SSymbol @"balance") SInteger SNil'
         readBalance ba = PObjAt objTy "balance"
           (PropSpecific $ PropRead objTy ba "accounts" acct)

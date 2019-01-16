@@ -73,7 +73,7 @@ import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, str,
                                                time, Constraint)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
-import           Pact.Analyze.Types.ObjUtil   hiding ((++))
+import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util            (Boolean(..))
@@ -118,7 +118,12 @@ instance IsTerm tm => Eq (Existential tm) where
     Just Refl -> singEqTm' tya a b
 
 instance IsTerm tm => Show (Existential tm) where
-  showsPrec p (Some ty tm) = singShowsTm' ty p tm
+  showsPrec p (Some ty tm)
+    = showParen (p > 10)
+    $ showString "Some "
+    . showsPrec 11 ty
+    . showChar ' '
+    . singShowsTm' ty 11 tm
 
 instance IsTerm tm => UserShow (Existential tm) where
   userShowPrec _ (Some ty tm) = singUserShowTm' ty tm

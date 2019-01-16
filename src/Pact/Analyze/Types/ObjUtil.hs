@@ -15,18 +15,21 @@
 {-# LANGUAGE UndecidableInstances  #-}
 module Pact.Analyze.Types.ObjUtil where
 
-import Data.Type.Bool     (If, type (||))
+import Data.Typeable      (Typeable)
+import Data.Type.Bool     (If)
 import Data.Type.Equality (type (==))
-import GHC.TypeLits       (Symbol, CmpSymbol, symbolVal)
-import Prelude            hiding ((++))
+import GHC.TypeLits       (Symbol, CmpSymbol, symbolVal, KnownSymbol)
+import Unsafe.Coerce      (unsafeCoerce)
 
 import Pact.Analyze.Types.Types
 
-
-import Unsafe.Coerce (unsafeCoerce)
-
 -- inspiration:
 -- https://github.com/dorchard/type-level-sets/blob/master/src/Data/Type/Set.hs
+
+compareKeys :: SingSymbol a -> SingSymbol b -> Ordering
+compareKeys a b = case a of
+  SSymbol -> case b of
+    SSymbol -> symbolVal a `compare` symbolVal b
 
 -- section: Append
 
@@ -38,114 +41,38 @@ type family (:++) (x :: [ k ]) (y :: [ k ]) :: [ k ] where
 infixr 5 :++
 
 -- | Singleton list append
-(++) :: HList f s -> HList f t -> HList f (s :++ t)
-SNil           ++ x  = x
-(SCons k v xs) ++ ys = SCons k v (xs ++ ys)
+(+++) :: HList f s -> HList f t -> HList f (s :++ t)
+SNil         +++ x  = x
+SCons k v xs +++ ys = SCons k v (xs +++ ys)
 
-infixr 5 ++
+infixr 5 +++
 
 -- section: Filter
 
-data Flag = FMin | FMax
+-- | Remove keys >= vs < the pivot
+--
+--   [@SRemoveGE@] Remove keys >= the pivot
+--   [@SRemoveLT@] Remove keys <  the pivot
+data Flag = RemoveGE | RemoveLT
 
 data instance Sing (f :: Flag) where
-  SFMin :: Sing 'FMin
-  SFMax :: Sing 'FMax
-
-type SingFlag (f :: Flag) = Sing f
-
-instance SingI 'FMin where
-  sing = SFMin
-
-instance SingI 'FMax where
-  sing = SFMax
-
-data instance Sing (o :: Ordering) where
-  SLT :: Sing 'LT
-  SEQ :: Sing 'EQ
-  SGT :: Sing 'GT
+  SRemoveGE :: Sing 'RemoveGE
+  SRemoveLT :: Sing 'RemoveLT
 
 -- | Type-level filter elements less-than or greater-than-or-equal to the pivot
 type family Filter (f :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ])
   :: [ (Symbol, Ty) ] where
   Filter f p '[] = '[]
-  Filter 'FMin p ('(k, x) ': xs)
+  Filter 'RemoveGE p ('(k, x) ': xs)
     = If (CmpSymbol k p == 'LT)
-         ('(k, x) ': Filter 'FMin p xs)
-         (Filter 'FMin p xs)
-  Filter 'FMax p ('(k, x) ': xs)
-    = If (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ)
-         ('(k, x) ': Filter 'FMax p xs)
-         (Filter 'FMax p xs)
+         ('(k, x) ': Filter 'RemoveGE p xs)
+         (Filter 'RemoveGE p xs)
+  Filter 'RemoveLT p ('(k, x) ': xs)
+    = If (CmpSymbol k p == 'LT)
+         (Filter 'RemoveLT p xs)
+         ('(k, x) ': Filter 'RemoveLT p xs)
 
-data BoolExpr
-  = ETrue
-  | EFalse
-  | EOr BoolExpr BoolExpr
-  | EOrderingEq Ordering Ordering
-
-type family NormalizeB (b :: BoolExpr) :: Bool where
-  NormalizeB 'ETrue             = 'True
-  NormalizeB 'EFalse            = 'False
-  NormalizeB ('EOr a b)         = NormalizeB a || NormalizeB b
-  NormalizeB ('EOrderingEq a b) = a == b
-
-type SingBoolExpr (e :: BoolExpr) = Sing e
-
-data instance Sing (a :: BoolExpr) where
-  SETrue       ::                     Sing 'ETrue
-  SEFalse      ::                     Sing 'EFalse
-  SEOr         :: Sing a -> Sing b -> Sing ('EOr a b)
-  SEOrderingEq :: Sing a -> Sing b -> Sing ('EOrderingEq a b)
-  -- SESymEq      :: SingSymbol a -> SingSymbol b -> Sing (a == b)
-
-evalBoolExpr :: SingBoolExpr e -> Sing (NormalizeB e)
-evalBoolExpr = \case
-  SETrue   -> STrue
-  SEFalse  -> SFalse
-  SEOr a b -> case (evalBoolExpr a, evalBoolExpr b) of
-    (SFalse, SFalse) -> SFalse
-    (SFalse, STrue ) -> STrue
-    (STrue,  SFalse) -> STrue
-    (STrue,  STrue ) -> STrue
-  SEOrderingEq SLT SLT -> STrue
-  SEOrderingEq SLT SEQ -> SFalse
-  SEOrderingEq SLT SGT -> SFalse
-  SEOrderingEq SEQ SLT -> SFalse
-  SEOrderingEq SEQ SEQ -> STrue
-  SEOrderingEq SEQ SGT -> SFalse
-  SEOrderingEq SGT SLT -> SFalse
-  SEOrderingEq SGT SEQ -> SFalse
-  SEOrderingEq SGT SGT -> STrue
-  -- SESymEq      a   b   -> case sameSymbol a b of
-  --   Just Refl -> STrue
-  --   Nothing   -> SFalse
-
-data OrderingExpr
-  = ECmpSymbol Symbol Symbol
-
-data instance Sing (o :: OrderingExpr) where
-  SCmpSymbol :: SingSymbol a -> SingSymbol b -> Sing ('ECmpSymbol a b)
-
-type family NormalizeO (a :: OrderingExpr) :: Ordering where
-  NormalizeO ('ECmpSymbol a b) = CmpSymbol a b
-
-evalOrderingExpr :: Sing o -> Sing (NormalizeO o)
-evalOrderingExpr (SCmpSymbol a b) = case a of
-  SSymbol -> case b of
-    SSymbol -> case symbolVal a `compare` symbolVal b of
-      LT -> unsafeCoerce SLT
-      EQ -> unsafeCoerce SEQ
-      GT -> unsafeCoerce SGT
-
-data ListExpr
-  = EIf BoolExpr ListExpr ListExpr
-  | EList [ (Symbol, Ty) ]
-
-type family NormalizeL (l :: ListExpr) :: [ (Symbol, Ty) ] where
-  NormalizeL ('EIf b l r) = If (NormalizeB b) (NormalizeL l) (NormalizeL r)
-  NormalizeL ('EList l)   = l
-
+-- | Filter out keys above or below the pivot
 filterV
   :: forall
      (flag :: Flag)
@@ -157,18 +84,13 @@ filterV
   -> HList f xs
   -> HList f (Filter flag p xs)
 filterV _ _ SNil = SNil
-filterV SFMin p (SCons k x xs) = unsafeCoerce $ ite'
-  (evalBoolExpr (SEOrderingEq (evalOrderingExpr (SCmpSymbol k p)) SLT))
-  (SCons k x (filterV SFMin p xs))
-  (filterV SFMin p xs)
-filterV SFMax p (SCons k x xs) = unsafeCoerce $ ite'
-  (evalBoolExpr
-    -- k > p || k = p
-    (SEOr
-      (SEOrderingEq (evalOrderingExpr (SCmpSymbol k p)) SGT)
-      (SEOrderingEq (evalOrderingExpr (SCmpSymbol k p)) SEQ)))
-  (SCons k x (filterV SFMax p xs))
-  (filterV SFMax p xs)
+filterV flag p (SCons k x xs) = case compareKeys k p of
+  LT -> case flag of
+    SRemoveGE -> unsafeCoerce $ SCons k x (filterV flag p xs)
+    SRemoveLT -> unsafeCoerce $ filterV flag p xs
+  _  -> case flag of
+    SRemoveGE -> unsafeCoerce $ filterV flag p xs
+    SRemoveLT -> unsafeCoerce $ SCons k x (filterV flag p xs)
 
 -- section: Nub
 
@@ -177,21 +99,16 @@ type family Nub (t :: [ (Symbol, Ty) ]) :: [ (Symbol, Ty) ] where
   Nub '[]                           = '[]
   Nub '[e]                          = '[e]
   Nub ('(k1, v1) ': '(k2, v2) ': s) = If (k1 == k2)
-    (Nub ('(k1, v2) ': s))
+                 (Nub ('(k1, v2) ': s))
     ('(k1, v1) ': Nub ('(k2, v2) ': s))
-
-ite' :: SingBool b -> l -> r -> If b l r
-ite' STrue  l _ = l
-ite' SFalse _ r = r
 
 -- | Value-level counterpart to the type-level 'Nub'
 nub :: HList f t -> HList f (Nub t)
 nub SNil = SNil
 nub (SCons k v SNil) = SCons k v SNil
-nub (SCons k1 v1 (SCons k2 v2 s)) = unsafeCoerce $ ite'
-  (evalBoolExpr (SEOrderingEq (evalOrderingExpr (SCmpSymbol k1 k2)) SEQ))
-  (nub (SCons k2 v2 s))
-  (SCons k1 v1 (nub (SCons k2 v2 s)))
+nub (SCons k1 v1 (SCons k2 v2 s)) = case compareKeys k1 k2 of
+  EQ -> unsafeCoerce $               nub $ SCons k2 v2 s
+  _  -> unsafeCoerce $ SCons k1 v1 $ nub $ SCons k2 v2 s
 
 -- section: Sort
 
@@ -199,15 +116,17 @@ nub (SCons k1 v1 (SCons k2 v2 s)) = unsafeCoerce $ ite'
 type family Sort (xs :: [ (Symbol, Ty) ]) :: [ (Symbol, Ty) ] where
   Sort '[] = '[]
   Sort ('(k, x) ': xs)
-    = Sort (Filter 'FMin k xs) :++ '[ '(k, x) ] :++ Sort (Filter 'FMax k xs)
+    =   Sort (Filter 'RemoveGE k xs)
+    :++ '[ '(k, x) ]
+    :++ Sort (Filter 'RemoveLT k xs)
 
 -- | Value-level quick sort that respects the type-level ordering
 quicksort :: HList f t -> HList f (Sort t)
 quicksort SNil = SNil
-quicksort (SCons k p xs) =
-  quicksort (less k xs) ++ SCons k p SNil ++ quicksort (more k xs)
-  where less = filterV (sing @'FMin)
-        more = filterV (sing @'FMax)
+quicksort (SCons k p xs)
+  =   quicksort (filterV SRemoveGE k xs)
+  +++ SCons k p SNil
+  +++ quicksort (filterV SRemoveLT k xs)
 
 -- section: Normalization
 
@@ -220,37 +139,25 @@ normalize = nub . quicksort
 
 -- section: Union
 
--- type Unionable s t = (Sortable (s :++ t), Nubable (Sort (s :++ t)))
-
 type Union s t = Nub (Sort (s :++ t))
 
-union -- :: Unionable s t =>
-  :: HList f s -> HList f t -> HList f (Union s t)
-union s t = nub (quicksort (s ++ t))
+union :: HList f s -> HList f t -> HList f (Union s t)
+union s t = nub $ quicksort $ s +++ t
 
 -- section: Insert
 
--- type family Insert (x :: (Symbol, Ty)) (xs :: [ (Symbol, Ty) ]) :: [ (Symbol, Ty) ] where
---   Insert y '[] = '[y]
---   Insert '(ky, vy) ('(kx, vx) ': xs) = If
---     (CmpSymbol ky kx == 'LT)
---     ('(ky, vy) ': '(kx, vx) ': xs)
---     ('(kx, vx) ': Insert '(ky, vy) xs)
+type family Insert (v :: (Symbol, Ty)) (vs :: [ (Symbol, Ty) ])
+  :: [ (Symbol, Ty) ] where
+  Insert y '[] = '[y]
+  Insert '(k, v) ('(k', v') ': vs) = If
+    (CmpSymbol k k' == 'LT)
+    ('(k, v) ': '(k', v') ': vs)
+    ('(k', v') ': Insert '(k, v) vs)
 
--- class InsertV (k :: Symbol) (v :: Ty) (xs :: [ (Symbol, Ty) ]) where
---   insert :: Sing k -> Sing v -> SingList xs -> SingList ('(k, v) ': xs)
-
--- instance (SingI v, Typeable v, KnownSymbol k) => InsertV k v '[] where
---   insert k v _ = SingList (SCons k v SNil)
-
--- instance
---   ( SingI v
---   , Typeable v
---   , KnownSymbol k
---   , Conder (CmpSymbol k k' == 'LT)
---   , InsertV k v kvs
---   ) => InsertV k v ('(k', v') ': kvs) where
---   insert k v (SingList (SCons k' v' kvs))
---     = cond (Proxy @(CmpSymbol k k' == 'LT))
---            (SingList (SCons k v (SCons k' v' kvs)))
---            (SingList (SCons k' v' (UnSingList (insert k v (SingList kvs)))))
+insert
+  :: (SingI v, Typeable v, KnownSymbol k)
+  => SingSymbol k -> f v -> HList f vs -> HList f (Insert '(k, v) vs)
+insert k v SNil = SCons k v SNil
+insert k v (SCons k' v' kvs) = case compareKeys k k' of
+  LT -> unsafeCoerce $ SCons k v $ SCons k' v' kvs
+  _  -> unsafeCoerce $ SCons k' v' $ insert k v kvs
