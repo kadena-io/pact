@@ -59,7 +59,6 @@ import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
-import Debug.Trace
 import Unsafe.Coerce (unsafeCoerce)
 
 -- * Translation types
@@ -616,7 +615,7 @@ coerceObjectType
   :: SingTy ('TyObject (Normalize schema))
   -> tm ('TyObject schema)
   -> tm ('TyObject (Normalize schema))
-coerceObjectType = unsafeCoerce
+coerceObjectType _ty = unsafeCoerce
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
@@ -806,8 +805,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
         op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
         let ta' = normalizeObjTy ta
             tb' = normalizeObjTy tb
-        traceM $ "[translate 809] (ta, ta'): " ++ show (ta, ta')
-        traceM $ "[translate 810] (tb, tb'): " ++ show (tb, tb')
         pure $ Some SBool $ inject $ ObjectEqNeq ta' tb' op'
           (coerceObjectType ta' a')
           (coerceObjectType tb' b')
@@ -881,8 +878,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
         -- Feature 3: object merge
         let ty1' = normalizeObjTy ty1
             ty2' = normalizeObjTy ty2
-        traceM $ "[translate 884] (ty1, ty1'): " ++ show (ty1, ty1')
-        traceM $ "[translate 885] (ty2, ty2'): " ++ show (ty2, ty2')
         pure $ Some retTy $ inject $ ObjMerge ty1' ty2'
           (coerceObjectType ty1' o1)
           (coerceObjectType ty2' o2)
@@ -927,9 +922,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some objTy@SObject{} obj' <- translateNode obj
     tid                       <- tagWrite writeType node $ ESchema objTy
     let objTy' = normalizeObjTy objTy
-    traceM $ "[translate 930] (objTy, objTy'): " ++ show (objTy, objTy')
     pure $ Some SStr $
-      Write objTy writeType tid (TableName (T.unpack tn)) row' obj'
+      Write objTy' writeType tid (TableName (T.unpack tn)) row' $
+        coerceObjectType objTy' obj'
 
   AST_If _ cond tBranch fBranch -> do
     Some SBool cond' <- translateNode cond
@@ -1013,14 +1008,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     obj'     <- translateNode obj
     EType ty <- translateType node
     case obj' of
-      Some objTy@(SObject schema) obj'' -> do
-        traceM $ "[translate] schema:  " ++ show (SObject schema)
-        traceM $ "[translate] schema': " ++ show (normalizeObjTy objTy)
-        withSing (SObject schema) $ traceM $ "[translate] obj'': " ++ show obj''
+      Some objTy@SObject{} obj'' -> do
         Some SStr colName <- translateNode index
-        pure $ Some ty $ CoreTerm $ ObjAt (normalizeObjTy objTy)
-          colName
-          (unsafeCoerce obj'')
+        let objTy' = normalizeObjTy objTy
+        pure $ Some ty $ CoreTerm $ ObjAt objTy' colName $
+          coerceObjectType objTy' obj''
       Some (SList listOfTy) list -> do
         Some SInteger index' <- translateNode index
         pure $ Some listOfTy $ CoreTerm $ ListAt listOfTy index' list
@@ -1034,9 +1026,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         _                   -> throwError' $ NonConstKey k
       v' <- translateNode v
       pure (k', v')
-    traceM $ "[translate] kvs': " ++ show kvs'
-    x@(Some objTy litObj) <- mkLiteralObject kvs'
-    traceM $ "[translate] litObj: " ++ show x
+    Some objTy litObj <- mkLiteralObject kvs'
     pure $ Some objTy $ CoreTerm litObj
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
@@ -1059,7 +1049,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some objTy@SObject{} obj -> case needleTy of
         SStr -> do
           let objTy' = normalizeObjTy objTy
-          traceM $ "[translate 1063] (objTy, objTy'): " ++ show (objTy, objTy')
           pure $ Some SBool $ CoreTerm $ ObjContains objTy' needle $
             coerceObjectType objTy' obj
         _    -> throwError' $ TypeError node
@@ -1082,7 +1071,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some objTy@SObject{} obj -> do
         Some (SList SStr) keys <- translateNode numOrKeys
         let objTy' = normalizeObjTy objTy
-        traceM $ "[translate 1085] (objTy, objTy'): " ++ show (objTy, objTy')
         pure $ Some objTy' $ CoreTerm $ coerceObjectType objTy' $
           ObjDrop keys obj
       _ -> throwError' $ TypeError node
@@ -1096,7 +1084,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some objTy@SObject{} obj -> do
         Some (SList SStr) keys <- translateNode numOrKeys
         let objTy' = normalizeObjTy objTy
-        traceM $ "[translate 1100] (objTy, objTy'): " ++ show (objTy, objTy')
         pure $ Some objTy' $ CoreTerm $ coerceObjectType objTy' $
           ObjTake keys obj
       _ -> throwError' $ TypeError node
