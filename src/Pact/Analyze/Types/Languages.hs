@@ -85,7 +85,7 @@ import           Pact.Types.Util              (tShow)
 import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec, ks)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
-import           Pact.Analyze.Types.ObjUtil   (quicksort)
+import           Pact.Analyze.Types.ObjUtil   (normalize)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
@@ -261,8 +261,8 @@ sortLiteralObject
   -> Existential (Core tm)
   -> m (Existential (Core tm))
 sortLiteralObject err = \case
-  Some objTy (LiteralObject _ (Object obj)) -> withSortable objTy $ do
-    let obj'  = quicksort obj
+  Some _objTy (LiteralObject _ (Object obj)) -> do
+    let obj'  = normalize obj
         retTy = SObject $ eraseList obj'
     pure $ Some retTy $ LiteralObject retTy $ Object obj'
   notObj -> err "sortLiteralObject: this must be an object: " notObj
