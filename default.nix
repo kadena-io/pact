@@ -63,8 +63,8 @@ in
             sbv = dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "joelburget";
               repo = "sbv";
-              rev = "8d13e26255178c5ee5b5b3fad97873ff214d7470";
-              sha256 = "13hzbf6pxl0spf2j5sdjflpqd3al895b71dwg82dspxp4jzgsjcs";
+              rev = "25d9357ff8eaac697eb6fde96598d7beb587b4e9";
+              sha256 = "0i0ajrw8j9hc208hizi4rnj5giqhbawjfgdbacswwfvgfqvvb69z";
             }) {});
 
             # need crackNum 2.3

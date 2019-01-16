@@ -38,6 +38,8 @@ import qualified Pact.Native                 as Pact
 
 import GHC.Stack
 
+import Debug.Trace
+
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
 listBound :: Int
@@ -419,6 +421,8 @@ evalObjAt objTy@(SObject schema) colNameT obj retType
   = withSymVal retType $ withSing objTy $ do
     needColName <- eval colNameT
     S mObjProv objVal <- eval obj
+    traceM $ "[eval core] objVal: " ++ show objVal
+    traceM $ "[eval core] objTy: " ++ show objTy
 
     let go :: HasCallStack
            => SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
@@ -427,13 +431,18 @@ evalObjAt objTy@(SObject schema) colNameT obj retType
           pure $ uninterpret "notfound"
         go (SingList (SCons sym colTy schema')) obj'
           = withSymVal (SObject (SingList schema')) $ withSymVal colTy $
-            withMergeableAnalyzer @m retType $ ite
-            (needColName .== literalS (Str (symbolVal sym)))
-            (case singEq colTy retType of
-               Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
-               Just Refl -> pure $ obj' ^. _1
-            )
-            (go (SingList schema') (_2 obj'))
+            withMergeableAnalyzer @m retType $ do
+            traceM $ "[eval core] colTy: " ++ show colTy
+            traceM $ "[eval core] sym: " ++ show (symbolVal sym)
+            traceM $ "[eval core] obj': " ++ show obj'
+            traceM $ "[eval core] schema: " ++ show (SObject (SingList schema'))
+            ite
+              (needColName .== literalS (Str (symbolVal sym)))
+              (case singEq colTy retType of
+                 Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
+                 Just Refl -> pure $ obj' ^. _1
+              )
+              (go (SingList schema') (_2 obj'))
 
         mProv :: Maybe Provenance
         mProv = do
