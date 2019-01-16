@@ -782,16 +782,6 @@ withSing = withDict . singMkSing where
     withHListDict SNil f               = f
     withHListDict (SCons _k _ty tys) f = withHListDict tys f
 
-withSortable :: SingTy ('TyObject a) -> (Sortable a => b) -> b
-withSortable = withDict . singMkSortable where
-  singMkSortable
-    :: SingTy ('TyObject a)
-    -> Dict (Sortable a)
-  singMkSortable = undefined
-
-withSingBool :: SingBool b -> (SingI b => a) -> a
-withSingBool = undefined
-
 withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
 withEq = withDict . singMkEq
   where

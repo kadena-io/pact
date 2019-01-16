@@ -15,10 +15,9 @@
 {-# LANGUAGE UndecidableInstances  #-}
 module Pact.Analyze.Types.ObjUtil where
 
-import Data.Typeable      (Typeable)
 import Data.Type.Bool     (If, type (||))
-import Data.Type.Equality (type (==), (:~:)(Refl))
-import GHC.TypeLits       (Symbol, CmpSymbol, KnownSymbol, symbolVal)
+import Data.Type.Equality (type (==))
+import GHC.TypeLits       (Symbol, CmpSymbol, symbolVal)
 import Prelude            hiding ((++))
 
 import Pact.Analyze.Types.Types
@@ -126,7 +125,7 @@ data OrderingExpr
   = ECmpSymbol Symbol Symbol
 
 data instance Sing (o :: OrderingExpr) where
-  SCmpSymbol :: SingSymbol a -> SingSymbol b -> Sing (ECmpSymbol a b)
+  SCmpSymbol :: SingSymbol a -> SingSymbol b -> Sing ('ECmpSymbol a b)
 
 type family NormalizeO (a :: OrderingExpr) :: Ordering where
   NormalizeO ('ECmpSymbol a b) = CmpSymbol a b
@@ -148,17 +147,21 @@ type family NormalizeL (l :: ListExpr) :: [ (Symbol, Ty) ] where
   NormalizeL ('EList l)   = l
 
 filterV
-  :: forall (flag :: Flag) (p :: Symbol) (xs :: [ (Symbol, Ty) ]) (f :: Ty -> *).
+  :: forall
+     (flag :: Flag)
+     (p :: Symbol)
+     (xs :: [ (Symbol, Ty) ])
+     (f :: Ty -> *).
      Sing flag
   -> Sing p
   -> HList f xs
   -> HList f (Filter flag p xs)
 filterV _ _ SNil = SNil
-filterV SFMin p (SCons k x xs) = ite
+filterV SFMin p (SCons k x xs) = unsafeCoerce $ ite'
   (evalBoolExpr (SEOrderingEq (evalOrderingExpr (SCmpSymbol k p)) SLT))
   (SCons k x (filterV SFMin p xs))
   (filterV SFMin p xs)
-filterV SFMax p (SCons k x xs) = ite
+filterV SFMax p (SCons k x xs) = unsafeCoerce $ ite'
   (evalBoolExpr
     -- k > p || k = p
     (SEOr
@@ -173,24 +176,22 @@ filterV SFMax p (SCons k x xs) = ite
 type family Nub (t :: [ (Symbol, Ty) ]) :: [ (Symbol, Ty) ] where
   Nub '[]                           = '[]
   Nub '[e]                          = '[e]
-  Nub ('(k1, v1) ': '(k2, v2) ': s)
-    = If (k1 == k2)
-         (Nub ('(k1, v2) ': s))
-         ('(k1, v1) ': Nub ('(k2, v2) ': s))
-  -- Nub ('(k1, v1) ': '(k1, v2) ': s) = Nub ('(k1, v2) ': s)
-  -- Nub ('(k1, v1) ': '(k2, v2) ': s) = '(k1, v1) ': Nub ('(k2, v2) ': s)
+  Nub ('(k1, v1) ': '(k2, v2) ': s) = If (k1 == k2)
+    (Nub ('(k1, v2) ': s))
+    ('(k1, v1) ': Nub ('(k2, v2) ': s))
 
-ite :: SingBool b -> l -> r -> If b l r
-ite STrue  l _ = l
-ite SFalse _ r = r
+ite' :: SingBool b -> l -> r -> If b l r
+ite' STrue  l _ = l
+ite' SFalse _ r = r
 
 -- | Value-level counterpart to the type-level 'Nub'
 nub :: HList f t -> HList f (Nub t)
 nub SNil = SNil
 nub (SCons k v SNil) = SCons k v SNil
-nub (SCons k1 v1 (SCons k2 v2 s)) = undefined
-  -- Just Refl -> nub (SCons k2 v2 s)
-  -- Nothing   -> SCons k1 v1 (nub (SCons k2 v2 s))
+nub (SCons k1 v1 (SCons k2 v2 s)) = unsafeCoerce $ ite'
+  (evalBoolExpr (SEOrderingEq (evalOrderingExpr (SCmpSymbol k1 k2)) SEQ))
+  (nub (SCons k2 v2 s))
+  (SCons k1 v1 (nub (SCons k2 v2 s)))
 
 -- section: Sort
 
@@ -203,21 +204,10 @@ type family Sort (xs :: [ (Symbol, Ty) ]) :: [ (Symbol, Ty) ] where
 -- | Value-level quick sort that respects the type-level ordering
 quicksort :: HList f t -> HList f (Sort t)
 quicksort SNil = SNil
-quicksort (SCons _ _ _) = undefined
-
--- instance
---   ( Sortable (Filter 'FMin p xs)
---   , Sortable (Filter 'FMax p xs)
---   , FilterV 'FMin p xs
---   , FilterV 'FMax p xs
---   , SingI x
---   , Typeable x
---   , KnownSymbol p
---   ) => Sortable ('(p, x) ': xs) where
---   quicksort (SCons k p xs) =
---     quicksort (less k xs) ++ SCons k p SNil ++ quicksort (more k xs)
---     where less = filterV (sing @'FMin)
---           more = filterV (sing @'FMax)
+quicksort (SCons k p xs) =
+  quicksort (less k xs) ++ SCons k p SNil ++ quicksort (more k xs)
+  where less = filterV (sing @'FMin)
+        more = filterV (sing @'FMax)
 
 -- section: Normalization
 
@@ -225,9 +215,7 @@ type Normalize t = Nub (Sort t)
 
 type IsNormalized t = t ~ Nub (Sort t)
 
-normalize
-  -- :: (Sortable t, Nubable (Sort t))
-  :: HList f t -> HList f (Normalize t)
+normalize :: HList f t -> HList f (Normalize t)
 normalize = nub . quicksort
 
 -- section: Union
