@@ -61,8 +61,8 @@ import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
-import           Data.Type.Bool               (If, type (||))
-import           Data.Type.Equality           ((:~:) (Refl), type (==))
+-- import           Data.Type.Bool               (If, type (||))
+import           Data.Type.Equality           ((:~:) (Refl)) -- , type (==))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
 
@@ -787,88 +787,7 @@ withSortable = withDict . singMkSortable where
   singMkSortable
     :: SingTy ('TyObject a)
     -> Dict (Sortable a)
-  singMkSortable (SObject (SingList SNil)) = Dict
-  singMkSortable (SObject (SingList (SCons p _ty tys)))
-    = withDict (singMkSortableConstraints p (SObject (SingList tys))) Dict
-
-  singMkSortableConstraints
-    :: SingSymbol p
-    -> SingTy ('TyObject xs)
-    -> Dict
-       ( Sortable (Filter 'FMin p xs)
-       , Sortable (Filter 'FMax p xs)
-       , FilterV 'FMin p xs
-       , FilterV 'FMax p xs
-       )
-  singMkSortableConstraints _p (SObject (SingList SNil)) = Dict
-  singMkSortableConstraints p (SObject (SingList (SCons p' ty tys)))
-    = withDict (singMkSortableConstraints p' (SObject (SingList tys)))
-    $ withDict (singMkStuffMin p' p ty (SingList tys))
-    $ withDict (singMkStuffMax p' p ty (SingList tys))
-    $ withDict (singMkConderMin p' p)
-    $ withDict (singMkConderMax p' p)
-    $ withDict (singMkFilterMin p (SingList tys))
-    $ withDict (singMkFilterMax p (SingList tys))
-    undefined
-      -- Dict
-
-  singMkFilterMin
-    :: Sing p -> Sing tys
-    -> Dict (FilterV 'FMin p tys)
-  singMkFilterMin _ (SingList SNil) = Dict
-  singMkFilterMin p (SingList (SCons k _ tys')) = undefined
-    -- = withDict (singMkConderMin k p)
-    -- $ withDict (singMkFilterMin p (SingList tys')) Dict
-
-  singMkFilterMax
-    :: Sing p -> Sing tys
-    -> Dict (FilterV 'FMax p tys)
-  singMkFilterMax _ (SingList SNil) = Dict
-  singMkFilterMax p (SingList (SCons k _ tys')) = undefined
-    -- = withDict (singMkConderMax k p)
-    -- $ withDict (singMkFilterMax p (SingList tys')) Dict
-
-  singMkConderMin
-    :: forall k p.
-       Sing k -> Sing p
-    -> Dict (Conder (CmpSymbol k p == 'LT))
-  singMkConderMin _ _ = undefined -- case sing @(CmpSymbol k p == 'LT) of
-    -- STrue  -> Dict
-    -- SFalse -> Dict
-
-  singMkConderMax
-    :: forall k p.
-       Sing k -> Sing p
-    -> Dict (Conder (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ))
-  singMkConderMax _ _ = undefined
-    -- = case sing @(CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ) of
-    --   STrue  -> Dict
-    --   SFalse -> Dict
-
-  singMkStuffMin
-    :: forall k p ty tys.
-       Sing k -> Sing p -> Sing ty -> Sing tys
-    -> Dict (Sortable
-      (If (CmpSymbol k p == 'LT)
-          ('(k, ty) ': Filter 'FMin p tys)
-          (Filter 'FMin p tys)))
-  singMkStuffMin k p ty tys = undefined
-    -- = case sing @(CmpSymbol k p == 'LT) of
-    --   STrue  -> undefined
-    --   SFalse -> undefined
-
-  singMkStuffMax
-    :: forall k p ty tys.
-       Sing k -> Sing p -> Sing ty -> Sing tys
-    -> Dict (Sortable
-      (If (CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ)
-          ('(k, ty) ': Filter 'FMax p tys)
-          (Filter 'FMax p tys)))
-  singMkStuffMax k p ty tys = undefined
-  -- withSingBool () $
-  --   case sing @(CmpSymbol k p == 'GT || CmpSymbol k p == 'EQ) of
-  --     STrue  -> undefined
-  --     SFalse -> undefined
+  singMkSortable = undefined
 
 withSingBool :: SingBool b -> (SingI b => a) -> a
 withSingBool = undefined
