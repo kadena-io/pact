@@ -10,7 +10,6 @@
 module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
--- import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
 import           Data.Monoid                 ((<>))
 import           Data.SBV                    (EqSymbolic ((./=), (.==)),
@@ -22,7 +21,7 @@ import qualified Data.SBV.List               as SBVL
 import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
                                               bzipWith, bmapM, bfoldrM)
 import qualified Data.SBV.String             as SBVS
-import           Data.SBV.Tuple              ((^.), _1, _2, tuple)
+import           Data.SBV.Tuple              (_1, _2, tuple)
 -- import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:)(Refl))
@@ -172,17 +171,17 @@ evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
   = evalObjAt schema colNameT objT (sing :: SingTy a)
-evalCore (LiteralObject (SObject (SingList SNil)) (Object SNil))
+evalCore (LiteralObject (SObjectUnsafe (SingList SNil)) (Object SNil))
   = pure $ literalS ()
 evalCore
   (LiteralObject
-    (SObject (SingList (SCons _ ty tys)))
+    (SObjectUnsafe (SingList (SCons _ ty tys)))
     (Object (SCons _ (Column _ val) vals)))
   = do
-    let objTy = SObject (SingList tys)
+    let objTy = SObjectUnsafe $ SingList tys
     withSing objTy $ withSymVal ty $ withSymVal objTy $ do
       S _ val'  <- eval val
-      S _ vals' <- evalCore $ LiteralObject objTy (Object vals)
+      S _ vals' <- evalCore $ LiteralObject objTy $ Object vals
       pure $ sansProv $ tuple (val', vals')
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
 -- error "TODO"
@@ -414,7 +413,7 @@ evalObjAt
   -> TermOf m ('TyObject schema)
   -> SingTy a
   -> m (S (Concrete a))
-evalObjAt objTy@(SObject schema) colNameT obj retType
+evalObjAt objTy@(SObjectUnsafe schema) colNameT obj retType
   = withSymVal retType $ withSing objTy $ do
     needColName <- eval colNameT
     S mObjProv objVal <- eval obj
@@ -425,12 +424,12 @@ evalObjAt objTy@(SObject schema) colNameT obj retType
           markFailure sTrue
           pure $ uninterpret "notfound"
         go (SingList (SCons sym colTy schema')) obj'
-          = withSymVal (SObject (SingList schema')) $ withSymVal colTy $
+          = withSymVal (SObjectUnsafe (SingList schema')) $ withSymVal colTy $
             withMergeableAnalyzer @m retType $ ite
               (needColName .== literalS (Str (symbolVal sym)))
               (case singEq colTy retType of
                  Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
-                 Just Refl -> pure $ obj' ^. _1
+                 Just Refl -> pure $ _1 obj'
               )
               (go (SingList schema') (_2 obj'))
 

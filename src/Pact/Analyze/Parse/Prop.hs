@@ -259,20 +259,21 @@ mkLiteralObject = mkUnsortedLiteralObject >=> sortLiteralObject
 
 -- Note: there is a very similar @mkUnsortedLiteralObject@ in
 -- @Analyze.Translate@. These could probably be combined.
+-- TODO: use insert
 mkUnsortedLiteralObject
   :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
-mkUnsortedLiteralObject [] = pure $ Some (SObject SNil') $
-  LiteralObject (SObject SNil') (Object SNil)
+mkUnsortedLiteralObject [] = pure $ Some (mkSObject SNil') $
+  LiteralObject (mkSObject SNil') (Object SNil)
 mkUnsortedLiteralObject ((name, preProp) : tups) = do
   tups' <- mkUnsortedLiteralObject tups
   case tups' of
-    Some (SObject objTy) (LiteralObject _ (Object objProp)) -> do
+    Some (SObjectUnsafe objTy) (LiteralObject _ (Object objProp)) -> do
       eProp <- inferPreProp preProp
       case eProp of
         Some ty prop -> case someSymbolVal (T.unpack name) of
           SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $
             let sym    = SSymbol @k
-                objTy' = SObject (SCons' sym ty objTy)
+                objTy' = SObjectUnsafe (SCons' sym ty objTy)
             in pure $ Some objTy' $
                  LiteralObject objTy' $
                    Object $ SCons sym (Column ty prop) objProp
@@ -358,7 +359,7 @@ inferPreProp preProp = case preProp of
       (Some SInteger ix'', Some (SList ty) lst)
         -> pure $ Some ty $ CoreProp $ ListAt ty ix'' lst
 
-      (Some SStr (StrLit ix''), Some objty@(SObject schema) objProp)
+      (Some SStr (StrLit ix''), Some objty@(SObjectUnsafe schema) objProp)
         -> case lookupKeyInType ix'' schema of
           Nothing -> throwErrorIn preProp $
             "could not find expected key " <> T.pack ix''
@@ -378,7 +379,7 @@ inferPreProp preProp = case preProp of
         cm  <- view $ tableEnv . at (TableName litTn)
         case cm of
           Just cm' -> case columnMapToSchema cm' of
-            EType objTy@(SObject _schema) -> pure $
+            EType objTy@SObjectUnsafe{} -> pure $
               Some objTy $ PropSpecific $ PropRead objTy ba' tn' rk'
             _ -> error "TODO"
           Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn

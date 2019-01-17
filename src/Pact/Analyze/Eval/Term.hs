@@ -237,7 +237,7 @@ validateWrite
   -> SingTy ('TyObject schema)
   -> Object Term schema
   -> Analyze ()
-validateWrite _writeType (SObject schema) (Object om)
+validateWrite _writeType (SObjectUnsafe schema) (Object om)
   = validateWrite' schema om where
 
   validateWrite'
@@ -245,7 +245,7 @@ validateWrite _writeType (SObject schema) (Object om)
   validateWrite' (SingList SNil) SNil = pure ()
   validateWrite' _               _    = error "TODO"
 
--- validateWrite writeType objTy@(SObject schema) obj@(Object om) = do
+-- validateWrite writeType objTy@(SObjectUnsafe schema) obj@(Object om) = do
 
 --   -- For now we lump our three cases together:
 --   --   1. write field not in schema
@@ -267,13 +267,13 @@ validateWrite _writeType (SObject schema) (Object om)
 readFields
   :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
   -> Analyze (S (ConcreteObj ty), Map Text AVal)
-readFields _tn _sRk _tid (SObject (SingList SNil)) =
+readFields _tn _sRk _tid (SObjectUnsafe (SingList SNil)) =
   pure (withProv (FromRow Map.empty) (literal ()), Map.empty)
-readFields tn sRk tid (SObject (SingList (SCons sym fieldType subSchema))) = do
+readFields tn sRk tid (SObjectUnsafe (SingList (SCons sym fieldType subSchema))) = do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
-      subObjTy   = SObject $ SingList subSchema
+      subObjTy   = SObjectUnsafe $ SingList subSchema
   columnRead tn cn .= sTrue
   sDirty <- use $ cellWritten tn cn sRk
   av     <- readField tn cn sRk sDirty fieldType
@@ -305,7 +305,7 @@ aValsOfObj
   -> Map Text AVal
 aValsOfObj (SingList SNil) _ = Map.empty
 aValsOfObj (SingList (SCons sym fieldTy fields)) obj
-  = withSymVal fieldTy $ withSymVal (SObject (SingList fields)) $
+  = withSymVal fieldTy $ withSymVal (SObjectUnsafe (SingList fields)) $
   let k = T.pack (symbolVal sym)
       SBVI.SBV sval = obj SBVT.^. SBVT._1
   in Map.insert k (AVal Nothing sval) $
@@ -315,11 +315,11 @@ writeFields
   :: Pact.WriteType -> TagId -> TableName -> S RowKey
   -> S (ConcreteObj ty) -> SingTy ('TyObject ty)
   -> Analyze ()
-writeFields _ _ _ _ _ (SObject (SingList SNil)) = pure ()
+writeFields _ _ _ _ _ (SObjectUnsafe (SingList SNil)) = pure ()
 
 writeFields writeType tid tn sRk (S mProv obj)
-  (SObject (SingList (SCons sym fieldType subObjTy)))
-  = withSymVal fieldType $ withSymVal (SObject (SingList subObjTy)) $ do
+  (SObjectUnsafe (SingList (SCons sym fieldType subObjTy)))
+  = withSymVal fieldType $ withSymVal (SObjectUnsafe (SingList subObjTy)) $ do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
@@ -336,8 +336,8 @@ writeFields writeType tid tn sRk (S mProv obj)
         :: forall ty ty'. (SymVal ty', Num ty', Concrete ty ~ ty')
         => SingTy ty
         -> (S ty' -> S ty' -> S ty') -> (S ty' -> S ty' -> S ty')
-        -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S ty'))
-        -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S ty'))
+        -> (TableName -> ColumnName -> S RowKey -> Lens' EvalAnalyzeState (S ty'))
+        -> (TableName -> ColumnName ->             Lens' EvalAnalyzeState (S ty'))
         -> Analyze ()
       writeDelta ty plus minus mkCellDeltaL mkColDeltaL = do
         let cell :: Lens' EvalAnalyzeState (S ty')
@@ -361,7 +361,7 @@ writeFields writeType tid tn sRk (S mProv obj)
     _        -> typedCell fieldType id tn cn sRk sTrue .= mkS mProv sVal
 
   writeFields writeType tid tn sRk (S mProv (obj SBVT.^. SBVT._2))
-    (SObject (SingList subObjTy))
+    (SObjectUnsafe (SingList subObjTy))
 
   -- OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
@@ -428,7 +428,7 @@ evalTerm = \case
 
     pure sObj
 
-  Write objTy@(SObject schema) writeType tid tn rowKey objT -> do
+  Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     obj <- withSing objTy $ evalTerm objT
     -- validateWrite writeType objTy obj
     sRk <- symRowKey <$> evalTerm rowKey
@@ -546,7 +546,7 @@ evalTerm = \case
       Some SDecimal _    -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
       Some (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash` on lists"
-      Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
+      Some (SObjectUnsafe _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
 -- For now we only allow these three types to be formatted.

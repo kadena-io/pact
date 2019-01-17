@@ -161,3 +161,9 @@ insert k v SNil = SCons k v SNil
 insert k v (SCons k' v' kvs) = case compareKeys k k' of
   LT -> unsafeCoerce $ SCons k v $ SCons k' v' kvs
   _  -> unsafeCoerce $ SCons k' v' $ insert k v kvs
+
+-- section: SObject wrangling
+
+-- | This should /always/ be used to construct an @SObject@.
+mkSObject :: Sing schema -> Sing ('TyObject (Normalize schema))
+mkSObject = SObjectUnsafe . eraseList . normalize . UnSingList

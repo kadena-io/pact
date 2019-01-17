@@ -18,7 +18,29 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ViewPatterns               #-}
 
-module Pact.Analyze.Types.Types where
+module Pact.Analyze.Types.Types
+  ( Ty(..)
+  , Sing(..)
+  , SingSymbol
+  , SingList
+  , HList(..)
+  , pattern SNil'
+  , pattern SCons'
+  , pattern UnSingList
+  , eraseList
+  , TyTableName
+  , TyColumnName
+  , TyRowKey
+  , TyKeySetName
+  , singEq
+  , singEqB
+  , eqSym
+  , eqSymB
+  , singListEq
+  , type ListElem
+  , SingI(sing)
+  , SingTy
+  ) where
 
 import           Data.Kind                   (Type)
 import           Data.Maybe                  (isJust)
@@ -61,9 +83,6 @@ data HList (f :: Ty -> Type) (tys :: [(Symbol, Ty)]) where
          -> HList f tys
          -> HList f ('(k, ty) ': tys)
 
-pattern SNil' :: SingList '[]
-pattern SNil' = SingList SNil
-
 pattern UnSingList :: Sing n -> HList Sing n
 pattern UnSingList l <- (SingList -> l) where
   UnSingList (SingList l) = l
@@ -72,21 +91,24 @@ eraseList :: HList f m -> SingList m
 eraseList SNil          = SNil'
 eraseList (SCons k _ l) = SCons' k sing (eraseList l)
 
+pattern SNil' :: SingList '[]
+pattern SNil' = SingList SNil
+
 pattern SCons'
   :: (SingI v, KnownSymbol k, Typeable v)
   => SingSymbol k -> Sing v -> SingList tys -> SingList ('(k, v) ': tys)
 pattern SCons' k v vs = SingList (SCons k v (UnSingList vs))
 
 data instance Sing (a :: Ty) where
-  SInteger ::               Sing 'TyInteger
-  SBool    ::               Sing 'TyBool
-  SStr     ::               Sing 'TyStr
-  STime    ::               Sing 'TyTime
-  SDecimal ::               Sing 'TyDecimal
-  SKeySet  ::               Sing 'TyKeySet
-  SAny     ::               Sing 'TyAny
-  SList    :: Sing a     -> Sing ('TyList a)
-  SObject  :: SingList a -> Sing ('TyObject a)
+  SInteger      ::               Sing 'TyInteger
+  SBool         ::               Sing 'TyBool
+  SStr          ::               Sing 'TyStr
+  STime         ::               Sing 'TyTime
+  SDecimal      ::               Sing 'TyDecimal
+  SKeySet       ::               Sing 'TyKeySet
+  SAny          ::               Sing 'TyAny
+  SList         :: Sing a     -> Sing ('TyList a)
+  SObjectUnsafe :: SingList a -> Sing ('TyObject a)
 
 instance Eq (SingTy a) where
   _ == _ = True
@@ -101,16 +123,16 @@ type TyRowKey     = 'TyStr
 type TyKeySetName = 'TyStr
 
 singEq :: forall (a :: Ty) (b :: Ty). Sing a -> Sing b -> Maybe (a :~: b)
-singEq SInteger    SInteger    = Just Refl
-singEq SBool       SBool       = Just Refl
-singEq SStr        SStr        = Just Refl
-singEq STime       STime       = Just Refl
-singEq SDecimal    SDecimal    = Just Refl
-singEq SKeySet     SKeySet     = Just Refl
-singEq SAny        SAny        = Just Refl
-singEq (SList   a) (SList   b) = apply Refl <$> singEq a b
-singEq (SObject a) (SObject b) = apply Refl <$> singListEq a b
-singEq _           _           = Nothing
+singEq SInteger          SInteger          = Just Refl
+singEq SBool             SBool             = Just Refl
+singEq SStr              SStr              = Just Refl
+singEq STime             STime             = Just Refl
+singEq SDecimal          SDecimal          = Just Refl
+singEq SKeySet           SKeySet           = Just Refl
+singEq SAny              SAny              = Just Refl
+singEq (SList         a) (SList         b) = apply Refl <$> singEq a b
+singEq (SObjectUnsafe a) (SObjectUnsafe b) = apply Refl <$> singListEq a b
+singEq _                 _                 = Nothing
 
 singEqB :: forall (a :: Ty) (b :: Ty). Sing a -> Sing b -> Bool
 singEqB a b = isJust $ singEq a b
@@ -149,8 +171,8 @@ instance Show (SingTy ty) where
     SKeySet   -> showString "SKeySet"
     SAny      -> showString "SAny"
     SList a   -> showParen (p > 10) $ showString "SList "   . showsPrec 11 a
-    SObject (SingList m)
-      -> showParen (p > 10) $ showString "SObject " . showsHList m
+    SObjectUnsafe (SingList m)
+      -> showParen (p > 10) $ showString "SObjectUnsafe " . showsHList m
     where
       showsHList :: HList Sing a -> ShowS
       showsHList SNil = showString "SNil"
@@ -172,7 +194,7 @@ instance UserShow (SingTy ty) where
     SKeySet   -> "keyset"
     SAny      -> "*"
     SList a   -> "[" <> userShow a <> "]"
-    SObject (SingList m)
+    SObjectUnsafe (SingList m)
       -> "{ " <> intercalate ", " (userShowHList m) <> " }"
     where
       userShowHList :: HList Sing a -> [Text]
@@ -209,7 +231,7 @@ instance SingI a => SingI ('TyList a) where
   sing = SList sing
 
 instance SingI lst => SingI ('TyObject lst) where
-  sing = SObject sing
+  sing = SObjectUnsafe sing
 
 instance SingI ('[] :: [(Symbol, Ty)]) where
   sing = SingList SNil

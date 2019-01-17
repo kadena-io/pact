@@ -263,7 +263,7 @@ sortLiteralObject
 sortLiteralObject err = \case
   Some _objTy (LiteralObject _ (Object obj)) -> do
     let obj'  = normalize obj
-        retTy = SObject $ eraseList obj'
+        retTy = SObjectUnsafe $ eraseList obj'
     pure $ Some retTy $ LiteralObject retTy $ Object obj'
   notObj -> err "sortLiteralObject: this must be an object: " notObj
 
@@ -314,40 +314,40 @@ singEqTm = singEqTm'
 singEqObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> Object tm a -> Bool
-singEqObject (SObject (SingList SNil)) (Object _) (Object _) = True
+singEqObject (SObjectUnsafe (SingList SNil)) (Object _) (Object _) = True
 singEqObject
-  (SObject (SingList (SCons _ colty objTy)))
+  (SObjectUnsafe (SingList (SCons _ colty objTy)))
   (Object (SCons _ (Column _ v1) obj1))
   (Object (SCons _ (Column _ v2) obj2))
   = singEqTm colty v1 v2 &&
-    singEqObject (SObject (SingList objTy)) (Object obj1) (Object obj2)
+    singEqObject (SObjectUnsafe (SingList objTy)) (Object obj1) (Object obj2)
 singEqObject _ _ _ = False
 
 singShowsObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> ShowS
-singShowsObject (SObject (SingList SNil)) (Object SNil)
+singShowsObject (SObjectUnsafe (SingList SNil)) (Object SNil)
   = showString "SNil'"
 singShowsObject
-  (SObject (SingList (SCons _ _ objty)))
+  (SObjectUnsafe (SingList (SCons _ _ objty)))
   (Object (SCons k (Column vTy v) obj))
     = showString "SCons' (SSymbol @\""
     . showString (symbolVal k)
     . showString "\") "
     . singShowsTm vTy 11 v
     . showChar ' '
-    . singShowsObject (SObject (SingList objty)) (Object obj)
+    . singShowsObject (SObjectUnsafe (SingList objty)) (Object obj)
 singShowsObject _ _ = error "malformed object"
 
 singUserShowObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> [Text]
-singUserShowObject (SObject (SingList SNil)) (Object SNil) = [""]
+singUserShowObject (SObjectUnsafe (SingList SNil)) (Object SNil) = [""]
 singUserShowObject
-  (SObject (SingList (SCons _ _ objty)))
+  (SObjectUnsafe (SingList (SCons _ _ objty)))
   (Object (SCons k (Column vTy v) obj))
     = (Text.pack (symbolVal k) <> ": " <> singUserShowTm vTy v)
-      : singUserShowObject (SObject (SingList objty)) (Object obj)
+      : singUserShowObject (SObjectUnsafe (SingList objty)) (Object obj)
 singUserShowObject _ _ = error "malformed object"
 
 singEqOpen :: IsTerm tm => SingTy a -> Open x tm a -> Open x tm a -> Bool
