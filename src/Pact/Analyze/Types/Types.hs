@@ -36,6 +36,7 @@ module Pact.Analyze.Types.Types
   , singEqB
   , eqSym
   , eqSymB
+  , cmpSym
   , singListEq
   , type ListElem
   , SingI(sing)
@@ -146,6 +147,12 @@ eqSymB :: forall (a :: Symbol) (b :: Symbol).
   (KnownSymbol a, KnownSymbol b)
   => SingSymbol a -> SingSymbol b -> Bool
 eqSymB a b = isJust $ eqSym a b
+
+cmpSym
+  :: forall (a :: Symbol) (b :: Symbol).
+     (KnownSymbol a, KnownSymbol b)
+  => SingSymbol a -> SingSymbol b -> Ordering
+cmpSym a b = symbolVal a `compare` symbolVal b
 
 singListEq
   :: forall (a :: [(Symbol, Ty)]) (b :: [(Symbol, Ty)]).
