@@ -318,6 +318,13 @@ evalCore (Where schema tya key (Open vid _ f) obj) = withSymVal tya $ do
 
 evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
 
+evalCore (GuardEqNeq op xT yT) = do
+  x <- eval xT
+  y <- eval yT
+  pure $ sansProv $ case op of
+    Eq'  -> x .== y
+    Neq' -> x ./= y
+
 evalCore (ObjectEqNeq SObjectNil SObjectNil eqNeq _ _)
   = pure $ case eqNeq of { Eq' -> sTrue; Neq' -> sFalse }
 evalCore (ObjectEqNeq SObjectNil SObjectCons{} eqNeq _ _)

@@ -1375,7 +1375,7 @@ doc FAuthorizedBy = Doc
   "authorized-by"
   CAuthorization
   PropOnly
-  "Whether the named keyset is enforced by the function under analysis"
+  "Whether the named keyset/guard is satisfied by the executing transaction"
   [ Usage
       "(authorized-by k)"
       Map.empty

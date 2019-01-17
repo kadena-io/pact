@@ -46,13 +46,13 @@ import           Analyze.TimeGen
 
 data GenEnv = GenEnv
   { _envTables  :: ![(TableName, ESchema)]
-  , _envKeysets :: ![(Pact.KeySet, KeySet)]
+  , _envKeysets :: ![(Pact.KeySet, Guard)]
   }
 
 data GenState = GenState
   { _idGen            :: !TagId
-  , _registryKeySets  :: !(Map.Map String (Pact.KeySet, KeySet))
-  , _txKeySets        :: !(Map.Map String (Pact.KeySet, KeySet))
+  , _registryKeySets  :: !(Map.Map String (Pact.KeySet, Guard))
+  , _txKeySets        :: !(Map.Map String (Pact.KeySet, Guard))
   , _txDecimals       :: !(Map.Map String Decimal)
   , _txIntegers       :: !(Map.Map String Integer)
   } deriving Show
@@ -170,9 +170,9 @@ instance Extract 'TyTime where
     Some STime x -> x
     other -> error (show other)
 
-instance Extract 'TyKeySet where
+instance Extract 'TyGuard where
   extract = \case
-    Some SKeySet x -> x
+    Some SGuard x -> x
     other -> error (show other)
 
 -- TODO: cover Var, objects
@@ -284,7 +284,7 @@ genCore BoundedTime = Gen.recursive Gen.choice [
   , Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedDecimal 1e9)) $ \x y ->
       pure $ Some STime $ Inj $ DecAddTime (extract x) (extract y)
   ]
-genCore BoundedKeySet = Some SKeySet . Lit' . KeySet
+genCore BoundedKeySet = Some SGuard . Lit' . Guard
   <$> genInteger (0 ... 2)
 genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
   -- EqNeq, At, Contains
@@ -446,7 +446,7 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
   , genTermSpecific' size
   ]
 genTermSpecific BoundedKeySet = scale 2 $
-  Some SKeySet . ReadKeySet . StrLit <$> genKeySetName
+  Some SGuard . ReadKeySet . StrLit <$> genKeySetName
 genTermSpecific (BoundedDecimal len) = scale 2 $
   Some SDecimal . ReadDecimal . StrLit <$> genDecimalName len
 genTermSpecific BoundedTime = scale 8 $ Gen.choice
@@ -549,7 +549,7 @@ genType = Gen.element
   , EType SBool   , EType (SList SBool)
   , EType SStr    , EType (SList SStr)
   , EType STime   , EType (SList STime)
-  , EType SKeySet , EType (SList SKeySet)
+  , EType SGuard  , EType (SList SGuard)
   ]
 
 describeAnalyzeFailure :: AnalyzeFailure -> String
@@ -596,7 +596,7 @@ genEnv = GenEnv
         SCons' (SSymbol @"name") SStr
           SNil'
     )]
-  [ (Pact.KeySet [alice, bob] (Name "keys-all" dummyInfo), KeySet 0)
-  , (Pact.KeySet [alice, bob] (Name "keys-any" dummyInfo), KeySet 1)
-  , (Pact.KeySet [alice, bob] (Name "keys-2" dummyInfo), KeySet 2)
+  [ (Pact.KeySet [alice, bob] (Name "keys-all" dummyInfo), Guard 0)
+  , (Pact.KeySet [alice, bob] (Name "keys-any" dummyInfo), Guard 1)
+  , (Pact.KeySet [alice, bob] (Name "keys-2" dummyInfo), Guard 2)
   ]

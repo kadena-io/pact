@@ -195,7 +195,8 @@ parseType = \case
   EAtom' "integer" -> pure $ EType SInteger
   EAtom' "string"  -> pure $ EType SStr
   EAtom' "time"    -> pure $ EType STime
-  EAtom' "keyset"  -> pure $ EType SKeySet
+  EAtom' "keyset"  -> pure $ EType SGuard
+  EAtom' "guard"   -> pure $ EType SGuard
   EAtom' "*"       -> pure $ EType SAny
 
   EAtom' "table"   -> pure QTable
@@ -498,12 +499,12 @@ inferPreProp preProp = case preProp of
       <$> checkPreProp SStr rk
       <*> parseBeforeAfter beforeAfter
   PreApp s [PreStringLit ks] | s == SAuthorizedBy ->
-    pure $ Some SBool (PropSpecific (KsNameAuthorized (KeySetName ks)))
+    pure $ Some SBool (PropSpecific (GuardPassed (KeySetName ks)))
   PreApp s [tn, cn, rk] | s == SRowEnforced -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
     _   <- expectTableExists tn'
-    _   <- expectColumnType tn' cn' SKeySet
+    _   <- expectColumnType tn' cn' SGuard
     Some SBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp SStr rk
 
   PreApp (toOp arithOpP -> Just _) args -> asum

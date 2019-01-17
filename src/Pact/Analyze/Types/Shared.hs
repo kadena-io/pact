@@ -309,12 +309,20 @@ data OriginatingCell
 data Provenance
   = FromCell    OriginatingCell
   | FromRow     (Map ColumnName OriginatingCell)
+  --
+  -- TODO: probably rename FromRegistry
+  --
   | FromNamedKs (S KeySetName)
   | FromInput   Unmunged
+  --
+  -- TODO: add FromTx for data from tx metadata
+  --
+  -- TODO: in the future, probably have FromYield?
+  --
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
--- particular table+row.
+-- particular source of data (db, tx metadata, keyset registry, arg, etc).
 data S (a :: Type)
   = S
     { _sProv :: Maybe Provenance
@@ -697,20 +705,20 @@ instance HasKind Any
 instance SymVal Any
 instance SMTValue Any
 
-newtype KeySet
-  = KeySet Integer
+newtype Guard
+  = Guard Integer
   deriving (Eq, Ord, Data, Show, Read, UserShow)
 
-instance SymVal KeySet where
+instance SymVal Guard where
   mkSymVal = SBVI.genMkSymVar KUnbounded
-  literal (KeySet s) = mkConcreteInteger s
-  fromCV = wrappedIntegerFromCV KeySet
+  literal (Guard s) = mkConcreteInteger s
+  fromCV = wrappedIntegerFromCV Guard
 
-instance HasKind KeySet where
+instance HasKind Guard where
   kindOf _ = KUnbounded
 
-instance SMTValue KeySet where
-  sexprToVal = fmap KeySet . sexprToVal
+instance SMTValue Guard where
+  sexprToVal = fmap Guard . sexprToVal
 
 type family Concrete (a :: Ty) where
   Concrete 'TyInteger     = Integer
@@ -718,7 +726,7 @@ type family Concrete (a :: Ty) where
   Concrete 'TyStr         = Str
   Concrete 'TyTime        = Time
   Concrete 'TyDecimal     = Decimal
-  Concrete 'TyKeySet      = KeySet
+  Concrete 'TyGuard       = Guard
   Concrete 'TyAny         = Any
   Concrete ('TyList a)    = [Concrete a]
   Concrete ('TyObject ty) = ConcreteObj ty
@@ -810,7 +818,7 @@ withSing = withDict . singMkSing where
       SStr                   -> Dict
       STime                  -> Dict
       SDecimal               -> Dict
-      SKeySet                -> Dict
+      SGuard                 -> Dict
       SAny                   -> Dict
       SList ty'              -> withSing ty' Dict
       SObjectUnsafe (SingList tys) -> withHListDict tys Dict
@@ -830,7 +838,7 @@ withEq = withDict . singMkEq
       SStr         -> Dict
       STime        -> Dict
       SDecimal     -> Dict
-      SKeySet      -> Dict
+      SGuard       -> Dict
       SAny         -> Dict
       SList ty'    -> withEq ty' Dict
       SObjectUnsafe SNil'   -> Dict
@@ -848,7 +856,7 @@ withShow = withDict . singMkShow
       SStr         -> Dict
       STime        -> Dict
       SDecimal     -> Dict
-      SKeySet      -> Dict
+      SGuard       -> Dict
       SAny         -> Dict
       SList ty'    -> withShow ty' Dict
       SObjectUnsafe SNil'   -> Dict
@@ -866,7 +874,7 @@ withUserShow = withDict . singMkUserShow
       SStr         -> Dict
       STime        -> Dict
       SDecimal     -> Dict
-      SKeySet      -> Dict
+      SGuard       -> Dict
       SAny         -> Dict
       SList ty'    -> withUserShow ty' Dict
       SObjectUnsafe SNil'   -> Dict
@@ -885,7 +893,7 @@ withTypeable = withDict . singMkTypeable
       SStr         -> Dict
       STime        -> Dict
       SDecimal     -> Dict
-      SKeySet      -> Dict
+      SGuard       -> Dict
       SAny         -> Dict
       SList   ty'  -> withTypeable ty' Dict
       SObjectUnsafe (SingList tys)
@@ -911,7 +919,7 @@ withSMTValue = withDict . singMkSMTValue
       SStr       -> Dict
       STime      -> Dict
       SDecimal   -> Dict
-      SKeySet    -> Dict
+      SGuard     -> Dict
       SAny       -> Dict
       SList ty'  -> withSMTValue ty' $ withTypeable ty' Dict
       SObjectUnsafe SNil' -> Dict
@@ -930,7 +938,7 @@ withHasKind = withDict . singMkHasKind
       SStr       -> Dict
       STime      -> Dict
       SDecimal   -> Dict
-      SKeySet    -> Dict
+      SGuard     -> Dict
       SAny       -> Dict
       SList ty'  -> withHasKind ty' $ withTypeable ty' Dict
       SObjectUnsafe SNil' -> Dict
@@ -963,7 +971,7 @@ withSymVal = withDict . singMkSymVal
       SStr        -> Dict
       STime       -> Dict
       SDecimal    -> Dict
-      SKeySet     -> Dict
+      SGuard      -> Dict
       SAny        -> Dict
       SList ty'   -> withSymVal ty' Dict
       SObjectUnsafe SNil' -> Dict

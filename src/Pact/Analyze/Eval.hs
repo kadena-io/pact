@@ -113,7 +113,7 @@ runAnalysis' query tables args tm rootPath tags info = do
       cv1     = state1 ^. latticeState . lasExtra
       state1' = state1 &  latticeState . lasExtra .~ ()
       qEnv    = mkQueryEnv aEnv state1' cv0 cv1 funResult
-      ksProvs = state1 ^. globalState.gasKsProvenances
+      ksProvs = state1 ^. globalState.gasGuardProvenances
 
   (results, querySucceeds)
     <- hoist runAlloc $ runReaderT (runStateT (queryAction query) sTrue) qEnv

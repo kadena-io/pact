@@ -44,7 +44,6 @@ module Pact.Analyze.Types.Languages
   , pattern TimeComparison
   , pattern StrComparison
   , pattern BoolComparison
-  , pattern KeySetComparison
   , pattern ILiteral
   , pattern ILogicalOp
   , pattern Inj
@@ -192,6 +191,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- Note: for bool and keyset this is a wider comparison than pact supports
   Comparison :: SingTy a -> ComparisonOp -> t a -> t a -> Core t 'TyBool
 
+  GuardEqNeq :: EqNeq -> t 'TyGuard -> t 'TyGuard -> Core t 'TyBool
+
   -- object ops
   ObjectEqNeq
     :: SingTy ('TyObject m1) -> SingTy ('TyObject m2)
@@ -325,10 +326,6 @@ pattern StrComparison op a b = Comparison SStr op a b
 pattern BoolComparison
   :: ComparisonOp -> t 'TyBool -> t 'TyBool -> Core t 'TyBool
 pattern BoolComparison op a b = Comparison SBool op a b
-
-pattern KeySetComparison
-  :: ComparisonOp -> t 'TyKeySet -> t 'TyKeySet -> Core t 'TyBool
-pattern KeySetComparison op a b = Comparison SKeySet op a b
 
 -- Note [Sing Functions]:
 --
@@ -681,6 +678,15 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . singShowsTm ty' 11 a
     . showChar ' '
     . singShowsTm ty' 11 b
+
+  GuardEqNeq op a b ->
+      showString "GuardEqNeq"
+    . showsPrec 11 op
+    . showString " "
+    . showsTm 11 a
+    . showString " "
+    . showsTm 11 b
+
   ObjectEqNeq ty1 ty2 op a b ->
       showString "ObjectEqNeq "
     . showsPrec 11 ty1
@@ -895,6 +901,7 @@ userShowCore ty _p = \case
   IntAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
   DecAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
   Comparison ty' op x y    -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
+  GuardEqNeq op x y        -> parenList [userShow op, userShowTm x, userShowTm y]
   ObjectEqNeq ty1 ty2 op x y
     -> parenList [userShow op, singUserShowTm ty1 x, singUserShowTm ty2 y]
   ObjAt ty' k obj          -> parenList [userShowTm k, singUserShowTm ty' obj]
@@ -1034,10 +1041,10 @@ data PropSpecific (a :: Ty) where
 
   -- Authorization
 
-  -- | Whether a transaction contains a signature that satisfied the named key set
-  KsNameAuthorized :: KeySetName      ->                                   PropSpecific 'TyBool
+  -- | Whether a transaction satisfies the named guard in the registry
+  GuardPassed :: KeySetName                                              -> PropSpecific 'TyBool
   -- | Whether a row has its keyset @enforce@d in a transaction
-  RowEnforced      :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
+  RowEnforced :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
 
   PropRead :: SingTy ('TyObject m) -> BeforeOrAfter -> Prop TyTableName -> Prop TyRowKey -> PropSpecific ('TyObject m)
 
@@ -1069,7 +1076,7 @@ instance UserShow (PropSpecific a) where
     RowReadCount tab rk     -> parenList [SRowReadCount, userShowTm tab, userShowTm rk]
     RowWrite tab rk         -> parenList [SRowWritten, userShowTm tab, userShowTm rk]
     RowWriteCount tab rk    -> parenList [SRowWriteCount, userShowTm tab, userShowTm rk]
-    KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
+    GuardPassed name        -> parenList [SAuthorizedBy, userShow name]
     RowEnforced tn cn rk    -> parenList [SRowEnforced, userShowTm tn, userShowTm cn, userShowTm rk]
     RowExists tn rk ba      -> parenList [SRowExists, userShowTm tn, userShowTm rk, userShow ba]
     PropRead _ty ba tn rk   -> parenList [SPropRead, userShowTm tn, userShowTm rk, userShow ba]
@@ -1247,15 +1254,20 @@ data Term (a :: Ty) where
   EnforceOne      :: Either TagId [((Path, Path), Term 'TyBool)] -> Term 'TyBool
 
   -- Reading from environment
-  ReadKeySet      :: Term 'TyStr -> Term 'TyKeySet
+  ReadKeySet      :: Term 'TyStr -> Term 'TyGuard
   ReadDecimal     :: Term 'TyStr -> Term 'TyDecimal
   ReadInteger     :: Term 'TyStr -> Term 'TyInteger
 
   -- TODO: ReadMsg
 
+  -- Guards
+  GuardPasses :: TagId -> Term 'TyGuard -> Term 'TyBool
+
   -- Keyset access
-  KsAuthorized    :: TagId -> Term 'TyKeySet -> Term 'TyBool
-  NameAuthorized  :: TagId -> Term 'TyStr -> Term 'TyBool
+  --
+  -- NOTE: this will be removed. see Pact.Analyze.Eval.Term matching on this.
+  --
+  NameAuthorized :: TagId -> Term 'TyStr -> Term 'TyBool
 
   -- Table access
   Read
@@ -1309,8 +1321,8 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showChar ' '
     . showsPrec 11 b
 
-  KsAuthorized a b ->
-      showString "KsAuthorized "
+  GuardPasses a b ->
+      showString "GuardPasses "
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
@@ -1404,11 +1416,14 @@ userShowTerm ty p = \case
     , userShow $ fmap snd x
     ]
 
-  Enforce _ (KsAuthorized _ x)   -> parenList ["enforce-keyset", userShow x]
-  Enforce _ (NameAuthorized _ x) -> parenList ["enforce-keyset", userShow x]
+  --
+  -- TODO: perhaps track whether -guard or -keyset was used for these?
+  --
+  Enforce _ (GuardPasses _ x)    -> parenList ["enforce-guard", userShow x]
+  Enforce _ (NameAuthorized _ x) -> parenList ["enforce-guard", userShow x]
   Enforce _ x                    -> parenList ["enforce", userShow x]
-  KsAuthorized   _ _
-    -> error "KsAuthorized should only appear inside of an Enforce"
+  GuardPasses _ _
+    -> error "GuardPasses should only appear inside of an Enforce"
   NameAuthorized _ _
     -> error "NameAuthorized should only appear inside of an Enforce"
 
@@ -1443,7 +1458,7 @@ eqTerm _ty (ReadDecimal a) (ReadDecimal b)
   = a == b
 eqTerm _ty (ReadInteger a) (ReadInteger b)
   = a == b
-eqTerm _ty (KsAuthorized a1 b1) (KsAuthorized a2 b2)
+eqTerm _ty (GuardPasses a1 b1) (GuardPasses a2 b2)
   = a1 == a2 && b1 == b2
 eqTerm _ty (NameAuthorized a1 b1) (NameAuthorized a2 b2)
   = a1 == a2 && b1 == b2

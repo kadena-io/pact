@@ -26,7 +26,7 @@ import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
 import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
-import           Pact.Analyze.Types.Eval  (aeRegistryKeySets, aeTxDecimals,
+import           Pact.Analyze.Types.Eval  (aeRegistryGuards, aeTxDecimals,
                                            aeTxIntegers, aeTxKeySets,
                                            mkAnalyzeEnv, mkInitialAnalyzeState)
 import           Pact.Analyze.Util        (dummyInfo)
@@ -109,8 +109,8 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       --
       -- TODO: need to hook this up to authorized-by (NameAuthorized) support
       --
-      withRegistryKeySets = flip (foldr
-          (\(k, v) -> aeRegistryKeySets
+      withRegistryGuards = flip (foldr
+          (\(k, v) -> aeRegistryGuards
             %~ writeArray' (literal (KeySetName (T.pack k))) (literal v)))
         (Map.toList (fmap snd registryKSs))
 
@@ -121,7 +121,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
 
       withTxKeySets = flip (foldr
           (\(k, v) -> aeTxKeySets
-            %~ writeArray' (literal (KeySetName (T.pack k))) (literal v)))
+            %~ writeArray' (literal (Str k)) (literal v)))
         (Map.toList (fmap snd txKSs))
 
       withDecimals = flip (foldr
@@ -139,7 +139,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
 
   -- evaluate via analyze
   (analyzeVal, las)
-    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) (aEnv & withRegistryKeySets & withKsAuths & withTxKeySets & withDecimals & withIntegers & withStrings) state0 of
+    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) (aEnv & withRegistryGuards & withKsAuths & withTxKeySets & withDecimals & withIntegers & withStrings) state0 of
       Right (analyzeVal, las, ()) -> pure (analyzeVal, las)
       Left err                    -> error $ describeAnalyzeFailure err
 

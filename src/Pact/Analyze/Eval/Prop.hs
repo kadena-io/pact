@@ -203,7 +203,7 @@ evalPropSpecific (RowExists tn pRk beforeAfter) = do
     rowExists (case beforeAfter of {Before -> before; After -> after}) tn' sRk
 
 -- Authorization
-evalPropSpecific (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
+evalPropSpecific (GuardPassed n) = namedGuardPasses $ literalS n
 evalPropSpecific (RowEnforced tn cn pRk) = do
   sRk <- evalProp pRk
   tn' <- getLitTableName tn

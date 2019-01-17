@@ -32,7 +32,7 @@ expToInvariant ty exp = case (ty, exp) of
         (STime,    Pact.TyTime)    -> pure (CoreInvariant (Var vid varName))
         (SStr,     Pact.TyString)  -> pure (CoreInvariant (Var vid varName))
         (SBool,    Pact.TyBool)    -> pure (CoreInvariant (Var vid varName))
-        (SKeySet,  Pact.TyGuard (Just Pact.GTyKeySet)) -> pure (CoreInvariant (Var vid varName))
+        (SGuard,   Pact.TyGuard _) -> pure (CoreInvariant (Var vid varName))
         (_,        Pact.TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
         (_,        _)         -> throwErrorIn exp $
@@ -77,13 +77,13 @@ expToInvariant ty exp = case (ty, exp) of
     , CoreInvariant ... StrComparison op
       <$> expToInvariant SStr a     <*> expToInvariant SStr b
     , case toOp eqNeqP op' of
-      -- enforce that users can only test (dis-)equality of keysets
-      Just _eqNeq -> CoreInvariant ... KeySetComparison op
-        <$> expToInvariant SKeySet a
-        <*> expToInvariant SKeySet b
-      Nothing -> throwErrorIn exp $
-        op' <> " is an invalid operation for keysets (only " <> SEquality <>
-        " or " <> SInequality <> " allowed)"
+        -- enforce that users can only test {,in}equality of guards
+        Just eqNeq -> CoreInvariant ... GuardEqNeq eqNeq
+          <$> expToInvariant SGuard a
+          <*> expToInvariant SGuard b
+        Nothing -> throwErrorIn exp $
+          op' <> " is an invalid operation for keysets (only " <> SEquality <>
+          " or " <> SInequality <> " allowed)"
     ] <|> throwErrorIn exp "unexpected argument types"
 
   (SBool, ParenList (EAtom' op:args))

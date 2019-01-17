@@ -119,9 +119,9 @@ showAssert recov (Located (Pact.Info mInfo) lsb) = case SBV.unliteral lsb of
   where
     context = maybe "" (\(Pact.Code code, _) -> ": " <> code) mInfo
 
-showAuth :: Recoverability -> Maybe Provenance -> Located Authorization -> Text
-showAuth recov mProv (_located -> Authorization srk sbool) =
-  status <> " " <> ksDescription
+showGE :: Recoverability -> Maybe Provenance -> Located GuardEnforcement -> Text
+showGE recov mProv (_located -> GuardEnforcement sg sbool) =
+  status <> " " <> guardDescription
 
   where
     status = case SBV.unliteral sbool of
@@ -129,23 +129,23 @@ showAuth recov mProv (_located -> Authorization srk sbool) =
       Just True  -> "satisfied"
       Just False -> showFailure recov <> " to satisfy"
 
-    ks :: Text
-    ks = showS srk
+    guard :: Text
+    guard = showS sg
 
-    ksDescription = case mProv of
+    guardDescription = case mProv of
       Nothing ->
-        "unknown " <> ks
+        "unknown " <> guard
       Just (FromRow _) ->
-        error "impossible: FromRow provenance on keyset"
+        error "impossible: FromRow provenance on guard"
       Just (FromCell (OriginatingCell tn cn sRk _)) ->
-        ks <> " from database at ("
+        guard <> " from database at ("
           <> userShow tn <> ", "
           <> "'" <> userShow cn <> ", "
           <> showS sRk <> ")"
       Just (FromNamedKs sKsn) ->
-        ks <> " named " <> showKsn sKsn
+        guard <> " named " <> showKsn sKsn
       Just (FromInput (Unmunged arg)) ->
-        ks <> " from argument " <> arg
+        guard <> " from argument " <> arg
 
 -- TODO: after factoring Location out of TraceEvent, include source locations
 --       in trace
@@ -164,8 +164,11 @@ showEvent ksProvs tags event = do
         pure [display mtWrites tid (showWrite writeType)]
       TraceAssert recov (_located -> tid) ->
         pure [display mtAsserts tid (showAssert recov)]
+      --
+      -- TODO: rename TraceAuth
+      --
       TraceAuth recov (_located -> tid) ->
-        pure [display mtAuths tid (showAuth recov $ tid `Map.lookup` ksProvs)]
+        pure [display mtGuardEnforcements tid (showGE recov $ tid `Map.lookup` ksProvs)]
       TraceSubpathStart _ ->
         pure [] -- not shown to end-users
       TracePushScope _ scopeTy locatedBindings -> do

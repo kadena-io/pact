@@ -35,7 +35,7 @@ singFloat ty p = case p of
   PropSpecific TableRead{}        -> ([], p)
   PropSpecific ColumnWritten{}    -> ([], p)
   PropSpecific ColumnRead{}       -> ([], p)
-  PropSpecific KsNameAuthorized{} -> ([], p)
+  PropSpecific GuardPassed{}      -> ([], p)
   PropSpecific RowEnforced{}      -> ([], p)
   PropSpecific IntColumnDelta{}   -> ([], p)
   PropSpecific DecColumnDelta{}   -> ([], p)
@@ -109,6 +109,8 @@ singFloat ty p = case p of
     -> CoreProp ... Comparison ty' op <$> singFloat ty' a <*> singFloat ty' b
   CoreProp (ObjectEqNeq ty1 ty2 op a b)
     -> CoreProp <$> (ObjectEqNeq ty1 ty2 op <$> singFloat ty1 a <*> singFloat ty2 b)
+  CoreProp (GuardEqNeq op a b)
+    -> CoreProp <$> (GuardEqNeq op <$> float a <*> float b)
   CoreProp (ListEqNeq ty' op a b) ->
     CoreProp <$> (ListEqNeq ty' op <$> singFloat (SList ty') a <*> singFloat (SList ty') b)
   CoreProp (StrContains needle haystack) -> CoreProp <$>

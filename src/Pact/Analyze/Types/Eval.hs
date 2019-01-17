@@ -81,16 +81,22 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope           :: !(Map VarId AVal)              -- used as a stack
-    , _aeRegistryKeySets :: !(SFunArray KeySetName KeySet) -- read-only
-    , _aeKsAuths         :: !(SFunArray KeySet Bool)       -- read-only
-    , _aeTxKeySets       :: !(SFunArray KeySetName KeySet) -- read-only
-    , _aeTxDecimals      :: !(SFunArray Str Decimal)       -- read-only
-    , _aeTxIntegers      :: !(SFunArray Str Integer)       -- read-only
-    , _invariants        :: !(TableMap [Located (Invariant 'TyBool)])
-    , _aeColumnIds       :: !(TableMap (Map Text VarId))
-    , _aeModelTags       :: !(ModelTags 'Symbolic)
-    , _aeInfo            :: !Info
+    { _aeScope          :: !(Map VarId AVal)              -- used as a stack
+    --
+    -- TODO: change this to use RegistryName keys (KSN -> RN)
+    --
+    , _aeRegistryGuards :: !(SFunArray KeySetName Guard) -- read-only
+    , _aeGuardPasses    :: !(SFunArray Guard Bool)       -- read-only
+    --
+    -- TODO: change this to use Str keys
+    --
+    , _aeTxKeySets      :: !(SFunArray Str Guard)  -- read-only
+    , _aeTxDecimals     :: !(SFunArray Str Decimal)       -- read-only
+    , _aeTxIntegers     :: !(SFunArray Str Integer)       -- read-only
+    , _invariants       :: !(TableMap [Located (Invariant 'TyBool)])
+    , _aeColumnIds      :: !(TableMap (Map Text VarId))
+    , _aeModelTags      :: !(ModelTags 'Symbolic)
+    , _aeInfo           :: !Info
     }
 
 instance Show AnalyzeEnv where
@@ -98,9 +104,9 @@ instance Show AnalyzeEnv where
     $ showString "AnalyzeEnv "
     . showsPrec 11 _aeScope
     . showChar ' '
-    . showsPrec 11 _aeRegistryKeySets
+    . showsPrec 11 _aeRegistryGuards
     . showChar ' '
-    . showsPrec 11 _aeKsAuths
+    . showsPrec 11 _aeGuardPasses
     . showChar ' '
     . showsPrec 11 _aeTxKeySets
     . showChar ' '
@@ -122,11 +128,11 @@ mkAnalyzeEnv
   -> Info
   -> Maybe AnalyzeEnv
 mkAnalyzeEnv tables args tags info = do
-  let registryKeySets = mkFreeArray "registryKeySets"
-      keySetAuths     = mkFreeArray "keySetAuths"
-      txKeySets       = mkFreeArray "txKeySets"
-      txDecimals      = mkFreeArray "txDecimals"
-      txIntegers      = mkFreeArray "txIntegers"
+  let registryGuards = mkFreeArray "registryGuards"
+      guardPasses    = mkFreeArray "guardPasses"
+      txKeySets      = mkFreeArray "txKeySets"
+      txDecimals     = mkFreeArray "txDecimals"
+      txIntegers     = mkFreeArray "txIntegers"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -140,7 +146,7 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args registryKeySets keySetAuths txKeySets txDecimals txIntegers invariants'
+  pure $ AnalyzeEnv args registryGuards guardPasses txKeySets txDecimals txIntegers invariants'
     columnIds' tags info
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
@@ -245,7 +251,7 @@ deriving instance Mergeable a => Mergeable (LatticeAnalyzeState a)
 -- Checking state that is transferred through every computation, in-order.
 data GlobalAnalyzeState
   = GlobalAnalyzeState
-    { _gasKsProvenances :: Map TagId Provenance -- added as we accum ks info
+    { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
     }
   deriving (Show)
 
@@ -320,7 +326,7 @@ mkInitialAnalyzeState tables = AnalyzeState
           }
         }
     , _globalState = GlobalAnalyzeState
-        { _gasKsProvenances = mempty
+        { _gasGuardProvenances = mempty
         }
     }
 
@@ -332,9 +338,11 @@ mkInitialAnalyzeState tables = AnalyzeState
     decCellDeltas   = mkTableColumnMap (== TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
     intColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyInteger) 0
     decColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyDecimal) (fromInteger 0)
-    cellsEnforced
-      = mkTableColumnMap (== TyPrim (Pact.TyGuard $ Just Pact.GTyKeySet)) (mkSFunArray (const sFalse))
-    cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const sFalse))
+    cellsEnforced   = mkTableColumnMap isGuardTy (mkSFunArray (const sFalse))
+    cellsWritten    = mkTableColumnMap (const True) (mkSFunArray (const sFalse))
+
+    isGuardTy (TyPrim (Pact.TyGuard _)) = True
+    isGuardTy _                         = False
 
     mkTableColumnMap
       :: (Pact.Type Pact.UserType -> Bool) -- ^ Include this column in the mapping?
@@ -401,13 +409,13 @@ class HasAnalyzeEnv a where
   scope :: Lens' a (Map VarId AVal)
   scope = analyzeEnv.aeScope
 
-  registryKeySets :: Lens' a (SFunArray KeySetName KeySet)
-  registryKeySets = analyzeEnv.aeRegistryKeySets
+  registryGuards :: Lens' a (SFunArray KeySetName Guard)
+  registryGuards = analyzeEnv.aeRegistryGuards
 
-  ksAuths :: Lens' a (SFunArray KeySet Bool)
-  ksAuths = analyzeEnv.aeKsAuths
+  guardPasses :: Lens' a (SFunArray Guard Bool)
+  guardPasses = analyzeEnv.aeGuardPasses
 
-  txKeySets :: Lens' a (SFunArray KeySetName KeySet)
+  txKeySets :: Lens' a (SFunArray Str Guard)
   txKeySets = analyzeEnv.aeTxKeySets
 
   txDecimals :: Lens' a (SFunArray Str Decimal)
@@ -578,31 +586,31 @@ symArrayAt (S _ symKey) = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
--- | Resolve a named keyset from the keyset registry (not tx metadata)
-resolveKeySet
+-- | Resolve a named guard from the registry (not tx metadata)
+resolveGuard
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S KeySetName
-  -> m (S KeySet)
-resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
-  readArray <$> view registryKeySets <*> pure (_sSbv sKsn)
+  -> m (S Guard)
+resolveGuard sn = fmap (withProv $ fromNamedKs sn) $
+  readArray <$> view registryGuards <*> pure (_sSbv sn)
 
-nameAuthorized
+namedGuardPasses
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S KeySetName
   -> m (S Bool)
-nameAuthorized sKsn = fmap sansProv $
-  readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
+namedGuardPasses sn = fmap sansProv $
+  readArray <$> view guardPasses <*> (_sSbv <$> resolveGuard sn)
 
 -- | Reads a named keyset from tx metadata (not the keyset registry)
 readKeySet
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S KeySetName
-  -> m (S KeySet)
+  => S Str
+  -> m (S Guard)
 --
--- TODO: add provenance for tx metadata
+-- TODO: add provenance for tx metadata (new prov type: FromTx)
 --
-readKeySet sKsn = fmap sansProv $
-  readArray <$> view txKeySets <*> pure (_sSbv sKsn)
+readKeySet sStr = fmap sansProv $
+  readArray <$> view txKeySets <*> pure (_sSbv sStr)
 
 -- | Reads a named decimal from tx metadata
 readDecimal

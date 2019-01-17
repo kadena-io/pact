@@ -34,7 +34,6 @@ module Pact.Analyze.Types.Types
   , TyTableName
   , TyColumnName
   , TyRowKey
-  , TyKeySetName
   , singEq
   , singEqB
   , eqSym
@@ -59,13 +58,22 @@ import           GHC.TypeLits                (Symbol, KnownSymbol, symbolVal, sa
 
 import           Pact.Analyze.Types.UserShow
 
+-- data GuardTy
+--   = GuardTyKeySet
+--   | GuardTyAny
+--   -- | GuardTyKeySetName
+--   -- | GuardTyPact
+--   -- | GuardTyUser
+--   -- | GuardTyModule
+
 data Ty
   = TyInteger
   | TyBool
   | TyStr
   | TyTime
   | TyDecimal
-  | TyKeySet
+  -- | TyGuard GuardTy
+  | TyGuard
   | TyAny
   | TyList Ty
   | TyObject [ (Symbol, Ty) ]
@@ -114,7 +122,7 @@ pattern SObject a <- SObjectUnsafe a
 
 -- This pragma doesn't work because of data instances
 -- https://ghc.haskell.org/trac/ghc/ticket/14059
-{-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SKeySet, SAny, SList,
+{-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SGuard, SAny, SList,
   SObject #-}
 
 pattern SObjectNil :: () => obj ~ 'TyObject '[] => Sing obj
@@ -128,8 +136,12 @@ pattern SObjectCons k v vs <- SObjectUnsafe (SCons' k v vs)
 
 -- This pragma doesn't work because of data instances
 -- https://ghc.haskell.org/trac/ghc/ticket/14059
-{-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SKeySet, SAny, SList,
+{-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SGuard, SAny, SList,
   SObjectNil, SObjectCons #-}
+
+-- data instance Sing (a :: GuardTy) where
+--   SGuardKeySet :: Sing 'GuardTyKeySet
+--   SGuardAny    :: Sing 'GuardTyAny
 
 data instance Sing (a :: Ty) where
   SInteger      ::               Sing 'TyInteger
@@ -137,7 +149,7 @@ data instance Sing (a :: Ty) where
   SStr          ::               Sing 'TyStr
   STime         ::               Sing 'TyTime
   SDecimal      ::               Sing 'TyDecimal
-  SKeySet       ::               Sing 'TyKeySet
+  SGuard        ::               Sing 'TyGuard
   SAny          ::               Sing 'TyAny
   SList         :: Sing a     -> Sing ('TyList a)
   SObjectUnsafe :: SingList a -> Sing ('TyObject a)
@@ -149,10 +161,10 @@ instance Ord (SingTy a) where
 
 type SingTy (a :: Ty) = Sing a
 
+
 type TyTableName  = 'TyStr
 type TyColumnName = 'TyStr
 type TyRowKey     = 'TyStr
-type TyKeySetName = 'TyStr
 
 singEq :: forall (a :: Ty) (b :: Ty). Sing a -> Sing b -> Maybe (a :~: b)
 singEq SInteger          SInteger          = Just Refl
@@ -160,7 +172,7 @@ singEq SBool             SBool             = Just Refl
 singEq SStr              SStr              = Just Refl
 singEq STime             STime             = Just Refl
 singEq SDecimal          SDecimal          = Just Refl
-singEq SKeySet           SKeySet           = Just Refl
+singEq SGuard            SGuard            = Just Refl
 singEq SAny              SAny              = Just Refl
 singEq (SList         a) (SList         b) = apply Refl <$> singEq a b
 singEq (SObjectUnsafe a) (SObjectUnsafe b) = apply Refl <$> singListEq a b
@@ -206,7 +218,7 @@ instance Show (SingTy ty) where
     SStr      -> showString "SStr"
     STime     -> showString "STime"
     SDecimal  -> showString "SDecimal"
-    SKeySet   -> showString "SKeySet"
+    SGuard    -> showString "SGuard"
     SAny      -> showString "SAny"
     SList a   -> showParen (p > 10) $ showString "SList "   . showsPrec 11 a
     SObjectUnsafe (SingList m)
@@ -229,7 +241,7 @@ instance UserShow (SingTy ty) where
     SStr      -> "string"
     STime     -> "time"
     SDecimal  -> "decimal"
-    SKeySet   -> "keyset"
+    SGuard    -> "guard"
     SAny      -> "*"
     SList a   -> "[" <> userShow a <> "]"
     SObjectUnsafe (SingList m)
@@ -259,8 +271,8 @@ instance SingI 'TyTime where
 instance SingI 'TyDecimal where
   sing = SDecimal
 
-instance SingI 'TyKeySet where
-  sing = SKeySet
+instance SingI 'TyGuard where
+  sing = SGuard
 
 instance SingI 'TyAny where
   sing = SAny

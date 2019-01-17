@@ -121,7 +121,7 @@ toPactTm = \case
   Some STime    (CoreTerm (Lit x))
     -> pure $ TLiteral (LTime (toPact timeIso x)) dummyInfo
 
-  Some SKeySet  (CoreTerm (Lit (KeySet x))) -> do
+  Some SGuard (CoreTerm (Lit (Guard x))) -> do
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
       Just (ks, _) -> pure $ Pact.TGuard (Pact.GKeySet ks) dummyInfo
@@ -147,7 +147,7 @@ toPactTm = \case
     -> mkApp defFormatTime [Some SStr x, Some STime y]
   Some SStr (Hash x) -> mkApp hashDef [x]
 
-  Some SKeySet (ReadKeySet x) -> mkApp readKeysetDef [Some SStr x]
+  Some SGuard (ReadKeySet x) -> mkApp readKeysetDef [Some SStr x]
 
   Some SDecimal (ReadDecimal x) -> mkApp readDecimalDef [Some SStr x]
 
@@ -293,7 +293,7 @@ reverseTranslateType = \case
   SInteger  -> Pact.TyPrim Pact.TyInteger
   SStr      -> Pact.TyPrim Pact.TyString
   STime     -> Pact.TyPrim Pact.TyTime
-  SKeySet   -> Pact.TyPrim $ Pact.TyGuard $ Just Pact.GTyKeySet
+  SGuard    -> Pact.TyPrim $ Pact.TyGuard Nothing
   SAny      -> Pact.TyAny
   SList a   -> Pact.TyList $ reverseTranslateType a
   -- SObject needs to hold a type name or something

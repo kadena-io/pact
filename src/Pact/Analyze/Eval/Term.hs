@@ -138,17 +138,15 @@ tagAssert tid sb = do
     Nothing  -> pure ()
     Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
 
--- | "Tag" an uninterpreted auth value with value from our Model that was
--- allocated in Symbolic.
-tagAuth :: TagId -> S KeySet -> S Bool -> Analyze ()
-tagAuth tid sKs sb = do
-  mAuth <- preview $ aeModelTags.mtAuths.at tid._Just.located
-  case mAuth of
+tagGuard :: TagId -> S Guard -> S Bool -> Analyze ()
+tagGuard tid sg sPasses = do
+  mGEnforcement <- preview $ aeModelTags.mtGuardEnforcements.at tid._Just.located
+  case mGEnforcement of
     Nothing  -> pure ()
-    Just (Authorization ksTag sbv) -> do
-      addConstraint $ sansProv $ ksTag .== sKs
-      addConstraint $ sansProv $ sbv .== _sSbv sb
-      globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
+    Just (GuardEnforcement sg' passes') -> do
+      addConstraint $ sansProv $ sg' .== sg
+      addConstraint $ sansProv $ passes' .== _sSbv sPasses
+      globalState.gasGuardProvenances.at tid .= (sg ^. sProv)
 
 tagSubpathStart :: Path -> S Bool -> Analyze ()
 tagSubpathStart p active = do
@@ -182,21 +180,6 @@ tagVarBinding vid av = do
   case mTag of
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
-
-symKsName :: S Str -> S KeySetName
-symKsName = unsafeCoerceS
-
-ksAuthorized :: S KeySet -> Analyze (S Bool)
-ksAuthorized sKs = do
-  -- NOTE: we know that KsAuthorized constructions are only emitted within
-  -- Enforced constructions, so we know that this keyset is being enforced
-  -- here.
-  case sKs ^? sProv._Just._FromCell of
-    Just (OriginatingCell tn sCn sRk sDirty) ->
-      cellEnforced tn sCn sRk %= (.|| sNot sDirty)
-    Nothing ->
-      pure ()
-  fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
 reindex :: Map Text VarId -> Map Text AVal -> Map VarId AVal
 reindex varMap = Map.mapKeys (varMap Map.!)
@@ -467,22 +450,54 @@ evalTerm = \case
       pure res
 
   -- Read values from tx metadata
-  ReadKeySet  str -> readKeySet  =<< symKsName <$> evalTerm str
+  ReadKeySet  str -> readKeySet  =<< evalTerm str
   ReadDecimal str -> readDecimal =<< evalTerm str
   ReadInteger str -> readInteger =<< evalTerm str
 
-  KsAuthorized tid ksT -> do
-    ks <- evalTerm ksT
-    authorized <- ksAuthorized ks
-    tagAuth tid ks authorized
-    pure authorized
+  GuardPasses tid guardT -> do
+    guard <- evalTerm guardT
 
-  NameAuthorized tid str -> do
-    ksn <- symKsName <$> evalTerm str
-    ks <- resolveKeySet ksn
-    authorized <- nameAuthorized ksn
-    tagAuth tid ks authorized
-    pure authorized
+    -- NOTE: we're at an enforcement site; we know that `GuardPasses`
+    -- constructions only appear within `Enforce` constructions. so if we have
+    -- metadata sitting around for a cell that this guard came from, mark that
+    -- cell as enforced.
+    case guard ^? sProv._Just._FromCell of
+      Just (OriginatingCell tn sCn sRk sDirty) ->
+        cellEnforced tn sCn sRk %= (.|| sNot sDirty)
+      Nothing ->
+        pure ()
+
+    whetherPasses <- fmap sansProv $
+      readArray <$> view guardPasses <*> pure (_sSbv guard)
+
+    tagGuard tid guard whetherPasses
+    pure whetherPasses
+
+  NameAuthorized _tid str -> do
+      ksn <- symKsName <$> evalTerm str
+      -- ks <- resolveKeySet ksn
+      authorized <- namedGuardPasses ksn
+
+      --
+      -- TODO: naively we want to switch this call to `tagGuard`, but instead
+      -- of introducing a guard here so that we could call that, the cleanest
+      -- path is to add keyset-ref-guard support, change translation for
+      --
+      --     (enforce-keyset "str")
+      --
+      -- to desugar to
+      --
+      --     (enforce-guard (keyset-ref-guard "str"))
+      --
+      -- and remove this notion of `NameAuthorized`. in the mean time, we don't
+      -- tag here.
+
+      -- tagAuth tid ks authorized
+      pure authorized
+
+    where
+      symKsName :: S Str -> S KeySetName
+      symKsName = unsafeCoerceS
 
   PactVersion -> pure $ literalS $ Str $ T.unpack pactVersion
 

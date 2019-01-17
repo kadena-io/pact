@@ -482,9 +482,9 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable (Inj Success)
-    expectPass code $ Valid $ Inj Success .=> Inj (KsNameAuthorized "ks")
+    expectPass code $ Valid $ Inj Success .=> Inj (GuardPassed "ks")
 
-    expectFail code $ Valid $ Inj Success .=> Inj (KsNameAuthorized "different-ks")
+    expectFail code $ Valid $ Inj Success .=> Inj (GuardPassed "different-ks")
 
   describe "enforce-keyset.name.dynamic" $ do
     let code =
@@ -492,7 +492,7 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce-keyset (+ "k" "s")))
           |]
-    expectPass code $ Valid $ sNot (Inj (KsNameAuthorized "ks")) .=> Abort'
+    expectPass code $ Valid $ sNot (Inj (GuardPassed "ks")) .=> Abort'
 
   describe "enforce-keyset.value" $ do
     let code =
@@ -764,10 +764,10 @@ spec = describe "analyze" $ do
         timeout = PVar 2 "timeout"
     expectPass code $ Valid $ Inj Success .=>
       POr
-        (Inj (KsNameAuthorized "ck"))
+        (Inj (GuardPassed "ck"))
         (PAnd
           (Inj (TimeComparison Gte systime timeout))
-          (Inj (KsNameAuthorized "dk")))
+          (Inj (GuardPassed "dk")))
 
   describe "enforce-one.2" $ do
     let code =
@@ -2085,7 +2085,7 @@ spec = describe "analyze" $ do
     it "parses row-enforced / vars" $ do
       let env1 = Map.singleton "from" (VarId 1)
           env2 = Map.singleton (VarId 1) (EType SStr)
-          tableEnv = singletonTableEnv "accounts" "ks" $ EType SKeySet
+          tableEnv = singletonTableEnv "accounts" "ks" $ EType SGuard
       textToProp' env1 env2 tableEnv SBool "(row-enforced accounts 'ks from)"
       `shouldBe`
       Right (Inj $ RowEnforced
@@ -2100,12 +2100,12 @@ spec = describe "analyze" $ do
            Right (CoreProp $ IntegerComparison Eq (Inj $ IntColumnDelta "accounts" "balance") 0)
 
     it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
-      let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType SKeySet
+      let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType SGuard
       in textToPropTableEnv tableEnv SBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
          `shouldBe`
          Right (PLogical OrOp
            [ PLogical NotOp [
-               PLogical NotOp [Inj $ KsNameAuthorized "accounts-admin-keyset"]
+               PLogical NotOp [Inj $ GuardPassed "accounts-admin-keyset"]
              ]
            , Abort'
            ])

@@ -78,7 +78,7 @@ allocModelTags argsMap locatedTm graph = ModelTags
     <*> allocReads
     <*> allocWrites
     <*> allocAsserts
-    <*> allocAuths
+    <*> allocGEs
     <*> allocResult
     <*> allocPaths
     <*> allocReturns
@@ -129,11 +129,11 @@ allocModelTags argsMap locatedTm graph = ModelTags
       for (toListOf (traverse._TraceAssert._2) events) $ \(Located info tid) ->
         (tid,) . Located info <$> allocSbv @'TyBool
 
-    allocAuths :: Alloc (Map TagId (Located Authorization))
-    allocAuths = fmap Map.fromList $
+    allocGEs :: Alloc (Map TagId (Located GuardEnforcement))
+    allocGEs = fmap Map.fromList $
       for (toListOf (traverse._TraceAuth._2) events) $ \(Located info tid) ->
         (tid,) . Located info <$>
-          (Authorization <$> allocS @'TyKeySet <*> allocSbv @'TyBool)
+          (GuardEnforcement <$> allocS @'TyGuard <*> allocSbv @'TyBool)
 
     allocResult :: Alloc (TagId, Located TVal)
     allocResult = do
@@ -159,16 +159,16 @@ allocModelTags argsMap locatedTm graph = ModelTags
 -- symbolic 'Model'.
 saturateModel :: Model 'Symbolic -> SBV.Query (Model 'Concrete)
 saturateModel =
-    traverseOf (modelArgs.traversed.located._2)        fetchTVal   >=>
-    traverseOf (modelTags.mtVars.traversed.located._2) fetchTVal   >=>
-    traverseOf (modelTags.mtReads.traversed.located)   fetchAccess >=>
-    traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
-    traverseOf (modelTags.mtAsserts.traversed.located) fetchSbv    >=>
-    traverseOf (modelTags.mtAuths.traversed.located)   fetchAuth   >=>
-    traverseOf (modelTags.mtResult._2.located)         fetchTVal   >=>
-    traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
-    traverseOf (modelTags.mtReturns.traversed)         fetchTVal   >=>
-    traverseOf (modelKsProvs.traversed)                fetchProv
+    traverseOf (modelArgs.traversed.located._2)                  fetchTVal   >=>
+    traverseOf (modelTags.mtVars.traversed.located._2)           fetchTVal   >=>
+    traverseOf (modelTags.mtReads.traversed.located)             fetchAccess >=>
+    traverseOf (modelTags.mtWrites.traversed.located)            fetchAccess >=>
+    traverseOf (modelTags.mtAsserts.traversed.located)           fetchSbv    >=>
+    traverseOf (modelTags.mtGuardEnforcements.traversed.located) fetchGE     >=>
+    traverseOf (modelTags.mtResult._2.located)                   fetchTVal   >=>
+    traverseOf (modelTags.mtPaths.traversed)                     fetchSbv    >=>
+    traverseOf (modelTags.mtReturns.traversed)                   fetchTVal   >=>
+    traverseOf (modelKsProvs.traversed)                          fetchProv
 
   where
     fetchTVal :: TVal -> SBV.Query TVal
@@ -198,9 +198,9 @@ saturateModel =
       suc' <- fetchSbv suc
       pure $ Access sRk' obj' suc'
 
-    fetchAuth :: Authorization -> SBV.Query Authorization
-    fetchAuth (Authorization sKs sbool) = Authorization <$>
-      fetchS sKs <*> fetchSbv sbool
+    fetchGE :: GuardEnforcement -> SBV.Query GuardEnforcement
+    fetchGE (GuardEnforcement sg sbool) = GuardEnforcement <$>
+      fetchS sg <*> fetchSbv sbool
 
     fetchProv :: Provenance -> SBV.Query Provenance
     fetchProv = traverseOf (_FromCell.ocRowKey) fetchS

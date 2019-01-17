@@ -45,9 +45,9 @@ import           GHC.Natural                (Natural)
 import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
-import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
+import           Pact.Types.Lang            (Info, Literal (..),
                                              Type (TyFun, TyPrim, TySchema,
-                                             TyUser, TyVar))
+                                                   TyUser, TyVar))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
@@ -369,14 +369,14 @@ maybeTranslateType' = \case
   TyUser a -> maybeTranslateUserType a
 
   -- TODO(joel): understand the difference between the TyUser and TySchema cases
-  TySchema Pact.TyTable _                     -> pure QTable
-  TySchema _ ty'                              -> maybeTranslateType' ty'
-  TyPrim Pact.TyBool                          -> pure $ EType SBool
-  TyPrim Pact.TyDecimal                       -> pure $ EType SDecimal
-  TyPrim Pact.TyInteger                       -> pure $ EType SInteger
-  TyPrim Pact.TyString                        -> pure $ EType SStr
-  TyPrim Pact.TyTime                          -> pure $ EType STime
-  TyPrim (Pact.TyGuard (Just Pact.GTyKeySet)) -> pure $ EType SKeySet
+  TySchema Pact.TyTable _ -> pure QTable
+  TySchema _ ty'          -> maybeTranslateType' ty'
+  TyPrim Pact.TyBool      -> pure $ EType SBool
+  TyPrim Pact.TyDecimal   -> pure $ EType SDecimal
+  TyPrim Pact.TyInteger   -> pure $ EType SInteger
+  TyPrim Pact.TyString    -> pure $ EType SStr
+  TyPrim Pact.TyTime      -> pure $ EType STime
+  TyPrim (Pact.TyGuard _) -> pure $ EType SGuard
 
   -- Pretend any and an unknown var are the same -- we can't analyze either of
   -- them.
@@ -393,9 +393,8 @@ maybeTranslateType' = \case
   --
   -- TODO: handle these:
   --
-  TyPrim TyValue     -> empty
-  TyFun _            -> empty
-  TyPrim (TyGuard _) -> empty
+  TyPrim Pact.TyValue -> empty
+  TyFun _             -> empty
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -648,7 +647,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_ReadKeyset nameA -> do
     Some SStr nameT <- translateNode nameA
-    return $ Some SKeySet $ ReadKeySet nameT
+    return $ Some SGuard $ ReadKeySet nameT
 
   AST_ReadDecimal nameA -> do
     Some SStr nameT <- translateNode nameA
@@ -673,11 +672,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
       return $ Some SBool $ Enforce Nothing $ NameAuthorized tid ksnT
 
   AST_EnforceKeyset ksA
-    | ksA ^? aNode.aTy == Just (TyPrim $ Pact.TyGuard $ Just Pact.GTyKeySet)
+    | Just (TyPrim (Pact.TyGuard _)) <- ksA ^? aNode.aTy
     -> do
-      Some SKeySet ksT <- translateNode ksA
+      Some SGuard ksT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ Some SBool $ Enforce Nothing $ KsAuthorized tid ksT
+      return $ Some SBool $ Enforce Nothing $ GuardPasses tid ksT
 
   AST_EnforceOne node [] -> do
     -- we just emit an event equivalent to one for `(enforce false)` in this
