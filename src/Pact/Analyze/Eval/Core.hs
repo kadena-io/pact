@@ -183,6 +183,7 @@ evalCore
       S _ val'  <- eval val
       S _ vals' <- evalCore $ LiteralObject objTy $ Object vals
       pure $ sansProv $ tuple (val', vals')
+evalCore (LiteralObject _ _) = error "impossible"
 evalCore ObjMerge{} = throwErrorNoLoc "TODO: ObjMerge"
 -- error "TODO"
 -- evalCore (ObjMerge ty1 ty2 objT1 objT2) = mappend <$> eval objT1 <*> eval objT2
@@ -321,9 +322,44 @@ evalCore (Where schema tya key (Open vid _ f) obj) = withSymVal tya $ do
   withVar vid (mkAVal' v) $ eval f
 
 evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
-evalCore ObjTake{}      = throwErrorNoLoc "not yet implemented"
-evalCore ObjDrop{}      = throwErrorNoLoc "not yet implemented"
-evalCore _ = throwErrorNoLoc "not yet implemented"
+evalCore ObjTake{}     = throwErrorNoLoc "not yet implemented"
+evalCore ObjDrop{}     = throwErrorNoLoc "not yet implemented"
+
+evalCore (ObjectEqNeq
+  (SObjectUnsafe (SingList SNil))
+  (SObjectUnsafe (SingList SNil))
+  eqNeq _ _) = pure $ case eqNeq of { Eq' -> sTrue; Neq' -> sFalse }
+evalCore (ObjectEqNeq
+  (SObjectUnsafe (SingList SNil))
+  (SObjectUnsafe (SingList SCons{}))
+  eqNeq _ _) = pure $ case eqNeq of { Eq' -> sFalse; Neq' -> sTrue }
+evalCore (ObjectEqNeq
+  (SObjectUnsafe (SingList SCons{}))
+  (SObjectUnsafe (SingList SNil))
+  eqNeq _ _) = pure $ case eqNeq of { Eq' -> sFalse; Neq' -> sTrue }
+
+evalCore (ObjectEqNeq
+  objTy1@(SObjectUnsafe schema@(SingList SCons{}))
+  objTy2@(SObjectUnsafe        (SingList SCons{}))
+  eqNeq obj1 obj2) = case singEq objTy1 objTy2 of
+    Nothing   -> pure sFalse
+    Just Refl -> withSing objTy1 $ do
+      S _ obj1' <- eval obj1
+      S _ obj2' <- eval obj2
+
+      let go
+            :: SingList tys
+            -> SBV (Concrete ('TyObject tys))
+            -> SBV (Concrete ('TyObject tys))
+            -> SBV Bool
+          go (SingList SNil) _ _ = sTrue
+          go (SingList (SCons _ colTy' schema')) a b
+            = withSymVal colTy'
+            $ withSymVal (SObjectUnsafe (SingList schema'))
+            $ _1 a .== _1 b .&& go (SingList schema') (_2 a) (_2 b)
+
+      let objsEq = go schema obj1' obj2'
+      pure $ sansProv $ case eqNeq of { Eq' -> objsEq; Neq' -> sNot objsEq }
 
 -- error "TODO"
 -- evalCore (ObjDrop schema@(Schema schemaFields) keys _obj) = do
