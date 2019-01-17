@@ -51,9 +51,6 @@ import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
-mkSObject :: Sing schema -> Sing ('TyObject (Normalize schema))
-mkSObject = SObject . eraseList . normalize . UnSingList
-
 wrap :: Text -> Text -> Text
 wrap code model =
   [text|

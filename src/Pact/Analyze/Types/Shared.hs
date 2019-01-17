@@ -781,7 +781,7 @@ withSing = withDict . singMkSing where
       SKeySet                -> Dict
       SAny                   -> Dict
       SList ty'              -> withSing ty' Dict
-      SObject (SingList tys) -> withHListDict tys Dict
+      SObjectUnsafe (SingList tys) -> withHListDict tys Dict
 
     withHListDict :: HList Sing tys -> (SingI tys => b) -> b
     withHListDict SNil f               = f
@@ -801,10 +801,10 @@ withEq = withDict . singMkEq
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withEq ty' Dict
-      SObject (SingList SNil)
+      SObjectUnsafe (SingList SNil)
         -> Dict
-      SObject (SingList (SCons _ ty' tys))
-        -> withEq ty' $ withDict (singMkEq (SObject (SingList tys))) Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
+        -> withEq ty' $ withDict (singMkEq (SObjectUnsafe (SingList tys))) Dict
 
 withShow :: SingTy a -> (Show (Concrete a) => b) -> b
 withShow = withDict . singMkShow
@@ -820,10 +820,10 @@ withShow = withDict . singMkShow
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withShow ty' Dict
-      SObject (SingList SNil)
+      SObjectUnsafe (SingList SNil)
         -> Dict
-      SObject (SingList (SCons _ ty' tys))
-        -> withShow ty' $ withDict (singMkShow (SObject (SingList tys))) Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
+        -> withShow ty' $ withDict (singMkShow (SObjectUnsafe (SingList tys))) Dict
 
 withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
 withUserShow = withDict . singMkUserShow
@@ -839,11 +839,11 @@ withUserShow = withDict . singMkUserShow
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withUserShow ty' Dict
-      SObject (SingList SNil)
+      SObjectUnsafe (SingList SNil)
         -> Dict
-      SObject (SingList (SCons _ ty' tys))
+      SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withUserShow ty' $
-           withDict (singMkUserShow (SObject (SingList tys))) Dict
+           withDict (singMkUserShow (SObjectUnsafe (SingList tys))) Dict
 
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable = withDict . singMkTypeable
@@ -859,7 +859,7 @@ withTypeable = withDict . singMkTypeable
       SKeySet      -> Dict
       SAny         -> Dict
       SList   ty'  -> withTypeable ty' Dict
-      SObject (SingList tys)
+      SObjectUnsafe (SingList tys)
         -> withTypeableListDict tys $ Dict
 
     withTypeableListDict
@@ -885,11 +885,11 @@ withSMTValue = withDict . singMkSMTValue
       SKeySet   -> Dict
       SAny      -> Dict
       SList ty' -> withSMTValue ty' $ withTypeable ty' Dict
-      SObject (SingList SNil)
+      SObjectUnsafe (SingList SNil)
         -> Dict
-      SObject (SingList (SCons _ ty' tys))
+      SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withSMTValue ty' $
-           withDict (singMkSMTValue (SObject (SingList tys))) Dict
+           withDict (singMkSMTValue (SObjectUnsafe (SingList tys))) Dict
 
 withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
 withHasKind = withDict . singMkHasKind
@@ -905,11 +905,11 @@ withHasKind = withDict . singMkHasKind
       SKeySet   -> Dict
       SAny      -> Dict
       SList ty' -> withHasKind ty' $ withTypeable ty' Dict
-      SObject (SingList SNil)
+      SObjectUnsafe (SingList SNil)
         -> Dict
-      SObject (SingList (SCons _ ty' tys))
+      SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withHasKind ty' $
-           withDict (singMkHasKind (SObject (SingList tys))) Dict
+           withDict (singMkHasKind (SObjectUnsafe (SingList tys))) Dict
 
 instance SMTValue (Object AConcrete '[]) where
   sexprToVal _ = Just $ Object SNil
@@ -939,11 +939,11 @@ withSymVal = withDict . singMkSymVal
       SKeySet     -> Dict
       SAny        -> Dict
       SList ty'   -> withSymVal ty' Dict
-      SObject (SingList SNil)
+      SObjectUnsafe (SingList SNil)
         -> Dict
-      SObject (SingList (SCons _ ty' tys))
+      SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withSymVal ty' $
-           withDict (singMkSymVal (SObject (SingList tys))) Dict
+           withDict (singMkSymVal (SObjectUnsafe (SingList tys))) Dict
 
 instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
   compare _ _ = EQ
@@ -1017,11 +1017,11 @@ instance Mergeable a => Mergeable (ColumnMap a) where
 
 columnMapToSchema :: ColumnMap EType -> EType
 columnMapToSchema (ColumnMap colMap) = go (Map.toList colMap) where
-  go [] = EType (SObject SNil')
+  go [] = EType (mkSObject SNil')
   go ((ColumnName colName, EType ty) : tys) = case go tys of
-    EType (SObject tys') -> case someSymbolVal colName of
+    EType (SObjectUnsafe tys') -> case someSymbolVal colName of
       SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $
-        EType $ SObject $ SCons' (SSymbol @k) ty tys'
+        EType $ mkSObject $ SCons' (SSymbol @k) ty tys'
     _ -> error "TODO"
   go _ = error "TODO"
   -- = Schema

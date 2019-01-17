@@ -292,9 +292,8 @@ reverseTranslateType = \case
   SKeySet   -> Pact.TyPrim $ Pact.TyGuard $ Just Pact.GTyKeySet
   SAny      -> Pact.TyAny
   SList a   -> Pact.TyList $ reverseTranslateType a
-  -- TODO(joel): this is no longer valid
   -- SObject needs to hold a type name or something
-  SObject _ -> error "this reverse-translation is currently impossible"
+  SObjectUnsafe _ -> error "this reverse-translation is currently impossible"
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)
 fromPactVal (EType ty)  = runMaybeT . toAnalyze (reverseTranslateType ty)

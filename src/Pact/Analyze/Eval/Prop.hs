@@ -12,6 +12,7 @@ import           Control.Lens               (Lens', at, ix, view, (%=), (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT (..))
+import           Data.List                  (sortOn)
 import qualified Data.Map.Strict            as Map
 import           Data.Proxy                 (Proxy)
 import           Data.SBV                   (EqSymbolic ((.==)),
@@ -209,7 +210,7 @@ evalPropSpecific (RowEnforced tn cn pRk) = do
   cn' <- getLitColName cn
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
-evalPropSpecific (PropRead objTy@(SObject fields) ba tn pRk) = do
+evalPropSpecific (PropRead objTy@(SObjectUnsafe fields) ba tn pRk) = do
   (tn' :: TableName) <- getLitTableName (tn :: Prop TyTableName)
   sRk <- evalProp pRk
   let fields' :: [(String, EType)]
@@ -238,17 +239,20 @@ evalPropSpecific (PropRead objTy@(SObject fields) ba tn pRk) = do
       Just Refl -> pure $ sansProv obj
 
 assembleObj :: [(String, EType, AVal)] -> Existential AnSBV
-assembleObj [] = Some (SObject SNil') (AnSBV (literal ()))
-assembleObj ((name, EType ty, AVal _prov sval) : tys)
-  = case someSymbolVal name of
-    SomeSymbol (_ :: Proxy k) -> case assembleObj tys of
-      Some objTy@(SObject schema) (AnSBV obj)
-        -> withSing ty $ withSymVal ty $ withTypeable ty $ withSymVal objTy $
-          Some
-            (SObject (SCons' (SSymbol @k) ty schema))
-            (AnSBV (tuple (SBVI.SBV sval, obj)))
-      _ -> error "impossible (we always return an SObject)"
-assembleObj ((_, _, OpaqueVal) : _) = error "TODO"
+assembleObj = assembleObj' . sortOn (\(name, _, _) -> name) where
+
+  assembleObj' [] = Some (SObjectUnsafe SNil') (AnSBV (literal ()))
+  assembleObj' ((name, EType ty, AVal _prov sval) : tys)
+    = case someSymbolVal name of
+      SomeSymbol (_ :: Proxy k) -> case assembleObj' tys of
+        Some objTy@(SObjectUnsafe schema) (AnSBV obj)
+          -> withSing ty $ withSymVal ty $ withTypeable ty $ withSymVal objTy $
+            Some
+              (SObjectUnsafe (SCons' (SSymbol @k) ty schema))
+              (AnSBV (tuple (SBVI.SBV sval, obj)))
+        _ -> error "impossible (we always return an SObject)"
+  assembleObj' ((_, _, OpaqueVal) : _) = error "TODO"
+  assembleObj' _ = error "impossible"
 
 objFields :: Sing (schema :: [(Symbol, Ty)]) -> [(String, EType)]
 objFields (SingList SNil) = []

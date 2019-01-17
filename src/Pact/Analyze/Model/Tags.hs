@@ -47,7 +47,7 @@ allocSbv :: forall a. SingI a => Alloc (SBV (Concrete a))
 allocSbv = _sSbv <$> allocS @a
 
 allocSchema :: SingTy ('TyObject m) -> Alloc UObject
-allocSchema (SObject tys) = UObject <$> allocSchema' tys where
+allocSchema (SObjectUnsafe tys) = UObject <$> allocSchema' tys where
   allocSchema' :: Sing (m :: [ (Symbol, Ty) ]) -> Alloc (Map.Map Text TVal)
   allocSchema' (SingList SNil) = pure Map.empty
   allocSchema' (SingList (SCons k ty tys')) = do
