@@ -1063,29 +1063,31 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some ty' $ CoreTerm $ ListSort elemTy list'
 
   AST_Drop node numOrKeys list -> do
-    elist <- translateNode list
+    elist       <- translateNode list
+    EType retTy <- translateType node
     case elist of
       Some ty'@(SList elemTy) list' -> do
         Some SInteger num <- translateNode numOrKeys
         pure $ Some ty' $ CoreTerm $ ListDrop elemTy num list'
-      Some objTy@SObjectUnsafe{} obj -> do
-        Some (SList SStr) keys <- translateNode numOrKeys
-        let objTy' = normalizeObjTy objTy
-        pure $ Some objTy' $ CoreTerm $ coerceObjectType objTy' $
-          ObjDrop keys obj
+      Some objTy@SObjectUnsafe{} obj -> case retTy of
+        SObjectUnsafe{} -> do
+          Some (SList SStr) keys <- translateNode numOrKeys
+          pure $ Some (normalizeObjTy retTy) $ CoreTerm $ ObjDrop objTy keys obj
+        _ -> throwError' $ TypeError node
       _ -> throwError' $ TypeError node
 
   AST_Take node numOrKeys list -> do
-    elist <- translateNode list
+    elist       <- translateNode list
+    EType retTy <- translateType node
     case elist of
       Some ty'@(SList elemTy) list' -> do
         Some SInteger num <- translateNode numOrKeys
         pure $ Some ty' $ CoreTerm $ ListTake elemTy num list'
-      Some objTy@SObjectUnsafe{} obj -> do
-        Some (SList SStr) keys <- translateNode numOrKeys
-        let objTy' = normalizeObjTy objTy
-        pure $ Some objTy' $ CoreTerm $ coerceObjectType objTy' $
-          ObjTake keys obj
+      Some objTy@SObjectUnsafe{} obj -> case retTy of
+        SObjectUnsafe{} -> do
+          Some (SList SStr) keys <- translateNode numOrKeys
+          pure $ Some (normalizeObjTy retTy) $ CoreTerm $ ObjDrop objTy keys obj
+        _ -> throwError' $ TypeError node
       _ -> throwError' $ TypeError node
 
   AST_MakeList _node num a -> do

@@ -11,6 +11,7 @@ module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
 import qualified Data.Map.Strict             as Map
+import           Data.Maybe                  (fromMaybe)
 import           Data.Monoid                 ((<>))
 import           Data.SBV                    (EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
@@ -322,8 +323,6 @@ evalCore (Where schema tya key (Open vid _ f) obj) = withSymVal tya $ do
   withVar vid (mkAVal' v) $ eval f
 
 evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
-evalCore ObjTake{}     = throwErrorNoLoc "not yet implemented"
-evalCore ObjDrop{}     = throwErrorNoLoc "not yet implemented"
 
 evalCore (ObjectEqNeq
   (SObjectUnsafe (SingList SNil))
@@ -361,18 +360,42 @@ evalCore (ObjectEqNeq
       let objsEq = go schema obj1' obj2'
       pure $ sansProv $ case eqNeq of { Eq' -> objsEq; Neq' -> sNot objsEq }
 
--- error "TODO"
--- evalCore (ObjDrop schema@(Schema schemaFields) keys _obj) = do
---   keys' <- eval keys
---   case unliteralS keys' of
---     Nothing -> throwErrorNoLoc "Unable to statically determine keys to drop"
---     Just literalKeys -> do
---       fields <- for literalKeys $ \(Str key) -> do
---         let retType = schemaFields ^?! ix (T.pack key)
---         val <- withSymVal singTy $
---           evalObjAt schema (Lit' (Str key)) obj retType
---         pure (T.pack key, (retType, mkAVal val))
---       pure $ Object $ Map.fromList fields
+evalCore (ObjDrop ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
+  S prov obj' <- eval obj
+  case sing @a of
+    SObjectUnsafe schema -> pure $ S prov $ evalDropTake schema' schema obj'
+evalCore (ObjTake ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
+  S prov obj' <- eval obj
+  case sing @a of
+    SObjectUnsafe schema -> pure $ S prov $ evalDropTake schema' schema obj'
+
+-- | Implementation for both drop and take.
+--
+-- We @schema@ -- the type of the object we're starting with, and @schema'@ --
+-- the type we need to produce. @schema'@ must be a sub-list of @schema@.
+-- Therefore, we work through the elements of the object one at a time, keeping
+-- the ones that go in the resulting object.
+evalDropTake
+  :: SingList schema
+  -> SingList schema'
+  -> SBV (ConcreteObj schema)
+  -> SBV (ConcreteObj schema')
+evalDropTake _ (SingList SNil) _ = literal ()
+evalDropTake
+  (SingList (SCons k ty ks))
+  schema'@(SingList (SCons k' ty' ks'))
+  tm
+  = withHasKind ty $ withSymVal (SObjectUnsafe (SingList ks))
+
+  -- Test equality of both the key names and types. If the key matches then the
+  -- type should as well, but we need to test both to convince ghc
+  $ fromMaybe (evalDropTake (SingList ks) schema' (_2 tm)) $ do
+    Refl <- eqSym k' k
+    Refl <- singEq ty ty'
+    withSymVal ty $ withSymVal (SObjectUnsafe (SingList ks')) $ pure $
+      tuple (_1 tm, evalDropTake (SingList ks) (SingList ks') (_2 tm))
+
+evalDropTake _ _ _ = error "evalDropTake invariant violation"
 
 evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)
 evalStrToInt sT = do

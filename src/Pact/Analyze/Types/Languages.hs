@@ -195,8 +195,16 @@ data Core (t :: Ty -> *) (a :: Ty) where
     -> EqNeq -> t ('TyObject m1) -> t ('TyObject m2) -> Core t 'TyBool
   ObjAt       :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t a
   ObjContains :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t 'TyBool
-  ObjDrop     :: t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
-  ObjTake     :: t ('TyList 'TyStr) -> t ('TyObject m) -> Core t ('TyObject m)
+  ObjDrop
+    :: SingTy ('TyObject schema)
+    -> t ('TyList 'TyStr)
+    -> t ('TyObject schema)
+    -> Core t ('TyObject schema')
+  ObjTake
+    :: SingTy ('TyObject schema)
+    -> t ('TyList 'TyStr)
+    -> t ('TyObject schema)
+    -> Core t ('TyObject schema')
   ObjMerge    :: SingTy o1 -> SingTy o2 -> t o1 -> t o2 -> Core t o
 
   -- TODO(joel): combine with `Lit`?
@@ -529,10 +537,14 @@ eqCoreTm _ (ObjContains ty1 a1 b1)       (ObjContains ty2 a2 b2)
   = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> eqTm a1 a2 && singEqTm ty1 b1 b2
-eqCoreTm ty (ObjDrop b1 c1)            (ObjDrop b2 c2)
-  = eqTm b1 b2 && singEqTm ty c1 c2
-eqCoreTm ty (ObjTake b1 c1)            (ObjTake b2 c2)
-  = eqTm b1 b2 && singEqTm ty c1 c2
+eqCoreTm _ty (ObjDrop ty1 b1 c1)        (ObjDrop ty2 b2 c2)
+  = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> eqTm b1 b2 && singEqTm ty1 c1 c2
+eqCoreTm _ty (ObjTake ty1 b1 c1)        (ObjTake ty2 b2 c2)
+  = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> eqTm b1 b2 && singEqTm ty1 c1 c2
 eqCoreTm _ (ObjMerge ty11 ty21 a1 b1)          (ObjMerge ty12 ty22 a2 b2)
   = fromMaybe False $ do
     Refl <- singEq ty11 ty12
@@ -673,16 +685,20 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showsTm 11 a
     . showString " "
     . singShowsTm ty' 11 b
-  ObjDrop b c ->
+  ObjDrop a b c ->
       showString "ObjDrop "
+    . showsPrec 11 a
+    . showChar ' '
     . showsTm 11 b
     . showString " "
-    . singShowsTm ty 11 c
-  ObjTake b c ->
+    . singShowsTm a 11 c
+  ObjTake a b c ->
       showString "ObjTake "
+    . showsPrec 11 a
+    . showChar ' '
     . showsTm 11 b
     . showString " "
-    . singShowsTm ty 11 c
+    . singShowsTm a 11 c
   ObjMerge ty1 ty2 a b ->
       showString "ObjMerge "
     . showsPrec 11 ty1
@@ -861,8 +877,8 @@ userShowCore ty _p = \case
     -> parenList [userShow op, singUserShowTm ty1 x, singUserShowTm ty2 y]
   ObjAt ty' k obj          -> parenList [userShowTm k, singUserShowTm ty' obj]
   ObjContains ty' k obj    -> parenList [SContains, userShowTm k, singUserShowTm ty' obj]
-  ObjDrop ks obj           -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty obj]
-  ObjTake ks obj           -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty obj]
+  ObjDrop ty' ks obj       -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty' obj]
+  ObjTake ty' ks obj       -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty' obj]
   ObjMerge ty1 ty2 x y     -> parenList [SObjectMerge, singUserShowTm ty1 x, singUserShowTm ty2 y]
   LiteralObject ty' obj    -> "{ " <> Text.intercalate ", " (singUserShowObject ty' obj) <> " }"
   Logical op args          -> parenList $ userShow op : fmap userShowTm args

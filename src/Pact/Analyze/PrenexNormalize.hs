@@ -164,10 +164,10 @@ float ty p = case p of
   CoreProp (ObjAt ty' str obj) -> PObjAt ty' <$> singFloat str <*> float ty' obj
   CoreProp (ObjContains ty' a b) -> CoreProp <$>
     (ObjContains ty' <$> singFloat a <*> float ty' b)
-  CoreProp (ObjDrop keys obj) -> CoreProp <$>
-    (ObjDrop <$> singFloat keys <*> float ty obj)
-  CoreProp (ObjTake keys obj) -> CoreProp <$>
-    (ObjTake <$> singFloat keys <*> float ty obj)
+  CoreProp (ObjDrop ty' keys obj) -> CoreProp <$>
+    (ObjDrop ty' <$> singFloat keys <*> float ty' obj)
+  CoreProp (ObjTake ty' keys obj) -> CoreProp <$>
+    (ObjTake ty' <$> singFloat keys <*> float ty' obj)
   CoreProp LiteralObject{} -> ([], p)
   CoreProp ObjMerge{}      -> ([], p)
   CoreProp (Where objty tya a b c) -> CoreProp <$>
