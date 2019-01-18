@@ -97,22 +97,22 @@ instance Show AnalyzeEnv where
   showsPrec p AnalyzeEnv{..} = showParen (p > 10)
     $ showString "AnalyzeEnv "
     . showsPrec 11 _aeScope
-    . showString " "
+    . showChar ' '
     . showsPrec 11 _aeRegistryKeySets
-    . showString " "
+    . showChar ' '
     . showsPrec 11 _aeKsAuths
-    . showString " "
+    . showChar ' '
     . showsPrec 11 _aeTxKeySets
-    . showString " "
+    . showChar ' '
     . showsPrec 11 _aeTxDecimals
-    . showString " "
+    . showChar ' '
     . showsPrec 11 _aeTxIntegers
-    . showString " "
+    . showChar ' '
     -- . showsPrec 11 _invariants TODO
     . showsPrec 11 _aeColumnIds
-    . showString " "
+    . showChar ' '
     . showsPrec 11 _aeModelTags
-    . showString " "
+    . showChar ' '
     . showsPrec 11 _aeInfo
 
 mkAnalyzeEnv

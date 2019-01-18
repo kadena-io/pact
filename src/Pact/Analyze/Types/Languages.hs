@@ -388,9 +388,9 @@ singShowsTm = singShowsTm'
 singShowsOpen :: IsTerm tm => SingTy a -> Open x tm a -> ShowS
 singShowsOpen ty (Open v nm a) = showParen True $
     showsPrec 11 v
-  . showString " "
+  . showChar ' '
   . showsPrec 11 nm
-  . showString " "
+  . showChar ' '
   . singShowsTm' ty 11 a
 
 eqNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Numerical tm a -> Bool
@@ -419,57 +419,57 @@ showsNumerical _ty p tm = showParen (p > 10) $ case tm of
   DecArithOp op a b ->
       showString "DecArithOp "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . showsTm 11 b
   IntArithOp op a b ->
       showString "IntArithOp "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . showsTm 11 b
   DecUnaryArithOp op a ->
       showString "DecUnaryArithOp "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
   IntUnaryArithOp op a ->
       showString "IntUnaryArithOp "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
   DecIntArithOp op a b ->
       showString "DecIntArithOp "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . showsTm 11 b
   IntDecArithOp op a b ->
       showString "IntDecArithOp "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . showsTm 11 b
   ModOp a b ->
       showString "ModOp "
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . showsTm 11 b
   RoundingLikeOp1 op a ->
       showString "RoundingLikeOp1 "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
   RoundingLikeOp2 op a b ->
       showString "RoundingLikeOp2 "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . showsTm 11 b
 
 userShowNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Text
@@ -621,92 +621,92 @@ showsPrecCore :: IsTerm tm => SingTy a -> Int -> Core tm a -> ShowS
 showsPrecCore ty p core = showParen (p > 10) $ case core of
   Lit a            -> showString "Lit "        . withShow ty (showsPrec 11 a)
   Sym a            -> showString "Sym "        . showsPrec 11 a
-  Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
-  Identity a b     -> showString "Identity "   . showsPrec 11 a . showString " " . singShowsTm a 11 b
+  Var a b          -> showString "Var "        . showsPrec 11 a . showChar ' ' . showsPrec 11 b
+  Identity a b     -> showString "Identity "   . showsPrec 11 a . showChar ' ' . singShowsTm a 11 b
   Constantly tyb a b ->
       showString "Constantly "
     . showsPrec 11 ty
-    . showString " "
+    . showChar ' '
     . singShowsTm ty 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTm tyb 11 b
   Compose tya tyb tyc a b c ->
       showString "Compose "
     . showsPrec 11 tya
-    . showString " "
+    . showChar ' '
     . showsPrec 11 tyb
-    . showString " "
+    . showChar ' '
     . showsPrec 11 tyc
-    . showString " "
+    . showChar ' '
     . singShowsTm tya 11 a
     . singShowsOpen tyb b
-    . showString " "
+    . showChar ' '
     . singShowsOpen tyc c
-  StrConcat a b    -> showString "StrConcat "    . showsTm 11 a . showString " " . showsTm 11 b
+  StrConcat a b    -> showString "StrConcat "    . showsTm 11 a . showChar ' ' . showsTm 11 b
   StrLength a      -> showString "StrLength "    . showsTm 11 a
   StrToInt a       -> showString "StrToInt "     . showsTm 11 a
-  StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showString " " . showsTm 11 b
-  StrContains  a b -> showString "StrContains "  . showsTm 11 a . showString " " . showsTm 11 b
+  StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showChar ' ' . showsTm 11 b
+  StrContains  a b -> showString "StrContains "  . showsTm 11 a . showChar ' ' . showsTm 11 b
   Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
-  IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showString " " . showsTm 11 b
-  DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showString " " . showsTm 11 b
+  IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
+  DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
   Comparison ty' op a b ->
       showString "Comparison "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . singShowsTm ty' 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTm ty' 11 b
   ObjectEqNeq ty1 ty2 op a b ->
       showString "ObjectEqNeq "
     . showsPrec 11 ty1
-    . showString " "
+    . showChar ' '
     . showsPrec 11 ty2
-    . showString " "
+    . showChar ' '
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . singShowsTm ty1 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTm ty2 11 b
 
   ObjAt ty' a b ->
       showString "ObjAt "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTm ty' 11 b
   ObjContains ty' a b ->
       showString "ObjContains "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTm ty' 11 b
   ObjDrop a b c ->
       showString "ObjDrop "
     . showsPrec 11 a
     . showChar ' '
     . showsTm 11 b
-    . showString " "
+    . showChar ' '
     . singShowsTm a 11 c
   ObjTake a b c ->
       showString "ObjTake "
     . showsPrec 11 a
     . showChar ' '
     . showsTm 11 b
-    . showString " "
+    . showChar ' '
     . singShowsTm a 11 c
   ObjMerge ty1 ty2 a b ->
       showString "ObjMerge "
     . showsPrec 11 ty1
-    . showString " "
+    . showChar ' '
     . showsPrec 11 ty2
-    . showString " "
+    . showChar ' '
     . singShowsTm ty1 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTm ty2 11 b
   LiteralObject ty' obj ->
       showString "LiteralObject ("
@@ -716,143 +716,143 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   Logical op args ->
       showString "Logical "
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . showListWith (singShowsTm SBool 0) args
 
   ListEqNeq ty' op a b ->
       showString "ListEqNeq "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . showsPrec 11 op
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 b
   ListAt ty' a b ->
       showString "ListAt "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 b
   ListContains ty' a b ->
       showString "ListContains "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . singShowsTm ty' 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 b
   ListLength ty' a ->
       showString "ListLength "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 a
   ListReverse ty' a ->
       showString "ListReverse "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 a
   ListSort ty' a ->
       showString "ListSort "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 a
   ListDrop ty' i l ->
       showString "ListDrop "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . showsTm 11 i
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 l
   ListTake ty' a b ->
       showString "ListTake "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 b
   ListConcat ty' a b ->
       showString "ListConcat "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTmList ty' 11 b
   MakeList ty' a b ->
       showString "MakeList "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . showsTm 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTm ty' 11 b
   LiteralList ty' l ->
       showString "LiteralList "
     . showsPrec 11 ty'
-    . showString " "
+    . showChar ' '
     . singShowsListTm ty' 11 l
   ListMap tya tyb b as ->
       showString "ListMap "
     . showsPrec 11 tya
-    . showString " "
+    . showChar ' '
     . showsPrec 11 tyb
-    . showString " "
+    . showChar ' '
     . singShowsOpen tyb b
-    . showString " "
+    . showChar ' '
     . singShowsTmList tya 11 as
   ListFilter tya f as ->
       showString "ListFilter "
     . showsPrec 11 tya
-    . showString " "
+    . showChar ' '
     . singShowsOpen sing f
-    . showString " "
+    . showChar ' '
     . singShowsTmList tya 11 as
   ListFold tya tyb (Open vid nm f) a bs ->
       showString "ListFold "
     . showsPrec 11 tya
-    . showString " "
+    . showChar ' '
     . showsPrec 11 tyb
     . showString " (Open "
       . showsPrec 11 vid
-      . showString " "
+      . showChar ' '
       . showsPrec 11 nm
       . singShowsOpen tya f
     . showString ") "
     . singShowsTm tya 11 a
-    . showString " "
+    . showChar ' '
     . singShowsTmList tyb 11 bs
   AndQ tya f g a ->
       showString "AndQ "
     . showsPrec 11 tya
-    . showString " "
+    . showChar ' '
     . singShowsOpen sing f
-    . showString " "
+    . showChar ' '
     . singShowsOpen sing g
-    . showString " "
+    . showChar ' '
     . singShowsTm tya 11 a
   OrQ tya f g a ->
       showString "OrQ "
     . showsPrec 11 tya
-    . showString " "
+    . showChar ' '
     . singShowsOpen sing f
-    . showString " "
+    . showChar ' '
     . singShowsOpen sing g
-    . showString " "
+    . showChar ' '
     . singShowsTm tya 11 a
   Where tyo tya str f obj ->
       showString "Where "
     . showsPrec 11 tyo
-    . showString " "
+    . showChar ' '
     . showsPrec 11 tya
-    . showString " "
+    . showChar ' '
     . showsTm 11 str
-    . showString " "
+    . showChar ' '
     . singShowsOpen sing f
-    . showString " "
+    . showChar ' '
     . singShowsTm tyo 11 obj
   Typeof tya a ->
       showString "Typeof "
     . showsPrec 11 tya
-    . showString " "
+    . showChar ' '
     . singShowsTm tya 11 a
 
 userShowCore :: IsTerm tm => SingTy ty -> Int -> Core tm ty -> Text

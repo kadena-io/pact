@@ -470,9 +470,9 @@ instance Show (tm ('TyObject m)) => Show (Object tm m) where
           showsVals (SCons k (Column singv v) m') = showParen True $
               showString "SCons "
             . showString (symbolVal k)
-            . showString " "
+            . showChar ' '
             . singShowsTm' singv 11 v
-            . showString " "
+            . showChar ' '
             . showsVals m'
 
 instance Eq (tm ('TyObject m)) => Eq (Object tm m) where

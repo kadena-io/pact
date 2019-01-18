@@ -188,7 +188,7 @@ instance Show (SingTy ty) where
         . showString (symbolVal k)
         . showString "\" "
         . shows v
-        . showString " "
+        . showChar ' '
         . showsHList n
 
 instance UserShow (SingTy ty) where
