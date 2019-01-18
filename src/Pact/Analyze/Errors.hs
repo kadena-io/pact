@@ -29,7 +29,6 @@ data AnalyzeFailureNoLoc
   | VarNotInScope Text VarId
   | UnsupportedObjectInDbCell
   | InvalidDbWrite Pact.WriteType ESchema EType
-  | SimpleKindRequired
   -- For cases we don't handle yet:
   | UnhandledTerm Text
   deriving (Eq, Show)
@@ -51,7 +50,6 @@ describeAnalyzeFailureNoLoc = \case
 
     -- these are likely user-facing errors
     FailureMessage msg -> msg
-    SimpleKindRequired -> "we currently support only simple types for this operation"
     UnhandledTerm termText -> foundUnsupported termText
     VarNotInScope name vid -> "variable not in scope: " <> name <> " (vid " <> tShow vid <> ")"
     --

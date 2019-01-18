@@ -346,7 +346,7 @@ instance SymVal a => OrdSymbolic (S a) where
 instance Boolean (S Bool) where
   sTrue           = sansProv SBV.sTrue
   sFalse          = sansProv SBV.sFalse
-  sNot (S _ x)    = sansProv $ SBV.sNot x
+  sNot (S prov x) = S prov $ SBV.sNot x
   S _ x .&& S _ y = sansProv $ x SBV..&& y
   S _ x .|| S _ y = sansProv $ x SBV..|| y
 

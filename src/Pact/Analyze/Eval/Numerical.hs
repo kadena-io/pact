@@ -173,7 +173,7 @@ evalRoundingLikeOp2
   -> TermOf m 'TyInteger
   -> m (S Decimal)
 evalRoundingLikeOp2 op xT precisionT = do
-  (x :: S Decimal)         <- eval xT
+  x <- eval @_ @'TyDecimal xT
   precision <- eval precisionT
   -- Precision must be >= 0
   markFailure (precision .< 0)

@@ -218,20 +218,21 @@ evalPropSpecific (PropRead objTy@(SObjectUnsafe fields) ba tn pRk) = do
 
   -- TODO: there is a lot of duplication between this and the corresponding
   -- term evaluation code. It would be nice to consolidate these.
-  (aValFields :: [(String, EType, AVal)]) <- for fields' $ \(fieldName, fieldType) -> do
-    let cn = ColumnName fieldName
+  (aValFields :: [(String, EType, AVal)]) <- for fields' $
+    \(fieldName, fieldType) -> do
+      let cn = ColumnName fieldName
 
-    av <- case fieldType of
-      EType ty -> mkAVal <$> view
-        (qeAnalyzeState.typedCell ty (beforeAfterLens ba) tn' cn sRk sFalse)
+      av <- case fieldType of
+        EType ty -> mkAVal <$> view
+          (qeAnalyzeState.typedCell ty (beforeAfterLens ba) tn' cn sRk sFalse)
 
-     -- TODO: do we still need to do this?
-     -- TODO: if we add nested object support here, we need to install
-     --       the correct provenance into AVals all the way down into
-     --       sub-objects.
-     --
+       -- TODO: do we still need to do this?
+       -- TODO: if we add nested object support here, we need to install
+       --       the correct provenance into AVals all the way down into
+       --       sub-objects.
+       --
 
-    pure (fieldName, fieldType, av)
+      pure (fieldName, fieldType, av)
 
   case assembleObj aValFields of
     Some ty (AnSBV obj) -> case singEq ty objTy of
@@ -257,4 +258,4 @@ assembleObj = assembleObj' . sortOn (\(name, _, _) -> name) where
 objFields :: Sing (schema :: [(Symbol, Ty)]) -> [(String, EType)]
 objFields (SingList SNil) = []
 objFields (SingList (SCons k ty tys))
- = (symbolVal k, EType ty) : objFields (SingList tys)
+  = (symbolVal k, EType ty) : objFields (SingList tys)

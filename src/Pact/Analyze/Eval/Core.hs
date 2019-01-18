@@ -137,15 +137,6 @@ evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length te
 Nothing  ?? err = throwErrorNoLoc err
 infix 0 ??
 
--- traverseObj :: Object tm ty -> m a -> (String -> Existential tm -> a -> m a) -> m a
-traverseObj
-  :: SingTy ('TyObject schema)
-  -> S (ConcreteObj schema)
-  -> m a
-  -> (String -> Existential tm -> a -> m a)
-  -> m a
-traverseObj = undefined
-
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)
@@ -199,11 +190,8 @@ evalCore (ObjMerge
         evalObjMerge (obj1' :< schema1) (obj2' :< schema2) schema
       _ -> error "impossible match"
 evalCore ObjMerge{} = error "impossible match"
-evalCore (ObjContains objTy key obj) = withSing objTy $ do
-  key' <- eval key
-  obj' <- eval obj
-  traverseObj objTy obj' (pure sFalse) $ \testKey _v prev -> pure $
-    prev .|| sansProv (literalS (Str testKey) .== key')
+evalCore (ObjContains (SObjectUnsafe schema) key _obj)
+  = hasKey schema <$> eval key
 evalCore (StrContains needle haystack) = do
   needle'   <- eval needle
   haystack' <- eval haystack
@@ -566,6 +554,13 @@ evalObjMerge1
 evalObjMerge1 _ (SingList SNil)      = literal ()
 evalObjMerge1 (_ :< SingList SNil) _ = error
   "evalObjMerge1 invariant violation: input object exhausted"
+
+hasKey :: SingList schema -> S Str -> S Bool
+hasKey (SingList SNil) _ = sFalse
+hasKey (SingList (SCons k _ schema')) key
+  = ite (literalS (Str (symbolVal k)) .== key)
+        sTrue
+        (hasKey (SingList schema') key)
 
 evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)
 evalStrToInt sT = do
