@@ -41,6 +41,9 @@ module Pact.Analyze.Types.Types
   , type ListElem
   , SingI(sing)
   , SingTy
+
+  , (:<)
+  , pattern (:<)
   ) where
 
 import           Data.Kind                   (Type)
@@ -259,3 +262,10 @@ instance (KnownSymbol k, SingI v, Typeable v, SingI kvs)
 -- type family IsObject (ty :: Ty) :: Bool where
 --   IsObject ('TyObject _) = 'True
 --   IsObject _             = 'False
+
+type (a :< b) = (a, b)
+
+pattern (:<) :: a -> b -> (a, b)
+pattern a :< b = (a, b)
+
+{-# complete (:<) #-}

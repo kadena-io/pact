@@ -3,7 +3,6 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -396,13 +395,6 @@ evalDropTake _ _ = error "evalDropTake invariant violation"
 
 data SomeObj where
   SomeObj :: SingList schema -> SBV (ConcreteObj schema) -> SomeObj
-
-type (a :< b) = (a, b)
-
-pattern (:<) :: a -> b -> (a, b)
-pattern a :< b = (a, b)
-
-{-# complete (:<) #-}
 
 -- | Shrink the given object to the largest subobject smaller than the search
 -- schema. Meaning its first key is > than the search schema's first key.
