@@ -380,7 +380,7 @@ evalDropTake
   -> SBV (ConcreteObj schema')
 evalDropTake _ (SingList SNil) = literal ()
 evalDropTake
-  (tm :< SingList (SCons k ty ks))
+  (tm :<   SingList (SCons k  ty  ks ))
   schema'@(SingList (SCons k' ty' ks'))
   = withHasKind ty $ withSymVal (SObjectUnsafe (SingList ks))
 
@@ -516,44 +516,16 @@ evalObjMerge
   (obj1 :< schema1@(SingList SCons{}))
   (_    :<          SingList SNil)
             schema@(SingList SCons{})
-  = evalObjMerge1 (obj1 :< schema1) schema
+  = evalDropTake (obj1 :< schema1) schema
 
 evalObjMerge
   (_    :<          SingList SNil)
   (obj2 :< schema2@(SingList SCons{}))
             schema@(SingList SCons{})
-  = evalObjMerge1 (obj2 :< schema2) schema
+  = evalDropTake (obj2 :< schema2) schema
 
 evalObjMerge (_ :< SingList SNil) (_ :< SingList SNil) (SingList SCons{})
   = error "evalObjMerge invariant violation: both input object exhausted"
-
-evalObjMerge1
-  :: (SBV (ConcreteObj inSchema) :< SingList inSchema)
-  -> SingList outSchema
-  -> SBV (ConcreteObj outSchema)
-evalObjMerge1
-  (obj :< inSchema@(SingList (SCons inK  inTy  inSubSchema )))
-         outSchema@(SingList (SCons outK outTy outSubSchema))
-  = withSymVal (SObjectUnsafe (SingList inSubSchema)) $ withHasKind inTy $
-    withSymVal outTy $ withSymVal (SObjectUnsafe (SingList outSubSchema)) $
-
-    fromMaybe (error "evalObjMerge invariant violation") $
-      case subObject (obj :< inSchema) outSchema of
-        SomeObj inSchema' obj' -> asum
-          -- object matches
-          [ do Refl <- eqSym  inK  outK
-               Refl <- singEq inTy outTy
-               pure $ tuple
-                 (_1 obj
-                 , evalObjMerge1 (obj' :< inSchema') (SingList outSubSchema)
-                 )
-
-          -- object doesn't match
-          , pure $ evalObjMerge1 (obj' :< inSchema') outSchema
-          ]
-evalObjMerge1 _ (SingList SNil)      = literal ()
-evalObjMerge1 (_ :< SingList SNil) _ = error
-  "evalObjMerge1 invariant violation: input object exhausted"
 
 hasKey :: SingList schema -> S Str -> S Bool
 hasKey (SingList SNil) _ = sFalse
