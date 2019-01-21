@@ -359,7 +359,7 @@ inferPreProp preProp = case preProp of
       (Some SInteger ix'', Some (SList ty) lst)
         -> pure $ Some ty $ CoreProp $ ListAt ty ix'' lst
 
-      (Some SStr (StrLit ix''), Some objty@(SObjectUnsafe schema) objProp)
+      (Some SStr (StrLit ix''), Some objty@(SObject schema) objProp)
         -> case lookupKeyInType ix'' schema of
           Nothing -> throwErrorIn preProp $
             "could not find expected key " <> T.pack ix''

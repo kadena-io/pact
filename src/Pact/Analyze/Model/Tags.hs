@@ -33,7 +33,6 @@ import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
 import           Data.Text            (Text, pack)
 import           Data.Traversable     (for)
-import           GHC.TypeLits         (Symbol, symbolVal)
 
 import qualified Pact.Types.Typecheck as TC
 
@@ -48,13 +47,11 @@ allocSbv = _sSbv <$> allocS @a
 
 allocSchema :: SingTy ('TyObject m) -> Alloc UObject
 allocSchema (SObjectUnsafe tys) = UObject <$> allocSchema' tys where
-  allocSchema' :: Sing (m :: [ (Symbol, Ty) ]) -> Alloc (Map.Map Text TVal)
-  allocSchema' (SingList SNil) = pure Map.empty
-  allocSchema' (SingList (SCons k ty tys')) = do
-    let ety = EType ty
-    m   <- allocSchema' $ SingList tys'
-    val <- allocAVal ety
-    pure $ Map.insert (pack (symbolVal k)) (ety, val) m
+  allocSchema' :: SingList schema -> Alloc (Map.Map Text TVal)
+  allocSchema' = recSingList (pure Map.empty) $ \k ty m -> do
+      let ety = EType ty
+      val <- allocAVal ety
+      Map.insert (pack k) (ety, val) <$> m
 
 allocAVal :: EType -> Alloc AVal
 allocAVal (EType ty) = mkAVal <$> singFree ty

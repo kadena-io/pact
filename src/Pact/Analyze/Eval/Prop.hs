@@ -213,6 +213,7 @@ evalPropSpecific (RowEnforced tn cn pRk) = do
 evalPropSpecific (PropRead objTy@(SObjectUnsafe fields) ba tn pRk) = do
   (tn' :: TableName) <- getLitTableName (tn :: Prop TyTableName)
   sRk <- evalProp pRk
+
   let fields' :: [(String, EType)]
       fields' = objFields fields
 
@@ -256,6 +257,6 @@ assembleObj = assembleObj' . sortOn (\(name, _, _) -> name) where
   assembleObj' _ = error "impossible"
 
 objFields :: Sing (schema :: [(Symbol, Ty)]) -> [(String, EType)]
-objFields (SingList SNil) = []
+objFields SNil' = []
 objFields (SingList (SCons k ty tys))
   = (symbolVal k, EType ty) : objFields (SingList tys)

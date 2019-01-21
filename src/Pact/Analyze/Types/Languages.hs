@@ -322,7 +322,7 @@ singEqTm = singEqTm'
 singEqObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> Object tm a -> Bool
-singEqObject (SObjectUnsafe (SingList SNil)) (Object _) (Object _) = True
+singEqObject SObjectNil (Object _) (Object _) = True
 singEqObject
   (SObjectUnsafe (SingList (SCons _ colty objTy)))
   (Object (SCons _ (Column _ v1) obj1))
@@ -334,7 +334,7 @@ singEqObject _ _ _ = False
 singShowsObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> ShowS
-singShowsObject (SObjectUnsafe (SingList SNil)) (Object SNil)
+singShowsObject SObjectNil (Object SNil)
   = showString "SNil'"
 singShowsObject
   (SObjectUnsafe (SingList (SCons _ _ objty)))
@@ -350,7 +350,7 @@ singShowsObject _ _ = error "malformed object"
 singUserShowObject
   :: IsTerm tm
   => SingTy ('TyObject a) -> Object tm a -> [Text]
-singUserShowObject (SObjectUnsafe (SingList SNil)) (Object SNil) = [""]
+singUserShowObject SObjectNil (Object SNil) = [""]
 singUserShowObject
   (SObjectUnsafe (SingList (SCons _ _ objty)))
   (Object (SCons k (Column vTy v) obj))

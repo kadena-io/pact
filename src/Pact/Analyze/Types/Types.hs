@@ -24,9 +24,12 @@ module Pact.Analyze.Types.Types
   , SingSymbol
   , SingList
   , HList(..)
+  , pattern UnSingList
   , pattern SNil'
   , pattern SCons'
-  , pattern UnSingList
+  , pattern SObject
+  , pattern SObjectNil
+  , pattern SObjectCons
   , eraseList
   , TyTableName
   , TyColumnName
@@ -95,13 +98,36 @@ eraseList :: HList f m -> SingList m
 eraseList SNil          = SNil'
 eraseList (SCons k _ l) = SCons' k sing (eraseList l)
 
-pattern SNil' :: SingList '[]
+pattern SNil' :: () => schema ~ '[] => SingList schema
 pattern SNil' = SingList SNil
 
 pattern SCons'
-  :: (SingI v, KnownSymbol k, Typeable v)
-  => SingSymbol k -> Sing v -> SingList tys -> SingList ('(k, v) ': tys)
+  :: ()
+  => (SingI v, KnownSymbol k, Typeable v, schema ~ ('(k, v) ': tys))
+  => SingSymbol k -> Sing v -> SingList tys -> SingList schema
 pattern SCons' k v vs = SingList (SCons k v (UnSingList vs))
+
+{-# COMPLETE SNil', SCons' #-}
+
+pattern SObject :: () => obj ~ 'TyObject schema => SingList schema -> Sing obj
+pattern SObject a <- SObjectUnsafe a
+
+-- TODO: why does ghc ignore this pragma? (data instance?)
+{-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SKeySet, SAny, SList,
+  SObject #-}
+
+pattern SObjectNil :: () => obj ~ 'TyObject '[] => Sing obj
+pattern SObjectNil = SObjectUnsafe SNil'
+
+pattern SObjectCons
+  :: ()
+  => (SingI v, KnownSymbol k, Typeable v, obj ~ 'TyObject ('(k, v) ': tys))
+  => SingSymbol k -> Sing v -> SingList tys -> Sing obj
+pattern SObjectCons k v vs <- SObjectUnsafe (SCons' k v vs)
+
+-- TODO: why does ghc ignore this pragma? (data instance?)
+{-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SKeySet, SAny, SList,
+  SObjectNil, SObjectCons #-}
 
 data instance Sing (a :: Ty) where
   SInteger      ::               Sing 'TyInteger
@@ -160,7 +186,7 @@ cmpSym a b = symbolVal a `compare` symbolVal b
 singListEq
   :: forall (a :: [(Symbol, Ty)]) (b :: [(Symbol, Ty)]).
      SingList a -> SingList b -> Maybe (a :~: b)
-singListEq (SingList SNil) (SingList SNil) = Just Refl
+singListEq SNil' SNil' = Just Refl
 singListEq (SingList (SCons k1 v1 n1)) (SingList (SCons k2 v2 n2)) = do
   Refl <- eqSym k1 k2
   Refl <- singEq v1 v2
@@ -244,11 +270,11 @@ instance SingI lst => SingI ('TyObject lst) where
   sing = SObjectUnsafe sing
 
 instance SingI ('[] :: [(Symbol, Ty)]) where
-  sing = SingList SNil
+  sing = SNil'
 
 instance (KnownSymbol k, SingI v, Typeable v, SingI kvs)
   => SingI (('(k, v) ': kvs) :: [(Symbol, Ty)]) where
-  sing = SingList (SCons SSymbol sing (UnSingList sing))
+  sing = SCons' SSymbol sing sing
 
 -- type family IsSimple (ty :: Ty) :: Bool where
 --   IsSimple ('TyList _)   = 'False

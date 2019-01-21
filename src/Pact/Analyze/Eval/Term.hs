@@ -242,10 +242,10 @@ validateWrite _writeType (SObjectUnsafe schema) (Object om)
 
   validateWrite'
     :: SingList schema -> HList (Column Term) schema -> Analyze ()
-  validateWrite' (SingList SNil) SNil = pure ()
-  validateWrite' _               _    = error "TODO"
+  validateWrite' SNil' SNil = pure ()
+  validateWrite' _     _    = error "TODO"
 
--- validateWrite writeType objTy@(SObjectUnsafe schema) obj@(Object om) = do
+-- validateWrite writeType objTy@(SObject schema) obj@(Object om) = do
 
 --   -- For now we lump our three cases together:
 --   --   1. write field not in schema
@@ -267,13 +267,13 @@ validateWrite _writeType (SObjectUnsafe schema) (Object om)
 readFields
   :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
   -> Analyze (S (ConcreteObj ty), Map Text AVal)
-readFields _tn _sRk _tid (SObjectUnsafe (SingList SNil)) =
+readFields _tn _sRk _tid (SObjectUnsafe SNil') =
   pure (withProv (FromRow Map.empty) (literal ()), Map.empty)
-readFields tn sRk tid (SObjectUnsafe (SingList (SCons sym fieldType subSchema))) = do
+readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
-      subObjTy   = SObjectUnsafe $ SingList subSchema
+      subObjTy   = SObjectUnsafe subSchema
   columnRead tn cn .= sTrue
   sDirty <- use $ cellWritten tn cn sRk
   av     <- readField tn cn sRk sDirty fieldType
@@ -303,23 +303,23 @@ aValsOfObj
   :: Sing (schema :: [(Symbol, Ty)])
   -> SBV (ConcreteObj schema)
   -> Map Text AVal
-aValsOfObj (SingList SNil) _ = Map.empty
-aValsOfObj (SingList (SCons sym fieldTy fields)) obj
-  = withSymVal fieldTy $ withSymVal (SObjectUnsafe (SingList fields)) $
+aValsOfObj SNil' _ = Map.empty
+aValsOfObj (SCons' sym fieldTy fields) obj
+  = withSymVal fieldTy $ withSymVal (SObjectUnsafe fields) $
   let k = T.pack (symbolVal sym)
       SBVI.SBV sval = obj SBVT.^. SBVT._1
   in Map.insert k (AVal Nothing sval) $
-       aValsOfObj (SingList fields) (obj SBVT.^. SBVT._2)
+       aValsOfObj fields (obj SBVT.^. SBVT._2)
 
 writeFields
   :: Pact.WriteType -> TagId -> TableName -> S RowKey
   -> S (ConcreteObj ty) -> SingTy ('TyObject ty)
   -> Analyze ()
-writeFields _ _ _ _ _ (SObjectUnsafe (SingList SNil)) = pure ()
+writeFields _ _ _ _ _ (SObjectUnsafe SNil') = pure ()
 
 writeFields writeType tid tn sRk (S mProv obj)
-  (SObjectUnsafe (SingList (SCons sym fieldType subObjTy)))
-  = withSymVal fieldType $ withSymVal (SObjectUnsafe (SingList subObjTy)) $ do
+  (SObjectUnsafe (SCons' sym fieldType subObjTy))
+  = withSymVal fieldType $ withSymVal (SObjectUnsafe subObjTy) $ do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
@@ -361,7 +361,7 @@ writeFields writeType tid tn sRk (S mProv obj)
     _        -> typedCell fieldType id tn cn sRk sTrue .= mkS mProv sVal
 
   writeFields writeType tid tn sRk (S mProv (obj SBVT.^. SBVT._2))
-    (SObjectUnsafe (SingList subObjTy))
+    (SObjectUnsafe subObjTy)
 
   -- OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
@@ -546,7 +546,7 @@ evalTerm = \case
       Some SDecimal _    -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
       Some (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash` on lists"
-      Some (SObjectUnsafe _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
+      Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
 -- For now we only allow these three types to be formatted.

@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE Rank2Types          #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# options_ghc -fno-warn-redundant-constraints #-}
 module Pact.Analyze.Eval.Core where
 
@@ -24,7 +25,7 @@ import qualified Data.SBV.List               as SBVL
 import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
                                               bzipWith, bmapM, bfoldrM)
 import qualified Data.SBV.String             as SBVS
-import           Data.SBV.Tuple              (_1, _2, tuple)
+import           Data.SBV.Tuple              (tuple, _1, _2)
 -- import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:)(Refl))
@@ -36,7 +37,7 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
-import           Pact.Analyze.Util           (Boolean(..))
+import           Pact.Analyze.Util           (Boolean(..), vacuousMatch)
 import qualified Pact.Native                 as Pact
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
@@ -165,27 +166,27 @@ evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
   = evalObjAt schema colNameT objT (sing :: SingTy a)
-evalCore (LiteralObject (SObjectUnsafe (SingList SNil)) (Object SNil))
+evalCore (LiteralObject SObjectNil (Object SNil))
   = pure $ literalS ()
 evalCore
   (LiteralObject
-    (SObjectUnsafe (SingList (SCons _ ty tys)))
+    (SObjectCons _ ty tys)
     (Object (SCons _ (Column _ val) vals)))
   = do
-    let objTy = SObjectUnsafe $ SingList tys
+    let objTy = SObjectUnsafe tys
     withSing objTy $ withSymVal ty $ withSymVal objTy $ do
       S _ val'  <- eval val
       S _ vals' <- evalCore $ LiteralObject objTy $ Object vals
       pure $ sansProv $ tuple (val', vals')
 evalCore LiteralObject{} = error "impossible match"
 evalCore (ObjMerge
-  ty1@(SObjectUnsafe schema1)
-  ty2@(SObjectUnsafe schema2)
+  ty1@(SObject schema1)
+  ty2@(SObject schema2)
   obj1 obj2) = withSing ty1 $ withSing ty2 $ do
     S _ obj1' <- eval obj1
     S _ obj2' <- eval obj2
     case sing @a of
-      SObjectUnsafe schema -> pure $ sansProv $
+      SObject schema -> pure $ sansProv $
         evalObjMerge (obj1' :< schema1) (obj2' :< schema2) schema
       _ -> error "impossible match"
 evalCore ObjMerge{} = error "impossible match"
@@ -322,22 +323,16 @@ evalCore (Where schema tya key (Open vid _ f) obj) = withSymVal tya $ do
 
 evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
 
-evalCore (ObjectEqNeq
-  (SObjectUnsafe (SingList SNil))
-  (SObjectUnsafe (SingList SNil))
-  eqNeq _ _) = pure $ case eqNeq of { Eq' -> sTrue; Neq' -> sFalse }
-evalCore (ObjectEqNeq
-  (SObjectUnsafe (SingList SNil))
-  (SObjectUnsafe (SingList SCons{}))
-  eqNeq _ _) = pure $ case eqNeq of { Eq' -> sFalse; Neq' -> sTrue }
-evalCore (ObjectEqNeq
-  (SObjectUnsafe (SingList SCons{}))
-  (SObjectUnsafe (SingList SNil))
-  eqNeq _ _) = pure $ case eqNeq of { Eq' -> sFalse; Neq' -> sTrue }
+evalCore (ObjectEqNeq SObjectNil SObjectNil eqNeq _ _)
+  = pure $ case eqNeq of { Eq' -> sTrue; Neq' -> sFalse }
+evalCore (ObjectEqNeq SObjectNil SObjectCons{} eqNeq _ _)
+  = pure $ case eqNeq of { Eq' -> sFalse; Neq' -> sTrue }
+evalCore (ObjectEqNeq SObjectCons{} SObjectNil eqNeq _ _)
+  = pure $ case eqNeq of { Eq' -> sFalse; Neq' -> sTrue }
 
 evalCore (ObjectEqNeq
-  objTy1@(SObjectUnsafe schema@(SingList SCons{}))
-  objTy2@(SObjectUnsafe        (SingList SCons{}))
+  objTy1@(SObject schema@SCons'{})
+  objTy2@(SObject        SCons'{})
   eqNeq obj1 obj2) = case singEq objTy1 objTy2 of
     Nothing   -> pure sFalse
     Just Refl -> withSing objTy1 $ do
@@ -349,14 +344,17 @@ evalCore (ObjectEqNeq
             -> SBV (Concrete ('TyObject tys))
             -> SBV (Concrete ('TyObject tys))
             -> SBV Bool
-          go (SingList SNil) _ _ = sTrue
-          go (SingList (SCons _ colTy' schema')) a b
+          go SNil' _ _ = sTrue
+          go (SCons' _ colTy' schema')
+            objA objB
             = withSymVal colTy'
-            $ withSymVal (SObjectUnsafe (SingList schema'))
-            $ _1 a .== _1 b .&& go (SingList schema') (_2 a) (_2 b)
+            $ withSymVal (SObjectUnsafe schema')
+            $ _1 objA .== _1 objB .&& go schema' (_2 objA) (_2 objB)
 
       let objsEq = go schema obj1' obj2'
       pure $ sansProv $ case eqNeq of { Eq' -> objsEq; Neq' -> sNot objsEq }
+
+evalCore (ObjectEqNeq _ _ _ _ _) = vacuousMatch "covered by previous case"
 
 evalCore (ObjDrop ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
   S prov obj' <- eval obj
@@ -377,19 +375,19 @@ evalDropTake
   :: SBV (ConcreteObj schema) :< SingList schema
   -> SingList schema'
   -> SBV (ConcreteObj schema')
-evalDropTake _ (SingList SNil) = literal ()
+evalDropTake _ SNil' = literal ()
 evalDropTake
-  (tm :<   SingList (SCons k  ty  ks ))
+   (obj :< SingList (SCons k  ty  ks ))
   schema'@(SingList (SCons k' ty' ks'))
   = withHasKind ty $ withSymVal (SObjectUnsafe (SingList ks))
 
   -- Test equality of both the key names and types. If the key matches then the
   -- type should as well, but we need to test both to convince ghc
-  $ fromMaybe (evalDropTake (_2 tm :< SingList ks) schema') $ do
+  $ fromMaybe (evalDropTake (_2 obj :< SingList ks) schema') $ do
     Refl <- eqSym  k  k'
     Refl <- singEq ty ty'
     withSymVal ty $ withSymVal (SObjectUnsafe (SingList ks')) $ pure $
-      tuple (_1 tm, evalDropTake (_2 tm :< SingList ks) (SingList ks'))
+      tuple (_1 obj, evalDropTake (_2 obj :< SingList ks) (SingList ks'))
 
 evalDropTake _ _ = error "evalDropTake invariant violation"
 
@@ -402,8 +400,8 @@ subObject
   :: SBV (ConcreteObj schema) :< SingList schema
   -> SingList searchSchema
   -> SomeObj
-subObject (_ :< SingList SNil) _ = SomeObj (SingList SNil) (literal ())
-subObject _ (SingList SNil)      = SomeObj (SingList SNil) (literal ())
+subObject (_ :< SNil') _ = SomeObj SNil' (literal ())
+subObject _ SNil'        = SomeObj SNil' (literal ())
 subObject
   (obj :< schema@(SingList (SCons k  v   kvs)))
     searchSchema@(SingList (SCons sk _sv _skvs))
@@ -469,7 +467,7 @@ evalObjMerge
   -> (SBV (ConcreteObj schema2) :< SingList schema2)
   -> SingList schema
   -> SBV (ConcreteObj schema)
-evalObjMerge _ _ (SingList SNil) = literal ()
+evalObjMerge _ _ SNil' = literal ()
 evalObjMerge
   (obj1 :< schema1@(SingList (SCons k1 ty1 subSchema1)))
   (obj2 :< schema2@(SingList (SCons k2 ty2 subSchema2)))
@@ -506,25 +504,23 @@ evalObjMerge
 
 evalObjMerge
   (obj1 :< schema1@(SingList SCons{}))
-  (_    :<          SingList SNil)
+  (_    :<          SNil')
             schema@(SingList SCons{})
   = evalDropTake (obj1 :< schema1) schema
 
 evalObjMerge
-  (_    :<          SingList SNil)
+  (_    :<          SNil')
   (obj2 :< schema2@(SingList SCons{}))
             schema@(SingList SCons{})
   = evalDropTake (obj2 :< schema2) schema
 
-evalObjMerge (_ :< SingList SNil) (_ :< SingList SNil) (SingList SCons{})
+evalObjMerge (_ :< SNil') (_ :< SNil') (SingList SCons{})
   = error "evalObjMerge invariant violation: both input object exhausted"
 
 hasKey :: SingList schema -> S Str -> S Bool
-hasKey (SingList SNil) _ = sFalse
-hasKey (SingList (SCons k _ schema')) key
-  = ite (literalS (Str (symbolVal k)) .== key)
-        sTrue
-        (hasKey (SingList schema') key)
+hasKey singList (S _ key) = sansProv $ recSingList sFalse
+  (\k _ty accum -> (literal (Str k) .== key) .|| accum)
+  singList
 
 evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)
 evalStrToInt sT = do
@@ -608,18 +604,18 @@ evalObjAt objTy@(SObjectUnsafe schema) colNameT obj retType
 
     let go :: HasCallStack
            => SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
-        go (SingList SNil) _ = do
+        go SNil' _ = do
           markFailure sTrue
           pure $ uninterpret "notfound"
-        go (SingList (SCons sym colTy schema')) obj'
-          = withSymVal (SObjectUnsafe (SingList schema')) $ withSymVal colTy $
+        go (SCons' sym colTy schema') obj'
+          = withSymVal (SObjectUnsafe schema') $ withSymVal colTy $
             withMergeableAnalyzer @m retType $ ite
               (needColName .== literalS (Str (symbolVal sym)))
               (case singEq colTy retType of
                  Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
                  Just Refl -> pure $ _1 obj'
               )
-              (go (SingList schema') (_2 obj'))
+              (go schema' (_2 obj'))
 
         mProv :: Maybe Provenance
         mProv = do

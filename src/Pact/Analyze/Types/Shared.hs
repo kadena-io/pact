@@ -9,6 +9,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -19,6 +20,7 @@
 
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE PolyKinds                  #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
@@ -56,6 +58,7 @@ import           Data.SBV.Control             (SMTValue (..))
 import           Data.SBV.Internals           (CVal(..), CV(..), genMkSymVar, SVal(SVal), Kind(..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
+import           Data.SBV.Tuple               (_1, _2)
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
@@ -440,6 +443,15 @@ instance (Ord (SingTy a), Ord (tm a)) => Ord (Column tm a) where
 data Object (tm :: Ty -> *) (m :: [(Symbol, Ty)])
   = Object !(HList (Column tm) m)
 
+pattern ObjectNil :: () => schema ~ '[] => Object tm schema
+pattern ObjectNil = Object SNil
+
+-- pattern ObjectCons
+--   :: ()
+--   => (schema ~ '(k, ty) ': schema', SingI ty, Typeable ty, KnownSymbol k)
+--   => Object tm schema
+-- pattern ObjectCons k v obj = Object (SCons k (Column
+
 objectLookup :: Object tm m -> String -> Maybe (Existential (Column tm))
 objectLookup (Object cols) name = objectLookup' cols where
   objectLookup'
@@ -498,12 +510,12 @@ instance Show ESchema where
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
 varIdColumns :: Sing (m :: [ (Symbol, Ty) ]) -> Map Text VarId
-varIdColumns = Map.fromList . snd . varIdColumns' where
-  varIdColumns' :: Sing (m :: [ (Symbol, Ty) ]) -> (VarId, [(Text, VarId)])
-  varIdColumns' (SingList SNil) = (0, [])
-  varIdColumns' (SingList (SCons k _ty tys))
-    = case varIdColumns' (SingList tys) of
-      (i, tys') -> (succ i, (T.pack (symbolVal k), i) : tys')
+varIdColumns
+  = Map.fromList
+  . snd
+  . recSingList
+    (0, [])
+    (\name _ (i, tys') -> (succ i, (T.pack name, i) : tys'))
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.
@@ -715,6 +727,26 @@ type family ConcreteObj (a :: [(Symbol, Ty)]) where
   ConcreteObj '[]               = ()
   ConcreteObj ('(k', v) ': kvs) = (Concrete v, ConcreteObj kvs)
 
+-- | Eliminator for objects
+recObject
+  :: (SBV (ConcreteObj schema) :< SingList schema)
+  -> a
+  -> (forall k b.
+       KnownSymbol k
+    => SingSymbol k -> SBV (Concrete b) -> SingTy b -> a -> a)
+  -> a
+recObject (_   :< SNil')              base _f = base
+recObject (obj :< SCons' k ty schema) base f
+  = withSymVal ty $ withSymVal (SObjectUnsafe schema) $
+  f k (_1 obj) ty (recObject (_2 obj :< schema) base f)
+
+-- | Eliminator singleton lists
+recSingList
+  :: a -> (forall b. String -> SingTy b -> a -> a) -> SingList schema -> a
+recSingList base _ SNil' = base
+recSingList base f (SCons' sym ty schema)
+  = f (symbolVal sym) ty $ recSingList base f schema
+
 newtype AConcrete ty = AConcrete (Concrete ty)
 
 instance (Eq (Concrete ty)) => Eq (AConcrete ty) where
@@ -801,10 +833,9 @@ withEq = withDict . singMkEq
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withEq ty' Dict
-      SObjectUnsafe (SingList SNil)
-        -> Dict
-      SObjectUnsafe (SingList (SCons _ ty' tys))
-        -> withEq ty' $ withDict (singMkEq (SObjectUnsafe (SingList tys))) Dict
+      SObjectUnsafe SNil'   -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withEq ty' $ withDict (singMkEq (SObjectUnsafe tys)) Dict
 
 withShow :: SingTy a -> (Show (Concrete a) => b) -> b
 withShow = withDict . singMkShow
@@ -820,10 +851,9 @@ withShow = withDict . singMkShow
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withShow ty' Dict
-      SObjectUnsafe (SingList SNil)
-        -> Dict
-      SObjectUnsafe (SingList (SCons _ ty' tys))
-        -> withShow ty' $ withDict (singMkShow (SObjectUnsafe (SingList tys))) Dict
+      SObjectUnsafe SNil'   -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withShow ty' $ withDict (singMkShow (SObjectUnsafe tys)) Dict
 
 withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
 withUserShow = withDict . singMkUserShow
@@ -839,11 +869,10 @@ withUserShow = withDict . singMkUserShow
       SKeySet      -> Dict
       SAny         -> Dict
       SList ty'    -> withUserShow ty' Dict
-      SObjectUnsafe (SingList SNil)
-        -> Dict
-      SObjectUnsafe (SingList (SCons _ ty' tys))
+      SObjectUnsafe SNil'   -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
         -> withUserShow ty' $
-           withDict (singMkUserShow (SObjectUnsafe (SingList tys))) Dict
+           withDict (singMkUserShow (SObjectUnsafe tys)) Dict
 
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable = withDict . singMkTypeable
@@ -877,19 +906,18 @@ withSMTValue = withDict . singMkSMTValue
 
     singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
     singMkSMTValue = \case
-      SInteger  -> Dict
-      SBool     -> Dict
-      SStr      -> Dict
-      STime     -> Dict
-      SDecimal  -> Dict
-      SKeySet   -> Dict
-      SAny      -> Dict
-      SList ty' -> withSMTValue ty' $ withTypeable ty' Dict
-      SObjectUnsafe (SingList SNil)
-        -> Dict
-      SObjectUnsafe (SingList (SCons _ ty' tys))
+      SInteger   -> Dict
+      SBool      -> Dict
+      SStr       -> Dict
+      STime      -> Dict
+      SDecimal   -> Dict
+      SKeySet    -> Dict
+      SAny       -> Dict
+      SList ty'  -> withSMTValue ty' $ withTypeable ty' Dict
+      SObjectUnsafe SNil' -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
         -> withSMTValue ty' $
-           withDict (singMkSMTValue (SObjectUnsafe (SingList tys))) Dict
+           withDict (singMkSMTValue (SObjectUnsafe tys)) Dict
 
 withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
 withHasKind = withDict . singMkHasKind
@@ -897,19 +925,18 @@ withHasKind = withDict . singMkHasKind
 
     singMkHasKind :: SingTy a -> Dict (HasKind (Concrete a))
     singMkHasKind = \case
-      SInteger  -> Dict
-      SBool     -> Dict
-      SStr      -> Dict
-      STime     -> Dict
-      SDecimal  -> Dict
-      SKeySet   -> Dict
-      SAny      -> Dict
-      SList ty' -> withHasKind ty' $ withTypeable ty' Dict
-      SObjectUnsafe (SingList SNil)
-        -> Dict
-      SObjectUnsafe (SingList (SCons _ ty' tys))
+      SInteger   -> Dict
+      SBool      -> Dict
+      SStr       -> Dict
+      STime      -> Dict
+      SDecimal   -> Dict
+      SKeySet    -> Dict
+      SAny       -> Dict
+      SList ty'  -> withHasKind ty' $ withTypeable ty' Dict
+      SObjectUnsafe SNil' -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
         -> withHasKind ty' $
-           withDict (singMkHasKind (SObjectUnsafe (SingList tys))) Dict
+           withDict (singMkHasKind (SObjectUnsafe tys)) Dict
 
 instance SMTValue (Object AConcrete '[]) where
   sexprToVal _ = Just $ Object SNil
@@ -939,11 +966,10 @@ withSymVal = withDict . singMkSymVal
       SKeySet     -> Dict
       SAny        -> Dict
       SList ty'   -> withSymVal ty' Dict
-      SObjectUnsafe (SingList SNil)
-        -> Dict
-      SObjectUnsafe (SingList (SCons _ ty' tys))
+      SObjectUnsafe SNil' -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
         -> withSymVal ty' $
-           withDict (singMkSymVal (SObjectUnsafe (SingList tys))) Dict
+           withDict (singMkSymVal (SObjectUnsafe tys)) Dict
 
 instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
   compare _ _ = EQ
@@ -1024,11 +1050,6 @@ columnMapToSchema (ColumnMap colMap) = go (Map.toList colMap) where
         EType $ mkSObject $ SCons' (SSymbol @k) ty tys'
     _ -> error "TODO"
   go _ = error "TODO"
-  -- = Schema
-  -- . Map.fromList
-  -- . fmap (\(ColumnName name, ety) -> (fromString name, ety))
-  -- . Map.toList
-  -- . _columnMap
 
 newtype TableMap a
   = TableMap { _tableMap :: Map.Map TableName a }

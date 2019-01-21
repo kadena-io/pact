@@ -352,8 +352,8 @@ normalizeObjTy (SObjectUnsafe obj) = mkSObject obj
 maybeTranslateUserType :: Pact.UserType -> Maybe QType
 maybeTranslateUserType (Pact.Schema _ _ [] _) = Just $ EType $ mkSObject SNil'
 maybeTranslateUserType (Pact.Schema a b (Pact.Arg name ty _:tys) c) = do
-  EType (SObjectUnsafe tys') <- maybeTranslateUserType $ Pact.Schema a b tys c
-  EType ty'                  <- maybeTranslateType ty
+  EType (SObject tys') <- maybeTranslateUserType $ Pact.Schema a b tys c
+  EType ty'            <- maybeTranslateType ty
   withSing ty' $ withTypeable ty' $
     case someSymbolVal (T.unpack name) of
       SomeSymbol (_ :: Proxy sym) ->
@@ -597,7 +597,7 @@ mkUnsortedLiteralObject [] = pure $
   let ty = mkSObject SNil'
   in Some ty (LiteralObject ty (Object SNil))
 mkUnsortedLiteralObject ((name, Some ty tm) : tms) = do
-  Some (SObjectUnsafe objTy) (LiteralObject _ (Object obj))
+  Some (SObject objTy) (LiteralObject _ (Object obj))
     <- mkUnsortedLiteralObject tms
   case someSymbolVal (T.unpack name) of
     SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
@@ -801,7 +801,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
         pure $ Some SBool $ inject $ ListEqNeq ta op' a' b'
 
-      (Some ta@SObjectUnsafe{} a', Some tb@SObjectUnsafe{} b') -> do
+      (Some ta@SObject{} a', Some tb@SObject{} b') -> do
         op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
         let ta' = normalizeObjTy ta
             tb' = normalizeObjTy tb
@@ -874,7 +874,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     aT          <- translateNode a
     bT          <- translateNode b
     case (aT, bT) of
-      (Some ty1@SObjectUnsafe{} o1, Some ty2@SObjectUnsafe{} o2) -> do
+      (Some ty1@SObject{} o1, Some ty2@SObject{} o2) -> do
         -- Feature 3: object merge
         let ty1' = normalizeObjTy ty1
             ty2' = normalizeObjTy ty2
@@ -918,9 +918,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SInteger $ CoreTerm $ StrLength a'
 
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
-    Some SStr row'                  <- translateNode row
-    Some objTy@SObjectUnsafe{} obj' <- translateNode obj
-    tid                             <- tagWrite writeType node $ ESchema objTy
+    Some SStr row'            <- translateNode row
+    Some objTy@SObject{} obj' <- translateNode obj
+    tid                       <- tagWrite writeType node $ ESchema objTy
     let objTy' = normalizeObjTy objTy
     pure $ Some SStr $
       Write objTy' writeType tid (TableName (T.unpack tn)) row' $
@@ -954,8 +954,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _node "pact-version" [] -> pure $ Some SStr PactVersion
 
   AST_WithRead node table key bindings schemaNode body -> do
-    EType objTy@SObjectUnsafe{} <- translateType schemaNode
-    Some SStr key' <- translateNode key
+    EType objTy@SObject{} <- translateType schemaNode
+    Some SStr key'        <- translateNode key
     tid                   <- tagRead node $ ESchema objTy
     let readT = Some objTy $
           Read objTy tid (TableName (T.unpack table)) key'
@@ -963,8 +963,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
       translateObjBinding bindings (normalizeObjTy objTy) body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
-    EType objTy@SObjectUnsafe{} <- translateType schemaNode
-    objectT                     <- translateNode objectA
+    EType objTy@SObject{} <- translateType schemaNode
+    objectT               <- translateNode objectA
     withNodeContext node $
       translateObjBinding bindings (normalizeObjTy objTy) body objectT
 
@@ -983,9 +983,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
           "Unexpected type for seconds in add-time " ++ show ty
 
   AST_Read node table key -> do
-    Some SStr key'              <- translateNode key
-    EType objTy@SObjectUnsafe{} <- translateType node
-    tid                         <- tagRead node $ ESchema objTy
+    Some SStr key'        <- translateNode key
+    EType objTy@SObject{} <- translateType node
+    tid                   <- tagRead node $ ESchema objTy
     let objTy' = normalizeObjTy objTy
     pure $ Some objTy' $ Read objTy' tid (TableName (T.unpack table)) key'
 
@@ -1008,7 +1008,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     obj'     <- translateNode obj
     EType ty <- translateType node
     case obj' of
-      Some objTy@SObjectUnsafe{} obj'' -> do
+      Some objTy@SObject{} obj'' -> do
         Some SStr colName <- translateNode index
         let objTy' = normalizeObjTy objTy
         pure $ Some ty $ CoreTerm $ ObjAt objTy' colName $
@@ -1046,7 +1046,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some (SList ty) haystack -> do
         Refl <- singEq needleTy ty ?? TypeError node
         pure $ Some SBool $ CoreTerm $ ListContains ty needle haystack
-      Some objTy@SObjectUnsafe{} obj -> case needleTy of
+      Some objTy@SObject{} obj -> case needleTy of
         SStr -> do
           let objTy' = normalizeObjTy objTy
           pure $ Some SBool $ CoreTerm $ ObjContains objTy' needle $
@@ -1069,8 +1069,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some ty'@(SList elemTy) list' -> do
         Some SInteger num <- translateNode numOrKeys
         pure $ Some ty' $ CoreTerm $ ListDrop elemTy num list'
-      Some objTy@SObjectUnsafe{} obj -> case retTy of
-        SObjectUnsafe{} -> do
+      Some objTy@SObject{} obj -> case retTy of
+        SObject{} -> do
           Some (SList SStr) keys <- translateNode numOrKeys
           pure $ Some (normalizeObjTy retTy) $ CoreTerm $ ObjDrop objTy keys obj
         _ -> throwError' $ TypeError node
@@ -1083,8 +1083,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some ty'@(SList elemTy) list' -> do
         Some SInteger num <- translateNode numOrKeys
         pure $ Some ty' $ CoreTerm $ ListTake elemTy num list'
-      Some objTy@SObjectUnsafe{} obj -> case retTy of
-        SObjectUnsafe{} -> do
+      Some objTy@SObject{} obj -> case retTy of
+        SObject{} -> do
           Some (SList SStr) keys <- translateNode numOrKeys
           pure $ Some (normalizeObjTy retTy) $ CoreTerm $ ObjDrop objTy keys obj
         _ -> throwError' $ TypeError node
