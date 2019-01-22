@@ -42,6 +42,7 @@ import           Data.List                    (sortBy)
 import           Data.Maybe                   (isJust)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
+import           Data.Monoid                  (First(..))
 import           Data.SBV.Trans               (MProvable (..), mkSymVal)
 import           Data.SBV                     (EqSymbolic, HasKind, Int64,
                                                Kind (KString, KUnbounded),
@@ -461,13 +462,9 @@ pattern ObjectNil = Object SNil
 
 objectLookup :: Object tm m -> String -> Maybe (Existential (Column tm))
 objectLookup (Object cols) name = objectLookup' cols where
-  objectLookup'
-    :: forall tm m. HList (Column tm) m -> Maybe (Existential (Column tm))
-  objectLookup' SNil = Nothing
-  objectLookup' (SCons k c@(Column ty _) cols')
-    = if symbolVal k == name
-      then Just $ Some ty c
-      else objectLookup' cols'
+  objectLookup' = getFirst . foldHList
+    (\k c@(Column ty _) -> First $
+      if symbolVal k == name then Just $ Some ty c else Nothing)
 
 data EObject tm where
   EObject :: SingList m -> Object tm m -> EObject tm
@@ -476,23 +473,21 @@ instance UserShow (tm ('TyObject m)) => UserShow (Object tm m) where
   userShowPrec _ (Object vals)
     = "{" <> T.intercalate ", " (userShowVals vals) <> "}"
       where
-      userShowVals :: HList (Column tm) m' -> [Text]
-      userShowVals SNil = []
-      userShowVals (SCons k (Column ty v) m')
-        = T.pack (symbolVal k) <> " := " <> singUserShowTm ty v : userShowVals m'
+      userShowVals = foldHList $ \k (Column ty v) ->
+        [T.pack (symbolVal k) <> " := " <> singUserShowTm ty v]
 
 instance Show (tm ('TyObject m)) => Show (Object tm m) where
   showsPrec p (Object vals) = showParen (p > 10) $
-    showString "Object " . showsVals vals
-    where showsVals :: HList (Column tm) m' -> ShowS
-          showsVals SNil = showString "SNil"
-          showsVals (SCons k (Column singv v) m') = showParen True $
-              showString "SCons "
-            . showString (symbolVal k)
-            . showChar ' '
-            . singShowsTm singv 11 v
-            . showChar ' '
-            . showsVals m'
+    showString "Object " . showsVals vals (11 :: Int) where
+      showsVals = foldrHList
+        (\_p -> showString "SNil")
+        (\k (Column singv v) showRest p' -> showParen (p' > 10) $
+           showString "SCons "
+         . showString (symbolVal k)
+         . showChar ' '
+         . singShowsTm singv 11 v
+         . showChar ' '
+         . showRest 11)
 
 instance Eq (tm ('TyObject m)) => Eq (Object tm m) where
   Object vals1 == Object vals2 = eq vals1 vals2 where
@@ -503,11 +498,11 @@ instance Eq (tm ('TyObject m)) => Eq (Object tm m) where
       = eqSymB k1 k2 && singEqTm singv v1 v2 && eq m1' m2'
 
 data ESchema where
-  ESchema :: SingTy ('TyObject m) -> ESchema
+  ESchema :: SingList schema -> ESchema
 
 instance Eq ESchema where
   -- Since this is a singleton, checking the types match is good enough
-  ESchema ty1 == ESchema ty2 = isJust $ singEq ty1 ty2
+  ESchema ty1 == ESchema ty2 = isJust $ singListEq ty1 ty2
 
 instance Show ESchema where
   showsPrec p (ESchema ty) = showParen (p > 10) $
@@ -520,9 +515,9 @@ varIdColumns :: Sing (m :: [ (Symbol, Ty) ]) -> Map Text VarId
 varIdColumns
   = Map.fromList
   . snd
-  . foldSingList
+  . foldrSingList
     (0, [])
-    (\name _ (i, tys') -> (succ i, (T.pack name, i) : tys'))
+    (\name _ (i, tys') -> (succ i, (T.pack (symbolVal name), i) : tys'))
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.
@@ -746,13 +741,6 @@ foldObject (_   :< SNil')              base _f = base
 foldObject (obj :< SCons' k ty schema) base f
   = withSymVal ty $ withSymVal (SObjectUnsafe schema) $
   f k (_1 obj) ty (foldObject (_2 obj :< schema) base f)
-
--- | Eliminator for singleton lists
-foldSingList
-  :: a -> (forall b. String -> SingTy b -> a -> a) -> SingList schema -> a
-foldSingList base _ SNil' = base
-foldSingList base f (SCons' sym ty schema)
-  = f (symbolVal sym) ty $ foldSingList base f schema
 
 newtype AConcrete ty = AConcrete (Concrete ty)
 

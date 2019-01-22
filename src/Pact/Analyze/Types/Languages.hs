@@ -199,6 +199,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
     -> EqNeq -> t ('TyObject m1) -> t ('TyObject m2) -> Core t 'TyBool
   ObjAt       :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t a
   ObjContains :: SingTy ('TyObject m) -> t 'TyStr -> t ('TyObject m) -> Core t 'TyBool
+
+  -- TODO: ObjDrop and ObjTake could be combined into one
   ObjDrop
     :: SingTy ('TyObject schema)
     -> t ('TyList 'TyStr)

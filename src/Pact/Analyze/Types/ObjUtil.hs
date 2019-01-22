@@ -167,3 +167,6 @@ insert k v (SCons k' v' kvs) = case compareKeys k k' of
 -- | This should /always/ be used to construct an @SObject@.
 mkSObject :: Sing schema -> Sing ('TyObject (Normalize schema))
 mkSObject = SObjectUnsafe . eraseList . normalize . UnSingList
+
+mkSchema :: SingList schema -> SingList (Normalize schema)
+mkSchema = eraseList . normalize . UnSingList

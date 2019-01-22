@@ -24,6 +24,8 @@ module Pact.Analyze.Types.Types
   , SingSymbol
   , SingList
   , HList(..)
+  , foldrHList
+  , foldHList
   , pattern UnSingList
   , pattern SNil'
   , pattern SCons'
@@ -40,6 +42,8 @@ module Pact.Analyze.Types.Types
   , eqSymB
   , cmpSym
   , singListEq
+  , foldrSingList
+  , foldSingList
   , type ListElem
   , SingI(sing)
   , SingTy
@@ -88,6 +92,23 @@ data HList (f :: Ty -> Type) (tys :: [(Symbol, Ty)]) where
          -> f ty
          -> HList f tys
          -> HList f ('(k, ty) ': tys)
+
+-- | Eliminator for HLists
+foldrHList
+  :: a
+  -> (forall k b. KnownSymbol k => SingSymbol k -> f b -> a -> a)
+  -> HList f schema
+  -> a
+foldrHList base _ SNil = base
+foldrHList base f (SCons sym val rest)
+  = f sym val $ foldrHList base f rest
+
+foldHList
+  :: Monoid a
+  => (forall k b. KnownSymbol k => SingSymbol k -> f b -> a)
+  -> HList f schema
+  -> a
+foldHList f = foldrHList mempty (\sym fb accum -> f sym fb <> accum)
 
 pattern UnSingList :: Sing n -> HList Sing n
 pattern UnSingList l <- (SingList -> l) where
@@ -195,6 +216,25 @@ singListEq (SingList (SCons k1 v1 n1)) (SingList (SCons k2 v2 n2)) = do
   pure Refl
 singListEq _ _ = Nothing
 
+-- | Eliminator for singleton lists
+foldrSingList
+  :: a
+  -> (forall k b. (KnownSymbol k, SingI b, Typeable b)
+     => SingSymbol k -> SingTy b -> a -> a)
+  -> SingList schema
+  -> a
+foldrSingList base _ SNil' = base
+foldrSingList base f (SCons' sym ty schema)
+  = f sym ty $ foldrSingList base f schema
+
+foldSingList
+  :: Monoid a
+  => (forall k b. (KnownSymbol k, SingI b, Typeable b)
+     => SingSymbol k -> SingTy b -> a)
+  -> SingList schema
+  -> a
+foldSingList f = foldrSingList mempty (\sym ty accum -> f sym ty <> accum)
+
 type family ListElem (a :: Ty) where
   ListElem ('TyList a) = a
 
@@ -208,18 +248,20 @@ instance Show (SingTy ty) where
     SGuard    -> showString "SGuard"
     SAny      -> showString "SAny"
     SList a   -> showParen (p > 10) $ showString "SList "   . showsPrec 11 a
-    SObjectUnsafe (SingList m)
-      -> showParen (p > 10) $ showString "SObjectUnsafe " . showsHList m
-    where
-      showsHList :: HList Sing a -> ShowS
-      showsHList SNil = showString "SNil"
-      showsHList (SCons k v n) = showParen True $
-          showString "SCons \""
-        . showString (symbolVal k)
-        . showString "\" "
-        . shows v
-        . showChar ' '
-        . showsHList n
+    SObjectUnsafe schema
+      -> showParen (p > 10) $ showString "SObjectUnsafe " . showsPrec 11 schema
+
+instance Show (SingList schema) where
+  showsPrec p m = showsHList m p where
+    showsHList = foldrSingList
+      (\_p -> showString "SNil")
+      (\k v rest p' -> showParen (p' > 10) $
+        showString "SCons \""
+      . showString (symbolVal k)
+      . showString "\" "
+      . shows v
+      . showChar ' '
+      . rest 11)
 
 instance UserShow (SingTy ty) where
   userShowPrec _ = \case

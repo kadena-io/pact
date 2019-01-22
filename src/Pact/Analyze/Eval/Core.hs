@@ -520,8 +520,8 @@ evalObjMerge (_ :< SNil') (_ :< SNil') (SingList SCons{})
   = error "evalObjMerge invariant violation: both input object exhausted"
 
 hasKey :: SingList schema -> S Str -> S Bool
-hasKey singList (S _ key) = sansProv $ foldSingList sFalse
-  (\k _ty accum -> (literal (Str k) .== key) .|| accum)
+hasKey singList (S _ key) = sansProv $ foldrSingList sFalse
+  (\k _ty accum -> (literal (Str (symbolVal k)) .== key) .|| accum)
   singList
 
 evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)

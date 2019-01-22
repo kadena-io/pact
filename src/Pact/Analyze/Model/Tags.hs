@@ -31,8 +31,9 @@ import           Data.SBV             (SBV, SymVal)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
-import           Data.Text            (Text, pack)
+import           Data.Text            (pack)
 import           Data.Traversable     (for)
+import           GHC.TypeLits         (symbolVal)
 
 import qualified Pact.Types.Typecheck as TC
 
@@ -45,13 +46,12 @@ allocS = free @a
 allocSbv :: forall a. SingI a => Alloc (SBV (Concrete a))
 allocSbv = _sSbv <$> allocS @a
 
-allocSchema :: SingTy ('TyObject m) -> Alloc UObject
-allocSchema (SObjectUnsafe tys) = UObject <$> allocSchema' tys where
-  allocSchema' :: SingList schema -> Alloc (Map.Map Text TVal)
-  allocSchema' = foldSingList (pure Map.empty) $ \k ty m -> do
-      let ety = EType ty
-      val <- allocAVal ety
-      Map.insert (pack k) (ety, val) <$> m
+allocSchema :: SingList schema -> Alloc UObject
+allocSchema = fmap UObject . allocSchema' where
+  allocSchema' = foldrSingList (pure Map.empty) $ \k ty m -> do
+    let ety = EType ty
+    val <- allocAVal ety
+    Map.insert (pack (symbolVal k)) (ety, val) <$> m
 
 allocAVal :: EType -> Alloc AVal
 allocAVal (EType ty) = mkAVal <$> singFree ty
@@ -106,11 +106,12 @@ allocModelTags argsMap locatedTm graph = ModelTags
       :: Traversal' TraceEvent (ESchema, Located TagId)
       -> Alloc (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
-      for (toListOf (traverse.p) events) $ \(ESchema schema, Located info tid) -> do
-        srk <- allocS @TyRowKey
-        obj <- allocSchema schema
-        suc <- allocSbv @'TyBool
-        pure (tid, Located info (Access srk obj suc))
+      for (toListOf (traverse.p) events) $
+        \(ESchema schema, Located info tid) -> do
+          srk <- allocS @TyRowKey
+          obj <- allocSchema schema
+          suc <- allocSbv @'TyBool
+          pure (tid, Located info (Access srk obj suc))
 
     allocReads :: Alloc (Map TagId (Located Access))
     allocReads = allocAccesses _TraceRead

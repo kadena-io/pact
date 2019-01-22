@@ -50,12 +50,14 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust)
+import           Data.Monoid                  (First(..))
 import qualified Data.Set                     as Set
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
 import           Data.Type.Equality           ((:~:) (Refl))
+import           GHC.TypeLits                 (symbolVal)
 import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
@@ -254,8 +256,8 @@ inferVar vid name prop = do
 
 -- | Look up the type of a given key in an object schema
 lookupKeyInType :: String -> SingList schema -> Maybe EType
-lookupKeyInType name = foldSingList Nothing
-  (\k ty accum -> if k == name then Just (EType ty) else accum)
+lookupKeyInType name = getFirst . foldSingList
+  (\k ty -> First $ if symbolVal k == name then Just (EType ty) else Nothing)
 
 --
 -- NOTE: because we have a lot of cases here and we are using pattern synonyms

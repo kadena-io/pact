@@ -35,7 +35,7 @@ import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe, isNothing)
 import           Data.Proxy                 (Proxy)
--- import qualified Data.Set                   as Set
+import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Thyme                 (parseTime)
@@ -881,9 +881,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SInteger $ CoreTerm $ StrLength a'
 
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
-    Some SStr row'            <- translateNode row
-    Some objTy@SObject{} obj' <- translateNode obj
-    tid                       <- tagWrite writeType node $ ESchema objTy
+    Some SStr row'                   <- translateNode row
+    Some objTy@(SObject schema) obj' <- translateNode obj
+    tid                              <- tagWrite writeType node $ ESchema schema
     pure $ Some SStr $
       Write objTy writeType tid (TableName (T.unpack tn)) row' obj'
 
@@ -915,9 +915,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _node "pact-version" [] -> pure $ Some SStr PactVersion
 
   AST_WithRead node table key bindings schemaNode body -> do
-    EType objTy@SObject{} <- translateType schemaNode
-    Some SStr key'        <- translateNode key
-    tid                   <- tagRead node $ ESchema objTy
+    EType objTy@(SObject schema) <- translateType schemaNode
+    Some SStr key'               <- translateNode key
+    tid                          <- tagRead node $ ESchema schema
     let readT = Some objTy $
           Read objTy tid (TableName (T.unpack table)) key'
     withNodeContext node $ translateObjBinding bindings objTy body readT
@@ -942,25 +942,41 @@ translateNode astNode = withAstContext astNode $ case astNode of
           "Unexpected type for seconds in add-time " ++ show ty
 
   AST_Read node table key -> do
-    Some SStr key'        <- translateNode key
-    EType objTy@SObject{} <- translateType node
-    tid                   <- tagRead node $ ESchema objTy
+    Some SStr key'               <- translateNode key
+    EType objTy@(SObject schema) <- translateType node
+    tid                          <- tagRead node $ ESchema schema
     pure $ Some objTy $ Read objTy tid (TableName (T.unpack table)) key'
 
---   error "TODO"
---   -- Note: this won't match if the columns are not a list literal
---   AST_ReadCols node table key columns -> do
---     Some SStr key' <- translateNode key
---     (Schema fields) <- translateType node
---     columns' <- fmap Set.fromList $ for columns $ \case
---       AST_Lit (LString col) -> pure col
---       bad                   -> throwError' (NonStaticColumns bad)
---     let schema = Schema $
---           Map.filterWithKey (\k _ -> k `Set.member` columns') fields
+  -- Note: this won't match if the columns are not a list literal
+  AST_ReadCols node table key columns -> do
+    Some SStr key' <- translateNode key
 
---     tid <- tagRead node schema
---     pure $ Some (mkSObject schema) $
---       Read tid (TableName (T.unpack table)) schema key'
+    -- this object type contains all the fields in the schema
+    EType tableObjTy@(SObject tableSchema) <- translateType node
+
+    litColumns <- for columns $ \case
+      AST_Lit (LString col) -> pure $ T.unpack col
+      bad                   -> throwError' $ NonStaticColumns bad
+
+    let columnSet = Set.fromList litColumns
+
+        -- the filtered schema contains only the columns we want
+        eFilteredSchema = foldrSingList
+          (ESchema SNil')
+          (\k ty (ESchema subSchema) ->
+            if symbolVal k `Set.member` columnSet
+            then ESchema $ SCons' k ty subSchema
+            else ESchema subSchema)
+          tableSchema
+
+    case eFilteredSchema of
+      ESchema filteredSchema -> do
+        let filteredObjTy = mkSObject filteredSchema
+        tid <- tagRead node $ ESchema tableSchema
+        pure $ Some filteredObjTy $
+          CoreTerm $ ObjTake tableObjTy
+            (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> litColumns)))
+            (Read tableObjTy tid (TableName (T.unpack table)) key')
 
   AST_At node index obj -> do
     obj'     <- translateNode obj
@@ -1040,7 +1056,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some objTy@SObject{} obj -> case retTy of
         SObject{} -> do
           Some (SList SStr) keys <- translateNode numOrKeys
-          pure $ Some retTy $ CoreTerm $ ObjDrop objTy keys obj
+          pure $ Some retTy $ CoreTerm $ ObjTake objTy keys obj
         _ -> throwError' $ TypeError node
       _ -> throwError' $ TypeError node
 
@@ -1136,17 +1152,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SBool $ CoreTerm $ (if name == "and?" then AndQ else OrQ)
       aTy' (Open fvid fvarName f') (Open gvid gvarName g') a'
 
-  -- AST_NFun _ SWhere [ field, fun, obj ] -> do
-  --   Some SStr field' <- translateNode field
+  AST_NFun _ SWhere [ field, fun, obj ] -> do
+    Some SStr field' <- translateNode field
 
---     expectNoFreeVars
---     Some SBool fun' <- translateNode fun
---     (vid, varName, EType freeTy) <- captureOneFreeVar
+    expectNoFreeVars
+    Some SBool fun' <- translateNode fun
+    (vid, varName, EType freeTy) <- captureOneFreeVar
 
---     Some (mkSObject objTy) obj' <- translateNode obj
+    Some objTy@SObject{} obj' <- translateNode obj
 
---     pure $ Some SBool $ CoreTerm $
---       Where objTy freeTy field' (Open vid varName fun') obj'
+    pure $ Some SBool $ CoreTerm $
+      Where objTy freeTy field' (Open vid varName fun') obj'
 
   AST_NFun _ STypeof [tm] -> do
     Some ty tm' <- translateNode tm

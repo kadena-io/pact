@@ -2883,3 +2883,39 @@ spec = describe "analyze" $ do
   --           (format-time "%j%V%l\246806\941262\743680\111256\291942\925764%u%M\413482\881382\334334\465271\899033\560560\47211\75894\501994\417096%w%r\507953\1007703\1111496\1088522\37264\325569\357465\769605\960665\527873\218746\570536\389358\202229\870795%l\476745\322505\570838\545020\965973\1052968\868090\746731\25721\233682\1055404\91996\51906\278110\1104222\629147\1033543\1083315\318365\449369\186461\884415\293431\257589\601947\971770\880368\881194\497135\354885%V%V" (parse-time "" "")))
   --         |]
   --   expectVerified code
+
+  describe "read columns" $ do
+    it "read after write" $ do
+      pendingWith "partial row typechecking (#360)"
+      -- let code =
+      --       [text|
+      --         (defschema token-row
+      --           name:string
+      --           balance:integer)
+      --         (deftable tokens:{token-row})
+
+      --         (defun test:bool ()
+      --           (write tokens 'joel { 'name: 'joel, 'balance: 5 })
+      --           (let ((joel (read tokens 'joel ['balance])))
+      --             (enforce (= (at 'balance joel) 5) "balance is 5")))
+      --       |]
+
+      -- expectPass code $ Valid Success'
+
+    it "only includes the specified columns" $ do
+      pendingWith "partial row typechecking (#360)"
+      -- We read only the name column from the database then try to read
+      -- balance
+      -- let code =
+      --       [text|
+      --         (defschema token-row
+      --           name:string
+      --           balance:integer)
+      --         (deftable tokens:{token-row})
+
+      --         (defun test:integer ()
+      --           (let ((joel (read tokens 'joel ['name])))
+      --             (at ('balance joel))))
+      --       |]
+
+      -- expectPass code $ Valid Abort'
