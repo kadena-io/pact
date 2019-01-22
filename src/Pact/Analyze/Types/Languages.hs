@@ -1264,12 +1264,6 @@ data Term (a :: Ty) where
   MkKsRefGuard :: Term 'TyStr            -> Term 'TyGuard
   GuardPasses  :: TagId -> Term 'TyGuard -> Term 'TyBool
 
-  -- Keyset access
-  --
-  -- NOTE: this will be removed. see Pact.Analyze.Eval.Term matching on this.
-  --
-  NameAuthorized :: TagId -> Term 'TyStr -> Term 'TyBool
-
   -- Table access
   Read
     :: SingTy ('TyObject m)
@@ -1327,11 +1321,6 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 a
   GuardPasses a b ->
       showString "GuardPasses "
-    . showsPrec 11 a
-    . showChar ' '
-    . showsPrec 11 b
-  NameAuthorized a b ->
-      showString "NameAuthorized "
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
@@ -1421,15 +1410,12 @@ userShowTerm ty p = \case
     ]
 
   --
-  -- TODO: perhaps track whether -guard or -keyset was used for these?
+  -- TODO: perhaps track whether -guard or -keyset was used for this?
   --
   Enforce _ (GuardPasses _ x)    -> parenList ["enforce-guard", userShow x]
-  Enforce _ (NameAuthorized _ x) -> parenList ["enforce-guard", userShow x]
   Enforce _ x                    -> parenList ["enforce", userShow x]
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
-  NameAuthorized _ _
-    -> error "NameAuthorized should only appear inside of an Enforce"
 
   Read _ _ tab x       -> parenList ["read", userShow tab, userShow x]
   Write ty' _ _ tab x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty' y]
@@ -1464,8 +1450,6 @@ eqTerm _ty (ReadDecimal a) (ReadDecimal b)
 eqTerm _ty (ReadInteger a) (ReadInteger b)
   = a == b
 eqTerm _ty (GuardPasses a1 b1) (GuardPasses a2 b2)
-  = a1 == a2 && b1 == b2
-eqTerm _ty (NameAuthorized a1 b1) (NameAuthorized a2 b2)
   = a1 == a2 && b1 == b2
 eqTerm _ty (Read _ a1 b1 c1) (Read _ a2 b2 c2)
   = a1 == a2 && b1 == b2 && c1 == c2

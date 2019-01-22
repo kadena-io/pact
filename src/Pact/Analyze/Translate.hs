@@ -581,7 +581,7 @@ translateNamedGuard :: AST Node -> TranslateM ETerm
 translateNamedGuard strA = do
   Some SStr strT <- translateNode strA
   tid <- tagGuard $ strA ^. aNode
-  return $ Some SBool $ Enforce Nothing $ NameAuthorized tid strT
+  return $ Some SBool $ Enforce Nothing $ GuardPasses tid $ MkKsRefGuard strT
 
 translateGuard :: AST Node -> TranslateM ETerm
 translateGuard guardA = do

@@ -479,28 +479,6 @@ evalTerm = \case
     tagGuard tid guard whetherPasses
     pure whetherPasses
 
-  NameAuthorized _tid str -> do
-      sRn <- symRegistryName <$> evalTerm str
-      -- ks <- resolveKeySet sRn
-      authorized <- namedGuardPasses sRn
-
-      --
-      -- TODO: naively we want to switch this call to `tagGuard`, but instead
-      -- of introducing a guard here so that we could call that, the cleanest
-      -- path is to add keyset-ref-guard support, change translation for
-      --
-      --     (enforce-keyset "str")
-      --
-      -- to desugar to
-      --
-      --     (enforce-guard (keyset-ref-guard "str"))
-      --
-      -- and remove this notion of `NameAuthorized`. in the mean time, we don't
-      -- tag here.
-
-      -- tagAuth tid ks authorized
-      pure authorized
-
   PactVersion -> pure $ literalS $ Str $ T.unpack pactVersion
 
   Format formatStr args -> do
