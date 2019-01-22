@@ -1261,7 +1261,8 @@ data Term (a :: Ty) where
   -- TODO: ReadMsg
 
   -- Guards
-  GuardPasses :: TagId -> Term 'TyGuard -> Term 'TyBool
+  MkKsRefGuard :: Term 'TyStr            -> Term 'TyGuard
+  GuardPasses  :: TagId -> Term 'TyGuard -> Term 'TyBool
 
   -- Keyset access
   --
@@ -1321,6 +1322,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showChar ' '
     . showsPrec 11 b
 
+  MkKsRefGuard a ->
+      showString "MkKsRefGuard "
+    . showsPrec 11 a
   GuardPasses a b ->
       showString "GuardPasses "
     . showsPrec 11 a
@@ -1438,6 +1442,7 @@ userShowTerm ty p = \case
   ReadKeySet name      -> parenList ["read-keyset", userShow name]
   ReadDecimal name     -> parenList ["read-decimal", userShow name]
   ReadInteger name     -> parenList ["read-integer", userShow name]
+  MkKsRefGuard name    -> parenList ["keyset-ref-guard", userShow name]
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2

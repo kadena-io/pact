@@ -742,6 +742,15 @@ spec = describe "analyze" $ do
       Inj (RowWrite "tokens" (PVar 1 "row")) .=>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
+  describe "keyset-ref-guard" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              @model [(property (authorized-by "foo"))]
+              (enforce-guard (keyset-ref-guard "foo")))
+          |]
+    expectVerified code
+
   describe "call-by-value semantics for inlining" $ do
     let code =
           [text|

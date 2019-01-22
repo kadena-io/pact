@@ -450,9 +450,15 @@ evalTerm = \case
       pure res
 
   -- Read values from tx metadata
-  ReadKeySet  str -> readKeySet  =<< evalTerm str
-  ReadDecimal str -> readDecimal =<< evalTerm str
-  ReadInteger str -> readInteger =<< evalTerm str
+  ReadKeySet  nameT -> readKeySet  =<< evalTerm nameT
+  ReadDecimal nameT -> readDecimal =<< evalTerm nameT
+  ReadInteger nameT -> readInteger =<< evalTerm nameT
+
+  --
+  -- If in the future Pact is able to store guards other than keysets in the
+  -- registry, our approach will work for that generally.
+  --
+  MkKsRefGuard nameT -> resolveGuard =<< symRegistryName <$> evalTerm nameT
 
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT
@@ -494,10 +500,6 @@ evalTerm = \case
 
       -- tagAuth tid ks authorized
       pure authorized
-
-    where
-      symRegistryName :: S Str -> S RegistryName
-      symRegistryName = unsafeCoerceS
 
   PactVersion -> pure $ literalS $ Str $ T.unpack pactVersion
 

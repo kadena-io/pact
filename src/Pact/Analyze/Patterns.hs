@@ -75,6 +75,10 @@ pattern AST_If node cond then' else' <-
 pattern AST_StringLit :: forall a. Text -> AST a
 pattern AST_StringLit str <- AST_Lit (LString str)
 
+pattern AST_KeysetRefGuard :: forall a. AST a -> AST a
+pattern AST_KeysetRefGuard name <-
+  App _node (NativeFunc "keyset-ref-guard") [name]
+
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
   App node (NativeFunc "enforce") (cond:_rest)

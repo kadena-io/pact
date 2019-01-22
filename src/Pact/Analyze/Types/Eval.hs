@@ -577,6 +577,9 @@ symArrayAt (S _ symKey) = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
+symRegistryName :: S Str -> S RegistryName
+symRegistryName = unsafeCoerceS
+
 -- | Resolve a named guard from the registry (not tx metadata)
 resolveGuard
   :: (MonadReader r m, HasAnalyzeEnv r)
