@@ -278,19 +278,6 @@ instance (KnownSymbol k, SingI v, Typeable v, SingI kvs)
   => SingI (('(k, v) ': kvs) :: [(Symbol, Ty)]) where
   sing = SCons' SSymbol sing sing
 
--- type family IsSimple (ty :: Ty) :: Bool where
---   IsSimple ('TyList _)   = 'False
---   IsSimple ('TyObject _) = 'False
---   IsSimple _             = 'True
-
--- type family IsList (ty :: Ty) :: Bool where
---   IsList ('TyList _) = 'True
---   IsList _           = 'False
-
--- type family IsObject (ty :: Ty) :: Bool where
---   IsObject ('TyObject _) = 'True
---   IsObject _             = 'False
-
 type (a :< b) = (a, b)
 
 pattern (:<) :: a -> b -> (a, b)
