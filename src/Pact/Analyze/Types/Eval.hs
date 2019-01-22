@@ -449,7 +449,7 @@ succeeds = latticeState.lasSucceeds._Wrapped'.sbv2S
 -- graph formed by reachable edges, we now have 2 components.
 --
 -- We prefer to give a single-component reachable graph to model reporting, and
--- let that code consider 'TraceAssert' and 'TraceAuth' 'TraceEvent's on its
+-- let that code consider 'TraceAssert' and 'TraceGuard 'TraceEvent's on its
 -- own to determine where linear execution aborts for a concrete program trace.
 --
 purelyReachable :: Lens' (AnalyzeState a) (S Bool)

@@ -131,7 +131,7 @@ allocModelTags argsMap locatedTm graph = ModelTags
 
     allocGEs :: Alloc (Map TagId (Located GuardEnforcement))
     allocGEs = fmap Map.fromList $
-      for (toListOf (traverse._TraceAuth._2) events) $ \(Located info tid) ->
+      for (toListOf (traverse._TraceGuard._2) events) $ \(Located info tid) ->
         (tid,) . Located info <$>
           (GuardEnforcement <$> allocS @'TyGuard <*> allocSbv @'TyBool)
 

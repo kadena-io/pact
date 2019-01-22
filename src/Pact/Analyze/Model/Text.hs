@@ -164,10 +164,7 @@ showEvent ksProvs tags event = do
         pure [display mtWrites tid (showWrite writeType)]
       TraceAssert recov (_located -> tid) ->
         pure [display mtAsserts tid (showAssert recov)]
-      --
-      -- TODO: rename TraceAuth
-      --
-      TraceAuth recov (_located -> tid) ->
+      TraceGuard recov (_located -> tid) ->
         pure [display mtGuardEnforcements tid (showGE recov $ tid `Map.lookup` ksProvs)]
       TraceSubpathStart _ ->
         pure [] -- not shown to end-users

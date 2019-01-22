@@ -79,10 +79,7 @@ data TraceEvent
   = TraceRead ESchema (Located TagId)
   | TraceWrite WriteType ESchema (Located TagId)
   | TraceAssert Recoverability (Located TagId)
-  --
-  -- TODO: rename this:
-  --
-  | TraceAuth Recoverability (Located TagId)
+  | TraceGuard Recoverability (Located TagId)
   | TraceSubpathStart Path
   | TracePushScope Natural ScopeType [Located Binding]
   | TracePopScope Natural ScopeType TagId EType

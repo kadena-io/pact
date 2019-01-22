@@ -332,11 +332,11 @@ tagAssert node = do
   emit $ TraceAssert recov $ Located (nodeInfo node) tid
   pure tid
 
-tagAuth :: Node -> TranslateM TagId
-tagAuth node = do
+tagGuard :: Node -> TranslateM TagId
+tagGuard node = do
   tid <- genTagId
   recov <- view teRecoverability
-  emit $ TraceAuth recov $ Located (nodeInfo node) tid
+  emit $ TraceGuard recov $ Located (nodeInfo node) tid
   pure tid
 
 -- Note: uses left-biased union to prefer new vars
@@ -580,13 +580,13 @@ pattern EmptyList ty = CoreTerm (LiteralList ty [])
 translateNamedGuard :: AST Node -> TranslateM ETerm
 translateNamedGuard strA = do
   Some SStr strT <- translateNode strA
-  tid <- tagAuth $ strA ^. aNode
+  tid <- tagGuard $ strA ^. aNode
   return $ Some SBool $ Enforce Nothing $ NameAuthorized tid strT
 
 translateGuard :: AST Node -> TranslateM ETerm
 translateGuard guardA = do
   Some SGuard guardT <- translateNode guardA
-  tid <- tagAuth $ guardA ^. aNode
+  tid <- tagGuard $ guardA ^. aNode
   return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
 
 translateNode :: AST Node -> TranslateM ETerm

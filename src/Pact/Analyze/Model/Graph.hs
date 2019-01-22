@@ -73,7 +73,7 @@ linearize model = go traceEvents
         in case event of
              TraceAssert recov (_located -> tid) ->
                handleEnforce recov $ mtAsserts.at tid._Just.located
-             TraceAuth recov (_located -> tid) ->
+             TraceGuard recov (_located -> tid) ->
                handleEnforce recov $
                  mtGuardEnforcements.at tid._Just.located.geSuccess
              TraceRead _schema (Located _i tid) ->
@@ -88,7 +88,8 @@ linearize model = go traceEvents
     -- over monotonically increasing 'Vertex's across the execution graph
     -- yields a topological sort. Additionally the 'TraceEvent's on each 'Edge'
     -- are ordered, so we now have a linear trace of events. But we still have
-    -- the possibility of 'TraceAssert' and 'TraceAuth' affecting control flow.
+    -- the possibility of 'TraceAssert' and 'TraceGuard' affecting control
+    -- flow.
     traceEvents :: [TraceEvent]
     traceEvents = concat $ restrictKeys edgeEvents (reachableEdges model)
 
