@@ -239,6 +239,10 @@ timeIso = PactIso $ iso mkTime unMkTime
     unMkTime :: Time -> UTCTime
     unMkTime time = toEnum 0 .+^ view (from microseconds) time
 
+isGuardTy :: Pact.Type v -> Bool
+isGuardTy (Pact.TyPrim (Pact.TyGuard _)) = True
+isGuardTy _                              = False
+
 data LogicalOp
   = AndOp -- ^ Conjunction
   | OrOp  -- ^ Disjunction

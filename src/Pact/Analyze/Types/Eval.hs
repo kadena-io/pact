@@ -341,9 +341,6 @@ mkInitialAnalyzeState tables = AnalyzeState
     cellsEnforced   = mkTableColumnMap isGuardTy (mkSFunArray (const sFalse))
     cellsWritten    = mkTableColumnMap (const True) (mkSFunArray (const sFalse))
 
-    isGuardTy (TyPrim (Pact.TyGuard _)) = True
-    isGuardTy _                         = False
-
     mkTableColumnMap
       :: (Pact.Type Pact.UserType -> Bool) -- ^ Include this column in the mapping?
       -> a                                 -- ^ Default value

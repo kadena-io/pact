@@ -22,7 +22,7 @@ import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, use, view, zoom, (%=), (%~),
                                              (+~), (.=), (.~), (<>~),
-                                             (?=), (^.), (^?))
+                                             (?=), (^.))
 import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -664,19 +664,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
     tid <- tagAssert $ cond ^. aNode
     pure $ Some SBool $ Enforce (Just tid) condTerm
 
-  AST_EnforceKeyset ksA
-    | ksA ^? aNode.aTy == Just (TyPrim Pact.TyString)
-    -> do
-      Some SStr ksnT <- translateNode ksA
-      tid <- tagAuth $ ksA ^. aNode
-      return $ Some SBool $ Enforce Nothing $ NameAuthorized tid ksnT
+  AST_EnforceKeyset_Str ksA -> do
+    Some SStr ksnT <- translateNode ksA
+    tid <- tagAuth $ ksA ^. aNode
+    return $ Some SBool $ Enforce Nothing $ NameAuthorized tid ksnT
 
-  AST_EnforceKeyset ksA
-    | Just (TyPrim (Pact.TyGuard _)) <- ksA ^? aNode.aTy
-    -> do
-      Some SGuard ksT <- translateNode ksA
-      tid <- tagAuth $ ksA ^. aNode
-      return $ Some SBool $ Enforce Nothing $ GuardPasses tid ksT
+  AST_EnforceKeyset_Guard ksA -> do
+    Some SGuard ksT <- translateNode ksA
+    tid <- tagAuth $ ksA ^. aNode
+    return $ Some SBool $ Enforce Nothing $ GuardPasses tid ksT
 
   AST_EnforceOne node [] -> do
     -- we just emit an event equivalent to one for `(enforce false)` in this

@@ -5,20 +5,23 @@
 
 module Pact.Analyze.Patterns where
 
+import           Control.Lens         ((^?))
 import           Data.Maybe           (isJust)
 import           Data.Text            (Text)
 
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (Literal (LString))
-import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
+import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim,
+                                            Step, Table),
                                        AstBindType (..), Fun (FDefun, FNative),
                                        Named, Node, PrimValue (PrimLit),
-                                       Special (SBinding))
+                                       Special (SBinding), aNode, aTy)
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature
-import           Pact.Analyze.Types   (arithOpP, comparisonOpP, logicalOpP,
-                                       roundingLikeOpP, unaryArithOpP)
+import           Pact.Analyze.Types   (arithOpP, comparisonOpP, isGuardTy,
+                                       logicalOpP, roundingLikeOpP,
+                                       unaryArithOpP)
 
 ofBasicOp :: Text -> Maybe Text
 ofBasicOp s = if isBasicOp then Just s else Nothing
@@ -92,9 +95,22 @@ pattern AST_ReadMsg :: forall a. AST a -> AST a
 pattern AST_ReadMsg name <-
   App _node (NativeFunc "read-msg") [name]
 
-pattern AST_EnforceKeyset :: forall a. AST a -> AST a
-pattern AST_EnforceKeyset ks <-
-  App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object
+typeSatisfying :: (Lang.Type TC.UserType -> Bool) -> AST Node -> Maybe (AST Node)
+typeSatisfying test x = case x ^? aNode.aTy of
+  Just ty | test ty -> Just x
+  _                 -> Nothing
+
+ofType :: Lang.Type TC.UserType -> AST Node -> Maybe (AST Node)
+ofType ty = typeSatisfying (== ty)
+
+pattern AST_EnforceKeyset_Str :: AST Node -> AST Node
+pattern AST_EnforceKeyset_Str str <-
+  App _node (NativeFunc "enforce-keyset")
+    [ofType (Lang.TyPrim Lang.TyString) -> Just str]
+
+pattern AST_EnforceKeyset_Guard :: AST Node -> AST Node
+pattern AST_EnforceKeyset_Guard g <-
+  App _node (NativeFunc "enforce-keyset") [typeSatisfying isGuardTy -> Just g]
 
 pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
 pattern AST_EnforceOne node enforces <-
