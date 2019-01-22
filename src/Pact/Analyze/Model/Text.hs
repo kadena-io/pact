@@ -130,11 +130,11 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
       Just False -> showFailure recov <> " to satisfy"
 
     guard :: Text
-    guard = "guard " <> showS sg
+    guard = "guard"
 
     guardDescription = case mProv of
       Nothing ->
-        "unknown " <> guard
+        "unknown " <> guard <> " " <> showS sg
       Just (FromRow _) ->
         error "impossible: FromRow provenance on guard"
       Just (FromCell (OriginatingCell tn cn sRk _)) ->
