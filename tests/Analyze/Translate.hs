@@ -2,6 +2,10 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+-- set this to a low number because it will fail anyway on `toPactTm` and it
+-- might as well be quick (default is 2000000)
+{-# options_ghc -fmax-pmcheck-iterations=10000 #-}
 module Analyze.Translate where
 
 import           Control.Lens              hiding (op, (...))
