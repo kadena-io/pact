@@ -84,9 +84,6 @@ data AnalyzeEnv
     { _aeScope          :: !(Map VarId AVal)               -- used as a stack
     , _aeRegistryGuards :: !(SFunArray RegistryName Guard) -- read-only
     , _aeGuardPasses    :: !(SFunArray Guard Bool)         -- read-only
-    --
-    -- TODO: change this to use Str keys
-    --
     , _aeTxKeySets      :: !(SFunArray Str Guard)          -- read-only
     , _aeTxDecimals     :: !(SFunArray Str Decimal)        -- read-only
     , _aeTxIntegers     :: !(SFunArray Str Integer)        -- read-only
