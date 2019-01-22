@@ -168,7 +168,7 @@ saturateModel =
     traverseOf (modelTags.mtResult._2.located)                   fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)                     fetchSbv    >=>
     traverseOf (modelTags.mtReturns.traversed)                   fetchTVal   >=>
-    traverseOf (modelKsProvs.traversed)                          fetchProv
+    traverseOf (modelGuardProvs.traversed)                       fetchProv
 
   where
     fetchTVal :: TVal -> SBV.Query TVal

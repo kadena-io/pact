@@ -214,4 +214,4 @@ showModel model =
   where
     ExecutionTrace traceEvents mRetval = linearize model
 
-    showEvent' = showEvent (model ^. modelKsProvs) (model ^. modelTags)
+    showEvent' = showEvent (model ^. modelGuardProvs) (model ^. modelTags)

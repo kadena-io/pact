@@ -150,10 +150,7 @@ data Model (c :: Concreteness)
     , _modelTags           :: ModelTags c
     -- ^ free values to be constrained to equal values during analysis;
     -- allocated post-translation.
-    --
-    -- TODO: rename this:
-    --
-    , _modelKsProvs        :: Map TagId Provenance
+    , _modelGuardProvs     :: Map TagId Provenance
     -- ^ keyset 'Provenance's from analysis
     , _modelExecutionGraph :: ExecutionGraph
     -- ^ execution graph corresponding to the program for reporting linearized
