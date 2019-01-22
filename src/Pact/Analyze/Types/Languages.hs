@@ -342,13 +342,10 @@ pattern KeySetComparison op a b = Comparison SKeySet op a b
 
 singEqTmList
   :: IsTerm tm => SingTy a -> tm ('TyList a) -> tm ('TyList a) -> Bool
-singEqTmList ty t1 t2 = singEqTm' (SList ty) t1 t2
+singEqTmList ty t1 t2 = singEqTm (SList ty) t1 t2
 
 singEqListTm :: IsTerm tm => SingTy a -> [tm a] -> [tm a] -> Bool
-singEqListTm ty t1 t2 = and $ zipWith (singEqTm' ty) t1 t2
-
-singEqTm :: IsTerm tm => SingTy a -> tm a -> tm a -> Bool
-singEqTm = singEqTm'
+singEqListTm ty t1 t2 = and $ zipWith (singEqTm ty) t1 t2
 
 singEqObject
   :: IsTerm tm
@@ -391,30 +388,24 @@ singUserShowObject _ _ = error "malformed object"
 
 singEqOpen :: IsTerm tm => SingTy a -> Open x tm a -> Open x tm a -> Bool
 singEqOpen ty (Open v1 nm1 a1) (Open v2 nm2 a2)
-  = singEqTm' ty a1 a2 && v1 == v2 && nm1 == nm2
+  = singEqTm ty a1 a2 && v1 == v2 && nm1 == nm2
 
 singUserShowTmList :: IsTerm tm => SingTy a -> tm ('TyList a) -> Text
-singUserShowTmList ty tm = singUserShowTm' (SList ty) tm
+singUserShowTmList ty tm = singUserShowTm (SList ty) tm
 
 singUserShowListTm :: IsTerm tm => SingTy a -> [tm a] -> Text
 singUserShowListTm ty tms =
   "[" <> Text.intercalate ", " (singUserShowTm ty <$> tms) <> "]"
 
-singUserShowTm :: IsTerm tm => SingTy a -> tm a -> Text
-singUserShowTm = singUserShowTm'
-
 singUserShowOpen :: IsTerm tm => SingTy a -> Open x tm a -> Text
 singUserShowOpen ty (Open _ nm a)
-  = parenList [ "lambda", nm, singUserShowTm' ty a ]
+  = parenList [ "lambda", nm, singUserShowTm ty a ]
 
 singShowsTmList :: IsTerm tm => SingTy a -> Int -> tm ('TyList a) -> ShowS
-singShowsTmList ty = singShowsTm' (SList ty)
+singShowsTmList ty = singShowsTm (SList ty)
 
 singShowsListTm :: IsTerm tm => SingTy a -> Int -> [tm a] -> ShowS
 singShowsListTm ty _ = showListWith (singShowsTm ty 0)
-
-singShowsTm :: IsTerm tm => SingTy a -> Int -> tm a -> ShowS
-singShowsTm = singShowsTm'
 
 singShowsOpen :: IsTerm tm => SingTy a -> Open x tm a -> ShowS
 singShowsOpen ty (Open v nm a) = showParen True $
@@ -422,7 +413,7 @@ singShowsOpen ty (Open v nm a) = showParen True $
   . showChar ' '
   . showsPrec 11 nm
   . showChar ' '
-  . singShowsTm' ty 11 a
+  . singShowsTm ty 11 a
 
 eqNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Numerical tm a -> Bool
 eqNumerical _ty (DecArithOp op1 a1 b1) (DecArithOp op2 a2 b2)
@@ -1434,7 +1425,7 @@ userShowTerm ty p = \case
   ReadInteger name     -> parenList ["read-integer", userShow name]
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
-eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm' ty a1 a2
+eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2
 eqTerm ty (IfThenElse _ty1 a1 (b1, c1) (d1, e1))
           (IfThenElse _ty2 a2 (b2, c2) (d2, e2))
   = eqTm a1 a2 && b1 == b2 && singEqTm ty c1 c2 && d1 == d2 && singEqTm ty e1 e2
@@ -1545,23 +1536,23 @@ instance SingI ty => Eq (Invariant ty) where
   (==) = singEqTm sing
 
 instance IsTerm Term where
-  singEqTm'          = eqTerm
-  singShowsTm'       = showsTerm
-  singUserShowTm' ty = userShowTerm ty 0
+  singEqTm          = eqTerm
+  singShowsTm       = showsTerm
+  singUserShowTm ty = userShowTerm ty 0
 
 instance IsTerm Prop where
-  singEqTm'          = eqProp
-  singShowsTm'       = showsProp
-  singUserShowTm' ty = \case
+  singEqTm          = eqProp
+  singShowsTm       = showsProp
+  singUserShowTm ty = \case
     PropSpecific tm -> userShowPrec 0 tm
-    CoreProp     tm -> singUserShowTm' ty tm
+    CoreProp     tm -> singUserShowTm ty tm
 
 instance IsTerm Invariant where
-  singEqTm' ty (CoreInvariant tm1) (CoreInvariant tm2) = singEqTm' ty tm1 tm2
-  singShowsTm' ty p (CoreInvariant tm)                 = singShowsTm' ty p tm
-  singUserShowTm' ty (CoreInvariant tm)                = singUserShowTm' ty tm
+  singEqTm ty (CoreInvariant tm1) (CoreInvariant tm2) = singEqTm ty tm1 tm2
+  singShowsTm ty p (CoreInvariant tm)                 = singShowsTm ty p tm
+  singUserShowTm ty (CoreInvariant tm)                = singUserShowTm ty tm
 
 instance IsTerm tm => IsTerm (Core tm) where
-  singEqTm'          = eqCoreTm
-  singShowsTm'       = showsPrecCore
-  singUserShowTm' ty = userShowCore ty 0
+  singEqTm          = eqCoreTm
+  singShowsTm       = showsPrecCore
+  singUserShowTm ty = userShowCore ty 0

@@ -83,21 +83,21 @@ import           Pact.Analyze.Util            (Boolean(..))
 
 
 class IsTerm tm where
-  singEqTm'       :: SingTy ty -> tm ty -> tm ty -> Bool
-  singShowsTm'    :: SingTy ty -> Int   -> tm ty -> ShowS
-  singUserShowTm' :: SingTy ty ->          tm ty -> Text
+  singEqTm       :: SingTy ty -> tm ty -> tm ty -> Bool
+  singShowsTm    :: SingTy ty -> Int   -> tm ty -> ShowS
+  singUserShowTm :: SingTy ty ->          tm ty -> Text
 
 eqTm :: (SingI ty, IsTerm tm) => tm ty -> tm ty -> Bool
-eqTm = singEqTm' sing
+eqTm = singEqTm sing
 
 showsTm :: (SingI ty, IsTerm tm) => Int -> tm ty -> ShowS
-showsTm = singShowsTm' sing
+showsTm = singShowsTm sing
 
 showTm :: (SingI ty, IsTerm tm) => tm ty -> String
 showTm tm = showsTm 0 tm ""
 
 userShowTm :: (SingI ty, IsTerm tm) => tm ty -> Text
-userShowTm = singUserShowTm' sing
+userShowTm = singUserShowTm sing
 
 data Located a
   = Located
@@ -118,7 +118,7 @@ data Existential (tm :: Ty -> Type) where
 instance IsTerm tm => Eq (Existential tm) where
   Some tya a == Some tyb b = case singEq tya tyb of
     Nothing   -> False
-    Just Refl -> singEqTm' tya a b
+    Just Refl -> singEqTm tya a b
 
 instance IsTerm tm => Show (Existential tm) where
   showsPrec p (Some ty tm)
@@ -126,10 +126,10 @@ instance IsTerm tm => Show (Existential tm) where
     $ showString "Some "
     . showsPrec 11 ty
     . showChar ' '
-    . singShowsTm' ty 11 tm
+    . singShowsTm ty 11 tm
 
 instance IsTerm tm => UserShow (Existential tm) where
-  userShowPrec _ (Some ty tm) = singUserShowTm' ty tm
+  userShowPrec _ (Some ty tm) = singUserShowTm ty tm
 
 transformExistential
   :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
@@ -472,7 +472,7 @@ instance UserShow (tm ('TyObject m)) => UserShow (Object tm m) where
       userShowVals :: HList (Column tm) m' -> [Text]
       userShowVals SNil = []
       userShowVals (SCons k (Column ty v) m')
-        = T.pack (symbolVal k) <> " := " <> singUserShowTm' ty v : userShowVals m'
+        = T.pack (symbolVal k) <> " := " <> singUserShowTm ty v : userShowVals m'
 
 instance Show (tm ('TyObject m)) => Show (Object tm m) where
   showsPrec p (Object vals) = showParen (p > 10) $
@@ -483,7 +483,7 @@ instance Show (tm ('TyObject m)) => Show (Object tm m) where
               showString "SCons "
             . showString (symbolVal k)
             . showChar ' '
-            . singShowsTm' singv 11 v
+            . singShowsTm singv 11 v
             . showChar ' '
             . showsVals m'
 
@@ -493,7 +493,7 @@ instance Eq (tm ('TyObject m)) => Eq (Object tm m) where
     eq SNil SNil = True
     eq (SCons k1 (Column singv v1) m1')
        (SCons k2 (Column _     v2) m2')
-      = eqSymB k1 k2 && singEqTm' singv v1 v2 && eq m1' m2'
+      = eqSymB k1 k2 && singEqTm singv v1 v2 && eq m1' m2'
 
 data ESchema where
   ESchema :: SingTy ('TyObject m) -> ESchema
@@ -763,9 +763,9 @@ instance SMTValue (Concrete ty) => SMTValue (AConcrete ty) where
   sexprToVal = fmap AConcrete . sexprToVal
 
 instance IsTerm AConcrete where
-  singEqTm' ty (AConcrete a) (AConcrete b) = withEq ty $ a == b
-  singShowsTm' ty p tm = withShow ty $ showsPrec p tm
-  singUserShowTm' ty tm = withUserShow ty $ userShowPrec 0 tm
+  singEqTm ty (AConcrete a) (AConcrete b) = withEq ty $ a == b
+  singShowsTm ty p tm                     = withShow ty $ showsPrec p tm
+  singUserShowTm ty tm                    = withUserShow ty $ userShowPrec 0 tm
 
 instance Ord (Concrete ty) => Ord (AConcrete ty) where
   compare (AConcrete a) (AConcrete b) = compare a b
