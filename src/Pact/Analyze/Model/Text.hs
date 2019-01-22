@@ -146,6 +146,8 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
         guard <> " named " <> showRn sRn
       Just (FromInput (Unmunged arg)) ->
         guard <> " from argument " <> arg
+      Just (FromMetadata sName) ->
+        guard <> " from tx metadata attribute named " <> showS sName
 
 -- TODO: after factoring Location out of TraceEvent, include source locations
 --       in trace

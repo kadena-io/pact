@@ -600,10 +600,7 @@ readKeySet
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S Str
   -> m (S Guard)
---
--- TODO: add provenance for tx metadata (new prov type: FromTx)
---
-readKeySet sStr = fmap sansProv $
+readKeySet sStr = fmap (withProv $ fromMetadata sStr) $
   readArray <$> view txKeySets <*> pure (_sSbv sStr)
 
 -- | Reads a named decimal from tx metadata
@@ -611,19 +608,13 @@ readDecimal
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S Str
   -> m (S Decimal)
---
--- TODO: add provenance for tx metadata
---
-readDecimal sDn = fmap sansProv $
-  readArray <$> view txDecimals <*> pure (_sSbv sDn)
+readDecimal sStr = fmap (withProv $ fromMetadata sStr) $
+  readArray <$> view txDecimals <*> pure (_sSbv sStr)
 
 -- | Reads a named integer from tx metadata
 readInteger
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S Str
   -> m (S Integer)
---
--- TODO: add provenance for tx metadata
---
-readInteger sSn = fmap sansProv $
-  readArray <$> view txIntegers <*> pure (_sSbv sSn)
+readInteger sStr = fmap (withProv $ fromMetadata sStr) $
+  readArray <$> view txIntegers <*> pure (_sSbv sStr)

@@ -315,8 +315,7 @@ data Provenance
   | FromRow      (Map ColumnName OriginatingCell)
   | FromRegistry (S RegistryName)
   | FromInput    Unmunged
-  --
-  -- TODO: add FromTx for data from tx metadata
+  | FromMetadata (S Str)
   --
   -- TODO: in the future, probably have FromYield?
   --
@@ -430,6 +429,9 @@ fromCell tn cn sRk sDirty = FromCell $ OriginatingCell tn cn sRk sDirty
 
 fromRegistry :: S RegistryName -> Provenance
 fromRegistry = FromRegistry
+
+fromMetadata :: S Str -> Provenance
+fromMetadata = FromMetadata
 
 symRowKey :: S Str -> S RowKey
 symRowKey = coerceS
