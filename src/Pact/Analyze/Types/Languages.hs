@@ -1042,7 +1042,7 @@ data PropSpecific (a :: Ty) where
   -- Authorization
 
   -- | Whether a transaction satisfies the named guard in the registry
-  GuardPassed :: KeySetName                                              -> PropSpecific 'TyBool
+  GuardPassed :: RegistryName                                            -> PropSpecific 'TyBool
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
 

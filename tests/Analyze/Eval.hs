@@ -111,7 +111,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       --
       withRegistryGuards = flip (foldr
           (\(k, v) -> aeRegistryGuards
-            %~ writeArray' (literal (KeySetName (T.pack k))) (literal v)))
+            %~ writeArray' (literal (RegistryName (T.pack k))) (literal v)))
         (Map.toList (fmap snd registryKSs))
 
       --

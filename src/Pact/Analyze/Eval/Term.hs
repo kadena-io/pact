@@ -474,9 +474,9 @@ evalTerm = \case
     pure whetherPasses
 
   NameAuthorized _tid str -> do
-      ksn <- symKsName <$> evalTerm str
-      -- ks <- resolveKeySet ksn
-      authorized <- namedGuardPasses ksn
+      sRn <- symRegistryName <$> evalTerm str
+      -- ks <- resolveKeySet sRn
+      authorized <- namedGuardPasses sRn
 
       --
       -- TODO: naively we want to switch this call to `tagGuard`, but instead
@@ -496,8 +496,8 @@ evalTerm = \case
       pure authorized
 
     where
-      symKsName :: S Str -> S KeySetName
-      symKsName = unsafeCoerceS
+      symRegistryName :: S Str -> S RegistryName
+      symRegistryName = unsafeCoerceS
 
   PactVersion -> pure $ literalS $ Str $ T.unpack pactVersion
 

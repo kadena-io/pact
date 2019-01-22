@@ -165,25 +165,25 @@ mkConcreteInteger = SBVI.SBV
                   . CV KUnbounded
                   . CInteger
 
-newtype KeySetName
-  = KeySetName Text
+newtype RegistryName
+  = RegistryName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
 
-instance Show KeySetName where show (KeySetName s) = show s
+instance Show RegistryName where show (RegistryName s) = show s
 
-instance SymVal KeySetName where
+instance SymVal RegistryName where
   mkSymVal = SBVI.genMkSymVar KString
-  literal (KeySetName t) = mkConcreteString $ T.unpack t
-  fromCV = wrappedStringFromCV $ KeySetName . T.pack
+  literal (RegistryName t) = mkConcreteString $ T.unpack t
+  fromCV = wrappedStringFromCV $ RegistryName . T.pack
 
-instance HasKind KeySetName where
+instance HasKind RegistryName where
   kindOf _ = KString
 
-instance SMTValue KeySetName where
-  sexprToVal = fmap (KeySetName . T.pack) . sexprToVal
+instance SMTValue RegistryName where
+  sexprToVal = fmap (RegistryName . T.pack) . sexprToVal
 
-instance UserShow KeySetName where
-  userShowPrec _ (KeySetName name) = "'" <> name
+instance UserShow RegistryName where
+  userShowPrec _ (RegistryName name) = "'" <> name
 
 newtype TableName
   = TableName String
@@ -311,13 +311,10 @@ data OriginatingCell
   deriving (Eq, Show)
 
 data Provenance
-  = FromCell    OriginatingCell
-  | FromRow     (Map ColumnName OriginatingCell)
-  --
-  -- TODO: probably rename FromRegistry
-  --
-  | FromNamedKs (S KeySetName)
-  | FromInput   Unmunged
+  = FromCell     OriginatingCell
+  | FromRow      (Map ColumnName OriginatingCell)
+  | FromRegistry (S RegistryName)
+  | FromInput    Unmunged
   --
   -- TODO: add FromTx for data from tx metadata
   --
@@ -354,10 +351,6 @@ instance EqSymbolic (S a) where
 instance SymVal a => OrdSymbolic (S a) where
   S _ x .< S _ y = x .< y
 
--- We don't care about preserving the provenance value here as we are most
--- interested in tracking `SBV KeySet`s, but really as soon as we apply a
--- transformation to a symbolic value, we are no longer working with the value
--- that was sourced from the database.
 instance Boolean (S Bool) where
   sTrue           = sansProv SBV.sTrue
   sFalse          = sansProv SBV.sFalse
@@ -435,8 +428,8 @@ sbv2S = iso sansProv _sSbv
 fromCell :: TableName -> ColumnName -> S RowKey -> S Bool -> Provenance
 fromCell tn cn sRk sDirty = FromCell $ OriginatingCell tn cn sRk sDirty
 
-fromNamedKs :: S KeySetName -> Provenance
-fromNamedKs = FromNamedKs
+fromRegistry :: S RegistryName -> Provenance
+fromRegistry = FromRegistry
 
 symRowKey :: S Str -> S RowKey
 symRowKey = coerceS

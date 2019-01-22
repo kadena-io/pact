@@ -100,10 +100,10 @@ showDbAccessSuccess successSbv expectPresent = case SBV.unliteral successSbv of
     ExpectPresent    -> "fails because the row was not present"
     ExpectNotPresent -> "fails because the was already present"
 
-showKsn :: S KeySetName -> Text
-showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
-  Nothing               -> "[unknown]"
-  Just (KeySetName ksn) -> "'" <> ksn
+showRn :: S RegistryName -> Text
+showRn sRn = case SBV.unliteral (_sSbv sRn) of
+  Nothing                -> "[unknown]"
+  Just (RegistryName rn) -> "'" <> rn
 
 showFailure :: Recoverability -> Text
 showFailure = \case
@@ -142,8 +142,8 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
           <> userShow tn <> ", "
           <> "'" <> userShow cn <> ", "
           <> showS sRk <> ")"
-      Just (FromNamedKs sKsn) ->
-        guard <> " named " <> showKsn sKsn
+      Just (FromRegistry sRn) ->
+        guard <> " named " <> showRn sRn
       Just (FromInput (Unmunged arg)) ->
         guard <> " from argument " <> arg
 

@@ -81,18 +81,15 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope          :: !(Map VarId AVal)              -- used as a stack
-    --
-    -- TODO: change this to use RegistryName keys (KSN -> RN)
-    --
-    , _aeRegistryGuards :: !(SFunArray KeySetName Guard) -- read-only
-    , _aeGuardPasses    :: !(SFunArray Guard Bool)       -- read-only
+    { _aeScope          :: !(Map VarId AVal)               -- used as a stack
+    , _aeRegistryGuards :: !(SFunArray RegistryName Guard) -- read-only
+    , _aeGuardPasses    :: !(SFunArray Guard Bool)         -- read-only
     --
     -- TODO: change this to use Str keys
     --
-    , _aeTxKeySets      :: !(SFunArray Str Guard)  -- read-only
-    , _aeTxDecimals     :: !(SFunArray Str Decimal)       -- read-only
-    , _aeTxIntegers     :: !(SFunArray Str Integer)       -- read-only
+    , _aeTxKeySets      :: !(SFunArray Str Guard)          -- read-only
+    , _aeTxDecimals     :: !(SFunArray Str Decimal)        -- read-only
+    , _aeTxIntegers     :: !(SFunArray Str Integer)        -- read-only
     , _invariants       :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds      :: !(TableMap (Map Text VarId))
     , _aeModelTags      :: !(ModelTags 'Symbolic)
@@ -406,7 +403,7 @@ class HasAnalyzeEnv a where
   scope :: Lens' a (Map VarId AVal)
   scope = analyzeEnv.aeScope
 
-  registryGuards :: Lens' a (SFunArray KeySetName Guard)
+  registryGuards :: Lens' a (SFunArray RegistryName Guard)
   registryGuards = analyzeEnv.aeRegistryGuards
 
   guardPasses :: Lens' a (SFunArray Guard Bool)
@@ -586,17 +583,17 @@ symArrayAt (S _ symKey) = lens getter setter
 -- | Resolve a named guard from the registry (not tx metadata)
 resolveGuard
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S KeySetName
+  => S RegistryName
   -> m (S Guard)
-resolveGuard sn = fmap (withProv $ fromNamedKs sn) $
-  readArray <$> view registryGuards <*> pure (_sSbv sn)
+resolveGuard sRn = fmap (withProv $ fromRegistry sRn) $
+  readArray <$> view registryGuards <*> pure (_sSbv sRn)
 
 namedGuardPasses
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S KeySetName
+  => S RegistryName
   -> m (S Bool)
-namedGuardPasses sn = fmap sansProv $
-  readArray <$> view guardPasses <*> (_sSbv <$> resolveGuard sn)
+namedGuardPasses sRn = fmap sansProv $
+  readArray <$> view guardPasses <*> (_sSbv <$> resolveGuard sRn)
 
 -- | Reads a named keyset from tx metadata (not the keyset registry)
 readKeySet

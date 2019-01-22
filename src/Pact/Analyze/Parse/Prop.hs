@@ -498,8 +498,8 @@ inferPreProp preProp = case preProp of
     (Some SBool . PropSpecific) ... RowExists tn'
       <$> checkPreProp SStr rk
       <*> parseBeforeAfter beforeAfter
-  PreApp s [PreStringLit ks] | s == SAuthorizedBy ->
-    pure $ Some SBool (PropSpecific (GuardPassed (KeySetName ks)))
+  PreApp s [PreStringLit rn] | s == SAuthorizedBy ->
+    pure $ Some SBool (PropSpecific (GuardPassed (RegistryName rn)))
   PreApp s [tn, cn, rk] | s == SRowEnforced -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn

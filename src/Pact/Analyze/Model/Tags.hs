@@ -204,4 +204,4 @@ saturateModel =
 
     fetchProv :: Provenance -> SBV.Query Provenance
     fetchProv = traverseOf (_FromCell.ocRowKey) fetchS
-            >=> traverseOf _FromNamedKs         fetchS
+            >=> traverseOf _FromRegistry        fetchS
