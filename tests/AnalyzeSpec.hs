@@ -503,6 +503,15 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable Success'
 
+  describe "enforce-guard" $ do
+    let code =
+          [text|
+            (defun test:bool (ks:keyset)
+              (enforce-guard ks))
+          |]
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+
   describe "read-decimal" $ do
     let code =
           [text|

@@ -664,15 +664,25 @@ translateNode astNode = withAstContext astNode $ case astNode of
     tid <- tagAssert $ cond ^. aNode
     pure $ Some SBool $ Enforce (Just tid) condTerm
 
-  AST_EnforceKeyset_Str ksA -> do
-    Some SStr ksnT <- translateNode ksA
-    tid <- tagAuth $ ksA ^. aNode
-    return $ Some SBool $ Enforce Nothing $ NameAuthorized tid ksnT
+  AST_EnforceGuard_Str strA -> do
+    Some SStr strT <- translateNode strA
+    tid <- tagAuth $ strA ^. aNode
+    return $ Some SBool $ Enforce Nothing $ NameAuthorized tid strT
 
-  AST_EnforceKeyset_Guard ksA -> do
-    Some SGuard ksT <- translateNode ksA
-    tid <- tagAuth $ ksA ^. aNode
-    return $ Some SBool $ Enforce Nothing $ GuardPasses tid ksT
+  AST_EnforceGuard_Guard guardA -> do
+    Some SGuard guardT <- translateNode guardA
+    tid <- tagAuth $ guardA ^. aNode
+    return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
+
+  AST_EnforceKeyset_Str strA -> do
+    Some SStr strT <- translateNode strA
+    tid <- tagAuth $ strA ^. aNode
+    return $ Some SBool $ Enforce Nothing $ NameAuthorized tid strT
+
+  AST_EnforceKeyset_Guard guardA -> do
+    Some SGuard guardT <- translateNode guardA
+    tid <- tagAuth $ guardA ^. aNode
+    return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
 
   AST_EnforceOne node [] -> do
     -- we just emit an event equivalent to one for `(enforce false)` in this

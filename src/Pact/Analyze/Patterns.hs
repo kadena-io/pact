@@ -112,6 +112,15 @@ pattern AST_EnforceKeyset_Guard :: AST Node -> AST Node
 pattern AST_EnforceKeyset_Guard g <-
   App _node (NativeFunc "enforce-keyset") [typeSatisfying isGuardTy -> Just g]
 
+pattern AST_EnforceGuard_Str :: AST Node -> AST Node
+pattern AST_EnforceGuard_Str str <-
+  App _node (NativeFunc "enforce-guard")
+    [ofType (Lang.TyPrim Lang.TyString) -> Just str]
+
+pattern AST_EnforceGuard_Guard :: AST Node -> AST Node
+pattern AST_EnforceGuard_Guard g <-
+  App _node (NativeFunc "enforce-guard") [typeSatisfying isGuardTy -> Just g]
+
 pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
 pattern AST_EnforceOne node enforces <-
   App node (NativeFunc "enforce-one") [_, List _ enforces]
