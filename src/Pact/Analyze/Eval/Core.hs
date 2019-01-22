@@ -129,13 +129,8 @@ evalLogicalOp OrOp [a, b] = do
   a' <- eval a
   singIte SBool (_sSbv a') (pure sTrue) (eval b)
 evalLogicalOp NotOp [a] = sNot <$> eval a
-evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
-
--- | Throw an analyze failure when Nothing
-(??) :: Analyzer m => Maybe a -> AnalyzeFailureNoLoc -> m a
-(Just a) ?? _   = pure a
-Nothing  ?? err = throwErrorNoLoc err
-infix 0 ??
+evalLogicalOp op terms
+  = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
@@ -518,7 +513,7 @@ evalObjMerge (_ :< SNil') (_ :< SNil') (SingList SCons{})
   = error "evalObjMerge invariant violation: both input object exhausted"
 
 hasKey :: SingList schema -> S Str -> S Bool
-hasKey singList (S _ key) = sansProv $ recSingList sFalse
+hasKey singList (S _ key) = sansProv $ foldSingList sFalse
   (\k _ty accum -> (literal (Str k) .== key) .|| accum)
   singList
 
@@ -544,8 +539,8 @@ evalStrToIntBase bT sT = do
 
   case (unliteralS b, unliteralS s) of
     -- Symbolic base and string: give up; too many possible solutions.
-    (Nothing, Nothing) ->
-      throwErrorNoLoc "Unable to convert string to integer for symbolic base and string"
+    (Nothing, Nothing) -> throwErrorNoLoc
+      "Unable to convert string to integer for symbolic base and string"
 
     -- Symbolic base and concrete string: pre-compute all 17 possible outcomes
     (Nothing, Just conStr) ->
@@ -561,7 +556,9 @@ evalStrToIntBase bT sT = do
     -- Concrete base and symbolic string: only support base 10
     (Just conBase, Nothing)
       | conBase == 10 -> evalStrToInt $ inject' $ coerceS @String @Str s
-      | otherwise     -> throwErrorNoLoc $ FailureMessage $ T.pack $ "Unable to statically determine the string for conversion to integer from base " ++ show conBase
+      | otherwise     -> throwErrorNoLoc $ FailureMessage $ T.pack $
+        "Unable to statically determine the string for conversion to integer \
+        \from base " ++ show conBase
 
     -- Concrete base and string: use pact native impl
     (Just conBase, Just conStr) ->
@@ -580,7 +577,8 @@ evalStrToIntBase bT sT = do
         Left _err -> symbolicFailure
         Right res -> pure (literalS res)
 
-relevantFields :: (Typeable a, SingI a) => SingTy a -> Object tm obj -> EObject tm
+relevantFields
+  :: (Typeable a, SingI a) => SingTy a -> Object tm obj -> EObject tm
 relevantFields _ obj@(Object SNil) = EObject SNil' obj
 relevantFields targetTy (Object (SCons key (Column vTy v) vals))
   = case relevantFields targetTy (Object vals) of
@@ -602,20 +600,24 @@ evalObjAt objTy@(SObjectUnsafe schema) colNameT obj retType
     needColName <- eval colNameT
     S mObjProv objVal <- eval obj
 
-    let go :: HasCallStack
-           => SingList tys -> SBV (Concrete ('TyObject tys)) -> m (SBV (Concrete a))
-        go SNil' _ = do
-          markFailure sTrue
-          pure $ uninterpret "notfound"
-        go (SCons' sym colTy schema') obj'
-          = withSymVal (SObjectUnsafe schema') $ withSymVal colTy $
+    let go :: m (SBV (Concrete a))
+        go = foldObject
+          (objVal :< schema)
+
+          -- if we didn't hit the column we're looking for mark as failure
+          (do markFailure sTrue
+              pure $ uninterpret "notfound")
+
+          -- look through every column for one with the name we're looking for
+          (\sym col schema' rest ->
             withMergeableAnalyzer @m retType $ ite
               (needColName .== literalS (Str (symbolVal sym)))
-              (case singEq colTy retType of
-                 Nothing   -> throwErrorNoLoc "TODO (evalObjAt mismatched field types)"
-                 Just Refl -> pure $ _1 obj'
+              (case singEq schema' retType of
+                 Nothing   -> throwErrorNoLoc
+                   "evalObjAt mismatched field types"
+                 Just Refl -> pure col
               )
-              (go schema' (_2 obj'))
+              rest)
 
         mProv :: Maybe Provenance
         mProv = do
@@ -625,7 +627,7 @@ evalObjAt objTy@(SObjectUnsafe schema) colNameT obj retType
           Str cnStr <- unliteralS needColName
           FromCell <$> Map.lookup (ColumnName cnStr) ocMap
 
-    S mProv <$> go schema objVal
+    S mProv <$> go
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential (Some ty prop) = do

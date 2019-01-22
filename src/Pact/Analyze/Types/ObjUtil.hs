@@ -151,16 +151,16 @@ type family Insert (v :: (Symbol, Ty)) (vs :: [ (Symbol, Ty) ])
   Insert y '[] = '[y]
   Insert '(k, v) ('(k', v') ': vs) = If
     (CmpSymbol k k' == 'LT)
-    ('(k, v) ': '(k', v') ': vs)
-    ('(k', v') ': Insert '(k, v) vs)
+    ('(k , v ) ':        '(k', v') ': vs)
+    ('(k', v') ': Insert '(k , v )    vs)
 
 insert
   :: (SingI v, Typeable v, KnownSymbol k)
   => SingSymbol k -> f v -> HList f vs -> HList f (Insert '(k, v) vs)
 insert k v SNil = SCons k v SNil
 insert k v (SCons k' v' kvs) = case compareKeys k k' of
-  LT -> unsafeCoerce $ SCons k v $ SCons k' v' kvs
-  _  -> unsafeCoerce $ SCons k' v' $ insert k v kvs
+  LT -> unsafeCoerce $ SCons k  v  $ SCons  k' v' kvs
+  _  -> unsafeCoerce $ SCons k' v' $ insert k  v  kvs
 
 -- section: SObject wrangling
 

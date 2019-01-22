@@ -36,6 +36,8 @@ module Pact.Analyze.Types.Languages
   , fromPact
   , valueToProp
   , sortLiteralObject
+  , mkLiteralList
+  , mkLiteralObject
 
   , pattern IntegerComparison
   , pattern DecimalComparison
@@ -61,8 +63,6 @@ module Pact.Analyze.Types.Languages
   , pattern PStrLength
   , pattern PVar
 
-  , mkLiteralList
-
   , singEqTm
   , singEqListTm
   , singShowsTm
@@ -70,22 +70,25 @@ module Pact.Analyze.Types.Languages
   , singUserShowListTm
   ) where
 
+import           Control.Monad                ((>=>))
 import           Data.Maybe                   (fromMaybe)
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as Text
-import           Data.Typeable                ((:~:) (Refl))
+import           Data.Typeable                ((:~:) (Refl), Proxy)
 import           Prelude                      hiding (Float)
 import           Text.Show                    (showListWith)
-import           GHC.TypeLits                 (symbolVal)
+import           GHC.TypeLits                 (symbolVal, someSymbolVal,
+                                               SomeSymbol(SomeSymbol))
 
 import           Pact.Types.Persistence       (WriteType)
 import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec, ks)
+import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj,
+                                                      dec, ks)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
-import           Pact.Analyze.Types.ObjUtil   (normalize)
+import           Pact.Analyze.Types.ObjUtil   (mkSObject, normalize)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
@@ -262,6 +265,34 @@ data Core (t :: Ty -> *) (a :: Ty) where
     -> t 'TyStr -> Open a t 'TyBool -> t ('TyObject m) -> Core t 'TyBool
 
   Typeof :: SingTy a -> t a -> Core t 'TyStr
+
+mkLiteralObject
+  :: (IsTerm tm, Monad m)
+  => (forall a. String -> Existential (Core tm) -> m a)
+  -> [(Text, Existential tm)]
+  -> m (Existential (Core tm))
+mkLiteralObject err = mkUnsortedLiteralObject err >=> sortLiteralObject err
+
+mkUnsortedLiteralObject
+  :: (IsTerm tm, Monad m)
+  => (forall a. String -> Existential (Core tm) -> m a)
+  -> [(Text, Existential tm)]
+  -> m (Existential (Core tm))
+mkUnsortedLiteralObject _ [] = pure $
+  let ty = mkSObject SNil'
+  in Some ty (LiteralObject ty (Object SNil))
+mkUnsortedLiteralObject err ((name, Some ty tm) : tms) = do
+  someObj <- mkUnsortedLiteralObject err tms
+  case someObj of
+    Some (SObject objTy) (LiteralObject _ (Object obj)) ->
+      case someSymbolVal (Text.unpack name) of
+        SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
+          let sym    = SSymbol @k
+              objTy' = SObjectUnsafe (SCons' sym ty objTy)
+          in Some objTy' $
+               LiteralObject objTy' $
+                 Object $ SCons sym (Column ty tm) obj
+    notObj -> err "mkUnsortedLiteralObject: expected an object: " notObj
 
 sortLiteralObject
   :: Applicative m

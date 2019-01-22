@@ -112,7 +112,8 @@ pattern SCons' k v vs = SingList (SCons k v (UnSingList vs))
 pattern SObject :: () => obj ~ 'TyObject schema => SingList schema -> Sing obj
 pattern SObject a <- SObjectUnsafe a
 
--- TODO: why does ghc ignore this pragma? (data instance?)
+-- This pragma doesn't work because of data instances
+-- https://ghc.haskell.org/trac/ghc/ticket/14059
 {-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SKeySet, SAny, SList,
   SObject #-}
 
@@ -125,7 +126,8 @@ pattern SObjectCons
   => SingSymbol k -> Sing v -> SingList tys -> Sing obj
 pattern SObjectCons k v vs <- SObjectUnsafe (SCons' k v vs)
 
--- TODO: why does ghc ignore this pragma? (data instance?)
+-- This pragma doesn't work because of data instances
+-- https://ghc.haskell.org/trac/ghc/ticket/14059
 {-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SKeySet, SAny, SList,
   SObjectNil, SObjectCons #-}
 

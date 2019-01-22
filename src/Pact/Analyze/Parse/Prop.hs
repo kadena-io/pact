@@ -41,7 +41,7 @@ import           Control.Applicative
 import           Control.Lens                 (at, toListOf, view, (%~), (&),
                                                (.~), (?~))
 import qualified Control.Lens                 as Lens
-import           Control.Monad                (unless, when, (>=>))
+import           Control.Monad                (unless, when)
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (asks, local, runReaderT)
 import           Control.Monad.State.Strict   (evalStateT)
@@ -50,14 +50,12 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust)
-import           Data.Proxy                   (Proxy)
 import qualified Data.Set                     as Set
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
 import           Data.Type.Equality           ((:~:) (Refl))
-import           GHC.TypeLits
 import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
@@ -253,39 +251,10 @@ inferVar vid name prop = do
     Just QTable         -> error "Table names cannot be vars"
     Just QColumnOf{}    -> error "Column names cannot be vars"
 
-mkLiteralObject :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
-mkLiteralObject = mkUnsortedLiteralObject >=> sortLiteralObject
-  (\msg tm -> throwError $ msg <> show tm)
-
--- Note: there is a very similar @mkUnsortedLiteralObject@ in
--- @Analyze.Translate@. These could probably be combined.
--- TODO: use insert
-mkUnsortedLiteralObject
-  :: [(Text, PreProp)] -> PropCheck (Existential (Core Prop))
-mkUnsortedLiteralObject [] = pure $ Some (mkSObject SNil') $
-  LiteralObject (mkSObject SNil') (Object SNil)
-mkUnsortedLiteralObject ((name, preProp) : tups) = do
-  tups' <- mkUnsortedLiteralObject tups
-  case tups' of
-    Some (SObjectUnsafe objTy) (LiteralObject _ (Object objProp)) -> do
-      eProp <- inferPreProp preProp
-      case eProp of
-        Some ty prop -> case someSymbolVal (T.unpack name) of
-          SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $
-            let sym    = SSymbol @k
-                objTy' = SObjectUnsafe (SCons' sym ty objTy)
-            in pure $ Some objTy' $
-                 LiteralObject objTy' $
-                   Object $ SCons sym (Column ty prop) objProp
-    Some _ _ -> throwErrorT $ "unexpected non-literal object: " <> tShow tups'
-
 -- | Look up the type of a given key in an object schema
-lookupKeyInType :: String -> Sing (schema :: [(Symbol, Ty)]) -> Maybe EType
-lookupKeyInType _name (SingList SNil) = Nothing
-lookupKeyInType name (SingList (SCons k ty tys)) =
-  if symbolVal k == name
-    then Just $ EType ty
-    else lookupKeyInType name (SingList tys)
+lookupKeyInType :: String -> SingList schema -> Maybe EType
+lookupKeyInType name = foldSingList Nothing
+  (\k ty accum -> if k == name then Just (EType ty) else accum)
 
 --
 -- NOTE: because we have a lot of cases here and we are using pattern synonyms
@@ -381,14 +350,16 @@ inferPreProp preProp = case preProp of
           Just cm' -> case columnMapToSchema cm' of
             EType objTy@SObjectUnsafe{} -> pure $
               Some objTy $ PropSpecific $ PropRead objTy ba' tn' rk'
-            _ -> error "TODO"
+            _ -> throwErrorIn preProp "expected an object"
           Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn
       _ -> throwErrorT $ "table name (" <> userShow tn <> ") must be a literal"
 
   PreLiteralObject obj -> do
-    obj' <- mkLiteralObject (Map.toList obj)
-    case obj' of
-      Some schema obj'' -> pure $ Some schema $ CoreProp obj''
+    obj'  <- traverse inferPreProp obj
+    obj'' <- mkLiteralObject (\msg tm -> throwError $ msg <> show tm)
+      (Map.toList obj')
+    case obj'' of
+      Some schema obj''' -> pure $ Some schema $ CoreProp obj'''
 
   -- applications:
   --

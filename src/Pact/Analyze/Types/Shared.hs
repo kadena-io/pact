@@ -513,7 +513,7 @@ varIdColumns :: Sing (m :: [ (Symbol, Ty) ]) -> Map Text VarId
 varIdColumns
   = Map.fromList
   . snd
-  . recSingList
+  . foldSingList
     (0, [])
     (\name _ (i, tys') -> (succ i, (T.pack name, i) : tys'))
 
@@ -728,24 +728,24 @@ type family ConcreteObj (a :: [(Symbol, Ty)]) where
   ConcreteObj ('(k', v) ': kvs) = (Concrete v, ConcreteObj kvs)
 
 -- | Eliminator for objects
-recObject
+foldObject
   :: (SBV (ConcreteObj schema) :< SingList schema)
   -> a
   -> (forall k b.
        KnownSymbol k
     => SingSymbol k -> SBV (Concrete b) -> SingTy b -> a -> a)
   -> a
-recObject (_   :< SNil')              base _f = base
-recObject (obj :< SCons' k ty schema) base f
+foldObject (_   :< SNil')              base _f = base
+foldObject (obj :< SCons' k ty schema) base f
   = withSymVal ty $ withSymVal (SObjectUnsafe schema) $
-  f k (_1 obj) ty (recObject (_2 obj :< schema) base f)
+  f k (_1 obj) ty (foldObject (_2 obj :< schema) base f)
 
--- | Eliminator singleton lists
-recSingList
+-- | Eliminator for singleton lists
+foldSingList
   :: a -> (forall b. String -> SingTy b -> a -> a) -> SingList schema -> a
-recSingList base _ SNil' = base
-recSingList base f (SCons' sym ty schema)
-  = f (symbolVal sym) ty $ recSingList base f schema
+foldSingList base _ SNil' = base
+foldSingList base f (SCons' sym ty schema)
+  = f (symbolVal sym) ty $ foldSingList base f schema
 
 newtype AConcrete ty = AConcrete (Concrete ty)
 

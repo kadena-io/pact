@@ -48,7 +48,7 @@ allocSbv = _sSbv <$> allocS @a
 allocSchema :: SingTy ('TyObject m) -> Alloc UObject
 allocSchema (SObjectUnsafe tys) = UObject <$> allocSchema' tys where
   allocSchema' :: SingList schema -> Alloc (Map.Map Text TVal)
-  allocSchema' = recSingList (pure Map.empty) $ \k ty m -> do
+  allocSchema' = foldSingList (pure Map.empty) $ \k ty m -> do
       let ety = EType ty
       val <- allocAVal ety
       Map.insert (pack k) (ety, val) <$> m
