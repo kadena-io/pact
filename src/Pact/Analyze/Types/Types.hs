@@ -58,21 +58,12 @@ import           GHC.TypeLits                (Symbol, KnownSymbol, symbolVal, sa
 
 import           Pact.Analyze.Types.UserShow
 
--- data GuardTy
---   = GuardTyKeySet
---   | GuardTyAny
---   -- | GuardTyKeySetName
---   -- | GuardTyPact
---   -- | GuardTyUser
---   -- | GuardTyModule
-
 data Ty
   = TyInteger
   | TyBool
   | TyStr
   | TyTime
   | TyDecimal
-  -- | TyGuard GuardTy
   | TyGuard
   | TyAny
   | TyList Ty
@@ -138,10 +129,6 @@ pattern SObjectCons k v vs <- SObjectUnsafe (SCons' k v vs)
 -- https://ghc.haskell.org/trac/ghc/ticket/14059
 {-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SGuard, SAny, SList,
   SObjectNil, SObjectCons #-}
-
--- data instance Sing (a :: GuardTy) where
---   SGuardKeySet :: Sing 'GuardTyKeySet
---   SGuardAny    :: Sing 'GuardTyAny
 
 data instance Sing (a :: Ty) where
   SInteger      ::               Sing 'TyInteger
