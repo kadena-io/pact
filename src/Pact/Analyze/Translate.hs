@@ -577,6 +577,18 @@ translateObjBinding pairs schema bodyA rhsT = do
 pattern EmptyList :: SingTy a -> Term ('TyList a)
 pattern EmptyList ty = CoreTerm (LiteralList ty [])
 
+translateNamedGuard :: AST Node -> TranslateM ETerm
+translateNamedGuard strA = do
+  Some SStr strT <- translateNode strA
+  tid <- tagAuth $ strA ^. aNode
+  return $ Some SBool $ Enforce Nothing $ NameAuthorized tid strT
+
+translateGuard :: AST Node -> TranslateM ETerm
+translateGuard guardA = do
+  Some SGuard guardT <- translateNode guardA
+  tid <- tagAuth $ guardA ^. aNode
+  return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
+
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
@@ -664,25 +676,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
     tid <- tagAssert $ cond ^. aNode
     pure $ Some SBool $ Enforce (Just tid) condTerm
 
-  AST_EnforceGuard_Str strA -> do
-    Some SStr strT <- translateNode strA
-    tid <- tagAuth $ strA ^. aNode
-    return $ Some SBool $ Enforce Nothing $ NameAuthorized tid strT
+  AST_EnforceGuard_Str strA -> translateNamedGuard strA
 
-  AST_EnforceGuard_Guard guardA -> do
-    Some SGuard guardT <- translateNode guardA
-    tid <- tagAuth $ guardA ^. aNode
-    return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
+  AST_EnforceGuard_Guard guardA -> translateGuard guardA
 
-  AST_EnforceKeyset_Str strA -> do
-    Some SStr strT <- translateNode strA
-    tid <- tagAuth $ strA ^. aNode
-    return $ Some SBool $ Enforce Nothing $ NameAuthorized tid strT
+  AST_EnforceKeyset_Str strA -> translateNamedGuard strA
 
-  AST_EnforceKeyset_Guard guardA -> do
-    Some SGuard guardT <- translateNode guardA
-    tid <- tagAuth $ guardA ^. aNode
-    return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
+  AST_EnforceKeyset_Guard guardA -> translateGuard guardA
 
   AST_EnforceOne node [] -> do
     -- we just emit an event equivalent to one for `(enforce false)` in this
