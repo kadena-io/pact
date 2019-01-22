@@ -130,7 +130,7 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
       Just False -> showFailure recov <> " to satisfy"
 
     guard :: Text
-    guard = showS sg
+    guard = "guard " <> showS sg
 
     guardDescription = case mProv of
       Nothing ->
