@@ -171,7 +171,8 @@ evalCore
       S _ val'  <- eval val
       S _ vals' <- evalCore $ LiteralObject objTy $ Object vals
       pure $ sansProv $ tuple (val', vals')
-evalCore LiteralObject{} = error "impossible match"
+evalCore LiteralObject{}
+  = vacuousMatch "previous two cases cover all literal objects"
 evalCore (ObjMerge
   ty1@(SObject schema1)
   ty2@(SObject schema2)
@@ -179,10 +180,10 @@ evalCore (ObjMerge
     S _ obj1' <- eval obj1
     S _ obj2' <- eval obj2
     case sing @a of
-      SObject schema -> pure $ sansProv $
+      SObjectUnsafe schema -> pure $ sansProv $
         evalObjMerge (obj1' :< schema1) (obj2' :< schema2) schema
-      _ -> error "impossible match"
-evalCore ObjMerge{} = error "impossible match"
+      _ -> throwErrorNoLoc "this must be an object"
+evalCore ObjMerge{} = throwErrorNoLoc "both types must be objects"
 evalCore (ObjContains (SObjectUnsafe schema) key _obj)
   = hasKey schema <$> eval key
 evalCore (StrContains needle haystack) = do
