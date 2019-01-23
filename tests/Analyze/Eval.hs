@@ -26,7 +26,7 @@ import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
 import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
-import           Pact.Analyze.Types.Eval  (aeRegistryGuards, aeTxDecimals,
+import           Pact.Analyze.Types.Eval  (aeRegistry, aeTxDecimals,
                                            aeTxIntegers, aeTxKeySets,
                                            mkAnalyzeEnv, mkInitialAnalyzeState)
 import           Pact.Analyze.Util        (dummyInfo)
@@ -110,7 +110,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       -- TODO: need to hook this up to authorized-by (NameAuthorized) support
       --
       withRegistryGuards = flip (foldr
-          (\(k, v) -> aeRegistryGuards
+          (\(k, v) -> aeRegistry
             %~ writeArray' (literal (RegistryName (T.pack k))) (literal v)))
         (Map.toList (fmap snd registryKSs))
 

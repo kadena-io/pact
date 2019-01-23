@@ -81,16 +81,16 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope          :: !(Map VarId AVal)               -- used as a stack
-    , _aeRegistryGuards :: !(SFunArray RegistryName Guard) -- read-only
-    , _aeGuardPasses    :: !(SFunArray Guard Bool)         -- read-only
-    , _aeTxKeySets      :: !(SFunArray Str Guard)          -- read-only
-    , _aeTxDecimals     :: !(SFunArray Str Decimal)        -- read-only
-    , _aeTxIntegers     :: !(SFunArray Str Integer)        -- read-only
-    , _invariants       :: !(TableMap [Located (Invariant 'TyBool)])
-    , _aeColumnIds      :: !(TableMap (Map Text VarId))
-    , _aeModelTags      :: !(ModelTags 'Symbolic)
-    , _aeInfo           :: !Info
+    { _aeScope       :: !(Map VarId AVal)               -- used as a stack
+    , _aeRegistry    :: !(SFunArray RegistryName Guard) -- read-only
+    , _aeGuardPasses :: !(SFunArray Guard Bool)         -- read-only
+    , _aeTxKeySets   :: !(SFunArray Str Guard)          -- read-only
+    , _aeTxDecimals  :: !(SFunArray Str Decimal)        -- read-only
+    , _aeTxIntegers  :: !(SFunArray Str Integer)        -- read-only
+    , _invariants    :: !(TableMap [Located (Invariant 'TyBool)])
+    , _aeColumnIds   :: !(TableMap (Map Text VarId))
+    , _aeModelTags   :: !(ModelTags 'Symbolic)
+    , _aeInfo        :: !Info
     }
 
 instance Show AnalyzeEnv where
@@ -98,7 +98,7 @@ instance Show AnalyzeEnv where
     $ showString "AnalyzeEnv "
     . showsPrec 11 _aeScope
     . showChar ' '
-    . showsPrec 11 _aeRegistryGuards
+    . showsPrec 11 _aeRegistry
     . showChar ' '
     . showsPrec 11 _aeGuardPasses
     . showChar ' '
@@ -123,11 +123,11 @@ mkAnalyzeEnv
   -> Info
   -> Maybe AnalyzeEnv
 mkAnalyzeEnv tables args tags info = do
-  let registryGuards = mkFreeArray "registryGuards"
-      guardPasses    = mkFreeArray "guardPasses"
-      txKeySets      = mkFreeArray "txKeySets"
-      txDecimals     = mkFreeArray "txDecimals"
-      txIntegers     = mkFreeArray "txIntegers"
+  let registry    = mkFreeArray "registry"
+      guardPasses = mkFreeArray "guardPasses"
+      txKeySets   = mkFreeArray "txKeySets"
+      txDecimals  = mkFreeArray "txDecimals"
+      txIntegers  = mkFreeArray "txIntegers"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -141,8 +141,8 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args registryGuards guardPasses txKeySets txDecimals
-    txIntegers invariants' columnIds' tags info
+  pure $ AnalyzeEnv args registry guardPasses txKeySets txDecimals txIntegers
+    invariants' columnIds' tags info
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -401,8 +401,8 @@ class HasAnalyzeEnv a where
   scope :: Lens' a (Map VarId AVal)
   scope = analyzeEnv.aeScope
 
-  registryGuards :: Lens' a (SFunArray RegistryName Guard)
-  registryGuards = analyzeEnv.aeRegistryGuards
+  registry :: Lens' a (SFunArray RegistryName Guard)
+  registry = analyzeEnv.aeRegistry
 
   guardPasses :: Lens' a (SFunArray Guard Bool)
   guardPasses = analyzeEnv.aeGuardPasses
@@ -587,7 +587,7 @@ resolveGuard
   => S RegistryName
   -> m (S Guard)
 resolveGuard sRn = fmap (withProv $ fromRegistry sRn) $
-  readArray <$> view registryGuards <*> pure (_sSbv sRn)
+  readArray <$> view registry <*> pure (_sSbv sRn)
 
 namedGuardPasses
   :: (MonadReader r m, HasAnalyzeEnv r)
