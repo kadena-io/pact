@@ -260,7 +260,7 @@ readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
   av     <- readField tn cn sRk sDirty fieldType
   tagAccessCell mtReads tid tFieldName av
   case av of
-    OpaqueVal -> error "TODO (readFields OpaqueVal)"
+    OpaqueVal -> throwErrorNoLoc "Opaque value encountered in table read"
     AVal (Just (FromCell oc)) sval
       -> withSymVal fieldType $ withSymVal subObjTy $ do
         (S (Just (FromRow ocMap)) obj', avs) <- readFields tn sRk tid subObjTy

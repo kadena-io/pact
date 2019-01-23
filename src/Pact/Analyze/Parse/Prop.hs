@@ -413,20 +413,40 @@ inferPreProp preProp = case preProp of
         -> pure $ Some SBool $ CoreProp $
           ListEqNeq ty eqNeq (CoreProp (LiteralList ty [])) prop
 
+      -- We require both types to be equal to compare them, except for objects!
       _ -> case singEq aTy bTy of
-        Nothing   -> typeError preProp aTy bTy
-        Just Refl -> if
-          -- TODO: enable
-          | False -> throwErrorIn preProp $ eqNeqMsg "lists"
-          | False -> throwErrorIn preProp $ eqNeqMsg "objects"
-          | False -> throwErrorIn preProp $ eqNeqMsg "keysets"
-          | True -> pure $ Some SBool $ CoreProp $ Comparison aTy op a' b'
+        Nothing   -> case aTy of
+          SObject{} -> case bTy of
+            SObject{} -> case toOp eqNeqP op' of
+              Just eqNeq ->
+                pure $ Some SBool $ CoreProp $ ObjectEqNeq aTy bTy eqNeq a' b'
+              Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
+            _ -> typeError preProp aTy bTy
+          _ -> typeError preProp aTy bTy
+
+        -- Given both types are equal, if they're a guard, list, or object, the
+        -- only valid operations are `=` and `!=`
+        Just Refl -> case aTy of
+          SGuard -> case toOp eqNeqP op' of
+            Just eqNeq -> pure $ Some SBool $ CoreProp $ GuardEqNeq eqNeq a' b'
+            Nothing    -> throwErrorIn preProp $ eqNeqMsg "guards"
+          SList elemTy -> case toOp eqNeqP op' of
+            Just eqNeq ->
+              pure $ Some SBool $ CoreProp $ ListEqNeq elemTy eqNeq a' b'
+            Nothing    -> throwErrorIn preProp $ eqNeqMsg "lists"
+          SObject{} -> case toOp eqNeqP op' of
+            Just eqNeq ->
+              pure $ Some SBool $ CoreProp $ ObjectEqNeq aTy aTy eqNeq a' b'
+            Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
+
+          -- For all other (simple) types, any comparison operator is valid
+          _ -> pure $ Some SBool $ CoreProp $ Comparison aTy op a' b'
 
   PreApp op'@(toOp logicalOpP -> Just op) args ->
     Some SBool <$> case (op, args) of
-      (NotOp, [a])    -> PNot <$> checkPreProp SBool a
+      (NotOp, [a  ])  -> PNot <$> checkPreProp SBool a
       (AndOp, [a, b]) -> PAnd <$> checkPreProp SBool a <*> checkPreProp SBool b
-      (OrOp, [a, b])  -> POr  <$> checkPreProp SBool a <*> checkPreProp SBool b
+      (OrOp,  [a, b]) -> POr  <$> checkPreProp SBool a <*> checkPreProp SBool b
       _               -> throwErrorIn preProp $
         op' <> " applied to wrong number of arguments"
 
