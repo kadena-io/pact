@@ -338,8 +338,6 @@ writeFields writeType tid tn sRk (S mProv obj)
   writeFields writeType tid tn sRk (S mProv (obj SBVT.^. SBVT._2))
     (SObjectUnsafe subObjTy)
 
-  -- OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
-
 writeFields _ _ _ _ _ _ = vacuousMatch "the previous two cases are complete"
 
 evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))

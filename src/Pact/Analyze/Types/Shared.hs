@@ -1046,15 +1046,14 @@ instance Mergeable a => Mergeable (ColumnMap a) where
     -- intersection is fine here; we know each map has all tables:
     Map.intersectionWith (symbolicMerge force test) left right
 
-columnMapToSchema :: ColumnMap EType -> EType
+columnMapToSchema :: ColumnMap EType -> Maybe EType
 columnMapToSchema (ColumnMap colMap) = go (Map.toList colMap) where
-  go [] = EType (mkSObject SNil')
-  go ((ColumnName colName, EType ty) : tys) = case go tys of
-    EType (SObjectUnsafe tys') -> case someSymbolVal colName of
-      SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $
-        EType $ mkSObject $ SCons' (SSymbol @k) ty tys'
-    _ -> error "TODO"
-  go _ = error "TODO"
+  go [] = Just $ EType SObjectNil
+  go ((ColumnName colName, EType ty) : tys) = case someSymbolVal colName of
+    SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $ do
+      EType (SObject tys') <- go tys
+      pure $ EType $ mkSObject $ SCons' (SSymbol @k) ty tys'
+  go _ = Nothing
 
 newtype TableMap a
   = TableMap { _tableMap :: Map.Map TableName a }
