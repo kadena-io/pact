@@ -4,9 +4,9 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
-{-# LANGUAGE RecordWildCards       #-}
 module Pact.Analyze.Check
   ( verifyModule
   , renderVerifiedModule
@@ -28,11 +28,10 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (at, each, ifoldrM, ifor,
-                                            itraversed, ix, toListOf,
-                                            traversed, view, (%~), (&), (<&>),
-                                            (?~), (^.), (^?), (^@..), (^?!),
-                                            _1, _2, _Left)
+import           Control.Lens              (at, each, ifoldrM, ifor, itraversed,
+                                            ix, toListOf, traversed, view, (%~),
+                                            (&), (<&>), (?~), (^.), (^?), (^?!),
+                                            (^@..), _1, _2, _Left)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -58,30 +57,32 @@ import qualified Data.Text                 as T
 import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
-import           Pact.Typechecker     (typecheckTopLevel)
-import           Pact.Types.Lang      (pattern ColonExp, pattern CommaExp,
-                                       Info, mModel, renderInfo, renderParsed,
-                                       tInfo, tMeta, _tDef, tDef, _dDefName, dMeta)
-import           Pact.Types.Runtime   (Exp, ModuleData(..), ModuleName,
-                                       Ref (Ref), mdRefMap, mdModule,
-                                       Term (TConst, TDef, TSchema, TTable),
-                                       asString, getInfo, tShow)
-import qualified Pact.Types.Runtime   as Pact
-import           Pact.Types.Term      (Module(..),DefName(..))
-import           Pact.Types.Typecheck (AST,
-                                       Fun (FDefun, _fArgs, _fBody, _fInfo),
-                                       Named, Node, TcId (_tiInfo),
-                                       TopLevel (TopConst, TopFun, TopTable),
-                                       UserType (_utFields, _utName), runTC,
-                                       tcFailures)
-import qualified Pact.Types.Typecheck as TC
+import           Pact.Typechecker          (typecheckTopLevel)
+import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
+                                            Info, dMeta, mModel, renderInfo,
+                                            renderParsed, tDef, tInfo, tMeta,
+                                            _dDefName, _tDef)
+import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
+                                            Ref (Ref),
+                                            Term (TConst, TDef, TSchema, TTable),
+                                            asString, getInfo, mdModule,
+                                            mdRefMap, tShow)
+import qualified Pact.Types.Runtime        as Pact
+import           Pact.Types.Term           (DefName (..), Module (..))
+import           Pact.Types.Typecheck      (AST,
+                                            Fun (FDefun, _fArgs, _fBody, _fInfo),
+                                            Named, Node, TcId (_tiInfo),
+                                            TopLevel (TopConst, TopFun, TopTable),
+                                            UserType (_utFields, _utName),
+                                            runTC, tcFailures)
+import qualified Pact.Types.Typecheck      as TC
 
-import           Pact.Analyze.Alloc     (runAlloc)
+import           Pact.Analyze.Alloc        (runAlloc)
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval      hiding (invariants)
-import           Pact.Analyze.Model     (allocArgs, allocModelTags,
-                                         saturateModel, showModel)
-import           Pact.Analyze.Parse     hiding (tableEnv)
+import           Pact.Analyze.Eval         hiding (invariants)
+import           Pact.Analyze.Model        (allocArgs, allocModelTags,
+                                            saturateModel, showModel)
+import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util

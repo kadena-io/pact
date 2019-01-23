@@ -1,27 +1,27 @@
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE ExplicitNamespaces    #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds             #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE ExplicitNamespaces   #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE KindSignatures       #-}
+{-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeApplications     #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Pact.Analyze.Types.ObjUtil where
 
-import Data.Typeable      (Typeable)
-import Data.Type.Bool     (If)
-import Data.Type.Equality (type (==))
-import GHC.TypeLits       (Symbol, CmpSymbol, symbolVal, KnownSymbol)
-import Unsafe.Coerce      (unsafeCoerce)
+import           Data.Type.Bool           (If)
+import           Data.Type.Equality       (type (==))
+import           Data.Typeable            (Typeable)
+import           GHC.TypeLits             (CmpSymbol, KnownSymbol, Symbol,
+                                           symbolVal)
+import           Unsafe.Coerce            (unsafeCoerce)
 
-import Pact.Analyze.Types.Types
+import           Pact.Analyze.Types.Types
 
 -- inspiration:
 -- https://github.com/dorchard/type-level-sets/blob/master/src/Data/Type/Set.hs

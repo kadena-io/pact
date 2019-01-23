@@ -20,7 +20,7 @@ import           Control.Lens                (Iso', Prism', from, iso, view)
 import           Data.Coerce                 (Coercible)
 import qualified Data.Decimal                as Decimal
 import           Data.SBV                    (HasKind (kindOf), SDivisible (..),
-                                              SymVal (..), sNot, oneIf, (.&&),
+                                              SymVal (..), oneIf, sNot, (.&&),
                                               (.==), (.>), (.^), (.||))
 import           Data.SBV.Control            (SMTValue (sexprToVal))
 import           Data.SBV.Dynamic            (svAbs, svPlus, svTimes, svUNeg)

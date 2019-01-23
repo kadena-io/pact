@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
@@ -10,8 +11,6 @@
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE ViewPatterns        #-}
-
-{-# LANGUAGE AllowAmbiguousTypes #-}
 
 -- | 'Symbolic' allocation of quantified variables for arguments and tags,
 -- for use prior to evaluation; and functions to saturate and show models from

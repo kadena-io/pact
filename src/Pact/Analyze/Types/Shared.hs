@@ -10,6 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -17,16 +18,12 @@
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
-
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE PolyKinds                  #-}
-{-# LANGUAGE ViewPatterns               #-}
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
 module Pact.Analyze.Types.Shared where
 
-import Data.List (sort)
 import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                Ixed (ix), Lens', Prism', both,
                                                from, iso, lens, makeLenses,
@@ -36,30 +33,31 @@ import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
 import           Data.Constraint              (Dict (Dict), withDict)
-import           Data.Data                    (Data, Typeable, Proxy)
+import           Data.Data                    (Data, Proxy, Typeable)
 import           Data.Function                (on)
 import           Data.Kind                    (Type)
+import           Data.List                    (sort)
 import           Data.List                    (sortBy)
-import           Data.Maybe                   (isJust)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
-import           Data.Monoid                  (First(..))
-import           Data.SBV.Trans               (MProvable (..), mkSymVal)
+import           Data.Maybe                   (isJust)
+import           Data.Monoid                  (First (..))
 import           Data.SBV                     (EqSymbolic, HasKind, Int64,
                                                Kind (KString, KUnbounded),
                                                Mergeable (symbolicMerge),
-                                               OrdSymbolic,
-                                               SBV,
+                                               OrdSymbolic, SBV,
                                                SDivisible (sDivMod, sQuotRem),
-                                               SymVal(..), Symbolic,
+                                               SymVal (..), Symbolic, fromCV,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
-                                               (.<), (.==), fromCV)
+                                               (.<), (.==))
 import qualified Data.SBV                     as SBV
 import           Data.SBV.Control             (SMTValue (..))
-import           Data.SBV.Internals           (CVal(..), CV(..), genMkSymVar, SVal(SVal), Kind(..))
+import           Data.SBV.Internals           (CV (..), CVal (..), Kind (..),
+                                               SVal (SVal), genMkSymVar)
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
+import           Data.SBV.Trans               (MProvable (..), mkSymVal)
 import           Data.SBV.Tuple               (_1, _2)
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
@@ -67,21 +65,21 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
 -- import           Data.Type.Bool               (If, type (||))
-import           Data.Type.Equality           ((:~:) (Refl)) -- , type (==))
+import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
-import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, str,
-                                               time, Constraint)
+import           Pact.Analyze.Feature         hiding (Constraint, Type, dec, ks,
+                                               obj, str, time)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
-import           Pact.Analyze.Util            (Boolean(..))
+import           Pact.Analyze.Util            (Boolean (..))
 
 
 class IsTerm tm where
@@ -990,7 +988,7 @@ instance (Eq (tm ('TyObject '[])), Typeable tm) => SymVal (Object tm '[]) where
     in SBVI.SBV . SVal k . Left . CV k $ CTuple []
 
   fromCV (CV _ (CTuple [])) = Object SNil
-  fromCV c = error $ "invalid (Object '[]): " ++ show c
+  fromCV c                  = error $ "invalid (Object '[]): " ++ show c
 
 instance
   ( Ord (tm ty)

@@ -3,11 +3,10 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE Rank2Types          #-}
-{-# LANGUAGE ViewPatterns        #-}
 {-# options_ghc -fno-warn-redundant-constraints #-}
 module Pact.Analyze.Eval.Core where
 
@@ -16,18 +15,17 @@ import           Data.Foldable               (asum)
 import qualified Data.Map.Strict             as Map
 import           Data.Maybe                  (fromMaybe)
 import           Data.Monoid                 ((<>))
-import           Data.SBV                    (EqSymbolic ((./=), (.==)),
-                                              OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymVal,
-                                              SBV, ite, unliteral, literal, uninterpret)
+import           Data.SBV                    (EqSymbolic ((./=), (.==)), OrdSymbolic ((.<), (.<=), (.>), (.>=)),
+                                              SBV, SymVal, ite, literal,
+                                              uninterpret, unliteral)
 import           Data.SBV.List               ((.:))
 import qualified Data.SBV.List               as SBVL
-import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
-                                              bzipWith, bmapM, bfoldrM)
 import qualified Data.SBV.String             as SBVS
+import           Data.SBV.Tools.BoundedList  (band, bfoldr, bfoldrM, bmapM,
+                                              breverse, bsort, bzipWith)
 import           Data.SBV.Tuple              (tuple, _1, _2)
 import qualified Data.Text                   as T
-import           Data.Type.Equality          ((:~:)(Refl))
+import           Data.Type.Equality          ((:~:) (Refl))
 import           GHC.Stack
 import           GHC.TypeLits                (symbolVal)
 
@@ -35,7 +33,7 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
-import           Pact.Analyze.Util           (Boolean(..), vacuousMatch)
+import           Pact.Analyze.Util           (Boolean (..), vacuousMatch)
 import qualified Pact.Native                 as Pact
 
 -- | Bound on the size of lists we check. This may be user-configurable in the

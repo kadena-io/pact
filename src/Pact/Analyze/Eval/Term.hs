@@ -10,11 +10,10 @@
 module Pact.Analyze.Eval.Term where
 
 import           Control.Applicative         (ZipList (..))
-import           Control.Lens                (At (at), Lens',
-                                              preview, use, view, (%=), (%~),
-                                              (&), (+=), (.=), (.~), (<&>),
-                                              (?~), (^.), (^?), _1, _2, _Just)
--- import           Control.Monad               (when)
+import           Control.Lens                (At (at), Lens', preview, use,
+                                              view, (%=), (%~), (&), (+=), (.=),
+                                              (.~), (<&>), (?~), (^.), (^?), _1,
+                                              _2, _Just)
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
@@ -26,8 +25,8 @@ import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
-                                              SymArray (readArray), SymVal,
-                                              ite, literal, (.<))
+                                              SymArray (readArray), SymVal, ite,
+                                              literal, (.<))
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.String             as SBV
 import           Data.SBV.Tuple              (tuple)
@@ -275,12 +274,6 @@ readField
   :: TableName -> ColumnName -> S RowKey -> S Bool -> SingTy ty -> Analyze AVal
 readField tn cn sRk sDirty ty
   = mkAVal <$> use (typedCell ty id tn cn sRk sDirty)
- --
- -- TODO: do we still need to do this?:
- -- TODO: if we add nested object support here, we need to install
- --       the correct provenance into AVals all the way down into
- --       sub-objects.
- --
 
 aValsOfObj :: SingList schema -> SBV (ConcreteObj schema) -> Map Text AVal
 aValsOfObj schema obj = foldObject (obj :< schema) $ \sym (SBVI.SBV sval) _

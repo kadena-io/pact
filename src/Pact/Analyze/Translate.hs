@@ -21,8 +21,8 @@ import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, use, view, zoom, (%=), (%~),
-                                             (+~), (.=), (.~), (<>~),
-                                             (?=), (^.))
+                                             (+~), (.=), (.~), (<>~), (?=),
+                                             (^.))
 import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -45,13 +45,11 @@ import           GHC.Natural                (Natural)
 import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
-import           Pact.Types.Lang            (Info, Literal (..),
-                                             Type (TyFun, TyPrim, TySchema,
-                                                   TyUser, TyVar))
+import           Pact.Types.Lang            (Info, Literal (..), Type (TyFun, TyPrim, TySchema, TyUser, TyVar))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
-                                             aNode, aTy, tiName, _aTy, tiName)
+                                             aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 
@@ -228,7 +226,7 @@ data TranslateState
       -- The \ edges correspond to the execution of each case. The _ edges
       -- correspond to successful exit early due to the lack of a failure.
       -- These three "success" edges all join together at the same vertex.
-    , _tsFoundVars :: [(VarId, Text, EType)]
+    , _tsFoundVars     :: [(VarId, Text, EType)]
     }
 
 makeLenses ''TranslateFailure

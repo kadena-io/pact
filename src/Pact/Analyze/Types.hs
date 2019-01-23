@@ -16,7 +16,6 @@ module Pact.Analyze.Types
   , module Pact.Analyze.Types.UserShow
 
   , Check(..)
-  -- , Float(float)
   , HasVarId(varId)
   , Quantifier(..)
   , Table(..)
@@ -86,7 +85,7 @@ data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
   , _tableInvariants :: [Located (Invariant 'TyBool)]
-  } -- deriving (Show)
+  }
 
 pattern TableNameLit :: String -> Prop TyTableName
 pattern TableNameLit str = StrLit str

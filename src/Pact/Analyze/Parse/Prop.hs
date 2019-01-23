@@ -50,7 +50,7 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust)
-import           Data.Monoid                  (First(..))
+import           Data.Monoid                  (First (..))
 import qualified Data.Set                     as Set
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
@@ -62,7 +62,7 @@ import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                PrimType (..), SchemaVar, TList,
-                                               TableName, Type, TyObject)
+                                               TableName, TyObject, Type)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)

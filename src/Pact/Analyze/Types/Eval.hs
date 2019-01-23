@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveGeneric         #-}
@@ -15,7 +16,6 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 
-{-# LANGUAGE AllowAmbiguousTypes   #-}
 module Pact.Analyze.Types.Eval where
 
 import           Control.Applicative          (ZipList (..))
@@ -28,14 +28,16 @@ import           Control.Monad.Reader         (MonadReader)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
-import           Data.SBV                     (HasKind, Mergeable(symbolicMerge), SBV, SBool,
+import           Data.SBV                     (HasKind,
+                                               Mergeable (symbolicMerge), SBV,
+                                               SBool,
                                                SymArray (readArray, writeArray),
                                                SymVal, uninterpret)
 import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
-import           Data.Type.Equality           ((:~:)(Refl))
+import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.Generics                 hiding (S)
 import           GHC.Stack                    (HasCallStack)
 
@@ -47,7 +49,8 @@ import qualified Pact.Types.Typecheck         as Pact
 import           Pact.Analyze.Errors
 import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
 import           Pact.Analyze.Orphans         ()
-import           Pact.Analyze.Translate       (maybeTranslateUserType', maybeTranslateType)
+import           Pact.Analyze.Translate       (maybeTranslateType,
+                                               maybeTranslateUserType')
 import           Pact.Analyze.Types           hiding (tableName)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
@@ -386,7 +389,7 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
              -- TODO: we should Left here. this means that mkSymbolicCells and
              --       mkInitialAnalyzeState should both return Either.
              --
-             Nothing -> id
+             Nothing          -> id
       )
       (SymbolicCells mempty)
       fields

@@ -1,10 +1,10 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeApplications           #-}
 
 module Pact.Analyze.Alloc
   ( MonadAlloc (singForAll, singExists, singFree)
@@ -19,12 +19,12 @@ import qualified Control.Monad.State.Lazy    as LS
 import           Control.Monad.State.Strict  (StateT)
 import           Control.Monad.Trans         (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe   (MaybeT)
-import           Control.Monad.Writer.Strict (WriterT)
 import qualified Control.Monad.Writer.Lazy   as LW
+import           Control.Monad.Writer.Strict (WriterT)
 import           Data.SBV                    (Symbolic)
 import qualified Data.SBV                    as SBV
 
-import           Pact.Analyze.Types          (S, SingI(sing), SingTy, Concrete,
+import           Pact.Analyze.Types          (Concrete, S, SingI (sing), SingTy,
                                               sansProv, withSymVal)
 
 -- | A restricted symbolic context in which only quantified variable allocation

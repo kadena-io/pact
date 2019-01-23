@@ -11,8 +11,7 @@ import           Data.Text            (Text)
 
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (Literal (LString))
-import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim,
-                                            Step, Table),
+import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
                                        AstBindType (..), Fun (FDefun, FNative),
                                        Named, Node, PrimValue (PrimLit),
                                        Special (SBinding), aNode, aTy)
@@ -102,7 +101,7 @@ pattern AST_ReadMsg name <-
 typeSatisfying :: (Lang.Type TC.UserType -> Bool) -> AST Node -> Maybe (AST Node)
 typeSatisfying test x = case x ^? aNode.aTy of
   Just ty | test ty -> Just x
-  _                 -> Nothing
+  _       -> Nothing
 
 ofType :: Lang.Type TC.UserType -> AST Node -> Maybe (AST Node)
 ofType ty = typeSatisfying (== ty)

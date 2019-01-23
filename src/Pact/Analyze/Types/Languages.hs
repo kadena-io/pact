@@ -10,13 +10,11 @@
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE ViewPatterns          #-}
-
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
 
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
