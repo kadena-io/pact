@@ -59,7 +59,7 @@ data ApiEnv = ApiEnv
   }
 makeLenses ''ApiEnv
 
-type ApiT a = ReaderT ApiEnv (ExceptT ServantErr IO) a
+type Api a = ReaderT ApiEnv (ExceptT ServantErr IO) a
 
 runApiServer :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int -> FilePath -> IO ()
 runApiServer histChan inbChan logFn port _logDir = do
@@ -86,10 +86,10 @@ apiV1Server conf = hoistServer apiV1API nt
   (sendHandler :<|> pollHandler :<|> listenHandler :<|> localHandler)
   where
     apiV1API = Proxy :: Proxy ApiV1API
-    nt :: forall a. ApiT a -> Handler a
+    nt :: forall a. Api a -> Handler a
     nt s = Handler $ runReaderT s conf
 
-sendHandler :: SubmitBatch -> ApiT (ApiResponse RequestKeys)
+sendHandler :: SubmitBatch -> Api (ApiResponse RequestKeys)
 sendHandler (SubmitBatch cmds) = do
   when (null cmds) $ die' "Empty Batch"
   crs <- forM cmds $ \c -> do
@@ -98,14 +98,14 @@ sendHandler (SubmitBatch cmds) = do
   rks <- mapM queueCmds $ group 8000 crs
   pure $ ApiSuccess $ RequestKeys $ concat rks
 
-pollHandler :: Poll -> ApiT (ApiResponse PollResponses)
+pollHandler :: Poll -> Api (ApiResponse PollResponses)
 pollHandler (Poll rks) = do
   log $ "Polling for " ++ show rks
   PossiblyIncompleteResults{..} <- checkHistoryForResult (HashSet.fromList rks)
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   pure $ pollResultToReponse possiblyIncompleteResults
 
-listenHandler :: ListenerRequest -> ApiT (ApiResponse ApiResult)
+listenHandler :: ListenerRequest -> Api (ApiResponse ApiResult)
 listenHandler (ListenerRequest rk) = do
   hChan <- view aiHistoryChan
   m <- liftIO newEmptyMVar
@@ -120,7 +120,7 @@ listenHandler (ListenerRequest rk) = do
       log $ "Listener Serviced for: " ++ show rk
       pure $ ApiSuccess (crToAr cr)
 
-localHandler :: Command T.Text -> ApiT (ApiResponse (CommandSuccess Value))
+localHandler :: Command T.Text -> Api (ApiResponse (CommandSuccess Value))
 localHandler commandText = do
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
@@ -150,7 +150,7 @@ crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId Nothing
 log :: (MonadReader ApiEnv m, MonadIO m) => String -> m ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)
 
-die' :: String -> ApiT t
+die' :: String -> Api t
 die' str = throwError err404 { errBody = BSL8.pack str }
 
 buildCmdRpc :: (MonadReader ApiEnv m, MonadIO m) => Command T.Text -> m (RequestKey,Command ByteString)
