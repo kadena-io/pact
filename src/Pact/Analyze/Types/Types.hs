@@ -46,7 +46,6 @@ module Pact.Analyze.Types.Types
   , foldSingList
   , foldrSObject
   , foldSObject
-  , type ListElem
   , SingI(sing)
   , SingTy
 
@@ -252,9 +251,6 @@ foldSObject
   -> SingTy ('TyObject schema)
   -> a
 foldSObject f (SObjectUnsafe schema) = foldSingList f schema
-
-type family ListElem (a :: Ty) where
-  ListElem ('TyList a) = a
 
 instance Show (SingTy ty) where
   showsPrec p = \case
