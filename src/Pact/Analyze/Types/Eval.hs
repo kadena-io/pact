@@ -198,12 +198,14 @@ eArrayAt ty (S _ symKey) = lens getter setter where
   getter :: ESFunArray -> SBV (Concrete a)
   getter (SomeSFunArray ty' arr) = case singEq ty ty' of
     Just Refl -> readArray arr symKey
-    Nothing   -> error "TODO: eArrayAt: bad getter access"
+    Nothing   -> error $
+      "eArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
 
   setter :: ESFunArray -> SBV (Concrete a) -> ESFunArray
   setter (SomeSFunArray ty' arr) val = case singEq ty ty' of
     Just Refl -> withSymVal ty $ SomeSFunArray ty $ writeArray arr symKey val
-    Nothing   -> error "TODO: eArrayAt: bad setter access"
+    Nothing   -> error $
+      "eArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
 
 instance Mergeable ESFunArray where
   symbolicMerge force test (SomeSFunArray ty1 arr1) (SomeSFunArray ty2 arr2)
