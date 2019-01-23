@@ -26,10 +26,8 @@ import           Data.SBV.Tools.BoundedList  (band, bfoldr, breverse, bsort,
                                               bzipWith, bmapM, bfoldrM)
 import qualified Data.SBV.String             as SBVS
 import           Data.SBV.Tuple              (tuple, _1, _2)
--- import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:)(Refl))
-import           Data.Typeable               (Typeable)
 import           GHC.Stack
 import           GHC.TypeLits                (symbolVal)
 
@@ -583,16 +581,6 @@ evalStrToIntBase bT sT = do
       case Pact.baseStrToInt base conText of
         Left _err -> symbolicFailure
         Right res -> pure (literalS res)
-
-relevantFields
-  :: (Typeable a, SingI a) => SingTy a -> Object tm obj -> EObject tm
-relevantFields _ obj@(Object SNil) = EObject SNil' obj
-relevantFields targetTy (Object (SCons key (Column vTy v) vals))
-  = case relevantFields targetTy (Object vals) of
-      EObject ty obj'@(Object vals') -> case singEq targetTy vTy of
-        Nothing   -> EObject ty obj'
-        Just Refl -> EObject (SCons' key sing ty) $
-          Object (SCons key (Column vTy v) vals')
 
 evalObjAt
   :: forall a m schema.
