@@ -212,18 +212,19 @@ applyInvariants tn aValFields addInvariants = do
 evalETerm :: ETerm -> Analyze AVal
 evalETerm tm = snd <$> evalExistential tm
 
-validateWrite
-  :: Pact.WriteType
-  -> SingTy ('TyObject schema)
-  -> Object Term schema
-  -> Analyze ()
-validateWrite _writeType (SObjectUnsafe schema) (Object om)
-  = validateWrite' schema om where
+-- TODO: pending #360
+-- validateWrite
+--   :: Pact.WriteType
+--   -> SingTy ('TyObject schema)
+--   -> Object Term schema
+--   -> Analyze ()
+-- validateWrite _writeType (SObjectUnsafe schema) (Object om)
+--   = validateWrite' schema om where
 
-  validateWrite'
-    :: SingList schema -> HList (Column Term) schema -> Analyze ()
-  validateWrite' SNil' SNil = pure ()
-  validateWrite' _     _    = error "TODO"
+--   validateWrite'
+--     :: SingList schema -> HList (Column Term) schema -> Analyze ()
+--   validateWrite' SNil' SNil = pure ()
+--   validateWrite' _     _    = error "TODO"
 
 -- validateWrite writeType objTy@(SObject schema) obj@(Object om) = do
 
@@ -398,6 +399,7 @@ evalTerm = \case
 
   Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     obj <- withSing objTy $ evalTerm objT
+    -- TODO: pending issue #360
     -- validateWrite writeType objTy obj
     sRk <- symRowKey <$> evalTerm rowKey
 
