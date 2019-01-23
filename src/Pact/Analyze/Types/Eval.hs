@@ -82,34 +82,46 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
         ) => b)
     -> b
 
+-- | Execution context that can be a clean slate, or propagated from a
+-- previous transaction/function call analysis.
+data AnalyzeContext
+  = AnalyzeContext
+    { _acRegistry   :: !(SFunArray RegistryName Guard)
+    , _acTxKeySets  :: !(SFunArray Str Guard)
+    , _acTxDecimals :: !(SFunArray Str Decimal)
+    , _acTxIntegers :: !(SFunArray Str Integer)
+    }
+
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope       :: !(Map VarId AVal)               -- used as a stack
-    , _aeRegistry    :: !(SFunArray RegistryName Guard) -- read-only
-    , _aeGuardPasses :: !(SFunArray Guard Bool)         -- read-only
-    , _aeTxKeySets   :: !(SFunArray Str Guard)          -- read-only
-    , _aeTxDecimals  :: !(SFunArray Str Decimal)        -- read-only
-    , _aeTxIntegers  :: !(SFunArray Str Integer)        -- read-only
+    { _aeScope       :: !(Map VarId AVal) -- used as a stack
+    , _aeContext     :: !AnalyzeContext
+    , _aeGuardPasses :: !(SFunArray Guard Bool)
     , _invariants    :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds   :: !(TableMap (Map Text VarId))
     , _aeModelTags   :: !(ModelTags 'Symbolic)
     , _aeInfo        :: !Info
     }
 
+instance Show AnalyzeContext where
+  showsPrec p AnalyzeContext{..} = showParen (p > 10)
+    $ showString "AnalyzeContext "
+    . showsPrec 11 _acRegistry
+    . showChar ' '
+    . showsPrec 11 _acTxKeySets
+    . showChar ' '
+    . showsPrec 11 _acTxDecimals
+    . showChar ' '
+    . showsPrec 11 _acTxIntegers
+
 instance Show AnalyzeEnv where
   showsPrec p AnalyzeEnv{..} = showParen (p > 10)
     $ showString "AnalyzeEnv "
     . showsPrec 11 _aeScope
     . showChar ' '
-    . showsPrec 11 _aeRegistry
+    . showsPrec 11 _aeContext
     . showChar ' '
     . showsPrec 11 _aeGuardPasses
-    . showChar ' '
-    . showsPrec 11 _aeTxKeySets
-    . showChar ' '
-    . showsPrec 11 _aeTxDecimals
-    . showChar ' '
-    . showsPrec 11 _aeTxIntegers
     . showChar ' '
     . showsPrec 11 _invariants
     . showChar ' '
@@ -119,18 +131,23 @@ instance Show AnalyzeEnv where
     . showChar ' '
     . showsPrec 11 _aeInfo
 
+mkAnalyzeContext :: AnalyzeContext
+mkAnalyzeContext =
+  let registry    = mkFreeArray "registry"
+      txKeySets   = mkFreeArray "txKeySets"
+      txDecimals  = mkFreeArray "txDecimals"
+      txIntegers  = mkFreeArray "txIntegers"
+   in AnalyzeContext registry txKeySets txDecimals txIntegers
+
 mkAnalyzeEnv
-  :: [Table]
+  :: AnalyzeContext
+  -> [Table]
   -> Map VarId AVal
   -> ModelTags 'Symbolic
   -> Info
   -> Maybe AnalyzeEnv
-mkAnalyzeEnv tables args tags info = do
-  let registry    = mkFreeArray "registry"
-      guardPasses = mkFreeArray "guardPasses"
-      txKeySets   = mkFreeArray "txKeySets"
-      txDecimals  = mkFreeArray "txDecimals"
-      txIntegers  = mkFreeArray "txIntegers"
+mkAnalyzeEnv context tables args tags info = do
+  let guardPasses = mkFreeArray "guardPasses"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -144,8 +161,7 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args registry guardPasses txKeySets txDecimals txIntegers
-    invariants' columnIds' tags info
+  pure $ AnalyzeEnv args context guardPasses invariants' columnIds' tags info
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -277,6 +293,7 @@ data AnalysisResult
     }
   deriving (Show)
 
+makeLenses ''AnalyzeContext
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
 makeLenses ''BeforeAndAfter
@@ -405,19 +422,19 @@ class HasAnalyzeEnv a where
   scope = analyzeEnv.aeScope
 
   registry :: Lens' a (SFunArray RegistryName Guard)
-  registry = analyzeEnv.aeRegistry
+  registry = analyzeEnv.aeContext.acRegistry
 
   guardPasses :: Lens' a (SFunArray Guard Bool)
   guardPasses = analyzeEnv.aeGuardPasses
 
   txKeySets :: Lens' a (SFunArray Str Guard)
-  txKeySets = analyzeEnv.aeTxKeySets
+  txKeySets = analyzeEnv.aeContext.acTxKeySets
 
   txDecimals :: Lens' a (SFunArray Str Decimal)
-  txDecimals = analyzeEnv.aeTxDecimals
+  txDecimals = analyzeEnv.aeContext.acTxDecimals
 
   txIntegers :: Lens' a (SFunArray Str Integer)
-  txIntegers = analyzeEnv.aeTxIntegers
+  txIntegers = analyzeEnv.aeContext.acTxIntegers
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv

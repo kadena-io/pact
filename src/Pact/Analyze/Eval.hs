@@ -91,7 +91,13 @@ runAnalysis'
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
 runAnalysis' query tables args tm rootPath tags info = do
-  aEnv <- case mkAnalyzeEnv tables args tags info of
+  --
+  -- TODO: pass this in (from a previous analysis) when we analyze >1 function
+  --       calls:
+  --
+  let context = mkAnalyzeContext
+
+  aEnv <- case mkAnalyzeEnv context tables args tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"
