@@ -2,10 +2,7 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-
--- set this to a low number because it will fail anyway on `toPactTm` and it
--- might as well be quick (default is 2000000)
-{-# options_ghc -fmax-pmcheck-iterations=10000 #-}
+{-# options_ghc -fmax-pmcheck-iterations=100000000 #-}
 module Analyze.Translate where
 
 import           Control.Lens              hiding (op, (...))
@@ -47,85 +44,96 @@ toPactTm :: ETerm -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
 toPactTm = \case
   -- core terms:
 
-  Some SDecimal (Inj (DecArithOp op x y)) ->
-    mkApp (arithOpToDef op) [Some SDecimal x, Some SDecimal y]
+  Some ty (CoreTerm tm) -> case tm of
 
-  Some SDecimal (Inj (DecUnaryArithOp op x)) ->
-    mkApp (unaryArithOpToDef op) [Some SDecimal x]
+    Numerical numerical -> case numerical of
+      DecArithOp op x y ->
+        mkApp (arithOpToDef op) [Some SDecimal x, Some SDecimal y]
 
-  Some SInteger (Inj (IntArithOp op x y)) ->
-    mkApp (arithOpToDef op) [Some SInteger x, Some SInteger y]
+      DecUnaryArithOp op x ->
+        mkApp (unaryArithOpToDef op) [Some SDecimal x]
 
-  Some SInteger (Inj (IntUnaryArithOp op x)) ->
-    mkApp (unaryArithOpToDef op) [Some SInteger x]
+      IntArithOp op x y ->
+        mkApp (arithOpToDef op) [Some SInteger x, Some SInteger y]
 
-  Some SInteger (Inj (RoundingLikeOp1 op x)) ->
-    mkApp (roundingLikeOpToDef op) [Some SDecimal x]
+      IntUnaryArithOp op x ->
+        mkApp (unaryArithOpToDef op) [Some SInteger x]
 
-  Some SDecimal (Inj (RoundingLikeOp2 op x y)) ->
-    mkApp (roundingLikeOpToDef op) [Some SDecimal x, Some SInteger y]
+      RoundingLikeOp1 op x ->
+        mkApp (roundingLikeOpToDef op) [Some SDecimal x]
 
-  Some SDecimal (Inj (DecIntArithOp op x y)) ->
-    mkApp (arithOpToDef op) [Some SDecimal x, Some SInteger y]
+      RoundingLikeOp2 op x y ->
+        mkApp (roundingLikeOpToDef op) [Some SDecimal x, Some SInteger y]
 
-  Some SDecimal (Inj (IntDecArithOp op x y)) ->
-    mkApp (arithOpToDef op) [Some SInteger x, Some SDecimal y]
+      DecIntArithOp op x y ->
+        mkApp (arithOpToDef op) [Some SDecimal x, Some SInteger y]
 
-  Some SInteger (Inj (ModOp x y)) ->
-    mkApp modDef [Some SInteger x, Some SInteger y]
+      IntDecArithOp op x y ->
+        mkApp (arithOpToDef op) [Some SInteger x, Some SDecimal y]
 
-  Some SInteger (Inj (StrLength x)) ->
-    mkApp lengthDef [Some SStr x]
+      ModOp x y ->
+        mkApp modDef [Some SInteger x, Some SInteger y]
 
-  Some SStr (Inj (StrConcat x y)) ->
-    mkApp addDef [Some SStr x, Some SStr y]
+    StrLength x ->
+      mkApp lengthDef [Some SStr x]
 
-  Some SInteger (Inj (StrToInt s)) ->
-    mkApp strToIntDef [Some SStr s]
+    StrConcat x y ->
+      mkApp addDef [Some SStr x, Some SStr y]
 
-  Some SInteger (Inj (StrToIntBase b s)) ->
-    mkApp strToIntDef [Some SInteger b, Some SStr s]
+    StrToInt s ->
+      mkApp strToIntDef [Some SStr s]
 
-  Some SBool (Inj (IntegerComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Some SInteger x, Some SInteger y]
+    StrToIntBase b s ->
+      mkApp strToIntDef [Some SInteger b, Some SStr s]
 
-  Some SBool (Inj (DecimalComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Some SDecimal x, Some SDecimal y]
+    Comparison ty' op x y ->
+      mkApp (comparisonOpToDef op) [Some ty' x, Some ty' y]
 
-  Some SBool (Inj (StrComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Some SStr x, Some SStr y]
+    IntAddTime x y ->
+      mkApp defAddTime [Some STime x, Some SInteger y]
 
-  Some SBool (Inj (BoolComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Some SBool x, Some SBool y]
+    DecAddTime x y ->
+      mkApp defAddTime [Some STime x, Some SDecimal y]
 
-  Some SBool (Inj (TimeComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [Some STime x, Some STime y]
+    Logical op args ->
+      mkApp (logicalOpToDef op) (Some SBool <$> args)
 
-  Some STime (Inj (IntAddTime x y)) ->
-    mkApp defAddTime [Some STime x, Some SInteger y]
+    Lit x -> case ty of
+      SInteger -> pure $ TLiteral (LInteger x) dummyInfo
+      SDecimal -> pure $ TLiteral (LDecimal (toPact decimalIso x)) dummyInfo
+      SStr     -> pure $ TLiteral (LString (strToText x)) dummyInfo
+      SBool    -> pure $ TLiteral (LBool x) dummyInfo
+      STime    -> pure $ TLiteral (LTime (toPact timeIso x)) dummyInfo
+      SGuard   -> case x of
+        Guard x' -> do
+          keysets <- view (_1 . envKeysets)
+          case keysets ^? ix (fromIntegral x') of
+            Just (ks, _) -> pure $ Pact.TGuard (Pact.GKeySet ks) dummyInfo
+            Nothing      -> error $ "no keysets found at index " ++ show x'
+      _ -> error "unexpected lit type"
 
-  Some STime (Inj (DecAddTime x y)) ->
-    mkApp defAddTime [Some STime x, Some SDecimal y]
+    ListEqNeq ty' op l1 l2 ->
+      mkApp (eqNeqOpToDef op) [ Some (SList ty') l1, Some (SList ty') l2 ]
 
-  Some SBool (Inj (Logical op args)) ->
-    mkApp (logicalOpToDef op) (Some SBool <$> args)
+    ListReverse _ lst ->
+      mkApp reverseDef [ Some ty lst ]
 
-  Some SInteger     (CoreTerm (Lit x))
-    -> pure $ TLiteral (LInteger x) dummyInfo
-  Some SDecimal (CoreTerm (Lit x))
-    -> pure $ TLiteral (LDecimal (toPact decimalIso x)) dummyInfo
-  Some SStr     (TextLit x)
-    -> pure $ TLiteral (LString x) dummyInfo
-  Some SBool    (CoreTerm (Lit x))
-    -> pure $ TLiteral (LBool x) dummyInfo
-  Some STime    (CoreTerm (Lit x))
-    -> pure $ TLiteral (LTime (toPact timeIso x)) dummyInfo
+    ListSort _ lst ->
+      mkApp sortDef [ Some ty lst ]
 
-  Some SGuard (CoreTerm (Lit (Guard x))) -> do
-    keysets <- view (_1 . envKeysets)
-    case keysets ^? ix (fromIntegral x) of
-      Just (ks, _) -> pure $ Pact.TGuard (Pact.GKeySet ks) dummyInfo
-      Nothing      -> error $ "no keysets found at index " ++ show x
+    ListConcat _ l1 l2 ->
+      mkApp addDef [ Some ty l1, Some ty l2 ]
+
+    ListDrop _ i l2 ->
+      mkApp dropDef [ Some SInteger i, Some ty l2 ]
+
+    ListTake _ i l2 ->
+      mkApp takeDef [ Some SInteger i, Some ty l2 ]
+
+    MakeList _ i a -> case ty of
+      SList ty' -> mkApp makeListDef [ Some SInteger i, Some ty' a ]
+
+    _ -> withSing ty $ error $ "TODO: handle core term: " ++ show (CoreTerm tm)
 
   -- term-specific terms:
   Some SBool (Enforce _ x)
@@ -170,27 +178,6 @@ toPactTm = \case
 
   Some ty (IfThenElse _ t1 (_, t2) (_, t3)) ->
     mkApp ifDef [Some SBool t1, Some ty t2, Some ty t3]
-
-  Some SBool (CoreTerm (ListEqNeq ty op l1 l2)) ->
-    mkApp (eqNeqOpToDef op) [ Some (SList ty) l1, Some (SList ty) l2 ]
-
-  Some ty (CoreTerm (ListReverse _ lst)) ->
-    mkApp reverseDef [ Some ty lst ]
-
-  Some ty (CoreTerm (ListSort _ lst)) ->
-    mkApp sortDef [ Some ty lst ]
-
-  Some ty (CoreTerm (ListConcat _ l1 l2)) ->
-    mkApp addDef [ Some ty l1, Some ty l2 ]
-
-  Some ty (CoreTerm (ListDrop _ i l2)) ->
-    mkApp dropDef [ Some SInteger i, Some ty l2 ]
-
-  Some ty (CoreTerm (ListTake _ i l2)) ->
-    mkApp takeDef [ Some SInteger i, Some ty l2 ]
-
-  Some (SList ty) (CoreTerm (MakeList _ i a)) ->
-    mkApp makeListDef [ Some SInteger i, Some ty a ]
 
   tm -> error $ "TODO: toPactTm " ++ show tm
 

@@ -218,6 +218,9 @@ instance IsString ColumnName where
 newtype Str = Str String
   deriving (Eq, Ord, Show, SMTValue, HasKind, Typeable, IsString)
 
+strToText :: Str -> Text
+strToText (Str str) = T.pack str
+
 instance SymVal Str where
   mkSymVal = SBVI.genMkSymVar KString
   literal (Str s) = mkConcreteString s
