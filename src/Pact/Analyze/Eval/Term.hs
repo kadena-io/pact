@@ -7,8 +7,6 @@
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 
-{-# options_ghc -fdefer-type-errors #-}
-
 module Pact.Analyze.Eval.Term where
 
 import           Control.Applicative         (ZipList (..))
@@ -200,11 +198,11 @@ applyInvariants tn aValFields addInvariants = do
   case (mInvariants, mColumnIds) of
     (Just invariants', Just columnIds) -> do
       let aValFields' = reindex columnIds aValFields
-      invariants'' <- for invariants' $ \(Located info invariant) ->
+      invariants'' <- for invariants' $ \(Located info invariant) -> do
         case runReaderT (runStateT (unInvariantCheck (eval invariant)) sTrue)
                         (Located info aValFields') of
           -- Use the location of the invariant
-          Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
+          Left (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
           -- though it's important that the query succeeds, we don't check that
           -- here. it's checked when we query invariants. if it passes there,
           -- it'll pass here. if not, we won't get here.
@@ -263,13 +261,15 @@ readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
   tagAccessCell mtReads tid tFieldName av
   case av of
     OpaqueVal -> error "TODO (readFields OpaqueVal)"
-    AVal (Just (FromCell oc)) sval -> withSymVal fieldType $ withSymVal subObjTy $ do
-      (S (Just (FromRow ocMap)) obj', avs) <- readFields tn sRk tid subObjTy
-      pure ( withProv (FromRow $ Map.insert cn oc ocMap) $
-               tuple (SBVI.SBV sval, obj')
-           , Map.insert tFieldName av avs
-           )
-    AVal _ _ -> error "impossible: unexpected type of cell provenance in readFields"
+    AVal (Just (FromCell oc)) sval
+      -> withSymVal fieldType $ withSymVal subObjTy $ do
+        (S (Just (FromRow ocMap)) obj', avs) <- readFields tn sRk tid subObjTy
+        pure ( withProv (FromRow $ Map.insert cn oc ocMap) $
+                 tuple (SBVI.SBV sval, obj')
+             , Map.insert tFieldName av avs
+             )
+    AVal _ _ -> error
+      "impossible: unexpected type of cell provenance in readFields"
 
 readField
   :: TableName -> ColumnName -> S RowKey -> S Bool -> SingTy ty -> Analyze AVal
@@ -282,26 +282,18 @@ readField tn cn sRk sDirty ty
  --       sub-objects.
  --
 
-aValsOfObj
-  :: Sing (schema :: [(Symbol, Ty)])
-  -> SBV (ConcreteObj schema)
-  -> Map Text AVal
-aValsOfObj SNil' _ = Map.empty
-aValsOfObj (SCons' sym fieldTy fields) obj
-  = withSymVal fieldTy $ withSymVal (SObjectUnsafe fields) $
-  let k = T.pack (symbolVal sym)
-      SBVI.SBV sval = obj SBVT.^. SBVT._1
-  in Map.insert k (AVal Nothing sval) $
-       aValsOfObj fields (obj SBVT.^. SBVT._2)
+aValsOfObj :: SingList schema -> SBV (ConcreteObj schema) -> Map Text AVal
+aValsOfObj schema obj = foldObject (obj :< schema) $ \sym (SBVI.SBV sval) _
+  -> Map.singleton (T.pack (symbolVal sym)) (AVal Nothing sval)
 
 writeFields
   :: Pact.WriteType -> TagId -> TableName -> S RowKey
   -> S (ConcreteObj ty) -> SingTy ('TyObject ty)
   -> Analyze ()
-writeFields _ _ _ _ _ (SObjectUnsafe SNil') = pure ()
+writeFields _ _ _ _ _ SObjectNil = pure ()
 
 writeFields writeType tid tn sRk (S mProv obj)
-  (SObjectUnsafe (SCons' sym fieldType subObjTy))
+  (SObjectCons sym fieldType subObjTy)
   = withSymVal fieldType $ withSymVal (SObjectUnsafe subObjTy) $ do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
@@ -347,6 +339,8 @@ writeFields writeType tid tn sRk (S mProv obj)
     (SObjectUnsafe subObjTy)
 
   -- OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
+
+writeFields _ _ _ _ _ _ = vacuousMatch "the previous two cases are complete"
 
 evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case

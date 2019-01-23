@@ -44,6 +44,8 @@ module Pact.Analyze.Types.Types
   , singListEq
   , foldrSingList
   , foldSingList
+  , foldrSObject
+  , foldSObject
   , type ListElem
   , SingI(sing)
   , SingTy
@@ -234,6 +236,22 @@ foldSingList
   -> SingList schema
   -> a
 foldSingList f = foldrSingList mempty (\sym ty accum -> f sym ty <> accum)
+
+foldrSObject
+  :: a
+  -> (forall k b. (KnownSymbol k, SingI b, Typeable b)
+     => SingSymbol k -> SingTy b -> a -> a)
+  -> SingTy ('TyObject schema)
+  -> a
+foldrSObject a f (SObjectUnsafe schema) = foldrSingList a f schema
+
+foldSObject
+  :: Monoid a
+  => (forall k b. (KnownSymbol k, SingI b, Typeable b)
+     => SingSymbol k -> SingTy b -> a)
+  -> SingTy ('TyObject schema)
+  -> a
+foldSObject f (SObjectUnsafe schema) = foldSingList f schema
 
 type family ListElem (a :: Ty) where
   ListElem ('TyList a) = a

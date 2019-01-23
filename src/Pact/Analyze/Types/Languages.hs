@@ -906,7 +906,7 @@ userShowCore ty _p = \case
   GuardEqNeq op x y        -> parenList [userShow op, userShowTm x, userShowTm y]
   ObjectEqNeq ty1 ty2 op x y
     -> parenList [userShow op, singUserShowTm ty1 x, singUserShowTm ty2 y]
-  ObjAt ty' k obj          -> parenList [userShowTm k, singUserShowTm ty' obj]
+  ObjAt ty' k obj          -> parenList [SObjectProjection, userShowTm k, singUserShowTm ty' obj]
   ObjContains ty' k obj    -> parenList [SContains, userShowTm k, singUserShowTm ty' obj]
   ObjDrop ty' ks obj       -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty' obj]
   ObjTake ty' ks obj       -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty' obj]
@@ -1394,8 +1394,12 @@ userShowTerm ty p = \case
     ]
   Let var _ _ x y -> parenList
     [ "let"
-    , userShow var
-    , userShow x
+    , parenList
+      [ parenList
+        [ var
+        , userShow x
+        ]
+      ]
     , userShowTerm ty 0 y
     ]
   Sequence x y -> Text.unlines [userShow x, userShowTerm ty 0 y]

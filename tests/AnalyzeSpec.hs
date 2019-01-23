@@ -1741,9 +1741,9 @@ spec = describe "analyze" $ do
             (deftable ints:{ints-row} "Table of positive and negative integers")
 
             (defun test:bool ()
-              (with-read ints "any index" { "pos" := pos, "neg" := neg }
-                (enforce (> pos 0) "is not positive")
-                (enforce (< neg 0) "is not negative")
+              (with-read ints "any index" { "pos" := p, "neg" := n }
+                (enforce (> p 0) "is not positive")
+                (enforce (< n 0) "is not negative")
                 ))
           |]
 

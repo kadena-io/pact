@@ -26,6 +26,7 @@
 
 module Pact.Analyze.Types.Shared where
 
+import Data.List (sort)
 import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                Ixed (ix), Lens', Prism', both,
                                                from, iso, lens, makeLenses,
@@ -511,20 +512,19 @@ instance Show ESchema where
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
-varIdColumns :: Sing (m :: [ (Symbol, Ty) ]) -> Map Text VarId
+varIdColumns :: SingList m -> Map Text VarId
 varIdColumns
   = Map.fromList
-  . snd
-  . foldrSingList
-    (0, [])
-    (\name _ (i, tys') -> (succ i, (T.pack (symbolVal name), i) : tys'))
+  . flip zip [0..]
+  . sort
+  . foldSingList (\name _ -> [T.pack (symbolVal name)])
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.
 varIdArgs :: [Pact.Arg a] -> [(Pact.Arg a, VarId)]
-varIdArgs args =
-  let sortedList = sortBy (compare `on` Pact._aName) args
-  in zip sortedList [0..]
+varIdArgs
+  = flip zip [0..]
+  . sortBy (compare `on` Pact._aName)
 
 -- | Untyped object
 newtype UObject = UObject (Map.Map Text TVal)
@@ -730,17 +730,27 @@ type family ConcreteObj (a :: [(Symbol, Ty)]) where
   ConcreteObj ('(k', v) ': kvs) = (Concrete v, ConcreteObj kvs)
 
 -- | Eliminator for objects
-foldObject
+foldrObject
   :: (SBV (ConcreteObj schema) :< SingList schema)
   -> a
   -> (forall k b.
        KnownSymbol k
     => SingSymbol k -> SBV (Concrete b) -> SingTy b -> a -> a)
   -> a
-foldObject (_   :< SNil')              base _f = base
-foldObject (obj :< SCons' k ty schema) base f
+foldrObject (_   :< SNil')              base _f = base
+foldrObject (obj :< SCons' k ty schema) base f
   = withSymVal ty $ withSymVal (SObjectUnsafe schema) $
-  f k (_1 obj) ty (foldObject (_2 obj :< schema) base f)
+  f k (_1 obj) ty (foldrObject (_2 obj :< schema) base f)
+
+foldObject
+  :: Monoid a
+  => (SBV (ConcreteObj schema) :< SingList schema)
+  -> (forall k b.
+       KnownSymbol k
+    => SingSymbol k -> SBV (Concrete b) -> SingTy b -> a)
+  -> a
+foldObject objSchema f
+  = foldrObject objSchema mempty (\sym val ty accum -> f sym val ty <> accum)
 
 newtype AConcrete ty = AConcrete (Concrete ty)
 

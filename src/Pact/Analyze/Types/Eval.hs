@@ -108,7 +108,8 @@ instance Show AnalyzeEnv where
     . showChar ' '
     . showsPrec 11 _aeTxIntegers
     . showChar ' '
-    -- . showsPrec 11 _invariants TODO
+    . showsPrec 11 _invariants
+    . showChar ' '
     . showsPrec 11 _aeColumnIds
     . showChar ' '
     . showsPrec 11 _aeModelTags
@@ -140,8 +141,8 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args registryGuards guardPasses txKeySets txDecimals txIntegers invariants'
-    columnIds' tags info
+  pure $ AnalyzeEnv args registryGuards guardPasses txKeySets txDecimals
+    txIntegers invariants' columnIds' tags info
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -159,11 +160,11 @@ data QueryEnv
     }
 
 data ESFunArray where
-  ESFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> ESFunArray
+  SomeSFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> ESFunArray
 
 instance Show ESFunArray where
-  showsPrec p (ESFunArray ty sfunarr) = showParen (p > 10) $
-      showString "ESFunArray "
+  showsPrec p (SomeSFunArray ty sfunarr) = showParen (p > 10) $
+      showString "SomeSFunArray "
     . showsPrec 11 ty
     . showChar ' '
     . withHasKind ty (showsPrec 11 sfunarr)
@@ -176,21 +177,21 @@ eArrayAt :: forall a.
 eArrayAt ty (S _ symKey) = lens getter setter where
 
   getter :: ESFunArray -> SBV (Concrete a)
-  getter (ESFunArray ty' arr) = case singEq ty ty' of
+  getter (SomeSFunArray ty' arr) = case singEq ty ty' of
     Just Refl -> readArray arr symKey
     Nothing   -> error "TODO: eArrayAt: bad getter access"
 
   setter :: ESFunArray -> SBV (Concrete a) -> ESFunArray
-  setter (ESFunArray ty' arr) val = case singEq ty ty' of
-    Just Refl -> withSymVal ty $ ESFunArray ty $ writeArray arr symKey val
+  setter (SomeSFunArray ty' arr) val = case singEq ty ty' of
+    Just Refl -> withSymVal ty $ SomeSFunArray ty $ writeArray arr symKey val
     Nothing   -> error "TODO: eArrayAt: bad setter access"
 
 instance Mergeable ESFunArray where
-  symbolicMerge force test (ESFunArray ty1 arr1) (ESFunArray ty2 arr2)
+  symbolicMerge force test (SomeSFunArray ty1 arr1) (SomeSFunArray ty2 arr2)
     = case singEq ty1 ty2 of
       Nothing   -> error "mismatched types when merging two ESFunArrays"
       Just Refl -> withSymVal ty1 $
-        ESFunArray ty1 $ symbolicMerge force test arr1 arr2
+        SomeSFunArray ty1 $ symbolicMerge force test arr1 arr2
 
 instance Mergeable SymbolicCells where
   symbolicMerge force test (SymbolicCells left) (SymbolicCells right)
@@ -376,7 +377,7 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
         let col      = ColumnName $ T.unpack colName
 
             mkArray :: SingTy a -> ESFunArray
-            mkArray sTy = withHasKind sTy $ ESFunArray sTy $ mkFreeArray $
+            mkArray sTy = withHasKind sTy $ SomeSFunArray sTy $ mkFreeArray $
               "cells__" <> tableName <> "__" <> colName
 
         in cells & case maybeTranslateType ty of

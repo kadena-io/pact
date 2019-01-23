@@ -608,7 +608,7 @@ evalObjAt objTy@(SObjectUnsafe schema) colNameT obj retType
     S mObjProv objVal <- eval obj
 
     let go :: m (SBV (Concrete a))
-        go = foldObject
+        go = foldrObject
           (objVal :< schema)
 
           -- if we didn't hit the column we're looking for mark as failure

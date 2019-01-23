@@ -130,7 +130,8 @@ runPropertyAnalysis
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
 runPropertyAnalysis check tables args tm rootPath tags info =
   runIdentity <$>
-    runAnalysis' (Identity <$> analyzeCheck check) tables args tm rootPath tags info
+    runAnalysis'
+      (Identity <$> analyzeCheck check) tables args tm rootPath tags info
 
 runInvariantAnalysis
   :: [Table]
@@ -141,4 +142,5 @@ runInvariantAnalysis
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
 runInvariantAnalysis tables args tm rootPath tags info =
-  unInvariantsF <$> runAnalysis' analyzeInvariants tables args tm rootPath tags info
+  unInvariantsF <$>
+    runAnalysis' analyzeInvariants tables args tm rootPath tags info
