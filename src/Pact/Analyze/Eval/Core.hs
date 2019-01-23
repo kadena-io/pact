@@ -410,8 +410,6 @@ subObject
       _  -> subObject (_2 obj :< SingList kvs) searchSchema
 
 
--- | Merge two objects, returning one with the requested schema.
---
 -- We simultaneously shrink each input object, via @subObject@ so that we're
 -- always examining the smallest objects that could possibly match our
 -- searched-for schema.
@@ -442,7 +440,7 @@ subObject
 --   obj2:   { z: 5       }
 --   schema: { z: integer }
 --
--- 3.5. switch to @evalObjMerge1@
+-- 3.5. switch to @evalDropTake@
 --
 --   obj2:   { z: 5       }
 --   schema: { z: integer }
@@ -459,15 +457,13 @@ subObject
 -- 6: terminate
 --
 -- result: { y: 2, z: 5 }
---
--- XXX must shrink before first call!
-evalObjMerge
+evalObjMerge'
   :: (SBV (ConcreteObj schema1) :< SingList schema1)
   -> (SBV (ConcreteObj schema2) :< SingList schema2)
   -> SingList schema
   -> SBV (ConcreteObj schema)
-evalObjMerge _ _ SNil' = literal ()
-evalObjMerge
+evalObjMerge' _ _ SNil' = literal ()
+evalObjMerge'
   (obj1 :< schema1@(SingList (SCons k1 ty1 subSchema1)))
   (obj2 :< schema2@(SingList (SCons k2 ty2 subSchema2)))
             schema@(SingList (SCons k  ty  subSchema ))
@@ -475,7 +471,7 @@ evalObjMerge
     withSymVal (SObjectUnsafe (SingList subSchema2)) $ withHasKind ty2 $
     withSymVal ty $ withSymVal (SObjectUnsafe (SingList subSchema)) $
 
-    fromMaybe (error "evalObjMerge invariant violation") $
+    fromMaybe (error "evalObjMerge' invariant violation") $
       case subObject (obj1 :< schema1) schema of
         SomeObj schema1' obj1' -> case subObject (obj2 :< schema2) schema of
           SomeObj schema2' obj2' -> asum
@@ -484,7 +480,7 @@ evalObjMerge
                  Refl <- singEq ty1 ty
                  pure $ tuple
                    ( _1 obj1
-                   , evalObjMerge (obj1' :< schema1') (obj2' :< schema2')
+                   , evalObjMerge' (obj1' :< schema1') (obj2' :< schema2')
                      (SingList subSchema)
                    )
 
@@ -493,28 +489,38 @@ evalObjMerge
                  Refl <- singEq ty2 ty
                  pure $ tuple
                    (_1 obj2
-                   , evalObjMerge (obj1' :< schema1') (obj2' :< schema2')
+                   , evalObjMerge' (obj1' :< schema1') (obj2' :< schema2')
                      (SingList subSchema)
                    )
 
             -- neither object matches
-            , pure $ evalObjMerge (obj1' :< schema1') (obj2' :< schema2') schema
+            , pure $ evalObjMerge' (obj1' :< schema1') (obj2' :< schema2') schema
             ]
 
-evalObjMerge
+evalObjMerge'
   (obj1 :< schema1@(SingList SCons{}))
   (_    :<          SNil')
             schema@(SingList SCons{})
   = evalDropTake (obj1 :< schema1) schema
 
-evalObjMerge
+evalObjMerge'
   (_    :<          SNil')
   (obj2 :< schema2@(SingList SCons{}))
             schema@(SingList SCons{})
   = evalDropTake (obj2 :< schema2) schema
 
-evalObjMerge (_ :< SNil') (_ :< SNil') (SingList SCons{})
-  = error "evalObjMerge invariant violation: both input object exhausted"
+evalObjMerge' (_ :< SNil') (_ :< SNil') (SingList SCons{})
+  = error "evalObjMerge' invariant violation: both input object exhausted"
+
+-- | Merge two objects, returning one with the requested schema.
+evalObjMerge
+  :: (SBV (ConcreteObj schema1) :< SingList schema1)
+  -> (SBV (ConcreteObj schema2) :< SingList schema2)
+  -> SingList schema
+  -> SBV (ConcreteObj schema)
+evalObjMerge x y s = case subObject x s of
+  SomeObj s1 obj1 -> case subObject y s of
+    SomeObj s2 obj2 -> evalObjMerge' (obj1 :< s1) (obj2 :< s2) s
 
 hasKey :: SingList schema -> S Str -> S Bool
 hasKey singList (S _ key) = sansProv $ foldrSingList sFalse
