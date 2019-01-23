@@ -481,11 +481,14 @@ inferPreProp preProp = case preProp of
     asum
       [ do
           _ <- expectColumnType tn' cn' SInteger
-          Some SInteger . PropSpecific . IntCellDelta tn' cn' <$> checkPreProp SStr rk
+          Some SInteger . PropSpecific . IntCellDelta tn' cn'
+            <$> checkPreProp SStr rk
       , do
           _ <- expectColumnType tn' cn' SDecimal
-          Some SDecimal . PropSpecific . DecCellDelta tn' cn' <$> checkPreProp SStr rk
-      ] <|> throwErrorIn preProp "couldn't find column of appropriate (integer / decimal) type"
+          Some SDecimal . PropSpecific . DecCellDelta tn' cn'
+            <$> checkPreProp SStr rk
+      ] <|> throwErrorIn preProp
+        "couldn't find column of appropriate (integer / decimal) type"
   PreApp s [tn, cn] | s == SColumnDelta -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
@@ -497,7 +500,8 @@ inferPreProp preProp = case preProp of
       , do
           _ <- expectColumnType tn' cn' SDecimal
           pure $ Some SDecimal (PropSpecific (DecColumnDelta tn' cn'))
-      ] <|> throwErrorIn preProp "couldn't find column of appropriate (integer / decimal) type"
+      ] <|> throwErrorIn preProp
+        "couldn't find column of appropriate (integer / decimal) type"
   PreApp s [tn, rk] | s == SRowRead -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
@@ -605,7 +609,9 @@ checkPreProp ty preProp
         userShow (existentialType a') <> " and " <>
         userShow (existentialType b')
   (SInteger, PreApp (toOp arithOpP -> Just op) [a, b])
-    -> PNumerical ... IntArithOp op <$> checkPreProp SInteger a <*> checkPreProp SInteger b
+    -> PNumerical ... IntArithOp op
+      <$> checkPreProp SInteger a
+      <*> checkPreProp SInteger b
   (SDecimal, PreApp (toOp unaryArithOpP -> Just op) [a])
     -> PNumerical . DecUnaryArithOp op <$> checkPreProp SDecimal a
   (SInteger, PreApp (toOp unaryArithOpP -> Just op) [a])
@@ -632,10 +638,10 @@ expectColumnType (TextLit tn) (TextLit cn) expectedTy = do
         userShow foundTy
       Just Refl -> pure ()
     _ -> throwErrorT $
-      "didn't find expected column " <> userShow cn <> " in table " <> userShow tn
+      "didn't find expected column " <> userShow cn <> " in table " <>
+      userShow tn
 expectColumnType _ _ _
-  -- TODO(joel): make this better
-  = error "table and column names must be concrete at this point"
+  = throwError "table and column names must be statically knowable"
 
 expectTableExists :: Prop TyTableName -> PropCheck ()
 expectTableExists (TextLit tn) = do
@@ -647,10 +653,12 @@ expectTableExists (TextLit tn) = do
 expectTableExists (PVar vid name) = do
   ty <- view (varTys . at vid)
   case ty of
-    Nothing     -> throwErrorT $ "unable to look up variable " <> name <> " (expected table)"
+    Nothing     -> throwErrorT $
+      "unable to look up variable " <> name <> " (expected table)"
     Just QTable -> pure ()
     _           -> throwErrorT $ "expected " <> name <> " to be a table"
-expectTableExists tn = throwError $ "table name must be concrete at this point: " ++ showTm tn
+expectTableExists tn = throwError $
+  "table name must be concrete at this point: " ++ showTm tn
 
 -- Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.
