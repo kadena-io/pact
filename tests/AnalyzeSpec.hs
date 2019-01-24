@@ -2921,3 +2921,35 @@ spec = describe "analyze" $ do
       --       |]
 
       -- expectPass code $ Valid Abort'
+
+  describe "using a separate function to state properties of multiple function calls" $ do
+    describe "associativity of addition" $ do
+      let code = [text|
+            (defun test:bool (a:integer b:integer c:integer)
+              @model [ (property result) ]
+              (= (+ a (+ b c)) (+ (+ a b) c)))
+            |]
+      expectVerified code
+
+    describe "associativity of list concatenation" $ do
+      let code = [text|
+            (defun test:bool (a:[integer] b:[integer] c:[integer])
+              @model [ (property result) ]
+              (= (+ a (+ b c)) (+ (+ a b) c)))
+            |]
+      expectVerified code
+
+    describe "testing monotonicity of a function" $ do
+      let code = [text|
+            (defun f:integer (x:integer)
+              (if (< x 0) (- x 5) (- x 3)))
+
+            (defun test:bool (a:integer b:integer)
+              @model [ (property result) ]
+              ; a < b => f(a) < f(b)
+              (or (< a b)
+                  (not (< (f a) (f b)))
+                  )
+              )
+            |]
+      expectVerified code
