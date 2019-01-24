@@ -82,21 +82,24 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
         ) => b)
     -> b
 
--- | Execution context that can be a clean slate, or propagated from a
--- previous transaction/function call analysis.
-data AnalyzeContext
-  = AnalyzeContext
-    { _acModuleName :: Pact.ModuleName
-    , _acRegistry   :: !(SFunArray RegistryName Guard)
-    , _acTxKeySets  :: !(SFunArray Str Guard)
-    , _acTxDecimals :: !(SFunArray Str Decimal)
-    , _acTxIntegers :: !(SFunArray Str Integer)
+data TxMetadata
+  = TxMetadata
+    { _tmKeySets  :: !(SFunArray Str Guard)
+    , _tmDecimals :: !(SFunArray Str Decimal)
+    , _tmIntegers :: !(SFunArray Str Integer)
+    -- TODO: strings
     }
+
+newtype Registry = Registry
+  { _registryMap :: SFunArray RegistryName Guard }
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope       :: !(Map VarId AVal) -- used as a stack
-    , _aeContext     :: !AnalyzeContext
+    { _aeModuleName  :: !Pact.ModuleName
+    -- TODO: pact id
+    , _aeRegistry    :: !Registry
+    , _aeTxMetadata  :: !TxMetadata
+    , _aeScope       :: !(Map VarId AVal) -- used as a stack
     , _aeGuardPasses :: !(SFunArray Guard Bool)
     , _invariants    :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds   :: !(TableMap (Map Text VarId))
@@ -104,25 +107,36 @@ data AnalyzeEnv
     , _aeInfo        :: !Info
     }
 
-instance Show AnalyzeContext where
-  showsPrec p AnalyzeContext{..} = showParen (p > 10)
-    $ showString "AnalyzeContext "
-    . showsPrec 11 _acModuleName
+instance Show TxMetadata where
+  showsPrec p TxMetadata{..} = showParen (p > 10)
+    $ showString "TxMetadata "
+    . showsPrec 11 _tmKeySets
     . showChar ' '
-    . showsPrec 11 _acRegistry
+    . showsPrec 11 _tmDecimals
     . showChar ' '
-    . showsPrec 11 _acTxKeySets
-    . showChar ' '
-    . showsPrec 11 _acTxDecimals
-    . showChar ' '
-    . showsPrec 11 _acTxIntegers
+    . showsPrec 11 _tmIntegers
+    --
+    -- TODO: strings
+    --
+
+instance Show Registry where
+  showsPrec p Registry{..} = showParen (p > 10)
+    $ showString "Registry "
+    . showsPrec 11 _registryMap
 
 instance Show AnalyzeEnv where
   showsPrec p AnalyzeEnv{..} = showParen (p > 10)
     $ showString "AnalyzeEnv "
-    . showsPrec 11 _aeScope
+    . showsPrec 11 _aeModuleName
     . showChar ' '
-    . showsPrec 11 _aeContext
+    --
+    -- TODO: pact id
+    --
+    . showsPrec 11 _aeRegistry
+    . showChar ' '
+    . showsPrec 11 _aeTxMetadata
+    . showChar ' '
+    . showsPrec 11 _aeScope
     . showChar ' '
     . showsPrec 11 _aeGuardPasses
     . showChar ' '
@@ -134,23 +148,22 @@ instance Show AnalyzeEnv where
     . showChar ' '
     . showsPrec 11 _aeInfo
 
-mkAnalyzeContext :: Pact.ModuleName -> AnalyzeContext
-mkAnalyzeContext modName =
-  let registry    = mkFreeArray "registry"
-      txKeySets   = mkFreeArray "txKeySets"
-      txDecimals  = mkFreeArray "txDecimals"
-      txIntegers  = mkFreeArray "txIntegers"
-   in AnalyzeContext modName registry txKeySets txDecimals txIntegers
+mkRegistry :: Registry
+mkRegistry = Registry $ mkFreeArray "registry"
 
 mkAnalyzeEnv
-  :: AnalyzeContext
+  :: Pact.ModuleName
+  -> Registry
   -> [Table]
   -> Map VarId AVal
   -> ModelTags 'Symbolic
   -> Info
   -> Maybe AnalyzeEnv
-mkAnalyzeEnv context tables args tags info = do
-  let guardPasses = mkFreeArray "guardPasses"
+mkAnalyzeEnv modName registry tables args tags info = do
+  let txMetadata  = TxMetadata (mkFreeArray "txKeySets")
+                               (mkFreeArray "txDecimals")
+                               (mkFreeArray "txIntegers")
+      guardPasses = mkFreeArray "guardPasses"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -164,7 +177,8 @@ mkAnalyzeEnv context tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args context guardPasses invariants' columnIds' tags info
+  pure $ AnalyzeEnv modName registry txMetadata args guardPasses invariants'
+    columnIds' tags info
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -298,7 +312,8 @@ data AnalysisResult
     }
   deriving (Show)
 
-makeLenses ''AnalyzeContext
+makeLenses ''TxMetadata
+makeLenses ''Registry
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
 makeLenses ''BeforeAndAfter
@@ -308,7 +323,6 @@ makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
 makeLenses ''AnalysisResult
 makeLenses ''QueryEnv
-
 
 mkQueryEnv
   :: AnalyzeEnv
@@ -427,19 +441,19 @@ class HasAnalyzeEnv a where
   scope = analyzeEnv.aeScope
 
   registry :: Lens' a (SFunArray RegistryName Guard)
-  registry = analyzeEnv.aeContext.acRegistry
+  registry = analyzeEnv.aeRegistry.registryMap
 
   guardPasses :: Lens' a (SFunArray Guard Bool)
   guardPasses = analyzeEnv.aeGuardPasses
 
   txKeySets :: Lens' a (SFunArray Str Guard)
-  txKeySets = analyzeEnv.aeContext.acTxKeySets
+  txKeySets = analyzeEnv.aeTxMetadata.tmKeySets
 
   txDecimals :: Lens' a (SFunArray Str Decimal)
-  txDecimals = analyzeEnv.aeContext.acTxDecimals
+  txDecimals = analyzeEnv.aeTxMetadata.tmDecimals
 
   txIntegers :: Lens' a (SFunArray Str Integer)
-  txIntegers = analyzeEnv.aeContext.acTxIntegers
+  txIntegers = analyzeEnv.aeTxMetadata.tmIntegers
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv

@@ -94,11 +94,11 @@ runAnalysis'
 runAnalysis' modName query tables args tm rootPath tags info = do
   --
   -- TODO: pass this in (from a previous analysis) when we analyze >1 function
-  --       calls:
+  --       calls. we will want to propagate previous db state too.
   --
-  let context = mkAnalyzeContext modName
+  let reg = mkRegistry
 
-  aEnv <- case mkAnalyzeEnv context tables args tags info of
+  aEnv <- case mkAnalyzeEnv modName reg tables args tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"

@@ -26,10 +26,10 @@ import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
 import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
-import           Pact.Analyze.Types.Eval  (aeContext, acRegistry, acTxDecimals,
-                                           acTxIntegers, acTxKeySets,
-                                           mkAnalyzeContext, mkAnalyzeEnv,
-                                           mkInitialAnalyzeState)
+import           Pact.Analyze.Types.Eval  (aeRegistry, aeTxMetadata,
+                                           tmDecimals, tmIntegers, tmKeySets,
+                                           mkAnalyzeEnv, mkRegistry,
+                                           mkInitialAnalyzeState, registryMap)
 import           Pact.Analyze.Util        (dummyInfo)
 
 import           Pact.Eval                (reduce)
@@ -103,9 +103,10 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
         (error "analyzeEval: Located TVal unexpectedly forced")
         Map.empty Map.empty
 
-      context = mkAnalyzeContext $ Pact.ModuleName "test" Nothing
+      modName = Pact.ModuleName "test" Nothing
+      reg     = mkRegistry
 
-  Just aEnv <- pure $ mkAnalyzeEnv context tables args tags dummyInfo
+  Just aEnv <- pure $ mkAnalyzeEnv modName reg tables args tags dummyInfo
 
   let writeArray' k v env = writeArray env k v
 
@@ -113,7 +114,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       -- TODO: need to hook this up to authorized-by (NameAuthorized) support
       --
       withRegistryGuards = flip (foldr
-          (\(k, v) -> aeContext.acRegistry %~
+          (\(k, v) -> aeRegistry.registryMap %~
             writeArray' (literal (RegistryName (T.pack k))) (literal v)))
         (Map.toList (fmap snd registryKSs))
 
@@ -123,17 +124,17 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       withKsAuths = id
 
       withTxKeySets = flip (foldr
-        (\(k, v) -> aeContext.acTxKeySets %~
+        (\(k, v) -> aeTxMetadata.tmKeySets %~
           writeArray' (literal (Str k)) (literal v)))
         (Map.toList (fmap snd txKSs))
 
       withDecimals = flip (foldr
-          (\(k, v) -> aeContext.acTxDecimals %~
+          (\(k, v) -> aeTxMetadata.tmDecimals %~
             writeArray' (literal (Str k)) (literal v)))
         (Map.toList txDecs)
 
       withIntegers = flip (foldr
-          (\(k, v) -> aeContext.acTxIntegers %~
+          (\(k, v) -> aeTxMetadata.tmIntegers %~
             writeArray' (literal (Str k)) (literal v)))
         (Map.toList txInts)
 
