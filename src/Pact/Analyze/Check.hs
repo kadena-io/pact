@@ -281,13 +281,14 @@ analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
 
 verifyFunctionInvariants'
-  :: Text
+  :: ModuleName
+  -> Text
   -> Info
   -> [Table]
   -> [Named Node]
   -> [AST Node]
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants' funName funInfo tables pactArgs body = runExceptT $ do
+verifyFunctionInvariants' modName funName funInfo tables pactArgs body = runExceptT $ do
     (args, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation funName funInfo pactArgs body
 
@@ -296,8 +297,8 @@ verifyFunctionInvariants' funName funInfo tables pactArgs body = runExceptT $ do
       tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
       let rootPath = _egRootPath graph
       resultsTable <- withExceptT analyzeToCheckFailure $
-        runInvariantAnalysis tables (analysisArgs modelArgs') tm rootPath tags
-          funInfo
+        runInvariantAnalysis modName tables (analysisArgs modelArgs') tm
+          rootPath tags funInfo
 
       -- Iterate through each invariant in a single query so we can reuse our
       -- assertion stack.
@@ -337,14 +338,15 @@ verifyFunctionInvariants' funName funInfo tables pactArgs body = runExceptT $ do
     runSymbolic = SBV.runSMTWith config
 
 verifyFunctionProperty
-  :: Text
+  :: ModuleName
+  -> Text
   -> Info
   -> [Table]
   -> [Named Node]
   -> [AST Node]
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo check) =
+verifyFunctionProperty modName funName funInfo tables pactArgs body (Located propInfo check) =
   runExceptT $ do
     (args, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
@@ -355,7 +357,7 @@ verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo ch
       let rootPath = _egRootPath graph
       AnalysisResult _querySucceeds prop ksProvs
         <- withExceptT analyzeToCheckFailure $
-          runPropertyAnalysis check tables (analysisArgs modelArgs') tm
+          runPropertyAnalysis modName check tables (analysisArgs modelArgs') tm
             rootPath tags funInfo
 
       -- TODO: bring back the query success check when we've resolved the SBV
@@ -637,37 +639,51 @@ runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
   Left err   -> Left (meta, err)
   Right good -> Right (Located (getInfo meta) good)
 
-verifyFunctionProps :: [Table] -> Ref -> Text -> [Located Check] -> IO [CheckResult]
-verifyFunctionProps tables ref name props = do
+verifyFunctionProps
+  :: ModuleName
+  -> [Table]
+  -> Ref
+  -> Text
+  -> [Located Check]
+  -> IO [CheckResult]
+verifyFunctionProps modName tables ref funName props = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
 
   case fun of
     TopFun FDefun {_fInfo, _fArgs, _fBody} _ ->
       if Set.null failures
-      then for props $ verifyFunctionProperty name _fInfo tables _fArgs _fBody
+      then for props $
+             verifyFunctionProperty modName funName _fInfo tables _fArgs _fBody
       else pure [Left (CheckFailure _fInfo (TypecheckFailure failures))]
     _ -> pure []
 
 verifyFunctionInvariants
-  :: [Table]
+  :: ModuleName
+  -> [Table]
   -> Ref
   -> Text
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants tables ref name = do
+verifyFunctionInvariants modName tables ref funName = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
 
   case fun of
     TopFun FDefun {_fInfo, _fArgs, _fBody} _ ->
       if Set.null failures
-      then verifyFunctionInvariants' name _fInfo tables _fArgs _fBody
+      then verifyFunctionInvariants' modName funName _fInfo tables _fArgs _fBody
       else pure $ Left $ CheckFailure _fInfo (TypecheckFailure failures)
     _ -> pure $ Right $ TableMap Map.empty
 
 -- TODO: use from Control.Monad.Except when on mtl 2.2.2
 liftEither :: MonadError e m => Either e a -> m a
 liftEither = either throwError return
+
+moduleName :: ModuleData -> ModuleName
+moduleName moduleData =
+  case moduleData ^. mdModule of
+    Interface{..} -> _interfaceName
+    Module{..}    -> _mName
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -741,8 +757,11 @@ verifyModule modules moduleData = runExceptT $ do
   let funChecks' :: Either ParseFailure (HM.HashMap Text (Ref, [Located Check]))
       funChecks' = traverse sequence funChecks
 
+      modName :: ModuleName
+      modName = moduleName moduleData
+
       verifyFunProps :: Ref -> Text -> [Located Check] -> IO [CheckResult]
-      verifyFunProps = verifyFunctionProps tables
+      verifyFunProps = verifyFunctionProps modName tables
 
   funChecks'' <- case funChecks' of
     Left errs         -> throwError $ ModuleParseFailure errs
@@ -752,7 +771,7 @@ verifyModule modules moduleData = runExceptT $ do
     verifyFunProps ref name check
   invariantChecks <- ifor typecheckedRefs $ \name ref ->
     withExceptT ModuleCheckFailure $ ExceptT $
-      verifyFunctionInvariants tables ref name
+      verifyFunctionInvariants modName tables ref name
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
@@ -783,19 +802,15 @@ verifyCheck
   -> Check          -- ^ the check we're running
   -> ExceptT VerificationFailure IO CheckResult
 verifyCheck moduleData funName check = do
-  let info       = dummyInfo
-      module'    = moduleData ^. mdModule
-      moduleName = nameOf module'
-      modules    = HM.fromList [(moduleName, moduleData)]
+  let info    = dummyInfo
+      modName = moduleName moduleData
+      modules = HM.fromList [(modName, moduleData)]
+
       moduleFun :: ModuleData -> Text -> Maybe Ref
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
 
   tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
-      Right . head <$> verifyFunctionProps tables funRef funName [Located info check]
+      Right . head <$> verifyFunctionProps modName tables funRef funName [Located info check]
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
-  where
-    nameOf m = case m of
-      Interface{..} -> _interfaceName
-      Module{..}    -> _mName

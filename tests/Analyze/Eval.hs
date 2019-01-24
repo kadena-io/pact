@@ -103,7 +103,9 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
         (error "analyzeEval: Located TVal unexpectedly forced")
         Map.empty Map.empty
 
-  Just aEnv <- pure $ mkAnalyzeEnv mkAnalyzeContext tables args tags dummyInfo
+      context = mkAnalyzeContext $ Pact.ModuleName "test" Nothing
+
+  Just aEnv <- pure $ mkAnalyzeEnv context tables args tags dummyInfo
 
   let writeArray' k v env = writeArray env k v
 

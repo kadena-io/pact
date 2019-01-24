@@ -30,7 +30,7 @@ import           Data.SBV                    (SBV, Symbolic)
 import qualified Data.SBV                    as SBV
 import           Data.String                 (fromString)
 
-import           Pact.Types.Lang             (Info)
+import           Pact.Types.Lang             (Info, ModuleName)
 
 import           Pact.Analyze.Alloc          (runAlloc)
 import           Pact.Analyze.Errors
@@ -82,7 +82,8 @@ analyzeInvariants = assumingSuccess =<< invariantsHold''
 -- | Helper to run either property or invariant analysis
 runAnalysis'
   :: Functor f
-  => Query (f (S Bool))
+  => ModuleName
+  -> Query (f (S Bool))
   -> [Table]
   -> Map VarId AVal
   -> ETerm
@@ -90,12 +91,12 @@ runAnalysis'
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' query tables args tm rootPath tags info = do
+runAnalysis' modName query tables args tm rootPath tags info = do
   --
   -- TODO: pass this in (from a previous analysis) when we analyze >1 function
   --       calls:
   --
-  let context = mkAnalyzeContext
+  let context = mkAnalyzeContext modName
 
   aEnv <- case mkAnalyzeEnv context tables args tags info of
     Just env -> pure env
@@ -126,7 +127,8 @@ runAnalysis' query tables args tm rootPath tags info = do
   pure $ results <&> \prop -> AnalysisResult querySucceeds (_sSbv prop) ksProvs
 
 runPropertyAnalysis
-  :: Check
+  :: ModuleName
+  -> Check
   -> [Table]
   -> Map VarId AVal
   -> ETerm
@@ -134,19 +136,20 @@ runPropertyAnalysis
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis check tables args tm rootPath tags info =
+runPropertyAnalysis modName check tables args tm rootPath tags info =
   runIdentity <$>
-    runAnalysis'
-      (Identity <$> analyzeCheck check) tables args tm rootPath tags info
+    runAnalysis' modName (Identity <$> analyzeCheck check) tables args tm
+      rootPath tags info
 
 runInvariantAnalysis
-  :: [Table]
+  :: ModuleName
+  -> [Table]
   -> Map VarId AVal
   -> ETerm
   -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis tables args tm rootPath tags info =
+runInvariantAnalysis modName tables args tm rootPath tags info =
   unInvariantsF <$>
-    runAnalysis' analyzeInvariants tables args tm rootPath tags info
+    runAnalysis' modName analyzeInvariants tables args tm rootPath tags info

@@ -86,7 +86,8 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
 -- previous transaction/function call analysis.
 data AnalyzeContext
   = AnalyzeContext
-    { _acRegistry   :: !(SFunArray RegistryName Guard)
+    { _acModuleName :: Pact.ModuleName
+    , _acRegistry   :: !(SFunArray RegistryName Guard)
     , _acTxKeySets  :: !(SFunArray Str Guard)
     , _acTxDecimals :: !(SFunArray Str Decimal)
     , _acTxIntegers :: !(SFunArray Str Integer)
@@ -106,6 +107,8 @@ data AnalyzeEnv
 instance Show AnalyzeContext where
   showsPrec p AnalyzeContext{..} = showParen (p > 10)
     $ showString "AnalyzeContext "
+    . showsPrec 11 _acModuleName
+    . showChar ' '
     . showsPrec 11 _acRegistry
     . showChar ' '
     . showsPrec 11 _acTxKeySets
@@ -131,13 +134,13 @@ instance Show AnalyzeEnv where
     . showChar ' '
     . showsPrec 11 _aeInfo
 
-mkAnalyzeContext :: AnalyzeContext
-mkAnalyzeContext =
+mkAnalyzeContext :: Pact.ModuleName -> AnalyzeContext
+mkAnalyzeContext modName =
   let registry    = mkFreeArray "registry"
       txKeySets   = mkFreeArray "txKeySets"
       txDecimals  = mkFreeArray "txDecimals"
       txIntegers  = mkFreeArray "txIntegers"
-   in AnalyzeContext registry txKeySets txDecimals txIntegers
+   in AnalyzeContext modName registry txKeySets txDecimals txIntegers
 
 mkAnalyzeEnv
   :: AnalyzeContext
