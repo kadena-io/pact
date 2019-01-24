@@ -51,7 +51,7 @@ withCapability =
   \upon completion of BODY. Nested 'with-capability' calls for the same token \
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
   \but simply execute BODY. \
-   \`$(with-capability (update-users id) (update users id { salary: new-salary }))`"
+   \`$(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))`"
   where
     withCapability' :: NativeFun e
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
@@ -63,7 +63,7 @@ withCapability =
       composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
                                      set (evalCapabilities . capComposed) [] s)
       r <- reduceBody body
-      -- only revoke if newly granted (ie, isNothing grantedCap)
+      -- only revoke if newly granted
       forM_ grantedCap $ \newcap -> do
         revokeCapability newcap
         mapM_ revokeCapability composedCaps
