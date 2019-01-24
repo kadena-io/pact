@@ -33,7 +33,7 @@ module Pact.Types.Term
    UserGuard(..),
    ModuleGuard(..),
    Guard(..),
-   DefType(..),
+   DefType(..),_Defun,_Defpact,_Defcap,
    defTypeRep,
    NativeDefName(..),DefName(..),
    FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
@@ -64,7 +64,7 @@ module Pact.Types.Term
    ) where
 
 
-import Control.Lens (makeLenses)
+import Control.Lens (makeLenses,makePrisms)
 import Control.Applicative
 import Data.List
 import Control.Monad
@@ -845,3 +845,4 @@ makeLenses ''Module
 makeLenses ''App
 makeLenses ''Def
 makeLenses ''ModuleName
+makePrisms ''DefType

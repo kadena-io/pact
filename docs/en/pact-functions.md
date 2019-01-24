@@ -1223,6 +1223,17 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 
 ## Capabilities {#Capabilities}
 
+### compose-capability {#compose-capability}
+
+*capability*&nbsp;`( -> bool)` *&rarr;*&nbsp;`bool`
+
+
+Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production, only valid within a (distinct) 'defcap' body, as a way to compose CAPABILITY with the outer capability such that the scope of the containing 'with-capability' call will "import" this capability. Thus, a call to '(with-capability (OUTER-CAP) OUTER-BODY)', where the OUTER-CAP defcap calls '(compose-capability (INNER-CAP))', will result in INNER-CAP being granted in the scope of OUTER-BODY. 
+```lisp
+(compose-capability (TRANSFER src dest))
+```
+
+
 ### create-module-guard {#create-module-guard}
 
 *name*&nbsp;`string` *&rarr;*&nbsp;`guard`

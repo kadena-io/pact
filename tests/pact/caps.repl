@@ -51,6 +51,17 @@
   (defun get-guard (id:string)
     (at 'g (read guard-table id)))
 
+  (defcap COMPOSING-CAP ()
+    (compose-capability (KALL-CAP)))
+
+  (defun bad-compose-cap ()
+    (compose-capability (KALL-CAP)))
+
+  (defun test-compose-cap ()
+    (with-capability (COMPOSING-CAP)
+       (require-capability (KALL-CAP))))
+
+
 )
 (create-table guard-table)
 
@@ -76,12 +87,14 @@
 
 (env-keys ["k1"])
 (expect "cap k1 succeeds" 1 (test-id-cap "k1"))
-(expect-failure "direct call to test-require fails for k1" (require-capability "k1"))
+(expect-failure "direct call to test-require fails for k1"
+                (require-capability (KEYSET-ID-CAP "k1")))
 (expect-failure "cap k2 fails w/o key" (test-id-cap "k2"))
 
 (env-keys ["k2"])
 (expect-failure "cap k1 fails w/o key" (test-id-cap "k1"))
-(expect-failure "direct call to test-require fails for k2" (require-capability "k2"))
+(expect-failure "direct call to test-require fails for k2"
+                (require-capability (KEYSET-ID-CAP "k2")))
 (expect "cap k2 succeeds" 1 (test-id-cap "k2"))
 
 (expect-failure "top-level with-capability fails"
@@ -121,3 +134,11 @@
 
 (env-pactid "4")
 (expect-failure "pact enforce fails" (test-pact-guards "a"))
+
+(env-keys ["a" "b" "c"])
+(expect-failure "cannot compose caps at toplevel" (compose-capability (KALL-CAP)))
+(expect-failure "cannot compose caps in defun" (bad-compose-cap))
+;compose test will validate that KALL-CAP was acquired
+(test-compose-cap)
+;now validate that KALL-CAP is gone
+(expect-failure "KALL-CAP composed cap is revoked" (require-capability KALL-CAP))

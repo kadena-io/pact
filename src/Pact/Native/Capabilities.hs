@@ -16,6 +16,8 @@ import Control.Monad
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Runtime
+import Control.Lens
+import Control.Monad.State (state)
 
 
 capDefs :: NativeModule
@@ -24,6 +26,7 @@ capDefs =
    [ withCapability
    , enforceGuardDef "enforce-guard"
    , requireCapability
+   , composeCapability
    , createUserGuard
    , createPactGuard
    , createModuleGuard
@@ -52,9 +55,18 @@ withCapability =
   where
     withCapability' :: NativeFun e
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
+      -- erased composed
+      evalCapabilities . capComposed .= []
+      -- evaluate cap
       grantedCap <- evalCap (_tApp c)
+      -- grab composed caps and clear composed state
+      composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
+                                     set (evalCapabilities . capComposed) [] s)
       r <- reduceBody body
-      mapM_ revokeCapability grantedCap
+      -- only revoke if newly granted (ie, isNothing grantedCap)
+      forM_ grantedCap $ \newcap -> do
+        revokeCapability newcap
+        mapM_ revokeCapability composedCaps
       return r
     withCapability' i as = argsError' i as
 
@@ -94,6 +106,33 @@ requireCapability =
       unless granted $ evalError' i $ "require-capability: not granted: " ++ show cap
       return $ toTerm True
     requireCapability' i as = argsError' i as
+
+composeCapability :: NativeDef
+composeCapability =
+  defNative "compose-capability" composeCapability'
+  (funType tTyBool [("capability",TyFun $ funType' tTyBool [])])
+  "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
+  \production, only valid within a (distinct) 'defcap' body, as a way to compose \
+  \CAPABILITY with the outer capability such that the scope of the containing \
+  \'with-capability' call will \"import\" this capability. Thus, a call to \
+  \'(with-capability (OUTER-CAP) OUTER-BODY)', where the OUTER-CAP defcap calls \
+  \'(compose-capability (INNER-CAP))', will result in INNER-CAP being granted \
+  \in the scope of OUTER-BODY. \
+  \`$(compose-capability (TRANSFER src dest))`"
+  where
+    composeCapability' :: NativeFun e
+    composeCapability' i [TApp app _] = gasUnreduced i [] $ do
+      -- enforce in defcap
+      isDefCap <- uses evalCallStack $ preview (traverse . sfApp . _Just . _1 . faDefType . _Defcap)
+      void $ case isDefCap of
+        Nothing -> evalError' i "compose-capability valid only within defcap body"
+        Just {} -> do
+          granted <- evalCap app
+          -- if newly granted, add to composed list
+          forM_ granted $ \newcap -> evalCapabilities . capComposed %= (newcap:)
+      return $ toTerm True
+    composeCapability' i as = argsError' i as
+
 
 
 createPactGuard :: NativeDef
