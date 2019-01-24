@@ -565,6 +565,7 @@ safeGenAnyTerm
   :: (MonadCatch m, HasCallStack) => PropertyT m (ETerm, GenState)
 safeGenAnyTerm = (do
   (etm, gState) <- forAll genAnyTerm'
+  footnote $ T.unpack $ "term: " <> userShow etm
   pure $ show etm `deepseq` (etm, gState)
   ) `catch` (\(_e :: EmptyInterval)  -> discard) -- see note [EmptyInterval]
 
