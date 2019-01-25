@@ -179,7 +179,7 @@ evalCore (ObjMerge
     S _ obj2' <- eval obj2
     case sing @a of
       SObjectUnsafe schema -> pure $ sansProv $
-        evalObjMerge (obj1' :< schema1) (obj2' :< schema2) schema
+        evalObjMerge' (obj1' :< schema1) (obj2' :< schema2) schema
       _ -> throwErrorNoLoc "this must be an object"
 evalCore ObjMerge{} = throwErrorNoLoc "both types must be objects"
 evalCore (ObjContains (SObjectUnsafe schema) key _obj)
@@ -407,6 +407,8 @@ subObject
       _  -> subObject (_2 obj :< SingList kvs) searchSchema
 
 
+-- | Merge two objects, returning one with the requested schema.
+--
 -- We simultaneously shrink each input object, via @subObject@ so that we're
 -- always examining the smallest objects that could possibly match our
 -- searched-for schema.
@@ -509,17 +511,6 @@ evalObjMerge'
 
 evalObjMerge' (_ :< SNil') (_ :< SNil') (SingList SCons{})
   = error "evalObjMerge' invariant violation: both input object exhausted"
-
--- | Merge two objects, returning one with the requested schema.
-evalObjMerge
-  :: HasCallStack
-  => (SBV (ConcreteObj schema1) :< SingList schema1)
-  -> (SBV (ConcreteObj schema2) :< SingList schema2)
-  -> SingList schema
-  -> SBV (ConcreteObj schema)
-evalObjMerge x y s = case subObject x s of
-  SomeObj s1 obj1 -> case subObject y s of
-    SomeObj s2 obj2 -> evalObjMerge' (obj1 :< s1) (obj2 :< s2) s
 
 hasKey :: SingList schema -> S Str -> S Bool
 hasKey singList (S _ key) = sansProv $ foldrSingList sFalse
