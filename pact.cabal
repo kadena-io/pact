@@ -264,7 +264,6 @@ test-suite hspec
       , ed25519-donna
       , crypto-api
       , http-client
-      , wreq
       , servant-client
     other-modules:
         DocgenSpec
