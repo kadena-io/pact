@@ -367,7 +367,8 @@ evalCore (ObjTake ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
 -- Therefore, we work through the elements of the object one at a time, keeping
 -- the ones that go in the resulting object.
 evalDropTake
-  :: SBV (ConcreteObj schema) :< SingList schema
+  :: HasCallStack
+  => SBV (ConcreteObj schema) :< SingList schema
   -> SingList schema'
   -> SBV (ConcreteObj schema')
 evalDropTake _ SNil' = literal ()
@@ -454,7 +455,8 @@ subObject
 --
 -- result: { y: 2, z: 5 }
 evalObjMerge'
-  :: (SBV (ConcreteObj schema1) :< SingList schema1)
+  :: HasCallStack
+  => (SBV (ConcreteObj schema1) :< SingList schema1)
   -> (SBV (ConcreteObj schema2) :< SingList schema2)
   -> SingList schema
   -> SBV (ConcreteObj schema)
@@ -510,7 +512,8 @@ evalObjMerge' (_ :< SNil') (_ :< SNil') (SingList SCons{})
 
 -- | Merge two objects, returning one with the requested schema.
 evalObjMerge
-  :: (SBV (ConcreteObj schema1) :< SingList schema1)
+  :: HasCallStack
+  => (SBV (ConcreteObj schema1) :< SingList schema1)
   -> (SBV (ConcreteObj schema2) :< SingList schema2)
   -> SingList schema
   -> SBV (ConcreteObj schema)
