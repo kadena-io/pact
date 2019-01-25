@@ -26,6 +26,8 @@ module Pact.Types.Command
   ( Command(..)
 #if !defined(ghcjs_HOST_OS)
   ,mkCommand,mkCommand',verifyUserSig,verifyCommand
+#else
+  ,PPKScheme(..)
 #endif
   , ProcessedCommand(..)
   , Address(..),aFrom,aTo
