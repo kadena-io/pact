@@ -67,25 +67,11 @@ spec = around_ bracket $ describe "Servant API client tests" $ do
   mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
   url <- runIO $ parseBaseUrl _serverPath
   let clientEnv = mkClientEnv mgr url
-  it "correctly runs a simple command publicly" $ do
-    cmd <- simpleServerCmd
-    res <- runClientM (send (SubmitBatch [cmd])) clientEnv
-    res `shouldBe` (Right (ApiSuccess (RequestKeys [(cmdToRequestKey cmd)])))
   -- it "incorrectly runs a simple command privately" $ do
   --   cmd <- simpleServerCmd
   --   res <- runClientM (private (SubmitBatch [cmd])) clientEnv
   --   let expt = Right (ApiFailure "Send private: payload must have address")
   --   res `shouldBe` expt
-  it "correctly runs a simple command publicly and polls the result" $ do
-    cmd <- simpleServerCmd
-    res <- runClientM (send (SubmitBatch [cmd])) clientEnv
-    let rk = cmdToRequestKey cmd
-    res `shouldBe` (Right (ApiSuccess (RequestKeys [rk])))
-    res' <- runClientM (poll (Poll [rk])) clientEnv
-    let cmdData = (toJSON . CommandSuccess . Number) 3
-    let expt = Right (ApiSuccess (PollResponses
-            (HM.singleton rk (ApiResult cmdData (Just 0) Nothing))))
-    res' `shouldBe` expt
   it "correctly runs a simple command publicly and listens to the result" $ do
     cmd <- simpleServerCmd
     res <- runClientM (send (SubmitBatch [cmd])) clientEnv
