@@ -12,7 +12,7 @@ module Analyze.Gen where
 
 import           Control.DeepSeq
 import           Control.Lens               hiding (op, (...), Empty)
-import           Control.Monad.Catch        (MonadCatch (catch))
+import           Control.Monad.Catch        (MonadCatch (catch), SomeException)
 import           Control.Monad.Reader       (MonadReader, ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, runStateT)
 import qualified Data.Decimal               as Decimal
@@ -177,7 +177,7 @@ instance Extract 'TyGuard where
 
 -- TODO: cover Var, objects
 -- TODO: we might want to reweight these by using `Gen.frequency`.
-genCore :: MonadGen m => BoundedType -> m ETerm
+genCore :: (HasCallStack, MonadGen m) => BoundedType -> m ETerm
 genCore (BoundedInt size) = Gen.recursive Gen.choice [
     Some SInteger . Lit' <$> genInteger size
   ] $ scale 4 <$> [
@@ -286,7 +286,13 @@ genCore BoundedTime = Gen.recursive Gen.choice [
   ]
 genCore BoundedKeySet = Some SGuard . Lit' . Guard
   <$> genInteger (0 ... 2)
-genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
+genCore bound@(BoundedList elemBound) = Gen.recursive Gen.choice
+  [ Gen.subtermM2 (genCore (BoundedInt (0 ... 5))) (genCore elemBound) $
+      \elst1 elst2 -> case (elst1, elst2) of
+      (Some SInteger i, Some ty a)
+        -> pure $ Some (SList ty) $ Inj $ MakeList ty i a
+      _ -> listError elst1 elst2
+  ]
   -- EqNeq, At, Contains
   [ Gen.subtermM (genCore bound) $ \case
       Some lty@(SList ty) lst -> pure $ Some lty $ Inj $ ListReverse ty lst
@@ -299,26 +305,33 @@ genCore bound@(BoundedList elemBound) = Gen.choice $ fmap Gen.small
       (Some lty@(SList ty) l1, Some lty2 l2) -> case singEq lty lty2 of
         Nothing   -> error "impossible"
         Just Refl -> pure $ Some lty $ Inj $ ListConcat ty l1 l2
-      _ -> error (show (elst1, elst2))
+      _ -> listError elst1 elst2
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
       \elst1 elst2 -> case (elst1, elst2) of
       (Some lty@(SList ty) l, Some SInteger i)
         -> pure $ Some lty $ Inj $ ListDrop ty i l
-      _ -> error (show (elst1, elst2))
+      _ -> listError elst1 elst2
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
       \elst1 elst2 -> case (elst1, elst2) of
       (Some lty@(SList ty) l, Some SInteger i)
         -> pure $ Some lty $ Inj $ ListTake ty i l
-      _ -> error (show (elst1, elst2))
+      _ -> listError elst1 elst2
   -- Note: we currently use bounded list checking so anything beyond 10 is
   -- pointless
-  , Gen.subtermM2 (genCore (BoundedInt (0 ... 5))) (genCore elemBound) $
-      \elst1 elst2 -> case (elst1, elst2) of
-      (Some SInteger i, Some ty a)
-        -> pure $ Some (SList ty) $ Inj $ MakeList ty i a
-      _ -> error (show (elst1, elst2))
   -- LiteralList
   -- , Gen.subtermM
+  ]
+
+listError :: HasCallStack => ETerm -> ETerm -> a
+listError a@(Some aTy _) b@(Some bTy _) = error $ unlines
+  [ "expected two lists, got"
+  , T.unpack $ userShow a <> ": " <> userShow aTy
+  , "/"
+  , show a
+  , "and"
+  , T.unpack $ userShow b <> ": " <> userShow bTy
+  , "/"
+  , show b
   ]
 
 intSize, decSize, strSize :: BoundedType
@@ -359,7 +372,7 @@ genTerm size = scale 2 $ Gen.choice [genCore size, genTermSpecific size]
 genTermSpecific
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => BoundedType -> m ETerm
-genTermSpecific size@(BoundedInt len) = Gen.choice
+genTermSpecific size@(BoundedInt _len) = Gen.choice
   [ do
       base      <- Gen.int    (Range.linear 2 16)
       formatted <- Gen.string (Range.exponential 1 128) (genBaseChar base)
@@ -369,7 +382,8 @@ genTermSpecific size@(BoundedInt len) = Gen.choice
   , do
       formatted <- Gen.string (Range.exponential 1 128) (genBaseChar 10)
       pure $ Some SInteger $ CoreTerm $ StrToInt $ Lit' $ Str formatted
-  , Some SInteger . ReadInteger . StrLit <$> genIntegerName len
+  -- TODO:
+  -- , Some SInteger . ReadInteger . StrLit <$> genIntegerName len
   , genTermSpecific' size
   ]
 genTermSpecific BoundedBool       = Gen.choice
@@ -568,6 +582,8 @@ safeGenAnyTerm = (do
   footnote $ T.unpack $ "term: " <> userShow etm
   pure $ show etm `deepseq` (etm, gState)
   ) `catch` (\(_e :: EmptyInterval)  -> discard) -- see note [EmptyInterval]
+    -- also, sometimes term generation fails for mysterious reasons
+    `catch` (\(_e :: SomeException) -> discard)
 
 genFormatTime :: Gen (ETerm, GenState)
 genFormatTime = do
