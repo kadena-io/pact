@@ -86,6 +86,9 @@ toPactTm = \case
     StrToIntBase b s ->
       mkApp strToIntDef [Some SInteger b, Some SStr s]
 
+    -- TODO:
+    -- ReadInteger
+
     Comparison ty' op x y ->
       mkApp (comparisonOpToDef op) [Some ty' x, Some ty' y]
 
@@ -253,7 +256,8 @@ toPactTm'
 toPactTm' envState etm = MaybeT $ do
   pure $ runReaderT (toPactTm etm) envState
 
-toAnalyze :: Pact.Type (Pact.Term Pact.Ref) -> Pact.Term Pact.Ref -> MaybeT IO ETerm
+toAnalyze
+  :: Pact.Type (Pact.Term Pact.Ref) -> Pact.Term Pact.Ref -> MaybeT IO ETerm
 toAnalyze ty tm = do
   let cnst = TConst
         (Pact.Arg "tm" ty dummyInfo)
