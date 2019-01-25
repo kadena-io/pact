@@ -36,7 +36,6 @@ module Pact.Analyze.Parse.Prop
 -- bidirectional style, so the application is inferred while each argument is
 -- checked.
 
-
 import           Control.Applicative
 import           Control.Lens                 (at, toListOf, view, (%~), (&),
                                                (.~), (?~))
@@ -57,6 +56,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
 import           Data.Type.Equality           ((:~:) (Refl))
+import           GHC.Stack
 import           GHC.TypeLits                 (symbolVal)
 import           Prelude                      hiding (exp)
 
@@ -403,15 +403,15 @@ inferPreProp preProp = case preProp of
     -- special case for an empty list on either side
     case (a'', b'') of
       -- cast ([] :: [*]) to any other list type
-      (Some (SList SAny) (CoreProp (LiteralList _ [])), Some (SList ty) prop)
+      (Some (SList SAny) (CoreProp (Lit [])), Some (SList ty) prop)
         | Just eqNeq <- toOp eqNeqP op'
         -> pure $ Some SBool $ CoreProp $
-          ListEqNeq ty eqNeq (CoreProp (LiteralList ty [])) prop
+          ListEqNeq ty eqNeq (CoreProp (Lit [])) prop
 
-      (Some (SList ty) prop, Some (SList SAny) (CoreProp (LiteralList _ [])))
+      (Some (SList ty) prop, Some (SList SAny) (CoreProp (Lit [])))
         | Just eqNeq <- toOp eqNeqP op'
         -> pure $ Some SBool $ CoreProp $
-          ListEqNeq ty eqNeq (CoreProp (LiteralList ty [])) prop
+          ListEqNeq ty eqNeq (CoreProp (Lit [])) prop
 
       -- We require both types to be equal to compare them, except for objects!
       _ -> case singEq aTy bTy of
@@ -559,6 +559,21 @@ inferPreProp preProp = case preProp of
     Some (SList ty) lst' <- inferPreProp lst
     pure $ Some (SList ty) $ CoreProp $ ListSort ty lst'
 
+  PreApp s [i, lst] | s == SListTake -> do
+    i' <- checkPreProp SInteger i
+    Some (SList ty) lst' <- inferPreProp lst
+    pure $ Some (SList ty) $ CoreProp $ ListTake ty i' lst'
+
+  PreApp s [i, lst] | s == SListDrop -> do
+    i' <- checkPreProp SInteger i
+    Some (SList ty) lst' <- inferPreProp lst
+    pure $ Some (SList ty) $ CoreProp $ ListDrop ty i' lst'
+
+  PreApp s [i, a] | s == SMakeList -> do
+    i' <- checkPreProp SInteger i
+    Some ty a' <- inferPreProp a
+    pure $ Some (SList ty) $ CoreProp $ MakeList ty i' a'
+
   -- inline property definitions. see note [Inlining].
   PreApp fName args -> do
     defn <- view $ definedProps . at fName
@@ -619,9 +634,10 @@ checkPreProp ty preProp
 
   _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
 
-typeError :: (UserShow a, UserShow b) => PreProp -> a -> b -> PropCheck c
+typeError :: (HasCallStack, UserShow a, UserShow b) => PreProp -> a -> b -> PropCheck c
 typeError preProp a b = throwErrorIn preProp $
-  "type error: " <> userShow a <> " vs " <> userShow b
+  "type error: " <> userShow a <> " vs " <> userShow b <> "(" <>
+  T.pack (prettyCallStack callStack) <> ")"
 
 expectColumnType
   :: Prop TyTableName -> Prop TyColumnName -> SingTy a -> PropCheck ()
