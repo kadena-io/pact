@@ -473,7 +473,7 @@ translateBinding :: Named Node -> TranslateM (Located Binding)
 translateBinding (Named unmunged' node _) = do
   vid <- genVarId
   let munged = node ^. aId.tiName.to Munged
-      info = node ^. aId . Pact.tiInfo
+      info   = node ^. aId . Pact.tiInfo
   varType <- translateType node
   pure $ Located info $ Binding vid (Unmunged unmunged') munged varType
 
