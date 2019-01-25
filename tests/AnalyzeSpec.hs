@@ -2639,6 +2639,9 @@ spec = describe "analyze" $ do
                         (>= i 0)
                         (<  i 5))
                       (= (at i result) a))))
+              , (property (not (!=
+                  (take 0 (make-list 2 0))
+                  (take 0 (make-list 2 0)))))
               ]
             (make-list 5 a))
           |]
