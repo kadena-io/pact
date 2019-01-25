@@ -21,6 +21,8 @@ module Utils.TestRunner
   , pactWithYield
   , pactWithYieldErr
   , pactWithSameNameYield
+  , startServer
+  , stopServer
   ) where
 
 import Pact.Server.Server (setupServer)
@@ -43,13 +45,15 @@ import System.Directory
 import System.Timeout
 import NeatInterpolation (text)
 
-testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
+testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath, _serverRootPath :: String
 testDir = "tests/"
 _testLogDir = testDir ++ "test-log/"
 _testConfigFilePath = testDir ++ "test-config.yaml"
 
 _testPort = "8080"
 _serverPath = "http://localhost:" ++ _testPort ++ "/api/v1/"
+
+_serverRootPath = "http://localhost:" ++ _testPort ++ "/"
 
 _logFiles :: [String]
 _logFiles = ["access.log","commands.sqlite","error.log","pact.sqlite"]
@@ -77,7 +81,7 @@ startServer configFile = do
 
 waitUntilStarted :: IO ()
 waitUntilStarted = do
-  r <- get $ _serverPath ++ "poll"
+  r <- get $ _serverRootPath ++ "version"
   let s = r ^. responseStatus . statusCode
   if s == 200
     then return ()

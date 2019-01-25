@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -23,7 +24,12 @@
 --
 
 module Pact.Types.Command
-  ( Command(..),mkCommand,mkCommand'
+  ( Command(..)
+#if !defined(ghcjs_HOST_OS)
+  , mkCommand, mkCommand', verifyUserSig, verifyCommand
+#else
+  , PPKScheme(..)
+#endif
   , ProcessedCommand(..)
   , Address(..),aFrom,aTo
   , PrivateMeta(..),pmAddress
@@ -32,7 +38,7 @@ module Pact.Types.Command
   , Payload(..)
   , ParsedCode(..)
   , UserSig(..),usScheme,usPubKey,usSig
-  , verifyUserSig, verifyCommand
+
   , CommandError(..)
   , CommandSuccess(..)
   , CommandResult(..)
@@ -51,7 +57,6 @@ import Control.DeepSeq
 import Data.Aeson as A
 import Data.Maybe (fromMaybe)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize as SZ
 import Data.String
 import Data.Text hiding (filter, all)
@@ -66,9 +71,17 @@ import Prelude
 
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Orphans ()
-import Pact.Types.Crypto as Base
-import Pact.Parse
 import Pact.Types.RPC
+import Pact.Parse
+
+
+#if !defined(ghcjs_HOST_OS)
+import qualified Data.ByteString.Lazy as BSL
+import Pact.Types.Crypto as Base
+#else
+import Pact.Types.Hash
+#endif
+
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
@@ -97,6 +110,16 @@ instance (FromJSON a) => FromJSON (Command a) where
 instance NFData a => NFData (Command a)
 
 
+-- | Strict Either thing for attempting to deserialize a Command.
+data ProcessedCommand m a =
+  ProcSucc !(Command (Payload m a)) |
+  ProcFail !String
+  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
+
+
+#if !defined(ghcjs_HOST_OS)
+
 requestKeyHash :: H.Blake2b_512
 requestKeyHash = H.Blake2b_512
 
@@ -105,6 +128,7 @@ mkCommand :: (ToJSON m, ToJSON c) =>
              [SomeKeyPair] -> m ->
              Text -> PactRPC c -> IO (Command ByteString)
 mkCommand creds meta nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce meta)
+
 
 mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = makeCommand <$> (traverse makeSigs creds)
@@ -133,12 +157,29 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
 {-# INLINE verifyCommand #-}
 
 
--- | Strict Either thing for attempting to deserialize a Command.
-data ProcessedCommand m a =
-  ProcSucc !(Command (Payload m a)) |
-  ProcFail !String
-  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
-instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
+verifyUserSig :: ByteString -> UserSig -> Bool
+verifyUserSig msg UserSig{..} = verify (toScheme _usScheme) msg (PubT _usPubKey) (SigT _usSig)
+
+
+#else
+
+-- TODO: Add ETH Scheme for GHCJS
+
+data PPKScheme = ED25519
+  deriving (Show, Eq, Ord, Generic)
+
+instance NFData PPKScheme
+instance Serialize PPKScheme
+instance ToJSON PPKScheme where
+  toJSON ED25519 = "ED25519"
+instance FromJSON PPKScheme where
+  parseJSON = withText "PPKScheme" $ \s -> case s of
+    "ED25519" -> return ED25519
+    _ -> fail $ "Unsupported PPKScheme: " ++ show s
+  {-# INLINE parseJSON #-}
+
+#endif
+
 
 -- | Pair parsed Pact expressions with the original text.
 data ParsedCode = ParsedCode {
@@ -227,9 +268,6 @@ instance FromJSON UserSig where
   {-# INLINE parseJSON #-}
 
 
-verifyUserSig :: ByteString -> UserSig -> Bool
-verifyUserSig msg UserSig{..} = verify (toScheme _usScheme) msg (PubT _usPubKey) (SigT _usSig)
-
 
 data CommandError = CommandError {
       _ceMsg :: String
@@ -242,12 +280,16 @@ instance ToJSON CommandError where
         maybe [] ((:[]) . ("detail" .=)) d
 
 newtype CommandSuccess a = CommandSuccess { _csData :: a }
+  deriving (Eq, Show)
 
 instance (ToJSON a) => ToJSON (CommandSuccess a) where
     toJSON (CommandSuccess a) =
         object [ "status" .= ("success" :: String)
                , "data" .= a ]
 
+instance (FromJSON a) => FromJSON (CommandSuccess a) where
+    parseJSON = withObject "CommandSuccess" $ \o ->
+        CommandSuccess <$> o .: "data"
 
 data CommandResult = CommandResult {
   _crReqKey :: RequestKey,

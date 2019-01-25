@@ -11,13 +11,12 @@ import Control.Monad.State.Strict
 import Data.Aeson
 import Data.Maybe
 import qualified Data.Text as T
-import Snap.Http.Server.Config
 import Test.Hspec
 import NeatInterpolation (text)
 import Network.Wreq
 
 import qualified Pact.Analyze.Remote.Types as Remote
-import Pact.Analyze.Remote.Server (runServer)
+import Pact.Analyze.Remote.Server (runServantServer)
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Runtime
@@ -43,13 +42,7 @@ stateModuleData :: ModuleName -> ReplState -> Maybe ModuleData
 stateModuleData nm replState = replState ^. rEnv . eeRefStore . rsModules . at nm
 
 serve :: Int -> IO ThreadId
-serve port = forkIO $ runServer config
-  where
-    config = mempty
-           & setVerbose False
-           & setPort port
-           & setAccessLog ConfigNoLog
-           & setErrorLog ConfigNoLog
+serve port = forkIO $ runServantServer port
 
 serveAndRequest :: Int -> Remote.Request -> IO (Response (Remote.Response))
 serveAndRequest port body = do
