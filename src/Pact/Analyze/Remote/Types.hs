@@ -11,6 +11,7 @@ import           Pact.Types.Term    (Module, ModuleName)
 
 data Request
   = Request [Module] ModuleName -- ^ verify one of the modules, by name
+  deriving (Eq, Show)
 
 instance A.FromJSON Request where
   parseJSON = A.withObject "Request" $ \o ->
@@ -27,7 +28,7 @@ newtype Response
   = Response
     { _responseLines :: [Text] -- ^ REPL output from the server, whether
                                -- verification has failed or succeeded.
-    }
+    } deriving (Eq, Show)
 
 instance A.FromJSON Response where
   parseJSON = A.withObject "Response" $ \o ->

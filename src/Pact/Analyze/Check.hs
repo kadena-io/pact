@@ -293,6 +293,7 @@ verifyFunctionInvariants' modName funName funInfo tables pactArgs body = runExce
       withExcept translateToCheckFailure $ runTranslation funName funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
+      lift $ SBV.setTimeOut 1000 -- one second
       modelArgs' <- lift $ runAlloc $ allocArgs args
       tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
       let rootPath = _egRootPath graph
@@ -352,6 +353,7 @@ verifyFunctionProperty modName funName funInfo tables pactArgs body (Located pro
       withExcept translateToCheckFailure $
         runTranslation funName funInfo pactArgs body
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
+      lift $ SBV.setTimeOut 1000 -- one second
       modelArgs' <- lift $ runAlloc $ allocArgs args
       tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
       let rootPath = _egRootPath graph
