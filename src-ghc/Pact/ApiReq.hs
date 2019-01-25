@@ -117,12 +117,13 @@ mkApiReqExec ar@ApiReq{..} kps fp = do
 mkExec :: String -> Value -> PublicMeta -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
 mkExec code mdata pubMeta kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
-  return $ decodeUtf8 <$>
-    mkCommand
-    kps
-    pubMeta
-    (pack $ show rid)
-    (Exec (ExecMsg (pack code) mdata))
+  cmd <- mkCommand
+         kps
+         pubMeta
+         (pack $ show rid)
+         (Exec (ExecMsg (pack code) mdata))
+  return $ decodeUtf8 <$> cmd
+
 
 mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqCont ar@ApiReq{..} kps fp = do
@@ -153,29 +154,23 @@ mkCont :: TxId -> Int -> Bool  -> Value -> PublicMeta -> [SomeKeyPair]
   -> Maybe String -> IO (Command Text)
 mkCont txid step rollback mdata pubMeta kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
-  return $ decodeUtf8 <$>
-    mkCommand
-    kps
-    pubMeta
-    (pack $ show rid)
-    (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
+  cmd <- mkCommand
+         kps
+         pubMeta
+         (pack $ show rid)
+         (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
+  return $ decodeUtf8 <$> cmd
+
 
 
 mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPair]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
   where mkPair ApiKeyPair{..} =
-          let res = case (toScheme <$> _akpScheme) of
-                      Nothing -> mkKeyPairs' defaultScheme _akpPublic _akpSecret
-                      Just (SED25519 sed) -> mkKeyPairs' sed _akpPublic _akpSecret
+          let res = case _akpScheme of
+                      Nothing -> importKeyPair defaultScheme _akpPublic _akpSecret
+                      Just ppk -> importKeyPair (toScheme ppk) _akpPublic _akpSecret
           in either dieAR return res
 
-mkKeyPairs' :: (Scheme a) => SPPKScheme a -> PublicKeyText -> PrivateKeyText -> Either String SomeKeyPair
-mkKeyPairs' scheme pubT privT = do
-  case (importKeyPair scheme pubT privT) of
-    Just kp -> Right $ SomeKeyPair kp
-    Nothing -> Left $ "Public Key and or Private Key does not match scheme provided: "
-               ++ "Received " ++ show (toPPKScheme scheme) ++ " scheme but received the following key pair "
-               ++ show pubT ++ ",  " ++ show privT
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\

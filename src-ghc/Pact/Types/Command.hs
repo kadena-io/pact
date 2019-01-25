@@ -97,23 +97,22 @@ instance (FromJSON a) => FromJSON (Command a) where
 instance NFData a => NFData (Command a)
 
 
+requestKeyHash :: H.Blake2b_512
+requestKeyHash = H.Blake2b_512
+
 
 mkCommand :: (ToJSON m, ToJSON c) =>
              [SomeKeyPair] -> m ->
-             Text -> PactRPC c -> Command ByteString
+             Text -> PactRPC c -> IO (Command ByteString)
 mkCommand creds meta nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce meta)
 
-mkCommand' :: [SomeKeyPair] -> ByteString -> Command ByteString
-mkCommand' creds env = makeCommand (makeSigs <$> creds)
+mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
+mkCommand' creds env = makeCommand <$> (traverse makeSigs creds)
   where makeCommand sigs = Command env sigs hsh
-        hsh = hashTx H.Blake2b_512 env    -- hash associated with a Command, aka a Command's Request Key
-        makeSigs (SomeKeyPair kp) = mkUserSig kp env
-         
-mkUserSig :: (Scheme a) => KeyPair a -> ByteString -> UserSig
-mkUserSig KeyPair{..} env = (UserSig (toPPKScheme _kpScheme) pubBS sig)
-  where pubBS = toB16Text $ export _kpPublicKey
-        sig = toB16Text $ export $ sign _kpScheme env _kpPublicKey _kpPrivateKey
-
+        hsh = hashTx env requestKeyHash    -- hash associated with a Command, aka a Command's Request Key
+        makeSigs kp =
+          let (PubT pub) = getPublic kp
+          in UserSig (kpToPPKScheme kp) pub <$> (sign kp env)
 
 
 verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
@@ -125,7 +124,7 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
     (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdPayload u)) <$> _cmdSigs
-    ppcmdHash' = verifyHashTx H.Blake2b_512 _cmdHash _cmdPayload
+    ppcmdHash' = verifyHashTx _cmdHash _cmdPayload requestKeyHash
     mSigIssue = if all snd ppcmdSigs' then Nothing
       else Just $ "Invalid sig(s) found: " ++ show (A.encode . fst <$> filter (not.snd) ppcmdSigs')
     toErrStr :: Either String a -> String
@@ -229,17 +228,7 @@ instance FromJSON UserSig where
 
 
 verifyUserSig :: ByteString -> UserSig -> Bool
-verifyUserSig msg UserSig{..} =
-  case (toScheme _usScheme) of
-    SED25519 s -> verifyUserSig' s msg (PubT _usPubKey) (SigT _usSig)
-
-verifyUserSig' :: (Scheme s) => SPPKScheme s -> ByteString -> PublicKeyText -> SignatureText -> Bool
-verifyUserSig' scheme msg (PubT pT) (SigT sT) =
-  let pParsed = fromText pT
-      sParsed = fromText sT
-  in case (pParsed, sParsed) of
-    (Success p, Success s) -> valid scheme msg p s
-    _ -> False
+verifyUserSig msg UserSig{..} = verify (toScheme _usScheme) msg (PubT _usPubKey) (SigT _usSig)
 
 
 data CommandError = CommandError {

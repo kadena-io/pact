@@ -115,6 +115,7 @@ library
       Pact.Types.API
       Pact.Types.Command
       Pact.Types.Crypto
+      Pact.Types.ECC
       Pact.Types.RPC
       Pact.Types.Server
       Pact.Types.SQLite

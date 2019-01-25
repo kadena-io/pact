@@ -5,12 +5,13 @@
 
 module Utils.TestRunner
   ( ApiResultCheck (..)
-  , SomeKeyPair(..)
   , testDir
   , runAll
   , flushDb
+  , Crypto.SomeKeyPair
   , genKeys
-  , getPublicKeyBS
+  , genKeysEth
+  , formatPubKeyForCmd
   , makeCheck
   , checkResult
   , threeStepPactCode
@@ -25,8 +26,7 @@ module Utils.TestRunner
 import Pact.Server.Server (setupServer)
 import Pact.Types.API
 import Pact.Types.Command
-import Pact.Types.Crypto
-import Pact.Types.Util (Export(..), toB16JSON)
+import Pact.Types.Crypto as Crypto
 
 
 import Data.Aeson hiding (Options)
@@ -140,14 +140,15 @@ flushDb = mapM_ deleteIfExists _logFiles
           when isFile $ removeFile fp
 
 genKeys :: IO SomeKeyPair
-genKeys = do
-  kp <- genKeyPair defaultScheme
-  return $ SomeKeyPair kp
+genKeys = genKeyPair defaultScheme
 
-getPublicKeyBS :: SomeKeyPair -> Value
-getPublicKeyBS (SomeKeyPair kp) = some
-  where KeyPair{..} = kp
-        some = toB16JSON $ export _kpPublicKey
+genKeysEth :: IO SomeKeyPair
+genKeysEth = genKeyPair (toScheme ETH)
+
+formatPubKeyForCmd :: SomeKeyPair -> Value
+formatPubKeyForCmd kp = String $ formatPublicKey scheme pub
+  where (PubT pub) = getPublic kp
+        scheme = toScheme (kpToPPKScheme kp)
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect

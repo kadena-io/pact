@@ -26,7 +26,7 @@ shouldMatch results checks = mapM_ match checks
 
 makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
 makeExecCmd keyPairs code =
-  mkExec code (object ["admin-keyset" .= [getPublicKeyBS keyPairs]]) def [keyPairs] Nothing
+  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
@@ -92,7 +92,7 @@ testSimpleServerCmd opts = do
 testCorrectNextStep :: Options -> Expectation
 testCorrectNextStep opts = do
   let moduleName = "testCorrectNextStep"
-  adminKeys <- genKeys
+  adminKeys <- genKeysEth
   let makeExecCmdWith = makeExecCmd adminKeys
 
   moduleCmd       <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
@@ -428,6 +428,36 @@ testTwoPartyEscrow opts = before_ flushDb $ after_ flushDb $ do
     it "finishes escrow if final price stays the same or negotiated down" $
       testValidEscrowFinish opts
 
+
+twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Options -> Expectation
+twoPartyEscrow testCmds testChecks opts = do
+  let setupPath = testDir ++ "cont-scripts/setup-"
+
+  (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
+  (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
+  (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")
+  (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
+  (_, resetTimeCmd)  <- mkApiReq (setupPath ++ "05-reset.yaml")
+  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")
+  (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
+  let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
+                : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
+  allResults <- runAll opts allCmds
+
+  let sysModuleCheck      = makeCheck sysModuleCmd False $ Just "system module loaded"
+      acctModuleCheck     = makeCheck acctModuleCmd False $ Just "TableCreated"
+      testModuleCheck     = makeCheck testModuleCmd False $ Just "test module loaded"
+      createAcctCheck     = makeCheck createAcctCmd False Nothing -- Alice should be funded with $100
+      resetTimeCheck      = makeCheck resetTimeCmd False Nothing
+      runEscrowCheck      = makeCheck runEscrowCmd False Nothing
+      balanceCheck        = makeCheck balanceCmd False $ Just "98.00"
+      allChecks           = sysModuleCheck : acctModuleCheck : testModuleCheck
+                            : createAcctCheck : resetTimeCheck : runEscrowCheck
+                            : balanceCheck : testChecks
+
+  allResults `shouldMatch` allChecks
+
+
 testDebtorPreTimeoutCancel :: Options -> Expectation
 testDebtorPreTimeoutCancel opts = do
   let testPath = testDir ++ "cont-scripts/fail-deb-cancel-"
@@ -510,7 +540,7 @@ testValidEscrowFinish opts = do
 
   (_, tryNegDownCmd)  <- mkApiReq (testPath ++ "01-cont.yaml")
   (_, credBalanceCmd) <- mkApiReq (testPath ++ "02-cred-balance.yaml")
-  (_, debBalanceCmd) <- mkApiReq (testPath ++ "03-deb-balance.yaml")
+  (_, debBalanceCmd)  <- mkApiReq (testPath ++ "03-deb-balance.yaml")
   let allCmds = [tryNegDownCmd, credBalanceCmd, debBalanceCmd]
 
   let tryNegDownCheck  = makeCheck tryNegDownCmd False
@@ -520,31 +550,3 @@ testValidEscrowFinish opts = do
       allChecks        = [tryNegDownCheck, credBalanceCheck, debBalanceCheck]
 
   twoPartyEscrow allCmds allChecks opts
-
-twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Options -> Expectation
-twoPartyEscrow testCmds testChecks opts = do
-  let setupPath = testDir ++ "cont-scripts/setup-"
-
-  (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
-  (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
-  (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")
-  (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
-  (_, resetTimeCmd)  <- mkApiReq (setupPath ++ "05-reset.yaml")
-  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")
-  (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
-  let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
-                : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
-  allResults <- runAll opts allCmds
-
-  let sysModuleCheck      = makeCheck sysModuleCmd False $ Just "system module loaded"
-      acctModuleCheck     = makeCheck acctModuleCmd False $ Just "TableCreated"
-      testModuleCheck     = makeCheck testModuleCmd False $ Just "test module loaded"
-      createAcctCheck     = makeCheck createAcctCmd False Nothing -- Alice should be funded with $100
-      resetTimeCheck      = makeCheck resetTimeCmd False Nothing
-      runEscrowCheck      = makeCheck runEscrowCmd False Nothing
-      balanceCheck        = makeCheck balanceCmd False $ Just "98.00"
-      allChecks           = sysModuleCheck : acctModuleCheck : testModuleCheck
-                            : createAcctCheck : resetTimeCheck : runEscrowCheck
-                            : balanceCheck : testChecks
-
-  allResults `shouldMatch` allChecks
