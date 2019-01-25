@@ -9,11 +9,9 @@ import           Control.Monad               ((<=<))
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Trans.Class   (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe   (MaybeT (runMaybeT))
-import           Data.Text                   (unpack)
 import           Data.Type.Equality          ((:~:) (Refl))
 import           HaskellWorks.Hspec.Hedgehog
 import           Hedgehog                    hiding (Update)
-import           Hedgehog.Internal.Property  (failWith)
 import qualified Hedgehog.Gen                as Gen
 import           Test.Hspec                  (Spec, describe, it, pending)
 
