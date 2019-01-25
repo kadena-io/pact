@@ -572,8 +572,8 @@ translateObjBinding pairs schema bodyA rhsT = do
       withNodeVars nodeVars $
         translateBody bodyA
 
-pattern EmptyList :: SingTy a -> Term ('TyList a)
-pattern EmptyList ty = CoreTerm (LiteralList ty [])
+pattern EmptyList :: Term ('TyList a)
+pattern EmptyList = CoreTerm (Lit [])
 
 translateNamedGuard :: AST Node -> TranslateM ETerm
 translateNamedGuard strA = do
@@ -757,13 +757,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
     bT <- translateNode b
     case (aT, bT) of
 
-      (Some (SList SAny) (EmptyList SAny), Some (SList ty) lst) -> do
+      (Some (SList SAny) EmptyList, Some (SList ty) lst) -> do
         op' <- toOp eqNeqP fn ?? MalformedComparison fn args
-        pure $ Some SBool $ CoreTerm $ ListEqNeq ty op' (EmptyList ty) lst
+        pure $ Some SBool $ CoreTerm $ ListEqNeq ty op' EmptyList lst
 
-      (Some (SList ty) lst, Some (SList SAny) (EmptyList SAny)) -> do
+      (Some (SList ty) lst, Some (SList SAny) EmptyList) -> do
         op' <- toOp eqNeqP fn ?? MalformedComparison fn args
-        pure $ Some SBool $ CoreTerm $ ListEqNeq ty op' lst (EmptyList ty)
+        pure $ Some SBool $ CoreTerm $ ListEqNeq ty op' lst EmptyList
 
       (Some (SList ta) a', Some (SList tb) b') -> do
         Refl <- singEq ta tb ?? TypeMismatch (EType ta) (EType tb)

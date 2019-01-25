@@ -61,33 +61,12 @@ testDualEvaluation' etm ty gState = do
       Just etm' <- lift $ fromPactVal (EType ty) pactVal
       case etm' of
         Some ty' (CoreTerm (Lit pactSval)) -> do
-          Some ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
+          Some ty'' (CoreTerm (Lit sval')) <- pure analyzeVal
 
           -- compare results
           case singEq ty' ty'' of
             Just Refl -> withEq ty' $ withShow ty' $ sval' === pactSval
             Nothing   -> EType ty' === EType ty'' -- this'll fail
-
-        Some ty' (CoreTerm (LiteralList lty svals)) -> do
-          -- compare results
-          case analyzeVal of
-            Some ty'' (CoreTerm (LiteralList lty' svals')) -> case singEq lty lty' of
-              Just Refl -> if
-                | length svals > 10             -> discard
-                | singEqListTm lty svals' svals -> success
-                | otherwise                     -> failWith Nothing $ unlines
-                  [ "━━━ Not Equal ━━━"
-                  , unpack $ singUserShowListTm lty svals
-                  , unpack $ singUserShowListTm lty svals'
-                  ]
-              Nothing   ->
-                if singEqB lty SAny && singEqListTm lty svals [] && singEqListTm lty' svals' []
-                then success
-                else EType ty' === EType ty'' -- this'll fail
-            _ -> do
-              footnote $ "l: " ++ show etm'
-              footnote $ "r: " ++ show analyzeVal
-              failure
 
         Some _ (CoreTerm (LiteralObject _ _obj)) -> do
           footnote "can't property test evaluation of objects"
