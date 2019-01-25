@@ -1133,17 +1133,56 @@ instance Num (Prop 'TyDecimal) where
 
 type EProp = Existential Prop
 
-mkLiteralList :: [Existential tm] -> Maybe (Existential (Core tm))
-mkLiteralList [] = Just $ Some (SList SAny) (LiteralList SAny [])
-mkLiteralList xs@(Some ty0 _ : _) = foldr
+-- Try to build a literal list of @a@s and if that fails builds a
+-- @LiteralList@.
+data ListBuilder tm where
+  ListBuilder
+    :: Core tm :<: tm
+    => SingTy a
+    -> Maybe [Concrete a]
+    -> Maybe (Core tm ('TyList a))
+    -> ListBuilder tm
+
+-- | This makes a literal list in one of two forms.
+--
+-- If possible we'd like to build a @Lit@ which is entirely concrete (@Lit ::
+-- Concrete a -> Core t a@). However, we can't always concretize the entire
+-- thing, so we build a @LiteralList@ (@LiteralList  :: SingTy a -> [t a] ->
+-- Core t ('TyList a)@).
+mkLiteralList
+  :: Core tm :<: tm
+  => [Existential tm]
+  -> Maybe (Existential (Core tm))
+mkLiteralList tms = case mkLiteralList' tms of
+  ListBuilder ty (Just lits) _          -> Just (Some (SList ty) (Lit lits))
+  ListBuilder ty Nothing (Just litList) -> Just (Some (SList ty) litList)
+  ListBuilder _ Nothing Nothing         -> Nothing
+
+mkLiteralList'
+  :: forall tm. Core tm :<: tm
+  => [Existential tm]
+  -> ListBuilder tm
+mkLiteralList' []
+  = ListBuilder SAny
+    (Just [])
+    (Just $ LiteralList SAny [])
+
+mkLiteralList' xs@(Some ty0 _ : _) = foldr
   (\case
     Some ty y -> \case
-      Nothing -> Nothing
-      Just (Some (SList ty') (LiteralList _ty ys)) -> case singEq ty ty' of
-        Nothing   -> Nothing
-        Just Refl -> Just (Some (SList ty') (LiteralList ty' (y:ys)))
-      _ -> error "impossible")
-  (Just (Some (SList ty0) (LiteralList ty0 [])))
+      ListBuilder ty' mLits mLitList ->
+
+        -- If there's a wrong type we give up on both lists
+        fromMaybe (ListBuilder ty Nothing Nothing) $ do
+          Refl <- singEq ty ty'
+
+          pure $ ListBuilder ty
+            (do ys     <- mLits
+                Lit y' <- project @(Core tm) @tm y
+                Just $ y' : ys)
+            (do LiteralList _ty tms <- mLitList
+                Just $ LiteralList ty' $ Inj y : tms))
+  (ListBuilder ty0 (Just []) (Just $ LiteralList ty0 []))
   xs
 
 pattern Lit' :: forall tm ty. Core tm :<: tm => Concrete ty -> tm ty
