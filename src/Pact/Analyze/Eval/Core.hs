@@ -200,16 +200,12 @@ evalCore (ListEqNeq ty op a b) = withSymVal ty $ do
   S _ a' <- withSing ty $ eval a
   S _ b' <- withSing ty $ eval b
 
-  let wrongLength = case op of
-        Eq'  -> sFalse
-        Neq' -> sTrue
-      zipF = case op of
-        Eq'  -> (.==)
-        Neq' -> (./=)
+  let sameList = SBVL.length a' .== SBVL.length b' .&&
+        band listBound (bzipWith listBound (.==) a' b')
 
-  pure $ ite (SBVL.length a' .== SBVL.length b')
-    (sansProv $ band listBound $ bzipWith listBound zipF a' b')
-    wrongLength
+  pure $ sansProv $ case op of
+    Eq'  -> sameList
+    Neq' -> sNot sameList
 evalCore (ListAt ty i l) = withSymVal ty $ do
   S _ i' <- eval i
   S _ l' <- eval l
