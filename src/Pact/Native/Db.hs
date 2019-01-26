@@ -54,13 +54,17 @@ instance Readable (TxId, TxLog (Columns Persistable)) where
 
 dbDefs :: NativeModule
 dbDefs =
-  let writeArgs = funType tTyString [("table",tableTy),("key",tTyString),("object",rowTy)]
+  let writeArgs part = funType tTyString
+        [("table",tableTy),("key",tTyString),
+         ("object",TySchema TyObject rt part)]
       writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" <> s <> "`$" <> ex <> "`"
       rt = mkSchemaVar "row"
-      tableTy = TySchema TyTable rt
-      rowTy = TySchema TyObject rt
-      bindTy = TySchema TyBinding rt
+      tableTy = TySchema TyTable rt def
+      rowTy = TySchema TyObject rt def
+      bindTy = TySchema TyBinding rt def
       a = mkTyVar "a" []
+      partial = SPPartial []
+      full = SPFull
   in ("Database",
     [setTopLevelOnly $ defRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
@@ -101,12 +105,12 @@ dbDefs =
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
-    ,defRNative "write" (write Write) writeArgs
+    ,defRNative "write" (write Write partial) (writeArgs partial)
      (writeDocs "." "(write accounts id { \"balance\": 100.0 })")
-    ,defRNative "insert" (write Insert) writeArgs
+    ,defRNative "insert" (write Insert full) (writeArgs full)
      (writeDocs ", failing if data already exists for KEY."
      "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
-    ,defRNative "update" (write Update) writeArgs
+    ,defRNative "update" (write Update partial) (writeArgs partial)
      (writeDocs ", failing if data does not exist for KEY."
       "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog
@@ -325,15 +329,15 @@ keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
 keylog _ i as = argsError i as
 
 
-write :: WriteType -> RNativeFun e
-write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
+write :: WriteType -> SchemaPartial -> RNativeFun e
+write wt partial i [table@TTable {..},TLitString key,TObject ps _ _] = do
   guardTable i table
   case _tTableType of
     TyAny -> return ()
     TyVar {} -> return ()
-    tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
+    tty -> void $ checkUserType partial (_faInfo i) ps tty
   success "Write succeeded" . writeRow (_faInfo i) wt (userTable table) (RowKey key) =<< toColumns i ps
-write _ i as = argsError i as
+write _ _ i as = argsError i as
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
 toColumns i = fmap (Columns . M.fromList) . mapM conv where

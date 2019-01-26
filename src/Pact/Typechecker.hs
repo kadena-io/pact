@@ -235,7 +235,7 @@ handleSpecialOverload :: Maybe OverloadSpecial ->
 handleSpecialOverload (Just OAt) m =
   case (M.lookup (ArgVar 0) m,M.lookup (ArgVar 1) m,M.lookup RetVar m) of
     (Just keyArg,Just srcArg,Just ret) -> case (roleTy keyArg,view rtAST keyArg,roleTy srcArg) of
-      (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u)) -> case findSchemaField k u of
+      (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u) _) -> case findSchemaField k u of
         Nothing -> m
         Just t -> unifyRet (roleTy ret) t
       (TyPrim TyInteger,_,TyList t) -> unifyRet (roleTy ret) t
@@ -320,7 +320,7 @@ applySchemas Pre ast = case ast of
     findSchema n act = do
       ty <- lookupAndResolveTy n
       case ty of
-        (TySchema _ (TyUser sch)) -> act sch
+        (TySchema _ (TyUser sch) _) -> act sch -- TODO
         _ -> return ast
 
     validateList :: Node -> Type UserType -> [AST Node] -> TC ()
@@ -390,7 +390,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
               assocAstTy (_aNode $ last ll) $ _ftReturn mangledFunType
             sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
           -- TODO the following is dodgy, schema may not be resolved.
-          ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty)]) -> asPrimString field >>= \fld -> case uty of
+          ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty _)]) -> asPrimString field >>= \fld -> case uty of
             TyUser u -> case findSchemaField fld u of
               Nothing -> return ()
               Just fty -> assocTyWithAppArg fty partialAst 0
@@ -576,7 +576,7 @@ alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 assocParams :: TcId -> Type UserType -> Type UserType -> TC ()
 assocParams i x y = case (x,y) of
   _ | x == y -> return ()
-  (TySchema _ a,TySchema _ b) -> assoc a b
+  (TySchema _ a _,TySchema _ b _) -> assoc a b -- TODO
   (TyList a,TyList b) -> assoc a b
   _ -> return ()
   where
@@ -614,6 +614,7 @@ unifyTypes' i a b act = case unifyTypes a b of
 -- | Unify two types, indicating which of the types was more specialized with the Either result.
 -- TODO: this Either thing is becoming problematic, as specialization can result in a new type.
 -- For now specialization is left-biased.
+-- NB: parameterized types return the unified parameter, not the outer type ...
 unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
 unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
@@ -626,7 +627,7 @@ unifyTypes l r = case (l,r) of
   (TyVar v,s) -> unifyVar Left Right v s
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam a b
-  (TySchema sa a,TySchema sb b) | sa == sb -> unifyParam a b
+  (TySchema sa a _,TySchema sb b _) | sa == sb -> unifyParam a b -- TODO
   _ -> Nothing
   where
     unifyParam a b = fmap (either (const (Left l)) (const (Right r))) (unifyTypes a b)
@@ -811,7 +812,7 @@ toAST TList {..} = do
   List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST _tList
 toAST TObject {..} = do
   debug $ "TObject: " ++ show _tObjectType
-  ty <- TySchema TyObject <$> traverse toUserType _tObjectType
+  ty <- TySchema TyObject <$> traverse toUserType _tObjectType <*> pure SPFull
   Object <$> (trackNode ty =<< freshId _tInfo "object")
     <*> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
@@ -820,7 +821,7 @@ toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
-  ty <- TySchema TyTable <$> traverse toUserType _tTableType
+  ty <- TySchema TyTable <$> traverse toUserType _tTableType <*> pure SPFull
   Table
     <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
     <*> pure _tTableName
@@ -898,7 +899,7 @@ resolveTy rt = do
           Just t | t /= tv -> go t
                  | otherwise -> return (Just tv)
           Nothing -> return (Just tv)
-      resolv (TySchema s st) = fmap (TySchema s) <$> go st
+      resolv (TySchema s st p) = fmap (\t -> TySchema s t p) <$> go st
       resolv (TyList l) = fmap TyList <$> go l
       resolv t = return (Just t)
       go t = do
@@ -916,7 +917,7 @@ resolveTy rt = do
 -- | Is this type a variable, or does it have any parameterized variables
 isUnresolvedTy :: Type n -> Bool
 isUnresolvedTy TyVar {} = True
-isUnresolvedTy (TySchema _ v) = isUnresolvedTy v
+isUnresolvedTy (TySchema _ v _) = isUnresolvedTy v
 isUnresolvedTy (TyList l) = isUnresolvedTy l
 isUnresolvedTy _ = False -- TODO fun types
 

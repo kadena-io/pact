@@ -160,7 +160,7 @@ eqTy = binTy tTyBool eqA eqA
 
 eqA :: Type n
 eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
-  TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
+  TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
 
 orDef :: NativeDef
 orDef = defLogic "or" (||) True
@@ -204,7 +204,7 @@ coerceBinNum :: FunTypes n
 coerceBinNum = binTy numA numA numA <> binTy tTyDecimal numA (numV "b")
 
 plusA :: Type n
-plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o")]
+plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def]
 
 defTrunc :: NativeDefName -> Text -> (Decimal -> Integer) -> NativeDef
 defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("prec",tTyInteger)] <>
