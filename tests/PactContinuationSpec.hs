@@ -6,10 +6,8 @@ module PactContinuationSpec (spec) where
 import Test.Hspec
 import Utils.TestRunner
 import qualified Data.HashMap.Strict as HM
-import Data.Aeson hiding (Options)
+import Data.Aeson
 import qualified Network.HTTP.Client as HTTP
-import Network.Wreq
-import Control.Lens ((&), (.~))
 import Data.Default (def)
 
 import Pact.ApiReq
@@ -27,15 +25,14 @@ shouldMatch results checks = mapM_ match checks
 spec :: Spec
 spec = describe "pacts in dev server" $ do
   mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
-  let opts = defaults & manager .~ Right mgr
-  describe "testPactContinuation" $ testPactContinuation opts
-  describe "testPactRollback" $ testPactRollback opts
-  describe "testPactYield" $ testPactYield opts
-  describe "testTwoPartyEscrow" $ testTwoPartyEscrow opts
-  describe "testNestedPacts" $ testNestedPacts opts
+  describe "testPactContinuation" $ testPactContinuation mgr
+  describe "testPactRollback" $ testPactRollback mgr
+  describe "testPactYield" $ testPactYield mgr
+  describe "testTwoPartyEscrow" $ testTwoPartyEscrow mgr
+  describe "testNestedPacts" $ testNestedPacts mgr
 
-testNestedPacts :: Options -> Spec
-testNestedPacts opts = before_ flushDb $ after_ flushDb $
+testNestedPacts :: HTTP.Manager -> Spec
+testNestedPacts mgr = before_ flushDb $ after_ flushDb $
   it "throws error when multiple defpact executions occur in same transaction" $ do
     adminKeys <- genKeys
 
@@ -44,7 +41,7 @@ testNestedPacts opts = before_ flushDb $ after_ flushDb $
                  def [adminKeys] (Just "test1")
     nestedExecPactCmd <- mkExec ("(nestedPact.tester)" ++ " (nestedPact.tester)")
                          Null def [adminKeys] (Just "test2")
-    allResults <- runAll opts [moduleCmd, nestedExecPactCmd]
+    allResults <- runAll mgr [moduleCmd, nestedExecPactCmd]
 
     let allChecks = [makeCheck moduleCmd False Nothing,
                      makeCheck nestedExecPactCmd True
@@ -55,40 +52,40 @@ testNestedPacts opts = before_ flushDb $ after_ flushDb $
 
 -- CONTINUATIONS TESTS
 
-testPactContinuation :: Options -> Spec
-testPactContinuation opts = before_ flushDb $ after_ flushDb $ do
+testPactContinuation :: HTTP.Manager -> Spec
+testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
     let cmdData = (toJSON . CommandSuccess . Number) 3
         expRes = Just $ ApiResult cmdData ((Just . TxId) 0) Nothing
-    testSimpleServerCmd opts `shouldReturn` expRes
+    testSimpleServerCmd mgr `shouldReturn` expRes
 
   context "when provided with correct next step" $
     it "executes the next step and updates pact's state" $
-      testCorrectNextStep opts
+      testCorrectNextStep mgr
 
   context "when provided with incorrect next step" $
     it "throws error and does not update pact's state" $
-      testIncorrectNextStep opts
+      testIncorrectNextStep mgr
 
   context "when last step of a pact executed" $
     it "deletes pact from the state" $
-      testLastStep opts
+      testLastStep mgr
 
   context "when error occurs when executing pact step" $
     it "throws error and does not update pact's state" $
-      testErrStep opts
+      testErrStep mgr
 
-testSimpleServerCmd :: Options -> IO (Maybe ApiResult)
-testSimpleServerCmd opts = do
+testSimpleServerCmd :: HTTP.Manager -> IO (Maybe ApiResult)
+testSimpleServerCmd mgr = do
   simpleKeys <- genKeys
   cmd <- mkExec  "(+ 1 2)" Null def
              [simpleKeys] (Just "test1")
-  allResults <- runAll opts [cmd]
+  allResults <- runAll mgr [cmd]
   return $ HM.lookup (RequestKey (_cmdHash cmd)) allResults
 
 
-testCorrectNextStep :: Options -> Expectation
-testCorrectNextStep opts = do
+testCorrectNextStep :: HTTP.Manager -> Expectation
+testCorrectNextStep mgr = do
   let moduleName = "testCorrectNextStep"
   adminKeys <- genKeys
 
@@ -99,7 +96,7 @@ testCorrectNextStep opts = do
                      Null def [adminKeys] (Just "test2")
   contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   checkStateCmd   <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test4")
-  allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
+  allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
@@ -111,8 +108,8 @@ testCorrectNextStep opts = do
   allResults `shouldMatch` allChecks
 
 
-testIncorrectNextStep :: Options -> Expectation
-testIncorrectNextStep opts = do
+testIncorrectNextStep :: HTTP.Manager -> Expectation
+testIncorrectNextStep mgr = do
   let moduleName = "testIncorrectNextStep"
   adminKeys <- genKeys
 
@@ -123,7 +120,7 @@ testIncorrectNextStep opts = do
                        Null def [adminKeys] (Just "test2")
   incorrectStepCmd  <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test3")
   checkStateCmd     <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test4")
-  allResults        <- runAll opts [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
+  allResults        <- runAll mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
@@ -135,8 +132,8 @@ testIncorrectNextStep opts = do
   allResults `shouldMatch` allChecks
 
 
-testLastStep :: Options -> Expectation
-testLastStep opts = do
+testLastStep :: HTTP.Manager -> Expectation
+testLastStep mgr = do
   let moduleName = "testLastStep"
   adminKeys <- genKeys
 
@@ -148,7 +145,7 @@ testLastStep opts = do
   contNextStep1Cmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   contNextStep2Cmd <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
-  allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStep1Cmd,
+  allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStep1Cmd,
                               contNextStep2Cmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -163,8 +160,8 @@ testLastStep opts = do
   allResults `shouldMatch` allChecks
 
 
-testErrStep :: Options -> Expectation
-testErrStep opts = do
+testErrStep :: HTTP.Manager -> Expectation
+testErrStep mgr = do
   let moduleName = "testErrStep"
   adminKeys <- genKeys
 
@@ -175,7 +172,7 @@ testErrStep opts = do
                       Null def [adminKeys] (Just "test2")
   contErrStepCmd   <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
-  allResults       <- runAll opts [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
+  allResults       <- runAll mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
@@ -190,27 +187,27 @@ testErrStep opts = do
 
 -- ROLLBACK TESTS
 
-testPactRollback :: Options -> Spec
-testPactRollback opts = before_ flushDb $ after_ flushDb $ do
+testPactRollback :: HTTP.Manager -> Spec
+testPactRollback mgr = before_ flushDb $ after_ flushDb $ do
   context "when provided with correct rollback step" $
     it "executes the rollback function and deletes pact from state" $
-      testCorrectRollbackStep opts
+      testCorrectRollbackStep mgr
 
   context "when provided with incorrect rollback step" $
     it "throws error and does not delete pact from state" $
-      testIncorrectRollbackStep opts
+      testIncorrectRollbackStep mgr
 
   context "when error occurs when executing rollback function" $
     it "throws error and does not delete pact from state" $
-      testRollbackErr opts
+      testRollbackErr mgr
 
   context "when trying to rollback a step without a rollback function" $
     it "outputs that no rollback function exists for step and deletes pact from state" $
-      testNoRollbackFunc opts
+      testNoRollbackFunc mgr
 
 
-testCorrectRollbackStep :: Options -> Expectation
-testCorrectRollbackStep opts = do
+testCorrectRollbackStep :: HTTP.Manager -> Expectation
+testCorrectRollbackStep mgr = do
   let moduleName = "testCorrectRollbackStep"
   adminKeys <- genKeys
 
@@ -222,7 +219,7 @@ testCorrectRollbackStep opts = do
   contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   rollbackStepCmd <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4") -- rollback = True
   checkStateCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
-  allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                              rollbackStepCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
@@ -237,8 +234,8 @@ testCorrectRollbackStep opts = do
   allResults `shouldMatch` allChecks
 
 
-testIncorrectRollbackStep :: Options -> Expectation
-testIncorrectRollbackStep opts = do
+testIncorrectRollbackStep :: HTTP.Manager -> Expectation
+testIncorrectRollbackStep mgr = do
   let moduleName = "testIncorrectRollbackStep"
   adminKeys <- genKeys
 
@@ -250,7 +247,7 @@ testIncorrectRollbackStep opts = do
   contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   incorrectRbCmd  <- mkCont (TxId 1) 2 True Null def [adminKeys] (Just "test4")
   checkStateCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
-  allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                              incorrectRbCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
@@ -265,8 +262,8 @@ testIncorrectRollbackStep opts = do
   allResults `shouldMatch` allChecks
 
 
-testRollbackErr :: Options -> Expectation
-testRollbackErr opts = do
+testRollbackErr :: HTTP.Manager -> Expectation
+testRollbackErr mgr = do
   let moduleName = "testRollbackErr"
   adminKeys <- genKeys
 
@@ -278,7 +275,7 @@ testRollbackErr opts = do
   contNextStepCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   rollbackErrCmd   <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
-  allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                               rollbackErrCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -292,8 +289,8 @@ testRollbackErr opts = do
   allResults `shouldMatch` allChecks
 
 
-testNoRollbackFunc :: Options -> Expectation
-testNoRollbackFunc opts = do
+testNoRollbackFunc :: HTTP.Manager -> Expectation
+testNoRollbackFunc mgr = do
   let moduleName = "testNoRollbackFunc"
   adminKeys <- genKeys
 
@@ -305,7 +302,7 @@ testNoRollbackFunc opts = do
   contNextStepCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   noRollbackCmd    <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
-  allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                               noRollbackCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -323,22 +320,22 @@ testNoRollbackFunc opts = do
 
 -- YIELD / RESUME TESTS
 
-testPactYield :: Options -> Spec
-testPactYield opts = before_ flushDb $ after_ flushDb $ do
+testPactYield :: HTTP.Manager -> Spec
+testPactYield mgr = before_ flushDb $ after_ flushDb $ do
   context "when previous step yields value" $
     it "resumes value" $
-      testValidYield opts
+      testValidYield mgr
 
   context "when previous step does not yield value" $
     it "throws error when trying to resume, and does not delete pact from state" $
-      testNoYield opts
+      testNoYield mgr
 
   it "resets yielded values after each step" $
-    testResetYield opts
+    testResetYield mgr
 
 
-testValidYield :: Options -> Expectation
-testValidYield opts = do
+testValidYield :: HTTP.Manager -> Expectation
+testValidYield mgr = do
   let moduleName = "testValidYield"
   adminKeys <- genKeys
 
@@ -350,7 +347,7 @@ testValidYield opts = do
   resumeAndYieldCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   resumeOnlyCmd      <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   checkStateCmd      <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
-  allResults         <- runAll opts [moduleCmd, executePactCmd, resumeAndYieldCmd,
+  allResults         <- runAll mgr [moduleCmd, executePactCmd, resumeAndYieldCmd,
                                 resumeOnlyCmd, checkStateCmd]
 
   let moduleCheck         = makeCheck moduleCmd False Nothing
@@ -365,8 +362,8 @@ testValidYield opts = do
   allResults `shouldMatch` allChecks
 
 
-testNoYield :: Options -> Expectation
-testNoYield opts = do
+testNoYield :: HTTP.Manager -> Expectation
+testNoYield mgr = do
   let moduleName = "testNoYield"
   adminKeys <- genKeys
 
@@ -378,7 +375,7 @@ testNoYield opts = do
   noYieldStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   resumeErrCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test3")
   checkStateCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test5")
-  allResults     <- runAll opts [moduleCmd, executePactCmd, noYieldStepCmd,
+  allResults     <- runAll mgr [moduleCmd, executePactCmd, noYieldStepCmd,
                            resumeErrCmd, checkStateCmd]
 
   let moduleCheck      = makeCheck moduleCmd False Nothing
@@ -393,8 +390,8 @@ testNoYield opts = do
   allResults `shouldMatch` allChecks
 
 
-testResetYield :: Options -> Expectation
-testResetYield opts = do
+testResetYield :: HTTP.Manager -> Expectation
+testResetYield mgr = do
   let moduleName = "testResetYield"
   adminKeys <- genKeys
 
@@ -406,7 +403,7 @@ testResetYield opts = do
   yieldSameKeyCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   resumeStepCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
-  allResults       <- runAll opts [moduleCmd, executePactCmd, yieldSameKeyCmd,
+  allResults       <- runAll mgr [moduleCmd, executePactCmd, yieldSameKeyCmd,
                               resumeStepCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
@@ -424,31 +421,31 @@ testResetYield opts = do
 
 -- TWO PARTY ESCROW TESTS
 
-testTwoPartyEscrow :: Options -> Spec
-testTwoPartyEscrow opts = before_ flushDb $ after_ flushDb $ do
+testTwoPartyEscrow :: HTTP.Manager -> Spec
+testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
   context "when debtor tries to cancel pre-timeout" $
     it "throws error and money still escrowed" $
-      testDebtorPreTimeoutCancel opts
+      testDebtorPreTimeoutCancel mgr
 
   context "when debtor tries to cancel after timeout" $
     it "cancels escrow and deposits escrowed amount back to debtor" $
-      testDebtorPostTimeoutCancel opts
+      testDebtorPostTimeoutCancel mgr
 
   it "cancels escrow immediately if creditor cancels" $
-    testCreditorCancel opts
+    testCreditorCancel mgr
 
   it "throws error when creditor or debtor try to finish alone" $
-    testFinishAlone opts
+    testFinishAlone mgr
 
   it "throws error when final price negotiated up" $
-    testPriceNegUp opts
+    testPriceNegUp mgr
 
   context "when both debtor and creditor finish together" $
     it "finishes escrow if final price stays the same or negotiated down" $
-      testValidEscrowFinish opts
+      testValidEscrowFinish mgr
 
-testDebtorPreTimeoutCancel :: Options -> Expectation
-testDebtorPreTimeoutCancel opts = do
+testDebtorPreTimeoutCancel :: HTTP.Manager -> Expectation
+testDebtorPreTimeoutCancel mgr = do
   let testPath = testDir ++ "cont-scripts/fail-deb-cancel-"
 
   (_, tryCancelCmd)        <- mkApiReq (testPath ++ "01-rollback.yaml")
@@ -462,10 +459,10 @@ testDebtorPreTimeoutCancel opts = do
       checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "98.00"
       allChecks             = [tryCancelCheck, checkStillEscrowCheck]
 
-  twoPartyEscrow allCmds allChecks opts
+  twoPartyEscrow allCmds allChecks mgr
 
-testDebtorPostTimeoutCancel :: Options -> Expectation
-testDebtorPostTimeoutCancel opts = do
+testDebtorPostTimeoutCancel :: HTTP.Manager -> Expectation
+testDebtorPostTimeoutCancel mgr = do
   let testPath = testDir ++ "cont-scripts/pass-deb-cancel-"
 
   (_, setTimeCmd)          <- mkApiReq (testPath ++ "01-set-time.yaml")
@@ -478,10 +475,10 @@ testDebtorPostTimeoutCancel opts = do
       checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "100.00"
       allChecks = [setTimeCheck, tryCancelCheck, checkStillEscrowCheck]
 
-  twoPartyEscrow allCmds allChecks opts
+  twoPartyEscrow allCmds allChecks mgr
 
-testCreditorCancel :: Options -> Expectation
-testCreditorCancel opts = do
+testCreditorCancel :: HTTP.Manager -> Expectation
+testCreditorCancel mgr = do
   let testPath = testDir ++ "cont-scripts/pass-cred-cancel-"
 
   (_, resetTimeCmd)        <- mkApiReq (testPath ++ "01-reset.yaml")
@@ -494,10 +491,10 @@ testCreditorCancel opts = do
       checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "100.00"
       allChecks = [resetTimeCheck, credCancelCheck, checkStillEscrowCheck]
 
-  twoPartyEscrow allCmds allChecks opts
+  twoPartyEscrow allCmds allChecks mgr
 
-testFinishAlone :: Options -> Expectation
-testFinishAlone opts = do
+testFinishAlone :: HTTP.Manager -> Expectation
+testFinishAlone mgr = do
   let testPathCred  = testDir ++ "cont-scripts/fail-cred-finish-"
       testPathDeb   = testDir ++ "cont-scripts/fail-deb-finish-"
 
@@ -511,20 +508,20 @@ testFinishAlone opts = do
                           (Just "(enforce-guard g): Failure: Tx Failed: Keyset failure (keys-all)")
       allChecks         = [tryCredAloneCheck, tryDebAloneCheck]
 
-  twoPartyEscrow allCmds allChecks opts
+  twoPartyEscrow allCmds allChecks mgr
 
-testPriceNegUp :: Options -> Expectation
-testPriceNegUp opts = do
+testPriceNegUp :: HTTP.Manager -> Expectation
+testPriceNegUp mgr = do
   let testPath = testDir ++ "cont-scripts/fail-both-price-up-"
 
   (_, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
   let tryNegUpCheck = makeCheck tryNegUpCmd True
                       (Just "(enforce (>= escrow-amount pri...: Failure: Tx Failed: Price cannot negotiate up")
 
-  twoPartyEscrow [tryNegUpCmd] [tryNegUpCheck] opts
+  twoPartyEscrow [tryNegUpCmd] [tryNegUpCheck] mgr
 
-testValidEscrowFinish :: Options -> Expectation
-testValidEscrowFinish opts = do
+testValidEscrowFinish :: HTTP.Manager -> Expectation
+testValidEscrowFinish mgr = do
   let testPath = testDir ++ "cont-scripts/pass-both-price-down-"
 
   (_, tryNegDownCmd)  <- mkApiReq (testPath ++ "01-cont.yaml")
@@ -538,10 +535,10 @@ testValidEscrowFinish opts = do
       debBalanceCheck  = makeCheck debBalanceCmd False $ Just "98.25"
       allChecks        = [tryNegDownCheck, credBalanceCheck, debBalanceCheck]
 
-  twoPartyEscrow allCmds allChecks opts
+  twoPartyEscrow allCmds allChecks mgr
 
-twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Options -> Expectation
-twoPartyEscrow testCmds testChecks opts = do
+twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> HTTP.Manager -> Expectation
+twoPartyEscrow testCmds testChecks mgr = do
   let setupPath = testDir ++ "cont-scripts/setup-"
 
   (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
@@ -553,7 +550,7 @@ twoPartyEscrow testCmds testChecks opts = do
   (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
   let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
-  allResults <- runAll opts allCmds
+  allResults <- runAll mgr allCmds
 
   let sysModuleCheck      = makeCheck sysModuleCmd False $ Just "system module loaded"
       acctModuleCheck     = makeCheck acctModuleCmd False $ Just "TableCreated"
