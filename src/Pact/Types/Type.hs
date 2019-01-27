@@ -31,7 +31,7 @@ module Pact.Types.Type
    TypeVar(..),tvName,tvConstraint,
    Type(..),tyFunType,tyListType,tySchema,tySchemaType,tySchemaPartial,tyUser,tyVar,tyGuard,
    mkTyVar,mkTyVar',mkSchemaVar,
-   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
+   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,canUnifyPartial
 
    ) where
 
@@ -201,19 +201,15 @@ instance Eq1 TypeVar where
   liftEq _ (SchemaVar a) (SchemaVar m) = a == m
   liftEq _ _ _ = False
 
--- | Represent a full or partial schema specification.
-data SchemaPartial =
-    -- | only fully-saturated schema inhabitants allowed
-    SPFull
-    -- | Partial allowed, where the [Text] lists specified fields
-    -- allowed, such that a Full inhabitant is always allowed, or
-    -- an inhabitant containing at least the specified fields.
-    -- [] (empty) means any subset is allowed, as empty (no fields)
-    -- is NOT a valid subset.
-  | SPPartial [Text]
+-- | Represent a full or partial schema inhabitant.
+data SchemaPartial = SPFull | SPPartial
   deriving (Eq,Show,Ord,Generic)
 instance NFData SchemaPartial
 instance Default SchemaPartial where def = SPFull
+
+showPartial :: SchemaPartial -> String
+showPartial SPFull = ""
+showPartial SPPartial = "~"
 
 -- | Pact types.
 data Type v =
@@ -245,8 +241,9 @@ instance (Show v) => Show (Type v) where
   show (TyPrim t) = show t
   show (TyList t) | isAnyTy t = unpack tyList
                   | otherwise = "[" ++ show t ++ "]"
-  show (TySchema s t _) | isAnyTy t = show s
-                      | otherwise = show s ++ ":" ++ show t -- TODO need partial rep
+  show (TySchema s t p)
+    | isAnyTy t = show s
+    | otherwise = show s ++ ":" ++ showPartial p ++ show t
   show (TyFun f) = show f
   show (TyUser v) = show v
   show TyAny = "*"
@@ -257,7 +254,7 @@ instance (Pretty o) => Pretty (Type o) where
     TyVar n -> pretty n
     TyUser v -> pretty v
     TyFun f -> pretty f
-    TySchema s t _ -> pretty s PP.<> colon PP.<> pretty t -- TODO need partial rep
+    TySchema s t p -> pretty s PP.<> colon PP.<> text (showPartial p) PP.<> pretty t
     TyList t -> "list:" PP.<> pretty t
     TyPrim t -> pretty t
     TyAny -> "*"
@@ -299,11 +296,11 @@ canUnifyWith a b = a == b
 -- | a `canUnifyPartial` b means the subset specified by b is
 -- valid in a, etc. [] in a subset is a wildcard.
 canUnifyPartial :: SchemaPartial -> SchemaPartial -> Bool
-canUnifyPartial a b | a == b = True -- equality works
-canUnifyPartial SPFull _ = True -- a full can always satisfy a subset
-canUnifyPartial _ (SPPartial []) = True -- a wildcard subset is trivially satisfiable
-canUnifyPartial (SPPartial as) (SPPartial bs) = all (`elem` as) bs -- bs is specified, as must contain all
-canUnifyPartial _ _ = False
+canUnifyPartial SPFull SPFull = True
+canUnifyPartial SPPartial SPPartial = True
+canUnifyPartial SPFull SPPartial = True -- full can always satisfy subset
+canUnifyPartial SPPartial SPFull = False -- partial cannot satisfy full
+
 
 
 

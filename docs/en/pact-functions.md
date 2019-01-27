@@ -619,7 +619,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 ### update {#update}
 
-*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>(partial)` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY.

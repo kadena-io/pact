@@ -264,16 +264,21 @@ asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " +
 applySchemas :: Visitor TC Node
 applySchemas Pre ast = case ast of
 
-  (Object n ps) -> findSchema n $ \sch -> do
-    debug $ "applySchemas [object]: " ++ show (n,sch)
+  (Object n ps) -> findSchema n $ \sch partial -> do
+    debug $ "applySchemas [object]: " ++ show (n,sch,partial)
     pmap <- forM ps $ \(k,v) -> do
       kstr <- asPrimString k
       vt' <- lookupAndResolveTy (_aNode v)
       return (kstr,(v,_aId (_aNode k),vt'))
-    validateSchema sch (M.fromList pmap)
+    validateSchema sch (M.fromList pmap) >>= \pm -> case (partial,pm) of
+      (SPPartial,Just {}) -> return () -- partial specified and partial found
+      (SPFull, Just {}) ->
+        addFailure (_aId n) "Invalid partial schema found"
+      (SPFull, Nothing) -> return () -- full specified and full found
+      (SPPartial, Nothing) -> return () -- partial specified and full found
     return ast
 
-  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch -> do
+  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch _ -> do
     debug $ "applySchemas [binding]: " ++ show (n,sch)
     pmapM <- forM bs $ \(Named _ node ni,bv) -> case bv of
       Prim _ (PrimLit (LString bn)) -> do
@@ -281,7 +286,7 @@ applySchemas Pre ast = case ast of
         return $ Just (bn,(Var node,ni,vt'))
       _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
     case sequence pmapM of
-      Just pmap -> validateSchema sch (M.fromList pmap)
+      Just pmap -> void $ validateSchema sch (M.fromList pmap)
       Nothing -> return () -- error already tracked above
     return ast
 
@@ -299,7 +304,8 @@ applySchemas Pre ast = case ast of
 
   where
     -- Given map of object text key to (value,key id,value ty) ...
-    validateSchema :: UserType -> M.Map Text (AST Node, TcId, Type UserType) -> TC ()
+    -- (returns partial keys list if not full match)
+    validateSchema :: UserType -> M.Map Text (AST Node, TcId, Type UserType) -> TC (Maybe [Text])
     validateSchema sch pmap = do
       -- smap: lookup from field name to ty
       let smap = M.fromList <$> (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
@@ -312,15 +318,20 @@ applySchemas Pre ast = case ast of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
           -- associate unified ty with value node.
           Just u -> assocAstTy (_aNode v) (either id id u)
+      let keyinter = intersect (M.keys pmap) (M.keys smap)
+      if length keyinter < M.size smap
+        then return (Just keyinter)
+        else return Nothing
+
 
     lookupAndResolveTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 
     -- Resolve schema ty if possible and act on it, otherwise skip.
-    findSchema :: Node -> (UserType -> TC (AST Node)) -> TC (AST Node)
+    findSchema :: Node -> (UserType -> SchemaPartial -> TC (AST Node)) -> TC (AST Node)
     findSchema n act = do
       ty <- lookupAndResolveTy n
       case ty of
-        (TySchema _ (TyUser sch) _) -> act sch -- TODO
+        (TySchema _ (TyUser sch) sp) -> act sch sp
         _ -> return ast
 
     validateList :: Node -> Type UserType -> [AST Node] -> TC ()
@@ -576,7 +587,7 @@ alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 assocParams :: TcId -> Type UserType -> Type UserType -> TC ()
 assocParams i x y = case (x,y) of
   _ | x == y -> return ()
-  (TySchema _ a _,TySchema _ b _) -> assoc a b -- TODO
+  (TySchema _ a _,TySchema _ b _) -> assoc a b -- partial not dealt with here
   (TyList a,TyList b) -> assoc a b
   _ -> return ()
   where
@@ -612,9 +623,6 @@ unifyTypes' i a b act = case unifyTypes a b of
     return ()
 
 -- | Unify two types, indicating which of the types was more specialized with the Either result.
--- TODO: this Either thing is becoming problematic, as specialization can result in a new type.
--- For now specialization is left-biased.
--- NB: parameterized types return the unified parameter, not the outer type ...
 unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
 unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
@@ -627,10 +635,17 @@ unifyTypes l r = case (l,r) of
   (TyVar v,s) -> unifyVar Left Right v s
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam a b
-  (TySchema sa a _,TySchema sb b _) | sa == sb -> unifyParam a b -- TODO
+  (TySchema sa a spa,TySchema sb b spb) | sa == sb -> specializePartial spa spb <$> unifyParam a b
   _ -> Nothing
   where
-    unifyParam a b = fmap (either (const (Left l)) (const (Right r))) (unifyTypes a b)
+    unifyParam a b = (<$> unifyTypes a b) $ \u -> case u of
+      Left _ -> Left l
+      Right _ -> Right r
+    specializePartial spa spb u
+      | spa == spb = u
+        -- in inequality, partial is always more specialized
+      | otherwise = either (Left . setPartial) (Right . setPartial) u
+        where setPartial = set tySchemaPartial SPPartial
     unifyVar vWrap sWrap v s =
       let useS = sWrap s
       in case (v,s) of

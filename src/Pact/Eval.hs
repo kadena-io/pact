@@ -717,8 +717,7 @@ checkUserType partial i ps (TyUser tu@TSchema {..}) = do
           "Missing fields for {" ++ unpack (asString _tSchemaName) ++ "}: " ++ show (M.elems missing)
   case partial of
     SPFull -> findMissing fields
-    SPPartial [] -> return ()
-    SPPartial fs -> findMissing (M.restrictKeys fields (S.fromList fs))
+    SPPartial -> return ()
   typecheck aps
   return $ TySchema TyObject (TyUser tu) partial
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
