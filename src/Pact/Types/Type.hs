@@ -34,12 +34,13 @@ module Pact.Types.Type
 
    ) where
 
+import Data.Eq.Deriving
+import Text.Show.Deriving
 
 import Control.Lens
 import Data.List
 import Control.Monad
 import Prelude
-import Data.Functor.Classes
 import Data.Aeson
 import Data.String
 import Data.Thyme.Format.Aeson ()
@@ -57,44 +58,35 @@ import Pact.Types.Info
 
 
 newtype TypeName = TypeName Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData)
-instance Show TypeName where show (TypeName s) = show s
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Show)
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
   _aName :: Text,
   _aType :: Type o,
   _aInfo :: Info
-  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
+  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (Arg o)
-instance Show o => Show (Arg o) where show (Arg n t _) = unpack n ++ ":" ++ show t
 instance (Pretty o) => Pretty (Arg o)
   where pretty (Arg n t _) = pretty n PP.<> colon PP.<> pretty t
-
-instance Eq1 Arg where
-  liftEq eq (Arg a b c) (Arg m n o) = a == m && liftEq eq b n && c == o
 
 -- | Function type
 data FunType o = FunType {
   _ftArgs :: [Arg o],
   _ftReturn :: Type o
-  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
+  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (FunType o)
-instance Show o => Show (FunType o) where
-  show (FunType as t) = "(" ++ unwords (map show as) ++ " -> " ++ show t ++ ")"
 instance (Pretty o) => Pretty (FunType o) where
-  pretty (FunType as t) = parens (hsep (map pretty as) <+> "->" <+> pretty t)
-
-instance Eq1 FunType where
-  liftEq eq (FunType a b) (FunType m n) = liftEq (liftEq eq) a m && liftEq eq b n
+  pretty (FunType as t) = hsep (map pretty as) <+> "->" <+> pretty t
 
 -- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
 
 funTypes :: FunType o -> FunTypes o
 funTypes ft = ft :| []
+
 showFunTypes :: Show o => FunTypes o -> String
 showFunTypes (t :| []) = show t
 showFunTypes ts = show (toList ts)
@@ -105,7 +97,7 @@ data GuardType
   | GTyPact
   | GTyUser
   | GTyModule
-  deriving (Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic,Show)
 
 instance NFData GuardType
 
@@ -119,7 +111,7 @@ data PrimType =
   TyString |
   TyValue |
   TyGuard (Maybe GuardType)
-  deriving (Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic,Show)
 
 instance NFData PrimType
 
@@ -138,8 +130,8 @@ tyKeySet = "keyset"
 tyGuard = "guard"
 tyTable = "table"
 
-instance Show PrimType where
-  show t = unpack $ case t of
+instance Pretty PrimType where
+  pretty t = text $ unpack $ case t of
     TyInteger -> tyInteger
     TyDecimal -> tyDecimal
     TyTime -> tyTime
@@ -149,30 +141,27 @@ instance Show PrimType where
     TyGuard tg -> case tg of
       Just GTyKeySet -> tyKeySet
       _ -> tyGuard
-instance Pretty PrimType where pretty = text . show
 
 data SchemaType =
   TyTable |
   TyObject |
   TyBinding
-  deriving (Eq,Ord,Generic)
+  deriving (Eq,Ord,Generic,Show)
 
 instance NFData SchemaType
-instance Show SchemaType where
-  show TyTable = unpack tyTable
-  show TyObject = unpack tyObject
-  show TyBinding = "binding"
-instance Pretty SchemaType where pretty = text . show
+instance Pretty SchemaType where
+  pretty TyTable = text $ unpack tyTable
+  pretty TyObject = text $ unpack tyObject
+  pretty TyBinding = "binding"
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
-instance Show TypeVarName where show = unpack . _typeVarName
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData,Show)
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
   TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
   SchemaVar { _tvName :: TypeVarName }
-  deriving (Functor,Foldable,Traversable,Generic)
+  deriving (Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (TypeVar v)
 instance Eq (TypeVar v) where
@@ -185,20 +174,10 @@ instance Ord (TypeVar v) where
     (SchemaVar {},TypeVar {}) -> GT
     (TypeVar a _,TypeVar b _) -> a `compare` b
     (SchemaVar a,SchemaVar b) -> a `compare` b
-instance Show v => Show (TypeVar v) where
-  show (TypeVar n []) = "<" ++ show n ++ ">"
-  show (TypeVar n cs) = "<" ++ show n ++ show cs ++ ">"
-  show (SchemaVar n) = "<{" ++ show n ++ "}>"
 instance (Pretty v) => Pretty (TypeVar v) where
   pretty (TypeVar n []) = angles (pretty n)
   pretty (TypeVar n cs) = angles (pretty n <+> brackets (hsep (map pretty cs)))
   pretty (SchemaVar n) = angles (braces (pretty n))
-
-instance Eq1 TypeVar where
-  liftEq eq (TypeVar a b) (TypeVar m n) = a == m && liftEq (liftEq eq) b n
-  liftEq _ (SchemaVar a) (SchemaVar m) = a == m
-  liftEq _ _ _ = False
-
 
 -- | Pact types.
 data Type v =
@@ -209,30 +188,9 @@ data Type v =
   TySchema { _tySchema :: SchemaType, _tySchemaType :: Type v } |
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v }
-    deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
-
-instance Eq1 Type where
-  liftEq _ TyAny TyAny = True
-  liftEq eq (TyVar a) (TyVar m) = liftEq eq a m
-  liftEq _ (TyPrim a) (TyPrim m) = a == m
-  liftEq eq (TyList a) (TyList m) = liftEq eq a m
-  liftEq eq (TySchema a b) (TySchema m n) = a == m && liftEq eq b n
-  liftEq eq (TyFun a) (TyFun b) = liftEq eq a b
-  liftEq eq (TyUser a) (TyUser b) = eq a b
-  liftEq _ _ _ = False
+    deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)
-
-instance (Show v) => Show (Type v) where
-  show (TyPrim t) = show t
-  show (TyList t) | isAnyTy t = unpack tyList
-                  | otherwise = "[" ++ show t ++ "]"
-  show (TySchema s t) | isAnyTy t = show s
-                      | otherwise = show s ++ ":" ++ show t
-  show (TyFun f) = show f
-  show (TyUser v) = show v
-  show TyAny = "*"
-  show (TyVar n) = show n
 
 instance (Pretty o) => Pretty (Type o) where
   pretty ty = case ty of
@@ -283,3 +241,12 @@ makeLenses ''FunType
 makeLenses ''Arg
 makeLenses ''TypeVar
 makeLenses ''TypeVarName
+
+deriveShow1 ''TypeVar
+deriveShow1 ''Arg
+deriveShow1 ''FunType
+deriveShow1 ''Type
+deriveEq1 ''TypeVar
+deriveEq1 ''Arg
+deriveEq1 ''FunType
+deriveEq1 ''Type

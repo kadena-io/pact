@@ -69,6 +69,7 @@ import Text.Trifecta.Delta
 import Control.Concurrent
 import Data.Monoid (appEndo)
 import System.FilePath
+import Text.PrettyPrint.ANSI.Leijen (pretty)
 
 import Pact.Compile
 import Pact.Parse
@@ -222,7 +223,7 @@ doOut ei mode a = case mode of
   Script True _ -> lineOut
   _ -> return ()
   where
-    plainOut = outStrLn HOut (show a)
+    plainOut = outStrLn HOut $ show $ pretty a
     lineOut = do
       outStrLn HErr $ renderInfo ei ++ ":Trace: " ++ show a
 

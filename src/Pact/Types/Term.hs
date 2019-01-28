@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
@@ -11,6 +12,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Module      :  Pact.Types.Term
@@ -72,12 +75,11 @@ import Prelude
 import Control.Arrow ((***),first)
 import Data.Functor.Classes
 import Bound
-import Data.Text (Text,pack,unpack)
+import Data.Text (Text,pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Aeson
 import qualified Data.ByteString.UTF8 as BS
-import qualified Data.ByteString.Lazy.UTF8 as BSL
 import Data.String
 import Data.Default
 import Data.Thyme
@@ -95,6 +97,8 @@ import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
 import Data.Int (Int64)
 import Data.Serialize (Serialize)
+import Data.Eq.Deriving
+import Text.Show.Deriving
 
 
 import Pact.Types.Parser
@@ -109,6 +113,14 @@ data Meta = Meta
   , _mModel :: ![Exp Info]   -- ^ models
   } deriving (Eq, Show, Generic)
 
+instance Pretty Meta where
+  pretty (Meta (Just doc) model) = pretty doc <> line <> prettyModel model
+  pretty (Meta Nothing    model) = prettyModel model
+
+prettyModel :: [Exp Info] -> Doc
+prettyModel []    = mempty
+prettyModel props = "@model " <> list (pretty <$> props)
+
 instance ToJSON Meta where
   toJSON Meta {..} = object
     [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
@@ -122,7 +134,7 @@ instance Monoid Meta where
   mempty = Meta Nothing []
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
-  deriving (Eq,Ord,Generic,IsString,AsString)
+  deriving (Eq,Ord,Generic,IsString,AsString,Show)
 
 instance Serialize PublicKey
 instance NFData PublicKey
@@ -130,16 +142,24 @@ instance FromJSON PublicKey where
   parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
 instance ToJSON PublicKey where
   toJSON = toJSON . decodeUtf8 . _pubKey
-instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
+
+instance Pretty PublicKey where pretty (PublicKey s) = pretty (BS.toString s)
 
 -- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet {
       _ksKeys :: ![PublicKey]
     , _ksPredFun :: !Name
-    } deriving (Eq,Generic)
-instance Show KeySet where
-  show (KeySet ks f) =
-    "KeySet { keys: " ++ show ks ++ ", pred: " ++ show f ++ " }"
+    } deriving (Eq,Generic,Show)
+
+commaBraces, commaBrackets :: [Doc] -> Doc
+commaBraces = encloseSep "{" "}" ", "
+commaBrackets = encloseSep "[" "]" ", "
+
+instance Pretty KeySet where
+  pretty (KeySet ks f) = "KeySet" <+> commaBraces
+    [ "keys: " <> pretty ks
+    , "pred: " <> pretty f
+    ]
 
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
@@ -154,21 +174,25 @@ instance ToJSON KeySet where
 
 
 newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
-instance Show KeySetName where show (KeySetName s) = show s
+    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show)
+
+instance Pretty KeySetName where pretty (KeySetName s) = pretty s
 
 newtype PactId = PactId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
-instance Show PactId where show (PactId s) = show s
+    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default,Show)
+
+instance Pretty PactId where pretty (PactId s) = pretty s
 
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
   , _pgName :: !Text
-  } deriving (Eq,Generic)
+  } deriving (Eq,Generic,Show)
 
-instance Show PactGuard where
-  show PactGuard{..} =
-    "PactGuard { pactId: " ++ show _pgPactId ++ ", name: " ++ show _pgName ++ "}"
+instance Pretty PactGuard where
+  pretty PactGuard{..} = "PactGuard" <+> commaBraces
+    [ "pactId: " <> pretty _pgPactId
+    , "name: "   <> pretty _pgName
+    ]
 
 instance ToJSON PactGuard where toJSON = lensyToJSON 3
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
@@ -176,11 +200,13 @@ instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 data ModuleGuard = ModuleGuard
   { _mgModuleName :: !ModuleName
   , _mgName :: !Text
-  } deriving (Eq,Generic)
+  } deriving (Eq,Generic,Show)
 
-instance Show ModuleGuard where
-  show ModuleGuard{..} =
-    "ModuleGuard { module: " ++ show _mgModuleName ++ ", name: " ++ show _mgName ++ "}"
+instance Pretty ModuleGuard where
+  pretty ModuleGuard{..} = "ModuleGuard" <+> commaBraces
+    [ "module: " <> pretty _mgModuleName
+    , "name: " <> pretty _mgName
+    ]
 
 instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
@@ -188,11 +214,13 @@ instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 data UserGuard = UserGuard
   { _ugData :: !(Term Name) -- TODO when Term is safe, use "object" type
   , _ugPredFun :: !Name
-  } deriving (Eq,Generic)
+  } deriving (Eq,Generic,Show)
 
-instance Show UserGuard where
-  show UserGuard{..} =
-    "UserGuard { data: " ++ show _ugData ++ ", pred: " ++ show _ugPredFun ++ "}"
+instance Pretty UserGuard where
+  pretty UserGuard{..} = "UserGuard" <+> commaBraces
+    [ "data: " <> pretty _ugData
+    , "pred: " <> pretty _ugPredFun
+    ]
 
 instance ToJSON UserGuard where toJSON = lensyToJSON 3
 instance FromJSON UserGuard where parseJSON = lensyParseJSON 3
@@ -203,14 +231,14 @@ data Guard
   | GKeySetRef KeySetName
   | GModule ModuleGuard
   | GUser UserGuard
-  deriving (Eq)
+  deriving (Eq,Show)
 
-instance Show Guard where
-  show (GPact g) = show g
-  show (GKeySet g) = show g
-  show (GKeySetRef g) = show g
-  show (GUser g) = show g
-  show (GModule g) = show g
+instance Pretty Guard where
+  pretty (GPact g)      = pretty g
+  pretty (GKeySet g)    = pretty g
+  pretty (GKeySetRef g) = pretty g
+  pretty (GUser g)      = pretty g
+  pretty (GModule g)    = pretty g
 
 instance ToJSON Guard where
   toJSON (GPact g) = toJSON g
@@ -239,8 +267,7 @@ defTypeRep Defpact = "defpact"
 defTypeRep Defcap = "defcap"
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,AsString)
-instance Show NativeDefName where show (NativeDefName s) = show s
+    deriving (Eq,Ord,IsString,ToJSON,AsString,Show)
 
 -- | Capture function application metadata
 data FunApp = FunApp {
@@ -250,12 +277,7 @@ data FunApp = FunApp {
     , _faDefType :: !DefType
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
-    }
-
-instance Show FunApp where
-  show FunApp {..} =
-    "(" ++ defTypeRep _faDefType ++ " " ++ maybeDelim "." _faModule ++
-    unpack _faName ++ " " ++ showFunTypes _faTypes ++ ")"
+    } deriving Show
 
 -- | Variable type for an evaluable 'Term'.
 data Ref =
@@ -263,15 +285,11 @@ data Ref =
   Direct (Term Name) |
   -- | Unevaulated/un-reduced term, never a native.
   Ref (Term Ref)
-               deriving (Eq)
-instance Show Ref where
-    show (Direct t) = abbrev t
-    show (Ref t) = abbrev t
+  deriving (Eq,Show)
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum)
-instance Show Gas where show (Gas g) = show g
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show)
 
 instance Semigroup Gas where
   (Gas a) <> (Gas b) = Gas $ a + b
@@ -285,7 +303,9 @@ data NativeDFun = NativeDFun
   }
 
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
-instance Show NativeDFun where show a = show $ _nativeName a
+instance Show NativeDFun where
+  showsPrec p (NativeDFun name _) = showParen (p > 10) $
+    showString "NativeDFun " . showsPrec 11 name . showString " _"
 
 -- | Binding forms.
 data BindType n =
@@ -293,37 +313,27 @@ data BindType n =
   BindLet |
   -- | Schema-style binding, with string value for key
   BindSchema { _bType :: n }
-  deriving (Eq,Functor,Foldable,Traversable,Ord)
-instance (Show n) => Show (BindType n) where
-  show BindLet = "let"
-  show (BindSchema b) = "bind" ++ show b
+  deriving (Eq,Functor,Foldable,Traversable,Ord,Show)
+
 instance (Pretty n) => Pretty (BindType n) where
   pretty BindLet = "let"
   pretty (BindSchema b) = "bind" PP.<> pretty b
 
-instance Eq1 BindType where
-  liftEq _ BindLet BindLet = True
-  liftEq eq (BindSchema a) (BindSchema m) = eq a m
-  liftEq _ _ _ = False
-
 newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
-instance Show TableName where show (TableName s) = show s
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show)
+instance Pretty TableName where pretty (TableName s) = pretty s
 
 -- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
-  } deriving (Eq, Ord, Generic)
+  } deriving (Eq, Ord, Generic, Show)
 
 instance Hashable ModuleName where
   hashWithSalt s (ModuleName n Nothing)   =
     s `hashWithSalt` (0::Int) `hashWithSalt` n
   hashWithSalt s (ModuleName n (Just ns)) =
     s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
-
-instance Show ModuleName where
-  show = unpack . asString
 
 instance AsString ModuleName where
   asString (ModuleName n Nothing) = n
@@ -338,7 +348,7 @@ instance IsString ModuleName where
         _      -> ModuleName (pack . show $ l) (Just . NamespaceName $ "Err: malformed name")
 
 instance Pretty ModuleName where
-  pretty (ModuleName n Nothing) = pretty n
+  pretty (ModuleName n Nothing)   = pretty n
   pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
 
 instance ToJSON ModuleName where
@@ -353,18 +363,19 @@ instance FromJSON ModuleName where
     <*> o .:? "namespace"
 
 newtype DefName = DefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
-instance Show DefName where show (DefName s) = show s
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show)
 
 -- | A named reference from source.
 data Name
   = QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info }
   | Name { _nName :: Text, _nInfo :: Info }
-  deriving (Generic)
+  deriving (Generic, Show)
 
-instance Show Name where
-  show (QName q n _) = asString' q ++ "." ++ unpack n
-  show (Name n _) = unpack n
+instance Pretty Name where
+  pretty = \case
+    QName modName nName _ -> pretty modName <> "." <> pretty nName
+    Name nName _          -> pretty nName
+
 instance ToJSON Name where toJSON = toJSON . show
 instance FromJSON Name where
   parseJSON = withText "Name" $ \t -> case parseName def t of
@@ -405,17 +416,21 @@ data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe Hash)
   , _uInfo :: !Info
-  } deriving (Eq)
-instance Show Use where
-  show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
+  } deriving (Eq, Show)
+
+instance Pretty Use where
+  pretty Use{..} =
+    let args = pretty _uModuleName : maybe [] (\mh -> [pretty mh]) _uModuleHash
+    in parens $ "use " <> sep args
 
 data App t = App
   { _appFun :: !t
   , _appArgs :: ![t]
   , _appInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq)
-instance Show n => Show (App n) where
-  show App{..} = "(" ++ unwords (show _appFun:map show _appArgs) ++ ")"
+  } deriving (Functor,Foldable,Traversable,Eq,Show)
+
+instance Pretty n => Pretty (App n) where
+  pretty App{..} = parens $ sep $ pretty _appFun : map pretty _appArgs
 
 -- TODO: We need a more expressive, safer ADT for this.
 data Module
@@ -434,12 +449,17 @@ data Module
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
   , _interfaceImports :: [Use]
-  } deriving Eq
+  } deriving (Eq, Show)
 
-instance Show Module where
-  show m = case m of
-    Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
-    Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
+instance Pretty Module where
+  pretty m = parens . sep $ case m of
+    Module{..} ->
+      [ "Module"
+      , pretty _mName
+      , pretty $ "'" ++ asString' _mKeySet
+      , pretty _mHash
+      ]
+    Interface{..} -> [ "Interface", pretty _interfaceName ]
 
 instance ToJSON Module where
   toJSON Module{..} = object
@@ -476,13 +496,14 @@ data Def n = Def
   , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
   , _dInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq)
-instance (Show n) => Show (Def n) where
-  show Def{..} = "(" ++ unwords
-    [ defTypeRep _dDefType
-    , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
-    , "(" ++ unwords (map show (_ftArgs _dFunType)) ++ ")"] ++
-    maybeDelim " " (_mDocs _dMeta) ++ ")"
+  } deriving (Functor,Foldable,Traversable,Eq,Show)
+
+instance (Pretty n) => Pretty (Def n) where
+  pretty Def{..} = parens $ sep $
+    [ text $ defTypeRep _dDefType
+    , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
+    , parens $ sep $ pretty <$> _ftArgs _dFunType
+    ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
 
 newtype NamespaceName = NamespaceName Text
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic)
@@ -510,16 +531,138 @@ data ConstVal n =
   CVRaw { _cvRaw :: !n } |
   CVEval { _cvRaw :: !n
          , _cvEval :: !n }
-  deriving (Eq,Functor,Foldable,Traversable,Generic)
+  deriving (Eq,Functor,Foldable,Traversable,Generic,Show)
 
-instance Show o => Show (ConstVal o) where
-  show (CVRaw r) = show r
-  show (CVEval _ e) = show e
-
-instance Eq1 ConstVal where
-  liftEq eq (CVRaw a) (CVRaw b) = eq a b
-  liftEq eq (CVEval a c) (CVEval b d) = eq a b && eq c d
-  liftEq _ _ _ = False
+-- Note: I believe this entire thing could be derived automatically if we go
+-- rid of bound (@Scope@)
+instance Show1 Term where
+  liftShowsPrec :: forall a. (Int -> a -> ShowS) -> ([a] -> ShowS) -> Int -> Term a -> ShowS
+  liftShowsPrec showsA showListA p tm = showParen (p > 10) $ case tm of
+    TModule{..} ->
+        showString "TModule "
+      . showsPrec 11 _tModuleDef
+      . showChar ' '
+      . shows1 11 _tModuleBody
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TList{..} ->
+        showString "TList "
+      . showList1 _tList
+      . showChar ' '
+      . shows2 11 _tListType
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TDef{..} ->
+        showString "TDef "
+      . shows1 11 _tDef
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TNative{..} ->
+        showString "TNative "
+      . showsPrec 11 _tNativeName
+      . showChar ' '
+      . showsPrec 11 _tNativeFun
+      . showChar ' '
+      . shows3 11 _tFunTypes
+      . showChar ' '
+      . showsPrec 11 _tNativeDocs
+      . showChar ' '
+      . showsPrec 11 _tNativeTopLevelOnly
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TConst{..} ->
+        showString "TConst "
+      . shows2 11 _tConstArg
+      . showChar ' '
+      . showsPrec 11 _tModule
+      . showChar ' '
+      . shows2 11 _tConstVal
+      . showChar ' '
+      . showsPrec 11 _tMeta
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TApp{..} ->
+        showString "TApp "
+      . shows2 11 _tApp
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TVar{..} ->
+        showString "TVar "
+      . showsA 11 _tVar
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TBinding{..} ->
+        showString "TBinding"
+      . liftShowList2 shows2 showList2 shows1 showList1 _tBindPairs
+      . shows1 11 _tBindBody
+      . shows3 11 _tBindType
+      . showsPrec 11 _tInfo
+    TObject{..} ->
+        showString "TObject"
+      . liftShowList2 shows1 showList1 shows1 showList1 _tObject
+      . shows2 11 _tObjectType
+      . showsPrec 11 _tInfo
+    TSchema{..} ->
+        showString "TSchema "
+      . showsPrec 11 _tSchemaName
+      . showChar ' '
+      . showsPrec 11 _tModule
+      . showChar ' '
+      . showsPrec 11 _tMeta
+      . showChar ' '
+      . showList2 _tFields
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TLiteral{..} ->
+        showString "TLiteral "
+      . showsPrec 11 _tLiteral
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TGuard{..} ->
+        showString "TGuard "
+      . showsPrec 11 _tGuard
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TUse{..} ->
+        showString "TUse "
+      . showsPrec 11 _tUse
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TValue{..} ->
+        showString "TValue "
+      . showsPrec 11 _tValue
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    TStep{..} ->
+        showString "TStep "
+      . shows2 11 _tStepEntity
+      . shows1 11 _tStepExec
+      . shows2 11 _tStepRollback
+      . showsPrec 11 _tInfo
+    TTable{..} ->
+        showString "TTable "
+      . showsPrec 11 _tTableName
+      . showChar ' '
+      . showsPrec 11 _tModule
+      . showChar ' '
+      . showsPrec 11 _tHash
+      . showChar ' '
+      . shows2
+        11 _tTableType
+      . showChar ' '
+      . showsPrec 11 _tMeta
+      . showChar ' '
+      . showsPrec 11 _tInfo
+    where shows1 :: Show1 f => Int -> f a -> ShowS
+          shows1 = liftShowsPrec showsA showListA
+          showList1 :: Show1 f => [f a] -> ShowS
+          showList1 = liftShowList showsA showListA
+          shows2 :: (Show1 f, Show1 g) => Int -> f (g a) -> ShowS
+          shows2 = liftShowsPrec shows1 showList1
+          showList2 :: (Show1 f, Show1 g) => [f (g a)] -> ShowS
+          showList2 = liftShowList shows1 showList1
+          shows3 :: (Show1 f, Show1 g, Show1 h) => Int -> f (g (h a)) -> ShowS
+          shows3 = liftShowsPrec shows2 showList2
 
 -- | Pact evaluable term.
 data Term n =
@@ -608,41 +751,77 @@ data Term n =
     , _tMeta :: !Meta
     , _tInfo :: !Info
     }
-    deriving (Functor,Foldable,Traversable,Eq)
+    deriving (Functor,Foldable,Traversable,Eq,Show)
 
-instance Show n => Show (Term n) where
-    show TModule {..} =
-      "(TModule " ++ show _tModuleDef ++ " " ++ show (unscope _tModuleBody) ++ ")"
-    show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
-    show TDef {..} = show _tDef
-    show TNative {..} =
-      "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
-    show TConst {..} =
-      "(TConst " ++ asString' _tModule ++ "." ++ show _tConstArg ++ " " ++ show _tMeta ++ ")"
-    show (TApp a _) = show a
-    show (TVar n _) = "(TVar " ++ show n ++ ")"
-    show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show (unscope b) ++ " " ++ show c ++ ")"
-    show (TObject bs _ _) =
-      "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
-    show (TLiteral l _) = show l
-    show (TGuard k _) = show k
-    show (TUse u _) = show u
-    show (TValue v _) = BSL.toString $ encode v
-    show (TStep ent e r _) =
-      "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
-    show TSchema {..} =
-      "(TSchema " ++ asString' _tModule ++ "." ++ asString' _tSchemaName ++ " " ++
-      show _tFields ++ " " ++ show _tMeta ++ ")"
-    show TTable {..} =
-      "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
-      ++ " " ++ show _tMeta ++ ")"
+-- | Newtype to avoid introducing an orphan instance for @Pretty Var@. Used
+-- just for pretty printing (@prettyUnscope@).
+newtype PrettyVar a b = PrettyVar (Var a b)
+
+instance (Pretty a, Pretty b) => Pretty (PrettyVar a b) where
+  pretty (PrettyVar (B b)) = pretty b
+  pretty (PrettyVar (F a)) = pretty a
+
+prettyUnscope
+  :: (Functor f, Pretty (f (PrettyVar b (f a))))
+  => Scope b f a -> Doc
+prettyUnscope = pretty . fmap PrettyVar . unscope
+
+instance Pretty n => Pretty (Term n) where
+  pretty = \case
+    TModule{..} -> parens $ sep
+      [ "TModule", pretty _tModuleDef, prettyUnscope _tModuleBody ]
+    TList{..} -> prettyList _tList
+    TDef{..} -> pretty _tDef
+    TNative{..} -> "native " <> pretty (asString' _tNativeName) <> ":"
+      <> nest 2 (
+        line <> pretty _tNativeDocs <>
+        line <> align (vsep (pretty <$> toList _tFunTypes))
+      )
+    TConst{..} -> "constant " <> pretty _tModule <> "." <> pretty _tConstArg
+      <> " " <> pretty _tMeta
+    TApp a _ -> pretty a
+    TVar n _ -> pretty n
+    TBinding{..} -> parens $ sep
+      [ "TBinding", pretty _tBindPairs
+      , prettyUnscope _tBindBody
+      , pretty _tBindType
+      ]
+    TObject bs _ _ -> commaBraces $
+      fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
+    TLiteral l _ -> pretty l
+    TGuard k _ -> pretty k
+    TUse u _ -> pretty u
+    TValue v _ -> prettyValue v
+    TStep{..} -> parens $ sep $
+      [ "TStep", pretty _tStepEntity, pretty _tStepExec ]
+      ++ maybe [] (\rb -> [pretty rb]) _tStepRollback
+    TSchema{..} -> parens $ sep
+      [ "TSchema"
+      , pretty _tModule <> "." <> pretty _tSchemaName
+      , pretty _tFields
+      , pretty _tMeta
+      ]
+    TTable{..} -> parens $ sep
+      [ "TTable"
+      , pretty _tModule <> "." <> pretty _tTableName <> ":" <> pretty _tTableType
+      , pretty _tMeta
+      ]
+
+prettyValue :: Value -> Doc
+prettyValue = \case
+  Object hm -> commaBraces
+    $ fmap (\(k, v) -> pretty k <> ": " <> prettyValue v)
+    $ HM.toList hm
+  Array values -> commaBrackets $ prettyValue <$> toList values
+  String str -> pretty str
+  Number scientific -> text $ show scientific
+  Bool b -> pretty b
+  Null -> "null"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
 showParamType t = ":" ++ show t
 
---deriveEq1 ''Term
--- instance Show1 Term
 instance Eq1 Term where
   liftEq eq (TModule a b c) (TModule m n o) =
     a == m && liftEq eq b n && c == o
@@ -846,3 +1025,13 @@ makeLenses ''App
 makeLenses ''Def
 makeLenses ''ModuleName
 makePrisms ''DefType
+
+deriveEq1 ''App
+deriveEq1 ''BindType
+deriveEq1 ''ConstVal
+deriveEq1 ''Def
+deriveShow1 ''App
+deriveShow1 ''BindType
+deriveShow1 ''ConstVal
+deriveShow1 ''Def
+>>>>>>> Improved `show` / `pretty`.

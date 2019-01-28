@@ -69,6 +69,8 @@ newtype Hash = Hash { unHash :: ByteString }
   deriving (Eq, Ord, Generic, Hashable)
 instance Show Hash where
   show (Hash h) = show $ B16.encode h
+instance Pretty Hash where
+  pretty = text . unpack . asString
 instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
 instance NFData Hash
 
