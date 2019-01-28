@@ -24,6 +24,8 @@
 
 module Pact.Analyze.Types.Shared where
 
+import Pact.Analyze.Types.WithTH
+
 import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                Ixed (ix), Lens', Prism', both,
                                                from, iso, lens, makeLenses,
@@ -906,24 +908,26 @@ withTypeable = withDict . singMkTypeable
     withTypeableListDict (SCons _k ty tys) f
       = withTypeableListDict tys $ withTypeable ty f
 
-withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
-withSMTValue = withDict . singMkSMTValue
-  where
+declareWith "SMTValue"
 
-    singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
-    singMkSMTValue = \case
-      SInteger   -> Dict
-      SBool      -> Dict
-      SStr       -> Dict
-      STime      -> Dict
-      SDecimal   -> Dict
-      SGuard     -> Dict
-      SAny       -> Dict
-      SList ty'  -> withSMTValue ty' $ withTypeable ty' Dict
-      SObjectUnsafe SNil' -> Dict
-      SObjectUnsafe (SCons' _ ty' tys)
-        -> withSMTValue ty' $
-           withDict (singMkSMTValue (SObjectUnsafe tys)) Dict
+-- withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
+-- withSMTValue = withDict . singMkSMTValue
+--   where
+
+--     singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
+--     singMkSMTValue = \case
+--       SInteger   -> Dict
+--       SBool      -> Dict
+--       SStr       -> Dict
+--       STime      -> Dict
+--       SDecimal   -> Dict
+--       SGuard     -> Dict
+--       SAny       -> Dict
+--       SList ty'  -> withSMTValue ty' $ withTypeable ty' Dict
+--       SObjectUnsafe SNil' -> Dict
+--       SObjectUnsafe (SCons' _ ty' tys)
+--         -> withSMTValue ty' $
+--            withDict (singMkSMTValue (SObjectUnsafe tys)) Dict
 
 withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
 withHasKind = withDict . singMkHasKind

@@ -101,6 +101,7 @@ library
       Pact.Analyze.Types.Shared
       Pact.Analyze.Types.Types
       Pact.Analyze.Types.UserShow
+      Pact.Analyze.Types.WithTH
       Pact.Analyze.Util
       Pact.Analyze.Remote.Server
       Pact.ApiReq
@@ -165,6 +166,7 @@ library
                      , constraints
                      , servant
                      , servant-client
+                     , template-haskell
 
   if impl(ghcjs)
     build-depends:
