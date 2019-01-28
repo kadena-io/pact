@@ -142,7 +142,7 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
 capabilityGranted :: Capability -> Eval e Bool
-capabilityGranted cap = (cap `elem`) <$> use evalCapabilities
+capabilityGranted cap = (cap `elem`) <$> use (evalCapabilities . capGranted)
 
 -- | Test if capability is already installed, if not
 -- evaluate `test` which is expected to fail by some
@@ -153,7 +153,7 @@ acquireCapability cap test = do
   granted <- capabilityGranted cap
   if granted then return AlreadyAcquired else do
     test
-    evalCapabilities %= (cap:)
+    evalCapabilities . capGranted %= (cap:)
     return NewlyAcquired
 
 acquireModuleAdmin :: Info -> ModuleName -> KeySetName -> Eval e CapAcquireResult
@@ -163,10 +163,10 @@ acquireModuleAdmin i modName modKeySetName =
 
 
 revokeAllCapabilities :: Eval e ()
-revokeAllCapabilities = evalCapabilities .= []
+revokeAllCapabilities = evalCapabilities . capGranted .= []
 
 revokeCapability :: Capability -> Eval e ()
-revokeCapability c = evalCapabilities %= filter (/= c)
+revokeCapability c = evalCapabilities . capGranted %= filter (/= c)
 
 -- | Evaluate current namespace and prepend namespace to the
 -- module name. This should be done before any lookups, as
@@ -179,7 +179,7 @@ evalNamespace info m = do
   case mNs of
     Nothing -> do
       policy <- view (eeNamespacePolicy . nsPolicy)
-      unless (policy mNs) $ evalError info $ "Definitions in default namespace are not authorized"
+      unless (policy mNs) $ evalError info "Definitions in default namespace are not authorized"
       return m
     Just (Namespace n _) ->
       return $ over (case m of Module {} -> mName; _ -> interfaceName) (mangleModuleName n) m
