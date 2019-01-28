@@ -54,15 +54,13 @@ import Control.Applicative
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.DeepSeq
-import Data.Aeson as A
-import Data.Maybe (fromMaybe)
 import Data.ByteString (ByteString)
 import Data.Serialize as SZ
 import Data.String
-import Data.Text hiding (filter, all)
 import Data.Hashable (Hashable)
+import Data.Aeson as A
+import Data.Text hiding (filter, all)
 import qualified Data.Set as S
-import qualified Crypto.Hash as H
 import Data.Default (Default,def)
 
 
@@ -76,8 +74,10 @@ import Pact.Parse
 
 
 #if !defined(ghcjs_HOST_OS)
+import Data.Maybe       (fromMaybe)
 import qualified Data.ByteString.Lazy as BSL
-import Pact.Types.Crypto as Base
+import Pact.Types.Crypto              as Base
+import qualified Crypto.Hash          as H
 #else
 import Pact.Types.Hash
 #endif
@@ -327,9 +327,18 @@ newtype RequestKey = RequestKey { unRequestKey :: Hash}
 instance Show RequestKey where
   show (RequestKey rk) = show rk
 
+
+#if !defined(ghcjs_HOST_OS)
+
 initialRequestKey :: RequestKey
 initialRequestKey = RequestKey $ initialHashTx H.Blake2b_512
 
+#else
+
+initialRequestKey :: RequestKey
+initialRequestKey = RequestKey $ initialHash
+
+#endif
 
 
 makeLenses ''UserSig
