@@ -111,7 +111,7 @@ listDelims Brackets = ("[","]")
 listDelims Braces   = ("{","}")
 
 enlist :: ListDelimiter -> ((Text,Text) -> a) -> a
-enlist d f = f (listDelims d) where
+enlist d f = f (listDelims d)
 
 data Separator = Colon|ColonEquals|Comma deriving (Eq,Ord,Generic,Bounded,Enum,Show)
 instance NFData Separator
