@@ -150,8 +150,9 @@ getDelta = do
 handleParse :: TF.Result [Exp Parsed] -> ([Exp Parsed] -> Repl (Either String a)) -> Repl (Either String a)
 handleParse (TF.Failure e) _ = do
   mode <- use rMode
-  outStrLn HErr (renderPrettyString (colors mode) (_errDoc e))
-  return (Left (renderCompactString $ _errDoc e))
+  let errDoc = _errDoc e
+  outStrLn HErr $ renderPrettyString (colors mode) errDoc
+  return $ Left $ renderCompactString errDoc
 handleParse (TF.Success es) a = a es
 
 colors :: ReplMode -> RenderColor

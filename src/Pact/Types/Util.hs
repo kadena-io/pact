@@ -144,7 +144,11 @@ outputJSON a = BSL8.putStrLn $ encode a
 data RenderColor = RColor | RPlain
 
 renderString :: Pretty a => (Doc -> SimpleDoc) -> RenderColor -> a -> String
-renderString renderf colors p = displayS (renderf ((case colors of RColor -> id; RPlain -> plain) (pretty p))) ""
+renderString renderf colors p =
+  let display = case colors of
+        RColor -> displayS . renderf         . pretty
+        RPlain -> displayS . renderf . plain . pretty
+  in display p ""
 
 renderCompactString :: Pretty a => a -> String
 renderCompactString = renderString renderCompact RPlain
