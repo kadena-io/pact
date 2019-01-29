@@ -30,6 +30,7 @@ import qualified Pact.Server.Client as C
 import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
+import Pact.Types.Util (toB16JSON)
 
 
 import Data.Aeson
@@ -152,9 +153,7 @@ genKeysEth :: IO SomeKeyPair
 genKeysEth = genKeyPair (toScheme ETH)
 
 formatPubKeyForCmd :: SomeKeyPair -> Value
-formatPubKeyForCmd kp = String $ formatPublicKey scheme pub
-  where (PubT pub) = getPublic kp
-        scheme = toScheme (kpToPPKScheme kp)
+formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
 
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck

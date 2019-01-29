@@ -118,7 +118,7 @@ library
       Pact.Server.PactService
       Pact.Server.Server
       Pact.Types.Crypto
-      Pact.Types.ECC
+      Pact.Types.ECDSA
       Pact.Types.Server
       Pact.Types.SQLite
 

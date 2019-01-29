@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Pact.Types.ECC
+module Pact.Types.ECDSA
   ( PublicKey
   , PrivateKey
   , Signature
@@ -10,6 +10,9 @@ module Pact.Types.ECC
   , signETH
   , validETH
   , formatPublicKeyETH
+  , exportPublic,    importPublic
+  , exportPrivate,   importPrivate
+  , exportSignature, importSignature
   ) where
 
 
@@ -30,8 +33,8 @@ import qualified Data.ByteString          as BS
 import qualified Data.ByteString.Base16   as B16
 
 
+import Pact.Types.Util (parseB16TextOnly, toB16Text)
 
-import Pact.Types.Util
 
 
 --------- ETHEREUM SCHEME FUNCTIONS ---------
@@ -65,46 +68,38 @@ formatPublicKeyETH pub = BS.drop 12 $ keccak256Hash pub
 
 
 
---------- ECDSA KEYS AND SIGNATURES INSTANCES ---------
+--------- ECDSA KEYS AND SIGNATURES FUNCTIONS ---------
 
-instance Export ECDSA.PrivateKey where
-  export (PrivateKey _ p) = integerToBS p
-instance ParseText ECDSA.PrivateKey where
-  parseText s = do
-    s' <- parseB16Text s
-    failMaybe ("ECDSA Private Key import failed: " ++ show s) (importPrivate s')
-
-
-
-instance Export ECDSA.PublicKey where
-  export (ECDSA.PublicKey _ point) =
+exportPublic :: ECDSA.PublicKey -> ByteString
+exportPublic (ECDSA.PublicKey _ point) =
    case point of
       ECDSA.Point x y  -> integerToBS x <> integerToBS y
       ECDSA.PointO     -> BS.empty
-instance ParseText ECDSA.PublicKey where
-  parseText s = do
-    s' <- parseB16Text s
-    failMaybe ("ECDSA Public Key import failed: " ++ show s) (importPublic s')
+
+
+-- ECDSA Public Key must be uncompressed and 64 bytes long or 65 bytes with 0x04.
+-- Assumes ByteString is not base 16.
+-- Source: https://kobl.one/blog/create-full-ethereum-keypair-and-address/
+
+importPublic :: ByteString -> Maybe PublicKey
+importPublic bs | BS.length bs == 65 &&
+                  startsWithConstant4    = checkIfValid (BS.drop 1 bs)
+                | BS.length bs == 64     = checkIfValid bs
+                | otherwise              = Nothing
+  where  startsWithConstant4 =
+           (BS.take 1 bs) == (integerToBS 0x04)
+         point b = ECDSA.Point (bsToInteger xBS) (bsToInteger yBS)
+           where (xBS, yBS) = BS.splitAt 32 b
+         checkIfValid b
+           | isPointValid curveECDSA (point b) &&
+             not (isPointAtInfinity (point b))      = Just $ PublicKey curveECDSA (point b)
+           | otherwise                              = Nothing
 
 
 
-instance Export ECDSA.Signature where
-  export (Signature r s) = (integerToBS r) <> (integerToBS s)
-instance ParseText ECDSA.Signature where
-  parseText s = do
-    s' <- parseB16Text s
-    failMaybe ("ECDSA Signature import failed " ++ show s) (importSignature s')
 
-
-
-
---------- ECDSA HELPER FUNCTIONS ---------
-
-keccak256Hash :: ByteString -> ByteString
-keccak256Hash =
-  BS.pack . BA.unpack . (H.hash :: BA.Bytes -> H.Digest H.Keccak_256) . BA.pack . BS.unpack
-
-
+exportPrivate :: ECDSA.PrivateKey -> ByteString
+exportPrivate (PrivateKey _ p) = integerToBS p
 
 
 -- ECDSA Private Key must be 32 bytes and not begin with 0x00 (null byte)
@@ -126,26 +121,8 @@ importPrivate bs | not startsNullByte &&
 
 
 
--- TODO: 65 bytes with 04 in front
--- ECDSA Public Key must be uncompressed and 64 bytes long.
--- Assumes ByteString is not base 16.
--- Source: https://kobl.one/blog/create-full-ethereum-keypair-and-address/
-
-importPublic :: ByteString -> Maybe PublicKey
-importPublic bs | BS.length bs == 65 &&
-                  startsWithConstant4    = checkIfValid (BS.drop 1 bs)
-                | BS.length bs == 64     = checkIfValid bs
-                | otherwise              = Nothing
-  where  startsWithConstant4 =
-           (BS.take 1 bs) == (integerToBS 0x04)
-         point b = ECDSA.Point (bsToInteger xBS) (bsToInteger yBS)
-           where (xBS, yBS) = BS.splitAt 32 b
-         checkIfValid b
-           | isPointValid curveECDSA (point b) &&
-             not (isPointAtInfinity (point b))      = Just $ PublicKey curveECDSA (point b)
-           | otherwise                              = Nothing
-
-
+exportSignature :: ECDSA.Signature -> ByteString
+exportSignature (Signature r s) = (integerToBS r) <> (integerToBS s)
 
 
 -- Assumes ByteString is not base 16.
@@ -159,6 +136,13 @@ importSignature bs | BS.length bs == 64   = Just makeSignature
 
 
 
+--------- ECDSA HELPER FUNCTIONS ---------
+
+keccak256Hash :: ByteString -> ByteString
+keccak256Hash =
+  BS.pack . BA.unpack . (H.hash :: BA.Bytes -> H.Digest H.Keccak_256) . BA.pack . BS.unpack
+
+
 integerToBS :: Integer -> ByteString
 integerToBS = i2osp
 
@@ -167,6 +151,12 @@ bsToInteger :: ByteString -> Integer
 bsToInteger = os2ip
 
 
+textToPublic :: Text -> Either String ECDSA.PublicKey
+textToPublic t = do
+  b' <- parseB16TextOnly t
+  case importPublic b' of
+    Nothing -> Left "ECDSA Public Key import failed"
+    Just p  -> Right p
 
 
 {--
@@ -200,10 +190,10 @@ _testFormatPublicKeyETH = toB16Text $ formatPublicKeyETH $ fst $ B16.decode
 
 
 _testPublicKeyImport64Bytes :: Either String PublicKey
-_testPublicKeyImport64Bytes = fromText' "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
+_testPublicKeyImport64Bytes = textToPublic "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
 
 _testPublicKeyImport65Bytes :: Either String PublicKey
-_testPublicKeyImport65Bytes = fromText' "04836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
+_testPublicKeyImport65Bytes = textToPublic "04836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
 
 _testSameKey :: Bool
 _testSameKey = _testPublicKeyImport64Bytes == _testPublicKeyImport65Bytes
@@ -211,4 +201,4 @@ _testSameKey = _testPublicKeyImport64Bytes == _testPublicKeyImport65Bytes
 
 -- Only 65 bytes Public Keys starting with 0x04 are valid.
 _testPublicKeyImport65BytesFail :: Either String PublicKey
-_testPublicKeyImport65BytesFail = fromText' "05836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
+_testPublicKeyImport65BytesFail = textToPublic "05836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"

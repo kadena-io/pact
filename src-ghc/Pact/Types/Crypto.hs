@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies, GADTs, DataKinds #-}
 
@@ -25,9 +25,9 @@ module Pact.Types.Crypto
   , defaultScheme
   , toScheme
   , SomeKeyPair
-  , PublicKeyText(..)
-  , PrivateKeyText(..)
-  , SignatureText(..)
+  , PublicKeyBS(..)
+  , PrivateKeyBS(..)
+  , SignatureBS(..)
   , sign
   , verify
   , formatPublicKey
@@ -53,10 +53,8 @@ import Data.ByteString  (ByteString)
 
 import Data.Aeson                        as A
 import qualified Data.ByteArray          as B
-import qualified Data.ByteString.Base16  as B16
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
-import qualified Data.Text               as T
 
 
 import GHC.Generics
@@ -64,8 +62,8 @@ import Prelude
 import Pact.Types.Util
 
 
-import qualified Crypto.Ed25519.Pure  as Ed25519
-import qualified Pact.Types.ECC       as ECDSA
+import qualified Crypto.Ed25519.Pure   as Ed25519
+import qualified Pact.Types.ECDSA      as ECDSA
 
 
 --------- HASHING ---------
@@ -90,8 +88,6 @@ initialHashTx algo = hashTx mempty algo
 
 data PPKScheme = ED25519 | ETH
   deriving (Show, Eq, Ord, Generic)
-
-
 
 
 instance NFData PPKScheme
@@ -153,9 +149,9 @@ defaultScheme = SomeScheme SED25519
 -- is always known and this module controls the relationship
 -- between PPKScheme and SPPKScheme a.
 
-class (Export (PublicKey a),  ParseText (PublicKey a),
-       Export (PrivateKey a), ParseText (PrivateKey a),
-       Export (Signature a),  ParseText (Signature a))  =>
+class (ConvertBS (PublicKey a),
+       ConvertBS (PrivateKey a),
+       ConvertBS (Signature a))  =>
       Scheme (a :: PPKScheme) where
 
   type PublicKey a
@@ -166,8 +162,7 @@ class (Export (PublicKey a),  ParseText (PublicKey a),
   _sign :: SPPKScheme a -> ByteString -> PublicKey a -> PrivateKey a -> IO (Signature a)
   _valid :: SPPKScheme a -> ByteString -> PublicKey a -> Signature a -> Bool
   _genKeyPair :: SPPKScheme a -> IO (PublicKey a, PrivateKey a)
-  _formatPublicKey :: SPPKScheme a -> ByteString -> ByteString
-
+  _formatPublicKey :: SPPKScheme a -> PublicKey a -> ByteString
 
 
 
@@ -177,11 +172,13 @@ instance Scheme 'ED25519 where
   type PrivateKey 'ED25519 = Ed25519.PrivateKey
   type Signature 'ED25519 = Ed25519.Signature
 
-  _hashPayload _ msg = export $ hashTx msg H.Blake2b_512
+  _hashPayload _ msg = hsh
+    where (Hash hsh) = hashTx msg H.Blake2b_512
   _sign s msg pub priv = return $ Ed25519.sign (_hashPayload s msg) priv pub
   _valid s msg pub sig = Ed25519.valid (_hashPayload s msg) pub sig
   _genKeyPair _ = ed25519GenKeyPair
-  _formatPublicKey _ p = p
+  _formatPublicKey _ p = toBS p
+
 
 
 
@@ -190,11 +187,60 @@ instance Scheme 'ETH where
   type PrivateKey 'ETH = ECDSA.PrivateKey
   type Signature 'ETH = ECDSA.Signature
 
-  _hashPayload _ msg = export $ hashTx msg ECDSA.hashAlgoETH
+  _hashPayload _ msg = hsh
+    where (Hash hsh) = hashTx msg ECDSA.hashAlgoETH
   _sign s msg pub priv = ECDSA.signETH (_hashPayload s msg) pub priv
   _valid s msg pub sig = ECDSA.validETH (_hashPayload s msg) pub sig
   _genKeyPair _ = ECDSA.genKeyPair
-  _formatPublicKey _ = ECDSA.formatPublicKeyETH
+  _formatPublicKey _ p = ECDSA.formatPublicKeyETH (toBS p)
+
+
+
+
+--------- CRYPTO KEYS AND SIGNATURE CONVERSIONS ---------
+
+class ConvertBS a where
+  toBS :: a -> ByteString
+  fromBS :: ByteString -> Either String a
+
+maybeToEither :: String -> Maybe a -> Either String a
+maybeToEither err Nothing = Left err
+maybeToEither _ (Just a)  = Right a
+
+
+
+
+-- Ed25519 instances
+
+instance ConvertBS (Ed25519.PublicKey) where
+  toBS = Ed25519.exportPublic
+  fromBS s = maybeToEither ("Invalid ED25519 Public Key: " ++ show s)
+             (Ed25519.importPublic s)
+instance ConvertBS (Ed25519.PrivateKey) where
+  toBS = Ed25519.exportPrivate
+  fromBS s = maybeToEither ("Invalid ED25519 Private Key: " ++ show s)
+             (Ed25519.importPrivate s)
+instance ConvertBS Ed25519.Signature where
+  toBS (Ed25519.Sig bs) = bs
+  fromBS = Right . Ed25519.Sig
+
+
+
+
+-- ECDSA instances
+
+instance ConvertBS (ECDSA.PublicKey) where
+  toBS = ECDSA.exportPublic
+  fromBS s = maybeToEither ("Invalid ECDSA Public Key: " ++ show s)
+             (ECDSA.importPublic s)
+instance ConvertBS (ECDSA.PrivateKey) where
+  toBS = ECDSA.exportPrivate
+  fromBS s = maybeToEither ("Invalid ECDSA Private Key: " ++ show s)
+             (ECDSA.importPrivate s)
+instance ConvertBS (ECDSA.Signature) where
+  toBS = ECDSA.exportSignature
+  fromBS s = maybeToEither ("Invalid ECDSA Signature: " ++ show s)
+             (ECDSA.importSignature s)
 
 
 
@@ -213,15 +259,30 @@ data SomeKeyPair = forall a. Scheme a => SomeKeyPair (KeyPair a)
 
 
 
+
 --------- HELPER DATA TYPES AND FUNCTIONS --------
 
-newtype PublicKeyText = PubT { _pktPublic :: T.Text}
-  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
+  deriving (Eq, Show, Generic)
+instance ToJSON PublicKeyBS where
+  toJSON (PubBS p) = toB16JSON p
+instance FromJSON PublicKeyBS where
+  parseJSON = withText "PublicKeyBS" $ \s -> do
+    s' <- parseB16Text s
+    return $ PubBS s'
 
-newtype PrivateKeyText = PrivT { _pktSecret :: T.Text}
-  deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
-newtype SignatureText = SigT T.Text
+newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
+  deriving (Eq, Show, Generic)
+instance ToJSON PrivateKeyBS where
+  toJSON (PrivBS p) = toB16JSON p
+instance FromJSON PrivateKeyBS where
+  parseJSON = withText "PrivateKeyBS" $ \s -> do
+    s' <- parseB16Text s
+    return $ PrivBS s'
+
+
+newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic)
 
 
@@ -229,17 +290,17 @@ newtype SignatureText = SigT T.Text
 
 -- Scheme class helper functions
 
-sign :: SomeKeyPair -> ByteString -> IO T.Text
-sign (SomeKeyPair KeyPair{..}) msg = toText <$> _sign _kpScheme msg _kpPublicKey _kpPrivateKey
+sign :: SomeKeyPair -> ByteString -> IO ByteString
+sign (SomeKeyPair KeyPair{..}) msg = toBS <$> _sign _kpScheme msg _kpPublicKey _kpPrivateKey
 
 
-verify :: SomeScheme -> ByteString -> PublicKeyText -> SignatureText -> Bool
-verify (SomeScheme scheme) msg (PubT pT) (SigT sT) =
-  let pParsed = fromText pT
-      sParsed = fromText sT
-  in case (pParsed, sParsed) of
-    (Success p, Success s) -> _valid scheme msg p s
-    _ -> False
+verify :: SomeScheme -> ByteString -> PublicKeyBS -> SignatureBS -> Bool
+verify (SomeScheme scheme) msg (PubBS pBS) (SigBS sigBS) =
+  let pParsed = fromBS pBS
+      sigParsed = fromBS sigBS
+  in case (pParsed, sigParsed) of
+       (Right p, Right sig) -> _valid scheme msg p sig
+       _ -> False
 
 
 -- Converts Cryptographic public keys to Pact Runtime public keys depending on the scheme.
@@ -247,12 +308,8 @@ verify (SomeScheme scheme) msg (PubT pT) (SigT sT) =
 -- While it uses Runtime PKs during keyset enforcement to denote ownership and permissions.
 -- Certain schemes (i.e. Ethereum) call Runtime public keys 'addresses'.
 
--- Assumes Public Key is B16 Text
-
-formatPublicKey :: SomeScheme -> T.Text -> T.Text
-formatPublicKey (SomeScheme scheme) p = toB16Text formatPub
-  where unwrapPub = fst $ B16.decode $ encodeUtf8 p
-        formatPub = _formatPublicKey scheme unwrapPub
+formatPublicKey :: SomeKeyPair -> ByteString
+formatPublicKey (SomeKeyPair KeyPair{..}) = _formatPublicKey _kpScheme _kpPublicKey
 
 
 
@@ -262,11 +319,11 @@ formatPublicKey (SomeScheme scheme) p = toB16Text formatPub
 kpToPPKScheme :: SomeKeyPair -> PPKScheme
 kpToPPKScheme (SomeKeyPair kp) = toPPKScheme (_kpScheme kp)
 
-getPublic :: SomeKeyPair -> PublicKeyText
-getPublic (SomeKeyPair kp) = PubT $ toText (_kpPublicKey kp)
+getPublic :: SomeKeyPair -> ByteString
+getPublic (SomeKeyPair kp) = toBS (_kpPublicKey kp)
 
-getPrivate :: SomeKeyPair -> PrivateKeyText
-getPrivate (SomeKeyPair kp) = PrivT $ toText (_kpPrivateKey kp)
+getPrivate :: SomeKeyPair -> ByteString
+getPrivate (SomeKeyPair kp) = toBS (_kpPrivateKey kp)
 
 
 
@@ -279,10 +336,10 @@ genKeyPair (SomeScheme scheme) = do
   return $ SomeKeyPair $ KeyPair scheme pub priv
 
 
-importKeyPair :: (Monad m) => SomeScheme -> PublicKeyText -> PrivateKeyText -> m SomeKeyPair
-importKeyPair (SomeScheme scheme) (PubT pubText) (PrivT privText) = do
-  pub <- failEither Nothing (fromText' pubText)
-  priv <- failEither Nothing (fromText' privText)
+importKeyPair :: SomeScheme -> PublicKeyBS -> PrivateKeyBS -> Either String SomeKeyPair
+importKeyPair (SomeScheme scheme) (PubBS pubBS) (PrivBS privBS) = do
+  pub <- fromBS pubBS
+  priv <- fromBS privBS
   return $ SomeKeyPair $ KeyPair scheme pub priv
 
 
@@ -312,43 +369,26 @@ ed25519GenKeyPair = do
       Right (s,p,_) -> return (p, s)
 
 
+
 instance Eq Ed25519.PublicKey where
-  b == b' = (export b) == (export b')
+  b == b' = (Ed25519.exportPublic b) == (Ed25519.exportPublic b')
 instance Ord Ed25519.PublicKey where
-  b <= b' = (export b) <= (export b')
-instance ParseText Ed25519.PublicKey where
-  parseText s = do
-    s' <- parseB16Text s
-    failMaybe ("ED25519 Public Key import failed: " ++ show s)
-      (Ed25519.importPublic s')
-  {-# INLINE parseText #-}
+  b <= b' = (Ed25519.exportPublic b) <= (Ed25519.exportPublic b')
 instance Serialize Ed25519.PublicKey where
-  put s = S.putByteString (export s)
+  put s = S.putByteString (Ed25519.exportPublic s)
   get = maybe (fail "Invalid ED25519 Public Key") return =<<
         (Ed25519.importPublic <$> S.getByteString 32)
-instance Export (Ed25519.PublicKey) where
-  export = Ed25519.exportPublic
-
 
 
 
 instance Eq Ed25519.PrivateKey where
-  b == b' = (export b) == (export b')
+  b == b' = (Ed25519.exportPrivate b) == (Ed25519.exportPrivate b')
 instance Ord Ed25519.PrivateKey where
-  b <= b' = (export b) <= (export b')
-instance ParseText Ed25519.PrivateKey where
-  parseText s = do
-    s' <- parseB16Text s
-    failMaybe ("ED25519 Private Key import failed: " ++ show s)
-      (Ed25519.importPrivate s')
-  {-# INLINE parseText #-}
+  b <= b' = (Ed25519.exportPrivate b) <= (Ed25519.exportPrivate b')
 instance Serialize Ed25519.PrivateKey where
-  put s = S.putByteString (export s)
+  put s = S.putByteString (Ed25519.exportPrivate s)
   get = maybe (fail "Invalid ED25519 Private Key") return =<<
         (Ed25519.importPrivate <$> S.getByteString 32)
-instance Export (Ed25519.PrivateKey) where
-  export = Ed25519.exportPrivate
-
 
 
 
@@ -357,9 +397,3 @@ deriving instance Ord Ed25519.Signature
 instance Serialize Ed25519.Signature where
   put (Ed25519.Sig s) = S.put s
   get = Ed25519.Sig <$> (S.get >>= S.getByteString)
-instance ParseText Ed25519.Signature where
-  parseText s = Ed25519.Sig <$> parseB16Text s
-  {-# INLINE parseText #-}
-instance Export Ed25519.Signature where
-  export (Ed25519.Sig bs) = bs
-

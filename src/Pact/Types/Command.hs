@@ -37,7 +37,7 @@ module Pact.Types.Command
   , HasPlafMeta(..)
   , Payload(..)
   , ParsedCode(..)
-  , UserSig(..),usScheme,usPubKey,usSig
+  , UserSig(..),usScheme,usPubKey,usAddress,usSig
 
   , CommandError(..)
   , CommandSuccess(..)
@@ -135,8 +135,10 @@ mkCommand' creds env = makeCommand <$> (traverse makeSigs creds)
   where makeCommand sigs = Command env sigs hsh
         hsh = hashTx env requestKeyHash    -- hash associated with a Command, aka a Command's Request Key
         makeSigs kp =
-          let (PubT pub) = getPublic kp
-          in UserSig (kpToPPKScheme kp) pub <$> (sign kp env)
+          let pub = toB16Text $ getPublic kp
+              formattedPub = toB16Text $ formatPublicKey kp
+              sig = toB16Text <$> sign kp env
+          in UserSig (kpToPPKScheme kp) pub formattedPub <$> sig
 
 
 verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
@@ -158,7 +160,12 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
 
 
 verifyUserSig :: ByteString -> UserSig -> Bool
-verifyUserSig msg UserSig{..} = verify (toScheme _usScheme) msg (PubT _usPubKey) (SigT _usSig)
+verifyUserSig msg UserSig{..} =
+  let pubT = parseB16TextOnly _usPubKey
+      sigT = parseB16TextOnly _usSig
+  in case (pubT, sigT) of
+       (Right p, Right sig) -> verify (toScheme _usScheme) msg (PubBS p) (SigBS sig)
+       _ -> False
 
 
 #else
@@ -253,6 +260,7 @@ instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = len
 data UserSig = UserSig
   { _usScheme :: !PPKScheme
   , _usPubKey :: !Text
+  , _usAddress :: !Text
   , _usSig :: !Text }
   deriving (Eq, Ord, Show, Generic)
 instance NFData UserSig
@@ -261,10 +269,10 @@ instance NFData UserSig
 instance Serialize UserSig
 instance ToJSON UserSig where
   toJSON UserSig {..} = object [
-    "scheme" .= _usScheme, "pubKey" .= _usPubKey, "sig" .= _usSig ]
+    "scheme" .= _usScheme, "pubKey" .= _usPubKey, "addr" .= _usAddress, "sig" .= _usSig ]
 instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o ->
-    UserSig <$> (o .: "scheme" >>= parseJSON)  <*> o .: "pubKey" <*> o .: "sig"
+    UserSig <$> (o .: "scheme" >>= parseJSON)  <*> o .: "pubKey" <*> o.: "addr" <*> o .: "sig"
   {-# INLINE parseJSON #-}
 
 

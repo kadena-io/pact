@@ -51,8 +51,8 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.API
 
 data ApiKeyPair = ApiKeyPair {
-  _akpSecret :: PrivateKeyText,
-  _akpPublic :: PublicKeyText,
+  _akpSecret :: PrivateKeyBS,
+  _akpPublic :: PublicKeyBS,
   _akpScheme :: Maybe PPKScheme
   } deriving (Eq, Show, Generic)
 instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4

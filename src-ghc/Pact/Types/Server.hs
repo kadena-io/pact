@@ -59,7 +59,6 @@ import Data.HashMap.Strict (HashMap)
 import Prelude
 
 import Pact.Types.Runtime as Pact
-import qualified Pact.Types.Crypto  as Crypto
 import Pact.Types.Orphans ()
 import Pact.Types.SQLite
 import Pact.Types.Command
@@ -68,8 +67,8 @@ import Pact.Interpreter
 
 
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
-userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 formatPubT
-  where formatPubT = Crypto.formatPublicKey (Crypto.toScheme _usScheme) _usPubKey
+userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usAddress
+
 
 userSigsToPactKeySet :: [UserSig] -> S.Set Pact.PublicKey
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey

@@ -36,15 +36,11 @@ import Data.Serialize (Serialize)
 import qualified Data.Serialize as S
 
 
-class Export a where
-  export :: a -> ByteString
 
 class ParseText a where
   parseText :: Text -> Parser a
 
 
-toText :: Export e => e -> Text
-toText = toB16Text . export
 
 fromText :: ParseText a => Text -> Result a
 fromText = parse parseText
@@ -77,8 +73,6 @@ instance Show Hash where
   show (Hash h) = show $ B16.encode h
 instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
 instance NFData Hash
-instance Export Hash where
-  export (Hash hsh) = hsh
 
 
 -- NB: this hash is also used for the bloom filter, which needs 32bit keys
@@ -128,6 +122,9 @@ parseB16Text t = case B16.decode (encodeUtf8 t) of
                                | otherwise -> fail $ "Base16 decode failed: " ++ show t
 {-# INLINE parseB16Text #-}
 
+parseB16TextOnly :: Text -> Either String ByteString
+parseB16TextOnly t = resultToEither $ parse parseB16Text t
+
 toB16JSON :: ByteString -> Value
 toB16JSON s = String $ toB16Text s
 
@@ -137,11 +134,6 @@ toB16Text s = decodeUtf8 $ B16.encode s
 failMaybe :: Monad m => String -> Maybe a -> m a
 failMaybe err m = maybe (fail err) return m
 
-failEither :: Monad m => Maybe String -> Either String a -> m a
-failEither errExtra m =
-  case m of
-    Left err -> fail (maybe err ((err ++ ": ") ++) errExtra)
-    Right r -> return r
 
 -- | Utility for unsafe parse of JSON
 unsafeFromJSON :: FromJSON a => Value -> a

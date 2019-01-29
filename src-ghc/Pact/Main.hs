@@ -150,7 +150,5 @@ echoBuiltins = do
 genKeys :: IO ()
 genKeys = do
   kp <- genKeyPair defaultScheme
-  let (PubT pub)   = getPublic kp
-      (PrivT priv) = getPrivate kp
-  putStrLn $ "public: " ++ unpack pub
-  putStrLn $ "secret: " ++ unpack priv
+  putStrLn $ "public: " ++ unpack (toB16Text $ getPublic kp)
+  putStrLn $ "secret: " ++ unpack (toB16Text $ getPrivate kp)
