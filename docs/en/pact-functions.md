@@ -540,7 +540,7 @@ Top level only: this function will fail if used in module code.
 *table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
 
 
-Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
+Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY. OBJECT must have all fields specified by row type.
 ```lisp
 (insert accounts id { "balance": 0.0, "note": "Created account." })
 ```
@@ -619,10 +619,10 @@ Return all updates to TABLE performed in transaction TXID.
 
 ### update {#update}
 
-*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:~<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>~` *&rarr;*&nbsp;`string`
 
 
-Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY.
+Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY. OBJECT can have just the fields to update.
 ```lisp
 (update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 ```
@@ -630,7 +630,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 
 ### with-default-read {#with-default-read}
 
-*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *defaults*&nbsp;`object:<{row}>` *bindings*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *defaults*&nbsp;`object:<{row}>~` *bindings*&nbsp;`binding:<{row}>~` *&rarr;*&nbsp;`<a>`
 
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names. 
@@ -657,7 +657,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 *table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
 
 
-Write entry in TABLE for KEY of OBJECT column data.
+Write entry in TABLE for KEY of OBJECT column data. OBJECT must have all fields specified by row type.
 ```lisp
 (write accounts id { "balance": 100.0 })
 ```

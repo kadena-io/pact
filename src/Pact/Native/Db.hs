@@ -62,6 +62,7 @@ dbDefs =
       tableTy = TySchema TyTable rt def
       rowTy = TySchema TyObject rt def
       bindTy = TySchema TyBinding rt def
+      partialize = set tySchemaPartial (SPPartial [])
       a = mkTyVar "a" []
   in ("Database",
     [setTopLevelOnly $ defRNative "create-table" createTable'
@@ -76,7 +77,7 @@ dbDefs =
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType a
-      [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",bindTy)])
+      [("table",tableTy),("key",tTyString),("defaults",partialize rowTy),("bindings",partialize bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
      \`$(with-default-read accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
@@ -104,12 +105,12 @@ dbDefs =
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
     ,defRNative "write" (write Write SPFull) (writeArgs SPFull)
-     (writeDocs "." "(write accounts id { \"balance\": 100.0 })")
+     (writeDocs ". OBJECT must have all fields specified by row type." "(write accounts id { \"balance\": 100.0 })")
     ,defRNative "insert" (write Insert SPFull) (writeArgs SPFull)
-     (writeDocs ", failing if data already exists for KEY."
+     (writeDocs ", failing if data already exists for KEY. OBJECT must have all fields specified by row type."
      "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
-    ,defRNative "update" (write Update SPPartial) (writeArgs SPPartial)
-     (writeDocs ", failing if data does not exist for KEY."
+    ,defRNative "update" (write Update $ SPPartial []) (writeArgs $ SPPartial [])
+     (writeDocs ", failing if data does not exist for KEY. OBJECT can have just the fields to update."
       "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])

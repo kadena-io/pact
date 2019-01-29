@@ -202,14 +202,16 @@ instance Eq1 TypeVar where
   liftEq _ _ _ = False
 
 -- | Represent a full or partial schema inhabitant.
-data SchemaPartial = SPFull | SPPartial
-  deriving (Eq,Show,Ord,Generic)
+data SchemaPartial = SPFull | SPPartial [Text]
+  deriving (Eq,Ord,Show,Generic)
 instance NFData SchemaPartial
 instance Default SchemaPartial where def = SPFull
 
+
 showPartial :: SchemaPartial -> String
 showPartial SPFull = ""
-showPartial SPPartial = "~"
+showPartial (SPPartial []) = "~"
+showPartial (SPPartial ks) = "~[" ++ intercalate "," (map (unpack.asString) ks) ++ "]"
 
 -- | Pact types.
 data Type v =
@@ -243,7 +245,7 @@ instance (Show v) => Show (Type v) where
                   | otherwise = "[" ++ show t ++ "]"
   show (TySchema s t p)
     | isAnyTy t = show s
-    | otherwise = show s ++ ":" ++ showPartial p ++ show t
+    | otherwise = show s ++ ":"  ++ show t ++ showPartial p
   show (TyFun f) = show f
   show (TyUser v) = show v
   show TyAny = "*"
@@ -297,9 +299,9 @@ canUnifyWith a b = a == b
 -- valid in a, etc. [] in a subset is a wildcard.
 canUnifyPartial :: SchemaPartial -> SchemaPartial -> Bool
 canUnifyPartial SPFull SPFull = True
-canUnifyPartial SPPartial SPPartial = True
-canUnifyPartial SPFull SPPartial = True -- full can always satisfy subset
-canUnifyPartial SPPartial SPFull = False -- partial cannot satisfy full
+canUnifyPartial (SPPartial a) (SPPartial b) = null b || all (`elem` a) b
+canUnifyPartial SPFull SPPartial {} = True -- full can always satisfy subset
+canUnifyPartial SPPartial {} SPFull = False -- partial cannot satisfy full
 
 
 

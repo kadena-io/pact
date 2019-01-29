@@ -142,7 +142,9 @@
 
   (defun tc-update-partial ()
     "update allows partial schema"
-    (update persons "foo" { "name": "dave" }))
+    (let ((partial { "name": "dave" }))
+      (update persons "foo" partial)
+      partial))
 
 
 )

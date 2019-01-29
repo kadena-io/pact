@@ -270,15 +270,14 @@ applySchemas Pre ast = case ast of
       kstr <- asPrimString k
       vt' <- lookupAndResolveTy (_aNode v)
       return (kstr,(v,_aId (_aNode k),vt'))
-    validateSchema sch (M.fromList pmap) >>= \pm -> case (partial,pm) of
-      (SPPartial,Just {}) -> return () -- partial specified and partial found
-      (SPFull, Just {}) ->
-        addFailure (_aId n) "Invalid partial schema found"
-      (SPFull, Nothing) -> return () -- full specified and full found
-      (SPPartial, Nothing) -> return () -- partial specified and full found
+    validateSchema sch partial (M.fromList pmap) >>= \pm -> forM_ pm $ \pkeys -> case partial of
+      SPFull -> addFailure (_aId n) "Invalid partial schema found"
+      SPPartial {} -> do
+        debug $ "Specializing schema ty for sublist: " ++ show pkeys
+        assocAstTy n $ TySchema TyObject (TyUser sch) (SPPartial pkeys)
     return ast
 
-  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch _ -> do
+  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch partial -> do
     debug $ "applySchemas [binding]: " ++ show (n,sch)
     pmapM <- forM bs $ \(Named _ node ni,bv) -> case bv of
       Prim _ (PrimLit (LString bn)) -> do
@@ -286,7 +285,7 @@ applySchemas Pre ast = case ast of
         return $ Just (bn,(Var node,ni,vt'))
       _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
     case sequence pmapM of
-      Just pmap -> void $ validateSchema sch (M.fromList pmap)
+      Just pmap -> void $ validateSchema sch partial (M.fromList pmap)
       Nothing -> return () -- error already tracked above
     return ast
 
@@ -304,25 +303,29 @@ applySchemas Pre ast = case ast of
 
   where
     -- Given map of object text key to (value,key id,value ty) ...
-    -- (returns partial keys list if not full match)
-    validateSchema :: UserType -> M.Map Text (AST Node, TcId, Type UserType) -> TC (Maybe [Text])
-    validateSchema sch pmap = do
+    -- (returns partial keys list if subset of specified)
+    validateSchema :: UserType -> SchemaPartial
+                   -> M.Map Text (AST Node, TcId, Type UserType) -> TC (Maybe [Text])
+    validateSchema sch partial pmap = do
       -- smap: lookup from field name to ty
-      let smap = M.fromList <$> (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+      let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+          filterPartial SPFull = id
+          filterPartial (SPPartial []) = id
+          filterPartial (SPPartial ks) = M.filterWithKey $ \k _ -> k `elem` ks
       -- over each object field ...
-      forM_ (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
+      pks <- fmap concat $ forM (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
         -- validate field exists ...
-        Nothing -> addFailure ki $ "Invalid field in schema object: " ++ show k
+        Nothing -> do
+          addFailure ki $ "Invalid field in schema object: " ++ show k ++ ", expected " ++ show (M.keys smap)
+          return []
         -- unify field value ty ...
-        Just aty -> case unifyTypes aty vty of
-          Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
-          -- associate unified ty with value node.
-          Just u -> assocAstTy (_aNode v) (either id id u)
-      let keyinter = intersect (M.keys pmap) (M.keys smap)
-      if length keyinter < M.size smap
-        then return (Just keyinter)
-        else return Nothing
-
+        Just aty -> do
+          case unifyTypes aty vty of
+            Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
+            -- associate unified ty with value node.
+            Just u -> assocAstTy (_aNode v) (either id id u)
+          return [k]
+      return $ if length pks < M.size smap then Just pks else Nothing
 
     lookupAndResolveTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 
@@ -623,7 +626,7 @@ unifyTypes' i a b act = case unifyTypes a b of
     return ()
 
 -- | Unify two types, indicating which of the types was more specialized with the Either result.
-unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
+unifyTypes :: forall n . Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
 unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
   (TyAny,_) -> Just (Right r)
@@ -634,18 +637,29 @@ unifyTypes l r = case (l,r) of
     _ -> Just (Right r) -- equality already covered above, and Nothing/Nothing ok
   (TyVar v,s) -> unifyVar Left Right v s
   (s,TyVar v) -> unifyVar Right Left v s
-  (TyList a,TyList b) -> unifyParam a b
-  (TySchema sa a spa,TySchema sb b spb) | sa == sb -> specializePartial spa spb <$> unifyParam a b
+  (TyList a,TyList b) -> unifyParam Just a b
+  (TySchema sa a spa,TySchema sb b spb) | sa == sb -> unifyParam (specializePartial spa spb) a b
   _ -> Nothing
   where
-    unifyParam a b = (<$> unifyTypes a b) $ \u -> case u of
-      Left _ -> Left l
-      Right _ -> Right r
-    specializePartial spa spb u
-      | spa == spb = u
-        -- in inequality, partial is always more specialized
-      | otherwise = either (Left . setPartial) (Right . setPartial) u
-        where setPartial = set tySchemaPartial SPPartial
+    -- | Unifies param and uses bias to return parent, with additional test/modifier f
+    -- TODO why not specialize param too?
+    unifyParam :: (Type n -> Maybe (Type n)) -> Type n -> Type n -> (Maybe (Either (Type n) (Type n)))
+    unifyParam f a b = case unifyTypes a b of
+      Nothing -> Nothing
+      Just u -> case u of
+        Left _ -> Left <$> f l
+        Right _ -> Right <$> f r
+    specializePartial spa spb u =
+      let setPartial p = Just $ set tySchemaPartial p u
+      in case (spa,spb) of
+        (SPFull,SPFull) -> Just u
+        (SPFull,SPPartial {}) -> setPartial spb
+        (SPPartial {},SPFull) -> setPartial spa
+        (SPPartial as,SPPartial bs)
+          | as == bs -> Just u
+          | null as || all (`elem` as) bs -> setPartial spb
+          | null bs || all (`elem` bs) as -> setPartial spa
+          | otherwise -> Nothing
     unifyVar vWrap sWrap v s =
       let useS = sWrap s
       in case (v,s) of
