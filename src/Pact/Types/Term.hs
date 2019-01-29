@@ -152,8 +152,8 @@ data KeySet = KeySet {
     } deriving (Eq,Generic,Show)
 
 commaBraces, commaBrackets, parensSep :: [Doc] -> Doc
-commaBraces   = encloseSep "{" "}" ", "
-commaBrackets = encloseSep "[" "]" ", "
+commaBraces   = encloseSep "{" "}" ","
+commaBrackets = encloseSep "[" "]" ","
 parensSep     = parens . sep
 
 instance Pretty KeySet where
@@ -797,7 +797,7 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tBindType
       ]
     TObject bs _ _ -> blue $ commaBraces $
-      fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
+      fmap (\(a, b) -> dquotes (pretty a) <> ": " <> pretty b) bs
     TLiteral l _ -> blue $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
