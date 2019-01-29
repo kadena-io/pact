@@ -86,7 +86,7 @@ moduleToMap = M.fromList . map (((`Name` def) . asString) *** Direct) . snd
 
 lengthDef :: NativeDef
 lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
- ["`(length [1 2 3])`", "`(length \"abcdefgh\")`", "`(length { \"a\": 1, \"b\": 2 })`"]
+ ["(length [1 2 3])", "(length \"abcdefgh\")", "(length { \"a\": 1, \"b\": 2 })"]
  "Compute length of X, which can be a list, a string, or an object."
 
 listA :: Type n
@@ -95,7 +95,7 @@ listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (
 enforceDef :: NativeDef
 enforceDef = defNative "enforce" enforce
   (funType tTyBool [("test",tTyBool),("msg",tTyString)])
-  ["`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"]
+  [ExecErrExample "(enforce (!= (+ 2 2) 4) \"Chaos reigns\")"]
   "Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true."
   where
 
@@ -112,7 +112,7 @@ enforceDef = defNative "enforce" enforce
 enforceOneDef :: NativeDef
 enforceOneDef =
   defNative "enforce-one" enforceOne (funType tTyBool [("msg",tTyString),("tests",TyList tTyBool)])
-  ["`(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])`"]
+  ["(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])"]
   "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success."
   where
 
@@ -136,7 +136,7 @@ pactVersionDef :: NativeDef
 pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
   (\_ _ -> return $ toTerm pactVersion)
   (funType tTyString [])
-  ["`(pact-version)`"]
+  ["(pact-version)"]
   "Obtain current pact build version."
 
 
@@ -144,7 +144,7 @@ formatDef :: NativeDef
 formatDef =
   defRNative "format" format
   (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
-  ["`(format \"My {} has {}\" [\"dog\" \"fleas\"])`"]
+  ["(format \"My {} has {}\" [\"dog\" \"fleas\"])"]
   "Interpolate VARS into TEMPLATE using {}."
   where
 
@@ -169,14 +169,14 @@ strToIntDef :: NativeDef
 strToIntDef = defRNative "str-to-int" strToInt
   (funType tTyInteger [("str-val", tTyString)] <>
    funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
-  ["`(str-to-int 16 \"abcdef123456\")`", "`(str-to-int \"123456\")`"]
+  ["(str-to-int 16 \"abcdef123456\")", "(str-to-int \"123456\")"]
   "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
   \chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for \
   \the base."
 
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
-  ["`(hash \"hello\")`", "`(hash { 'foo: 1 })`"]
+  ["(hash \"hello\")", "(hash { 'foo: 1 })"]
   "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
   \converted using their JSON representation."
   where
@@ -189,7 +189,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
 
 ifDef :: NativeDef
 ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
-  ["`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"]
+  ["(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")"]
   "Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE."
   where
 
@@ -203,7 +203,7 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
 readDecimalDef :: NativeDef
 readDecimalDef = defRNative "read-decimal" readDecimal
   (funType tTyDecimal [("key",tTyString)])
-  ["`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"]
+  [ExecExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
   "Parse KEY string or number value from top level of message data body as decimal."
   where
 
@@ -216,7 +216,7 @@ readDecimalDef = defRNative "read-decimal" readDecimal
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
-  ["`$(define-namespace 'my-namespace (read-keyset 'my-keyset))`"]
+  [ExecExample "(define-namespace 'my-namespace (read-keyset 'my-keyset))"]
   "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
   \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
   \and GUARD will be rotated in its place."
@@ -247,7 +247,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
 namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
   (funType tTyString [("namespace", tTyString)])
-  ["`$(namespace 'my-namespace)`"]
+  [ExecExample "(namespace 'my-namespace)"]
   "Set the current namespace to NAMESPACE. All expressions that occur in a current \
   \transaction will be contained in NAMESPACE, and once committed, may be accessed \
   \via their fully qualified name, which will include the namespace. Subsequent \
@@ -278,69 +278,69 @@ langDefs =
      ifDef
     ,defNative "map" map'
      (funType (TyList a) [("app",lam b a),("list",TyList b)])
-     ["`(map (+ 1) [1 2 3])`"]
+     ["(map (+ 1) [1 2 3])"]
      "Apply APP to each element in LIST, returning a new list of results."
 
     ,defNative "fold" fold'
      (funType a [("app",lam2 a b a),("init",a),("list",TyList b)])
-     ["`(fold (+) 0 [100 10 5])`"]
+     ["(fold (+) 0 [100 10 5])"]
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT."
 
     ,defRNative "list" list
      (funType (TyList TyAny) [("elems",TyAny)])
-     ["`(list 1 2 3)`"]
+     ["(list 1 2 3)"]
      "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support."
 
     ,defRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
-     ["`(make-list 5 true)`"]
+     ["(make-list 5 true)"]
      "Create list by repeating VALUE LENGTH times."
 
     ,defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
-     ["`(reverse [1 2 3])`"] "Reverse LIST."
+     ["(reverse [1 2 3])"] "Reverse LIST."
 
     ,defNative "filter" filter'
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
-     ["`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"]
+     ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"]
      "Filter LIST by applying APP to each element. For each true result, the original value is kept."
 
     ,defRNative "sort" sort'
      (funType (TyList a) [("values",TyList a)] <>
       funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
-     ["`(sort [3 1 2])`", "`(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"]
+     ["(sort [3 1 2])", "(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])"]
      "Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list."
 
     ,defNative (specialForm Where) where'
      (funType tTyBool [("field",tTyString),("app",lam a tTyBool),("value",tTyObject (mkSchemaVar "row"))])
-     ["`(filter (where 'age (> 20)) [{'name: \"Mary\",'age: 30} {'name: \"Juan\",'age: 15}])`"]
+     ["(filter (where 'age (> 20)) [{'name: \"Mary\",'age: 30} {'name: \"Juan\",'age: 15}])"]
      "Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE."
 
      ,defNative "compose" compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
-     ["`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"]
+     ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"]
      "Compose X and Y, such that X operates on VALUE, and Y on the results of X."
 
      ,lengthDef
 
     ,defRNative "take" take' takeDrop
-     [ "`(take 2 \"abcd\")`"
-     , "`(take (- 3) [1 2 3 4 5])`"
-     , "`(take ['name] { 'name: \"Vlad\", 'active: false})`"
+     [ "(take 2 \"abcd\")"
+     , "(take (- 3) [1 2 3 4 5])"
+     , "(take ['name] { 'name: \"Vlad\", 'active: false})"
      ]
      "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end."
 
     ,defRNative "drop" drop' takeDrop
-     [ "`(drop 2 \"vwxyz\")`"
-     , "`(drop (- 2) [1 2 3 4 5])`"
-     , "`(drop ['name] { 'name: \"Vlad\", 'active: false})`"
+     [ "(drop 2 \"vwxyz\")"
+     , "(drop (- 2) [1 2 3 4 5])"
+     , "(drop ['name] { 'name: \"Vlad\", 'active: false})"
      ]
      "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end."
 
     ,defRNative "remove" remove (funType (tTyObject (mkSchemaVar "o")) [("key",tTyString),("object",tTyObject (mkSchemaVar "o"))])
-     ["`(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"]
+     ["(remove \"bar\" { \"foo\": 1, \"bar\": 2 })"]
      "Remove entry for KEY from OBJECT."
 
     ,defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
                           funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
-     ["`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"]
+     ["(at 1 [1 2 3]) (at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
      "Index LIST at IDX, or get value with key IDX from OBJECT."
 
     ,enforceDef
@@ -353,28 +353,28 @@ langDefs =
 
     ,readDecimalDef
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
-     ["`$(read-integer \"age\")`"]
+     [ExecExample "(read-integer \"age\")"]
      "Parse KEY string or number value from top level of message data body as integer."
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
-     ["`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"]
+     [ExecExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
      \List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type."
 
 
-    ,defRNative "tx-hash" txHash (funType tTyString []) ["`(tx-hash)`"]
+    ,defRNative "tx-hash" txHash (funType tTyString []) ["(tx-hash)"]
      "Obtain hash of current transaction as a string."
 
     ,defNative (specialForm Bind) bind
      (funType a [("src",tTyObject row),("binding",TySchema TyBinding row)])
-     ["`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"]
+     ["(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)"]
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements."
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
-     ["`(typeof \"hello\")`"] "Returns type of X as string."
+     ["(typeof \"hello\")"] "Returns type of X as string."
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
     ,defRNative "yield" yield (funType yieldv [("OBJECT",yieldv)])
-     ["`$(yield { \"amount\": 100.0 })`"]
+     [ExecExample "(yield { \"amount\": 100.0 })"]
      "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
      \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values."
     ,defNative "resume" resume
@@ -386,7 +386,7 @@ langDefs =
     ,setTopLevelOnly $ defRNative "enforce-pact-version" enforceVersion
      (funType tTyBool [("min-version",tTyString)] <>
       funType tTyBool [("min-version",tTyString),("max-version",tTyString)])
-    ["`(enforce-pact-version \"2.3\")`"]
+    ["(enforce-pact-version \"2.3\")"]
     "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \
     \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'."
 
@@ -394,9 +394,9 @@ langDefs =
     (funType tTyBool [("value",a),("list",TyList a)] <>
      funType tTyBool [("key",a),("object",tTyObject (mkSchemaVar "o"))] <>
      funType tTyBool [("value",tTyString),("string",tTyString)])
-    ["`(contains 2 [1 2 3])`"
-    , "`(contains 'name { 'name: \"Ted\", 'age: 72 })`"
-    , "`(contains \"foo\" \"foobar\")`"
+    [ "(contains 2 [1 2 3])"
+    , "(contains 'name { 'name: \"Ted\", 'age: 72 })"
+    , "(contains \"foo\" \"foobar\")"
     ]
     "Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry."
 
@@ -404,10 +404,10 @@ langDefs =
      (funType a [("value",a),("ignore1",b)] <>
       funType a [("value",a),("ignore1",b),("ignore2",c)] <>
       funType a [("value",a),("ignore1",b),("ignore2",c),("ignore3",d)])
-     ["`(filter (constantly true) [1 2 3])`"]
+     ["(filter (constantly true) [1 2 3])"]
      "Lazily ignore arguments IGNORE* and return VALUE."
     ,defRNative "identity" identity (funType a [("value",a)])
-     ["`(map (identity) [1 2 3])`"] "Return provided value."
+     ["(map (identity) [1 2 3])"] "Return provided value."
     ,strToIntDef
     ,hashDef
     ,defineNamespaceDef

@@ -64,20 +64,20 @@ dbDefs =
   in ("Database",
     [setTopLevelOnly $ defRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
-     ["`$(create-table accounts)`"] "Create table TABLE."
+     [ExecExample "(create-table accounts)"] "Create table TABLE."
 
     ,defNative (specialForm WithRead) withRead
      (funType a [("table",tableTy),("key",tTyString),("bindings",bindTy)])
-     [ "`$(with-read accounts id { \"balance\":= bal, \"ccy\":= ccy }\n\
-       \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
+     [ ExecExample "(with-read accounts id { \"balance\":= bal, \"ccy\":= ccy }\n\
+       \  (format \"Balance for {} is {} {}\" [id bal ccy]))"
      ]
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements."
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType a
       [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",bindTy)])
-     [ "`$(with-default-read accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n\
-       \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
+     [ ExecExample "(with-default-read accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n\
+       \  (format \"Balance for {} is {} {}\" [id bal ccy]))"
      ]
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names."
@@ -85,50 +85,50 @@ dbDefs =
     ,defGasRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
       funType rowTy [("table",tableTy),("key",tTyString),("columns",TyList tTyString)])
-     ["`$(read accounts id ['balance 'ccy])`"]
+     [ExecExample "(read accounts id ['balance 'ccy])"]
      "Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified."
 
     ,defNative (specialForm Select) select
       (funType (TyList rowTy)  [("table",tableTy),("where",TyFun $ funType' tTyBool [("row",rowTy)])] <>
        funType (TyList rowTy)  [("table",tableTy),("columns",TyList tTyString),("where",TyFun $ funType' tTyBool [("row",rowTy)])])
-      [ "`$(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))`"
-      , "`$(select people (where 'age (> 30)))`?"
+      [ ExecExample "(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))"
+      , ExecExample "(select people (where 'age (> 30)))?"
       ]
       "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion."
 
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
-     ["`$(keys accounts)`"] "Return all keys in TABLE."
+     [ExecExample "(keys accounts)"] "Return all keys in TABLE."
 
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
-     ["`$(txids accounts 123849535)`"] "Return all txid values greater than or equal to TXID in TABLE."
+     [ExecExample "(txids accounts 123849535)"] "Return all txid values greater than or equal to TXID in TABLE."
 
     ,defRNative "write" (write Write) writeArgs
-     ["`$(write accounts id { \"balance\": 100.0 })`"] (writeDocs ".")
+     [ExecExample "(write accounts id { \"balance\": 100.0 })"] (writeDocs ".")
     ,defRNative "insert" (write Insert) writeArgs
-     ["`$(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })`"]
+     [ExecExample "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })"]
      (writeDocs ", failing if data already exists for KEY.")
     ,defRNative "update" (write Update) writeArgs
-     ["`$(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })`"]
+     [ExecExample "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })"]
      (writeDocs ", failing if data does not exist for KEY.")
     ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
-      ["`$(txlog accounts 123485945)`"] "Return all updates to TABLE performed in transaction TXID."
+      [ExecExample "(txlog accounts 123485945)"] "Return all updates to TABLE performed in transaction TXID."
     ,defGasRNative "keylog" keylog
      (funType (TyList (tTyObject TyAny)) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
-      ["`$(keylog accounts \"Alice\" 123485945)`"] "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
+      [ExecExample "(keylog accounts \"Alice\" 123485945)"] "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
       \indexed by txid."
 
     ,setTopLevelOnly $ defRNative "describe-table" descTable
      (funType tTyValue [("table",tableTy)])
-     ["`$(describe-table accounts)`"]
+     [ExecExample "(describe-table accounts)"]
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
      (funType tTyValue [("keyset",tTyString)]) [] "Get metadata for KEYSET."
     ,setTopLevelOnly $ defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
-     ["`$(describe-module 'my-module)`"]
+     [ExecExample "(describe-module 'my-module)"]
      "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ])
 

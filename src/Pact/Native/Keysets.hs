@@ -20,7 +20,7 @@ import Pact.Types.Runtime
 readKeysetDef :: NativeDef
 readKeysetDef =
   defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)])
-    ["`$(read-keyset \"admin-keyset\")`"] $
+    [ExecExample "(read-keyset \"admin-keyset\")"] $
     "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " <>
     "PREDFUN should resolve to a keys predicate."
   where
@@ -42,17 +42,17 @@ keyDefs =
     ,setTopLevelOnly $ defRNative "define-keyset" defineKeyset
      (funType tTyString [("name",tTyString),("keyset",tTyString)] <>
       funType tTyString [("name",tTyString)])
-     ["`$(define-keyset 'admin-keyset (read-keyset \"keyset\"))`"]
+     [ExecExample "(define-keyset 'admin-keyset (read-keyset \"keyset\"))"]
      "Define keyset as NAME with KEYSET, or if unspecified, read NAME from message payload as keyset, \
      \similarly to 'read-keyset'. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value."
     ,enforceGuardDef "enforce-keyset"
     ,defKeyPred KeysAll (==)
-     ["`(keys-all 3 3)`"] "Keyset predicate function to match all keys in keyset."
+     ["(keys-all 3 3)"] "Keyset predicate function to match all keys in keyset."
     ,defKeyPred KeysAny (keysN 1)
-     ["`(keys-any 10 1)`"] "Keyset predicate function to match any (at least 1) key in keyset."
+     ["(keys-any 10 1)"] "Keyset predicate function to match any (at least 1) key in keyset."
     ,defKeyPred Keys2 (keysN 2)
-     ["`(keys-2 3 1)`"] "Keyset predicate function to match at least 2 keys in keyset."
+     ["(keys-2 3 1)"] "Keyset predicate function to match at least 2 keys in keyset."
     ])
 
 

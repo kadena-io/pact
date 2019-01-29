@@ -69,10 +69,10 @@ type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
 zeroGas :: Eval e a -> Eval e (Gas,a)
 zeroGas = fmap (0,)
 
-defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> [Text] -> Text -> NativeDef
+defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defZNative name fun = Native.defNative name $ \fi as -> zeroGas $ fun fi as
 
-defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Text] -> Text -> NativeDef
+defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defZRNative name fun = Native.defNative name (reduced fun)
     where reduced f fi as = mapM reduce as >>= zeroGas . f fi
 
@@ -81,20 +81,20 @@ replDefs = ("Repl",
      [
       defZRNative "load" load (funType tTyString [("file",tTyString)] <>
                               funType tTyString [("file",tTyString),("reset",tTyBool)])
-      ["`$(load \"accounts.repl\")`"]
+      [ExecErrExample "(load \"accounts.repl\")"]
       "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
-      ["`(env-keys [\"my-key\" \"admin-key\"])`"]
+      [ExecExample "(env-keys [\"my-key\" \"admin-key\"])"]
       "Set transaction signature KEYS."
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
-      ["`(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })`"]
+      [ExecExample "(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
      ,defZRNative "env-step"
       setstep (funType tTyString [] <>
                funType tTyString [("step-idx",tTyInteger)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool),("resume",TySchema TyObject (mkSchemaVar "y"))])
-      ["`$(env-step 1)`", "`$(env-step 0 true)`"]
+      [LitExample "(env-step 1)", LitExample "(env-step 0 true)"]
       ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
        "Clears any previous pact execution state.")
@@ -103,28 +103,28 @@ replDefs = ("Repl",
        funType tTyString [("id",tTyString)]) []
        "Query environment pact id, or set to ID."
      ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
-      ["`$(pact-state)`"]
+      [LitExample "(pact-state)"]
       ("Inspect state from previous pact execution. Returns object with fields " <>
       "'yield': yield result or 'false' if none; 'step': executed step; " <>
       "'executed': indicates if step was skipped because entity did not match.")
      ,defZRNative "env-entity" setentity
       (funType tTyString [] <> funType tTyString [("entity",tTyString)])
-      ["`$(env-entity \"my-org\")`", "`$(env-entity)`"]
+      [LitExample "(env-entity \"my-org\")", LitExample "(env-entity)"]
       ("Set environment confidential ENTITY id, or unset with no argument. " <>
       "Clears any previous pact execution state.")
      ,defZRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
-      ["`$(begin-tx \"load module\")`"] "Begin transaction with optional NAME."
-     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) ["`$(commit-tx)`"] "Commit transaction."
-     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) ["`$(rollback-tx)`"] "Rollback transaction."
+      [LitExample "(begin-tx \"load module\")"] "Begin transaction with optional NAME."
+     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) [LitExample "(commit-tx)"] "Commit transaction."
+     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) [LitExample "(rollback-tx)"] "Rollback transaction."
      ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
-      ["`(expect \"Sanity prevails.\" 4 (+ 2 2))`"]
+      [ExecExample "(expect \"Sanity prevails.\" 4 (+ 2 2))"]
       "Evaluate ACTUAL and verify that it equals EXPECTED."
      ,defZNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)])
-      ["`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"]
+      [ExecExample "(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))"]
       "Evaluate EXP and succeed only if it throws an error."
      ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
-      ["`$(bench (+ 1 2))`"] "Benchmark execution of EXPRS."
+      [LitExample "(bench (+ 1 2))"] "Benchmark execution of EXPRS."
      ,defZRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
        []
@@ -146,7 +146,7 @@ replDefs = ("Repl",
        "Verify MODULE, checking that all properties hold."
 
      ,defZRNative "json" json' (funType tTyValue [("exp",a)])
-      ["`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"] $
+      [ExecExample "(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])"] $
       "Encode pact expression EXP as a JSON value. " <>
       "This is only needed for tests, as Pact values are automatically represented as JSON in API output. "
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
@@ -156,7 +156,7 @@ replDefs = ("Repl",
        []
        "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
-       ["`(env-hash (hash \"hello\"))`"]
+       [ExecExample "(env-hash (hash \"hello\"))"]
        "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash."
      ])
      where

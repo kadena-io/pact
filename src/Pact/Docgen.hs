@@ -41,8 +41,6 @@ main = do
   withFile "docs/en/pact-functions.md"      WriteMode renderFunctions
   withFile "docs/en/pact-properties-api.md" WriteMode renderProperties
 
-data ExampleType = Exec | ExecErr | Lit
-
 renderFunctions :: Handle -> IO ()
 renderFunctions h = do
   hPutStrLn h "# Built-in Functions {#builtins}"
@@ -81,25 +79,26 @@ renderTerm h TNative {..} = do
   hPutStrLn h ""
 renderTerm _ _ = return ()
 
-renderExamples :: Handle -> NativeDefName -> [Text] -> IO ()
+data ExampleType = Exec | ExecErr | Lit
+
+renderExamples :: Handle -> NativeDefName -> [Example] -> IO ()
 renderExamples h f es = do
   hPutStrLn h "```lisp"
-  forM_ es $ \eText -> do
-    let e = unpack eText
-        (et,e') = case head e of
-                    '!' -> (ExecErr,drop 1 e)
-                    '$' -> (Lit,drop 1 e)
-                    _   -> (Exec,e)
-    case et of
-      Lit -> hPutStrLn h e'
+  forM_ es $ \example -> do
+    let (eTy, e) = case example of
+          ExecErrExample str -> (ExecErr, unpack str)
+          LitExample     str -> (Lit,     unpack str)
+          ExecExample    str -> (Exec,    unpack str)
+    case eTy of
+      Lit -> hPutStrLn h e
       _ -> do
-        hPutStrLn h $ "pact> " ++ e'
-        r <- evalRepl FailureTest e'
-        case (r,et) of
+        hPutStrLn h $ "pact> " ++ e
+        r <- evalRepl FailureTest e
+        case (r,eTy) of
           (Right r',_)       -> hPrint h r'
           (Left err,ExecErr) -> hPutStrLn h err
           (Left err,_)       ->
-            throwM (userError $ "Error rendering example for fucntion " ++ show f ++ ": " ++ e ++ ": " ++ err)
+            throwM (userError $ "Error rendering example for function " ++ show f ++ ": " ++ e ++ ": " ++ err)
   hPutStrLn h "```"
 
 renderProperties :: Handle -> IO ()

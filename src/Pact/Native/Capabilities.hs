@@ -41,7 +41,7 @@ withCapability :: NativeDef
 withCapability =
   defNative (specialForm WithCapability) withCapability'
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
-  ["`$(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))`"]
+  [ExecExample "(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))"]
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
   \production. Given the unique token specified by this application, ensure \
   \that the token is granted in the environment during execution of BODY. \
@@ -95,7 +95,7 @@ requireCapability :: NativeDef
 requireCapability =
   defNative "require-capability" requireCapability'
   (funType tTyBool [("capability",TyFun $ funType' tTyBool [])])
-  ["`$(require-capability (TRANSFER src dest))`"]
+  [ExecExample "(require-capability (TRANSFER src dest))"]
   "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment."
   where
     requireCapability' :: NativeFun e

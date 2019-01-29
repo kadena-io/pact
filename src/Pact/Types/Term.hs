@@ -52,6 +52,7 @@ module Pact.Types.Term
    Use(..),
    App(..),appFun,appArgs,appInfo,
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
+   Example(..),
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
@@ -667,6 +668,24 @@ instance Show1 Term where
           shows3 :: (Show1 f, Show1 g, Show1 h) => Int -> f (g (h a)) -> ShowS
           shows3 = liftShowsPrec shows2 showList2
 
+data Example
+  = ExecExample !Text
+  -- ^ An example shown as a good execution
+  | ExecErrExample !Text
+  -- ^ An example shown as a failing execution
+  | LitExample !Text
+  -- ^ An example shown as a literal
+  deriving (Eq, Show)
+
+instance Pretty Example where
+  pretty = \case
+    ExecExample    str -> green $ "> " <> pretty str
+    ExecErrExample str -> red   $ "> " <> pretty str
+    LitExample     str -> green $ pretty str
+
+instance IsString Example where
+  fromString = ExecExample . fromString
+
 -- | Pact evaluable term.
 data Term n =
     TModule {
@@ -687,7 +706,7 @@ data Term n =
       _tNativeName :: !NativeDefName
     , _tNativeFun :: !NativeDFun
     , _tFunTypes :: FunTypes (Term n)
-    , _tNativeExamples :: ![Text]
+    , _tNativeExamples :: ![Example]
     , _tNativeDocs :: Text
     , _tNativeTopLevelOnly :: Bool
     , _tInfo :: !Info
