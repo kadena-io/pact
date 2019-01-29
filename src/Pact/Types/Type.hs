@@ -43,13 +43,15 @@ import Prelude
 import Data.Functor.Classes
 import Data.Aeson
 import Data.String
+import Data.Set (Set, isSubsetOf)
+import qualified Data.Set as Set
 import Data.Thyme.Format.Aeson ()
 import GHC.Generics (Generic)
 import Data.Hashable
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Foldable
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Text.PrettyPrint.ANSI.Leijen
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Control.DeepSeq
 import Data.Text (Text,unpack)
 import Data.Default (Default(..))
@@ -202,7 +204,12 @@ instance Eq1 TypeVar where
   liftEq _ _ _ = False
 
 -- | Represent a full or partial schema inhabitant.
-data SchemaPartial = SPFull | SPPartial [Text]
+--
+-- @SPPartial@ represents a schema with only the given subset of fields.
+-- @SPPartial Set.empty@ is used in places where any subset of fields can be
+-- provided. @SPPartial Set.empty@ unifies with any larger type to give that
+-- type.
+data SchemaPartial = SPFull | SPPartial (Set Text)
   deriving (Eq,Ord,Show,Generic)
 instance NFData SchemaPartial
 instance Default SchemaPartial where def = SPFull
@@ -210,8 +217,9 @@ instance Default SchemaPartial where def = SPFull
 
 showPartial :: SchemaPartial -> String
 showPartial SPFull = ""
-showPartial (SPPartial []) = "~"
-showPartial (SPPartial ks) = "~[" ++ intercalate "," (map (unpack.asString) ks) ++ "]"
+showPartial (SPPartial ks)
+  | Set.null ks = "~"
+  | otherwise   = "~[" ++ intercalate "," (unpack.asString <$> Set.toList ks) ++ "]"
 
 -- | Pact types.
 data Type v =
@@ -299,7 +307,7 @@ canUnifyWith a b = a == b
 -- valid in a, etc. [] in a subset is a wildcard.
 canUnifyPartial :: SchemaPartial -> SchemaPartial -> Bool
 canUnifyPartial SPFull SPFull = True
-canUnifyPartial (SPPartial a) (SPPartial b) = null b || all (`elem` a) b
+canUnifyPartial (SPPartial a) (SPPartial b) = b `isSubsetOf` a
 canUnifyPartial SPFull SPPartial {} = True -- full can always satisfy subset
 canUnifyPartial SPPartial {} SPFull = False -- partial cannot satisfy full
 

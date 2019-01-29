@@ -62,7 +62,7 @@ dbDefs =
       tableTy = TySchema TyTable rt def
       rowTy = TySchema TyObject rt def
       bindTy = TySchema TyBinding rt def
-      partialize = set tySchemaPartial (SPPartial [])
+      partialize = set tySchemaPartial (SPPartial mempty)
       a = mkTyVar "a" []
   in ("Database",
     [setTopLevelOnly $ defRNative "create-table" createTable'
@@ -109,7 +109,7 @@ dbDefs =
     ,defRNative "insert" (write Insert SPFull) (writeArgs SPFull)
      (writeDocs ", failing if data already exists for KEY. OBJECT must have all fields specified by row type."
      "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
-    ,defRNative "update" (write Update $ SPPartial []) (writeArgs $ SPPartial [])
+    ,defRNative "update" (write Update $ SPPartial mempty) (writeArgs $ SPPartial mempty)
      (writeDocs ", failing if data does not exist for KEY. OBJECT can have just the fields to update."
       "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog

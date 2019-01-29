@@ -32,6 +32,9 @@
 
 module Pact.Typechecker where
 
+import Data.Set (Set, isSubsetOf)
+import qualified Data.Set as Set
+import Data.Bitraversable (bimapM)
 import Control.Monad.Catch
 import Control.Lens hiding (List,Fold)
 import Bound.Scope
@@ -305,15 +308,14 @@ applySchemas Pre ast = case ast of
     -- Given map of object text key to (value,key id,value ty) ...
     -- (returns partial keys list if subset of specified)
     validateSchema :: UserType -> SchemaPartial
-                   -> M.Map Text (AST Node, TcId, Type UserType) -> TC (Maybe [Text])
+                   -> M.Map Text (AST Node, TcId, Type UserType) -> TC (Maybe (Set Text))
     validateSchema sch partial pmap = do
       -- smap: lookup from field name to ty
       let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
           filterPartial SPFull = id
-          filterPartial (SPPartial []) = id
-          filterPartial (SPPartial ks) = M.filterWithKey $ \k _ -> k `elem` ks
+          filterPartial (SPPartial ks) = (`M.restrictKeys` ks)
       -- over each object field ...
-      pks <- fmap concat $ forM (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
+      pks <- fmap (Set.fromList . concat) $ forM (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
         -- validate field exists ...
         Nothing -> do
           addFailure ki $ "Invalid field in schema object: " ++ show k ++ ", expected " ++ show (M.keys smap)
@@ -325,7 +327,7 @@ applySchemas Pre ast = case ast of
             -- associate unified ty with value node.
             Just u -> assocAstTy (_aNode v) (either id id u)
           return [k]
-      return $ if length pks < M.size smap then Just pks else Nothing
+      return $ if Set.size pks < M.size smap then Just pks else Nothing
 
     lookupAndResolveTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 
@@ -644,11 +646,7 @@ unifyTypes l r = case (l,r) of
     -- | Unifies param and uses bias to return parent, with additional test/modifier f
     -- TODO why not specialize param too?
     unifyParam :: (Type n -> Maybe (Type n)) -> Type n -> Type n -> (Maybe (Either (Type n) (Type n)))
-    unifyParam f a b = case unifyTypes a b of
-      Nothing -> Nothing
-      Just u -> case u of
-        Left _ -> Left <$> f l
-        Right _ -> Right <$> f r
+    unifyParam f a b = bimapM (const (f l)) (const (f r)) =<< unifyTypes a b
     specializePartial spa spb u =
       let setPartial p = Just $ set tySchemaPartial p u
       in case (spa,spb) of
@@ -656,10 +654,10 @@ unifyTypes l r = case (l,r) of
         (SPFull,SPPartial {}) -> setPartial spb
         (SPPartial {},SPFull) -> setPartial spa
         (SPPartial as,SPPartial bs)
-          | as == bs -> Just u
-          | null as || all (`elem` as) bs -> setPartial spb
-          | null bs || all (`elem` bs) as -> setPartial spa
-          | otherwise -> Nothing
+          | as == bs           -> Just u
+          | bs `isSubsetOf` as -> setPartial spb
+          | as `isSubsetOf` bs -> setPartial spa
+          | otherwise          -> Nothing
     unifyVar vWrap sWrap v s =
       let useS = sWrap s
       in case (v,s) of
