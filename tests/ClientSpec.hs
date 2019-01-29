@@ -47,12 +47,12 @@ spec = around_ bracket $ describe "Servant API client tests" $ do
     cmd <- simpleServerCmd
     res <- runClientM (send (SubmitBatch [cmd])) clientEnv
     let rk = cmdToRequestKey cmd
-    res `shouldBe` (Right (ApiSuccess (RequestKeys [rk])))
+    res `shouldBe` (Right (RequestKeys [rk]))
     res' <- runClientM (listen (ListenerRequest rk)) clientEnv
     let cmdData = (toJSON . CommandSuccess . Number) 3
-    res' `shouldBe` (Right (ApiSuccess (ApiResult cmdData (Just 0) Nothing)))
+    res' `shouldBe` (Right (ApiResult cmdData (Just 0) Nothing))
   it "correctly runs a simple command locally" $ do
     cmd <- simpleServerCmd
     res <- runClientM (local cmd) clientEnv
     let cmdData = (CommandSuccess . Number) 3
-    res `shouldBe` (Right (ApiSuccess cmdData))
+    res `shouldBe` (Right cmdData)

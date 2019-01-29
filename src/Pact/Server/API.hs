@@ -20,13 +20,13 @@ import Data.Text (Text)
 
 type ApiV1API =
   (    "send" :> ReqBody '[JSON] SubmitBatch :>
-    Post '[JSON] (ApiResponse RequestKeys)
+    Post '[JSON] RequestKeys
   :<|> "poll" :> ReqBody '[JSON] Poll :>
-    Post '[JSON] (ApiResponse PollResponses)
+    Post '[JSON] PollResponses
   :<|> "listen" :> ReqBody '[JSON] ListenerRequest :>
-    Post '[JSON] (ApiResponse ApiResult)
+    Post '[JSON] ApiResult
   :<|> "local" :> ReqBody '[JSON] (Command Text) :>
-    Post '[JSON] (ApiResponse (CommandSuccess Value))
+    Post '[JSON] (CommandSuccess Value)
   )
 
 type PactServerAPI =
