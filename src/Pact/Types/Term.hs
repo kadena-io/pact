@@ -842,7 +842,7 @@ prettyValue = \case
     $ fmap (\(k, v) -> pretty k <> ": " <> prettyValue v)
     $ HM.toList hm
   Array values -> commaBrackets $ prettyValue <$> toList values
-  String str -> pretty str
+  String str -> dquotes $ pretty str
   Number scientific -> text $ show scientific
   Bool b -> pretty b
   Null -> "null"

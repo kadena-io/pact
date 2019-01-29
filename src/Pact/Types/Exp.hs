@@ -80,7 +80,7 @@ formatLTime = pack . formatTime defaultTimeLocale simpleISO8601
 {-# INLINE formatLTime #-}
 
 instance Pretty Literal where
-    pretty (LString s) = pretty s
+    pretty (LString s) = dquotes $ pretty s
     pretty (LInteger i) = pretty i
     pretty (LDecimal r) = text $ show r
     pretty (LBool b) = string $ map toLower $ show b
