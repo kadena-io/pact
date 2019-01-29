@@ -15,6 +15,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Monad
 import Data.Foldable
 import qualified Data.Text as T
+import qualified Data.Set as Set
 
 spec :: Spec
 spec = do
@@ -87,7 +88,9 @@ customFunChecks name (tl,_) = case name of
   "tests/pact/tc.repl.tc-update-partial" -> do
     -- TODO top levels don't get inferred return type, so we have to dig in here
     it (show name ++ ":specializes partial type") $
-      preview (tlFun . fBody . _head . aNode . aTy . tySchemaPartial) tl `shouldBe` (Just $ SPPartial ["name"])
+      preview (tlFun . fBody . _head . aNode . aTy . tySchemaPartial) tl
+        `shouldBe`
+      (Just $ SPPartial $ Set.singleton "name")
   _ -> return ()
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
