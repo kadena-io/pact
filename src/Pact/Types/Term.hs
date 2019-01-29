@@ -799,13 +799,15 @@ instance Pretty n => Pretty (Term n) where
       <> nest 2 (
          line
       <> line <> pretty _tNativeDocs
-      <> line
-      <> line <> dullgreen "Examples:"
-      <> line <> align (vsep (pretty <$> _tNativeExamples))
+      <> examples
       <> line
       <> line <> dullgreen "Type:"
       <> line <> align (vsep (pretty <$> toList _tFunTypes))
-      )
+      ) where examples = case _tNativeExamples of
+                [] -> mempty
+                exs ->
+                     line <> line <> dullgreen "Examples:"
+                  <> line <> align (vsep (pretty <$> exs))
     TConst{..} -> "constant " <> pretty _tModule <> "." <> pretty _tConstArg
       <> " " <> pretty _tMeta
     TApp a _ -> pretty a
