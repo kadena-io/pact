@@ -41,6 +41,7 @@ withCapability :: NativeDef
 withCapability =
   defNative (specialForm WithCapability) withCapability'
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
+  ["`$(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))`"]
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
   \production. Given the unique token specified by this application, ensure \
   \that the token is granted in the environment during execution of BODY. \
@@ -50,8 +51,7 @@ withCapability =
   \resulting in the installation/granting of the token, which will then be revoked \
   \upon completion of BODY. Nested 'with-capability' calls for the same token \
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
-  \but simply execute BODY. \
-   \`$(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))`"
+  \but simply execute BODY."
   where
     withCapability' :: NativeFun e
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
@@ -95,8 +95,8 @@ requireCapability :: NativeDef
 requireCapability =
   defNative "require-capability" requireCapability'
   (funType tTyBool [("capability",TyFun $ funType' tTyBool [])])
-  "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment. \
-  \`$(require-capability (TRANSFER src dest))`"
+  ["`$(require-capability (TRANSFER src dest))`"]
+  "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment."
   where
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
@@ -139,6 +139,7 @@ createPactGuard :: NativeDef
 createPactGuard =
   defRNative "create-pact-guard" createPactGuard'
   (funType (tTyGuard (Just GTyPact)) [("name",tTyString)])
+  []
   "Defines a guard predicate by NAME that captures the results of 'pact-id'. \
   \At enforcement time, the success condition is that at that time 'pact-id' must \
   \return the same value. In effect this ensures that the guard will only succeed \
@@ -155,6 +156,7 @@ createModuleGuard :: NativeDef
 createModuleGuard =
   defRNative "create-module-guard" createModuleGuard'
   (funType (tTyGuard (Just GTyModule)) [("name",tTyString)])
+  []
   "Defines a guard by NAME that enforces the current module admin predicate."
   where
     createModuleGuard' :: RNativeFun e
@@ -168,6 +170,7 @@ keysetRefGuard :: NativeDef
 keysetRefGuard =
   defRNative "keyset-ref-guard" keysetRefGuard'
   (funType (tTyGuard (Just GTyKeySetName)) [("keyset-ref",tTyString)])
+  []
   "Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. \
   \Concrete keysets are themselves guard types; this function is specifically to \
   \store references alongside other guards in the database, etc."
@@ -182,6 +185,7 @@ createUserGuard :: NativeDef
 createUserGuard =
   defRNative "create-user-guard" createUserGuard'
   (funType (tTyGuard (Just GTyUser)) [("data",tvA),("predfun",tTyString)])
+  []
   "Defines a custom guard predicate, where DATA will be passed to PREDFUN at time \
   \of enforcement. PREDFUN is a valid name in the declaring environment. \
   \PREDFUN must refer to a pure function or enforcement will fail at runtime."

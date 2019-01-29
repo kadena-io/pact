@@ -28,7 +28,6 @@ import           Data.List
 import           Data.Text            (replace)
 import qualified Data.Text            as T
 import           System.IO
-import           Text.Trifecta        hiding (err)
 
 import qualified Pact.Analyze.Feature as Analyze
 import           Pact.Native
@@ -71,21 +70,21 @@ renderTerm h TNative {..} = do
     hPutStrLn h ""
   hPutStrLn h ""
   let noexs = hPutStrLn stderr $ "No examples for " ++ show _tNativeName
-  case parseString nativeDocParser mempty (unpack _tNativeDocs) of
-    Success (t,es) -> do
-         hPutStrLn h t
-         if null es then noexs else renderExamples h _tNativeName es
-    _ -> hPutStrLn h (unpack _tNativeDocs) >> noexs
+
+  -- render docs and examples
+  hPutStrLn h $ unpack _tNativeDocs
+  if null _tNativeExamples then noexs else renderExamples h _tNativeName _tNativeExamples
+
   when _tNativeTopLevelOnly $ do
     hPutStrLn h ""
     hPutStrLn h "Top level only: this function will fail if used in module code."
   hPutStrLn h ""
 renderTerm _ _ = return ()
 
-renderExamples :: Handle -> NativeDefName -> [String] -> IO ()
+renderExamples :: Handle -> NativeDefName -> [Text] -> IO ()
 renderExamples h f es = do
   hPutStrLn h "```lisp"
-  forM_ es $ \e -> do
+  forM_ es $ \(unpack -> e) -> do
     let (et,e') = case head e of
                     '!' -> (ExecErr,drop 1 e)
                     '$' -> (Lit,drop 1 e)
@@ -191,14 +190,3 @@ escapeAnchor = unpack .
   (\t -> if T.take 1 t == "-"
          then "minus" <> T.drop 1 t else t) .
   pack
-
-nativeDocParser :: Parser (String,[String])
-nativeDocParser = do
-  t <- many $ satisfy (/= '`')
-  es <- many $ do
-    _ <- char '`'
-    e <- some (satisfy (/= '`'))
-    _ <- char '`'
-    _ <- optional spaces
-    return e
-  return (t,es)

@@ -19,9 +19,10 @@ import Pact.Types.Runtime
 
 readKeysetDef :: NativeDef
 readKeysetDef =
-  defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)]) $
+  defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)])
+    ["`$(read-keyset \"admin-keyset\")`"] $
     "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " <>
-    "PREDFUN should resolve to a keys predicate. `$(read-keyset \"admin-keyset\")`"
+    "PREDFUN should resolve to a keys predicate."
   where
     readKeySet :: RNativeFun e
     readKeySet i [TLiteral (LString key) ki] = ((`TGuard` ki) . GKeySet) <$> readKeySet' i key
@@ -31,27 +32,27 @@ readKeysetDef =
 keyDefs :: NativeModule
 keyDefs =
     let keysN n _ m = m >= n
-        defKeyPred kp pf docs =
+        defKeyPred kp pf examples docs =
           defRNative (NativeDefName $ asString kp) (keyPred pf)
           (funType tTyBool [("count",tTyInteger),("matched",tTyInteger)])
-          docs
+          examples docs
     in
     ("Keysets",[
      readKeysetDef
     ,setTopLevelOnly $ defRNative "define-keyset" defineKeyset
      (funType tTyString [("name",tTyString),("keyset",tTyString)] <>
       funType tTyString [("name",tTyString)])
+     ["`$(define-keyset 'admin-keyset (read-keyset \"keyset\"))`"]
      "Define keyset as NAME with KEYSET, or if unspecified, read NAME from message payload as keyset, \
      \similarly to 'read-keyset'. \
-     \If keyset NAME already exists, keyset will be enforced before updating to new value.\
-     \`$(define-keyset 'admin-keyset (read-keyset \"keyset\"))`"
+     \If keyset NAME already exists, keyset will be enforced before updating to new value."
     ,enforceGuardDef "enforce-keyset"
     ,defKeyPred KeysAll (==)
-     "Keyset predicate function to match all keys in keyset. `(keys-all 3 3)`"
+     ["`(keys-all 3 3)`"] "Keyset predicate function to match all keys in keyset."
     ,defKeyPred KeysAny (keysN 1)
-     "Keyset predicate function to match any (at least 1) key in keyset. `(keys-any 10 1)`"
+     ["`(keys-any 10 1)`"] "Keyset predicate function to match any (at least 1) key in keyset."
     ,defKeyPred Keys2 (keysN 2)
-     "Keyset predicate function to match at least 2 keys in keyset. `(keys-2 3 1)`"
+     ["`(keys-2 3 1)`"] "Keyset predicate function to match at least 2 keys in keyset."
     ])
 
 

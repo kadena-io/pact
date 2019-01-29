@@ -90,17 +90,17 @@ setTopLevelOnly :: NativeDef -> NativeDef
 setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
 
 -- | Specify a 'NativeFun'
-defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
-defNative n fun ftype docs =
-  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs False def)
+defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> [Text] -> Text -> NativeDef
+defNative n fun ftype examples docs =
+  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def)
 
 -- | Specify a 'GasRNativeFun'
-defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Text] -> Text -> NativeDef
 defGasRNative name fun = defNative name (reduced fun)
     where reduced f fi as = preGas fi as >>= \(g,as') -> f g fi as'
 
 -- | Specify a 'RNativeFun'
-defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Text] -> Text -> NativeDef
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = preGas fi as >>= \(g,as') -> (g,) <$> f fi as'
 
@@ -146,8 +146,10 @@ enforceGuardDef dn =
   defRNative dn enforceGuard'
   (funType tTyBool [("guard",tTyGuard Nothing)] <>
    funType tTyBool [("keysetname",tTyString)])
-  ("Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. " <>
-   "`$(" <> asString dn <> " 'admin-keyset)` `$(" <> asString dn <> " row-guard)`")
+  [ "$(" <> asString dn <> " 'admin-keyset)"
+  , "$(" <> asString dn <> " row-guard)"
+  ]
+  "Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic."
   where
     enforceGuard' :: RNativeFun e
     enforceGuard' i as = case as of

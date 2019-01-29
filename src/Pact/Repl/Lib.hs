@@ -69,10 +69,10 @@ type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
 zeroGas :: Eval e a -> Eval e (Gas,a)
 zeroGas = fmap (0,)
 
-defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> [Text] -> Text -> NativeDef
 defZNative name fun = Native.defNative name $ \fi as -> zeroGas $ fun fi as
 
-defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Text] -> Text -> NativeDef
 defZRNative name fun = Native.defNative name (reduced fun)
     where reduced f fi as = mapM reduce as >>= zeroGas . f fi
 
@@ -80,69 +80,84 @@ replDefs :: NativeModule
 replDefs = ("Repl",
      [
       defZRNative "load" load (funType tTyString [("file",tTyString)] <>
-                              funType tTyString [("file",tTyString),("reset",tTyBool)]) $
-      "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. " <>
-      "`$(load \"accounts.repl\")`"
+                              funType tTyString [("file",tTyString),("reset",tTyBool)])
+      ["`$(load \"accounts.repl\")`"]
+      "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
-      "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
-     ,defZRNative "env-data" setmsg (funType tTyString [("json",json)]) $
-      "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. " <>
-      "`(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })`"
+      ["`(env-keys [\"my-key\" \"admin-key\"])`"]
+      "Set transaction signature KEYS."
+     ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
+      ["`(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })`"]
+      "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
      ,defZRNative "env-step"
       setstep (funType tTyString [] <>
                funType tTyString [("step-idx",tTyInteger)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool),("resume",TySchema TyObject (mkSchemaVar "y"))])
+      ["`$(env-step 1)`", "`$(env-step 0 true)`"]
       ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
-       "Clears any previous pact execution state. `$(env-step 1)` `$(env-step 0 true)`")
+       "Clears any previous pact execution state.")
      ,defZRNative "env-pactid" envPactId
       (funType tTyString [] <>
-       funType tTyString [("id",tTyString)])
+       funType tTyString [("id",tTyString)]) []
        "Query environment pact id, or set to ID."
      ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
+      ["`$(pact-state)`"]
       ("Inspect state from previous pact execution. Returns object with fields " <>
       "'yield': yield result or 'false' if none; 'step': executed step; " <>
-      "'executed': indicates if step was skipped because entity did not match. `$(pact-state)`")
+      "'executed': indicates if step was skipped because entity did not match.")
      ,defZRNative "env-entity" setentity
       (funType tTyString [] <> funType tTyString [("entity",tTyString)])
+      ["`$(env-entity \"my-org\")`", "`$(env-entity)`"]
       ("Set environment confidential ENTITY id, or unset with no argument. " <>
-      "Clears any previous pact execution state. `$(env-entity \"my-org\")` `$(env-entity)`")
+      "Clears any previous pact execution state.")
      ,defZRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
-       "Begin transaction with optional NAME. `$(begin-tx \"load module\")`"
-     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) "Commit transaction. `$(commit-tx)`"
-     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) "Rollback transaction. `$(rollback-tx)`"
+      ["`$(begin-tx \"load module\")`"] "Begin transaction with optional NAME."
+     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) ["`$(commit-tx)`"] "Commit transaction."
+     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) ["`$(rollback-tx)`"] "Rollback transaction."
      ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
-      "Evaluate ACTUAL and verify that it equals EXPECTED. `(expect \"Sanity prevails.\" 4 (+ 2 2))`"
-     ,defZNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)]) $
-      "Evaluate EXP and succeed only if it throws an error. " <>
-      "`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"
+      ["`(expect \"Sanity prevails.\" 4 (+ 2 2))`"]
+      "Evaluate ACTUAL and verify that it equals EXPECTED."
+     ,defZNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)])
+      ["`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"]
+      "Evaluate EXP and succeed only if it throws an error."
      ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
-      "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
+      ["`$(bench (+ 1 2))`"] "Benchmark execution of EXPRS."
      ,defZRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
+       []
        "Typecheck MODULE, optionally enabling DEBUG output."
      ,defZRNative "env-gaslimit" setGasLimit (funType tTyString [("limit",tTyInteger)])
+       []
        "Set environment gas limit to LIMIT."
      ,defZRNative "env-gas" envGas (funType tTyInteger [] <> funType tTyString [("gas",tTyInteger)])
+       []
        "Query gas state, or set it to GAS."
      ,defZRNative "env-gasprice" setGasPrice (funType tTyString [("price",tTyDecimal)])
+       []
        "Set environment gas price to PRICE."
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
+       []
        "Update gas model to charge constant RATE."
-     ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
+     ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
+       []
+       "Verify MODULE, checking that all properties hold."
 
-     ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
+     ,defZRNative "json" json' (funType tTyValue [("exp",a)])
+      ["`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"] $
       "Encode pact expression EXP as a JSON value. " <>
-      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " <>
-      "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
+      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. "
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
-     "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
+       []
+       "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
      ,defZRNative "print" print' (funType tTyString [("value",a)])
-     "Output VALUE to terminal as unquoted, unescaped text."
+       []
+       "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
-     "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
+       ["`(env-hash (hash \"hello\"))`"]
+       "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,

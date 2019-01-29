@@ -39,8 +39,8 @@ defAddTime = defRNative "add-time" addTime
   ( funType tTyTime [("time", tTyTime),("seconds", tTyDecimal)]
   <> funType tTyTime [("time", tTyTime),("seconds", tTyInteger)]
   )
-  $ "Add SECONDS to TIME; SECONDS can be integer or decimal. "
-  <> "`(add-time (time \"2016-07-22T12:00:00Z\") 15)`"
+  ["`(add-time (time \"2016-07-22T12:00:00Z\") 15)`"]
+  "Add SECONDS to TIME; SECONDS can be integer or decimal."
   where
 
     addTime :: RNativeFun e
@@ -56,8 +56,8 @@ defAddTime = defRNative "add-time" addTime
 defFormatTime :: NativeDef
 defFormatTime = defRNative "format-time" formatTime'
   (funType tTyString [("format", tTyString),("time", tTyTime)])
+  ["`(format-time \"%F\" (time \"2016-07-22T12:00:00Z\"))`"]
   $ "Format TIME using FORMAT. " <> timedoc
-  <> "`(format-time \"%F\" (time \"2016-07-22T12:00:00Z\"))`"
   where
 
     formatTime' :: RNativeFun e
@@ -68,8 +68,8 @@ defFormatTime = defRNative "format-time" formatTime'
 parseTimeDef :: NativeDef
 parseTimeDef = defRNative "parse-time" parseTime'
   (funType tTyTime [("format", tTyString),("utcval", tTyString)])
+  ["`(parse-time \"%F\" \"2016-09-12\")`"]
   $ "Construct time from UTCVAL using FORMAT. " <> timedoc
-  <> "`(parse-time \"%F\" \"2016-09-12\")`"
   where
 
     parseTime' :: RNativeFun e
@@ -82,9 +82,9 @@ parseTimeDef = defRNative "parse-time" parseTime'
 timeDef :: NativeDef
 timeDef = defRNative "time" time
   (funType tTyTime [("utcval", tTyString)])
+  ["`(time \"2016-07-22T11:26:35Z\")`"]
   $ "Construct time from UTCVAL using ISO8601 format ("
   <> pack simpleISO8601 <> "). "
-  <> "`(time \"2016-07-22T11:26:35Z\")`"
   where
 
     time :: RNativeFun e
@@ -104,21 +104,21 @@ timeDefs = ("Time", defs)
         , defAddTime
         , defRNative "diff-time" diffTime
             (funType tTyDecimal [("time1", tTyTime),("time2", tTyTime)])
-            $ "Compute difference between TIME1 and TIME2 in seconds. "
-            <> "`(diff-time (parse-time \"%T\" \"16:00:00\") "
-            <> "(parse-time \"%T\" \"09:30:00\"))`"
+            [ "`(diff-time (parse-time \"%T\" \"16:00:00\") (parse-time \"%T\" \"09:30:00\"))`"
+            ]
+            "Compute difference between TIME1 and TIME2 in seconds."
         , defRNative "minutes" (timeMult 60)
             multType
-            $ "N minutes, for use with 'add-time'. "
-            <> "`(add-time (time \"2016-07-22T12:00:00Z\") (minutes 1))`"
+            ["`(add-time (time \"2016-07-22T12:00:00Z\") (minutes 1))`"]
+            "N minutes, for use with 'add-time'. "
         , defRNative "hours" (timeMult $ 60 * 60)
             multType
-            $ "N hours, for use with 'add-time' "
-            <> "`(add-time (time \"2016-07-22T12:00:00Z\") (hours 1))`"
+            ["`(add-time (time \"2016-07-22T12:00:00Z\") (hours 1))`"]
+            "N hours, for use with 'add-time' "
         , defRNative "days" (timeMult $ 60 * 60 * 24)
             multType
-            $ "N days, for use with 'add-time' "
-            <> "`(add-time (time \"2016-07-22T12:00:00Z\") (days 1))`"
+            ["`(add-time (time \"2016-07-22T12:00:00Z\") (days 1))`"]
+            "N days, for use with 'add-time' "
         , defFormatTime
         ]
     multType = funType tTyDecimal [("n", tTyDecimal)]

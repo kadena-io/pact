@@ -56,7 +56,7 @@ module Pact.Types.Term
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
-   tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
+   tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
    toTermList,toTObject,toTList,
@@ -151,9 +151,10 @@ data KeySet = KeySet {
     , _ksPredFun :: !Name
     } deriving (Eq,Generic,Show)
 
-commaBraces, commaBrackets :: [Doc] -> Doc
-commaBraces = encloseSep "{" "}" ", "
+commaBraces, commaBrackets, parensSep :: [Doc] -> Doc
+commaBraces   = encloseSep "{" "}" ", "
 commaBrackets = encloseSep "[" "]" ", "
+parensSep     = parens . sep
 
 instance Pretty KeySet where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
@@ -421,7 +422,7 @@ data Use = Use
 instance Pretty Use where
   pretty Use{..} =
     let args = pretty _uModuleName : maybe [] (\mh -> [pretty mh]) _uModuleHash
-    in parens $ "use " <> sep args
+    in parensSep $ "use" : args
 
 data App t = App
   { _appFun :: !t
@@ -430,7 +431,7 @@ data App t = App
   } deriving (Functor,Foldable,Traversable,Eq,Show)
 
 instance Pretty n => Pretty (App n) where
-  pretty App{..} = parens $ sep $ pretty _appFun : map pretty _appArgs
+  pretty App{..} = parensSep $ pretty _appFun : map pretty _appArgs
 
 -- TODO: We need a more expressive, safer ADT for this.
 data Module
@@ -452,7 +453,7 @@ data Module
   } deriving (Eq, Show)
 
 instance Pretty Module where
-  pretty m = parens . sep $ case m of
+  pretty m = parensSep $ case m of
     Module{..} ->
       [ "Module"
       , pretty _mName
@@ -499,10 +500,10 @@ data Def n = Def
   } deriving (Functor,Foldable,Traversable,Eq,Show)
 
 instance (Pretty n) => Pretty (Def n) where
-  pretty Def{..} = parens $ sep $
+  pretty Def{..} = parensSep $
     [ text $ defTypeRep _dDefType
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
-    , parens $ sep $ pretty <$> _ftArgs _dFunType
+    , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
 
 newtype NamespaceName = NamespaceName Text
@@ -564,6 +565,8 @@ instance Show1 Term where
       . showsPrec 11 _tNativeFun
       . showChar ' '
       . shows3 11 _tFunTypes
+      . showChar ' '
+      . showsPrec 11 _tNativeExamples
       . showChar ' '
       . showsPrec 11 _tNativeDocs
       . showChar ' '
@@ -684,6 +687,7 @@ data Term n =
       _tNativeName :: !NativeDefName
     , _tNativeFun :: !NativeDFun
     , _tFunTypes :: FunTypes (Term n)
+    , _tNativeExamples :: ![Text]
     , _tNativeDocs :: Text
     , _tNativeTopLevelOnly :: Bool
     , _tInfo :: !Info
@@ -768,40 +772,46 @@ prettyUnscope = pretty . fmap PrettyVar . unscope
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
-    TModule{..} -> parens $ sep
+    TModule{..} -> parensSep
       [ "TModule", pretty _tModuleDef, prettyUnscope _tModuleBody ]
     TList{..} -> prettyList _tList
     TDef{..} -> pretty _tDef
-    TNative{..} -> "native " <> pretty (asString' _tNativeName) <> ":"
+    TNative{..} -> dullgreen ("native function `" <> pretty (asString' _tNativeName) <> "`")
       <> nest 2 (
-        line <> pretty _tNativeDocs <>
-        line <> align (vsep (pretty <$> toList _tFunTypes))
+         line
+      <> line <> pretty _tNativeDocs
+      <> line
+      <> line <> dullgreen "Examples:"
+      <> line <> align (vsep (pretty <$> _tNativeExamples))
+      <> line
+      <> line <> dullgreen "Type:"
+      <> line <> align (vsep (pretty <$> toList _tFunTypes))
       )
     TConst{..} -> "constant " <> pretty _tModule <> "." <> pretty _tConstArg
       <> " " <> pretty _tMeta
     TApp a _ -> pretty a
     TVar n _ -> pretty n
-    TBinding{..} -> parens $ sep
+    TBinding{..} -> parensSep
       [ "TBinding", pretty _tBindPairs
       , prettyUnscope _tBindBody
       , pretty _tBindType
       ]
-    TObject bs _ _ -> commaBraces $
+    TObject bs _ _ -> blue $ commaBraces $
       fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
-    TLiteral l _ -> pretty l
+    TLiteral l _ -> blue $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
-    TValue v _ -> prettyValue v
-    TStep{..} -> parens $ sep $
+    TValue v _ -> blue $ prettyValue v
+    TStep{..} -> parensSep $
       [ "TStep", pretty _tStepEntity, pretty _tStepExec ]
       ++ maybe [] (\rb -> [pretty rb]) _tStepRollback
-    TSchema{..} -> parens $ sep
+    TSchema{..} -> parensSep
       [ "TSchema"
       , pretty _tModule <> "." <> pretty _tSchemaName
       , pretty _tFields
       , pretty _tMeta
       ]
-    TTable{..} -> parens $ sep
+    TTable{..} -> parensSep
       [ "TTable"
       , pretty _tModule <> "." <> pretty _tTableName <> ":" <> pretty _tTableType
       , pretty _tMeta
@@ -866,7 +876,7 @@ instance Monad Term where
     TModule m b i >>= f = TModule m (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef (Def n m dt ft b d i) i' >>= f = TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d i) i'
-    TNative n fn t d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d tl i
+    TNative n fn t exs d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) exs d tl i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp a i >>= f = TApp (fmap (>>= f) a) i
     TVar n i >>= f = (f n) { _tInfo = i }
