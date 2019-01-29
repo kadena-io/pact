@@ -84,8 +84,9 @@ renderTerm _ _ = return ()
 renderExamples :: Handle -> NativeDefName -> [Text] -> IO ()
 renderExamples h f es = do
   hPutStrLn h "```lisp"
-  forM_ es $ \(unpack -> e) -> do
-    let (et,e') = case head e of
+  forM_ es $ \eText -> do
+    let e = unpack eText
+        (et,e') = case head e of
                     '!' -> (ExecErr,drop 1 e)
                     '$' -> (Lit,drop 1 e)
                     _   -> (Exec,e)
