@@ -90,7 +90,7 @@ waitUntilStarted = do
   mgr <- HTTP.newManager HTTP.defaultManagerSettings
   baseUrl <- _serverBaseUrl
   let clientEnv = mkClientEnv mgr baseUrl
-  r <- runClientM C.version clientEnv
+  r <- runClientM (C.version C.pactServerApiClient) clientEnv
   case r of
     Right _ -> pure ()
     Left _ -> do
@@ -130,12 +130,12 @@ run mgr cmds = do
 doSend :: Manager -> SubmitBatch -> IO (Either ServantError RequestKeys)
 doSend mgr req = do
   baseUrl <- _serverBaseUrl
-  runClientM (C.send req) (mkClientEnv mgr baseUrl)
+  runClientM (C.send C.pactServerApiClient req) (mkClientEnv mgr baseUrl)
 
 doPoll :: Manager -> Poll -> IO (Either ServantError PollResponses)
 doPoll mgr req = do
   baseUrl <- _serverBaseUrl
-  runClientM (C.poll req) (mkClientEnv mgr baseUrl)
+  runClientM (C.poll C.pactServerApiClient req) (mkClientEnv mgr baseUrl)
 
 flushDb :: IO ()
 flushDb = mapM_ deleteIfExists _logFiles

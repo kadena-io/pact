@@ -162,6 +162,7 @@ library
                      , mmorph >= 1.1 && < 1.2
                      , servant
                      , servant-client
+                     , servant-client-core
 
   if impl(ghcjs)
     build-depends:
