@@ -291,7 +291,7 @@ instance FromJSON a => FromJSON (CommandValue a) where
     case status of
       "failure" -> do
         msg <- o .: "error"
-        detail <- fmap Just (o .: "detail") <|> pure Nothing
+        detail <- o .:? "detail"
         pure $ CommandFailure $ CommandError msg detail
       "success" -> do
         CommandSuccess <$> o .: "data"
