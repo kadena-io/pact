@@ -1,11 +1,12 @@
 {-# LANGUAGE PackageImports #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies, GADTs, DataKinds #-}
 
 -- |
@@ -20,7 +21,7 @@ module Pact.Types.Crypto
   ( hashTx
   , verifyHashTx
   , initialHashTx
-  , PPKScheme(..)
+  , ST.PPKScheme(..)
   , SomeScheme
   , defaultScheme
   , toScheme
@@ -39,17 +40,15 @@ module Pact.Types.Crypto
   ) where
 
 
-import Control.Applicative
-import Control.Monad.Reader
-import Control.DeepSeq
+import Prelude
+import GHC.Generics
 
 import "crypto-api" Crypto.Random
 import qualified    Crypto.Hash    as H
 
-import Data.Aeson.Types  (toJSONKeyText)
-import Data.Maybe
+import Data.Aeson.Types   (toJSONKeyText)
 import Data.Text.Encoding
-import Data.ByteString  (ByteString)
+import Data.ByteString    (ByteString)
 
 import Data.Aeson                        as A
 import qualified Data.ByteArray          as B
@@ -57,13 +56,12 @@ import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
 
 
-import GHC.Generics
-import Prelude
 import Pact.Types.Util
-
-
+import Pact.Types.Scheme               as ST
 import qualified Crypto.Ed25519.Pure   as Ed25519
 import qualified Pact.Types.ECDSA      as ECDSA
+
+
 
 
 --------- HASHING ---------
@@ -84,37 +82,12 @@ initialHashTx algo = hashTx mempty algo
 
 
 
---------- PPKSCHEME DATA TYPE ---------
+--------- CONNECTS PPKSCHEME TO SPPKSCHEME ---------
 
-data PPKScheme = ED25519 | ETH
-  deriving (Show, Eq, Ord, Generic)
+data SomeScheme = forall a. Scheme (SPPKScheme a) => SomeScheme (SPPKScheme a)
 
-
-instance NFData PPKScheme
-instance Serialize PPKScheme
-instance ToJSON PPKScheme where
-  toJSON ED25519 = "ED25519"
-  toJSON ETH = "ETH"
-instance FromJSON PPKScheme where
-  parseJSON = withText "PPKScheme" $ \s -> case s of
-    "ED25519" -> return ED25519
-    "ETH" -> return ETH
-    _ -> fail $ "Unsupported PPKScheme: " ++ show s
-  {-# INLINE parseJSON #-}
-
-
-
-
-
---------- INTERNAL SCHEME CLASS ---------
-
--- Run-time witness to PPKScheme kind.
-
-data SPPKScheme :: PPKScheme -> * where
-  SED25519 :: SPPKScheme 'ED25519
-  SETH :: SPPKScheme 'ETH
-data SomeScheme = forall a. Scheme a => SomeScheme (SPPKScheme a)
-
+defaultScheme :: SomeScheme
+defaultScheme = SomeScheme SED25519
 
 
 -- Connects each PPKScheme to some SPPKScheme a
@@ -132,45 +105,13 @@ toPPKScheme SETH     = ETH
 
 
 
-defaultScheme :: SomeScheme
-defaultScheme = SomeScheme SED25519
 
+--------- SCHEME ED25519 INSTANCES --------
 
-
-
--- Scheme class created to enforce at the type level that Public Key,
--- Private Key, and Signature are of the same scheme when signing
--- and validating.
-
--- Also ensures that each scheme specifies its payload hash and
--- how it will transform its public keys to Pact Runtime public keys.
-
--- Not exported to hide implementation details. The PPKScheme
--- is always known and this module controls the relationship
--- between PPKScheme and SPPKScheme a.
-
-class (ConvertBS (PublicKey a),
-       ConvertBS (PrivateKey a),
-       ConvertBS (Signature a))  =>
-      Scheme (a :: PPKScheme) where
-
-  type PublicKey a
-  type PrivateKey a
-  type Signature a
-
-  _hashPayload :: SPPKScheme a -> ByteString -> ByteString
-  _sign :: SPPKScheme a -> ByteString -> PublicKey a -> PrivateKey a -> IO (Signature a)
-  _valid :: SPPKScheme a -> ByteString -> PublicKey a -> Signature a -> Bool
-  _genKeyPair :: SPPKScheme a -> IO (PublicKey a, PrivateKey a)
-  _formatPublicKey :: SPPKScheme a -> PublicKey a -> ByteString
-
-
-
-
-instance Scheme 'ED25519 where
-  type PublicKey 'ED25519 = Ed25519.PublicKey
-  type PrivateKey 'ED25519 = Ed25519.PrivateKey
-  type Signature 'ED25519 = Ed25519.Signature
+instance Scheme (SPPKScheme 'ED25519) where
+  type PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
+  type PrivateKey (SPPKScheme 'ED25519) = Ed25519.PrivateKey
+  type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
 
   _hashPayload _ msg = hsh
     where (Hash hsh) = hashTx msg H.Blake2b_512
@@ -180,37 +121,6 @@ instance Scheme 'ED25519 where
   _formatPublicKey _ p = toBS p
 
 
-
-
-instance Scheme 'ETH where
-  type PublicKey 'ETH = ECDSA.PublicKey
-  type PrivateKey 'ETH = ECDSA.PrivateKey
-  type Signature 'ETH = ECDSA.Signature
-
-  _hashPayload _ msg = hsh
-    where (Hash hsh) = hashTx msg ECDSA.hashAlgoETH
-  _sign s msg pub priv = ECDSA.signETH (_hashPayload s msg) pub priv
-  _valid s msg pub sig = ECDSA.validETH (_hashPayload s msg) pub sig
-  _genKeyPair _ = ECDSA.genKeyPair
-  _formatPublicKey _ p = ECDSA.formatPublicKeyETH (toBS p)
-
-
-
-
---------- CRYPTO KEYS AND SIGNATURE CONVERSIONS ---------
-
-class ConvertBS a where
-  toBS :: a -> ByteString
-  fromBS :: ByteString -> Either String a
-
-maybeToEither :: String -> Maybe a -> Either String a
-maybeToEither err Nothing = Left err
-maybeToEither _ (Just a)  = Right a
-
-
-
-
--- Ed25519 instances
 
 instance ConvertBS (Ed25519.PublicKey) where
   toBS = Ed25519.exportPublic
@@ -227,7 +137,21 @@ instance ConvertBS Ed25519.Signature where
 
 
 
--- ECDSA instances
+--------- SCHEME ETH INSTANCES --------
+
+instance Scheme (SPPKScheme 'ETH) where
+  type PublicKey (SPPKScheme 'ETH) = ECDSA.PublicKey
+  type PrivateKey (SPPKScheme 'ETH) = ECDSA.PrivateKey
+  type Signature (SPPKScheme 'ETH) = ECDSA.Signature
+
+  _hashPayload _ msg = hsh
+    where (Hash hsh) = hashTx msg ECDSA.hashAlgoETH
+  _sign s msg pub priv = ECDSA.signETH (_hashPayload s msg) pub priv
+  _valid s msg pub sig = ECDSA.validETH (_hashPayload s msg) pub sig
+  _genKeyPair _ = ECDSA.genKeyPair
+  _formatPublicKey _ p = ECDSA.formatPublicKeyETH (toBS p)
+
+
 
 instance ConvertBS (ECDSA.PublicKey) where
   toBS = ECDSA.exportPublic
@@ -245,22 +169,19 @@ instance ConvertBS (ECDSA.Signature) where
 
 
 
---------- KEY PAIR DATA TYPES ---------
+--------- SCHEME HELPER DATA TYPES ---------
 
 -- KeyPair existential allows a transaction to be signed by
--- key pairs of different schemes.
+-- key pairs of different schemes
 
-data KeyPair (a :: PPKScheme) = KeyPair
-  { _kpScheme :: SPPKScheme a
+data KeyPair a = KeyPair
+  { _kpScheme :: a
   , _kpPublicKey :: PublicKey a
   , _kpPrivateKey :: PrivateKey a
   }
-data SomeKeyPair = forall a. Scheme a => SomeKeyPair (KeyPair a)
+data SomeKeyPair = forall a. Scheme (SPPKScheme a) => SomeKeyPair (KeyPair (SPPKScheme a))
 
 
-
-
---------- HELPER DATA TYPES AND FUNCTIONS --------
 
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
   deriving (Eq, Show, Generic)
@@ -288,7 +209,7 @@ newtype SignatureBS = SigBS ByteString
 
 
 
--- Scheme class helper functions
+--------- SCHEME HELPER FUNCTIONS ---------
 
 sign :: SomeKeyPair -> ByteString -> IO ByteString
 sign (SomeKeyPair KeyPair{..}) msg = toBS <$> _sign _kpScheme msg _kpPublicKey _kpPrivateKey
@@ -303,14 +224,8 @@ verify (SomeScheme scheme) msg (PubBS pBS) (SigBS sigBS) =
        _ -> False
 
 
--- Converts Cryptographic public keys to Pact Runtime public keys depending on the scheme.
--- Pact uses Cryptographic PKs to sign/validate transactions.
--- While it uses Runtime PKs during keyset enforcement to denote ownership and permissions.
--- Certain schemes (i.e. Ethereum) call Runtime public keys 'addresses'.
-
 formatPublicKey :: SomeKeyPair -> ByteString
 formatPublicKey (SomeKeyPair KeyPair{..}) = _formatPublicKey _kpScheme _kpPublicKey
-
 
 
 
@@ -324,7 +239,6 @@ getPublic (SomeKeyPair kp) = toBS (_kpPublicKey kp)
 
 getPrivate :: SomeKeyPair -> ByteString
 getPrivate (SomeKeyPair kp) = toBS (_kpPrivateKey kp)
-
 
 
 

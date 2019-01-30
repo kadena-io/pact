@@ -80,6 +80,7 @@ import Pact.Types.Crypto              as Base
 import qualified Crypto.Hash          as H
 #else
 import Pact.Types.Hash
+import Pact.Types.Scheme (PPKScheme(..))
 #endif
 
 
@@ -167,24 +168,6 @@ verifyUserSig msg UserSig{..} =
        (Right p, Right sig) -> verify (toScheme _usScheme) msg (PubBS p) (SigBS sig)
        _ -> False
 
-
-#else
-
--- TODO: Add ETH Scheme for GHCJS
-
-data PPKScheme = ED25519
-  deriving (Show, Eq, Ord, Generic)
-
-instance NFData PPKScheme
-instance Serialize PPKScheme
-instance ToJSON PPKScheme where
-  toJSON ED25519 = "ED25519"
-instance FromJSON PPKScheme where
-  parseJSON = withText "PPKScheme" $ \s -> case s of
-    "ED25519" -> return ED25519
-    _ -> fail $ "Unsupported PPKScheme: " ++ show s
-  {-# INLINE parseJSON #-}
-
 #endif
 
 
@@ -256,7 +239,8 @@ instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where toJSON = lensyToJSON 
 instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
 
-
+-- | UserSig combines PPKScheme, PublicKey, and the formatted PublicKey
+--   referred to as the Address.
 data UserSig = UserSig
   { _usScheme :: !PPKScheme
   , _usPubKey :: !Text

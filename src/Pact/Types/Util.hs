@@ -134,6 +134,10 @@ toB16Text s = decodeUtf8 $ B16.encode s
 failMaybe :: Monad m => String -> Maybe a -> m a
 failMaybe err m = maybe (fail err) return m
 
+maybeToEither :: String -> Maybe a -> Either String a
+maybeToEither err Nothing = Left err
+maybeToEither _ (Just a)  = Right a
+
 
 -- | Utility for unsafe parse of JSON
 unsafeFromJSON :: FromJSON a => Value -> a

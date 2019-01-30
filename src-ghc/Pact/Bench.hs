@@ -116,11 +116,9 @@ mkBenchCmd kps (str, t) = do
 
 main :: IO ()
 main = do
-  let !pub = PubBS "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
-      !priv = PrivBS "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
-  !keyPair <- case importKeyPair defaultScheme pub priv of
-    Right kp -> return kp
-    Left errMsg -> error errMsg
+  !pub <- eitherDie $ parseB16TextOnly "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
+  !priv <- eitherDie $ parseB16TextOnly "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
+  !keyPair <- eitherDie $ importKeyPair defaultScheme (PubBS pub) (PrivBS priv)
   !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
   initSchema pureDb

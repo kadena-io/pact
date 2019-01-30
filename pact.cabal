@@ -39,6 +39,7 @@ library
                      , Pact.Server.Client
                      , Pact.Types.API
                      , Pact.Types.Command
+                     , Pact.Types.Scheme
                      , Pact.Types.Exp
                      , Pact.Types.ExpParser
                      , Pact.Types.Gas
