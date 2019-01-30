@@ -41,7 +41,7 @@ withCapability :: NativeDef
 withCapability =
   defNative (specialForm WithCapability) withCapability'
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
-  [ExecExample "(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))"]
+  [LitExample "(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))"]
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
   \production. Given the unique token specified by this application, ensure \
   \that the token is granted in the environment during execution of BODY. \
@@ -95,7 +95,7 @@ requireCapability :: NativeDef
 requireCapability =
   defNative "require-capability" requireCapability'
   (funType tTyBool [("capability",TyFun $ funType' tTyBool [])])
-  [ExecExample "(require-capability (TRANSFER src dest))"]
+  [LitExample "(require-capability (TRANSFER src dest))"]
   "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment."
   where
     requireCapability' :: NativeFun e
@@ -111,14 +111,14 @@ composeCapability :: NativeDef
 composeCapability =
   defNative "compose-capability" composeCapability'
   (funType tTyBool [("capability",TyFun $ funType' tTyBool [])])
+  [LitExample "(compose-capability (TRANSFER src dest))"]
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
   \production, only valid within a (distinct) 'defcap' body, as a way to compose \
   \CAPABILITY with the outer capability such that the scope of the containing \
   \'with-capability' call will \"import\" this capability. Thus, a call to \
   \'(with-capability (OUTER-CAP) OUTER-BODY)', where the OUTER-CAP defcap calls \
   \'(compose-capability (INNER-CAP))', will result in INNER-CAP being granted \
-  \in the scope of OUTER-BODY. \
-  \`$(compose-capability (TRANSFER src dest))`"
+  \in the scope of OUTER-BODY."
   where
     composeCapability' :: NativeFun e
     composeCapability' i [TApp app _] = gasUnreduced i [] $ do

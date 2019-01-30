@@ -81,13 +81,13 @@ replDefs = ("Repl",
      [
       defZRNative "load" load (funType tTyString [("file",tTyString)] <>
                               funType tTyString [("file",tTyString),("reset",tTyBool)])
-      [ExecErrExample "(load \"accounts.repl\")"]
+      [LitExample "(load \"accounts.repl\")"]
       "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
-      [ExecExample "(env-keys [\"my-key\" \"admin-key\"])"]
+      ["(env-keys [\"my-key\" \"admin-key\"])"]
       "Set transaction signature KEYS."
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
-      [ExecExample "(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
+      ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
      ,defZRNative "env-step"
       setstep (funType tTyString [] <>
@@ -118,10 +118,10 @@ replDefs = ("Repl",
      ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) [LitExample "(commit-tx)"] "Commit transaction."
      ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) [LitExample "(rollback-tx)"] "Rollback transaction."
      ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
-      [ExecExample "(expect \"Sanity prevails.\" 4 (+ 2 2))"]
+      ["(expect \"Sanity prevails.\" 4 (+ 2 2))"]
       "Evaluate ACTUAL and verify that it equals EXPECTED."
      ,defZNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)])
-      [ExecExample "(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))"]
+      ["(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))"]
       "Evaluate EXP and succeed only if it throws an error."
      ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       [LitExample "(bench (+ 1 2))"] "Benchmark execution of EXPRS."
@@ -146,7 +146,7 @@ replDefs = ("Repl",
        "Verify MODULE, checking that all properties hold."
 
      ,defZRNative "json" json' (funType tTyValue [("exp",a)])
-      [ExecExample "(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])"] $
+      ["(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])"] $
       "Encode pact expression EXP as a JSON value. " <>
       "This is only needed for tests, as Pact values are automatically represented as JSON in API output. "
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
@@ -156,7 +156,7 @@ replDefs = ("Repl",
        []
        "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
-       [ExecExample "(env-hash (hash \"hello\"))"]
+       ["(env-hash (hash \"hello\"))"]
        "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash."
      ])
      where

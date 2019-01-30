@@ -203,7 +203,7 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
 readDecimalDef :: NativeDef
 readDecimalDef = defRNative "read-decimal" readDecimal
   (funType tTyDecimal [("key",tTyString)])
-  [ExecExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
+  [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
   "Parse KEY string or number value from top level of message data body as decimal."
   where
 
@@ -216,7 +216,7 @@ readDecimalDef = defRNative "read-decimal" readDecimal
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
-  [ExecExample "(define-namespace 'my-namespace (read-keyset 'my-keyset))"]
+  [LitExample "(define-namespace 'my-namespace (read-keyset 'my-keyset))"]
   "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
   \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
   \and GUARD will be rotated in its place."
@@ -247,7 +247,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
 namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
   (funType tTyString [("namespace", tTyString)])
-  [ExecExample "(namespace 'my-namespace)"]
+  [LitExample "(namespace 'my-namespace)"]
   "Set the current namespace to NAMESPACE. All expressions that occur in a current \
   \transaction will be contained in NAMESPACE, and once committed, may be accessed \
   \via their fully qualified name, which will include the namespace. Subsequent \
@@ -353,10 +353,10 @@ langDefs =
 
     ,readDecimalDef
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
-     [ExecExample "(read-integer \"age\")"]
+     [LitExample "(read-integer \"age\")"]
      "Parse KEY string or number value from top level of message data body as integer."
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
-     [ExecExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
+     [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
      \List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type."
@@ -374,7 +374,7 @@ langDefs =
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
     ,defRNative "yield" yield (funType yieldv [("OBJECT",yieldv)])
-     [ExecExample "(yield { \"amount\": 100.0 })"]
+     [LitExample "(yield { \"amount\": 100.0 })"]
      "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
      \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values."
     ,defNative "resume" resume

@@ -20,7 +20,7 @@ import Pact.Types.Runtime
 readKeysetDef :: NativeDef
 readKeysetDef =
   defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)])
-    [ExecExample "(read-keyset \"admin-keyset\")"] $
+    [LitExample "(read-keyset \"admin-keyset\")"] $
     "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " <>
     "PREDFUN should resolve to a keys predicate."
   where
@@ -42,7 +42,7 @@ keyDefs =
     ,setTopLevelOnly $ defRNative "define-keyset" defineKeyset
      (funType tTyString [("name",tTyString),("keyset",tTyString)] <>
       funType tTyString [("name",tTyString)])
-     [ExecExample "(define-keyset 'admin-keyset (read-keyset \"keyset\"))"]
+     [LitExample "(define-keyset 'admin-keyset (read-keyset \"keyset\"))"]
      "Define keyset as NAME with KEYSET, or if unspecified, read NAME from message payload as keyset, \
      \similarly to 'read-keyset'. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value."
