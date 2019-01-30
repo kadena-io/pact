@@ -62,7 +62,7 @@ dbDefs =
       tableTy = TySchema TyTable rt def
       rowTy = TySchema TyObject rt def
       bindTy = TySchema TyBinding rt def
-      partialize = set tySchemaPartial (SPPartial mempty)
+      partialize = set tySchemaPartial AnySubschema
       a = mkTyVar "a" []
   in ("Database",
     [setTopLevelOnly $ defRNative "create-table" createTable'
@@ -104,12 +104,12 @@ dbDefs =
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
-    ,defRNative "write" (write Write SPFull) (writeArgs SPFull)
+    ,defRNative "write" (write Write FullSchema) (writeArgs FullSchema)
      (writeDocs ". OBJECT must have all fields specified by row type." "(write accounts id { \"balance\": 100.0 })")
-    ,defRNative "insert" (write Insert SPFull) (writeArgs SPFull)
+    ,defRNative "insert" (write Insert FullSchema) (writeArgs FullSchema)
      (writeDocs ", failing if data already exists for KEY. OBJECT must have all fields specified by row type."
      "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
-    ,defRNative "update" (write Update $ SPPartial mempty) (writeArgs $ SPPartial mempty)
+    ,defRNative "update" (write Update AnySubschema) (writeArgs AnySubschema)
      (writeDocs ", failing if data does not exist for KEY. OBJECT can have just the fields to update."
       "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog

@@ -90,7 +90,7 @@ customFunChecks name (tl,_) = case name of
     it (show name ++ ":specializes partial type") $
       preview (tlFun . fBody . _head . aNode . aTy . tySchemaPartial) tl
         `shouldBe`
-      (Just $ SPPartial $ Set.singleton "name")
+      (Just $ PartialSchema $ Set.singleton "name")
   _ -> return ()
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
