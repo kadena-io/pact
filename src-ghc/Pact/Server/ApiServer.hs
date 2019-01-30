@@ -89,23 +89,23 @@ apiV1Server conf = hoistServer apiV1API nt
     nt :: forall a. Api a -> Handler a
     nt s = Handler $ runReaderT s conf
 
-sendHandler :: SubmitBatch -> Api (ApiResponse RequestKeys)
+sendHandler :: SubmitBatch -> Api RequestKeys
 sendHandler (SubmitBatch cmds) = do
   when (null cmds) $ die' "Empty Batch"
   crs <- forM cmds $ \c -> do
     cr@(_,Command{..}) <- buildCmdRpc c
     return cr
   rks <- mapM queueCmds $ group 8000 crs
-  pure $ ApiSuccess $ RequestKeys $ concat rks
+  pure $ RequestKeys $ concat rks
 
-pollHandler :: Poll -> Api (ApiResponse PollResponses)
+pollHandler :: Poll -> Api PollResponses
 pollHandler (Poll rks) = do
   log $ "Polling for " ++ show rks
   PossiblyIncompleteResults{..} <- checkHistoryForResult (HashSet.fromList rks)
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   pure $ pollResultToReponse possiblyIncompleteResults
 
-listenHandler :: ListenerRequest -> Api (ApiResponse ApiResult)
+listenHandler :: ListenerRequest -> Api ApiResult
 listenHandler (ListenerRequest rk) = do
   hChan <- view aiHistoryChan
   m <- liftIO newEmptyMVar
@@ -118,9 +118,9 @@ listenHandler (ListenerRequest rk) = do
       die' msg
     ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      pure $ ApiSuccess (crToAr cr)
+      pure $ crToAr cr
 
-localHandler :: Command T.Text -> Api (ApiResponse (CommandSuccess Value))
+localHandler :: Command T.Text -> Api (CommandSuccess Value)
 localHandler commandText = do
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
@@ -128,7 +128,7 @@ localHandler commandText = do
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
   case parseMaybe parseJSON r of
-    Just v@CommandSuccess{} -> pure $ ApiSuccess v
+    Just v@CommandSuccess{} -> pure v
     Nothing -> die' "command could not be run locally"
 
 versionHandler :: Handler T.Text
@@ -141,8 +141,8 @@ checkHistoryForResult rks = do
   liftIO $ writeHistory hChan $ QueryForResults (rks,m)
   liftIO $ readMVar m
 
-pollResultToReponse :: HM.HashMap RequestKey CommandResult -> ApiResponse PollResponses
-pollResultToReponse m = ApiSuccess $ PollResponses $ HM.fromList $ map (second crToAr) $ HM.toList m
+pollResultToReponse :: HM.HashMap RequestKey CommandResult -> PollResponses
+pollResultToReponse m = PollResponses $ HM.fromList $ map (second crToAr) $ HM.toList m
 
 crToAr :: CommandResult -> ApiResult
 crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId Nothing

@@ -113,8 +113,7 @@ run mgr cmds = do
   sendResp <- doSend mgr $ SubmitBatch cmds
   case sendResp of
     Left servantErr -> Exception.evaluate (error $ show servantErr)
-    Right (ApiFailure err) -> Exception.evaluate (error err)
-    Right (ApiSuccess RequestKeys{..}) -> do
+    Right RequestKeys{..} -> do
       results <- timeout 3000000 (helper _rkRequestKeys)
       case results of
         Nothing -> Exception.evaluate (error "Received empty poll. Timeout in retrying.")
@@ -124,17 +123,16 @@ run mgr cmds = do
           pollResp <- doPoll mgr $ Poll reqKeys
           case pollResp of
             Left servantErr -> Exception.evaluate (error $ show servantErr)
-            Right (ApiFailure err) -> Exception.evaluate (error err)
-            Right (ApiSuccess (PollResponses apiResults)) ->
+            Right (PollResponses apiResults) ->
               if null apiResults then helper reqKeys
               else return apiResults
 
-doSend :: Manager -> SubmitBatch -> IO (Either ServantError (ApiResponse RequestKeys))
+doSend :: Manager -> SubmitBatch -> IO (Either ServantError RequestKeys)
 doSend mgr req = do
   baseUrl <- _serverBaseUrl
   runClientM (C.send req) (mkClientEnv mgr baseUrl)
 
-doPoll :: Manager -> Poll -> IO (Either ServantError (ApiResponse PollResponses))
+doPoll :: Manager -> Poll -> IO (Either ServantError PollResponses)
 doPoll mgr req = do
   baseUrl <- _serverBaseUrl
   runClientM (C.poll req) (mkClientEnv mgr baseUrl)
