@@ -69,7 +69,8 @@ instance UserShow PreProp where
     PreStringLit t    -> tShow t
     PreDecimalLit d   -> userShow d
     PreTimeLit t      -> tShow (Pact.LTime (toPact timeIso t))
-    PreBoolLit b      -> tShow (Pact.LBool b)
+    PreBoolLit True   -> "true"
+    PreBoolLit False  -> "false"
 
     PreAbort          -> STransactionAborts
     PreSuccess        -> STransactionSucceeds
