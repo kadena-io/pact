@@ -1065,4 +1065,3 @@ deriveShow1 ''App
 deriveShow1 ''BindType
 deriveShow1 ''ConstVal
 deriveShow1 ''Def
->>>>>>> Improved `show` / `pretty`.
