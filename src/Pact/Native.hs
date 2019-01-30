@@ -51,6 +51,7 @@ import Data.List
 import Data.Function (on)
 import Data.ByteString.Lazy (toStrict)
 import Data.Text.Encoding
+import Text.PrettyPrint.ANSI.Leijen (Pretty)
 
 
 import Pact.Eval
@@ -153,7 +154,7 @@ formatDef =
       let parts = T.splitOn "{}" s
           plen = length parts
           rep (TLitString t) = t
-          rep t = pack $ show t
+          rep t = pack $ renderCompactString t
       if plen == 1
       then return $ tStr s
       else if plen - length es > 1
@@ -196,7 +197,8 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
     if' :: NativeFun e
     if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \case
                TLiteral (LBool c) _ -> reduce (if c then then' else else')
-               t -> evalError' i $ "if: conditional not boolean: " ++ show t
+               t -> evalError' i $
+                 "if: conditional not boolean: " ++ renderCompactString t
     if' i as = argsError' i as
 
 
@@ -340,7 +342,7 @@ langDefs =
 
     ,defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
                           funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
-     ["(at 1 [1 2 3]) (at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
+     ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
      "Index LIST at IDX, or get value with key IDX from OBJECT."
 
     ,enforceDef
@@ -440,7 +442,8 @@ list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here
 makeList :: RNativeFun e
 makeList i [TLitInteger len,value] = case typeof value of
   Right ty -> return $ toTList ty def $ replicate (fromIntegral len) value
-  Left ty -> evalError' i $ "make-list: invalid value type: " ++ show ty
+  Left ty -> evalError' i $
+    "make-list: invalid value type: " ++ renderCompactString ty
 makeList i as = argsError i as
 
 reverse' :: RNativeFun e
@@ -495,14 +498,16 @@ at' :: RNativeFun e
 at' _ [li@(TLitInteger idx),TList ls _ _] =
     case ls `atMay` fromIntegral idx of
       Just t -> return t
-      Nothing -> evalError (_tInfo li) $ "at: bad index " ++ show idx ++ ", length " ++ show (length ls)
+      Nothing -> evalError (_tInfo li) $ "at: bad index " ++
+        renderCompactString idx ++ ", length " ++ renderCompactString (length ls)
 at' _ [idx,TObject ls _ _] = lookupObj idx ls
 at' i as = argsError i as
 
-lookupObj :: (Eq n, Show n) => Term n -> [(Term n, Term n)] -> Eval m (Term n)
+lookupObj :: (Eq n, Pretty n) => Term n -> [(Term n, Term n)] -> Eval m (Term n)
 lookupObj idx ls = case lookup (unsetInfo idx) (map (first unsetInfo) ls) of
   Just v -> return v
-  Nothing -> evalError (_tInfo idx) $ "at: key not found: " ++ show idx
+  Nothing -> evalError (_tInfo idx) $
+    "at: key not found: " ++ renderCompactString idx
 
 remove :: RNativeFun e
 remove _ [key,TObject ps t _] = return $ TObject (filter (\(k,_) -> unsetInfo key /= unsetInfo k) ps) t def
@@ -544,9 +549,11 @@ bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Ref))
 bindObjectLookup TObject {..} = do
   !m <- fmap M.fromList $ forM _tObject $ \(k,v) -> case k of
     TLitString k' -> return (k',liftTerm v)
-    tk -> evalError _tInfo $ "Bad object (non-string key) in bind: " ++ show tk
+    tk -> evalError _tInfo $
+      "Bad object (non-string key) in bind: " ++ renderCompactString tk
   return (\s -> M.lookup s m)
-bindObjectLookup t = evalError (_tInfo t) $ "bind: expected object: " ++ show t
+bindObjectLookup t = evalError (_tInfo t) $
+  "bind: expected object: " ++ renderCompactString t
 
 typeof'' :: RNativeFun e
 typeof'' _ [t] = return $ tStr $ typeof' t
@@ -590,25 +597,30 @@ sort' :: RNativeFun e
 sort' _ [TList{..}] = case nub (map typeof _tList) of
   [ty] -> case ty of
     Right rty@(TyPrim pty) -> case pty of
-      TyValue -> badTy (show ty)
-      TyGuard{} -> badTy (show ty)
+      TyValue -> badTy ty
+      TyGuard{} -> badTy ty
       _ -> do
         sl <- forM _tList $ \e -> case firstOf tLiteral e of
-          Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ show e
+          Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ renderCompactString e
           Just lit -> return (lit,e)
         return $ TList (map snd $ sortBy (compare `on` fst) sl) rty def
-    _ -> badTy (show ty)
-  ts -> evalError _tInfo $ "sort: non-uniform list: " ++ show ts
-  where badTy s = evalError _tInfo $ "sort: bad list type: " ++ s
+    _ -> badTy ty
+  ts -> evalError _tInfo $ "sort: non-uniform list: " ++ renderCompactString (fmap renderMsgOrTm ts)
+  where renderMsgOrTm = \case
+          Left msg -> unpack msg
+          Right tm -> renderCompactString tm
+        badTy msgOrTm = evalError _tInfo $ "sort: bad list type: " ++ renderMsgOrTm msgOrTm
 sort' _ [fields@TList{},l@TList{}]
   | null (_tList fields) = evalError (_tInfo fields) "Empty fields list"
   | otherwise = do
       sortPairs <- forM (_tList l) $ \el -> case firstOf tObject el of
-        Nothing -> evalError (_tInfo l) $ "Non-object found: " ++ show el
+        Nothing -> evalError (_tInfo l) $ "Non-object found: " ++ renderCompactString el
         Just o -> fmap ((,el) . reverse) $ (\f -> foldM f [] (_tList fields)) $ \lits fld -> do
           v <- lookupObj fld o
           case firstOf tLiteral v of
-            Nothing -> evalError (_tInfo l) $ "Non-literal found at field " ++ show fld ++ ": " ++ show el
+            Nothing -> evalError (_tInfo l) $
+              "Non-literal found at field " ++ renderCompactString fld ++
+              ": " ++ renderCompactString el
             Just lit -> return (lit:lits)
       return $ TList (map snd $ sortBy (compare `on` fst) sortPairs) (_tListType l) def
 
@@ -628,14 +640,15 @@ enforceVersion i as = case as of
       foldM_ matchPart False $ zip (T.splitOn "." pactVersion) (T.splitOn "." fullV)
       where
         parseNum orgV s = case AP.parseOnly (AP.many1 AP.digit) s of
-          Left _ -> evalError' i $ "Invalid version component: " ++ show (orgV,s)
+          Left _ -> evalError' i $ "Invalid version component: " ++ renderCompactString (orgV,s)
           Right v -> return v
         matchPart True _ = return True
         matchPart _ (pv,mv)  = do
           pv' <- parseNum pactVersion pv
           mv' <- parseNum fullV mv
           when (mv' `failCmp` pv') $ evalError' i $
-            "Invalid pact version " ++ show pactVersion ++ ", " ++ msg ++ " allowed: " ++ show fullV
+            "Invalid pact version " ++ renderCompactString pactVersion ++
+            ", " ++ msg ++ " allowed: " ++ renderCompactString fullV
           return (mv' `succCmp` pv')
 
 contains :: RNativeFun e

@@ -39,7 +39,8 @@ hash bs = case blake2b hashLengthAsBS mempty bs of
 verifyHash :: Hash -> ByteString -> Either String Hash
 verifyHash h b = if hash b == h
   then Right h
-  else Left $ "Hash Mismatch, received " ++ show h ++ " but our hashing resulted in " ++ show (hash b)
+  else Left $ "Hash Mismatch, received " ++ renderCompactString h ++
+              " but our hashing resulted in " ++ renderCompactString (hash b)
 {-# INLINE verifyHash #-}
 
 

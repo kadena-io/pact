@@ -8,7 +8,7 @@
 *idx*&nbsp;`string` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`<a>`
 
 
-Index LIST at IDX, or get value with key IDX from OBJECT. 
+Index LIST at IDX, or get value with key IDX from OBJECT.
 ```lisp
 pact> (at 1 [1 2 3])
 2
@@ -22,7 +22,7 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 *src*&nbsp;`object:<{row}>` *binding*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
 
 
-Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements. 
+Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements.
 ```lisp
 pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 1
@@ -31,10 +31,10 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 
 ### compose {#compose}
 
-*x*&nbsp;`(x:<a> -> <b>)` *y*&nbsp;`(x:<b> -> <c>)` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
+*x*&nbsp;`x:<a> -> <b>` *y*&nbsp;`x:<b> -> <c>` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
 
 
-Compose X and Y, such that X operates on VALUE, and Y on the results of X. 
+Compose X and Y, such that X operates on VALUE, and Y on the results of X.
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ["dog" "has" "fleas"]
@@ -50,7 +50,7 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 *value*&nbsp;`<a>` *ignore1*&nbsp;`<b>` *ignore2*&nbsp;`<c>` *ignore3*&nbsp;`<d>` *&rarr;*&nbsp;`<a>`
 
 
-Lazily ignore arguments IGNORE* and return VALUE. 
+Lazily ignore arguments IGNORE* and return VALUE.
 ```lisp
 pact> (filter (constantly true) [1 2 3])
 [1 2 3]
@@ -66,7 +66,7 @@ pact> (filter (constantly true) [1 2 3])
 *value*&nbsp;`string` *string*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry. 
+Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry.
 ```lisp
 pact> (contains 2 [1 2 3])
 true
@@ -82,7 +82,7 @@ true
 *namespace*&nbsp;`string` *guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
 
 
-Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in its place. 
+Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in its place.
 ```lisp
 (define-namespace 'my-namespace (read-keyset 'my-keyset))
 ```
@@ -113,7 +113,7 @@ pact> (drop ['name] { 'name: "Vlad", 'active: false})
 *test*&nbsp;`bool` *msg*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true. 
+Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true.
 ```lisp
 pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
 <interactive>:0:0: Chaos reigns
@@ -125,7 +125,7 @@ pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
 *msg*&nbsp;`string` *tests*&nbsp;`[bool]` *&rarr;*&nbsp;`bool`
 
 
-Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success. 
+Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success.
 ```lisp
 pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
 true
@@ -139,7 +139,7 @@ true
 *min-version*&nbsp;`string` *max-version*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'. 
+Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'.
 ```lisp
 pact> (enforce-pact-version "2.3")
 true
@@ -150,7 +150,7 @@ Top level only: this function will fail if used in module code.
 
 ### filter {#filter}
 
-*app*&nbsp;`(x:<a> -> bool)` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+*app*&nbsp;`x:<a> -> bool` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
 Filter LIST by applying APP to each element. For each true result, the original value is kept.
@@ -162,10 +162,10 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 
 ### fold {#fold}
 
-*app*&nbsp;`(x:<a> y:<b> -> <a>)` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
+*app*&nbsp;`x:<a> y:<b> -> <a>` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
 
 
-Iteratively reduce LIST by applying APP to last result and element, starting with INIT. 
+Iteratively reduce LIST by applying APP to last result and element, starting with INIT.
 ```lisp
 pact> (fold (+) 0 [100 10 5])
 115
@@ -174,10 +174,10 @@ pact> (fold (+) 0 [100 10 5])
 
 ### format {#format}
 
-*template*&nbsp;`string` *vars*&nbsp;`list` *&rarr;*&nbsp;`string`
+*template*&nbsp;`string` *vars*&nbsp;`[*]` *&rarr;*&nbsp;`string`
 
 
-Interpolate VARS into TEMPLATE using {}. 
+Interpolate VARS into TEMPLATE using {}.
 ```lisp
 pact> (format "My {} has {}" ["dog" "fleas"])
 "My dog has fleas"
@@ -189,7 +189,7 @@ pact> (format "My {} has {}" ["dog" "fleas"])
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are converted using their JSON representation. 
+Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are converted using their JSON representation.
 ```lisp
 pact> (hash "hello")
 "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
@@ -203,7 +203,7 @@ pact> (hash { 'foo: 1 })
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
 
 
-Return provided value. 
+Return provided value.
 ```lisp
 pact> (map (identity) [1 2 3])
 [1 2 3]
@@ -215,7 +215,7 @@ pact> (map (identity) [1 2 3])
 *cond*&nbsp;`bool` *then*&nbsp;`<a>` *else*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
 
 
-Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE. 
+Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE.
 ```lisp
 pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 "Sanity prevails"
@@ -240,10 +240,10 @@ pact> (length { "a": 1, "b": 2 })
 
 ### list {#list}
 
-*elems*&nbsp;`*` *&rarr;*&nbsp;`list`
+*elems*&nbsp;`*` *&rarr;*&nbsp;`[*]`
 
 
-Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support. 
+Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support.
 ```lisp
 pact> (list 1 2 3)
 [1 2 3]
@@ -265,7 +265,7 @@ Top level only: this function will fail if used in module code.
 *length*&nbsp;`integer` *value*&nbsp;`<a>` *&rarr;*&nbsp;`[<a>]`
 
 
-Create list by repeating VALUE LENGTH times. 
+Create list by repeating VALUE LENGTH times.
 ```lisp
 pact> (make-list 5 true)
 [true true true true true]
@@ -274,10 +274,10 @@ pact> (make-list 5 true)
 
 ### map {#map}
 
-*app*&nbsp;`(x:<b> -> <a>)` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
+*app*&nbsp;`x:<b> -> <a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Apply APP to each element in LIST, returning a new list of results. 
+Apply APP to each element in LIST, returning a new list of results.
 ```lisp
 pact> (map (+ 1) [1 2 3])
 [2 3 4]
@@ -289,7 +289,7 @@ pact> (map (+ 1) [1 2 3])
 *namespace*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set the current namespace to NAMESPACE. All expressions that occur in a current transaction will be contained in NAMESPACE, and once committed, may be accessed via their fully qualified name, which will include the namespace. Subsequent namespace calls in the same tx will set a new namespace for all declarations until either the next namespace declaration, or the end of the tx. 
+Set the current namespace to NAMESPACE. All expressions that occur in a current transaction will be contained in NAMESPACE, and once committed, may be accessed via their fully qualified name, which will include the namespace. Subsequent namespace calls in the same tx will set a new namespace for all declarations until either the next namespace declaration, or the end of the tx.
 ```lisp
 (namespace 'my-namespace)
 ```
@@ -310,7 +310,7 @@ Return ID if called during current pact execution, failing if not.
  *&rarr;*&nbsp;`string`
 
 
-Obtain current pact build version. 
+Obtain current pact build version.
 ```lisp
 pact> (pact-version)
 "2.6.1"
@@ -336,7 +336,7 @@ Parse KEY string or number value from top level of message data body as decimal.
 *key*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
-Parse KEY string or number value from top level of message data body as integer. 
+Parse KEY string or number value from top level of message data body as integer.
 ```lisp
 (read-integer "age")
 ```
@@ -349,7 +349,7 @@ Parse KEY string or number value from top level of message data body as integer.
 *key*&nbsp;`string` *&rarr;*&nbsp;`<a>`
 
 
-Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type. 
+Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type.
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -361,7 +361,7 @@ Read KEY from top level of message data body, or data body itself if not provide
 *key*&nbsp;`string` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
-Remove entry for KEY from OBJECT. 
+Remove entry for KEY from OBJECT.
 ```lisp
 pact> (remove "bar" { "foo": 1, "bar": 2 })
 {"foo": 1}
@@ -381,7 +381,7 @@ Special form binds to a yielded object value from the prior step execution in a 
 *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Reverse LIST. 
+Reverse LIST.
 ```lisp
 pact> (reverse [1 2 3])
 [3 2 1]
@@ -395,12 +395,12 @@ pact> (reverse [1 2 3])
 *fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
 
 
-Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. 
+Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list.
 ```lisp
 pact> (sort [3 1 2])
 [1 2 3]
 pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
-[{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
+[{"name": "Val","age": 25} {"name": "Lin","age": 30}]
 ```
 
 
@@ -411,7 +411,7 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 *base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
-Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for the base. 
+Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for the base.
 ```lisp
 pact> (str-to-int 16 "abcdef123456")
 188900967593046
@@ -427,7 +427,7 @@ pact> (str-to-int "123456")
 *keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
-Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. 
+Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end.
 ```lisp
 pact> (take 2 "abcd")
 "ab"
@@ -443,7 +443,7 @@ pact> (take ['name] { 'name: "Vlad", 'active: false})
  *&rarr;*&nbsp;`string`
 
 
-Obtain hash of current transaction as a string. 
+Obtain hash of current transaction as a string.
 ```lisp
 pact> (tx-hash)
 "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
@@ -455,7 +455,7 @@ pact> (tx-hash)
 *x*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Returns type of X as string. 
+Returns type of X as string.
 ```lisp
 pact> (typeof "hello")
 "string"
@@ -464,13 +464,13 @@ pact> (typeof "hello")
 
 ### where {#where}
 
-*field*&nbsp;`string` *app*&nbsp;`(x:<a> -> bool)` *value*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`bool`
+*field*&nbsp;`string` *app*&nbsp;`x:<a> -> bool` *value*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`bool`
 
 
-Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE. 
+Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE.
 ```lisp
 pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
-[{"name": "Juan", "age": 15}]
+[{"name": "Juan","age": 15}]
 ```
 
 
@@ -479,7 +479,7 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 *OBJECT*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
 
 
-Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values. 
+Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values.
 ```lisp
 (yield { "amount": 100.0 })
 ```
@@ -491,7 +491,7 @@ Yield OBJECT for use with 'resume' in following pact step. The object is similar
 *table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`string`
 
 
-Create table TABLE. 
+Create table TABLE.
 ```lisp
 (create-table accounts)
 ```
@@ -514,7 +514,7 @@ Top level only: this function will fail if used in module code.
 *module*&nbsp;`string` *&rarr;*&nbsp;`value`
 
 
-Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. 
+Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields.
 ```lisp
 (describe-module 'my-module)
 ```
@@ -527,7 +527,7 @@ Top level only: this function will fail if used in module code.
 *table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`value`
 
 
-Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. 
+Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields.
 ```lisp
 (describe-table accounts)
 ```
@@ -548,10 +548,10 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data already exis
 
 ### keylog {#keylog}
 
-*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object]`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:*]`
 
 
-Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects indexed by txid. 
+Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects indexed by txid.
 ```lisp
 (keylog accounts "Alice" 123485945)
 ```
@@ -562,7 +562,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 *table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`[string]`
 
 
-Return all keys in TABLE. 
+Return all keys in TABLE.
 ```lisp
 (keys accounts)
 ```
@@ -575,7 +575,7 @@ Return all keys in TABLE.
 *table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object:<{row}>`
 
 
-Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified. 
+Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified.
 ```lisp
 (read accounts id ['balance 'ccy])
 ```
@@ -583,15 +583,15 @@ Read row from TABLE for KEY, returning database record object, or just COLUMNS i
 
 ### select {#select}
 
-*table*&nbsp;`table:<{row}>` *where*&nbsp;`(row:object:<{row}> -> bool)` *&rarr;*&nbsp;`[object:<{row}>]`
+*table*&nbsp;`table:<{row}>` *where*&nbsp;`row:object:<{row}> -> bool` *&rarr;*&nbsp;`[object:<{row}>]`
 
-*table*&nbsp;`table:<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`(row:object:<{row}> -> bool)` *&rarr;*&nbsp;`[object:<{row}>]`
+*table*&nbsp;`table:<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:<{row}> -> bool` *&rarr;*&nbsp;`[object:<{row}>]`
 
 
 Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.
 ```lisp
 (select people ['firstName,'lastName] (where 'name (= "Fatima")))
-(select people (where 'age (> 30)))
+(select people (where 'age (> 30)))?
 ```
 
 
@@ -600,7 +600,7 @@ Select full rows or COLUMNS from table by applying WHERE to each row to get a bo
 *table*&nbsp;`table:<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
 
 
-Return all txid values greater than or equal to TXID in TABLE. 
+Return all txid values greater than or equal to TXID in TABLE.
 ```lisp
 (txids accounts 123849535)
 ```
@@ -611,7 +611,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 *table*&nbsp;`table:<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[value]`
 
 
-Return all updates to TABLE performed in transaction TXID. 
+Return all updates to TABLE performed in transaction TXID.
 ```lisp
 (txlog accounts 123485945)
 ```
@@ -633,10 +633,10 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 *table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *defaults*&nbsp;`object:<{row}>` *bindings*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
 
 
-Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names. 
+Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names.
 ```lisp
 (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
-   (format "Balance for {} is {} {}" [id bal ccy]))
+  (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
 
@@ -648,7 +648,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.
 ```lisp
 (with-read accounts id { "balance":= bal, "ccy":= ccy }
-   (format "Balance for {} is {} {}" [id bal ccy]))
+  (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
 
@@ -671,7 +671,7 @@ Write entry in TABLE for KEY of OBJECT column data.
 *time*&nbsp;`time` *seconds*&nbsp;`integer` *&rarr;*&nbsp;`time`
 
 
-Add SECONDS to TIME; SECONDS can be integer or decimal. 
+Add SECONDS to TIME; SECONDS can be integer or decimal.
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") 15)
 "2016-07-22T12:00:15Z"
@@ -697,7 +697,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 *time1*&nbsp;`time` *time2*&nbsp;`time` *&rarr;*&nbsp;`decimal`
 
 
-Compute difference between TIME1 and TIME2 in seconds. 
+Compute difference between TIME1 and TIME2 in seconds.
 ```lisp
 pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
 23400
@@ -774,7 +774,7 @@ pact> (time "2016-07-22T11:26:35Z")
 *x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
-True if X does not equal Y. 
+True if X does not equal Y.
 ```lisp
 pact> (!= "hello" "goodbye")
 true
@@ -788,7 +788,7 @@ true
 *x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
-Multiply X by Y. 
+Multiply X by Y.
 ```lisp
 pact> (* 0.5 10.0)
 5
@@ -806,7 +806,7 @@ pact> (* 3 5)
 *x*&nbsp;`<a[string,[<l>],object:<{o}>]>` *y*&nbsp;`<a[string,[<l>],object:<{o}>]>` *&rarr;*&nbsp;`<a[string,[<l>],object:<{o}>]>`
 
 
-Add numbers, concatenate strings/lists, or merge objects. 
+Add numbers, concatenate strings/lists, or merge objects.
 ```lisp
 pact> (+ 1 2)
 3
@@ -817,7 +817,7 @@ pact> (+ "every" "body")
 pact> (+ [1 2] [3 4])
 [1 2 3 4]
 pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-{"bar": 2, "foo": 100}
+{"bar": 2,"foo": 100}
 ```
 
 
@@ -830,7 +830,7 @@ pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
-Negate X, or subtract Y from X. 
+Negate X, or subtract Y from X.
 ```lisp
 pact> (- 1.0)
 -1.0
@@ -846,7 +846,7 @@ pact> (- 3 2)
 *x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
-Divide X by Y. 
+Divide X by Y.
 ```lisp
 pact> (/ 10.0 2.0)
 5
@@ -860,7 +860,7 @@ pact> (/ 8 3)
 *x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
-True if X < Y. 
+True if X < Y.
 ```lisp
 pact> (< 1 3)
 true
@@ -876,7 +876,7 @@ true
 *x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
-True if X <= Y. 
+True if X <= Y.
 ```lisp
 pact> (<= 1 3)
 true
@@ -892,7 +892,7 @@ true
 *x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
-True if X equals Y. 
+True if X equals Y.
 ```lisp
 pact> (= [1 2 3] [1 2 3])
 true
@@ -908,7 +908,7 @@ true
 *x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
-True if X > Y. 
+True if X > Y.
 ```lisp
 pact> (> 1 3)
 false
@@ -924,7 +924,7 @@ false
 *x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
-True if X >= Y. 
+True if X >= Y.
 ```lisp
 pact> (>= 1 3)
 false
@@ -942,7 +942,7 @@ false
 *x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
-Raise X to Y power. 
+Raise X to Y power.
 ```lisp
 pact> (^ 2 3)
 8
@@ -956,7 +956,7 @@ pact> (^ 2 3)
 *x*&nbsp;`integer` *&rarr;*&nbsp;`integer`
 
 
-Absolute value of X. 
+Absolute value of X.
 ```lisp
 pact> (abs (- 10 23))
 13
@@ -968,7 +968,7 @@ pact> (abs (- 10 23))
 *x*&nbsp;`bool` *y*&nbsp;`bool` *&rarr;*&nbsp;`bool`
 
 
-Boolean logic with short-circuit. 
+Boolean logic with short-circuit.
 ```lisp
 pact> (and true false)
 false
@@ -977,10 +977,10 @@ false
 
 ### and? {#and?}
 
-*a*&nbsp;`(x:<r> -> bool)` *b*&nbsp;`(x:<r> -> bool)` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
+*a*&nbsp;`x:<r> -> bool` *b*&nbsp;`x:<r> -> bool` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
 
 
-Apply logical 'and' to the results of applying VALUE to A and B, with short-circuit. 
+Apply logical 'and' to the results of applying VALUE to A and B, with short-circuit.
 ```lisp
 pact> (and? (> 20) (> 10) 15)
 false
@@ -994,7 +994,7 @@ false
 *x*&nbsp;`decimal` *&rarr;*&nbsp;`integer`
 
 
-Rounds up value of decimal X as integer, or to PREC precision as decimal. 
+Rounds up value of decimal X as integer, or to PREC precision as decimal.
 ```lisp
 pact> (ceiling 3.5)
 4
@@ -1008,7 +1008,7 @@ pact> (ceiling 100.15234 2)
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
-Exp of X. 
+Exp of X.
 ```lisp
 pact> (round (exp 3) 6)
 20.085537
@@ -1022,7 +1022,7 @@ pact> (round (exp 3) 6)
 *x*&nbsp;`decimal` *&rarr;*&nbsp;`integer`
 
 
-Rounds down value of decimal X as integer, or to PREC precision as decimal. 
+Rounds down value of decimal X as integer, or to PREC precision as decimal.
 ```lisp
 pact> (floor 3.5)
 3
@@ -1036,7 +1036,7 @@ pact> (floor 100.15234 2)
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
-Natural log of X. 
+Natural log of X.
 ```lisp
 pact> (round (ln 60) 6)
 4.094345
@@ -1050,7 +1050,7 @@ pact> (round (ln 60) 6)
 *x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
-Log of Y base X. 
+Log of Y base X.
 ```lisp
 pact> (log 2 256)
 8
@@ -1062,7 +1062,7 @@ pact> (log 2 256)
 *x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
 
 
-X modulo Y. 
+X modulo Y.
 ```lisp
 pact> (mod 13 8)
 5
@@ -1074,7 +1074,7 @@ pact> (mod 13 8)
 *x*&nbsp;`bool` *&rarr;*&nbsp;`bool`
 
 
-Boolean logic. 
+Boolean not.
 ```lisp
 pact> (not (> 1 2))
 true
@@ -1083,10 +1083,10 @@ true
 
 ### not? {#not?}
 
-*app*&nbsp;`(x:<r> -> bool)` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
+*app*&nbsp;`x:<r> -> bool` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
 
 
-Apply logical 'not' to the results of applying VALUE to APP. 
+Apply logical 'not' to the results of applying VALUE to APP.
 ```lisp
 pact> (not? (> 20) 15)
 false
@@ -1098,7 +1098,7 @@ false
 *x*&nbsp;`bool` *y*&nbsp;`bool` *&rarr;*&nbsp;`bool`
 
 
-Boolean logic with short-circuit. 
+Boolean logic with short-circuit.
 ```lisp
 pact> (or true false)
 true
@@ -1107,10 +1107,10 @@ true
 
 ### or? {#or?}
 
-*a*&nbsp;`(x:<r> -> bool)` *b*&nbsp;`(x:<r> -> bool)` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
+*a*&nbsp;`x:<r> -> bool` *b*&nbsp;`x:<r> -> bool` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
 
 
-Apply logical 'or' to the results of applying VALUE to A and B, with short-circuit. 
+Apply logical 'or' to the results of applying VALUE to A and B, with short-circuit.
 ```lisp
 pact> (or? (> 20) (> 10) 15)
 true
@@ -1124,7 +1124,7 @@ true
 *x*&nbsp;`decimal` *&rarr;*&nbsp;`integer`
 
 
-Performs Banker's rounding value of decimal X as integer, or to PREC precision as decimal. 
+Performs Banker's rounding value of decimal X as integer, or to PREC precision as decimal.
 ```lisp
 pact> (round 3.5)
 4
@@ -1138,7 +1138,7 @@ pact> (round 100.15234 2)
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
-Square root of X. 
+Square root of X.
 ```lisp
 pact> (sqrt 25)
 5
@@ -1168,7 +1168,7 @@ Top level only: this function will fail if used in module code.
 *keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. 
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```lisp
 (enforce-keyset 'admin-keyset)
 (enforce-keyset row-guard)
@@ -1180,7 +1180,7 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 *count*&nbsp;`integer` *matched*&nbsp;`integer` *&rarr;*&nbsp;`bool`
 
 
-Keyset predicate function to match at least 2 keys in keyset. 
+Keyset predicate function to match at least 2 keys in keyset.
 ```lisp
 pact> (keys-2 3 1)
 false
@@ -1192,7 +1192,7 @@ false
 *count*&nbsp;`integer` *matched*&nbsp;`integer` *&rarr;*&nbsp;`bool`
 
 
-Keyset predicate function to match all keys in keyset. 
+Keyset predicate function to match all keys in keyset.
 ```lisp
 pact> (keys-all 3 3)
 true
@@ -1204,7 +1204,7 @@ true
 *count*&nbsp;`integer` *matched*&nbsp;`integer` *&rarr;*&nbsp;`bool`
 
 
-Keyset predicate function to match any (at least 1) key in keyset. 
+Keyset predicate function to match any (at least 1) key in keyset.
 ```lisp
 pact> (keys-any 10 1)
 true
@@ -1216,7 +1216,7 @@ true
 *key*&nbsp;`string` *&rarr;*&nbsp;`keyset`
 
 
-Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN }). PREDFUN should resolve to a keys predicate. 
+Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN }). PREDFUN should resolve to a keys predicate.
 ```lisp
 (read-keyset "admin-keyset")
 ```
@@ -1225,10 +1225,10 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 
 ### compose-capability {#compose-capability}
 
-*capability*&nbsp;`( -> bool)` *&rarr;*&nbsp;`bool`
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
 
 
-Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production, only valid within a (distinct) 'defcap' body, as a way to compose CAPABILITY with the outer capability such that the scope of the containing 'with-capability' call will "import" this capability. Thus, a call to '(with-capability (OUTER-CAP) OUTER-BODY)', where the OUTER-CAP defcap calls '(compose-capability (INNER-CAP))', will result in INNER-CAP being granted in the scope of OUTER-BODY. 
+Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production, only valid within a (distinct) 'defcap' body, as a way to compose CAPABILITY with the outer capability such that the scope of the containing 'with-capability' call will "import" this capability. Thus, a call to '(with-capability (OUTER-CAP) OUTER-BODY)', where the OUTER-CAP defcap calls '(compose-capability (INNER-CAP))', will result in INNER-CAP being granted in the scope of OUTER-BODY.
 ```lisp
 (compose-capability (TRANSFER src dest))
 ```
@@ -1265,7 +1265,7 @@ Defines a custom guard predicate, where DATA will be passed to PREDFUN at time o
 *keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. 
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```lisp
 (enforce-guard 'admin-keyset)
 (enforce-guard row-guard)
@@ -1282,10 +1282,10 @@ Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Co
 
 ### require-capability {#require-capability}
 
-*capability*&nbsp;`( -> bool)` *&rarr;*&nbsp;`bool`
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
 
 
-Specifies and tests for existing grant of CAPABILITY, failing if not found in environment. 
+Specifies and tests for existing grant of CAPABILITY, failing if not found in environment.
 ```lisp
 (require-capability (TRANSFER src dest))
 ```
@@ -1293,10 +1293,10 @@ Specifies and tests for existing grant of CAPABILITY, failing if not found in en
 
 ### with-capability {#with-capability}
 
-*capability*&nbsp;`( -> bool)` *body*&nbsp;`list` *&rarr;*&nbsp;`<a>`
+*capability*&nbsp;` -> bool` *body*&nbsp;`[*]` *&rarr;*&nbsp;`<a>`
 
 
-Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is applied, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 
+Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is applied, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY.
 ```lisp
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```
@@ -1313,7 +1313,7 @@ The following functions are loaded automatically into the interactive REPL, or w
 *name*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Begin transaction with optional NAME. 
+Begin transaction with optional NAME.
 ```lisp
 (begin-tx "load module")
 ```
@@ -1324,7 +1324,7 @@ Begin transaction with optional NAME.
 *exprs*&nbsp;`*` *&rarr;*&nbsp;`string`
 
 
-Benchmark execution of EXPRS. 
+Benchmark execution of EXPRS.
 ```lisp
 (bench (+ 1 2))
 ```
@@ -1335,7 +1335,7 @@ Benchmark execution of EXPRS.
  *&rarr;*&nbsp;`string`
 
 
-Commit transaction. 
+Commit transaction.
 ```lisp
 (commit-tx)
 ```
@@ -1346,7 +1346,7 @@ Commit transaction.
 *json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,value]>` *&rarr;*&nbsp;`string`
 
 
-Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. 
+Set transaction JSON data, either as encoded string, or as pact types coerced to JSON.
 ```lisp
 pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
 "Setting transaction data"
@@ -1360,7 +1360,7 @@ pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any"
 *entity*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set environment confidential ENTITY id, or unset with no argument. Clears any previous pact execution state. 
+Set environment confidential ENTITY id, or unset with no argument. Clears any previous pact execution state.
 ```lisp
 (env-entity "my-org")
 (env-entity)
@@ -1406,7 +1406,7 @@ Update gas model to charge constant RATE.
 *hash*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. 
+Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash.
 ```lisp
 pact> (env-hash (hash "hello"))
 "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
@@ -1418,7 +1418,7 @@ pact> (env-hash (hash "hello"))
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-Set transaction signature KEYS. 
+Set transaction signature KEYS.
 ```lisp
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
@@ -1446,7 +1446,7 @@ Query environment pact id, or set to ID.
 *step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *resume*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
 
 
-Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'.Clears any previous pact execution state. 
+Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'.Clears any previous pact execution state.
 ```lisp
 (env-step 1)
 (env-step 0 true)
@@ -1458,7 +1458,7 @@ Set pact step state. With no arguments, unset step. With STEP-IDX, set step inde
 *doc*&nbsp;`string` *expected*&nbsp;`<a>` *actual*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Evaluate ACTUAL and verify that it equals EXPECTED. 
+Evaluate ACTUAL and verify that it equals EXPECTED.
 ```lisp
 pact> (expect "Sanity prevails." 4 (+ 2 2))
 "Expect: success: Sanity prevails."
@@ -1470,7 +1470,7 @@ pact> (expect "Sanity prevails." 4 (+ 2 2))
 *doc*&nbsp;`string` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Evaluate EXP and succeed only if it throws an error. 
+Evaluate EXP and succeed only if it throws an error.
 ```lisp
 pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 "Expect failure: success: Enforce fails on false"
@@ -1485,7 +1485,7 @@ pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 Encode pact expression EXP as a JSON value. This is only needed for tests, as Pact values are automatically represented as JSON in API output. 
 ```lisp
 pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
-[{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
+[{"age": 10.0,"name": "joe"} {"age": 25.0,"name": "mary"}]
 ```
 
 
@@ -1496,7 +1496,7 @@ pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
 *file*&nbsp;`string` *reset*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
 
-Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. 
+Load and evaluate FILE, resetting repl state beforehand if optional RESET is true.
 ```lisp
 (load "accounts.repl")
 ```
@@ -1504,10 +1504,10 @@ Load and evaluate FILE, resetting repl state beforehand if optional RESET is tru
 
 ### pact-state {#pact-state}
 
- *&rarr;*&nbsp;`object`
+ *&rarr;*&nbsp;`object:*`
 
 
-Inspect state from previous pact execution. Returns object with fields 'yield': yield result or 'false' if none; 'step': executed step; 'executed': indicates if step was skipped because entity did not match. 
+Inspect state from previous pact execution. Returns object with fields 'yield': yield result or 'false' if none; 'step': executed step; 'executed': indicates if step was skipped because entity did not match.
 ```lisp
 (pact-state)
 ```
@@ -1526,7 +1526,7 @@ Output VALUE to terminal as unquoted, unescaped text.
  *&rarr;*&nbsp;`string`
 
 
-Rollback transaction. 
+Rollback transaction.
 ```lisp
 (rollback-tx)
 ```

@@ -146,8 +146,8 @@ enforceGuardDef dn =
   defRNative dn enforceGuard'
   (funType tTyBool [("guard",tTyGuard Nothing)] <>
    funType tTyBool [("keysetname",tTyString)])
-  [ ExecErrExample $ "(" <> asString dn <> " 'admin-keyset)"
-  , ExecErrExample $ "(" <> asString dn <> " row-guard)"
+  [ LitExample $ "(" <> asString dn <> " 'admin-keyset)"
+  , LitExample $ "(" <> asString dn <> " row-guard)"
   ]
   "Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic."
   where

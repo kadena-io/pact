@@ -41,7 +41,7 @@ import Control.Lens (makePrisms)
 import Data.List
 import Control.Monad
 import Prelude
-import Data.Text (Text,pack,unpack)
+import Data.Text (Text,pack)
 import Data.Aeson
 import Data.Char
 import Data.Thyme
@@ -80,18 +80,18 @@ formatLTime = pack . formatTime defaultTimeLocale simpleISO8601
 {-# INLINE formatLTime #-}
 
 instance Pretty Literal where
-    pretty (LString s) = dquotes $ pretty s
+    pretty (LString s)  = dquotes $ pretty s
     pretty (LInteger i) = pretty i
     pretty (LDecimal r) = text $ show r
-    pretty (LBool b) = string $ map toLower $ show b
-    pretty (LTime t) = string $ unpack $ formatLTime t
+    pretty (LBool b)    = string $ map toLower $ show b
+    pretty (LTime t)    = dquotes $ pretty $ formatLTime t
 
 instance ToJSON Literal where
-    toJSON (LString s) = String s
+    toJSON (LString s)  = String s
     toJSON (LInteger i) = Number (scientific i 0)
     toJSON (LDecimal r) = toJSON (show r)
-    toJSON (LBool b) = toJSON b
-    toJSON (LTime t) = toJSON (formatLTime t)
+    toJSON (LBool b)    = toJSON b
+    toJSON (LTime t)    = toJSON (formatLTime t)
     {-# INLINE toJSON #-}
 
 

@@ -23,23 +23,24 @@ import Data.Aeson
 import Data.String
 import Data.Hashable
 import Data.Typeable
+import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
 
 import Pact.Types.Runtime
 
 type Persist s a = s -> IO (s,a)
 
 newtype DataKey = DataKey Text
-  deriving (Eq,Ord,IsString,AsString,Hashable)
+  deriving (Eq,Ord,IsString,AsString,Hashable,Pretty)
 instance Show DataKey where show (DataKey k) = show k
 newtype TxKey = TxKey Integer
-  deriving (Eq,Ord,Num,Enum,Real,Integral,Hashable)
+  deriving (Eq,Ord,Num,Enum,Real,Integral,Hashable,Pretty)
 instance Show TxKey where show (TxKey k) = show k
 
 type DataTable = Table DataKey
 type TxTable = Table TxKey
 
 newtype TableId = TableId Text
-  deriving (Eq,Show,Ord,IsString,AsString,Hashable)
+  deriving (Eq,Show,Ord,IsString,AsString,Hashable, Pretty)
 
 data Table k where
   DataTable :: !TableId -> DataTable
@@ -56,6 +57,10 @@ deriving instance Ord (Table k)
 instance Hashable k => Hashable (Table k) where
   hashWithSalt s (DataTable t) = s `hashWithSalt` (0::Int) `hashWithSalt` t
   hashWithSalt s (TxTable t) = s `hashWithSalt` (1::Int) `hashWithSalt` t
+
+instance Pretty (Table k) where
+  pretty (DataTable tid) = pretty tid
+  pretty (TxTable tid) = pretty tid
 
 data KeyCmp = KGT|KGTE|KEQ|KNEQ|KLT|KLTE deriving (Eq,Show,Ord,Enum)
 data KeyConj = AND|OR deriving (Eq,Show,Ord,Enum)
@@ -108,7 +113,7 @@ compileQuery keyfield (Just kq) = ("WHERE " <> qs,pms)
 {-# INLINE compileQuery #-}
 
 
-class (Ord k,Show k,Eq k,Hashable k) => PactKey k
+class (Ord k,Show k,Eq k,Hashable k,Pretty k) => PactKey k
 instance PactKey TxKey
 instance PactKey DataKey
 

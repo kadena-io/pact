@@ -64,7 +64,8 @@ module Pact.Types.Term
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
-   Gas(..)
+   Gas(..),
+   commaBraces
    ) where
 
 
@@ -152,9 +153,9 @@ data KeySet = KeySet {
     , _ksPredFun :: !Name
     } deriving (Eq,Generic,Show)
 
-commaBraces, commaBrackets, parensSep :: [Doc] -> Doc
+commaBraces, spaceBrackets, parensSep :: [Doc] -> Doc
 commaBraces   = encloseSep "{" "}" ","
-commaBrackets = encloseSep "[" "]" ","
+spaceBrackets = encloseSep "[" "]" " "
 parensSep     = parens . sep
 
 instance Pretty KeySet where
@@ -381,10 +382,12 @@ instance Pretty Name where
     QName modName nName _ -> pretty modName <> "." <> pretty nName
     Name nName _          -> pretty nName
 
-instance ToJSON Name where toJSON = toJSON . show
+instance ToJSON Name where
+  toJSON = toJSON . renderCompactString
+
 instance FromJSON Name where
   parseJSON = withText "Name" $ \t -> case parseName def t of
-    Left s -> fail s
+    Left s  -> fail s
     Right n -> return n
 
 parseName :: Info -> Text -> Either String Name
@@ -796,7 +799,7 @@ instance Pretty n => Pretty (Term n) where
   pretty = \case
     TModule{..} -> parensSep
       [ "TModule", pretty _tModuleDef, prettyUnscope _tModuleBody ]
-    TList{..} -> prettyList _tList
+    TList{..} -> spaceBrackets $ pretty <$> _tList
     TDef{..} -> pretty _tDef
     TNative{..} -> dullgreen ("native function `" <> pretty (asString' _tNativeName) <> "`")
       <> nest 2 (
@@ -821,7 +824,7 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tBindType
       ]
     TObject bs _ _ -> blue $ commaBraces $
-      fmap (\(a, b) -> dquotes (pretty a) <> ": " <> pretty b) bs
+      fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
     TLiteral l _ -> blue $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
@@ -844,9 +847,9 @@ instance Pretty n => Pretty (Term n) where
 prettyValue :: Value -> Doc
 prettyValue = \case
   Object hm -> commaBraces
-    $ fmap (\(k, v) -> pretty k <> ": " <> prettyValue v)
+    $ fmap (\(k, v) -> dquotes (pretty k) <> ": " <> prettyValue v)
     $ HM.toList hm
-  Array values -> commaBrackets $ prettyValue <$> toList values
+  Array values -> spaceBrackets $ prettyValue <$> toList values
   String str -> dquotes $ pretty str
   Number scientific -> text $ show scientific
   Bool b -> pretty b
@@ -991,8 +994,10 @@ typeof t = case t of
 {-# INLINE typeof #-}
 
 -- | Return string type description.
-typeof' :: Show a => Term a -> Text
-typeof' = either id (pack . show) . typeof
+typeof' :: Pretty a => Term a -> Text
+typeof'
+  = either id (pack . renderCompactString)
+  . typeof
 
 pattern TLitString :: Text -> Term t
 pattern TLitString s <- TLiteral (LString s) _

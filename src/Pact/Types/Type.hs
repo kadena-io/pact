@@ -48,7 +48,6 @@ import GHC.Generics (Generic)
 import Data.Hashable
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Foldable
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen
 import Control.DeepSeq
 import Data.Text (Text,unpack)
@@ -69,7 +68,7 @@ data Arg o = Arg {
 
 instance NFData o => NFData (Arg o)
 instance (Pretty o) => Pretty (Arg o)
-  where pretty (Arg n t _) = pretty n PP.<> colon PP.<> pretty t
+  where pretty (Arg n t _) = pretty n <> colon <> pretty t
 
 -- | Function type
 data FunType o = FunType {
@@ -150,8 +149,8 @@ data SchemaType =
 
 instance NFData SchemaType
 instance Pretty SchemaType where
-  pretty TyTable = text $ unpack tyTable
-  pretty TyObject = text $ unpack tyObject
+  pretty TyTable   = text $ unpack tyTable
+  pretty TyObject  = text $ unpack tyObject
   pretty TyBinding = "binding"
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
@@ -176,8 +175,11 @@ instance Ord (TypeVar v) where
     (SchemaVar a,SchemaVar b) -> a `compare` b
 instance (Pretty v) => Pretty (TypeVar v) where
   pretty (TypeVar n []) = angles (pretty n)
-  pretty (TypeVar n cs) = angles (pretty n <+> brackets (hsep (map pretty cs)))
-  pretty (SchemaVar n) = angles (braces (pretty n))
+  pretty (TypeVar n cs) = angles (pretty n <> commaBrackets (map pretty cs))
+  pretty (SchemaVar n)  = angles (braces (pretty n))
+
+commaBrackets :: [Doc] -> Doc
+commaBrackets = encloseSep "[" "]" ","
 
 -- | Pact types.
 data Type v =
@@ -194,13 +196,13 @@ instance NFData v => NFData (Type v)
 
 instance (Pretty o) => Pretty (Type o) where
   pretty ty = case ty of
-    TyVar n -> pretty n
-    TyUser v -> pretty v
-    TyFun f -> pretty f
-    TySchema s t -> pretty s PP.<> colon PP.<> pretty t
-    TyList t -> "list:" PP.<> pretty t
-    TyPrim t -> pretty t
-    TyAny -> "*"
+    TyVar n      -> pretty n
+    TyUser v     -> pretty v
+    TyFun f      -> pretty f
+    TySchema s t -> pretty s <> colon <> pretty t
+    TyList t     -> brackets $ pretty t
+    TyPrim t     -> pretty t
+    TyAny        -> "*"
 
 mkTyVar :: TypeVarName -> [Type n] -> Type n
 mkTyVar n cs = TyVar (TypeVar n cs)

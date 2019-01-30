@@ -19,15 +19,16 @@
 
 module Pact.Docgen where
 
-import           Control.Lens         (ifor_)
+import           Control.Lens                 (ifor_)
 import           Control.Monad
 import           Control.Monad.Catch
-import           Data.Foldable        (for_)
+import           Data.Foldable                (for_)
 import           Data.Function
 import           Data.List
-import           Data.Text            (replace)
-import qualified Data.Text            as T
+import           Data.Text                    (replace)
+import qualified Data.Text                    as T
 import           System.IO
+import           Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), dquotes)
 
 import qualified Pact.Analyze.Feature as Analyze
 import           Pact.Native
@@ -56,18 +57,19 @@ renderFunctions h = do
   hPutStrLn h ""
   renderSection (snd replDefs)
 
-renderTerm :: Show n => Handle -> Term n -> IO ()
+renderTerm :: Pretty n => Handle -> Term n -> IO ()
 renderTerm h TNative {..} = do
   hPutStrLn h ""
   hPutStrLn h $ "### " ++ escapeText (unpack $ asString _tNativeName)
              ++ " {#" ++ escapeAnchor (unpack $ asString _tNativeName) ++ "}"
   hPutStrLn h ""
   forM_ _tFunTypes $ \FunType {..} -> do
-    hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ unpack n ++ "*&nbsp;`" ++ show t ++ "`") _ftArgs) ++
-      " *&rarr;*&nbsp;`" ++ show _ftReturn ++ "`"
+    hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ unpack n ++
+      "*&nbsp;`" ++ renderCompactString t ++ "`") _ftArgs) ++
+      " *&rarr;*&nbsp;`" ++ renderCompactString _ftReturn ++ "`"
     hPutStrLn h ""
   hPutStrLn h ""
-  let noexs = hPutStrLn stderr $ "No examples for " ++ show _tNativeName
+  let noexs = hPutStrLn stderr $ "No examples for " ++ renderCompactString _tNativeName
 
   -- render docs and examples
   hPutStrLn h $ unpack _tNativeDocs
@@ -95,10 +97,12 @@ renderExamples h f es = do
         hPutStrLn h $ "pact> " ++ e
         r <- evalRepl FailureTest e
         case (r,eTy) of
-          (Right r',_)       -> hPrint h r'
+          (Right r',_)       -> hPutStrLn h $ renderCompactString r'
           (Left err,ExecErr) -> hPutStrLn h err
           (Left err,_)       ->
-            throwM (userError $ "Error rendering example for function " ++ show f ++ ": " ++ e ++ ": " ++ err)
+            throwM $ userError $
+              "Error rendering example for function " ++
+              renderCompactString f ++ ": " ++ e ++ ": " ++ err
   hPutStrLn h "```"
 
 renderProperties :: Handle -> IO ()
@@ -168,7 +172,8 @@ renderProperties h = do
     showType :: Analyze.Type -> String
     showType (Analyze.TyCon ct) = showConTy ct
     showType (Analyze.TyVar (Analyze.TypeVar (unpack -> tv))) = "_" ++ tv ++ "_"
-    showType (Analyze.TyEnum vals) = "one of {" ++ intercalate ", " (fmap show vals) ++ "}"
+    showType (Analyze.TyEnum vals) = renderCompactString $
+      "one of " <> commaBraces (dquotes . pretty <$> vals)
 
 escapeText :: String -> String
 escapeText n

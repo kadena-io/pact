@@ -74,7 +74,7 @@ addDef = defRNative "+" plus plusTy
 
 subDef :: NativeDef
 subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
-  ["(- 1.0) (- 3 2)"]
+  ["(- 1.0)", "(- 3 2)"]
   "Negate X, or subtract Y from X."
   where
 

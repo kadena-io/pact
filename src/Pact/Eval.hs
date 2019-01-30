@@ -100,7 +100,9 @@ enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   let count = length _ksKeys
       matched = S.size $ S.intersection (S.fromList _ksKeys) sigs
-      failed = failTx i $ "Keyset failure (" ++ show _ksPredFun ++ ")" ++ maybe "" (": " ++) (fmap show ksn)
+      failed = failTx i $ "Keyset failure (" ++
+        renderCompactString _ksPredFun ++ ")" ++
+        maybe "" (": " ++) (fmap show ksn)
       runBuiltIn p | p count matched = return ()
                    | otherwise = failed
       atLeast t m = m >= t
@@ -113,7 +115,8 @@ enforceKeySet i ksn KeySet{..} = do
         App (TVar _ksPredFun def) [toTerm count,toTerm matched] i
       case r of
         (TLiteral (LBool b) _) | b -> return ()
-                               | otherwise -> failTx i $ "Keyset failure: " ++ maybe "[dynamic]" show ksn
+                               | otherwise -> failTx i $ "Keyset failure: " ++
+                                   maybe "[dynamic]" renderCompactString ksn
         _ -> evalError i $ "Invalid response from keyset predicate: " ++ show r
 {-# INLINE enforceKeySet #-}
 
