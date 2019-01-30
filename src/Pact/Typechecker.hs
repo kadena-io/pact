@@ -313,7 +313,8 @@ applySchemas Pre ast = case ast of
       -- smap: lookup from field name to ty
       let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
           filterPartial SPFull = id
-          filterPartial (SPPartial ks) = (`M.restrictKeys` ks)
+          filterPartial (SPPartial ks) | S.null ks = id
+                                       | otherwise = (`M.restrictKeys` ks)
       -- over each object field ...
       pks <- fmap (Set.fromList . concat) $ forM (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
         -- validate field exists ...
@@ -655,8 +656,8 @@ unifyTypes l r = case (l,r) of
         (SPPartial {},SPFull) -> setPartial spa
         (SPPartial as,SPPartial bs)
           | as == bs           -> Just u
-          | bs `isSubsetOf` as -> setPartial spb
-          | as `isSubsetOf` bs -> setPartial spa
+          | S.null as || bs `isSubsetOf` as -> setPartial spb
+          | S.null bs || as `isSubsetOf` bs -> setPartial spa
           | otherwise          -> Nothing
     unifyVar vWrap sWrap v s =
       let useS = sWrap s
