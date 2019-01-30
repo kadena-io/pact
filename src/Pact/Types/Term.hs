@@ -271,6 +271,9 @@ defTypeRep Defcap = "defcap"
 newtype NativeDefName = NativeDefName Text
     deriving (Eq,Ord,IsString,ToJSON,AsString,Show)
 
+instance Pretty NativeDefName where
+  pretty (NativeDefName name) = pretty name
+
 -- | Capture function application metadata
 data FunApp = FunApp {
       _faInfo :: !Info
