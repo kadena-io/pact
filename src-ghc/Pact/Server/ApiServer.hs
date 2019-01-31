@@ -120,7 +120,7 @@ listenHandler (ListenerRequest rk) = do
       log $ "Listener Serviced for: " ++ show rk
       pure $ crToAr cr
 
-localHandler :: Command T.Text -> Api (CommandSuccess Value)
+localHandler :: Command T.Text -> Api (CommandValue Value)
 localHandler commandText = do
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
@@ -128,7 +128,7 @@ localHandler commandText = do
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
   case parseMaybe parseJSON r of
-    Just v@CommandSuccess{} -> pure v
+    Just v  -> pure v
     Nothing -> die' "command could not be run locally"
 
 versionHandler :: Handler T.Text

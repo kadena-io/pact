@@ -12,6 +12,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Types.Command
@@ -39,7 +40,7 @@ module Pact.Types.Command
   , UserSig(..),usScheme,usPubKey,usSig
 
   , CommandError(..)
-  , CommandSuccess(..)
+  , CommandValue(..)
   , CommandResult(..)
   , ExecutionMode(..), emTxId
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
@@ -253,37 +254,48 @@ instance FromJSON UserSig where
   {-# INLINE parseJSON #-}
 
 
-
-
-
-
-data CommandError = CommandError {
-      _ceMsg :: String
-    , _ceDetail :: Maybe String
-}
-instance ToJSON CommandError where
-    toJSON (CommandError m d) =
-        object $ [ "status" .= ("failure" :: String)
-                 , "error" .= m ] ++
-        maybe [] ((:[]) . ("detail" .=)) d
-
-newtype CommandSuccess a = CommandSuccess { _csData :: a }
-  deriving (Eq, Show)
-
-instance (ToJSON a) => ToJSON (CommandSuccess a) where
-    toJSON (CommandSuccess a) =
-        object [ "status" .= ("success" :: String)
-               , "data" .= a ]
-
-instance (FromJSON a) => FromJSON (CommandSuccess a) where
-    parseJSON = withObject "CommandSuccess" $ \o ->
-        CommandSuccess <$> o .: "data"
-
 data CommandResult = CommandResult {
   _crReqKey :: RequestKey,
   _crTxId :: Maybe TxId,
   _crResult :: Value
   } deriving (Eq,Show)
+
+-- | Actual value of a `CommandResult`.
+data CommandValue a
+  = CommandSuccess a
+  | CommandFailure CommandError
+  deriving (Eq, Show)
+
+-- | Error details for `CommandValue`.
+data CommandError = CommandError {
+      _ceMsg :: String
+    , _ceDetail :: Maybe String
+  } deriving (Eq, Show)
+
+
+instance ToJSON a => ToJSON (CommandValue a) where
+    toJSON = \case
+      CommandSuccess a -> object
+        [ "status" .= ("success" :: Text)
+        , "data"   .= a
+        ]
+      CommandFailure (CommandError {..}) -> object $
+        [ "status" .= ("failure" :: Text)
+        , "error" .= _ceMsg
+        ]
+        ++ maybe [] (pure . ("detail" .=)) _ceDetail
+
+instance FromJSON a => FromJSON (CommandValue a) where
+  parseJSON = withObject "CommandValue" $ \o -> do
+    status <- o .: "status"
+    case status of
+      "failure" -> do
+        msg <- o .: "error"
+        detail <- fmap Just (o .: "detail") <|> pure Nothing
+        pure $ CommandFailure $ CommandError msg detail
+      "success" -> do
+        CommandSuccess <$> o .: "data"
+      _ -> fail $ "Expected a status of `success` or `failure`, not: " <> status
 
 
 cmdToRequestKey :: Command a -> RequestKey
