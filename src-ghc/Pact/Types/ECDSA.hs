@@ -6,6 +6,7 @@ module Pact.Types.ECDSA
   , PrivateKey
   , Signature
   , genKeyPair
+  , getPublicKey
   , hashAlgoETH
   , signETH
   , validETH
@@ -20,7 +21,7 @@ import Data.ByteString  (ByteString)
 import Data.Text        (Text)
 import Data.Monoid      ((<>))
 
-import Crypto.PubKey.ECC.Generate  (generate)
+import Crypto.PubKey.ECC.Generate  (generate, generateQ)
 import Crypto.PubKey.ECC.ECDSA     (PublicKey(..), PrivateKey(..), Signature(..))
 import Crypto.PubKey.ECC.Prim      (isPointValid, isPointAtInfinity)
 import Crypto.Number.Serialize     (i2osp, os2ip)
@@ -49,6 +50,10 @@ hashAlgoETH = H.SHA3_256
 
 genKeyPair :: IO (PublicKey, PrivateKey)
 genKeyPair = generate curveECDSA
+
+
+getPublicKey :: PrivateKey -> PublicKey
+getPublicKey (PrivateKey curve d) = PublicKey curve (generateQ curve d)
 
 
 signETH :: ByteString -> PublicKey -> PrivateKey -> IO Signature

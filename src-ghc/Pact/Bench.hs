@@ -118,7 +118,7 @@ main :: IO ()
 main = do
   !pub <- eitherDie $ parseB16TextOnly "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
   !priv <- eitherDie $ parseB16TextOnly "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
-  !keyPair <- eitherDie $ importKeyPair defaultScheme (PubBS pub) (PrivBS priv)
+  !keyPair <- eitherDie $ importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS priv)
   !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
   initSchema pureDb

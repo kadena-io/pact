@@ -15,7 +15,7 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, William Martino <will@kadena.io>
 --
--- PPK and hashing types.
+-- Hashing types and Scheme class.
 --
 module Pact.Types.Crypto
   ( hashTx
@@ -32,6 +32,7 @@ module Pact.Types.Crypto
   , sign
   , verify
   , formatPublicKey
+  , formatPublicKeyBS
   , kpToPPKScheme
   , getPublic
   , getPrivate
@@ -60,6 +61,52 @@ import Pact.Types.Util
 import Pact.Types.Scheme               as ST
 import qualified Crypto.Ed25519.Pure   as Ed25519
 import qualified Pact.Types.ECDSA      as ECDSA
+
+
+
+
+--------- INTERNAL SCHEME CLASS ---------
+
+class ConvertBS a where
+  toBS :: a -> ByteString
+  fromBS :: ByteString -> Either String a
+
+
+
+
+-- Scheme class created to enforce at the type level that Public Key,
+-- Private Key, and Signature are of the same scheme when signing
+-- and validating.
+
+-- Also ensures that each scheme specifies its payload hash and
+-- how it will transform its public keys to Pact Runtime public keys.
+
+class (ConvertBS (PublicKey a),
+       ConvertBS (PrivateKey a),
+       ConvertBS (Signature a))  =>
+      Scheme a where
+
+  type PublicKey a
+  type PrivateKey a
+  type Signature a
+
+  _hashPayload :: a -> ByteString -> ByteString
+  _sign :: a -> ByteString -> PublicKey a -> PrivateKey a -> IO (Signature a)
+  _valid :: a -> ByteString -> PublicKey a -> Signature a -> Bool
+  _genKeyPair :: a -> IO (PublicKey a, PrivateKey a)
+
+
+  -- Trivial to derive in Elliptic Curve Cryptography
+
+  _getPublic :: a -> PrivateKey a -> Maybe (PublicKey a)
+
+
+  -- Converts Cryptographic public keys to Pact Runtime public keys depending on the scheme.
+  -- Pact uses Cryptographic PKs to sign/validate transactions.
+  -- While it uses Runtime PKs during keyset enforcement to denote ownership and permissions.
+  -- Certain schemes (i.e. Ethereum) call Runtime public keys 'addresses'.
+
+  _formatPublicKey :: a -> PublicKey a -> ByteString
 
 
 
@@ -118,6 +165,7 @@ instance Scheme (SPPKScheme 'ED25519) where
   _sign s msg pub priv = return $ Ed25519.sign (_hashPayload s msg) priv pub
   _valid s msg pub sig = Ed25519.valid (_hashPayload s msg) pub sig
   _genKeyPair _ = ed25519GenKeyPair
+  _getPublic _ = Just . ed25519GetPublicKey
   _formatPublicKey _ p = toBS p
 
 
@@ -149,6 +197,7 @@ instance Scheme (SPPKScheme 'ETH) where
   _sign s msg pub priv = ECDSA.signETH (_hashPayload s msg) pub priv
   _valid s msg pub sig = ECDSA.validETH (_hashPayload s msg) pub sig
   _genKeyPair _ = ECDSA.genKeyPair
+  _getPublic _ = Just . ECDSA.getPublicKey
   _formatPublicKey _ p = ECDSA.formatPublicKeyETH (toBS p)
 
 
@@ -227,6 +276,11 @@ verify (SomeScheme scheme) msg (PubBS pBS) (SigBS sigBS) =
 formatPublicKey :: SomeKeyPair -> ByteString
 formatPublicKey (SomeKeyPair KeyPair{..}) = _formatPublicKey _kpScheme _kpPublicKey
 
+formatPublicKeyBS :: SomeScheme -> PublicKeyBS -> Either String ByteString
+formatPublicKeyBS (SomeScheme scheme) (PubBS pBS) = do
+  pub <- fromBS pBS
+  return $ _formatPublicKey scheme pub
+
 
 
 -- Key Pair getter functions
@@ -250,10 +304,17 @@ genKeyPair (SomeScheme scheme) = do
   return $ SomeKeyPair $ KeyPair scheme pub priv
 
 
-importKeyPair :: SomeScheme -> PublicKeyBS -> PrivateKeyBS -> Either String SomeKeyPair
-importKeyPair (SomeScheme scheme) (PubBS pubBS) (PrivBS privBS) = do
-  pub <- fromBS pubBS
+-- Derives Public Key from Private Key if none provided. Trivial in some
+-- Crypto schemes (i.e. Elliptic curve ones).
+
+importKeyPair :: SomeScheme -> Maybe PublicKeyBS -> PrivateKeyBS -> Either String SomeKeyPair
+importKeyPair (SomeScheme scheme) maybePubBS (PrivBS privBS) = do
   priv <- fromBS privBS
+  pub <- case maybePubBS of
+    Just (PubBS pubBS) -> fromBS pubBS
+    Nothing  -> maybe (Left $ show (toPPKScheme scheme) ++ " Key Pair import failed: Need Public Key")
+                (Right) (_getPublic scheme priv)
+
   return $ SomeKeyPair $ KeyPair scheme pub priv
 
 
@@ -281,6 +342,11 @@ ed25519GenKeyPair = do
     case Ed25519.generateKeyPair g of
       Left _ -> error "Something went wrong in genKeyPairs"
       Right (s,p,_) -> return (p, s)
+
+
+ed25519GetPublicKey :: Ed25519.PrivateKey -> Ed25519.PublicKey
+ed25519GetPublicKey = Ed25519.generatePublic
+
 
 
 

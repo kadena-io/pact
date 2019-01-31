@@ -51,9 +51,10 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.API
 
 data ApiKeyPair = ApiKeyPair {
-  _akpSecret :: PrivateKeyBS,
-  _akpPublic :: PublicKeyBS,
-  _akpScheme :: Maybe PPKScheme
+  _akpSecret  :: PrivateKeyBS,
+  _akpPublic  :: Maybe PublicKeyBS,
+  _akpAddress :: Maybe Text,
+  _akpScheme  :: Maybe PPKScheme
   } deriving (Eq, Show, Generic)
 instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
@@ -165,12 +166,28 @@ mkCont txid step rollback mdata pubMeta kps ridm = do
 
 mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPair]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
-  where mkPair ApiKeyPair{..} =
-          let res = case _akpScheme of
-                      Nothing -> importKeyPair defaultScheme _akpPublic _akpSecret
-                      Just ppk -> importKeyPair (toScheme ppk) _akpPublic _akpSecret
-          in either dieAR return res
+  where isValidKeyPair ApiKeyPair{..} =
+          case _akpScheme of
+            Nothing  -> importKeyPair defaultScheme _akpPublic _akpSecret
+            Just ppk -> importKeyPair (toScheme ppk) _akpPublic _akpSecret
 
+        mkPair akp = case _akpAddress akp of
+          Nothing    -> either dieAR return (isValidKeyPair akp)
+          Just addrT -> do
+            addrBS <- either dieAR return (parseB16TextOnly addrT)
+            kp     <- either dieAR return (isValidKeyPair akp)
+
+            -- Enforces that user provided address matches the address derived from the Public Key
+            -- for transparency and a better user experience. User provided address not used except
+            -- for this purpose.
+
+            case (addrBS, formatPublicKey kp) of
+              (expectAddr, actualAddr)
+                | expectAddr == actualAddr  -> return kp
+                | otherwise                 -> dieAR $ "Address provided "
+                                               ++ (show $ toB16Text $ expectAddr)
+                                               ++ " does not match actual Address "
+                                               ++ show (toB16Text actualAddr)
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
@@ -181,6 +198,7 @@ dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file key
   \  keyPairs: list of key pairs for signing (use pact -g to generate): [\n\
   \    public: base 16 public key \n\
   \    secret: base 16 secret key \n\
+  \    address: base 16 address   \n\
   \    scheme: cryptographic scheme \n\
   \    ] \n\
   \  nonce: optional request nonce, will use current time if not provided \n\
