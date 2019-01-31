@@ -256,7 +256,7 @@ instance FromJSON UserSig where
 data CommandResult = CommandResult {
   _crReqKey :: RequestKey,
   _crTxId :: Maybe TxId,
-  _crResult :: Value
+  _crResult :: CommandValue
   } deriving (Eq,Show)
 
 -- | Actual value of a `CommandResult`.
@@ -266,12 +266,10 @@ data CommandValue
   deriving (Eq, Show)
 
 -- | Error details for `CommandValue`.
-data CommandError = CommandError
-  { _ceMsg :: String
-  , _ceDetail :: Maybe String
-  , _crGas :: Gas
+data CommandError = CommandError {
+      _ceMsg :: String
+    , _ceDetail :: Maybe String
   } deriving (Eq, Show)
-
 
 instance ToJSON CommandValue where
     toJSON = \case
