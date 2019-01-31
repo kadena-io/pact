@@ -23,6 +23,11 @@ import           Unsafe.Coerce            (unsafeCoerce)
 
 import           Pact.Analyze.Types.Types
 
+-- | Only to be used in this module, for when it's too arduous to convince GHC
+-- that two types are equivalent
+sansProof :: a -> b
+sansProof = unsafeCoerce
+
 -- inspiration:
 -- https://github.com/dorchard/type-level-sets/blob/master/src/Data/Type/Set.hs
 
@@ -86,11 +91,11 @@ filterV
 filterV _ _ SNil = SNil
 filterV flag p (SCons k x xs) = case compareKeys k p of
   LT -> case flag of
-    SRemoveGE -> unsafeCoerce $ SCons k x (filterV flag p xs)
-    SRemoveLT -> unsafeCoerce $ filterV flag p xs
+    SRemoveGE -> sansProof $ SCons k x (filterV flag p xs)
+    SRemoveLT -> sansProof $ filterV flag p xs
   _  -> case flag of
-    SRemoveGE -> unsafeCoerce $ filterV flag p xs
-    SRemoveLT -> unsafeCoerce $ SCons k x (filterV flag p xs)
+    SRemoveGE -> sansProof $ filterV flag p xs
+    SRemoveLT -> sansProof $ SCons k x (filterV flag p xs)
 
 -- section: Nub
 
@@ -107,8 +112,8 @@ nub :: HList f t -> HList f (Nub t)
 nub SNil = SNil
 nub (SCons k v SNil) = SCons k v SNil
 nub (SCons k1 v1 (SCons k2 v2 s)) = case compareKeys k1 k2 of
-  EQ -> unsafeCoerce $               nub $ SCons k2 v2 s
-  _  -> unsafeCoerce $ SCons k1 v1 $ nub $ SCons k2 v2 s
+  EQ -> sansProof $               nub $ SCons k2 v2 s
+  _  -> sansProof $ SCons k1 v1 $ nub $ SCons k2 v2 s
 
 -- section: Sort
 
@@ -159,8 +164,8 @@ insert
   => SingSymbol k -> f v -> HList f vs -> HList f (Insert '(k, v) vs)
 insert k v SNil = SCons k v SNil
 insert k v (SCons k' v' kvs) = case compareKeys k k' of
-  LT -> unsafeCoerce $ SCons k  v  $ SCons  k' v' kvs
-  _  -> unsafeCoerce $ SCons k' v' $ insert k  v  kvs
+  LT -> sansProof $ SCons k  v  $ SCons  k' v' kvs
+  _  -> sansProof $ SCons k' v' $ insert k  v  kvs
 
 -- section: SObject wrangling
 
