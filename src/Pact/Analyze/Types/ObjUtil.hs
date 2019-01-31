@@ -12,7 +12,25 @@
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Pact.Analyze.Types.ObjUtil where
+module Pact.Analyze.Types.ObjUtil
+  (
+  -- * Normalization
+    Normalize
+  , IsNormalized
+  , normalize
+
+  -- * Union
+  , Union
+  , union
+
+  -- * Insertion
+  , type Insert
+  , insert
+
+  -- * Utilities
+  , mkSObject
+  , mkSchema
+  ) where
 
 import           Data.Type.Bool           (If)
 import           Data.Type.Equality       (type (==))
