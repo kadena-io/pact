@@ -31,7 +31,7 @@ module Pact.Types.Type
    TypeVar(..),tvName,tvConstraint,
    Type(..),tyFunType,tyListType,tySchema,tySchemaType,tySchemaPartial,tyUser,tyVar,tyGuard,
    mkTyVar,mkTyVar',mkSchemaVar,
-   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,canUnifyPartial
+   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,isSubPartial
 
    ) where
 
@@ -299,13 +299,9 @@ canUnifyWith (TyVar (TypeVar _ ac)) (TyVar (TypeVar _ bc)) = all (`elem` ac) bc
 canUnifyWith (TyVar (TypeVar _ cs)) b = null cs || b `elem` cs
 canUnifyWith (TyList a) (TyList b) = a `canUnifyWith` b
 canUnifyWith (TySchema _ aTy aP) (TySchema _ bTy bP)
-  = aTy `canUnifyWith` bTy && aP `canUnifyPartial` bP
+  = aTy `canUnifyWith` bTy && bP `isSubPartial` aP
 canUnifyWith a b = a == b
 {-# INLINE canUnifyWith #-}
-
--- | a `canUnifyPartial` b means the subset specified by b is valid in a, etc.
-canUnifyPartial :: SchemaPartial -> SchemaPartial -> Bool
-canUnifyPartial = flip isSubPartial
 
 -- | @a `isSubPartial` b@ means that @a <= b@ in the lattice given by
 -- @SchemaPartial@, ie, that @a@ is smaller than @b@.

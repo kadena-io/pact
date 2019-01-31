@@ -661,7 +661,7 @@ unifyTypes l r = case (l,r) of
           | otherwise          -> Nothing
         (PartialSchema {}, AnySubschema) -> setPartial spa
         (AnySubschema, PartialSchema {}) -> setPartial spb
-        (AnySubschema, AnySubschema) -> setPartial spa
+        (AnySubschema, AnySubschema) -> Just u
     unifyVar vWrap sWrap v s =
       let useS = sWrap s
       in case (v,s) of
