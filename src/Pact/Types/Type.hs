@@ -31,8 +31,7 @@ module Pact.Types.Type
    TypeVar(..),tvName,tvConstraint,
    Type(..),tyFunType,tyListType,tySchema,tySchemaType,tySchemaPartial,tyUser,tyVar,tyGuard,
    mkTyVar,mkTyVar',mkSchemaVar,
-   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,isSubPartial
-
+   isAnyTy,isVarTy,canUnifyWith
    ) where
 
 
@@ -282,12 +281,6 @@ isAnyTy _ = False
 isVarTy :: Type v -> Bool
 isVarTy TyVar {} = True
 isVarTy _ = False
-
-isUnconstrainedTy :: Type v -> Bool
-isUnconstrainedTy TyAny = True
-isUnconstrainedTy (TyVar (TypeVar _ [])) = True
-isUnconstrainedTy _ = False
-{-# INLINE isUnconstrainedTy #-}
 
 -- | a `canUnifyWith` b means a "can represent/contains" b
 canUnifyWith :: Eq n => Type n -> Type n -> Bool
