@@ -274,10 +274,10 @@ applySchemas Pre ast = case ast of
       vt' <- lookupAndResolveTy (_aNode v)
       return (kstr,(v,_aId (_aNode k),vt'))
     validateSchema sch partial (M.fromList pmap) >>= \pm -> forM_ pm $ \pkeys -> case partial of
-      SPFull -> addFailure (_aId n) "Invalid partial schema found"
-      SPPartial {} -> do
+      FullSchema -> addFailure (_aId n) "Invalid partial schema found"
+      _ -> do
         debug $ "Specializing schema ty for sublist: " ++ show pkeys
-        assocAstTy n $ TySchema TyObject (TyUser sch) (SPPartial pkeys)
+        assocAstTy n $ TySchema TyObject (TyUser sch) (PartialSchema pkeys)
     return ast
 
   (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch partial -> do
@@ -312,9 +312,9 @@ applySchemas Pre ast = case ast of
     validateSchema sch partial pmap = do
       -- smap: lookup from field name to ty
       let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
-          filterPartial SPFull = id
-          filterPartial (SPPartial ks) | S.null ks = id
-                                       | otherwise = (`M.restrictKeys` ks)
+          filterPartial FullSchema = id
+          filterPartial AnySubschema = id
+          filterPartial (PartialSchema ks) = (`M.restrictKeys` ks)
       -- over each object field ...
       pks <- fmap (Set.fromList . concat) $ forM (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
         -- validate field exists ...
@@ -651,14 +651,17 @@ unifyTypes l r = case (l,r) of
     specializePartial spa spb u =
       let setPartial p = Just $ set tySchemaPartial p u
       in case (spa,spb) of
-        (SPFull,SPFull) -> Just u
-        (SPFull,SPPartial {}) -> setPartial spb
-        (SPPartial {},SPFull) -> setPartial spa
-        (SPPartial as,SPPartial bs)
+        (FullSchema,FullSchema) -> Just u
+        (FullSchema,_) -> setPartial spb
+        (_,FullSchema) -> setPartial spa
+        (PartialSchema as,PartialSchema bs)
           | as == bs           -> Just u
-          | S.null as || bs `isSubsetOf` as -> setPartial spb
-          | S.null bs || as `isSubsetOf` bs -> setPartial spa
+          | bs `isSubsetOf` as -> setPartial spb
+          | as `isSubsetOf` bs -> setPartial spa
           | otherwise          -> Nothing
+        (PartialSchema {}, AnySubschema) -> setPartial spa
+        (AnySubschema, PartialSchema {}) -> setPartial spb
+        (AnySubschema, AnySubschema) -> Just u
     unifyVar vWrap sWrap v s =
       let useS = sWrap s
       in case (v,s) of
@@ -840,7 +843,7 @@ toAST TList {..} = do
   List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST _tList
 toAST TObject {..} = do
   debug $ "TObject: " ++ show _tObjectType
-  ty <- TySchema TyObject <$> traverse toUserType _tObjectType <*> pure SPFull
+  ty <- TySchema TyObject <$> traverse toUserType _tObjectType <*> pure FullSchema
   Object <$> (trackNode ty =<< freshId _tInfo "object")
     <*> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
@@ -849,7 +852,7 @@ toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
-  ty <- TySchema TyTable <$> traverse toUserType _tTableType <*> pure SPFull
+  ty <- TySchema TyTable <$> traverse toUserType _tTableType <*> pure FullSchema
   Table
     <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
     <*> pure _tTableName

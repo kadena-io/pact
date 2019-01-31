@@ -31,8 +31,7 @@ module Pact.Types.Type
    TypeVar(..),tvName,tvConstraint,
    Type(..),tyFunType,tyListType,tySchema,tySchemaType,tySchemaPartial,tyUser,tyVar,tyGuard,
    mkTyVar,mkTyVar',mkSchemaVar,
-   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,canUnifyPartial
-
+   isAnyTy,isVarTy,canUnifyWith
    ) where
 
 
@@ -205,21 +204,20 @@ instance Eq1 TypeVar where
 
 -- | Represent a full or partial schema inhabitant.
 --
--- @SPPartial@ represents a schema with only the given subset of fields.
--- @SPPartial Set.empty@ is used in places where any subset of fields can be
--- provided. @SPPartial Set.empty@ unifies with any larger type to give that
--- type.
-data SchemaPartial = SPFull | SPPartial (Set Text)
+-- @PartialSchema@ represents a schema with only the given subset of fields.
+-- @AnySubschema@ is used in places where any subset of fields can be provided.
+-- @AnySubschema@ unifies with any larger type to give that type.
+data SchemaPartial = FullSchema | PartialSchema !(Set Text) | AnySubschema
   deriving (Eq,Ord,Show,Generic)
 instance NFData SchemaPartial
-instance Default SchemaPartial where def = SPFull
+instance Default SchemaPartial where def = FullSchema
 
 
 showPartial :: SchemaPartial -> String
-showPartial SPFull = ""
-showPartial (SPPartial ks)
-  | Set.null ks = "~"
-  | otherwise   = "~[" ++ intercalate "," (unpack.asString <$> Set.toList ks) ++ "]"
+showPartial FullSchema = ""
+showPartial (PartialSchema ks)
+  = "~[" ++ intercalate "," (unpack.asString <$> Set.toList ks) ++ "]"
+showPartial AnySubschema = "~"
 
 -- | Pact types.
 data Type v =
@@ -284,12 +282,6 @@ isVarTy :: Type v -> Bool
 isVarTy TyVar {} = True
 isVarTy _ = False
 
-isUnconstrainedTy :: Type v -> Bool
-isUnconstrainedTy TyAny = True
-isUnconstrainedTy (TyVar (TypeVar _ [])) = True
-isUnconstrainedTy _ = False
-{-# INLINE isUnconstrainedTy #-}
-
 -- | a `canUnifyWith` b means a "can represent/contains" b
 canUnifyWith :: Eq n => Type n -> Type n -> Bool
 canUnifyWith TyAny _ = True
@@ -299,18 +291,19 @@ canUnifyWith (TyVar SchemaVar {}) (TyVar SchemaVar {}) = True
 canUnifyWith (TyVar (TypeVar _ ac)) (TyVar (TypeVar _ bc)) = all (`elem` ac) bc
 canUnifyWith (TyVar (TypeVar _ cs)) b = null cs || b `elem` cs
 canUnifyWith (TyList a) (TyList b) = a `canUnifyWith` b
-canUnifyWith (TySchema _ aTy aP) (TySchema _ bTy bP) = aTy `canUnifyWith` bTy && aP `canUnifyPartial` bP
+canUnifyWith (TySchema _ aTy aP) (TySchema _ bTy bP)
+  = aTy `canUnifyWith` bTy && bP `isSubPartial` aP
 canUnifyWith a b = a == b
 {-# INLINE canUnifyWith #-}
 
--- | a `canUnifyPartial` b means the subset specified by b is
--- valid in a, etc. [] in a subset is a wildcard.
-canUnifyPartial :: SchemaPartial -> SchemaPartial -> Bool
-canUnifyPartial SPFull SPFull = True
-canUnifyPartial (SPPartial a) (SPPartial b) = b `isSubsetOf` a
-canUnifyPartial SPFull SPPartial {} = True -- full can always satisfy subset
-canUnifyPartial SPPartial {} SPFull = False -- partial cannot satisfy full
-
+-- | @a `isSubPartial` b@ means that @a <= b@ in the lattice given by
+-- @SchemaPartial@, ie, that @a@ is smaller than @b@.
+isSubPartial :: SchemaPartial -> SchemaPartial -> Bool
+isSubPartial _ FullSchema = True
+isSubPartial FullSchema _ = False
+isSubPartial AnySubschema _ = True
+isSubPartial _ AnySubschema = False
+isSubPartial (PartialSchema a) (PartialSchema b) = a `isSubsetOf` b
 
 
 
