@@ -27,6 +27,7 @@ module Pact.Native.Ops
 import Data.Decimal
 import Data.Default
 import qualified Data.Map.Strict as M
+import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), Doc, text)
 
 import Pact.Native.Internal
 import Pact.Types.Runtime
@@ -244,8 +245,8 @@ defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool)
 logicLam :: Type v -> Type v
 logicLam argTy = TyFun $ funType' tTyBool [("x",argTy)]
 
-delegateError :: String -> Term Ref -> Term Name -> Eval m a
-delegateError desc app r = evalError (_tInfo app) $ desc ++ ": Non-boolean result from delegate: " ++ show r
+delegateError :: Doc -> Term Ref -> Term Name -> Eval m a
+delegateError desc app r = evalError (_tInfo app) $ desc <> ": Non-boolean result from delegate: " <> pretty r
 
 liftLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Text -> Bool -> NativeDef
 liftLogic n bop desc shortCircuit =
@@ -263,8 +264,8 @@ liftLogic n bop desc shortCircuit =
               br <- apply (_tApp b) [v]
               case br of
                 TLitBool bb -> return $ toTerm $ bop ab bb
-                _ -> delegateError (show n) b br
-        _ -> delegateError (show n) a ar
+                _ -> delegateError (pretty n) b br
+        _ -> delegateError (pretty n) a ar
     fun i as = argsError' i as
 
 liftNot :: NativeFun e
@@ -321,7 +322,7 @@ binop :: (Decimal -> Decimal -> Either String Decimal) ->
        (Integer -> Integer -> Either String Integer) -> RNativeFun e
 binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
   let hdl (Right v) = return $ toTerm v
-      hdl (Left err) = evalError' fi $ err <> ": " <> show (a,b)
+      hdl (Left err) = evalError' fi $ text err <> ": " <> pretty (a,b)
   case (a,b) of
     (LInteger i,LInteger j) -> hdl (i `iop` j)
     (LDecimal i,LDecimal j) -> hdl (i `dop` j)

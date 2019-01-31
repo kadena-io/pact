@@ -26,6 +26,7 @@ import Data.Thyme
 import Data.Decimal
 import System.Locale
 import Data.AffineSpace
+import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
@@ -75,7 +76,7 @@ parseTimeDef = defRNative "parse-time" parseTime'
     parseTime' :: RNativeFun e
     parseTime' i [TLitString fmt,TLitString s] =
       case parseTime defaultTimeLocale (unpack fmt) (unpack s) of
-        Nothing -> evalError' i $ "Failed to parse time '" ++ unpack s ++ "' with format: " ++ unpack fmt
+        Nothing -> evalError' i $ "Failed to parse time '" <> pretty s <> "' with format: " <> pretty fmt
         Just t -> return (tLit (LTime t))
     parseTime' i as = argsError i as
 
@@ -91,7 +92,7 @@ timeDef = defRNative "time" time
     time i [TLitString s] =
       case parseTime defaultTimeLocale simpleISO8601 (unpack s) of
         Nothing -> evalError' i $
-          "Invalid time, expecting '" ++ simpleISO8601 ++ "': " ++ unpack s
+          "Invalid time, expecting '" <> pretty simpleISO8601 <> "': " <> pretty s
         Just t -> return (tLit (LTime t))
     time i as = argsError i as
 

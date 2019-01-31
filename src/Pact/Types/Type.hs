@@ -20,7 +20,7 @@ module Pact.Types.Type
    TypeName(..),
    Arg(..),aInfo,aName,aType,
    FunType(..),ftArgs,ftReturn,
-   FunTypes,funTypes,showFunTypes,
+   FunTypes,funTypes,prettyFunTypes,
    PrimType(..),
    GuardType(..),
    tyInteger,tyDecimal,tyTime,tyBool,tyString,
@@ -86,9 +86,9 @@ type FunTypes o = NonEmpty (FunType o)
 funTypes :: FunType o -> FunTypes o
 funTypes ft = ft :| []
 
-showFunTypes :: Show o => FunTypes o -> String
-showFunTypes (t :| []) = show t
-showFunTypes ts = show (toList ts)
+prettyFunTypes :: Pretty o => FunTypes o -> Doc
+prettyFunTypes (t :| []) = pretty t
+prettyFunTypes ts = pretty (toList ts)
 
 data GuardType
   = GTyKeySet

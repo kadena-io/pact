@@ -32,6 +32,7 @@ import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
 import Data.Text.Encoding
 import Data.Maybe
+import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 #else
@@ -222,7 +223,7 @@ setsigs i as = argsError i as
 setmsg :: RNativeFun LibState
 setmsg i [TLitString j] =
   case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
-    Left f -> evalError' i ("Invalid JSON: " ++ show f)
+    Left f -> evalError' i ("Invalid JSON: " <> pretty f)
     Right v -> setenv eeMsgBody v >> return (tStr "Setting transaction data")
 setmsg _ [a] = setenv eeMsgBody (toJSON a) >> return (tStr "Setting transaction data")
 setmsg i as = argsError i as
@@ -336,7 +337,7 @@ bench' i as = do
                 !ts <- mapM reduce as
                 return $! toTerm (length ts)
   case r of
-    Left ex -> evalError' i (show ex)
+    Left ex -> evalError' i (text (show ex))
     Right rpt -> do
            let mean = estPoint (anMean (reportAnalysis rpt))
                sd = estPoint (anStdDev (reportAnalysis rpt))
@@ -363,12 +364,12 @@ tc i as = case as of
     go modname dbg = do
       mdm <- HM.lookup (ModuleName modname Nothing) <$> view (eeRefStore . rsModules)
       case mdm of
-        Nothing -> evalError' i $ "No such module: " ++ show modname
+        Nothing -> evalError' i $ "No such module: " <> pretty modname
         Just md -> do
           r :: Either CheckerException ([TopLevel Node],[Failure]) <-
             try $ liftIO $ typecheckModule dbg md
           case r of
-            Left (CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " ++ e)
+            Left (CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> text e)
             Right (_,fails) -> case fails of
               [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
               _ -> do
@@ -381,7 +382,7 @@ verify i as = case as of
     modules <- view (eeRefStore . rsModules)
     let mdm = HM.lookup (ModuleName modName Nothing) modules
     case mdm of
-      Nothing -> evalError' i $ "No such module: " ++ show modName
+      Nothing -> evalError' i $ "No such module: " <> pretty modName
       Just md -> do
 #if defined(ghcjs_HOST_OS)
         uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
@@ -409,7 +410,7 @@ print' i as = argsError i as
 
 envHash :: RNativeFun LibState
 envHash i [TLitString s] = case fromText' s of
-  Left err -> evalError' i $ "Bad hash value: " ++ show s ++ ": " ++ err
+  Left err -> evalError' i $ "Bad hash value: " <> pretty s <> ": " <> text err
   Right h -> do
     setenv eeHash h
     return $ tStr $ "Set tx hash to " <> s

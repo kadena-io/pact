@@ -9,6 +9,7 @@ import Pact.Types.Runtime
 import Control.Lens
 import Control.Arrow
 import Data.Word
+import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
 
 -- | Compute gas for some application or evaluation.
 computeGas :: Either (Info,Text) FunApp -> GasArgs -> Eval e Gas
@@ -20,7 +21,7 @@ computeGas i args = do
     g1 = g0 + runGasModel _geGasModel name args
   evalGas .= g1
   if g1 > fromIntegral _geGasLimit then
-    throwErr GasError info $ "Gas limit (" <> tShow _geGasLimit <> ") exceeded: " <> tShow g1
+    throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty g1
     else return g1
 
 

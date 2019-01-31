@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- |
 -- Module      :  Pact.Types.Gas
@@ -19,6 +20,7 @@ import Control.Lens (makeLenses)
 import Data.Word (Word64)
 import Data.Decimal (Decimal)
 import Control.DeepSeq (NFData)
+import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
 
 import Pact.Types.Lang
 import Pact.Types.Persistence
@@ -26,8 +28,9 @@ import Pact.Types.Persistence
 
 -- | Price per 'Gas' unit.
 newtype GasPrice = GasPrice Decimal
-  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Enum)
-instance Show GasPrice where show (GasPrice p) = show p
+  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Enum,Show)
+instance Pretty GasPrice where
+  pretty (GasPrice p) = text (show p)
 
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
@@ -50,12 +53,14 @@ data GasArgs
 
 
 newtype GasLimit = GasLimit Word64
-  deriving (Eq,Ord,Num,Real,Integral,Enum)
-instance Show GasLimit where show (GasLimit g) = show g
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show)
+instance Pretty GasLimit where
+  pretty (GasLimit g) = text (show g)
 
 
 newtype GasModel = GasModel { runGasModel :: Text -> GasArgs -> Gas }
-instance Show GasModel where show _ = "[GasModel]"
+instance Pretty GasModel where
+  pretty _ = "[GasModel]"
 
 data GasEnv = GasEnv
   { _geGasLimit :: GasLimit

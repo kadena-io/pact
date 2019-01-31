@@ -175,8 +175,8 @@ handleCompile src exp a =
             Just (_,d) -> do
                         mode <- use rMode
                         outStr HErr (renderPrettyString (colors mode) (_pDelta d))
-                        outStrLn HErr $ ": error: " ++ unpack (peText er)
-            Nothing -> outStrLn HErr $ "[No location]: " ++ unpack (peText er)
+                        outStrLn HErr $ ": error: " ++ renderCompactString (peText er)
+            Nothing -> outStrLn HErr $ "[No location]: " ++ renderCompactString (peText er)
           Left <$> renderErr er
 
 compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
@@ -188,7 +188,7 @@ pureEval ei e = do
   (ReplState evalE evalS _ _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
-                 Left (SomeException ex) -> (Left (PactError EvalError def def (pack $ show ex)),evalS)
+                 Left (SomeException ex) -> (Left (PactError EvalError def def (pretty (show ex))),evalS)
                  Right v -> v
   mode <- use rMode
   case r of
@@ -235,8 +235,8 @@ renderErr a
       let i = case m of
                 Script _ f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
                 _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
-      return $ renderInfo i ++ ":" ++ unpack (peText a)
-  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ unpack (peText a)
+      return $ renderInfo i ++ ":" ++ renderCompactString (peText a)
+  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString (peText a)
 
 updateForOp :: Term Name -> Repl (Either String (Term Name))
 updateForOp a = do

@@ -51,7 +51,7 @@ import Data.List
 import Data.Function (on)
 import Data.ByteString.Lazy (toStrict)
 import Data.Text.Encoding
-import Text.PrettyPrint.ANSI.Leijen (Pretty)
+import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
 
 
 import Pact.Eval
@@ -106,7 +106,7 @@ enforceDef = defNative "enforce" enforce
     enforce' :: RNativeFun e
     enforce' i [TLiteral (LBool b) _,TLitString msg]
         | b = return $ TLiteral (LBool True) def
-        | otherwise = failTx (_faInfo i) $ unpack msg
+        | otherwise = failTx (_faInfo i) $ pretty msg
     enforce' i as = argsError i as
     {-# INLINE enforce' #-}
 
@@ -129,7 +129,7 @@ enforceOneDef =
               (\(_ :: SomeException) -> return Nothing)
         r <- foldM tryCond Nothing conds
         case r of
-          Nothing -> failTx (_faInfo i) (unpack msg')
+          Nothing -> failTx (_faInfo i) $ pretty msg'
           Just b -> return b
     enforceOne i as = argsError' i as
 
@@ -197,8 +197,7 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
     if' :: NativeFun e
     if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \case
                TLiteral (LBool c) _ -> reduce (if c then then' else else')
-               t -> evalError' i $
-                 "if: conditional not boolean: " ++ renderCompactString t
+               t -> evalError' i $ "if: conditional not boolean: " <> pretty t
     if' i as = argsError' i as
 
 
@@ -272,7 +271,7 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
           success ("Namespace set to " <> (asString ns')) $
             evalRefs . rsNamespace .= (Just n)
         Nothing  -> evalError info $
-          "namespace: '" ++ asString' name ++ "' not defined"
+          "namespace: '" <> pretty name <> "' not defined"
 
 langDefs :: NativeModule
 langDefs =
@@ -433,7 +432,7 @@ a = mkTyVar "a" []
 map' :: NativeFun e
 map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply (_tApp app) . pure)
-           t -> evalError' i $ "map: expecting list: " ++ abbrev t
+           t -> evalError' i $ "map: expecting list: " <> text (abbrev t)
 map' i as = argsError' i as
 
 list :: RNativeFun e
@@ -442,8 +441,7 @@ list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here
 makeList :: RNativeFun e
 makeList i [TLitInteger len,value] = case typeof value of
   Right ty -> return $ toTList ty def $ replicate (fromIntegral len) value
-  Left ty -> evalError' i $
-    "make-list: invalid value type: " ++ renderCompactString ty
+  Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList i as = argsError i as
 
 reverse' :: RNativeFun e
@@ -454,7 +452,7 @@ fold' :: NativeFun e
 fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
-           t -> evalError' i $ "fold: expecting list: " ++ abbrev t
+           t -> evalError' i $ "fold: expecting list: " <> text (abbrev t)
 fold' i as = argsError' i as
 
 
@@ -466,7 +464,7 @@ filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' o
                            case t of
                              (TLiteral (LBool True) _) -> return [a']
                              _ -> return []) -- hmm, too permissive here, select is stricter
-           t -> evalError' i $ "filter: expecting list: " ++ abbrev t
+           t -> evalError' i $ "filter: expecting list: " <> text (abbrev t)
 filter' i as = argsError' i as
 
 length' :: RNativeFun e
@@ -498,16 +496,15 @@ at' :: RNativeFun e
 at' _ [li@(TLitInteger idx),TList ls _ _] =
     case ls `atMay` fromIntegral idx of
       Just t -> return t
-      Nothing -> evalError (_tInfo li) $ "at: bad index " ++
-        renderCompactString idx ++ ", length " ++ renderCompactString (length ls)
+      Nothing -> evalError (_tInfo li) $ "at: bad index " <>
+        pretty idx <> ", length " <> pretty (length ls)
 at' _ [idx,TObject ls _ _] = lookupObj idx ls
 at' i as = argsError i as
 
 lookupObj :: (Eq n, Pretty n) => Term n -> [(Term n, Term n)] -> Eval m (Term n)
 lookupObj idx ls = case lookup (unsetInfo idx) (map (first unsetInfo) ls) of
   Just v -> return v
-  Nothing -> evalError (_tInfo idx) $
-    "at: key not found: " ++ renderCompactString idx
+  Nothing -> evalError (_tInfo idx) $ "at: key not found: " <> pretty idx
 
 remove :: RNativeFun e
 remove _ [key,TObject ps t _] = return $ TObject (filter (\(k,_) -> unsetInfo key /= unsetInfo k) ps) t def
@@ -550,10 +547,10 @@ bindObjectLookup TObject {..} = do
   !m <- fmap M.fromList $ forM _tObject $ \(k,v) -> case k of
     TLitString k' -> return (k',liftTerm v)
     tk -> evalError _tInfo $
-      "Bad object (non-string key) in bind: " ++ renderCompactString tk
+      "Bad object (non-string key) in bind: " <> pretty tk
   return (\s -> M.lookup s m)
 bindObjectLookup t = evalError (_tInfo t) $
-  "bind: expected object: " ++ renderCompactString t
+  "bind: expected object: " <> pretty t
 
 typeof'' :: RNativeFun e
 typeof'' _ [t] = return $ tStr $ typeof' t
@@ -601,26 +598,24 @@ sort' _ [TList{..}] = case nub (map typeof _tList) of
       TyGuard{} -> badTy ty
       _ -> do
         sl <- forM _tList $ \e -> case firstOf tLiteral e of
-          Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ renderCompactString e
+          Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " <> pretty e
           Just lit -> return (lit,e)
         return $ TList (map snd $ sortBy (compare `on` fst) sl) rty def
     _ -> badTy ty
-  ts -> evalError _tInfo $ "sort: non-uniform list: " ++ renderCompactString (fmap renderMsgOrTm ts)
-  where renderMsgOrTm = \case
-          Left msg -> unpack msg
-          Right tm -> renderCompactString tm
-        badTy msgOrTm = evalError _tInfo $ "sort: bad list type: " ++ renderMsgOrTm msgOrTm
+  ts -> evalError _tInfo $ "sort: non-uniform list: " <> spaceBrackets (fmap renderMsgOrTm ts)
+  where renderMsgOrTm = either pretty pretty
+        badTy msgOrTm = evalError _tInfo $ "sort: bad list type: " <> renderMsgOrTm msgOrTm
 sort' _ [fields@TList{},l@TList{}]
   | null (_tList fields) = evalError (_tInfo fields) "Empty fields list"
   | otherwise = do
       sortPairs <- forM (_tList l) $ \el -> case firstOf tObject el of
-        Nothing -> evalError (_tInfo l) $ "Non-object found: " ++ renderCompactString el
+        Nothing -> evalError (_tInfo l) $ "Non-object found: " <> pretty el
         Just o -> fmap ((,el) . reverse) $ (\f -> foldM f [] (_tList fields)) $ \lits fld -> do
           v <- lookupObj fld o
           case firstOf tLiteral v of
             Nothing -> evalError (_tInfo l) $
-              "Non-literal found at field " ++ renderCompactString fld ++
-              ": " ++ renderCompactString el
+              "Non-literal found at field " <> pretty fld <>
+              ": " <> pretty el
             Just lit -> return (lit:lits)
       return $ TList (map snd $ sortBy (compare `on` fst) sortPairs) (_tListType l) def
 
@@ -640,15 +635,15 @@ enforceVersion i as = case as of
       foldM_ matchPart False $ zip (T.splitOn "." pactVersion) (T.splitOn "." fullV)
       where
         parseNum orgV s = case AP.parseOnly (AP.many1 AP.digit) s of
-          Left _ -> evalError' i $ "Invalid version component: " ++ renderCompactString (orgV,s)
+          Left _ -> evalError' i $ "Invalid version component: " <> pretty (orgV,s)
           Right v -> return v
         matchPart True _ = return True
         matchPart _ (pv,mv)  = do
           pv' <- parseNum pactVersion pv
           mv' <- parseNum fullV mv
           when (mv' `failCmp` pv') $ evalError' i $
-            "Invalid pact version " ++ renderCompactString pactVersion ++
-            ", " ++ msg ++ " allowed: " ++ renderCompactString fullV
+            "Invalid pact version " <> pretty pactVersion <>
+            ", " <> msg <> " allowed: " <> pretty fullV
           return (mv' `succCmp` pv')
 
 contains :: RNativeFun e
@@ -687,8 +682,8 @@ strToInt i as =
         then case baseStrToInt base' txt of
           Left _ -> argsError i as
           Right n -> return (toTerm n)
-        else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack txt)
-      else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack txt)
+        else evalError' i $ "Invalid input: unsupported string length: " <> pretty txt
+      else evalError' i $ "Invalid input: supplied string is not hex: " <> pretty txt
 
 txHash :: RNativeFun e
 txHash _ [] = (tStr . asString) <$> view eeHash

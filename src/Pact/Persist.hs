@@ -117,7 +117,7 @@ class (Ord k,Show k,Eq k,Hashable k,Pretty k) => PactKey k
 instance PactKey TxKey
 instance PactKey DataKey
 
-class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactValue v
+class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v,Pretty v) => PactValue v
 instance PactValue v => PactValue (TxLog v)
 instance PactValue (Columns Persistable)
 instance PactValue a => PactValue [a]

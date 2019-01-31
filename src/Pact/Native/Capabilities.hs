@@ -18,6 +18,7 @@ import Pact.Native.Internal
 import Pact.Types.Runtime
 import Control.Lens
 import Control.Monad.State (state)
+import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
 
 
 capDefs :: NativeModule
@@ -88,8 +89,8 @@ requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
 requireDefcap App{..} = case _appFun of
   (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
     Defcap -> return d
-    _ -> evalError _appInfo $ "Can only apply defcap here, found: " ++ show _dDefType
-  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " ++ show _appFun
+    _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
+  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " <> pretty _appFun
 
 requireCapability :: NativeDef
 requireCapability =
@@ -103,7 +104,7 @@ requireCapability =
       (args,_) <- prepareUserAppArgs d _appArgs
       let cap = UserCapability _dDefName args
       granted <- capabilityGranted cap
-      unless granted $ evalError' i $ "require-capability: not granted: " ++ show cap
+      unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
     requireCapability' i as = argsError' i as
 
@@ -198,10 +199,10 @@ createUserGuard =
             Just (Direct {}) -> return n
             Just (Ref (TDef Def{..} _)) ->
               return $ QName _dModule (asString _dDefName) _dInfo
-            Just _ -> evalError' i $ "Invalid predfun, not a def: " ++ show n
-            _ -> evalError' i $ "Could not resolve predfun: " ++ show n
+            Just _ -> evalError' i $ "Invalid predfun, not a def: " <> pretty n
+            _ -> evalError' i $ "Could not resolve predfun: " <> pretty n
           return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard udata rn)
         Left s -> evalError' i $
-          "Invalid name " ++ show predfun ++ ": " ++ s
+          "Invalid name " <> pretty predfun <> ": " <> text s
       Left {} -> evalError' i "Data must be value"
     createUserGuard' i as = argsError i as

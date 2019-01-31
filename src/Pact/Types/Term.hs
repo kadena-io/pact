@@ -65,7 +65,7 @@ module Pact.Types.Term
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
    Gas(..),
-   commaBraces
+   parensSep,commaBraces,commaBrackets,spaceBrackets
    ) where
 
 
@@ -153,8 +153,9 @@ data KeySet = KeySet {
     , _ksPredFun :: !Name
     } deriving (Eq,Generic,Show)
 
-commaBraces, spaceBrackets, parensSep :: [Doc] -> Doc
+commaBraces, commaBrackets, spaceBrackets, parensSep :: [Doc] -> Doc
 commaBraces   = encloseSep "{" "}" ","
+commaBrackets = encloseSep "[" "]" ","
 spaceBrackets = encloseSep "[" "]" " "
 parensSep     = parens . sep
 
@@ -269,6 +270,9 @@ defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
 defTypeRep Defcap = "defcap"
 
+instance Pretty DefType where
+  pretty = text . defTypeRep
+
 newtype NativeDefName = NativeDefName Text
     deriving (Eq,Ord,IsString,ToJSON,AsString,Show)
 
@@ -293,9 +297,16 @@ data Ref =
   Ref (Term Ref)
   deriving (Eq,Show)
 
+instance Pretty Ref where
+  pretty (Direct tm) = pretty tm
+  pretty (Ref tm)    = pretty tm
+
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
   deriving (Eq,Ord,Num,Real,Integral,Enum,Show)
+
+instance Pretty Gas where
+  pretty (Gas i) = text (show i)
 
 instance Semigroup Gas where
   (Gas a) <> (Gas b) = Gas $ a + b
@@ -519,10 +530,10 @@ newtype NamespaceName = NamespaceName Text
 data Namespace = Namespace
   { _nsName   :: NamespaceName
   , _nsGuard  :: Guard
-  } deriving Eq
+  } deriving (Eq, Show)
 
-instance Show Namespace where
-  show Namespace{..} = "(namespace " ++ asString' _nsName ++ ")"
+instance Pretty Namespace where
+  pretty Namespace{..} = "(namespace " <> text (asString' _nsName) <> ")"
 
 instance FromJSON Namespace where
   parseJSON = withObject "Namespace" $ \o -> Namespace
@@ -828,7 +839,7 @@ instance Pretty n => Pretty (Term n) where
     TLiteral l _ -> blue $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
-    TValue v _ -> blue $ prettyValue v
+    TValue v _ -> blue $ pretty v
     TStep{..} -> parensSep $
       [ "TStep", pretty _tStepEntity, pretty _tStepExec ]
       ++ maybe [] (\rb -> [pretty rb]) _tStepRollback
@@ -843,17 +854,6 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tModule <> "." <> pretty _tTableName <> ":" <> pretty _tTableType
       , pretty _tMeta
       ]
-
-prettyValue :: Value -> Doc
-prettyValue = \case
-  Object hm -> commaBraces
-    $ fmap (\(k, v) -> dquotes (pretty k) <> ": " <> prettyValue v)
-    $ HM.toList hm
-  Array values -> spaceBrackets $ prettyValue <$> toList values
-  String str -> dquotes $ pretty str
-  Number scientific -> text $ show scientific
-  Bool b -> pretty b
-  Null -> "null"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""

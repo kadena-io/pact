@@ -14,10 +14,13 @@ import           Control.Monad.RWS.Strict (runRWST)
 import           Data.Aeson               (Value (Object), toJSON)
 import qualified Data.Default             as Default
 import qualified Data.HashMap.Strict      as HM
+import           Data.List                (isPrefixOf)
 import qualified Data.Map.Strict          as Map
 import           Data.SBV                 (literal, unliteral, writeArray)
 import qualified Data.SBV.Internals       as SBVI
 import qualified Data.Text                as T
+import           Text.PrettyPrint.ANSI.Leijen
+                                          (Doc, text)
 
 import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
@@ -32,7 +35,7 @@ import           Pact.Repl                (initPureEvalEnv)
 import           Pact.Repl.Types          (LibState)
 import           Pact.Types.Runtime       (EvalEnv, PactError (..),
                                            PactErrorType (EvalError), eeMsgBody,
-                                           runEval)
+                                           renderCompactString, runEval)
 import qualified Pact.Types.Term          as Pact
 
 import           Analyze.Gen
@@ -41,8 +44,8 @@ import           Analyze.Translate
 data EvalResult
   = EvalResult !(Pact.Term Pact.Ref)
   | Discard
-  | EvalErr !String
-  | UnexpectedErr !String
+  | EvalErr !Doc
+  | UnexpectedErr !Doc
 
 -- Evaluate a term via Pact
 pactEval :: ETerm -> GenState -> IO EvalResult
@@ -70,17 +73,17 @@ pactEval etm gState = (do
       _            -> throw e
       )
     `catch` (\(pe@(PactError err _ _ msg) :: PactError) ->
-      case err of
+      let msgStr = renderCompactString msg in case err of
         EvalError ->
-          if "Division by 0" `T.isPrefixOf` msg ||
-             "Negative precision not allowed" `T.isPrefixOf` msg
+          if "Division by 0" `isPrefixOf` msgStr ||
+             "Negative precision not allowed" `isPrefixOf` msgStr
           then pure Discard
-          else pure $ EvalErr $ T.unpack msg
-        _ -> case msg of
-          "(enforce)"     -> pure $ EvalErr $ T.unpack msg
-          "(enforce-one)" -> pure $ EvalErr $ T.unpack msg
-          ""              -> pure $ UnexpectedErr $ show pe
-          _               -> pure $ UnexpectedErr $ T.unpack msg)
+          else pure $ EvalErr msg
+        _ -> case msgStr of
+          "(enforce)"     -> pure $ EvalErr msg
+          "(enforce-one)" -> pure $ EvalErr msg
+          ""              -> pure $ UnexpectedErr $ text $ show pe
+          _               -> pure $ UnexpectedErr msg)
 
 -- Evaluate a term symbolically
 analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
