@@ -136,6 +136,16 @@
   (defun fails-list-literal-type:[integer] ()
     [1.0 2.0])
 
+  (defun fails-write-partial ()
+    "will fail as write demands full schema"
+    (write persons "foo" { "name": "dave" }))
+
+  (defun tc-update-partial ()
+    "update allows partial schema"
+    (let ((partial { "name": "dave" }))
+      (update persons "foo" partial)
+      partial))
+
 
 )
 

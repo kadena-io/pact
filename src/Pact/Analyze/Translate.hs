@@ -354,8 +354,8 @@ maybeTranslateType' f = \case
   TyUser a         -> f a
 
   -- TODO(joel): understand the difference between the TyUser and TySchema cases
-  TySchema Pact.TyTable _ -> pure QTable
-  TySchema _ ty'   -> maybeTranslateType' f ty'
+  TySchema Pact.TyTable _ _ -> pure QTable
+  TySchema _ ty' _   -> maybeTranslateType' f ty'
 
   TyPrim TyBool    -> pure $ EType TBool
   TyPrim TyDecimal -> pure $ EType TDecimal

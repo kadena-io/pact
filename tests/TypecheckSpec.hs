@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 module TypecheckSpec (spec) where
 
@@ -14,20 +15,23 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Monad
 import Data.Foldable
 import qualified Data.Text as T
+import qualified Data.Set as Set
 
 spec :: Spec
 spec = do
-  void $ runIO $ inferModule False "tests/pact/tc.repl" "tctest"
-  void $ runIO $ inferModule False "tests/pact/caps.repl" "caps"
-  void $ runIO $ inferModule False "examples/cp/cp.repl" "cp"
-  void $ runIO $ inferModule False "examples/accounts/accounts.repl" "accounts"
+  checkModule "tests/pact/caps.repl" "caps"
+  checkModule "examples/cp/cp.repl" "cp"
+  checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
   checkFuns
 
 type TCResult = (TopLevel Node,TcState)
 type TCResultCheck a = TCResult -> ([a] -> [a] -> Expectation) -> Expectation
 
 checkUnresolvedTys :: TCResultCheck (Type UserType)
-checkUnresolvedTys (tl,_) test = filter isUnresolvedTy (map _aTy (toList tl)) `test` []
+checkUnresolvedTys (tl,_) test = getUnresolvedTys tl `test` []
+
+getUnresolvedTys :: TopLevel Node -> [Type UserType]
+getUnresolvedTys tl = filter isUnresolvedTy (map _aTy (toList tl))
 
 checkFailures :: TCResultCheck Failure
 checkFailures (_,s) test = toList (_tcFailures s) `test` []
@@ -46,10 +50,21 @@ topLevelFails n r =
 topLevelChecks :: Text -> TCResult -> Spec
 topLevelChecks n r = topLevelTypechecks n r >> topLevelNoFailures n r
 
+checkModule :: FilePath -> ModuleName -> Spec
+checkModule fp mn = describe (fp ++ ": " ++ show mn ++ " typechecks") $ do
+  (tls,fs) <- runIO $ inferModule False fp mn
+  it (show mn ++ ": module has no failures") $ map prettyFail fs `shouldBe` []
+  it (show mn ++ ": all toplevels typecheck") $ concatMap getUnresolvedTys tls `shouldBe` []
+
+prettyFail :: Failure -> String
+prettyFail (Failure TcId{..} msg) = renderInfo _tiInfo ++ ": " ++ msg
+
+
 checkFun :: FilePath -> ModuleName -> Text -> Spec
 checkFun fp mn fn = do
   r <- runIO $ inferFun False fp mn fn
   topLevelChecks (asString mn <> "." <> fn) r
+
 
 checkFuns :: Spec
 checkFuns = describe "pact typecheck" $ do
@@ -59,14 +74,24 @@ checkFuns = describe "pact typecheck" $ do
     let doTc = runIO $ runTC 0 False (typecheckTopLevel ref)
         n = asString mn <> "." <> fn
     when (T.take 3 fn == "tc-") $
-      doTc >>= topLevelChecks n
+      doTc >>= \r -> do
+      topLevelChecks n r
+      customFunChecks n r
     when (T.take 6 fn == "fails-") $
       doTc >>= \r -> do
         topLevelTypechecks n r
         topLevelFails n r
 
-  checkFun "examples/cp/cp.repl" "cp" "issue"
-  checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
+
+customFunChecks :: Text -> TCResult -> Spec
+customFunChecks name (tl,_) = case name of
+  "tests/pact/tc.repl.tc-update-partial" -> do
+    -- TODO top levels don't get inferred return type, so we have to dig in here
+    it (show name ++ ":specializes partial type") $
+      preview (tlFun . fBody . _head . aNode . aTy . tySchemaPartial) tl
+        `shouldBe`
+      (Just $ PartialSchema $ Set.singleton "name")
+  _ -> return ()
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
 loadModule fp mn = do
@@ -86,10 +111,10 @@ inferFun :: Bool -> FilePath -> ModuleName -> Text -> IO TCResult
 inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
 
 
-inferModule :: Bool -> FilePath -> ModuleName -> IO [TopLevel Node]
+inferModule :: Bool -> FilePath -> ModuleName -> IO ([TopLevel Node],[Failure])
 inferModule debug fp mn = do
   md <- loadModule fp mn
-  fst <$> typecheckModule debug md
+  typecheckModule debug md
 
 
 
@@ -102,16 +127,16 @@ _inferIssue = inferFun True "examples/cp/cp.repl" "cp" "issue"
 _inferTransfer :: IO TCResult
 _inferTransfer = inferFun True "examples/accounts/accounts.repl" "accounts" "transfer"
 
-_inferTestModule :: IO [TopLevel Node]
+_inferTestModule :: IO ([TopLevel Node],[Failure])
 _inferTestModule = inferModule True "tests/pact/tc.repl" "tctest"
 
 _inferTestFun :: Text -> IO TCResult
 _inferTestFun = inferFun True "tests/pact/tc.repl" "tctest"
 
-_inferAccounts :: IO [TopLevel Node]
+_inferAccounts :: IO ([TopLevel Node],[Failure])
 _inferAccounts = inferModule False "examples/accounts/accounts.repl" "accounts"
 
-_inferCP :: IO [TopLevel Node]
+_inferCP :: IO ([TopLevel Node],[Failure])
 _inferCP = inferModule False "examples/cp/cp.repl" "cp"
 
 -- | prettify output of 'inferFun' runs
