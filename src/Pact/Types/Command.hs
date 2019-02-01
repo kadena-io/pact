@@ -293,7 +293,7 @@ instance FromJSON a => FromJSON (CommandValue a) where
         msg <- o .: "error"
         detail <- o .:? "detail"
         pure $ CommandFailure $ CommandError msg detail
-      "success" -> do
+      "success" ->
         CommandSuccess <$> o .: "data"
       _ -> fail $ "Expected a status of `success` or `failure`, not: " <> status
 
