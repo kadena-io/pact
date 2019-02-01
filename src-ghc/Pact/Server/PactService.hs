@@ -71,11 +71,8 @@ applyCmd logger conf dbv cv gasModel exMode _ (ProcSucc cmd) = do
       return cr
     Left e -> do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
-      let
-        cValue :: CommandValue (Term Name)
-        cValue = CommandFailure $
-          CommandError "Command execution failed" (Just $ show e)
-      return $ jsonResult exMode (cmdToRequestKey cmd) (Gas 0) cValue
+      return $ jsonResult exMode (cmdToRequestKey cmd) (Gas 0) $
+        CommandFailure $ CommandError "Command execution failed" (Just $ show e)
 
 jsonResult :: ToJSON a => ExecutionMode -> RequestKey -> Gas -> a -> CommandResult
 jsonResult ex cmd gas a = CommandResult cmd (exToTx ex) (toJSON a) gas

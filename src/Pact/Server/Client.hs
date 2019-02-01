@@ -20,7 +20,6 @@ import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
-import Data.Aeson (Value)
 
 import Pact.Server.API
 
@@ -28,7 +27,7 @@ data PactServerAPIClient m = PactServerAPIClient
   { send :: SubmitBatch -> m RequestKeys
   , poll :: Poll -> m PollResponses
   , listen :: ListenerRequest -> m ApiResult
-  , local :: Command Text -> m (CommandValue Value)
+  , local :: Command Text -> m CommandValue
   , verify :: Analyze.Request -> m Analyze.Response
   , version :: m Text
   }

@@ -16,6 +16,9 @@ import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
 import Pact.Server.Client
+import Pact.Types.Term (Term (TLiteral))
+import Pact.Types.Exp (Literal(LInteger))
+import Pact.Types.Info (Info (..))
 import Servant.Client
 
 _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
@@ -33,6 +36,9 @@ simpleServerCmd = do
   simpleKeys <- genKeys
   mkExec  "(+ 1 2)" Null def [simpleKeys] (Just "test1")
 
+simpleServerResult :: CommandValue
+simpleServerResult = CommandSuccess $ TLiteral (LInteger 3) (Info Nothing)
+
 spec :: Spec
 spec = around_ bracket $ describe "Servant API client tests" $ do
   mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
@@ -49,10 +55,9 @@ spec = around_ bracket $ describe "Servant API client tests" $ do
     let rk = cmdToRequestKey cmd
     res `shouldBe` (Right (RequestKeys [rk]))
     res' <- runClientM (listen pactServerApiClient (ListenerRequest rk)) clientEnv
-    let cmdData = (toJSON . CommandSuccess . Number) 3
+    let cmdData = toJSON simpleServerResult
     res' `shouldBe` (Right (ApiResult cmdData (Just 0) Nothing))
   it "correctly runs a simple command locally" $ do
     cmd <- simpleServerCmd
     res <- runClientM (local pactServerApiClient cmd) clientEnv
-    let cmdData = (CommandSuccess . Number) 3
-    res `shouldBe` (Right cmdData)
+    res `shouldBe` (Right simpleServerResult)

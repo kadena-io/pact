@@ -16,7 +16,6 @@ import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
-import Data.Aeson (Value)
 
 type ApiV1API =
   (    "send" :> ReqBody '[JSON] SubmitBatch :>
@@ -26,7 +25,7 @@ type ApiV1API =
   :<|> "listen" :> ReqBody '[JSON] ListenerRequest :>
     Post '[JSON] ApiResult
   :<|> "local" :> ReqBody '[JSON] (Command Text) :>
-    Post '[JSON] (CommandValue Value)
+    Post '[JSON] CommandValue
   )
 
 type PactServerAPI =

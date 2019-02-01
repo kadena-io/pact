@@ -121,7 +121,7 @@ listenHandler (ListenerRequest rk) = do
       log $ "Listener Serviced for: " ++ show rk
       pure $ crToAr cr
 
-localHandler :: Command T.Text -> Api (CommandValue Value)
+localHandler :: Command T.Text -> Api CommandValue
 localHandler commandText = do
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
