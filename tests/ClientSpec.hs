@@ -16,9 +16,8 @@ import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
 import Pact.Server.Client
-import Pact.Types.Term (Term (TLiteral))
+import Pact.Types.Term (tLit)
 import Pact.Types.Exp (Literal(LInteger))
-import Pact.Types.Info (Info (..))
 import Servant.Client
 
 _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
@@ -37,7 +36,7 @@ simpleServerCmd = do
   mkExec  "(+ 1 2)" Null def [simpleKeys] (Just "test1")
 
 simpleServerResult :: CommandValue
-simpleServerResult = CommandSuccess $ TLiteral (LInteger 3) (Info Nothing)
+simpleServerResult = CommandSuccess $ tLit $ LInteger 3
 
 spec :: Spec
 spec = around_ bracket $ describe "Servant API client tests" $ do
