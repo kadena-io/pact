@@ -261,8 +261,8 @@ data CommandResult = CommandResult {
   } deriving (Eq,Show)
 
 -- | Actual value of a `CommandResult`.
-data CommandValue a
-  = CommandSuccess a
+data CommandValue
+  = CommandSuccess (Term Name)
   | CommandFailure CommandError
   deriving (Eq, Show)
 
@@ -273,7 +273,7 @@ data CommandError = CommandError {
   } deriving (Eq, Show)
 
 
-instance ToJSON a => ToJSON (CommandValue a) where
+instance ToJSON CommandValue where
     toJSON = \case
       CommandSuccess a -> object
         [ "status" .= ("success" :: Text)
@@ -285,7 +285,7 @@ instance ToJSON a => ToJSON (CommandValue a) where
         ]
         ++ maybe [] (pure . ("detail" .=)) _ceDetail
 
-instance FromJSON a => FromJSON (CommandValue a) where
+instance FromJSON CommandValue where
   parseJSON = withObject "CommandValue" $ \o -> do
     status <- o .: "status"
     case status of
