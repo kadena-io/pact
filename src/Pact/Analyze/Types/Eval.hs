@@ -88,10 +88,11 @@ data TxMetadata
     , _tmDecimals :: !(SFunArray Str Decimal)
     , _tmIntegers :: !(SFunArray Str Integer)
     -- TODO: strings
-    }
+    } deriving Show
 
 newtype Registry = Registry
   { _registryMap :: SFunArray RegistryName Guard }
+  deriving Show
 
 data AnalyzeEnv
   = AnalyzeEnv
@@ -105,48 +106,7 @@ data AnalyzeEnv
     , _aeColumnIds   :: !(TableMap (Map Text VarId))
     , _aeModelTags   :: !(ModelTags 'Symbolic)
     , _aeInfo        :: !Info
-    }
-
-instance Show TxMetadata where
-  showsPrec p TxMetadata{..} = showParen (p > 10)
-    $ showString "TxMetadata "
-    . showsPrec 11 _tmKeySets
-    . showChar ' '
-    . showsPrec 11 _tmDecimals
-    . showChar ' '
-    . showsPrec 11 _tmIntegers
-    --
-    -- TODO: strings
-    --
-
-instance Show Registry where
-  showsPrec p Registry{..} = showParen (p > 10)
-    $ showString "Registry "
-    . showsPrec 11 _registryMap
-
-instance Show AnalyzeEnv where
-  showsPrec p AnalyzeEnv{..} = showParen (p > 10)
-    $ showString "AnalyzeEnv "
-    . showsPrec 11 _aeModuleName
-    . showChar ' '
-    --
-    -- TODO: pact id
-    --
-    . showsPrec 11 _aeRegistry
-    . showChar ' '
-    . showsPrec 11 _aeTxMetadata
-    . showChar ' '
-    . showsPrec 11 _aeScope
-    . showChar ' '
-    . showsPrec 11 _aeGuardPasses
-    . showChar ' '
-    . showsPrec 11 _invariants
-    . showChar ' '
-    . showsPrec 11 _aeColumnIds
-    . showChar ' '
-    . showsPrec 11 _aeModelTags
-    . showChar ' '
-    . showsPrec 11 _aeInfo
+    } deriving Show
 
 mkRegistry :: Registry
 mkRegistry = Registry $ mkFreeArray "registry"
