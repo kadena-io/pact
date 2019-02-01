@@ -31,7 +31,6 @@ import Control.Monad.Trans.Except
 import Control.Arrow
 
 import Data.Aeson hiding (defaultOptions, Result(..))
-import Data.Aeson.Types (parseMaybe)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
@@ -127,10 +126,7 @@ localHandler commandText = do
   mv <- liftIO newEmptyMVar
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
-  r <- liftIO $ takeMVar mv
-  case parseMaybe parseJSON r of
-    Just v  -> pure v
-    Nothing -> die' "command could not be run locally"
+  liftIO $ takeMVar mv
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion

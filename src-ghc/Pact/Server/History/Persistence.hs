@@ -43,7 +43,7 @@ hashFromField h = case A.eitherDecodeStrict' h of
   Left err -> error $ "hashFromField: unable to decode Hash from database! " ++ show err ++ " => " ++ show h
   Right v -> v
 
-crToField :: A.Value -> SType
+crToField :: A.ToJSON v => v -> SType
 crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode r
 
 crFromField :: RequestKey -> Maybe TxId -> ByteString -> Gas -> CommandResult

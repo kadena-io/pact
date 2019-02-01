@@ -109,7 +109,7 @@ instance NFData a => NFData (Command a)
 -- | Strict Either thing for attempting to deserialize a Command.
 data ProcessedCommand m a =
   ProcSucc !(Command (Payload m a)) |
-  ProcFail !String
+  ProcFail !CommandError
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
@@ -128,7 +128,7 @@ mkCommand' creds env = Command env (sig <$> creds) hsh
 verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
       (Right env', Right _, Nothing) -> ProcSucc $ orig { _cmdPayload = env' }
-      (e, h, s) -> ProcFail $ "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
+      (e, h, s) -> ProcFail $ CommandError "Invalid command" $ Just $ toErrStr e ++ toErrStr h ++ fromMaybe "" s
   where
     ppcmdPayload' = traverse parsePact =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
@@ -265,11 +265,14 @@ data CommandValue
   | CommandFailure CommandError
   deriving (Eq, Show)
 
+
 -- | Error details for `CommandValue`.
 data CommandError = CommandError {
-      _ceMsg :: String
-    , _ceDetail :: Maybe String
-  } deriving (Eq, Show)
+      _ceMsg :: !String
+    , _ceDetail :: !(Maybe String)
+  } deriving (Eq, Show, Generic)
+
+instance NFData CommandError
 
 instance ToJSON CommandValue where
     toJSON = \case

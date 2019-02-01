@@ -21,7 +21,6 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import qualified Data.Map.Strict as M
 
-import Data.Aeson as A
 import Data.Maybe (fromMaybe)
 
 import Pact.Types.Command
@@ -59,7 +58,8 @@ initPactService CommandConfig {..} loggers = do
 applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState ->
             GasModel -> ExecutionMode -> Command a ->
             ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
-applyCmd _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
+applyCmd _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) (CommandFailure s)
+
 applyCmd logger conf dbv cv gasModel exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
@@ -71,11 +71,12 @@ applyCmd logger conf dbv cv gasModel exMode _ (ProcSucc cmd) = do
       return cr
     Left e -> do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
-      return $ jsonResult exMode (cmdToRequestKey cmd) (Gas 0) $
+      return $ cmdResult exMode (cmdToRequestKey cmd) (Gas 0) $
         CommandFailure $ CommandError "Command execution failed" (Just $ show e)
 
-jsonResult :: ToJSON a => ExecutionMode -> RequestKey -> Gas -> a -> CommandResult
-jsonResult ex cmd gas a = CommandResult cmd (exToTx ex) (toJSON a) gas
+
+cmdResult :: ExecutionMode -> RequestKey -> Gas -> CommandValue -> CommandResult
+cmdResult ex cmd gas a = CommandResult cmd (exToTx ex) a gas
 
 exToTx :: ExecutionMode -> Maybe TxId
 exToTx (Transactional t) = Just t
@@ -102,7 +103,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
         Just cmdPact -> M.insert (_cpTxId cmdPact) cmdPact pacts
   void $ liftIO $ swapMVar _ceState $ CommandState _erRefStore newPacts
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) newCmdPact
-  return $ jsonResult _ceMode rk _erGas $ CommandSuccess (last _erOutput)
+  return $ cmdResult _ceMode rk _erGas $ CommandSuccess (last (erOutput pr))
 
 handlePactExec :: [Term Name] -> PactExec -> CommandM p (Maybe CommandPact)
 handlePactExec em PactExec{..} = do
@@ -150,7 +151,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
               if _cmRollback
                 then rollbackUpdate env msg state
                 else continuationUpdate env msg state pact exec
-              return $ jsonResult _ceMode rk _erGas $ CommandSuccess (last _erOutput)
+              return $ cmdResult _ceMode rk _erGas $ CommandSuccess (last erOutput)
 
 rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
 rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
