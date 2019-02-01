@@ -995,9 +995,7 @@ typeof t = case t of
 
 -- | Return string type description.
 typeof' :: Pretty a => Term a -> Text
-typeof'
-  = either id (pack . renderCompactString)
-  . typeof
+typeof' = either id renderCompactText . typeof
 
 pattern TLitString :: Text -> Term t
 pattern TLitString s <- TLiteral (LString s) _

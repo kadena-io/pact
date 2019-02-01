@@ -154,6 +154,9 @@ renderString renderf colors p =
 renderCompactString :: Pretty a => a -> String
 renderCompactString = renderString renderReallyCompact RPlain
 
+renderCompactText :: Pretty a => a -> Text
+renderCompactText = pack . renderCompactString
+
 -- This is the same as @renderCompact@ from the pretty printing package, except
 -- that printer inserts line breaks every chance it gets whereas this function
 -- never inserts them.

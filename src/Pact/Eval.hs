@@ -588,7 +588,7 @@ applyPact (TList steps _ i) = do
           case (_psRollback,_tStepRollback step) of
             (False,_) -> reduce $ _tStepExec step
             (True,Just rexp) -> reduce rexp
-            (True,Nothing) -> return $ tStr $ pack $ renderCompactString $
+            (True,Nothing) -> return $ tStr $ renderCompactText $
               "No rollback on step " <> pretty _psStep
       case stepEntity of
         Just (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
@@ -620,7 +620,7 @@ installModule ModuleData{..} = do
   (evalRefs . rsLoadedModules) %= HM.insert n _mdModule
 
 msg :: Doc -> Term n
-msg = toTerm . pack . renderCompactString
+msg = toTerm . renderCompactText
 
 enscope ::  Term Name ->  Eval e (Term Ref)
 enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothing) $ t)

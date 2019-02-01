@@ -154,7 +154,7 @@ formatDef =
       let parts = T.splitOn "{}" s
           plen = length parts
           rep (TLitString t) = t
-          rep t = pack $ renderCompactString t
+          rep t = renderCompactText t
       if plen == 1
       then return $ tStr s
       else if plen - length es > 1
