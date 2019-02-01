@@ -162,11 +162,17 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
 
 verifyUserSig :: ByteString -> UserSig -> Bool
 verifyUserSig msg UserSig{..} =
-  let pubT = parseB16TextOnly _usPubKey
-      sigT = parseB16TextOnly _usSig
-  in case (pubT, sigT) of
-       (Right p, Right sig) -> verify (toScheme _usScheme) msg (PubBS p) (SigBS sig)
-       _ -> False
+  case (pubT, sigT, addrT) of
+    (Right p, Right sig, Right addr) ->
+      (isValidAddr addr p) && verify (toScheme _usScheme) msg (PubBS p) (SigBS sig)
+    _ -> False
+  where pubT = parseB16TextOnly _usPubKey
+        sigT = parseB16TextOnly _usSig
+        addrT = parseB16TextOnly _usAddress
+        isValidAddr givenAddr pubBS =
+          case formatPublicKeyBS (toScheme _usScheme) (PubBS pubBS) of
+            Right expectAddr -> givenAddr == expectAddr
+            Left _           -> False
 
 #endif
 

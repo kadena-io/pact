@@ -42,6 +42,7 @@ import qualified Data.Map as M
 import qualified Pact.Analyze.Check as Check
 import Statistics.Types (Estimate(..))
 import qualified Pact.Types.Crypto as Crypto
+import Pact.Types.Util (fromText')
 #endif
 import Pact.Typechecker
 import Pact.Types.Typecheck
@@ -54,7 +55,6 @@ import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Repl.Types
-import Pact.Types.Util (parseB16TextOnly, toB16Text, fromText')
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
