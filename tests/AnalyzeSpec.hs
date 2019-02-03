@@ -908,6 +908,19 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Success'
     expectPass code $ Valid Success'
 
+  describe "pact-id" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              (pact-id))
+          |]
+
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+    expectPass code $ Satisfiable $ CoreProp $ IntegerComparison Eq
+      (Inj Result :: Prop 'TyInteger)
+      10
+
   describe "logical short-circuiting" $ do
     describe "and" $ do
       let code =

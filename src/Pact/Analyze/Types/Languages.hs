@@ -1299,6 +1299,8 @@ data Term (a :: Ty) where
 
   -- TODO: ReadMsg
 
+  PactId          :: Term 'TyInteger
+
   -- Guards
   MkKsRefGuard :: Term 'TyStr            -> Term 'TyGuard
   GuardPasses  :: TagId -> Term 'TyGuard -> Term 'TyBool
@@ -1409,6 +1411,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadKeySet  name -> showString "ReadKeySet " . showsPrec 11 name
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
+  PactId -> showString "PactId"
 
 showsProp :: SingTy ty -> Int -> Prop ty -> ShowS
 showsProp ty p = withSing ty $ \case
@@ -1471,6 +1474,7 @@ userShowTerm ty p = \case
   ReadKeySet name      -> parenList ["read-keyset", userShow name]
   ReadDecimal name     -> parenList ["read-decimal", userShow name]
   ReadInteger name     -> parenList ["read-integer", userShow name]
+  PactId               -> parenList ["pact-id"]
   MkKsRefGuard name    -> parenList ["keyset-ref-guard", userShow name]
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool

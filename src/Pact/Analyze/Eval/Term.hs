@@ -441,6 +441,11 @@ evalTerm = \case
   ReadDecimal nameT -> readDecimal =<< evalTerm nameT
   ReadInteger nameT -> readInteger =<< evalTerm nameT
 
+  PactId -> do
+    whetherInPact <- view inPact
+    succeeds %= (.&& whetherInPact)
+    view currentPactId
+
   --
   -- If in the future Pact is able to store guards other than keysets in the
   -- registry, our approach will work for that generally.
