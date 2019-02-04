@@ -43,9 +43,9 @@ data GasArgs
   | GUnreduced [Term Ref]
   | GReduced [Term Name]
   | GUse ModuleName (Maybe Hash)
-  | GModuleDecl Module
-  | GInterfaceDecl Module
-  | GModuleMember Module
+  | GModuleDecl (Module (Term Name))
+  | GInterfaceDecl (Module (Term Name))
+  | GModuleMember (Module (Term Name))
   | GUserApp
 
 

@@ -228,7 +228,7 @@ makeLenses ''Columns
 data Domain k v where
   UserTables :: !TableName -> Domain RowKey (Columns Persistable)
   KeySets :: Domain KeySetName KeySet
-  Modules :: Domain ModuleName Module
+  Modules :: Domain ModuleName (Module Name)
   Namespaces :: Domain NamespaceName Namespace
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)

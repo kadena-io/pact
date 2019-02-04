@@ -41,8 +41,9 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    TableName(..),
-   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
+   Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    interfaceCode, interfaceMeta, interfaceName, interfaceImports,
+   Governance(..),
    ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
    ConstVal(..),
@@ -417,11 +418,31 @@ data App t = App
 instance Show n => Show (App n) where
   show App{..} = "(" ++ unwords (show _appFun:map show _appArgs) ++ ")"
 
+
+newtype Governance g = Governance { _gGovernance :: Either KeySetName g }
+  deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance Show g => Show (Governance g) where
+  show (Governance (Left k)) = asString' k
+  show (Governance (Right r)) = show r
+
+instance ToJSON g => ToJSON (Governance g) where
+  toJSON (Governance g) = case g of
+    Left ks -> object [ "keyset" .= ks ]
+    Right c -> object [ "capability" .= c ]
+instance FromJSON g => FromJSON (Governance g) where
+  parseJSON = withObject "Governance" $ \o ->
+    Governance <$> (Left <$> o .: "keyset" <|>
+                    Right <$> o .: "capability")
+
+
+
+
 -- TODO: We need a more expressive, safer ADT for this.
-data Module
+data Module g
   = Module
   { _mName :: !ModuleName
-  , _mKeySet :: !KeySetName
+  , _mGovernance :: !(Governance g)
   , _mMeta :: !Meta
   , _mCode :: !Code
   , _mHash :: !Hash
@@ -434,17 +455,17 @@ data Module
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
   , _interfaceImports :: [Use]
-  } deriving Eq
+  } deriving (Eq,Functor,Foldable,Traversable)
 
-instance Show Module where
+instance Show g => Show (Module g) where
   show m = case m of
-    Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
+    Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ show _mGovernance ++ " " ++ show _mHash ++ ")"
     Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
 
-instance ToJSON Module where
+instance ToJSON g => ToJSON (Module g) where
   toJSON Module{..} = object
     [ "name" .= _mName
-    , "keyset" .= _mKeySet
+    , "governance" .= _mGovernance
     , "meta" .= _mMeta
     , "code" .= _mCode
     , "hash" .= _mHash
@@ -457,16 +478,26 @@ instance ToJSON Module where
     , "meta" .= _interfaceMeta
     ]
 
-instance FromJSON Module where
+instance FromJSON g => FromJSON (Module g) where
   parseJSON = withObject "Module" $ \o -> Module
     <$> o .: "name"
-    <*> o .: "keyset"
+    <*> o .: "governance"
     <*> pure (Meta Nothing []) {- o .:? "meta" -}
     <*> o .: "code"
     <*> o .: "hash"
     <*> (HS.fromList <$> o .: "blessed")
     <*> o .: "interfaces"
     <*> pure []
+
+instance Eq1 Module where
+  liftEq eq
+    (Module a (Governance b) c d e f g h)
+    (Module m (Governance n) o p q r s t) =
+      a == m && liftEq eq b n && c == o && d == p &&
+      e == q && f == r && g == s && h == t
+  liftEq _ a@Interface {} b@Interface{} = (() <$ a) == (() <$ b)
+  liftEq _ _ _ = False
+
 
 data Def n = Def
   { _dDefName :: !DefName
@@ -524,7 +555,7 @@ instance Eq1 ConstVal where
 -- | Pact evaluable term.
 data Term n =
     TModule {
-      _tModuleDef :: Module
+      _tModuleDef :: Module (Term n)
     , _tModuleBody :: !(Scope () Term n)
     , _tInfo :: !Info
     } |
@@ -645,7 +676,7 @@ showParamType t = ":" ++ show t
 -- instance Show1 Term
 instance Eq1 Term where
   liftEq eq (TModule a b c) (TModule m n o) =
-    a == m && liftEq eq b n && c == o
+    liftEq (liftEq eq) a m && liftEq eq b n && c == o
   liftEq eq (TList a b c) (TList m n o) =
     liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o
   liftEq eq (TDef (Def a b c d e f g) i) (TDef (Def m n o p q r s) t) =
@@ -684,7 +715,7 @@ instance Applicative Term where
 
 instance Monad Term where
     return a = TVar a def
-    TModule m b i >>= f = TModule m (b >>>= f) i
+    TModule m b i >>= f = TModule (fmap (>>= f) m) (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef (Def n m dt ft b d i) i' >>= f = TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d i) i'
     TNative n fn t d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d tl i
