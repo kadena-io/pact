@@ -50,6 +50,7 @@ module Pact.Types.Term
    Use(..),
    App(..),appFun,appArgs,appInfo,
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
+   derefDef,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
@@ -499,6 +500,7 @@ instance Eq1 Module where
   liftEq _ _ _ = False
 
 
+
 data Def n = Def
   { _dDefName :: !DefName
   , _dModule :: !ModuleName
@@ -508,12 +510,18 @@ data Def n = Def
   , _dMeta :: !Meta
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq)
+
 instance (Show n) => Show (Def n) where
   show Def{..} = "(" ++ unwords
     [ defTypeRep _dDefType
     , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
     , "(" ++ unwords (map show (_ftArgs _dFunType)) ++ ")"] ++
     maybeDelim " " (_mDocs _dMeta) ++ ")"
+
+derefDef :: Def Ref -> Name
+derefDef Def{..} = QName _dModule (asString _dDefName) _dInfo
+
+
 
 newtype NamespaceName = NamespaceName Text
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic)

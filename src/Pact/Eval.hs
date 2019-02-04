@@ -245,8 +245,6 @@ eval (TModule m@Interface{} bod i) =
     return (g, msg $ pack $ "Loaded interface " ++ show (_interfaceName mangledI))
 eval t = enscope t >>= reduce
 
-derefDef :: Def Ref -> Name
-derefDef Def{..} = QName _dModule (asString _dDefName) _dInfo
 
 evalUse :: Use -> Eval e ()
 evalUse (Use mn h i) = do

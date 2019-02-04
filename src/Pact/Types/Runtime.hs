@@ -323,11 +323,11 @@ txids :: Info -> TableName -> TxId -> Eval e [TxId]
 txids i tn tid = method i $ \db -> _txids db tn tid
 
 -- | Invoke '_createUserTable'
-createUserTable :: Info -> TableName -> ModuleName -> KeySetName -> Eval e ()
-createUserTable i t m k = method i $ \db -> _createUserTable db t m k
+createUserTable :: Info -> TableName -> ModuleName -> Eval e ()
+createUserTable i t m = method i $ \db -> _createUserTable db t m
 
 -- | Invoke _getUserTableInfo
-getUserTableInfo :: Info -> TableName -> Eval e (ModuleName,KeySetName)
+getUserTableInfo :: Info -> TableName -> Eval e ModuleName
 getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
 
 -- | Invoke _beginTx
@@ -428,7 +428,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     , _writeRow = \_ _ _ _ -> diePure
     , _keys = const diePure
     , _txids = \_ _ -> diePure
-    , _createUserTable = \_ _ _ -> diePure
+    , _createUserTable = \_ _ -> diePure
     , _getUserTableInfo = const diePure
     , _beginTx = const diePure
     , _commitTx = diePure

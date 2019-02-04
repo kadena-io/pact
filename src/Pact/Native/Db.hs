@@ -347,9 +347,8 @@ toColumns i = fmap (Columns . M.fromList) . mapM conv where
 createTable' :: RNativeFun e
 createTable' i [t@TTable {..}] = do
   guardTable i t
-  m <- getModule (_faInfo i) _tModule
   let (UserTables tn) = userTable t
-  success "TableCreated" $ createUserTable (_faInfo i) tn _tModule (_mKeySet m)
+  success "TableCreated" $ createUserTable (_faInfo i) tn _tModule
 createTable' i as = argsError i as
 
 guardTable :: Show n => FunApp -> Term n -> Eval e ()

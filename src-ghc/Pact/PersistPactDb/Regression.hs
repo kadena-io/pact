@@ -28,16 +28,15 @@ runRegression p = do
   t2 <- begin v (Just t1)
   let user1 = "user1"
       usert = UserTables user1
-  createUserTable' v user1 "someModule" "someKeyset"
+  createUserTable' v user1 "someModule"
   assertEquals' "output of commit 2"
     [TxLog "SYS_usertables" "user1" $
      object [ ("utModule" .= object [ ("name" .= String "someModule"), ("namespace" .= Null)])
-            , ("utKeySet" .= String "someKeyset")
             ]
      ]
     (commit v)
   t3 <- begin v t2
-  assertEquals' "user table info correct" ("someModule","someKeyset") $ _getUserTableInfo pactdb user1 v
+  assertEquals' "user table info correct" "someModule" $ _getUserTableInfo pactdb user1 v
   let row = Columns $ M.fromList [("gah",toTerm' (LDecimal 123.454345))]
   _writeRow pactdb Insert usert "key1" (fmap toPersistable row) v
   assertEquals' "user insert" (Just row) (fmap (fmap toTerm) <$> _readRow pactdb usert "key1" v)
@@ -57,7 +56,7 @@ runRegression p = do
      ,TxLog "SYS_modules" "mod1" $
        object [("hash" .= String "bf5fda6cead20c9349f8a7f0052ec6039bf8b38c4507db2142cbc5f2a01169941e3f0d7c7aaa3c97d53c36e63502f47d3b8c3948cce15a919055e5550f86c3ba")
               ,("blessed" .= ([]::[Text]))
-              ,("keyset" .= String "mod-admin-keyset")
+              ,("governance" .= object ["keyset" .= String "mod-admin-keyset"])
               ,("interfaces" .= ([]::[Text]))
               ,("name" .= object [ ("name" .= String "mod1"), ("namespace" .= Null)])
               ,("code" .= String "code")

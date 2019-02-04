@@ -106,7 +106,7 @@ moduleNotFoundP = MP.string "<interactive>:"
     digitsP = void $ MP.some MP.digitChar
 
 loadModules
-  :: [Module]
+  :: [Module a]
   -> IO (Either ClientError (HM.HashMap ModuleName ModuleData))
 loadModules mods0 = do
   let -- - try to load the remaining list of modules
@@ -148,7 +148,7 @@ loadModules mods0 = do
       (_others, [])             -> Nothing
       (others, found : others') -> Just $ found : (others ++ others')
 
-    loadModule :: Module -> ExceptT String (StateT ReplState IO) ()
+    loadModule :: Module a -> ExceptT String (StateT ReplState IO) ()
     loadModule = void
                . ExceptT
                . evalRepl'
