@@ -290,7 +290,7 @@ verifyFunctionInvariants'
   -> IO (Either CheckFailure (TableMap [CheckResult]))
 verifyFunctionInvariants' modName funName funInfo tables pactArgs body = runExceptT $ do
     (args, tm, graph) <- hoist generalize $
-      withExcept translateToCheckFailure $ runTranslation funName funInfo pactArgs body
+      withExcept translateToCheckFailure $ runTranslation modName funName funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       lift $ SBV.setTimeOut 1000 -- one second
@@ -351,7 +351,7 @@ verifyFunctionProperty modName funName funInfo tables pactArgs body (Located pro
   runExceptT $ do
     (args, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
-        runTranslation funName funInfo pactArgs body
+        runTranslation modName funName funInfo pactArgs body
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       lift $ SBV.setTimeOut 1000 -- one second
       modelArgs' <- lift $ runAlloc $ allocArgs args
@@ -733,7 +733,7 @@ verifyModule modules moduleData = runExceptT $ do
     (\name ref accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
-        (TopFun (FDefun _info _name funType _args _body) _meta, _tcState)
+        (TopFun (FDefun _info _mod _name funType _args _body) _meta, _tcState)
           -> accum & _1 . at name ?~ (ref, funType)
         (TopConst _info _qualifiedName _type val _doc, _tcState)
           -> accum & _2 . at name ?~ val

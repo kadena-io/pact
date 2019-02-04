@@ -592,8 +592,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
     translateLet LetScope bindings body
 
-  AST_InlinedApp nm bindings body ->
-    translateLet (FunctionScope nm) bindings body
+  AST_InlinedApp modName funName bindings body ->
+    translateLet (FunctionScope modName funName) bindings body
 
   AST_Var node -> do
     mVar     <- view $ teNodeVars.at node
@@ -1207,12 +1207,13 @@ mkExecutionGraph vertex0 rootPath st = ExecutionGraph
     (_tsPathEdges st)
 
 runTranslation
-  :: Text
+  :: Pact.ModuleName
+  -> Text
   -> Info
   -> [Named Node]
   -> [AST Node]
   -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
-runTranslation name info pactArgs body = do
+runTranslation modName funName info pactArgs body = do
     (args, translationVid) <- runArgsTranslation
     (tm, graph) <- runBodyTranslation args translationVid
     pure (args, tm, graph)
@@ -1242,7 +1243,7 @@ runTranslation name info pactArgs body = do
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
             let bindingTs = fmap argToBinding args
-            res <- withNewScope (FunctionScope name) bindingTs retTid $
+            res <- withNewScope (FunctionScope modName funName) bindingTs retTid $
               translateBody body
             _ <- extendPath -- form final edge for any remaining events
             pure res
