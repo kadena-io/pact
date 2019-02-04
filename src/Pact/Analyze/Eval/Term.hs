@@ -452,6 +452,11 @@ evalTerm = \case
   --
   MkKsRefGuard nameT -> resolveGuard =<< symRegistryName <$> evalTerm nameT
 
+  MkPactGuard _nameT -> do
+    whetherInPact <- view inPact
+    succeeds %= (.&& whetherInPact)
+    view aeTrivialGuard
+
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT
 

@@ -675,6 +675,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr strT <- translateNode strA
     pure $ Some SGuard $ MkKsRefGuard strT
 
+  AST_CreatePactGuard strA -> do
+    Some SStr strT <- translateNode strA
+    pure $ Some SGuard $ MkPactGuard strT
+
   AST_Enforce _ cond -> do
     Some SBool condTerm <- translateNode cond
     tid <- tagAssert $ cond ^. aNode

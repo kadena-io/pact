@@ -93,9 +93,7 @@ data PactMetadata
 -- We just use `uninterpret` for now until we need to extract these values from
 -- the model.
 mkPactMetadata :: PactMetadata
-mkPactMetadata = PactMetadata
-  (sansProv $ uninterpret "in_pact")
-  (sansProv $ uninterpret "pact_id")
+mkPactMetadata = PactMetadata (uninterpretS "in_pact") (uninterpretS "pact_id")
 
 newtype Registry
   = Registry
@@ -126,6 +124,7 @@ data AnalyzeEnv
     , _aeColumnIds    :: !(TableMap (Map Text VarId))
     , _aeModelTags    :: !(ModelTags 'Symbolic)
     , _aeInfo         :: !Info
+    , _aeTrivialGuard :: !(S Guard)
     } deriving Show
 
 mkAnalyzeEnv
@@ -138,10 +137,21 @@ mkAnalyzeEnv
   -> Info
   -> Maybe AnalyzeEnv
 mkAnalyzeEnv modName pactMetadata registry tables args tags info = do
-  let txMetadata  = TxMetadata (mkFreeArray "txKeySets")
-                               (mkFreeArray "txDecimals")
-                               (mkFreeArray "txIntegers")
-      guardPasses = mkFreeArray "guardPasses"
+  let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
+                                (mkFreeArray "txDecimals")
+                                (mkFreeArray "txIntegers")
+      --
+      -- NOTE: for now we create an always-passing singleton "trivial guard"
+      -- that we hand out for pact and module creation. this will not suffice
+      -- as soon as we need to share pact and module guards across pacts and
+      -- modules. at this point, we'll need to replace our opaque (map to Bool)
+      -- _aeGuardPasses with map to a symbolic sum capturing different guard
+      -- types. this is because we we will need to "close over" the pact id or
+      -- module name at the time of creation and compare that with pact id /
+      -- module name during symbolic execution
+      --
+      trivialGuard = uninterpret "trivial_guard"
+      guardPasses  = writeArray (mkFreeArray "guardPasses") trivialGuard sTrue
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -156,7 +166,7 @@ mkAnalyzeEnv modName pactMetadata registry tables args tags info = do
   let columnIds' = TableMap (Map.fromList columnIds)
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args guardPasses
-    invariants' columnIds' tags info
+    invariants' columnIds' tags info (sansProv trivialGuard)
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier

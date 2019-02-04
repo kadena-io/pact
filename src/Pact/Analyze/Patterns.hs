@@ -78,6 +78,10 @@ pattern AST_KeysetRefGuard :: forall a. AST a -> AST a
 pattern AST_KeysetRefGuard name <-
   App _node (NativeFunc "keyset-ref-guard") [name]
 
+pattern AST_CreatePactGuard :: forall a. AST a -> AST a
+pattern AST_CreatePactGuard name <-
+  App _node (NativeFunc "create-pact-guard") [name]
+
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
   App node (NativeFunc "enforce") (cond:_rest)

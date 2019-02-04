@@ -751,6 +751,16 @@ spec = describe "analyze" $ do
           |]
     expectVerified code
 
+  describe "create-pact-guard" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce-guard (create-pact-guard "foo")))
+          |]
+    -- Depending on whether we're executing in a pact:
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+
   describe "call-by-value semantics for inlining" $ do
     let code =
           [text|

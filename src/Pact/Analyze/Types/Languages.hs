@@ -1303,6 +1303,7 @@ data Term (a :: Ty) where
 
   -- Guards
   MkKsRefGuard :: Term 'TyStr            -> Term 'TyGuard
+  MkPactGuard  :: Term 'TyStr            -> Term 'TyGuard
   GuardPasses  :: TagId -> Term 'TyGuard -> Term 'TyBool
 
   -- Table access
@@ -1359,6 +1360,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
 
   MkKsRefGuard a ->
       showString "MkKsRefGuard "
+    . showsPrec 11 a
+  MkPactGuard a ->
+      showString "MkPactGuard "
     . showsPrec 11 a
   GuardPasses a b ->
       showString "GuardPasses "
@@ -1476,6 +1480,7 @@ userShowTerm ty p = \case
   ReadInteger name     -> parenList ["read-integer", userShow name]
   PactId               -> parenList ["pact-id"]
   MkKsRefGuard name    -> parenList ["keyset-ref-guard", userShow name]
+  MkPactGuard name     -> parenList ["create-pact-guard", userShow name]
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2
