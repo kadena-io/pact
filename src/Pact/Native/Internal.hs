@@ -115,7 +115,7 @@ funType' :: Type n -> [(Text,Type n)] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
 
-getModule :: Info -> ModuleName -> Eval e Module
+getModule :: Info -> ModuleName -> Eval e (Module (Def Ref))
 getModule i n = do
   lm <- HM.lookup n <$> use (evalRefs.rsLoadedModules)
   case lm of
@@ -166,7 +166,7 @@ enforceGuard i g = case g of
   GModule mg@ModuleGuard{..} -> do
     m <- getModule (_faInfo i) _mgModuleName
     case m of
-      Module{..} -> enforceKeySetName (_faInfo i) _mKeySet
+      Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
       Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
   GUser UserGuard{..} -> do
     void $ runReadOnly (_faInfo i) $
@@ -182,4 +182,4 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
     (Just mn) | mn == modName -> onFound
     _ -> do
       m <- getModule i modName
-      void $ acquireModuleAdmin i (_mName m) (_mKeySet m)
+      void $ acquireModuleAdmin i (_mName m) (_mGovernance m)

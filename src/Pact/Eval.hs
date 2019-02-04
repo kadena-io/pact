@@ -37,7 +37,7 @@ module Pact.Eval
     ,runPure,runReadOnly,Purity
     ,liftTerm,apply
     ,preGas
-    ,acquireCapability,acquireModuleAdmin
+    ,acquireCapability,acquireModuleAdmin,enforceModuleAdmin
     ,capabilityGranted
     ,revokeCapability,revokeAllCapabilities
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
@@ -158,7 +158,10 @@ acquireCapability cap test = do
 
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modGov =
-  acquireCapability (ModuleAdminCapability modName) $
+  acquireCapability (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
+
+enforceModuleAdmin :: Info -> Governance (Def Ref) -> Eval e ()
+enforceModuleAdmin i modGov =
     case _gGovernance modGov of
       Left ks -> enforceKeySetName i ks
       Right d@Def{..} -> case _dDefType of

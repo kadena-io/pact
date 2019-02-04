@@ -157,7 +157,7 @@ descModule i [TLitString t] = do
           return $ TObject
             [ (tStr "name"      , tStr $ asString _mName)
             , (tStr "hash"      , tStr $ asString _mHash)
-            , (tStr "keyset"    , tStr $ asString _mKeySet)
+            , (tStr "keyset"    , tStr $ pack $ show _mGovernance)
             , (tStr "blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
             , (tStr "code"      , tStr $ asString _mCode)
             , (tStr "interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
