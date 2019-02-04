@@ -210,7 +210,7 @@ formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
            "Invalid PPKScheme"
            Crypto.toScheme
   pubBS <- eitherEvalErr (parseB16TextOnly cryptoPubKey)
-           "Invalid Public Key"
+           "Invalid Public Key format"
            Crypto.PubBS
   addr  <- eitherEvalErr (Crypto.formatPublicKeyBS sppk pubBS)
            "Unable to convert Public Key to Address"

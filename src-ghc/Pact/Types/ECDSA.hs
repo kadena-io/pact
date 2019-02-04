@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Pact.Types.ECDSA
@@ -18,7 +17,6 @@ module Pact.Types.ECDSA
 
 
 import Data.ByteString  (ByteString)
-import Data.Text        (Text)
 import Data.Monoid      ((<>))
 
 import Crypto.PubKey.ECC.Generate  (generate, generateQ)
@@ -31,10 +29,6 @@ import qualified Crypto.PubKey.ECC.Types  as ECDSA
 import qualified Crypto.PubKey.ECC.ECDSA  as ECDSA
 import qualified Data.ByteArray           as BA
 import qualified Data.ByteString          as BS
-import qualified Data.ByteString.Base16   as B16
-
-
-import Pact.Types.Util (parseB16TextOnly, toB16Text)
 
 
 
@@ -110,6 +104,7 @@ exportPrivate (PrivateKey _ p) = integerToBS p
 -- ECDSA Private Key must be 32 bytes and not begin with 0x00 (null byte)
 -- Assumes ByteString is not base 16.
 -- Source: https://kobl.one/blog/create-full-ethereum-keypair-and-address/
+--         http://hackage.haskell.org/package/cryptonite-0.25/docs/src/Crypto-PubKey-ECC-Generate.html#generate
 
 importPrivate :: ByteString -> Maybe PrivateKey
 importPrivate bs | not startsNullByte &&
@@ -154,56 +149,3 @@ integerToBS = i2osp
 
 bsToInteger :: ByteString -> Integer
 bsToInteger = os2ip
-
-
-textToPublic :: Text -> Either String ECDSA.PublicKey
-textToPublic t = do
-  b' <- parseB16TextOnly t
-  case importPublic b' of
-    Nothing -> Left "ECDSA Public Key import failed"
-    Just p  -> Right p
-
-
-{--
-integralToHexBS :: Integral a => a -> ByteString
-integralToHexBS a = BS.pack $ reverse $ go (quotRem a base) where
-  go (n,d) | n == 0 = [fromIntegral d]
-           | otherwise = (fromIntegral d):go (quotRem n base)
-  base = 256
-
-
--- Generates an ECDSA nonce (`k`) deterministically according to RFC 6979.
--- https://tools.ietf.org/html/rfc6979#section-3.2
--- Based in this example:
---   https://github.com/btcsuite/btcd/blob/master/btcec/signature.go#L455
--- If k-signature returns zero should re-determine k
-deterministicNonce :: PrivateKey -> ByteString -> Int
-deterministicNonce = undefined
---}
-
-
-
-
---------- ECDSA TESTS ---------
-
--- Example from https://kobl.one/blog/create-full-ethereum-keypair-and-address/
--- "Which gives us the Ethereum address 0x0bed7abd61247635c1973eb38474a2516ed1d884"
-
-_testFormatPublicKeyETH :: Text
-_testFormatPublicKeyETH = toB16Text $ formatPublicKeyETH $ fst $ B16.decode
-  "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
-
-
-_testPublicKeyImport64Bytes :: Either String PublicKey
-_testPublicKeyImport64Bytes = textToPublic "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
-
-_testPublicKeyImport65Bytes :: Either String PublicKey
-_testPublicKeyImport65Bytes = textToPublic "04836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
-
-_testSameKey :: Bool
-_testSameKey = _testPublicKeyImport64Bytes == _testPublicKeyImport65Bytes
-
-
--- Only 65 bytes Public Keys starting with 0x04 are valid.
-_testPublicKeyImport65BytesFail :: Either String PublicKey
-_testPublicKeyImport65BytesFail = textToPublic "05836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"

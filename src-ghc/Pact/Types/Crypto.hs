@@ -81,7 +81,7 @@ class ConvertBS a where
 -- Also ensures that each scheme specifies its payload hash and
 -- how it will transform its public keys to Pact Runtime public keys.
 
-class (ConvertBS (PublicKey a),
+class (ConvertBS (PublicKey a),  Eq (PublicKey a),
        ConvertBS (PrivateKey a),
        ConvertBS (Signature a))  =>
       Scheme a where
@@ -96,7 +96,8 @@ class (ConvertBS (PublicKey a),
   _genKeyPair :: a -> IO (PublicKey a, PrivateKey a)
 
 
-  -- Trivial to derive in Elliptic Curve Cryptography
+  -- Trivial to derive in Elliptic Curve Cryptography.
+  -- Return Nothing if not possible to derive.
 
   _getPublic :: a -> PrivateKey a -> Maybe (PublicKey a)
 
@@ -172,11 +173,11 @@ instance Scheme (SPPKScheme 'ED25519) where
 
 instance ConvertBS (Ed25519.PublicKey) where
   toBS = Ed25519.exportPublic
-  fromBS s = maybeToEither ("Invalid ED25519 Public Key: " ++ show s)
+  fromBS s = maybeToEither ("Invalid ED25519 Public Key: " ++ show (toB16Text s))
              (Ed25519.importPublic s)
 instance ConvertBS (Ed25519.PrivateKey) where
   toBS = Ed25519.exportPrivate
-  fromBS s = maybeToEither ("Invalid ED25519 Private Key: " ++ show s)
+  fromBS s = maybeToEither ("Invalid ED25519 Private Key: " ++ show (toB16Text s))
              (Ed25519.importPrivate s)
 instance ConvertBS Ed25519.Signature where
   toBS (Ed25519.Sig bs) = bs
@@ -204,15 +205,15 @@ instance Scheme (SPPKScheme 'ETH) where
 
 instance ConvertBS (ECDSA.PublicKey) where
   toBS = ECDSA.exportPublic
-  fromBS s = maybeToEither ("Invalid ECDSA Public Key: " ++ show s)
+  fromBS s = maybeToEither ("Invalid ECDSA Public Key: " ++ show (toB16Text s))
              (ECDSA.importPublic s)
 instance ConvertBS (ECDSA.PrivateKey) where
   toBS = ECDSA.exportPrivate
-  fromBS s = maybeToEither ("Invalid ECDSA Private Key: " ++ show s)
+  fromBS s = maybeToEither ("Invalid ECDSA Private Key: " ++ show (toB16Text s))
              (ECDSA.importPrivate s)
 instance ConvertBS (ECDSA.Signature) where
   toBS = ECDSA.exportSignature
-  fromBS s = maybeToEither ("Invalid ECDSA Signature: " ++ show s)
+  fromBS s = maybeToEither ("Invalid ECDSA Signature: " ++ show (toB16Text s))
              (ECDSA.importSignature s)
 
 
@@ -306,16 +307,26 @@ genKeyPair (SomeScheme scheme) = do
 
 -- Derives Public Key from Private Key if none provided. Trivial in some
 -- Crypto schemes (i.e. Elliptic curve ones).
+-- Checks that Public Key provided matches the Public Key derived from the Private Key.
 
 importKeyPair :: SomeScheme -> Maybe PublicKeyBS -> PrivateKeyBS -> Either String SomeKeyPair
 importKeyPair (SomeScheme scheme) maybePubBS (PrivBS privBS) = do
   priv <- fromBS privBS
   pub <- case maybePubBS of
-    Just (PubBS pubBS) -> fromBS pubBS
-    Nothing  -> maybe (Left $ show (toPPKScheme scheme) ++ " Key Pair import failed: Need Public Key")
-                (Right) (_getPublic scheme priv)
-
+           Nothing  -> maybeToEither
+                       (show (toPPKScheme scheme) ++ " Key Pair import failed: Need Public Key")
+                       (_getPublic scheme priv)
+           Just (PubBS pubBS) -> do
+             pubActual <- fromBS pubBS
+             case (_getPublic scheme priv) of
+               Nothing -> Right pubActual
+               Just pubExpect | pubExpect == pubActual -> Right pubActual
+                              | otherwise              -> Left $ "Expected PublicKey "
+                                                          ++ show (toB16Text $ toBS pubExpect)
+                                                          ++ " but received "
+                                                          ++ show (toB16Text $ toBS pubActual)
   return $ SomeKeyPair $ KeyPair scheme pub priv
+
 
 
 

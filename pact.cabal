@@ -248,6 +248,7 @@ test-suite hspec
               , unordered-containers
               , ansi-wl-pprint
               , bytestring
+              , base16-bytestring >=0.1.1.6 && < 0.2
               , mtl
               , text
               , transformers
@@ -284,3 +285,4 @@ test-suite hspec
       , Analyze.TimeGen
       , Analyze.Translate
       , ClientSpec
+      , SchemeSpec
