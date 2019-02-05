@@ -101,7 +101,7 @@ lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
  \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
 
 listA :: Type n
-listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
+listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o") def]
 
 enforceDef :: NativeDef
 enforceDef = defNative "enforce" enforce
@@ -388,7 +388,7 @@ langDefs =
      "Obtain hash of current transaction as a string. `(tx-hash)`"
 
     ,defNative (specialForm Bind) bind
-     (funType a [("src",tTyObject row),("binding",TySchema TyBinding row)])
+     (funType a [("src",tTyObject row),("binding",TySchema TyBinding row def)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
@@ -400,7 +400,7 @@ langDefs =
      \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values. \
      \`$(yield { \"amount\": 100.0 })`"
     ,defNative "resume" resume
-     (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
+     (funType a [("binding",TySchema TyBinding (mkSchemaVar "y") def),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
 
     ,pactVersionDef
@@ -433,7 +433,7 @@ langDefs =
     ])
     where d = mkTyVar "d" []
           row = mkSchemaVar "row"
-          yieldv = TySchema TyObject (mkSchemaVar "y")
+          yieldv = TySchema TyObject (mkSchemaVar "y") def
 
 lam2 :: Type v -> Type v -> Type v -> Type v
 lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]

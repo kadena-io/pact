@@ -34,6 +34,7 @@ module Pact.Types.Runtime
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
    Capability(..),CapAcquireResult(..),
+   Capabilities(..),capGranted,capComposed,
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
    module Pact.Types.Lang,
@@ -239,6 +240,13 @@ updateRefStore RefState {..}
   | HM.null _rsNewModules = id
   | otherwise = over rsModules (HM.union _rsNewModules)
 
+data Capabilities = Capabilities
+  { _capGranted :: [Capability]
+  , _capComposed :: [Capability]
+  } deriving (Show)
+instance Default Capabilities where def = Capabilities def def
+makeLenses ''Capabilities
+
 -- | Interpreter mutable state.
 data EvalState = EvalState {
       -- | New or imported modules and defs.
@@ -250,7 +258,7 @@ data EvalState = EvalState {
       -- | Gas tally
     , _evalGas :: Gas
       -- | Capability list
-    , _evalCapabilities :: [Capability]
+    , _evalCapabilities :: Capabilities
     } deriving (Show)
 makeLenses ''EvalState
 instance Default EvalState where def = EvalState def def def 0 def

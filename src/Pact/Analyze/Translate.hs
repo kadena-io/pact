@@ -367,14 +367,14 @@ maybeTranslateType' = \case
   TyUser a -> maybeTranslateUserType a
 
   -- TODO(joel): understand the difference between the TyUser and TySchema cases
-  TySchema Pact.TyTable _ -> pure QTable
-  TySchema _ ty'          -> maybeTranslateType' ty'
-  TyPrim Pact.TyBool      -> pure $ EType SBool
-  TyPrim Pact.TyDecimal   -> pure $ EType SDecimal
-  TyPrim Pact.TyInteger   -> pure $ EType SInteger
-  TyPrim Pact.TyString    -> pure $ EType SStr
-  TyPrim Pact.TyTime      -> pure $ EType STime
-  TyPrim (Pact.TyGuard _) -> pure $ EType SGuard
+  TySchema Pact.TyTable _ _ -> pure QTable
+  TySchema _ ty' _          -> maybeTranslateType' ty'
+  TyPrim Pact.TyBool        -> pure $ EType SBool
+  TyPrim Pact.TyDecimal     -> pure $ EType SDecimal
+  TyPrim Pact.TyInteger     -> pure $ EType SInteger
+  TyPrim Pact.TyString      -> pure $ EType SStr
+  TyPrim Pact.TyTime        -> pure $ EType STime
+  TyPrim (Pact.TyGuard _)   -> pure $ EType SGuard
 
   -- Pretend any and an unknown var are the same -- we can't analyze either of
   -- them.

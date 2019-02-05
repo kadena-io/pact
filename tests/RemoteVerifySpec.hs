@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Tests remote verification on the server side (i.e. no GHCJS involvement)
 module RemoteVerifySpec (spec) where
@@ -8,17 +9,18 @@ import Control.Concurrent
 import Control.Exception (finally)
 import Control.Lens
 import Control.Monad.State.Strict
-import Data.Aeson
 import Data.Maybe
 import qualified Data.Text as T
 import Test.Hspec
 import NeatInterpolation (text)
-import Network.Wreq
+import qualified Network.HTTP.Client as HTTP
+import Servant.Client
 
 import qualified Pact.Analyze.Remote.Types as Remote
 import Pact.Analyze.Remote.Server (runServantServer)
 import Pact.Repl
 import Pact.Repl.Types
+import Pact.Server.Client
 import Pact.Types.Runtime
 
 spec :: Spec
@@ -44,12 +46,15 @@ stateModuleData nm replState = replState ^. rEnv . eeRefStore . rsModules . at n
 serve :: Int -> IO ThreadId
 serve port = forkIO $ runServantServer port
 
-serveAndRequest :: Int -> Remote.Request -> IO (Response (Remote.Response))
+serveAndRequest :: Int -> Remote.Request -> IO (Either ServantError (Remote.Response))
 serveAndRequest port body = do
-  let url = "http://localhost:" ++ show port ++ "/verify"
+  let url = "http://localhost:" ++ show port
+  verifyBaseUrl <- parseBaseUrl url
+  mgr <- HTTP.newManager HTTP.defaultManagerSettings
+  let clientEnv = mkClientEnv mgr verifyBaseUrl
   tid <- serve port
   finally
-    (asJSON =<< post url (toJSON body) :: IO (Response Remote.Response))
+    (runClientM (verify pactServerApiClient body) clientEnv)
     (killThread tid)
 
 testSingleModule :: Spec
@@ -80,7 +85,7 @@ testSingleModule = do
   resp <- runIO $ serveAndRequest 3000 $ Remote.Request [mod1] "mod1"
 
   it "verifies over the network" $
-    "Property proven valid" == resp ^. responseBody . Remote.responseLines . ix 0
+    "Property proven valid" == resp ^. _Right . Remote.responseLines . ix 0
 
 testUnsortedModules :: Spec
 testUnsortedModules = do
@@ -118,4 +123,4 @@ testUnsortedModules = do
   resp <- runIO $ serveAndRequest 3001 $ Remote.Request [mod2, mod1] "mod2"
 
   it "verifies over the network" $
-    "Property proven valid" == resp ^. responseBody . Remote.responseLines . ix 0
+    "Property proven valid" == resp ^. _Right . Remote.responseLines . ix 0

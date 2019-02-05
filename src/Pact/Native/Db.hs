@@ -54,12 +54,15 @@ instance Readable (TxId, TxLog (Columns Persistable)) where
 
 dbDefs :: NativeModule
 dbDefs =
-  let writeArgs = funType tTyString [("table",tableTy),("key",tTyString),("object",rowTy)]
+  let writeArgs part = funType tTyString
+        [("table",tableTy),("key",tTyString),
+         ("object",TySchema TyObject rt part)]
       writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" <> s <> "`$" <> ex <> "`"
       rt = mkSchemaVar "row"
-      tableTy = TySchema TyTable rt
-      rowTy = TySchema TyObject rt
-      bindTy = TySchema TyBinding rt
+      tableTy = TySchema TyTable rt def
+      rowTy = TySchema TyObject rt def
+      bindTy = TySchema TyBinding rt def
+      partialize = set tySchemaPartial AnySubschema
       a = mkTyVar "a" []
   in ("Database",
     [setTopLevelOnly $ defRNative "create-table" createTable'
@@ -74,7 +77,7 @@ dbDefs =
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType a
-      [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",bindTy)])
+      [("table",tableTy),("key",tTyString),("defaults",partialize rowTy),("bindings",partialize bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
      \`$(with-default-read accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
@@ -101,13 +104,13 @@ dbDefs =
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
-    ,defRNative "write" (write Write) writeArgs
-     (writeDocs "." "(write accounts id { \"balance\": 100.0 })")
-    ,defRNative "insert" (write Insert) writeArgs
-     (writeDocs ", failing if data already exists for KEY."
+    ,defRNative "write" (write Write FullSchema) (writeArgs FullSchema)
+     (writeDocs ". OBJECT must have all fields specified by row type." "(write accounts id { \"balance\": 100.0 })")
+    ,defRNative "insert" (write Insert FullSchema) (writeArgs FullSchema)
+     (writeDocs ", failing if data already exists for KEY. OBJECT must have all fields specified by row type."
      "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
-    ,defRNative "update" (write Update) writeArgs
-     (writeDocs ", failing if data does not exist for KEY."
+    ,defRNative "update" (write Update AnySubschema) (writeArgs AnySubschema)
+     (writeDocs ", failing if data does not exist for KEY. OBJECT can have just the fields to update."
       "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
@@ -325,15 +328,15 @@ keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
 keylog _ i as = argsError i as
 
 
-write :: WriteType -> RNativeFun e
-write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
+write :: WriteType -> SchemaPartial -> RNativeFun e
+write wt partial i [table@TTable {..},TLitString key,TObject ps _ _] = do
   guardTable i table
   case _tTableType of
     TyAny -> return ()
     TyVar {} -> return ()
-    tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
+    tty -> void $ checkUserType partial (_faInfo i) ps tty
   success "Write succeeded" . writeRow (_faInfo i) wt (userTable table) (RowKey key) =<< toColumns i ps
-write _ i as = argsError i as
+write _ _ i as = argsError i as
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
 toColumns i = fmap (Columns . M.fromList) . mapM conv where
