@@ -184,16 +184,15 @@ revokeCapability c = evalCapabilities . capGranted %= filter (/= c)
 -- 'namespace.modulename' is the name we will associate
 -- with a module unless the namespace policy is defined
 -- otherwise
-evalNamespace :: Info -> (Module n) -> Eval e (Module n)
-evalNamespace info m = do
+evalNamespace :: Info -> (Setter' s ModuleName) -> s -> Eval e s
+evalNamespace info setter m = do
   mNs <- use $ evalRefs . rsNamespace
   case mNs of
     Nothing -> do
       policy <- view (eeNamespacePolicy . nsPolicy)
       unless (policy mNs) $ evalError info "Definitions in default namespace are not authorized"
       return m
-    Just (Namespace n _) ->
-      return $ over (case m of Module {} -> mName; _ -> interfaceName) (mangleModuleName n) m
+    Just (Namespace n _) -> return $ over setter (mangleModuleName n) m
   where
     mangleModuleName :: NamespaceName -> ModuleName -> ModuleName
     mangleModuleName n mn@(ModuleName nn ns) =
@@ -205,19 +204,19 @@ evalNamespace info m = do
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
-eval (TModule m@Module{} bod i) =
+eval (TModule (MDModule m) bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- prepend namespace def to module name
-    mangledM <- evalNamespace i m
+    mangledM <- evalNamespace i mName m
     -- enforce old module keysets
     oldM <- preview $ eeRefStore . rsModules . ix (_mName m)
     case oldM of
       Nothing -> return ()
-      Just (ModuleData om _) ->
-        case om of
-          Module{} -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
-          Interface{..} -> evalError i $
-            "Name overlap: module " ++ show (_mName om) ++ " overlaps with interface  " ++ show _interfaceName
+      Just (ModuleData omd _) ->
+        case omd of
+          MDModule om -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
+          MDInterface Interface{..} -> evalError i $
+            "Name overlap: module " ++ show (_mName m) ++ " overlaps with interface  " ++ show _interfaceName
     case _gGovernance $ _mGovernance mangledM of
       -- enforce new module keyset
       Left ks -> enforceKeySetName i ks
@@ -227,20 +226,17 @@ eval (TModule m@Module{} bod i) =
     (g,govM) <- loadModule mangledM bod i g0
     writeRow i Write Modules (_mName mangledM) (derefDef <$> govM)
     return (g, msg $ pack $ "Loaded module " ++ show (_mName mangledM) ++ ", hash " ++ show (_mHash mangledM))
-eval (TModule m@Interface{} bod i) =
+
+eval (TModule (MDInterface m) bod i) =
   topLevelCall i "interface" (GInterfaceDecl m) $ \gas -> do
      -- prepend namespace def to module name
-    mangledI <- evalNamespace i m
-    -- enforce old module keysets
+    mangledI <- evalNamespace i interfaceName m
+    -- enforce no upgrades
     oldI <- readRow i Modules $ _interfaceName mangledI
     case oldI of
       Nothing -> return ()
-      Just oi ->
-        case oi of
-          Module{..} -> evalError i $
-            "Name overlap: interface " ++ show (_interfaceName m) ++ " overlaps with module " ++ show _mName
-          Interface{..} -> return ()
-    (g,govI) <- loadModule mangledI bod i gas
+      Just old -> evalError i $ "Existing interface found: " ++ show old
+    (g,govI) <- loadInterface mangledI bod i gas
     writeRow i Write Modules (_interfaceName mangledI) (derefDef <$> govI)
     return (g, msg $ pack $ "Loaded interface " ++ show (_interfaceName mangledI))
 eval t = enscope t >>= reduce
@@ -253,13 +249,13 @@ evalUse (Use mn h i) = do
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just md -> do
       case view mdModule md of
-        Module{..} ->
+        MDModule Module{..} ->
           case h of
             Nothing -> return ()
             Just mh | mh == _mHash -> return ()
                     | otherwise -> evalError i $ "Module " ++ show mn ++ " does not match specified hash: " ++
                                show mh ++ ", " ++ show _mHash
-        Interface{..} ->
+        MDInterface Interface{..} ->
           case h of
             Nothing -> return ()
             Just _ -> evalError i $ "Interfaces should not have associated hashes: " ++ show _interfaceName
@@ -278,7 +274,7 @@ mangleDefs mn term = modifyMn term
 
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule :: Module (Term Name) -> Scope n Term Name -> Info -> Gas
-           -> Eval e (Gas,Module (Def Ref))
+           -> Eval e (Gas,ModuleDef (Def Ref))
 loadModule m@Module {} bod1 mi g0 = do
   (g1,mdefs) <-
     case instantiate' bod1 of
@@ -294,18 +290,18 @@ loadModule m@Module {} bod1 mi g0 = do
               case dnm of
                 Nothing -> return (g, rs)
                 Just dn -> do
-                  g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember m)
+                  g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember (MDModule m))
                   return (g + g',(dn,t):rs)
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
   mapM_ evalUse $ _mImports m
   evaluatedDefs <- evaluateDefs mi (fmap (mangleDefs $ _mName m) mdefs)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
-  mGov <- forM m' $ \g -> case g of
+  mGov <- fmap MDModule $ forM m' $ \g -> case g of
     TVar (Name n _) _ -> case HM.lookup n solvedDefs of
       Just r -> case r of
         (Ref (TDef govDef _)) -> case _dDefType govDef of
-          Defcap -> return govDef
+          Defcap -> return $ govDef
           _ -> evalError (_tInfo g) "Invalid module governance, must be defcap"
         _ -> evalError (_tInfo g) "Invalid module governance, should be def ref"
       Nothing -> evalError (_tInfo g) "Unknown module governance reference"
@@ -314,7 +310,10 @@ loadModule m@Module {} bod1 mi g0 = do
   installModule md
   (evalRefs . rsNewModules) %= HM.insert (_mName m) md
   return (g1,mGov)
-loadModule i@Interface{..} body info gas0 = do
+
+loadInterface :: Interface -> Scope n Term Name -> Info -> Gas
+              -> Eval e (Gas,ModuleDef (Def Ref))
+loadInterface i@Interface{..} body info gas0 = do
   (gas1,idefs) <- case instantiate' body of
     (TList bd _ _bi) -> do
       let doDef (g,rs) t = do
@@ -327,13 +326,13 @@ loadModule i@Interface{..} body info gas0 = do
             case dnm of
               Nothing -> return (g, rs)
               Just dn -> do
-                g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember i)
+                g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember (MDInterface i))
                 return (g + g',(dn,t):rs)
       second HM.fromList <$> foldM doDef (gas0,[]) bd
     t -> evalError (_tInfo t) "Malformed interface"
   mapM_ evalUse _interfaceImports
   evaluatedDefs <- evaluateDefs info (fmap (mangleDefs _interfaceName) idefs)
-  md <- fmap (`ModuleData` evaluatedDefs) $ forM i $ \_ ->  evalError info ""
+  let md = ModuleData (MDInterface i) evaluatedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
   return (gas1,_mdModule md)
@@ -376,8 +375,6 @@ evaluateConstraints
   -> (Module n)
   -> HM.HashMap Text Ref
   -> Eval e (Module n, HM.HashMap Text Ref)
-evaluateConstraints info Interface{} _ =
-  evalError info "Unexpected: interface found in module position while solving constraints"
 evaluateConstraints info m evalMap =
   foldM evaluateConstraint (m, evalMap) $ _mInterfaces m
   where
@@ -386,7 +383,7 @@ evaluateConstraints info m evalMap =
       case refData of
         Nothing -> evalError info $
           "Interface not defined: " ++ asString' ifn
-        Just (ModuleData Interface{..} irefs) -> do
+        Just (ModuleData (MDInterface Interface{..}) irefs) -> do
           em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
           pure (um, em')
@@ -632,10 +629,7 @@ resolveFreeVars i b = traverse r b where
 installModule :: ModuleData ->  Eval e ()
 installModule ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
-  let n = case _mdModule of
-        Module{..} -> _mName
-        Interface{..} -> _interfaceName
-  (evalRefs . rsLoadedModules) %= HM.insert n _mdModule
+  (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) _mdModule
 
 msg :: Text -> Term n
 msg = toTerm

@@ -143,7 +143,7 @@ makeLenses ''PactStep
 
 -- | Module ref store
 data ModuleData = ModuleData
-  { _mdModule :: (Module (Def Ref))
+  { _mdModule :: ModuleDef (Def Ref)
   , _mdRefMap :: HM.HashMap Text Ref
   } deriving (Eq, Show)
 makeLenses ''ModuleData
@@ -225,7 +225,7 @@ data RefState = RefState {
       -- | Imported Module-local defs and natives.
       _rsLoaded :: HM.HashMap Name Ref
       -- | Modules that were loaded.
-    , _rsLoadedModules :: HM.HashMap ModuleName (Module (Def Ref))
+    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleDef (Def Ref))
       -- | Modules that were compiled and loaded in this tx.
     , _rsNewModules :: HM.HashMap ModuleName ModuleData
       -- | Current Namespace

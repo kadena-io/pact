@@ -153,7 +153,7 @@ descModule i [TLitString t] = do
   case _mdModule <$> mods of
     Just m ->
       case m of
-        Module{..} ->
+        MDModule Module{..} ->
           return $ TObject
             [ (tStr "name"      , tStr $ asString _mName)
             , (tStr "hash"      , tStr $ asString _mHash)
@@ -162,7 +162,7 @@ descModule i [TLitString t] = do
             , (tStr "code"      , tStr $ asString _mCode)
             , (tStr "interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
             ] TyAny def
-        Interface{..} ->
+        MDInterface Interface{..} ->
           return $ TObject
             [ (tStr "name", tStr $ asString _interfaceName)
             , (tStr "code", tStr $ asString _interfaceCode)
@@ -364,7 +364,7 @@ enforceBlessedHashes i mn h = do
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
     Just m ->
       case m of
-        Module{..}
+        MDModule Module{..}
           | h == _mHash -> return () -- current version ok
           | h `HS.member` _mBlessed -> return () -- hash is blessed
           | otherwise -> evalError' i $

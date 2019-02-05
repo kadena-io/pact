@@ -42,7 +42,8 @@ module Pact.Types.Term
    BindType(..),
    TableName(..),
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
-   interfaceCode, interfaceMeta, interfaceName, interfaceImports,
+   Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
+   ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,
    Governance(..),
    ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
@@ -410,6 +411,14 @@ data Use = Use
   } deriving (Eq)
 instance Show Use where
   show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
+instance ToJSON Use where
+  toJSON Use{..} =
+    object $ ("module" .= _uModuleName) : (maybe [] (return . ("hash" .=)) _uModuleHash)
+instance FromJSON Use where
+  parseJSON = withObject "Use" $ \o ->
+    Use <$> o .: "module"
+        <*> o .:? "hash"
+        <*> pure def
 
 data App t = App
   { _appFun :: !t
@@ -437,11 +446,7 @@ instance FromJSON g => FromJSON (Governance g) where
                     Right <$> o .: "capability")
 
 
-
-
--- TODO: We need a more expressive, safer ADT for this.
-data Module g
-  = Module
+data Module g = Module
   { _mName :: !ModuleName
   , _mGovernance :: !(Governance g)
   , _mMeta :: !Meta
@@ -450,19 +455,9 @@ data Module g
   , _mBlessed :: !(HS.HashSet Hash)
   , _mInterfaces :: [ModuleName]
   , _mImports :: [Use]
-  }
-  | Interface
-  { _interfaceName :: !ModuleName
-  , _interfaceCode :: !Code
-  , _interfaceMeta :: !Meta
-  , _interfaceImports :: [Use]
   } deriving (Eq,Functor,Foldable,Traversable)
-
 instance Show g => Show (Module g) where
-  show m = case m of
-    Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ show _mGovernance ++ " " ++ show _mHash ++ ")"
-    Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
-
+  show Module{..} = "(Module " ++ asString' _mName ++ " '" ++ show _mGovernance ++ " " ++ show _mHash ++ ")"
 instance ToJSON g => ToJSON (Module g) where
   toJSON Module{..} = object
     [ "name" .= _mName
@@ -472,11 +467,7 @@ instance ToJSON g => ToJSON (Module g) where
     , "hash" .= _mHash
     , "blessed" .= _mBlessed
     , "interfaces" .= _mInterfaces
-    ]
-  toJSON Interface{..} = object
-    [ "name" .= _interfaceName
-    , "code" .= _interfaceCode
-    , "meta" .= _interfaceMeta
+    , "imports" .= _mImports
     ]
 
 instance FromJSON g => FromJSON (Module g) where
@@ -488,16 +479,67 @@ instance FromJSON g => FromJSON (Module g) where
     <*> o .: "hash"
     <*> (HS.fromList <$> o .: "blessed")
     <*> o .: "interfaces"
-    <*> pure []
+    <*> o .: "imports"
 
-instance Eq1 Module where
+data Interface = Interface
+  { _interfaceName :: !ModuleName
+  , _interfaceCode :: !Code
+  , _interfaceMeta :: !Meta
+  , _interfaceImports :: [Use]
+  } deriving (Eq)
+instance Show Interface where
+  show Interface{..} = "(Interface " ++ asString' _interfaceName ++ ")"
+
+instance ToJSON Interface where
+  toJSON Interface{..} = object
+    [ "name" .= _interfaceName
+    , "code" .= _interfaceCode
+    , "meta" .= _interfaceMeta
+    , "imports" .= _interfaceImports
+    ]
+
+instance FromJSON Interface where
+  parseJSON = withObject "Interface" $ \o -> Interface
+    <$> o .: "name"
+    <*> o .: "code"
+    <*> pure (Meta Nothing [])
+    <*> o .: "imports"
+
+
+-- TODO: We need a more expressive, safer ADT for this.
+data ModuleDef g
+  = MDModule !(Module g)
+  | MDInterface !Interface
+ deriving (Eq,Functor,Foldable,Traversable)
+
+instance Show g => Show (ModuleDef g) where
+  show md = case md of
+    MDModule m -> show m
+    MDInterface i -> show i
+
+instance ToJSON g => ToJSON (ModuleDef g) where
+  toJSON (MDModule m) = toJSON m
+  toJSON (MDInterface i) = toJSON i
+
+instance FromJSON g => FromJSON (ModuleDef g) where
+  parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
+
+instance Eq1 ModuleDef where
   liftEq eq
-    (Module a (Governance b) c d e f g h)
-    (Module m (Governance n) o p q r s t) =
+    (MDModule (Module a (Governance b) c d e f g h))
+    (MDModule (Module m (Governance n) o p q r s t)) =
       a == m && liftEq eq b n && c == o && d == p &&
       e == q && f == r && g == s && h == t
-  liftEq _ a@Interface {} b@Interface{} = (() <$ a) == (() <$ b)
+  liftEq _ (MDInterface a@Interface {}) (MDInterface b@Interface{}) = a == b
   liftEq _ _ _ = False
+
+moduleDefName :: ModuleDef g -> ModuleName
+moduleDefName (MDModule m) = _mName m
+moduleDefName (MDInterface m) = _interfaceName m
+
+moduleDefCode :: ModuleDef g -> Code
+moduleDefCode (MDModule m) = _mCode m
+moduleDefCode (MDInterface m) = _interfaceCode m
 
 
 
@@ -563,7 +605,7 @@ instance Eq1 ConstVal where
 -- | Pact evaluable term.
 data Term n =
     TModule {
-      _tModuleDef :: Module (Term n)
+      _tModuleDef :: ModuleDef (Term n)
     , _tModuleBody :: !(Scope () Term n)
     , _tInfo :: !Info
     } |
@@ -857,8 +899,8 @@ termEq _ _ = False
 abbrev :: Show t => Term t -> String
 abbrev (TModule m _ _) =
   case m of
-    Module{..} -> "<module " ++ asString' _mName ++ ">"
-    Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
+    MDModule Module{..} -> "<module " ++ asString' _mName ++ ">"
+    MDInterface Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
 abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
 abbrev TDef {..} = "<defun " ++ asString' (_dDefName _tDef) ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
@@ -882,6 +924,8 @@ makeLenses ''Namespace
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
+makeLenses ''Interface
+makePrisms ''ModuleDef
 makeLenses ''App
 makeLenses ''Def
 makeLenses ''ModuleName

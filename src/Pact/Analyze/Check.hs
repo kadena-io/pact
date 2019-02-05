@@ -67,7 +67,7 @@ import           Pact.Types.Runtime   (Exp, ModuleData(..), ModuleName,
                                        Term (TConst, TDef, TSchema, TTable),
                                        asString, getInfo, tShow)
 import qualified Pact.Types.Runtime   as Pact
-import           Pact.Types.Term      (Module(..),DefName(..))
+import           Pact.Types.Term      (DefName(..),moduleDefName)
 import           Pact.Types.Typecheck (AST,
                                        Fun (FDefun, _fArgs, _fBody, _fInfo),
                                        Named, Node, TcId (_tiInfo),
@@ -529,8 +529,8 @@ moduleModelDecl ModuleData{..} = do
   pure $ ModelDecl (HM.fromList propList) checkList
   where
     model = case _mdModule of
-      Pact.Module{Pact._mMeta=Pact.Meta _ m}            -> m
-      Pact.Interface{Pact._interfaceMeta=Pact.Meta _ m} -> m
+      Pact.MDModule Pact.Module{Pact._mMeta=Pact.Meta _ m}            -> m
+      Pact.MDInterface Pact.Interface{Pact._interfaceMeta=Pact.Meta _ m} -> m
 
 
 moduleFunChecks
@@ -773,7 +773,7 @@ verifyCheck
 verifyCheck moduleData funName check = do
   let info       = dummyInfo
       module'    = moduleData ^. mdModule
-      moduleName = nameOf module'
+      moduleName = moduleDefName module'
       modules    = HM.fromList [(moduleName, moduleData)]
       moduleFun :: ModuleData -> Text -> Maybe Ref
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
@@ -783,7 +783,3 @@ verifyCheck moduleData funName check = do
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps tables funRef funName [Located info check]
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
-  where
-    nameOf m = case m of
-      Interface{..} -> _interfaceName
-      Module{..}    -> _mName

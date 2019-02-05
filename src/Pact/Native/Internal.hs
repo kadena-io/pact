@@ -115,7 +115,7 @@ funType' :: Type n -> [(Text,Type n)] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
 
-getModule :: Info -> ModuleName -> Eval e (Module (Def Ref))
+getModule :: Info -> ModuleName -> Eval e (ModuleDef (Def Ref))
 getModule i n = do
   lm <- HM.lookup n <$> use (evalRefs.rsLoadedModules)
   case lm of
@@ -166,8 +166,8 @@ enforceGuard i g = case g of
   GModule mg@ModuleGuard{..} -> do
     m <- getModule (_faInfo i) _mgModuleName
     case m of
-      Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
-      Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
+      MDModule Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
+      MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
   GUser UserGuard{..} -> do
     void $ runReadOnly (_faInfo i) $
       enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
@@ -181,5 +181,7 @@ guardForModuleCall :: Info -> ModuleName -> Eval e () -> Eval e ()
 guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
     (Just mn) | mn == modName -> onFound
     _ -> do
-      m <- getModule i modName
-      void $ acquireModuleAdmin i (_mName m) (_mGovernance m)
+      md <- getModule i modName
+      case md of
+        MDModule m -> void $ acquireModuleAdmin i (_mName m) (_mGovernance m)
+        MDInterface iface -> evalError i $ "Internal error, interface found in call stack: " ++ show iface

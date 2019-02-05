@@ -41,7 +41,7 @@ import           Pact.Types.Info           (Code(_unCode))
 import           Pact.Types.Runtime        (Domain(KeySets), Method,
                                             ModuleData, PactDb(_readRow),
                                             eePactDb, eeRefStore, rsModules)
-import           Pact.Types.Term           (Module(_mName, _mCode),
+import           Pact.Types.Term           (ModuleDef(..), moduleDefName, moduleDefCode,
                                             ModuleName(..), Name(..),
                                             KeySet(..))
 
@@ -106,7 +106,7 @@ moduleNotFoundP = MP.string "<interactive>:"
     digitsP = void $ MP.some MP.digitChar
 
 loadModules
-  :: [Module a]
+  :: [ModuleDef a]
   -> IO (Either ClientError (HM.HashMap ModuleName ModuleData))
 loadModules mods0 = do
   let -- - try to load the remaining list of modules
@@ -129,7 +129,7 @@ loadModules mods0 = do
                 Just depName -> do
                   let numLoaded = HM.size (replStateModules replState')
                                 - HM.size (replStateModules replState)
-                  case promoteBy ((== depName) . _mName) (drop numLoaded mods) of
+                  case promoteBy ((== depName) . moduleDefName) (drop numLoaded mods) of
                     Nothing    -> pure $ Left $ ClientError msg
                     Just mods' -> do
                       let promos' = if numLoaded > 0 then 0 else succ promotionsSinceLastSuccess
@@ -148,14 +148,14 @@ loadModules mods0 = do
       (_others, [])             -> Nothing
       (others, found : others') -> Just $ found : (others ++ others')
 
-    loadModule :: Module a -> ExceptT String (StateT ReplState IO) ()
+    loadModule :: ModuleDef a -> ExceptT String (StateT ReplState IO) ()
     loadModule = void
                . ExceptT
                . evalRepl'
                . T.unpack
                . (\code -> "(begin-tx)" <> code <> "(commit-tx)")
                . _unCode
-               . _mCode
+               . moduleDefCode
 
 runVerification :: ValidRequest -> IO Response
 runVerification (ValidRequest modsMap mod') =
