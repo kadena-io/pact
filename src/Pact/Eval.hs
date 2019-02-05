@@ -222,6 +222,8 @@ eval (TModule (MDModule m) bod i) =
       Left ks -> enforceKeySetName i ks
       -- governance however is not called on install
       _ -> return ()
+    -- in any case, grant module admin to this transaction
+    void $ acquireCapability (ModuleAdminCapability $ _mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     writeRow i Write Modules (_mName mangledM) (derefDef <$> govM)
