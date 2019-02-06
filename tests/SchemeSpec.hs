@@ -6,12 +6,17 @@ import Test.Hspec
 import System.IO.Error
 import Data.Text (Text)
 import Data.ByteString (ByteString)
+import Data.Aeson as A
 import qualified Data.ByteString.Base16   as B16
+import qualified Crypto.Hash              as H
 
 import Pact.ApiReq
 import Pact.Types.Crypto
-import Pact.Types.Util
+import Pact.Types.Command hiding (Address)
+import Pact.Types.Util (toB16Text, fromJSON')
 
+
+---- HELPER DATA TYPES AND FUNCTIONS ----
 
 getByteString :: ByteString -> ByteString
 getByteString = fst . B16.decode
@@ -42,12 +47,15 @@ someETHPair = (PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b
 
 
 
+---- HSPEC TESTS ----
+
 spec :: Spec
 spec = describe "working with crypto schemes" $ do
   describe "test importing Key Pair for each Scheme" testKeyPairImport
   describe "test default scheme in ApiKeyPair" testDefSchemeApiKeyPair
   describe "test for correct address in ApiKeyPair" testAddrApiKeyPair
   describe "test PublicKey import" testPublicKeyImport
+  describe "test UserSig creation and verificaton" testUserSig
 
 
 testKeyPairImport :: Spec
@@ -96,3 +104,73 @@ testPublicKeyImport = do
         fakePub = PubBS $ getByteString "c640e94730fb7b7fce01b11086645741fcb5174d1c634888b9d146613730243a171833259cd7dab9b3435421dcb2816d3efa55033ff0899de6cc8b1e0b20e56c"
         apiKP = ApiKeyPair priv (Just fakePub) (Just addr) (Just scheme)
     mkKeyPairs [apiKP] `shouldThrow` isUserError
+
+
+testUserSig :: Spec
+testUserSig = do
+  it "successfully verifies ETH UserSig when using Command's mkUserSig" $ do
+    let (pub, priv, addr, scheme) = someETHPair
+        apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
+    kp <- mkKeyPairs [apiKP]
+    cmd <- mkCommand' kp "(somePactFunction)"
+    (map (verifyUserSig $ _cmdHash cmd) (_cmdSigs cmd)) `shouldBe` [True]
+
+
+
+
+  it "successfully verifies ETH UserSig when provided by user" $ do
+    let (pub, priv, addr, scheme) = someETHPair
+        apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
+        (PubBS pubBS) = pub
+        -- UserSig verification will pass but Command verification might fail
+        -- if hash algorithm provided not supported for hashing commands.
+        hsh = hashTx "(somePactFunction)" H.SHA3_256
+    [kp] <- mkKeyPairs [apiKP]
+    sig <- sign kp hsh
+    let myUserSig = UserSig scheme (toB16Text pubBS) addr (toB16Text sig)
+    (verifyUserSig hsh myUserSig) `shouldBe` True
+
+
+
+
+  it "fails UserSig validation when UserSig has unexpected Address" $ do
+    let (pub, priv, addr, scheme) = someETHPair
+        apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
+        (PubBS pubBS) = pub
+        hsh = hashTx "(somePactFunction)" H.Blake2b_512
+        wrongAddr = (toB16Text pubBS)
+    [kp] <- mkKeyPairs [apiKP]
+    sig <- sign kp hsh
+    let myUserSig = UserSig scheme (toB16Text pubBS) wrongAddr (toB16Text sig)
+    (verifyUserSig hsh myUserSig) `shouldBe` False
+
+
+
+
+  it "fails UserSig validation when UserSig has unexpected Scheme" $ do
+    let (pub, priv, addr, scheme) = someETHPair
+        apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
+        (PubBS pubBS) = pub
+        hsh = hashTx "(somePactFunction)" H.Blake2b_512
+        wrongScheme = ED25519
+    [kp] <- mkKeyPairs [apiKP]
+    sig <- sign kp hsh
+    let myUserSig = UserSig wrongScheme (toB16Text pubBS) addr (toB16Text sig)
+    (verifyUserSig hsh myUserSig) `shouldBe` False
+
+
+
+
+  it "provides default ppkscheme when one not provided" $ do
+    let sigJSON = A.object ["addr" .= String "SomeAddr", "pubKey" .= String "SomePubKey",
+                            "sig" .= String "SomeSig"]
+        sig = UserSig defPPKScheme "SomePubKey" "SomeAddr" "SomeSig"
+    (fromJSON' sigJSON) `shouldBe` (Right sig)
+
+
+
+
+  it "makes address field the full public key when one not provided" $ do
+    let sigJSON = A.object ["pubKey" .= String "SomePubKey", "sig" .= String "SomeSig"]
+        sig = UserSig defPPKScheme "SomePubKey" "SomePubKey" "SomeSig"
+    (fromJSON' sigJSON) `shouldBe` (Right sig)

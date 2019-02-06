@@ -26,7 +26,7 @@
 module Pact.Types.Command
   ( Command(..)
 #if !defined(ghcjs_HOST_OS)
-  , mkCommand, mkCommand', verifyUserSig, verifyCommand
+  , mkCommand, mkCommand', mkUserSig, verifyUserSig, verifyCommand
 #else
   , PPKScheme(..)
 #endif
@@ -62,6 +62,7 @@ import Data.Aeson as A
 import Data.Text hiding (filter, all)
 import qualified Data.Set as S
 import Data.Default (Default,def)
+import Data.Maybe  (fromMaybe)
 
 
 import GHC.Generics
@@ -74,7 +75,6 @@ import Pact.Parse
 
 
 #if !defined(ghcjs_HOST_OS)
-import Data.Maybe       (fromMaybe)
 import qualified Data.ByteString.Lazy as BSL
 import Pact.Types.Crypto              as Base
 import qualified Crypto.Hash          as H
@@ -135,11 +135,15 @@ mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = makeCommand <$> (traverse makeSigs creds)
   where makeCommand sigs = Command env sigs hsh
         hsh = hashTx env requestKeyHash    -- hash associated with a Command, aka a Command's Request Key
-        makeSigs kp =
-          let pub = toB16Text $ getPublic kp
-              formattedPub = toB16Text $ formatPublicKey kp
-              sig = toB16Text <$> sign kp env
-          in UserSig (kpToPPKScheme kp) pub formattedPub <$> sig
+        makeSigs kp = mkUserSig hsh kp
+
+mkUserSig :: Hash -> SomeKeyPair -> IO UserSig
+mkUserSig hsh kp =
+  let pub = toB16Text $ getPublic kp
+      formattedPub = toB16Text $ formatPublicKey kp
+      sig = toB16Text <$> sign kp hsh
+  in UserSig (kpToPPKScheme kp) pub formattedPub <$> sig
+
 
 
 verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
@@ -150,7 +154,7 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     ppcmdPayload' = traverse parsePact =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
-    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdPayload u)) <$> _cmdSigs
+    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
     ppcmdHash' = verifyHashTx _cmdHash _cmdPayload requestKeyHash
     mSigIssue = if all snd ppcmdSigs' then Nothing
       else Just $ "Invalid sig(s) found: " ++ show (A.encode . fst <$> filter (not.snd) ppcmdSigs')
@@ -160,7 +164,7 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
 {-# INLINE verifyCommand #-}
 
 
-verifyUserSig :: ByteString -> UserSig -> Bool
+verifyUserSig :: Hash -> UserSig -> Bool
 verifyUserSig msg UserSig{..} =
   case (pubT, sigT, addrT) of
     (Right p, Right sig, Right addr) ->
@@ -261,9 +265,14 @@ instance ToJSON UserSig where
   toJSON UserSig {..} = object [
     "scheme" .= _usScheme, "pubKey" .= _usPubKey, "addr" .= _usAddress, "sig" .= _usSig ]
 instance FromJSON UserSig where
-  parseJSON = withObject "UserSig" $ \o ->
-    UserSig <$> (o .: "scheme" >>= parseJSON)  <*> o .: "pubKey" <*> o.: "addr" <*> o .: "sig"
-  {-# INLINE parseJSON #-}
+  parseJSON = withObject "UserSig" $ \o -> do
+    pub <- o .: "pubKey"
+    sig <- o .: "sig"
+
+    scheme <- o .:? "scheme"   -- defaults to PPKScheme default
+    addr <- o .:? "addr"       -- defaults to full Public Key
+
+    return $ UserSig (fromMaybe defPPKScheme scheme) pub (fromMaybe pub addr) sig
 
 
 
@@ -334,7 +343,7 @@ initialRequestKey = RequestKey $ initialHashTx H.Blake2b_512
 #else
 
 initialRequestKey :: RequestKey
-initialRequestKey = RequestKey $ initialHash
+initialRequestKey = RequestKey initialHash
 
 #endif
 

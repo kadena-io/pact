@@ -22,6 +22,7 @@ module Pact.Types.Crypto
   , verifyHashTx
   , initialHashTx
   , ST.PPKScheme(..)
+  , ST.defPPKScheme
   , SomeScheme
   , defaultScheme
   , toScheme
@@ -90,9 +91,8 @@ class (ConvertBS (PublicKey a),  Eq (PublicKey a),
   type PrivateKey a
   type Signature a
 
-  _hashPayload :: a -> ByteString -> ByteString
-  _sign :: a -> ByteString -> PublicKey a -> PrivateKey a -> IO (Signature a)
-  _valid :: a -> ByteString -> PublicKey a -> Signature a -> Bool
+  _sign :: a -> Hash -> PublicKey a -> PrivateKey a -> IO (Signature a)
+  _valid :: a -> Hash -> PublicKey a -> Signature a -> Bool
   _genKeyPair :: a -> IO (PublicKey a, PrivateKey a)
 
 
@@ -135,7 +135,7 @@ initialHashTx algo = hashTx mempty algo
 data SomeScheme = forall a. Scheme (SPPKScheme a) => SomeScheme (SPPKScheme a)
 
 defaultScheme :: SomeScheme
-defaultScheme = SomeScheme SED25519
+defaultScheme = toScheme defPPKScheme
 
 
 -- Connects each PPKScheme to some SPPKScheme a
@@ -161,10 +161,8 @@ instance Scheme (SPPKScheme 'ED25519) where
   type PrivateKey (SPPKScheme 'ED25519) = Ed25519.PrivateKey
   type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
 
-  _hashPayload _ msg = hsh
-    where (Hash hsh) = hashTx msg H.Blake2b_512
-  _sign s msg pub priv = return $ Ed25519.sign (_hashPayload s msg) priv pub
-  _valid s msg pub sig = Ed25519.valid (_hashPayload s msg) pub sig
+  _sign _ (Hash msg) pub priv = return $ Ed25519.sign msg priv pub
+  _valid _ (Hash msg) pub sig = Ed25519.valid msg pub sig
   _genKeyPair _ = ed25519GenKeyPair
   _getPublic _ = Just . ed25519GetPublicKey
   _formatPublicKey _ p = toBS p
@@ -193,10 +191,8 @@ instance Scheme (SPPKScheme 'ETH) where
   type PrivateKey (SPPKScheme 'ETH) = ECDSA.PrivateKey
   type Signature (SPPKScheme 'ETH) = ECDSA.Signature
 
-  _hashPayload _ msg = hsh
-    where (Hash hsh) = hashTx msg ECDSA.hashAlgoETH
-  _sign s msg pub priv = ECDSA.signETH (_hashPayload s msg) pub priv
-  _valid s msg pub sig = ECDSA.validETH (_hashPayload s msg) pub sig
+  _sign _ (Hash msg) pub priv = ECDSA.signETH msg pub priv
+  _valid _ (Hash msg) pub sig = ECDSA.validETH msg pub sig
   _genKeyPair _ = ECDSA.genKeyPair
   _getPublic _ = Just . ECDSA.getPublicKey
   _formatPublicKey _ p = ECDSA.formatPublicKeyETH (toBS p)
@@ -261,11 +257,11 @@ newtype SignatureBS = SigBS ByteString
 
 --------- SCHEME HELPER FUNCTIONS ---------
 
-sign :: SomeKeyPair -> ByteString -> IO ByteString
+sign :: SomeKeyPair -> Hash -> IO ByteString
 sign (SomeKeyPair KeyPair{..}) msg = toBS <$> _sign _kpScheme msg _kpPublicKey _kpPrivateKey
 
 
-verify :: SomeScheme -> ByteString -> PublicKeyBS -> SignatureBS -> Bool
+verify :: SomeScheme -> Hash -> PublicKeyBS -> SignatureBS -> Bool
 verify (SomeScheme scheme) msg (PubBS pBS) (SigBS sigBS) =
   let pParsed = fromBS pBS
       sigParsed = fromBS sigBS

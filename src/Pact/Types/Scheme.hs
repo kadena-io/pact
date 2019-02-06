@@ -6,6 +6,7 @@
 
 module Pact.Types.Scheme
   ( PPKScheme(..)
+  , defPPKScheme
   , SPPKScheme(..)
   ) where
 
@@ -39,6 +40,10 @@ instance ParseText PPKScheme where
     "ETH" -> return ETH
     _ -> fail $ "Unsupported PPKScheme: " ++ show s
   {-# INLINE parseText #-}
+
+
+defPPKScheme :: PPKScheme
+defPPKScheme = ED25519
 
 
 -- Run-time witness to PPKScheme kind.

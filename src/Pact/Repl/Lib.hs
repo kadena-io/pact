@@ -86,7 +86,7 @@ replDefs = ("Repl",
       "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. " <>
       "`$(load \"accounts.repl\")`"
      ,defZRNative "format-address" formatAddr (funType tTyString [("scheme", tTyString), ("public-key", tTyString)])
-      "Transform Crypto Public Key into an Address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
+      "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)]) $
