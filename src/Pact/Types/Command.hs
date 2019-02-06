@@ -80,7 +80,7 @@ import Pact.Types.Crypto              as Base
 import qualified Crypto.Hash          as H
 #else
 import Pact.Types.Hash
-import Pact.Types.Scheme (PPKScheme(..))
+import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
 #endif
 
 
