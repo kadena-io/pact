@@ -22,19 +22,19 @@
 --
 
 module Pact.Types.Command
-  ( Command(..),mkCommand,mkCommand'
-  , ProcessedCommand(..)
+  ( Command(..),cmdPayload,cmdSigs,cmdHash,mkCommand,mkCommand'
+  , ProcessedCommand(..),_ProcSucc,_ProcFail
   , Address(..),aFrom,aTo
   , PrivateMeta(..),pmAddress
   , PublicMeta(..),pmChainId,pmSender,pmGasLimit,pmGasPrice,pmFee
   , HasPlafMeta(..)
-  , Payload(..)
-  , ParsedCode(..)
+  , Payload(..),pMeta,pNonce,pPayload
+  , ParsedCode(..),pcCode,pcExps
   , UserSig(..),usScheme,usPubKey,usSig
   , verifyUserSig, verifyCommand
-  , CommandError(..)
-  , CommandSuccess(..)
-  , CommandResult(..)
+  , CommandError(..),ceMsg,ceDetail
+  , CommandSuccess(..),csData
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas
   , ExecutionMode(..), emTxId
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
@@ -134,9 +134,9 @@ data ProcessedCommand m a =
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 -- | Pair parsed Pact expressions with the original text.
-data ParsedCode = ParsedCode {
-  _pcCode :: !Text,
-  _pcExps :: ![Exp Parsed]
+data ParsedCode = ParsedCode
+  { _pcCode :: !Text
+  , _pcExps :: ![Exp Parsed]
   } deriving (Eq,Show,Generic)
 instance NFData ParsedCode
 
@@ -248,10 +248,11 @@ instance (ToJSON a) => ToJSON (CommandSuccess a) where
                , "data" .= a ]
 
 
-data CommandResult = CommandResult {
-  _crReqKey :: RequestKey,
-  _crTxId :: Maybe TxId,
-  _crResult :: Value
+data CommandResult = CommandResult
+  { _crReqKey :: RequestKey
+  , _crTxId :: Maybe TxId
+  , _crResult :: Value
+  , _crGas :: Gas
   } deriving (Eq,Show)
 
 
@@ -295,3 +296,11 @@ makeLenses ''ExecutionMode
 makeLenses ''Address
 makeLenses ''PrivateMeta
 makeLenses ''PublicMeta
+makeLenses ''Command
+makeLenses ''ParsedCode
+makeLenses ''Payload
+makeLenses ''CommandError
+makeLenses ''CommandSuccess
+makeLenses ''CommandResult
+makePrisms ''ProcessedCommand
+makePrisms ''ExecutionMode

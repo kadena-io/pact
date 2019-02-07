@@ -50,12 +50,13 @@ data MsgData = MsgData {
 initMsgData :: Hash -> MsgData
 initMsgData = MsgData def Null def
 
-data EvalResult = EvalResult {
-  erInput :: ![Term Name],
-  erOutput :: ![Term Name],
-  erLogs :: ![TxLog Value],
-  erRefStore :: !RefStore,
-  erExec :: !(Maybe PactExec)
+data EvalResult = EvalResult
+  { _erInput :: ![Term Name]
+  , _erOutput :: ![Term Name]
+  , _erLogs :: ![TxLog Value]
+  , _erRefStore :: !RefStore
+  , _erExec :: !(Maybe PactExec)
+  , _erGas :: Gas
   } deriving (Eq,Show)
 
 
@@ -124,9 +125,12 @@ interpret evalEnv terms = do
   let tx = _eeTxId evalEnv
   ((rs,logs),state) <-
     runEval def evalEnv $ evalTerms tx terms
-  let newRefs oldStore | isNothing tx = oldStore
+  let gas = _evalGas state
+      refStore = newRefs . _eeRefStore $ evalEnv
+      pactExec = _evalPactExec state
+      newRefs oldStore | isNothing tx = oldStore
                        | otherwise = updateRefStore (_evalRefs state) oldStore
-  return $! EvalResult terms rs logs (newRefs $ _eeRefStore evalEnv) (_evalPactExec state)
+  return $! EvalResult terms rs logs refStore pactExec gas
 
 evalTerms :: Maybe TxId -> [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do
