@@ -1,5 +1,8 @@
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 module Analyze.Eval where
 
 import           Bound                    (closed)
@@ -26,8 +29,10 @@ import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
 import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
-import           Pact.Analyze.Types.Eval  (aeDecimals, aeKeySets, mkAnalyzeEnv,
-                                           mkInitialAnalyzeState)
+import           Pact.Analyze.Types.Eval  (aeRegistry, aeTxMetadata,
+                                           tmDecimals, tmIntegers, tmKeySets,
+                                           mkAnalyzeEnv, mkRegistry,
+                                           mkInitialAnalyzeState, registryMap)
 import           Pact.Analyze.Util        (dummyInfo)
 
 import           Pact.Eval                (reduce)
@@ -87,7 +92,10 @@ pactEval etm gState = (do
 
 -- Evaluate a term symbolically
 analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
-analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
+analyzeEval etm@(Some ty _tm) gs = analyzeEval' etm ty gs
+
+analyzeEval' :: ETerm -> SingTy a -> GenState -> IO (Either String ETerm)
+analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
   -- analyze setup
   let tables = []
       args   = Map.empty
@@ -98,24 +106,49 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
         (error "analyzeEval: Located TVal unexpectedly forced")
         Map.empty Map.empty
 
-  Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
+      modName = Pact.ModuleName "test" Nothing
+      reg     = mkRegistry
 
-  -- TODO: also write aeKsAuths
+  Just aEnv <- pure $ mkAnalyzeEnv modName reg tables args tags dummyInfo
+
   let writeArray' k v env = writeArray env k v
 
-      -- Update the analysis env with keysets
-      aEnv' = foldr (\(k, v) -> aeKeySets
-          %~ writeArray' (literal (KeySetName (T.pack k))) (literal v))
-        aEnv (Map.toList (fmap snd keysets))
+      --
+      -- TODO: need to hook this up to authorized-by (NameAuthorized) support
+      --
+      withRegistryGuards = flip (foldr
+          (\(k, v) -> aeRegistry.registryMap %~
+            writeArray' (literal (RegistryName (T.pack k))) (literal v)))
+        (Map.toList (fmap snd registryKSs))
 
-      -- ... and decimals
-      aEnv'' = foldr
-          (\(k, v) -> aeDecimals %~ writeArray' (literal k) (literal v))
-        aEnv' (Map.toList decimals)
+      --
+      -- TODO: handle aeKsAuths
+      --
+      withKsAuths = id
+
+      withTxKeySets = flip (foldr
+        (\(k, v) -> aeTxMetadata.tmKeySets %~
+          writeArray' (literal (Str k)) (literal v)))
+        (Map.toList (fmap snd txKSs))
+
+      withDecimals = flip (foldr
+          (\(k, v) -> aeTxMetadata.tmDecimals %~
+            writeArray' (literal (Str k)) (literal v)))
+        (Map.toList txDecs)
+
+      withIntegers = flip (foldr
+          (\(k, v) -> aeTxMetadata.tmIntegers %~
+            writeArray' (literal (Str k)) (literal v)))
+        (Map.toList txInts)
+
+      --
+      -- TODO: add read-msg support here
+      --
+      withStrings = id
 
   -- evaluate via analyze
   (analyzeVal, las)
-    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv'' state0 of
+    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) (aEnv & withRegistryGuards & withKsAuths & withTxKeySets & withDecimals & withIntegers & withStrings) state0 of
       Right (analyzeVal, las, ()) -> pure (analyzeVal, las)
       Left err                    -> error $ describeAnalyzeFailure err
 
@@ -123,23 +156,28 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
     Nothing -> pure $ Left $ "couldn't unliteral lasSucceeds"
     Just False -> pure $ Left "fails"
     Just True -> case analyzeVal of
-      AVal _ sval -> case unliteral (SBVI.SBV sval) of
-        Just sval' -> pure $ Right $ ESimple ty $ CoreTerm $ Lit sval'
-        Nothing    -> pure $ Left $ "couldn't unliteral: " ++ show sval
+      AVal _ sval -> pure $ case withSymVal ty (unliteral (SBVI.SBV sval)) of
+        Just sval' -> Right $ Some ty $ CoreTerm $ Lit sval'
+        Nothing    -> Left $ "couldn't unliteral: " ++ show sval
       _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
-analyzeEval EObject{} _ = pure (Left "TODO: analyzeEval EObject")
 
 -- Generate a pact evaluation environment given the keysets and decimals used
 -- in the generated term. This generates an environment with just keysets and
 -- decimals.
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
-mkEvalEnv (GenState _ keysets decimals) = do
+mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts) = do
   evalEnv <- liftIO $ initPureEvalEnv Nothing
-  let keysets' = HM.fromList
-        $ fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
-        $ Map.toList keysets
-      decimals' = HM.fromList
+  let xformKsMap = HM.fromList
+        . fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
+        . Map.toList
+
+      registryKSs' = xformKsMap registryKSs
+      txKSs' = xformKsMap txKSs
+      txDecs' = HM.fromList
         $ fmap (\(k, v) -> (T.pack k, toJSON (show (toPact decimalIso v))))
-        $ Map.toList decimals
-      body = Object $ keysets' `HM.union` decimals'
+        $ Map.toList txDecs
+      txInts' = HM.fromList
+        $ fmap (\(k, v) -> (T.pack k, toJSON v))
+        $ Map.toList txInts
+      body = Object $ HM.unions [registryKSs', txKSs', txDecs', txInts']
   pure $ evalEnv & eeMsgBody .~ body

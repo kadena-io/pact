@@ -388,6 +388,36 @@ Logical implication. Equivalent to `(or (not x) y)`.
 
 Supported in either invariants or properties.
 
+### and? {#FAndQ}
+
+```lisp
+(and? f g a)
+```
+
+* takes `f`: _a_ -> `bool`
+* takes `g`: _a_ -> `bool`
+* takes `a`: _a_
+* produces `bool`
+
+`and` the results of applying both `f` and `g` to `a`
+
+Supported in either invariants or properties.
+
+### or? {#FOrQ}
+
+```lisp
+(or? f g a)
+```
+
+* takes `f`: _a_ -> `bool`
+* takes `g`: _a_ -> `bool`
+* takes `a`: _a_
+* produces `bool`
+
+`or` the results of applying both `f` and `g` to `a`
+
+Supported in either invariants or properties.
+
 ## Object operators {#Object}
 
 ### at {#FObjectProjection}
@@ -398,9 +428,17 @@ Supported in either invariants or properties.
 
 * takes `k`: `string`
 * takes `o`: `object`
+* produces _a_
+
+```lisp
+(at i l)
+```
+
+* takes `i`: `integer`
+* takes `o`: `list`
 * produces `bool`
 
-Object projection
+projection
 
 Supported in either invariants or properties.
 
@@ -415,6 +453,212 @@ Supported in either invariants or properties.
 * produces `object`
 
 Object merge
+
+Supported in either invariants or properties.
+
+### drop {#FObjectDrop}
+
+```lisp
+(drop keys o)
+```
+
+* takes `keys`: [`string`]
+* takes `o`: `object`
+* produces `object`
+
+drop entries having the specified keys from an object
+
+Supported in either invariants or properties.
+
+### take {#FObjectTake}
+
+```lisp
+(take keys o)
+```
+
+* takes `keys`: [`string`]
+* takes `o`: `object`
+* produces `object`
+
+take entries having the specified keys from an object
+
+Supported in either invariants or properties.
+
+## List operators {#List}
+
+### at {#FListProjection}
+
+```lisp
+(at k l)
+```
+
+* takes `k`: `string`
+* takes `l`: [_a_]
+* produces _a_
+
+```lisp
+(at i l)
+```
+
+* takes `i`: `integer`
+* takes `o`: `list`
+* produces `bool`
+
+projection
+
+Supported in either invariants or properties.
+
+### length {#FListLength}
+
+```lisp
+(length s)
+```
+
+* takes `s`: [_a_]
+* produces `integer`
+
+List length
+
+Supported in either invariants or properties.
+
+### contains {#FContains}
+
+```lisp
+(contains x xs)
+```
+
+* takes `x`: _a_
+* takes `xs`: [_a_]
+* produces `bool`
+
+```lisp
+(contains k o)
+```
+
+* takes `k`: `string`
+* takes `o`: `object`
+* produces `bool`
+
+```lisp
+(contains value string)
+```
+
+* takes `value`: `string`
+* takes `string`: `string`
+* produces `bool`
+
+List / string / object contains
+
+Supported in either invariants or properties.
+
+### reverse {#FReverse}
+
+```lisp
+(reverse xs)
+```
+
+* takes `xs`: [_a_]
+* produces [_a_]
+
+reverse a list of values
+
+Supported in either invariants or properties.
+
+### sort {#FSort}
+
+```lisp
+(sort xs)
+```
+
+* takes `xs`: [_a_]
+* produces [_a_]
+
+sort a list of values
+
+Supported in either invariants or properties.
+
+### drop {#FListDrop}
+
+```lisp
+(drop n xs)
+```
+
+* takes `n`: `integer`
+* takes `xs`: [_a_]
+* produces [_a_]
+
+drop the first `n` values from the beginning of a list (or the end if `n` is negative)
+
+Supported in either invariants or properties.
+
+### take {#FListTake}
+
+```lisp
+(take n xs)
+```
+
+* takes `n`: `integer`
+* takes `xs`: [_a_]
+* produces [_a_]
+
+take the first `n` values from `xs` (taken from the end if `n` is negative)
+
+Supported in either invariants or properties.
+
+### make-list {#FMakeList}
+
+```lisp
+(make-list n a)
+```
+
+* takes `n`: `integer`
+* takes `a`: _a_
+* produces [_a_]
+
+create a new list with `n` copies of `a`
+
+Supported in either invariants or properties.
+
+### map {#FMap}
+
+```lisp
+(map f as)
+```
+
+* takes `f`: _a_ -> _b_
+* takes `as`: [_a_]
+* produces [_b_]
+
+apply `f` to each element in a list
+
+Supported in either invariants or properties.
+
+### filter {#FFilter}
+
+```lisp
+(filter f as)
+```
+
+* takes `f`: _a_ -> `bool`
+* takes `as`: [_a_]
+* produces [_a_]
+
+filter a list by keeping the values for which `f` returns `true`
+
+Supported in either invariants or properties.
+
+### fold {#FFold}
+
+```lisp
+(fold f a bs)
+```
+
+* takes `f`: _a_ -> _b_ -> _a_
+* takes `a`: _a_
+* takes `bs`: [_b_]
+* produces [_a_]
+
+reduce a list by applying `f` to each element and the previous result
 
 Supported in either invariants or properties.
 
@@ -433,7 +677,7 @@ String length
 
 Supported in either invariants or properties.
 
-### \+ {#FStringConcatenation}
+### \+ {#FConcatenation}
 
 ```lisp
 (+ s t)
@@ -443,7 +687,15 @@ Supported in either invariants or properties.
 * takes `t`: `string`
 * produces `string`
 
-String concatenation
+```lisp
+(+ s t)
+```
+
+* takes `s`: [_a_]
+* takes `t`: [_a_]
+* produces [_a_]
+
+String / list concatenation
 
 Supported in either invariants or properties.
 
@@ -771,7 +1023,7 @@ Supported in properties only.
 * takes `k`: `string`
 * produces `bool`
 
-Whether the named keyset is enforced by the function under analysis
+Whether the named keyset/guard is satisfied by the executing transaction
 
 Supported in properties only.
 
@@ -791,4 +1043,78 @@ Supported in properties only.
 Whether the keyset in the row is enforced by the function under analysis
 
 Supported in properties only.
+
+## Function operators {#Function}
+
+### identity {#FIdentity}
+
+```lisp
+(identity a)
+```
+
+* takes `a`: _a_
+* produces _a_
+* where _a_ is of type `table` or `string`
+
+identity returns its argument unchanged
+
+Supported in either invariants or properties.
+
+### constantly {#FConstantly}
+
+```lisp
+(constantly a)
+```
+
+* takes `a`: _a_
+* takes `b`: _b_
+* produces _a_
+
+constantly returns its first argument, ignoring the second
+
+Supported in either invariants or properties.
+
+### compose {#FCompose}
+
+```lisp
+(compose f g)
+```
+
+* takes `f`: _a_ -> _b_
+* takes `g`: _b_ -> _c_
+* produces _c_
+
+compose two functions
+
+Supported in either invariants or properties.
+
+## Other operators {#Other}
+
+### where {#FWhere}
+
+```lisp
+(where field f obj)
+```
+
+* takes `field`: `string`
+* takes `f`: _a_ -> `bool`
+* takes `obj`: `object`
+* produces `bool`
+
+utility for use in `filter` and `select` applying `f` to `field` in `obj`
+
+Supported in either invariants or properties.
+
+### typeof {#FTypeof}
+
+```lisp
+(typeof a)
+```
+
+* takes `a`: _a_
+* produces `string`
+
+return the type of `a` as a string
+
+Supported in either invariants or properties.
 

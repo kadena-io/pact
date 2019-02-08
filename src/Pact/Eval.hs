@@ -700,8 +700,8 @@ typecheckTerm i spec t = do
     (TyList lspec,TyList lty,TList {..}) ->
       paramCheck lspec lty (checkList _tList)
     -- check object
-    (TySchema TyObject ospec,TySchema TyObject oty,TObject {..}) ->
-      paramCheck ospec oty (checkUserType True i _tObject)
+    (TySchema TyObject ospec specPartial,TySchema TyObject oty _,TObject {..}) ->
+      paramCheck ospec oty (checkUserType specPartial i _tObject)
     (TyPrim (TyGuard a),TyPrim (TyGuard b),_) -> case (a,b) of
       (Nothing,Just _) -> tcOK
       (Just _,Nothing) -> tcOK
@@ -710,20 +710,24 @@ typecheckTerm i spec t = do
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
 -- Total flag allows for partial row types if False.
-checkUserType :: Bool -> Info  -> [(Term Name,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
-checkUserType total i ps (TyUser tu@TSchema {..}) = do
-  let uty = M.fromList . map (_aName &&& id) $ _tFields
+checkUserType :: SchemaPartial -> Info  -> [(Term Name,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
+checkUserType partial i ps (TyUser tu@TSchema {..}) = do
+  let fields = M.fromList . map (_aName &&& id) $ _tFields
   aps <- forM ps $ \(k,v) -> case k of
-    TLitString ks -> case M.lookup ks uty of
+    TLitString ks -> case M.lookup ks fields of
       Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty ks
       Just a -> return (a,v)
     t -> evalError i $ "Invalid object, non-String key found: " <> pretty t
-  when total $ do
-    let missing = M.difference uty (M.fromList (map (first _aName) aps))
-    unless (M.null missing) $ evalError i $
-      "Missing fields for {" <> pretty _tSchemaName <> "}: " <> pretty (M.elems missing)
+  let findMissing fs = do
+        let missing = M.difference fs (M.fromList (map (first _aName) aps))
+        unless (M.null missing) $ evalError i $
+          "Missing fields for {" ++ pretty _tSchemaName ++ "}: " ++ pretty (M.elems missing)
+  case partial of
+    FullSchema -> findMissing fields
+    PartialSchema fs -> findMissing (M.restrictKeys fields fs)
+    AnySubschema -> return ()
   typecheck aps
-  return $ TySchema TyObject (TyUser tu)
+  return $ TySchema TyObject (TyUser tu) partial
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " <> pretty t
 
 runPure :: Eval (EnvNoDb e) a -> Eval e a

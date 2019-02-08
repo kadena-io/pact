@@ -134,7 +134,7 @@ tTyBool :: Type n; tTyBool = TyPrim TyBool
 tTyString :: Type n; tTyString = TyPrim TyString
 tTyValue :: Type n; tTyValue = TyPrim TyValue
 tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard $ Just GTyKeySet)
-tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o
+tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o def
 tTyGuard :: Maybe GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
 
 getPactId :: FunApp -> Eval e PactId

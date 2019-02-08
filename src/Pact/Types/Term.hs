@@ -971,6 +971,7 @@ guardTypeOf g = case g of
   GModule {} -> GTyModule
 
 -- | Return a Pact type, or a String description of non-value Terms.
+-- Does not handle partial schema types.
 typeof :: Term a -> Either Text (Type (Term a))
 typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
@@ -983,14 +984,14 @@ typeof t = case t of
       TVar {..} -> Left "var"
       TBinding {..} -> case _tBindType of
         BindLet -> Left "let"
-        BindSchema bt -> Right $ TySchema TyBinding bt
-      TObject {..} -> Right $ TySchema TyObject _tObjectType
+        BindSchema bt -> Right $ TySchema TyBinding bt def
+      TObject {..} -> Right $ TySchema TyObject _tObjectType def
       TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
       TUse {} -> Left "use"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
-      TTable {..} -> Right $ TySchema TyTable _tTableType
+      TTable {..} -> Right $ TySchema TyTable _tTableType def
 {-# INLINE typeof #-}
 
 -- | Return string type description.
