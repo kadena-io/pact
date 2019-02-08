@@ -26,12 +26,11 @@ import           Control.Monad.State.Strict  (runStateT)
 import           Control.Monad.Trans.Class   (lift)
 import           Data.Functor.Identity       (Identity (Identity, runIdentity))
 import           Data.Map.Strict             (Map)
-import           Data.SBV                    (Boolean ((==>)), SBV, Symbolic,
-                                              true)
+import           Data.SBV                    (SBV, Symbolic)
 import qualified Data.SBV                    as SBV
 import           Data.String                 (fromString)
 
-import           Pact.Types.Lang             (Info)
+import           Pact.Types.Lang             (Info, ModuleName)
 
 import           Pact.Analyze.Alloc          (runAlloc)
 import           Pact.Analyze.Errors
@@ -40,7 +39,7 @@ import           Pact.Analyze.Eval.Invariant
 import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Eval.Prop
 import           Pact.Analyze.Eval.Term
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types          hiding (Core(Identity))
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
@@ -54,7 +53,7 @@ analyzeCheck = \case
     assumingSuccess :: S Bool -> Query (S Bool)
     assumingSuccess p = do
       success <- view (qeAnalyzeState.succeeds)
-      pure $ success ==> p
+      pure $ success .=> p
 
 -- | A convenience to treat a nested 'TableMap', '[]', and tuple as a single
 -- functor instead of three.
@@ -69,21 +68,22 @@ analyzeInvariants = assumingSuccess =<< invariantsHold''
     assumingSuccess :: InvariantsF (S Bool) -> Query (InvariantsF (S Bool))
     assumingSuccess ps = do
       success <- view (qeAnalyzeState.succeeds)
-      pure $ (success ==>) <$> ps
+      pure $ (success .=>) <$> ps
 
     invariantsHold :: Query (TableMap (ZipList (Located (SBV Bool))))
     invariantsHold = view (qeAnalyzeState.maintainsInvariants)
 
     invariantsHold' :: Query (InvariantsF (SBV Bool))
-    invariantsHold' = InvariantsF <$> (getZipList <$$> invariantsHold)
+    invariantsHold' = InvariantsF <$> (fmap getZipList <$> invariantsHold)
 
     invariantsHold'' :: Query (InvariantsF (S Bool))
-    invariantsHold'' = sansProv <$$> invariantsHold'
+    invariantsHold'' = fmap sansProv <$> invariantsHold'
 
 -- | Helper to run either property or invariant analysis
 runAnalysis'
   :: Functor f
-  => Query (f (S Bool))
+  => ModuleName
+  -> Query (f (S Bool))
   -> [Table]
   -> Map VarId AVal
   -> ETerm
@@ -91,8 +91,14 @@ runAnalysis'
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' query tables args tm rootPath tags info = do
-  aEnv <- case mkAnalyzeEnv tables args tags info of
+runAnalysis' modName query tables args tm rootPath tags info = do
+  --
+  -- TODO: pass this in (from a previous analysis) when we analyze >1 function
+  --       calls. we will want to propagate previous db state too.
+  --
+  let reg = mkRegistry
+
+  aEnv <- case mkAnalyzeEnv modName reg tables args tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"
@@ -100,7 +106,7 @@ runAnalysis' query tables args tm rootPath tags info = do
   let state0 = mkInitialAnalyzeState tables
 
       analysis = do
-        tagSubpathStart rootPath true
+        tagSubpathStart rootPath sTrue
         res <- evalETerm tm
         tagResult res
         pure res
@@ -114,14 +120,15 @@ runAnalysis' query tables args tm rootPath tags info = do
       cv1     = state1 ^. latticeState . lasExtra
       state1' = state1 &  latticeState . lasExtra .~ ()
       qEnv    = mkQueryEnv aEnv state1' cv0 cv1 funResult
-      ksProvs = state1 ^. globalState.gasKsProvenances
+      ksProvs = state1 ^. globalState.gasGuardProvenances
 
   (results, querySucceeds)
-    <- hoist runAlloc $ runReaderT (runStateT (queryAction query) true) qEnv
+    <- hoist runAlloc $ runReaderT (runStateT (queryAction query) sTrue) qEnv
   pure $ results <&> \prop -> AnalysisResult querySucceeds (_sSbv prop) ksProvs
 
 runPropertyAnalysis
-  :: Check
+  :: ModuleName
+  -> Check
   -> [Table]
   -> Map VarId AVal
   -> ETerm
@@ -129,17 +136,20 @@ runPropertyAnalysis
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis check tables args tm rootPath tags info =
+runPropertyAnalysis modName check tables args tm rootPath tags info =
   runIdentity <$>
-    runAnalysis' (Identity <$> analyzeCheck check) tables args tm rootPath tags info
+    runAnalysis' modName (Identity <$> analyzeCheck check) tables args tm
+      rootPath tags info
 
 runInvariantAnalysis
-  :: [Table]
+  :: ModuleName
+  -> [Table]
   -> Map VarId AVal
   -> ETerm
   -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis tables args tm rootPath tags info =
-  unInvariantsF <$> runAnalysis' analyzeInvariants tables args tm rootPath tags info
+runInvariantAnalysis modName tables args tm rootPath tags info =
+  unInvariantsF <$>
+    runAnalysis' modName analyzeInvariants tables args tm rootPath tags info
