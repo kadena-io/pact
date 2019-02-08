@@ -137,7 +137,7 @@ selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey
 selectCompletedCommands e v = foldM f HashMap.empty v
   where
     f m rk = do
-      rs <- qrys (_qryCompletedStmt e) [hashToField $ unRequestKey rk] [RText,RInt]
+      rs <- qrys (_qryCompletedStmt e) [hashToField $ unRequestKey rk] [RText,RInt,RInt]
       if null rs
       then return m
       else case head rs of
@@ -155,4 +155,4 @@ selectAllCommands e = do
                       , _cmdSigs = userSigsFromField userSigs'
                       , _cmdHash = hashFromField hash'}
       rowToCmd err = error $ "During selectAllCommands, we encountered a non-SText type: " ++ show err
-  fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RInt,RText,RText,RText,RInt]
+  fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RInt,RText,RText,RText]
