@@ -103,10 +103,10 @@ initRefStore = RefStore nativeDefs HM.empty
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
   when deleteOldFile $ do
-    dbExists <- doesFileExist (PSL.dbFile c)
+    dbExists <- doesFileExist (PSL._dbFile c)
     when dbExists $ do
       logLog initLog "INIT" "Deleting Existing Pact DB File"
-      removeFile (PSL.dbFile c)
+      removeFile (PSL._dbFile c)
   dbe <- initDbEnv loggers PSL.persister <$> PSL.initSQLite c loggers
   mkPactDbEnv pactdb dbe
 

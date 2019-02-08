@@ -107,7 +107,8 @@ insertRow s (Command{..},CommandResult {..}) =
             ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
             ,SText $ Utf8 _cmdPayload
             ,crToField _crResult
-            ,userSigsToField _cmdSigs]
+            ,userSigsToField _cmdSigs
+            ,gasToField _crGas]
 
 insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult)] -> IO ()
 insertCompletedCommand DbEnv{..} v = do
@@ -141,7 +142,7 @@ selectCompletedCommands e v = foldM f HashMap.empty v
       then return m
       else case head rs of
           [SText (Utf8 cr),SInt tid, SInt g] ->
-            return $ HashMap.insert rk (crFromField rk (if tid < 0 then Nothing else Just (fromIntegral tid)) cr (Gas . fromIntegral $ g)) m
+            return $ HashMap.insert rk (crFromField rk (if tid < 0 then Nothing else Just (fromIntegral tid)) cr (Gas g)) m
           r -> dbError $ "Invalid result from query: " ++ show r
 
 sqlSelectAllCommands :: Utf8
@@ -149,7 +150,7 @@ sqlSelectAllCommands = "SELECT txid,hash,command,userSigs FROM 'main'.'pactComma
 
 selectAllCommands :: DbEnv -> IO [Command ByteString]
 selectAllCommands e = do
-  let rowToCmd [_, SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
+  let rowToCmd [_, SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs'), _] =
               Command { _cmdPayload = cmd'
                       , _cmdSigs = userSigsFromField userSigs'
                       , _cmdHash = hashFromField hash'}
