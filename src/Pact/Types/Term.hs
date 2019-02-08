@@ -270,7 +270,7 @@ instance Show Ref where
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,ToJSON,FromJSON)
 instance Show Gas where show (Gas g) = show g
 
 instance Semigroup Gas where

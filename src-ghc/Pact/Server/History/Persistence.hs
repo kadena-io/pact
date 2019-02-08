@@ -72,7 +72,7 @@ sqlDbSchema =
   \, 'command' TEXT NOT NULL\
   \, 'result' TEXT NOT NULL\
   \, 'userSigs' TEXT NOT NULL\
-  \, 'gas' TEXT NOT NULL\
+  \, 'gas' INTEGER NOT NULL\
   \)"
 
 eitherToError :: Show e => String -> Either e a -> a
@@ -146,7 +146,7 @@ selectCompletedCommands e v = foldM f HashMap.empty v
           r -> dbError $ "Invalid result from query: " ++ show r
 
 sqlSelectAllCommands :: Utf8
-sqlSelectAllCommands = "SELECT txid,hash,command,userSigs FROM 'main'.'pactCommands' ORDER BY txid ASC"
+sqlSelectAllCommands = "SELECT txid,hash,command,userSigs,gas FROM 'main'.'pactCommands' ORDER BY txid ASC"
 
 selectAllCommands :: DbEnv -> IO [Command ByteString]
 selectAllCommands e = do
@@ -155,4 +155,4 @@ selectAllCommands e = do
                       , _cmdSigs = userSigsFromField userSigs'
                       , _cmdHash = hashFromField hash'}
       rowToCmd err = error $ "During selectAllCommands, we encountered a non-SText type: " ++ show err
-  fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RInt,RText,RText,RText]
+  fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RInt,RText,RText,RText,RInt]
