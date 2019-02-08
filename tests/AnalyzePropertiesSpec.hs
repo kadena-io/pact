@@ -1,4 +1,6 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module AnalyzePropertiesSpec where
@@ -14,7 +16,7 @@ import qualified Hedgehog.Gen                as Gen
 import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Translate      (maybeTranslateType)
-import           Pact.Analyze.Types          hiding (Object, Term)
+import           Pact.Analyze.Types          hiding (Object)
 
 import           Analyze.Eval
 import           Analyze.Gen
@@ -26,7 +28,12 @@ import           Analyze.Translate
 -- evaluations give the same result (including the same exception, if the
 -- program throws).
 testDualEvaluation :: ETerm -> GenState -> PropertyT IO ()
-testDualEvaluation etm@(ESimple ty _tm) gState = do
+testDualEvaluation etm@(Some ty _tm) gState
+  = testDualEvaluation' etm ty gState
+
+testDualEvaluation'
+  :: ETerm -> SingTy a -> GenState -> PropertyT IO ()
+testDualEvaluation' etm ty gState = do
   -- evaluate via pact, convert to analyze term
   mPactVal <- liftIO $ pactEval etm gState
   ePactVal <- case mPactVal of
@@ -49,17 +56,24 @@ testDualEvaluation etm@(ESimple ty _tm) gState = do
       failure
 
     (Right pactVal, Right analyzeVal) -> do
-      Just (ESimple ty' (CoreTerm (Lit pactSval)))
-        <- lift $ fromPactVal (EType ty) pactVal
-      ESimple ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
+      Just etm' <- lift $ fromPactVal (EType ty) pactVal
+      case etm' of
+        Some ty' (CoreTerm (Lit pactSval)) -> do
+          Some ty'' (CoreTerm (Lit sval')) <- pure analyzeVal
 
-      -- compare results
-      case typeEq ty' ty'' of
-        Just Refl -> sval' === pactSval
-        Nothing   -> EType ty' === EType ty'' -- this'll fail
-testDualEvaluation EObject{} _ = do
-  footnote "can't property test evaluation of objects"
-  failure
+          -- compare results
+          case singEq ty' ty'' of
+            Just Refl -> withEq ty' $ withShow ty' $ sval' === pactSval
+            Nothing   ->
+              if singEqB ty' (SList SAny) || singEqB ty'' (SList SAny)
+              then discard -- TODO: check this case
+              else EType ty' === EType ty'' -- this'll fail
+
+        Some _ (CoreTerm (LiteralObject _ _obj)) -> do
+          footnote "can't property test evaluation of objects"
+          failure
+
+        _ -> error (show etm)
 
 prop_evaluation :: Property
 prop_evaluation = property $ do
@@ -78,10 +92,11 @@ prop_round_trip_type = property $ do
 
 prop_round_trip_term :: Property
 prop_round_trip_term = property $ do
-  (etm@(ESimple ty _tm), gState) <- safeGenAnyTerm
+  (etm, gState) <- safeGenAnyTerm
 
-  etm' <- lift $ runMaybeT $
-    (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
+  etm' <- lift $ runMaybeT $ case etm of
+    Some ty _tm ->
+      (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
 
   etm' === Just etm
 
@@ -112,8 +127,8 @@ spec = describe "analyze properties" $ do
 -- sequentially (so logs from different threads don't clobber each other)
 sequentialChecks :: IO Bool
 sequentialChecks = checkSequential $ Group "checks"
-  [ ("prop_round_trip_type", prop_round_trip_type)
-  , ("prop_round_trip_term", prop_round_trip_term)
-  , ("prop_evaluation",      withTests 1000 prop_evaluation)
-  , ("prop_evaluation_time", prop_evaluation_time)
+  [ ("prop_round_trip_type", withShrinks 25 prop_round_trip_type)
+  , ("prop_round_trip_term", withShrinks 10 prop_round_trip_term)
+  , ("prop_evaluation",      withShrinks 25 prop_evaluation)
+  , ("prop_evaluation_time", withShrinks 25 prop_evaluation_time)
   ]

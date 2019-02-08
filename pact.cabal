@@ -35,6 +35,10 @@ library
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
+                     , Pact.Server.API
+                     , Pact.Server.Client
+                     , Pact.Types.API
+                     , Pact.Types.Command
                      , Pact.Types.Exp
                      , Pact.Types.ExpParser
                      , Pact.Types.Gas
@@ -45,6 +49,7 @@ library
                      , Pact.Types.Native
                      , Pact.Types.Parser
                      , Pact.Types.Persistence
+                     , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
                      , Pact.Types.Term
@@ -92,7 +97,9 @@ library
       Pact.Analyze.Types.Languages
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical
+      Pact.Analyze.Types.ObjUtil
       Pact.Analyze.Types.Shared
+      Pact.Analyze.Types.Types
       Pact.Analyze.Types.UserShow
       Pact.Analyze.Util
       Pact.Analyze.Remote.Server
@@ -112,10 +119,7 @@ library
       Pact.Server.History.Types
       Pact.Server.PactService
       Pact.Server.Server
-      Pact.Types.API
-      Pact.Types.Command
       Pact.Types.Crypto
-      Pact.Types.RPC
       Pact.Types.Server
       Pact.Types.SQLite
 
@@ -158,6 +162,10 @@ library
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-space >= 0.10.4 && < 0.14
                      , mmorph >= 1.1 && < 1.2
+                     , constraints
+                     , servant
+                     , servant-client
+                     , servant-client-core
 
   if impl(ghcjs)
     build-depends:
@@ -176,10 +184,11 @@ library
       , haskeline >= 0.7.3 && < 0.8
       , memory
       , safe-exceptions >= 0.1.5.0 && < 0.2
-      , sbv >= 7.9 && < 7.10
-      , snap-core
-      , snap-server
+      , sbv >= 7.11
+      , servant-server
       , statistics >= 0.13.3 && < 0.15
+      , wai-cors
+      , warp
       , yaml
 
   if !impl(ghcjs) && !os(windows)
@@ -259,8 +268,7 @@ test-suite hspec
       , ed25519-donna
       , crypto-api
       , http-client
-      , wreq
-      , snap-server
+      , servant-client
     other-modules:
         DocgenSpec
       , PactTestsSpec
@@ -277,3 +285,4 @@ test-suite hspec
       , Analyze.Gen
       , Analyze.TimeGen
       , Analyze.Translate
+      , ClientSpec

@@ -168,13 +168,7 @@
           (transfer deb-acct pact-acct amount (get-system-time))))))
 
   (defun cancel-escrow (timeout deb-acct cred-acct amount)
-    (let ((systime (get-system-time)))
-      (enforce-one
-        "Cancel can only be effected by creditor, or debitor after timeout"
-        [(with-capability (USER_GUARD cred-acct) true)
-         (with-capability (USER_GUARD deb-acct)
-           (enforce (>= systime timeout) "Timeout expired"))
-        ])
+    (with-capability (CANCEL-ESCROW deb-acct cred-acct timeout)
       (transfer (get-pact-account ESCROW_ACCT) deb-acct amount (get-system-time))))
 
 
@@ -192,6 +186,17 @@
             "noop")
           (format "Escrow completed with {} paid and {} refunded" [price delta])
           ))))
+
+
+  (defcap CANCEL-ESCROW (deb-acct cred-acct timeout)
+    "Capability to cancel an escrow between DEB-ACCT and CRED-ACCT within TIMEOUT"
+    (let ((systime (get-system-time)))
+      (enforce-one
+        "Cancel can only be effected by creditor, or debitor after timeout"
+        [(compose-capability (USER_GUARD cred-acct))
+         (and (compose-capability (USER_GUARD deb-acct))
+              (enforce (>= systime timeout) "Cancel timeout not expired for debitor cancel"))
+        ])))
 
 
   (defun get-pact-account (pfx:string) (format "{}-{}" [pfx (pact-id)]))

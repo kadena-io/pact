@@ -8,14 +8,15 @@ packages:
 extra-deps:
   - aeson-1.4.2.0
   - algebraic-graphs-0.2
-  - crackNum-2.2
+  - crackNum-2.3
   - FloatingHex-0.4
   - compactable-0.1.2.2
   - ed25519-donna-0.1.1
   - hw-hspec-hedgehog-0.1.0.5
-  - git: https://github.com/slpopejoy/snap-cors.git
-    commit: cc88bab1fd3f62dc4d9f9ad81a231877a639c812
   - git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
-  - git: https://github.com/LeventErkok/sbv.git
-    commit: 3dc60340634c82f39f6c5dca2b3859d10925cfdf # with exposed registerKind
+  - constraints-extras-0.2.0.0
+  # temporarily using a patched fork of sbv to disable "unsupported query call"
+  # until it's fixed upstream
+  - git: https://github.com/joelburget/sbv.git
+    commit: 8d13e26255178c5ee5b5b3fad97873ff214d7470

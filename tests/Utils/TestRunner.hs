@@ -20,9 +20,12 @@ module Utils.TestRunner
   , pactWithYield
   , pactWithYieldErr
   , pactWithSameNameYield
+  , startServer
+  , stopServer
   ) where
 
 import Pact.Server.Server (setupServer)
+import qualified Pact.Server.Client as C
 import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
@@ -30,7 +33,7 @@ import Pact.Types.Command
 import "crypto-api" Crypto.Random
 import Crypto.Ed25519.Pure
 
-import Data.Aeson hiding (Options)
+import Data.Aeson
 import Test.Hspec
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
@@ -38,19 +41,25 @@ import qualified Control.Exception as Exception
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Monad
-import Control.Lens
-import Network.Wreq
+import Network.HTTP.Client (Manager)
+import qualified Network.HTTP.Client as HTTP
+import Servant.Client
 import System.Directory
 import System.Timeout
 import NeatInterpolation (text)
 
-testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
+testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath, _serverRootPath :: String
 testDir = "tests/"
 _testLogDir = testDir ++ "test-log/"
 _testConfigFilePath = testDir ++ "test-config.yaml"
 
 _testPort = "8080"
 _serverPath = "http://localhost:" ++ _testPort ++ "/api/v1/"
+
+_serverRootPath = "http://localhost:" ++ _testPort ++ "/"
+
+_serverBaseUrl :: IO BaseUrl
+_serverBaseUrl = parseBaseUrl _serverRootPath
 
 _logFiles :: [String]
 _logFiles = ["access.log","commands.sqlite","error.log","pact.sqlite"]
@@ -61,11 +70,11 @@ data ApiResultCheck = ApiResultCheck
   , _arcExpect :: Maybe Value
   } deriving (Show, Eq)
 
-runAll :: Options -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
-runAll opts cmds = Exception.bracket
+runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+runAll mgr cmds = Exception.bracket
               (startServer _testConfigFilePath)
                stopServer
-              (const (run opts cmds))
+              (const (run mgr cmds))
 
 startServer :: FilePath -> IO (Async (), Async (), Async ())
 startServer configFile = do
@@ -78,11 +87,13 @@ startServer configFile = do
 
 waitUntilStarted :: IO ()
 waitUntilStarted = do
-  r <- get $ _serverPath ++ "poll"
-  let s = r ^. responseStatus . statusCode
-  if s == 200
-    then return ()
-    else do
+  mgr <- HTTP.newManager HTTP.defaultManagerSettings
+  baseUrl <- _serverBaseUrl
+  let clientEnv = mkClientEnv mgr baseUrl
+  r <- runClientM (C.version C.pactServerApiClient) clientEnv
+  case r of
+    Right _ -> pure ()
+    Left _ -> do
       threadDelay 500
       waitUntilStarted
 
@@ -97,41 +108,34 @@ stopServer (asyncServer, asyncCmd, asyncHist) = do
                     "Thread " ++ show (asyncThreadId asy) ++ " could not be cancelled."
           _ -> return ()
 
-run :: Options -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
-run opts cmds = do
-  sendResp <- doSend opts $ SubmitBatch cmds
+run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+run mgr cmds = do
+  sendResp <- doSend mgr $ SubmitBatch cmds
   case sendResp of
-    ApiFailure err -> Exception.evaluate (error err)
-    ApiSuccess RequestKeys{..} -> do
+    Left servantErr -> Exception.evaluate (error $ show servantErr)
+    Right RequestKeys{..} -> do
       results <- timeout 3000000 (helper _rkRequestKeys)
       case results of
         Nothing -> Exception.evaluate (error "Received empty poll. Timeout in retrying.")
         Just res -> return res
 
   where helper reqKeys = do
-          pollResp <- doPoll opts $ Poll reqKeys
+          pollResp <- doPoll mgr $ Poll reqKeys
           case pollResp of
-            ApiFailure err -> Exception.evaluate (error err)
-            ApiSuccess (PollResponses apiResults) ->
+            Left servantErr -> Exception.evaluate (error $ show servantErr)
+            Right (PollResponses apiResults) ->
               if null apiResults then helper reqKeys
               else return apiResults
 
-doSend :: (ToJSON req) => Options -> req -> IO (ApiResponse RequestKeys)
-doSend opts req = view responseBody <$> doSend' opts req
+doSend :: Manager -> SubmitBatch -> IO (Either ServantError RequestKeys)
+doSend mgr req = do
+  baseUrl <- _serverBaseUrl
+  runClientM (C.send C.pactServerApiClient req) (mkClientEnv mgr baseUrl)
 
-doSend' :: (ToJSON req) => Options -> req -> IO (Response (ApiResponse RequestKeys))
-doSend' opts req = do
-  sendResp <- postWith opts (_serverPath ++ "send") (toJSON req)
-  asJSON sendResp
-
-doPoll :: (ToJSON req) => Options -> req -> IO (ApiResponse PollResponses)
-doPoll opts req = view responseBody <$> doPoll' opts req
-
-doPoll' :: (ToJSON req) => Options -> req -> IO (Response (ApiResponse PollResponses))
-doPoll' opts req = do
-  pollResp <- postWith opts (_serverPath ++ "poll") (toJSON req)
-  asJSON pollResp
-
+doPoll :: Manager -> Poll -> IO (Either ServantError PollResponses)
+doPoll mgr req = do
+  baseUrl <- _serverBaseUrl
+  runClientM (C.poll C.pactServerApiClient req) (mkClientEnv mgr baseUrl)
 
 flushDb :: IO ()
 flushDb = mapM_ deleteIfExists _logFiles
@@ -146,8 +150,6 @@ genKeys = do
   case generateKeyPair g of
     Left _ -> error "Something went wrong in genKeys"
     Right (s,p,_) -> return $ KeyPair s p
-
-
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect

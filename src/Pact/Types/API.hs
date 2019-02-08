@@ -17,19 +17,15 @@
 --
 
 module Pact.Types.API
-  ( ApiResponse(..), apiResponse, apiError
-  , RequestKeys(..), rkRequestKeys
+  ( RequestKeys(..), rkRequestKeys
   , SubmitBatch(..), sbCmds
-  , SubmitBatchResponse
   , Poll(..)
   , PollResponses(..)
   , ListenerRequest(..)
-  , ListenerResponse
   , ApiResult(..), arMetaData, arResult, arTxId
   ) where
 
 import Data.Aeson hiding (Success)
-import qualified Data.Aeson as A
 import Control.Lens hiding ((.=))
 import GHC.Generics
 import qualified Data.HashMap.Strict as HM
@@ -40,26 +36,8 @@ import Pact.Types.Command
 import Pact.Types.Util
 import Pact.Types.Runtime
 
-data ApiResponse a =
-  ApiSuccess
-    { _apiResponse :: !a} |
-  ApiFailure
-    { _apiError :: !String}
-  deriving (Show, Eq, Generic)
-makeLenses ''ApiResponse
-
-instance ToJSON a => ToJSON (ApiResponse a) where
-  toJSON (ApiSuccess a)= object [ "status" .= A.String "success", "response" .= a]
-  toJSON (ApiFailure a)= object [ "status" .= A.String "failure", "error" .= a]
-instance FromJSON a => FromJSON (ApiResponse a) where
-  parseJSON (Object o) = do
-    st <- o .: "status"
-    if st == A.String "success"
-    then ApiSuccess <$> o .: "response"
-    else ApiFailure <$> o .: "error"
-  parseJSON _ = mempty
-
-newtype RequestKeys = RequestKeys { _rkRequestKeys :: [RequestKey] } deriving (Show, Eq, Ord, Generic)
+newtype RequestKeys = RequestKeys { _rkRequestKeys :: [RequestKey] }
+  deriving (Show, Eq, Ord, Generic)
 makeLenses ''RequestKeys
 
 instance ToJSON RequestKeys where
@@ -69,16 +47,14 @@ instance FromJSON RequestKeys where
 
 
 -- | Submit new commands for execution
-newtype SubmitBatch = SubmitBatch { _sbCmds :: [Command Text] } deriving (Eq,Generic,Show)
+newtype SubmitBatch = SubmitBatch { _sbCmds :: [Command Text] }
+  deriving (Eq,Generic,Show)
 makeLenses ''SubmitBatch
 
 instance ToJSON SubmitBatch where
   toJSON = lensyToJSON 3
 instance FromJSON SubmitBatch where
    parseJSON = lensyParseJSON 3
-
--- | What you get back from a SubmitBatch
-type SubmitBatchResponse = ApiResponse RequestKeys
 
 -- | Poll for results by RequestKey
 newtype Poll = Poll { _pRequestKeys :: [RequestKey] }
@@ -99,6 +75,7 @@ instance ToJSON ApiResult where toJSON = lensyToJSON 3
 
 -- | What you get back from a Poll
 newtype PollResponses = PollResponses (HM.HashMap RequestKey ApiResult)
+  deriving (Eq, Show)
 instance ToJSON PollResponses where
   toJSON (PollResponses m) = object $ map (requestKeyToB16Text *** toJSON) $ HM.toList m
 instance FromJSON PollResponses where
@@ -113,5 +90,3 @@ instance ToJSON ListenerRequest where
   toJSON (ListenerRequest r) = object ["listen" .= r]
 instance FromJSON ListenerRequest where
   parseJSON = withObject "ListenerRequest" $ \o -> ListenerRequest <$> o .: "listen"
-
-type ListenerResponse = ApiResponse ApiResult
