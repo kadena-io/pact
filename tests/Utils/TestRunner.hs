@@ -41,7 +41,6 @@ import qualified Control.Exception as Exception
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Monad
-import Control.Monad.IO.Class (liftIO)
 import Network.HTTP.Client (Manager)
 import qualified Network.HTTP.Client as HTTP
 import Servant.Client
