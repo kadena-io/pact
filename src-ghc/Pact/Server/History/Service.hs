@@ -14,6 +14,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
 import Control.Concurrent.MVar
 import System.Directory
+import Data.Aeson (Value(Null))
 
 import Data.ByteString (ByteString)
 import Data.HashSet (HashSet)
@@ -26,6 +27,8 @@ import Pact.Types.Command
 import Pact.Types.Server
 import Pact.Server.History.Types
 import Pact.Server.History.Persistence as DB
+
+import Pact.Types.Hash
 
 initHistoryEnv
   :: HistoryChannel
@@ -216,3 +219,25 @@ _gcListener :: String -> (RequestKey, [MVar ListenerResult]) -> HistoryService (
 _gcListener res (k,mvs) = do
   fails <- filter not <$> liftIO (mapM (`tryPutMVar` GCed res) mvs)
   unless (null fails) $ debug $ "Registered listener failure during GC for " ++ show k ++ " (" ++ show (length fails) ++ " of " ++ show (length mvs) ++ " failed)"
+
+
+_testHistoryDB :: IO ()
+_testHistoryDB = do
+  (inC,histC) <- initChans
+  replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
+  let fp = Just "/tmp"
+      dbg = putStrLn
+      env = initHistoryEnv histC inC fp dbg replayFromDisk'
+  pers <- setupPersistence dbg fp replayFromDisk'
+  let hstate = HistoryState { _registeredListeners = HashMap.empty, _persistence = pers }
+  void $ runRWST _go env hstate
+
+_go :: HistoryService ()
+_go = do
+  addNewKeys [Command "" [] initialHash]
+  let rq = RequestKey initialHash
+  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null)])
+  mv <- liftIO $ newEmptyMVar
+  queryForResults (HashSet.singleton rq, mv)
+  v <- liftIO $ takeMVar mv
+  liftIO $ print v
