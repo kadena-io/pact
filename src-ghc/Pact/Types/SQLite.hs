@@ -53,7 +53,6 @@ data SQLiteConfig = SQLiteConfig
   } deriving (Eq,Show,Generic)
 instance FromJSON SQLiteConfig
 instance ToJSON SQLiteConfig
-
 makeLenses ''SQLiteConfig
 
 -- | Statement input types
@@ -187,6 +186,8 @@ exec' e q as = do
 
 runPragmas :: Database -> [Pragma] -> IO ()
 runPragmas c = mapM_ (\(Pragma s) -> exec_ c (fromString ("PRAGMA " ++ s)))
+
+
 
 fastNoJournalPragmas :: [Pragma]
 fastNoJournalPragmas = [
