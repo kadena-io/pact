@@ -41,6 +41,7 @@ verifyModule namedMods mod' uri = do
       nothingText = Nothing
   XHR.open req ("POST" :: Text) requestURI True nothingText nothingText
   XHR.setTimeout req 5000 -- Terminate at some point (5 seconds).
+  XHR.setRequestHeader req ("content-type" :: Text) ("application/json;charset=utf-8" :: Text)
   alreadyHandled <- liftIO $ newIORef False
   respVar :: MVar [Text] <- newEmptyMVar
   void $ req `onAsync` XHR.readyStateChange $ do
