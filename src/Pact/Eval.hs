@@ -721,7 +721,7 @@ checkUserType partial i ps (TyUser tu@TSchema {..}) = do
   let findMissing fs = do
         let missing = M.difference fs (M.fromList (map (first _aName) aps))
         unless (M.null missing) $ evalError i $
-          "Missing fields for {" ++ pretty _tSchemaName ++ "}: " ++ pretty (M.elems missing)
+          "Missing fields for {" <> pretty _tSchemaName <> "}: " <> pretty (M.elems missing)
   case partial of
     FullSchema -> findMissing fields
     PartialSchema fs -> findMissing (M.restrictKeys fields fs)

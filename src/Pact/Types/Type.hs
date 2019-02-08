@@ -217,16 +217,6 @@ data Type v =
 
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
-instance Eq1 Type where
-  liftEq _ TyAny TyAny = True
-  liftEq eq (TyVar a) (TyVar m) = liftEq eq a m
-  liftEq _ (TyPrim a) (TyPrim m) = a == m
-  liftEq eq (TyList a) (TyList m) = liftEq eq a m
-  liftEq eq (TySchema a b c) (TySchema m n o) = a == m && liftEq eq b n && c == o
-  liftEq eq (TyFun a) (TyFun b) = liftEq eq a b
-  liftEq eq (TyUser a) (TyUser b) = eq a b
-  liftEq _ _ _ = False
-
 instance NFData v => NFData (Type v)
 
 instance (Pretty o) => Pretty (Type o) where
