@@ -195,7 +195,6 @@ data SchemaPartial = FullSchema | PartialSchema !(Set Text) | AnySubschema
 instance NFData SchemaPartial
 instance Default SchemaPartial where def = FullSchema
 
-
 showPartial :: SchemaPartial -> String
 showPartial FullSchema = ""
 showPartial (PartialSchema ks)
@@ -214,7 +213,6 @@ data Type v =
   , _tySchemaPartial :: SchemaPartial } |
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v }
-
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)
