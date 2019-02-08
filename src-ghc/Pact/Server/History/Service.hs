@@ -24,11 +24,11 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust)
 
 import Pact.Types.Command
+import Pact.Types.Hash
 import Pact.Types.Server
+import Pact.Types.Term
 import Pact.Server.History.Types
 import Pact.Server.History.Persistence as DB
-
-import Pact.Types.Hash
 
 initHistoryEnv
   :: HistoryChannel
@@ -236,7 +236,7 @@ _go :: HistoryService ()
 _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey initialHash
-  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null)])
+  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null (Gas 0))])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)
   v <- liftIO $ takeMVar mv
