@@ -2359,7 +2359,7 @@ spec = describe "analyze" $ do
             SCons' (SSymbol @"name") SStr $
               SCons' (SSymbol @"balance") SInteger
                 SNil'
-      pretty' schema `shouldBe` "{ balance: integer, name: string }"
+      pretty' schema `shouldBe` "{balance: integer,name: string}"
 
   describe "at-properties verify" $ do
     let code = [text|
