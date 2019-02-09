@@ -19,8 +19,9 @@ import           Data.Map.Strict        (Map)
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
 import           Data.String            (IsString)
-import           Data.Text              (Text)
+import           Data.Text              (Text, unpack)
 import           Data.Tuple             (swap)
+import qualified Text.PrettyPrint.ANSI.Leijen as Pretty
 
 import qualified Pact.Types.Persistence as Pact
 
@@ -1621,6 +1622,9 @@ toOp = preview
 
 toText :: Prism' Text op -> op -> Text
 toText = review
+
+toDoc :: Prism' Text op -> op -> Pretty.Doc
+toDoc p op = Pretty.text $ unpack $ toText p op
 
 -- NOTE: we don't (yet?) use symbols here because Feature (currently?) only
 -- handles properties and invariants.

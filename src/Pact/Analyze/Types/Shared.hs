@@ -29,7 +29,7 @@ import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                Ixed (ix), Lens', Prism', both,
                                                from, iso, lens, makeLenses,
                                                makePrisms, over, view, (%~),
-                                               (&))
+                                               (&), (<&>))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
@@ -68,23 +68,25 @@ import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
+import Text.PrettyPrint.ANSI.Leijen hiding
+  ((<$>), empty, int, bool, columns, list, float)
 
+import           Pact.Types.Lang              (text', commaBraces)
 import qualified Pact.Types.Lang              as Pact
-import           Pact.Types.Util              (AsString, tShow)
+import           Pact.Types.Util              (AsString)
 
-import           Pact.Analyze.Feature         hiding (Constraint, Type, dec, ks,
-                                               obj, str, time)
+import           Pact.Analyze.Feature         hiding (Constraint, Doc, Type,
+                                               dec, ks, obj, str, time)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Types
-import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util            (Boolean (..))
 
 class IsTerm tm where
-  singEqTm       :: SingTy ty -> tm ty -> tm ty -> Bool
-  singShowsTm    :: SingTy ty -> Int   -> tm ty -> ShowS
-  singUserShowTm :: SingTy ty ->          tm ty -> Text
+  singEqTm     :: SingTy ty -> tm ty -> tm ty -> Bool
+  singShowsTm  :: SingTy ty -> Int   -> tm ty -> ShowS
+  singPrettyTm :: SingTy ty ->          tm ty -> Doc
 
 eqTm :: (SingI ty, IsTerm tm) => tm ty -> tm ty -> Bool
 eqTm = singEqTm sing
@@ -95,8 +97,8 @@ showsTm = singShowsTm sing
 showTm :: (SingI ty, IsTerm tm) => tm ty -> String
 showTm tm = showsTm 0 tm ""
 
-userShowTm :: (SingI ty, IsTerm tm) => tm ty -> Text
-userShowTm = singUserShowTm sing
+prettyTm :: (SingI ty, IsTerm tm) => tm ty -> Doc
+prettyTm = singPrettyTm sing
 
 data Located a
   = Located
@@ -127,8 +129,8 @@ instance IsTerm tm => Show (Existential tm) where
     . showChar ' '
     . singShowsTm ty 11 tm
 
-instance IsTerm tm => UserShow (Existential tm) where
-  userShowPrec _ (Some ty tm) = singUserShowTm ty tm
+instance IsTerm tm => Pretty (Existential tm) where
+  pretty (Some ty tm) = singPrettyTm ty tm
 
 transformExistential
   :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
@@ -181,8 +183,8 @@ instance HasKind RegistryName where
 instance SMTValue RegistryName where
   sexprToVal = fmap (RegistryName . T.pack) . sexprToVal
 
-instance UserShow RegistryName where
-  userShowPrec _ (RegistryName name) = "'" <> name
+instance Pretty RegistryName where
+  pretty (RegistryName name) = "'" <> text' name
 
 newtype TableName
   = TableName String
@@ -225,8 +227,8 @@ instance SymVal Str where
   literal (Str s) = mkConcreteString s
   fromCV = wrappedStringFromCV Str
 
-instance UserShow Str where
-  userShowPrec _ (Str str) = "\"" <> T.pack str <> "\""
+instance Pretty Str where
+  pretty (Str str) = dquotes $ text str
 
 type RowKey = Str
 
@@ -261,8 +263,8 @@ logicalOpP = mkOpNamePrism
   -- combination of negation and disjunction during parsing.
   ]
 
-instance UserShow LogicalOp where
-  userShowPrec _ = toText logicalOpP
+instance Pretty LogicalOp where
+  pretty = toDoc logicalOpP
 
 data EqNeq
   = Eq'  -- ^ Equal
@@ -275,8 +277,8 @@ eqNeqP = mkOpNamePrism
   , (SInequality, Neq')
   ]
 
-instance UserShow EqNeq where
-  userShowPrec _ = toText eqNeqP
+instance Pretty EqNeq where
+  pretty = toDoc eqNeqP
 
 data ComparisonOp
   = Gt  -- ^ Greater than
@@ -297,8 +299,8 @@ comparisonOpP = mkOpNamePrism
   , (SInequality,         Neq)
   ]
 
-instance UserShow ComparisonOp where
-  userShowPrec _ = toText comparisonOpP
+instance Pretty ComparisonOp where
+  pretty = toDoc comparisonOpP
 
 -- | Metadata about a database cell from which a symbolic value originates.
 -- This is a separate datatype from 'Provenance' so that we avoid partial field
@@ -470,12 +472,10 @@ objectLookup (Object cols) name = objectLookup' cols where
 data EObject tm where
   EObject :: SingList m -> Object tm m -> EObject tm
 
-instance UserShow (tm ('TyObject m)) => UserShow (Object tm m) where
-  userShowPrec _ (Object vals)
-    = "{" <> T.intercalate ", " (userShowVals vals) <> "}"
-      where
-      userShowVals = foldHList $ \k (Column ty v) ->
-        [T.pack (symbolVal k) <> " := " <> singUserShowTm ty v]
+instance Pretty (tm ('TyObject m)) => Pretty (Object tm m) where
+  pretty (Object vals) = commaBraces (prettyVals vals) where
+    prettyVals = foldHList $ \k (Column ty v) ->
+      [text (symbolVal k) <> " := " <> singPrettyTm ty v]
 
 instance Show (tm ('TyObject m)) => Show (Object tm m) where
   showsPrec p (Object vals) = showParen (p > 10) $
@@ -530,8 +530,9 @@ varIdArgs
 newtype UObject = UObject (Map.Map Text TVal)
   deriving (Eq, Show, Semigroup, Monoid)
 
-instance UserShow UObject where
-  userShowPrec d (UObject m) = userShowPrec d (fmap snd m)
+instance Pretty UObject where
+  pretty (UObject m) = pretty $ Map.toList m <&> \(k, v) ->
+    text' k <> " := " <> pretty v
 
 objFields :: Lens' UObject (Map.Map Text TVal)
 objFields = lens getter setter
@@ -545,9 +546,9 @@ data AVal
   | OpaqueVal
   deriving (Eq, Show)
 
-instance UserShow AVal where
-  userShowPrec _ = \case
-    AVal _ sVal -> tShow sVal
+instance Pretty AVal where
+  pretty = \case
+    AVal _ sVal -> text $ show sVal
     OpaqueVal   -> "[opaque]"
 
 instance EqSymbolic UObject where
@@ -695,8 +696,8 @@ data Binding
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
 
-instance UserShow Any where
-  userShowPrec _ Any = "*"
+instance Pretty Any where
+  pretty Any = "*"
 
 instance HasKind Any
 instance SymVal Any
@@ -704,7 +705,7 @@ instance SMTValue Any
 
 newtype Guard
   = Guard Integer
-  deriving (Eq, Ord, Data, Show, Read, UserShow)
+  deriving (Eq, Ord, Data, Show, Read, Pretty)
 
 instance SymVal Guard where
   mkSymVal = SBVI.genMkSymVar KUnbounded
@@ -764,8 +765,8 @@ instance (Show (Concrete ty)) => Show (AConcrete ty) where
   showsPrec p (AConcrete a) = showParen (p > 10) $
     showString "AConcrete " . showsPrec 11 a
 
-instance (UserShow (Concrete ty)) => UserShow (AConcrete ty) where
-  userShowPrec p (AConcrete a) = userShowPrec p a
+instance (Pretty (Concrete ty)) => Pretty (AConcrete ty) where
+  pretty (AConcrete a) = pretty a
 
 instance SMTValue (Concrete ty) => SMTValue (AConcrete ty) where
   sexprToVal = fmap AConcrete . sexprToVal
@@ -773,7 +774,7 @@ instance SMTValue (Concrete ty) => SMTValue (AConcrete ty) where
 instance IsTerm AConcrete where
   singEqTm ty (AConcrete a) (AConcrete b) = withEq ty $ a == b
   singShowsTm ty p tm                     = withShow ty $ showsPrec p tm
-  singUserShowTm ty tm                    = withUserShow ty $ userShowPrec 0 tm
+  singPrettyTm ty tm                      = withPretty ty $ pretty tm
 
 instance Ord (Concrete ty) => Ord (AConcrete ty) where
   compare (AConcrete a) (AConcrete b) = compare a b
@@ -863,24 +864,24 @@ withShow = withDict . singMkShow
       SObjectUnsafe (SCons' _ ty' tys)
         -> withShow ty' $ withDict (singMkShow (SObjectUnsafe tys)) Dict
 
-withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
-withUserShow = withDict . singMkUserShow
+withPretty :: SingTy a -> (Pretty (Concrete a) => b) -> b
+withPretty = withDict . singMkPretty
   where
 
-    singMkUserShow :: SingTy a -> Dict (UserShow (Concrete a))
-    singMkUserShow = \case
+    singMkPretty :: SingTy a -> Dict (Pretty (Concrete a))
+    singMkPretty = \case
       SInteger     -> Dict
       SBool        -> Dict
       SStr         -> Dict
-      STime        -> Dict
+      STime        -> error "TODO" -- Dict
       SDecimal     -> Dict
       SGuard       -> Dict
       SAny         -> Dict
-      SList ty'    -> withUserShow ty' Dict
+      SList ty'    -> withPretty ty' Dict
       SObjectUnsafe SNil'   -> Dict
       SObjectUnsafe (SCons' _ ty' tys)
-        -> withUserShow ty' $
-           withDict (singMkUserShow (SObjectUnsafe tys)) Dict
+        -> withPretty ty' $
+           withDict (singMkPretty (SObjectUnsafe tys)) Dict
 
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable = withDict . singMkTypeable
@@ -1068,17 +1069,17 @@ instance Mergeable a => Mergeable (TableMap a) where
     Map.intersectionWith (symbolicMerge force test) left right
 
 
-instance UserShow (Quantifiable q) where
-  userShowPrec d = \case
-    EType ty     -> userShowPrec d ty
+instance Pretty (Quantifiable q) where
+  pretty = \case
+    EType ty     -> pretty ty
     QTable       -> "table"
-    QColumnOf tn -> "(column-of " <> userShow tn <> ")"
+    QColumnOf tn -> "(column-of " <> pretty tn <> ")"
 
-instance UserShow TableName where
-  userShowPrec _ (TableName tn) = T.pack tn
+instance Pretty TableName where
+  pretty (TableName tn) = text tn
 
-instance UserShow ColumnName where
-  userShowPrec _ (ColumnName cn) = T.pack cn
+instance Pretty ColumnName where
+  pretty (ColumnName cn) = text cn
 
 data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]

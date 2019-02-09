@@ -26,11 +26,12 @@ import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact
+import           Pact.Types.Lang            (text')
 import qualified Pact.Types.Persistence     as Pact
-import           Pact.Types.Util            (asString)
+import           Pact.Types.Util            (renderCompactString)
 
 import           Pact.Analyze.Model.Graph   (linearize)
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types         hiding (indent)
 
 indent1 :: Text -> Text
 indent1 = ("  " <>)
@@ -39,17 +40,20 @@ indent :: Natural -> Text -> Text
 indent 0     = id
 indent times = indent (pred times) . indent1
 
-showSbv :: (UserShow a, SymVal a) => SBV a -> Text
-showSbv sbv = maybe "[ERROR:symbolic]" userShow (SBV.unliteral sbv)
+showSbv :: (Pretty a, SymVal a) => SBV a -> Text
+showSbv sbv
+  = T.pack
+  $ renderCompactString
+  $ maybe "[ERROR:symbolic]" pretty (SBV.unliteral sbv)
 
-showS :: (UserShow a, SymVal a) => S a -> Text
+showS :: (Pretty a, SymVal a) => S a -> Text
 showS = showSbv . _sSbv
 
 showTVal :: TVal -> Text
 showTVal (ety, av) = case av of
   OpaqueVal   -> "[opaque]"
   AVal _ sval -> case ety of
-    EType (ty :: SingTy ty) -> withUserShow ty $ withSymVal ty $
+    EType (ty :: SingTy ty) -> withPretty ty $ withSymVal ty $
       showSbv (SBVI.SBV sval :: SBV (Concrete ty))
 
 showObject :: UObject -> Text
@@ -141,11 +145,9 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
         "unknown " <> guard <> " " <> showS sg
       Just (FromRow _) ->
         error "impossible: FromRow provenance on guard"
-      Just (FromCell (OriginatingCell tn cn sRk _)) ->
-        guard <> " from database at ("
-          <> userShow tn <> ", "
-          <> "'" <> userShow cn <> ", "
-          <> showS sRk <> ")"
+      Just (FromCell (OriginatingCell tn cn sRk _)) -> T.pack $ renderCompactString $
+        text' guard <> " from database at (" <> pretty tn <> ", " <> "'" <>
+          pretty cn <> ", " <> text (show sRk) <> ")"
       Just (FromRegistry sRn) ->
         guard <> " named " <> showRn sRn
       Just (FromInput (Unmunged arg)) ->

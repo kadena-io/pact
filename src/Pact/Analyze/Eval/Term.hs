@@ -502,9 +502,10 @@ evalTerm = \case
       Some SStr     str  -> Left          <$> eval str
       Some SInteger int  -> Right . Left  <$> eval int
       Some SBool    bool -> Right . Right <$> eval bool
-      etm                   -> throwErrorNoLoc $ fromString $ T.unpack $
+      etm                   -> throwErrorNoLoc $ fromString $
+        Pact.renderCompactString $
         "We can only analyze calls to `format` formatting {string,integer,bool}" <>
-        " (not " <> userShow etm <> ")"
+        " (not " <> pretty etm <> ")"
     case unliteralS formatStr' of
       Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
       Just (Str concreteStr) -> case format concreteStr args' of

@@ -66,7 +66,8 @@ import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                TableName, TyObject, Type)
 import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)
+import           Pact.Analyze.Feature         hiding (Doc, Type, Var, ks, obj,
+                                               str)
 import           Pact.Analyze.Parse.Types
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Types
@@ -80,8 +81,8 @@ parseTableName (PreVar vid name) = do
   case varTy of
     Just QTable -> pure $ CoreProp $ Var vid name
     _           -> throwError $ T.unpack $ "invalid table name: " <> name
-parseTableName bad = throwError $ T.unpack $
-  "invalid table name: " <> userShow bad
+parseTableName bad = throwError $ renderCompactString $
+  "invalid table name: " <> pretty bad
 
 parseColumnName :: PreProp -> PropCheck (Prop TyColumnName)
 parseColumnName (PreStringLit str) = pure (fromString (T.unpack str))
@@ -91,8 +92,8 @@ parseColumnName (PreVar vid name) = do
     Just QColumnOf{} -> pure $ CoreProp $ Var vid name
     _                -> throwError $ T.unpack $
       "invalid column name: " <> name
-parseColumnName bad = throwError $ T.unpack $
-  "invalid column name: " <> userShow bad
+parseColumnName bad = throwError $ renderCompactString $
+  "invalid column name: " <> pretty bad
 
 parseBeforeAfter :: PreProp -> PropCheck BeforeOrAfter
 parseBeforeAfter (PreStringLit str)
@@ -140,7 +141,7 @@ expToPreProp = \case
     <*> expToPreProp rk
     <*> expToPreProp ba
   exp@(ParenList [EAtom' SPropRead, _tn, _rk]) -> throwErrorIn exp $
-    SPropRead <> " must specify a time ('before or 'after). example: " <>
+    text' SPropRead <> " must specify a time ('before or 'after). example: " <>
     "(= result (read accounts user 'before))"
 
   exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
@@ -189,7 +190,7 @@ parseBindings mkBinding = \case
     (nameTy:) <$> parseBindings mkBinding exps
   exp@(EAtom _):_exps -> throwErrorIn exp
     "type annotation required for all property bindings."
-  exp -> throwErrorT $ "in " <> userShow exp <> ", unexpected binding form"
+  exp -> throwErrorD $ "in " <> pretty exp <> ", unexpected binding form"
 
 parseType :: Exp Info -> Maybe QType
 parseType = \case
@@ -285,8 +286,8 @@ inferPreProp preProp = case preProp of
   PreListLit as   -> do
     as' <- traverse inferPreProp as
     Some listTy litList <- maybe
-      (throwErrorT
-        ("unable to make list of a single type from " <> userShow as'))
+      (throwErrorD
+        ("unable to make list of a single type from " <> pretty as'))
       pure
       $ mkLiteralList as'
 
@@ -335,13 +336,13 @@ inferPreProp preProp = case preProp of
       (Some SStr (StrLit ix''), Some objty@(SObject schema) objProp)
         -> case lookupKeyInType ix'' schema of
           Nothing -> throwErrorIn preProp $
-            "could not find expected key " <> T.pack ix''
+            "could not find expected key " <> pretty ix''
           Just (EType ty) -> pure $
             Some ty $ PObjAt objty (StrLit ix'') objProp
 
       (_, Some ty _) -> throwErrorIn preProp $
-        "expected object or list (with key " <> tShow ix' <>
-        ") but found type " <> userShow ty
+        "expected object or list (with key " <> pretty ix' <>
+        ") but found type " <> pretty ty
 
   PrePropRead tn rk ba -> do
     tn' <- parseTableName tn
@@ -356,7 +357,7 @@ inferPreProp preProp = case preProp of
               Some objTy $ PropSpecific $ PropRead objTy ba' tn' rk'
             _ -> throwErrorIn preProp "expected an object"
           Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn
-      _ -> throwErrorT $ "table name (" <> userShow tn <> ") must be a literal"
+      _ -> throwErrorD $ "table name (" <> pretty tn <> ") must be a literal"
 
   PreLiteralObject obj -> do
     obj'  <- traverse inferPreProp obj
@@ -392,14 +393,15 @@ inferPreProp preProp = case preProp of
       Some SInteger b'' -> pure $ Some STime $ PIntAddTime a' b''
       Some SDecimal b'' -> pure $ Some STime $ PDecAddTime a' b''
       _                 -> throwErrorIn b $
-        "expected integer or decimal, found " <> userShow (existentialType b')
+        "expected integer or decimal, found " <> pretty (existentialType b')
 
   PreApp op'@(toOp comparisonOpP -> Just op) [a, b] -> do
     a''@(Some aTy a') <- inferPreProp a
     b''@(Some bTy b') <- inferPreProp b
-    let eqNeqMsg :: Text -> Text
-        eqNeqMsg nouns = nouns <> " only support equality (" <> SEquality <>
-          ") / inequality (" <> SInequality <> ") checks"
+    let eqNeqMsg :: Text -> Doc
+        eqNeqMsg nouns = text' nouns <> " only support equality (" <>
+          text' SEquality <> ") / inequality (" <> text' SInequality <>
+          ") checks"
 
     -- special case for an empty list on either side
     case (a'', b'') of
@@ -449,7 +451,7 @@ inferPreProp preProp = case preProp of
       (AndOp, [a, b]) -> PAnd <$> checkPreProp SBool a <*> checkPreProp SBool b
       (OrOp,  [a, b]) -> POr  <$> checkPreProp SBool a <*> checkPreProp SBool b
       _               -> throwErrorIn preProp $
-        op' <> " applied to wrong number of arguments"
+        text' op' <> " applied to wrong number of arguments"
 
   PreApp s [a, b] | s == SLogicalImplication -> do
     propNotA <- PNot <$> checkPreProp SBool a
@@ -579,7 +581,8 @@ inferPreProp preProp = case preProp of
   PreApp fName args -> do
     defn <- view $ definedProps . at fName
     case defn of
-      Nothing -> throwErrorIn preProp $ "couldn't find property named " <> fName
+      Nothing -> throwErrorIn preProp $
+        "couldn't find property named " <> text' fName
       Just (DefinedProperty argTys body) -> do
         when (length args /= length argTys) $
           throwErrorIn preProp "wrong number of arguments"
@@ -621,9 +624,9 @@ checkPreProp ty preProp
       (Some SInteger aprop, Some SDecimal bprop) ->
         pure $ PNumerical $ IntDecArithOp op aprop bprop
       (_, _) -> throwErrorIn preProp $
-        "unexpected argument types for (" <> opSym <> "): " <>
-        userShow (existentialType a') <> " and " <>
-        userShow (existentialType b')
+        "unexpected argument types for (" <> text' opSym <> "): " <>
+        pretty (existentialType a') <> " and " <>
+        pretty (existentialType b')
   (SInteger, PreApp (toOp arithOpP -> Just op) [a, b])
     -> PNumerical ... IntArithOp op
       <$> checkPreProp SInteger a
@@ -633,12 +636,12 @@ checkPreProp ty preProp
   (SInteger, PreApp (toOp unaryArithOpP -> Just op) [a])
     -> PNumerical . IntUnaryArithOp op <$> checkPreProp SInteger a
 
-  _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
+  _ -> throwErrorIn preProp $ "type error: expected type " <> pretty ty
 
-typeError :: (HasCallStack, UserShow a, UserShow b) => PreProp -> a -> b -> PropCheck c
+typeError :: (HasCallStack, Pretty a, Pretty b) => PreProp -> a -> b -> PropCheck c
 typeError preProp a b = throwErrorIn preProp $
-  "type error: " <> userShow a <> " vs " <> userShow b <> "(" <>
-  T.pack (prettyCallStack callStack) <> ")"
+  "type error: " <> pretty a <> " vs " <> pretty b <> "(" <>
+  text (prettyCallStack callStack) <> ")"
 
 expectColumnType
   :: Prop TyTableName -> Prop TyColumnName -> SingTy a -> PropCheck ()
@@ -649,14 +652,14 @@ expectColumnType (TextLit tn) (TextLit cn) expectedTy = do
     . Lens.ix (ColumnName (T.unpack cn))
   case tys of
     [EType foundTy] -> case singEq foundTy expectedTy of
-      Nothing   -> throwErrorT $
-        "expected column " <> userShow cn <> " in table " <> userShow tn <>
-        " to have type " <> userShow expectedTy <> ", instead found " <>
-        userShow foundTy
+      Nothing   -> throwErrorD $
+        "expected column " <> pretty cn <> " in table " <> pretty tn <>
+        " to have type " <> pretty expectedTy <> ", instead found " <>
+        pretty foundTy
       Just Refl -> pure ()
-    _ -> throwErrorT $
-      "didn't find expected column " <> userShow cn <> " in table " <>
-      userShow tn
+    _ -> throwErrorD $
+      "didn't find expected column " <> pretty cn <> " in table " <>
+      pretty tn
 expectColumnType _ _ _
   = throwError "table and column names must be statically knowable"
 
@@ -666,7 +669,7 @@ expectTableExists (TextLit tn) = do
   quantified <- view $ quantifiedTables . at tn'
   defined    <- view $ tableEnv . at tn'
   unless (isJust quantified || isJust defined) $
-    throwErrorT $ "expected table " <> userShow tn <> " but it isn't in scope"
+    throwErrorD $ "expected table " <> pretty tn <> " but it isn't in scope"
 expectTableExists (PVar vid name) = do
   ty <- view (varTys . at vid)
   case ty of

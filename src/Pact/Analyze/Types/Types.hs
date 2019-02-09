@@ -55,15 +55,16 @@ module Pact.Analyze.Types.Types
   , pattern (:<)
   ) where
 
-import           Data.Kind                   (Type)
-import           Data.Maybe                  (isJust)
-import           Data.Semigroup              ((<>))
-import           Data.Text                   (intercalate, pack, Text)
-import           Data.Type.Equality          ((:~:) (Refl), apply)
-import           Data.Typeable               (Typeable, Proxy(Proxy))
-import           GHC.TypeLits                (Symbol, KnownSymbol, symbolVal, sameSymbol)
+import           Data.Kind                    (Type)
+import           Data.Maybe                   (isJust)
+import           Data.Semigroup               ((<>))
+import           Data.Type.Equality           ((:~:) (Refl), apply)
+import           Data.Typeable                (Typeable, Proxy(Proxy))
+import           GHC.TypeLits                 (Symbol, KnownSymbol, symbolVal,
+                                               sameSymbol)
+import           Text.PrettyPrint.ANSI.Leijen (Pretty(..), Doc, text)
 
-import           Pact.Analyze.Types.UserShow
+import           Pact.Types.Term              (commaBraces)
 
 data Ty
   = TyInteger
@@ -279,24 +280,23 @@ instance Show (SingList schema) where
       . showChar ' '
       . rest 11)
 
-instance UserShow (SingTy ty) where
-  userShowPrec _ = \case
-    SInteger  -> "integer"
-    SBool     -> "bool"
-    SStr      -> "string"
-    STime     -> "time"
-    SDecimal  -> "decimal"
-    SGuard    -> "guard"
-    SAny      -> "*"
-    SList a   -> "[" <> userShow a <> "]"
-    SObjectUnsafe (SingList m)
-      -> "{ " <> intercalate ", " (userShowHList m) <> " }"
+instance Pretty (SingTy ty) where
+  pretty = \case
+    SInteger                   -> "integer"
+    SBool                      -> "bool"
+    SStr                       -> "string"
+    STime                      -> "time"
+    SDecimal                   -> "decimal"
+    SGuard                     -> "guard"
+    SAny                       -> "*"
+    SList a                    -> "[" <> pretty a <> "]"
+    SObjectUnsafe (SingList m) -> commaBraces (prettyHList m)
     where
-      userShowHList :: HList Sing a -> [Text]
-      userShowHList SNil        = []
-      userShowHList (SCons k v n) =
-        (pack (symbolVal k) <> ": " <> userShow v)
-        : userShowHList n
+      prettyHList :: HList Sing a -> [Doc]
+      prettyHList SNil        = []
+      prettyHList (SCons k v n) =
+        (text (symbolVal k) <> ": " <> pretty v)
+        : prettyHList n
 
 class SingI a where
   sing :: Sing a

@@ -8,27 +8,30 @@
 -- | Types related to parsing from 'Exp' to 'Prop' and 'Invariant'.
 module Pact.Analyze.Parse.Types where
 
-import           Control.Lens               (makeLenses)
+import           Control.Lens               (makeLenses, (<&>))
 import           Control.Monad.Except       (MonadError (throwError))
 import           Control.Monad.Reader       (ReaderT)
 import           Control.Monad.State.Strict (StateT)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map                   (Map)
+import qualified Data.Map                   as Map
 import           Data.Set                   (Set)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
 
-import           Pact.Types.Lang            (AtomExp (..),
+import           Pact.Types.Lang            (text', commaBraces, commaBrackets,
+                                             AtomExp (..),
                                              Exp (EAtom, ELiteral, ESeparator),
                                              ListDelimiter (..), ListExp (..),
                                              Literal (LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (UserType)
-import           Pact.Types.Util            (tShow)
+import           Pact.Types.Util            (renderCompactString)
 
-import           Pact.Analyze.Feature       hiding (Type, Var, ks, obj, str)
+import           Pact.Analyze.Feature       hiding (Doc, Type, Var, ks, obj,
+                                             str)
 import           Pact.Analyze.Types
 
 -- @PreProp@ stands between @Exp@ and @Prop@.
@@ -67,48 +70,49 @@ data PreProp
   | PreLiteralObject (Map Text PreProp)
   deriving (Eq, Show)
 
-instance UserShow PreProp where
-  userShowPrec prec = \case
-    PreIntegerLit i -> tShow i
-    PreStringLit t  -> tShow t
-    PreDecimalLit d -> userShow d
-    PreTimeLit t    -> tShow (Pact.LTime (toPact timeIso t))
+instance Pretty PreProp where
+  pretty = \case
+    PreIntegerLit i   -> pretty i
+    PreStringLit t    -> dquotes $ pretty t
+    PreDecimalLit d   -> pretty d
+    PreTimeLit t      -> pretty (Pact.LTime (toPact timeIso t))
     PreBoolLit True   -> "true"
     PreBoolLit False  -> "false"
-    PreListLit lst  ->
-      "[" <> T.intercalate ", " (fmap (userShowPrec 0) lst) <> "]"
-
-    PreAbort          -> STransactionAborts
-    PreSuccess        -> STransactionSucceeds
-    PreResult         -> SFunctionResult
-    PreVar _id name   -> name
-    PreGlobalVar name -> name
+    PreListLit lst    -> commaBrackets $ fmap pretty lst
+    PreAbort          -> text' STransactionAborts
+    PreSuccess        -> text' STransactionSucceeds
+    PreResult         -> text' SFunctionResult
+    PreVar _id name   -> text' name
+    PreGlobalVar name -> text' name
 
     PreForall _vid name qty prop ->
-      "(" <> SUniversalQuantification <> " (" <> name <> ":" <> userShow qty <>
-        ") " <> userShow prop <> ")"
+      "(" <> text' SUniversalQuantification <> " (" <> text' name <> ":" <>
+        pretty qty <> ") " <> pretty prop <> ")"
     PreExists _vid name qty prop ->
-      "(" <> SExistentialQuantification <> " (" <> name <> ":" <>
-        userShow qty <> ") " <> userShow prop <> ")"
+      "(" <> text' SExistentialQuantification <> " (" <> text' name <> ":" <>
+        pretty qty <> ") " <> pretty prop <> ")"
     PreApp name applicands ->
-      "(" <> name <> " " <> T.unwords (map userShow applicands) <> ")"
+      "(" <> text' name <> " " <> hsep (map pretty applicands) <> ")"
     PreAt objIx obj ->
-      "(" <> SObjectProjection <> " " <> userShow objIx <> " " <>
-        userShow obj <> ")"
+      "(" <> text' SObjectProjection <> " " <> pretty objIx <> " " <>
+        pretty obj <> ")"
     PrePropRead tn rk ba ->
-      "(" <> SPropRead <> " '" <> userShow tn <> " " <> userShow rk <> " " <>
-        userShow ba <> ")"
-    PreLiteralObject obj ->
-      userShowPrec prec obj
+      "(" <> text' SPropRead <> " '" <> pretty tn <> " " <> pretty rk <> " " <>
+        pretty ba <> ")"
+    PreLiteralObject obj -> commaBraces $ Map.toList obj <&> \(k, v) ->
+      text' k <> " := " <> pretty v
 
 
 throwErrorT :: MonadError String m => Text -> m a
 throwErrorT = throwError . T.unpack
 
+throwErrorD :: MonadError String m => Doc -> m a
+throwErrorD = throwError . renderCompactString
+
 -- TODO(joel): add location info
-throwErrorIn :: (MonadError String m, UserShow a) => a -> Text -> m b
-throwErrorIn exp text = throwError $ T.unpack $
-  "in " <> userShow exp <> ", " <> text
+throwErrorIn :: (MonadError String m, Pretty a) => a -> Doc -> m b
+throwErrorIn exp msg = throwError $ renderCompactString $
+  "in " <> pretty exp <> ", " <> msg
 
 textToQuantifier
   :: Text -> Maybe (VarId -> Text -> QType -> PreProp -> PreProp)
