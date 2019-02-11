@@ -873,7 +873,7 @@ withPretty = withDict . singMkPretty
       SInteger     -> Dict
       SBool        -> Dict
       SStr         -> Dict
-      STime        -> error "TODO" -- Dict
+      STime        -> Dict
       SDecimal     -> Dict
       SGuard       -> Dict
       SAny         -> Dict
