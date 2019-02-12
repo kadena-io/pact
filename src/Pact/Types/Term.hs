@@ -69,7 +69,7 @@ module Pact.Types.Term
    ) where
 
 
-import Control.Lens (makeLenses,makePrisms)
+import Control.Lens (makeLenses,makePrisms, (<&>))
 import Control.Applicative
 import Data.List
 import Control.Monad
@@ -80,7 +80,7 @@ import Bound
 import Data.Text (Text,pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.Aeson
+import Data.Aeson hiding (pairs)
 import qualified Data.ByteString.UTF8 as BS
 import Data.String
 import Data.Default
@@ -473,12 +473,12 @@ data Module
 instance Pretty Module where
   pretty m = parensSep $ case m of
     Module{..} ->
-      [ "Module"
+      [ "module"
       , pretty _mName
       , pretty $ "'" ++ asString' _mKeySet
       , pretty _mHash
       ]
-    Interface{..} -> [ "Interface", pretty _interfaceName ]
+    Interface{..} -> [ "interface", pretty _interfaceName ]
 
 instance ToJSON Module where
   toJSON Module{..} = object
@@ -808,11 +808,10 @@ prettyUnscope = pretty . fmap PrettyVar . unscope
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
-    TModule{..} -> parensSep
-      [ "TModule", pretty _tModuleDef, prettyUnscope _tModuleBody ]
+    TModule{..} -> pretty _tModuleDef
     TList{..} -> spaceBrackets $ pretty <$> _tList
     TDef{..} -> pretty _tDef
-    TNative{..} -> dullgreen ("native function `" <> pretty (asString' _tNativeName) <> "`")
+    TNative{..} -> dullgreen ("native `" <> pretty (asString' _tNativeName) <> "`")
       <> nest 2 (
          line
       <> line <> pretty _tNativeDocs
@@ -829,10 +828,14 @@ instance Pretty n => Pretty (Term n) where
       <> " " <> pretty _tMeta
     TApp a _ -> pretty a
     TVar n _ -> pretty n
-    TBinding{..} -> parensSep
-      [ "TBinding", pretty _tBindPairs
-      , prettyUnscope _tBindBody
-      , pretty _tBindType
+    TBinding pairs body BindLet _i -> parensSep
+      [ "let"
+      , parensSep $ pairs <&> \(arg, body') -> pretty arg <+> pretty body'
+      , prettyUnscope body
+      ]
+    TBinding pairs body (BindSchema _) _i -> parensSep
+      [ commaBraces $ pairs <&> \(arg, body') -> pretty arg <+> pretty body'
+      , prettyUnscope body
       ]
     TObject bs _ _ -> blue $ commaBraces $
       fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
@@ -840,18 +843,26 @@ instance Pretty n => Pretty (Term n) where
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
     TValue v _ -> blue $ pretty v
-    TStep{..} -> parensSep $
-      [ "TStep", pretty _tStepEntity, pretty _tStepExec ]
-      ++ maybe [] (\rb -> [pretty rb]) _tStepRollback
+    TStep mEntity exec Nothing _i -> parensSep $
+      [ "step"
+      ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
+      [ pretty exec
+      ]
+    TStep mEntity exec (Just rollback) _i -> parensSep $
+      [ "step-with-rollback"
+      ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
+      [ pretty exec
+      , pretty rollback
+      ]
     TSchema{..} -> parensSep
-      [ "TSchema"
-      , pretty _tModule <> "." <> pretty _tSchemaName
-      , pretty _tFields
+      [ "defschema"
+      , pretty _tSchemaName
       , pretty _tMeta
+      , pretty _tFields
       ]
     TTable{..} -> parensSep
-      [ "TTable"
-      , pretty _tModule <> "." <> pretty _tTableName <> ":" <> pretty _tTableType
+      [ "deftable"
+      , pretty _tTableName <> ":" <> pretty _tTableType
       , pretty _tMeta
       ]
 
