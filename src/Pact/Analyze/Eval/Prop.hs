@@ -6,6 +6,9 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
+
+-- | Symbolic evaluation of the property language, 'Prop' (as opposed to the
+-- 'Term' or 'Invariant' languages).
 module Pact.Analyze.Eval.Prop where
 
 import           Control.Lens               (Lens', at, ix, view, (%=), (?~))

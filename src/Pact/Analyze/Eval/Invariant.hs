@@ -1,5 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies               #-}
+
+-- | Symbolic evaluation for the schema 'Invariant' language (as opposed to
+-- the 'Prop' or 'Term' languages).
 module Pact.Analyze.Eval.Invariant where
 
 import           Control.Lens               (at, view, (%=), (?~))

@@ -7,6 +7,8 @@
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 
+-- | Symbolic evaluation of program 'Term's (as opposed to the 'Invariant' or
+-- 'Prop' languages).
 module Pact.Analyze.Eval.Term where
 
 import           Control.Applicative         (ZipList (..))

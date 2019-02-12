@@ -16,6 +16,9 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE ConstraintKinds       #-}
 
+-- | Type definitions for each of the languages we analyze, including the three
+-- main languages of programs ('Term'), invariants ('Invariant'), and
+-- properties ('Prop').
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
   , (:*<:)(inject', project')
