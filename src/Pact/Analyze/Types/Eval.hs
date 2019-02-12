@@ -82,48 +82,78 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
         ) => b)
     -> b
 
+data PactMetadata
+  = PactMetadata
+    { _pmInPact :: S Bool
+    , _pmPactId :: S Integer
+    -- , _pmStep   :: S Integer
+    }
+  deriving Show
+
+-- We just use `uninterpret` for now until we need to extract these values from
+-- the model.
+mkPactMetadata :: PactMetadata
+mkPactMetadata = PactMetadata (uninterpretS "in_pact") (uninterpretS "pact_id")
+
+-- | The registry of names to keysets that is shared across multiple modules in
+-- a namespace.
+newtype Registry
+  = Registry
+    { _registryMap :: SFunArray RegistryName Guard }
+  deriving Show
+
+mkRegistry :: Registry
+mkRegistry = Registry $ mkFreeArray "registry"
+
 data TxMetadata
   = TxMetadata
     { _tmKeySets  :: !(SFunArray Str Guard)
     , _tmDecimals :: !(SFunArray Str Decimal)
     , _tmIntegers :: !(SFunArray Str Integer)
     -- TODO: strings
-    } deriving Show
-
-newtype Registry = Registry
-  { _registryMap :: SFunArray RegistryName Guard }
+    }
   deriving Show
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeModuleName  :: !Pact.ModuleName
-    -- TODO: pact id
-    , _aeRegistry    :: !Registry
-    , _aeTxMetadata  :: !TxMetadata
-    , _aeScope       :: !(Map VarId AVal) -- used as a stack
-    , _aeGuardPasses :: !(SFunArray Guard Bool)
-    , _invariants    :: !(TableMap [Located (Invariant 'TyBool)])
-    , _aeColumnIds   :: !(TableMap (Map Text VarId))
-    , _aeModelTags   :: !(ModelTags 'Symbolic)
-    , _aeInfo        :: !Info
+    { _aeModuleName   :: !Pact.ModuleName
+    , _aePactMetadata :: !PactMetadata
+    , _aeRegistry     :: !Registry
+    , _aeTxMetadata   :: !TxMetadata
+    , _aeScope        :: !(Map VarId AVal) -- used as a stack
+    , _aeGuardPasses  :: !(SFunArray Guard Bool)
+    , _invariants     :: !(TableMap [Located (Invariant 'TyBool)])
+    , _aeColumnIds    :: !(TableMap (Map Text VarId))
+    , _aeModelTags    :: !(ModelTags 'Symbolic)
+    , _aeInfo         :: !Info
+    , _aeTrivialGuard :: !(S Guard)
     } deriving Show
-
-mkRegistry :: Registry
-mkRegistry = Registry $ mkFreeArray "registry"
 
 mkAnalyzeEnv
   :: Pact.ModuleName
+  -> PactMetadata
   -> Registry
   -> [Table]
   -> Map VarId AVal
   -> ModelTags 'Symbolic
   -> Info
   -> Maybe AnalyzeEnv
-mkAnalyzeEnv modName registry tables args tags info = do
-  let txMetadata  = TxMetadata (mkFreeArray "txKeySets")
-                               (mkFreeArray "txDecimals")
-                               (mkFreeArray "txIntegers")
-      guardPasses = mkFreeArray "guardPasses"
+mkAnalyzeEnv modName pactMetadata registry tables args tags info = do
+  let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
+                                (mkFreeArray "txDecimals")
+                                (mkFreeArray "txIntegers")
+      --
+      -- NOTE: for now we create an always-passing singleton "trivial guard"
+      -- that we hand out for pact and module creation. this will not suffice
+      -- as soon as we need to share pact and module guards across pacts and
+      -- modules. at this point, we'll need to replace our opaque (map to Bool)
+      -- _aeGuardPasses with map to a symbolic sum capturing different guard
+      -- types. this is because we we will need to "close over" the pact id or
+      -- module name at the time of creation and compare that with pact id /
+      -- module name during symbolic execution
+      --
+      trivialGuard = uninterpret "trivial_guard"
+      guardPasses  = writeArray (mkFreeArray "guardPasses") trivialGuard sTrue
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -137,8 +167,8 @@ mkAnalyzeEnv modName registry tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv modName registry txMetadata args guardPasses invariants'
-    columnIds' tags info
+  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args guardPasses
+    invariants' columnIds' tags info (sansProv trivialGuard)
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -273,6 +303,7 @@ data AnalysisResult
   deriving (Show)
 
 makeLenses ''TxMetadata
+makeLenses ''PactMetadata
 makeLenses ''Registry
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
@@ -414,6 +445,12 @@ class HasAnalyzeEnv a where
 
   txIntegers :: Lens' a (SFunArray Str Integer)
   txIntegers = analyzeEnv.aeTxMetadata.tmIntegers
+
+  inPact :: Lens' a (S Bool)
+  inPact = analyzeEnv.aePactMetadata.pmInPact
+
+  currentPactId :: Lens' a (S Integer)
+  currentPactId = analyzeEnv.aePactMetadata.pmPactId
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv

@@ -669,9 +669,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_ReadMsg _ -> throwError' $ NoReadMsg astNode
 
+  AST_PactId -> pure $ Some SInteger PactId
+
   AST_KeysetRefGuard strA -> do
     Some SStr strT <- translateNode strA
     pure $ Some SGuard $ MkKsRefGuard strT
+
+  AST_CreatePactGuard strA -> do
+    Some SStr strT <- translateNode strA
+    pure $ Some SGuard $ MkPactGuard strT
 
   AST_Enforce _ cond -> do
     Some SBool condTerm <- translateNode cond

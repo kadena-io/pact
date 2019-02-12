@@ -582,6 +582,9 @@ literalS = sansProv . literal
 unliteralS :: SymVal a => S a -> Maybe a
 unliteralS = unliteral . _sSbv
 
+uninterpretS :: HasKind a => String -> S a
+uninterpretS = sansProv . SBV.uninterpret
+
 sbv2SFrom :: Provenance -> Iso (SBV a) (SBV b) (S a) (S b)
 sbv2SFrom prov = iso (withProv prov) _sSbv
 
