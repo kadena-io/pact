@@ -54,8 +54,7 @@ spec = around_ bracket $ describe "Servant API client tests" $ do
     let rk = cmdToRequestKey cmd
     res `shouldBe` (Right (RequestKeys [rk]))
     res' <- runClientM (listen pactServerApiClient (ListenerRequest rk)) clientEnv
-    let cmdData = toJSON simpleServerResult
-    res' `shouldBe` (Right (ApiResult cmdData (Just 0) Nothing))
+    res' `shouldBe` (Right (ApiResult simpleServerResult (Just 0) Nothing))
   it "correctly runs a simple command locally" $ do
     cmd <- simpleServerCmd
     res <- runClientM (local pactServerApiClient cmd) clientEnv

@@ -65,7 +65,7 @@ instance FromJSON Poll where
   parseJSON = lensyParseJSON 2
 
 data ApiResult = ApiResult {
-  _arResult :: !Value,
+  _arResult :: !CommandValue,
   _arTxId :: !(Maybe TxId),
   _arMetaData :: !(Maybe Value)
   } deriving (Eq,Show,Generic)

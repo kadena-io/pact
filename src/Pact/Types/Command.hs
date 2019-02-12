@@ -256,7 +256,8 @@ instance FromJSON UserSig where
 data CommandResult = CommandResult {
   _crReqKey :: RequestKey,
   _crTxId :: Maybe TxId,
-  _crResult :: CommandValue
+  _crResult :: CommandValue,
+  _crGas :: Gas
   } deriving (Eq,Show)
 
 -- | Actual value of a `CommandResult`.

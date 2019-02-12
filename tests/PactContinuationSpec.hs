@@ -56,8 +56,7 @@ testPactContinuation :: HTTP.Manager -> Spec
 testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
     let cmdRes = CommandSuccess $ tLit $ LInteger 3
-        cmdData = toJSON cmdRes
-        expRes = Just $ ApiResult cmdData ((Just . TxId) 0) Nothing
+        expRes = Just $ ApiResult cmdRes ((Just . TxId) 0) Nothing
     testSimpleServerCmd mgr `shouldReturn` expRes
 
   context "when provided with correct next step" $

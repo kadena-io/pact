@@ -159,9 +159,9 @@ checkResult isFailure expect result =
   case result of
     Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
     Just (ApiResult cmdRes _ _) ->
-      case cmdRes of
+      case toJSON cmdRes of
         Object h -> if isFailure then checkIfFailure h expect
-                    else checkIfSuccess h expect
+                                  else checkIfSuccess h expect
         _ -> expectationFailure $ show cmdRes ++ " should be Object"
 
 

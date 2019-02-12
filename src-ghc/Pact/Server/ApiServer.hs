@@ -30,7 +30,6 @@ import Control.Monad.Reader
 import Control.Monad.Trans.Except
 import Control.Arrow
 
-import Data.Aeson hiding (defaultOptions, Result(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
@@ -142,7 +141,7 @@ pollResultToReponse :: HM.HashMap RequestKey CommandResult -> PollResponses
 pollResultToReponse m = PollResponses $ HM.fromList $ map (second crToAr) $ HM.toList m
 
 crToAr :: CommandResult -> ApiResult
-crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId Nothing
+crToAr CommandResult {..} = ApiResult _crResult _crTxId Nothing
 
 log :: (MonadReader ApiEnv m, MonadIO m) => String -> m ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)

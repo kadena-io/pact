@@ -14,7 +14,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
 import Control.Concurrent.MVar
 import System.Directory
-import Data.Aeson (Value(Null))
 
 import Data.ByteString (ByteString)
 import Data.HashSet (HashSet)
@@ -24,11 +23,12 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust)
 
 import Pact.Types.Command
-import Pact.Types.Hash
 import Pact.Types.Server
-import Pact.Types.Term
 import Pact.Server.History.Types
 import Pact.Server.History.Persistence as DB
+import Pact.Types.Term (tLit, Gas (..))
+import Pact.Types.Exp (Literal(LInteger))
+import Pact.Types.Hash
 
 initHistoryEnv
   :: HistoryChannel
@@ -236,7 +236,9 @@ _go :: HistoryService ()
 _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey initialHash
-  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null (Gas 0))])
+  -- Some dummy data for testing:
+  let cv = CommandSuccess $ tLit $ LInteger 0
+  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing cv (Gas 0))])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)
   v <- liftIO $ takeMVar mv
