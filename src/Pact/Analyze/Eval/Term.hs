@@ -23,7 +23,7 @@ import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (EqSymbolic ((.==)),
+import           Data.SBV                    (EqSymbolic ((.==)), HasKind,
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymVal, ite,
                                               literal, (.<))
@@ -73,6 +73,13 @@ instance Analyzer Analyze where
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint b = modify' $ latticeState.lasConstraints %~ (.&& b)
+
+genUninterpreted :: HasKind a => Analyze (S a)
+genUninterpreted = do
+  nextId <- use $ globalState.gasNextUninterpId
+  let val = uninterpretS $ "uninterp_" <> show nextId
+  globalState.gasNextUninterpId += 1
+  pure val
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s ->
@@ -456,6 +463,15 @@ evalTerm = \case
     whetherInPact <- view inPact
     succeeds %= (.&& whetherInPact)
     view aeTrivialGuard
+
+  MkUserGuard _ty _obj _name ->
+    --
+    -- NOTE: for now we just leave this uninterpreted, until we are prepared to
+    -- close over and analyze user guard functions in the future. we do not
+    -- try to resolve two uses of the same name to the same user guard, because
+    -- the guard created is *also* a function of the supplied object.
+    --
+    genUninterpreted
 
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT

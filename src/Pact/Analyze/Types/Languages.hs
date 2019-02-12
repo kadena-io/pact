@@ -1302,9 +1302,10 @@ data Term (a :: Ty) where
   PactId          :: Term 'TyInteger
 
   -- Guards
-  MkKsRefGuard :: Term 'TyStr            -> Term 'TyGuard
-  MkPactGuard  :: Term 'TyStr            -> Term 'TyGuard
-  GuardPasses  :: TagId -> Term 'TyGuard -> Term 'TyBool
+  MkKsRefGuard :: Term 'TyStr                                               -> Term 'TyGuard
+  MkPactGuard  :: Term 'TyStr                                               -> Term 'TyGuard
+  MkUserGuard  :: SingTy ('TyObject m) -> Term ('TyObject m) -> Term 'TyStr -> Term 'TyGuard
+  GuardPasses  :: TagId                -> Term 'TyGuard                     -> Term 'TyBool
 
   -- Table access
   Read
@@ -1364,6 +1365,13 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   MkPactGuard a ->
       showString "MkPactGuard "
     . showsPrec 11 a
+  MkUserGuard a b c -> withSing a $
+      showString "MkUserGuard "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+    . showChar ' '
+    . showsPrec 11 c
   GuardPasses a b ->
       showString "GuardPasses "
     . showsPrec 11 a
@@ -1481,6 +1489,7 @@ userShowTerm ty p = \case
   PactId               -> parenList ["pact-id"]
   MkKsRefGuard name    -> parenList ["keyset-ref-guard", userShow name]
   MkPactGuard name     -> parenList ["create-pact-guard", userShow name]
+  MkUserGuard ty' o n  -> parenList ["create-user-guard", singUserShowTm ty' o, userShow n]
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2
