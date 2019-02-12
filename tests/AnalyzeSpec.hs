@@ -742,6 +742,27 @@ spec = describe "analyze" $ do
       Inj (RowWrite "tokens" (PVar 1 "row")) .=>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
+  describe "enforce-guard.row-level" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer
+              g:guard)
+            (deftable tokens:{token-row})
+
+            (defun test:integer (acct:string)
+              @model
+                [(property (forall (row:string)
+                   (when (row-read tokens row)
+                     (row-enforced tokens "g" row))))]
+              (with-read tokens acct { "g" := g, "balance" := bal }
+                (enforce-guard g)
+                bal))
+          |]
+
+    expectVerified code
+
   describe "keyset-ref-guard" $ do
     let code =
           [text|
