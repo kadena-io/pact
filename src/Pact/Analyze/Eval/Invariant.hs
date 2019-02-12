@@ -2,21 +2,20 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Invariant where
 
-import           Control.Lens               (at, view, (%=))
+import           Control.Lens               (at, view, (%=), (?~))
 import           Control.Monad.Except       (MonadError (throwError))
-import           Control.Monad.Reader       (MonadReader, ReaderT)
+import           Control.Monad.Reader       (MonadReader, ReaderT, local)
 import           Control.Monad.State.Strict (MonadState,
-                                             StateT(StateT, runStateT))
+                                             StateT (StateT, runStateT))
 import           Data.Map.Strict            (Map)
-import           Data.SBV                   (Mergeable(symbolicMerge),
-                                             bnot, (&&&))
+import           Data.SBV                   (Mergeable (symbolicMerge))
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
+import           Pact.Analyze.Util
 
--- TODO Change SVal to AVal (allowing objects), update analyzer
 newtype InvariantCheck a = InvariantCheck
   { unInvariantCheck :: StateT SymbolicSuccess
     (ReaderT
@@ -35,10 +34,11 @@ instance (Mergeable a) => Mergeable (InvariantCheck a) where
 
 instance Analyzer InvariantCheck where
   type TermOf InvariantCheck = Invariant
-  eval  (CoreInvariant tm)   = evalCore tm
-  evalO (CoreInvariant tm)   = evalCoreO tm
+  eval (CoreInvariant tm)    = evalCore tm
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err
-  getVar vid = view (located . at vid)
-  markFailure b = id %= (&&& SymbolicSuccess (bnot b))
+  getVar vid                 = view (located . at vid)
+  withVar vid val m          = local (located . at vid ?~ val) m
+  markFailure b              = id %= (.&& SymbolicSuccess (sNot b))
+  withMergeableAnalyzer ty f = withSymVal ty f

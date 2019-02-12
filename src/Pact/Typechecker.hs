@@ -32,6 +32,9 @@
 
 module Pact.Typechecker where
 
+import Data.Set (Set, isSubsetOf)
+import qualified Data.Set as Set
+import Data.Bitraversable (bimapM)
 import Control.Monad.Catch
 import Control.Lens hiding (List,Fold)
 import Bound.Scope
@@ -235,7 +238,7 @@ handleSpecialOverload :: Maybe OverloadSpecial ->
 handleSpecialOverload (Just OAt) m =
   case (M.lookup (ArgVar 0) m,M.lookup (ArgVar 1) m,M.lookup RetVar m) of
     (Just keyArg,Just srcArg,Just ret) -> case (roleTy keyArg,view rtAST keyArg,roleTy srcArg) of
-      (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u)) -> case findSchemaField k u of
+      (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u) _) -> case findSchemaField k u of
         Nothing -> m
         Just t -> unifyRet (roleTy ret) t
       (TyPrim TyInteger,_,TyList t) -> unifyRet (roleTy ret) t
@@ -264,16 +267,20 @@ asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " +
 applySchemas :: Visitor TC Node
 applySchemas Pre ast = case ast of
 
-  (Object n ps) -> findSchema n $ \sch -> do
-    debug $ "applySchemas [object]: " ++ show (n,sch)
+  (Object n ps) -> findSchema n $ \sch partial -> do
+    debug $ "applySchemas [object]: " ++ show (n,sch,partial)
     pmap <- forM ps $ \(k,v) -> do
       kstr <- asPrimString k
       vt' <- lookupAndResolveTy (_aNode v)
       return (kstr,(v,_aId (_aNode k),vt'))
-    validateSchema sch (M.fromList pmap)
+    validateSchema sch partial (M.fromList pmap) >>= \pm -> forM_ pm $ \pkeys -> case partial of
+      FullSchema -> addFailure (_aId n) "Invalid partial schema found"
+      _ -> do
+        debug $ "Specializing schema ty for sublist: " ++ show pkeys
+        assocAstTy n $ TySchema TyObject (TyUser sch) (PartialSchema pkeys)
     return ast
 
-  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch -> do
+  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch partial -> do
     debug $ "applySchemas [binding]: " ++ show (n,sch)
     pmapM <- forM bs $ \(Named _ node ni,bv) -> case bv of
       Prim _ (PrimLit (LString bn)) -> do
@@ -281,7 +288,7 @@ applySchemas Pre ast = case ast of
         return $ Just (bn,(Var node,ni,vt'))
       _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
     case sequence pmapM of
-      Just pmap -> validateSchema sch (M.fromList pmap)
+      Just pmap -> void $ validateSchema sch partial (M.fromList pmap)
       Nothing -> return () -- error already tracked above
     return ast
 
@@ -299,28 +306,38 @@ applySchemas Pre ast = case ast of
 
   where
     -- Given map of object text key to (value,key id,value ty) ...
-    validateSchema :: UserType -> M.Map Text (AST Node, TcId, Type UserType) -> TC ()
-    validateSchema sch pmap = do
+    -- (returns partial keys list if subset of specified)
+    validateSchema :: UserType -> SchemaPartial
+                   -> M.Map Text (AST Node, TcId, Type UserType) -> TC (Maybe (Set Text))
+    validateSchema sch partial pmap = do
       -- smap: lookup from field name to ty
-      let smap = M.fromList <$> (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+      let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+          filterPartial FullSchema = id
+          filterPartial AnySubschema = id
+          filterPartial (PartialSchema ks) = (`M.restrictKeys` ks)
       -- over each object field ...
-      forM_ (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
+      pks <- fmap (Set.fromList . concat) $ forM (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
         -- validate field exists ...
-        Nothing -> addFailure ki $ "Invalid field in schema object: " ++ show k
+        Nothing -> do
+          addFailure ki $ "Invalid field in schema object: " ++ show k ++ ", expected " ++ show (M.keys smap)
+          return []
         -- unify field value ty ...
-        Just aty -> case unifyTypes aty vty of
-          Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
-          -- associate unified ty with value node.
-          Just u -> assocAstTy (_aNode v) (either id id u)
+        Just aty -> do
+          case unifyTypes aty vty of
+            Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
+            -- associate unified ty with value node.
+            Just u -> assocAstTy (_aNode v) (either id id u)
+          return [k]
+      return $ if Set.size pks < M.size smap then Just pks else Nothing
 
     lookupAndResolveTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 
     -- Resolve schema ty if possible and act on it, otherwise skip.
-    findSchema :: Node -> (UserType -> TC (AST Node)) -> TC (AST Node)
+    findSchema :: Node -> (UserType -> SchemaPartial -> TC (AST Node)) -> TC (AST Node)
     findSchema n act = do
       ty <- lookupAndResolveTy n
       case ty of
-        (TySchema _ (TyUser sch)) -> act sch
+        (TySchema _ (TyUser sch) sp) -> act sch sp
         _ -> return ast
 
     validateList :: Node -> Type UserType -> [AST Node] -> TC ()
@@ -390,7 +407,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
               assocAstTy (_aNode $ last ll) $ _ftReturn mangledFunType
             sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
           -- TODO the following is dodgy, schema may not be resolved.
-          ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty)]) -> asPrimString field >>= \fld -> case uty of
+          ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty _)]) -> asPrimString field >>= \fld -> case uty of
             TyUser u -> case findSchemaField fld u of
               Nothing -> return ()
               Just fty -> assocTyWithAppArg fty partialAst 0
@@ -576,7 +593,7 @@ alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 assocParams :: TcId -> Type UserType -> Type UserType -> TC ()
 assocParams i x y = case (x,y) of
   _ | x == y -> return ()
-  (TySchema _ a,TySchema _ b) -> assoc a b
+  (TySchema _ a _,TySchema _ b _) -> assoc a b -- partial not dealt with here
   (TyList a,TyList b) -> assoc a b
   _ -> return ()
   where
@@ -612,9 +629,7 @@ unifyTypes' i a b act = case unifyTypes a b of
     return ()
 
 -- | Unify two types, indicating which of the types was more specialized with the Either result.
--- TODO: this Either thing is becoming problematic, as specialization can result in a new type.
--- For now specialization is left-biased.
-unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
+unifyTypes :: forall n . Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
 unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
   (TyAny,_) -> Just (Right r)
@@ -625,11 +640,28 @@ unifyTypes l r = case (l,r) of
     _ -> Just (Right r) -- equality already covered above, and Nothing/Nothing ok
   (TyVar v,s) -> unifyVar Left Right v s
   (s,TyVar v) -> unifyVar Right Left v s
-  (TyList a,TyList b) -> unifyParam a b
-  (TySchema sa a,TySchema sb b) | sa == sb -> unifyParam a b
+  (TyList a,TyList b) -> unifyParam Just a b
+  (TySchema sa a spa,TySchema sb b spb) | sa == sb -> unifyParam (specializePartial spa spb) a b
   _ -> Nothing
   where
-    unifyParam a b = fmap (either (const (Left l)) (const (Right r))) (unifyTypes a b)
+    -- | Unifies param and uses bias to return parent, with additional test/modifier f
+    -- TODO why not specialize param too?
+    unifyParam :: (Type n -> Maybe (Type n)) -> Type n -> Type n -> (Maybe (Either (Type n) (Type n)))
+    unifyParam f a b = bimapM (const (f l)) (const (f r)) =<< unifyTypes a b
+    specializePartial spa spb u =
+      let setPartial p = Just $ set tySchemaPartial p u
+      in case (spa,spb) of
+        (FullSchema,FullSchema) -> Just u
+        (FullSchema,_) -> setPartial spb
+        (_,FullSchema) -> setPartial spa
+        (PartialSchema as,PartialSchema bs)
+          | as == bs           -> Just u
+          | bs `isSubsetOf` as -> setPartial spb
+          | as `isSubsetOf` bs -> setPartial spa
+          | otherwise          -> Nothing
+        (PartialSchema {}, AnySubschema) -> setPartial spa
+        (AnySubschema, PartialSchema {}) -> setPartial spb
+        (AnySubschema, AnySubschema) -> Just u
     unifyVar vWrap sWrap v s =
       let useS = sWrap s
       in case (v,s) of
@@ -706,7 +738,8 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
-  let fn = asString (_dModule _tDef) <> "." <> asString (_dDefName _tDef)
+  let mn = _dModule _tDef
+      fn = asString $ _dDefName _tDef
   args <- forM (_ftArgs (_dFunType _tDef)) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
@@ -716,7 +749,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
-  return $ FDefun _tInfo fn funType args tcs
+  return $ FDefun _tInfo mn fn funType args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
@@ -811,7 +844,7 @@ toAST TList {..} = do
   List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST _tList
 toAST TObject {..} = do
   debug $ "TObject: " ++ show _tObjectType
-  ty <- TySchema TyObject <$> traverse toUserType _tObjectType
+  ty <- TySchema TyObject <$> traverse toUserType _tObjectType <*> pure FullSchema
   Object <$> (trackNode ty =<< freshId _tInfo "object")
     <*> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
@@ -820,7 +853,7 @@ toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
-  ty <- TySchema TyTable <$> traverse toUserType _tTableType
+  ty <- TySchema TyTable <$> traverse toUserType _tTableType <*> pure FullSchema
   Table
     <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
     <*> pure _tTableName
@@ -898,7 +931,7 @@ resolveTy rt = do
           Just t | t /= tv -> go t
                  | otherwise -> return (Just tv)
           Nothing -> return (Just tv)
-      resolv (TySchema s st) = fmap (TySchema s) <$> go st
+      resolv (TySchema s st p) = fmap (\t -> TySchema s t p) <$> go st
       resolv (TyList l) = fmap TyList <$> go l
       resolv t = return (Just t)
       go t = do
@@ -916,7 +949,7 @@ resolveTy rt = do
 -- | Is this type a variable, or does it have any parameterized variables
 isUnresolvedTy :: Type n -> Bool
 isUnresolvedTy TyVar {} = True
-isUnresolvedTy (TySchema _ v) = isUnresolvedTy v
+isUnresolvedTy (TySchema _ v _) = isUnresolvedTy v
 isUnresolvedTy (TyList l) = isUnresolvedTy l
 isUnresolvedTy _ = False -- TODO fun types
 

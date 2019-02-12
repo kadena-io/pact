@@ -5,20 +5,22 @@
 
 module Pact.Analyze.Patterns where
 
+import           Control.Lens         ((^?))
 import           Data.Maybe           (isJust)
 import           Data.Text            (Text)
 
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (Literal (LString))
-import           Pact.Types.Typecheck (AstBindType (..),
-                                       AST (App, Binding, List, Object, Prim, Step, Table),
-                                       Fun (FDefun, FNative), Named, Node,
-                                       PrimValue (PrimLit), Special (SBinding))
+import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
+                                       AstBindType (..), Fun (FDefun, FNative),
+                                       Named, Node, PrimValue (PrimLit),
+                                       Special (SBinding), aNode, aTy)
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature
-import           Pact.Analyze.Types   (arithOpP, comparisonOpP, logicalOpP,
-                                       roundingLikeOpP, unaryArithOpP)
+import           Pact.Analyze.Types   (arithOpP, comparisonOpP, isGuardTy,
+                                       logicalOpP, roundingLikeOpP,
+                                       unaryArithOpP)
 
 ofBasicOp :: Text -> Maybe Text
 ofBasicOp s = if isBasicOp then Just s else Nothing
@@ -37,9 +39,9 @@ pattern NativeFunc f <- FNative _ f _ _
 
 -- compileNode's Patterns
 
-pattern AST_InlinedApp :: Text -> [(Named a, AST a)] -> [AST a] -> AST a
-pattern AST_InlinedApp funName bindings body <-
-  App _ (FDefun _ funName _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
+pattern AST_InlinedApp :: Lang.ModuleName -> Text -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_InlinedApp modName funName bindings body <-
+  App _ (FDefun _ modName funName _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
 
 pattern AST_Let :: forall a. [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Let bindings body <- Binding _ bindings body AstBindLet
@@ -72,6 +74,18 @@ pattern AST_If node cond then' else' <-
 pattern AST_StringLit :: forall a. Text -> AST a
 pattern AST_StringLit str <- AST_Lit (LString str)
 
+pattern AST_KeysetRefGuard :: forall a. AST a -> AST a
+pattern AST_KeysetRefGuard name <-
+  App _node (NativeFunc "keyset-ref-guard") [name]
+
+pattern AST_CreatePactGuard :: forall a. AST a -> AST a
+pattern AST_CreatePactGuard name <-
+  App _node (NativeFunc "create-pact-guard") [name]
+
+pattern AST_CreateUserGuard :: forall a. AST a -> AST a -> AST a
+pattern AST_CreateUserGuard obj funName <-
+  App _node (NativeFunc "create-user-guard") [obj, funName]
+
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
   App node (NativeFunc "enforce") (cond:_rest)
@@ -92,9 +106,34 @@ pattern AST_ReadMsg :: forall a. AST a -> AST a
 pattern AST_ReadMsg name <-
   App _node (NativeFunc "read-msg") [name]
 
-pattern AST_EnforceKeyset :: forall a. AST a -> AST a
-pattern AST_EnforceKeyset ks <-
-  App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object
+pattern AST_PactId :: AST a
+pattern AST_PactId <- App _node (NativeFunc "pact-id") []
+
+typeSatisfying :: (Lang.Type TC.UserType -> Bool) -> AST Node -> Maybe (AST Node)
+typeSatisfying test x = case x ^? aNode.aTy of
+  Just ty | test ty -> Just x
+  _       -> Nothing
+
+ofType :: Lang.Type TC.UserType -> AST Node -> Maybe (AST Node)
+ofType ty = typeSatisfying (== ty)
+
+pattern AST_EnforceKeyset_Str :: AST Node -> AST Node
+pattern AST_EnforceKeyset_Str str <-
+  App _node (NativeFunc "enforce-keyset")
+    [ofType (Lang.TyPrim Lang.TyString) -> Just str]
+
+pattern AST_EnforceKeyset_Guard :: AST Node -> AST Node
+pattern AST_EnforceKeyset_Guard g <-
+  App _node (NativeFunc "enforce-keyset") [typeSatisfying isGuardTy -> Just g]
+
+pattern AST_EnforceGuard_Str :: AST Node -> AST Node
+pattern AST_EnforceGuard_Str str <-
+  App _node (NativeFunc "enforce-guard")
+    [ofType (Lang.TyPrim Lang.TyString) -> Just str]
+
+pattern AST_EnforceGuard_Guard :: AST Node -> AST Node
+pattern AST_EnforceGuard_Guard g <-
+  App _node (NativeFunc "enforce-guard") [typeSatisfying isGuardTy -> Just g]
 
 pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
 pattern AST_EnforceOne node enforces <-
@@ -174,8 +213,29 @@ pattern AST_ReadCols node tn key columns
 pattern AST_At :: a -> AST a -> AST a -> AST a
 pattern AST_At node colName obj <- App node (NativeFunc SObjectProjection) [colName, obj]
 
+pattern AST_Contains :: a -> AST a -> AST a -> AST a
+pattern AST_Contains node val collection <- App node (NativeFunc SContains) [val, collection]
+
+pattern AST_Drop :: a -> AST a -> AST a -> AST a
+pattern AST_Drop node num collection <- App node (NativeFunc SListDrop) [num, collection]
+
+pattern AST_Reverse :: a -> AST a -> AST a
+pattern AST_Reverse node list <- App node (NativeFunc SReverse) [list]
+
+pattern AST_Sort :: a -> AST a -> AST a
+pattern AST_Sort node list <- App node (NativeFunc SSort) [list]
+
+pattern AST_Take :: a -> AST a -> AST a -> AST a
+pattern AST_Take node num list <- App node (NativeFunc SListTake) [num, list]
+
+pattern AST_MakeList :: a -> AST a -> AST a -> AST a
+pattern AST_MakeList node num val <- App node (NativeFunc SMakeList) [num, val]
+
 pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
+
+pattern AST_List :: forall a. a -> [AST a] -> AST a
+pattern AST_List node elems <- List node elems
 
 pattern AST_Step :: AST a
 pattern AST_Step <- Step {}

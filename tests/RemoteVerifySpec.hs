@@ -54,7 +54,7 @@ serveAndRequest port body = do
   let clientEnv = mkClientEnv mgr verifyBaseUrl
   tid <- serve port
   finally
-    (runClientM (verify body) clientEnv)
+    (runClientM (verify pactServerApiClient body) clientEnv)
     (killThread tid)
 
 testSingleModule :: Spec

@@ -93,7 +93,8 @@ replDefs = ("Repl",
       setstep (funType tTyString [] <>
                funType tTyString [("step-idx",tTyInteger)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)] <>
-               funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool),("resume",TySchema TyObject (mkSchemaVar "y"))])
+               funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool),
+                                  ("resume",TySchema TyObject (mkSchemaVar "y") def)])
       ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
        "Clears any previous pact execution state. `$(env-step 1)` `$(env-step 0 true)`")
@@ -149,7 +150,7 @@ replDefs = ("Repl",
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
-                         TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet,tTyValue]
+                         TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet,tTyValue]
        a = mkTyVar "a" []
 
 invokeEnv :: (MVar (DbEnv PureDb) -> IO b) -> MVar LibState -> IO b
