@@ -1,17 +1,21 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TupleSections              #-}
 
 module Pact.Analyze.Types.Model where
 
 import qualified Algebra.Graph             as Alga
-import           Control.Lens              (makeLenses, makePrisms)
+import           Control.Lens              (makeLenses, makePrisms, foldMapOf)
+import           Data.Foldable             (fold)
 import           Data.Map.Strict           (Map)
-import           Data.SBV                  (SBV)
+import           Data.SBV                  (SBV, literal, unliteral)
 import           Data.Text                 (Text)
 import           GHC.Natural               (Natural)
 import           Prelude                   hiding (Float)
@@ -19,7 +23,8 @@ import           Prelude                   hiding (Float)
 import           Pact.Types.Persistence    (WriteType)
 import qualified Pact.Types.Typecheck      as TC
 
-import           Pact.Analyze.Types.Shared
+import           Pact.Analyze.Types.Types  (Sing(SList))
+import           Pact.Analyze.Types.Shared hiding (Any)
 
 -- | An argument to a function
 data Arg = Arg
@@ -143,6 +148,27 @@ data ModelTags (c :: Concreteness)
     }
   deriving (Eq, Show)
 
+data ModelCheck = Okay | TooLongList
+
+instance Semigroup ModelCheck where
+  Okay <> Okay = Okay
+  _    <> _    = TooLongList
+
+instance Monoid ModelCheck where
+  mempty = Okay
+
+-- | Check this 'TVal' to see if contains a list with more than 10 elements.
+tValIsTooLong :: TVal -> ModelCheck
+tValIsTooLong = \case
+  (EType ty@(SList subty), AVal _ sval)
+    -> case withSymVal ty (unliteral (mkSBV ty sval)) of
+      Nothing -> error "tValIsTooLong expects a concrete model"
+      Just as -> if length as > 10
+        then TooLongList
+        else fold $ withSymVal subty $
+          tValIsTooLong . (EType subty,) . (mkAVal' . literal) <$> as
+  _ -> Okay
+
 data Model (c :: Concreteness)
   = Model
     { _modelArgs           :: Map VarId (Located (Unmunged, TVal))
@@ -177,3 +203,15 @@ makeLenses ''Access
 makeLenses ''GuardEnforcement
 makeLenses ''ModelTags
 makeLenses ''Model
+
+-- | Check a concrete model for any lists that are longer than the limit (10).
+--
+-- If any input, output, or intermediate values are too long, the entire result
+-- could be inconsistent.
+checkModel :: Model 'Concrete -> ModelCheck
+checkModel m = mconcat
+  [ check $ modelArgs             . traverse . traverse . traverse
+  , check $ modelTags . mtVars    . traverse . traverse . traverse
+  , check $ modelTags . mtResult  . traverse . traverse
+  , check $ modelTags . mtReturns . traverse
+  ] where check trav = foldMapOf trav tValIsTooLong m

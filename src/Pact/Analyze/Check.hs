@@ -109,7 +109,16 @@ data SmtFailure
   | Unknown SBV.SMTReasonUnknown
   | SortMismatch String
   | UnexpectedFailure SBV.SBVException
+  | SmtBoundFailure
   deriving Show
+
+checkModel'
+  :: (Model 'Concrete -> ExceptT SmtFailure SBV.Query CheckSuccess)
+  -> Model 'Concrete
+  -> ExceptT SmtFailure SBV.Query CheckSuccess
+checkModel' action model = case checkModel model of
+  Okay        -> action model
+  TooLongList -> throwError SmtBoundFailure
 
 instance Eq SmtFailure where
   Invalid m1    == Invalid m2    = m1 == m2
@@ -172,6 +181,10 @@ describeSmtFailure = \case
     , "Specifically, before commit a37d05d54b9ca10d4c613a4bb3a980f1bb0c1c4a."
     ]
   UnexpectedFailure smtE -> T.pack $ show smtE
+  SmtBoundFailure  -> "Pact verification can currently only handle bounded \
+    \lists (up to length 10). Z3 returned a model with a list longer than \
+    \the limit. We're unfortunately not able to provide any guarantees in \
+    \this situation"
 
 describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
@@ -180,6 +193,10 @@ describeQueryFailure = \case
   err@SortMismatch{} -> describeSmtFailure err
   Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
   UnexpectedFailure smtE -> T.pack $ show smtE
+  SmtBoundFailure  -> "Pact verification can currently only handle bounded \
+    \lists (up to length 10). Z3 returned a model with a list longer than \
+    \the limit. We're unfortunately not able to provide any guarantees in \
+    \this situation"
 
 describeCheckFailure :: CheckFailure -> Text
 describeCheckFailure (CheckFailure info failure) =
@@ -236,13 +253,13 @@ resultQuery goal model0 = do
   case goal of
     Validation ->
       case satResult of
-        SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
+        SBV.Sat   -> checkModel' (throwError . Invalid) =<< lift (saturateModel model0)
         SBV.Unsat -> pure ProvedTheorem
         SBV.Unk   -> throwError . mkUnknown =<< lift SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
-        SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
+        SBV.Sat   -> checkModel' (pure . SatisfiedProperty) =<< lift (saturateModel model0)
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . mkUnknown =<< lift SBV.getUnknownReason
 

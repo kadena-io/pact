@@ -576,6 +576,9 @@ instance EqSymbolic AVal where
 mkS :: Maybe Provenance -> SVal -> S a
 mkS mProv sval = S mProv (SBVI.SBV sval)
 
+mkSBV :: SingTy a -> SVal -> SBV (Concrete a)
+mkSBV _ = SBVI.SBV
+
 literalS :: SymVal a => a -> S a
 literalS = sansProv . literal
 

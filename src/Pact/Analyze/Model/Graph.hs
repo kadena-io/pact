@@ -3,8 +3,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module Pact.Analyze.Model.Graph
-  ( reachablePaths
-  , reachableEdges
+  ( reachableEdges
   , linearize
   ) where
 

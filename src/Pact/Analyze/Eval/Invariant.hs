@@ -34,7 +34,7 @@ instance (Mergeable a) => Mergeable (InvariantCheck a) where
 
 instance Analyzer InvariantCheck where
   type TermOf InvariantCheck = Invariant
-  eval (CoreInvariant tm)    = evalCore tm
+  eval (CoreInvariant tm)   = evalCore tm
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err

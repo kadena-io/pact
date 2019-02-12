@@ -1315,6 +1315,25 @@ spec = describe "analyze" $ do
 
               other -> runIO $ HUnit.assertFailure $ show other
 
+  describe "list too long" $ do
+    let code =
+          [text|
+            (defun test:[integer] ()
+              @model [ (property (= 10 (length result))) ]
+              (make-list 11 0))
+          |]
+
+    eModuleData <- runIO $ compile $ wrapNoTable code
+    case eModuleData of
+      Left err -> it "failed to compile" $ expectationFailure $ show err
+      Right moduleData -> do
+        results <- runIO $
+          verifyModule (HM.fromList [("test", moduleData)]) moduleData
+        case results of
+          Left (ModuleCheckFailure (CheckFailure _ (SmtFailure SmtBoundFailure)))
+            -> pure ()
+          _ -> runIO $ HUnit.assertFailure $ "wrong failure: " ++ show results
+
   describe "cell-delta.integer" $ do
     let code =
           [text|
