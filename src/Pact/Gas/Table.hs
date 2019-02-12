@@ -2,24 +2,22 @@
 {-# LANGUAGE LambdaCase #-}
 module Pact.Gas.Table where
 
-import qualified Data.Map as Map
-
-import Pact.Types.Gas
 import Data.Map (Map)
---import qualified Data.Map as M
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Pact.Types.Term
+import Pact.Types.Gas
 import Pact.Types.Persistence
+import Pact.Types.Term
 
 -- NB: If pact ends up not having any variadic primitives (currently, I didn't spot any thus far, but also the types don't rule it out)
--- then the primTableUnreduced here could lose the [Term Ref] function parameter, and simply be Map Text Gas.
+-- then the primTable here could lose the [Term Ref] function parameter, and simply be Map Text Gas.
 -- Attributing gas costs to Term Ref on its own is problematic in general -- typically we want to account for those costs when the terms
 -- become evaluated, but there may be some cases where the ability to inspect the argument list is helpful, so I'll leave this in for now.
 
--- The argument lists in the GReduced case may be more useful, but I wasn't able to find instances where GReduced was in present use,
--- so it's possible we want to simplify that away.
+-- The argument lists in the GReduced case (where gas costs are computed after arguments are evaluated) may be more useful, but I wasn't
+-- able to find instances where GReduced was in present use, so I've removed it for now.
 
 data GasCostConfig = GasCostConfig
   { _gasCostConfig_primTable :: Map Text ([Term Ref] -> Gas)
