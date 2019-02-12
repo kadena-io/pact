@@ -95,6 +95,8 @@ data PactMetadata
 mkPactMetadata :: PactMetadata
 mkPactMetadata = PactMetadata (uninterpretS "in_pact") (uninterpretS "pact_id")
 
+-- | The registry of names to keysets that is shared across multiple modules in
+-- a namespace.
 newtype Registry
   = Registry
     { _registryMap :: SFunArray RegistryName Guard }
