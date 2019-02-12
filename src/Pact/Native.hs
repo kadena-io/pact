@@ -298,7 +298,7 @@ langDefs =
      "Filter LIST by applying APP to each element. For each true result, the original value is kept.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
-    ,defRNative "sort" sort'
+    ,defNative "sort" sort'
      (funType (TyList a) [("values",TyList a)] <>
       funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
      "Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. \
@@ -497,21 +497,16 @@ compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
   apply (_tApp appB) [a']
 compose i as = argsError' i as
 
-
-
-
 readMsg :: RNativeFun e
 readMsg i [TLitString key] = parseMsgKey i "read-msg" key
 readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
 readMsg i as = argsError i as
-
 
 readInteger :: RNativeFun e
 readInteger i [TLitString key] = do
   (ParsedInteger a') <- parseMsgKey i "read-integer" key
   return $ toTerm a'
 readInteger i as = argsError i as
-
 
 pactId :: RNativeFun e
 pactId i [] = toTerm <$> getPactId i
@@ -567,35 +562,44 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
   _ -> argsError' i as
 where' i as = argsError' i as
 
-
-sort' :: RNativeFun e
-sort' _ [TList{..}] = case nub (map typeof _tList) of
-  [ty] -> case ty of
-    Right rty@(TyPrim pty) -> case pty of
-      TyValue -> badTy (show ty)
-      TyGuard{} -> badTy (show ty)
-      _ -> do
-        sl <- forM _tList $ \e -> case firstOf tLiteral e of
-          Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ show e
-          Just lit -> return (lit,e)
-        return $ TList (map snd $ sortBy (compare `on` fst) sl) rty def
-    _ -> badTy (show ty)
-  ts -> evalError _tInfo $ "sort: non-uniform list: " ++ show ts
-  where badTy s = evalError _tInfo $ "sort: bad list type: " ++ s
-sort' _ [fields@TList{},l@TList{}]
-  | null (_tList fields) = evalError (_tInfo fields) "Empty fields list"
-  | otherwise = do
-      sortPairs <- forM (_tList l) $ \el -> case firstOf tObject el of
-        Nothing -> evalError (_tInfo l) $ "Non-object found: " ++ show el
-        Just o -> fmap ((,el) . reverse) $ (\f -> foldM f [] (_tList fields)) $ \lits fld -> do
-          v <- lookupObj fld o
-          case firstOf tLiteral v of
-            Nothing -> evalError (_tInfo l) $ "Non-literal found at field " ++ show fld ++ ": " ++ show el
-            Just lit -> return (lit:lits)
-      return $ TList (map snd $ sortBy (compare `on` fst) sortPairs) (_tListType l) def
-
-sort' i as = argsError i as
-
+sort' :: NativeFun e
+sort' i as@[el] = do
+  (g,l) <- gasUnreduced i as (reduce el) 
+  case l of
+    TList{_tList = tl, _tInfo = info} ->
+      let badTy s = evalError info $ "sort: bad list type: " ++ s
+      in case nub (map typeof tl) of
+        [ty] -> case ty of
+          Right rty@(TyPrim pty) -> case pty of
+            TyValue -> badTy (show ty)
+            TyGuard{} -> badTy (show ty)
+            _ -> do
+              sl <- forM tl $ \e -> case firstOf tLiteral e of
+                Nothing -> evalError info $ "Unexpected type error, expected literal: " ++ show e
+                Just lit -> return (lit,e)
+              return $ (g, TList (map snd $ sortBy (compare `on` fst) sl) rty def)
+          _ -> badTy (show ty)
+        ts -> evalError info $ "sort: non-uniform list: " ++ show ts
+    t -> argsError i [t]
+sort' i as@[efs, el] = do
+  (g0,(fields,l)) <- gasUnreduced i as ((,) <$> reduce efs <*> reduce el)
+  case (fields, l) of
+    (TList{},TList{})
+      | null (_tList fields) -> evalError (_tInfo fields) "Empty fields list"
+      | otherwise -> do
+          gLookups <- computeGas (Right i) $ GSortFieldLookup (length (_tList l) * length (_tList fields))
+          sortPairs <- forM (_tList l) $ \elt -> case firstOf tObject elt of
+            Nothing -> evalError (_tInfo l) $ "Non-object found: " ++ show elt
+            Just o -> do
+              fieldValues <- forM (_tList fields) $ \fld -> do
+                v <- lookupObj fld o
+                case firstOf tLiteral v of
+                  Nothing -> evalError (_tInfo l) $ "Non-literal found at field " ++ show fld ++ ": " ++ show elt
+                  Just lit -> return lit
+              return (fieldValues, elt)
+          return $ (g0+gLookups, TList (map snd $ sortBy (compare `on` fst) sortPairs) (_tListType l) def)
+    (x,y) -> argsError i [x,y]
+sort' i as = argsError' i as
 
 enforceVersion :: RNativeFun e
 enforceVersion i as = case as of

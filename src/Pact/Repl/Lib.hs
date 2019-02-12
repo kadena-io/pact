@@ -53,6 +53,7 @@ import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Repl.Types
+import Pact.Gas.Table
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -131,6 +132,8 @@ replDefs = ("Repl",
        "Set environment gas price to PRICE."
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        "Update gas model to charge constant RATE."
+     ,defZRNative "env-gasreal" setGasReal (funType tTyString [])
+       "Update gas model to a test version of a real gas model."
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
 
      ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
@@ -425,3 +428,9 @@ setGasRate _ [TLitInteger r] = do
     return $ tStr $ "Set gas rate to " <> tShow r
 
 setGasRate i as = argsError i as
+
+setGasReal :: RNativeFun LibState
+setGasReal _ [] = do
+    setenv (eeGasEnv . geGasModel) (tableGasModel testGasConfig)
+    return $ tStr $ "Set gas to table-based model"
+setGasReal i as = argsError i as

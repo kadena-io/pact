@@ -40,14 +40,14 @@ data ReadValue
 data GasArgs
   = GPostRead ReadValue
   | GSelect (Maybe [(Info,ColumnId)]) (Term Ref) (Term Name)
+  | GSortFieldLookup Int
   | GUnreduced [Term Ref]
-  | GReduced [Term Name]
+  | GWrite WriteType (Term Name) (Term Name)
   | GUse ModuleName (Maybe Hash)
   | GModuleDecl Module
   | GInterfaceDecl Module
   | GModuleMember Module
   | GUserApp
-
 
 newtype GasLimit = GasLimit Word64
   deriving (Eq,Ord,Num,Real,Integral,Enum)

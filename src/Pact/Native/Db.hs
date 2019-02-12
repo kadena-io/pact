@@ -101,12 +101,12 @@ dbDefs =
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
-    ,defRNative "write" (write Write) writeArgs
+    ,defNative "write" (write Write) writeArgs
      (writeDocs "." "(write accounts id { \"balance\": 100.0 })")
-    ,defRNative "insert" (write Insert) writeArgs
+    ,defNative "insert" (write Insert) writeArgs
      (writeDocs ", failing if data already exists for KEY."
      "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
-    ,defRNative "update" (write Update) writeArgs
+    ,defNative "update" (write Update) writeArgs
      (writeDocs ", failing if data does not exist for KEY."
       "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog
@@ -325,15 +325,20 @@ keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
 keylog _ i as = argsError i as
 
 
-write :: WriteType -> RNativeFun e
-write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
-  guardTable i table
-  case _tTableType of
-    TyAny -> return ()
-    TyVar {} -> return ()
-    tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
-  success "Write succeeded" . writeRow (_faInfo i) wt (userTable table) (RowKey key) =<< toColumns i ps
-write _ i as = argsError i as
+write :: WriteType -> NativeFun e
+write wt i as = do
+  ts <- mapM reduce as
+  case ts of
+    [table@TTable {..},TLitString key,obj@(TObject ps _ _)] -> do
+      cost <- computeGas (Right i) (GWrite wt table obj)
+      guardTable i table
+      case _tTableType of
+        TyAny -> return ()
+        TyVar {} -> return ()
+        tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
+      r <- success "Write succeeded" . writeRow (_faInfo i) wt (userTable table) (RowKey key) =<< toColumns i ps
+      return (cost, r)
+    _ -> argsError i ts
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
 toColumns i = fmap (Columns . M.fromList) . mapM conv where

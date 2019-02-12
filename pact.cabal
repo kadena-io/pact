@@ -21,6 +21,7 @@ library
                      , Pact.Compile
                      , Pact.Eval
                      , Pact.Gas
+                     , Pact.Gas.Table
                      , Pact.Native
                      , Pact.Native.Capabilities
                      , Pact.Native.Db
