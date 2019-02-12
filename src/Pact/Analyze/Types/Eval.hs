@@ -275,6 +275,7 @@ deriving instance Mergeable a => Mergeable (LatticeAnalyzeState a)
 data GlobalAnalyzeState
   = GlobalAnalyzeState
     { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
+    , _gasNextUninterpId   :: Integer
     }
   deriving (Show)
 
@@ -352,6 +353,7 @@ mkInitialAnalyzeState tables = AnalyzeState
         }
     , _globalState = GlobalAnalyzeState
         { _gasGuardProvenances = mempty
+        , _gasNextUninterpId   = 0
         }
     }
 
