@@ -24,24 +24,23 @@
 --
 
 module Pact.Types.Command
-  ( Command(..)
+  ( Command(..),cmdPayload,cmdSigs,cmdHash
 #if !defined(ghcjs_HOST_OS)
   , mkCommand, mkCommand', mkUserSig, verifyUserSig, verifyCommand
 #else
   , PPKScheme(..)
 #endif
-  , ProcessedCommand(..)
+  , ProcessedCommand(..),_ProcSucc,_ProcFail
   , Address(..),aFrom,aTo
   , PrivateMeta(..),pmAddress
   , PublicMeta(..),pmChainId,pmSender,pmGasLimit,pmGasPrice,pmFee
   , HasPlafMeta(..)
-  , Payload(..)
-  , ParsedCode(..)
+  , Payload(..),pMeta,pNonce,pPayload
+  , ParsedCode(..),pcCode,pcExps
   , UserSig(..),usScheme,usPubKey,usAddress,usSig
-
-  , CommandError(..)
-  , CommandSuccess(..)
-  , CommandResult(..)
+  , CommandError(..),ceMsg,ceDetail
+  , CommandSuccess(..),csData
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas
   , ExecutionMode(..), emTxId
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
@@ -182,9 +181,9 @@ verifyUserSig msg UserSig{..} =
 
 
 -- | Pair parsed Pact expressions with the original text.
-data ParsedCode = ParsedCode {
-  _pcCode :: !Text,
-  _pcExps :: ![Exp Parsed]
+data ParsedCode = ParsedCode
+  { _pcCode :: !Text
+  , _pcExps :: ![Exp Parsed]
   } deriving (Eq,Show,Generic)
 instance NFData ParsedCode
 
@@ -298,10 +297,11 @@ instance (FromJSON a) => FromJSON (CommandSuccess a) where
     parseJSON = withObject "CommandSuccess" $ \o ->
         CommandSuccess <$> o .: "data"
 
-data CommandResult = CommandResult {
-  _crReqKey :: RequestKey,
-  _crTxId :: Maybe TxId,
-  _crResult :: Value
+data CommandResult = CommandResult
+  { _crReqKey :: RequestKey
+  , _crTxId :: Maybe TxId
+  , _crResult :: Value
+  , _crGas :: Gas
   } deriving (Eq,Show)
 
 
@@ -354,3 +354,11 @@ makeLenses ''ExecutionMode
 makeLenses ''Address
 makeLenses ''PrivateMeta
 makeLenses ''PublicMeta
+makeLenses ''Command
+makeLenses ''ParsedCode
+makeLenses ''Payload
+makeLenses ''CommandError
+makeLenses ''CommandSuccess
+makeLenses ''CommandResult
+makePrisms ''ProcessedCommand
+makePrisms ''ExecutionMode

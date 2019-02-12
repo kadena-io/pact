@@ -2,65 +2,102 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE UndecidableInstances       #-}
+
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
 module Pact.Analyze.Types.Shared where
 
-import           Control.Lens                 (At (at), Index, Iso, Iso',
-                                               IxValue, Ixed (ix), Lens',
-                                               Prism', both, from, iso, lens,
-                                               makeLenses, makePrisms, over,
-                                               view, (%~), (&))
+import           Control.Lens                 (At (at), Index, Iso, IxValue,
+                                               Ixed (ix), Lens', Prism', both,
+                                               from, iso, lens, makeLenses,
+                                               makePrisms, over, view, (%~),
+                                               (&))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
-import           Data.Coerce                  (Coercible)
-import           Data.Data                    (Data)
-import qualified Data.Decimal                 as Decimal
+import           Data.Coerce                  (Coercible, coerce)
+import           Data.Constraint              (Dict (Dict), withDict)
+import           Data.Data                    (Data, Proxy, Typeable)
 import           Data.Function                (on)
+import           Data.Kind                    (Type)
+import           Data.List                    (sort)
 import           Data.List                    (sortBy)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
-import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
-                                               EqSymbolic, HasKind, Int64,
+import           Data.Maybe                   (isJust)
+import           Data.Monoid                  (First (..))
+import           Data.SBV                     (EqSymbolic, HasKind, Int64,
                                                Kind (KString, KUnbounded),
                                                Mergeable (symbolicMerge),
-                                               OrdSymbolic, Provable (forAll),
-                                               SBV,
+                                               OrdSymbolic, SBV,
                                                SDivisible (sDivMod, sQuotRem),
-                                               SymWord, Symbolic, forAll_,
-                                               forSome, forSome_, fromBool,
+                                               SymVal (..), Symbolic, fromCV,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
-                                               (%), (.<), (.==))
+                                               (.<), (.==))
+import qualified Data.SBV                     as SBV
 import           Data.SBV.Control             (SMTValue (..))
+import           Data.SBV.Internals           (CV (..), CVal (..), Kind (..),
+                                               SVal (SVal), genMkSymVar)
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
+import           Data.SBV.Trans               (MProvable (..), mkSymVal)
+import           Data.SBV.Tuple               (_1, _2)
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
-import           Data.Typeable                ((:~:) (Refl))
+-- import           Data.Type.Bool               (If, type (||))
+import           Data.Type.Equality           ((:~:) (Refl))
+import           GHC.TypeLits
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
-import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, time)
+import           Pact.Analyze.Feature         hiding (Constraint, Type, dec, ks,
+                                               obj, str, time)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.ObjUtil
+import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
+import           Pact.Analyze.Util            (Boolean (..))
 
+
+class IsTerm tm where
+  singEqTm       :: SingTy ty -> tm ty -> tm ty -> Bool
+  singShowsTm    :: SingTy ty -> Int   -> tm ty -> ShowS
+  singUserShowTm :: SingTy ty ->          tm ty -> Text
+
+eqTm :: (SingI ty, IsTerm tm) => tm ty -> tm ty -> Bool
+eqTm = singEqTm sing
+
+showsTm :: (SingI ty, IsTerm tm) => Int -> tm ty -> ShowS
+showsTm = singShowsTm sing
+
+showTm :: (SingI ty, IsTerm tm) => tm ty -> String
+showTm tm = showsTm 0 tm ""
+
+userShowTm :: (SingI ty, IsTerm tm) => tm ty -> Text
+userShowTm = singUserShowTm sing
 
 data Located a
   = Located
@@ -75,103 +112,87 @@ instance Mergeable a => Mergeable (Located a) where
   symbolicMerge f t (Located i a) (Located i' a') =
     Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
-data Existential (tm :: * -> *) where
-  ESimple :: SimpleType a => Type a -> tm a      -> Existential tm
-  EObject ::                 Schema -> tm Object -> Existential tm
+data Existential (tm :: Ty -> Type) where
+  Some :: SingTy a -> tm a -> Existential tm
 
--- TODO: when we have quantified constraints we can do this (also for Show):
--- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
---   ESimple ta ia == ESimple tb ib = case typeEq ta tb of
---     Just Refl -> ia == ib
---     Nothing   -> False
---   EObject sa pa == EObject sb pb = sa == sb && pa == pb
---   _ == _ = False
+instance IsTerm tm => Eq (Existential tm) where
+  Some tya a == Some tyb b = case singEq tya tyb of
+    Nothing   -> False
+    Just Refl -> singEqTm tya a b
+
+instance IsTerm tm => Show (Existential tm) where
+  showsPrec p (Some ty tm)
+    = showParen (p > 10)
+    $ showString "Some "
+    . showsPrec 11 ty
+    . showChar ' '
+    . singShowsTm ty 11 tm
+
+instance IsTerm tm => UserShow (Existential tm) where
+  userShowPrec _ (Some ty tm) = singUserShowTm ty tm
 
 transformExistential
   :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
-transformExistential f term = case term of
-  ESimple ty  term' -> ESimple ty  (f term')
-  EObject sch term' -> EObject sch (f term')
+transformExistential f (Some ty term') = Some ty (f term')
 
 mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
 mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
-existentialType (ESimple ety _) = EType ety
-existentialType (EObject sch _) = EObjectTy sch
+existentialType (Some ety _) = EType ety
 
 -- TODO: could implement this stuff generically or add newtype-awareness
 
-wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
-wrappedStringFromCW construct (SBVI.CW _ (SBVI.CWString s)) = construct s
-wrappedStringFromCW _ c = error $ "SymWord: Unexpected non-string value: " ++ show c
+wrappedStringFromCV :: (String -> a) -> SBVI.CV -> a
+wrappedStringFromCV construct (SBVI.CV _ (SBVI.CString s)) = construct s
+wrappedStringFromCV _ c = error $ "SymVal: Unexpected non-string value: " ++ show c
 
-wrappedIntegerFromCW :: (Integer -> a) -> SBVI.CW -> a
-wrappedIntegerFromCW construct (SBVI.CW _ (SBVI.CWInteger i)) = construct i
-wrappedIntegerFromCW _ c = error $ "SymWord: Unexpected non-integer value: " ++ show c
+wrappedIntegerFromCV :: (Integer -> a) -> SBVI.CV -> a
+wrappedIntegerFromCV construct (SBVI.CV _ (SBVI.CInteger i)) = construct i
+wrappedIntegerFromCV _ c = error $ "SymVal: Unexpected non-integer value: " ++ show c
 
 mkConcreteString :: String -> SBV a
 mkConcreteString = SBVI.SBV
-                 . SBVI.SVal KString
+                 . SVal KString
                  . Left
-                 . SBVI.CW KString
-                 . SBVI.CWString
+                 . CV KString
+                 . SBVI.CString
 
 mkConcreteInteger :: Integer -> SBV a
 mkConcreteInteger = SBVI.SBV
-                  . SBVI.SVal KUnbounded
+                  . SVal KUnbounded
                   . Left
-                  . SBVI.CW KUnbounded
-                  . SBVI.CWInteger
+                  . CV KUnbounded
+                  . CInteger
 
-newtype PactIso a b = PactIso {unPactIso :: Iso' a b}
-
-decimalIso :: PactIso Decimal.Decimal Decimal
-decimalIso = PactIso $ iso mkDecimal unMkDecimal
-  where
-    unMkDecimal :: Decimal -> Decimal.Decimal
-    unMkDecimal (Decimal dec) = case Decimal.eitherFromRational (dec % 10 ^ decimalPrecision) of
-      Left err -> error err
-      Right d  -> d
-
-    mkDecimal :: Decimal.Decimal -> Decimal
-    mkDecimal (Decimal.Decimal places mantissa)
-      = lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
-
-fromPact :: PactIso a b -> a -> b
-fromPact = view . unPactIso
-
-toPact :: PactIso a b -> b -> a
-toPact = view . from . unPactIso
-
-newtype KeySetName
-  = KeySetName Text
+newtype RegistryName
+  = RegistryName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
 
-instance Show KeySetName where show (KeySetName s) = show s
+instance Show RegistryName where show (RegistryName s) = show s
 
-instance SymWord KeySetName where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (KeySetName t) = mkConcreteString $ T.unpack t
-  fromCW = wrappedStringFromCW $ KeySetName . T.pack
+instance SymVal RegistryName where
+  mkSymVal = SBVI.genMkSymVar KString
+  literal (RegistryName t) = mkConcreteString $ T.unpack t
+  fromCV = wrappedStringFromCV $ RegistryName . T.pack
 
-instance HasKind KeySetName where
+instance HasKind RegistryName where
   kindOf _ = KString
 
-instance SMTValue KeySetName where
-  sexprToVal = fmap (KeySetName . T.pack) . sexprToVal
+instance SMTValue RegistryName where
+  sexprToVal = fmap (RegistryName . T.pack) . sexprToVal
 
-instance UserShow KeySetName where
-  userShowsPrec _ (KeySetName name) = "'" <> name
+instance UserShow RegistryName where
+  userShowPrec _ (RegistryName name) = "'" <> name
 
 newtype TableName
   = TableName String
   deriving (Eq, Ord, Show)
 
-instance SymWord TableName where
-  mkSymWord = SBVI.genMkSymVar KString
+instance SymVal TableName where
+  mkSymVal = SBVI.genMkSymVar KString
   literal (TableName s) = mkConcreteString s
-  fromCW = wrappedStringFromCW TableName
+  fromCV = wrappedStringFromCV TableName
 
 instance HasKind TableName where
   kindOf _ = KString
@@ -183,10 +204,10 @@ newtype ColumnName
   = ColumnName String
   deriving (Eq, Ord, Show)
 
-instance SymWord ColumnName where
-  mkSymWord = SBVI.genMkSymVar KString
+instance SymVal ColumnName where
+  mkSymVal = SBVI.genMkSymVar KString
   literal (ColumnName s) = mkConcreteString s
-  fromCW = wrappedStringFromCW ColumnName
+  fromCV = wrappedStringFromCV ColumnName
 
 instance HasKind ColumnName where
   kindOf _ = KString
@@ -194,7 +215,21 @@ instance HasKind ColumnName where
 instance IsString ColumnName where
   fromString = ColumnName
 
-type RowKey = String
+newtype Str = Str String
+  deriving (Eq, Ord, Show, SMTValue, HasKind, Typeable, IsString)
+
+strToText :: Str -> Text
+strToText (Str str) = T.pack str
+
+instance SymVal Str where
+  mkSymVal = SBVI.genMkSymVar KString
+  literal (Str s) = mkConcreteString s
+  fromCV = wrappedStringFromCV Str
+
+instance UserShow Str where
+  userShowPrec _ (Str str) = "\"" <> T.pack str <> "\""
+
+type RowKey = Str
 
 type Time = Int64
 
@@ -206,6 +241,10 @@ timeIso = PactIso $ iso mkTime unMkTime
 
     unMkTime :: Time -> UTCTime
     unMkTime time = toEnum 0 .+^ view (from microseconds) time
+
+isGuardTy :: Pact.Type v -> Bool
+isGuardTy (Pact.TyPrim (Pact.TyGuard _)) = True
+isGuardTy _                              = False
 
 data LogicalOp
   = AndOp -- ^ Conjunction
@@ -224,7 +263,7 @@ logicalOpP = mkOpNamePrism
   ]
 
 instance UserShow LogicalOp where
-  userShowsPrec _ = toText logicalOpP
+  userShowPrec _ = toText logicalOpP
 
 data EqNeq
   = Eq'  -- ^ Equal
@@ -238,7 +277,7 @@ eqNeqP = mkOpNamePrism
   ]
 
 instance UserShow EqNeq where
-  userShowsPrec _ = toText eqNeqP
+  userShowPrec _ = toText eqNeqP
 
 data ComparisonOp
   = Gt  -- ^ Greater than
@@ -260,7 +299,7 @@ comparisonOpP = mkOpNamePrism
   ]
 
 instance UserShow ComparisonOp where
-  userShowsPrec _ = toText comparisonOpP
+  userShowPrec _ = toText comparisonOpP
 
 -- | Metadata about a database cell from which a symbolic value originates.
 -- This is a separate datatype from 'Provenance' so that we avoid partial field
@@ -275,14 +314,19 @@ data OriginatingCell
   deriving (Eq, Show)
 
 data Provenance
-  = FromCell    OriginatingCell
-  | FromNamedKs (S KeySetName)
-  | FromInput   Unmunged
+  = FromCell     OriginatingCell
+  | FromRow      (Map ColumnName OriginatingCell)
+  | FromRegistry (S RegistryName)
+  | FromInput    Unmunged
+  | FromMetadata (S Str)
+  --
+  -- TODO: in the future, probably have FromYield?
+  --
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
--- particular table+row.
-data S a
+-- particular source of data (db, tx metadata, keyset registry, arg, etc).
+data S (a :: Type)
   = S
     { _sProv :: Maybe Provenance
     , _sSbv  :: SBV a }
@@ -294,7 +338,7 @@ sansProv = S Nothing
 withProv :: Provenance -> SBV a -> S a
 withProv prov sym = S (Just prov) sym
 
-instance SymWord a => Mergeable (S a) where
+instance (SymVal a) => Mergeable (S a) where
   symbolicMerge f t (S mProv1 x) (S mProv2 y)
     | mProv1 == mProv2 = S mProv1 $ symbolicMerge f t x y
     | otherwise        = sansProv $ symbolicMerge f t x y
@@ -306,22 +350,21 @@ instance SymWord a => Mergeable (S a) where
 instance EqSymbolic (S a) where
   S _ x .== S _ y = x .== y
 
-instance SymWord a => OrdSymbolic (S a) where
+instance SymVal a => OrdSymbolic (S a) where
   S _ x .< S _ y = x .< y
 
--- We don't care about preserving the provenance value here as we are most
--- interested in tracking `SBV KeySet`s, but really as soon as we apply a
--- transformation to a symbolic value, we are no longer working with the value
--- that was sourced from the database.
 instance Boolean (S Bool) where
-  true            = sansProv true
-  false           = sansProv false
-  bnot (S _ x)    = sansProv $ bnot x
-  S _ x &&& S _ y = sansProv $ x &&& y
-  S _ x ||| S _ y = sansProv $ x ||| y
+  sTrue           = sansProv SBV.sTrue
+  sFalse          = sansProv SBV.sFalse
+  sNot (S prov x) = S prov $ SBV.sNot x
+  S _ x .&& S _ y = sansProv $ x SBV..&& y
+  S _ x .|| S _ y = sansProv $ x SBV..|| y
 
 instance IsString (S String) where
   fromString = sansProv . fromString
+
+instance IsString (S Str) where
+  fromString = coerceS @String @Str . fromString
 
 instance SymbolicDecimal (S Decimal) where
   type IntegerOf (S Decimal) = S Integer
@@ -336,7 +379,7 @@ instance SymbolicDecimal (S Decimal) where
 -- exactly the same as the one below, do not be deceived, it is not. In this
 -- instance `*` resolves to `*` from `instance Num (SBV Decimal)`, which has an
 -- `rShift255D`. In the instance below, `*` resolves to `*` from `*` from
--- `instance (Ord a, Num a, SymWord a) => Num (SBV a)`, included in sbv, which
+-- `instance (Ord a, Num a, SymVal a) => Num (SBV a)`, included in sbv, which
 -- does to include the shift. *This instance must be selected for decimals*.
 instance {-# OVERLAPPING #-} Num (S Decimal) where
   S _ x + S _ y  = sansProv $ x + y
@@ -346,7 +389,7 @@ instance {-# OVERLAPPING #-} Num (S Decimal) where
   fromInteger i  = sansProv $ fromInteger i
   negate (S _ x) = sansProv $ negate x
 
-instance (Num a, SymWord a) => Num (S a) where
+instance (Num a, SymVal a) => Num (S a) where
   S _ x + S _ y  = sansProv $ x + y
   S _ x * S _ y  = sansProv $ x * y
   abs (S _ x)    = sansProv $ abs x
@@ -360,7 +403,7 @@ instance {-# OVERLAPPING #-} Fractional (S Decimal) where
   fromRational  = literalS . fromRational
   S _ x / S _ y = sansProv $ x / y
 
-instance (Fractional a, SymWord a) => Fractional (S a) where
+instance (Fractional a, SymVal a) => Fractional (S a) where
   fromRational = literalS . fromRational
   S _ x / S _ y = sansProv $ x / y
 
@@ -370,15 +413,15 @@ instance SDivisible (S Integer) where
 
 type PredicateS = Symbolic (S Bool)
 
-instance Provable PredicateS where
+instance MProvable IO PredicateS where
   forAll_   = fmap _sSbv
   forAll _  = fmap _sSbv
   forSome_  = fmap _sSbv
   forSome _ = fmap _sSbv
 
 -- Until SBV adds a typeclass for strConcat/(.++):
-(.++) :: S String -> S String -> S String
-S _ a .++ S _ b = sansProv $ SBV.concat a b
+(.++) :: S Str -> S Str -> S Str
+S _ a .++ S _ b = sansProv $ coerceSBV $ SBV.concat (coerceSBV a) (coerceSBV b)
 
 -- Beware: not a law-abiding Iso. Drops provenance info.
 sbv2S :: Iso (SBV a) (SBV b) (S a) (S b)
@@ -387,109 +430,160 @@ sbv2S = iso sansProv _sSbv
 fromCell :: TableName -> ColumnName -> S RowKey -> S Bool -> Provenance
 fromCell tn cn sRk sDirty = FromCell $ OriginatingCell tn cn sRk sDirty
 
-fromNamedKs :: S KeySetName -> Provenance
-fromNamedKs = FromNamedKs
+fromRegistry :: S RegistryName -> Provenance
+fromRegistry = FromRegistry
 
-symRowKey :: S String -> S RowKey
+fromMetadata :: S Str -> Provenance
+fromMetadata = FromMetadata
+
+symRowKey :: S Str -> S RowKey
 symRowKey = coerceS
 
 -- | Typed symbolic value.
 type TVal = (EType, AVal)
 
-newtype Object
-  = Object (Map Text TVal)
-  deriving (Eq, Show, Semigroup)
+data Column tm a where
+  Column :: IsTerm tm => !(SingTy a) -> !(tm a) -> Column tm a
 
-instance UserShow Object where
-  userShowsPrec d (Object m) = userShowsPrec d (fmap snd m)
+instance (Eq (SingTy a), Eq (tm a)) => Eq (Column tm a) where
+  Column _ a == Column _ b = a == b
+instance (Ord (SingTy a), Ord (tm a)) => Ord (Column tm a) where
+  Column _ a `compare` Column _ b = a `compare` b
 
-instance Monoid Object where
-  mempty = Object Map.empty
+data Object (tm :: Ty -> *) (m :: [(Symbol, Ty)])
+  = Object !(HList (Column tm) m)
 
-  -- NOTE: left-biased semantics of schemas for Pact's "object merging":
-  mappend = (<>)
+pattern ObjectNil :: () => schema ~ '[] => Object tm schema
+pattern ObjectNil = Object SNil
 
-objFields :: Lens' Object (Map Text TVal)
-objFields = lens getter setter
-  where
-    getter (Object fs) = fs
-    setter (Object _) fs' = Object fs'
+-- pattern ObjectCons
+--   :: ()
+--   => (schema ~ '(k, ty) ': schema', SingI ty, Typeable ty, KnownSymbol k)
+--   => Object tm schema
+-- pattern ObjectCons k v obj = Object (SCons k (Column
 
-newtype Schema
-  = Schema (Map Text EType)
-  deriving (Show, Eq, Semigroup)
+objectLookup :: Object tm m -> String -> Maybe (Existential (Column tm))
+objectLookup (Object cols) name = objectLookup' cols where
+  objectLookup' = getFirst . foldHList
+    (\k c@(Column ty _) -> First $
+      if symbolVal k == name then Just $ Some ty c else Nothing)
 
-instance Monoid Schema where
-  mempty = Schema Map.empty
+data EObject tm where
+  EObject :: SingList m -> Object tm m -> EObject tm
 
-  -- NOTE: left-biased semantics of schemas for Pact's "object merging":
-  mappend = (<>)
+instance UserShow (tm ('TyObject m)) => UserShow (Object tm m) where
+  userShowPrec _ (Object vals)
+    = "{" <> T.intercalate ", " (userShowVals vals) <> "}"
+      where
+      userShowVals = foldHList $ \k (Column ty v) ->
+        [T.pack (symbolVal k) <> " := " <> singUserShowTm ty v]
 
--- Note: this doesn't exactly match the pact syntax
-instance UserShow Schema where
-  userShowsPrec d (Schema schema) = userShowsPrec d schema
+instance Show (tm ('TyObject m)) => Show (Object tm m) where
+  showsPrec p (Object vals) = showParen (p > 10) $
+    showString "Object " . showsVals vals (11 :: Int) where
+      showsVals = foldrHList
+        (\_p -> showString "SNil")
+        (\k (Column singv v) showRest p' -> showParen (p' > 10) $
+           showString "SCons "
+         . showString (symbolVal k)
+         . showChar ' '
+         . singShowsTm singv 11 v
+         . showChar ' '
+         . showRest 11)
+
+instance Eq (tm ('TyObject m)) => Eq (Object tm m) where
+  Object vals1 == Object vals2 = eq vals1 vals2 where
+    eq :: HList (Column tm) m' -> HList (Column tm) m' -> Bool
+    eq SNil SNil = True
+    eq (SCons k1 (Column singv v1) m1')
+       (SCons k2 (Column _     v2) m2')
+      = eqSymB k1 k2 && singEqTm singv v1 v2 && eq m1' m2'
+
+data ESchema where
+  ESchema :: SingList schema -> ESchema
+
+instance Eq ESchema where
+  -- Since this is a singleton, checking the types match is good enough
+  ESchema ty1 == ESchema ty2 = isJust $ singListEq ty1 ty2
+
+instance Show ESchema where
+  showsPrec p (ESchema ty) = showParen (p > 10) $
+      showString "ESchema "
+    . showsPrec 11 ty
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
-varIdColumns :: Map Text a -> Map Text VarId
-varIdColumns m =
-  let sortedList = sortBy (compare `on` fst) (Map.toList m)
-      reindexedList =
-        zipWith (\index (name, _) -> (name, index)) [0..] sortedList
-  in Map.fromList reindexedList
+varIdColumns :: SingList m -> Map Text VarId
+varIdColumns
+  = Map.fromList
+  . flip zip [0..]
+  . sort
+  . foldSingList (\name _ -> [T.pack (symbolVal name)])
 
 -- | Given args representing the columns of a schema, this function gives a
 -- canonical assignment of var ids to each column. Also see 'varIdColumns'.
 varIdArgs :: [Pact.Arg a] -> [(Pact.Arg a, VarId)]
-varIdArgs args =
-  let sortedList = sortBy (compare `on` Pact._aName) args
-  in zip sortedList [0..]
+varIdArgs
+  = flip zip [0..]
+  . sortBy (compare `on` Pact._aName)
+
+-- | Untyped object
+newtype UObject = UObject (Map.Map Text TVal)
+  deriving (Eq, Show, Semigroup, Monoid)
+
+instance UserShow UObject where
+  userShowPrec d (UObject m) = userShowPrec d (fmap snd m)
+
+objFields :: Lens' UObject (Map.Map Text TVal)
+objFields = lens getter setter
+  where
+    getter (UObject fs)    = fs
+    setter (UObject _) fs' = UObject fs'
 
 -- | Untyped symbolic value.
 data AVal
   = AVal (Maybe Provenance) SBVI.SVal
-  | AnObj Object
   | OpaqueVal
   deriving (Eq, Show)
 
 instance UserShow AVal where
-  userShowsPrec _ = \case
+  userShowPrec _ = \case
     AVal _ sVal -> tShow sVal
-    AnObj obj   -> userShow obj
     OpaqueVal   -> "[opaque]"
 
-instance EqSymbolic Object where
-  Object fields .== Object fields' =
+instance EqSymbolic UObject where
+  UObject fields .== UObject fields' =
     let ks  = Map.keysSet fields
         ks' = Map.keysSet fields'
     in if ks == ks'
        then Set.foldl'
-              (\acc key -> acc &&&
+              (\acc key -> acc .&&
                 ((fields Map.! key) .== (fields' Map.! key)))
-              true
+              sTrue
               ks
-       else false
+       else sFalse
 
 instance EqSymbolic AVal where
   AVal mProv sv .== AVal mProv' sv' = mkS mProv sv .== mkS mProv' sv'
 
-  AnObj o .== AnObj o' = o .== o'
-
   -- Not perfect; this would be better if we could easily produce an
   -- uninterpreted bool here. We can't though, because 'uninterpret' takes a
   -- String that must be unique for each allocation.
-  OpaqueVal .== OpaqueVal = false
+  OpaqueVal .== OpaqueVal = sFalse
 
-  _ .== _ = false
+  _ .== _ = sFalse
 
-mkS :: Maybe Provenance -> SBVI.SVal -> S a
+mkS :: Maybe Provenance -> SVal -> S a
 mkS mProv sval = S mProv (SBVI.SBV sval)
 
-literalS :: SymWord a => a -> S a
+literalS :: SymVal a => a -> S a
 literalS = sansProv . literal
 
-unliteralS :: SymWord a => S a -> Maybe a
+unliteralS :: SymVal a => S a -> Maybe a
 unliteralS = unliteral . _sSbv
+
+uninterpretS :: HasKind a => String -> S a
+uninterpretS = sansProv . SBV.uninterpret
 
 sbv2SFrom :: Provenance -> Iso (SBV a) (SBV b) (S a) (S b)
 sbv2SFrom prov = iso (withProv prov) _sSbv
@@ -503,7 +597,7 @@ mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
 mkAVal' :: SBV a -> AVal
 mkAVal' (SBVI.SBV sval) = AVal Nothing sval
 
-coerceS :: Coercible a b => S a -> S b
+coerceS :: forall a b. Coercible a b => S a -> S b
 coerceS (S mProv a) = S mProv $ coerceSBV a
 
 unsafeCoerceS :: S a -> S b
@@ -513,37 +607,30 @@ iteS :: Mergeable a => S Bool -> a -> a -> a
 iteS sbool = ite (_sSbv sbool)
 
 fromIntegralS
-  :: forall a b
-  . (Integral a, SymWord a, Num b, SymWord b)
+  :: forall a b. (Integral a, SymVal a, Num b, SymVal b)
   => S a
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral
 
-oneIfS :: (Num a, SymWord a) => S Bool -> S a
+oneIfS :: (Num a, SymVal a) => S Bool -> S a
 oneIfS = over s2Sbv oneIf
 
-isConcreteS :: SymWord a => S a -> Bool
+isConcreteS :: SymVal a => S a -> Bool
 isConcreteS = isConcrete . _sSbv
 
 data QKind = QType | QAny
 
--- Integer, Decimal, Bool, String, Time
-type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a)
-
-data Quantifiable :: QKind -> * where
-  -- TODO: parametrize over constraint
-  EType     :: SimpleType a =>                    Type a -> Quantifiable q
-  EObjectTy ::                                    Schema -> Quantifiable q
-  QTable    ::                                              Quantifiable 'QAny
-  QColumnOf :: TableName                                 -> Quantifiable 'QAny
+data Quantifiable :: QKind -> Type where
+  EType     :: SingTy a  -> Quantifiable q
+  QTable    ::              Quantifiable 'QAny
+  QColumnOf :: TableName -> Quantifiable 'QAny
 
 deriving instance Show (Quantifiable q)
 
 instance Eq (Quantifiable q) where
-  EType a == EType b = case typeEq a b of
-    Just _refl -> True
-    Nothing    -> False
-  EObjectTy a == EObjectTy b = a == b
+  EType a == EType b = case singEq a b of
+    Just Refl -> True
+    Nothing   -> False
   QTable      == QTable      = True
   QColumnOf a == QColumnOf b = a == b
   _           == _           = False
@@ -555,15 +642,12 @@ type EType = Quantifiable 'QType
 type QType = Quantifiable 'QAny
 
 coerceQType :: EType -> QType
-coerceQType = \case
-  EType ty         -> EType ty
-  EObjectTy schema -> EObjectTy schema
+coerceQType (EType ty) = EType ty
 
 downcastQType :: QType -> Maybe EType
 downcastQType = \case
-  EType ty         -> Just $ EType ty
-  EObjectTy schema -> Just $ EObjectTy schema
-  _                -> Nothing
+  EType ty -> Just $ EType ty
+  _        -> Nothing
 
 -- | Unique variable IDs
 --
@@ -613,70 +697,352 @@ data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
 
 instance UserShow Any where
-  userShowsPrec _ Any = "*"
+  userShowPrec _ Any = "*"
 
 instance HasKind Any
-instance SymWord Any
+instance SymVal Any
 instance SMTValue Any
 
-newtype KeySet
-  = KeySet Integer
+newtype Guard
+  = Guard Integer
   deriving (Eq, Ord, Data, Show, Read, UserShow)
 
-instance SymWord KeySet where
-  mkSymWord = SBVI.genMkSymVar KUnbounded
-  literal (KeySet s) = mkConcreteInteger s
-  fromCW = wrappedIntegerFromCW KeySet
+instance SymVal Guard where
+  mkSymVal = SBVI.genMkSymVar KUnbounded
+  literal (Guard s) = mkConcreteInteger s
+  fromCV = wrappedIntegerFromCV Guard
 
-instance HasKind KeySet where
+instance HasKind Guard where
   kindOf _ = KUnbounded
 
-instance SMTValue KeySet where
-  sexprToVal = fmap KeySet . sexprToVal
+instance SMTValue Guard where
+  sexprToVal = fmap Guard . sexprToVal
 
--- The type of a simple type
-data Type a where
-  TInt     :: Type Integer
-  TBool    :: Type Bool
-  TStr     :: Type String
-  TTime    :: Type Time
-  TDecimal :: Type Decimal
-  TKeySet  :: Type KeySet
-  TAny     :: Type Any
+type family Concrete (a :: Ty) where
+  Concrete 'TyInteger     = Integer
+  Concrete 'TyBool        = Bool
+  Concrete 'TyStr         = Str
+  Concrete 'TyTime        = Time
+  Concrete 'TyDecimal     = Decimal
+  Concrete 'TyGuard       = Guard
+  Concrete 'TyAny         = Any
+  Concrete ('TyList a)    = [Concrete a]
+  Concrete ('TyObject ty) = ConcreteObj ty
 
-deriving instance Show (Type a)
-deriving instance Eq (Type a)
+type family ConcreteObj (a :: [(Symbol, Ty)]) where
+  ConcreteObj '[]               = ()
+  ConcreteObj ('(k', v) ': kvs) = (Concrete v, ConcreteObj kvs)
 
-typeEq :: Type a -> Type b -> Maybe (a :~: b)
-typeEq TInt     TInt     = Just Refl
-typeEq TBool    TBool    = Just Refl
-typeEq TStr     TStr     = Just Refl
-typeEq TTime    TTime    = Just Refl
-typeEq TDecimal TDecimal = Just Refl
-typeEq TAny     TAny     = Just Refl
-typeEq TKeySet  TKeySet  = Just Refl
-typeEq _        _        = Nothing
+-- | Eliminator for objects
+foldrObject
+  :: (SBV (ConcreteObj schema) :< SingList schema)
+  -> a
+  -> (forall k b.
+       KnownSymbol k
+    => SingSymbol k -> SBV (Concrete b) -> SingTy b -> a -> a)
+  -> a
+foldrObject (_   :< SNil')              base _f = base
+foldrObject (obj :< SCons' k ty schema) base f
+  = withSymVal ty $ withSymVal (SObjectUnsafe schema) $
+  f k (_1 obj) ty (foldrObject (_2 obj :< schema) base f)
 
-instance UserShow (Type a) where
-  userShowsPrec _ = \case
-    TInt     -> "integer"
-    TBool    -> "bool"
-    TStr     -> "string"
-    TTime    -> "time"
-    TDecimal -> "decimal"
-    TKeySet  -> "keyset"
-    TAny     -> "*"
+foldObject
+  :: Monoid a
+  => (SBV (ConcreteObj schema) :< SingList schema)
+  -> (forall k b.
+       KnownSymbol k
+    => SingSymbol k -> SBV (Concrete b) -> SingTy b -> a)
+  -> a
+foldObject objSchema f
+  = foldrObject objSchema mempty (\sym val ty accum -> f sym val ty <> accum)
 
-columnMapToSchema :: ColumnMap EType -> Schema
-columnMapToSchema
-  = Schema
-  . Map.fromList
-  . fmap (\(ColumnName name, ety) -> (fromString name, ety))
-  . Map.toList
-  . _columnMap
+newtype AConcrete ty = AConcrete (Concrete ty)
+
+instance (Eq (Concrete ty)) => Eq (AConcrete ty) where
+  AConcrete a == AConcrete b = a == b
+
+instance (Show (Concrete ty)) => Show (AConcrete ty) where
+  showsPrec p (AConcrete a) = showParen (p > 10) $
+    showString "AConcrete " . showsPrec 11 a
+
+instance (UserShow (Concrete ty)) => UserShow (AConcrete ty) where
+  userShowPrec p (AConcrete a) = userShowPrec p a
+
+instance SMTValue (Concrete ty) => SMTValue (AConcrete ty) where
+  sexprToVal = fmap AConcrete . sexprToVal
+
+instance IsTerm AConcrete where
+  singEqTm ty (AConcrete a) (AConcrete b) = withEq ty $ a == b
+  singShowsTm ty p tm                     = withShow ty $ showsPrec p tm
+  singUserShowTm ty tm                    = withUserShow ty $ userShowPrec 0 tm
+
+instance Ord (Concrete ty) => Ord (AConcrete ty) where
+  compare (AConcrete a) (AConcrete b) = compare a b
+
+instance HasKind (Concrete ty) => HasKind (AConcrete ty) where
+  kindOf (AConcrete a) = kindOf a
+
+instance
+  ( Typeable ty
+  , SymVal (Concrete ty)
+  , SingI ty
+  ) => SymVal (AConcrete ty) where
+  mkSymVal q name = coerce @(SBV (Concrete ty)) @(SBV (AConcrete ty))
+    <$> withSymVal (sing :: SingTy ty) (mkSymVal q name)
+  literal (AConcrete a) = coerce $ literal a
+  fromCV    = AConcrete . fromCV
+
+newtype AnSBV ty = AnSBV (SBV (Concrete ty))
+
+type family ConcreteList (a :: [Ty]) where
+  ConcreteList '[]         = '[]
+  ConcreteList (ty ': tys) = Concrete ty ': ConcreteList tys
+
+-- | 'withSing' is emblematic of a tradeoff we deal with repeatedly in
+-- evaluation. We must _always_ maintain evidence that _all_ of the types we
+-- deal with are in the closed universe we know how to deal with. Sometimes
+-- it's easiest to pass this information explicitly, as @SingTy a@. Other times
+-- it's easiest to pass it implicitly, as (constraint) @SingI a@. It's easy to
+-- go from a constraint to an explicit singleton type, just use 'sing'.
+-- 'withSing' allows us to go the other way as well.
+--
+--     explicit -- withSing -> implicit
+--
+--     SingTy a <--- sing ---- SingI a
+withSing :: SingTy a -> (SingI a => b) -> b
+withSing = withDict . singMkSing where
+
+    singMkSing :: SingTy a -> Dict (SingI a)
+    singMkSing = \case
+      SInteger               -> Dict
+      SBool                  -> Dict
+      SStr                   -> Dict
+      STime                  -> Dict
+      SDecimal               -> Dict
+      SGuard                 -> Dict
+      SAny                   -> Dict
+      SList ty'              -> withSing ty' Dict
+      SObjectUnsafe (SingList tys) -> withHListDict tys Dict
+
+    withHListDict :: HList Sing tys -> (SingI tys => b) -> b
+    withHListDict SNil f               = f
+    withHListDict (SCons _k _ty tys) f = withHListDict tys f
+
+withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
+withEq = withDict . singMkEq
+  where
+
+    singMkEq :: SingTy a -> Dict (Eq (Concrete a))
+    singMkEq = \case
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SGuard       -> Dict
+      SAny         -> Dict
+      SList ty'    -> withEq ty' Dict
+      SObjectUnsafe SNil'   -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withEq ty' $ withDict (singMkEq (SObjectUnsafe tys)) Dict
+
+withShow :: SingTy a -> (Show (Concrete a) => b) -> b
+withShow = withDict . singMkShow
+  where
+
+    singMkShow :: SingTy a -> Dict (Show (Concrete a))
+    singMkShow = \case
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SGuard       -> Dict
+      SAny         -> Dict
+      SList ty'    -> withShow ty' Dict
+      SObjectUnsafe SNil'   -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withShow ty' $ withDict (singMkShow (SObjectUnsafe tys)) Dict
+
+withUserShow :: SingTy a -> (UserShow (Concrete a) => b) -> b
+withUserShow = withDict . singMkUserShow
+  where
+
+    singMkUserShow :: SingTy a -> Dict (UserShow (Concrete a))
+    singMkUserShow = \case
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SGuard       -> Dict
+      SAny         -> Dict
+      SList ty'    -> withUserShow ty' Dict
+      SObjectUnsafe SNil'   -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withUserShow ty' $
+           withDict (singMkUserShow (SObjectUnsafe tys)) Dict
+
+withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
+withTypeable = withDict . singMkTypeable
+  where
+
+    singMkTypeable :: SingTy a -> Dict (Typeable a, Typeable (Concrete a))
+    singMkTypeable = \case
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SGuard       -> Dict
+      SAny         -> Dict
+      SList   ty'  -> withTypeable ty' Dict
+      SObjectUnsafe (SingList tys)
+        -> withTypeableListDict tys $ Dict
+
+    withTypeableListDict
+      :: HList Sing tys
+      -> ((Typeable tys, Typeable (ConcreteObj tys)) => b)
+      -> b
+    withTypeableListDict SNil f
+      = f
+    withTypeableListDict (SCons _k ty tys) f
+      = withTypeableListDict tys $ withTypeable ty f
+
+withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
+withSMTValue = withDict . singMkSMTValue
+  where
+
+    singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
+    singMkSMTValue = \case
+      SInteger   -> Dict
+      SBool      -> Dict
+      SStr       -> Dict
+      STime      -> Dict
+      SDecimal   -> Dict
+      SGuard     -> Dict
+      SAny       -> Dict
+      SList ty'  -> withSMTValue ty' $ withTypeable ty' Dict
+      SObjectUnsafe SNil' -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withSMTValue ty' $
+           withDict (singMkSMTValue (SObjectUnsafe tys)) Dict
+
+withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
+withHasKind = withDict . singMkHasKind
+  where
+
+    singMkHasKind :: SingTy a -> Dict (HasKind (Concrete a))
+    singMkHasKind = \case
+      SInteger   -> Dict
+      SBool      -> Dict
+      SStr       -> Dict
+      STime      -> Dict
+      SDecimal   -> Dict
+      SGuard     -> Dict
+      SAny       -> Dict
+      SList ty'  -> withHasKind ty' $ withTypeable ty' Dict
+      SObjectUnsafe SNil' -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withHasKind ty' $
+           withDict (singMkHasKind (SObjectUnsafe tys)) Dict
+
+instance SMTValue (Object AConcrete '[]) where
+  sexprToVal _ = Just $ Object SNil
+
+instance
+  ( SMTValue (Concrete ty)
+  , SMTValue (Object AConcrete tys)
+  , KnownSymbol k
+  , SingI ty
+  , Typeable ty
+  ) => SMTValue (Object AConcrete ('(k, ty) ': tys)) where
+  sexprToVal sexpr = case sexprToVal sexpr of
+    Nothing             -> Nothing
+    Just (a, Object as) -> Just $ Object $ SCons SSymbol (Column sing a) as
+
+withSymVal :: SingTy a -> (SymVal (Concrete a) => b) -> b
+withSymVal = withDict . singMkSymVal
+  where
+
+    singMkSymVal :: SingTy a -> Dict (SymVal (Concrete a))
+    singMkSymVal = \case
+      SInteger    -> Dict
+      SBool       -> Dict
+      SStr        -> Dict
+      STime       -> Dict
+      SDecimal    -> Dict
+      SGuard      -> Dict
+      SAny        -> Dict
+      SList ty'   -> withSymVal ty' Dict
+      SObjectUnsafe SNil' -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withSymVal ty' $
+           withDict (singMkSymVal (SObjectUnsafe tys)) Dict
+
+instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
+  compare _ _ = EQ
+
+instance HasKind (Object tm '[]) where
+  kindOf _ = KTuple []
+
+instance (Eq (tm ('TyObject '[])), Typeable tm) => SymVal (Object tm '[]) where
+  mkSymVal = genMkSymVar $ KTuple []
+
+  literal (Object SNil) =
+    let k = KTuple []
+    in SBVI.SBV . SVal k . Left . CV k $ CTuple []
+
+  fromCV (CV _ (CTuple [])) = Object SNil
+  fromCV c                  = error $ "invalid (Object '[]): " ++ show c
+
+instance
+  ( Ord (tm ty)
+  , Ord (Object tm tys)
+  , Eq (tm ('TyObject ('(k, ty) : tys)))
+  ) => Ord (Object tm ('(k, ty) ': tys)) where
+  compare (Object (SCons _ a tys1)) (Object (SCons _ b tys2))
+    = compare a b <> compare (Object tys1) (Object tys2)
+
+instance
+  ( HasKind (tm ty)
+  , HasKind (Object tm tys)
+  ) => HasKind (Object tm ('(k, ty) ': tys)) where
+  kindOf _ = KTuple
+    [ kindOf (undefined :: tm ty)
+    , kindOf (undefined :: Object tm tys)
+    ]
+
+instance
+  ( SingI ty
+  , Typeable ty
+  , Typeable tys
+  , SymVal (tm ty)
+  , SymVal (Object tm tys)
+  , KnownSymbol k
+  , Eq (tm ('TyObject ('(k, ty) : tys)))
+  , Typeable tm
+  , IsTerm tm
+  ) => SymVal (Object tm ('(k, ty) ': tys)) where
+
+  mkSymVal = genMkSymVar (kindOf (undefined :: Object tm ('(k, ty) ': tys)))
+
+  literal (Object (SCons _k (Column _ x) xs)) = case literal x of
+    SBVI.SBV (SVal kx (Left (CV _ xval))) -> case literal (Object xs) of
+      SBVI.SBV (SVal kxs (Left (CV _ xsval))) ->
+        let k = KTuple [kx, kxs]
+        in SBVI.SBV $ SVal k $ Left $ CV k $ CTuple [xval, xsval]
+      _ -> error "SymVal.literal (Object tm ('(k, ty) ': tys)): Cannot construct a literal value!"
+    _ -> error "SymVal.literal (Object tm ('(k, ty) ': tys)): Cannot construct a literal value!"
+
+  fromCV (CV (KTuple (k:ks)) (CTuple [x, xs])) =
+    case fromCV (CV (KTuple ks) xs) of
+      Object vals
+        -> Object $ SCons SSymbol (Column sing (fromCV (CV k x))) vals
+  fromCV c = error $ "invalid (Object tm ('(k, ty) ': tys)): " ++ show c
 
 newtype ColumnMap a
-  = ColumnMap { _columnMap :: Map ColumnName a }
+  = ColumnMap { _columnMap :: Map.Map ColumnName a }
   deriving (Show, Functor, Foldable, Traversable, Semigroup, Monoid)
 
 instance Mergeable a => Mergeable (ColumnMap a) where
@@ -684,8 +1050,17 @@ instance Mergeable a => Mergeable (ColumnMap a) where
     -- intersection is fine here; we know each map has all tables:
     Map.intersectionWith (symbolicMerge force test) left right
 
+columnMapToSchema :: ColumnMap EType -> Maybe EType
+columnMapToSchema (ColumnMap colMap) = go (Map.toList colMap) where
+  go [] = Just $ EType SObjectNil
+  go ((ColumnName colName, EType ty) : tys) = case someSymbolVal colName of
+    SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $ do
+      EType (SObject tys') <- go tys
+      pure $ EType $ mkSObject $ SCons' (SSymbol @k) ty tys'
+  go _ = Nothing
+
 newtype TableMap a
-  = TableMap { _tableMap :: Map TableName a }
+  = TableMap { _tableMap :: Map.Map TableName a }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 instance Mergeable a => Mergeable (TableMap a) where
@@ -695,17 +1070,16 @@ instance Mergeable a => Mergeable (TableMap a) where
 
 
 instance UserShow (Quantifiable q) where
-  userShowsPrec d = \case
-    EType ty     -> userShowsPrec d ty
-    EObjectTy ty -> userShowsPrec d ty
+  userShowPrec d = \case
+    EType ty     -> userShowPrec d ty
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> userShow tn <> ")"
 
 instance UserShow TableName where
-  userShowsPrec _ (TableName tn) = T.pack tn
+  userShowPrec _ (TableName tn) = T.pack tn
 
 instance UserShow ColumnName where
-  userShowsPrec _ (ColumnName cn) = T.pack cn
+  userShowPrec _ (ColumnName cn) = T.pack cn
 
 data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]

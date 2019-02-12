@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
@@ -8,11 +10,12 @@ module Pact.Analyze.Types
   ( module Pact.Analyze.Types.Languages
   , module Pact.Analyze.Types.Model
   , module Pact.Analyze.Types.Numerical
+  , module Pact.Analyze.Types.ObjUtil
   , module Pact.Analyze.Types.Shared
+  , module Pact.Analyze.Types.Types
   , module Pact.Analyze.Types.UserShow
 
   , Check(..)
-  , Float(float)
   , HasVarId(varId)
   , Quantifier(..)
   , Table(..)
@@ -38,15 +41,14 @@ import qualified Pact.Types.Typecheck         as TC
 import           Pact.Analyze.Types.Languages
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Shared
+import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 
 data Quantifier
   = Forall' VarId Text QType
   | Exists' VarId Text QType
-
-class Float a where
-  float :: Prop a -> ([Quantifier], Prop a)
 
 genId :: (MonadState s m, Num i) => Lens' s i -> m i
 genId l = do
@@ -64,10 +66,15 @@ genVarId :: (MonadState s m, HasVarId s) => m VarId
 genVarId = genId varId
 
 data Check
-  = PropertyHolds !(Prop Bool) -- valid, assuming success
-  | Satisfiable   !(Prop Bool) -- sat,   not assuming success
-  | Valid         !(Prop Bool) -- valid, not assuming success
-  deriving Show
+  = PropertyHolds !(Prop 'TyBool) -- valid, assuming success
+  | Satisfiable   !(Prop 'TyBool) -- sat,   not assuming success
+  | Valid         !(Prop 'TyBool) -- valid, not assuming success
+
+instance Show Check where
+  showsPrec p c = showParen (p > 10) $ case c of
+    PropertyHolds prop -> showString "PropertyHolds " . showsTm 11 prop
+    Satisfiable prop   -> showString "Satisfiable "   . showsTm 11 prop
+    Valid prop         -> showString "Valid "         . showsTm 11 prop
 
 checkGoal :: Check -> Goal
 checkGoal (PropertyHolds _) = Validation
@@ -77,13 +84,13 @@ checkGoal (Valid _)         = Validation
 data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
-  , _tableInvariants :: [Located (Invariant Bool)]
-  } deriving (Show)
+  , _tableInvariants :: [Located (Invariant 'TyBool)]
+  }
 
-pattern TableNameLit :: String -> Prop TableName
-pattern TableNameLit str = PLit (TableName str)
+pattern TableNameLit :: String -> Prop TyTableName
+pattern TableNameLit str = StrLit str
 
-pattern ColumnNameLit :: String -> Prop ColumnName
-pattern ColumnNameLit str = PLit (ColumnName str)
+pattern ColumnNameLit :: String -> Prop TyColumnName
+pattern ColumnNameLit str = StrLit str
 
 makeLenses ''Table

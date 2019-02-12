@@ -26,12 +26,12 @@ module Pact.Types.Type
    tyInteger,tyDecimal,tyTime,tyBool,tyString,
    tyList,tyObject,tyValue,tyKeySet,tyTable,
    SchemaType(..),
+   SchemaPartial(..),
    TypeVarName(..),typeVarName,
    TypeVar(..),tvName,tvConstraint,
-   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,tyGuard,
+   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tySchemaPartial,tyUser,tyVar,tyGuard,
    mkTyVar,mkTyVar',mkSchemaVar,
-   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
-
+   isAnyTy,isVarTy,canUnifyWith
    ) where
 
 
@@ -42,15 +42,18 @@ import Prelude
 import Data.Functor.Classes
 import Data.Aeson
 import Data.String
+import Data.Set (Set, isSubsetOf)
+import qualified Data.Set as Set
 import Data.Thyme.Format.Aeson ()
 import GHC.Generics (Generic)
 import Data.Hashable
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Foldable
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Text.PrettyPrint.ANSI.Leijen
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Control.DeepSeq
 import Data.Text (Text,unpack)
+import Data.Default (Default(..))
 
 import Pact.Types.Util
 import Pact.Types.Info
@@ -199,6 +202,22 @@ instance Eq1 TypeVar where
   liftEq _ (SchemaVar a) (SchemaVar m) = a == m
   liftEq _ _ _ = False
 
+-- | Represent a full or partial schema inhabitant.
+--
+-- @PartialSchema@ represents a schema with only the given subset of fields.
+-- @AnySubschema@ is used in places where any subset of fields can be provided.
+-- @AnySubschema@ unifies with any larger type to give that type.
+data SchemaPartial = FullSchema | PartialSchema !(Set Text) | AnySubschema
+  deriving (Eq,Ord,Show,Generic)
+instance NFData SchemaPartial
+instance Default SchemaPartial where def = FullSchema
+
+
+showPartial :: SchemaPartial -> String
+showPartial FullSchema = ""
+showPartial (PartialSchema ks)
+  = "~[" ++ intercalate "," (unpack.asString <$> Set.toList ks) ++ "]"
+showPartial AnySubschema = "~"
 
 -- | Pact types.
 data Type v =
@@ -206,7 +225,10 @@ data Type v =
   TyVar { _tyVar :: TypeVar v } |
   TyPrim PrimType |
   TyList { _tyListType :: Type v } |
-  TySchema { _tySchema :: SchemaType, _tySchemaType :: Type v } |
+  TySchema
+  { _tySchema :: SchemaType
+  , _tySchemaType :: Type v
+  , _tySchemaPartial :: SchemaPartial } |
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
@@ -216,7 +238,7 @@ instance Eq1 Type where
   liftEq eq (TyVar a) (TyVar m) = liftEq eq a m
   liftEq _ (TyPrim a) (TyPrim m) = a == m
   liftEq eq (TyList a) (TyList m) = liftEq eq a m
-  liftEq eq (TySchema a b) (TySchema m n) = a == m && liftEq eq b n
+  liftEq eq (TySchema a b c) (TySchema m n o) = a == m && liftEq eq b n && c == o
   liftEq eq (TyFun a) (TyFun b) = liftEq eq a b
   liftEq eq (TyUser a) (TyUser b) = eq a b
   liftEq _ _ _ = False
@@ -227,8 +249,9 @@ instance (Show v) => Show (Type v) where
   show (TyPrim t) = show t
   show (TyList t) | isAnyTy t = unpack tyList
                   | otherwise = "[" ++ show t ++ "]"
-  show (TySchema s t) | isAnyTy t = show s
-                      | otherwise = show s ++ ":" ++ show t
+  show (TySchema s t p)
+    | isAnyTy t = show s
+    | otherwise = show s ++ ":"  ++ show t ++ showPartial p
   show (TyFun f) = show f
   show (TyUser v) = show v
   show TyAny = "*"
@@ -239,7 +262,7 @@ instance (Pretty o) => Pretty (Type o) where
     TyVar n -> pretty n
     TyUser v -> pretty v
     TyFun f -> pretty f
-    TySchema s t -> pretty s PP.<> colon PP.<> pretty t
+    TySchema s t p -> pretty s PP.<> colon PP.<> text (showPartial p) PP.<> pretty t
     TyList t -> "list:" PP.<> pretty t
     TyPrim t -> pretty t
     TyAny -> "*"
@@ -259,12 +282,6 @@ isVarTy :: Type v -> Bool
 isVarTy TyVar {} = True
 isVarTy _ = False
 
-isUnconstrainedTy :: Type v -> Bool
-isUnconstrainedTy TyAny = True
-isUnconstrainedTy (TyVar (TypeVar _ [])) = True
-isUnconstrainedTy _ = False
-{-# INLINE isUnconstrainedTy #-}
-
 -- | a `canUnifyWith` b means a "can represent/contains" b
 canUnifyWith :: Eq n => Type n -> Type n -> Bool
 canUnifyWith TyAny _ = True
@@ -274,9 +291,22 @@ canUnifyWith (TyVar SchemaVar {}) (TyVar SchemaVar {}) = True
 canUnifyWith (TyVar (TypeVar _ ac)) (TyVar (TypeVar _ bc)) = all (`elem` ac) bc
 canUnifyWith (TyVar (TypeVar _ cs)) b = null cs || b `elem` cs
 canUnifyWith (TyList a) (TyList b) = a `canUnifyWith` b
-canUnifyWith (TySchema _ a) (TySchema _ b) = a `canUnifyWith` b
+canUnifyWith (TySchema _ aTy aP) (TySchema _ bTy bP)
+  = aTy `canUnifyWith` bTy && bP `isSubPartial` aP
 canUnifyWith a b = a == b
 {-# INLINE canUnifyWith #-}
+
+-- | @a `isSubPartial` b@ means that @a <= b@ in the lattice given by
+-- @SchemaPartial@, ie, that @a@ is smaller than @b@.
+isSubPartial :: SchemaPartial -> SchemaPartial -> Bool
+isSubPartial _ FullSchema = True
+isSubPartial FullSchema _ = False
+isSubPartial AnySubschema _ = True
+isSubPartial _ AnySubschema = False
+isSubPartial (PartialSchema a) (PartialSchema b) = a `isSubsetOf` b
+
+
+
 
 makeLenses ''Type
 makeLenses ''FunType

@@ -19,7 +19,27 @@
 -- functionality.
 --
 
-module Pact.Repl where
+module Pact.Repl
+  ( errToUnit
+  , execScript
+  , execScript'
+  , evalPact
+  , evalRepl
+  , evalRepl'
+  , evalString
+  , handleCompile
+  , handleParse
+  , initPureEvalEnv
+  , initReplState
+  , isPactFile
+  , parsedCompileEval
+  , rSuccess
+  , repl
+  , runPipedRepl
+  , setReplLib
+  , unsetReplLib
+  , utf8BytesLength
+  ) where
 
 import Control.Applicative
 import Control.Lens hiding (op)

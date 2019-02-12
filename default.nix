@@ -4,9 +4,19 @@ let rp = builtins.fetchTarball {
   url = "https://github.com/reflex-frp/reflex-platform/archive/${rpRef}.tar.gz";
   sha256 = rpSha;
 };
+overlay = self: super: {
+  z3 = super.z3.overrideAttrs (drv: {
+    src = self.fetchFromGitHub {
+      owner = "Z3Prover";
+      repo = "z3";
+      rev = "727929c9af003d71eab1f0d90cc8e01761943491";
+      sha256 = "02p8rhflimc852ysgf7nmaypz6ga3w4iss3z8d3qrby5a2d464p9";
+    };
+  });
+};
 
 in
-  (import rp { inherit system; }).project ({ pkgs, ... }:
+  (import rp { inherit system; nixpkgsOverlays = [ overlay ]; }).project ({ pkgs, ... }:
   let gitignore = pkgs.callPackage (pkgs.fetchFromGitHub {
         owner = "siers";
         repo = "nix-gitignore";
@@ -73,12 +83,20 @@ in
             hlint = self.callHackage "hlint" "2.0.14" {};
             # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-            # sbv >= 7.9
+            # sbv with a patch to disable "unsupported query call" until it's fixed upstream
             sbv = dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
-              owner = "LeventErkok";
+              owner = "joelburget";
               repo = "sbv";
-              rev = "3dc60340634c82f39f6c5dca2b3859d10925cfdf";
-              sha256 = "18xcxg1h19zx6gdzk3dfs87447k3xjqn40raghjz53bg5k8cdc31";
+              rev = "25d9357ff8eaac697eb6fde96598d7beb587b4e9";
+              sha256 = "0i0ajrw8j9hc208hizi4rnj5giqhbawjfgdbacswwfvgfqvvb69z";
+            }) {});
+
+            # need crackNum 2.3
+            crackNum = pkgs.haskell.lib.dontCheck (self.callCabal2nix "crackNum" (pkgs.fetchFromGitHub {
+              owner = "LeventErkok";
+              repo = "crackNum";
+              rev = "54cf70861a921062db762b3c50e933e73446c3b2";
+              sha256 = "02cg64rq8xk7x53ziidljyv3gsshdpgbzy7h03r869gj02l7bxwa";
             }) {});
 
             # Our own custom fork

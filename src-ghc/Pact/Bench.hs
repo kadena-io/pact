@@ -75,7 +75,7 @@ loadBenchModule db = do
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
            (initialHashTx H.Blake2b_512)
-  erRefStore <$> evalExec (setupEvalEnv db entity (Transactional 1) md initRefStore freeGasEnv permissiveNamespacePolicy) pc
+  _erRefStore <$> evalExec (setupEvalEnv db entity (Transactional 1) md initRefStore freeGasEnv permissiveNamespacePolicy) pc
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
@@ -86,7 +86,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData (initialHashTx H.Blake2b_512)) refStore freeGasEnv permissiveNamespacePolicy) pc
+  toJSON . _erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData (initialHashTx H.Blake2b_512)) refStore freeGasEnv permissiveNamespacePolicy) pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
