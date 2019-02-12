@@ -38,6 +38,7 @@ import Data.String
 import qualified Data.ByteString as BS
 import Data.Int
 import Data.Aeson
+import Data.Serialize hiding (Done)
 
 import GHC.Generics
 
@@ -45,7 +46,8 @@ import Prelude
 import Control.Monad.Catch
 
 
-newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString)
+newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString,Generic)
+instance Serialize Pragma
 
 data SQLiteConfig = SQLiteConfig
   { _dbFile :: FilePath
@@ -53,6 +55,7 @@ data SQLiteConfig = SQLiteConfig
   } deriving (Eq,Show,Generic)
 instance FromJSON SQLiteConfig
 instance ToJSON SQLiteConfig
+instance Serialize SQLiteConfig
 makeLenses ''SQLiteConfig
 
 -- | Statement input types

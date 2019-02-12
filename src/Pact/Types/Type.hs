@@ -5,6 +5,8 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.Type
@@ -54,6 +56,11 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Control.DeepSeq
 import Data.Text (Text,unpack)
 import Data.Default (Default(..))
+import Data.Bytes.Serial
+import Data.Bytes.Put
+import Data.Bytes.Get
+import Data.Serialize (Serialize (..))
+
 
 import Pact.Types.Util
 import Pact.Types.Info
@@ -62,6 +69,8 @@ import Pact.Types.Info
 newtype TypeName = TypeName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData)
 instance Show TypeName where show (TypeName s) = show s
+instance Serial TypeName
+instance Serialize TypeName
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
@@ -70,6 +79,15 @@ data Arg o = Arg {
   _aInfo :: Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
+instance Serial o => Serial (Arg o)
+instance Serialize o => Serialize (Arg o)
+instance Serial1 Arg where
+    serializeWith f (Arg {..}) = serialize _aName >> serializeWith f _aType >> serialize _aInfo
+    deserializeWith m = do
+        _aName <- deserialize
+        _aType <- deserializeWith m
+        _aInfo <- deserialize
+        return $ Arg {..}
 instance NFData o => NFData (Arg o)
 instance Show o => Show (Arg o) where show (Arg n t _) = unpack n ++ ":" ++ show t
 instance (Pretty o) => Pretty (Arg o)
@@ -84,6 +102,16 @@ data FunType o = FunType {
   _ftReturn :: Type o
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
+instance Serial o => Serial (FunType o)
+instance Serial1 FunType where
+    serializeWith f (FunType {..}) = do
+        serializeWith (serializeWith f) _ftArgs
+        serializeWith f _ftReturn
+    deserializeWith m = do
+        _ftArgs <- deserializeWith (deserializeWith m)
+        _ftReturn <- deserializeWith m
+        return $ FunType {..}
+instance Serialize o => Serialize (FunType o)
 instance NFData o => NFData (FunType o)
 instance Show o => Show (FunType o) where
   show (FunType as t) = "(" ++ unwords (map show as) ++ " -> " ++ show t ++ ")"
@@ -95,6 +123,8 @@ instance Eq1 FunType where
 
 -- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
+
+instance Serialize o => Serialize (NonEmpty o)
 
 funTypes :: FunType o -> FunTypes o
 funTypes ft = ft :| []
@@ -111,6 +141,8 @@ data GuardType
   deriving (Eq,Ord,Generic)
 
 instance NFData GuardType
+instance Serial GuardType
+instance Serialize GuardType
 
 -- | Primitive/unvarying types.
 -- Guard is lame Maybe to allow "wildcards".
@@ -125,6 +157,8 @@ data PrimType =
   deriving (Eq,Ord,Generic)
 
 instance NFData PrimType
+instance Serialize PrimType
+instance Serial PrimType
 
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,
@@ -160,6 +194,8 @@ data SchemaType =
   TyBinding
   deriving (Eq,Ord,Generic)
 
+instance Serial SchemaType
+instance Serialize SchemaType
 instance NFData SchemaType
 instance Show SchemaType where
   show TyTable = unpack tyTable
@@ -170,6 +206,8 @@ instance Pretty SchemaType where pretty = text . show
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
 instance Show TypeVarName where show = unpack . _typeVarName
+instance Serial TypeVarName
+instance Serialize TypeVarName
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
@@ -177,6 +215,25 @@ data TypeVar v =
   SchemaVar { _tvName :: TypeVarName }
   deriving (Functor,Foldable,Traversable,Generic)
 
+instance Serial v => Serial (TypeVar v)
+instance Serialize v => Serialize (TypeVar v)
+instance Serial1 TypeVar where
+    serializeWith f v =
+        case v of
+            TypeVar {..} -> do
+                putWord8 0
+                serialize _tvName
+                serializeWith (serializeWith f) _tvConstraint
+            SchemaVar {..} -> putWord8 1 >> serialize _tvName
+    deserializeWith m =
+        getWord8 >>= \a ->
+            case a of
+                0 -> do
+                    _tvName <- deserialize
+                    _tvConstraint <- deserializeWith (deserializeWith m)
+                    return $ TypeVar {..}
+                1 -> liftM SchemaVar deserialize
+                _ -> error "TypeVar: Deserialization error."
 instance NFData v => NFData (TypeVar v)
 instance Eq (TypeVar v) where
   (TypeVar a _) == (TypeVar b _) = a == b
@@ -211,7 +268,8 @@ data SchemaPartial = FullSchema | PartialSchema !(Set Text) | AnySubschema
   deriving (Eq,Ord,Show,Generic)
 instance NFData SchemaPartial
 instance Default SchemaPartial where def = FullSchema
-
+instance Serial SchemaPartial
+instance Serialize SchemaPartial
 
 showPartial :: SchemaPartial -> String
 showPartial FullSchema = ""
@@ -232,6 +290,34 @@ data Type v =
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
+
+instance Serialize v => Serialize (Type v)
+instance Serial1 Type where
+    serializeWith f t =
+        case t of
+            TyAny -> putWord8 0
+            TyVar {..} -> putWord8 1 >> serializeWith f _tyVar
+            TyPrim p -> putWord8 2 >> serialize p
+            TyList {..} -> putWord8 3 >> serializeWith f _tyListType
+            TySchema {..} -> do
+                putWord8 4
+                serialize _tySchema
+                serializeWith f _tySchemaType
+                serialize _tySchemaPartial
+            TyFun {..} -> putWord8 5 >> serializeWith f _tyFunType
+            TyUser {..} -> putWord8 6 >> f _tyUser
+    deserializeWith m =
+        getWord8 >>= \a ->
+            case a of
+                0 -> return TyAny
+                1 -> TyVar <$> deserializeWith m
+                2 -> TyPrim <$> deserialize
+                3 -> TyList <$> deserializeWith m
+                4 -> TySchema <$> deserialize <*> (deserializeWith m) <*> deserialize
+                5 -> TyFun <$> deserializeWith m
+                6 -> TyUser <$> m
+                _ -> fail "Type: Deserialization error."
+instance Serial v => Serial (Type v)
 
 instance Eq1 Type where
   liftEq _ TyAny TyAny = True

@@ -94,8 +94,11 @@ import Data.Maybe
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
 import Data.Int (Int64)
-import Data.Serialize (Serialize)
-
+import Data.Serialize (Serialize(..))
+import Data.Bytes.Get
+import Data.Bytes.Put
+import Data.Bytes.Serial
+import qualified Data.HashMap.Strict
 
 import Pact.Types.Parser
 import Pact.Types.Util
@@ -108,6 +111,9 @@ data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
   , _mModel :: ![Exp Info]   -- ^ models
   } deriving (Eq, Show, Generic)
+
+instance Serialize Meta
+instance Serial Meta
 
 instance ToJSON Meta where
   toJSON Meta {..} = object
@@ -124,6 +130,7 @@ instance Monoid Meta where
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
   deriving (Eq,Ord,Generic,IsString,AsString)
 
+instance Serial PublicKey
 instance Serialize PublicKey
 instance NFData PublicKey
 instance FromJSON PublicKey where
@@ -137,6 +144,8 @@ data KeySet = KeySet {
       _ksKeys :: ![PublicKey]
     , _ksPredFun :: !Name
     } deriving (Eq,Generic)
+instance Serial KeySet
+instance Serialize KeySet
 instance Show KeySet where
   show (KeySet ks f) =
     "KeySet { keys: " ++ show ks ++ ", pred: " ++ show f ++ " }"
@@ -154,17 +163,25 @@ instance ToJSON KeySet where
 
 
 newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
+    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON, Generic)
 instance Show KeySetName where show (KeySetName s) = show s
 
+instance Serialize KeySetName
+instance Serial KeySetName
+
 newtype PactId = PactId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
+    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default, Generic)
 instance Show PactId where show (PactId s) = show s
+instance Serial PactId
+instance Serialize PactId
 
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
   , _pgName :: !Text
   } deriving (Eq,Generic)
+
+instance Serial PactGuard
+instance Serialize PactGuard
 
 instance Show PactGuard where
   show PactGuard{..} =
@@ -177,6 +194,8 @@ data ModuleGuard = ModuleGuard
   { _mgModuleName :: !ModuleName
   , _mgName :: !Text
   } deriving (Eq,Generic)
+instance Serial ModuleGuard
+instance Serialize ModuleGuard
 
 instance Show ModuleGuard where
   show ModuleGuard{..} =
@@ -189,6 +208,8 @@ data UserGuard = UserGuard
   { _ugData :: !(Term Name) -- TODO when Term is safe, use "object" type
   , _ugPredFun :: !Name
   } deriving (Eq,Generic)
+instance Serial UserGuard
+instance Serialize UserGuard
 
 instance Show UserGuard where
   show UserGuard{..} =
@@ -203,7 +224,10 @@ data Guard
   | GKeySetRef KeySetName
   | GModule ModuleGuard
   | GUser UserGuard
-  deriving (Eq)
+  deriving (Eq,Generic)
+
+instance Serial Guard
+instance Serialize Guard
 
 instance Show Guard where
   show (GPact g) = show g
@@ -233,14 +257,19 @@ data DefType
   | Defcap
   deriving (Eq,Show,Generic)
 
+instance Serial DefType
+instance Serialize DefType
+
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
 defTypeRep Defcap = "defcap"
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,AsString)
+    deriving (Eq,Ord,IsString,ToJSON,AsString,Generic)
 instance Show NativeDefName where show (NativeDefName s) = show s
+instance Serial NativeDefName
+instance Serialize NativeDefName
 
 -- | Capture function application metadata
 data FunApp = FunApp {
@@ -263,14 +292,16 @@ data Ref =
   Direct (Term Name) |
   -- | Unevaulated/un-reduced term, never a native.
   Ref (Term Ref)
-               deriving (Eq)
+               deriving (Eq,Generic)
 instance Show Ref where
     show (Direct t) = abbrev t
     show (Ref t) = abbrev t
+instance Serial Ref
+instance Serialize Ref
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,ToJSON,FromJSON)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,ToJSON,FromJSON,Generic)
 instance Show Gas where show (Gas g) = show g
 
 instance Semigroup Gas where
@@ -286,6 +317,37 @@ data NativeDFun = NativeDFun
 
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a
+instance Serial NativeDFun where
+  serialize (NativeDFun {..}) = serialize _nativeName
+  deserialize = do
+    _nativeName <- deserialize
+    maybe
+      (fail "Serial NativeDFun: deserialization error.")
+      return
+      (native_dfun_deserialize _nativeName)
+
+instance Serialize NativeDFun where
+    put NativeDFun {..} = put _nativeName
+    get = do
+        _nativeName <- get
+        maybe
+          (fail "Serial NativeDFun: deserialization error.")
+          return
+          (native_dfun_deserialize _nativeName)
+
+native_dfun_deserialize :: NativeDefName -> Maybe NativeDFun
+native_dfun_deserialize nativename = Data.HashMap.Strict.lookup name nativeDefs >>= go
+  where
+    nativeDefs = undefined
+    getText (NativeDefName t) = t
+    name = Name (getText nativename) def
+    go r =
+        case r of
+            Direct t ->
+                case t of
+                    TNative {..} -> return _tNativeFun
+                    _ -> Nothing
+            rr@(Ref _) -> go rr
 
 -- | Binding forms.
 data BindType n =
@@ -293,7 +355,7 @@ data BindType n =
   BindLet |
   -- | Schema-style binding, with string value for key
   BindSchema { _bType :: n }
-  deriving (Eq,Functor,Foldable,Traversable,Ord)
+  deriving (Eq,Functor,Foldable,Traversable,Ord,Generic)
 instance (Show n) => Show (BindType n) where
   show BindLet = "let"
   show (BindSchema b) = "bind" ++ show b
@@ -307,14 +369,36 @@ instance Eq1 BindType where
   liftEq _ _ _ = False
 
 newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Generic)
+instance Serial TableName
+instance Serialize TableName
 instance Show TableName where show (TableName s) = show s
+instance Serial n => Serial (BindType n)
+instance Serialize n => Serialize (BindType n)
+instance Serial1 BindType where
+    serializeWith f t =
+        case t of
+            BindLet -> putWord8 0
+            BindSchema {..} -> do
+                putWord8 1
+                f _bType
+    deserializeWith m =
+        getWord8 >>= \a ->
+            case a of
+                0 -> return BindLet
+                1 -> do
+                    _bType <- m
+                    return $ BindSchema _bType
+                _ -> fail "BindType: Deserialization error."
 
 -- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
   } deriving (Eq, Ord, Generic)
+
+instance Serialize ModuleName
+instance Serial ModuleName
 
 instance Hashable ModuleName where
   hashWithSalt s (ModuleName n Nothing)   =
@@ -353,8 +437,10 @@ instance FromJSON ModuleName where
     <*> o .:? "namespace"
 
 newtype DefName = DefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Generic)
 instance Show DefName where show (DefName s) = show s
+instance Serialize DefName
+instance Serial DefName
 
 -- | A named reference from source.
 data Name
@@ -362,6 +448,8 @@ data Name
   | Name { _nName :: Text, _nInfo :: Info }
   deriving (Generic)
 
+instance Serial Name
+instance Serialize Name
 instance Show Name where
   show (QName q n _) = asString' q ++ "." ++ unpack n
   show (Name n _) = unpack n
@@ -405,17 +493,33 @@ data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe Hash)
   , _uInfo :: !Info
-  } deriving (Eq)
+  } deriving (Eq,Generic)
 instance Show Use where
   show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
+instance Serialize Use
+instance Serial Use
 
 data App t = App
   { _appFun :: !t
   , _appArgs :: ![t]
   , _appInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq)
+  } deriving (Functor,Foldable,Traversable,Eq,Generic)
 instance Show n => Show (App n) where
   show App{..} = "(" ++ unwords (show _appFun:map show _appArgs) ++ ")"
+instance Serial t => Serial (App t)
+instance Serialize t => Serialize (App t)
+instance Serial1 App where
+    serializeWith f t =
+        case t of
+            App {..} -> do
+                f _appFun
+                serializeWith f _appArgs
+                serialize _appInfo
+    deserializeWith m = do
+        _appFun <- m
+        _appArgs <- deserializeWith m
+        _appInfo <- deserialize
+        return $ App {..}
 
 -- TODO: We need a more expressive, safer ADT for this.
 data Module
@@ -434,7 +538,11 @@ data Module
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
   , _interfaceImports :: [Use]
-  } deriving Eq
+  } deriving (Eq, Generic)
+
+
+instance Serialize Module
+instance Serial Module
 
 instance Show Module where
   show m = case m of
@@ -476,7 +584,26 @@ data Def n = Def
   , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
   , _dInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq)
+  } deriving (Functor,Foldable,Traversable,Eq,Generic)
+instance (Generic n, Serialize n) => Serialize (Def n)
+instance Serial1 Def where
+    serializeWith f Def {..} = do
+        serialize _dDefName
+        serialize _dModule
+        serialize _dDefType
+        serializeWith (serializeWith f) _dFunType
+        serializeWith f _dDefBody
+        serialize _dMeta
+        serialize _dInfo
+    deserializeWith m = do
+        _dDefName <- deserialize
+        _dModule <- deserialize
+        _dDefType <- deserialize
+        _dFunType <- deserializeWith (deserializeWith m)
+        _dDefBody <- deserializeWith m
+        _dMeta <- deserialize
+        _dInfo <- deserialize
+        return $ Def {..}
 instance (Show n) => Show (Def n) where
   show Def{..} = "(" ++ unwords
     [ defTypeRep _dDefType
@@ -486,6 +613,10 @@ instance (Show n) => Show (Def n) where
 
 newtype NamespaceName = NamespaceName Text
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic)
+
+instance Serialize NamespaceName
+instance Serial NamespaceName
+
 
 data Namespace = Namespace
   { _nsName   :: NamespaceName
@@ -511,6 +642,30 @@ data ConstVal n =
   CVEval { _cvRaw :: !n
          , _cvEval :: !n }
   deriving (Eq,Functor,Foldable,Traversable,Generic)
+
+instance Serial n => Serial (ConstVal n)
+instance Serialize n => Serialize (ConstVal n)
+instance Serial1 ConstVal where
+    serializeWith f t =
+        case t of
+            CVRaw {..} -> do
+                putWord8 0
+                f _cvRaw
+            CVEval {..} -> do
+                putWord8 1
+                f _cvRaw
+                f _cvEval
+    deserializeWith m =
+        getWord8 >>= \a ->
+            case a of
+                0 -> do
+                    _cvRaw <- m
+                    return $ CVRaw {..}
+                1 -> do
+                    _cvRaw <- m
+                    _cvEval <- m
+                    return $ CVEval {..}
+                _ -> fail "ConstVal: Deserialization error."
 
 instance Show o => Show (ConstVal o) where
   show (CVRaw r) = show r
@@ -608,7 +763,395 @@ data Term n =
     , _tMeta :: !Meta
     , _tInfo :: !Info
     }
-    deriving (Functor,Foldable,Traversable,Eq)
+    deriving (Functor,Foldable,Traversable,Eq, Generic)
+
+instance (Generic n, Serialize n) => Serialize (Term n) where
+    put t =
+        case t of
+            TModule {..} -> do
+                putWord8 0
+                put _tModuleDef
+                put _tModuleBody
+                put _tInfo
+            TList {..} -> do
+                putWord8 1
+                put _tList
+                put _tListType
+                put _tInfo
+            TDef {..} -> do
+                putWord8 2
+                put _tDef
+                put _tInfo
+            TNative {..} -> do
+                putWord8 3
+                put _tNativeName
+                put _tNativeFun
+                put _tFunTypes
+                put _tFunTypes
+            TConst {..} -> do
+                putWord8 4
+                put _tConstArg
+                put _tModule
+                put _tConstVal
+                put _tMeta
+                put _tInfo
+            TApp {..} -> do
+                putWord8 5
+                put _tApp
+                put _tInfo
+            TVar {..} -> do
+                putWord8 6
+                put _tVar
+                put _tInfo
+            TBinding {..} -> do
+                putWord8 7
+                put _tBindPairs
+                put _tBindBody
+                put _tBindType
+                put _tInfo
+            TObject {..} -> do
+                putWord8 8
+                put _tObject
+                put _tObjectType
+                put _tInfo
+            TSchema {..} -> do
+                putWord8 9
+                put _tSchemaName
+                put _tModule
+                put _tMeta
+                put _tFields
+                put _tInfo
+            TLiteral {..} -> do
+                putWord8 10
+                put _tLiteral
+                put _tInfo
+            TGuard {..} -> do
+                putWord8 11
+                put _tGuard
+                put _tInfo
+            TUse {..} -> do
+                putWord8 12
+                put _tUse
+                put _tInfo
+            TValue {..} -> do
+                putWord8 13
+                put _tValue
+                put _tInfo
+            TStep {..} -> do
+                putWord8 14
+                put _tStepEntity
+                put _tStepExec
+                put _tStepRollback
+                put _tInfo
+            TTable {..} -> do
+                putWord8 15
+                put _tTableName
+                put _tModule
+                put _tHash
+                put _tTableType
+                put _tMeta
+                put _tInfo
+    get =
+        getWord8 >>= \a ->
+            case a of
+                0 -> do
+                    _tModuleDef <- get
+                    _tModuleBody <- get
+                    _tInfo <- get
+                    return $ TModule {..}
+                1 -> do
+                    _tList <- get
+                    _tListType <- get
+                    _tInfo <- get
+                    return $ TList {..}
+                2 -> do
+                    _tDef <- get
+                    _tInfo <- get
+                    return $ TDef {..}
+                3 -> do
+                    _tNativeName <- get
+                    _tNativeFun <- get
+                    _tFunTypes <- get
+                    _tNativeDocs <- get
+                    _tNativeTopLevelOnly <- get
+                    _tInfo <- get
+                    return $ TNative {..}
+                4 -> do
+                    _tConstArg <- get
+                    _tModule <- get
+                    _tConstVal <- get
+                    _tMeta <- get
+                    _tInfo <- get
+                    return $ TConst {..}
+                5 -> do
+                    _tApp <- get
+                    _tInfo <- get
+                    return $ TApp {..}
+                6 -> do
+                    _tVar <- get
+                    _tInfo <- get
+                    return $ TVar {..}
+                7 -> do
+                    _tBindPairs <- get
+                    _tBindBody <- get
+                    _tBindType <- get
+                    _tInfo <- get
+                    return $ TBinding {..}
+                8 -> do
+                    _tObject <- get
+                    _tObjectType <- get
+                    _tInfo <- get
+                    return $ TObject {..}
+                9 -> do
+                    _tSchemaName <- get
+                    _tModule <- get
+                    _tMeta <- get
+                    _tFields <- get
+                    _tInfo <- get
+                    return $ TSchema {..}
+                10 -> do
+                    _tLiteral <- get
+                    _tInfo <- get
+                    return $ TLiteral {..}
+                11 -> do
+                    _tGuard <- get
+                    _tInfo <- get
+                    return $ TGuard {..}
+                12 -> do
+                    _tUse <- get
+                    _tInfo <- get
+                    return $ TUse {..}
+                13 -> do
+                    _tValue <- get
+                    _tInfo <- get
+                    return $ TValue {..}
+                14 -> do
+                    _tStepEntity <- get
+                    _tStepExec <- get
+                    _tStepRollback <- get
+                    _tInfo <- get
+                    return $ TStep {..}
+                15 -> do
+                    _tTableName <- get
+                    _tModule <- get
+                    _tHash <- get
+                    _tTableType <- get
+                    _tMeta <- get
+                    _tInfo <- get
+                    return $ TTable {..}
+                _ -> fail "Term: get error."
+
+instance Serial1 Term where
+    serializeWith f t =
+        case t of
+            TModule {..} -> do
+                putWord8 0
+                serialize _tModuleDef
+                serializeWith f _tModuleBody
+                serialize _tInfo
+            TList {..} -> do
+                putWord8 1
+                serializeWith (serializeWith f) _tList
+                serializeWith (serializeWith f) _tListType
+                serialize _tInfo
+            TDef {..} -> do
+                putWord8 2
+                serializeWith f _tDef
+                serialize _tInfo
+            TNative {..} -> do
+                putWord8 3
+                serialize _tNativeName
+                serialize _tNativeFun
+                serializeWith (serializeWith (serializeWith f)) _tFunTypes
+                serialize _tNativeDocs
+                serialize _tNativeTopLevelOnly
+                serialize _tInfo
+            TConst {..} -> do
+                putWord8 4
+                serializeWith (serializeWith f) _tConstArg
+                serialize _tModule
+                serializeWith (serializeWith f) _tConstVal
+                serialize _tMeta
+                serialize _tInfo
+            TApp {..} -> do
+                putWord8 5
+                serializeWith (serializeWith f) _tApp
+                serialize _tInfo
+            TVar {..} -> do
+                putWord8 6
+                f _tVar
+                serialize _tInfo
+            TBinding {..} -> do
+                putWord8 7
+                pairListSerial1Helper
+                    (serializeWith (serializeWith f))
+                    (serializeWith f)
+                    _tBindPairs
+                serializeWith f _tBindBody
+                serializeWith (serializeWith (serializeWith f)) _tBindType
+                serialize _tInfo
+            TObject {..} -> do
+                putWord8 8
+                pairListSerial1Helper (serializeWith f) (serializeWith f) _tObject
+                serializeWith (serializeWith f) _tObjectType
+                serialize _tInfo
+            TSchema {..} -> do
+                putWord8 9
+                serialize _tSchemaName
+                serialize _tModule
+                serialize _tMeta
+                serializeWith (serializeWith (serializeWith f)) _tFields
+                serialize _tInfo
+            TLiteral {..} -> do
+                putWord8 10
+                serialize _tLiteral
+                serialize _tInfo
+            TGuard {..} -> do
+                putWord8 11
+                serialize _tGuard
+                serialize _tInfo
+            TUse {..} -> do
+                putWord8 12
+                serialize _tUse
+                serialize _tInfo
+            TValue {..} -> do
+                putWord8 13
+                serialize _tValue
+                serialize _tInfo
+            TStep {..} -> do
+                putWord8 14
+                serializeWith (serializeWith f) _tStepEntity
+                serializeWith f _tStepExec
+                serializeWith (serializeWith f) _tStepRollback
+                serialize _tInfo
+            TTable {..} -> do
+                putWord8 15
+                serialize _tTableName
+                serialize _tModule
+                serialize _tHash
+                serializeWith (serializeWith f) _tTableType
+                serialize _tMeta
+                serialize _tInfo
+    deserializeWith m =
+        getWord8 >>= \a ->
+            case a of
+                0 -> do
+                    _tModuleDef <- deserialize
+                    _tModuleBody <- deserializeWith m
+                    _tInfo <- deserialize
+                    return $ TModule {..}
+                1 -> do
+                    _tList <- deserializeWith (deserializeWith m)
+                    _tListType <- deserializeWith (deserializeWith m)
+                    _tInfo <- deserialize
+                    return $ TList {..}
+                2 -> do
+                    _tDef <- deserializeWith m
+                    _tInfo <- deserialize
+                    return $ TDef {..}
+                3 -> do
+                    _tNativeName <- deserialize
+                    _tNativeFun <- deserialize
+                    _tFunTypes <- deserializeWith (deserializeWith (deserializeWith m))
+                    _tNativeDocs <- deserialize
+                    _tNativeTopLevelOnly <- deserialize
+                    _tInfo <- deserialize
+                    return $ TNative {..}
+                4 -> do
+                    _tConstArg <- deserializeWith (deserializeWith m)
+                    _tModule <- deserialize
+                    _tConstVal <- deserializeWith (deserializeWith m)
+                    _tMeta <- deserialize
+                    _tInfo <- deserialize
+                    return $ TConst {..}
+                5 -> do
+                    _tApp <- deserializeWith (deserializeWith m)
+                    _tInfo <- deserialize
+                    return $ TApp {..}
+                6 -> do
+                    _tVar <- m
+                    _tInfo <- deserialize
+                    return $ TVar {..}
+                7 -> do
+                    _tBindPairs <-
+                        pairListDeSerial1Helper
+                            (deserializeWith . deserializeWith)
+                            deserializeWith
+                            m
+                    _tBindBody <- deserializeWith m
+                    _tBindType <- deserializeWith (deserializeWith (deserializeWith m))
+                    _tInfo <- deserialize
+                    return $ TBinding {..}
+                8 -> do
+                    _tObject <- pairListDeSerial1Helper deserializeWith deserializeWith m
+                    _tObjectType <- deserializeWith (deserializeWith m)
+                    _tInfo <- deserialize
+                    return $ TObject {..}
+                9 -> do
+                    _tSchemaName <- deserialize
+                    _tModule <- deserialize
+                    _tMeta <- deserialize
+                    _tFields <- deserializeWith (deserializeWith (deserializeWith m))
+                    _tInfo <- deserialize
+                    return $ TSchema {..}
+                10 -> do
+                    _tLiteral <- deserialize
+                    _tInfo <- deserialize
+                    return $ TLiteral {..}
+                11 -> do
+                    _tGuard <- deserialize
+                    _tInfo <- deserialize
+                    return $ TGuard {..}
+                12 -> do
+                    _tUse <- deserialize
+                    _tInfo <- deserialize
+                    return $ TUse {..}
+                13 -> do
+                    _tValue <- deserialize
+                    _tInfo <- deserialize
+                    return $ TValue {..}
+                14 -> do
+                    _tStepEntity <- deserializeWith (deserializeWith m)
+                    _tStepExec <- deserializeWith m
+                    _tStepRollback <- deserializeWith (deserializeWith m)
+                    _tInfo <- deserialize
+                    return $ TStep {..}
+                15 -> do
+                    _tTableName <- deserialize
+                    _tModule <- deserialize
+                    _tHash <- deserialize
+                    _tTableType <- deserializeWith (deserializeWith m)
+                    _tMeta <- deserialize
+                    _tInfo <- deserialize
+                    return $ TTable {..}
+                _ -> fail "Term: Deserialization error."
+
+pairListSerial1Helper ::
+     (MonadPut m, Foldable t1)
+  => (t2 -> m a)
+  -> (t3 -> m b)
+  -> t1 (t2, t3)
+  -> m ()
+pairListSerial1Helper f g xs = forM_ xs (uncurry go) >> putWord8 1
+  where
+    go a b = putWord8 0 >> f a >> g b
+
+pairListDeSerial1Helper ::
+     MonadGet m => (t -> m a1) -> (t -> m a2) -> t -> m [(a1, a2)]
+pairListDeSerial1Helper f g m = go id
+  where
+    go dl = do
+        a <- getWord8
+        if a == 1
+           then return $ dl []
+           else do
+            p <- (,) <$> f m <*> g m
+            go (dl . (p :))
+
+instance Serial (Term Name)
+instance Serial (Term Ref)
+instance Serial (Def Name)
+instance Serial (Def Ref)
 
 instance Show n => Show (Term n) where
     show TModule {..} =

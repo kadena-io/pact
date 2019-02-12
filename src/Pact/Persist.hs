@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Pact.Persist
   (Persist,
@@ -23,6 +24,9 @@ import Data.Aeson
 import Data.String
 import Data.Hashable
 import Data.Typeable
+import Data.Serialize
+
+import GHC.Generics
 
 import Pact.Types.Runtime
 
@@ -39,7 +43,9 @@ type DataTable = Table DataKey
 type TxTable = Table TxKey
 
 newtype TableId = TableId Text
-  deriving (Eq,Show,Ord,IsString,AsString,Hashable)
+  deriving (Eq,Show,Ord,IsString,AsString,Hashable,Generic)
+
+instance Serialize TableId
 
 data Table k where
   DataTable :: !TableId -> DataTable
@@ -56,6 +62,12 @@ deriving instance Ord (Table k)
 instance Hashable k => Hashable (Table k) where
   hashWithSalt s (DataTable t) = s `hashWithSalt` (0::Int) `hashWithSalt` t
   hashWithSalt s (TxTable t) = s `hashWithSalt` (1::Int) `hashWithSalt` t
+instance Serialize (Table DataKey) where
+    put (DataTable t) = put t
+    get = DataTable <$> get
+instance Serialize (Table TxKey) where
+    put (TxTable t) = put t
+    get = TxTable <$> get
 
 data KeyCmp = KGT|KGTE|KEQ|KNEQ|KLT|KLTE deriving (Eq,Show,Ord,Enum)
 data KeyConj = AND|OR deriving (Eq,Show,Ord,Enum)

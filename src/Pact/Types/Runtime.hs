@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveGeneric #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -58,8 +59,11 @@ import Data.String
 import Data.Default
 import Control.Monad.Catch
 import Control.Concurrent.MVar
-import Data.Serialize (Serialize)
+import qualified Data.Serialize as S
 import Data.Hashable
+import Data.Bytes.Serial
+
+import GHC.Generics
 
 import Pact.Types.Gas
 import Pact.Types.Lang
@@ -145,8 +149,11 @@ makeLenses ''PactStep
 data ModuleData = ModuleData
   { _mdModule :: Module
   , _mdRefMap :: HM.HashMap Text Ref
-  } deriving (Eq, Show)
+  } deriving (Eq, Show,Generic)
 makeLenses ''ModuleData
+
+instance Serial ModuleData
+instance S.Serialize ModuleData
 
 -- | Storage for loaded modules, interfaces, and natives.
 data RefStore = RefStore {
@@ -155,9 +162,23 @@ data RefStore = RefStore {
     } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
+instance Serial RefStore where
+    serialize RefStore {..} = serialize _rsModules
+    deserialize = do
+        let _rsNatives = nativeDefs
+            nativeDefs = undefined
+        _rsModules <- deserialize
+        return $ RefStore {..}
+instance S.Serialize RefStore where
+    put RefStore {..} = S.put _rsModules
+    get = do
+        let _rsNatives = nativeDefs
+            nativeDefs = undefined
+        _rsModules <- S.get
+        return $ RefStore {..}
 
 newtype EntityName = EntityName Text
-  deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
+  deriving (IsString,AsString,Eq,Ord,Hashable,S.Serialize,NFData,ToJSON,FromJSON,Default)
 instance Show EntityName where show (EntityName t) = show t
 
 

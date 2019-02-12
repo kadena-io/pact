@@ -49,7 +49,10 @@ import Data.Scientific
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
-import Data.Serialize (Serialize)
+import Data.Serialize (Serialize(..))
+import Data.Bytes.Serial
+import Data.Bytes.Put
+import Data.Bytes.Get
 
 import Pact.Types.Info
 import Pact.Types.Type
@@ -64,6 +67,7 @@ data Literal =
         deriving (Eq,Generic,Ord)
 
 instance Serialize Literal
+instance Serial Literal
 instance NFData Literal
 
 makePrisms ''Literal
@@ -101,6 +105,8 @@ litToPrim LTime {} = TyTime
 
 data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
 instance NFData ListDelimiter
+instance Serialize ListDelimiter
+instance Serial ListDelimiter
 
 listDelims :: ListDelimiter -> (Text,Text)
 listDelims Parens = ("(",")")
@@ -116,6 +122,8 @@ instance Show Separator where
   show Colon = ":"
   show ColonEquals = ":="
   show Comma = ","
+instance Serialize Separator
+instance Serial Separator
 
 
 data LiteralExp i = LiteralExp
@@ -126,6 +134,16 @@ instance Show (LiteralExp i) where show LiteralExp{..} = show _litLiteral
 instance HasInfo (LiteralExp Info) where
   getInfo = _litInfo
 instance NFData i => NFData (LiteralExp i)
+instance Serialize i => Serialize (LiteralExp i)
+instance Serial i => Serial (LiteralExp i)
+instance Serial1 LiteralExp where
+    serializeWith f t =
+        case t of
+            LiteralExp {..} -> serialize _litLiteral >> f _litInfo
+    deserializeWith m = do
+        _litLiteral <- deserialize
+        _litInfo <- m
+        return $ LiteralExp {..}
 
 data AtomExp i = AtomExp
   { _atomAtom :: !Text
@@ -137,6 +155,20 @@ instance Show (AtomExp i) where
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
+instance Serialize i => Serialize (AtomExp i)
+instance Serial i => Serial (AtomExp i)
+instance Serial1 AtomExp where
+    serializeWith f t =
+        case t of
+            AtomExp {..} -> do
+                serialize _atomAtom
+                mapM_ serialize _atomQualifiers
+                f _atomInfo
+    deserializeWith m = do
+        _atomAtom <- deserialize
+        _atomQualifiers <- deserialize
+        _atomInfo <- m
+        return $ AtomExp {..}
 
 data ListExp i = ListExp
   { _listList :: ![(Exp i)]
@@ -150,6 +182,20 @@ instance Show (ListExp i) where
 instance HasInfo (ListExp Info) where
   getInfo = _listInfo
 instance NFData i => NFData (ListExp i)
+instance Serialize i => Serialize (ListExp i)
+instance Serial i => Serial (ListExp i)
+instance Serial1 ListExp where
+    serializeWith f t =
+        case t of
+            ListExp {..} -> do
+                serializeWith (serializeWith f) _listList
+                serialize _listDelimiter
+                f _listInfo
+    deserializeWith m = do
+        _listList <- deserializeWith $ deserializeWith m
+        _listDelimiter <- deserialize
+        _listInfo <- m
+        return $ ListExp {..}
 
 data SeparatorExp i = SeparatorExp
   { _sepSeparator :: !Separator
@@ -159,7 +205,18 @@ instance Show (SeparatorExp i) where show (SeparatorExp{..}) = show _sepSeparato
 instance HasInfo (SeparatorExp Info) where
   getInfo = _sepInfo
 instance NFData i => NFData (SeparatorExp i)
-
+instance Serialize i => Serialize (SeparatorExp i)
+instance Serial i => Serial (SeparatorExp i)
+instance Serial1 SeparatorExp where
+    serializeWith f t =
+        case t of
+            SeparatorExp {..} -> do
+                serialize _sepSeparator
+                f _sepInfo
+    deserializeWith m = do
+        _sepSeparator <- deserialize
+        _sepInfo <- m
+        return $ SeparatorExp {..}
 
 -- | Pact syntax expressions
 data Exp i =
@@ -179,6 +236,23 @@ instance HasInfo (Exp Info) where
 
 makePrisms ''Exp
 
+instance Serialize i => Serialize (Exp i)
+instance Serial i => Serial (Exp i)
+instance Serial1 Exp where
+  serializeWith f t =
+    case t of
+      ELiteral l -> putWord8 0 >> serializeWith f l
+      EAtom a -> putWord8 1 >> serializeWith f a
+      EList l -> putWord8 2 >> serializeWith f l
+      ESeparator s -> putWord8 3 >> serializeWith f s
+  deserializeWith m =
+    getWord8 >>= \a ->
+      case a of
+        0 -> deserializeWith m >>= return . ELiteral
+        1 -> deserializeWith m >>= return . EAtom
+        2 -> deserializeWith m >>= return . EList
+        3 -> deserializeWith m >>= return . ESeparator
+        _ -> fail "Exp: Deserialization error."
 
 instance Show (Exp i) where
   show e = case e of

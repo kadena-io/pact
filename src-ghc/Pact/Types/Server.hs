@@ -52,9 +52,13 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text.Encoding
 import Data.Aeson
+import Data.Serialize (Serialize (..))
+import Data.Bytes.Serial
 
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
+
+import GHC.Generics
 
 import Prelude
 
@@ -87,14 +91,20 @@ data CommandPact = CommandPact
   , _cpStepCount :: Int
   , _cpStep :: Int
   , _cpYield :: Maybe (Term Name)
-  } deriving Show
+  } deriving (Show, Generic)
 $(makeLenses ''CommandPact)
+
+instance Serialize CommandPact
+instance Serial CommandPact
 
 data CommandState = CommandState {
        _csRefStore :: RefStore
      , _csPacts :: M.Map TxId CommandPact -- comment copied from Kadena code: TODO need hashable for TxId mebbe
-     } deriving Show
+     } deriving (Show, Generic)
 $(makeLenses ''CommandState)
+
+instance Serial CommandState
+instance Serialize CommandState
 
 data CommandEnv p = CommandEnv {
       _ceEntity :: Maybe EntityName

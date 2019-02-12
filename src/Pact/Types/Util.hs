@@ -33,6 +33,7 @@ import Control.Lens
 import Control.DeepSeq
 import Data.Hashable (Hashable)
 import Data.Serialize (Serialize)
+import Data.Bytes.Serial
 import qualified Data.Serialize as S
 
 
@@ -71,6 +72,7 @@ instance Show Hash where
   show (Hash h) = show $ B16.encode h
 instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
 instance NFData Hash
+instance Serial Hash -- TODO: Maybe this should be hand-written.
 
 -- NB: this hash is also used for the bloom filter, which needs 32bit keys
 -- if you want to change this, you need to retool the bloom filter as well

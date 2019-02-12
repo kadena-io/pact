@@ -51,6 +51,8 @@ import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Text.Read (readMaybe)
+import Data.Serialize (Serialize(..))
+import Data.Bytes.Serial
 
 import Pact.Types.Lang
 import Pact.Types.Util (AsString(..))
@@ -250,6 +252,7 @@ data TxLog v =
     } deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
 makeLenses ''TxLog
 instance Hashable v => Hashable (TxLog v)
+instance Serialize v => Serialize (TxLog v)
 
 instance ToJSON v => ToJSON (TxLog v) where
     toJSON (TxLog d k v) =
@@ -278,6 +281,8 @@ data WriteType =
 newtype TxId = TxId Word64
     deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON,Generic)
 
+instance Serial TxId
+instance Serialize TxId
 instance NFData TxId
 instance Show TxId where show (TxId s) = show s
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.Info
@@ -22,7 +23,8 @@ module Pact.Types.Info
    ) where
 
 
-import Text.Trifecta.Delta hiding (Columns)
+-- import Text.Trifecta.Delta hiding (Columns)
+import Text.Trifecta.Delta
 import Data.List
 import Prelude
 import Data.Text (Text,unpack)
@@ -34,6 +36,8 @@ import GHC.Generics (Generic)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Control.DeepSeq
+import Data.Serialize (Serialize(..))
+import Data.Bytes.Serial
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
@@ -46,11 +50,14 @@ data Parsed = Parsed {
   _pLength :: Int
   } deriving (Eq,Show,Ord,Generic)
 
+instance Serialize Parsed
+instance Serial Parsed
 instance NFData Parsed
 instance Default Parsed where def = Parsed mempty 0
 instance HasBytes Parsed where bytes = bytes . _pDelta
 instance Pretty Parsed where pretty = pretty . _pDelta
-
+instance Serialize Delta
+instance Serial Delta
 
 newtype Code = Code { _unCode :: Text }
   deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString)
@@ -60,11 +67,15 @@ instance Pretty Code where
                       text $ unpack (T.take maxLen c <> "...")
                   | otherwise = text $ unpack c
     where maxLen = 30
+instance Serialize Code
+instance Serial Code
 
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
 newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic)
 
+instance Serialize Info
+instance Serial Info
 instance NFData Info
 -- show instance uses Trifecta renderings
 instance Show Info where

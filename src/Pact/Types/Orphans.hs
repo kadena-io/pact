@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      :  Pact.Types.Orphans
@@ -27,16 +28,32 @@ import qualified Data.Text as T
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Data.Default
 import Control.DeepSeq
+import Data.HashMap.Strict
+import Data.HashSet
+import Data.Hashable
+import Data.Bytes.Serial
+import qualified Data.Vector as Vector
 
 instance Serialize Micro
+instance Serial Micro
 instance Serialize NominalDiffTime
+instance Serial NominalDiffTime
 instance Serialize UTCTime
+instance Serial UTCTime
 
 instance (Serialize i) => Serialize (DecimalRaw i) where
     put (Decimal p i) = put p >> put i
     get = Decimal <$> get <*> get
     {-# INLINE put #-}
     {-# INLINE get #-}
+
+instance Serial1 DecimalRaw where
+  serializeWith f (Decimal p i) = serialize p >> f i
+  deserializeWith m = Decimal <$> deserialize <*> m
+
+instance Serial i => Serial (DecimalRaw i) where
+  serialize (Decimal p i) = serialize p >> serialize i
+  deserialize = Decimal <$> deserialize <*> deserialize
 
 instance Serialize A.Value where
     put v = put (A.encode v)
@@ -65,3 +82,17 @@ instance Default Text where def = ""
 instance Serialize Text where
   put = put . encodeUtf8
   get = decodeUtf8 <$> get
+
+instance (Eq h, Hashable h, Serialize h) => Serialize (HashSet h) where
+    put = put . Data.HashSet.toList
+    get = get >>= return . Data.HashSet.fromList
+
+instance (Hashable k, Ord k, Serialize k, Serialize v) => Serialize (HashMap k v) where
+    put = put . Data.HashMap.Strict.toList
+    get = get >>= return . Data.HashMap.Strict.fromList
+
+instance Serial a => Serial (Vector.Vector a) where
+    serialize = mapM_ serialize . Vector.toList
+    deserialize = deserialize >>= return . Vector.fromList
+
+instance Serial A.Value
