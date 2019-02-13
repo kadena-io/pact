@@ -50,12 +50,11 @@ import GHC.Generics (Generic)
 import Data.Hashable
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Foldable
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Control.DeepSeq
 import Data.Text (Text,unpack)
 import Data.Default (Default(..))
 
+import Pact.Types.Pretty
 import Pact.Types.Util
 import Pact.Types.Info
 
@@ -71,8 +70,8 @@ data Arg o = Arg {
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (Arg o)
-instance (Pretty o) => Pretty (Arg o)
-  where pretty (Arg n t _) = pretty n <> colon <> pretty t
+instance Pretty o => Pretty (Arg o) where
+  pretty (Arg n t _) = pretty n <> colon <> pretty t
 
 -- | Function type
 data FunType o = FunType {
@@ -134,7 +133,7 @@ tyGuard = "guard"
 tyTable = "table"
 
 instance Pretty PrimType where
-  pretty t = text $ unpack $ case t of
+  pretty t = pretty $ case t of
     TyInteger -> tyInteger
     TyDecimal -> tyDecimal
     TyTime -> tyTime
@@ -153,8 +152,8 @@ data SchemaType =
 
 instance NFData SchemaType
 instance Pretty SchemaType where
-  pretty TyTable   = text $ unpack tyTable
-  pretty TyObject  = text $ unpack tyObject
+  pretty TyTable   = pretty tyTable
+  pretty TyObject  = pretty tyObject
   pretty TyBinding = "binding"
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
@@ -178,12 +177,9 @@ instance Ord (TypeVar v) where
     (TypeVar a _,TypeVar b _) -> a `compare` b
     (SchemaVar a,SchemaVar b) -> a `compare` b
 instance (Pretty v) => Pretty (TypeVar v) where
-  pretty (TypeVar n []) = angles (pretty n)
-  pretty (TypeVar n cs) = angles (pretty n <> commaBrackets (map pretty cs))
-  pretty (SchemaVar n)  = angles (braces (pretty n))
-
-commaBrackets :: [Doc] -> Doc
-commaBrackets = encloseSep "[" "]" ","
+  pretty (TypeVar n []) = angles $ pretty n
+  pretty (TypeVar n cs) = angles $ pretty n <> commaBrackets (map pretty cs)
+  pretty (SchemaVar n)  = angles $ braces $ pretty n
 
 -- | Represent a full or partial schema inhabitant.
 --
@@ -222,7 +218,7 @@ instance (Pretty o) => Pretty (Type o) where
     TyVar n        -> pretty n
     TyUser v       -> pretty v
     TyFun f        -> pretty f
-    TySchema s t p -> pretty s <> colon <> text (showPartial p) <> pretty t
+    TySchema s t p -> pretty s <> colon <> pretty (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
     TyAny          -> "*"

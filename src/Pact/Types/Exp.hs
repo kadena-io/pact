@@ -43,7 +43,6 @@ import Control.Monad
 import Prelude
 import Data.Text (Text,pack)
 import Data.Aeson
-import Data.Char
 import Data.Thyme
 import System.Locale
 import Data.Scientific
@@ -52,9 +51,9 @@ import Data.Decimal
 import Control.DeepSeq
 import Data.Serialize (Serialize)
 import Data.String (IsString)
-import Text.PrettyPrint.ANSI.Leijen
 
 import Pact.Types.Info
+import Pact.Types.Pretty
 import Pact.Types.Type
 
 
@@ -80,11 +79,12 @@ formatLTime = pack . formatTime defaultTimeLocale simpleISO8601
 {-# INLINE formatLTime #-}
 
 instance Pretty Literal where
-    pretty (LString s)  = dquotes $ pretty s
-    pretty (LInteger i) = pretty i
-    pretty (LDecimal r) = text $ show r
-    pretty (LBool b)    = string $ map toLower $ show b
-    pretty (LTime t)    = dquotes $ pretty $ formatLTime t
+    pretty (LString s)   = dquotes $ pretty s
+    pretty (LInteger i)  = pretty i
+    pretty (LDecimal r)  = viaShow r
+    pretty (LBool True)  = "true"
+    pretty (LBool False) = "false"
+    pretty (LTime t)     = dquotes $ pretty $ formatLTime t
 
 instance ToJSON Literal where
     toJSON (LString s)  = String s

@@ -64,8 +64,7 @@ module Pact.Types.Term
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
-   Gas(..),
-   parensSep,commaBraces,commaBrackets,spaceBrackets
+   Gas(..)
    ) where
 
 
@@ -89,8 +88,6 @@ import GHC.Generics (Generic)
 import Data.Decimal
 import Data.Hashable
 import Data.Foldable
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>),dot)
 import qualified Data.Attoparsec.Text as AP
 import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 import Control.DeepSeq
@@ -104,6 +101,7 @@ import Text.Show.Deriving
 
 
 import Pact.Types.Parser
+import Pact.Types.Pretty hiding (dot)
 import Pact.Types.Util
 import Pact.Types.Info
 import Pact.Types.Type
@@ -152,12 +150,6 @@ data KeySet = KeySet {
       _ksKeys :: ![PublicKey]
     , _ksPredFun :: !Name
     } deriving (Eq,Generic,Show)
-
-commaBraces, commaBrackets, spaceBrackets, parensSep :: [Doc] -> Doc
-commaBraces   = encloseSep "{" "}" ","
-commaBrackets = encloseSep "[" "]" ","
-spaceBrackets = encloseSep "[" "]" " "
-parensSep     = parens . sep
 
 instance Pretty KeySet where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
@@ -271,7 +263,7 @@ defTypeRep Defpact = "defpact"
 defTypeRep Defcap = "defcap"
 
 instance Pretty DefType where
-  pretty = text . defTypeRep
+  pretty = pretty . defTypeRep
 
 newtype NativeDefName = NativeDefName Text
     deriving (Eq,Ord,IsString,ToJSON,AsString,Show)
@@ -306,7 +298,7 @@ newtype Gas = Gas Int64
   deriving (Eq,Ord,Num,Real,Integral,Enum,Show)
 
 instance Pretty Gas where
-  pretty (Gas i) = text (show i)
+  pretty (Gas i) = pretty i
 
 instance Semigroup Gas where
   (Gas a) <> (Gas b) = Gas $ a + b
@@ -334,7 +326,7 @@ data BindType n =
 
 instance (Pretty n) => Pretty (BindType n) where
   pretty BindLet = "let"
-  pretty (BindSchema b) = "bind" PP.<> pretty b
+  pretty (BindSchema b) = "bind" <> pretty b
 
 newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show)
@@ -517,9 +509,9 @@ data Def n = Def
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show)
 
-instance (Pretty n) => Pretty (Def n) where
+instance Pretty n => Pretty (Def n) where
   pretty Def{..} = parensSep $
-    [ text $ defTypeRep _dDefType
+    [ pretty $ defTypeRep _dDefType
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
     , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
@@ -533,7 +525,7 @@ data Namespace = Namespace
   } deriving (Eq, Show)
 
 instance Pretty Namespace where
-  pretty Namespace{..} = "(namespace " <> text (asString' _nsName) <> ")"
+  pretty Namespace{..} = "(namespace " <> pretty (asString' _nsName) <> ")"
 
 instance FromJSON Namespace where
   parseJSON = withObject "Namespace" $ \o -> Namespace
@@ -696,9 +688,9 @@ data Example
 
 instance Pretty Example where
   pretty = \case
-    ExecExample    str -> green $ "> " <> pretty str
-    ExecErrExample str -> red   $ "> " <> pretty str
-    LitExample     str -> green $ pretty str
+    ExecExample    str -> annotate Example    $ "> " <> pretty str
+    ExecErrExample str -> annotate BadExample $ "> " <> pretty str
+    LitExample     str -> annotate Example    $ pretty str
 
 instance IsString Example where
   fromString = ExecExample . fromString
@@ -793,36 +785,23 @@ data Term n =
     }
     deriving (Functor,Foldable,Traversable,Eq,Show)
 
--- | Newtype to avoid introducing an orphan instance for @Pretty Var@. Used
--- just for pretty printing (@prettyUnscope@).
-newtype PrettyVar a b = PrettyVar (Var a b)
-
-instance (Pretty a, Pretty b) => Pretty (PrettyVar a b) where
-  pretty (PrettyVar (B b)) = pretty b
-  pretty (PrettyVar (F a)) = pretty a
-
-prettyUnscope
-  :: (Functor f, Pretty (f (PrettyVar b (f a))))
-  => Scope b f a -> Doc
-prettyUnscope = pretty . fmap PrettyVar . unscope
-
 instance Pretty n => Pretty (Term n) where
   pretty = \case
     TModule{..} -> pretty _tModuleDef
-    TList{..} -> spaceBrackets $ pretty <$> _tList
+    TList{..} -> bracketsSep $ pretty <$> _tList
     TDef{..} -> pretty _tDef
-    TNative{..} -> dullgreen ("native `" <> pretty (asString' _tNativeName) <> "`")
+    TNative{..} -> annotate Header ("native `" <> pretty (asString' _tNativeName) <> "`")
       <> nest 2 (
          line
       <> line <> pretty _tNativeDocs
       <> examples
       <> line
-      <> line <> dullgreen "Type:"
+      <> line <> annotate Header "Type:"
       <> line <> align (vsep (pretty <$> toList _tFunTypes))
       ) where examples = case _tNativeExamples of
                 [] -> mempty
                 exs ->
-                     line <> line <> dullgreen "Examples:"
+                     line <> line <> annotate Header "Examples:"
                   <> line <> align (vsep (pretty <$> exs))
     TConst{..} -> "constant " <> pretty _tModule <> "." <> pretty _tConstArg
       <> " " <> pretty _tMeta
@@ -831,18 +810,18 @@ instance Pretty n => Pretty (Term n) where
     TBinding pairs body BindLet _i -> parensSep
       [ "let"
       , parensSep $ pairs <&> \(arg, body') -> pretty arg <+> pretty body'
-      , prettyUnscope body
+      , pretty $ unscope body
       ]
     TBinding pairs body (BindSchema _) _i -> parensSep
       [ commaBraces $ pairs <&> \(arg, body') -> pretty arg <+> pretty body'
-      , prettyUnscope body
+      , pretty $ unscope body
       ]
-    TObject bs _ _ -> blue $ commaBraces $
+    TObject bs _ _ -> annotate Val $ commaBraces $
       fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
-    TLiteral l _ -> blue $ pretty l
+    TLiteral l _ -> annotate Val $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
-    TValue v _ -> blue $ pretty v
+    TValue v _ -> annotate Val $ pretty v
     TStep mEntity exec Nothing _i -> parensSep $
       [ "step"
       ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++

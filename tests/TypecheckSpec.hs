@@ -11,7 +11,7 @@ import Pact.Types.Typecheck
 import Data.Default
 import Control.Lens
 import qualified Data.HashMap.Strict as HM
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import Pact.Types.Pretty
 import Control.Monad
 import Data.Foldable
 import qualified Data.Text as T
@@ -141,4 +141,4 @@ _inferCP = inferModule False "examples/cp/cp.repl" "cp"
 
 -- | prettify output of 'inferFun' runs
 _pretty :: TCResult -> IO ()
-_pretty (f,tc) = PP.putDoc (PP.pretty tc <> PP.hardline <> PP.hardline <> PP.pretty f <> PP.hardline)
+_pretty (f,tc) = putDoc (pretty tc <> hardline <> hardline <> pretty f <> hardline)

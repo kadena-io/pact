@@ -20,17 +20,17 @@ import Control.Lens (makeLenses)
 import Data.Word (Word64)
 import Data.Decimal (Decimal)
 import Control.DeepSeq (NFData)
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
 
 import Pact.Types.Lang
 import Pact.Types.Persistence
+import Pact.Types.Pretty
 
 
 -- | Price per 'Gas' unit.
 newtype GasPrice = GasPrice Decimal
   deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Enum,Show)
 instance Pretty GasPrice where
-  pretty (GasPrice p) = text (show p)
+  pretty (GasPrice p) = viaShow p
 
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
@@ -55,7 +55,7 @@ data GasArgs
 newtype GasLimit = GasLimit Word64
   deriving (Eq,Ord,Num,Real,Integral,Enum,Show)
 instance Pretty GasLimit where
-  pretty (GasLimit g) = text (show g)
+  pretty (GasLimit g) = viaShow g
 
 
 newtype GasModel = GasModel { runGasModel :: Text -> GasArgs -> Gas }

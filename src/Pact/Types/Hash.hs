@@ -12,6 +12,7 @@ module Pact.Types.Hash
 import Prelude hiding (null)
 import Data.ByteString (ByteString)
 
+import Pact.Types.Pretty
 import Pact.Types.Util
 
 

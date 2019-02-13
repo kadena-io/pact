@@ -63,11 +63,11 @@ import Text.Trifecta.Delta
 import Control.Concurrent
 import Data.Monoid (appEndo)
 import System.FilePath
-import Text.PrettyPrint.ANSI.Leijen (pretty)
 
 import Pact.Compile
 import Pact.Parse
 import Pact.Eval
+import Pact.Types.Pretty hiding (line)
 import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl.Lib
@@ -145,8 +145,8 @@ handleParse :: TF.Result [Exp Parsed] -> ([Exp Parsed] -> Repl (Either String a)
 handleParse (TF.Failure e) _ = do
   mode <- use rMode
   let errDoc = _errDoc e
-  outStrLn HErr $ renderPrettyString (colors mode) errDoc
-  return $ Left $ renderCompactString errDoc
+  outStrLn HErr $ renderPrettyString' (colors mode) $ unAnnotate $ fromAnsiWlPprint errDoc
+  return $ Left $ renderCompactString' $ unAnnotate $ fromAnsiWlPprint errDoc
 handleParse (TF.Success es) a = a es
 
 colors :: ReplMode -> RenderColor
@@ -169,8 +169,8 @@ handleCompile src exp a =
             Just (_,d) -> do
                         mode <- use rMode
                         outStr HErr (renderPrettyString (colors mode) (_pDelta d))
-                        outStrLn HErr $ ": error: " ++ renderCompactString (peText er)
-            Nothing -> outStrLn HErr $ "[No location]: " ++ renderCompactString (peText er)
+                        outStrLn HErr $ ": error: " ++ renderCompactString' (peText er)
+            Nothing -> outStrLn HErr $ "[No location]: " ++ renderCompactString' (peText er)
           Left <$> renderErr er
 
 compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
@@ -229,8 +229,8 @@ renderErr a
       let i = case m of
                 Script _ f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
                 _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
-      return $ renderInfo i ++ ":" ++ renderCompactString (peText a)
-  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString (peText a)
+      return $ renderInfo i ++ ":" ++ renderCompactString' (peText a)
+  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peText a)
 
 updateForOp :: Term Name -> Repl (Either String (Term Name))
 updateForOp a = do

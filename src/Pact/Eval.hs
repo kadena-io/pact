@@ -65,7 +65,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Unsafe.Coerce
 import Data.Aeson (Value)
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), Doc, dquotes, line, text, parens)
+import Pact.Types.Pretty
 
 import Pact.Types.Runtime
 import Pact.Gas
@@ -196,7 +196,7 @@ evalNamespace info m = do
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
-  evalUse u >> return (g,tStr $ pack $ "Using " ++ renderCompactString _uModuleName)
+  evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- prepend namespace def to module name
@@ -334,10 +334,19 @@ evaluateDefs info defs = do
       case c of
         AcyclicSCC v -> return v
         CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
-          "Recursion detected: " <> pretty (vs & traverse . _1 %~ fmap (either pretty pretty))
+          "Recursion detected: " <> pretty (vs & traverse . _1 %~ fmap mkSomeDoc)
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
       unifiedDefs = foldl dresolve HM.empty sortedDefs
   traverse (runPure . evalConsts) unifiedDefs
+
+-- | Helper to use 'pretty' on an 'Either'
+newtype SomeDoc = SomeDoc Doc
+
+instance Pretty SomeDoc where
+  pretty (SomeDoc doc) = doc
+
+mkSomeDoc :: (Pretty a, Pretty b) => Either a b -> SomeDoc
+mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 
 traverseGraph :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
 traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) $ \(dn,d) -> do
@@ -524,7 +533,7 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
       Defcap -> evalError ai "Cannot directly evaluate defcap"
-reduceApp (App (TLitString errMsg) _ i) = evalError i $ text $ unpack errMsg
+reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App r _ ai) = evalError ai $ "Expected def: " <> pretty r
 
 -- | precompute "UserApp" cost
@@ -562,7 +571,7 @@ reduceDirect TNative {..} as ai =
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
     appCall fa ai as $ _nativeFun _tNativeFun fa as
 
-reduceDirect (TLitString errMsg) _ i = evalError i $ text $ unpack errMsg
+reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
@@ -588,7 +597,7 @@ applyPact (TList steps _ i) = do
           case (_psRollback,_tStepRollback step) of
             (False,_) -> reduce $ _tStepExec step
             (True,Just rexp) -> reduce rexp
-            (True,Nothing) -> return $ tStr $ renderCompactText $
+            (True,Nothing) -> return $ tStr $ renderCompactText' $
               "No rollback on step " <> pretty _psStep
       case stepEntity of
         Just (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
@@ -620,7 +629,7 @@ installModule ModuleData{..} = do
   (evalRefs . rsLoadedModules) %= HM.insert n _mdModule
 
 msg :: Doc -> Term n
-msg = toTerm . renderCompactText
+msg = toTerm . renderCompactText'
 
 enscope ::  Term Name ->  Eval e (Term Ref)
 enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothing) $ t)
