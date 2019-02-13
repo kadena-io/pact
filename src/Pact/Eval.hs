@@ -299,19 +299,23 @@ loadModule m@Module {} bod1 mi g0 = do
   mapM_ evalUse $ _mImports m
   evaluatedDefs <- evaluateDefs mi (fmap (mangleDefs $ _mName m) mdefs)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
-  mGov <- fmap MDModule $ forM m' $ \g -> case g of
-    TVar (Name n _) _ -> case HM.lookup n solvedDefs of
-      Just r -> case r of
-        (Ref (TDef govDef _)) -> case _dDefType govDef of
-          Defcap -> return $ govDef
-          _ -> evalError (_tInfo g) "Invalid module governance, must be defcap"
-        _ -> evalError (_tInfo g) "Invalid module governance, should be def ref"
-      Nothing -> evalError (_tInfo g) "Unknown module governance reference"
-    _ -> evalError (_tInfo g) "Invalid module governance, should be var"
+  mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert (_mName m) md
   return (g1,mGov)
+
+resolveGovernance :: HM.HashMap Text Ref
+                  -> Module (Term Name) -> Eval e (ModuleDef (Def Ref))
+resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
+    TVar (Name n _) _ -> case HM.lookup n solvedDefs of
+      Just r -> case r of
+        (Ref (TDef govDef _)) -> case _dDefType govDef of
+          Defcap -> return govDef
+          _ -> evalError (_tInfo g) "Invalid module governance, must be defcap"
+        _ -> evalError (_tInfo g) "Invalid module governance, should be def ref"
+      Nothing -> evalError (_tInfo g) "Unknown module governance reference"
+    _ -> evalError (_tInfo g) "Invalid module governance, should be var"
 
 loadInterface :: Interface -> Scope n Term Name -> Info -> Gas
               -> Eval e (Gas,ModuleDef (Def Ref))

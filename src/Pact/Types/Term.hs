@@ -43,7 +43,7 @@ module Pact.Types.Term
    TableName(..),
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
-   ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,
+   ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
    Governance(..),
    ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
@@ -313,7 +313,6 @@ newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
 instance Show TableName where show (TableName s) = show s
 
--- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
@@ -506,7 +505,6 @@ instance FromJSON Interface where
     <*> o .: "imports"
 
 
--- TODO: We need a more expressive, safer ADT for this.
 data ModuleDef g
   = MDModule !(Module g)
   | MDInterface !Interface
@@ -540,6 +538,10 @@ moduleDefName (MDInterface m) = _interfaceName m
 moduleDefCode :: ModuleDef g -> Code
 moduleDefCode (MDModule m) = _mCode m
 moduleDefCode (MDInterface m) = _interfaceCode m
+
+moduleDefMeta :: ModuleDef g -> Meta
+moduleDefMeta (MDModule m) = _mMeta m
+moduleDefMeta (MDInterface m) = _interfaceMeta m
 
 
 

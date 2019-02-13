@@ -68,7 +68,7 @@ import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
                                             asString, getInfo, mdModule,
                                             mdRefMap, tShow)
 import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Term           (DefName (..), moduleDefName)
+import           Pact.Types.Term           (DefName (..), moduleDefName, moduleDefMeta)
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
@@ -534,13 +534,9 @@ data ModelDecl = ModelDecl
 -- Get the model defined in this module
 moduleModelDecl :: ModuleData -> Either ParseFailure ModelDecl
 moduleModelDecl ModuleData{..} = do
-  lst <- parseModuleModelDecl model
+  lst <- parseModuleModelDecl $ Pact._mModel $ moduleDefMeta _mdModule
   let (propList, checkList) = partitionEithers lst
   pure $ ModelDecl (HM.fromList propList) checkList
-  where
-    model = case _mdModule of
-      Pact.MDModule Pact.Module{Pact._mMeta=Pact.Meta _ m}            -> m
-      Pact.MDInterface Pact.Interface{Pact._interfaceMeta=Pact.Meta _ m} -> m
 
 
 moduleFunChecks
