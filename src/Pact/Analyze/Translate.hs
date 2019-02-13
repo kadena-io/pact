@@ -15,6 +15,8 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ViewPatterns               #-}
 
+-- | Translation from typechecked 'AST' to 'Term', while accumulating an
+-- execution graph to be used during symbolic analysis and model reporting.
 module Pact.Analyze.Translate where
 
 import qualified Algebra.Graph              as Alga

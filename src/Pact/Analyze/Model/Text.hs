@@ -7,6 +7,9 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE ViewPatterns        #-}
 
+-- | Rendering concrete models' execution traces to text, for communication
+-- with end users. This relies on the linearization of traces that occurs in
+-- 'Pact.Analyze.Model.Graph'.
 module Pact.Analyze.Model.Text
   ( showModel
   ) where

@@ -8,6 +8,9 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# options_ghc -fno-warn-redundant-constraints #-}
+
+-- | Symbolic evaluation for the functionally pure subset of expressions that
+-- are shared by all three languages: 'Term', 'Prop', and 'Invariant'.
 module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)

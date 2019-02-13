@@ -16,6 +16,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 
+-- | Type definitions and constructors related to symbolic evaluation.
 module Pact.Analyze.Types.Eval where
 
 import           Control.Applicative          (ZipList (..))

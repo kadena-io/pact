@@ -2,6 +2,9 @@
 {-# LANGUAGE Rank2Types   #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- | Converts a concrete model and its execution graph to a linearized
+-- execution trace. This is converted to textual output in
+-- 'Pact.Analyze.Model.Text'.
 module Pact.Analyze.Model.Graph
   ( reachablePaths
   , reachableEdges

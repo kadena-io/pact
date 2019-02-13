@@ -22,6 +22,7 @@
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
+-- | Type definitions and constructors that cross-cut symbolic analysis.
 module Pact.Analyze.Types.Shared where
 
 import           Control.Lens                 (At (at), Index, Iso, IxValue,
@@ -64,7 +65,6 @@ import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
--- import           Data.Type.Bool               (If, type (||))
 import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
@@ -80,7 +80,6 @@ import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util            (Boolean (..))
-
 
 class IsTerm tm where
   singEqTm       :: SingTy ty -> tm ty -> tm ty -> Bool

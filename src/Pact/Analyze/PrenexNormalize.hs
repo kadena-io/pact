@@ -3,7 +3,13 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE Rank2Types #-}
 
-module Pact.Analyze.PrenexNormalize (prenexConvert) where
+-- | Prenex normalization pass, to float all quantifiers to the "outside" of a
+-- 'Prop' expression. This is necessary because SBV assumes that all inputs are
+-- already in prenex normal form:
+-- https://hackage.haskell.org/package/sbv-8.0/docs/Data-SBV.html#g:34.
+module Pact.Analyze.PrenexNormalize
+  ( prenexConvert
+  ) where
 
 import           Data.Bifunctor     (bimap)
 

@@ -7,6 +7,9 @@
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
+
+-- | Entrypoint for symbolic analysis of Pact programs -- for checking
+-- that functions obey properties and maintain invariants.
 module Pact.Analyze.Check
   ( verifyModule
   , renderVerifiedModule

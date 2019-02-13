@@ -4,6 +4,8 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE TemplateHaskell       #-}
+
+-- | Types related to parsing from 'Exp' to 'Prop' and 'Invariant'.
 module Pact.Analyze.Parse.Types where
 
 import           Control.Lens               (makeLenses)

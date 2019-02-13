@@ -6,6 +6,7 @@
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 
+-- | Toplevel module for types related to symbolic analysis of Pact programs.
 module Pact.Analyze.Types
   ( module Pact.Analyze.Types.Languages
   , module Pact.Analyze.Types.Model

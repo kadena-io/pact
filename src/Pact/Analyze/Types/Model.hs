@@ -6,6 +6,7 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
+-- | Types specific to models, tags, and execution graphs and traces.
 module Pact.Analyze.Types.Model where
 
 import qualified Algebra.Graph             as Alga

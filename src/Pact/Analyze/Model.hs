@@ -1,3 +1,6 @@
+-- | Toplevel module for the construction of symbolic and concrete models, and
+-- utilities for rendering concrete models to textual and graphical
+-- representations.
 module Pact.Analyze.Model
   ( module Pact.Analyze.Model.Dot
   , module Pact.Analyze.Model.Graph
