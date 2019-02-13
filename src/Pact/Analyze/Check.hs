@@ -68,7 +68,7 @@ import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
                                             asString, getInfo, mdModule,
                                             mdRefMap, tShow)
 import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Term           (DefName (..), Module (..))
+import           Pact.Types.Term           (DefName (..), moduleDefName)
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
@@ -681,12 +681,6 @@ verifyFunctionInvariants modName tables ref funName = do
 liftEither :: MonadError e m => Either e a -> m a
 liftEither = either throwError return
 
-moduleName :: ModuleData -> ModuleName
-moduleName moduleData =
-  case moduleData ^. mdModule of
-    Interface{..} -> _interfaceName
-    Module{..}    -> _mName
-
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
@@ -760,7 +754,7 @@ verifyModule modules moduleData = runExceptT $ do
       funChecks' = traverse sequence funChecks
 
       modName :: ModuleName
-      modName = moduleName moduleData
+      modName = moduleDefName $ _mdModule moduleData
 
       verifyFunProps :: Ref -> Text -> [Located Check] -> IO [CheckResult]
       verifyFunProps = verifyFunctionProps modName tables
@@ -814,5 +808,5 @@ verifyCheck moduleData funName check = do
   tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
-      Right . head <$> verifyFunctionProps modName tables funRef funName [Located info check]
+      Right . head <$> verifyFunctionProps moduleName tables funRef funName [Located info check]
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
