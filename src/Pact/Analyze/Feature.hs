@@ -6,7 +6,10 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ViewPatterns               #-}
 
--- | Features, availability, and documentation
+-- | Data and functions for generating documentation of the features found in
+-- the invariant and property languages. Note that currently this omits
+-- features found in the Pact term language that do not appear in either
+-- properties or invariants -- e.g. @write@ for modifying a database table.
 module Pact.Analyze.Feature where
 
 import           Control.Lens           (Prism', preview, prism', review)

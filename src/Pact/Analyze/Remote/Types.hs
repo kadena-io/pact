@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
+-- | Types for remote verification of pact programs from GHCJS in the browser.
 module Pact.Analyze.Remote.Types where
 
 import           Control.Lens       (makeLenses)

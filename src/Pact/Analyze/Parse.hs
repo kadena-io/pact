@@ -1,3 +1,4 @@
+-- | Toplevel module for parsers from 'Exp' to 'Prop' and 'Invariant'.
 module Pact.Analyze.Parse
   ( module Pact.Analyze.Parse.Invariant
   , module Pact.Analyze.Parse.Prop

@@ -12,6 +12,9 @@
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
+
+-- | Type definitions and utilities for manipulating 'HList's and singletons for
+-- objects.
 module Pact.Analyze.Types.ObjUtil
   (
   -- * Normalization

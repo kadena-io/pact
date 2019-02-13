@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- | Client for invoking program verification from GHCJS over XHR.
 module Pact.Analyze.Remote.Client
   ( verifyModule
   ) where

@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE ViewPatterns      #-}
+
+-- | Parser from 'Exp' to the 'Invariant' language.
 module Pact.Analyze.Parse.Invariant (expToInvariant) where
 
 import           Control.Applicative      ((<|>))
