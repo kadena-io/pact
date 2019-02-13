@@ -28,7 +28,6 @@ import           Data.List
 import           Data.Text                    (replace)
 import qualified Data.Text                    as T
 import           System.IO
-import           Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), dquotes)
 
 import qualified Pact.Analyze.Feature as Analyze
 import           Pact.Native
@@ -36,6 +35,7 @@ import           Pact.Repl
 import           Pact.Repl.Lib
 import           Pact.Repl.Types
 import           Pact.Types.Lang
+import           Pact.Types.Pretty
 
 main :: IO ()
 main = do
@@ -172,7 +172,7 @@ renderProperties h = do
     showType :: Analyze.Type -> String
     showType (Analyze.TyCon ct) = showConTy ct
     showType (Analyze.TyVar (Analyze.TypeVar (unpack -> tv))) = "_" ++ tv ++ "_"
-    showType (Analyze.TyEnum vals) = renderCompactString $
+    showType (Analyze.TyEnum vals) = renderCompactString' $
       "one of " <> commaBraces (dquotes . pretty <$> vals)
     showType (Analyze.TyList' ty) = "[" ++ showType ty ++ "]"
     showType (Analyze.TyFun dom codom) = foldr

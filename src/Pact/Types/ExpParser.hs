@@ -59,9 +59,9 @@ import Data.Default
 import Data.Text (Text,unpack)
 import qualified Data.Text as T
 import qualified Data.Set as S
-import Text.PrettyPrint.ANSI.Leijen (Doc, text)
 
 import Pact.Types.Exp
+import Pact.Types.Pretty hiding (list, sep)
 import Pact.Types.Runtime (PactError(..),PactErrorType(..))
 import Pact.Types.Info
 
@@ -137,11 +137,11 @@ runCompile act cs a =
     (Left (TrivialError _ (Just err) expect)) -> case err of
       EndOfInput -> case S.toList expect of
         (Tokens (x :| _):_) -> doErr (getInfo x) "unexpected end of input"
-        (Label s:_) -> doErr def (text (toList s))
-        er -> doErr def (text (show er))
-      Label ne -> doErr def (text (toList ne))
-      Tokens (x :| _) -> doErr (getInfo x) $ text $ showExpect expect
-    (Left e) -> doErr def (text (show e))
+        (Label s:_) -> doErr def (pretty (toList s))
+        er -> doErr def (viaShow er)
+      Label ne -> doErr def (pretty (toList ne))
+      Tokens (x :| _) -> doErr (getInfo x) $ pretty $ showExpect expect
+    (Left e) -> doErr def (viaShow e)
     where doErr :: Info -> Doc -> Either PactError a
           doErr i s = Left $ PactError SyntaxError i def s
           showExpect e = case labelText $ S.toList e of

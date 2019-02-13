@@ -27,10 +27,10 @@ module Pact.Native.Ops
 import Data.Decimal
 import Data.Default
 import qualified Data.Map.Strict as M
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), Doc, text)
 
 import Pact.Native.Internal
 import Pact.Types.Runtime
+import Pact.Types.Pretty
 
 import Pact.Eval
 
@@ -322,7 +322,7 @@ binop :: (Decimal -> Decimal -> Either String Decimal) ->
        (Integer -> Integer -> Either String Integer) -> RNativeFun e
 binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
   let hdl (Right v) = return $ toTerm v
-      hdl (Left err) = evalError' fi $ text err <> ": " <> pretty (a,b)
+      hdl (Left err) = evalError' fi $ pretty err <> ": " <> pretty (a,b)
   case (a,b) of
     (LInteger i,LInteger j) -> hdl (i `iop` j)
     (LDecimal i,LDecimal j) -> hdl (i `dop` j)

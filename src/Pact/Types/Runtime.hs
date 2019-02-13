@@ -59,12 +59,12 @@ import Control.Monad.Catch
 import Control.Concurrent.MVar
 import Data.Serialize (Serialize)
 import Data.Hashable
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), Doc, text)
 
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.Persistence
+import Pact.Types.Pretty
 import Pact.Types.Util
 
 
@@ -286,7 +286,7 @@ runEval' :: EvalState -> EvalEnv e -> Eval e a ->
 runEval' s env act =
   runStateT (catches (Right <$> runReaderT (unEval act) env)
               [Handler (\(e :: PactError) -> return $ Left e)
-              ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . text . show $ e)
+              ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . viaShow $ e)
               ]) s
 
 
@@ -303,7 +303,7 @@ call s act = do
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwErr DbError i . text . show) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAll (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
 
 
 --

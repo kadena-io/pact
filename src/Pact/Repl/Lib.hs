@@ -32,7 +32,6 @@ import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
 import Data.Text.Encoding
 import Data.Maybe
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 #else
@@ -53,6 +52,7 @@ import Pact.Eval
 import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
+import Pact.Types.Pretty
 import Pact.Repl.Types
 
 
@@ -338,7 +338,7 @@ bench' i as = do
                 !ts <- mapM reduce as
                 return $! toTerm (length ts)
   case r of
-    Left ex -> evalError' i (text (show ex))
+    Left ex -> evalError' i (viaShow ex)
     Right rpt -> do
            let mean = estPoint (anMean (reportAnalysis rpt))
                sd = estPoint (anStdDev (reportAnalysis rpt))
@@ -370,7 +370,7 @@ tc i as = case as of
           r :: Either CheckerException ([TopLevel Node],[Failure]) <-
             try $ liftIO $ typecheckModule dbg md
           case r of
-            Left (CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> text e)
+            Left (CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> pretty e)
             Right (_,fails) -> case fails of
               [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
               _ -> do
@@ -411,7 +411,7 @@ print' i as = argsError i as
 
 envHash :: RNativeFun LibState
 envHash i [TLitString s] = case fromText' s of
-  Left err -> evalError' i $ "Bad hash value: " <> pretty s <> ": " <> text err
+  Left err -> evalError' i $ "Bad hash value: " <> pretty s <> ": " <> pretty err
   Right h -> do
     setenv eeHash h
     return $ tStr $ "Set tx hash to " <> s

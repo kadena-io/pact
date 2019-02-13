@@ -18,7 +18,7 @@ import Pact.Native.Internal
 import Pact.Types.Runtime
 import Control.Lens
 import Control.Monad.State (state)
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
+import Pact.Types.Pretty
 
 
 capDefs :: NativeModule
@@ -203,6 +203,6 @@ createUserGuard =
             _ -> evalError' i $ "Could not resolve predfun: " <> pretty n
           return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard udata rn)
         Left s -> evalError' i $
-          "Invalid name " <> pretty predfun <> ": " <> text s
+          "Invalid name " <> pretty predfun <> ": " <> pretty s
       Left {} -> evalError' i "Data must be value"
     createUserGuard' i as = argsError i as

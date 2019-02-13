@@ -51,9 +51,9 @@ import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Text.Read (readMaybe)
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
 
 import Pact.Types.Lang
+import Pact.Types.Pretty
 import Pact.Types.Util (AsString(..))
 
 -- | Min, max values that Javascript doesn't mess up.
@@ -164,7 +164,7 @@ data Persistable =
 instance Pretty Persistable where
     pretty (PLiteral l) = pretty l
     pretty (PGuard k) = pretty k
-    pretty (PValue v) = text $ BSL.toString $ encode v
+    pretty (PValue v) = pretty $ BSL.toString $ encode v
 instance ToTerm Persistable where
     toTerm (PLiteral l) = toTerm l
     toTerm (PGuard k) = toTerm k
@@ -293,7 +293,7 @@ instance NFData TxId
 instance Show TxId where
   show (TxId s) = show s
 instance Pretty TxId where
-  pretty (TxId s) = text (show s)
+  pretty (TxId s) = viaShow s
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
 instance AsString TxId where asString = pack . show
 

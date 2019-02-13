@@ -25,9 +25,9 @@ import Control.Monad.Reader ()
 import Control.Monad.State
 import Data.Default
 import Data.Typeable
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
 
 import Pact.Persist hiding (compileQuery)
+import Pact.Types.Pretty
 
 data PValue = forall a . (PactValue a, Pretty a) => PValue a
 instance Show PValue where show (PValue a) = show a

@@ -62,7 +62,6 @@ import Data.List
 import Data.Function (on)
 import Data.ByteString.Lazy (toStrict)
 import Data.Text.Encoding
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty), text)
 
 
 import Pact.Eval
@@ -76,6 +75,7 @@ import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
 import Pact.Types.Hash
+import Pact.Types.Pretty hiding (list)
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -476,7 +476,7 @@ c = mkTyVar "c" []
 map' :: NativeFun e
 map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply (_tApp app) . pure)
-           t -> evalError' i $ "map: expecting list: " <> text (abbrev t)
+           t -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
 map' i as = argsError' i as
 
 list :: RNativeFun e
@@ -496,7 +496,7 @@ fold' :: NativeFun e
 fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
-           t -> evalError' i $ "fold: expecting list: " <> text (abbrev t)
+           t -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
 fold' i as = argsError' i as
 
 
@@ -508,7 +508,7 @@ filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' o
                            case t of
                              (TLiteral (LBool True) _) -> return [a']
                              _ -> return []) -- hmm, too permissive here, select is stricter
-           t -> evalError' i $ "filter: expecting list: " <> text (abbrev t)
+           t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
 filter' i as = argsError' i as
 
 length' :: RNativeFun e

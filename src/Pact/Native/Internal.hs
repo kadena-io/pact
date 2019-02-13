@@ -45,7 +45,7 @@ import Control.Arrow
 import qualified Data.Aeson.Lens as A
 import Bound
 import qualified Data.HashMap.Strict as HM
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
+import Pact.Types.Pretty
 
 import Pact.Types.Runtime
 import Pact.Types.Native

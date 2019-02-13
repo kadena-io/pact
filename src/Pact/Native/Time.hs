@@ -26,8 +26,8 @@ import Data.Thyme
 import Data.Decimal
 import System.Locale
 import Data.AffineSpace
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
 
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Native.Internal
 

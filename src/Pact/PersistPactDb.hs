@@ -35,7 +35,6 @@ import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.State.Strict
 import Data.Typeable
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
 
 import Data.Aeson hiding ((.=))
 import GHC.Generics
@@ -43,6 +42,7 @@ import GHC.Generics
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Persist as P
 import Pact.Types.Logger

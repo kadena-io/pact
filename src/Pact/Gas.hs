@@ -9,7 +9,7 @@ import Pact.Types.Runtime
 import Control.Lens
 import Control.Arrow
 import Data.Word
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
+import Pact.Types.Pretty
 
 -- | Compute gas for some application or evaluation.
 computeGas :: Either (Info,Text) FunApp -> GasArgs -> Eval e Gas

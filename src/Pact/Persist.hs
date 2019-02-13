@@ -23,8 +23,8 @@ import Data.Aeson
 import Data.String
 import Data.Hashable
 import Data.Typeable
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
 
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 
 type Persist s a = s -> IO (s,a)

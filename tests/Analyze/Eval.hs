@@ -22,8 +22,7 @@ import qualified Data.Map.Strict          as Map
 import           Data.SBV                 (literal, unliteral, writeArray)
 import qualified Data.SBV.Internals       as SBVI
 import qualified Data.Text                as T
-import           Text.PrettyPrint.ANSI.Leijen
-                                          (Doc, text)
+import           Pact.Types.Pretty        (Doc, viaShow, renderCompactString')
 
 import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
@@ -40,7 +39,7 @@ import           Pact.Repl                (initPureEvalEnv)
 import           Pact.Repl.Types          (LibState)
 import           Pact.Types.Runtime       (EvalEnv, PactError (..),
                                            PactErrorType (EvalError), eeMsgBody,
-                                           renderCompactString, runEval)
+                                           runEval)
 import qualified Pact.Types.Term          as Pact
 
 import           Analyze.Gen
@@ -78,7 +77,7 @@ pactEval etm gState = (do
       _            -> throw e
       )
     `catch` (\(pe@(PactError err _ _ msg) :: PactError) ->
-      let msgStr = renderCompactString msg in case err of
+      let msgStr = renderCompactString' msg in case err of
         EvalError ->
           if "Division by 0" `isPrefixOf` msgStr ||
              "Negative precision not allowed" `isPrefixOf` msgStr
@@ -87,7 +86,7 @@ pactEval etm gState = (do
         _ -> case msgStr of
           "(enforce)"     -> pure $ EvalErr msg
           "(enforce-one)" -> pure $ EvalErr msg
-          ""              -> pure $ UnexpectedErr $ text $ show pe
+          ""              -> pure $ UnexpectedErr $ viaShow pe
           _               -> pure $ UnexpectedErr msg)
 
 -- Evaluate a term symbolically

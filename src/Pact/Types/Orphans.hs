@@ -17,7 +17,6 @@ import Data.Serialize
 import Data.Thyme
 import Data.Thyme.Internal.Micro
 import Data.Decimal
-import Data.Aeson (Value(..))
 import qualified Data.Aeson as A
 import Text.Trifecta.Combinators (DeltaParsing(..))
 import Text.Trifecta.Delta
@@ -25,13 +24,8 @@ import qualified Data.Attoparsec.Text as AP
 import qualified Data.Attoparsec.Internal.Types as APT
 import Data.Text (Text)
 import Data.Text.Encoding
-import qualified Data.Text as T
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Data.Default
 import Control.DeepSeq
-import qualified Data.HashMap.Strict as HM
-import Data.Foldable (toList)
 
 instance Serialize Micro
 instance Serialize NominalDiffTime
@@ -65,19 +59,7 @@ instance DeltaParsing AP.Parser where
 attoPos :: APT.Parser n APT.Pos
 attoPos = APT.Parser $ \t pos more _lose win -> win t pos more pos
 
-instance Pretty Text where pretty = PP.text . T.unpack
 instance Default Text where def = ""
 instance Serialize Text where
   put = put . encodeUtf8
   get = decodeUtf8 <$> get
-
-instance Pretty Value where
-  pretty = \case
-    Object hm -> PP.encloseSep "{" "}" ","
-      $ fmap (\(k, v) -> PP.dquotes (pretty k) <> ": " <> pretty v)
-      $ HM.toList hm
-    Array values -> PP.encloseSep "[" "]" " " $ pretty <$> toList values
-    String str -> PP.dquotes $ pretty str
-    Number scientific -> PP.text $ show scientific
-    Bool b -> pretty b
-    Null -> "null"

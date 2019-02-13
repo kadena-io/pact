@@ -35,7 +35,6 @@ import Control.Monad.State
 import Control.Arrow ((&&&),first)
 import Prelude hiding (exp)
 import Bound
-import Text.PrettyPrint.ANSI.Leijen (putDoc)
 import Control.Exception hiding (try)
 import Data.String
 import Control.Lens hiding (prism)
@@ -55,6 +54,7 @@ import Pact.Types.Util
 import Pact.Types.Info
 import Pact.Types.Type
 import Pact.Types.Runtime (PactError)
+import Pact.Types.Pretty hiding (nest, sep)
 
 
 data ModuleState = ModuleState
@@ -594,7 +594,7 @@ _compileF f = _parseF f >>= _compile id
 
 _compile :: (ParseState CompileState -> ParseState CompileState) ->
             TF.Result ([Exp Parsed],String) -> IO (Either PactError [Term Name])
-_compile _ (TF.Failure f) = putDoc (TF._errDoc f) >> error "Parse failed"
+_compile _ (TF.Failure f) = putDoc (fromAnsiWlPprint (TF._errDoc f)) >> error "Parse failed"
 _compile sfun (TF.Success (a,s)) = return $ forM a $ \e ->
   let ei = mkStringInfo s <$> e
   in runCompile topLevel (sfun (initParseState ei)) ei
@@ -622,7 +622,7 @@ _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
     p <- _parseF f
     rs <- case p of
-            (TF.Failure e) -> putDoc (TF._errDoc e) >> error "Parse failed"
+            (TF.Failure e) -> putDoc (fromAnsiWlPprint (TF._errDoc e)) >> error "Parse failedDoc"
             (TF.Success (es,s)) -> return $ map (compile (mkStringInfo s)) es
     case sequence rs of
       Left e -> throwIO $ userError (show e)

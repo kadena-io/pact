@@ -26,16 +26,13 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Char
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-import Text.PrettyPrint.ANSI.Leijen.Internal (Doc(..))
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Concurrent
 import Control.Lens hiding (Empty)
 import Control.DeepSeq
 import Data.Hashable (Hashable)
 import Data.Serialize (Serialize)
 import qualified Data.Serialize as S
-
+import Pact.Types.Pretty
 
 
 class ParseText a where
@@ -71,7 +68,7 @@ newtype Hash = Hash { unHash :: ByteString }
 instance Show Hash where
   show (Hash h) = show $ B16.encode h
 instance Pretty Hash where
-  pretty = text . unpack . asString
+  pretty = pretty . asString
 instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
 instance NFData Hash
 
@@ -141,53 +138,6 @@ unsafeFromJSON v = case fromJSON v of Success a -> a; Error e -> error ("JSON pa
 outputJSON :: ToJSON a => a -> IO ()
 outputJSON a = BSL8.putStrLn $ encode a
 
-
-data RenderColor = RColor | RPlain
-
-renderString :: Pretty a => (Doc -> SimpleDoc) -> RenderColor -> a -> String
-renderString renderf colors p =
-  let display = case colors of
-        RColor -> displayS . renderf         . pretty
-        RPlain -> displayS . renderf . plain . pretty
-  in display p ""
-
-renderCompactString :: Pretty a => a -> String
-renderCompactString = renderString renderReallyCompact RPlain
-
-renderCompactText :: Pretty a => a -> Text
-renderCompactText = pack . renderCompactString
-
--- This is the same as @renderCompact@ from the pretty printing package, except
--- that printer inserts line breaks every chance it gets whereas this function
--- never inserts them.
-renderReallyCompact :: Doc -> SimpleDoc
-renderReallyCompact doc
-    = scan 0 [doc]
-    where
-      scan _ []     = SEmpty
-      scan k (d:ds) = case d of
-                        Fail                    -> SFail
-                        Empty                   -> scan k ds
-                        Char c                  -> let k' = k+1 in seq k' (SChar c (scan k' ds))
-                        Text l s                -> let k' = k+l in seq k' (SText l s (scan k' ds))
-                        FlatAlt _ x             -> scan k (x:ds)
-                        Line                    -> SLine 0 (scan 0 ds)
-                        Cat x y                 -> scan k (x:y:ds)
-                        Nest _ x                -> scan k (x:ds)
-                        Union _ y               -> scan k (y:ds)
-                        Column f                -> scan k (f k:ds)
-                        Columns f               -> scan k (f Nothing:ds)
-                        Nesting f               -> scan k (f 0:ds)
-                        Color _ _ _ x           -> scan k (x:ds)
-                        Intensify _ x           -> scan k (x:ds)
-                        Italicize _ x           -> scan k (x:ds)
-                        Underline _ x           -> scan k (x:ds)
-                        RestoreFormat _ _ _ _ _ -> scan k ds
-
-renderPrettyString :: Pretty a => RenderColor -> a -> String
-renderPrettyString = renderString (renderPretty 0.4 100)
-
-
 -- | Provide unquoted string representation.
 class AsString a where asString :: a -> Text
 instance AsString String where asString = pack
@@ -210,15 +160,6 @@ modifyingMVar mv l f = modifyMVar_ mv $ \ps -> (\b -> set l b ps) <$> f (view l 
 useMVar :: MVar s -> Getting a s a -> IO a
 useMVar e l = view l <$> readMVar e
 {-# INLINE useMVar #-}
-
--- | Prelude-friendly replacement for <$>
-infixr 5 <$$>
-(<$$>) :: Doc -> Doc -> Doc
-(<$$>) = (PP.<$>)
-
--- | Pretty show.
-pshow :: Show a => a -> Doc
-pshow = text . show
 
 tShow :: Show a => a -> Text
 tShow = pack . show

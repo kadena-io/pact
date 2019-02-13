@@ -47,10 +47,9 @@ import qualified Data.Set as S
 import Control.Monad.State
 import Data.Aeson hiding (Object)
 import Data.Foldable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$$>),(<>))
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import Pact.Types.Lang hiding (App)
+import Pact.Types.Pretty
 import Pact.Types.Native
 
 
@@ -84,7 +83,7 @@ instance Ord TcId where
   a <= b = _tiId a < _tiId b || (_tiId a == _tiId b && _tiName a <= _tiName b)
 -- show instance is important, used as variable name
 instance Show TcId where show TcId {..} = unpack _tiName ++ show _tiId
-instance Pretty TcId where pretty = string . show
+instance Pretty TcId where pretty = viaShow
 
 
 -- | Role of an AST in an overload.
@@ -104,11 +103,14 @@ data Overload m = Overload {
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
 
 instance Pretty m => Pretty (Overload m) where
-  pretty Overload {..} =
-    "Types:" <$$> indent 2 (vsep (map pshow $ toList _oTypes)) <$$>
-    "Roles:" <$$> indent 2 (vsep (map (\(k,v) -> pshow k <> colon <+> pretty v) (M.toList _oRoles))) <$$>
-    "Solution:" <+> pshow _oSolved <$$>
-    "Special:" <+> pshow _oSpecial
+  pretty Overload {..} = vsep
+    [ "Types:"
+    , indent 2 $ vsep $ map viaShow $ toList _oTypes
+    , "Roles:"
+    , indent 2 $ vsep $ map (\(k,v) -> viaShow k <> colon <+> pretty v) (M.toList _oRoles)
+    , "Solution:" <+> viaShow _oSolved
+    , "Special:" <+> viaShow _oSpecial
+    ]
 
 data Failure = Failure TcId String deriving (Eq,Ord,Show)
 
@@ -130,19 +132,21 @@ mkTcState :: Int -> Bool -> TcState
 mkTcState sup dbg = TcState dbg sup def def def def def
 
 instance Pretty TcState where
-  pretty TcState {..} =
-    "Overloads:" <$$>
-    indent 2 (vsep $ map (\(k,v) -> pretty k <> colon <+> pretty v) $ M.toList _tcOverloads) <$$>
-    "AstToVar:" <$$>
-    indent 2 (vsep (map (\(k,v) -> pretty k <> colon <+> pretty v) (M.toList _tcAstToVar))) <$$>
-    "VarToTypes:" <$$>
-    indent 2 (vsep $ map (\(k,v) -> pshow k <> colon <+> pretty v) $ M.toList _tcVarToTypes) <$$>
-    prettyFails _tcFailures
-    <> hardline
+  pretty TcState {..} = vsep
+    [ "Overloads:"
+    , indent 2 $ vsep $ map (\(k,v) -> pretty k <> colon <+> pretty v) $ M.toList _tcOverloads
+    , "AstToVar:"
+    , indent 2 $ vsep $ map (\(k,v) -> pretty k <> colon <+> pretty v) $ M.toList _tcAstToVar
+    , "VarToTypes:"
+    , indent 2 $ vsep $ map (\(k,v) -> viaShow k <> colon <+> pretty v) $ M.toList _tcVarToTypes
+    , prettyFails _tcFailures
+    ] <> hardline
 
 prettyFails :: Foldable f => f Failure -> Doc
-prettyFails fs = "Failures:" <$$>
-    indent 2 (vsep $ map (string.show) (toList fs))
+prettyFails fs = vsep
+  [ "Failures:"
+  , indent 2 $ vsep $ map viaShow $ toList fs
+  ]
 
 
 -- | Typechecker monad.
@@ -159,9 +163,9 @@ data PrimValue =
   PrimValue Value
   deriving (Eq,Show)
 instance Pretty PrimValue where
-  pretty (PrimLit l) = text (show l)
-  pretty (PrimGuard k) = text (show k)
-  pretty (PrimValue v) = text (show v)
+  pretty (PrimLit   l) = viaShow l
+  pretty (PrimGuard k) = viaShow k
+  pretty (PrimValue v) = viaShow v
 
 
 -- | A top-level module production.
@@ -190,10 +194,9 @@ data TopLevel t =
   }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 instance Pretty t => Pretty (TopLevel t) where
-  pretty (TopFun f _m) = "Fun" <$$> pretty f
+  pretty (TopFun f _m) = vsep [ "Fun",  pretty f ]
   pretty (TopConst _i n t v _m) =
-    "Const" <+> pretty n <> colon <> pretty t <$$>
-    indent 2 (pretty v)
+    "Const" <+> pretty n <> colon <> vsep [ pretty t, indent 2 (pretty v) ]
   pretty (TopTable _i n t _m) =
     "Table" <+> pretty n <> colon <> pretty t
   pretty (TopUserType _i t _m) = "UserType" <+> pretty t
@@ -223,19 +226,21 @@ data Fun t =
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
 instance Pretty t => Pretty (Fun t) where
-  pretty FNative {..} = "(native " <> pretty _fName <$$>
-    indent 2 ("::" <+> align (vsep (map pretty (toList _fTypes)))) <>
-      (case _fSpecial of
-         Nothing -> mempty
-         Just (_,SBinding bod) -> mempty <$$> indent 2 (pretty bod)
-         _ -> mempty) <$$>
-      ")"
-  pretty FDefun {..} = "(defun " <> pretty _fName <$$>
-    indent 2 ("::" <+> pretty _fType) <$$>
-    indent 2 ("(" <$$>
-              indent 2 (vsep (map pretty _fArgs)) <$$> ")") <$$>
-    indent 2 (vsep (map pretty _fBody)) <$$>
-    ")"
+  pretty FNative {..} = parensSep
+    [ "(native " <> pretty _fName
+    , indent 2 ("::" <+> align (vsep (map pretty (toList _fTypes)))) <>
+        (case _fSpecial of
+           Nothing -> mempty
+           Just (_,SBinding bod) -> line <> indent 2 (pretty bod)
+           _ -> mempty)
+    ]
+  pretty FDefun {..} = parensSep
+    [ "defun " <> pretty _fName
+    , indent 2 $ "::" <+> pretty _fType
+    , indent 2 $ sep [ "(", indent 2 (sep (map pretty _fArgs)), ")" ]
+    , indent 2 $ vsep (map pretty _fBody)
+    , ""
+    ]
 
 
 -- | Pair an AST with its type.
@@ -274,7 +279,7 @@ instance (Show n) => Show (AstBindType n) where
   show AstBindInlinedCallArgs = "inlinedCallArgs"
 instance (Pretty n) => Pretty (AstBindType n) where
   pretty AstBindLet = "let"
-  pretty (AstBindSchema b) = "bind" PP.<> pretty b
+  pretty (AstBindSchema b) = "bind" <> pretty b
   pretty AstBindInlinedCallArgs = "inlinedCallArgs"
 
 -- | Inlined AST.
@@ -320,29 +325,44 @@ data AST n =
 
 instance Pretty t => Pretty (AST t) where
   pretty a = case a of
-     Prim {..} -> pn <+> equals <+> pretty _aPrimValue
+     Prim {..} -> sep [ pn, equals, pretty _aPrimValue ]
      Var {..} -> pn
-     Object {..} -> pn <$$> "{" <$$>
-       indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aObject)) <$$>
-       "}"
-     List {..} -> pn <$$> "[" <$$> indent 2 (vsep (map pretty _aList)) <$$> "]"
-     Binding {..} -> pn <$$> "(" <> pretty _aBindType <$$>
-       indent 2 (vsep (map (\(k,v) ->
-                              "(" <$$>
-                              indent 2 (pretty k <+> colon <$$>
-                                        indent 2 (pretty v)) <$$>
-                              ")" ) _aBindings)) <$$>
-       indent 2 (vsep (map pretty _aBody)) <$$> ")"
-     App {..} -> pn <$$>
-       indent 2 ("(" <$$> indent 2 (vsep (map pretty _aAppArgs)) <$$> ")") <$$>
-       indent 2 (pretty _aAppFun)
+     Object {..} -> sep
+       [ pn
+       , bracesSep
+         [ indent 2 $ vsep $ _aObject <&> \(k,v) ->
+           pretty k <> sep [ ":", indent 4 (pretty v) ]
+         ]
+       ]
+     List {..} -> sep
+       [ pn
+       , spaceBrackets [ indent 2 $ vsep $ map pretty _aList ]
+       ]
+     Binding {..} -> sep
+       [ pn
+       , parensSep
+         [ pretty _aBindType
+         , indent 2 $ vsep $ _aBindings <&> \(k,v) -> parensSep
+           [ indent 2 $ pretty k <+> sep [ colon, indent 2 (pretty v) ]
+           ]
+         , indent 2 $ vsep $ map pretty _aBody
+         ]
+       ]
+     App {..} -> sep
+       [ pn
+       , indent 2 $ parensSep [ indent 2 $ vsep $ map pretty _aAppArgs ]
+       , indent 2 $ pretty _aAppFun
+       ]
      Table {..} -> pn
      Step {..} ->
-       let rb = case _aRollback of
-                  Nothing -> (<> empty)
-                  Just r -> (<$$> "Rollback:" <$$> indent 2 (pretty r))
-       in rb (pn <$$> indent 2 ("Entity" <> colon <+> pretty _aEntity) <$$>
-              indent 2 (pretty _aExec))
+       let rb x = case _aRollback of
+                  Nothing -> x
+                  Just r -> sep [ x, "Rollback:", indent 2 (pretty r) ]
+       in rb $ sep
+            [ pn
+            , indent 2 $ "Entity" <> colon <+> pretty _aEntity
+            , indent 2 $ pretty _aExec
+            ]
    where pn = pretty (_aNode a)
 
 

@@ -32,7 +32,7 @@ import Data.Aeson (toJSON)
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Text.PrettyPrint.ANSI.Leijen (Pretty(pretty))
+import Pact.Types.Pretty
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
