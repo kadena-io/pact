@@ -76,10 +76,10 @@ data ScopeType
   deriving (Eq, Show)
 
 data TraceEvent
-  = TraceRead Schema (Located TagId)
-  | TraceWrite WriteType Schema (Located TagId)
+  = TraceRead ESchema (Located TagId)
+  | TraceWrite WriteType ESchema (Located TagId)
   | TraceAssert Recoverability (Located TagId)
-  | TraceAuth Recoverability (Located TagId)
+  | TraceGuard Recoverability (Located TagId)
   | TraceSubpathStart Path
   | TracePushScope Natural ScopeType [Located Binding]
   | TracePopScope Natural ScopeType TagId EType
@@ -107,39 +107,38 @@ data Concreteness
 data Access
   = Access
     { _accRowKey  :: S RowKey
-    , _accObject  :: Object
+    , _accObject  :: UObject
     , _accSuccess :: SBV Bool
     }
   deriving (Eq, Show)
 
-data Authorization
-  = Authorization
-    { _authKeySet  :: S KeySet
-    , _authSuccess :: SBV Bool
+data GuardEnforcement
+  = GuardEnforcement
+    { _geGuard   :: S Guard
+    , _geSuccess :: SBV Bool
     }
   deriving (Eq, Show)
 
 data ModelTags (c :: Concreteness)
   = ModelTags
-    { _mtVars    :: Map VarId (Located (Unmunged, TVal))
+    { _mtVars              :: Map VarId (Located (Unmunged, TVal))
     -- ^ each intermediate variable binding
-    , _mtReads   :: Map TagId (Located Access)
+    , _mtReads             :: Map TagId (Located Access)
     -- ^ one per each read
-    , _mtWrites  :: Map TagId (Located Access)
+    , _mtWrites            :: Map TagId (Located Access)
     -- ^ one per each write
-    , _mtAsserts :: Map TagId (Located (SBV Bool))
+    , _mtAsserts           :: Map TagId (Located (SBV Bool))
     -- ^ one per non-keyset enforcement
-    , _mtAuths   :: Map TagId (Located Authorization)
-    -- ^ one per each authorization check. note that this includes uses of
-    -- @(enforce-keyset ks)@ and @(enforce-keyset "ks")@ calls.
-    , _mtResult  :: (TagId, Located TVal)
+    , _mtGuardEnforcements :: Map TagId (Located GuardEnforcement)
+    -- ^ one per each guard enforcement.
+    , _mtResult            :: (TagId, Located TVal)
     -- ^ return value of the function being checked
-    , _mtPaths   :: Map Path (SBV Bool)
+    , _mtPaths             :: Map Path (SBV Bool)
     -- ^ one at the start of the program, and on either side of the branches of
     -- each conditional. after a conditional, the path from before the
     -- conditional is resumed. we also split execution for each case of
     -- @enforce-one@.
-    , _mtReturns :: Map TagId TVal
+    , _mtReturns           :: Map TagId TVal
     -- ^ return values from function calls
     }
   deriving (Eq, Show)
@@ -151,7 +150,7 @@ data Model (c :: Concreteness)
     , _modelTags           :: ModelTags c
     -- ^ free values to be constrained to equal values during analysis;
     -- allocated post-translation.
-    , _modelKsProvs        :: Map TagId Provenance
+    , _modelGuardProvs     :: Map TagId Provenance
     -- ^ keyset 'Provenance's from analysis
     , _modelExecutionGraph :: ExecutionGraph
     -- ^ execution graph corresponding to the program for reporting linearized
@@ -170,12 +169,11 @@ data ExecutionTrace
 data Goal
   = Satisfaction -- ^ Find satisfying model
   | Validation   -- ^ Prove no invalidating model exists
-
-deriving instance Eq Goal
+  deriving (Eq, Show)
 
 makePrisms ''TraceEvent
 makeLenses ''ExecutionGraph
 makeLenses ''Access
-makeLenses ''Authorization
+makeLenses ''GuardEnforcement
 makeLenses ''ModelTags
 makeLenses ''Model
