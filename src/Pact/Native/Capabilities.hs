@@ -40,7 +40,7 @@ tvA = mkTyVar "a" []
 
 withCapability :: NativeDef
 withCapability =
-  defNative (specialForm WithCapability) withCapability'
+  defNative (specialForm WithCapability) (applyCap True)
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
   \production. Given the unique token specified by this application, ensure \
@@ -53,35 +53,42 @@ withCapability =
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
   \but simply execute BODY. \
    \`$(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))`"
-  where
-    withCapability' :: NativeFun e
-    withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
-      -- erased composed
-      evalCapabilities . capComposed .= []
-      -- evaluate in-module cap
-      grantedCap <- evalCap True (_tApp c)
-      -- grab composed caps and clear composed state
-      composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
-                                     set (evalCapabilities . capComposed) [] s)
-      r <- reduceBody body
-      -- only revoke if newly granted
-      forM_ grantedCap $ \newcap -> do
-        revokeCapability newcap
-        mapM_ revokeCapability composedCaps
-      return r
-    withCapability' i as = argsError' i as
 
 -- | This is the only place we can do an external call to a capability,
 -- using 'evalCap False'. This allows us to call magical capbilities
 -- within the coin contract code.
 grantCapability :: NativeDef
 grantCapability =
-  defNative "grant-capability" grantCapability'
-  (funType tvA [("capability", TyFun $ funType' tTyBool []), ("body", TyList TyAny)])
-  ""
-  where
-    grantCapability' :: NativeFun e
-    grantCapability' = undefined
+  defNative "grant-capability" (applyCap False)
+  (funType tTyBool [("capability", TyFun $ funType' tTyBool []),("body", TyList TyAny)])
+  "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
+  \production. Given the unique token specified by this application, ensure \
+  \that the token is granted in the environment during execution of BODY. \
+  \'grant-capability' can obe called outside of a module module that declares the \
+  \corresponding 'defcap', otherwise module-admin rights are required. \
+  \If token is not present, the CAPABILITY is applied, with successful completion \
+  \resulting in the installation/granting of the token, which will then be revoked \
+  \upon completion of BODY. Nested 'grant-capability' calls for the same token \
+  \will detect the presence of the token, and will not re-apply CAPABILITY, \
+  \but simply execute BODY. \
+   \`$(grant-capability (UPDATE-USERS id) (my-module.update-users users id { salary: new-salary }))`"
+
+applyCap :: Bool -> NativeFun e
+applyCap inModule i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
+  -- erase composed
+  evalCapabilities . capComposed .= []
+  -- evaluate in-module cap
+  grantedCap <- evalCap inModule (_tApp c)
+  -- grab composed caps and clear composed state
+  composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
+                                 set (evalCapabilities . capComposed) [] s)
+  r <- reduceBody body
+  -- only revoke if newly granted
+  forM_ grantedCap $ \newcap -> do
+    revokeCapability newcap
+    mapM_ revokeCapability composedCaps
+  return r
+applyCap _ i as = argsError' i as
 
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
