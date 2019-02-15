@@ -181,7 +181,7 @@ evalCore (ObjMerge
     S _ obj1' <- eval obj1
     S _ obj2' <- eval obj2
     case sing @a of
-      SObjectUnsafe schema -> pure $ sansProv $
+      SObject schema -> pure $ sansProv $
         evalObjMerge' (obj1' :< schema1) (obj2' :< schema2) schema
       _ -> throwErrorNoLoc "this must be an object"
 evalCore ObjMerge{} = throwErrorNoLoc "both types must be objects"
