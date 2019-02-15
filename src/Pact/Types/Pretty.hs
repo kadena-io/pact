@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -56,12 +57,13 @@ import           Data.Int
 import           Data.Text            (Text, unpack)
 import           Data.Text.Prettyprint.Convert.AnsiWlPprint (fromAnsiWlPprint)
 import           Data.Text.Prettyprint.Doc
-  (SimpleDocStream, annotate, unAnnotate, layoutCompact, layoutPretty,
+  (SimpleDocStream, annotate, unAnnotate, layoutPretty,
   defaultLayoutOptions, vsep, hsep, (<+>), colon, angles, list, braces,
   brackets, encloseSep, parens, sep, line, dquotes, viaShow, punctuate, dot,
   encloseSep, space, nest, align, hardline, tupled, indent, equals, reAnnotate,
   reAnnotateS)
 import qualified Data.Text.Prettyprint.Doc as PP
+import qualified Data.Text.Prettyprint.Doc.Internal.Type as PP
 import qualified Data.Text.Prettyprint.Doc.Render.String as PP
 import           Data.Text.Prettyprint.Doc.Render.Terminal
   (color, Color(..), AnsiStyle)
@@ -105,8 +107,8 @@ commaBraces, commaBrackets, bracketsSep, parensSep, bracesSep :: [Doc] -> Doc
 commaBraces   = encloseSep "{" "}" ","
 commaBrackets = encloseSep "[" "]" ","
 bracketsSep   = brackets . sep
-parensSep     = parens . sep
-bracesSep     = braces . sep
+parensSep     = parens   . sep
+bracesSep     = braces   . sep
 
 renderString'
   :: (Doc -> SimpleDocStream Annot) -> RenderColor -> Doc -> String
@@ -123,18 +125,39 @@ colorFun = color . \case
   Example    -> Green
   BadExample -> Red
 
+-- | The same as @layoutCompact@, except this printer never inserts a line
+-- break if it's given the choice (at @FlatAlt@).
+layoutReallyCompact :: PP.Doc ann -> SimpleDocStream ann
+layoutReallyCompact doc = scan 0 [doc]
+  where
+    scan _ [] = PP.SEmpty
+    scan !col (d:ds) = case d of
+        PP.Fail            -> PP.SFail
+        PP.Empty           -> scan col ds
+        PP.Char c          -> PP.SChar c (scan (col+1) ds)
+        PP.Text l t        -> let !col' = col+l in PP.SText l t (scan col' ds)
+        PP.FlatAlt _ y     -> scan col (y:ds)
+        PP.Line            -> PP.SLine 0 (scan 0 ds)
+        PP.Cat x y         -> scan col (x:y:ds)
+        PP.Nest _ x        -> scan col (x:ds)
+        PP.Union _ y       -> scan col (y:ds)
+        PP.Column f        -> scan col (f col:ds)
+        PP.WithPageWidth f -> scan col (f PP.Unbounded : ds)
+        PP.Nesting f       -> scan col (f 0 : ds)
+        PP.Annotated _ x   -> scan col (x:ds)
+
 renderCompactString :: Pretty a => a -> String
-renderCompactString = renderString' layoutCompact RPlain . pretty
+renderCompactString = renderString' layoutReallyCompact RPlain . pretty
 
 renderCompactString' :: Doc -> String
-renderCompactString' = renderString' layoutCompact RPlain
+renderCompactString' = renderString' layoutReallyCompact RPlain
 
 renderCompactText :: Pretty a => a -> Text
 renderCompactText
-  = RText.renderStrict . layoutCompact . reAnnotate colorFun . pretty
+  = RText.renderStrict . layoutReallyCompact . reAnnotate colorFun . pretty
 
 renderCompactText' :: PP.Doc Annot -> Text
-renderCompactText' = Term.renderStrict . layoutCompact . reAnnotate colorFun
+renderCompactText' = Term.renderStrict . layoutReallyCompact . reAnnotate colorFun
 
 renderPrettyString :: Pretty a => RenderColor -> a -> String
 renderPrettyString rc
@@ -150,7 +173,7 @@ instance Pretty Value where
       $ HM.toList hm
     Array values -> bracketsSep $ pretty <$> toList values
     String str -> dquotes $ pretty str
-    Number scientific -> pretty $ show scientific
+    Number scientific -> viaShow scientific
     Bool b -> pretty b
     Null -> "null"
 

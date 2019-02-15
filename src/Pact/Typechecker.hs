@@ -953,9 +953,6 @@ isUnresolvedTy (TySchema _ v _) = isUnresolvedTy v
 isUnresolvedTy (TyList l) = isUnresolvedTy l
 isUnresolvedTy _ = False -- TODO fun types
 
-prettyMap :: (t -> Doc) -> (t1 -> Doc) -> M.Map t t1 -> Doc
-prettyMap prettyK prettyV = vsep . map (\(k,v) -> prettyK k <> colon <+> prettyV v) . M.toList
-
 -- | A successful result has the '_tcAstToVar' map populated with "resolved types", ie concrete non-var types.
 resolveAllTypes :: TC (M.Map TcId (Type UserType))
 resolveAllTypes = do

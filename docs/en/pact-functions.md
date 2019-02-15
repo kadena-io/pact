@@ -5,7 +5,7 @@
 
 *idx*&nbsp;`integer` *list*&nbsp;`[<l>]` *&rarr;*&nbsp;`<a>`
 
-*idx*&nbsp;`string` *object*&nbsp;`object:[  ]<{o}>` *&rarr;*&nbsp;`<a>`
+*idx*&nbsp;`string` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`<a>`
 
 
 Index LIST at IDX, or get value with key IDX from OBJECT.
@@ -19,7 +19,7 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 
 ### bind {#bind}
 
-*src*&nbsp;`object:[  ]<{row}>` *binding*&nbsp;`binding:[  ]<{row}>` *&rarr;*&nbsp;`<a>`
+*src*&nbsp;`object:[]<{row}>` *binding*&nbsp;`binding:[]<{row}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements.
@@ -37,9 +37,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 Compose X and Y, such that X operates on VALUE, and Y on the results of X.
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-["dog"
-"has"
-"fleas"]
+["dog" "has" "fleas"]
 ```
 
 
@@ -55,9 +53,7 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 Lazily ignore arguments IGNORE* and return VALUE.
 ```lisp
 pact> (filter (constantly true) [1 2 3])
-[1
-2
-3]
+[1 2 3]
 ```
 
 
@@ -65,7 +61,7 @@ pact> (filter (constantly true) [1 2 3])
 
 *value*&nbsp;`<a>` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`bool`
 
-*key*&nbsp;`<a>` *object*&nbsp;`object:[  ]<{o}>` *&rarr;*&nbsp;`bool`
+*key*&nbsp;`<a>` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`bool`
 
 *value*&nbsp;`string` *string*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
@@ -96,11 +92,9 @@ Top level only: this function will fail if used in module code.
 
 ### drop {#drop}
 
-*count*&nbsp;`integer` *list*&nbsp;`<a[[<l>]
-,string]>` *&rarr;*&nbsp;`<a[[<l>]
-,string]>`
+*count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
 
-*keys*&nbsp;`[string]` *object*&nbsp;`object:[  ]<{o}>` *&rarr;*&nbsp;`object:[  ]<{o}>`
+*keys*&nbsp;`[string]` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`object:[]<{o}>`
 
 
 Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end.
@@ -108,9 +102,7 @@ Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJ
 pact> (drop 2 "vwxyz")
 "xyz"
 pact> (drop (- 2) [1 2 3 4 5])
-[1
-2
-3]
+[1 2 3]
 pact> (drop ['name] { 'name: "Vlad", 'active: false})
 {"active": false}
 ```
@@ -164,9 +156,7 @@ Top level only: this function will fail if used in module code.
 Filter LIST by applying APP to each element. For each true result, the original value is kept.
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-["dog"
-"has"
-"fleas"]
+["dog" "has" "fleas"]
 ```
 
 
@@ -216,9 +206,7 @@ pact> (hash { 'foo: 1 })
 Return provided value.
 ```lisp
 pact> (map (identity) [1 2 3])
-[1
-2
-3]
+[1 2 3]
 ```
 
 
@@ -236,9 +224,7 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 
 ### length {#length}
 
-*x*&nbsp;`<a[[<l>]
-,string
-,object:[  ]<{o}>]>` *&rarr;*&nbsp;`integer`
+*x*&nbsp;`<a[[<l>],string,object:[]<{o}>]>` *&rarr;*&nbsp;`integer`
 
 
 Compute length of X, which can be a list, a string, or an object.
@@ -260,9 +246,7 @@ pact> (length { "a": 1, "b": 2 })
 Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support.
 ```lisp
 pact> (list 1 2 3)
-[1
-2
-3]
+[1 2 3]
 ```
 
 
@@ -284,11 +268,7 @@ Top level only: this function will fail if used in module code.
 Create list by repeating VALUE LENGTH times.
 ```lisp
 pact> (make-list 5 true)
-[true
-true
-true
-true
-true]
+[true true true true true]
 ```
 
 
@@ -300,9 +280,7 @@ true]
 Apply APP to each element in LIST, returning a new list of results.
 ```lisp
 pact> (map (+ 1) [1 2 3])
-[2
-3
-4]
+[2 3 4]
 ```
 
 
@@ -380,7 +358,7 @@ Read KEY from top level of message data body, or data body itself if not provide
 
 ### remove {#remove}
 
-*key*&nbsp;`string` *object*&nbsp;`object:[  ]<{o}>` *&rarr;*&nbsp;`object:[  ]<{o}>`
+*key*&nbsp;`string` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`object:[]<{o}>`
 
 
 Remove entry for KEY from OBJECT.
@@ -392,7 +370,7 @@ pact> (remove "bar" { "foo": 1, "bar": 2 })
 
 ### resume {#resume}
 
-*binding*&nbsp;`binding:[  ]<{y}>` *body*&nbsp;`*` *&rarr;*&nbsp;`<a>`
+*binding*&nbsp;`binding:[]<{y}>` *body*&nbsp;`*` *&rarr;*&nbsp;`<a>`
 
 
 Special form binds to a yielded object value from the prior step execution in a pact.
@@ -406,9 +384,7 @@ Special form binds to a yielded object value from the prior step execution in a 
 Reverse LIST.
 ```lisp
 pact> (reverse [1 2 3])
-[3
-2
-1]
+[3 2 1]
 ```
 
 
@@ -416,20 +392,15 @@ pact> (reverse [1 2 3])
 
 *values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
-*fields*&nbsp;`[string]` *values*&nbsp;`[object:[  ]<{o}>]` *&rarr;*&nbsp;`[object:[  ]<{o}>]`
+*fields*&nbsp;`[string]` *values*&nbsp;`[object:[]<{o}>]` *&rarr;*&nbsp;`[object:[]<{o}>]`
 
 
 Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list.
 ```lisp
 pact> (sort [3 1 2])
-[1
-2
-3]
+[1 2 3]
 pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
-[{"name": "Val"
-,"age": 25}
-{"name": "Lin"
-,"age": 30}]
+[{"name": "Val","age": 25} {"name": "Lin","age": 30}]
 ```
 
 
@@ -451,11 +422,9 @@ pact> (str-to-int "123456")
 
 ### take {#take}
 
-*count*&nbsp;`integer` *list*&nbsp;`<a[[<l>]
-,string]>` *&rarr;*&nbsp;`<a[[<l>]
-,string]>`
+*count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
 
-*keys*&nbsp;`[string]` *object*&nbsp;`object:[  ]<{o}>` *&rarr;*&nbsp;`object:[  ]<{o}>`
+*keys*&nbsp;`[string]` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`object:[]<{o}>`
 
 
 Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end.
@@ -463,9 +432,7 @@ Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJ
 pact> (take 2 "abcd")
 "ab"
 pact> (take (- 3) [1 2 3 4 5])
-[3
-4
-5]
+[3 4 5]
 pact> (take ['name] { 'name: "Vlad", 'active: false})
 {"name": "Vlad"}
 ```
@@ -497,20 +464,19 @@ pact> (typeof "hello")
 
 ### where {#where}
 
-*field*&nbsp;`string` *app*&nbsp;`x:<a> -> bool` *value*&nbsp;`object:[  ]<{row}>` *&rarr;*&nbsp;`bool`
+*field*&nbsp;`string` *app*&nbsp;`x:<a> -> bool` *value*&nbsp;`object:[]<{row}>` *&rarr;*&nbsp;`bool`
 
 
 Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE.
 ```lisp
 pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
-[{"name": "Juan"
-,"age": 15}]
+[{"name": "Juan","age": 15}]
 ```
 
 
 ### yield {#yield}
 
-*OBJECT*&nbsp;`object:[  ]<{y}>` *&rarr;*&nbsp;`object:[  ]<{y}>`
+*OBJECT*&nbsp;`object:[]<{y}>` *&rarr;*&nbsp;`object:[]<{y}>`
 
 
 Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values.
@@ -522,7 +488,7 @@ Yield OBJECT for use with 'resume' in following pact step. The object is similar
 
 ### create-table {#create-table}
 
-*table*&nbsp;`table:[  ]<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:[]<{row}>` *&rarr;*&nbsp;`string`
 
 
 Create table TABLE.
@@ -558,7 +524,7 @@ Top level only: this function will fail if used in module code.
 
 ### describe-table {#describe-table}
 
-*table*&nbsp;`table:[  ]<{row}>` *&rarr;*&nbsp;`value`
+*table*&nbsp;`table:[]<{row}>` *&rarr;*&nbsp;`value`
 
 
 Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields.
@@ -571,7 +537,7 @@ Top level only: this function will fail if used in module code.
 
 ### insert {#insert}
 
-*table*&nbsp;`table:[  ]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[  ]<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[]<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
@@ -582,7 +548,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data already exis
 
 ### keylog {#keylog}
 
-*table*&nbsp;`table:[  ]<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:[  ]*]`
+*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:[]*]`
 
 
 Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects indexed by txid.
@@ -593,7 +559,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 
 ### keys {#keys}
 
-*table*&nbsp;`table:[  ]<{row}>` *&rarr;*&nbsp;`[string]`
+*table*&nbsp;`table:[]<{row}>` *&rarr;*&nbsp;`[string]`
 
 
 Return all keys in TABLE.
@@ -604,9 +570,9 @@ Return all keys in TABLE.
 
 ### read {#read}
 
-*table*&nbsp;`table:[  ]<{row}>` *key*&nbsp;`string` *&rarr;*&nbsp;`object:[  ]<{row}>`
+*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *&rarr;*&nbsp;`object:[]<{row}>`
 
-*table*&nbsp;`table:[  ]<{row}>` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object:[  ]<{row}>`
+*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object:[]<{row}>`
 
 
 Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified.
@@ -617,9 +583,9 @@ Read row from TABLE for KEY, returning database record object, or just COLUMNS i
 
 ### select {#select}
 
-*table*&nbsp;`table:[  ]<{row}>` *where*&nbsp;`row:object:[  ]<{row}> -> bool` *&rarr;*&nbsp;`[object:[  ]<{row}>]`
+*table*&nbsp;`table:[]<{row}>` *where*&nbsp;`row:object:[]<{row}> -> bool` *&rarr;*&nbsp;`[object:[]<{row}>]`
 
-*table*&nbsp;`table:[  ]<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:[  ]<{row}> -> bool` *&rarr;*&nbsp;`[object:[  ]<{row}>]`
+*table*&nbsp;`table:[]<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:[]<{row}> -> bool` *&rarr;*&nbsp;`[object:[]<{row}>]`
 
 
 Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.
@@ -631,7 +597,7 @@ Select full rows or COLUMNS from table by applying WHERE to each row to get a bo
 
 ### txids {#txids}
 
-*table*&nbsp;`table:[  ]<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
+*table*&nbsp;`table:[]<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
 
 
 Return all txid values greater than or equal to TXID in TABLE.
@@ -642,7 +608,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 
 ### txlog {#txlog}
 
-*table*&nbsp;`table:[  ]<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[value]`
+*table*&nbsp;`table:[]<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[value]`
 
 
 Return all updates to TABLE performed in transaction TXID.
@@ -653,7 +619,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 ### update {#update}
 
-*table*&nbsp;`table:[  ]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[ ~ ]<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[~]<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY.
@@ -664,7 +630,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 
 ### with-default-read {#with-default-read}
 
-*table*&nbsp;`table:[  ]<{row}>` *key*&nbsp;`string` *defaults*&nbsp;`object:[ ~ ]<{row}>` *bindings*&nbsp;`binding:[ ~ ]<{row}>` *&rarr;*&nbsp;`<a>`
+*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *defaults*&nbsp;`object:[~]<{row}>` *bindings*&nbsp;`binding:[~]<{row}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names.
@@ -676,7 +642,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 ### with-read {#with-read}
 
-*table*&nbsp;`table:[  ]<{row}>` *key*&nbsp;`string` *bindings*&nbsp;`binding:[  ]<{row}>` *&rarr;*&nbsp;`<a>`
+*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *bindings*&nbsp;`binding:[]<{row}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.
@@ -688,7 +654,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 ### write {#write}
 
-*table*&nbsp;`table:[  ]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[  ]<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[]<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data.
@@ -805,21 +771,7 @@ pact> (time "2016-07-22T11:26:35Z")
 
 ### != {#bangeq}
 
-*x*&nbsp;`<a[integer
-,string
-,time
-,decimal
-,bool
-,[<l>]
-,object:[  ]<{o}>
-,keyset]>` *y*&nbsp;`<a[integer
-,string
-,time
-,decimal
-,bool
-,[<l>]
-,object:[  ]<{o}>
-,keyset]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
 True if X does not equal Y.
@@ -831,14 +783,9 @@ true
 
 ### * {#star}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<b[integer
-,decimal]>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
 Multiply X by Y.
@@ -852,22 +799,11 @@ pact> (* 3 5)
 
 ### \+ {#plus}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<b[integer
-,decimal]>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
-*x*&nbsp;`<a[string
-,[<l>]
-,object:[  ]<{o}>]>` *y*&nbsp;`<a[string
-,[<l>]
-,object:[  ]<{o}>]>` *&rarr;*&nbsp;`<a[string
-,[<l>]
-,object:[  ]<{o}>]>`
+*x*&nbsp;`<a[string,[<l>],object:[]<{o}>]>` *y*&nbsp;`<a[string,[<l>],object:[]<{o}>]>` *&rarr;*&nbsp;`<a[string,[<l>],object:[]<{o}>]>`
 
 
 Add numbers, concatenate strings/lists, or merge objects.
@@ -879,30 +815,19 @@ pact> (+ 5.0 0.5)
 pact> (+ "every" "body")
 "everybody"
 pact> (+ [1 2] [3 4])
-[1
-2
-3
-4]
+[1 2 3 4]
 pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-{"bar": 2
-,"foo": 100}
+{"bar": 2,"foo": 100}
 ```
 
 
 ### \- {#minus}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<b[integer
-,decimal]>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
-*x*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
 Negate X, or subtract Y from X.
@@ -916,14 +841,9 @@ pact> (- 3 2)
 
 ### / {#slash}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<b[integer
-,decimal]>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
 Divide X by Y.
@@ -937,13 +857,7 @@ pact> (/ 8 3)
 
 ### < {#lt}
 
-*x*&nbsp;`<a[integer
-,decimal
-,string
-,time]>` *y*&nbsp;`<a[integer
-,decimal
-,string
-,time]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X < Y.
@@ -959,13 +873,7 @@ true
 
 ### <= {#lteq}
 
-*x*&nbsp;`<a[integer
-,decimal
-,string
-,time]>` *y*&nbsp;`<a[integer
-,decimal
-,string
-,time]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X <= Y.
@@ -981,21 +889,7 @@ true
 
 ### = {#eq}
 
-*x*&nbsp;`<a[integer
-,string
-,time
-,decimal
-,bool
-,[<l>]
-,object:[  ]<{o}>
-,keyset]>` *y*&nbsp;`<a[integer
-,string
-,time
-,decimal
-,bool
-,[<l>]
-,object:[  ]<{o}>
-,keyset]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
 True if X equals Y.
@@ -1011,13 +905,7 @@ true
 
 ### > {#gt}
 
-*x*&nbsp;`<a[integer
-,decimal
-,string
-,time]>` *y*&nbsp;`<a[integer
-,decimal
-,string
-,time]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X > Y.
@@ -1033,13 +921,7 @@ false
 
 ### >= {#gteq}
 
-*x*&nbsp;`<a[integer
-,decimal
-,string
-,time]>` *y*&nbsp;`<a[integer
-,decimal
-,string
-,time]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X >= Y.
@@ -1055,14 +937,9 @@ false
 
 ### ^ {#hat}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<b[integer
-,decimal]>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
 Raise X to Y power.
@@ -1128,9 +1005,7 @@ pact> (ceiling 100.15234 2)
 
 ### exp {#exp}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
 Exp of X.
@@ -1158,9 +1033,7 @@ pact> (floor 100.15234 2)
 
 ### ln {#ln}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
 Natural log of X.
@@ -1172,14 +1045,9 @@ pact> (round (ln 60) 6)
 
 ### log {#log}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a[integer
-,decimal]>` *y*&nbsp;`<b[integer
-,decimal]>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
 Log of Y base X.
@@ -1267,9 +1135,7 @@ pact> (round 100.15234 2)
 
 ### sqrt {#sqrt}
 
-*x*&nbsp;`<a[integer
-,decimal]>` *&rarr;*&nbsp;`<a[integer
-,decimal]>`
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
 Square root of X.
@@ -1477,15 +1343,7 @@ Commit transaction.
 
 ### env-data {#env-data}
 
-*json*&nbsp;`<a[integer
-,string
-,time
-,decimal
-,bool
-,[<l>]
-,object:[  ]<{o}>
-,keyset
-,value]>` *&rarr;*&nbsp;`string`
+*json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset,value]>` *&rarr;*&nbsp;`string`
 
 
 Set transaction JSON data, either as encoded string, or as pact types coerced to JSON.
@@ -1585,7 +1443,7 @@ Query environment pact id, or set to ID.
 
 *step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
-*step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *resume*&nbsp;`object:[  ]<{y}>` *&rarr;*&nbsp;`string`
+*step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *resume*&nbsp;`object:[]<{y}>` *&rarr;*&nbsp;`string`
 
 
 Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'.Clears any previous pact execution state.
@@ -1627,16 +1485,7 @@ pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 Encode pact expression EXP as a JSON value. This is only needed for tests, as Pact values are automatically represented as JSON in API output. 
 ```lisp
 pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
-[{"age": [ 1
-, 0
-, .
-, 0 ]
-,"name": "joe"}
-{"age": [ 2
-, 5
-, .
-, 0 ]
-,"name": "mary"}]
+[{"age": 10.0,"name": "joe"} {"age": 25.0,"name": "mary"}]
 ```
 
 
@@ -1655,7 +1504,7 @@ Load and evaluate FILE, resetting repl state beforehand if optional RESET is tru
 
 ### pact-state {#pact-state}
 
- *&rarr;*&nbsp;`object:[  ]*`
+ *&rarr;*&nbsp;`object:[]*`
 
 
 Inspect state from previous pact execution. Returns object with fields 'yield': yield result or 'false' if none; 'step': executed step; 'executed': indicates if step was skipped because entity did not match.
