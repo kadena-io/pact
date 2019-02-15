@@ -7,6 +7,9 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE ViewPatterns        #-}
 
+-- | Rendering concrete models' execution traces to text, for communication
+-- with end users. This relies on the linearization of traces that occurs in
+-- 'Pact.Analyze.Model.Graph'.
 module Pact.Analyze.Model.Text
   ( showModel
   ) where
@@ -24,6 +27,7 @@ import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact
 import qualified Pact.Types.Persistence     as Pact
+import           Pact.Types.Util            (asString)
 
 import           Pact.Analyze.Model.Graph   (linearize)
 import           Pact.Analyze.Types
@@ -181,8 +185,9 @@ showEvent ksProvs tags event = do
             "let" : displayVids showVar
           ObjectScope ->
             "destructuring object" : displayVids showVar
-          FunctionScope nm ->
-            let header = "entering function " <> nm <> " with "
+          FunctionScope modName funName ->
+            let header = "entering function " <> asString modName <> "."
+                      <> funName <> " with "
                       <> if length vids > 1 then "arguments" else "argument"
             in header : (displayVids showArg ++ [emptyLine])
       TracePopScope _ scopeTy tid _ -> do
@@ -190,7 +195,7 @@ showEvent ksProvs tags event = do
         pure $ case scopeTy of
           LetScope -> []
           ObjectScope -> []
-          FunctionScope _ ->
+          FunctionScope _ _ ->
             ["returning with " <> display mtReturns tid showTVal, emptyLine]
 
   where

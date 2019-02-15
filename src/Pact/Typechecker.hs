@@ -738,7 +738,8 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
-  let fn = asString (_dModule _tDef) <> "." <> asString (_dDefName _tDef)
+  let mn = _dModule _tDef
+      fn = asString $ _dDefName _tDef
   args <- forM (_ftArgs (_dFunType _tDef)) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
@@ -748,7 +749,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
-  return $ FDefun _tInfo fn funType args tcs
+  return $ FDefun _tInfo mn fn funType args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 

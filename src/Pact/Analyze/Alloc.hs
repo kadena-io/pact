@@ -6,6 +6,8 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeApplications           #-}
 
+-- | Monadic contexts, more restricted than 'Symbolic', that only allow
+-- allocation of quantified symbolic variables.
 module Pact.Analyze.Alloc
   ( MonadAlloc (singForAll, singExists, singFree)
   , forAll, exists, free
@@ -70,7 +72,7 @@ instance (MonadAlloc m, Monoid w) => MonadAlloc (LW.WriterT w m)
 -- * Standard 'MonadAlloc' implementation; 'Symbolic' restricted to use only
 -- use quantified variable allocation.
 
--- We can't implement @AllocT@ yet because sbv doesn't have a @SymbolicT@.
+-- TODO: implement @AllocT@ now that sbv has @SymbolicT@.
 
 newtype Alloc a = Alloc { runAlloc :: Symbolic a }
   deriving (Functor, Applicative, Monad)

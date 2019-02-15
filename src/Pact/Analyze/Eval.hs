@@ -2,6 +2,9 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Toplevel functions for symbolic evaluation of pact programs with respect
+-- to properties and invariants, primarily used by the high-level interface in
+-- 'Pact.Analyze.Check'.
 module Pact.Analyze.Eval
   ( module Pact.Analyze.Eval.Invariant
   , module Pact.Analyze.Eval.Numerical
@@ -14,7 +17,6 @@ module Pact.Analyze.Eval
   , runInvariantAnalysis
   , runPropertyAnalysis
   ) where
-
 
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (view, (&), (.~), (<&>), (^.))
@@ -92,13 +94,19 @@ runAnalysis'
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
 runAnalysis' modName query tables args tm rootPath tags info = do
-  --
-  -- TODO: pass this in (from a previous analysis) when we analyze >1 function
-  --       calls. we will want to propagate previous db state too.
-  --
-  let reg = mkRegistry
+  let --
+      --
+      -- TODO: pass this in (from a previous analysis) when we analyze >1
+      --       function calls. we will want to propagate previous db state too.
+      --
+      reg = mkRegistry
+      --
+      -- TODO: potentially pre-set this metadata in some circumstances once we
+      --       add support for analyzing pacts:
+      --
+      pactMetadata = mkPactMetadata
 
-  aEnv <- case mkAnalyzeEnv modName reg tables args tags info of
+  aEnv <- case mkAnalyzeEnv modName pactMetadata reg tables args tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"

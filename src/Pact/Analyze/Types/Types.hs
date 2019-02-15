@@ -18,6 +18,8 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ViewPatterns               #-}
 
+-- | Type definitions and utilities for modeling Pact types in the setting of
+-- symbolic analysis.
 module Pact.Analyze.Types.Types
   ( Ty(..)
   , Sing(..)

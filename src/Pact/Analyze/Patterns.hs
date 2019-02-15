@@ -3,6 +3,8 @@
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE ViewPatterns      #-}
 
+-- | Pattern synonym definitions for translation from typechecked 'AST' to
+-- 'Term'.
 module Pact.Analyze.Patterns where
 
 import           Control.Lens         ((^?))
@@ -39,9 +41,9 @@ pattern NativeFunc f <- FNative _ f _ _
 
 -- compileNode's Patterns
 
-pattern AST_InlinedApp :: Text -> [(Named a, AST a)] -> [AST a] -> AST a
-pattern AST_InlinedApp funName bindings body <-
-  App _ (FDefun _ funName _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
+pattern AST_InlinedApp :: Lang.ModuleName -> Text -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_InlinedApp modName funName bindings body <-
+  App _ (FDefun _ modName funName _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
 
 pattern AST_Let :: forall a. [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Let bindings body <- Binding _ bindings body AstBindLet
@@ -78,6 +80,14 @@ pattern AST_KeysetRefGuard :: forall a. AST a -> AST a
 pattern AST_KeysetRefGuard name <-
   App _node (NativeFunc "keyset-ref-guard") [name]
 
+pattern AST_CreatePactGuard :: forall a. AST a -> AST a
+pattern AST_CreatePactGuard name <-
+  App _node (NativeFunc "create-pact-guard") [name]
+
+pattern AST_CreateUserGuard :: forall a. AST a -> AST a -> AST a
+pattern AST_CreateUserGuard obj funName <-
+  App _node (NativeFunc "create-user-guard") [obj, funName]
+
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
   App node (NativeFunc "enforce") (cond:_rest)
@@ -97,6 +107,9 @@ pattern AST_ReadInteger name <-
 pattern AST_ReadMsg :: forall a. AST a -> AST a
 pattern AST_ReadMsg name <-
   App _node (NativeFunc "read-msg") [name]
+
+pattern AST_PactId :: AST a
+pattern AST_PactId <- App _node (NativeFunc "pact-id") []
 
 typeSatisfying :: (Lang.Type TC.UserType -> Bool) -> AST Node -> Maybe (AST Node)
 typeSatisfying test x = case x ^? aNode.aTy of

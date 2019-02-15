@@ -30,8 +30,9 @@ import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
 import           Pact.Analyze.Types.Eval  (aeRegistry, aeTxMetadata,
                                            tmDecimals, tmIntegers, tmKeySets,
-                                           mkAnalyzeEnv, mkRegistry,
-                                           mkInitialAnalyzeState, registryMap)
+                                           mkAnalyzeEnv, mkPactMetadata,
+                                           mkRegistry, mkInitialAnalyzeState,
+                                           registryMap)
 import           Pact.Analyze.Util        (dummyInfo)
 
 import           Pact.Eval                (reduce)
@@ -106,9 +107,10 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
         Map.empty Map.empty
 
       modName = Pact.ModuleName "test" Nothing
+      pactMd  = mkPactMetadata
       reg     = mkRegistry
 
-  Just aEnv <- pure $ mkAnalyzeEnv modName reg tables args tags dummyInfo
+  Just aEnv <- pure $ mkAnalyzeEnv modName pactMd reg tables args tags dummyInfo
 
   let writeArray' k v env = writeArray env k v
 

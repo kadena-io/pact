@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE ViewPatterns          #-}
 
+-- | Parser from 'Exp' to the property language 'Prop'.
 module Pact.Analyze.Parse.Prop
   ( PreProp(..)
   , TableEnv

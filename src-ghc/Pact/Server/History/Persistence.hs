@@ -46,8 +46,8 @@ hashFromField h = case A.eitherDecodeStrict' h of
 crToField :: A.Value -> SType
 crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode r
 
-crFromField :: RequestKey -> Maybe TxId -> ByteString -> CommandResult
-crFromField rk tid cr = CommandResult rk tid v
+crFromField :: RequestKey -> Maybe TxId -> ByteString -> Gas -> CommandResult
+crFromField rk tid cr gas = CommandResult rk tid v gas
   where
     v = case A.eitherDecodeStrict' cr of
       Left err -> error $ "crFromField: unable to decode CommandResult from database! " ++ show err ++ "\n" ++ show cr
@@ -61,6 +61,9 @@ userSigsFromField us = case A.eitherDecodeStrict' us of
   Left err -> error $ "userSigsFromField: unable to decode [UserSigs] from database! " ++ show err ++ "\n" ++ show us
   Right v -> v
 
+gasToField :: Gas -> SType
+gasToField (Gas g) = SInt g
+
 sqlDbSchema :: Utf8
 sqlDbSchema =
   "CREATE TABLE IF NOT EXISTS 'main'.'pactCommands' \
@@ -69,6 +72,7 @@ sqlDbSchema =
   \, 'command' TEXT NOT NULL\
   \, 'result' TEXT NOT NULL\
   \, 'userSigs' TEXT NOT NULL\
+  \, 'gas' INTEGER NOT NULL\
   \)"
 
 eitherToError :: Show e => String -> Either e a -> a
@@ -94,7 +98,8 @@ sqlInsertHistoryRow =
     \, 'command'\
     \, 'result'\
     \, 'userSigs'\
-    \) VALUES (?,?,?,?,?)"
+    \, 'gas'\
+    \) VALUES (?,?,?,?,?,?)"
 
 insertRow :: Statement -> (Command ByteString, CommandResult) -> IO ()
 insertRow s (Command{..},CommandResult {..}) =
@@ -102,7 +107,8 @@ insertRow s (Command{..},CommandResult {..}) =
             ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
             ,SText $ Utf8 _cmdPayload
             ,crToField _crResult
-            ,userSigsToField _cmdSigs]
+            ,userSigsToField _cmdSigs
+            ,gasToField _crGas]
 
 insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult)] -> IO ()
 insertCompletedCommand DbEnv{..} v = do
@@ -131,20 +137,20 @@ selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey
 selectCompletedCommands e v = foldM f HashMap.empty v
   where
     f m rk = do
-      rs <- qrys (_qryCompletedStmt e) [hashToField $ unRequestKey rk] [RText,RInt]
+      rs <- qrys (_qryCompletedStmt e) [hashToField $ unRequestKey rk] [RText,RInt,RInt]
       if null rs
       then return m
       else case head rs of
-          [SText (Utf8 cr),SInt tid] ->
-            return $ HashMap.insert rk (crFromField rk (if tid < 0 then Nothing else Just (fromIntegral tid)) cr) m
+          [SText (Utf8 cr),SInt tid, SInt g] ->
+            return $ HashMap.insert rk (crFromField rk (if tid < 0 then Nothing else Just (fromIntegral tid)) cr (Gas g)) m
           r -> dbError $ "Invalid result from query: " ++ show r
 
 sqlSelectAllCommands :: Utf8
-sqlSelectAllCommands = "SELECT txid,hash,command,userSigs FROM 'main'.'pactCommands' ORDER BY txid ASC"
+sqlSelectAllCommands = "SELECT txid,hash,command,userSigs,gas FROM 'main'.'pactCommands' ORDER BY txid ASC"
 
 selectAllCommands :: DbEnv -> IO [Command ByteString]
 selectAllCommands e = do
-  let rowToCmd [_, SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
+  let rowToCmd [_, SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs'), _] =
               Command { _cmdPayload = cmd'
                       , _cmdSigs = userSigsFromField userSigs'
                       , _cmdHash = hashFromField hash'}

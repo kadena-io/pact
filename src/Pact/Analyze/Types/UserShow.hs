@@ -1,5 +1,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+-- | Type definitions specific to the 'UserShow' typeclass for displaying values
+-- to end-users.
 module Pact.Analyze.Types.UserShow where
 
 import           Data.Map        (Map)

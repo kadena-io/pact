@@ -5,6 +5,7 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE ViewPatterns          #-}
 
+-- | Cross-cutting utilities shared across symbolic analysis code.
 module Pact.Analyze.Util where
 
 import           Control.Lens         (Iso, Snoc (_Snoc), iso, makeLenses,

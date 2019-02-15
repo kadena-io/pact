@@ -6,6 +6,7 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
+-- | Types specific to models, tags, and execution graphs and traces.
 module Pact.Analyze.Types.Model where
 
 import qualified Algebra.Graph             as Alga
@@ -18,6 +19,7 @@ import           Prelude                   hiding (Float)
 
 import           Pact.Types.Persistence    (WriteType)
 import qualified Pact.Types.Typecheck      as TC
+import qualified Pact.Types.Lang           as Pact
 
 import           Pact.Analyze.Types.Shared
 
@@ -72,7 +74,7 @@ instance Monoid Recoverability where
 data ScopeType
   = LetScope
   | ObjectScope
-  | FunctionScope Text
+  | FunctionScope Pact.ModuleName Text
   deriving (Eq, Show)
 
 data TraceEvent

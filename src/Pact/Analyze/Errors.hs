@@ -1,5 +1,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+-- | Errors that can occur during symbolic analysis.
 module Pact.Analyze.Errors where
 
 import qualified Data.SBV.Internals     as SBVI

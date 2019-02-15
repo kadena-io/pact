@@ -16,6 +16,9 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE ConstraintKinds       #-}
 
+-- | Type definitions for each of the languages we analyze, including the three
+-- main languages of programs ('Term'), invariants ('Invariant'), and
+-- properties ('Prop').
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
   , (:*<:)(inject', project')
@@ -1299,9 +1302,13 @@ data Term (a :: Ty) where
 
   -- TODO: ReadMsg
 
+  PactId          :: Term 'TyInteger
+
   -- Guards
-  MkKsRefGuard :: Term 'TyStr            -> Term 'TyGuard
-  GuardPasses  :: TagId -> Term 'TyGuard -> Term 'TyBool
+  MkKsRefGuard :: Term 'TyStr                                               -> Term 'TyGuard
+  MkPactGuard  :: Term 'TyStr                                               -> Term 'TyGuard
+  MkUserGuard  :: SingTy ('TyObject m) -> Term ('TyObject m) -> Term 'TyStr -> Term 'TyGuard
+  GuardPasses  :: TagId                -> Term 'TyGuard                     -> Term 'TyBool
 
   -- Table access
   Read
@@ -1358,6 +1365,16 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   MkKsRefGuard a ->
       showString "MkKsRefGuard "
     . showsPrec 11 a
+  MkPactGuard a ->
+      showString "MkPactGuard "
+    . showsPrec 11 a
+  MkUserGuard a b c -> withSing a $
+      showString "MkUserGuard "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+    . showChar ' '
+    . showsPrec 11 c
   GuardPasses a b ->
       showString "GuardPasses "
     . showsPrec 11 a
@@ -1409,6 +1426,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadKeySet  name -> showString "ReadKeySet " . showsPrec 11 name
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
+  PactId -> showString "PactId"
 
 showsProp :: SingTy ty -> Int -> Prop ty -> ShowS
 showsProp ty p = withSing ty $ \case
@@ -1471,7 +1489,10 @@ userShowTerm ty p = \case
   ReadKeySet name      -> parenList ["read-keyset", userShow name]
   ReadDecimal name     -> parenList ["read-decimal", userShow name]
   ReadInteger name     -> parenList ["read-integer", userShow name]
+  PactId               -> parenList ["pact-id"]
   MkKsRefGuard name    -> parenList ["keyset-ref-guard", userShow name]
+  MkPactGuard name     -> parenList ["create-pact-guard", userShow name]
+  MkUserGuard ty' o n  -> parenList ["create-user-guard", singUserShowTm ty' o, userShow n]
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2

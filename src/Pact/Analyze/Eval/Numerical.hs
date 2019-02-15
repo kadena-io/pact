@@ -7,6 +7,10 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+
+-- | Symbolic evaluation for the 'Numerical' subset of expressions of the
+-- 'Core' language shared by all three languages: 'Term', 'Prop', and
+-- 'Invariant'.
 module Pact.Analyze.Eval.Numerical where
 
 import           Data.Coerce             (Coercible)

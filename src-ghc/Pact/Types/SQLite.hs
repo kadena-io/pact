@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
+{-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.SQLite
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -27,28 +27,33 @@ module Pact.Types.SQLite
   , execs_
   , exec'
   , Pragma(..), runPragmas, fastNoJournalPragmas
-  , SQLiteConfig (..)
+  , SQLiteConfig (..), dbFile, pragmas
   ) where
 
+
+import Control.Lens
+import Control.Monad
 import Database.SQLite3.Direct as SQ3
 import Data.String
 import qualified Data.ByteString as BS
-import Control.Monad
 import Data.Int
 import Data.Aeson
+
 import GHC.Generics
 
 import Prelude
 import Control.Monad.Catch
 
 
+newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString)
 
-data SQLiteConfig = SQLiteConfig {
-  dbFile :: FilePath,
-  pragmas :: [Pragma]
+data SQLiteConfig = SQLiteConfig
+  { _dbFile :: FilePath
+  , _pragmas :: [Pragma]
   } deriving (Eq,Show,Generic)
 instance FromJSON SQLiteConfig
 instance ToJSON SQLiteConfig
+makeLenses ''SQLiteConfig
 
 -- | Statement input types
 data SType = SInt Int64 | SDouble Double | SText Utf8 | SBlob BS.ByteString deriving (Eq,Show)
@@ -178,9 +183,6 @@ exec' e q as = do
              void $ finalize stmt
              void $ liftEither (return r)
 {-# INLINE exec' #-}
-
-
-newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString)
 
 runPragmas :: Database -> [Pragma] -> IO ()
 runPragmas c = mapM_ (\(Pragma s) -> exec_ c (fromString ("PRAGMA " ++ s)))

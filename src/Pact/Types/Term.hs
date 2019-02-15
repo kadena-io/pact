@@ -295,7 +295,7 @@ instance Pretty Ref where
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON)
 
 instance Pretty Gas where
   pretty (Gas i) = pretty i

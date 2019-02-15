@@ -186,7 +186,7 @@ writeData' t wt k v e = do
 
 initSQLite :: SQLiteConfig -> Loggers -> IO SQLite
 initSQLite conf@SQLiteConfig {..} loggers = do
-  c <- liftEither $ open (fromString dbFile)
+  c <- liftEither $ open (fromString _dbFile)
   ts <- TxStmts <$> prepStmt c "BEGIN TRANSACTION"
          <*> prepStmt c "COMMIT TRANSACTION"
          <*> prepStmt c "ROLLBACK TRANSACTION"
@@ -197,7 +197,7 @@ initSQLite conf@SQLiteConfig {..} loggers = do
         tableStmts = M.empty,
         txStmts = ts
         }
-  runPragmas (conn s) pragmas
+  runPragmas (conn s) _pragmas
   return s
 
 closeSQLite :: SQLite -> IO (Either String ())

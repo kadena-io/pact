@@ -1,4 +1,6 @@
 {-# options_ghc -fno-warn-orphans #-}
+
+-- | Orphan typeclass instances specific to symbolic analysis.
 module Pact.Analyze.Orphans where
 
 import           Data.SBV        (Mergeable (symbolicMerge))

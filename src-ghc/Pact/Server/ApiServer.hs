@@ -19,6 +19,7 @@
 module Pact.Server.ApiServer
   ( runApiServer
   , ApiEnv(..), aiLog, aiHistoryChan
+  , sendHandler, pollHandler, listenHandler, localHandler, versionHandler
   ) where
 
 import Prelude hiding (log)

@@ -31,7 +31,7 @@ module Pact.Types.Typecheck
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,
     Special (..),
-    Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,
+    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,
     Node (..),aId,aTy,
     Named (..),
     AstBindType (..),
@@ -217,11 +217,12 @@ data Fun t =
     _fSpecial :: Maybe (SpecialForm,Special t)
     } |
   FDefun {
-    _fInfo :: Info,
-    _fName :: Text,
-    _fType :: FunType UserType,
-    _fArgs :: [Named t],
-    _fBody :: [AST t]
+    _fInfo   :: Info,
+    _fModule :: ModuleName,
+    _fName   :: Text,
+    _fType   :: FunType UserType,
+    _fArgs   :: [Named t],
+    _fBody   :: [AST t]
     }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 

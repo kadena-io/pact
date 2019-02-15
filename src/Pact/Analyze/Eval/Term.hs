@@ -7,6 +7,8 @@
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 
+-- | Symbolic evaluation of program 'Term's (as opposed to the 'Invariant' or
+-- 'Prop' languages).
 module Pact.Analyze.Eval.Term where
 
 import           Control.Applicative         (ZipList (..))
@@ -23,7 +25,7 @@ import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (EqSymbolic ((.==)),
+import           Data.SBV                    (EqSymbolic ((.==)), HasKind,
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymVal, ite,
                                               literal, (.<))
@@ -73,6 +75,13 @@ instance Analyzer Analyze where
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint b = modify' $ latticeState.lasConstraints %~ (.&& b)
+
+genUninterpreted :: HasKind a => Analyze (S a)
+genUninterpreted = do
+  nextId <- use $ globalState.gasNextUninterpId
+  let val = uninterpretS $ "uninterp_" <> show nextId
+  globalState.gasNextUninterpId += 1
+  pure val
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s ->
@@ -441,11 +450,30 @@ evalTerm = \case
   ReadDecimal nameT -> readDecimal =<< evalTerm nameT
   ReadInteger nameT -> readInteger =<< evalTerm nameT
 
+  PactId -> do
+    whetherInPact <- view inPact
+    succeeds %= (.&& whetherInPact)
+    view currentPactId
+
   --
   -- If in the future Pact is able to store guards other than keysets in the
   -- registry, our approach will work for that generally.
   --
   MkKsRefGuard nameT -> resolveGuard =<< symRegistryName <$> evalTerm nameT
+
+  MkPactGuard _nameT -> do
+    whetherInPact <- view inPact
+    succeeds %= (.&& whetherInPact)
+    view aeTrivialGuard
+
+  MkUserGuard _ty _obj _name ->
+    --
+    -- NOTE: for now we just leave this uninterpreted, until we are prepared to
+    -- close over and analyze user guard functions in the future. we do not
+    -- try to resolve two uses of the same name to the same user guard, because
+    -- the guard created is *also* a function of the supplied object.
+    --
+    genUninterpreted
 
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT

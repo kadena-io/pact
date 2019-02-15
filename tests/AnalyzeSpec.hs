@@ -742,6 +742,27 @@ spec = describe "analyze" $ do
       Inj (RowWrite "tokens" (PVar 1 "row")) .=>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
+  describe "enforce-guard.row-level" $ do
+    let code =
+          [text|
+            (defschema token-row
+              name:string
+              balance:integer
+              g:guard)
+            (deftable tokens:{token-row})
+
+            (defun test:integer (acct:string)
+              @model
+                [(property (forall (row:string)
+                   (when (row-read tokens row)
+                     (row-enforced tokens "g" row))))]
+              (with-read tokens acct { "g" := g, "balance" := bal }
+                (enforce-guard g)
+                bal))
+          |]
+
+    expectVerified code
+
   describe "keyset-ref-guard" $ do
     let code =
           [text|
@@ -750,6 +771,30 @@ spec = describe "analyze" $ do
               (enforce-guard (keyset-ref-guard "foo")))
           |]
     expectVerified code
+
+  describe "create-pact-guard" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce-guard (create-pact-guard "foo")))
+          |]
+    -- Depending on whether we're executing in a pact:
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+
+  describe "create-user-guard" $ do
+    let code =
+          [text|
+            (defun fail:bool (o:object{account})
+              (enforce false ""))
+
+            (defun test:bool ()
+              (enforce-guard (create-user-guard {} "fail")))
+          |]
+    -- We leave user guards completely free for now, until we inline them into
+    -- a new construct during typechecking:
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
 
   describe "call-by-value semantics for inlining" $ do
     let code =
@@ -907,6 +952,19 @@ spec = describe "analyze" $ do
     expectFail code $ Valid Abort'
     expectPass code $ Satisfiable Success'
     expectPass code $ Valid Success'
+
+  describe "pact-id" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              (pact-id))
+          |]
+
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+    expectPass code $ Satisfiable $ CoreProp $ IntegerComparison Eq
+      (Inj Result :: Prop 'TyInteger)
+      10
 
   describe "logical short-circuiting" $ do
     describe "and" $ do
