@@ -105,8 +105,13 @@ Request JSON:
     "sigs": [
       {
         "sig": "[crypto signature by secret key of 'hash' value]",
-        "pubKey": "[base16-format of public key of signing keypair]",
-        "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+        "pubKey": "[base16-format of public key of signing keypair]"
+
+        /* optional field, defaults to full public key */
+	"addr": "[base16-format of address derived from public key]"
+
+        /* optional field, defaults to ED25519, will support other curves as needed */
+        "scheme": "ED25519 or ETH"
       }
     ]
     "cmd": "[stringified transaction JSON]"
@@ -145,12 +150,18 @@ Request JSON:
     "sigs": [
       {
         "sig": "[crypto signature by secret key of 'hash' value]",
-        "pubKey": "[base16-format of public key of signing keypair]",
-        "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+        "pubKey": "[base16-format of public key of signing keypair]"
+
+        /* optional field, defaults to full public key */
+	"addr": "[base16-format of address derived from public key]"
+
+        /* optional field, defaults to ED25519, will support other curves as needed */
+        "scheme": "ED25519 or ETH"
       }
     ]
     "cmd": "[stringified transaction JSON]"
   }
+  // ... more commands
   ]
 }
 ```
@@ -234,19 +245,30 @@ to the environment are rolled back. See [cmd field format](#cmd-field-and-payloa
 
 Request JSON:
 
-```
+```javascript
 {
-  "hash": "[blake2 hash in base16 of 'cmd' value]",
-  "sigs": [
-    {
-      "sig": "[crypto signature by secret key of 'hash' value]",
-      "pubKey": "[base16-format of public key of signing keypair]",
-      "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-    }
+  "cmds": [
+  {
+    "hash": "[blake2 hash in base16 of 'cmd' string value]",
+    "sigs": [
+      {
+        "sig": "[crypto signature by secret key of 'hash' value]",
+        "pubKey": "[base16-format of public key of signing keypair]"
+
+        /* optional field, defaults to full public key */
+	"addr": "[base16-format of address derived from public key]"
+
+        /* optional field, defaults to ED25519, will support other curves as needed */
+        "scheme": "ED25519 or ETH"
+      }
+    ]
+    "cmd": "[stringified transaction JSON]"
+  }
+  // ... more commands
   ]
-  "cmd": "[stringified transaction JSON]"
 }
 ```
+
 Response JSON:
 
 ```
@@ -282,7 +304,7 @@ can be fed into `pact` to obtain a valid API request:
 
 ```
 $ pact -a tests/apireq.yaml -l
-{"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
+{"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d","addr":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
 
 ```
 
