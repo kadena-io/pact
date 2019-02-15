@@ -146,5 +146,7 @@
 (test-compose-cap)
 ;now validate that KALL-CAP is gone
 (expect-failure "KALL-CAP composed cap is revoked" (require-capability KALL-CAP))
-
-(expect "can grant caps at toplevel" (grant-capability (GRANTED) (test-granted)))
+; bring magical capabilities into scope at repl scope
+(test-capability (GRANTED))
+; revoke all
+(revoke-all-capabilities)

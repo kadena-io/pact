@@ -35,7 +35,7 @@ import Data.Maybe
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 #else
-import Control.Monad.State.Strict (state, get)
+import Control.Monad.State.Strict (get)
 import Criterion
 import Criterion.Types
 import qualified Data.Map as M
@@ -146,10 +146,14 @@ replDefs = ("Repl",
      "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
-     ,defZNative "grant-capability" grantCapability
-      (funType tvA [("capability", TyFun $ funType' tTyBool []),("body", TyList TyAny)]) $
-     "Allow the granting of capability CAPABILITY for use in BODY outside of a module. " <>
-      "`$(grant-capability (TRANSFER) (my-module.transfer sender receiver 1.0))`"
+     ,defZNative "test-capability" testCapability
+      (funType tvA [("capability", TyFun $ funType' tTyBool [])]) $
+     "Allow the testing of the scope of a capability CAPABILITY in the repl environment. This is intended for testing " <>
+     "ONLY, and one should revoke all capabilities after by calling 'revoke-all-capabilities' after use." <>
+     "`$(grant-capability (TRANSFER) (my-module.transfer sender receiver 1.0))`"
+     ,defZRNative "revoke-all-capabilities" revokeAll (funType tTyBool []) $
+     "Convenience function which revokes all capabilities in scope. This should be called when one needs to create " <>
+     "a fresh environment, or to clean up after using 'test-capability'. `$(revoke-all-capabilities)`"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -435,19 +439,15 @@ setGasRate i as = argsError i as
 -- | This is the only place we can do an external call to a capability,
 -- using 'evalCap False'. This allows us to call magical capabilities
 -- within the coin contract code.
-grantCapability :: ZNativeFun ReplState
-grantCapability _ [c@TApp{},body@TList{}] = do
-  -- erase composed
+testCapability :: ZNativeFun ReplState
+testCapability _ [ c@TApp{} ] = do
+  cap <- evalCap False $ _tApp c
+  return . tStr $ case cap of
+    Nothing -> "Capability granted"
+    Just cap' -> "Capability granted: " <> tShow cap'
+testCapability i as = argsError' i as
+
+revokeAll :: RNativeFun ReplState
+revokeAll _ _ = do
   evalCapabilities . capComposed .= []
-  -- evaluate in-module cap
-  grantedCap <- evalCap False $ _tApp c
-  -- grab composed caps and clear composed state
-  composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
-                                  set (evalCapabilities . capComposed) [] s)
-  r <- reduceBody body
-  -- only revoke if newly granted
-  forM_ grantedCap $ \newcap -> do
-    revokeCapability newcap
-    mapM_ revokeCapability composedCaps
-  return r
-grantCapability i as = argsError' i as
+  pure . tStr $ "All capabilities revoked"
