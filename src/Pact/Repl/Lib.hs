@@ -25,6 +25,7 @@ import Data.Semigroup (Endo(..))
 import qualified Data.HashMap.Strict as HM
 import Control.Monad.Reader
 import Control.Monad.Catch
+-- import Control.Monad.State (state)
 import Control.Lens
 import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as BSL
@@ -53,6 +54,7 @@ import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Repl.Types
+import Pact.Native.Capabilities (evalCap)
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -144,6 +146,8 @@ replDefs = ("Repl",
      "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
+     ,defZNative "grant-capability" grantCapability
+      (funType tTyBool [("capability", TyFun $ funType' tTyBool []),("body", TyList TyAny)]) ""
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -424,5 +428,23 @@ setGasRate :: RNativeFun LibState
 setGasRate _ [TLitInteger r] = do
     setenv (eeGasEnv . geGasModel) (constGasModel $ fromIntegral r)
     return $ tStr $ "Set gas rate to " <> tShow r
-
 setGasRate i as = argsError i as
+
+-- | This is the only place we can do an external call to a capability,
+-- using 'evalCap False'. This allows us to call magical capabilities
+-- within the coin contract code.
+grantCapability :: ZNativeFun ReplState
+grantCapability _ [c@TApp{},body@TList{}] = do
+  -- erase composed
+  evalCapabilities . capComposed .= []
+  -- evaluate in-module cap
+  grantedCap <- evalCap False (_tApp c)
+  -- grab composed caps and clear composed state
+  _composedCaps <- undefined -- state $ \s -> (view (evalCapabilities . capComposed) s, set (evalCapabilities . capComposed) [] s)
+  r <- reduceBody body
+  -- only revoke if newly granted
+  forM_ grantedCap $ \newcap -> do
+    revokeCapability newcap
+  -- mapM_ revokeCapability composedCaps
+  return r
+grantCapability i as = argsError' i as
