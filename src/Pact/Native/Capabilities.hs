@@ -19,6 +19,7 @@ import Control.Monad
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Runtime
+import Pact.Types.Type (tvA)
 import Control.Lens
 import Control.Monad.State (state)
 
@@ -35,10 +36,6 @@ capDefs =
    , createModuleGuard
    , keysetRefGuard
    ])
-
-tvA :: Type n
-tvA = mkTyVar "a" []
-
 
 withCapability :: NativeDef
 withCapability =

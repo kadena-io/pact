@@ -48,6 +48,7 @@ import Pact.Types.Typecheck
 import Pact.Native.Internal hiding (defRNative,defGasRNative,defNative)
 import qualified Pact.Native.Internal as Native
 import Pact.Types.Runtime
+import Pact.Types.Type (tvA)
 import Pact.Eval
 import Pact.Persist.Pure
 import Pact.PersistPactDb
@@ -146,7 +147,7 @@ replDefs = ("Repl",
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
      ,defZNative "grant-capability" grantCapability
-      (funType tTyBool [("capability", TyFun $ funType' tTyBool []),("body", TyList TyAny)]) $
+      (funType tvA [("capability", TyFun $ funType' tTyBool []),("body", TyList TyAny)]) $
      "Allow the granting of capability CAPABILITY for use in BODY outside of a module. " <>
       "`$(grant-capability (TRANSFER) (my-module.transfer sender receiver 1.0))`"
      ])
@@ -439,7 +440,7 @@ grantCapability _ [c@TApp{},body@TList{}] = do
   -- erase composed
   evalCapabilities . capComposed .= []
   -- evaluate in-module cap
-  grantedCap <- evalCap False (_tApp c)
+  grantedCap <- evalCap False $ _tApp c
   -- grab composed caps and clear composed state
   composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
                                   set (evalCapabilities . capComposed) [] s)
