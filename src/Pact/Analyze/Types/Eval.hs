@@ -162,7 +162,7 @@ mkAnalyzeEnv modName pactMetadata registry tables args tags info = do
 
   columnIds <- for tables $ \(Table tname ut _) ->
     case maybeTranslateUserType' ut of
-      Just (EType (SObjectUnsafe ty)) -> Just
+      Just (EType (SObject ty)) -> Just
         (TableName (T.unpack tname), varIdColumns ty)
       _ -> Nothing
 
