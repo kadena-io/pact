@@ -48,8 +48,8 @@ import Control.Concurrent.Chan
 import Data.Maybe
 import Data.String
 import Data.ByteString (ByteString)
-import qualified Data.Map.Strict as M
-import qualified Data.Set as S
+import qualified Data.Map.Strict         as M
+import qualified Data.Set                as S
 import Data.Text.Encoding
 import Data.Aeson
 
@@ -65,8 +65,10 @@ import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Interpreter
 
+
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
-userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usPubKey
+userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usAddress
+
 
 userSigsToPactKeySet :: [UserSig] -> S.Set Pact.PublicKey
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey

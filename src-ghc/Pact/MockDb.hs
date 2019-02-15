@@ -25,8 +25,8 @@ newtype MockTxIds =
 instance Default MockTxIds where def = MockTxIds (\_t _i -> rc [])
 
 newtype MockGetUserTableInfo =
-  MockGetUserTableInfo (TableName -> Method () (ModuleName,KeySetName))
-instance Default MockGetUserTableInfo where def = MockGetUserTableInfo (\_t -> rc ("",""))
+  MockGetUserTableInfo (TableName -> Method () ModuleName)
+instance Default MockGetUserTableInfo where def = MockGetUserTableInfo (\_t -> rc "")
 
 newtype MockCommitTx =
   MockCommitTx (Method () [TxLog Value])
@@ -58,7 +58,7 @@ pactdb (MockDb (MockRead r) (MockKeys ks) (MockTxIds tids) (MockGetUserTableInfo
   ,
   _txids = tids
   ,
-  _createUserTable = \_t _m _k -> rc ()
+  _createUserTable = \_t _m -> rc ()
   ,
   _getUserTableInfo = uti
   ,

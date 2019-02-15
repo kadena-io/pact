@@ -1,6 +1,4 @@
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -10,7 +8,10 @@ module Utils.TestRunner
   , testDir
   , runAll
   , flushDb
+  , Crypto.SomeKeyPair
   , genKeys
+  , genKeysEth
+  , formatPubKeyForCmd
   , makeCheck
   , checkResult
   , threeStepPactCode
@@ -26,12 +27,11 @@ module Utils.TestRunner
 
 import Pact.Server.Server (setupServer)
 import qualified Pact.Server.Client as C
-import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
+import Pact.Types.Crypto as Crypto
+import Pact.Types.Util (toB16JSON)
 
-import "crypto-api" Crypto.Random
-import Crypto.Ed25519.Pure
 
 import Data.Aeson
 import Test.Hspec
@@ -144,12 +144,15 @@ flushDb = mapM_ deleteIfExists _logFiles
           isFile <- doesFileExist fp
           when isFile $ removeFile fp
 
-genKeys :: IO KeyPair
-genKeys = do
-  g :: SystemRandom <- newGenIO
-  case generateKeyPair g of
-    Left _ -> error "Something went wrong in genKeys"
-    Right (s,p,_) -> return $ KeyPair s p
+genKeys :: IO SomeKeyPair
+genKeys = genKeyPair defaultScheme
+
+genKeysEth :: IO SomeKeyPair
+genKeysEth = genKeyPair (toScheme ETH)
+
+formatPubKeyForCmd :: SomeKeyPair -> Value
+formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
+
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect
