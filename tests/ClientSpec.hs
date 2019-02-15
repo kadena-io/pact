@@ -45,14 +45,14 @@ spec = around_ bracket $ describe "Servant API client tests" $ do
   --   res `shouldBe` expt
   it "correctly runs a simple command publicly and listens to the result" $ do
     cmd <- simpleServerCmd
-    res <- runClientM (send (SubmitBatch [cmd])) clientEnv
+    res <- runClientM (send pactServerApiClient (SubmitBatch [cmd])) clientEnv
     let rk = cmdToRequestKey cmd
-    res `shouldBe` (Right (ApiSuccess (RequestKeys [rk])))
-    res' <- runClientM (listen (ListenerRequest rk)) clientEnv
+    res `shouldBe` (Right (RequestKeys [rk]))
+    res' <- runClientM (listen pactServerApiClient (ListenerRequest rk)) clientEnv
     let cmdData = (toJSON . CommandSuccess . Number) 3
-    res' `shouldBe` (Right (ApiSuccess (ApiResult cmdData (Just 0) Nothing)))
+    res' `shouldBe` (Right (ApiResult cmdData (Just 0) Nothing))
   it "correctly runs a simple command locally" $ do
     cmd <- simpleServerCmd
-    res <- runClientM (local cmd) clientEnv
+    res <- runClientM (local pactServerApiClient cmd) clientEnv
     let cmdData = (CommandSuccess . Number) 3
-    res `shouldBe` (Right (ApiSuccess cmdData))
+    res `shouldBe` (Right cmdData)

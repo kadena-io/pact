@@ -17,19 +17,30 @@
 --
 
 module Pact.Native
-    (natives
-    ,nativeDefs
-    ,moduleToMap
-    ,lengthDef
-    ,enforceDef
-    ,enforceOneDef
-    ,pactVersionDef
-    ,formatDef
-    ,strToIntDef
-    ,hashDef
-    ,ifDef
-    ,readDecimalDef
-    ,baseStrToInt
+    ( natives
+    , nativeDefs
+    , moduleToMap
+    , enforceDef
+    , enforceOneDef
+    , pactVersionDef
+    , formatDef
+    , strToIntDef
+    , hashDef
+    , ifDef
+    , readDecimalDef
+    , baseStrToInt
+    , mapDef
+    , foldDef
+    , makeListDef
+    , reverseDef
+    , filterDef
+    , sortDef
+    , whereDef
+    , composeDef
+    , lengthDef
+    , takeDef
+    , dropDef
+    , atDef
     ) where
 
 import Control.Lens hiding (parts,Fold,contains)
@@ -43,7 +54,7 @@ import qualified Data.Attoparsec.Text as AP
 import Prelude
 import qualified Data.HashMap.Strict as M
 import qualified Data.Text as T (isInfixOf, length, all, splitOn, null, append, unpack, singleton)
-import Safe
+import Safe hiding (atDef)
 import Control.Arrow hiding (app)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
@@ -90,7 +101,7 @@ lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
  \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
 
 listA :: Type n
-listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
+listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o") def]
 
 enforceDef :: NativeDef
 enforceDef = defNative "enforce" enforce
@@ -103,8 +114,8 @@ enforceDef = defNative "enforce" enforce
     enforce i as = runPure $ gasUnreduced i as $ mapM reduce as >>= enforce' i
 
     enforce' :: RNativeFun e
-    enforce' i [TLiteral (LBool b) _,TLitString msg]
-        | b = return $ TLiteral (LBool True) def
+    enforce' i [TLiteral (LBool b') _,TLitString msg]
+        | b' = return $ TLiteral (LBool True) def
         | otherwise = failTx (_faInfo i) $ unpack msg
     enforce' i as = argsError i as
     {-# INLINE enforce' #-}
@@ -129,7 +140,7 @@ enforceOneDef =
         r <- foldM tryCond Nothing conds
         case r of
           Nothing -> failTx (_faInfo i) (unpack msg')
-          Just b -> return b
+          Just b' -> return b'
     enforceOne i as = argsError' i as
 
 pactVersionDef :: NativeDef
@@ -192,7 +203,7 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
 
     if' :: NativeFun e
     if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \case
-               TLiteral (LBool c) _ -> reduce (if c then then' else else')
+               TLiteral (LBool c') _ -> reduce (if c' then then' else else')
                t -> evalError' i $ "if: conditional not boolean: " ++ show t
     if' i as = argsError' i as
 
@@ -209,6 +220,10 @@ readDecimalDef = defRNative "read-decimal" readDecimal
       (ParsedDecimal a') <- parseMsgKey i "read-decimal" key
       return $ toTerm a'
     readDecimal i as = argsError i as
+
+reverseDef :: NativeDef
+reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
+  "Reverse LIST. `(reverse [1 2 3])`"
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
@@ -269,71 +284,92 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
         Nothing  -> evalError info $
           "namespace: '" ++ asString' name ++ "' not defined"
 
+sortDef :: NativeDef
+sortDef = defRNative "sort" sort'
+  (funType (TyList a) [("values",TyList a)] <>
+   funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
+  "Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. \
+  \`(sort [3 1 2])` `(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"
+
+
+whereDef :: NativeDef
+whereDef = defNative (specialForm Where) where'
+  (funType tTyBool [("field",tTyString),("app",lam a tTyBool),("value",tTyObject (mkSchemaVar "row"))])
+  "Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE. \
+  \`(filter (where 'age (> 20)) [{'name: \"Mary\",'age: 30} {'name: \"Juan\",'age: 15}])`"
+
+composeDef :: NativeDef
+composeDef = defNative "compose" compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
+     "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
+     \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
+
+
+
+takeDef :: NativeDef
+takeDef = defRNative "take" take' takeDrop
+     "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. \
+     \`(take 2 \"abcd\")` `(take (- 3) [1 2 3 4 5])` `(take ['name] { 'name: \"Vlad\", 'active: false})`"
+
+dropDef :: NativeDef
+dropDef = defRNative "drop" drop' takeDrop
+     "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end.\
+     \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])` `(drop ['name] { 'name: \"Vlad\", 'active: false})`"
+
+mapDef :: NativeDef
+mapDef = defNative "map" map'
+  (funType (TyList a) [("app",lam b a),("list",TyList b)])
+  "Apply APP to each element in LIST, returning a new list of results. \
+  \`(map (+ 1) [1 2 3])`"
+
+foldDef :: NativeDef
+foldDef = defNative "fold" fold'
+  (funType a [("app",lam2 a b a),("init",a),("list",TyList b)])
+  "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
+  \`(fold (+) 0 [100 10 5])`"
+
+filterDef :: NativeDef
+filterDef = defNative "filter" filter'
+  (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
+  "Filter LIST by applying APP to each element. For each true result, the original value is kept.\
+  \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
+
+makeListDef :: NativeDef
+makeListDef = defRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
+  "Create list by repeating VALUE LENGTH times. `(make-list 5 true)`"
+
+atDef :: NativeDef
+atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
+                       funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
+  "Index LIST at IDX, or get value with key IDX from OBJECT. \
+  \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
+
 langDefs :: NativeModule
 langDefs =
-    ("General",[
-     ifDef
-    ,defNative "map" map'
-     (funType (TyList a) [("app",lam b a),("list",TyList b)])
-     "Apply APP to each element in LIST, returning a new list of results. \
-     \`(map (+ 1) [1 2 3])`"
-
-    ,defNative "fold" fold'
-     (funType a [("app",lam2 a b a),("init",a),("list",TyList b)])
-     "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
-     \`(fold (+) 0 [100 10 5])`"
+    ("General",
+    [ifDef
+    ,mapDef
+    ,foldDef
 
     ,defRNative "list" list
      (funType (TyList TyAny) [("elems",TyAny)])
      "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support. `(list 1 2 3)`"
 
-    ,defRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
-     "Create list by repeating VALUE LENGTH times. `(make-list 5 true)`"
-
-    ,defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
-     "Reverse LIST. `(reverse [1 2 3])`"
-
-    ,defNative "filter" filter'
-     (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
-     "Filter LIST by applying APP to each element. For each true result, the original value is kept.\
-     \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
-
-    ,defRNative "sort" sort'
-     (funType (TyList a) [("values",TyList a)] <>
-      funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
-     "Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. \
-     \`(sort [3 1 2])` `(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"
-
-    ,defNative (specialForm Where) where'
-     (funType tTyBool [("field",tTyString),("app",lam a tTyBool),("value",tTyObject (mkSchemaVar "row"))])
-     "Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE. \
-     \`(filter (where 'age (> 20)) [{'name: \"Mary\",'age: 30} {'name: \"Juan\",'age: 15}])`"
-
-     ,defNative "compose" compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
-     "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
-     \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
-
-     ,lengthDef
-
-    ,defRNative "take" take' takeDrop
-     "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. \
-     \`(take 2 \"abcd\")` `(take (- 3) [1 2 3 4 5])` `(take ['name] { 'name: \"Vlad\", 'active: false})`"
-
-    ,defRNative "drop" drop' takeDrop
-     "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end.\
-     \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])` `(drop ['name] { 'name: \"Vlad\", 'active: false})`"
+    ,makeListDef
+    ,reverseDef
+    ,filterDef
+    ,sortDef
+    ,whereDef
+    ,composeDef
+    ,lengthDef
+    ,takeDef
+    ,dropDef
 
     ,defRNative "remove" remove (funType (tTyObject (mkSchemaVar "o")) [("key",tTyString),("object",tTyObject (mkSchemaVar "o"))])
      "Remove entry for KEY from OBJECT. `(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
-                          funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
-     "Index LIST at IDX, or get value with key IDX from OBJECT. \
-     \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
-
+    ,atDef
     ,enforceDef
     ,enforceOneDef
-
     ,formatDef
 
     ,defRNative "pact-id" pactId (funType tTyInteger [])
@@ -352,7 +388,7 @@ langDefs =
      "Obtain hash of current transaction as a string. `(tx-hash)`"
 
     ,defNative (specialForm Bind) bind
-     (funType a [("src",tTyObject row),("binding",TySchema TyBinding row)])
+     (funType a [("src",tTyObject row),("binding",TySchema TyBinding row def)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
@@ -364,7 +400,7 @@ langDefs =
      \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values. \
      \`$(yield { \"amount\": 100.0 })`"
     ,defNative "resume" resume
-     (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
+     (funType a [("binding",TySchema TyBinding (mkSchemaVar "y") def),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
 
     ,pactVersionDef
@@ -395,24 +431,34 @@ langDefs =
     ,defineNamespaceDef
     ,namespaceDef
     ])
-    where b = mkTyVar "b" []
-          c = mkTyVar "c" []
-          d = mkTyVar "d" []
+    where d = mkTyVar "d" []
           row = mkSchemaVar "row"
-          yieldv = TySchema TyObject (mkSchemaVar "y")
-          obj = tTyObject (mkSchemaVar "o")
-          listStringA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString]
-          takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)] <>
-                     funType obj [("keys",TyList tTyString),("object",obj)]
-          lam x y = TyFun $ funType' y [("x",x)]
-          lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
+          yieldv = TySchema TyObject (mkSchemaVar "y") def
 
-a :: Type n
+lam2 :: Type v -> Type v -> Type v -> Type v
+lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
+
+obj :: Type n
+obj = tTyObject (mkSchemaVar "o")
+
+listStringA :: Type n
+listStringA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString]
+
+takeDrop :: FunTypes n
+takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)] <>
+           funType obj [("keys",TyList tTyString),("object",obj)]
+
+lam :: Type v -> Type v -> Type v
+lam x y = TyFun $ funType' y [("x",x)]
+
+a, b, c :: Type n
 a = mkTyVar "a" []
+b = mkTyVar "b" []
+c = mkTyVar "c" []
 
 map' :: NativeFun e
 map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply (_tApp app) . pure)
+           TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply (_tApp app) . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
 
@@ -439,7 +485,7 @@ fold' i as = argsError' i as
 
 filter' :: NativeFun e
 filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls lt _ -> ((\b -> TList b lt def) . concat) <$>
+           TList ls lt _ -> ((\b' -> TList b' lt def) . concat) <$>
                          forM ls (\a' -> do
                            t <- apply (_tApp app) [a']
                            case t of
@@ -455,23 +501,23 @@ length' _ [TObject ps _ _] = return $ toTerm (length ps)
 length' i as = argsError i as
 
 take' :: RNativeFun e
-take' _ [TLitInteger c,TList l t _] = return $ TList (tord take c l) t def
-take' _ [TLitInteger c,TLitString l] = return $ toTerm $ pack $ tord take c (unpack l)
+take' _ [TLitInteger c',TList l t _] = return $ TList (tord take c' l) t def
+take' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tord take c' (unpack l)
 take' _ [l@TList {},TObject {..}] =
   return $ toTObject _tObjectType def $ (`filter` _tObject) $ \(k,_) -> searchTermList k (_tList l)
 
 take' i as = argsError i as
 
 drop' :: RNativeFun e
-drop' _ [TLitInteger c,TList l t _] = return $ TList (tord drop c l) t def
-drop' _ [TLitInteger c,TLitString l] = return $ toTerm $ pack $ tord drop c (unpack l)
+drop' _ [TLitInteger c',TList l t _] = return $ TList (tord drop c' l) t def
+drop' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tord drop c' (unpack l)
 drop' _ [l@TList {},TObject {..}] =
   return $ toTObject _tObjectType def $ (`filter` _tObject) $ \(k,_) -> not $ searchTermList k (_tList l)
 drop' i as = argsError i as
 
 tord :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
-tord f c l | c >= 0 = f (fromIntegral c) l
-           | otherwise = reverse $ f (fromIntegral (negate c)) (reverse l)
+tord f c' l | c' >= 0 = f (fromIntegral c') l
+           | otherwise = reverse $ f (fromIntegral (negate c')) (reverse l)
 
 at' :: RNativeFun e
 at' _ [li@(TLitInteger idx),TList ls _ _] =
@@ -569,6 +615,7 @@ where' i as = argsError' i as
 
 
 sort' :: RNativeFun e
+sort' _ [l@(TList [] _ _)] = pure l
 sort' _ [TList{..}] = case nub (map typeof _tList) of
   [ty] -> case ty of
     Right rty@(TyPrim pty) -> case pty of
@@ -680,10 +727,10 @@ baseStrToInt base t =
     else foldM go 0 $ T.unpack t
   where
     go :: Integer -> Char -> Either Text Integer
-    go acc c =
-      let val = fromIntegral . digitToInt $ c
+    go acc c' =
+      let val = fromIntegral . digitToInt $ c'
       in if val < base
          then pure $ base * acc + val
-         else Left $ "baseStrToInt - character '" <> T.singleton c <>
+         else Left $ "baseStrToInt - character '" <> T.singleton c' <>
                 "' is out of range for base " <> tShow base <> ": " <> t
 {-# INLINE baseStrToInt #-}

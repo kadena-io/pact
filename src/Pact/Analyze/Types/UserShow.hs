@@ -1,5 +1,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+-- | Type definitions specific to the 'UserShow' typeclass for displaying values
+-- to end-users.
 module Pact.Analyze.Types.UserShow where
 
 import           Data.Map        (Map)
@@ -13,42 +16,50 @@ import           Pact.Types.Info (Info)
 import           Pact.Types.Util (tShow)
 
 class UserShow a where
-  userShowsPrec :: Int -> a -> Text
-
-  userShowList :: [a] -> Text
-  userShowList as = "[" <> T.intercalate ", " (userShow <$> as) <> "]"
+  userShowPrec :: Int -> a -> Text
 
 userShow :: UserShow a => a -> Text
-userShow = userShowsPrec 0
+userShow = userShowPrec 0
 
 parens :: Text -> Text
 parens t = "(" <> t <> ")"
+
+brackets :: Text -> Text
+brackets t = "[" <> t <> "]"
 
 parenList :: [Text] -> Text
 parenList = parens . T.unwords
 
 instance UserShow Integer where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow AlgReal where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow (Exp Info) where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow Bool where
-  userShowsPrec _ = tShow
-
-instance UserShow String where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow Int64 where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow Text where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow a => UserShow (Map Text a) where
-  userShowsPrec _ m =
+  userShowPrec _ m =
     let go result k a = result <> ", " <> k <> ": " <> userShow a
     in "{ " <> T.drop 2 (Map.foldlWithKey go "" m) <> " }"
+
+instance UserShow a => UserShow [a] where
+  userShowPrec _ l =
+    "[" <> T.intercalate ", " (fmap (userShowPrec 0) l) <> "]"
+
+instance UserShow () where
+  userShowPrec _ _ = "()"
+
+instance (UserShow a, UserShow b) => UserShow (a, b) where
+  userShowPrec _ (a, b) = "(" <> userShow a <> ", " <> userShow b <> ")"
+

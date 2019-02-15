@@ -3,17 +3,21 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ViewPatterns               #-}
 
--- | Features, availability, and documentation
+-- | Data and functions for generating documentation of the features found in
+-- the invariant and property languages. Note that currently this omits
+-- features found in the Pact term language that do not appear in either
+-- properties or invariants -- e.g. @write@ for modifying a database table.
 module Pact.Analyze.Feature where
 
-import           Control.Lens           (Prism', prism', preview, review)
+import           Control.Lens           (Prism', preview, prism', review)
 import           Data.Foldable          (foldl')
 import qualified Data.Map               as Map
 import           Data.Map.Strict        (Map)
-import qualified Data.Set               as Set
 import           Data.Set               (Set)
+import qualified Data.Set               as Set
 import           Data.String            (IsString)
 import           Data.Text              (Text)
 import           Data.Tuple             (swap)
@@ -32,24 +36,30 @@ data FeatureClass
   = CNumerical
   | CLogical
   | CObject
+  | CList
   | CString
   | CTemporal
   | CQuantification
   | CTransactional
   | CDatabase
   | CAuthorization
+  | CFunction
+  | COther
   deriving (Eq, Ord, Show)
 
 classTitle :: FeatureClass -> Text
-classTitle CNumerical = "Numerical"
-classTitle CLogical = "Logical"
-classTitle CObject = "Object"
-classTitle CString = "String"
-classTitle CTemporal = "Temporal"
+classTitle CNumerical      = "Numerical"
+classTitle CLogical        = "Logical"
+classTitle CObject         = "Object"
+classTitle CString         = "String"
+classTitle CTemporal       = "Temporal"
 classTitle CQuantification = "Quantification"
-classTitle CTransactional = "Transactional"
-classTitle CDatabase = "Database"
-classTitle CAuthorization = "Authorization"
+classTitle CTransactional  = "Transactional"
+classTitle CDatabase       = "Database"
+classTitle CAuthorization  = "Authorization"
+classTitle CList           = "List"
+classTitle CFunction       = "Function"
+classTitle COther          = "Other"
 
 data Feature
   -- Numerical operators
@@ -79,12 +89,28 @@ data Feature
   | FLogicalDisjunction
   | FLogicalNegation
   | FLogicalImplication
+  | FAndQ
+  | FOrQ
   -- Object operators
   | FObjectProjection
   | FObjectMerge
+  | FObjectDrop
+  | FObjectTake
+  -- List operators
+  | FListProjection
+  | FListLength
+  | FContains
+  | FReverse
+  | FSort
+  | FListDrop
+  | FListTake
+  | FMakeList
+  | FMap
+  | FFilter
+  | FFold
   -- String operators
   | FStringLength
-  | FStringConcatenation
+  | FConcatenation
   | FStringToInteger
   -- Temporal operators
   | FTemporalAddition
@@ -112,6 +138,13 @@ data Feature
   -- Authorization operators
   | FAuthorizedBy
   | FRowEnforced
+  -- Function
+  | FIdentity
+  | FConstantly
+  | FCompose
+  -- Other
+  | FWhere
+  | FTypeof
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -183,7 +216,9 @@ newtype TypeVar
 data Type
   = TyCon ConcreteType
   | TyVar TypeVar
+  | TyList' Type
   | TyEnum [Text]
+  | TyFun [Type] Type
   deriving (Eq, Ord, Show)
 
 data Bindings
@@ -191,7 +226,7 @@ data Bindings
   | BindObject
   deriving (Eq, Ord, Show)
 
-int, dec, str, time, bool, obj, ks, tbl, col, type' :: ConcreteType
+int, dec, str, time, bool, obj, ks, tbl, col, type', list :: ConcreteType
 int   = "integer"
 dec   = "decimal"
 str   = "string"
@@ -202,6 +237,7 @@ ks    = "keyset"
 tbl   = "table"
 col   = "column"
 type' = "type"
+list  = "list"
 
 doc :: Feature -> Doc
 
@@ -618,6 +654,40 @@ doc FLogicalImplication = Doc
         ]
         (TyCon bool)
   ]
+doc FAndQ = Doc
+  "and?"
+  CLogical
+  InvAndProp
+  "`and` the results of applying both `f` and `g` to `a`"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(and? f g a)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("f", TyFun [a] (TyCon bool))
+        , ("g", TyFun [a] (TyCon bool))
+        , ("a", a)
+        ]
+        (TyCon bool)
+  ]
+doc FOrQ = Doc
+  "or?"
+  CLogical
+  InvAndProp
+  "`or` the results of applying both `f` and `g` to `a`"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(or? f g a)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("f", TyFun [a] (TyCon bool))
+        , ("g", TyFun [a] (TyCon bool))
+        , ("a", a)
+        ]
+        (TyCon bool)
+  ]
 
 -- Object features
 
@@ -625,14 +695,24 @@ doc FObjectProjection = Doc
   "at"
   CObject
   InvAndProp
-  "Object projection"
-  [ Usage
+  "projection"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
       "(at k o)"
       Map.empty
       $ Fun
         Nothing
         [ ("k", TyCon str)
         , ("o", TyCon obj)
+        ]
+        a
+  , Usage
+      "(at i l)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("i", TyCon int)
+        , ("o", TyCon list)
         ]
         (TyCon bool)
   ]
@@ -653,6 +733,255 @@ doc FObjectMerge = Doc
         (TyCon obj)
   ]
 
+doc FObjectDrop = Doc
+  "drop"
+  CObject
+  InvAndProp
+  "drop entries having the specified keys from an object"
+  [ Usage
+      "(drop keys o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("keys", TyList' (TyCon str))
+        , ("o", TyCon obj)
+        ]
+      (TyCon obj)
+  ]
+
+doc FObjectTake = Doc
+  "take"
+  CObject
+  InvAndProp
+  "take entries having the specified keys from an object"
+  [ Usage
+      "(take keys o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("keys", TyList' (TyCon str))
+        , ("o", TyCon obj)
+        ]
+      (TyCon obj)
+  ]
+
+-- List features
+
+doc FListProjection = Doc
+  "at"
+  CList
+  InvAndProp
+  "projection"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(at k l)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("k", TyCon str)
+        , ("l", TyList' a)
+        ]
+        a
+  , Usage
+      "(at i l)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("i", TyCon int)
+        , ("o", TyCon list)
+        ]
+        (TyCon bool)
+  ]
+
+doc FListLength = Doc
+  "length"
+  CList
+  InvAndProp -- TODO: double-check that this is true
+  "List length"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(length s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyList' a)
+        ]
+        (TyCon int)
+  ]
+
+doc FContains = Doc
+  "contains"
+  CList -- TODO: other category?
+  InvAndProp
+  "List / string / object contains"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(contains x xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("xs", TyList' a)
+        ]
+        (TyCon bool)
+  , Usage
+      "(contains k o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("k", TyCon str)
+        , ("o", TyCon obj)
+        ]
+      (TyCon bool)
+  , Usage
+      "(contains value string)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("value", TyCon str)
+        , ("string", TyCon str)
+        ]
+      (TyCon bool)
+  ]
+
+
+doc FReverse = Doc
+  "reverse"
+  CList
+  InvAndProp
+  "reverse a list of values"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(reverse xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FSort = Doc
+  "sort"
+  CList
+  InvAndProp
+  "sort a list of values"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(sort xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FListDrop = Doc
+  "drop"
+  CList
+  InvAndProp
+  "drop the first `n` values from the beginning of a list (or the end if `n` is negative)"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(drop n xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("n", TyCon int)
+        , ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FListTake = Doc
+  "take"
+  CList
+  InvAndProp
+  "take the first `n` values from `xs` (taken from the end if `n` is negative)"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(take n xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("n", TyCon int)
+        , ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FMakeList = Doc
+  "make-list"
+  CList
+  InvAndProp
+  "create a new list with `n` copies of `a`"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(make-list n a)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("n", TyCon int)
+        , ("a", a)
+        ]
+      (TyList' a)
+  ]
+
+doc FMap = Doc
+  "map"
+  CList
+  InvAndProp
+  "apply `f` to each element in a list"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+    in Usage
+      "(map f as)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("f", TyFun [a] b)
+        , ("as", TyList' a)
+        ]
+      (TyList' b)
+  ]
+
+doc FFilter = Doc
+  "filter"
+  CList
+  InvAndProp
+  "filter a list by keeping the values for which `f` returns `true`"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(filter f as)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("f", TyFun [a] (TyCon bool))
+        , ("as", TyList' a)
+        ]
+      (TyList' a)
+  ]
+doc FFold = Doc
+  "fold"
+  CList
+  InvAndProp
+  "reduce a list by applying `f` to each element and the previous result"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+    in Usage
+      "(fold f a bs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("f", TyFun [a, b] a)
+        , ("a", a)
+        , ("bs", TyList' b)
+        ]
+      (TyList' a)
+  ]
+
+
 -- String features
 
 doc FStringLength = Doc
@@ -669,11 +998,12 @@ doc FStringLength = Doc
         ]
         (TyCon int)
   ]
-doc FStringConcatenation = Doc
+
+doc FConcatenation = Doc
   "+"
   CString
   InvAndProp
-  "String concatenation"
+  "String / list concatenation"
   [ Usage
       "(+ s t)"
       Map.empty
@@ -683,7 +1013,18 @@ doc FStringConcatenation = Doc
         , ("t", TyCon str)
         ]
         (TyCon str)
+  , let a = TyVar $ TypeVar "a"
+    in Usage
+      "(+ s t)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyList' a)
+        , ("t", TyList' a)
+        ]
+        (TyList' a)
   ]
+
 doc FStringToInteger = Doc
   "str-to-int"
   CString
@@ -1037,7 +1378,7 @@ doc FAuthorizedBy = Doc
   "authorized-by"
   CAuthorization
   PropOnly
-  "Whether the named keyset is enforced by the function under analysis"
+  "Whether the named keyset/guard is satisfied by the executing transaction"
   [ Usage
       "(authorized-by k)"
       Map.empty
@@ -1067,6 +1408,97 @@ doc FRowEnforced = Doc
         , ("r", TyCon str)
         ]
         (TyCon bool)
+  ]
+
+-- Functions
+
+doc FIdentity = Doc
+  "identity"
+  CFunction
+  InvAndProp
+  "identity returns its argument unchanged"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(identity a)"
+      (Map.singleton "a" (OneOf [tbl, str]))
+      $ Fun
+        Nothing
+        [ ("a", a)
+        ]
+        a
+  ]
+
+doc FConstantly = Doc
+  "constantly"
+  CFunction
+  InvAndProp
+  -- TODO(joel): implement the multivariate form
+  "constantly returns its first argument, ignoring the second"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+    in Usage
+      "(constantly a)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("a", a)
+        , ("b", b)
+        ]
+        a
+  ]
+
+doc FCompose = Doc
+  "compose"
+  CFunction
+  InvAndProp
+  "compose two functions"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+        c = TyVar $ TypeVar "c"
+        f = TyFun [a] b
+        g = TyFun [b] c
+    in Usage
+      "(compose f g)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("f", f)
+        , ("g", g)
+        ]
+        c
+  ]
+
+-- Other features
+
+doc FWhere = Doc
+  "where"
+  COther
+  InvAndProp
+  "utility for use in `filter` and `select` applying `f` to `field` in `obj`"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(where field f obj)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("field", TyCon str)
+        , ("f", TyFun [a] (TyCon bool))
+        , ("obj", TyCon obj)
+        ]
+        (TyCon bool)
+  ]
+doc FTypeof = Doc
+  "typeof"
+  COther
+  InvAndProp
+  "return the type of `a` as a string"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(typeof a)"
+      Map.empty
+      $ Fun Nothing
+        [ ("a", a) ]
+        (TyCon str)
   ]
 
 allFeatures :: Set Feature
@@ -1127,10 +1559,24 @@ PAT(SLogicalConjunction, FLogicalConjunction)
 PAT(SLogicalDisjunction, FLogicalDisjunction)
 PAT(SLogicalNegation, FLogicalNegation)
 PAT(SLogicalImplication, FLogicalImplication)
+PAT(SAndQ, FAndQ)
+PAT(SOrQ, FOrQ)
 PAT(SObjectProjection, FObjectProjection)
+PAT(SListLength, FListLength)
+PAT(SContains, FContains)
+PAT(SReverse, FReverse)
+PAT(SSort, FSort)
+PAT(SListDrop, FListDrop)
+PAT(SListTake, FListTake)
+PAT(SMakeList, FMakeList)
+PAT(SMap, FMap)
+PAT(SFilter, FFilter)
+PAT(SFold, FFold)
 PAT(SObjectMerge, FObjectMerge)
+PAT(SObjectDrop, FObjectDrop)
+PAT(SObjectTake, FObjectTake)
 PAT(SStringLength, FStringLength)
-PAT(SStringConcatenation, FStringConcatenation)
+PAT(SConcatenation, FConcatenation)
 PAT(SStringToInteger, FStringToInteger)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
@@ -1153,6 +1599,11 @@ PAT(SRowExists, FRowExists)
 PAT(SPropRead, FPropRead)
 PAT(SAuthorizedBy, FAuthorizedBy)
 PAT(SRowEnforced, FRowEnforced)
+PAT(SIdentity, FIdentity)
+PAT(SConstantly, FConstantly)
+PAT(SCompose, FCompose)
+PAT(SWhere, FWhere)
+PAT(STypeof, FTypeof)
 
 -- 'Text'/op prisms
 

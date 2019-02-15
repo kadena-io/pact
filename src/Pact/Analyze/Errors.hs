@@ -1,5 +1,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+-- | Errors that can occur during symbolic analysis.
 module Pact.Analyze.Errors where
 
 import qualified Data.SBV.Internals     as SBVI
@@ -7,16 +9,15 @@ import           Data.String            (IsString (fromString))
 import           Data.Text              (Text)
 import qualified Data.Text              as T
 
-import qualified Pact.Types.Persistence as Pact
 import           Pact.Types.Lang        (Info, tShow)
+import qualified Pact.Types.Persistence as Pact
 
 import           Pact.Analyze.Types
 
 data AnalyzeFailureNoLoc
-  = AtHasNoRelevantFields EType Schema
+  = AtHasNoRelevantFields EType ESchema
   | AValUnexpectedlySVal SBVI.SVal
-  | AValUnexpectedlyObj Object
-  | KeyNotPresent Text Object
+  | KeyNotPresent Text EType
   | MalformedLogicalOpExec LogicalOp Int
   | ObjFieldOfWrongType Text EType
   | PossibleRoundoff Text
@@ -29,7 +30,7 @@ data AnalyzeFailureNoLoc
   | OpaqueValEncountered
   | VarNotInScope Text VarId
   | UnsupportedObjectInDbCell
-  | InvalidDbWrite Pact.WriteType Schema Object
+  | InvalidDbWrite Pact.WriteType ESchema EType
   -- For cases we don't handle yet:
   | UnhandledTerm Text
   deriving (Eq, Show)
@@ -38,8 +39,7 @@ describeAnalyzeFailureNoLoc :: AnalyzeFailureNoLoc -> Text
 describeAnalyzeFailureNoLoc = \case
     -- these are internal errors. not quite as much care is taken on the messaging
     AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
-    AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
-    AValUnexpectedlyObj obj -> "in analyzeTerm, found AnObj where we expected AVal" <> tShow obj
+    AValUnexpectedlySVal sval -> "in evalProp, unexpectedly found AVal: " <> tShow sval
     KeyNotPresent key obj -> "key " <> key <> " unexpectedly not found in object " <> tShow obj
     MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
     ObjFieldOfWrongType fName fType -> "object field " <> fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"

@@ -4,6 +4,8 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE TemplateHaskell       #-}
+
+-- | Types related to parsing from 'Exp' to 'Prop' and 'Invariant'.
 module Pact.Analyze.Parse.Types where
 
 import           Control.Lens               (makeLenses)
@@ -17,7 +19,8 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
 
-import           Pact.Types.Lang            (AtomExp (..), Exp (..),
+import           Pact.Types.Lang            (AtomExp (..),
+                                             Exp (EAtom, ELiteral, ESeparator),
                                              ListDelimiter (..), ListExp (..),
                                              Literal (LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))
@@ -38,6 +41,7 @@ data PreProp
   | PreDecimalLit Decimal
   | PreTimeLit    Time
   | PreBoolLit    Bool
+  | PreListLit    [PreProp]
 
   -- identifiers
   | PreAbort
@@ -58,18 +62,20 @@ data PreProp
   -- applications
   | PreApp Text [PreProp]
 
-  | PreAt Text PreProp
+  | PreAt PreProp PreProp
   | PrePropRead PreProp PreProp PreProp
   | PreLiteralObject (Map Text PreProp)
   deriving (Eq, Show)
 
 instance UserShow PreProp where
-  userShowsPrec prec = \case
-    PreIntegerLit i   -> tShow i
-    PreStringLit t    -> tShow t
-    PreDecimalLit d   -> userShow d
-    PreTimeLit t      -> tShow (Pact.LTime (toPact timeIso t))
-    PreBoolLit b      -> tShow (Pact.LBool b)
+  userShowPrec prec = \case
+    PreIntegerLit i -> tShow i
+    PreStringLit t  -> tShow t
+    PreDecimalLit d -> userShow d
+    PreTimeLit t    -> tShow (Pact.LTime (toPact timeIso t))
+    PreBoolLit b    -> tShow (Pact.LBool b)
+    PreListLit lst  ->
+      "[" <> T.intercalate ", " (fmap (userShowPrec 0) lst) <> "]"
 
     PreAbort          -> STransactionAborts
     PreSuccess        -> STransactionSucceeds
@@ -86,12 +92,13 @@ instance UserShow PreProp where
     PreApp name applicands ->
       "(" <> name <> " " <> T.unwords (map userShow applicands) <> ")"
     PreAt objIx obj ->
-      "(" <> SObjectProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
+      "(" <> SObjectProjection <> " " <> userShow objIx <> " " <>
+        userShow obj <> ")"
     PrePropRead tn rk ba ->
       "(" <> SPropRead <> " '" <> userShow tn <> " " <> userShow rk <> " " <>
         userShow ba <> ")"
     PreLiteralObject obj ->
-      userShowsPrec prec obj
+      userShowPrec prec obj
 
 
 throwErrorT :: MonadError String m => Text -> m a
@@ -133,13 +140,13 @@ type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 makeLenses ''PropCheckEnv
 
 pattern ParenList :: [Exp t] -> Exp t
-pattern ParenList elems <- EList (ListExp elems Parens _i)
+pattern ParenList elems <- Pact.EList (ListExp elems Parens _i)
 
 pattern BraceList :: [Exp t] -> Exp t
-pattern BraceList elems <- EList (ListExp elems Braces _i)
+pattern BraceList elems <- Pact.EList (ListExp elems Braces _i)
 
 pattern SquareList :: [Exp t] -> Exp t
-pattern SquareList elems <- EList (ListExp elems Brackets _i)
+pattern SquareList elems <- Pact.EList (ListExp elems Brackets _i)
 
 pattern EAtom' :: Text -> Exp t
 pattern EAtom' name <- EAtom (AtomExp name [] _i)

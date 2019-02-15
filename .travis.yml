@@ -92,7 +92,7 @@ matrix:
   #   addons: {apt: {packages: [libgmp-dev]}}
 
   # OSX Build El Cap
-  - env: BUILD=stack ARGS=""
+  - env: BUILD=stack ARGS="" Z3VERSION="4.8.3"
     os: osx
     addons:
       artifacts:
@@ -100,14 +100,12 @@ matrix:
           - .stack-work/dist/x86_64-osx/Cabal-2.2.0.1/build/pact/pact
 
   # Linux build
-  - env: BUILD=stack ARGS="-j1"
+  - env: BUILD=stack ARGS="-j1" Z3VERSION="4.8.3"
     addons:
       apt: {packages: [libgmp-dev]}
       artifacts:
         paths:
           - .stack-work/dist/x86_64-linux/Cabal-2.2.0.1/build/pact/pact
-
-
 
   # OSX Build Yosemite
   # - env: BUILD=stack ARGS=""
@@ -140,26 +138,22 @@ matrix:
   #   compiler: ": #stack nightly osx"
   #   os: osx
 
-  allow_failures: []
-  # - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
-  # - env: BUILD=stack ARGS="--resolver nightly"
-
 before_install:
 # Using compiler above sets CC to an invalid value, so unset it
 - unset CC
 - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-    export Z3=`wget -q -O- http://github.com/Z3Prover/bin/raw/master/nightly | grep 'z3.*x64.*ubuntu.*.zip<' | awk '{print $7}' | awk -F= '{print $2}' | awk -F\" '{print $2}'`;
+    export Z3=`wget -q -O- "http://github.com/Z3Prover/z3/releases/tag/z3-${Z3VERSION}" |  grep 'z3.*x64.*ubuntu.*.zip" ' | awk '{print $2}' | awk -F= '{print $2}' | awk -F\" '{print $2}' | head -n1` ;
     echo "Linux Z3 $Z3";
   fi
 # https://github.com/travis-ci/travis-ci/issues/6307
 - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
     curl -sSL https://rvm.io/mpapis.asc | gpg --import -;
     rvm get stable;
-    export Z3=`wget -q -O- http://github.com/Z3Prover/bin/raw/master/nightly | grep 'z3.*x64.*osx.*.zip<' | awk '{print $7}' | awk -F= '{print $2}' | awk -F\" '{print $2}'`;
+    export Z3=`wget -q -O- "http://github.com/Z3Prover/z3/releases/tag/z3-${Z3VERSION}" |  grep 'z3.*x64.*osx.*.zip" ' | awk '{print $2}' | awk -F= '{print $2}' | awk -F\" '{print $2}' | head -n1` ;
     echo "OS X Z3 $Z3";
   fi
 - export Z3Base=`basename $Z3 .zip`
-- wget --quiet -L -O z3.zip http://github.com/Z3Prover/bin/raw/master/nightly/`basename $Z3`
+- wget --quiet -L -O z3.zip "https://github.com${Z3/blob/raw}"
 - unzip -q z3.zip -d z3_downloaded
 - /bin/rm z3.zip
 - export PATH=$PATH:$PWD/z3_downloaded/$Z3Base/bin

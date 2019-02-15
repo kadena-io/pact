@@ -570,7 +570,7 @@ parseListType = withList' Brackets $ TyList <$> parseType
 
 parseSchemaType :: Text -> SchemaType -> Compile (Type (Term Name))
 parseSchemaType tyRep sty = symbol tyRep >>
-  (TySchema sty <$> (parseUserSchemaType <|> pure TyAny))
+  (TySchema sty <$> (parseUserSchemaType <|> pure TyAny) <*> pure def)
 
 
 parseUserSchemaType :: Compile (Type (Term Name))
