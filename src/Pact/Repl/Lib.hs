@@ -25,7 +25,6 @@ import Data.Semigroup (Endo(..))
 import qualified Data.HashMap.Strict as HM
 import Control.Monad.Reader
 import Control.Monad.Catch
--- import Control.Monad.State (state)
 import Control.Lens
 import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as BSL
@@ -36,7 +35,7 @@ import Data.Maybe
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 #else
-import Control.Monad.State.Strict (get)
+import Control.Monad.State.Strict (state, get)
 import Criterion
 import Criterion.Types
 import qualified Data.Map as M
@@ -147,7 +146,9 @@ replDefs = ("Repl",
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
      ,defZNative "grant-capability" grantCapability
-      (funType tTyBool [("capability", TyFun $ funType' tTyBool []),("body", TyList TyAny)]) ""
+      (funType tTyBool [("capability", TyFun $ funType' tTyBool []),("body", TyList TyAny)]) $
+     "Allow the granting of capability CAPABILITY for use in BODY outside of a module. " <>
+      "`$(grant-capability (TRANSFER) (my-module.transfer sender receiver 1.0))`"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -440,7 +441,8 @@ grantCapability _ [c@TApp{},body@TList{}] = do
   -- evaluate in-module cap
   grantedCap <- evalCap False (_tApp c)
   -- grab composed caps and clear composed state
-  _composedCaps <- undefined -- state $ \s -> (view (evalCapabilities . capComposed) s, set (evalCapabilities . capComposed) [] s)
+  _composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
+                                  set (evalCapabilities . capComposed) [] s)
   r <- reduceBody body
   -- only revoke if newly granted
   forM_ grantedCap $ \newcap -> do
