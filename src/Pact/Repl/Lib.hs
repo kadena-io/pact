@@ -450,4 +450,5 @@ testCapability i as = argsError' i as
 revokeAll :: RNativeFun ReplState
 revokeAll _ _ = do
   evalCapabilities . capComposed .= []
+  evalCapabilities . capGranted .= []
   pure . tStr $ "All capabilities revoked"
