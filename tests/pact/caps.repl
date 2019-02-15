@@ -62,9 +62,6 @@
   (defun test-compose-cap ()
     (with-capability (COMPOSING-CAP)
        (require-capability (KALL-CAP))))
-
-  (defun test-granted ()
-    (require-capability (GRANTED)))
 )
 
 (create-table guard-table)
