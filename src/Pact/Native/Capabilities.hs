@@ -68,7 +68,7 @@ withCapability =
       -- only revoke if newly granted
       forM_ grantedCap $ \newcap -> do
         revokeCapability newcap
-      mapM_ revokeCapability composedCaps
+        mapM_ revokeCapability composedCaps
       return r
     withCapability' i as = argsError' i as
 

@@ -441,12 +441,12 @@ grantCapability _ [c@TApp{},body@TList{}] = do
   -- evaluate in-module cap
   grantedCap <- evalCap False (_tApp c)
   -- grab composed caps and clear composed state
-  _composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
+  composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
                                   set (evalCapabilities . capComposed) [] s)
   r <- reduceBody body
   -- only revoke if newly granted
   forM_ grantedCap $ \newcap -> do
     revokeCapability newcap
-  -- mapM_ revokeCapability composedCaps
+    mapM_ revokeCapability composedCaps
   return r
 grantCapability i as = argsError' i as
