@@ -1,0 +1,87 @@
+(begin-tx)
+(env-data { "ED25519All": ["7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"
+                           "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"] })
+(define-keyset "ked25519All" (read-keyset "ED25519All"))
+
+
+(env-data { "ethAll": ["db8304f325524279d9a34706932a6a07ebfc5c97"
+                       "9f491e44a3f87df60d6cb0eefd5a9083ae6c3f32"
+                       "1dc3794f3079b380e26b26a5835c04b9497d0908"
+                       "bc6314c12b78a21d2fd6a8eec8e78936ce9a86e1"
+                       "612ac19e1ac0e5feb47737560930adeba57baf3f"
+                       "24f3ae0fc699ff2287365684a50cdaa8e69996dd"] })
+(define-keyset "kethAll" (read-keyset "ethAll"))
+
+
+(define-keyset "k" (sig-keyset))
+(module scheme "k"
+  (defun test-all-ed25519 ()
+    (enforce-keyset "ked25519All"))
+  (defun test-all-eth ()
+    (enforce-keyset "kethAll"))
+)
+(commit-tx)
+
+
+
+;; Test that all PPKScheme's Public Keys transformed into expected Address
+
+(begin-tx)
+(use scheme)
+
+(env-keys [(format-address "ED25519"
+              "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804")
+           (format-address "ED25519"
+              "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9") ])
+(expect "ED25519 public keys transformed into expected address" true (test-all-ed25519) )
+
+
+(env-keys [(format-address "ETH"
+              "8281c43fe803b508e2f3fdae7aa2c22db9c337e62806658c5fa67b137a5f82bafc74ea853feddf85c89d61c31f191f7e398a3b793004a7a7380ac72e2861ed33")
+           (format-address "ETH"
+              "c640e94730fb7b7fce01b11086645741fcb5174d1c634888b9d146613730243a171833259cd7dab9b3435421dcb2816d3efa55033ff0899de6cc8b1e0b20e56c")
+           (format-address "ETH"
+              "0e72033edfce78e0b74d07bb275312179af22ae38feaccecfbdd8728f816e5c938aed5015098af1dd0a135681118410f95f9036b2f16ff51a1bf3d6d23faa82b")
+           (format-address "ETH"
+              "558c704562332c798b1858f3a3e443dcf630d072e348a4466195c72a107b88cb588b49a70c36c41f4e2488b21b8f376f464b02074bea1f68ddb3c325465cf5a3")
+           (format-address "ETH"
+              "ef082370011f8c0f6ac2b5ab965b84f7141a1057ce55b9cc815f8d339b7b8168713e4a4b51982307f827199bbd9d6c94be3f93def86601c74772a52ca9631251")
+           (format-address "ETH"
+              "3ff4aa2504039f415b9e1a4f745da396a26f60c9370d5ef2f0c0778852f5e3b9d05780ea52bc0448714516c0315d0907f22419439613d0087d76e580c39b4a7a") ])
+(expect "ETH public keys transformed into expected address" true (test-all-eth))
+
+(commit-tx)
+
+
+(begin-tx)
+(expect-failure "Fails with invalid scheme" (format-address "IVALIDSCHEME" "SomePublicKey"))
+(expect-failure "Fails when Public Key not hex encoded" (format-address "ETH" "SomeNonB16PublicKey"))
+
+(expect-failure "Fails with invalid ED25519 Public Key" (format-address "ED25519" "8281c43fe803b508e2f3fdae7aa2c22db9c337e62806658c5fa67b137a5f82bafc74ea853feddf85c89d61c31f191f7e398a3b793004a7a7380ac72e2861ed33"))
+(expect-failure "Fails with invalid ETH Public Key" (format-address "ETH" "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"))
+(expect-failure "Fails with empty ED25519 Public Key" (format-address "ED25519" ""))
+(expect-failure "Fails with empty ETH Public Key" (format-address "ETH" ""))
+
+
+;; ED25519 Unit Tests
+(expect "ED25519 Address is equivalent to its Public Key"
+        "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"
+        (format-address "ED25519"
+        "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"))
+
+;; Source: https://kobl.one/blog/create-full-ethereum-keypair-and-address/
+;; ETH Unit Tests
+(expect "ECDSA Public Key converted to valid Ethereum Address"
+        "0bed7abd61247635c1973eb38474a2516ed1d884"
+        (format-address "ETH" "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"))
+
+;; ECDSA Unit Tests
+(expect "65 bytes ECDSA Public Key begining with 0x04 == 64 bytes ECDSA Public Key" true
+        (= (format-address "ETH" "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e")
+           (format-address "ETH" "04836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e") ))
+(expect-failure "Fails when 65 bytes ECDSA Public begins with anything other than 0x04"
+        (format-address "ETH" "05836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"))
+(expect-failure "Fails with valid ECC public key, but invalid ECDSA public key"
+                (format-address "ETH" "ce986528af7141a1d30ddac009b57ff5ab945d7767969f42821c1bd8"))
+
+(commit-tx)

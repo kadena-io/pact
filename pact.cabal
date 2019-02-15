@@ -39,6 +39,7 @@ library
                      , Pact.Server.Client
                      , Pact.Types.API
                      , Pact.Types.Command
+                     , Pact.Types.Scheme
                      , Pact.Types.Exp
                      , Pact.Types.ExpParser
                      , Pact.Types.Gas
@@ -120,6 +121,7 @@ library
       Pact.Server.PactService
       Pact.Server.Server
       Pact.Types.Crypto
+      Pact.Types.ECDSA
       Pact.Types.Server
       Pact.Types.SQLite
 
@@ -250,6 +252,7 @@ test-suite hspec
               , unordered-containers
               , ansi-wl-pprint
               , bytestring
+              , base16-bytestring >=0.1.1.6 && < 0.2
               , mtl
               , text
               , transformers
@@ -267,6 +270,7 @@ test-suite hspec
       , async
       , ed25519-donna
       , crypto-api
+      , cryptonite
       , http-client
       , servant-client
     other-modules:
@@ -286,3 +290,4 @@ test-suite hspec
       , Analyze.TimeGen
       , Analyze.Translate
       , ClientSpec
+      , SchemeSpec

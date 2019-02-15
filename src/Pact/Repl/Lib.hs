@@ -41,6 +41,8 @@ import Criterion.Types
 import qualified Data.Map as M
 import qualified Pact.Analyze.Check as Check
 import Statistics.Types (Estimate(..))
+import qualified Pact.Types.Crypto as Crypto
+import Pact.Types.Util (fromText')
 #endif
 import Pact.Typechecker
 import Pact.Types.Typecheck
@@ -83,6 +85,8 @@ replDefs = ("Repl",
                               funType tTyString [("file",tTyString),("reset",tTyBool)]) $
       "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. " <>
       "`$(load \"accounts.repl\")`"
+     ,defZRNative "format-address" formatAddr (funType tTyString [("scheme", tTyString), ("public-key", tTyString)])
+      "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)]) $
@@ -161,7 +165,7 @@ repldb = PactDb {
   , _writeRow = \wt d k v -> invokeEnv $ _writeRow pactdb wt d k v
   , _keys = \t -> invokeEnv $ _keys pactdb t
   , _txids = \t tid -> invokeEnv $ _txids pactdb t tid
-  , _createUserTable = \t m k -> invokeEnv $ _createUserTable pactdb t m k
+  , _createUserTable = \t m -> invokeEnv $ _createUserTable pactdb t m
   , _getUserTableInfo = \t -> invokeEnv $ _getUserTableInfo pactdb t
   , _beginTx = \tid -> invokeEnv $ _beginTx pactdb tid
   , _commitTx = invokeEnv $ _commitTx pactdb
@@ -195,6 +199,29 @@ setenv l v = setop $ UpdateEnv $ Endo (set l v)
 overenv :: Setter' (EvalEnv LibState) a -> (a -> a) -> Eval LibState ()
 overenv l f = setop $ UpdateEnv $ Endo (over l f)
 -}
+
+formatAddr :: RNativeFun LibState
+#if !defined(ghcjs_HOST_OS)
+formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
+  let eitherEvalErr res effectStr transformFunc =
+        case res of
+          Left e  -> evalError' i (effectStr ++ ": " ++ show e)
+          Right v -> return (transformFunc v)
+  sppk  <- eitherEvalErr (fromText' scheme)
+           "Invalid PPKScheme"
+           Crypto.toScheme
+  pubBS <- eitherEvalErr (parseB16TextOnly cryptoPubKey)
+           "Invalid Public Key format"
+           Crypto.PubBS
+  addr  <- eitherEvalErr (Crypto.formatPublicKeyBS sppk pubBS)
+           "Unable to convert Public Key to Address"
+           toB16Text
+  return (tStr addr)
+formatAddr i as = argsError i as
+#else
+formatAddr i _ = evalError' i "Address formatting not supported in GHCJS"
+#endif
+
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
