@@ -1,4 +1,11 @@
+stages:
+  - build
+  - deploy
+
 pact-macos:
+  stage: build
+  tags:
+    - macos
   script:
     - nix-build
     - nix-build -A ghc.pact.doc
@@ -8,8 +15,18 @@ pact-macos:
     - public/
 
 pact-linux:
+  stage: build
+  tags:
+    - linux
   script:
-    - nix-build --argstr system x86_64-linux
+    - nix-build
+
+deploy-nix-cache:
+  stage: deploy
+  allow_failure: true
+  script:
+    - nix-instantiate | cachix push pact
+    - nix-instantiate shell.nix | cachix push pact
 
 pages:
   stage: deploy
