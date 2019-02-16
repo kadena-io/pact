@@ -48,7 +48,6 @@ import Pact.Types.Typecheck
 import Pact.Native.Internal hiding (defRNative,defGasRNative,defNative)
 import qualified Pact.Native.Internal as Native
 import Pact.Types.Runtime
-import Pact.Types.Type (tvA)
 import Pact.Eval
 import Pact.Persist.Pure
 import Pact.PersistPactDb
@@ -147,13 +146,10 @@ replDefs = ("Repl",
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
      ,defZNative "test-capability" testCapability
-      (funType tvA [("capability", TyFun $ funType' tTyBool [])]) $
-     "Allow the testing of the scope of a capability CAPABILITY in the repl environment. This is intended for testing " <>
-     "ONLY, and one should revoke all capabilities after by calling 'revoke-all-capabilities' after use." <>
-     "`$(grant-capability (TRANSFER) (my-module.transfer sender receiver 1.0))`"
-     ,defZRNative "revoke-all-capabilities" revokeAll (funType tTyBool []) $
-     "Convenience function which revokes all capabilities in scope. This should be called when one needs to create " <>
-     "a fresh environment, or to clean up after using 'test-capability'. `$(revoke-all-capabilities)`"
+      (funType tTyString [("capability", TyFun $ funType' tTyBool [])]) $
+     "Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope " <>
+     "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
+     "blockchain environment. `$(grant-capability (TRANSFER) (my-module.transfer sender receiver 1.0))`"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -446,9 +442,3 @@ testCapability _ [ c@TApp{} ] = do
     Nothing -> "Capability granted"
     Just cap' -> "Capability granted: " <> tShow cap'
 testCapability i as = argsError' i as
-
-revokeAll :: RNativeFun ReplState
-revokeAll _ _ = do
-  evalCapabilities . capComposed .= []
-  evalCapabilities . capGranted .= []
-  pure . tStr $ "All capabilities revoked"

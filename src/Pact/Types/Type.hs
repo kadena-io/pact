@@ -31,7 +31,7 @@ module Pact.Types.Type
    TypeVar(..),tvName,tvConstraint,
    Type(..),tyFunType,tyListType,tySchema,tySchemaType,tySchemaPartial,tyUser,tyVar,tyGuard,
    mkTyVar,mkTyVar',mkSchemaVar,
-   isAnyTy,isVarTy,canUnifyWith,tvA
+   isAnyTy,isVarTy,canUnifyWith
    ) where
 
 
@@ -273,9 +273,6 @@ mkTyVar' :: TypeVarName -> Type n
 mkTyVar' n = mkTyVar n []
 mkSchemaVar :: TypeVarName -> Type n
 mkSchemaVar n = TyVar (SchemaVar n)
-
-tvA :: Type n
-tvA = mkTyVar "a" []
 
 isAnyTy :: Type v -> Bool
 isAnyTy TyAny = True
