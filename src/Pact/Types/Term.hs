@@ -618,9 +618,12 @@ data ConstVal n =
   deriving (Eq,Functor,Foldable,Traversable,Generic,Show)
 
 -- Note: I believe this entire thing could be derived automatically if we go
--- rid of bound (@Scope@)
+-- rid of bound (@Scope@). We currently need this instance to satisfy the
+-- 'Show' instance for 'Scope':
+-- @(Show b, Show1 f, Show a) => Show (Scope b f a)@.
 instance Show1 Term where
-  liftShowsPrec :: forall a. (Int -> a -> ShowS) -> ([a] -> ShowS) -> Int -> Term a -> ShowS
+  liftShowsPrec :: forall a.
+    (Int -> a -> ShowS) -> ([a] -> ShowS) -> Int -> Term a -> ShowS
   liftShowsPrec showsA showListA p tm = showParen (p > 10) $ case tm of
     TModule{..} ->
         showString "TModule "
@@ -922,6 +925,8 @@ showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
 showParamType t = ":" ++ show t
 
+-- We currently need this instance to satisfy the 'Eq instance for 'Scope':
+-- @(Monad f, Eq b, Eq1 f) => Eq1 (Scope b f)@
 instance Eq1 Term where
   liftEq eq (TModule a b c) (TModule m n o) =
     liftEq (liftEq eq) a m && liftEq eq b n && c == o
