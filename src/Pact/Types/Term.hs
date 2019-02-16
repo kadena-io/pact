@@ -41,14 +41,17 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    TableName(..),
-   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
-   interfaceCode, interfaceMeta, interfaceName, interfaceImports,
+   Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
+   Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
+   ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
+   Governance(..),
    ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
    ConstVal(..),
    Use(..),
    App(..),appFun,appArgs,appInfo,
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
+   derefDef,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
@@ -310,7 +313,6 @@ newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
 instance Show TableName where show (TableName s) = show s
 
--- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
@@ -408,6 +410,14 @@ data Use = Use
   } deriving (Eq)
 instance Show Use where
   show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
+instance ToJSON Use where
+  toJSON Use{..} =
+    object $ ("module" .= _uModuleName) : (maybe [] (return . ("hash" .=)) _uModuleHash)
+instance FromJSON Use where
+  parseJSON = withObject "Use" $ \o ->
+    Use <$> o .: "module"
+        <*> o .:? "hash"
+        <*> pure def
 
 data App t = App
   { _appFun :: !t
@@ -417,56 +427,123 @@ data App t = App
 instance Show n => Show (App n) where
   show App{..} = "(" ++ unwords (show _appFun:map show _appArgs) ++ ")"
 
--- TODO: We need a more expressive, safer ADT for this.
-data Module
-  = Module
+
+newtype Governance g = Governance { _gGovernance :: Either KeySetName g }
+  deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance Show g => Show (Governance g) where
+  show (Governance (Left k)) = asString' k
+  show (Governance (Right r)) = show r
+
+instance ToJSON g => ToJSON (Governance g) where
+  toJSON (Governance g) = case g of
+    Left ks -> object [ "keyset" .= ks ]
+    Right c -> object [ "capability" .= c ]
+instance FromJSON g => FromJSON (Governance g) where
+  parseJSON = withObject "Governance" $ \o ->
+    Governance <$> (Left <$> o .: "keyset" <|>
+                    Right <$> o .: "capability")
+
+
+data Module g = Module
   { _mName :: !ModuleName
-  , _mKeySet :: !KeySetName
+  , _mGovernance :: !(Governance g)
   , _mMeta :: !Meta
   , _mCode :: !Code
   , _mHash :: !Hash
   , _mBlessed :: !(HS.HashSet Hash)
   , _mInterfaces :: [ModuleName]
   , _mImports :: [Use]
-  }
-  | Interface
-  { _interfaceName :: !ModuleName
-  , _interfaceCode :: !Code
-  , _interfaceMeta :: !Meta
-  , _interfaceImports :: [Use]
-  } deriving Eq
-
-instance Show Module where
-  show m = case m of
-    Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
-    Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
-
-instance ToJSON Module where
+  } deriving (Eq,Functor,Foldable,Traversable)
+instance Show g => Show (Module g) where
+  show Module{..} = "(Module " ++ asString' _mName ++ " '" ++ show _mGovernance ++ " " ++ show _mHash ++ ")"
+instance ToJSON g => ToJSON (Module g) where
   toJSON Module{..} = object
     [ "name" .= _mName
-    , "keyset" .= _mKeySet
+    , "governance" .= _mGovernance
     , "meta" .= _mMeta
     , "code" .= _mCode
     , "hash" .= _mHash
     , "blessed" .= _mBlessed
     , "interfaces" .= _mInterfaces
-    ]
-  toJSON Interface{..} = object
-    [ "name" .= _interfaceName
-    , "code" .= _interfaceCode
-    , "meta" .= _interfaceMeta
+    , "imports" .= _mImports
     ]
 
-instance FromJSON Module where
+instance FromJSON g => FromJSON (Module g) where
   parseJSON = withObject "Module" $ \o -> Module
     <$> o .: "name"
-    <*> o .: "keyset"
+    <*> o .: "governance"
     <*> pure (Meta Nothing []) {- o .:? "meta" -}
     <*> o .: "code"
     <*> o .: "hash"
     <*> (HS.fromList <$> o .: "blessed")
     <*> o .: "interfaces"
-    <*> pure []
+    <*> o .: "imports"
+
+data Interface = Interface
+  { _interfaceName :: !ModuleName
+  , _interfaceCode :: !Code
+  , _interfaceMeta :: !Meta
+  , _interfaceImports :: [Use]
+  } deriving (Eq)
+instance Show Interface where
+  show Interface{..} = "(Interface " ++ asString' _interfaceName ++ ")"
+
+instance ToJSON Interface where
+  toJSON Interface{..} = object
+    [ "name" .= _interfaceName
+    , "code" .= _interfaceCode
+    , "meta" .= _interfaceMeta
+    , "imports" .= _interfaceImports
+    ]
+
+instance FromJSON Interface where
+  parseJSON = withObject "Interface" $ \o -> Interface
+    <$> o .: "name"
+    <*> o .: "code"
+    <*> pure (Meta Nothing [])
+    <*> o .: "imports"
+
+
+data ModuleDef g
+  = MDModule !(Module g)
+  | MDInterface !Interface
+ deriving (Eq,Functor,Foldable,Traversable)
+
+instance Show g => Show (ModuleDef g) where
+  show md = case md of
+    MDModule m -> show m
+    MDInterface i -> show i
+
+instance ToJSON g => ToJSON (ModuleDef g) where
+  toJSON (MDModule m) = toJSON m
+  toJSON (MDInterface i) = toJSON i
+
+instance FromJSON g => FromJSON (ModuleDef g) where
+  parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
+
+instance Eq1 ModuleDef where
+  liftEq eq
+    (MDModule (Module a (Governance b) c d e f g h))
+    (MDModule (Module m (Governance n) o p q r s t)) =
+      a == m && liftEq eq b n && c == o && d == p &&
+      e == q && f == r && g == s && h == t
+  liftEq _ (MDInterface a@Interface {}) (MDInterface b@Interface{}) = a == b
+  liftEq _ _ _ = False
+
+moduleDefName :: ModuleDef g -> ModuleName
+moduleDefName (MDModule m) = _mName m
+moduleDefName (MDInterface m) = _interfaceName m
+
+moduleDefCode :: ModuleDef g -> Code
+moduleDefCode (MDModule m) = _mCode m
+moduleDefCode (MDInterface m) = _interfaceCode m
+
+moduleDefMeta :: ModuleDef g -> Meta
+moduleDefMeta (MDModule m) = _mMeta m
+moduleDefMeta (MDInterface m) = _interfaceMeta m
+
+
 
 data Def n = Def
   { _dDefName :: !DefName
@@ -477,12 +554,18 @@ data Def n = Def
   , _dMeta :: !Meta
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq)
+
 instance (Show n) => Show (Def n) where
   show Def{..} = "(" ++ unwords
     [ defTypeRep _dDefType
     , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
     , "(" ++ unwords (map show (_ftArgs _dFunType)) ++ ")"] ++
     maybeDelim " " (_mDocs _dMeta) ++ ")"
+
+derefDef :: Def Ref -> Name
+derefDef Def{..} = QName _dModule (asString _dDefName) _dInfo
+
+
 
 newtype NamespaceName = NamespaceName Text
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic)
@@ -524,7 +607,7 @@ instance Eq1 ConstVal where
 -- | Pact evaluable term.
 data Term n =
     TModule {
-      _tModuleDef :: Module
+      _tModuleDef :: ModuleDef (Term n)
     , _tModuleBody :: !(Scope () Term n)
     , _tInfo :: !Info
     } |
@@ -645,7 +728,7 @@ showParamType t = ":" ++ show t
 -- instance Show1 Term
 instance Eq1 Term where
   liftEq eq (TModule a b c) (TModule m n o) =
-    a == m && liftEq eq b n && c == o
+    liftEq (liftEq eq) a m && liftEq eq b n && c == o
   liftEq eq (TList a b c) (TList m n o) =
     liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o
   liftEq eq (TDef (Def a b c d e f g) i) (TDef (Def m n o p q r s) t) =
@@ -684,7 +767,7 @@ instance Applicative Term where
 
 instance Monad Term where
     return a = TVar a def
-    TModule m b i >>= f = TModule m (b >>>= f) i
+    TModule m b i >>= f = TModule (fmap (>>= f) m) (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef (Def n m dt ft b d i) i' >>= f = TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d i) i'
     TNative n fn t d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d tl i
@@ -818,8 +901,8 @@ termEq _ _ = False
 abbrev :: Show t => Term t -> String
 abbrev (TModule m _ _) =
   case m of
-    Module{..} -> "<module " ++ asString' _mName ++ ">"
-    Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
+    MDModule Module{..} -> "<module " ++ asString' _mName ++ ">"
+    MDInterface Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
 abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
 abbrev TDef {..} = "<defun " ++ asString' (_dDefName _tDef) ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
@@ -843,6 +926,8 @@ makeLenses ''Namespace
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
+makeLenses ''Interface
+makePrisms ''ModuleDef
 makeLenses ''App
 makeLenses ''Def
 makeLenses ''ModuleName

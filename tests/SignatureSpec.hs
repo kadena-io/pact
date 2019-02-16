@@ -16,7 +16,7 @@ import Pact.Types.Exp
 import Pact.Types.Info (Info(..))
 import Pact.Types.Runtime (RefStore(..), ModuleData(..),
                            eeRefStore, rsModules)
-import Pact.Types.Term (Module(..), ModuleName(..),
+import Pact.Types.Term (Module(..), Interface(..), ModuleName(..), ModuleDef(..),
                         Meta(..), Term(..), Ref(..), Def(..))
 
 
@@ -29,8 +29,12 @@ compareModelSpec = describe "Module models" $ do
   md  <- runIO $ loadModuleData rs (ModuleName "model-test1-impl" Nothing)
   ifd <- runIO $ loadModuleData rs (ModuleName "model-test1" Nothing)
 
-  let mModels    = _mModel . _mMeta . _mdModule $ md
-      iModels    = _mModel . _interfaceMeta . _mdModule $ ifd
+  let mModels = case _mdModule md of
+        MDModule m -> _mModel $ _mMeta m
+        _ -> def
+      iModels = case _mdModule ifd of
+        MDInterface i -> _mModel $ _interfaceMeta i
+        _ -> def
       mfunModels = aggregateFunctionModels md
       ifunModels = aggregateFunctionModels ifd
 

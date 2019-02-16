@@ -116,7 +116,7 @@ class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactValue v
 instance PactValue v => PactValue (TxLog v)
 instance PactValue (Columns Persistable)
 instance PactValue a => PactValue [a]
-instance PactValue Module
+instance PactValue (ModuleDef Name)
 instance PactValue KeySet
 instance PactValue Value
 instance PactValue Namespace

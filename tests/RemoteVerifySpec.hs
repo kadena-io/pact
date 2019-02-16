@@ -82,7 +82,7 @@ testSingleModule = do
   Right replState0 <- pure eReplState0
   Just (ModuleData mod1 _refs) <- pure $ stateModuleData "mod1" replState0
 
-  resp <- runIO $ serveAndRequest 3000 $ Remote.Request [mod1] "mod1"
+  resp <- runIO $ serveAndRequest 3000 $ Remote.Request [derefDef <$> mod1] "mod1"
 
   it "verifies over the network" $
     "Property proven valid" == resp ^. _Right . Remote.responseLines . ix 0
@@ -120,7 +120,7 @@ testUnsortedModules = do
   Just (ModuleData mod1 _refs) <- pure $ stateModuleData "mod1" replState0
   Just (ModuleData mod2 _refs) <- pure $ stateModuleData "mod2" replState0
 
-  resp <- runIO $ serveAndRequest 3001 $ Remote.Request [mod2, mod1] "mod2"
+  resp <- runIO $ serveAndRequest 3001 $ Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
 
   it "verifies over the network" $
     "Property proven valid" == resp ^. _Right . Remote.responseLines . ix 0
