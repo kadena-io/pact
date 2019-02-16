@@ -64,6 +64,7 @@ import           Prelude                      hiding (exp)
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                PrimType (..), SchemaVar, TList,
                                                TableName, TyObject, Type)
+import           Pact.Types.Pretty
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Doc, Type, Var, ks, obj,
@@ -81,7 +82,7 @@ parseTableName (PreVar vid name) = do
   case varTy of
     Just QTable -> pure $ CoreProp $ Var vid name
     _           -> throwError $ T.unpack $ "invalid table name: " <> name
-parseTableName bad = throwError $ renderCompactString $
+parseTableName bad = throwError $ renderCompactString' $
   "invalid table name: " <> pretty bad
 
 parseColumnName :: PreProp -> PropCheck (Prop TyColumnName)
@@ -92,7 +93,7 @@ parseColumnName (PreVar vid name) = do
     Just QColumnOf{} -> pure $ CoreProp $ Var vid name
     _                -> throwError $ T.unpack $
       "invalid column name: " <> name
-parseColumnName bad = throwError $ renderCompactString $
+parseColumnName bad = throwError $ renderCompactString' $
   "invalid column name: " <> pretty bad
 
 parseBeforeAfter :: PreProp -> PropCheck BeforeOrAfter
@@ -141,7 +142,7 @@ expToPreProp = \case
     <*> expToPreProp rk
     <*> expToPreProp ba
   exp@(ParenList [EAtom' SPropRead, _tn, _rk]) -> throwErrorIn exp $
-    text' SPropRead <> " must specify a time ('before or 'after). example: " <>
+    pretty SPropRead <> " must specify a time ('before or 'after). example: " <>
     "(= result (read accounts user 'before))"
 
   exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
@@ -399,8 +400,8 @@ inferPreProp preProp = case preProp of
     a''@(Some aTy a') <- inferPreProp a
     b''@(Some bTy b') <- inferPreProp b
     let eqNeqMsg :: Text -> Doc
-        eqNeqMsg nouns = text' nouns <> " only support equality (" <>
-          text' SEquality <> ") / inequality (" <> text' SInequality <>
+        eqNeqMsg nouns = pretty nouns <> " only support equality (" <>
+          pretty SEquality <> ") / inequality (" <> pretty SInequality <>
           ") checks"
 
     -- special case for an empty list on either side
@@ -451,7 +452,7 @@ inferPreProp preProp = case preProp of
       (AndOp, [a, b]) -> PAnd <$> checkPreProp SBool a <*> checkPreProp SBool b
       (OrOp,  [a, b]) -> POr  <$> checkPreProp SBool a <*> checkPreProp SBool b
       _               -> throwErrorIn preProp $
-        text' op' <> " applied to wrong number of arguments"
+        pretty op' <> " applied to wrong number of arguments"
 
   PreApp s [a, b] | s == SLogicalImplication -> do
     propNotA <- PNot <$> checkPreProp SBool a
@@ -582,7 +583,7 @@ inferPreProp preProp = case preProp of
     defn <- view $ definedProps . at fName
     case defn of
       Nothing -> throwErrorIn preProp $
-        "couldn't find property named " <> text' fName
+        "couldn't find property named " <> pretty fName
       Just (DefinedProperty argTys body) -> do
         when (length args /= length argTys) $
           throwErrorIn preProp "wrong number of arguments"
@@ -624,7 +625,7 @@ checkPreProp ty preProp
       (Some SInteger aprop, Some SDecimal bprop) ->
         pure $ PNumerical $ IntDecArithOp op aprop bprop
       (_, _) -> throwErrorIn preProp $
-        "unexpected argument types for (" <> text' opSym <> "): " <>
+        "unexpected argument types for (" <> pretty opSym <> "): " <>
         pretty (existentialType a') <> " and " <>
         pretty (existentialType b')
   (SInteger, PreApp (toOp arithOpP -> Just op) [a, b])
@@ -641,7 +642,7 @@ checkPreProp ty preProp
 typeError :: (HasCallStack, Pretty a, Pretty b) => PreProp -> a -> b -> PropCheck c
 typeError preProp a b = throwErrorIn preProp $
   "type error: " <> pretty a <> " vs " <> pretty b <> "(" <>
-  text (prettyCallStack callStack) <> ")"
+  pretty (prettyCallStack callStack) <> ")"
 
 expectColumnType
   :: Prop TyTableName -> Prop TyColumnName -> SingTy a -> PropCheck ()

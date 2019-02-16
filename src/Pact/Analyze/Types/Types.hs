@@ -62,9 +62,8 @@ import           Data.Type.Equality           ((:~:) (Refl), apply)
 import           Data.Typeable                (Typeable, Proxy(Proxy))
 import           GHC.TypeLits                 (Symbol, KnownSymbol, symbolVal,
                                                sameSymbol)
-import           Text.PrettyPrint.ANSI.Leijen (Pretty(..), Doc, text)
 
-import           Pact.Types.Term              (commaBraces)
+import           Pact.Types.Pretty
 
 data Ty
   = TyInteger
@@ -295,7 +294,7 @@ instance Pretty (SingTy ty) where
       prettyHList :: HList Sing a -> [Doc]
       prettyHList SNil        = []
       prettyHList (SCons k v n) =
-        (text (symbolVal k) <> ": " <> pretty v)
+        (prettyString (symbolVal k) <> ": " <> pretty v)
         : prettyHList n
 
 class SingI a where

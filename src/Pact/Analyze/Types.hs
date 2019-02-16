@@ -8,9 +8,7 @@
 
 -- | Toplevel module for types related to symbolic analysis of Pact programs.
 module Pact.Analyze.Types
-  ( module Text.PrettyPrint.ANSI.Leijen
-
-  , module Pact.Analyze.Types.Languages
+  ( module Pact.Analyze.Types.Languages
   , module Pact.Analyze.Types.Model
   , module Pact.Analyze.Types.Numerical
   , module Pact.Analyze.Types.ObjUtil
@@ -37,8 +35,6 @@ import           Control.Lens                 (Lens', makeLenses, use, (+=))
 import           Control.Monad.State.Strict   (MonadState)
 import           Data.Text                    (Text)
 import           Prelude                      hiding (Float)
-import Text.PrettyPrint.ANSI.Leijen hiding
-  ((<$>), empty, int, bool, columns, list, float)
 
 import qualified Pact.Types.Typecheck         as TC
 

@@ -44,6 +44,7 @@ import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
 import qualified Pact.Types.Persistence      as Pact
+import           Pact.Types.Pretty           (renderCompactString', pretty)
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
 
@@ -503,7 +504,7 @@ evalTerm = \case
       Some SInteger int  -> Right . Left  <$> eval int
       Some SBool    bool -> Right . Right <$> eval bool
       etm                   -> throwErrorNoLoc $ fromString $
-        Pact.renderCompactString $
+        renderCompactString' $
         "We can only analyze calls to `format` formatting {string,integer,bool}" <>
         " (not " <> pretty etm <> ")"
     case unliteralS formatStr' of

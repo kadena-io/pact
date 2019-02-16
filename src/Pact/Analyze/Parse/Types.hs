@@ -20,15 +20,14 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
 
-import           Pact.Types.Lang            (text', commaBraces, commaBrackets,
-                                             AtomExp (..),
+import           Pact.Types.Lang            (AtomExp (..),
                                              Exp (EAtom, ELiteral, ESeparator),
                                              ListDelimiter (..), ListExp (..),
                                              Literal (LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (UserType)
-import           Pact.Types.Util            (renderCompactString)
+import           Pact.Types.Pretty
 
 import           Pact.Analyze.Feature       hiding (Doc, Type, Var, ks, obj,
                                              str)
@@ -79,39 +78,39 @@ instance Pretty PreProp where
     PreBoolLit True   -> "true"
     PreBoolLit False  -> "false"
     PreListLit lst    -> commaBrackets $ fmap pretty lst
-    PreAbort          -> text' STransactionAborts
-    PreSuccess        -> text' STransactionSucceeds
-    PreResult         -> text' SFunctionResult
-    PreVar _id name   -> text' name
-    PreGlobalVar name -> text' name
+    PreAbort          -> pretty STransactionAborts
+    PreSuccess        -> pretty STransactionSucceeds
+    PreResult         -> pretty SFunctionResult
+    PreVar _id name   -> pretty name
+    PreGlobalVar name -> pretty name
 
     PreForall _vid name qty prop ->
-      "(" <> text' SUniversalQuantification <> " (" <> text' name <> ":" <>
+      "(" <> pretty SUniversalQuantification <> " (" <> pretty name <> ":" <>
         pretty qty <> ") " <> pretty prop <> ")"
     PreExists _vid name qty prop ->
-      "(" <> text' SExistentialQuantification <> " (" <> text' name <> ":" <>
+      "(" <> pretty SExistentialQuantification <> " (" <> pretty name <> ":" <>
         pretty qty <> ") " <> pretty prop <> ")"
     PreApp name applicands ->
-      "(" <> text' name <> " " <> hsep (map pretty applicands) <> ")"
+      "(" <> pretty name <> " " <> hsep (map pretty applicands) <> ")"
     PreAt objIx obj ->
-      "(" <> text' SObjectProjection <> " " <> pretty objIx <> " " <>
+      "(" <> pretty SObjectProjection <> " " <> pretty objIx <> " " <>
         pretty obj <> ")"
     PrePropRead tn rk ba ->
-      "(" <> text' SPropRead <> " '" <> pretty tn <> " " <> pretty rk <> " " <>
+      "(" <> pretty SPropRead <> " '" <> pretty tn <> " " <> pretty rk <> " " <>
         pretty ba <> ")"
     PreLiteralObject obj -> commaBraces $ Map.toList obj <&> \(k, v) ->
-      text' k <> " := " <> pretty v
+      pretty k <> " := " <> pretty v
 
 
 throwErrorT :: MonadError String m => Text -> m a
 throwErrorT = throwError . T.unpack
 
 throwErrorD :: MonadError String m => Doc -> m a
-throwErrorD = throwError . renderCompactString
+throwErrorD = throwError . renderCompactString'
 
 -- TODO(joel): add location info
 throwErrorIn :: (MonadError String m, Pretty a) => a -> Doc -> m b
-throwErrorIn exp msg = throwError $ renderCompactString $
+throwErrorIn exp msg = throwError $ renderCompactString' $
   "in " <> pretty exp <> ", " <> msg
 
 textToQuantifier

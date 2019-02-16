@@ -33,11 +33,10 @@ import           Data.SBV.Internals           (CV (..), CVal (CInteger),
 import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import           GHC.Real                     ((%))
-import           Text.PrettyPrint.ANSI.Leijen (Pretty(..), text)
 
 import           Pact.Analyze.Feature         hiding (Constraint, dec)
 import           Pact.Analyze.Types.Types
-import           Pact.Types.Term              (parenList, text')
+import           Pact.Types.Pretty            (Pretty(..), parensSep, viaShow)
 
 
 newtype PactIso a b = PactIso {unPactIso :: Iso' a b}
@@ -206,8 +205,8 @@ instance Pretty Decimal where
     case Decimal.eitherFromRational (dec % (10 ^ decimalPrecision)) of
       Left err                    -> error err
       -- Make sure to show ".0":
-      Right (Decimal.Decimal 0 i) -> text $ show $ Decimal.Decimal 1 (i * 10 :: Integer)
-      Right d                     -> text $ show d
+      Right (Decimal.Decimal 0 i) -> viaShow $ Decimal.Decimal 1 (i * 10 :: Integer)
+      Right d                     -> viaShow d
 
 -- Operations that apply to a pair of either integer or decimal, resulting in
 -- the same:
@@ -320,14 +319,14 @@ data Numerical t (a :: Ty) where
 
 instance (Pretty (t 'TyInteger), Pretty (t 'TyDecimal))
   => Pretty (Numerical t a) where
-  pretty = parenList . \case
+  pretty = parensSep . \case
     DecArithOp op a b      -> [pretty op, pretty a, pretty b]
     IntArithOp op a b      -> [pretty op, pretty a, pretty b]
     DecUnaryArithOp op a   -> [pretty op, pretty a]
     IntUnaryArithOp op a   -> [pretty op, pretty a]
     DecIntArithOp op a b   -> [pretty op, pretty a, pretty b]
     IntDecArithOp op a b   -> [pretty op, pretty a, pretty b]
-    ModOp a b              -> [text' SModulus, pretty a, pretty b]
+    ModOp a b              -> [pretty SModulus, pretty a, pretty b]
     RoundingLikeOp1 op a   -> [pretty op, pretty a]
     RoundingLikeOp2 op a b -> [pretty op, pretty a, pretty b]
 

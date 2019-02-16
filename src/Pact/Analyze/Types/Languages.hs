@@ -79,12 +79,12 @@ import           Data.Typeable                ((:~:) (Refl), Proxy)
 import           GHC.TypeLits                 (symbolVal, someSymbolVal,
                                                SomeSymbol(SomeSymbol))
 import           Prelude                      hiding (Float)
-import Text.PrettyPrint.ANSI.Leijen hiding
-  ((<$>), empty, int, bool, columns, list, float)
 import           Text.Show                    (showListWith)
 
-import           Pact.Types.Lang              (commaBraces, commaBrackets,
-                                               parenList, text')
+import           Pact.Types.Pretty            (commaBraces, commaBrackets,
+                                               parens, parensSep,
+                                               Pretty(pretty), Doc, viaShow,
+                                               vsep)
 import           Pact.Types.Persistence       (WriteType)
 
 import           Pact.Analyze.Feature         hiding (Doc, Sym, Var,
@@ -384,7 +384,7 @@ singPrettyObject SObjectNil (Object SNil) = [""]
 singPrettyObject
   (SObjectUnsafe (SingList (SCons _ _ objty)))
   (Object (SCons k (Column vTy v) obj))
-    = (text (symbolVal k) <> ": " <> singPrettyTm vTy v)
+    = (pretty (symbolVal k) <> ": " <> singPrettyTm vTy v)
       : singPrettyObject (SObjectUnsafe (SingList objty)) (Object obj)
 singPrettyObject _ _ = error "malformed object"
 
@@ -400,7 +400,7 @@ singPrettyListTm ty tms = commaBrackets $ singPrettyTm ty <$> tms
 
 singPrettyOpen :: IsTerm tm => SingTy a -> Open x tm a -> Doc
 singPrettyOpen ty (Open _ nm a)
-  = parenList [ "lambda", text' nm, singPrettyTm ty a ]
+  = parensSep [ "lambda", pretty nm, singPrettyTm ty a ]
 
 singShowsTmList :: IsTerm tm => SingTy a -> Int -> tm ('TyList a) -> ShowS
 singShowsTmList ty = singShowsTm (SList ty)
@@ -497,15 +497,15 @@ showsNumerical _ty p tm = showParen (p > 10) $ case tm of
 
 prettyNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Doc
 prettyNumerical _ty = \case
-  DecArithOp op a b      -> parenList [pretty op,  prettyTm a, prettyTm b]
-  IntArithOp op a b      -> parenList [pretty op,  prettyTm a, prettyTm b]
-  DecUnaryArithOp op a   -> parenList [pretty op,  prettyTm a            ]
-  IntUnaryArithOp op a   -> parenList [pretty op,  prettyTm a            ]
-  DecIntArithOp op a b   -> parenList [pretty op,  prettyTm a, prettyTm b]
-  IntDecArithOp op a b   -> parenList [pretty op,  prettyTm a, prettyTm b]
-  ModOp a b              -> parenList [prettyTm a, prettyTm b            ]
-  RoundingLikeOp1 op a   -> parenList [pretty op,  prettyTm a            ]
-  RoundingLikeOp2 op a b -> parenList [pretty op,  prettyTm a, prettyTm b]
+  DecArithOp op a b      -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  IntArithOp op a b      -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  DecUnaryArithOp op a   -> parensSep [pretty op,  prettyTm a            ]
+  IntUnaryArithOp op a   -> parensSep [pretty op,  prettyTm a            ]
+  DecIntArithOp op a b   -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  IntDecArithOp op a b   -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  ModOp a b              -> parensSep [prettyTm a, prettyTm b            ]
+  RoundingLikeOp1 op a   -> parensSep [pretty op,  prettyTm a            ]
+  RoundingLikeOp2 op a b -> parensSep [pretty op,  prettyTm a, prettyTm b]
 
 eqCoreTm :: IsTerm tm => SingTy ty -> Core tm ty -> Core tm ty -> Bool
 eqCoreTm ty (Lit a)                      (Lit b)
@@ -890,79 +890,79 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
 prettyCore :: IsTerm tm => SingTy ty -> Core tm ty -> Doc
 prettyCore ty = \case
   Lit a                    -> withPretty ty $ pretty a
-  Sym s                    -> text $ show s
-  Var _vid name            -> text' name
-  Identity ty' x           -> parenList [text' SIdentity, singPrettyTm ty' x]
-  Constantly tyb a b       -> parenList [text' SConstantly, singPrettyTm ty a, singPrettyTm tyb b]
-  Compose _ tyb tyc _ b c  -> parenList [text' SCompose, singPrettyOpen tyb b, singPrettyOpen tyc c]
-  StrConcat x y            -> parenList [text' SConcatenation, prettyTm x, prettyTm y]
-  StrLength str            -> parenList [text' SStringLength, prettyTm str]
-  StrToInt s               -> parenList [text' SStringToInteger, prettyTm s]
-  StrToIntBase b s         -> parenList [text' SStringToInteger, prettyTm b, prettyTm s]
+  Sym s                    -> viaShow s
+  Var _vid name            -> pretty name
+  Identity ty' x           -> parensSep [pretty SIdentity, singPrettyTm ty' x]
+  Constantly tyb a b       -> parensSep [pretty SConstantly, singPrettyTm ty a, singPrettyTm tyb b]
+  Compose _ tyb tyc _ b c  -> parensSep [pretty SCompose, singPrettyOpen tyb b, singPrettyOpen tyc c]
+  StrConcat x y            -> parensSep [pretty SConcatenation, prettyTm x, prettyTm y]
+  StrLength str            -> parensSep [pretty SStringLength, prettyTm str]
+  StrToInt s               -> parensSep [pretty SStringToInteger, prettyTm s]
+  StrToIntBase b s         -> parensSep [pretty SStringToInteger, prettyTm b, prettyTm s]
   StrContains needle haystack
-    -> parenList [text' SContains, prettyTm needle, prettyTm haystack]
+    -> parensSep [pretty SContains, prettyTm needle, prettyTm haystack]
   Numerical tm             -> prettyNumerical ty tm
-  IntAddTime x y           -> parenList [text' STemporalAddition, prettyTm x, prettyTm y]
-  DecAddTime x y           -> parenList [text' STemporalAddition, prettyTm x, prettyTm y]
-  Comparison ty' op x y    -> parenList [pretty op, singPrettyTm ty' x, singPrettyTm ty' y]
-  GuardEqNeq op x y        -> parenList [pretty op, prettyTm x, prettyTm y]
+  IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
+  DecAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
+  Comparison ty' op x y    -> parensSep [pretty op, singPrettyTm ty' x, singPrettyTm ty' y]
+  GuardEqNeq op x y        -> parensSep [pretty op, prettyTm x, prettyTm y]
   ObjectEqNeq ty1 ty2 op x y
-    -> parenList [pretty op, singPrettyTm ty1 x, singPrettyTm ty2 y]
-  ObjAt ty' k obj          -> parenList [text' SObjectProjection, prettyTm k, singPrettyTm ty' obj]
-  ObjContains ty' k obj    -> parenList [text' SContains, prettyTm k, singPrettyTm ty' obj]
-  ObjDrop ty' ks obj       -> parenList [text' SObjectDrop, prettyTm ks, singPrettyTm ty' obj]
-  ObjTake ty' ks obj       -> parenList [text' SObjectTake, prettyTm ks, singPrettyTm ty' obj]
-  ObjMerge ty1 ty2 x y     -> parenList [text' SObjectMerge, singPrettyTm ty1 x, singPrettyTm ty2 y]
+    -> parensSep [pretty op, singPrettyTm ty1 x, singPrettyTm ty2 y]
+  ObjAt ty' k obj          -> parensSep [pretty SObjectProjection, prettyTm k, singPrettyTm ty' obj]
+  ObjContains ty' k obj    -> parensSep [pretty SContains, prettyTm k, singPrettyTm ty' obj]
+  ObjDrop ty' ks obj       -> parensSep [pretty SObjectDrop, prettyTm ks, singPrettyTm ty' obj]
+  ObjTake ty' ks obj       -> parensSep [pretty SObjectTake, prettyTm ks, singPrettyTm ty' obj]
+  ObjMerge ty1 ty2 x y     -> parensSep [pretty SObjectMerge, singPrettyTm ty1 x, singPrettyTm ty2 y]
   LiteralObject ty' obj    -> commaBraces (singPrettyObject ty' obj)
-  Logical op args          -> parenList $ pretty op : fmap prettyTm args
+  Logical op args          -> parensSep $ pretty op : fmap prettyTm args
 
-  ListEqNeq ty' op x y     -> parenList [pretty op, singPrettyTmList ty' x, singPrettyTmList ty' y]
-  ListAt ty' k lst         -> parenList [prettyTm k, singPrettyTmList ty' lst]
+  ListEqNeq ty' op x y     -> parensSep [pretty op, singPrettyTmList ty' x, singPrettyTmList ty' y]
+  ListAt ty' k lst         -> parensSep [prettyTm k, singPrettyTmList ty' lst]
   ListContains ty' needle haystack
-    -> parenList [text' SContains, singPrettyTm ty' needle, singPrettyTmList ty' haystack]
-  ListLength ty' x         -> parenList [text' SListLength, singPrettyTmList ty' x]
-  ListReverse ty' lst      -> parenList [text' SReverse, singPrettyTmList ty' lst]
-  ListSort ty' lst         -> parenList [text' SSort, singPrettyTmList ty' lst]
-  ListDrop ty' n lst       -> parenList [text' SListDrop, prettyTm n, singPrettyTmList ty' lst]
-  ListTake ty' n lst       -> parenList [text' SListTake, prettyTm n, singPrettyTmList ty' lst]
-  ListConcat ty' x y       -> parenList [text' SConcatenation, singPrettyTmList ty' x, singPrettyTmList ty' y]
-  MakeList ty' x y         -> parenList [text' SMakeList, prettyTm x, singPrettyTm ty' y]
+    -> parensSep [pretty SContains, singPrettyTm ty' needle, singPrettyTmList ty' haystack]
+  ListLength ty' x         -> parensSep [pretty SListLength, singPrettyTmList ty' x]
+  ListReverse ty' lst      -> parensSep [pretty SReverse, singPrettyTmList ty' lst]
+  ListSort ty' lst         -> parensSep [pretty SSort, singPrettyTmList ty' lst]
+  ListDrop ty' n lst       -> parensSep [pretty SListDrop, prettyTm n, singPrettyTmList ty' lst]
+  ListTake ty' n lst       -> parensSep [pretty SListTake, prettyTm n, singPrettyTmList ty' lst]
+  ListConcat ty' x y       -> parensSep [pretty SConcatenation, singPrettyTmList ty' x, singPrettyTmList ty' y]
+  MakeList ty' x y         -> parensSep [pretty SMakeList, prettyTm x, singPrettyTm ty' y]
   LiteralList ty' lst      -> singPrettyListTm ty' lst
-  ListMap tya tyb b as -> parenList
-    [ text' SMap
+  ListMap tya tyb b as -> parensSep
+    [ pretty SMap
     , singPrettyOpen tyb b
     , singPrettyTmList tya as
     ]
-  ListFilter ty' a b -> parenList
-    [ text' SFilter
+  ListFilter ty' a b -> parensSep
+    [ pretty SFilter
     , singPrettyOpen SBool a
     , singPrettyTmList ty' b
     ]
-  ListFold tya tyb (Open _ nm a) b c -> parenList
-    [ text' SFold
-    , parenList [ "lambda", text' nm, singPrettyOpen tya a ]
+  ListFold tya tyb (Open _ nm a) b c -> parensSep
+    [ pretty SFold
+    , parensSep [ "lambda", pretty nm, singPrettyOpen tya a ]
     , singPrettyTm tya b
     , singPrettyTmList tyb c
     ]
-  AndQ ty' a b c -> parenList
-    [ text' SAndQ
+  AndQ ty' a b c -> parensSep
+    [ pretty SAndQ
     , singPrettyOpen SBool a
     , singPrettyOpen SBool b
     , singPrettyTm ty' c
     ]
-  OrQ ty' a b c -> parenList
-    [ text' SOrQ
+  OrQ ty' a b c -> parensSep
+    [ pretty SOrQ
     , singPrettyOpen SBool a
     , singPrettyOpen SBool b
     , singPrettyTm ty' c
     ]
-  Where tyobj _tya k f obj -> parenList
-    [ text' SWhere
+  Where tyobj _tya k f obj -> parensSep
+    [ pretty SWhere
     , prettyTm k
     , singPrettyOpen SBool f
     , singPrettyTm tyobj obj
     ]
-  Typeof ty' a -> parenList [text' STypeof, singPrettyTm ty' a]
+  Typeof ty' a -> parensSep [pretty STypeof, singPrettyTm ty' a]
 
 
 data BeforeOrAfter = Before | After
@@ -1061,29 +1061,29 @@ data Prop (a :: Ty)
 
 instance Pretty (PropSpecific a) where
   pretty = \case
-    Abort                   -> text' STransactionAborts
-    Success                 -> text' STransactionSucceeds
-    Result                  -> text' SFunctionResult
-    Forall _ var ty x       -> parenList
-      [text' SUniversalQuantification, parens (text' var <> ":" <> pretty ty), prettyTm x]
-    Exists _ var ty x       -> parenList
-      [text' SExistentialQuantification, parens (text' var <> ":" <> pretty ty), prettyTm x]
-    TableWrite tab          -> parenList [text' STableWritten, prettyTm tab]
-    TableRead  tab          -> parenList [text' STableRead, prettyTm tab]
-    ColumnWritten tab col   -> parenList [text' "column-written", prettyTm tab, prettyTm col]
-    ColumnRead tab col      -> parenList [text' "column-read", prettyTm tab, prettyTm col]
-    IntCellDelta tab col rk -> parenList [text' SCellDelta, prettyTm tab, prettyTm col, prettyTm rk]
-    DecCellDelta tab col rk -> parenList [text' SCellDelta, prettyTm tab, prettyTm col, prettyTm rk]
-    IntColumnDelta tab col  -> parenList [text' SColumnDelta, prettyTm tab, prettyTm col]
-    DecColumnDelta tab col  -> parenList [text' SColumnDelta, prettyTm tab, prettyTm col]
-    RowRead tab rk          -> parenList [text' SRowRead, prettyTm tab, prettyTm rk]
-    RowReadCount tab rk     -> parenList [text' SRowReadCount, prettyTm tab, prettyTm rk]
-    RowWrite tab rk         -> parenList [text' SRowWritten, prettyTm tab, prettyTm rk]
-    RowWriteCount tab rk    -> parenList [text' SRowWriteCount, prettyTm tab, prettyTm rk]
-    GuardPassed name        -> parenList [text' SAuthorizedBy, pretty name]
-    RowEnforced tn cn rk    -> parenList [text' SRowEnforced, prettyTm tn, prettyTm cn, prettyTm rk]
-    RowExists tn rk ba      -> parenList [text' SRowExists, prettyTm tn, prettyTm rk, pretty ba]
-    PropRead _ty ba tn rk   -> parenList [text' SPropRead, prettyTm tn, prettyTm rk, pretty ba]
+    Abort                   -> pretty STransactionAborts
+    Success                 -> pretty STransactionSucceeds
+    Result                  -> pretty SFunctionResult
+    Forall _ var ty x       -> parensSep
+      [pretty SUniversalQuantification, parens (pretty var <> ":" <> pretty ty), prettyTm x]
+    Exists _ var ty x       -> parensSep
+      [pretty SExistentialQuantification, parens (pretty var <> ":" <> pretty ty), prettyTm x]
+    TableWrite tab          -> parensSep [pretty STableWritten, prettyTm tab]
+    TableRead  tab          -> parensSep [pretty STableRead, prettyTm tab]
+    ColumnWritten tab col   -> parensSep ["column-written", prettyTm tab, prettyTm col]
+    ColumnRead tab col      -> parensSep ["column-read", prettyTm tab, prettyTm col]
+    IntCellDelta tab col rk -> parensSep [pretty SCellDelta, prettyTm tab, prettyTm col, prettyTm rk]
+    DecCellDelta tab col rk -> parensSep [pretty SCellDelta, prettyTm tab, prettyTm col, prettyTm rk]
+    IntColumnDelta tab col  -> parensSep [pretty SColumnDelta, prettyTm tab, prettyTm col]
+    DecColumnDelta tab col  -> parensSep [pretty SColumnDelta, prettyTm tab, prettyTm col]
+    RowRead tab rk          -> parensSep [pretty SRowRead, prettyTm tab, prettyTm rk]
+    RowReadCount tab rk     -> parensSep [pretty SRowReadCount, prettyTm tab, prettyTm rk]
+    RowWrite tab rk         -> parensSep [pretty SRowWritten, prettyTm tab, prettyTm rk]
+    RowWriteCount tab rk    -> parensSep [pretty SRowWriteCount, prettyTm tab, prettyTm rk]
+    GuardPassed name        -> parensSep [pretty SAuthorizedBy, pretty name]
+    RowEnforced tn cn rk    -> parensSep [pretty SRowEnforced, prettyTm tn, prettyTm cn, prettyTm rk]
+    RowExists tn rk ba      -> parensSep [pretty SRowExists, prettyTm tn, prettyTm rk, pretty ba]
+    PropRead _ty ba tn rk   -> parensSep [pretty SPropRead, prettyTm tn, prettyTm rk, pretty ba]
 
 instance S :*<: Prop where
   inject' = CoreProp . Sym
@@ -1442,17 +1442,17 @@ eqProp _  _                _                = False
 prettyTerm :: SingTy ty -> Term ty -> Doc
 prettyTerm ty = \case
   CoreTerm tm -> prettyCore ty tm
-  IfThenElse ty' x (_, y) (_, z) -> parenList
+  IfThenElse ty' x (_, y) (_, z) -> parensSep
     [ "if"
     , prettyTm x
     , singPrettyTm ty' y
     , singPrettyTm ty' z
     ]
-  Let var _ _ x y -> parenList
+  Let var _ _ x y -> parensSep
     [ "let"
-    , parenList
-      [ parenList
-        [ text' var
+    , parensSep
+      [ parensSep
+        [ pretty var
         , pretty x
         ]
       ]
@@ -1460,12 +1460,12 @@ prettyTerm ty = \case
     ]
   Sequence x y -> vsep [pretty x, prettyTerm ty y]
 
-  EnforceOne (Left _)        -> parenList
+  EnforceOne (Left _)        -> parensSep
     [ "enforce-one"
     , "\"(generated enforce-one)\""
     , pretty ([] :: [Integer])
     ]
-  EnforceOne (Right x)       -> parenList
+  EnforceOne (Right x)       -> parensSep
     [ "enforce-one"
     , "\"(generated enforce-one)\""
     , pretty $ fmap snd x
@@ -1474,26 +1474,26 @@ prettyTerm ty = \case
   --
   -- TODO: perhaps track whether -guard or -keyset was used for this?
   --
-  Enforce _ (GuardPasses _ x)    -> parenList ["enforce-guard", pretty x]
-  Enforce _ x                    -> parenList ["enforce", pretty x]
+  Enforce _ (GuardPasses _ x)    -> parensSep ["enforce-guard", pretty x]
+  Enforce _ x                    -> parensSep ["enforce", pretty x]
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
 
-  Read _ _ tab x       -> parenList ["read", pretty tab, pretty x]
-  Write ty' _ _ tab x y -> parenList ["write", pretty tab, pretty x, singPrettyTm ty' y]
-  PactVersion          -> parenList ["pact-version"]
-  Format x y           -> parenList ["format", pretty x, pretty y]
-  FormatTime x y       -> parenList ["format", pretty x, pretty y]
-  ParseTime Nothing y  -> parenList ["parse-time", pretty y]
-  ParseTime (Just x) y -> parenList ["parse-time", pretty x, pretty y]
-  Hash x               -> parenList ["hash", pretty x]
-  ReadKeySet name      -> parenList ["read-keyset", pretty name]
-  ReadDecimal name     -> parenList ["read-decimal", pretty name]
-  ReadInteger name     -> parenList ["read-integer", pretty name]
-  PactId               -> parenList ["pact-id"]
-  MkKsRefGuard name    -> parenList ["keyset-ref-guard", pretty name]
-  MkPactGuard name     -> parenList ["create-pact-guard", pretty name]
-  MkUserGuard ty' o n  -> parenList ["create-user-guard", singPrettyTm ty' o, pretty n]
+  Read _ _ tab x       -> parensSep ["read", pretty tab, pretty x]
+  Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
+  PactVersion          -> parensSep ["pact-version"]
+  Format x y           -> parensSep ["format", pretty x, pretty y]
+  FormatTime x y       -> parensSep ["format", pretty x, pretty y]
+  ParseTime Nothing y  -> parensSep ["parse-time", pretty y]
+  ParseTime (Just x) y -> parensSep ["parse-time", pretty x, pretty y]
+  Hash x               -> parensSep ["hash", pretty x]
+  ReadKeySet name      -> parensSep ["read-keyset", pretty name]
+  ReadDecimal name     -> parensSep ["read-decimal", pretty name]
+  ReadInteger name     -> parensSep ["read-integer", pretty name]
+  PactId               -> parensSep ["pact-id"]
+  MkKsRefGuard name    -> parensSep ["keyset-ref-guard", pretty name]
+  MkPactGuard name     -> parensSep ["create-pact-guard", pretty name]
+  MkUserGuard ty' o n  -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2

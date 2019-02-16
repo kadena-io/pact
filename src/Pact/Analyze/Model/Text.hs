@@ -26,12 +26,11 @@ import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact
-import           Pact.Types.Lang            (text')
+import           Pact.Types.Pretty          hiding (indent)
 import qualified Pact.Types.Persistence     as Pact
-import           Pact.Types.Util            (renderCompactString)
 
 import           Pact.Analyze.Model.Graph   (linearize)
-import           Pact.Analyze.Types         hiding (indent)
+import           Pact.Analyze.Types
 
 indent1 :: Text -> Text
 indent1 = ("  " <>)
@@ -43,7 +42,7 @@ indent times = indent (pred times) . indent1
 showSbv :: (Pretty a, SymVal a) => SBV a -> Text
 showSbv sbv
   = T.pack
-  $ renderCompactString
+  $ renderCompactString'
   $ maybe "[ERROR:symbolic]" pretty (SBV.unliteral sbv)
 
 showS :: (Pretty a, SymVal a) => S a -> Text
@@ -145,9 +144,9 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
         "unknown " <> guard <> " " <> showS sg
       Just (FromRow _) ->
         error "impossible: FromRow provenance on guard"
-      Just (FromCell (OriginatingCell tn cn sRk _)) -> T.pack $ renderCompactString $
-        text' guard <> " from database at (" <> pretty tn <> ", " <> "'" <>
-          pretty cn <> ", " <> text (show sRk) <> ")"
+      Just (FromCell (OriginatingCell tn cn sRk _)) -> renderCompactText' $
+        pretty guard <> " from database at (" <> pretty tn <> ", " <> "'" <>
+          pretty cn <> ", " <> viaShow sRk <> ")"
       Just (FromRegistry sRn) ->
         guard <> " named " <> showRn sRn
       Just (FromInput (Unmunged arg)) ->
@@ -188,8 +187,10 @@ showEvent ksProvs tags event = do
           ObjectScope ->
             "destructuring object" : displayVids showVar
           FunctionScope modName funName ->
-            let header = "entering function " <> asString modName <> "."
-                      <> funName <> " with "
+            -- TODO(joel): convert all of this to Doc
+            let header = renderCompactText' $
+                         "entering function " <> pretty modName <> "."
+                      <> pretty funName <> " with "
                       <> if length vids > 1 then "arguments" else "argument"
             in header : (displayVids showArg ++ [emptyLine])
       TracePopScope _ scopeTy tid _ -> do

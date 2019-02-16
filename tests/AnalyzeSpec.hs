@@ -40,7 +40,8 @@ import           Pact.Repl                    (evalRepl', initReplState)
 import           Pact.Repl.Types              (ReplMode (StringEval), rEnv)
 import           Pact.Types.Runtime           (Exp, Info, ModuleData,
                                                eeRefStore, rsModules)
-import           Pact.Types.Util              (tShow, renderCompactString)
+import           Pact.Types.Pretty            (Pretty, renderCompactString)
+import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Eval.Numerical  (banker'sMethodS)
@@ -48,7 +49,7 @@ import qualified Pact.Analyze.Model           as Model
 import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
-import           Pact.Analyze.Types           hiding (text)
+import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
 wrap :: Text -> Text -> Text
@@ -2231,7 +2232,7 @@ spec = describe "analyze" $ do
                   (CoreProp (Var (VarId 2) "column")))))))
 
   let pretty' :: Pretty a => a -> String
-      pretty' = renderCompactString . pretty
+      pretty' = renderCompactString
   describe "pretty (PreProp)" $ do
     it "renders literals how you would expect" $ do
       pretty' (PreIntegerLit 1)            `shouldBe` "1"

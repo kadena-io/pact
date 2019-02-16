@@ -33,9 +33,9 @@ import qualified Pact.Analyze.Types         as Analyze
 import           Pact.Analyze.Util          (dummyInfo)
 
 import           Pact.Types.Persistence     (WriteType)
+import           Pact.Types.Pretty          (renderCompactString', pretty, vsep)
 import           Pact.Types.Term            (Name (Name))
 import qualified Pact.Types.Term            as Pact
-import           Pact.Types.Util            (renderCompactString)
 
 import           Analyze.TimeGen
 
@@ -324,7 +324,7 @@ genCore bound@(BoundedList elemBound) = Gen.recursive Gen.choice
   ]
 
 listError :: HasCallStack => ETerm -> ETerm -> a
-listError a@(Some aTy _) b@(Some bTy _) = error $ renderCompactString $ vsep
+listError a@(Some aTy _) b@(Some bTy _) = error $ renderCompactString' $ vsep
   [ "expected two lists, got"
   , pretty a <> ": " <> pretty aTy
   , "/"
@@ -580,7 +580,7 @@ safeGenAnyTerm
   :: (MonadCatch m, HasCallStack) => PropertyT m (ETerm, GenState)
 safeGenAnyTerm = (do
   (etm, gState) <- forAll genAnyTerm'
-  footnote $ renderCompactString $ "term: " <> pretty etm
+  footnote $ renderCompactString' $ "term: " <> pretty etm
   pure $ show etm `deepseq` (etm, gState)
   ) `catch` (\(_e :: EmptyInterval)  -> discard) -- see note [EmptyInterval]
     -- also, sometimes term generation fails for mysterious reasons

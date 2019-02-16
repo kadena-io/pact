@@ -19,11 +19,12 @@ import           Data.Map.Strict        (Map)
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
 import           Data.String            (IsString)
-import           Data.Text              (Text, unpack)
+import           Data.Text              (Text)
 import           Data.Tuple             (swap)
-import qualified Text.PrettyPrint.ANSI.Leijen as Pretty
 
 import qualified Pact.Types.Persistence as Pact
+import           Pact.Types.Pretty      hiding (Doc, list)
+import qualified Pact.Types.Pretty      as Pretty
 
 --
 -- NOTE: that in the current factoring, there can be multiple features that
@@ -1624,7 +1625,7 @@ toText :: Prism' Text op -> op -> Text
 toText = review
 
 toDoc :: Prism' Text op -> op -> Pretty.Doc
-toDoc p op = Pretty.text $ unpack $ toText p op
+toDoc p op = pretty $ toText p op
 
 -- NOTE: we don't (yet?) use symbols here because Feature (currently?) only
 -- handles properties and invariants.

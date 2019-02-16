@@ -68,10 +68,9 @@ import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
-import Text.PrettyPrint.ANSI.Leijen hiding
-  ((<$>), empty, int, bool, columns, list, float)
 
-import           Pact.Types.Lang              (text', commaBraces)
+import           Pact.Types.Pretty            hiding (list)
+import qualified Pact.Types.Pretty            as Pretty
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString)
 
@@ -184,7 +183,7 @@ instance SMTValue RegistryName where
   sexprToVal = fmap (RegistryName . T.pack) . sexprToVal
 
 instance Pretty RegistryName where
-  pretty (RegistryName name) = "'" <> text' name
+  pretty (RegistryName name) = "'" <> pretty name
 
 newtype TableName
   = TableName String
@@ -228,7 +227,7 @@ instance SymVal Str where
   fromCV = wrappedStringFromCV Str
 
 instance Pretty Str where
-  pretty (Str str) = dquotes $ text str
+  pretty (Str str) = dquotes $ pretty str
 
 type RowKey = Str
 
@@ -475,7 +474,7 @@ data EObject tm where
 instance Pretty (tm ('TyObject m)) => Pretty (Object tm m) where
   pretty (Object vals) = commaBraces (prettyVals vals) where
     prettyVals = foldHList $ \k (Column ty v) ->
-      [text (symbolVal k) <> " := " <> singPrettyTm ty v]
+      [pretty (symbolVal k) <> " := " <> singPrettyTm ty v]
 
 instance Show (tm ('TyObject m)) => Show (Object tm m) where
   showsPrec p (Object vals) = showParen (p > 10) $
@@ -531,8 +530,8 @@ newtype UObject = UObject (Map.Map Text TVal)
   deriving (Eq, Show, Semigroup, Monoid)
 
 instance Pretty UObject where
-  pretty (UObject m) = pretty $ Map.toList m <&> \(k, v) ->
-    text' k <> " := " <> pretty v
+  pretty (UObject m) = Pretty.list $ Map.toList m <&> \(k, v) ->
+    pretty k <> " := " <> pretty v
 
 objFields :: Lens' UObject (Map.Map Text TVal)
 objFields = lens getter setter
@@ -548,7 +547,7 @@ data AVal
 
 instance Pretty AVal where
   pretty = \case
-    AVal _ sVal -> text $ show sVal
+    AVal _ sVal -> viaShow sVal
     OpaqueVal   -> "[opaque]"
 
 instance EqSymbolic UObject where
@@ -1076,10 +1075,10 @@ instance Pretty (Quantifiable q) where
     QColumnOf tn -> "(column-of " <> pretty tn <> ")"
 
 instance Pretty TableName where
-  pretty (TableName tn) = text tn
+  pretty (TableName tn) = pretty tn
 
 instance Pretty ColumnName where
-  pretty (ColumnName cn) = text cn
+  pretty (ColumnName cn) = pretty cn
 
 data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]
