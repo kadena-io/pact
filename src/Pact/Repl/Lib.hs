@@ -56,6 +56,7 @@ import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Types.Pretty
 import Pact.Repl.Types
+import Pact.Native.Capabilities (evalCap)
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -165,6 +166,12 @@ replDefs = ("Repl",
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
        ["(env-hash (hash \"hello\"))"]
        "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash."
+     ,defZNative "test-capability" testCapability
+      (funType tTyString [("capability", TyFun $ funType' tTyBool [])])
+      ["(test-capability (MY-CAP))"] $
+     "Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope " <>
+     "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
+     "blockchain environment."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -469,5 +476,14 @@ setGasRate :: RNativeFun LibState
 setGasRate _ [TLitInteger r] = do
     setenv (eeGasEnv . geGasModel) (constGasModel $ fromIntegral r)
     return $ tStr $ "Set gas rate to " <> tShow r
-
 setGasRate i as = argsError i as
+
+-- | This is the only place we can do an external call to a capability,
+-- using 'evalCap False'.
+testCapability :: ZNativeFun ReplState
+testCapability _ [ c@TApp{} ] = do
+  cap <- evalCap False $ _tApp c
+  return . tStr $ case cap of
+    Nothing -> "Capability granted"
+    Just cap' -> "Capability granted: " <> tShow cap'
+testCapability i as = argsError' i as

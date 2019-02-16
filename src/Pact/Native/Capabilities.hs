@@ -10,7 +10,10 @@
 -- Builtins for working with capabilities.
 --
 
-module Pact.Native.Capabilities (capDefs) where
+module Pact.Native.Capabilities
+  ( capDefs
+  , evalCap
+  ) where
 
 import Control.Monad
 import Pact.Eval
@@ -37,7 +40,6 @@ capDefs =
 tvA :: Type n
 tvA = mkTyVar "a" []
 
-
 withCapability :: NativeDef
 withCapability =
   defNative (specialForm WithCapability) withCapability'
@@ -54,12 +56,11 @@ withCapability =
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
   \but simply execute BODY."
   where
-    withCapability' :: NativeFun e
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
-      -- erased composed
+      -- erase composed
       evalCapabilities . capComposed .= []
-      -- evaluate cap
-      grantedCap <- evalCap (_tApp c)
+      -- evaluate in-module cap
+      grantedCap <- evalCap True (_tApp c)
       -- grab composed caps and clear composed state
       composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
                                      set (evalCapabilities . capComposed) [] s)
@@ -72,10 +73,11 @@ withCapability =
     withCapability' i as = argsError' i as
 
 -- | Given cap app, enforce in-module call, eval args to form capability,
--- and attempt to acquire. Return capability if newly-granted.
-evalCap :: App (Term Ref) -> Eval e (Maybe Capability)
-evalCap a@App{..} = requireDefcap a >>= \d@Def{..} -> do
-      guardForModuleCall _appInfo _dModule $ return ()
+-- and attempt to acquire. Return capability if newly-granted. When
+-- 'inModule' is 'True', natives can only be run within module scope.
+evalCap :: Bool -> App (Term Ref) -> Eval e (Maybe Capability)
+evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
+      when inModule $ guardForModuleCall _appInfo _dModule $ return ()
       prep@(args,_) <- prepareUserAppArgs d _appArgs
       let cap = UserCapability _dDefName args
       acquired <- acquireCapability cap $ do
@@ -128,7 +130,8 @@ composeCapability =
       void $ case isDefCap of
         Nothing -> evalError' i "compose-capability valid only within defcap body"
         Just {} -> do
-          granted <- evalCap app
+          -- should be granted in-module
+          granted <- evalCap True app
           -- if newly granted, add to composed list
           forM_ granted $ \newcap -> evalCapabilities . capComposed %= (newcap:)
       return $ toTerm True
