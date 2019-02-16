@@ -149,7 +149,7 @@ replDefs = ("Repl",
       (funType tTyString [("capability", TyFun $ funType' tTyBool [])]) $
      "Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope " <>
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
-     "blockchain environment. `$(grant-capability (TRANSFER) (my-module.transfer sender receiver 1.0))`"
+     "blockchain environment. `$(test-capability (MY-CAP))`"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -433,8 +433,7 @@ setGasRate _ [TLitInteger r] = do
 setGasRate i as = argsError i as
 
 -- | This is the only place we can do an external call to a capability,
--- using 'evalCap False'. This allows us to call magical capabilities
--- within the coin contract code.
+-- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
 testCapability _ [ c@TApp{} ] = do
   cap <- evalCap False $ _tApp c
