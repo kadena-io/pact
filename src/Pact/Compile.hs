@@ -413,7 +413,10 @@ defpact = do
 moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
-  keyset <- str
+  gov <- Governance <$>
+    (((Left . KeySetName) <$> str) <|>
+     (userAtom >>= \AtomExp{..} ->
+         return $ Right $ TVar (Name _atomAtom _atomInfo) _atomInfo))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
@@ -426,7 +429,7 @@ moduleForm = do
       modHash = hash $ encodeUtf8 $ _unCode code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
-    (Module modName (KeySetName keyset) m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
+    (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
     (abstract (const Nothing) (TList (concat bd) TyAny bi)) i
 
 implements :: Compile ()
@@ -455,7 +458,7 @@ interface = do
               RUse -> return useForm
               t -> syntaxError $ "Invalid interface declaration: " ++ show (asString t)
   return $ TModule
-    (Interface iname code m _msImports)
+    (MDInterface $ Interface iname code m _msImports)
     (abstract (const Nothing) bd) info
 
 emptyDef :: Compile (Term Name)

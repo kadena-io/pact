@@ -1477,6 +1477,14 @@ pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 ```
 
 
+### format-address {#format-address}
+
+*scheme*&nbsp;`string` *public-key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME.
+
+
 ### json {#json}
 
 *exp*&nbsp;`<a>` *&rarr;*&nbsp;`value`

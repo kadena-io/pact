@@ -1,10 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
@@ -34,9 +32,6 @@ import qualified Options.Applicative as O
 import System.Directory
 import System.FilePath
 
-import "crypto-api" Crypto.Random
-import Crypto.Ed25519.Pure
-
 import Pact.Repl
 import Pact.Parse
 import Pact.Types.Runtime hiding (PublicKey)
@@ -48,6 +43,7 @@ import System.Posix.IO (stdInput)
 import Pact.ReplTools
 import Pact.Repl.Types
 import Pact.Types.Version
+import Pact.Types.Crypto
 import Pact.ApiReq
 
 
@@ -153,9 +149,6 @@ echoBuiltins = do
 
 genKeys :: IO ()
 genKeys = do
-  g :: SystemRandom <- newGenIO
-  case generateKeyPair g of
-    Left err -> die $ show err
-    Right (s,p,_) -> do
-      putStrLn $ "public: " ++ unpack (toB16Text $ exportPublic p)
-      putStrLn $ "secret: " ++ unpack (toB16Text $ exportPrivate s)
+  kp <- genKeyPair defaultScheme
+  putStrLn $ "public: " ++ unpack (toB16Text $ getPublic kp)
+  putStrLn $ "secret: " ++ unpack (toB16Text $ getPrivate kp)

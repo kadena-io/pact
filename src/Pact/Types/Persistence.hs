@@ -232,7 +232,7 @@ makeLenses ''Columns
 data Domain k v where
   UserTables :: !TableName -> Domain RowKey (Columns Persistable)
   KeySets :: Domain KeySetName KeySet
-  Modules :: Domain ModuleName Module
+  Modules :: Domain ModuleName (ModuleDef Name)
   Namespaces :: Domain NamespaceName Namespace
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
@@ -316,9 +316,9 @@ data PactDb e = PactDb {
     -- | Retrieve all transaction ids greater than supplied txid for table.
   , _txids ::  TableName -> TxId -> Method e [TxId]
     -- | Create a user table.
-  , _createUserTable ::  TableName -> ModuleName -> KeySetName -> Method e ()
+  , _createUserTable ::  TableName -> ModuleName -> Method e ()
     -- | Get module, keyset for user table.
-  , _getUserTableInfo ::  TableName -> Method e (ModuleName,KeySetName)
+  , _getUserTableInfo ::  TableName -> Method e ModuleName
     -- | Initiate transaction. If TxId not provided, commit fails/rolls back.
   , _beginTx :: Maybe TxId -> Method e ()
     -- | Commit transaction, if in tx. If not in tx, rollback and throw error.

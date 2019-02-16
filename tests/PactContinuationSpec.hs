@@ -22,6 +22,10 @@ shouldMatch results checks = mapM_ match checks
           let apiRes = HM.lookup _arcReqKey results
           checkResult _arcIsFailure _arcExpect apiRes
 
+makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
+makeExecCmd keyPairs code =
+  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
+
 spec :: Spec
 spec = describe "pacts in dev server" $ do
   mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
@@ -35,12 +39,10 @@ testNestedPacts :: HTTP.Manager -> Spec
 testNestedPacts mgr = before_ flushDb $ after_ flushDb $
   it "throws error when multiple defpact executions occur in same transaction" $ do
     adminKeys <- genKeys
+    let makeExecCmdWith = makeExecCmd adminKeys
 
-    moduleCmd <- mkExec (T.unpack (threeStepPactCode "nestedPact"))
-                 (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                 def [adminKeys] (Just "test1")
-    nestedExecPactCmd <- mkExec ("(nestedPact.tester)" ++ " (nestedPact.tester)")
-                         Null def [adminKeys] (Just "test2")
+    moduleCmd <- makeExecCmdWith (T.unpack (threeStepPactCode "nestedPact"))
+    nestedExecPactCmd <- makeExecCmdWith ("(nestedPact.tester)" ++ " (nestedPact.tester)")
     allResults <- runAll mgr [moduleCmd, nestedExecPactCmd]
 
     let allChecks = [makeCheck moduleCmd False Nothing,
@@ -87,13 +89,11 @@ testSimpleServerCmd mgr = do
 testCorrectNextStep :: HTTP.Manager -> Expectation
 testCorrectNextStep mgr = do
   let moduleName = "testCorrectNextStep"
-  adminKeys <- genKeys
+  adminKeys <- genKeysEth
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd       <- mkExec (T.unpack (threeStepPactCode moduleName))
-                     (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                     def [adminKeys] (Just "test1")
-  executePactCmd  <- mkExec ("(" ++ moduleName ++ ".tester)")
-                     Null def [adminKeys] (Just "test2")
+  moduleCmd       <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
+  executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   checkStateCmd   <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test4")
   allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
@@ -112,12 +112,10 @@ testIncorrectNextStep :: HTTP.Manager -> Expectation
 testIncorrectNextStep mgr = do
   let moduleName = "testIncorrectNextStep"
   adminKeys <- genKeys
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd         <- mkExec (T.unpack (threeStepPactCode moduleName))
-                       (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                       def [adminKeys] (Just "test1")
-  executePactCmd    <- mkExec ("(" ++ moduleName ++ ".tester)")
-                       Null def [adminKeys] (Just "test2")
+  moduleCmd         <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
+  executePactCmd    <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   incorrectStepCmd  <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test3")
   checkStateCmd     <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test4")
   allResults        <- runAll mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
@@ -136,12 +134,10 @@ testLastStep :: HTTP.Manager -> Expectation
 testLastStep mgr = do
   let moduleName = "testLastStep"
   adminKeys <- genKeys
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd        <- mkExec (T.unpack (threeStepPactCode moduleName))
-                      (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                      def [adminKeys] (Just "test1")
-  executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
-                      Null def [adminKeys] (Just "test2")
+  moduleCmd        <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
+  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contNextStep1Cmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   contNextStep2Cmd <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
@@ -164,12 +160,10 @@ testErrStep :: HTTP.Manager -> Expectation
 testErrStep mgr = do
   let moduleName = "testErrStep"
   adminKeys <- genKeys
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd        <- mkExec (T.unpack (errorStepPactCode moduleName))
-                      (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                      def [adminKeys] (Just "test1")
-  executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
-                      Null def [adminKeys] (Just "test2")
+  moduleCmd        <- makeExecCmdWith (T.unpack (errorStepPactCode moduleName))
+  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contErrStepCmd   <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
@@ -210,12 +204,10 @@ testCorrectRollbackStep :: HTTP.Manager -> Expectation
 testCorrectRollbackStep mgr = do
   let moduleName = "testCorrectRollbackStep"
   adminKeys <- genKeys
-
-  moduleCmd       <- mkExec (T.unpack (pactWithRollbackCode moduleName))
-                     (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                     def [adminKeys] (Just "test1")
-  executePactCmd  <- mkExec ("(" ++ moduleName ++ ".tester)")
-                     Null def [adminKeys] (Just "test2")
+  let makeExecCmdWith = makeExecCmd adminKeys
+  
+  moduleCmd       <- makeExecCmdWith (T.unpack (pactWithRollbackCode moduleName))
+  executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   rollbackStepCmd <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4") -- rollback = True
   checkStateCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
@@ -238,12 +230,10 @@ testIncorrectRollbackStep :: HTTP.Manager -> Expectation
 testIncorrectRollbackStep mgr = do
   let moduleName = "testIncorrectRollbackStep"
   adminKeys <- genKeys
-
-  moduleCmd       <- mkExec (T.unpack (pactWithRollbackCode moduleName))
-                     (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                     def [adminKeys] (Just "test1")
-  executePactCmd  <- mkExec ("(" ++ moduleName ++ ".tester)")
-                     Null def [adminKeys] (Just "test2")
+  let makeExecCmdWith = makeExecCmd adminKeys
+  
+  moduleCmd       <- makeExecCmdWith (T.unpack (pactWithRollbackCode moduleName))
+  executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   incorrectRbCmd  <- mkCont (TxId 1) 2 True Null def [adminKeys] (Just "test4")
   checkStateCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
@@ -266,12 +256,10 @@ testRollbackErr :: HTTP.Manager -> Expectation
 testRollbackErr mgr = do
   let moduleName = "testRollbackErr"
   adminKeys <- genKeys
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd        <- mkExec (T.unpack (pactWithRollbackErrCode moduleName))
-                      (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                      def [adminKeys] (Just "test1")
-  executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
-                      Null def [adminKeys] (Just "test2")
+  moduleCmd        <- makeExecCmdWith (T.unpack (pactWithRollbackErrCode moduleName))
+  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contNextStepCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   rollbackErrCmd   <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
@@ -293,12 +281,10 @@ testNoRollbackFunc :: HTTP.Manager -> Expectation
 testNoRollbackFunc mgr = do
   let moduleName = "testNoRollbackFunc"
   adminKeys <- genKeys
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd        <- mkExec (T.unpack (threeStepPactCode moduleName))
-                      (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                      def [adminKeys] (Just "test1")
-  executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
-                      Null def [adminKeys] (Just "test2")
+  moduleCmd        <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
+  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contNextStepCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   noRollbackCmd    <- mkCont (TxId 1) 1 True Null def [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test5")
@@ -338,12 +324,11 @@ testValidYield :: HTTP.Manager -> Expectation
 testValidYield mgr = do
   let moduleName = "testValidYield"
   adminKeys <- genKeys
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd          <- mkExec (T.unpack (pactWithYield moduleName))
-                        (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                        def [adminKeys] (Just "test1")
-  executePactCmd <- mkExec ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
-                        Null def [adminKeys] (Just "test2")
+  moduleCmd          <- makeExecCmdWith (T.unpack (pactWithYield moduleName))
+  executePactCmd     <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")")
+                        -- pact takes an input                 
   resumeAndYieldCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   resumeOnlyCmd      <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   checkStateCmd      <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
@@ -366,12 +351,10 @@ testNoYield :: HTTP.Manager -> Expectation
 testNoYield mgr = do
   let moduleName = "testNoYield"
   adminKeys <- genKeys
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd      <- mkExec (T.unpack (pactWithYieldErr moduleName))
-                    (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                    def [adminKeys] (Just "test1")
-  executePactCmd <- mkExec ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
-                    Null def [adminKeys] (Just "test2")
+  moduleCmd      <- makeExecCmdWith (T.unpack (pactWithYieldErr moduleName))
+  executePactCmd <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
   noYieldStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   resumeErrCmd   <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test3")
   checkStateCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test5")
@@ -394,12 +377,10 @@ testResetYield :: HTTP.Manager -> Expectation
 testResetYield mgr = do
   let moduleName = "testResetYield"
   adminKeys <- genKeys
+  let makeExecCmdWith = makeExecCmd adminKeys
 
-  moduleCmd        <- mkExec (T.unpack (pactWithSameNameYield moduleName))
-                        (object ["admin-keyset" .= [_kpPublic adminKeys]])
-                        def [adminKeys] (Just "test1")
-  executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
-                        Null def [adminKeys] (Just "test2")
+  moduleCmd        <- makeExecCmdWith (T.unpack (pactWithSameNameYield moduleName))
+  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   yieldSameKeyCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   resumeStepCmd    <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
@@ -443,6 +424,36 @@ testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
   context "when both debtor and creditor finish together" $
     it "finishes escrow if final price stays the same or negotiated down" $
       testValidEscrowFinish mgr
+
+
+twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> HTTP.Manager -> Expectation
+twoPartyEscrow testCmds testChecks mgr = do
+  let setupPath = testDir ++ "cont-scripts/setup-"
+
+  (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
+  (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
+  (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")
+  (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
+  (_, resetTimeCmd)  <- mkApiReq (setupPath ++ "05-reset.yaml")
+  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")
+  (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
+  let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
+                : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
+  allResults <- runAll mgr allCmds
+
+  let sysModuleCheck      = makeCheck sysModuleCmd False $ Just "system module loaded"
+      acctModuleCheck     = makeCheck acctModuleCmd False $ Just "TableCreated"
+      testModuleCheck     = makeCheck testModuleCmd False $ Just "test module loaded"
+      createAcctCheck     = makeCheck createAcctCmd False Nothing -- Alice should be funded with $100
+      resetTimeCheck      = makeCheck resetTimeCmd False Nothing
+      runEscrowCheck      = makeCheck runEscrowCmd False Nothing
+      balanceCheck        = makeCheck balanceCmd False $ Just "98.00"
+      allChecks           = sysModuleCheck : acctModuleCheck : testModuleCheck
+                            : createAcctCheck : resetTimeCheck : runEscrowCheck
+                            : balanceCheck : testChecks
+
+  allResults `shouldMatch` allChecks
+
 
 testDebtorPreTimeoutCancel :: HTTP.Manager -> Expectation
 testDebtorPreTimeoutCancel mgr = do
@@ -526,7 +537,7 @@ testValidEscrowFinish mgr = do
 
   (_, tryNegDownCmd)  <- mkApiReq (testPath ++ "01-cont.yaml")
   (_, credBalanceCmd) <- mkApiReq (testPath ++ "02-cred-balance.yaml")
-  (_, debBalanceCmd) <- mkApiReq (testPath ++ "03-deb-balance.yaml")
+  (_, debBalanceCmd)  <- mkApiReq (testPath ++ "03-deb-balance.yaml")
   let allCmds = [tryNegDownCmd, credBalanceCmd, debBalanceCmd]
 
   let tryNegDownCheck  = makeCheck tryNegDownCmd False
@@ -536,31 +547,3 @@ testValidEscrowFinish mgr = do
       allChecks        = [tryNegDownCheck, credBalanceCheck, debBalanceCheck]
 
   twoPartyEscrow allCmds allChecks mgr
-
-twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> HTTP.Manager -> Expectation
-twoPartyEscrow testCmds testChecks mgr = do
-  let setupPath = testDir ++ "cont-scripts/setup-"
-
-  (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
-  (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
-  (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")
-  (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
-  (_, resetTimeCmd)  <- mkApiReq (setupPath ++ "05-reset.yaml")
-  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")
-  (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
-  let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
-                : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
-  allResults <- runAll mgr allCmds
-
-  let sysModuleCheck      = makeCheck sysModuleCmd False $ Just "system module loaded"
-      acctModuleCheck     = makeCheck acctModuleCmd False $ Just "TableCreated"
-      testModuleCheck     = makeCheck testModuleCmd False $ Just "test module loaded"
-      createAcctCheck     = makeCheck createAcctCmd False Nothing -- Alice should be funded with $100
-      resetTimeCheck      = makeCheck resetTimeCmd False Nothing
-      runEscrowCheck      = makeCheck runEscrowCmd False Nothing
-      balanceCheck        = makeCheck balanceCmd False $ Just "98.00"
-      allChecks           = sysModuleCheck : acctModuleCheck : testModuleCheck
-                            : createAcctCheck : resetTimeCheck : runEscrowCheck
-                            : balanceCheck : testChecks
-
-  allResults `shouldMatch` allChecks

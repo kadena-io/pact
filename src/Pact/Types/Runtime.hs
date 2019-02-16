@@ -147,7 +147,7 @@ makeLenses ''PactStep
 
 -- | Module ref store
 data ModuleData = ModuleData
-  { _mdModule :: Module
+  { _mdModule :: ModuleDef (Def Ref)
   , _mdRefMap :: HM.HashMap Text Ref
   } deriving (Eq, Show)
 makeLenses ''ModuleData
@@ -229,7 +229,7 @@ data RefState = RefState {
       -- | Imported Module-local defs and natives.
       _rsLoaded :: HM.HashMap Name Ref
       -- | Modules that were loaded.
-    , _rsLoadedModules :: HM.HashMap ModuleName Module
+    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleDef (Def Ref))
       -- | Modules that were compiled and loaded in this tx.
     , _rsNewModules :: HM.HashMap ModuleName ModuleData
       -- | Current Namespace
@@ -327,11 +327,11 @@ txids :: Info -> TableName -> TxId -> Eval e [TxId]
 txids i tn tid = method i $ \db -> _txids db tn tid
 
 -- | Invoke '_createUserTable'
-createUserTable :: Info -> TableName -> ModuleName -> KeySetName -> Eval e ()
-createUserTable i t m k = method i $ \db -> _createUserTable db t m k
+createUserTable :: Info -> TableName -> ModuleName -> Eval e ()
+createUserTable i t m = method i $ \db -> _createUserTable db t m
 
 -- | Invoke _getUserTableInfo
-getUserTableInfo :: Info -> TableName -> Eval e (ModuleName,KeySetName)
+getUserTableInfo :: Info -> TableName -> Eval e ModuleName
 getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
 
 -- | Invoke _beginTx
@@ -432,7 +432,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     , _writeRow = \_ _ _ _ -> diePure
     , _keys = const diePure
     , _txids = \_ _ -> diePure
-    , _createUserTable = \_ _ _ -> diePure
+    , _createUserTable = \_ _ -> diePure
     , _getUserTableInfo = const diePure
     , _beginTx = const diePure
     , _commitTx = diePure

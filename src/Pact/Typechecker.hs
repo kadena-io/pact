@@ -1027,7 +1027,7 @@ typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abb
 -- | Typecheck all productions in a module.
 typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[Failure])
 typecheckModule dbg ModuleData{..} = do
-  debug' dbg $ "Typechecking module " ++ show (_mName _mdModule)
+  debug' dbg $ "Typechecking module " ++ show (moduleDefName _mdModule)
   let tc ((tls,fails),sup) r = do
         (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
