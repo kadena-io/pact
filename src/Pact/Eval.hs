@@ -219,7 +219,8 @@ eval (TModule (MDModule m) bod i) =
         case omd of
           MDModule om -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
           MDInterface Interface{..} -> evalError i $
-            "Name overlap: module " <> pretty (_mName om) <> " overlaps with interface  " <> pretty _interfaceName
+            "Name overlap: module " <> pretty (_mName m) <>
+            " overlaps with interface  " <> pretty _interfaceName
     case _gGovernance $ _mGovernance mangledM of
       -- enforce new module keyset
       Left ks -> enforceKeySetName i ks

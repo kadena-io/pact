@@ -175,7 +175,7 @@ instance ToJSON KeySet where
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show)
 
-instance Pretty KeySetName where pretty (KeySetName s) = pretty s
+instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
 newtype PactId = PactId Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default,Show)
@@ -456,11 +456,12 @@ instance Pretty n => Pretty (App n) where
 
 
 newtype Governance g = Governance { _gGovernance :: Either KeySetName g }
-  deriving (Eq,Ord,Functor,Foldable,Traversable)
+  deriving (Eq,Ord,Functor,Foldable,Traversable,Show)
 
-instance Show g => Show (Governance g) where
-  show (Governance (Left k)) = asString' k
-  show (Governance (Right r)) = show r
+instance Pretty g => Pretty (Governance g) where
+  pretty = \case
+    Governance (Left  k) -> pretty k
+    Governance (Right r) -> pretty r
 
 instance ToJSON g => ToJSON (Governance g) where
   toJSON (Governance g) = case g of
@@ -481,16 +482,11 @@ data Module g = Module
   , _mBlessed :: !(HS.HashSet Hash)
   , _mInterfaces :: [ModuleName]
   , _mImports :: [Use]
-  } deriving (Eq,Functor,Foldable,Traversable)
+  } deriving (Eq,Functor,Foldable,Traversable,Show)
 
-instance Pretty Module where
-  pretty m = parensSep $ case m of
-    Module{..} ->
-      [ "module"
-      , pretty _mName
-      , pretty $ "'" ++ asString' _mKeySet
-      , pretty _mHash
-      ]
+instance Pretty g => Pretty (Module g) where
+  pretty Module{..} = parensSep
+    [ "module" , pretty _mName , pretty _mGovernance , pretty _mHash ]
 
 instance ToJSON g => ToJSON (Module g) where
   toJSON Module{..} = object
@@ -520,9 +516,9 @@ data Interface = Interface
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
   , _interfaceImports :: [Use]
-  } deriving (Eq)
-instance Show Interface where
-  show Interface{..} = "(Interface " ++ asString' _interfaceName ++ ")"
+  } deriving (Eq,Show)
+instance Pretty Interface where
+  pretty Interface{..} = parensSep [ "interface", pretty _interfaceName ]
 
 instance ToJSON Interface where
   toJSON Interface{..} = object
@@ -543,12 +539,12 @@ instance FromJSON Interface where
 data ModuleDef g
   = MDModule !(Module g)
   | MDInterface !Interface
- deriving (Eq,Functor,Foldable,Traversable)
+ deriving (Eq,Functor,Foldable,Traversable,Show)
 
-instance Show g => Show (ModuleDef g) where
-  show md = case md of
-    MDModule m -> show m
-    MDInterface i -> show i
+instance Pretty g => Pretty (ModuleDef g) where
+  pretty = \case
+    MDModule    m -> pretty m
+    MDInterface i -> pretty i
 
 instance ToJSON g => ToJSON (ModuleDef g) where
   toJSON (MDModule m) = toJSON m
@@ -556,15 +552,6 @@ instance ToJSON g => ToJSON (ModuleDef g) where
 
 instance FromJSON g => FromJSON (ModuleDef g) where
   parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
-
-instance Eq1 ModuleDef where
-  liftEq eq
-    (MDModule (Module a (Governance b) c d e f g h))
-    (MDModule (Module m (Governance n) o p q r s t)) =
-      a == m && liftEq eq b n && c == o && d == p &&
-      e == q && f == r && g == s && h == t
-  liftEq _ (MDInterface a@Interface {}) (MDInterface b@Interface{}) = a == b
-  liftEq _ _ _ = False
 
 moduleDefName :: ModuleDef g -> ModuleName
 moduleDefName (MDModule m) = _mName m
@@ -637,7 +624,7 @@ instance Show1 Term where
   liftShowsPrec showsA showListA p tm = showParen (p > 10) $ case tm of
     TModule{..} ->
         showString "TModule "
-      . showsPrec 11 _tModuleDef
+      . shows2 11 _tModuleDef
       . showChar ' '
       . shows1 11 _tModuleBody
       . showChar ' '
@@ -1146,7 +1133,13 @@ deriveEq1 ''App
 deriveEq1 ''BindType
 deriveEq1 ''ConstVal
 deriveEq1 ''Def
+deriveEq1 ''ModuleDef
+deriveEq1 ''Module
+deriveEq1 ''Governance
 deriveShow1 ''App
 deriveShow1 ''BindType
 deriveShow1 ''ConstVal
 deriveShow1 ''Def
+deriveShow1 ''ModuleDef
+deriveShow1 ''Module
+deriveShow1 ''Governance

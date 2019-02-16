@@ -83,7 +83,7 @@ replDefs :: NativeModule
 replDefs = ("Repl",
      [
       defZRNative "load" load (funType tTyString [("file",tTyString)] <>
-                              funType tTyString [("file",tTyString),("reset",tTyBool)]) $
+                              funType tTyString [("file",tTyString),("reset",tTyBool)])
       [LitExample "(load \"accounts.repl\")"]
       "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true."
      ,defZRNative "format-address" formatAddr (funType tTyString [("scheme", tTyString), ("public-key", tTyString)])
@@ -220,9 +220,10 @@ overenv l f = setop $ UpdateEnv $ Endo (over l f)
 formatAddr :: RNativeFun LibState
 #if !defined(ghcjs_HOST_OS)
 formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
-  let eitherEvalErr res effectStr transformFunc =
+  let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
+      eitherEvalErr res effectStr transformFunc =
         case res of
-          Left e  -> evalError' i (effectStr ++ ": " ++ show e)
+          Left e  -> evalError' i $ pretty effectStr <> ": " <> pretty e
           Right v -> return (transformFunc v)
   sppk  <- eitherEvalErr (fromText' scheme)
            "Invalid PPKScheme"

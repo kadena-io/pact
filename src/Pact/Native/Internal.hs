@@ -187,4 +187,5 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
       md <- getModule i modName
       case md of
         MDModule m -> void $ acquireModuleAdmin i (_mName m) (_mGovernance m)
-        MDInterface iface -> evalError i $ "Internal error, interface found in call stack: " ++ show iface
+        MDInterface iface -> evalError i $
+          "Internal error, interface found in call stack: " <> pretty iface

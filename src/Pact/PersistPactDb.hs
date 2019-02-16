@@ -71,9 +71,8 @@ data UserTableInfo = UserTableInfo
   } deriving (Eq,Show,Generic,Typeable)
 
 instance Pretty UserTableInfo where
-  pretty (UserTableInfo mod' ks) = "UserTableInfo " <> commaBraces
+  pretty (UserTableInfo mod') = "UserTableInfo " <> commaBraces
     [ "module: " <> pretty mod'
-    , "keyset: " <> pretty ks
     ]
 
 instance PactValue UserTableInfo
