@@ -25,8 +25,8 @@ deploy-nix-cache:
   stage: deploy
   allow_failure: true
   script:
-    - nix-instantiate | cachix push pact
-    - nix-instantiate shell.nix | cachix push pact
+    - if [ ! "$CACHIX_SIGNING_KEY" = "" ]; then nix-instantiate | cachix push pact fi
+    - if [ ! "$CACHIX_SIGNING_KEY" = "" ]; then nix-instantiate shell.nix | cachix push pact fi
 
 pages:
   stage: deploy
