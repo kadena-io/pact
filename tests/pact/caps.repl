@@ -152,7 +152,8 @@
 (test-capability (GRANTED))
 ; defuns requiring magic capabilities should now work
 (expect "functions requiring restricted governance should succeed after 'test-capability'" true (test-granted))
-; revoke all
-(revoke-all-capabilities)
+(commit-tx)
+
+(use caps)
 ; revocation now makes functions requiring certain caps to now fail
 (expect-failure "functions requiring restricted governance should fail after revocation" (test-granted))
