@@ -196,21 +196,24 @@ instance Show (EValSFunArray k) where
     . showChar ' '
     . withHasKind ty (showsPrec 11 sfunarr)
 
-eArrayAt :: forall a.
-  SingTy a -> S RowKey -> Lens' (EValSFunArray RowKey) (SBV (Concrete a))
-eArrayAt ty (S _ symKey) = lens getter setter where
+eVArrayAt
+  :: forall k v
+   . SingTy v
+  -> S k
+  -> Lens' (EValSFunArray k) (SBV (Concrete v))
+eVArrayAt ty (S _ symKey) = lens getter setter where
 
-  getter :: EValSFunArray RowKey -> SBV (Concrete a)
+  getter :: EValSFunArray k -> SBV (Concrete v)
   getter (EValSFunArray ty' arr) = case singEq ty ty' of
     Just Refl -> readArray arr symKey
     Nothing   -> error $
-      "eArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
+      "eVArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
 
-  setter :: EValSFunArray RowKey -> SBV (Concrete a) -> EValSFunArray RowKey
+  setter :: EValSFunArray k -> SBV (Concrete v) -> EValSFunArray k
   setter (EValSFunArray ty' arr) val = case singEq ty ty' of
     Just Refl -> withSymVal ty $ EValSFunArray ty $ writeArray arr symKey val
     Nothing   -> error $
-      "eArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
+      "eVArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
 
 instance Mergeable (EValSFunArray k) where
   symbolicMerge force test (EValSFunArray ty1 arr1) (EValSFunArray ty2 arr2)
@@ -602,7 +605,7 @@ typedCell ty cellValues tn cn sRk sDirty
   . singular (ix tn)
   . scValues
   . singular (ix cn)
-  . eArrayAt ty sRk
+  . eVArrayAt ty sRk
   . sbv2SFrom (fromCell tn cn sRk sDirty)
 
 symArrayAt
