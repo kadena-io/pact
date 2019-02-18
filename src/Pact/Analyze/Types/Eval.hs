@@ -186,10 +186,10 @@ data QueryEnv
     , _qeColumnScope   :: Map VarId ColumnName
     }
 
-data EValSFunArray where
-  EValSFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> EValSFunArray
+data EValSFunArray k where
+  EValSFunArray :: HasKind k => SingTy v -> SFunArray k (Concrete v) -> EValSFunArray k
 
-instance Show EValSFunArray where
+instance Show (EValSFunArray k) where
   showsPrec p (EValSFunArray ty sfunarr) = showParen (p > 10) $
       showString "EValSFunArray "
     . showsPrec 11 ty
@@ -197,29 +197,29 @@ instance Show EValSFunArray where
     . withHasKind ty (showsPrec 11 sfunarr)
 
 eArrayAt :: forall a.
-  SingTy a -> S RowKey -> Lens' EValSFunArray (SBV (Concrete a))
+  SingTy a -> S RowKey -> Lens' (EValSFunArray RowKey) (SBV (Concrete a))
 eArrayAt ty (S _ symKey) = lens getter setter where
 
-  getter :: EValSFunArray -> SBV (Concrete a)
+  getter :: EValSFunArray RowKey -> SBV (Concrete a)
   getter (EValSFunArray ty' arr) = case singEq ty ty' of
     Just Refl -> readArray arr symKey
     Nothing   -> error $
       "eArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
 
-  setter :: EValSFunArray -> SBV (Concrete a) -> EValSFunArray
+  setter :: EValSFunArray RowKey -> SBV (Concrete a) -> EValSFunArray RowKey
   setter (EValSFunArray ty' arr) val = case singEq ty ty' of
     Just Refl -> withSymVal ty $ EValSFunArray ty $ writeArray arr symKey val
     Nothing   -> error $
       "eArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
 
-instance Mergeable EValSFunArray where
+instance Mergeable (EValSFunArray k) where
   symbolicMerge force test (EValSFunArray ty1 arr1) (EValSFunArray ty2 arr2)
     = case singEq ty1 ty2 of
       Nothing   -> error "mismatched types when merging two EValSFunArrays"
       Just Refl -> withSymVal ty1 $
         EValSFunArray ty1 $ symbolicMerge force test arr1 arr2
 
-data SymbolicCells = SymbolicCells { _scValues :: ColumnMap EValSFunArray }
+data SymbolicCells = SymbolicCells { _scValues :: ColumnMap (EValSFunArray RowKey) }
   deriving (Show)
 
 instance Mergeable SymbolicCells where
@@ -409,7 +409,7 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
       (\colName cells ty ->
         let col      = ColumnName $ T.unpack colName
 
-            mkArray :: SingTy a -> EValSFunArray
+            mkArray :: SingTy a -> EValSFunArray RowKey
             mkArray sTy = withHasKind sTy $ EValSFunArray sTy $ mkFreeArray $
               "cells__" <> tableName <> "__" <> colName
 
