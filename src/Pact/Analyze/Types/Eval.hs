@@ -187,11 +187,11 @@ data QueryEnv
     }
 
 data ESFunArray where
-  SomeSFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> ESFunArray
+  ESFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> ESFunArray
 
 instance Show ESFunArray where
-  showsPrec p (SomeSFunArray ty sfunarr) = showParen (p > 10) $
-      showString "SomeSFunArray "
+  showsPrec p (ESFunArray ty sfunarr) = showParen (p > 10) $
+      showString "ESFunArray "
     . showsPrec 11 ty
     . showChar ' '
     . withHasKind ty (showsPrec 11 sfunarr)
@@ -201,23 +201,23 @@ eArrayAt :: forall a.
 eArrayAt ty (S _ symKey) = lens getter setter where
 
   getter :: ESFunArray -> SBV (Concrete a)
-  getter (SomeSFunArray ty' arr) = case singEq ty ty' of
+  getter (ESFunArray ty' arr) = case singEq ty ty' of
     Just Refl -> readArray arr symKey
     Nothing   -> error $
       "eArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
 
   setter :: ESFunArray -> SBV (Concrete a) -> ESFunArray
-  setter (SomeSFunArray ty' arr) val = case singEq ty ty' of
-    Just Refl -> withSymVal ty $ SomeSFunArray ty $ writeArray arr symKey val
+  setter (ESFunArray ty' arr) val = case singEq ty ty' of
+    Just Refl -> withSymVal ty $ ESFunArray ty $ writeArray arr symKey val
     Nothing   -> error $
       "eArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
 
 instance Mergeable ESFunArray where
-  symbolicMerge force test (SomeSFunArray ty1 arr1) (SomeSFunArray ty2 arr2)
+  symbolicMerge force test (ESFunArray ty1 arr1) (ESFunArray ty2 arr2)
     = case singEq ty1 ty2 of
       Nothing   -> error "mismatched types when merging two ESFunArrays"
       Just Refl -> withSymVal ty1 $
-        SomeSFunArray ty1 $ symbolicMerge force test arr1 arr2
+        ESFunArray ty1 $ symbolicMerge force test arr1 arr2
 
 data SymbolicCells = SymbolicCells { _scValues :: ColumnMap ESFunArray }
   deriving (Show)
@@ -410,7 +410,7 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
         let col      = ColumnName $ T.unpack colName
 
             mkArray :: SingTy a -> ESFunArray
-            mkArray sTy = withHasKind sTy $ SomeSFunArray sTy $ mkFreeArray $
+            mkArray sTy = withHasKind sTy $ ESFunArray sTy $ mkFreeArray $
               "cells__" <> tableName <> "__" <> colName
 
         in cells & case maybeTranslateType ty of
