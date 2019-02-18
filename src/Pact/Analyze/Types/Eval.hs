@@ -186,40 +186,40 @@ data QueryEnv
     , _qeColumnScope   :: Map VarId ColumnName
     }
 
-data ESFunArray where
-  ESFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> ESFunArray
+data EValSFunArray where
+  EValSFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> EValSFunArray
 
-instance Show ESFunArray where
-  showsPrec p (ESFunArray ty sfunarr) = showParen (p > 10) $
-      showString "ESFunArray "
+instance Show EValSFunArray where
+  showsPrec p (EValSFunArray ty sfunarr) = showParen (p > 10) $
+      showString "EValSFunArray "
     . showsPrec 11 ty
     . showChar ' '
     . withHasKind ty (showsPrec 11 sfunarr)
 
 eArrayAt :: forall a.
-  SingTy a -> S RowKey -> Lens' ESFunArray (SBV (Concrete a))
+  SingTy a -> S RowKey -> Lens' EValSFunArray (SBV (Concrete a))
 eArrayAt ty (S _ symKey) = lens getter setter where
 
-  getter :: ESFunArray -> SBV (Concrete a)
-  getter (ESFunArray ty' arr) = case singEq ty ty' of
+  getter :: EValSFunArray -> SBV (Concrete a)
+  getter (EValSFunArray ty' arr) = case singEq ty ty' of
     Just Refl -> readArray arr symKey
     Nothing   -> error $
       "eArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
 
-  setter :: ESFunArray -> SBV (Concrete a) -> ESFunArray
-  setter (ESFunArray ty' arr) val = case singEq ty ty' of
-    Just Refl -> withSymVal ty $ ESFunArray ty $ writeArray arr symKey val
+  setter :: EValSFunArray -> SBV (Concrete a) -> EValSFunArray
+  setter (EValSFunArray ty' arr) val = case singEq ty ty' of
+    Just Refl -> withSymVal ty $ EValSFunArray ty $ writeArray arr symKey val
     Nothing   -> error $
       "eArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
 
-instance Mergeable ESFunArray where
-  symbolicMerge force test (ESFunArray ty1 arr1) (ESFunArray ty2 arr2)
+instance Mergeable EValSFunArray where
+  symbolicMerge force test (EValSFunArray ty1 arr1) (EValSFunArray ty2 arr2)
     = case singEq ty1 ty2 of
-      Nothing   -> error "mismatched types when merging two ESFunArrays"
+      Nothing   -> error "mismatched types when merging two EValSFunArrays"
       Just Refl -> withSymVal ty1 $
-        ESFunArray ty1 $ symbolicMerge force test arr1 arr2
+        EValSFunArray ty1 $ symbolicMerge force test arr1 arr2
 
-data SymbolicCells = SymbolicCells { _scValues :: ColumnMap ESFunArray }
+data SymbolicCells = SymbolicCells { _scValues :: ColumnMap EValSFunArray }
   deriving (Show)
 
 instance Mergeable SymbolicCells where
@@ -409,8 +409,8 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
       (\colName cells ty ->
         let col      = ColumnName $ T.unpack colName
 
-            mkArray :: SingTy a -> ESFunArray
-            mkArray sTy = withHasKind sTy $ ESFunArray sTy $ mkFreeArray $
+            mkArray :: SingTy a -> EValSFunArray
+            mkArray sTy = withHasKind sTy $ EValSFunArray sTy $ mkFreeArray $
               "cells__" <> tableName <> "__" <> colName
 
         in cells & case maybeTranslateType ty of
