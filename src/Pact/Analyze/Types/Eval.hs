@@ -186,6 +186,7 @@ data QueryEnv
     , _qeColumnScope   :: Map VarId ColumnName
     }
 
+-- | SFunArray with existential value type
 data EValSFunArray k where
   EValSFunArray :: HasKind k => SingTy v -> SFunArray k (Concrete v) -> EValSFunArray k
 
@@ -222,7 +223,45 @@ instance Mergeable (EValSFunArray k) where
       Just Refl -> withSymVal ty1 $
         EValSFunArray ty1 $ symbolicMerge force test arr1 arr2
 
-data SymbolicCells = SymbolicCells { _scValues :: ColumnMap (EValSFunArray RowKey) }
+-- | SFunArray with existential key type
+data EKeySFunArray v where
+  EKeySFunArray :: SingTy k -> SFunArray (Concrete k) v -> EKeySFunArray v
+
+instance SymVal v => Show (EKeySFunArray v) where
+  showsPrec p (EKeySFunArray ty sfunarr) = showParen (p > 10) $
+      showString "EKeySFunArray "
+    . showsPrec 11 ty
+    . showChar ' '
+    . withHasKind ty (showsPrec 11 sfunarr)
+
+eKArrayAt
+  :: forall k v
+   . SymVal v
+  => SingTy k
+  -> S (Concrete k)
+  -> Lens' (EKeySFunArray v) (SBV v)
+eKArrayAt ty (S _ symKey) = lens getter setter
+  where
+    getter :: EKeySFunArray v -> SBV v
+    getter (EKeySFunArray ty' arr) = case singEq ty ty' of
+      Just Refl -> readArray arr symKey
+      Nothing   -> error $
+        "eKArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
+
+    setter :: EKeySFunArray v -> SBV v -> EKeySFunArray v
+    setter (EKeySFunArray ty' arr) val = case singEq ty ty' of
+      Just Refl -> EKeySFunArray ty $ writeArray arr symKey val
+      Nothing   -> error $
+        "eKArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
+
+instance SymVal v => Mergeable (EKeySFunArray v) where
+  symbolicMerge f t (EKeySFunArray ty1 arr1) (EKeySFunArray ty2 arr2) =
+    case singEq ty1 ty2 of
+      Nothing   -> error "mismatched types when merging two EKeySFunArrays"
+      Just Refl -> EKeySFunArray ty1 $ symbolicMerge f t arr1 arr2
+
+data SymbolicCells
+  = SymbolicCells { _scValues :: ColumnMap (EValSFunArray RowKey) }
   deriving (Show)
 
 instance Mergeable SymbolicCells where
