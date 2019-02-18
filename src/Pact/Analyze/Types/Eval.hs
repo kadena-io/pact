@@ -196,9 +196,6 @@ instance Show ESFunArray where
     . showChar ' '
     . withHasKind ty (showsPrec 11 sfunarr)
 
-data SymbolicCells = SymbolicCells { _scValues :: ColumnMap ESFunArray }
-  deriving (Show)
-
 eArrayAt :: forall a.
   SingTy a -> S RowKey -> Lens' ESFunArray (SBV (Concrete a))
 eArrayAt ty (S _ symKey) = lens getter setter where
@@ -221,6 +218,9 @@ instance Mergeable ESFunArray where
       Nothing   -> error "mismatched types when merging two ESFunArrays"
       Just Refl -> withSymVal ty1 $
         SomeSFunArray ty1 $ symbolicMerge force test arr1 arr2
+
+data SymbolicCells = SymbolicCells { _scValues :: ColumnMap ESFunArray }
+  deriving (Show)
 
 instance Mergeable SymbolicCells where
   symbolicMerge force test (SymbolicCells left) (SymbolicCells right)
