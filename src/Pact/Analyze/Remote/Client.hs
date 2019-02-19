@@ -26,7 +26,8 @@ import qualified GHCJS.DOM.XMLHttpRequest   as XHR
 
 import qualified Pact.Analyze.Remote.Types  as Remote
 import           Pact.Types.Runtime         (ModuleData (..))
-import           Pact.Types.Term            (Module (_mName), ModuleName)
+import           Pact.Types.Term            (ModuleName, derefDef,
+                                             moduleDefName)
 
 verifyModule
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
@@ -35,7 +36,9 @@ verifyModule
   -> IO [Text]
 verifyModule namedMods mod' uri = do
   let requestURI = uri ++ "/verify"
-      body       = Remote.Request (Foldable.toList $ fmap _mdModule namedMods) (_mName $ _mdModule mod')
+      body       = Remote.Request
+        (Foldable.toList $ fmap (fmap derefDef . _mdModule) namedMods)
+        (moduleDefName $ _mdModule mod')
       jsonBody   = T.decodeUtf8 . BSL.toStrict $ A.encode body
   req <- XHR.newXMLHttpRequest
   let nothingText :: Maybe Text
