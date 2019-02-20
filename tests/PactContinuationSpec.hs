@@ -47,7 +47,7 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 
     let allChecks = [makeCheck moduleCmd False Nothing,
                      makeCheck nestedExecPactCmd True
-                      (Just "(defpact tester ()\n  (step \"st...: Failure: Nested pact execution, aborting")]
+                      (Just "(defpact tester ()   (step \"st...: Failure: Nested pact execution, aborting")]
 
     allResults `shouldMatch` allChecks
 
@@ -205,7 +205,7 @@ testCorrectRollbackStep mgr = do
   let moduleName = "testCorrectRollbackStep"
   adminKeys <- genKeys
   let makeExecCmdWith = makeExecCmd adminKeys
-  
+
   moduleCmd       <- makeExecCmdWith (T.unpack (pactWithRollbackCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
@@ -231,7 +231,7 @@ testIncorrectRollbackStep mgr = do
   let moduleName = "testIncorrectRollbackStep"
   adminKeys <- genKeys
   let makeExecCmdWith = makeExecCmd adminKeys
-  
+
   moduleCmd       <- makeExecCmdWith (T.unpack (pactWithRollbackCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
   contNextStepCmd <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
@@ -328,7 +328,7 @@ testValidYield mgr = do
 
   moduleCmd          <- makeExecCmdWith (T.unpack (pactWithYield moduleName))
   executePactCmd     <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")")
-                        -- pact takes an input                 
+                        -- pact takes an input
   resumeAndYieldCmd  <- mkCont (TxId 1) 1 False Null def [adminKeys] (Just "test3")
   resumeOnlyCmd      <- mkCont (TxId 1) 2 False Null def [adminKeys] (Just "test4")
   checkStateCmd      <- mkCont (TxId 1) 3 False Null def [adminKeys] (Just "test5")
@@ -463,7 +463,7 @@ testDebtorPreTimeoutCancel mgr = do
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "02-balance.yaml")
   let allCmds = [tryCancelCmd, checkStillEscrowCmd]
 
-  let cancelMsg = T.concat ["(enforce-one\n        \"Cancel c...: Failure:",
+  let cancelMsg = T.concat ["(enforce-one         \"Cancel c...: Failure:",
                             " Tx Failed: Cancel can only be effected by",
                             " creditor, or debitor after timeout"]
       tryCancelCheck        = makeCheck tryCancelCmd True $ Just $ String cancelMsg
