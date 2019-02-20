@@ -126,7 +126,7 @@ in
             }) {});
           };
     packages = {
-      pact = gitignore.gitignoreSource [] ./.;
+      pact = gitignore.gitignoreSource [".git" ".gitlab-ci.yml" "CHANGELOG.md" "README.md"] ./.;
     };
     shellToolOverrides = ghc: super: {
       z3 = pkgs.z3;
