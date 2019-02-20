@@ -168,7 +168,7 @@ replDefs = ("Repl",
        "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash."
      ,defZNative "test-capability" testCapability
       (funType tTyString [("capability", TyFun $ funType' tTyBool [])])
-      ["(test-capability (MY-CAP))"] $
+      [LitExample "(test-capability (MY-CAP))"] $
      "Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope " <>
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
      "blockchain environment."

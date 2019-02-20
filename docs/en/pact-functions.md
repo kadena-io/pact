@@ -1548,6 +1548,17 @@ Rollback transaction.
 Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
 
 
+### test-capability {#test-capability}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
+
+
+Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the blockchain environment.
+```lisp
+(test-capability (MY-CAP))
+```
+
+
 ### typecheck {#typecheck}
 
 *module*&nbsp;`string` *&rarr;*&nbsp;`string`
