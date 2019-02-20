@@ -17,6 +17,7 @@ import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Translate      (maybeTranslateType)
 import           Pact.Analyze.Types          hiding (Object)
+import           Pact.Types.Pretty           (renderCompactString')
 
 import           Analyze.Eval
 import           Analyze.Gen
@@ -37,7 +38,7 @@ testDualEvaluation' etm ty gState = do
   -- evaluate via pact, convert to analyze term
   mPactVal <- liftIO $ pactEval etm gState
   ePactVal <- case mPactVal of
-    UnexpectedErr err  -> footnote err >> failure
+    UnexpectedErr err  -> footnote (renderCompactString' err) >> failure
     Discard            -> discard
     EvalResult pactVal -> pure $ Right pactVal
     EvalErr err        -> pure $ Left err
@@ -47,7 +48,7 @@ testDualEvaluation' etm ty gState = do
   case (ePactVal, eAnalyzeVal) of
     (Left _pactErr, Left _analyzeErr) -> success
     (Left pactErr, Right analyzeVal) -> do
-      footnote $ "got failure from pact: " ++ pactErr
+      footnote $ "got failure from pact: " ++ renderCompactString' pactErr
       footnote $ "got value from analyze: " ++ show analyzeVal
       failure
     (Right pactVal, Left analyzeErr) ->  do

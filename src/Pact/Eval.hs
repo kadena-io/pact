@@ -65,6 +65,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Unsafe.Coerce
 import Data.Aeson (Value)
+import Pact.Types.Pretty
 
 import Pact.Types.Runtime
 import Pact.Gas
@@ -89,7 +90,7 @@ evalCommitTx i = do
 
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
-  ks <- maybe (evalError mi $ "No such keyset: " ++ show mksn) return =<< readRow mi KeySets mksn
+  ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
   runPure $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
@@ -100,7 +101,8 @@ enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   let count = length _ksKeys
       matched = S.size $ S.intersection (S.fromList _ksKeys) sigs
-      failed = failTx i $ "Keyset failure (" ++ show _ksPredFun ++ ")" ++ maybe "" (": " ++) (fmap show ksn)
+      failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <>
+        maybe "" (\ksn' -> ": " <> pretty ksn') ksn
       runBuiltIn p | p count matched = return ()
                    | otherwise = failed
       atLeast t m = m >= t
@@ -113,8 +115,9 @@ enforceKeySet i ksn KeySet{..} = do
         App (TVar _ksPredFun def) [toTerm count,toTerm matched] i
       case r of
         (TLiteral (LBool b) _) | b -> return ()
-                               | otherwise -> failTx i $ "Keyset failure: " ++ maybe "[dynamic]" show ksn
-        _ -> evalError i $ "Invalid response from keyset predicate: " ++ show r
+                               | otherwise -> failTx i $ "Keyset failure: " <>
+                                   maybe "[dynamic]" pretty ksn
+        _ -> evalError i $ "Invalid response from keyset predicate: " <> pretty r
 {-# INLINE enforceKeySet #-}
 
 
@@ -203,7 +206,7 @@ evalNamespace info setter m = do
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
-  evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
+  evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval (TModule (MDModule m) bod i) =
   topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- prepend namespace def to module name
@@ -216,7 +219,8 @@ eval (TModule (MDModule m) bod i) =
         case omd of
           MDModule om -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
           MDInterface Interface{..} -> evalError i $
-            "Name overlap: module " ++ show (_mName m) ++ " overlaps with interface  " ++ show _interfaceName
+            "Name overlap: module " <> pretty (_mName m) <>
+            " overlaps with interface  " <> pretty _interfaceName
     case _gGovernance $ _mGovernance mangledM of
       -- enforce new module keyset
       Left ks -> enforceKeySetName i ks
@@ -227,7 +231,7 @@ eval (TModule (MDModule m) bod i) =
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     writeRow i Write Modules (_mName mangledM) (derefDef <$> govM)
-    return (g, msg $ pack $ "Loaded module " ++ show (_mName mangledM) ++ ", hash " ++ show (_mHash mangledM))
+    return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 
 eval (TModule (MDInterface m) bod i) =
   topLevelCall i "interface" (GInterfaceDecl m) $ \gas -> do
@@ -237,10 +241,10 @@ eval (TModule (MDInterface m) bod i) =
     oldI <- readRow i Modules $ _interfaceName mangledI
     case oldI of
       Nothing -> return ()
-      Just old -> evalError i $ "Existing interface found: " ++ show old
+      Just old -> evalError i $ "Existing interface found: " <> pretty old
     (g,govI) <- loadInterface mangledI bod i gas
     writeRow i Write Modules (_interfaceName mangledI) (derefDef <$> govI)
-    return (g, msg $ pack $ "Loaded interface " ++ show (_interfaceName mangledI))
+    return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 eval t = enscope t >>= reduce
 
 
@@ -248,19 +252,22 @@ evalUse :: Use -> Eval e ()
 evalUse (Use mn h i) = do
   mm <- resolveName mn
   case mm of
-    Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
+    Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
     Just md -> do
       case view mdModule md of
         MDModule Module{..} ->
           case h of
             Nothing -> return ()
             Just mh | mh == _mHash -> return ()
-                    | otherwise -> evalError i $ "Module " ++ show mn ++ " does not match specified hash: " ++
-                               show mh ++ ", " ++ show _mHash
+                    | otherwise -> evalError i $ "Module " <>
+                        pretty mn <> " does not match specified hash: " <>
+                        pretty mh <> ", " <> pretty _mHash
         MDInterface Interface{..} ->
           case h of
             Nothing -> return ()
-            Just _ -> evalError i $ "Interfaces should not have associated hashes: " ++ show _interfaceName
+            Just _ -> evalError i $
+              "Interfaces should not have associated hashes: " <>
+              pretty _interfaceName
 
       installModule md
 
@@ -357,10 +364,19 @@ evaluateDefs info defs = do
       case c of
         AcyclicSCC v -> return v
         CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
-          "Recursion detected: " ++ show vs
+          "Recursion detected: " <> pretty (vs & traverse . _1 %~ fmap mkSomeDoc)
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
       unifiedDefs = foldl dresolve HM.empty sortedDefs
   traverse (runPure . evalConsts) unifiedDefs
+
+-- | Helper to use 'pretty' on an 'Either'
+newtype SomeDoc = SomeDoc Doc
+
+instance Pretty SomeDoc where
+  pretty (SomeDoc doc) = doc
+
+mkSomeDoc :: (Pretty a, Pretty b) => Either a b -> SomeDoc
+mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 
 traverseGraph :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
 traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) $ \(dn,d) -> do
@@ -371,8 +387,8 @@ traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) $ \(dn,d) ->
       (Nothing, Name fn _) ->
         case HM.lookup fn defs of
           Just _ -> return (Left fn)
-          Nothing -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
-      (Nothing, _) -> evalError (_nInfo f) $ "cannot resolve \"" ++ show f ++ "\""
+          Nothing -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
+      (Nothing, _) -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
   return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
 
 -- | Evaluate interface constraints in module.
@@ -388,7 +404,7 @@ evaluateConstraints info m evalMap =
       refData <- resolveName ifn
       case refData of
         Nothing -> evalError info $
-          "Interface not defined: " ++ asString' ifn
+          "Interface not defined: " <> pretty ifn
         Just (ModuleData (MDInterface Interface{..}) irefs) -> do
           em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
@@ -404,29 +420,29 @@ solveConstraint
   -> Eval e (HM.HashMap Text Ref)
   -> Eval e (HM.HashMap Text Ref)
 solveConstraint info refName (Direct t) _ =
-  evalError info $ "found native reference " ++ show t ++ " while resolving module contraints: " ++ show refName
+  evalError info $ "found native reference " <> pretty t <> " while resolving module contraints: " <> pretty refName
 solveConstraint info refName (Ref t) evalMap = do
   em <- evalMap
   case HM.lookup refName em of
     Nothing ->
       case t of
         TConst{..} -> evalMap
-        _ -> evalError info $ "found unimplemented member while resolving model constraints: " ++ show refName
+        _ -> evalError info $ "found unimplemented member while resolving model constraints: " <> pretty refName
     Just (Direct s) ->
-      evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
+      evalError info $ "found native reference " <> pretty s <> " while resolving module contraints: " <> pretty t
     Just (Ref s) ->
       case (t, s) of
         (TDef (Def _n _mn dt (FunType args rty) _ m _) _,
           TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _) _) -> do
-          when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
-          when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
-          when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
+          when (dt /= dt') $ evalError info $ "deftypes mismatching: " <> pretty dt <> line <> pretty dt'
+          when (rty /= rty') $ evalError info $ "return types mismatching: " <> pretty rty <> line <> pretty rty'
+          when (length args /= length args') $ evalError info $ "mismatching argument lists: " <> pretty args <> line <> pretty args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
-            when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
-            when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
+            when (n /= n') $ evalError info $ "mismatching argument names: " <> pretty n <> " and " <> pretty n'
+            when (ty /= ty') $ evalError info $ "mismatching types: " <> pretty ty <> " and " <> pretty ty'
           -- the model concatenation step: we reinsert the ref back into the map with new models
           pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
-        _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
+        _ -> evalError info $ "found overlapping const refs - please resolve: " <> pretty t
 
 resolveName :: ModuleName -> Eval e (Maybe ModuleData)
 resolveName mn = do
@@ -501,7 +517,7 @@ reduce t@TDef {} = return $ toTerm $ pack $ show t
 reduce t@TNative {} = return $ toTerm $ pack $ show t
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
-  CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " ++ show a
+  CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
 reduce (TObject ps t i) =
   TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> traverse reduce t <*> pure i
 reduce (TBinding ps bod c i) = case c of
@@ -529,7 +545,7 @@ reduceLet ps bod i = do
 
 {-# INLINE resolveArg #-}
 resolveArg :: Info -> [Term n] -> Int -> Term n
-resolveArg ai as i = fromMaybe (appError ai $ pack $ "Missing argument value at index " ++ show i) $
+resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index " <> pretty i) $
                      as `atMay` i
 
 appCall :: Show t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
@@ -546,8 +562,8 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
       Defcap -> evalError ai "Cannot directly evaluate defcap"
-reduceApp (App (TLitString errMsg) _ i) = evalError i $ unpack errMsg
-reduceApp (App r _ ai) = evalError ai $ "Expected def: " ++ show r
+reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
+reduceApp (App r _ ai) = evalError ai $ "Expected def: " <> pretty r
 
 -- | precompute "UserApp" cost
 computeUserAppGas :: Def Ref -> Info -> Eval e Gas
@@ -578,14 +594,14 @@ reduceDirect TNative {..} as ai =
       enforceTopLevel = traverse_ $ \c ->
         case preview (sfApp . _Just . _1 . faModule . _Just) c of
           Nothing -> return ()
-          Just m -> evalError ai $ "Top-level call used in module " ++ show m ++
-            ": " ++ show _tNativeName
+          Just m -> evalError ai $ "Top-level call used in module " <> pretty m <>
+            ": " <> pretty _tNativeName
   in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
     appCall fa ai as $ _nativeFun _tNativeFun fa as
 
-reduceDirect (TLitString errMsg) _ i = evalError i $ unpack errMsg
-reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " ++ show r
+reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
+reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
 -- defaulting to the first step.
@@ -599,7 +615,7 @@ applyPact (TList steps _ i) = do
       return $ PactStep 0 False (PactId $ maybe "[localPactId]" (pack . show) tid) Nothing
     Just v -> return v
   -- retrieve indicated step from code
-  s <- maybe (evalError i $ "applyPact: step not found: " ++ show _psStep) return $ steps `atMay` _psStep
+  s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps `atMay` _psStep
   case s of
     step@TStep {} -> do
       stepEntity <- traverse reduce (_tStepEntity step)
@@ -610,7 +626,8 @@ applyPact (TList steps _ i) = do
           case (_psRollback,_tStepRollback step) of
             (False,_) -> reduce $ _tStepExec step
             (True,Just rexp) -> reduce rexp
-            (True,Nothing) -> return $ tStr $ pack $ "No rollback on step " ++ show _psStep
+            (True,Nothing) -> return $ tStr $ renderCompactText' $
+              "No rollback on step " <> pretty _psStep
       case stepEntity of
         Just (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
           Just (EntityName en) | se == en -> execStep -- matched for "private" step exec
@@ -623,13 +640,13 @@ applyPact t = evalError (_tInfo t) "applyPact: expected list of steps"
 
 
 -- | Create special error form handled in 'reduceApp'
-appError :: Info -> Text -> Term n
-appError i errMsg = TApp (App (toTerm errMsg) [] i) i
+appError :: Info -> Doc -> Term n
+appError i errDoc = TApp (App (msg errDoc) [] i) i
 
 resolveFreeVars ::  Info -> Scope d Term Name ->  Eval e (Scope d Term Ref)
 resolveFreeVars i b = traverse r b where
     r fv = resolveRef fv >>= \m -> case m of
-             Nothing -> evalError i $ "Cannot resolve " ++ show fv
+             Nothing -> evalError i $ "Cannot resolve " <> pretty fv
              Just d -> return d
 
 installModule :: ModuleData ->  Eval e ()
@@ -637,8 +654,8 @@ installModule ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
   (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) _mdModule
 
-msg :: Text -> Term n
-msg = toTerm
+msg :: Doc -> Term n
+msg = toTerm . renderCompactText'
 
 enscope ::  Term Name ->  Eval e (Term Ref)
 enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothing) $ t)
@@ -659,8 +676,8 @@ typecheck ps = foldM_ tvarCheck M.empty ps where
         Nothing -> return $ M.insert v ty m
         Just prevTy | prevTy == ty -> return m
                     | otherwise ->
-                        evalError (_tInfo t) $ "Type error: values for variable " ++ show _aType ++
-                        " do not match: " ++ show (prevTy,ty)
+                        evalError (_tInfo t) $ "Type error: values for variable " <> pretty _aType <>
+                        " do not match: " <> pretty (prevTy,ty)
 
 -- | 'typecheckTerm i spec t' checks a Term 't' against a specified type 'spec'.
 -- Returns `Nothing` on successful check against concrete/untyped,
@@ -671,14 +688,14 @@ typecheckTerm :: forall e . Info -> Type (Term Name) -> Term Name
 typecheckTerm i spec t = do
 
   ty <- case typeof t of
-    Left s -> evalError i $ "Invalid type in value location: " ++ unpack s
+    Left s -> evalError i $ "Invalid type in value location: " <> pretty s
     Right r -> return r
 
   let
 
-    tcFail :: Show a => a -> Eval e b
+    tcFail :: Pretty a => a -> Eval e b
     tcFail found = evalError i $
-      "Type error: expected " ++ show spec ++ ", found " ++ show found
+      "Type error: expected " <> pretty spec <> ", found " <> pretty found
 
     tcOK = return Nothing
 
@@ -733,20 +750,20 @@ checkUserType partial i ps (TyUser tu@TSchema {..}) = do
   let fields = M.fromList . map (_aName &&& id) $ _tFields
   aps <- forM ps $ \(k,v) -> case k of
     TLitString ks -> case M.lookup ks fields of
-      Nothing -> evalError i $ "Invalid field for {" ++ unpack (asString _tSchemaName) ++ "}: " ++ show ks
+      Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty ks
       Just a -> return (a,v)
-    t -> evalError i $ "Invalid object, non-String key found: " ++ show t
+    t -> evalError i $ "Invalid object, non-String key found: " <> pretty t
   let findMissing fs = do
         let missing = M.difference fs (M.fromList (map (first _aName) aps))
         unless (M.null missing) $ evalError i $
-          "Missing fields for {" ++ unpack (asString _tSchemaName) ++ "}: " ++ show (M.elems missing)
+          "Missing fields for {" <> pretty _tSchemaName <> "}: " <> pretty (M.elems missing)
   case partial of
     FullSchema -> findMissing fields
     PartialSchema fs -> findMissing (M.restrictKeys fields fs)
     AnySubschema -> return ()
   typecheck aps
   return $ TySchema TyObject (TyUser tu) partial
-checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
+checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " <> pretty t
 
 runPure :: Eval (EnvNoDb e) a -> Eval e a
 runPure action = ask >>= \env -> case _eePurity env of

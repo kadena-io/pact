@@ -21,6 +21,7 @@ import Pact.Native.Internal
 import Pact.Types.Runtime
 import Control.Lens
 import Control.Monad.State (state)
+import Pact.Types.Pretty
 
 
 capDefs :: NativeModule
@@ -43,6 +44,7 @@ withCapability :: NativeDef
 withCapability =
   defNative (specialForm WithCapability) withCapability'
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
+  [LitExample "(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))"]
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
   \production. Given the unique token specified by this application, ensure \
   \that the token is granted in the environment during execution of BODY. \
@@ -52,8 +54,7 @@ withCapability =
   \resulting in the installation/granting of the token, which will then be revoked \
   \upon completion of BODY. Nested 'with-capability' calls for the same token \
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
-  \but simply execute BODY. \
-   \`$(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))`"
+  \but simply execute BODY."
   where
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
       -- erase composed
@@ -90,22 +91,22 @@ requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
 requireDefcap App{..} = case _appFun of
   (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
     Defcap -> return d
-    _ -> evalError _appInfo $ "Can only apply defcap here, found: " ++ show _dDefType
-  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " ++ show _appFun
+    _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
+  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " <> pretty _appFun
 
 requireCapability :: NativeDef
 requireCapability =
   defNative "require-capability" requireCapability'
   (funType tTyBool [("capability",TyFun $ funType' tTyBool [])])
-  "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment. \
-  \`$(require-capability (TRANSFER src dest))`"
+  [LitExample "(require-capability (TRANSFER src dest))"]
+  "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment."
   where
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
       (args,_) <- prepareUserAppArgs d _appArgs
       let cap = UserCapability _dDefName args
       granted <- capabilityGranted cap
-      unless granted $ evalError' i $ "require-capability: not granted: " ++ show cap
+      unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
     requireCapability' i as = argsError' i as
 
@@ -113,14 +114,14 @@ composeCapability :: NativeDef
 composeCapability =
   defNative "compose-capability" composeCapability'
   (funType tTyBool [("capability",TyFun $ funType' tTyBool [])])
+  [LitExample "(compose-capability (TRANSFER src dest))"]
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
   \production, only valid within a (distinct) 'defcap' body, as a way to compose \
   \CAPABILITY with the outer capability such that the scope of the containing \
   \'with-capability' call will \"import\" this capability. Thus, a call to \
   \'(with-capability (OUTER-CAP) OUTER-BODY)', where the OUTER-CAP defcap calls \
   \'(compose-capability (INNER-CAP))', will result in INNER-CAP being granted \
-  \in the scope of OUTER-BODY. \
-  \`$(compose-capability (TRANSFER src dest))`"
+  \in the scope of OUTER-BODY."
   where
     composeCapability' :: NativeFun e
     composeCapability' i [TApp app _] = gasUnreduced i [] $ do
@@ -142,6 +143,7 @@ createPactGuard :: NativeDef
 createPactGuard =
   defRNative "create-pact-guard" createPactGuard'
   (funType (tTyGuard (Just GTyPact)) [("name",tTyString)])
+  []
   "Defines a guard predicate by NAME that captures the results of 'pact-id'. \
   \At enforcement time, the success condition is that at that time 'pact-id' must \
   \return the same value. In effect this ensures that the guard will only succeed \
@@ -158,6 +160,7 @@ createModuleGuard :: NativeDef
 createModuleGuard =
   defRNative "create-module-guard" createModuleGuard'
   (funType (tTyGuard (Just GTyModule)) [("name",tTyString)])
+  []
   "Defines a guard by NAME that enforces the current module admin predicate."
   where
     createModuleGuard' :: RNativeFun e
@@ -171,6 +174,7 @@ keysetRefGuard :: NativeDef
 keysetRefGuard =
   defRNative "keyset-ref-guard" keysetRefGuard'
   (funType (tTyGuard (Just GTyKeySetName)) [("keyset-ref",tTyString)])
+  []
   "Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. \
   \Concrete keysets are themselves guard types; this function is specifically to \
   \store references alongside other guards in the database, etc."
@@ -185,6 +189,7 @@ createUserGuard :: NativeDef
 createUserGuard =
   defRNative "create-user-guard" createUserGuard'
   (funType (tTyGuard (Just GTyUser)) [("data",tvA),("predfun",tTyString)])
+  []
   "Defines a custom guard predicate, where DATA will be passed to PREDFUN at time \
   \of enforcement. PREDFUN is a valid name in the declaring environment. \
   \PREDFUN must refer to a pure function or enforcement will fail at runtime."
@@ -197,10 +202,10 @@ createUserGuard =
             Just (Direct {}) -> return n
             Just (Ref (TDef Def{..} _)) ->
               return $ QName _dModule (asString _dDefName) _dInfo
-            Just _ -> evalError' i $ "Invalid predfun, not a def: " ++ show n
-            _ -> evalError' i $ "Could not resolve predfun: " ++ show n
+            Just _ -> evalError' i $ "Invalid predfun, not a def: " <> pretty n
+            _ -> evalError' i $ "Could not resolve predfun: " <> pretty n
           return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard udata rn)
         Left s -> evalError' i $
-          "Invalid name " ++ show predfun ++ ": " ++ s
+          "Invalid name " <> pretty predfun <> ": " <> pretty s
       Left {} -> evalError' i "Data must be value"
     createUserGuard' i as = argsError i as

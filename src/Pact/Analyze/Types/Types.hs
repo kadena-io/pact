@@ -74,7 +74,7 @@ data Ty
   | TyGuard
   | TyAny
   | TyList Ty
-  | TyObject [ (Symbol, Ty) ]
+  | TyObject [ (Symbol, Ty) ] -- ^ Invariant: this list is always sorted
 
 data family Sing :: k -> Type
 

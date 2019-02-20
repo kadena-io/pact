@@ -42,6 +42,7 @@ import GHC.Generics
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Persist as P
 import Pact.Types.Logger
@@ -68,6 +69,11 @@ initDbEnv loggers funrec p = DbEnv {
 data UserTableInfo = UserTableInfo
   { utModule :: ModuleName
   } deriving (Eq,Show,Generic,Typeable)
+
+instance Pretty UserTableInfo where
+  pretty (UserTableInfo mod') = "UserTableInfo " <> commaBraces
+    [ "module: " <> pretty mod'
+    ]
 
 instance PactValue UserTableInfo
 instance FromJSON UserTableInfo
@@ -184,7 +190,7 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn Namespaces = TxTable namespacesTable
     tn (UserTables t) = userTxRecord t
     convLog tl = case fromJSON (_txValue tl) of
-      Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " ++ s
+      Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> pretty s
       Success v -> return $ set txValue v tl
 {-# INLINE getLogs #-}
 
@@ -242,11 +248,11 @@ writeUser s wt tn rk row = runMVState s $ do
       finish row' = record tt rk row'
   case (olds,wt) of
     (Nothing,Insert) -> ins
-    (Just _,Insert) -> throwDbError $ "Insert: row found for key " ++ show rk
+    (Just _,Insert) -> throwDbError $ "Insert: row found for key " <> pretty rk
     (Nothing,Write) -> ins
     (Just old,Write) -> upd old
     (Just old,Update) -> upd old
-    (Nothing,Update) -> throwDbError $ "Update: no row found for key " ++ show rk
+    (Nothing,Update) -> throwDbError $ "Update: no row found for key " <> pretty rk
 {-# INLINE writeUser #-}
 
 record :: (AsString k, PactValue v) => TxTable -> k -> v -> MVState p ()
@@ -258,7 +264,7 @@ getUserTableInfo' e tn = runMVState e $ do
   r <- doPersist $ \p -> readValue p (DataTable userTableInfo) (DataKey $ asString tn)
   case r of
     (Just (UserTableInfo mn)) -> return mn
-    Nothing -> throwDbError $ "getUserTableInfo: no such table: " ++ show tn
+    Nothing -> throwDbError $ "getUserTableInfo: no such table: " <> pretty tn
 {-# INLINE getUserTableInfo' #-}
 
 

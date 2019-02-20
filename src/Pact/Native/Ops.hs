@@ -30,13 +30,14 @@ import qualified Data.Map.Strict as M
 
 import Pact.Native.Internal
 import Pact.Types.Runtime
+import Pact.Types.Pretty
 
 import Pact.Eval
 
 
 modDef :: NativeDef
 modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
-  "X modulo Y. `(mod 13 8)`"
+  ["(mod 13 8)"] "X modulo Y."
   where
     mod' :: RNativeFun e
     mod' _ [TLitInteger a, TLitInteger b] = return $ toTerm $ a `mod` b
@@ -44,9 +45,13 @@ modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
 
 addDef :: NativeDef
 addDef = defRNative "+" plus plusTy
-     "Add numbers, concatenate strings/lists, or merge objects. \
-     \`(+ 1 2)` `(+ 5.0 0.5)` `(+ \"every\" \"body\")` `(+ [1 2] [3 4])` \
-     \`(+ { \"foo\": 100 } { \"foo\": 1, \"bar\": 2 })`"
+  [ "(+ 1 2)"
+  , "(+ 5.0 0.5)"
+  , "(+ \"every\" \"body\")"
+  , "(+ [1 2] [3 4])"
+  , "(+ { \"foo\": 100 } { \"foo\": 1, \"bar\": 2 })"
+  ]
+  "Add numbers, concatenate strings/lists, or merge objects."
   where
 
     plus :: RNativeFun e
@@ -70,7 +75,8 @@ addDef = defRNative "+" plus plusTy
 
 subDef :: NativeDef
 subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
-     "Negate X, or subtract Y from X. `(- 1.0)` `(- 3 2)`"
+  ["(- 1.0)", "(- 3 2)"]
+  "Negate X, or subtract Y from X."
   where
 
     minus :: RNativeFun e
@@ -84,42 +90,42 @@ subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
 
 mulDef :: NativeDef
 mulDef = defRNative "*" (binop' (*) (*)) coerceBinNum
-     "Multiply X by Y. `(* 0.5 10.0)` `(* 3 5)`"
+  ["(* 0.5 10.0)", "(* 3 5)"] "Multiply X by Y."
 
 divDef :: NativeDef
 divDef = defRNative "/" divide' coerceBinNum
-     "Divide X by Y. `(/ 10.0 2.0)` `(/ 8 3)`"
+  ["(/ 10.0 2.0)", "(/ 8 3)"] "Divide X by Y."
   where
     divide' :: RNativeFun e
     divide' = binop (\a b -> assert (b /= 0) "Division by 0" $ liftOp (/) a b)
                     (\a b -> assert (b /= 0) "Division by 0" $ liftOp div a b)
 
 powDef :: NativeDef
-powDef = defRNative "^" pow coerceBinNum "Raise X to Y power. `(^ 2 3)`"
+powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   where
     pow :: RNativeFun e
     pow = binop (\a b -> liftDecF (**) a b)
                 (\a b -> assert (b >= 0) "Integral power must be >= 0" $ liftOp (^) a b)
 
 logDef :: NativeDef
-logDef = defRNative "log" log' coerceBinNum "Log of Y base X. `(log 2 256)`"
+logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
     log' :: RNativeFun e
     log' = binop (\a b -> liftDecF logBase a b)
                  (\a b -> liftIntF logBase a b)
 
 sqrtDef :: NativeDef
-sqrtDef = defRNative "sqrt" (unopd sqrt) unopTy "Square root of X. `(sqrt 25)`"
+sqrtDef = defRNative "sqrt" (unopd sqrt) unopTy ["(sqrt 25)"] "Square root of X."
 
 lnDef :: NativeDef
-lnDef = defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
+lnDef = defRNative "ln" (unopd log) unopTy ["(round (ln 60) 6)"] "Natural log of X."
 
 expDef :: NativeDef
-expDef = defRNative "exp" (unopd exp) unopTy "Exp of X. `(round (exp 3) 6)`"
+expDef = defRNative "exp" (unopd exp) unopTy ["(round (exp 3) 6)"] "Exp of X."
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
-     "Absolute value of X. `(abs (- 10 23))`"
+  ["(abs (- 10 23))"] "Absolute value of X."
   where
     abs' :: RNativeFun e
     abs' _ [TLitInteger a] = return $ toTerm $ abs a
@@ -149,11 +155,12 @@ lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
 
 eqDef :: NativeDef
 eqDef = defRNative "=" (eq id) eqTy
-  "True if X equals Y. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
+  ["(= [1 2 3] [1 2 3])", "(= 'foo \"foo\")", "(= { 1: 2 } { 1: 2})"]
+  "True if X equals Y."
 
 neqDef :: NativeDef
 neqDef = defRNative "!=" (eq not) eqTy
-  "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
+  ["(!= \"hello\" \"goodbye\")"] "True if X does not equal Y."
 
 eqTy :: FunTypes n
 eqTy = binTy tTyBool eqA eqA
@@ -169,7 +176,7 @@ andDef :: NativeDef
 andDef = defLogic "and" (&&) False
 
 notDef :: NativeDef
-notDef = defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
+notDef = defRNative "not" not' (unaryTy tTyBool tTyBool) ["(not (> 1 2))"] "Boolean not."
   where
     not' :: RNativeFun e
     not' _ [TLiteral (LBool a) _] = return $ toTerm $ not a
@@ -181,8 +188,8 @@ opDefs = ("Operators",
     ,liftLogic "and?" (&&) "and" False
     ,defNative "not?" liftNot
      (funType tTyBool [("app",logicLam r),("value",r)])
-     ("Apply logical 'not' to the results of applying VALUE to APP. " <>
-      "`(not? (> 20) 15)`")
+     ["(not? (> 20) 15)"]
+     "Apply logical 'not' to the results of applying VALUE to APP."
 
     ,orDef, andDef, notDef
     ,gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
@@ -209,8 +216,10 @@ plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSche
 defTrunc :: NativeDefName -> Text -> (Decimal -> Integer) -> NativeDef
 defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("prec",tTyInteger)] <>
                                       unaryTy tTyInteger tTyDecimal)
-                     (desc <> " value of decimal X as integer, or to PREC precision as decimal. " <>
-                     "`(" <> asString n <> " 3.5)` `(" <> asString n <> " 100.15234 2)`")
+                     [ ExecExample $ "(" <> asString n <> " 3.5)"
+                     , ExecExample $ "(" <> asString n <> " 100.15234 2)"
+                     ]
+                     (desc <> " value of decimal X as integer, or to PREC precision as decimal.")
     where fun :: RNativeFun e
           fun _ [TLiteral (LDecimal d) _] = return $ toTerm $ op d
           fun i [TLiteral (LDecimal d) _,TLitInteger p]
@@ -220,8 +229,9 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
           fun i as = argsError i as
 
 defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Bool -> NativeDef
-defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool) $
-                 "Boolean logic with short-circuit. `(" <> asString n <> " true false)`"
+defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool)
+    [ExecExample $ "(" <> asString n <> " true false)"]
+    "Boolean logic with short-circuit."
     where
       fun :: NativeFun e
       fun i as@[a,b] = gasUnreduced i as $ reduce a >>= \a' -> case a' of
@@ -235,14 +245,14 @@ defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool) $
 logicLam :: Type v -> Type v
 logicLam argTy = TyFun $ funType' tTyBool [("x",argTy)]
 
-delegateError :: String -> Term Ref -> Term Name -> Eval m a
-delegateError desc app r = evalError (_tInfo app) $ desc ++ ": Non-boolean result from delegate: " ++ show r
+delegateError :: Doc -> Term Ref -> Term Name -> Eval m a
+delegateError desc app r = evalError (_tInfo app) $ desc <> ": Non-boolean result from delegate: " <> pretty r
 
 liftLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Text -> Bool -> NativeDef
 liftLogic n bop desc shortCircuit =
   defNative n fun (funType tTyBool [("a",logicLam r),("b",logicLam r),("value",r)])
-    ("Apply logical '" <> desc <> "' to the results of applying VALUE to A and B, with short-circuit. " <>
-    "`(" <> asString n <> " (> 20) (> 10) 15)`")
+    [ExecExample $ "(" <> asString n <> " (> 20) (> 10) 15)"]
+    ("Apply logical '" <> desc <> "' to the results of applying VALUE to A and B, with short-circuit.")
   where
     r = mkTyVar "r" []
     fun i as@[a@TApp{},b@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> do
@@ -254,8 +264,8 @@ liftLogic n bop desc shortCircuit =
               br <- apply (_tApp b) [v]
               case br of
                 TLitBool bb -> return $ toTerm $ bop ab bb
-                _ -> delegateError (show n) b br
-        _ -> delegateError (show n) a ar
+                _ -> delegateError (pretty n) b br
+        _ -> delegateError (pretty n) a ar
     fun i as = argsError' i as
 
 liftNot :: NativeFun e
@@ -277,14 +287,16 @@ binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
 defCmp :: NativeDefName -> RNativeFun e -> NativeDef
 defCmp o f = let o' = asString o
-                 ex a' b = " `(" <> o' <> " " <> a' <> " " <> b <> ")`"
+                 ex a' b
+                   = ExecExample $ "(" <> o' <> " " <> a' <> " " <> b <> ")"
                  a = mkTyVar "a" [tTyInteger,tTyDecimal,tTyString,tTyTime]
              in
-             defRNative o f (binTy tTyBool a a) $
-             "True if X " <> o' <> " Y." <>
-             ex "1" "3" <>
-             ex "5.24" "2.52" <>
-             ex "\"abc\"" "\"def\""
+             defRNative o f (binTy tTyBool a a)
+             [ ex "1" "3"
+             , ex "5.24" "2.52"
+             , ex "\"abc\"" "\"def\""
+             ]
+             $ "True if X " <> o' <> " Y."
 
 -- | Monomorphic compare.
 cmp :: (Ordering -> Bool) -> RNativeFun e
@@ -310,7 +322,7 @@ binop :: (Decimal -> Decimal -> Either String Decimal) ->
        (Integer -> Integer -> Either String Integer) -> RNativeFun e
 binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
   let hdl (Right v) = return $ toTerm v
-      hdl (Left err) = evalError' fi $ err <> ": " <> show (a,b)
+      hdl (Left err) = evalError' fi $ pretty err <> ": " <> pretty (a,b)
   case (a,b) of
     (LInteger i,LInteger j) -> hdl (i `iop` j)
     (LDecimal i,LDecimal j) -> hdl (i `dop` j)

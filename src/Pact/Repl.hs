@@ -67,6 +67,7 @@ import System.FilePath
 import Pact.Compile
 import Pact.Parse
 import Pact.Eval
+import Pact.Types.Pretty hiding (line)
 import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl.Lib
@@ -143,8 +144,9 @@ getDelta = do
 handleParse :: TF.Result [Exp Parsed] -> ([Exp Parsed] -> Repl (Either String a)) -> Repl (Either String a)
 handleParse (TF.Failure e) _ = do
   mode <- use rMode
-  outStrLn HErr (renderPrettyString (colors mode) (_errDoc e))
-  return (Left (renderCompactString $ _errDoc e))
+  let errDoc = _errDoc e
+  outStrLn HErr $ renderPrettyString' (colors mode) $ unAnnotate $ fromAnsiWlPprint errDoc
+  return $ Left $ renderCompactString' $ unAnnotate $ fromAnsiWlPprint errDoc
 handleParse (TF.Success es) a = a es
 
 colors :: ReplMode -> RenderColor
@@ -167,8 +169,8 @@ handleCompile src exp a =
             Just (_,d) -> do
                         mode <- use rMode
                         outStr HErr (renderPrettyString (colors mode) (_pDelta d))
-                        outStrLn HErr $ ": error: " ++ unpack (peText er)
-            Nothing -> outStrLn HErr $ "[No location]: " ++ unpack (peText er)
+                        outStrLn HErr $ ": error: " ++ renderCompactString' (peText er)
+            Nothing -> outStrLn HErr $ "[No location]: " ++ renderCompactString' (peText er)
           Left <$> renderErr er
 
 compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
@@ -180,7 +182,7 @@ pureEval ei e = do
   (ReplState evalE evalS _ _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
-                 Left (SomeException ex) -> (Left (PactError EvalError def def (pack $ show ex)),evalS)
+                 Left (SomeException ex) -> (Left (PactError EvalError def def (pretty (show ex))),evalS)
                  Right v -> v
   mode <- use rMode
   case r of
@@ -216,7 +218,7 @@ doOut ei mode a = case mode of
   Script True _ -> lineOut
   _ -> return ()
   where
-    plainOut = outStrLn HOut (show a)
+    plainOut = outStrLn HOut $ show $ pretty a
     lineOut = do
       outStrLn HErr $ renderInfo ei ++ ":Trace: " ++ show a
 
@@ -227,8 +229,8 @@ renderErr a
       let i = case m of
                 Script _ f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
                 _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
-      return $ renderInfo i ++ ":" ++ unpack (peText a)
-  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ unpack (peText a)
+      return $ renderInfo i ++ ":" ++ renderCompactString' (peText a)
+  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peText a)
 
 updateForOp :: Term Name -> Repl (Either String (Term Name))
 updateForOp a = do

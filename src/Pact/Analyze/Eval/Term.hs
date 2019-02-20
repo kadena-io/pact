@@ -64,7 +64,7 @@ newtype Analyze a
 
 instance Analyzer Analyze where
   type TermOf Analyze = Term
-  eval             = evalTerm
+  eval                = evalTerm
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err

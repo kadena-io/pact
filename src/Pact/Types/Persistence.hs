@@ -53,6 +53,7 @@ import GHC.Generics (Generic)
 import Text.Read (readMaybe)
 
 import Pact.Types.Lang
+import Pact.Types.Pretty
 import Pact.Types.Util (AsString(..))
 
 -- | Min, max values that Javascript doesn't mess up.
@@ -159,11 +160,11 @@ data Persistable =
     PLiteral Literal |
     PGuard Guard |
     PValue Value
-    deriving (Eq,Generic)
-instance Show Persistable where
-    show (PLiteral l) = show l
-    show (PGuard k) = show k
-    show (PValue v) = BSL.toString $ encode v
+    deriving (Eq,Generic,Show)
+instance Pretty Persistable where
+    pretty (PLiteral l) = pretty l
+    pretty (PGuard k) = pretty k
+    pretty (PValue v) = pretty $ BSL.toString $ encode v
 instance ToTerm Persistable where
     toTerm (PLiteral l) = toTerm l
     toTerm (PGuard k) = toTerm k
@@ -201,13 +202,11 @@ instance Show n => ToPersistable (Term n) where
 
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString)
-instance Show RowKey where show (RowKey s) = show s
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty)
 
 -- | Column key type.
 newtype ColumnId = ColumnId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
-instance Show ColumnId where show (ColumnId s) = show s
+    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default,Show,Pretty)
 
 -- | User table row-value type, mapping column ids to values.
 newtype Columns v = Columns { _columns :: M.Map ColumnId v }
@@ -221,6 +220,11 @@ instance (FromJSON v) => FromJSON (Columns v) where
                  forM (HM.toList o)
                   (\(k,v) -> ((,) <$> pure (ColumnId k) <*> parseJSON v))
     {-# INLINE parseJSON #-}
+
+instance Pretty v => Pretty (Columns v) where
+  pretty (Columns cols) = commaBraces
+    $ fmap (\(k, v) -> pretty k <> ": " <> pretty v)
+    $ M.toList cols
 
 makeLenses ''Columns
 
@@ -258,6 +262,13 @@ instance FromJSON v => FromJSON (TxLog v) where
     parseJSON = withObject "TxLog" $ \o ->
                 TxLog <$> o .: "table" <*> o .: "key" <*> o .: "value"
 
+instance Pretty v => Pretty (TxLog v) where
+  pretty (TxLog domain key value) = commaBrackets
+    [ "table: " <> pretty domain
+    , "key: "   <> pretty key
+    , "value: " <> pretty value
+    ]
+
 -- | Instruction for '_writeRow'.
 data WriteType =
   -- | Insert a new row, fail if key already found.
@@ -279,7 +290,10 @@ newtype TxId = TxId Word64
     deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON,Generic)
 
 instance NFData TxId
-instance Show TxId where show (TxId s) = show s
+instance Show TxId where
+  show (TxId s) = show s
+instance Pretty TxId where
+  pretty (TxId s) = viaShow s
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
 instance AsString TxId where asString = pack . show
 

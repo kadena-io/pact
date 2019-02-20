@@ -1289,6 +1289,6 @@ translateNodeNoGraph node =
 (??)
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
   => Maybe a -> TranslateFailureNoLoc -> m a
-(Just a) ?? _   = pure a
-Nothing  ?? err = throwError' err
+Just a  ?? _   = pure a
+Nothing ?? err = throwError' err
 infix 0 ??

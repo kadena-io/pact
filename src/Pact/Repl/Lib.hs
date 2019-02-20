@@ -54,6 +54,7 @@ import Pact.Eval
 import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
+import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 
@@ -72,10 +73,10 @@ type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
 zeroGas :: Eval e a -> Eval e (Gas,a)
 zeroGas = fmap (0,)
 
-defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defZNative name fun = Native.defNative name $ \fi as -> zeroGas $ fun fi as
 
-defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defZRNative name fun = Native.defNative name (reduced fun)
     where reduced f fi as = mapM reduce as >>= zeroGas . f fi
 
@@ -83,77 +84,94 @@ replDefs :: NativeModule
 replDefs = ("Repl",
      [
       defZRNative "load" load (funType tTyString [("file",tTyString)] <>
-                              funType tTyString [("file",tTyString),("reset",tTyBool)]) $
-      "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. " <>
-      "`$(load \"accounts.repl\")`"
+                              funType tTyString [("file",tTyString),("reset",tTyBool)])
+      [LitExample "(load \"accounts.repl\")"]
+      "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true."
      ,defZRNative "format-address" formatAddr (funType tTyString [("scheme", tTyString), ("public-key", tTyString)])
+      []
       "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
-      "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
-     ,defZRNative "env-data" setmsg (funType tTyString [("json",json)]) $
-      "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. " <>
-      "`(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })`"
+      ["(env-keys [\"my-key\" \"admin-key\"])"]
+      "Set transaction signature KEYS."
+     ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
+      ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
+      "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
      ,defZRNative "env-step"
       setstep (funType tTyString [] <>
                funType tTyString [("step-idx",tTyInteger)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool),
                                   ("resume",TySchema TyObject (mkSchemaVar "y") def)])
+      [LitExample "(env-step 1)", LitExample "(env-step 0 true)"]
       ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
-       "Clears any previous pact execution state. `$(env-step 1)` `$(env-step 0 true)`")
+       "Clears any previous pact execution state.")
      ,defZRNative "env-pactid" envPactId
       (funType tTyString [] <>
-       funType tTyString [("id",tTyString)])
+       funType tTyString [("id",tTyString)]) []
        "Query environment pact id, or set to ID."
      ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
+      [LitExample "(pact-state)"]
       ("Inspect state from previous pact execution. Returns object with fields " <>
       "'yield': yield result or 'false' if none; 'step': executed step; " <>
-      "'executed': indicates if step was skipped because entity did not match. `$(pact-state)`")
+      "'executed': indicates if step was skipped because entity did not match.")
      ,defZRNative "env-entity" setentity
       (funType tTyString [] <> funType tTyString [("entity",tTyString)])
+      [LitExample "(env-entity \"my-org\")", LitExample "(env-entity)"]
       ("Set environment confidential ENTITY id, or unset with no argument. " <>
-      "Clears any previous pact execution state. `$(env-entity \"my-org\")` `$(env-entity)`")
+      "Clears any previous pact execution state.")
      ,defZRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
-       "Begin transaction with optional NAME. `$(begin-tx \"load module\")`"
-     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) "Commit transaction. `$(commit-tx)`"
-     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) "Rollback transaction. `$(rollback-tx)`"
+      [LitExample "(begin-tx \"load module\")"] "Begin transaction with optional NAME."
+     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) [LitExample "(commit-tx)"] "Commit transaction."
+     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) [LitExample "(rollback-tx)"] "Rollback transaction."
      ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
-      "Evaluate ACTUAL and verify that it equals EXPECTED. `(expect \"Sanity prevails.\" 4 (+ 2 2))`"
-     ,defZNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)]) $
-      "Evaluate EXP and succeed only if it throws an error. " <>
-      "`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"
+      ["(expect \"Sanity prevails.\" 4 (+ 2 2))"]
+      "Evaluate ACTUAL and verify that it equals EXPECTED."
+     ,defZNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)])
+      ["(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))"]
+      "Evaluate EXP and succeed only if it throws an error."
      ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
-      "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
+      [LitExample "(bench (+ 1 2))"] "Benchmark execution of EXPRS."
      ,defZRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
+       []
        "Typecheck MODULE, optionally enabling DEBUG output."
      ,defZRNative "env-gaslimit" setGasLimit (funType tTyString [("limit",tTyInteger)])
+       []
        "Set environment gas limit to LIMIT."
      ,defZRNative "env-gas" envGas (funType tTyInteger [] <> funType tTyString [("gas",tTyInteger)])
+       []
        "Query gas state, or set it to GAS."
      ,defZRNative "env-gasprice" setGasPrice (funType tTyString [("price",tTyDecimal)])
+       []
        "Set environment gas price to PRICE."
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
+       []
        "Update gas model to charge constant RATE."
-     ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
+     ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
+       []
+       "Verify MODULE, checking that all properties hold."
 
-     ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
+     ,defZRNative "json" json' (funType tTyValue [("exp",a)])
+      ["(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])"] $
       "Encode pact expression EXP as a JSON value. " <>
-      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " <>
-      "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
+      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. "
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
-     "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
+       []
+       "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
      ,defZRNative "print" print' (funType tTyString [("value",a)])
-     "Output VALUE to terminal as unquoted, unescaped text."
+       []
+       "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
-     "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
+       ["(env-hash (hash \"hello\"))"]
+       "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash."
      ,defZNative "test-capability" testCapability
-      (funType tTyString [("capability", TyFun $ funType' tTyBool [])]) $
+      (funType tTyString [("capability", TyFun $ funType' tTyBool [])])
+      [LitExample "(test-capability (MY-CAP))"] $
      "Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope " <>
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
-     "blockchain environment. `$(test-capability (MY-CAP))`"
+     "blockchain environment."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -209,9 +227,10 @@ overenv l f = setop $ UpdateEnv $ Endo (over l f)
 formatAddr :: RNativeFun LibState
 #if !defined(ghcjs_HOST_OS)
 formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
-  let eitherEvalErr res effectStr transformFunc =
+  let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
+      eitherEvalErr res effectStr transformFunc =
         case res of
-          Left e  -> evalError' i (effectStr ++ ": " ++ show e)
+          Left e  -> evalError' i $ pretty effectStr <> ": " <> pretty e
           Right v -> return (transformFunc v)
   sppk  <- eitherEvalErr (fromText' scheme)
            "Invalid PPKScheme"
@@ -241,7 +260,7 @@ setsigs i as = argsError i as
 setmsg :: RNativeFun LibState
 setmsg i [TLitString j] =
   case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
-    Left f -> evalError' i ("Invalid JSON: " ++ show f)
+    Left f -> evalError' i ("Invalid JSON: " <> pretty f)
     Right v -> setenv eeMsgBody v >> return (tStr "Setting transaction data")
 setmsg _ [a] = setenv eeMsgBody (toJSON a) >> return (tStr "Setting transaction data")
 setmsg i as = argsError i as
@@ -355,7 +374,7 @@ bench' i as = do
                 !ts <- mapM reduce as
                 return $! toTerm (length ts)
   case r of
-    Left ex -> evalError' i (show ex)
+    Left ex -> evalError' i (viaShow ex)
     Right rpt -> do
            let mean = estPoint (anMean (reportAnalysis rpt))
                sd = estPoint (anStdDev (reportAnalysis rpt))
@@ -382,12 +401,12 @@ tc i as = case as of
     go modname dbg = do
       mdm <- HM.lookup (ModuleName modname Nothing) <$> view (eeRefStore . rsModules)
       case mdm of
-        Nothing -> evalError' i $ "No such module: " ++ show modname
+        Nothing -> evalError' i $ "No such module: " <> pretty modname
         Just md -> do
           r :: Either CheckerException ([TopLevel Node],[Failure]) <-
             try $ liftIO $ typecheckModule dbg md
           case r of
-            Left (CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " ++ e)
+            Left (CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> pretty e)
             Right (_,fails) -> case fails of
               [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
               _ -> do
@@ -400,7 +419,7 @@ verify i as = case as of
     modules <- view (eeRefStore . rsModules)
     let mdm = HM.lookup (ModuleName modName Nothing) modules
     case mdm of
-      Nothing -> evalError' i $ "No such module: " ++ show modName
+      Nothing -> evalError' i $ "No such module: " <> pretty modName
       Just md -> do
 #if defined(ghcjs_HOST_OS)
         uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
@@ -428,7 +447,7 @@ print' i as = argsError i as
 
 envHash :: RNativeFun LibState
 envHash i [TLitString s] = case fromText' s of
-  Left err -> evalError' i $ "Bad hash value: " ++ show s ++ ": " ++ err
+  Left err -> evalError' i $ "Bad hash value: " <> pretty s <> ": " <> pretty err
   Right h -> do
     setenv eeHash h
     return $ tStr $ "Set tx hash to " <> s

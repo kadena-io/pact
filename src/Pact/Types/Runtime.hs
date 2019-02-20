@@ -46,7 +46,6 @@ module Pact.Types.Runtime
 import Control.Arrow ((&&&))
 import Control.Lens hiding ((.=),DefName)
 import Control.DeepSeq
-import Data.List
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
@@ -65,6 +64,7 @@ import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.Persistence
+import Pact.Types.Pretty
 import Pact.Types.Util
 
 
@@ -72,6 +72,10 @@ data Capability
   = ModuleAdminCapability ModuleName
   | UserCapability DefName [Term Name]
   deriving (Eq,Show)
+
+instance Pretty Capability where
+  pretty (ModuleAdminCapability mn) = pretty mn
+  pretty (UserCapability name tms)  = parensSep (pretty name : fmap pretty tms)
 
 data CapAcquireResult = NewlyAcquired|AlreadyAcquired
   deriving (Eq,Show)
@@ -108,12 +112,12 @@ data PactError = PactError
   { peType :: PactErrorType
   , peInfo :: Info
   , peCallStack :: [StackFrame]
-  , peText :: Text }
+  , peText :: Doc }
 
 instance Exception PactError
 
 instance Show PactError where
-    show (PactError t i _ s) = show i ++ ": Failure: " ++ maybe "" (++ ": ") msg ++ unpack s
+    show (PactError t i _ s) = show i ++ ": Failure: " ++ maybe "" (++ ": ") msg ++ show s
       where msg = case t of
               EvalError -> Nothing
               ArgsError -> Nothing
@@ -282,7 +286,7 @@ runEval' :: EvalState -> EvalEnv e -> Eval e a ->
 runEval' s env act =
   runStateT (catches (Right <$> runReaderT (unEval act) env)
               [Handler (\(e :: PactError) -> return $ Left e)
-              ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . pack . show $ e)
+              ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . viaShow $ e)
               ]) s
 
 
@@ -299,7 +303,7 @@ call s act = do
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwErr DbError i . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAll (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
 
 
 --
@@ -361,24 +365,24 @@ getTxLog i d t = method i $ \db -> _getTxLog db d t
 
 
 throwArgsError :: FunApp -> [Term Name] -> Text -> Eval e a
-throwArgsError FunApp {..} args s = throwErr ArgsError _faInfo $ pack $
-  unpack s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++
-            showFunTypes _faTypes
+throwArgsError FunApp {..} args s = throwErr ArgsError _faInfo $
+  pretty s <> ", received " <> bracketsSep (map pretty args) <> " for " <>
+            prettyFunTypes _faTypes
 
-throwErr :: PactErrorType -> Info -> Text -> Eval e a
+throwErr :: PactErrorType -> Info -> Doc -> Eval e a
 throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) err)
 
-evalError :: Info -> String -> Eval e a
-evalError i = throwErr EvalError i . pack
+evalError :: Info -> Doc -> Eval e a
+evalError i = throwErr EvalError i
 
-evalError' :: FunApp -> String -> Eval e a
+evalError' :: FunApp -> Doc -> Eval e a
 evalError' = evalError . _faInfo
 
-failTx :: Info -> String -> Eval e a
-failTx i = throwErr TxFailure i . pack
+failTx :: Info -> Doc -> Eval e a
+failTx i = throwErr TxFailure i
 
-throwDbError :: MonadThrow m => String -> m a
-throwDbError s = throwM $ PactError DbError def def (pack s)
+throwDbError :: MonadThrow m => Doc -> m a
+throwDbError = throwM . PactError DbError def def
 
 -- | Throw an error coming from an Except/Either context.
 throwEither :: (MonadThrow m,Exception e) => Either e a -> m a

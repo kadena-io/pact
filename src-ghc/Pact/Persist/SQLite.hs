@@ -25,6 +25,7 @@ import System.Directory
 import Control.Monad.State
 
 import Pact.Persist
+import Pact.Types.Pretty
 import Pact.Types.SQLite
 import Pact.Types.Util (AsString(..))
 import Pact.Types.Logger hiding (Logging (..))
@@ -93,15 +94,15 @@ data KeyTys k = KeyTys {
 
 decodeText :: SType -> IO DataKey
 decodeText (SText (Utf8 t)) = return $ DataKey $ decodeUtf8 t
-decodeText v = throwDbError $ "Expected text, got: " ++ show v
+decodeText v = throwDbError $ "Expected text, got: " <> viaShow v
 
 decodeInt :: SType -> IO TxKey
 decodeInt (SInt i) = return $ fromIntegral i
-decodeInt v = throwDbError $ "Expected int, got: " ++ show v
+decodeInt v = throwDbError $ "Expected int, got: " <> viaShow v
 
 decodeBlob :: (FromJSON v) => SType -> IO v
 decodeBlob (SText (Utf8 t)) = liftEither (return $ eitherDecodeStrict' t)
-decodeBlob v = throwDbError $ "Expected text blob, got: " ++ show v
+decodeBlob v = throwDbError $ "Expected text blob, got: " <> viaShow v
 
 encodeBlob :: ToJSON a => a -> SType
 encodeBlob a = SText $ Utf8 $ BSL.toStrict $ encode a
@@ -109,11 +110,11 @@ encodeBlob a = SText $ Utf8 $ BSL.toStrict $ encode a
 
 expectSing :: Show a => String -> [a] -> IO a
 expectSing _ [s] = return s
-expectSing desc v = throwDbError $ "Expected single-" ++ desc ++ " result, got: " ++ show v
+expectSing desc v = throwDbError $ "Expected single-" <> pretty desc <> " result, got: " <> viaShow v
 
 expectTwo :: Show a => String -> [a] -> IO (a,a)
 expectTwo _ [a,b] = return (a,b)
-expectTwo desc v = throwDbError $ "Expected two-" ++ desc ++ " result, got: " ++ show v
+expectTwo desc v = throwDbError $ "Expected two-" <> pretty desc <> " result, got: " <> viaShow v
 
 kTextTys :: KeyTys DataKey
 kTextTys = KeyTys "text" (SText . toUtf8 . asString) RText decodeText
@@ -165,7 +166,7 @@ doQuery t kq cols outParams e = do
 getStmts :: SQLite -> Table k -> IO TableStmts
 getStmts e t = case M.lookup (tableName t) (tableStmts e) of
   Just ss -> return ss
-  Nothing -> throwDbError $ "No such table: " ++ show t
+  Nothing -> throwDbError $ "No such table: " <> pretty t
 
 readData' :: FromJSON v => Table k -> k -> SQLite -> IO (Maybe v)
 readData' t k e = do

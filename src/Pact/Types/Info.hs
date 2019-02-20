@@ -31,11 +31,10 @@ import Data.Aeson
 import Data.String
 import Data.Default
 import GHC.Generics (Generic)
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Control.DeepSeq
 
 import Pact.Types.Orphans ()
+import Pact.Types.Pretty
 import Pact.Types.Util
 
 --import Pact.Types.Crypto (Hash(..))
@@ -56,9 +55,10 @@ newtype Code = Code { _unCode :: Text }
   deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
-  pretty (Code c) | T.compareLength c maxLen == GT =
-                      text $ unpack (T.take maxLen c <> "...")
-                  | otherwise = text $ unpack c
+  pretty (Code c)
+    | T.compareLength c maxLen == GT
+    = pretty $ T.take maxLen c <> "..."
+    | otherwise = pretty c
     where maxLen = 30
 
 -- | For parsed items, original code and parse info;
