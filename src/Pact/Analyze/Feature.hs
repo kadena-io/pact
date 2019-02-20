@@ -23,6 +23,8 @@ import           Data.Text              (Text)
 import           Data.Tuple             (swap)
 
 import qualified Pact.Types.Persistence as Pact
+import           Pact.Types.Pretty      hiding (Doc, list)
+import qualified Pact.Types.Pretty      as Pretty
 
 --
 -- NOTE: that in the current factoring, there can be multiple features that
@@ -1621,6 +1623,9 @@ toOp = preview
 
 toText :: Prism' Text op -> op -> Text
 toText = review
+
+toDoc :: Prism' Text op -> op -> Pretty.Doc
+toDoc p op = pretty $ toText p op
 
 -- NOTE: we don't (yet?) use symbols here because Feature (currently?) only
 -- handles properties and invariants.

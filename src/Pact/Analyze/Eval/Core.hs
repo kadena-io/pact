@@ -38,6 +38,7 @@ import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util           (Boolean (..), vacuousMatch)
 import qualified Pact.Native                 as Pact
+import           Pact.Types.Pretty           (renderCompactString)
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -312,7 +313,8 @@ evalCore (Where schema tya key (Open vid _ f) obj) = withSymVal tya $ do
   S _ v <- evalObjAt schema key obj tya
   withVar vid (mkAVal' v) $ eval f
 
-evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
+-- TODO: we need to be very careful here with non-ground types
+evalCore (Typeof tya _a) = pure $ literalS $ Str $ renderCompactString tya
 
 evalCore (GuardEqNeq op xT yT) = do
   x <- eval xT

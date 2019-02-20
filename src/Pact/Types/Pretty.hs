@@ -32,6 +32,7 @@ module Pact.Types.Pretty
   , nest
   , parens
   , parensSep
+  , prettyString
   , punctuate
   , putDoc
   , renderCompactString
@@ -54,7 +55,7 @@ import qualified Data.ByteString.UTF8 as UTF8
 import           Data.Foldable        (toList)
 import qualified Data.HashMap.Strict  as HM
 import           Data.Int
-import           Data.Text            (Text, unpack)
+import           Data.Text            (Text, pack, unpack)
 import           Data.Text.Prettyprint.Convert.AnsiWlPprint (fromAnsiWlPprint)
 import           Data.Text.Prettyprint.Doc
   (SimpleDocStream, annotate, unAnnotate, layoutPretty,
@@ -97,11 +98,15 @@ instance Pretty Bool where pretty = PP.pretty
 instance Pretty Integer where pretty = PP.pretty
 instance Pretty Int where pretty = PP.pretty
 instance Pretty Int64 where pretty = viaShow
+instance Pretty () where pretty = PP.pretty
 instance (Pretty a, Pretty b) => Pretty (a, b) where
   pretty (a, b) = tupled [pretty a, pretty b]
 instance (Pretty a, Pretty b, Pretty c) => Pretty (a, b, c) where
   pretty (a, b, c) = tupled [pretty a, pretty b, pretty c]
 instance Pretty a => Pretty (Maybe a) where pretty = maybe mempty pretty
+
+prettyString :: String -> Doc
+prettyString = PP.pretty . pack
 
 commaBraces, commaBrackets, bracketsSep, parensSep, bracesSep :: [Doc] -> Doc
 commaBraces   = encloseSep "{" "}" ","

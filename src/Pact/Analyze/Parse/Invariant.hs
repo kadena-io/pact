@@ -16,7 +16,7 @@ import           Prelude                  hiding (exp)
 import           Pact.Types.Lang          hiding (KeySet, KeySetName, SchemaVar,
                                            TableName, Type)
 import qualified Pact.Types.Lang          as Pact
-import           Pact.Types.Util          (tShow)
+import           Pact.Types.Pretty
 
 import           Pact.Analyze.Feature     hiding (Type, Var, ks, obj, str)
 import           Pact.Analyze.Parse.Types
@@ -38,8 +38,8 @@ expToInvariant ty exp = case (ty, exp) of
         (_,        Pact.TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
         (_,        _)         -> throwErrorIn exp $
-          "found variable " <> varName <> " of type " <> tShow primTy <>
-          " where " <> userShow ty <> " was expected"
+          "found variable " <> pretty varName <> " of type " <> pretty primTy <>
+          " where " <> pretty ty <> " was expected"
       _ -> throwErrorT $ "couldn't find column named " <> varName
 
   (SDecimal, ELiteral' (LDecimal d)) -> pure (ILiteral (fromPact decimalIso d))
@@ -84,8 +84,8 @@ expToInvariant ty exp = case (ty, exp) of
           <$> expToInvariant SGuard a
           <*> expToInvariant SGuard b
         Nothing -> throwErrorIn exp $
-          op' <> " is an invalid operation for keysets (only " <> SEquality <>
-          " or " <> SInequality <> " allowed)"
+          pretty op' <> " is an invalid operation for keysets (only " <>
+            pretty SEquality <> " or " <> pretty SInequality <> " allowed)"
     ] <|> throwErrorIn exp "unexpected argument types"
 
   (SBool, ParenList (EAtom' op:args))
@@ -95,7 +95,8 @@ expToInvariant ty exp = case (ty, exp) of
       (AndOp, [a, b]) -> pure (ILogicalOp AndOp [a, b])
       (OrOp, [a, b])  -> pure (ILogicalOp OrOp [a, b])
       (NotOp, [a])    -> pure (ILogicalOp NotOp [a])
-      _ -> throwErrorIn exp $ "logical op with wrong number of args: " <> op
+      _ -> throwErrorIn exp $
+        "logical op with wrong number of args: " <> pretty op
 
   (_, EAtom {})        -> throwErrorIn exp "illegal invariant form"
   (_, Pact.EList {})   -> throwErrorIn exp "illegal invariant form"

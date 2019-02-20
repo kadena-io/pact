@@ -127,9 +127,9 @@ spec = describe "analyze properties" $ do
   -- format-time in detail
   it "should evaluate format-time to the same" $ require prop_evaluation_time
 
-  it "show round-trip userShow / parse" pending
+  it "show round-trip pretty / parse" pending
 
-  it "userShow should have the same result on both the pact and analyze side"
+  it "pretty should have the same result on both the pact and analyze side"
     pending
 
 -- Usually we run via `spec`, but these are useful for running tests

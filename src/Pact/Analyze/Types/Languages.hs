@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances  #-} -- UserShow (Core tm a)
+{-# LANGUAGE UndecidableInstances  #-} -- Pretty (Core tm a)
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -66,8 +66,8 @@ module Pact.Analyze.Types.Languages
   , singEqTm
   , singEqListTm
   , singShowsTm
-  , singUserShowTm
-  , singUserShowListTm
+  , singPrettyTm
+  , singPrettyListTm
   ) where
 
 import           Control.Monad                ((>=>))
@@ -76,22 +76,24 @@ import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as Text
 import           Data.Typeable                ((:~:) (Refl), Proxy)
-import           Prelude                      hiding (Float)
-import           Text.Show                    (showListWith)
 import           GHC.TypeLits                 (symbolVal, someSymbolVal,
                                                SomeSymbol(SomeSymbol))
+import           Prelude                      hiding (Float)
+import           Text.Show                    (showListWith)
 
+import           Pact.Types.Pretty            (commaBraces, commaBrackets,
+                                               parens, parensSep,
+                                               Pretty(pretty), Doc, viaShow,
+                                               vsep)
 import           Pact.Types.Persistence       (WriteType)
-import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj,
-                                                      dec, ks)
+import           Pact.Analyze.Feature         hiding (Doc, Sym, Var,
+                                               col, str, obj, dec, ks)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil   (mkSObject, normalize)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
-import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util
 
 -- | Subtyping relation from "Data types a la carte".
@@ -333,7 +335,7 @@ pattern BoolComparison op a b = Comparison SBool op a b
 -- Note [Sing Functions]:
 --
 -- The `sing*` family of 9 (+3) functions differs in two dimensions:
--- * The class required is `Eq`, `UserShow`, or `Show`
+-- * The class required is `Eq`, `Pretty`, or `Show`
 -- * It is applied at either `tm ('TyList a)`, `[tm a]`, or `tm a`
 --
 -- It looks like this should be generalizable using something like `withEq`,
@@ -375,31 +377,30 @@ singShowsObject
     . singShowsObject (SObjectUnsafe (SingList objty)) (Object obj)
 singShowsObject _ _ = error "malformed object"
 
-singUserShowObject
+singPrettyObject
   :: IsTerm tm
-  => SingTy ('TyObject a) -> Object tm a -> [Text]
-singUserShowObject SObjectNil (Object SNil) = [""]
-singUserShowObject
+  => SingTy ('TyObject a) -> Object tm a -> [Doc]
+singPrettyObject SObjectNil (Object SNil) = [""]
+singPrettyObject
   (SObjectUnsafe (SingList (SCons _ _ objty)))
   (Object (SCons k (Column vTy v) obj))
-    = (Text.pack (symbolVal k) <> ": " <> singUserShowTm vTy v)
-      : singUserShowObject (SObjectUnsafe (SingList objty)) (Object obj)
-singUserShowObject _ _ = error "malformed object"
+    = (pretty (symbolVal k) <> ": " <> singPrettyTm vTy v)
+      : singPrettyObject (SObjectUnsafe (SingList objty)) (Object obj)
+singPrettyObject _ _ = error "malformed object"
 
 singEqOpen :: IsTerm tm => SingTy a -> Open x tm a -> Open x tm a -> Bool
 singEqOpen ty (Open v1 nm1 a1) (Open v2 nm2 a2)
   = singEqTm ty a1 a2 && v1 == v2 && nm1 == nm2
 
-singUserShowTmList :: IsTerm tm => SingTy a -> tm ('TyList a) -> Text
-singUserShowTmList ty tm = singUserShowTm (SList ty) tm
+singPrettyTmList :: IsTerm tm => SingTy a -> tm ('TyList a) -> Doc
+singPrettyTmList ty tm = singPrettyTm (SList ty) tm
 
-singUserShowListTm :: IsTerm tm => SingTy a -> [tm a] -> Text
-singUserShowListTm ty tms =
-  "[" <> Text.intercalate ", " (singUserShowTm ty <$> tms) <> "]"
+singPrettyListTm :: IsTerm tm => SingTy a -> [tm a] -> Doc
+singPrettyListTm ty tms = commaBrackets $ singPrettyTm ty <$> tms
 
-singUserShowOpen :: IsTerm tm => SingTy a -> Open x tm a -> Text
-singUserShowOpen ty (Open _ nm a)
-  = parenList [ "lambda", nm, singUserShowTm ty a ]
+singPrettyOpen :: IsTerm tm => SingTy a -> Open x tm a -> Doc
+singPrettyOpen ty (Open _ nm a)
+  = parensSep [ "lambda", pretty nm, singPrettyTm ty a ]
 
 singShowsTmList :: IsTerm tm => SingTy a -> Int -> tm ('TyList a) -> ShowS
 singShowsTmList ty = singShowsTm (SList ty)
@@ -494,17 +495,17 @@ showsNumerical _ty p tm = showParen (p > 10) $ case tm of
     . showChar ' '
     . showsTm 11 b
 
-userShowNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Text
-userShowNumerical _ty = \case
-  DecArithOp op a b      -> parenList [userShow op, userShowTm a, userShowTm b]
-  IntArithOp op a b      -> parenList [userShow op, userShowTm a, userShowTm b]
-  DecUnaryArithOp op a   -> parenList [userShow op, userShowTm a]
-  IntUnaryArithOp op a   -> parenList [userShow op, userShowTm a]
-  DecIntArithOp op a b   -> parenList [userShow op, userShowTm a, userShowTm b]
-  IntDecArithOp op a b   -> parenList [userShow op, userShowTm a, userShowTm b]
-  ModOp a b              -> parenList [userShowTm a, userShowTm b]
-  RoundingLikeOp1 op a   -> parenList [userShow op, userShowTm a]
-  RoundingLikeOp2 op a b -> parenList [userShow op, userShowTm a, userShowTm b]
+prettyNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Doc
+prettyNumerical _ty = \case
+  DecArithOp op a b      -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  IntArithOp op a b      -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  DecUnaryArithOp op a   -> parensSep [pretty op,  prettyTm a            ]
+  IntUnaryArithOp op a   -> parensSep [pretty op,  prettyTm a            ]
+  DecIntArithOp op a b   -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  IntDecArithOp op a b   -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  ModOp a b              -> parensSep [prettyTm a, prettyTm b            ]
+  RoundingLikeOp1 op a   -> parensSep [pretty op,  prettyTm a            ]
+  RoundingLikeOp2 op a b -> parensSep [pretty op,  prettyTm a, prettyTm b]
 
 eqCoreTm :: IsTerm tm => SingTy ty -> Core tm ty -> Core tm ty -> Bool
 eqCoreTm ty (Lit a)                      (Lit b)
@@ -886,89 +887,89 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showChar ' '
     . singShowsTm tya 11 a
 
-userShowCore :: IsTerm tm => SingTy ty -> Int -> Core tm ty -> Text
-userShowCore ty _p = \case
-  Lit a                    -> withUserShow ty $ userShow a
-  Sym s                    -> tShow s
-  Var _vid name            -> name
-  Identity ty' x           -> parenList [SIdentity, singUserShowTm ty' x]
-  Constantly tyb a b       -> parenList [SConstantly, singUserShowTm ty a, singUserShowTm tyb b]
-  Compose _ tyb tyc _ b c  -> parenList [SCompose, singUserShowOpen tyb b, singUserShowOpen tyc c]
-  StrConcat x y            -> parenList [SConcatenation, userShowTm x, userShowTm y]
-  StrLength str            -> parenList [SStringLength, userShowTm str]
-  StrToInt s               -> parenList [SStringToInteger, userShowTm s]
-  StrToIntBase b s         -> parenList [SStringToInteger, userShowTm b, userShowTm s]
+prettyCore :: IsTerm tm => SingTy ty -> Core tm ty -> Doc
+prettyCore ty = \case
+  Lit a                    -> withPretty ty $ pretty a
+  Sym s                    -> viaShow s
+  Var _vid name            -> pretty name
+  Identity ty' x           -> parensSep [pretty SIdentity, singPrettyTm ty' x]
+  Constantly tyb a b       -> parensSep [pretty SConstantly, singPrettyTm ty a, singPrettyTm tyb b]
+  Compose _ tyb tyc _ b c  -> parensSep [pretty SCompose, singPrettyOpen tyb b, singPrettyOpen tyc c]
+  StrConcat x y            -> parensSep [pretty SConcatenation, prettyTm x, prettyTm y]
+  StrLength str            -> parensSep [pretty SStringLength, prettyTm str]
+  StrToInt s               -> parensSep [pretty SStringToInteger, prettyTm s]
+  StrToIntBase b s         -> parensSep [pretty SStringToInteger, prettyTm b, prettyTm s]
   StrContains needle haystack
-    -> parenList [SContains, userShowTm needle, userShowTm haystack]
-  Numerical tm             -> userShowNumerical ty tm
-  IntAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
-  DecAddTime x y           -> parenList [STemporalAddition, userShowTm x, userShowTm y]
-  Comparison ty' op x y    -> parenList [userShow op, singUserShowTm ty' x, singUserShowTm ty' y]
-  GuardEqNeq op x y        -> parenList [userShow op, userShowTm x, userShowTm y]
+    -> parensSep [pretty SContains, prettyTm needle, prettyTm haystack]
+  Numerical tm             -> prettyNumerical ty tm
+  IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
+  DecAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
+  Comparison ty' op x y    -> parensSep [pretty op, singPrettyTm ty' x, singPrettyTm ty' y]
+  GuardEqNeq op x y        -> parensSep [pretty op, prettyTm x, prettyTm y]
   ObjectEqNeq ty1 ty2 op x y
-    -> parenList [userShow op, singUserShowTm ty1 x, singUserShowTm ty2 y]
-  ObjAt ty' k obj          -> parenList [SObjectProjection, userShowTm k, singUserShowTm ty' obj]
-  ObjContains ty' k obj    -> parenList [SContains, userShowTm k, singUserShowTm ty' obj]
-  ObjDrop ty' ks obj       -> parenList [SObjectDrop, userShowTm ks, singUserShowTm ty' obj]
-  ObjTake ty' ks obj       -> parenList [SObjectTake, userShowTm ks, singUserShowTm ty' obj]
-  ObjMerge ty1 ty2 x y     -> parenList [SObjectMerge, singUserShowTm ty1 x, singUserShowTm ty2 y]
-  LiteralObject ty' obj    -> "{ " <> Text.intercalate ", " (singUserShowObject ty' obj) <> " }"
-  Logical op args          -> parenList $ userShow op : fmap userShowTm args
+    -> parensSep [pretty op, singPrettyTm ty1 x, singPrettyTm ty2 y]
+  ObjAt ty' k obj          -> parensSep [pretty SObjectProjection, prettyTm k, singPrettyTm ty' obj]
+  ObjContains ty' k obj    -> parensSep [pretty SContains, prettyTm k, singPrettyTm ty' obj]
+  ObjDrop ty' ks obj       -> parensSep [pretty SObjectDrop, prettyTm ks, singPrettyTm ty' obj]
+  ObjTake ty' ks obj       -> parensSep [pretty SObjectTake, prettyTm ks, singPrettyTm ty' obj]
+  ObjMerge ty1 ty2 x y     -> parensSep [pretty SObjectMerge, singPrettyTm ty1 x, singPrettyTm ty2 y]
+  LiteralObject ty' obj    -> commaBraces (singPrettyObject ty' obj)
+  Logical op args          -> parensSep $ pretty op : fmap prettyTm args
 
-  ListEqNeq ty' op x y     -> parenList [userShow op, singUserShowTmList ty' x, singUserShowTmList ty' y]
-  ListAt ty' k lst         -> parenList [userShowTm k, singUserShowTmList ty' lst]
+  ListEqNeq ty' op x y     -> parensSep [pretty op, singPrettyTmList ty' x, singPrettyTmList ty' y]
+  ListAt ty' k lst         -> parensSep [prettyTm k, singPrettyTmList ty' lst]
   ListContains ty' needle haystack
-    -> parenList [SContains, singUserShowTm ty' needle, singUserShowTmList ty' haystack]
-  ListLength ty' x         -> parenList [SListLength, singUserShowTmList ty' x]
-  ListReverse ty' lst      -> parenList [SReverse, singUserShowTmList ty' lst]
-  ListSort ty' lst         -> parenList [SSort, singUserShowTmList ty' lst]
-  ListDrop ty' n lst       -> parenList [SListDrop, userShowTm n, singUserShowTmList ty' lst]
-  ListTake ty' n lst       -> parenList [SListTake, userShowTm n, singUserShowTmList ty' lst]
-  ListConcat ty' x y       -> parenList [SConcatenation, singUserShowTmList ty' x, singUserShowTmList ty' y]
-  MakeList ty' x y         -> parenList [SMakeList, userShowTm x, singUserShowTm ty' y]
-  LiteralList ty' lst      -> singUserShowListTm ty' lst
-  ListMap tya tyb b as -> parenList
-    [ SMap
-    , singUserShowOpen tyb b
-    , singUserShowTmList tya as
+    -> parensSep [pretty SContains, singPrettyTm ty' needle, singPrettyTmList ty' haystack]
+  ListLength ty' x         -> parensSep [pretty SListLength, singPrettyTmList ty' x]
+  ListReverse ty' lst      -> parensSep [pretty SReverse, singPrettyTmList ty' lst]
+  ListSort ty' lst         -> parensSep [pretty SSort, singPrettyTmList ty' lst]
+  ListDrop ty' n lst       -> parensSep [pretty SListDrop, prettyTm n, singPrettyTmList ty' lst]
+  ListTake ty' n lst       -> parensSep [pretty SListTake, prettyTm n, singPrettyTmList ty' lst]
+  ListConcat ty' x y       -> parensSep [pretty SConcatenation, singPrettyTmList ty' x, singPrettyTmList ty' y]
+  MakeList ty' x y         -> parensSep [pretty SMakeList, prettyTm x, singPrettyTm ty' y]
+  LiteralList ty' lst      -> singPrettyListTm ty' lst
+  ListMap tya tyb b as -> parensSep
+    [ pretty SMap
+    , singPrettyOpen tyb b
+    , singPrettyTmList tya as
     ]
-  ListFilter ty' a b -> parenList
-    [ SFilter
-    , singUserShowOpen SBool a
-    , singUserShowTmList ty' b
+  ListFilter ty' a b -> parensSep
+    [ pretty SFilter
+    , singPrettyOpen SBool a
+    , singPrettyTmList ty' b
     ]
-  ListFold tya tyb (Open _ nm a) b c -> parenList
-    [ SFold
-    , parenList [ "lambda", nm, singUserShowOpen tya a ]
-    , singUserShowTm tya b
-    , singUserShowTmList tyb c
+  ListFold tya tyb (Open _ nm a) b c -> parensSep
+    [ pretty SFold
+    , parensSep [ "lambda", pretty nm, singPrettyOpen tya a ]
+    , singPrettyTm tya b
+    , singPrettyTmList tyb c
     ]
-  AndQ ty' a b c -> parenList
-    [ SAndQ
-    , singUserShowOpen SBool a
-    , singUserShowOpen SBool b
-    , singUserShowTm ty' c
+  AndQ ty' a b c -> parensSep
+    [ pretty SAndQ
+    , singPrettyOpen SBool a
+    , singPrettyOpen SBool b
+    , singPrettyTm ty' c
     ]
-  OrQ ty' a b c -> parenList
-    [ SOrQ
-    , singUserShowOpen SBool a
-    , singUserShowOpen SBool b
-    , singUserShowTm ty' c
+  OrQ ty' a b c -> parensSep
+    [ pretty SOrQ
+    , singPrettyOpen SBool a
+    , singPrettyOpen SBool b
+    , singPrettyTm ty' c
     ]
-  Where tyobj _tya k f obj -> parenList
-    [ SWhere
-    , userShowTm k
-    , singUserShowOpen SBool f
-    , singUserShowTm tyobj obj
+  Where tyobj _tya k f obj -> parensSep
+    [ pretty SWhere
+    , prettyTm k
+    , singPrettyOpen SBool f
+    , singPrettyTm tyobj obj
     ]
-  Typeof ty' a -> parenList [STypeof, singUserShowTm ty' a]
+  Typeof ty' a -> parensSep [pretty STypeof, singPrettyTm ty' a]
 
 
 data BeforeOrAfter = Before | After
   deriving (Eq, Show)
 
-instance UserShow BeforeOrAfter where
-  userShowPrec _p = \case
+instance Pretty BeforeOrAfter where
+  pretty = \case
     Before -> "'before"
     After  -> "'after"
 
@@ -1058,31 +1059,31 @@ data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
 
-instance UserShow (PropSpecific a) where
-  userShowPrec _d = \case
-    Abort                   -> STransactionAborts
-    Success                 -> STransactionSucceeds
-    Result                  -> SFunctionResult
-    Forall _ var ty x       -> parenList
-      [SUniversalQuantification, parens (var <> ":" <> userShow ty), userShowTm x]
-    Exists _ var ty x       -> parenList
-      [SExistentialQuantification, parens (var <> ":" <> userShow ty), userShowTm x]
-    TableWrite tab          -> parenList [STableWritten, userShowTm tab]
-    TableRead  tab          -> parenList [STableRead, userShowTm tab]
-    ColumnWritten tab col   -> parenList ["column-written", userShowTm tab, userShowTm col]
-    ColumnRead tab col      -> parenList ["column-read", userShowTm tab, userShowTm col]
-    IntCellDelta tab col rk -> parenList [SCellDelta, userShowTm tab, userShowTm col, userShowTm rk]
-    DecCellDelta tab col rk -> parenList [SCellDelta, userShowTm tab, userShowTm col, userShowTm rk]
-    IntColumnDelta tab col  -> parenList [SColumnDelta, userShowTm tab, userShowTm col]
-    DecColumnDelta tab col  -> parenList [SColumnDelta, userShowTm tab, userShowTm col]
-    RowRead tab rk          -> parenList [SRowRead, userShowTm tab, userShowTm rk]
-    RowReadCount tab rk     -> parenList [SRowReadCount, userShowTm tab, userShowTm rk]
-    RowWrite tab rk         -> parenList [SRowWritten, userShowTm tab, userShowTm rk]
-    RowWriteCount tab rk    -> parenList [SRowWriteCount, userShowTm tab, userShowTm rk]
-    GuardPassed name        -> parenList [SAuthorizedBy, userShow name]
-    RowEnforced tn cn rk    -> parenList [SRowEnforced, userShowTm tn, userShowTm cn, userShowTm rk]
-    RowExists tn rk ba      -> parenList [SRowExists, userShowTm tn, userShowTm rk, userShow ba]
-    PropRead _ty ba tn rk   -> parenList [SPropRead, userShowTm tn, userShowTm rk, userShow ba]
+instance Pretty (PropSpecific a) where
+  pretty = \case
+    Abort                   -> pretty STransactionAborts
+    Success                 -> pretty STransactionSucceeds
+    Result                  -> pretty SFunctionResult
+    Forall _ var ty x       -> parensSep
+      [pretty SUniversalQuantification, parens (pretty var <> ":" <> pretty ty), prettyTm x]
+    Exists _ var ty x       -> parensSep
+      [pretty SExistentialQuantification, parens (pretty var <> ":" <> pretty ty), prettyTm x]
+    TableWrite tab          -> parensSep [pretty STableWritten, prettyTm tab]
+    TableRead  tab          -> parensSep [pretty STableRead, prettyTm tab]
+    ColumnWritten tab col   -> parensSep ["column-written", prettyTm tab, prettyTm col]
+    ColumnRead tab col      -> parensSep ["column-read", prettyTm tab, prettyTm col]
+    IntCellDelta tab col rk -> parensSep [pretty SCellDelta, prettyTm tab, prettyTm col, prettyTm rk]
+    DecCellDelta tab col rk -> parensSep [pretty SCellDelta, prettyTm tab, prettyTm col, prettyTm rk]
+    IntColumnDelta tab col  -> parensSep [pretty SColumnDelta, prettyTm tab, prettyTm col]
+    DecColumnDelta tab col  -> parensSep [pretty SColumnDelta, prettyTm tab, prettyTm col]
+    RowRead tab rk          -> parensSep [pretty SRowRead, prettyTm tab, prettyTm rk]
+    RowReadCount tab rk     -> parensSep [pretty SRowReadCount, prettyTm tab, prettyTm rk]
+    RowWrite tab rk         -> parensSep [pretty SRowWritten, prettyTm tab, prettyTm rk]
+    RowWriteCount tab rk    -> parensSep [pretty SRowWriteCount, prettyTm tab, prettyTm rk]
+    GuardPassed name        -> parensSep [pretty SAuthorizedBy, pretty name]
+    RowEnforced tn cn rk    -> parensSep [pretty SRowEnforced, prettyTm tn, prettyTm cn, prettyTm rk]
+    RowExists tn rk ba      -> parensSep [pretty SRowExists, prettyTm tn, prettyTm rk, pretty ba]
+    PropRead _ty ba tn rk   -> parensSep [pretty SPropRead, prettyTm tn, prettyTm rk, pretty ba]
 
 instance S :*<: Prop where
   inject' = CoreProp . Sym
@@ -1198,8 +1199,8 @@ pattern StrLit :: forall tm. Core tm :<: tm => String -> tm 'TyStr
 pattern StrLit str = Lit' (Str str)
 
 pattern TextLit :: forall tm. Core tm :<: tm => Text -> tm 'TyStr
-pattern TextLit text <- Lit' (Str (Text.pack -> text)) where
-  TextLit text = Lit' (Str (Text.unpack text))
+pattern TextLit str <- Lit' (Str (Text.pack -> str)) where
+  TextLit str = Lit' (Str (Text.unpack str))
 
 pattern PVar :: VarId -> Text -> Prop t
 pattern PVar vid name = CoreProp (Var vid name)
@@ -1438,61 +1439,61 @@ eqProp ty (CoreProp     a) (CoreProp     b) = eqCoreTm ty a b
 eqProp ty (PropSpecific a) (PropSpecific b) = withSing ty $ a == b
 eqProp _  _                _                = False
 
-userShowTerm :: SingTy ty -> Int -> Term ty -> Text
-userShowTerm ty p = \case
-  CoreTerm tm -> userShowCore ty p tm
-  IfThenElse ty' x (_, y) (_, z) -> parenList
+prettyTerm :: SingTy ty -> Term ty -> Doc
+prettyTerm ty = \case
+  CoreTerm tm -> prettyCore ty tm
+  IfThenElse ty' x (_, y) (_, z) -> parensSep
     [ "if"
-    , userShowTm x
-    , singUserShowTm ty' y
-    , singUserShowTm ty' z
+    , prettyTm x
+    , singPrettyTm ty' y
+    , singPrettyTm ty' z
     ]
-  Let var _ _ x y -> parenList
+  Let var _ _ x y -> parensSep
     [ "let"
-    , parenList
-      [ parenList
-        [ var
-        , userShow x
+    , parensSep
+      [ parensSep
+        [ pretty var
+        , pretty x
         ]
       ]
-    , userShowTerm ty 0 y
+    , prettyTerm ty y
     ]
-  Sequence x y -> Text.unlines [userShow x, userShowTerm ty 0 y]
+  Sequence x y -> vsep [pretty x, prettyTerm ty y]
 
-  EnforceOne (Left _)        -> parenList
+  EnforceOne (Left _)        -> parensSep
     [ "enforce-one"
     , "\"(generated enforce-one)\""
-    , userShow ([] :: [Integer])
+    , pretty ([] :: [Integer])
     ]
-  EnforceOne (Right x)       -> parenList
+  EnforceOne (Right x)       -> parensSep
     [ "enforce-one"
     , "\"(generated enforce-one)\""
-    , userShow $ fmap snd x
+    , pretty $ fmap snd x
     ]
 
   --
   -- TODO: perhaps track whether -guard or -keyset was used for this?
   --
-  Enforce _ (GuardPasses _ x)    -> parenList ["enforce-guard", userShow x]
-  Enforce _ x                    -> parenList ["enforce", userShow x]
+  Enforce _ (GuardPasses _ x)    -> parensSep ["enforce-guard", pretty x]
+  Enforce _ x                    -> parensSep ["enforce", pretty x]
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
 
-  Read _ _ tab x       -> parenList ["read", userShow tab, userShow x]
-  Write ty' _ _ tab x y -> parenList ["write", userShow tab, userShow x, singUserShowTm ty' y]
-  PactVersion          -> parenList ["pact-version"]
-  Format x y           -> parenList ["format", userShow x, userShow y]
-  FormatTime x y       -> parenList ["format", userShow x, userShow y]
-  ParseTime Nothing y  -> parenList ["parse-time", userShow y]
-  ParseTime (Just x) y -> parenList ["parse-time", userShow x, userShow y]
-  Hash x               -> parenList ["hash", userShow x]
-  ReadKeySet name      -> parenList ["read-keyset", userShow name]
-  ReadDecimal name     -> parenList ["read-decimal", userShow name]
-  ReadInteger name     -> parenList ["read-integer", userShow name]
-  PactId               -> parenList ["pact-id"]
-  MkKsRefGuard name    -> parenList ["keyset-ref-guard", userShow name]
-  MkPactGuard name     -> parenList ["create-pact-guard", userShow name]
-  MkUserGuard ty' o n  -> parenList ["create-user-guard", singUserShowTm ty' o, userShow n]
+  Read _ _ tab x       -> parensSep ["read", pretty tab, pretty x]
+  Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
+  PactVersion          -> parensSep ["pact-version"]
+  Format x y           -> parensSep ["format", pretty x, pretty y]
+  FormatTime x y       -> parensSep ["format", pretty x, pretty y]
+  ParseTime Nothing y  -> parensSep ["parse-time", pretty y]
+  ParseTime (Just x) y -> parensSep ["parse-time", pretty x, pretty y]
+  Hash x               -> parensSep ["hash", pretty x]
+  ReadKeySet name      -> parensSep ["read-keyset", pretty name]
+  ReadDecimal name     -> parensSep ["read-decimal", pretty name]
+  ReadInteger name     -> parensSep ["read-integer", pretty name]
+  PactId               -> parensSep ["pact-id"]
+  MkKsRefGuard name    -> parensSep ["keyset-ref-guard", pretty name]
+  MkPactGuard name     -> parensSep ["create-pact-guard", pretty name]
+  MkUserGuard ty' o n  -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2
@@ -1571,19 +1572,19 @@ valueToProp = \case
 -- Note [instances]:
 -- The following nine instances seem like they should be
 --
---     instance (IsTerm tm, SingI ty) => UserShow (tm ty) where
+--     instance (IsTerm tm, SingI ty) => Pretty (tm ty) where
 --
 -- Unfortunately, that's a nightmare in terms of overlap. So we implement an
 -- instance for each term type.
 
-instance SingI ty => UserShow (Term ty) where
-  userShowPrec _ = singUserShowTm sing
+instance SingI ty => Pretty (Term ty) where
+  pretty = singPrettyTm sing
 
-instance SingI ty => UserShow (Prop ty) where
-  userShowPrec _ = singUserShowTm sing
+instance SingI ty => Pretty (Prop ty) where
+  pretty = singPrettyTm sing
 
-instance SingI ty => UserShow (Invariant ty) where
-  userShowPrec _ = singUserShowTm sing
+instance SingI ty => Pretty (Invariant ty) where
+  pretty = singPrettyTm sing
 
 instance SingI ty => Show (Term ty) where
   showsPrec = singShowsTm sing
@@ -1604,23 +1605,23 @@ instance SingI ty => Eq (Invariant ty) where
   (==) = singEqTm sing
 
 instance IsTerm Term where
-  singEqTm          = eqTerm
-  singShowsTm       = showsTerm
-  singUserShowTm ty = userShowTerm ty 0
+  singEqTm        = eqTerm
+  singShowsTm     = showsTerm
+  singPrettyTm ty = prettyTerm ty
 
 instance IsTerm Prop where
-  singEqTm          = eqProp
-  singShowsTm       = showsProp
-  singUserShowTm ty = \case
-    PropSpecific tm -> userShowPrec 0 tm
-    CoreProp     tm -> singUserShowTm ty tm
+  singEqTm        = eqProp
+  singShowsTm     = showsProp
+  singPrettyTm ty = \case
+    PropSpecific tm -> pretty tm
+    CoreProp     tm -> singPrettyTm ty tm
 
 instance IsTerm Invariant where
   singEqTm ty (CoreInvariant tm1) (CoreInvariant tm2) = singEqTm ty tm1 tm2
   singShowsTm ty p (CoreInvariant tm)                 = singShowsTm ty p tm
-  singUserShowTm ty (CoreInvariant tm)                = singUserShowTm ty tm
+  singPrettyTm ty (CoreInvariant tm)                  = singPrettyTm ty tm
 
 instance IsTerm tm => IsTerm (Core tm) where
-  singEqTm          = eqCoreTm
-  singShowsTm       = showsPrecCore
-  singUserShowTm ty = userShowCore ty 0
+  singEqTm        = eqCoreTm
+  singShowsTm     = showsPrecCore
+  singPrettyTm ty = prettyCore ty
