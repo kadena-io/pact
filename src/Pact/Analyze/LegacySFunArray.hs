@@ -7,6 +7,7 @@
 module Pact.Analyze.LegacySFunArray
   ( SFunArray
   , mkSFunArray
+  , eitherArray
   ) where
 
 import           Control.Monad.IO.Class (liftIO)
@@ -61,3 +62,6 @@ instance SymArray SFunArray where
 
 instance SymVal b => Mergeable (SFunArray a b) where
   symbolicMerge _ = mergeArrays
+
+eitherArray :: SFunArray a Bool -> SFunArray a Bool -> SFunArray a Bool
+eitherArray (SFunArray g) (SFunArray h) = SFunArray (\x -> g x .|| h x)

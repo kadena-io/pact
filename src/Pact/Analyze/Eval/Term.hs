@@ -16,6 +16,7 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               view, (%=), (%~), (&), (+=), (.=),
                                               (.~), (<&>), (?~), (^.), (^?), _1,
                                               _2, _Just)
+import           Control.Monad               (void)
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
@@ -55,7 +56,6 @@ import           Pact.Analyze.Orphans        ()
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
-
 
 newtype Analyze a
   = Analyze
@@ -344,9 +344,50 @@ writeFields writeType tid tn sRk (S mProv obj)
 
 writeFields _ _ _ _ _ _ = vacuousMatch "the previous two cases are complete"
 
+accumulatingPendingGrants :: Analyze () -> Analyze CapabilityGrants
+accumulatingPendingGrants act = do
+    emptyGrants <- view aeEmptyGrants
+    previouslyPending <- swapIn emptyGrants
+    act
+    swapIn previouslyPending
+
+  where
+    swapIn :: CapabilityGrants -> Analyze CapabilityGrants
+    swapIn next = do
+      prev <- use $ latticeState.lasPendingGrants
+      latticeState.lasPendingGrants .= next
+      pure prev
+
+capabilityAppToken :: Capability -> [VarId] -> Analyze Token
+capabilityAppToken (Capability schema capName) vids = do
+    mAVals <- sequence <$> traverse getVar vids
+    case mAVals of
+      Nothing    ->
+        throwErrorNoLoc "unexpected missing variable in environment"
+      Just avals ->
+        pure $ Token schema capName $ sansProv $ buildObject schema avals
+
+  where
+    buildObject :: SingList schema -> [AVal] -> SBV (ConcreteObj schema)
+    buildObject SNil' [] = literal ()
+    buildObject (SCons' _sym ty tys) ((AVal _ sval):avals) =
+      withSymVal ty $ withSymVal (SObjectUnsafe tys) $ tuple
+        ( SBVI.SBV sval
+        , buildObject tys avals
+        )
+    buildObject _ _ = vacuousMatch "buildObject: list length mismatch"
+
+addPendingGrant :: Token -> Analyze ()
+addPendingGrant token = pendingCapabilityGranted token .= sTrue
+
+extendingGrants :: CapabilityGrants -> Analyze (S a) -> Analyze (S a)
+extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
+
 evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
+
+  Sequence eterm valT -> evalETerm eterm *> evalTerm valT
 
   IfThenElse ty cond (thenPath, then') (elsePath, else') -> do
     reachable  <- use purelyReachable
@@ -390,7 +431,17 @@ evalTerm = \case
     succeeds .= (initSucceeds .&& anySucceeded)
     pure result
 
-  Sequence eterm valT -> evalETerm eterm *> evalTerm valT
+  WithCapability app body -> do
+    grants <- accumulatingPendingGrants $
+      void $ evalETerm app
+
+    extendingGrants grants $
+      evalTerm body
+
+  Granting cap vids t -> do
+    r <- evalTerm t
+    addPendingGrant =<< capabilityAppToken cap vids
+    pure r
 
   Read objTy tid tn rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
