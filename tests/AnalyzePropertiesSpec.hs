@@ -63,7 +63,15 @@ testDualEvaluation' etm ty gState = do
 
           -- compare results
           case singEq ty' ty'' of
-            Just Refl -> withEq ty' $ withShow ty' $ sval' === pactSval
+            Just Refl
+              -- we only test bounded lists up to length 10. discard if the
+              -- pact list is too long.
+              -- TODO: this should only be considered a temporary fix. Done
+              -- properly we need to check all intermediate values.
+              | SList{} <- ty'
+              , length pactSval > 10
+              -> discard
+              | otherwise -> withEq ty' $ withShow ty' $ sval' === pactSval
             Nothing   ->
               if singEqB ty' (SList SAny) || singEqB ty'' (SList SAny)
               then discard -- TODO: check this case

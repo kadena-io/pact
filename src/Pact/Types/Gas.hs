@@ -45,9 +45,9 @@ data GasArgs
   | GUnreduced [Term Ref]
   | GWrite WriteType (Term Name) (Term Name)
   | GUse ModuleName (Maybe Hash)
-  | GModuleDecl Module
-  | GInterfaceDecl Module
-  | GModuleMember Module
+  | GModuleDecl (Module (Term Name))
+  | GInterfaceDecl Interface
+  | GModuleMember (ModuleDef (Term Name))
   | GUserApp
 
 newtype GasLimit = GasLimit Word64

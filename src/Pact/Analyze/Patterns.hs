@@ -3,6 +3,8 @@
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE ViewPatterns      #-}
 
+-- | Pattern synonym definitions for translation from typechecked 'AST' to
+-- 'Term'.
 module Pact.Analyze.Patterns where
 
 import           Control.Lens         ((^?))

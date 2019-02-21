@@ -1,0 +1,45 @@
+
+(begin-tx)
+
+(module govtest count-votes
+  "Demonstrate programmable governance showing votes for upgrade transaction hashes"
+  (defschema vote
+    vote-hash:string)
+  (deftable votes:{vote})
+
+  (defun vote-for-hash (user hsh)
+    (write votes user { "vote-hash": hsh }))
+
+  (defcap count-votes ()
+    (let* ((h (tx-hash))
+           (tally (fold (do-count h) { "for": 0, "against": 0 } (keys votes))))
+      (enforce (> (at 'for tally) (at 'against tally)) (format "vote result: {}, {}" [h tally]))))
+
+  (defun do-count (hsh tally u)
+    (bind tally { "for" := f, "against" := a }
+          (with-read votes u { 'vote-hash := v }
+                     (if (= v hsh)
+                         { "for": (+ 1 f), "against": a }
+                         { "for": f, "against": (+ 1 a) })))))
+
+(create-table votes)
+
+(commit-tx)
+(use govtest)
+
+(vote-for-hash "alice" (hash "tx1"))
+(vote-for-hash "bob" (hash "tx2"))
+(vote-for-hash "charlie" (hash "tx3"))
+(vote-for-hash "dinesh" (hash "tx2"))
+(vote-for-hash "erica" (hash "tx2"))
+
+;; direct read will attempt to grant admin
+(env-hash (hash "tx1"))
+(expect-failure "admin grant fails for tx1" (read votes "bob"))
+
+(env-hash (hash "tx3"))
+(expect-failure "admin grant fails for tx3" (read votes "bob"))
+
+(env-hash (hash "tx2"))
+
+(expect "admin grant succeeds for tx2" { "vote-hash": (hash "tx2") } (read votes "bob"))

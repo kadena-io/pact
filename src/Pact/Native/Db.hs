@@ -153,16 +153,16 @@ descModule i [TLitString t] = do
   case _mdModule <$> mods of
     Just m ->
       case m of
-        Module{..} ->
+        MDModule Module{..} ->
           return $ TObject
             [ (tStr "name"      , tStr $ asString _mName)
             , (tStr "hash"      , tStr $ asString _mHash)
-            , (tStr "keyset"    , tStr $ asString _mKeySet)
+            , (tStr "keyset"    , tStr $ pack $ show _mGovernance)
             , (tStr "blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
             , (tStr "code"      , tStr $ asString _mCode)
             , (tStr "interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
             ] TyAny def
-        Interface{..} ->
+        MDInterface Interface{..} ->
           return $ TObject
             [ (tStr "name", tStr $ asString _interfaceName)
             , (tStr "code", tStr $ asString _interfaceCode)
@@ -351,9 +351,8 @@ toColumns i = fmap (Columns . M.fromList) . mapM conv where
 createTable' :: RNativeFun e
 createTable' i [t@TTable {..}] = do
   guardTable i t
-  m <- getModule (_faInfo i) _tModule
   let (UserTables tn) = userTable t
-  success "TableCreated" $ createUserTable (_faInfo i) tn _tModule (_mKeySet m)
+  success "TableCreated" $ createUserTable (_faInfo i) tn _tModule
 createTable' i as = argsError i as
 
 guardTable :: Show n => FunApp -> Term n -> Eval e ()
@@ -369,7 +368,7 @@ enforceBlessedHashes i mn h = do
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
     Just m ->
       case m of
-        Module{..}
+        MDModule Module{..}
           | h == _mHash -> return () -- current version ok
           | h `HS.member` _mBlessed -> return () -- hash is blessed
           | otherwise -> evalError' i $

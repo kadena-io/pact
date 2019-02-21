@@ -1,16 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
+-- | Types for remote verification of pact programs from GHCJS in the browser.
 module Pact.Analyze.Remote.Types where
 
 import           Control.Lens       (makeLenses)
 import qualified Data.Aeson         as A
 import           Data.Text          (Text)
 
-import           Pact.Types.Term    (Module, ModuleName)
+import           Pact.Types.Term    (ModuleDef, ModuleName, Name)
 
 data Request
-  = Request [Module] ModuleName -- ^ verify one of the modules, by name
+  = Request [ModuleDef Name] ModuleName -- ^ verify one of the modules, by name
   deriving (Eq, Show)
 
 instance A.FromJSON Request where

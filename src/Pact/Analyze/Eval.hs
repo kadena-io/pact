@@ -2,6 +2,9 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Toplevel functions for symbolic evaluation of pact programs with respect
+-- to properties and invariants, primarily used by the high-level interface in
+-- 'Pact.Analyze.Check'.
 module Pact.Analyze.Eval
   ( module Pact.Analyze.Eval.Invariant
   , module Pact.Analyze.Eval.Numerical
@@ -14,7 +17,6 @@ module Pact.Analyze.Eval
   , runInvariantAnalysis
   , runPropertyAnalysis
   ) where
-
 
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (view, (&), (.~), (<&>), (^.))

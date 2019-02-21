@@ -67,7 +67,6 @@ initDbEnv loggers funrec p = DbEnv {
 
 data UserTableInfo = UserTableInfo
   { utModule :: ModuleName
-  , utKeySet :: KeySetName
   } deriving (Eq,Show,Generic,Typeable)
 
 instance PactValue UserTableInfo
@@ -135,8 +134,8 @@ pactdb = PactDb
        (\p -> queryKeys p (userTxRecord tn) (Just (KQKey KGTE (fromIntegral tid)))))
 
 
- , _createUserTable = \tn mn ksn e ->
-       createUserTable' e tn mn ksn
+ , _createUserTable = \tn mn e ->
+       createUserTable' e tn mn
 
  , _getUserTableInfo = \tn e -> getUserTableInfo' e tn
 
@@ -254,18 +253,18 @@ record :: (AsString k, PactValue v) => TxTable -> k -> v -> MVState p ()
 record tt k v = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
 {-# INLINE record #-}
 
-getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO (ModuleName, KeySetName)
+getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO ModuleName
 getUserTableInfo' e tn = runMVState e $ do
   r <- doPersist $ \p -> readValue p (DataTable userTableInfo) (DataKey $ asString tn)
   case r of
-    (Just (UserTableInfo mn ksn)) -> return (mn,ksn)
+    (Just (UserTableInfo mn)) -> return mn
     Nothing -> throwDbError $ "getUserTableInfo: no such table: " ++ show tn
 {-# INLINE getUserTableInfo' #-}
 
 
-createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> KeySetName -> IO ()
-createUserTable' s tn mn ksn = runMVState s $ do
-  let uti = UserTableInfo mn ksn
+createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> IO ()
+createUserTable' s tn mn = runMVState s $ do
+  let uti = UserTableInfo mn
   doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (DataKey $ asString tn) uti
   record (TxTable userTableInfo) tn uti
   createTable' (userTable tn)

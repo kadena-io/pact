@@ -43,6 +43,11 @@ spec = around_ bracket $ describe "Servant API client tests" $ do
   --   res <- runClientM (private (SubmitBatch [cmd])) clientEnv
   --   let expt = Right (ApiFailure "Send private: payload must have address")
   --   res `shouldBe` expt
+  it "correctly runs a simple command locally" $ do
+    cmd <- simpleServerCmd
+    res <- runClientM (local pactServerApiClient cmd) clientEnv
+    let cmdData = (CommandSuccess . Number) 3
+    res `shouldBe` (Right cmdData)
   it "correctly runs a simple command publicly and listens to the result" $ do
     cmd <- simpleServerCmd
     res <- runClientM (send pactServerApiClient (SubmitBatch [cmd])) clientEnv
@@ -51,8 +56,3 @@ spec = around_ bracket $ describe "Servant API client tests" $ do
     res' <- runClientM (listen pactServerApiClient (ListenerRequest rk)) clientEnv
     let cmdData = (toJSON . CommandSuccess . Number) 3
     res' `shouldBe` (Right (ApiResult cmdData (Just 0) Nothing))
-  it "correctly runs a simple command locally" $ do
-    cmd <- simpleServerCmd
-    res <- runClientM (local pactServerApiClient cmd) clientEnv
-    let cmdData = (CommandSuccess . Number) 3
-    res `shouldBe` (Right cmdData)

@@ -3,6 +3,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
 
+-- | Compilation of concrete models to DOT format, for visually displaying the
+-- execution graphs that we build for constructing execution traces in a
+-- symbolic setting.
 module Pact.Analyze.Model.Dot
   ( compileDot
   , renderDot

@@ -14,6 +14,9 @@
 
 {-# OPTIONS_GHC -Wno-redundant-constraints #-} -- coerceSBV requires Coercible
 {-# OPTIONS_GHC -fno-warn-orphans #-} -- Num, etc instances for Decimal
+
+-- | Type definitions specific to symbolic analysis of numeric (integer and
+-- decimal) expressions.
 module Pact.Analyze.Types.Numerical where
 
 import           Control.Lens                (Iso', Prism', from, iso, view)

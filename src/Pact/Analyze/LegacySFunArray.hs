@@ -4,7 +4,6 @@
 -- | This is the old 'SFunArray' which has since been removed from SBV (see
 -- https://github.com/LeventErkok/sbv/commit/77858f34f98bb233b86ed3a9f79f75a3707c9400),
 -- until we have time to move to the new implementation:
-
 module Pact.Analyze.LegacySFunArray
   ( SFunArray
   , mkSFunArray
