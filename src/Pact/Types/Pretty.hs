@@ -23,6 +23,7 @@ module Pact.Types.Pretty
   , dquotes
   , encloseSep
   , equals
+  , fillSep
   , fromAnsiWlPprint
   , hardline
   , hsep
@@ -62,7 +63,7 @@ import           Data.Text.Prettyprint.Doc
   defaultLayoutOptions, vsep, hsep, (<+>), colon, angles, list, braces,
   brackets, encloseSep, parens, sep, line, dquotes, viaShow, punctuate, dot,
   encloseSep, space, nest, align, hardline, tupled, indent, equals, reAnnotate,
-  reAnnotateS)
+  reAnnotateS, fillSep)
 import qualified Data.Text.Prettyprint.Doc as PP
 import qualified Data.Text.Prettyprint.Doc.Internal.Type as PP
 import qualified Data.Text.Prettyprint.Doc.Render.String as PP
