@@ -7,6 +7,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 -- |
 -- Module      :  Pact.Types.Typecheck
@@ -29,7 +30,7 @@ module Pact.Types.Typecheck
     TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,tcVarToTypes,
     TC (..), runTC,
     PrimValue (..),
-    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,
+    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
     Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,
     Node (..),aId,aTy,
@@ -200,6 +201,12 @@ instance Pretty t => Pretty (TopLevel t) where
   pretty (TopTable _i n t _m) =
     "Table" <+> pretty n <> colon <> pretty t
   pretty (TopUserType _i t _m) = "UserType" <+> pretty t
+
+toplevelInfo :: TopLevel t -> Info
+toplevelInfo (TopFun fun _) = _fInfo fun
+toplevelInfo TopConst{_tlInfo} = _tlInfo
+toplevelInfo TopTable{_tlInfo} = _tlInfo
+toplevelInfo TopUserType{_tlInfo} = _tlInfo
 
 -- | Special-form handling (with-read, map etc)
 data Special t =
