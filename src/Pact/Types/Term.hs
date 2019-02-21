@@ -110,7 +110,6 @@ import Pact.Types.Info
 import Pact.Types.Type
 import Pact.Types.Exp
 
-
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
   , _mModel :: ![Exp Info]   -- ^ models
@@ -869,7 +868,7 @@ instance Pretty n => Pretty (Term n) where
     TNative{..} -> annotate Header ("native `" <> pretty _tNativeName <> "`")
       <> nest 2 (
          line
-      <> line <> pretty _tNativeDocs
+      <> line <> fillSep (pretty <$> T.words _tNativeDocs)
       <> examples
       <> line
       <> line <> annotate Header "Type:"
