@@ -37,6 +37,7 @@ import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe, isNothing)
 import           Data.Proxy                 (Proxy)
+import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
@@ -47,7 +48,8 @@ import           GHC.Natural                (Natural)
 import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
-import           Pact.Types.Lang            (Info, Literal (..), Type (TyFun, TyPrim, TySchema, TyUser, TyVar))
+import           Pact.Types.Lang            (Info, Literal (..), Type
+  (TyFun, TyPrim, TySchema, TyUser, TyVar), SchemaPartial(PartialSchema))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
@@ -343,34 +345,59 @@ tagGuard node = do
 withNodeVars :: Map Node (Munged, VarId) -> TranslateM a -> TranslateM a
 withNodeVars nodeVars = local (teNodeVars %~ Map.union nodeVars)
 
-maybeTranslateUserType :: Pact.UserType -> Maybe QType
-maybeTranslateUserType (Pact.Schema _ _ [] _) = Just $ EType $ mkSObject SNil'
-maybeTranslateUserType (Pact.Schema a b (Pact.Arg name ty _:tys) c) = do
-  EType (SObject tys') <- maybeTranslateUserType $ Pact.Schema a b tys c
-  EType ty'            <- maybeTranslateType ty
-  withSing ty' $ withTypeable ty' $
-    case someSymbolVal (T.unpack name) of
-      SomeSymbol (_ :: Proxy sym) ->
-        -- we can use @SObjectUnsafe@ here instead of @mkSObject@ because we
-        -- @insert@ the new column.
-        Just $ EType $ SObjectUnsafe $ SingList $
-          insert (SSymbol @sym) ty' (UnSingList tys')
+maybeTranslateUserType
+  :: Maybe (Set Text)
+  -- ^ Set of keys to keep (if this is a partial schema)
+  -> Pact.UserType
+  -> Maybe QType
+maybeTranslateUserType _ (Pact.Schema _ _ [] _) = Just $ EType $ mkSObject SNil'
+maybeTranslateUserType restrictKeys (Pact.Schema a b (Pact.Arg name ty _:tys) c) = do
+  subTy@(EType (SObject tys'))
+    <- maybeTranslateUserType restrictKeys $ Pact.Schema a b tys c
+  EType ty' <- maybeTranslateType ty
+
+  let keepThisKey = case restrictKeys of
+        Nothing  -> True
+        Just set -> name `Set.member` set
+
+  if keepThisKey
+  then
+
+    withSing ty' $ withTypeable ty' $
+      case someSymbolVal (T.unpack name) of
+        SomeSymbol (_ :: Proxy sym) ->
+          -- we can use @SObjectUnsafe@ here instead of @mkSObject@ because we
+          -- @insert@ the new column.
+          Just $ EType $ SObjectUnsafe $ SingList $
+            insert (SSymbol @sym) ty' (UnSingList tys')
+
+  else Just subTy
 
 maybeTranslateUserType' :: Pact.UserType -> Maybe EType
-maybeTranslateUserType' = maybeTranslateUserType >=> downcastQType
+maybeTranslateUserType' = maybeTranslateUserType Nothing >=> downcastQType
 
 maybeTranslateType :: Pact.Type Pact.UserType -> Maybe EType
-maybeTranslateType = maybeTranslateType' >=> downcastQType
+maybeTranslateType = maybeTranslateType' Nothing >=> downcastQType
 
 -- A helper to translate types that doesn't know how to handle user types
 -- itself
-maybeTranslateType' :: Pact.Type Pact.UserType -> Maybe QType
-maybeTranslateType' = \case
-  TyUser a -> maybeTranslateUserType a
+maybeTranslateType'
+  :: Maybe (Set Text)
+  -- ^ Set of keys to keep (if this is a partial schema)
+  -> Pact.Type Pact.UserType
+  -> Maybe QType
+maybeTranslateType' restrictKeys = \case
+  -- Note: TyUser vs TySchema
+  --
+  -- A user type holds a schema type (@TyUser TySchema{}@). A schema type can
+  -- be @TyTable@, @TyObject@, or @TyBinding@.
+  TyUser a -> maybeTranslateUserType restrictKeys a
 
-  -- TODO(joel): understand the difference between the TyUser and TySchema cases
   TySchema Pact.TyTable _ _ -> pure QTable
-  TySchema _ ty' _          -> maybeTranslateType' ty'
+  TySchema _ ty' (PartialSchema keys)
+    -> maybeTranslateType' (Just keys) ty'
+  TySchema _ ty' _          -> maybeTranslateType' Nothing ty'
+
   TyPrim Pact.TyBool        -> pure $ EType SBool
   TyPrim Pact.TyDecimal     -> pure $ EType SDecimal
   TyPrim Pact.TyInteger     -> pure $ EType SInteger
@@ -385,7 +412,7 @@ maybeTranslateType' = \case
   TyVar _                                           -> pure $ EType SAny
   Pact.TyAny                                        -> pure $ EType SAny
   Pact.TyList a -> do
-    ty <- maybeTranslateType' a
+    ty <- maybeTranslateType' Nothing a
     case ty of
       EType ty' -> pure $ EType $ SList ty'
       _         -> empty

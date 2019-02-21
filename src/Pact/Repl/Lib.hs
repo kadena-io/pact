@@ -30,6 +30,7 @@ import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as BSL
 import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
+import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Maybe
 #if defined(ghcjs_HOST_OS)
@@ -429,7 +430,7 @@ verify i as = case as of
         modResult <- liftIO $ Check.verifyModule modules md
         let renderedLines = Check.renderVerifiedModule modResult
 #endif
-        -- setop $ TcErrors $ Text.unpack <$> renderedLines
+        setop $ TcErrors $ Text.unpack <$> renderedLines
         return (tStr $ mconcat renderedLines)
 
   _ -> argsError i as

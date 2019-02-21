@@ -288,7 +288,12 @@ applySchemas Pre ast = case ast of
         return $ Just (bn,(Var node,ni,vt'))
       _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
     case sequence pmapM of
-      Just pmap -> void $ validateSchema sch partial (M.fromList pmap)
+      Just pmap -> validateSchema sch partial (M.fromList pmap) >>= \pm ->
+        forM_ pm $ \pkeys -> case partial of
+          PartialSchema{} -> do
+            debug $ "Specializing schema ty for sublist: " ++ show pkeys
+            assocAstTy n $ TySchema TyObject (TyUser sch) (PartialSchema pkeys)
+          _ -> pure ()
       Nothing -> return () -- error already tracked above
     return ast
 

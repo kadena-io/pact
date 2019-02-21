@@ -219,7 +219,7 @@ evalPropSpecific (PropRead objTy@(SObjectUnsafe fields) ba tn pRk) = do
   aValFields <- foldrSingList
     (pure $ Some SObjectNil $ AnSBV $ literal ())
     (\k ty accum -> do
-      Some objTy'@(SObjectUnsafe schema) (AnSBV obj) <- accum
+      Some objTy'@(SObject schema) (AnSBV obj) <- accum
       let fieldName = symbolVal k
           cn = ColumnName fieldName
 
