@@ -721,8 +721,8 @@ verifyModule modules moduleData = runExceptT $ do
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
 
-      typecheckedRefs :: HM.HashMap Text Ref
-      typecheckedRefs = moduleTypecheckableRefs moduleData
+      typecheckableRefs :: HM.HashMap Text Ref
+      typecheckableRefs = moduleTypecheckableRefs moduleData
 
   -- For each ref, if it typechecks as a function (it'll be either a function
   -- or a constant), keep its signature.
@@ -739,7 +739,7 @@ verifyModule modules moduleData = runExceptT $ do
         _ -> accum
     )
     (HM.empty, HM.empty)
-    typecheckedRefs
+    typecheckableRefs
 
   let valueToProp' :: ETerm -> Except VerificationFailure EProp
       valueToProp' tm = case valueToProp tm of
@@ -770,7 +770,7 @@ verifyModule modules moduleData = runExceptT $ do
 
   funChecks''' <- lift $ ifor funChecks'' $ \name (ref, check) ->
     verifyFunProps ref name check
-  invariantChecks <- ifor typecheckedRefs $ \name ref ->
+  invariantChecks <- ifor typecheckableRefs $ \name ref ->
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants modName tables ref name
 
