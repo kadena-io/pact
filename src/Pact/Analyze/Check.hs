@@ -76,7 +76,7 @@ import           Pact.Types.Typecheck      (AST,
                                             Named, Node, TcId (_tiInfo),
                                             TopLevel (TopConst, TopFun, TopTable),
                                             UserType (_utFields, _utName),
-                                            runTC, tcFailures)
+                                            runTC, tcFailures, toplevelInfo)
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Alloc        (runAlloc)
@@ -639,6 +639,15 @@ runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
   Left err   -> Left (meta, err)
   Right good -> Right (Located (getInfo meta) good)
 
+typecheck :: Ref -> IO (Either CheckFailure (TopLevel Node))
+typecheck ref = do
+  (toplevel, tcState) <- runTC 0 False $ typecheckTopLevel ref
+  let failures = tcState ^. tcFailures
+      info = toplevelInfo toplevel
+  pure $ if Set.null failures
+            then Right toplevel
+            else Left $ CheckFailure info $ TypecheckFailure failures
+
 verifyFunctionProps
   :: ModuleName
   -> [Table]
@@ -647,16 +656,15 @@ verifyFunctionProps
   -> [Located Check]
   -> IO [CheckResult]
 verifyFunctionProps modName tables ref funName props = do
-  (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-  let failures = tcState ^. tcFailures
-
-  case fun of
-    TopFun FDefun {_fInfo, _fArgs, _fBody} _ ->
-      if Set.null failures
-      then for props $
-             verifyFunctionProperty modName funName _fInfo tables _fArgs _fBody
-      else pure [Left (CheckFailure _fInfo (TypecheckFailure failures))]
-    _ -> pure []
+  eToplevel <- typecheck ref
+  case eToplevel of
+    Left failure ->
+      pure [Left failure]
+    Right (TopFun FDefun {_fInfo, _fArgs, _fBody} _) ->
+      for props $
+        verifyFunctionProperty modName funName _fInfo tables _fArgs _fBody
+    Right _ ->
+      pure []
 
 verifyFunctionInvariants
   :: ModuleName
@@ -665,15 +673,14 @@ verifyFunctionInvariants
   -> Text
   -> IO (Either CheckFailure (TableMap [CheckResult]))
 verifyFunctionInvariants modName tables ref funName = do
-  (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-  let failures = tcState ^. tcFailures
-
-  case fun of
-    TopFun FDefun {_fInfo, _fArgs, _fBody} _ ->
-      if Set.null failures
-      then verifyFunctionInvariants' modName funName _fInfo tables _fArgs _fBody
-      else pure $ Left $ CheckFailure _fInfo (TypecheckFailure failures)
-    _ -> pure $ Right $ TableMap Map.empty
+  eToplevel <- typecheck ref
+  case eToplevel of
+    Left failure ->
+      pure $ Left failure
+    Right (TopFun FDefun {_fInfo, _fArgs, _fBody} _) ->
+      verifyFunctionInvariants' modName funName _fInfo tables _fArgs _fBody
+    Right _ ->
+      pure $ Right $ TableMap Map.empty
 
 -- TODO: use from Control.Monad.Except when on mtl 2.2.2
 liftEither :: MonadError e m => Either e a -> m a
