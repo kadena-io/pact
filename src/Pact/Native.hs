@@ -286,10 +286,11 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
 
 sortDef :: NativeDef
 sortDef = defRNative "sort" sort'
-     (funType (TyList a) [("values",TyList a)] <>
-      funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
-     "Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. \
-     \`(sort [3 1 2])` `(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"
+  (funType (TyList a) [("values",TyList a)] <>
+   funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
+  "Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. \
+  \`(sort [3 1 2])` `(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"
+
 
 whereDef :: NativeDef
 whereDef = defNative (specialForm Where) where'
@@ -542,16 +543,21 @@ compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
   apply (_tApp appB) [a']
 compose i as = argsError' i as
 
+
+
+
 readMsg :: RNativeFun e
 readMsg i [TLitString key] = parseMsgKey i "read-msg" key
 readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
 readMsg i as = argsError i as
+
 
 readInteger :: RNativeFun e
 readInteger i [TLitString key] = do
   (ParsedInteger a') <- parseMsgKey i "read-integer" key
   return $ toTerm a'
 readInteger i as = argsError i as
+
 
 pactId :: RNativeFun e
 pactId i [] = toTerm <$> getPactId i
@@ -607,6 +613,7 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
   _ -> argsError' i as
 where' i as = argsError' i as
 
+
 sort' :: RNativeFun e
 sort' _ [l@(TList [] _ _)] = pure l
 sort' _ [TList{..}] = case nub (map typeof _tList) of
@@ -635,6 +642,7 @@ sort' _ [fields@TList{},l@TList{}]
       return $ TList (map snd $ sortBy (compare `on` fst) sortPairs) (_tListType l) def
 
 sort' i as = argsError i as
+
 
 enforceVersion :: RNativeFun e
 enforceVersion i as = case as of
