@@ -32,26 +32,25 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_functionApplicationCost :: Gas
   }
 
-testGasConfig :: GasCostConfig
-testGasConfig = GasCostConfig
-  { _gasCostConfig_primTable = testGasTable
+defaultGasConfig :: GasCostConfig
+defaultGasConfig = GasCostConfig
+  { _gasCostConfig_primTable = defaultGasTable
   , _gasCostConfig_selectColumnCost = 1
   , _gasCostConfig_readColumnCost = 1
-  , _gasCostConfig_sortFactor = 10
+  , _gasCostConfig_sortFactor = 1
   , _gasCostConfig_moduleCost = 1
   , _gasCostConfig_moduleMemberCost = 1
-  , _gasCostConfig_useModuleCost = 10
+  , _gasCostConfig_useModuleCost = 1
   , _gasCostConfig_interfaceCost = 1
-  , _gasCostConfig_writeCost = 10
+  , _gasCostConfig_writeCost = 1
   , _gasCostConfig_functionApplicationCost = 1
   }
 
-testGasTable :: Map Text ([Term Ref] -> Gas)
-testGasTable =
-  let lookupCost = 10
-  in Map.fromList
-    [ ("describe-module", const 100)
-    , ("sort", const 100)
+defaultGasTable :: Map Text ([Term Ref] -> Gas)
+defaultGasTable =
+  Map.fromList
+    [ ("describe-module", const 1)
+    , ("sort", const 1)
     , ("keys", const 1)
     , ("map", const 1)
     , ("!=", const 1)
@@ -112,7 +111,7 @@ testGasTable =
     , ("hash", const 1)
     , ("exp", const 1)
     , ("not", const 1)
-    , ("at", const lookupCost)
+    , ("at", const 1)
     , ("where", const 1)
     , ("-", const 1)
     , ("str-to-int", const 1)
@@ -150,22 +149,28 @@ testGasTable =
     ]
 
 tableGasModel :: GasCostConfig -> GasModel
-tableGasModel gasConfig = GasModel $ \name -> \case
-  GPostRead r -> case r of
-    ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_columns cols))
-    ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
-    ReadTxId -> _gasCostConfig_readColumnCost gasConfig
-  GSelect mColumns _expression _tableTerm -> _gasCostConfig_selectColumnCost gasConfig * case mColumns of
-    Nothing -> 100 -- not sure what to do here
-    Just cs -> fromIntegral (length cs)
-  GSortFieldLookup n -> fromIntegral n * _gasCostConfig_sortFactor gasConfig
-  GUnreduced ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
-    Just g -> g ts
-    Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
-  GWrite _writeType _tableTerm _objectTerm -> _gasCostConfig_writeCost gasConfig
-  GUse _moduleName _mHash -> _gasCostConfig_useModuleCost gasConfig
-    -- The above seems somewhat suspect (perhaps cost should scale with the module?)
-  GModuleDecl _module -> _gasCostConfig_moduleCost gasConfig
-  GInterfaceDecl _module -> _gasCostConfig_interfaceCost gasConfig
-  GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
-  GUserApp -> _gasCostConfig_functionApplicationCost gasConfig
+tableGasModel gasConfig = 
+  let run name ga = case ga of
+        GPostRead r -> case r of
+          ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_columns cols))
+          ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
+          ReadTxId -> _gasCostConfig_readColumnCost gasConfig
+        GSelect mColumns _expression _tableTerm -> _gasCostConfig_selectColumnCost gasConfig * case mColumns of
+          Nothing -> 1 -- not sure what to do here
+          Just cs -> fromIntegral (length cs)
+        GSortFieldLookup n -> fromIntegral n * _gasCostConfig_sortFactor gasConfig
+        GUnreduced ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
+          Just g -> g ts
+          Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
+        GWrite _writeType _tableTerm _objectTerm -> _gasCostConfig_writeCost gasConfig
+        GUse _moduleName _mHash -> _gasCostConfig_useModuleCost gasConfig
+          -- The above seems somewhat suspect (perhaps cost should scale with the module?)
+        GModuleDecl _module -> _gasCostConfig_moduleCost gasConfig
+        GInterfaceDecl _module -> _gasCostConfig_interfaceCost gasConfig
+        GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
+        GUserApp -> _gasCostConfig_functionApplicationCost gasConfig
+  in GasModel
+      { gasModelName = "table"
+      , gasModelDesc = "table-based cost model"
+      , runGasModel = run
+      }

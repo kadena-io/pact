@@ -133,8 +133,8 @@ replDefs = ("Repl",
        "Set environment gas price to PRICE."
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        "Update gas model to charge constant RATE."
-     ,defZRNative "env-gasreal" setGasReal (funType tTyString [])
-       "Update gas model to a test version of a real gas model."
+     ,defZRNative "env-gasmodel" setGasModel (funType tTyString [("model",tTyString)])
+       "Update gas model to the model named MODEL."
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
 
      ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
@@ -425,13 +425,22 @@ setGasPrice i as = argsError i as
 
 setGasRate :: RNativeFun LibState
 setGasRate _ [TLitInteger r] = do
-    setenv (eeGasEnv . geGasModel) (constGasModel $ fromIntegral r)
-    return $ tStr $ "Set gas rate to " <> tShow r
-
+  let model = constGasModel $ fromIntegral r
+  setenv (eeGasEnv . geGasModel) model
+  return $ tStr $ "Set gas model to " <> gasModelDesc model
 setGasRate i as = argsError i as
 
-setGasReal :: RNativeFun LibState
-setGasReal _ [] = do
-    setenv (eeGasEnv . geGasModel) (tableGasModel testGasConfig)
-    return $ tStr $ "Set gas to table-based model"
-setGasReal i as = argsError i as
+setGasModel :: RNativeFun LibState
+setGasModel _ [] = do
+  model <- asks (_geGasModel . _eeGasEnv)
+  return $ tStr $ "Current gas model is '" <> gasModelName model <> "': " <> gasModelDesc model
+setGasModel _ as = do
+  let mMod = case as of
+        [TLitString "table"] -> Just $ tableGasModel defaultGasConfig
+        [TLitString "fixed", TLitInteger r] -> Just $ constGasModel (fromIntegral r)
+        _ -> Nothing
+  case mMod of
+    Nothing -> return $ tStr "Unrecognized model, perhaps try (env-gasmodel \"table\") or (env-gasmodel \"fixed\" 1)"
+    Just model -> do
+      setenv (eeGasEnv . geGasModel) model
+      return $ tStr $ "Set gas model to " <> gasModelDesc model

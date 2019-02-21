@@ -15,10 +15,11 @@ module Pact.Types.Gas
     ReadValue(..),GasModel(..),GasArgs(..),GasLimit(..)
   ) where
 
-import Control.Lens (makeLenses)
-import Data.Word (Word64)
-import Data.Decimal (Decimal)
 import Control.DeepSeq (NFData)
+import Control.Lens (makeLenses)
+import Data.Decimal (Decimal)
+import qualified Data.Text as T
+import Data.Word (Word64)
 
 import Pact.Types.Lang
 import Pact.Types.Persistence
@@ -54,8 +55,14 @@ newtype GasLimit = GasLimit Word64
 instance Show GasLimit where show (GasLimit g) = show g
 
 
-newtype GasModel = GasModel { runGasModel :: Text -> GasArgs -> Gas }
-instance Show GasModel where show _ = "[GasModel]"
+data GasModel = GasModel
+  { gasModelName :: Text
+  , gasModelDesc :: Text
+  , runGasModel :: Text -> GasArgs -> Gas
+  }
+
+instance Show GasModel where
+  show m = "[GasModel: " <> T.unpack (gasModelName m) <> "]"
 
 data GasEnv = GasEnv
   { _geGasLimit :: GasLimit
