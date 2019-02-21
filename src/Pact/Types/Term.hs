@@ -40,7 +40,7 @@ module Pact.Types.Term
    defTypeRep,
    NativeDefName(..),DefName(..),
    FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
-   Ref(..),
+   Ref(..),_Direct,_Ref,
    NativeDFun(..),
    BindType(..),
    TableName(..),
@@ -1124,6 +1124,7 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 makeLenses ''Term
 makeLenses ''Namespace
 makeLenses ''FunApp
+makePrisms ''Ref
 makeLenses ''Meta
 makeLenses ''Module
 makeLenses ''Interface
