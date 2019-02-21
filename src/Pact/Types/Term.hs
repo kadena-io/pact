@@ -866,7 +866,7 @@ instance Pretty n => Pretty (Term n) where
     TModule{..} -> pretty _tModuleDef
     TList{..} -> bracketsSep $ pretty <$> _tList
     TDef{..} -> pretty _tDef
-    TNative{..} -> annotate Header ("native `" <> pretty (asString' _tNativeName) <> "`")
+    TNative{..} -> annotate Header ("native `" <> pretty _tNativeName <> "`")
       <> nest 2 (
          line
       <> line <> pretty _tNativeDocs
