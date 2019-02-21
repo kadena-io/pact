@@ -44,6 +44,7 @@ import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
 import qualified Pact.Types.Persistence      as Pact
+import           Pact.Types.Pretty           (renderCompactString', pretty)
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
 
@@ -64,7 +65,7 @@ newtype Analyze a
 
 instance Analyzer Analyze where
   type TermOf Analyze = Term
-  eval             = evalTerm
+  eval                = evalTerm
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
@@ -502,9 +503,10 @@ evalTerm = \case
       Some SStr     str  -> Left          <$> eval str
       Some SInteger int  -> Right . Left  <$> eval int
       Some SBool    bool -> Right . Right <$> eval bool
-      etm                   -> throwErrorNoLoc $ fromString $ T.unpack $
+      etm                   -> throwErrorNoLoc $ fromString $
+        renderCompactString' $
         "We can only analyze calls to `format` formatting {string,integer,bool}" <>
-        " (not " <> userShow etm <> ")"
+        " (not " <> pretty etm <> ")"
     case unliteralS formatStr' of
       Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
       Just (Str concreteStr) -> case format concreteStr args' of

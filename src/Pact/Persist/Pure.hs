@@ -27,8 +27,9 @@ import Data.Default
 import Data.Typeable
 
 import Pact.Persist hiding (compileQuery)
+import Pact.Types.Pretty
 
-data PValue = forall a . PactValue a => PValue a
+data PValue = forall a . (PactValue a, Pretty a) => PValue a
 instance Show PValue where show (PValue a) = show a
 
 
@@ -73,7 +74,7 @@ persister = Persister {
 
   createTable = \t s -> fmap (,()) $ overM s (temp . tblType t . tbls) $ \ts -> case M.lookup t ts of
       Nothing -> return (M.insert t mempty ts)
-      Just _ -> throwDbError $ "createTable: already exists: " ++ show t
+      Just _ -> throwDbError $ "createTable: already exists: " <> pretty t
   ,
   beginTx = \_ s -> return $ (,()) $ set temp (_committed s) s
   ,
@@ -88,10 +89,10 @@ persister = Persister {
   readValue = \t k s -> fmap (s,) $ traverse conv $ firstOf (temp . tblType t . tbls . ix t . tbl . ix k) s
   ,
   writeValue = \t wt k v s -> fmap (,()) $ overM s (temp . tblType t . tbls) $ \ts -> case M.lookup t ts of
-      Nothing -> throwDbError $ "writeValue: no such table: " ++ show t
+      Nothing -> throwDbError $ "writeValue: no such table: " <> pretty t
       Just tb -> fmap (\nt -> M.insert t nt ts) $ overM tb tbl $ \m -> case (M.lookup k m,wt) of
-        (Just _,Insert) -> throwDbError $ "Insert: value already at key: " ++ show k
-        (Nothing,Update) -> throwDbError $ "Update: no value at key: " ++ show k
+        (Just _,Insert) -> throwDbError $ "Insert: value already at key: " <> pretty k
+        (Nothing,Update) -> throwDbError $ "Update: no value at key: " <> pretty k
         _ -> return $ M.insert k (PValue v) m
   ,
   refreshConn = return . (,())
@@ -117,14 +118,14 @@ compileQuery (Just kq) = compile kq
 
 qry :: PactKey k => Table k -> Maybe (KeyQuery k) -> PureDb -> IO [(k,PValue)]
 qry t kq s = case firstOf (temp . tblType t . tbls . ix t . tbl) s of
-  Nothing -> throwDbError $ "query: no such table: " ++ show t
+  Nothing -> throwDbError $ "query: no such table: " <> pretty t
   Just m -> return $ filter (compileQuery kq . fst) $ M.toList m
 {-# INLINE qry #-}
 
 
-conv :: PactValue v => PValue -> IO v
+conv :: (PactValue v) => PValue -> IO v
 conv (PValue v) = case cast v of
-  Nothing -> throwDbError $ "Failed to reify DB value: " ++ show v
+  Nothing -> throwDbError $ "Failed to reify DB value: " <> pretty v
   Just s -> return s
 {-# INLINE conv #-}
 

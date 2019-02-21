@@ -38,6 +38,7 @@ import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util           (Boolean (..), vacuousMatch)
 import qualified Pact.Native                 as Pact
+import           Pact.Types.Pretty           (renderCompactString)
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -181,7 +182,7 @@ evalCore (ObjMerge
     S _ obj1' <- eval obj1
     S _ obj2' <- eval obj2
     case sing @a of
-      SObjectUnsafe schema -> pure $ sansProv $
+      SObject schema -> pure $ sansProv $
         evalObjMerge' (obj1' :< schema1) (obj2' :< schema2) schema
       _ -> throwErrorNoLoc "this must be an object"
 evalCore ObjMerge{} = throwErrorNoLoc "both types must be objects"
@@ -312,7 +313,8 @@ evalCore (Where schema tya key (Open vid _ f) obj) = withSymVal tya $ do
   S _ v <- evalObjAt schema key obj tya
   withVar vid (mkAVal' v) $ eval f
 
-evalCore (Typeof tya _a) = pure $ literalS $ Str $ T.unpack $ userShow tya
+-- TODO: we need to be very careful here with non-ground types
+evalCore (Typeof tya _a) = pure $ literalS $ Str $ renderCompactString tya
 
 evalCore (GuardEqNeq op xT yT) = do
   x <- eval xT

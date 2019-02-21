@@ -49,12 +49,12 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import Control.Arrow hiding ((<+>))
 import Data.Foldable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 import Data.String
 import Data.List
 import Data.Maybe (isJust)
 
 
+import Pact.Types.Pretty
 import Pact.Types.Typecheck
 import Pact.Types.Runtime hiding (App,appInfo)
 import qualified Pact.Types.Runtime as Term
@@ -288,7 +288,12 @@ applySchemas Pre ast = case ast of
         return $ Just (bn,(Var node,ni,vt'))
       _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
     case sequence pmapM of
-      Just pmap -> void $ validateSchema sch partial (M.fromList pmap)
+      Just pmap -> validateSchema sch partial (M.fromList pmap) >>= \pm ->
+        forM_ pm $ \pkeys -> case partial of
+          PartialSchema{} -> do
+            debug $ "Specializing schema ty for sublist: " ++ show pkeys
+            assocAstTy n $ TySchema TyObject (TyUser sch) (PartialSchema pkeys)
+          _ -> pure ()
       Nothing -> return () -- error already tracked above
     return ast
 
@@ -952,9 +957,6 @@ isUnresolvedTy TyVar {} = True
 isUnresolvedTy (TySchema _ v _) = isUnresolvedTy v
 isUnresolvedTy (TyList l) = isUnresolvedTy l
 isUnresolvedTy _ = False -- TODO fun types
-
-prettyMap :: (t -> Doc) -> (t1 -> Doc) -> M.Map t t1 -> Doc
-prettyMap prettyK prettyV = vsep . map (\(k,v) -> prettyK k <> colon <+> prettyV v) . M.toList
 
 -- | A successful result has the '_tcAstToVar' map populated with "resolved types", ie concrete non-var types.
 resolveAllTypes :: TC (M.Map TcId (Type UserType))

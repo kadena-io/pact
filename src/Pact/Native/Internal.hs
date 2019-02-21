@@ -45,6 +45,7 @@ import Control.Arrow
 import qualified Data.Aeson.Lens as A
 import Bound
 import qualified Data.HashMap.Strict as HM
+import Pact.Types.Pretty
 
 import Pact.Types.Runtime
 import Pact.Types.Native
@@ -66,10 +67,10 @@ parseMsgKey :: (FromJSON t) => FunApp -> String -> Text -> Eval e t
 parseMsgKey i msg key = do
   vm <- firstOf (A.key key) <$> view eeMsgBody
   case vm of
-    Nothing -> evalError' i $ "No such key in message: " ++ show key
+    Nothing -> evalError' i $ "No such key in message: " <> pretty key
     Just v -> case fromJSON v of
                 Success t -> return t
-                Error e -> evalError' i $ msg ++ ": parse failed: " ++ e ++ ": " ++ show v
+                Error e -> evalError' i $ pretty msg <> ": parse failed: " <> pretty e <> ": " <> pretty v
 
 
 bindReduce :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> (Text -> Maybe (Term Ref)) -> Eval e (Term Name)
@@ -78,9 +79,9 @@ bindReduce ps bd bi lkpFun = do
           var' <- reduce var
           case var' of
             (TLitString s) -> case lkpFun s of
-                                Nothing -> evalError bi $ "Bad column in binding: " ++ unpack s
+                                Nothing -> evalError bi $ "Bad column in binding: " <> pretty s
                                 Just v -> return v
-            t -> evalError bi $ "Invalid column identifier in binding: " ++ show t
+            t -> evalError bi $ "Invalid column identifier in binding: " <> pretty t
   let bd'' = instantiate (resolveArg bi (map snd vs)) bd
   -- NB stack frame here just documents scope, but does not incur gas
   call (StackFrame (pack $ "(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $!
@@ -90,17 +91,17 @@ setTopLevelOnly :: NativeDef -> NativeDef
 setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
 
 -- | Specify a 'NativeFun'
-defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
-defNative n fun ftype docs =
-  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs False def)
+defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
+defNative n fun ftype examples docs =
+  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def)
 
 -- | Specify a 'GasRNativeFun'
-defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defGasRNative name fun = defNative name (reduced fun)
     where reduced f fi as = preGas fi as >>= \(g,as') -> f g fi as'
 
 -- | Specify a 'RNativeFun'
-defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = preGas fi as >>= \(g,as') -> (g,) <$> f fi as'
 
@@ -124,7 +125,7 @@ getModule i n = do
       rm <- HM.lookup n <$> view (eeRefStore.rsModules)
       case rm of
         Just ModuleData{..} -> return _mdModule
-        Nothing -> evalError i $ "Unable to resolve module " ++ show n
+        Nothing -> evalError i $ "Unable to resolve module " <> pretty n
 
 tTyInteger :: Type n; tTyInteger = TyPrim TyInteger
 tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal
@@ -146,8 +147,10 @@ enforceGuardDef dn =
   defRNative dn enforceGuard'
   (funType tTyBool [("guard",tTyGuard Nothing)] <>
    funType tTyBool [("keysetname",tTyString)])
-  ("Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. " <>
-   "`$(" <> asString dn <> " 'admin-keyset)` `$(" <> asString dn <> " row-guard)`")
+  [ LitExample $ "(" <> asString dn <> " 'admin-keyset)"
+  , LitExample $ "(" <> asString dn <> " row-guard)"
+  ]
+  "Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic."
   where
     enforceGuard' :: RNativeFun e
     enforceGuard' i as = case as of
@@ -162,12 +165,12 @@ enforceGuard i g = case g of
   GPact PactGuard{..} -> do
     pid <- getPactId i
     unless (pid == _pgPactId) $
-      evalError' i $ "Pact guard failed, intended: " ++ show _pgPactId ++ ", active: " ++ show pid
+      evalError' i $ "Pact guard failed, intended: " <> pretty _pgPactId <> ", active: " <> pretty pid
   GModule mg@ModuleGuard{..} -> do
     m <- getModule (_faInfo i) _mgModuleName
     case m of
       MDModule Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
-      MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
+      MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} -> do
     void $ runReadOnly (_faInfo i) $
       enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
@@ -184,4 +187,5 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
       md <- getModule i modName
       case md of
         MDModule m -> void $ acquireModuleAdmin i (_mName m) (_mGovernance m)
-        MDInterface iface -> evalError i $ "Internal error, interface found in call stack: " ++ show iface
+        MDInterface iface -> evalError i $
+          "Internal error, interface found in call stack: " <> pretty iface

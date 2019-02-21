@@ -51,6 +51,7 @@ library
                      , Pact.Types.Native
                      , Pact.Types.Parser
                      , Pact.Types.Persistence
+                     , Pact.Types.Pretty
                      , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
@@ -102,7 +103,6 @@ library
       Pact.Analyze.Types.ObjUtil
       Pact.Analyze.Types.Shared
       Pact.Analyze.Types.Types
-      Pact.Analyze.Types.UserShow
       Pact.Analyze.Util
       Pact.Analyze.Remote.Server
       Pact.ApiReq
@@ -129,7 +129,9 @@ library
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
                      , algebraic-graphs >= 0.2 && < 0.3
-                     , ansi-wl-pprint >= 0.6.7.3 && < 0.7
+                     , prettyprinter >= 1.2 && < 1.3
+                     , prettyprinter-ansi-terminal >= 1.1 && < 1.2
+                     , prettyprinter-convert-ansi-wl-pprint
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.9.0.0 && < 4.12
                      , base16-bytestring >=0.1.1.6 && < 0.2
@@ -139,6 +141,7 @@ library
                      , containers >= 0.5.7 && < 0.6
                      , data-default >= 0.7.1.1 && < 0.8
                      , deepseq >= 1.4.2.0 && < 1.5
+                     , deriving-compat >= 0.5.1
                      , directory >= 1.2.6.2 && < 1.4
                      , exceptions >= 0.8.3 && < 0.11
                      , filepath >= 1.4.1.0 && < 1.5
@@ -251,7 +254,9 @@ test-suite hspec
               , data-default
               , lens
               , unordered-containers
-              , ansi-wl-pprint
+              , prettyprinter
+              , prettyprinter-ansi-terminal
+              , prettyprinter-convert-ansi-wl-pprint
               , bytestring
               , base16-bytestring >=0.1.1.6 && < 0.2
               , mtl

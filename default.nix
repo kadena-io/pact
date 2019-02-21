@@ -71,6 +71,11 @@ in
 
             algebraic-graphs = dontCheck super.algebraic-graphs;
 
+            # Prevent: "Setup: Encountered missing dependencies: doctest >=0.9"
+            prettyprinter = dontCheck super.prettyprinter;
+            prettyprinter-ansi-terminal = dontCheck super.prettyprinter-ansi-terminal;
+            prettyprinter-convert-ansi-wl-pprint = dontCheck super.prettyprinter-convert-ansi-wl-pprint;
+
             # Needed to get around a requirement on `hspec-discover`.
             megaparsec = dontCheck super.megaparsec;
 

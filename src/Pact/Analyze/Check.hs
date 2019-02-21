@@ -15,7 +15,6 @@ module Pact.Analyze.Check
   , renderVerifiedModule
   , verifyCheck
   , describeCheckFailure
-  , describeCheckResult
   , describeParseFailure
   , describeVerificationWarnings
   , falsifyingModel

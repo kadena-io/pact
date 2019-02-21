@@ -32,6 +32,7 @@ import Data.Aeson (toJSON)
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
+import Pact.Types.Pretty
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
@@ -57,7 +58,7 @@ dbDefs =
   let writeArgs part = funType tTyString
         [("table",tableTy),("key",tTyString),
          ("object",TySchema TyObject rt part)]
-      writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" <> s <> "`$" <> ex <> "`"
+      writeDocs s = "Write entry in TABLE for KEY of OBJECT column data" <> s
       rt = mkSchemaVar "row"
       tableTy = TySchema TyTable rt def
       rowTy = TySchema TyObject rt def
@@ -67,69 +68,72 @@ dbDefs =
   in ("Database",
     [setTopLevelOnly $ defRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
-     "Create table TABLE. `$(create-table accounts)`"
+     [LitExample "(create-table accounts)"] "Create table TABLE."
 
     ,defNative (specialForm WithRead) withRead
      (funType a [("table",tableTy),("key",tTyString),("bindings",bindTy)])
-     "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
-     \`$(with-read accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
-     \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
+     [ LitExample "(with-read accounts id { \"balance\":= bal, \"ccy\":= ccy }\n\
+       \  (format \"Balance for {} is {} {}\" [id bal ccy]))"
+     ]
+     "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements."
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType a
       [("table",tableTy),("key",tTyString),("defaults",partialize rowTy),("bindings",partialize bindTy)])
+     [ LitExample "(with-default-read accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n\
+       \  (format \"Balance for {} is {} {}\" [id bal ccy]))"
+     ]
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
-     \If row not found, read columns from DEFAULTS, an object with matching key names. \
-     \`$(with-default-read accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
-     \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
+     \If row not found, read columns from DEFAULTS, an object with matching key names."
 
     ,defGasRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
       funType rowTy [("table",tableTy),("key",tTyString),("columns",TyList tTyString)])
-     "Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified. \
-     \`$(read accounts id ['balance 'ccy])`"
+     [LitExample "(read accounts id ['balance 'ccy])"]
+     "Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified."
 
     ,defNative (specialForm Select) select
       (funType (TyList rowTy)  [("table",tableTy),("where",TyFun $ funType' tTyBool [("row",rowTy)])] <>
        funType (TyList rowTy)  [("table",tableTy),("columns",TyList tTyString),("where",TyFun $ funType' tTyBool [("row",rowTy)])])
-      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.\
-      \`$(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))` \
-      \`$(select people (where 'age (> 30)))`?"
+      [ LitExample "(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))"
+      , LitExample "(select people (where 'age (> 30)))?"
+      ]
+      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion."
 
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
-     "Return all keys in TABLE. `$(keys accounts)`"
+     [LitExample "(keys accounts)"] "Return all keys in TABLE."
 
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
-     "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
+     [LitExample "(txids accounts 123849535)"] "Return all txid values greater than or equal to TXID in TABLE."
 
     ,defNative "write" (write Write FullSchema) (writeArgs FullSchema)
-     (writeDocs ". OBJECT must have all fields specified by row type." "(write accounts id { \"balance\": 100.0 })")
+     [LitExample "(write accounts id { \"balance\": 100.0 })"] (writeDocs ".")
     ,defNative "insert" (write Insert FullSchema) (writeArgs FullSchema)
-     (writeDocs ", failing if data already exists for KEY. OBJECT must have all fields specified by row type."
-     "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })")
+     [LitExample "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })"]
+     (writeDocs ", failing if data already exists for KEY.")
     ,defNative "update" (write Update AnySubschema) (writeArgs AnySubschema)
-     (writeDocs ", failing if data does not exist for KEY. OBJECT can have just the fields to update."
-      "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
+     [LitExample "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })"]
+     (writeDocs ", failing if data does not exist for KEY.")
     ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
-      "Return all updates to TABLE performed in transaction TXID. `$(txlog accounts 123485945)`"
+      [LitExample "(txlog accounts 123485945)"] "Return all updates to TABLE performed in transaction TXID."
     ,defGasRNative "keylog" keylog
      (funType (TyList (tTyObject TyAny)) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
-      "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
-      \indexed by txid. \
-      \`$(keylog accounts \"Alice\" 123485945)`"
+      [LitExample "(keylog accounts \"Alice\" 123485945)"] "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
+      \indexed by txid."
+
     ,setTopLevelOnly $ defRNative "describe-table" descTable
      (funType tTyValue [("table",tableTy)])
-     "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
-     \`$(describe-table accounts)`"
+     [LitExample "(describe-table accounts)"]
+     "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
-     (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET."
+     (funType tTyValue [("keyset",tTyString)]) [] "Get metadata for KEYSET."
     ,setTopLevelOnly $ defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
-     "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
-     \`$(describe-module 'my-module)`"
+     [LitExample "(describe-module 'my-module)"]
+     "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ])
 
 descTable :: RNativeFun e
@@ -144,7 +148,7 @@ descKeySet i [TLitString t] = do
   r <- readRow (_faInfo i) KeySets (KeySetName t)
   case r of
     Just v -> return $ toTerm (toJSON v)
-    Nothing -> evalError' i $ "Keyset not found: " ++ show t
+    Nothing -> evalError' i $ "Keyset not found: " <> pretty t
 descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
@@ -167,7 +171,7 @@ descModule i [TLitString t] = do
             [ (tStr "name", tStr $ asString _interfaceName)
             , (tStr "code", tStr $ asString _interfaceCode)
             ] TyAny def
-    Nothing -> evalError' i $ "Module not found: " ++ show t
+    Nothing -> evalError' i $ "Module not found: " <> pretty t
 descModule i as = argsError i as
 
 -- | unsafe function to create domain from TTable.
@@ -189,7 +193,7 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
   guardTable i table
   mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
   case mrow of
-    Nothing -> failTx (_faInfo i) $ "read: row not found: " ++ show key
+    Nothing -> failTx (_faInfo i) $ "read: row not found: " <> pretty key
     Just cs -> do
       g <- gasPostRead i g0 cs
       fmap (g,) $ case cols of
@@ -217,7 +221,7 @@ columnsToObject' :: ToTerm a => Type (Term n) -> [(Info,ColumnId)] -> Columns a 
 columnsToObject' ty cols (Columns m) = do
   ps <- forM cols $ \(ci,col) ->
                 case M.lookup col m of
-                  Nothing -> evalError ci $ "read: invalid column: " ++ show col
+                  Nothing -> evalError ci $ "read: invalid column: " <> pretty col
                   Just v -> return (toTerm col,toTerm v)
   return $ TObject ps ty def
 
@@ -243,7 +247,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
     fmap (second (\b -> TList (reverse b) tblTy def)) $ (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
       mrow <- readRow fi (userTable tbl) k
       case mrow of
-        Nothing -> evalError fi $ "select: unexpected error, key not found in select: " ++ show k ++ ", table: " ++ show tbl
+        Nothing -> evalError fi $ "select: unexpected error, key not found in select: " <> pretty k <> ", table: " <> pretty tbl
         Just row -> do
           g <- gasPostRead i gPrev row
           let obj = columnsToObject tblTy row
@@ -254,7 +258,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
                   Nothing -> return (obj:rs)
                   Just cols -> (:rs) <$> columnsToObject' tblTy cols row
               | otherwise -> return rs
-            t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " ++ show t
+            t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " <> pretty t
 select' i as _ _ _ = argsError' i as
 
 
@@ -279,7 +283,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " ++ show key
+        Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " <> pretty key
         (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
@@ -345,7 +349,7 @@ write wt partial i as = do
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
 toColumns i = fmap (Columns . M.fromList) . mapM conv where
     conv (TLitString k, v) = return (ColumnId k,toPersistable v)
-    conv (k,_) = evalError' i $ "Only string keys are supported for database writes: " ++ show (k, typeof' k)
+    conv (k,_) = evalError' i $ "Only string keys are supported for database writes: " <> pretty (k, typeof' k)
 
 
 createTable' :: RNativeFun e
@@ -355,22 +359,22 @@ createTable' i [t@TTable {..}] = do
   success "TableCreated" $ createUserTable (_faInfo i) tn _tModule
 createTable' i as = argsError i as
 
-guardTable :: Show n => FunApp -> Term n -> Eval e ()
+guardTable :: Pretty n => FunApp -> Term n -> Eval e ()
 guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModule $
   enforceBlessedHashes i _tModule _tHash
-guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " ++ show t
+guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
 enforceBlessedHashes i mn h = do
   mmRs <- fmap _mdModule . HM.lookup mn <$> view (eeRefStore . rsModules)
   mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
   case mm of
-    Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
+    Nothing -> evalError' i $ "Internal error: Module " <> pretty mn <> " not found, could not enforce hashes"
     Just m ->
       case m of
         MDModule Module{..}
           | h == _mHash -> return () -- current version ok
           | h `HS.member` _mBlessed -> return () -- hash is blessed
           | otherwise -> evalError' i $
-            "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h
-        _ -> evalError' i $ "Internal error: expected module reference " ++ show mn
+            "Execution aborted, hash not blessed for module " <> pretty mn <> ": " <> pretty h
+        _ -> evalError' i $ "Internal error: expected module reference " <> pretty mn

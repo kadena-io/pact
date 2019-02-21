@@ -40,6 +40,7 @@ import           Pact.Repl                    (evalRepl', initReplState)
 import           Pact.Repl.Types              (ReplMode (StringEval), rEnv)
 import           Pact.Types.Runtime           (Exp, Info, ModuleData,
                                                eeRefStore, rsModules)
+import           Pact.Types.Pretty            (Pretty, renderCompactString)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Check
@@ -2230,21 +2231,23 @@ spec = describe "analyze" $ do
                   (CoreProp (Var (VarId 1) "table"))
                   (CoreProp (Var (VarId 2) "column")))))))
 
-  describe "UserShow (PreProp)" $ do
+  let pretty' :: Pretty a => a -> String
+      pretty' = renderCompactString
+  describe "pretty (PreProp)" $ do
     it "renders literals how you would expect" $ do
-      userShow (PreIntegerLit 1)            `shouldBe` "1"
-      userShow (PreStringLit "foo")         `shouldBe` "\"foo\""
-      userShow (PreDecimalLit 1) `shouldBe` "1.0"
+      pretty' (PreIntegerLit 1)            `shouldBe` "1"
+      pretty' (PreStringLit "foo")         `shouldBe` "\"foo\""
+      pretty' (PreDecimalLit 1) `shouldBe` "1.0"
       -- TODO: test rendering time literals
-      -- userShow (PreTimeLit _) `shouldBe` _
-      userShow (PreBoolLit True)            `shouldBe` "true"
-      userShow (PreBoolLit False)           `shouldBe` "false"
+      -- pretty' (PreTimeLit _) `shouldBe` _
+      pretty' (PreBoolLit True)            `shouldBe` "true"
+      pretty' (PreBoolLit False)           `shouldBe` "false"
 
     it "renders quantifiers how you would expect" $ do
-      userShow (PreForall 0 "foo" (EType SBool) (PreVar 0 "foo"))
+      pretty' (PreForall 0 "foo" (EType SBool) (PreVar 0 "foo"))
         `shouldBe`
         "(forall (foo:bool) foo)"
-      userShow (PreExists 0 "bar" (EType SBool) (PreApp "not" [PreVar 0 "bar"]))
+      pretty' (PreExists 0 "bar" (EType SBool) (PreApp "not" [PreVar 0 "bar"]))
         `shouldBe`
         "(exists (bar:bool) (not bar))"
 
@@ -2351,13 +2354,13 @@ spec = describe "analyze" $ do
 
     expectVerified code
 
-  describe "UserShow" $
+  describe "Pretty" $
     it "schema looks okay" $ do
       let schema = mkSObject $
             SCons' (SSymbol @"name") SStr $
               SCons' (SSymbol @"balance") SInteger
                 SNil'
-      userShow schema `shouldBe` "{ balance: integer, name: string }"
+      pretty' schema `shouldBe` "{balance: integer,name: string}"
 
   describe "at-properties verify" $ do
     let code = [text|

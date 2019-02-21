@@ -14,7 +14,6 @@ module Pact.Analyze.Types
   , module Pact.Analyze.Types.ObjUtil
   , module Pact.Analyze.Types.Shared
   , module Pact.Analyze.Types.Types
-  , module Pact.Analyze.Types.UserShow
 
   , Check(..)
   , HasVarId(varId)
@@ -45,7 +44,6 @@ import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
-import           Pact.Analyze.Types.UserShow
 
 data Quantifier
   = Forall' VarId Text QType

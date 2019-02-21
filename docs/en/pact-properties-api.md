@@ -988,7 +988,7 @@ Supported in properties only.
 
 * takes `t`: _a_
 * takes `r`: `string`
-* takes `time`: one of {"before", "after"}
+* takes `time`: one of {"before","after"}
 * produces `bool`
 * where _a_ is of type `table` or `string`
 
@@ -1004,7 +1004,7 @@ Supported in properties only.
 
 * takes `t`: _a_
 * takes `r`: `string`
-* takes `time`: one of {"before", "after"}
+* takes `time`: one of {"before","after"}
 * produces `object`
 * where _a_ is of type `table` or `string`
 

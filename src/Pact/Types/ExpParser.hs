@@ -56,11 +56,12 @@ import Prelude hiding (exp)
 import Data.String
 import Control.Lens hiding (prism)
 import Data.Default
-import Data.Text (Text,pack,unpack)
+import Data.Text (Text,unpack)
 import qualified Data.Text as T
 import qualified Data.Set as S
 
 import Pact.Types.Exp
+import Pact.Types.Pretty hiding (list, sep)
 import Pact.Types.Runtime (PactError(..),PactErrorType(..))
 import Pact.Types.Info
 
@@ -136,12 +137,13 @@ runCompile act cs a =
     (Left (TrivialError _ (Just err) expect)) -> case err of
       EndOfInput -> case S.toList expect of
         (Tokens (x :| _):_) -> doErr (getInfo x) "unexpected end of input"
-        (Label s:_) -> doErr def (toList s)
-        er -> doErr def (show er)
-      Label ne -> doErr def (toList ne)
-      Tokens (x :| _) -> doErr (getInfo x) $ showExpect expect
-    (Left e) -> doErr def (show e)
-    where doErr i s = Left $ PactError SyntaxError i def (pack s)
+        (Label s:_) -> doErr def (pretty (toList s))
+        er -> doErr def (viaShow er)
+      Label ne -> doErr def (pretty (toList ne))
+      Tokens (x :| _) -> doErr (getInfo x) $ pretty $ showExpect expect
+    (Left e) -> doErr def (viaShow e)
+    where doErr :: Info -> Doc -> Either PactError a
+          doErr i s = Left $ PactError SyntaxError i def s
           showExpect e = case labelText $ S.toList e of
             [] -> show (S.toList e)
             ss -> intercalate "," ss
