@@ -447,8 +447,8 @@ moduleTables modules ModuleData{..} = do
 
 moduleCapabilities :: ModuleData -> ExceptT VerificationFailure IO [Capability]
 moduleCapabilities md = do
-    toplevels <- withExceptT ModuleCheckFailure $ ExceptT $
-                   fmap sequence $ traverse typecheck defcapRefs
+    toplevels <- withExceptT ModuleCheckFailure $
+                   traverse (ExceptT . typecheck) defcapRefs
     hoist generalize $ traverse mkCap toplevels
 
   where
