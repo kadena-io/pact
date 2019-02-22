@@ -1,7 +1,10 @@
 {-# LANGUAGE GADTs           #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- | Types for representing capabilities in analysis.
+-- | Types for representing capabilities in analysis. Whereas colloquially in
+-- Pact we talk about "granting capabilities", in our symbolic modeling we
+-- speak more precisely of "granting tokens", where a token is effectively the
+-- combination of the name of a capability and a set of arguments to it.
 module Pact.Analyze.Types.Capability where
 
 import           Control.Lens                 ((<&>), makeLenses)
@@ -14,7 +17,7 @@ import           Pact.Analyze.LegacySFunArray (eitherArray, mkSFunArray)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 
--- | The "signature" for a capability in Pact.
+-- | The "signature" for a capability in Pact -- a family of tokens.
 data Capability where
   Capability :: SingList schema -> CapName -> Capability
 
@@ -25,24 +28,29 @@ instance Show Capability where
     . showChar ' '
     . showsPrec 11 capName
 
--- | Whether each capability is currently granted. The keys in this map are
--- statically determined by the number of @defcap@s in the module under
--- analysis.
-newtype CapabilityGrants
-  = CapabilityGrants { _capabilityGrants :: Map CapName (EKeySFunArray Bool) }
+-- | The index into the family that is a 'Capability'. Think of this of the
+-- arguments to a particular call of a capability.
+data Token where
+  Token :: SingList schema -> CapName -> S (ConcreteObj schema) -> Token
+
+-- | Whether any token is currently granted, organized by capability name. The
+-- keys in this map are statically determined by the number of @defcap@s in the
+-- module under analysis.
+newtype TokenGrants
+  = TokenGrants { _capabilityGrants :: Map CapName (EKeySFunArray Bool) }
   deriving Show
 
-mkCapabilityGrants :: [Capability] -> CapabilityGrants
-mkCapabilityGrants caps = CapabilityGrants $ Map.fromList $
+mkTokenGrants :: [Capability] -> TokenGrants
+mkTokenGrants caps = TokenGrants $ Map.fromList $
   caps <&> \(Capability schema name) ->
     ( name
     , EKeySFunArray (SObjectUnsafe schema) (mkSFunArray $ const sFalse)
     )
 
-extendGrants :: CapabilityGrants -> CapabilityGrants -> CapabilityGrants
-extendGrants (CapabilityGrants newGrants) (CapabilityGrants oldGrants) =
+extendGrants :: TokenGrants -> TokenGrants -> TokenGrants
+extendGrants (TokenGrants newGrants) (TokenGrants oldGrants) =
     -- We can intersect because both maps will contain the exact same keys
-    CapabilityGrants $ Map.intersectionWith eitherContains newGrants oldGrants
+    TokenGrants $ Map.intersectionWith eitherContains newGrants oldGrants
 
   where
     eitherContains :: EKeySFunArray Bool -> EKeySFunArray Bool -> EKeySFunArray Bool
@@ -52,18 +60,13 @@ extendGrants (CapabilityGrants newGrants) (CapabilityGrants oldGrants) =
         Nothing   -> error $
           "extendGrants: type mismatch: " ++ show ty1 ++ " vs " ++ show ty2
 
-instance Semigroup CapabilityGrants where
+instance Semigroup TokenGrants where
   (<>) = extendGrants
 
-instance Mergeable CapabilityGrants where
-  symbolicMerge f t (CapabilityGrants left) (CapabilityGrants right) =
+instance Mergeable TokenGrants where
+  symbolicMerge f t (TokenGrants left) (TokenGrants right) =
     -- Using intersectionWith here is fine, because we know that each map has
     -- all possible capabilities in the module.
-    CapabilityGrants $ Map.intersectionWith (symbolicMerge f t) left right
+    TokenGrants $ Map.intersectionWith (symbolicMerge f t) left right
 
--- | The index into the family that is a 'Capability'. Think of this of the
--- arguments to a particular call of a capability.
-data Token where
-  Token :: SingList schema -> CapName -> S (ConcreteObj schema) -> Token
-
-makeLenses ''CapabilityGrants
+makeLenses ''TokenGrants

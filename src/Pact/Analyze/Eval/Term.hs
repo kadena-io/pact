@@ -344,7 +344,7 @@ writeFields writeType tid tn sRk (S mProv obj)
 
 writeFields _ _ _ _ _ _ = vacuousMatch "the previous two cases are complete"
 
-accumulatingPendingGrants :: Analyze () -> Analyze CapabilityGrants
+accumulatingPendingGrants :: Analyze () -> Analyze TokenGrants
 accumulatingPendingGrants act = do
     emptyGrants <- view aeEmptyGrants
     previouslyPending <- swapIn emptyGrants
@@ -352,7 +352,7 @@ accumulatingPendingGrants act = do
     swapIn previouslyPending
 
   where
-    swapIn :: CapabilityGrants -> Analyze CapabilityGrants
+    swapIn :: TokenGrants -> Analyze TokenGrants
     swapIn next = do
       prev <- use $ latticeState.lasPendingGrants
       latticeState.lasPendingGrants .= next
@@ -378,9 +378,9 @@ capabilityAppToken (Capability schema capName) vids = do
     buildObject _ _ = error "invariant violation: list length mismatch"
 
 addPendingGrant :: Token -> Analyze ()
-addPendingGrant token = pendingCapabilityGranted token .= sTrue
+addPendingGrant token = pendingTokenGranted token .= sTrue
 
-extendingGrants :: CapabilityGrants -> Analyze (S a) -> Analyze (S a)
+extendingGrants :: TokenGrants -> Analyze (S a) -> Analyze (S a)
 extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
 
 evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))

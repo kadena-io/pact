@@ -126,9 +126,9 @@ data AnalyzeEnv
     , _aeModelTags    :: !(ModelTags 'Symbolic)
     , _aeInfo         :: !Info
     , _aeTrivialGuard :: !(S Guard)
-    , _aeEmptyGrants  :: CapabilityGrants
+    , _aeEmptyGrants  :: TokenGrants
     -- ^ the default, blank slate of grants, where no token is granted.
-    , _aeActiveGrants :: CapabilityGrants
+    , _aeActiveGrants :: TokenGrants
     -- ^ the current set of tokens that are granted, manipulated as a stack
     } deriving Show
 
@@ -170,7 +170,7 @@ mkAnalyzeEnv modName pactMetadata registry tables caps args tags info = do
       _ -> Nothing
 
   let columnIds'   = TableMap (Map.fromList columnIds)
-      emptyGrants  = mkCapabilityGrants caps
+      emptyGrants  = mkTokenGrants caps
       activeGrants = emptyGrants
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args guardPasses
@@ -240,7 +240,7 @@ data LatticeAnalyzeState a
     -- enforcement of the keyset.
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
-    , _lasPendingGrants       :: CapabilityGrants
+    , _lasPendingGrants       :: TokenGrants
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -322,7 +322,7 @@ mkInitialAnalyzeState tables caps = AnalyzeState
         , _lasCellsEnforced       = cellsEnforced
         , _lasCellsWritten        = cellsWritten
         , _lasConstraints         = sansProv sTrue
-        , _lasPendingGrants       = mkCapabilityGrants caps
+        , _lasPendingGrants       = mkTokenGrants caps
         , _lasExtra               = CellValues
           { _cvTableCells = mkSymbolicCells tables
           , _cvRowExists  = mkRowExists
@@ -561,24 +561,24 @@ cellWritten
 cellWritten tn cn sRk = latticeState.lasCellsWritten.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
-capabilityGranted
+tokenGranted
   :: HasCallStack
   => Token
-  -> Lens' CapabilityGrants (S Bool)
-capabilityGranted (Token schema capName sObj)
+  -> Lens' TokenGrants (S Bool)
+tokenGranted (Token schema capName sObj)
   = capabilityGrants
   . singular (ix capName)
   . eKArrayAt (SObjectUnsafe schema) sObj
   . sbv2S
 
-pendingCapabilityGranted
+pendingTokenGranted
   :: HasCallStack
   => Token
   -> Lens' (AnalyzeState a) (S Bool)
-pendingCapabilityGranted token
+pendingTokenGranted token
   = latticeState
   . lasPendingGrants
-  . capabilityGranted token
+  . tokenGranted token
 
 typedCell
   :: HasCallStack
