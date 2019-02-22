@@ -14,6 +14,7 @@ import           Pact.Analyze.LegacySFunArray (eitherArray, mkSFunArray)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 
+-- | The "signature" for a capability in Pact.
 data Capability where
   Capability :: SingList schema -> CapName -> Capability
 
@@ -24,6 +25,9 @@ instance Show Capability where
     . showChar ' '
     . showsPrec 11 capName
 
+-- | Whether each capability is currently granted. The keys in this map are
+-- statically determined by the number of @defcap@s in the module under
+-- analysis.
 newtype CapabilityGrants
   = CapabilityGrants { _capabilityGrants :: Map CapName (EKeySFunArray Bool) }
   deriving Show
@@ -54,10 +58,11 @@ instance Semigroup CapabilityGrants where
 instance Mergeable CapabilityGrants where
   symbolicMerge f t (CapabilityGrants left) (CapabilityGrants right) =
     -- Using intersectionWith here is fine, because we know that each map has
-    -- all possible capabilities:
+    -- all possible capabilities in the module.
     CapabilityGrants $ Map.intersectionWith (symbolicMerge f t) left right
 
--- | The index into the family that is a 'Capability'.
+-- | The index into the family that is a 'Capability'. Think of this of the
+-- arguments to a particular call of a capability.
 data Token where
   Token :: SingList schema -> CapName -> S (ConcreteObj schema) -> Token
 
