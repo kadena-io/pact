@@ -87,9 +87,13 @@ number = do
   let strToNum = foldl' (\x d -> 10*x + toInteger (digitToInt d))
   case dec of
     Nothing -> return $ LInteger (neg (strToNum 0 num))
-    Just d -> return $ LDecimal $ Decimal
-              (fromIntegral (length d))
-              (neg (strToNum (strToNum 0 num) d))
+    Just d ->
+      if length d > 255
+      then fail $ "decimal literal with too many digits to the right of the \
+        \decimal point (255 max): " ++ show num ++ "." ++ show d
+      else return $ LDecimal $ Decimal
+        (fromIntegral (length d))
+        (neg (strToNum (strToNum 0 num) d))
 {-# INLINE number #-}
 
 
