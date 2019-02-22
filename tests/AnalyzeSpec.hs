@@ -142,14 +142,15 @@ runVerification code = do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
-        Right (ModuleChecks propResults invariantResults _) -> pure $
+        Right (ModuleChecks propResults invariantResults pactResults _) -> pure $
           case findOf (traverse . traverse) isLeft propResults of
             Just (Left failure) -> Just $ TestCheckFailure failure
-            _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
-
+            _ -> case findOf (traverse . traverse) isLeft pactResults of
               Just (Left failure) -> Just $ TestCheckFailure failure
-              Just (Right _)      -> error "impossible: result of isLeft"
-              Nothing             -> Nothing
+              _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
+                Just (Left failure) -> Just $ TestCheckFailure failure
+                Just (Right _)      -> error "impossible: result of isLeft"
+                Nothing             -> Nothing
 
 runCheck :: Text -> Check -> IO (Maybe TestFailure)
 runCheck code check = do
@@ -217,6 +218,7 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
+  {-
   describe "decimal arithmetic" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
@@ -1364,9 +1366,11 @@ spec = describe "analyze" $ do
         case results of
           Left failure -> it "unexpectedly failed verification" $
             expectationFailure $ show failure
-          Right (ModuleChecks propResults invariantResults _) -> do
+          Right (ModuleChecks propResults invariantResults pactResults _) -> do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
+            it "should have no prop results" $
+              pactResults `shouldBe` HM.singleton "test" []
 
             case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
               -- see https://github.com/Z3Prover/z3/issues/1819
@@ -3038,5 +3042,34 @@ spec = describe "analyze" $ do
                   (not (< (f a) (f b)))
                   )
               )
+            |]
+      expectVerified code
+-}
+
+  describe "checking pacts" $ do
+    describe "translating a pact" $ do
+      let code = [text|
+            (defpact payment (payer payer-entity payee
+                              payee-entity amount)
+              @doc "this is a pact"
+              @model
+                [ (property (= (column-delta accounts 'balance) 1))
+                ]
+              (step-with-rollback payer-entity
+                (debit payer amount)
+                (credit payer amount))
+              (step payee-entity
+                (credit payee amount)))
+
+            (defun debit (acct amount)
+              (let ((bal (at 'balance (read accounts acct))))
+                (enforce (> amount 0)    "Non-positive amount")
+                (enforce (>= bal amount) "Insufficient Funds")
+                (update accounts acct { "balance": (- bal amount) })))
+
+            (defun credit (acct amount)
+              (let ((bal (at 'balance (read accounts acct))))
+                (enforce (> amount 0)    "Non-positive amount")
+                (update accounts acct { "balance": (+ bal amount) })))
             |]
       expectVerified code

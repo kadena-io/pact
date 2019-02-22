@@ -87,7 +87,6 @@ data TranslateFailureNoLoc
   | BadTimeType (AST Node)
   | NonConstKey (AST Node)
   | FailedVarLookup Text
-  | NoPacts (AST Node)
   | NoKeys (AST Node)
   | NoReadMsg (AST Node)
   | DeprecatedList Node
@@ -118,7 +117,6 @@ describeTranslateFailureNoLoc = \case
   BadTimeType node -> "Invalid: days / hours / minutes applied to non-integer / decimal: " <> tShow node
   NonConstKey k -> "Pact can currently only analyze constant keys in objects. Found " <> tShow k
   FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
-  NoPacts _node -> "Analysis of pacts is not yet supported"
   NoKeys _node  -> "`keys` is not yet supported"
   NoReadMsg _ -> "`read-msg` is not yet supported"
   DeprecatedList node -> "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
@@ -140,11 +138,15 @@ data TranslateEnv
     -- (see @mkTranslateEnv@) but in testing these return a constant @0@.
     , _teGenTagId       :: forall m. MonadState TagId  m => m TagId
     , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
+
+    -- If we've already entered a step, we need to emit intra-step resets
+    -- between this and following steps
+    , _teInStep         :: !Bool
     }
 
 mkTranslateEnv :: Info -> [Capability] -> [Arg] -> TranslateEnv
 mkTranslateEnv info caps args
-  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id)
+  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id) False
   where
     -- NOTE: like in Check's moduleFunChecks, this assumes that toplevel
     -- function arguments are the only variables for which we do not use munged
@@ -1231,8 +1233,22 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_Step                -> throwError' $ NoPacts astNode
-  AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
+  AST_Step _node entity exec rollback -> do
+    Some ty exec' <- translateNode exec
+    entity' <- case entity of
+      Nothing -> pure Nothing
+      Just tm -> do
+        Some SStr entity' <- translateNode tm
+        pure $ Just entity'
+    rollback' <- case rollback of
+      Nothing -> pure Nothing
+      Just tm -> Just <$> translateNode tm
+    inStep <- view teInStep
+    let step = Some SStr $ Sequence
+          (Some ty (Step entity' (exec' :< ty) rollback'))
+          (StrLit "step done")
+    pure $ if inStep then Some SStr (IntraStepReset step) else step
+
   AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
@@ -1337,7 +1353,7 @@ translateNodeNoGraph node =
       translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
         Map.empty mempty path0 Map.empty []
 
-      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
+      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0) False
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $

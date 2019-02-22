@@ -32,10 +32,10 @@ module Pact.Analyze.Check
 
 import           Control.Exception         as E
 import           Control.Lens              (at, each, filtered, ifoldrM, ifor,
-                                            itraversed, ix, toListOf,
-                                            traversed, view, (%~), (&), (<&>),
-                                            (?~), (^.), (^?), (^?!), (^@..),
-                                            _1, _2, _Left)
+                                            itraversed, ix, toListOf, traversed,
+                                            view, (%~), (&), (<&>), (?~), (^.),
+                                            (^?), (^?!), (^@..), _1, _2, _3,
+                                            _Left)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -63,25 +63,25 @@ import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
-                                            Info, dMeta, mModel, renderInfo,
-                                            renderParsed, tDef, tInfo, tMeta,
-                                            _dDefName, _tDef)
+                                            Def (..), DefType (..), Info, dMeta,
+                                            mModel, renderInfo, renderParsed,
+                                            tDef, tInfo, tMeta, _tDef)
 import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
                                             Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, mdModule,
                                             mdRefMap, tShow)
 import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Term           (DefName (..), DefType(Defcap),
-                                            _Ref, dDefType, moduleDefName,
-                                            moduleDefMeta)
+import           Pact.Types.Term           (DefName (..), DefType (Defcap),
+                                            dDefType, moduleDefMeta,
+                                            moduleDefName, _Ref)
+import           Pact.Types.Type           (_ftArgs)
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
                                             TopLevel (TopConst, TopFun, TopTable),
                                             UserType (_utFields, _utName),
                                             runTC, tcFailures, toplevelInfo)
-import           Pact.Types.Type           (_ftArgs)
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Alloc        (runAlloc)
@@ -144,6 +144,7 @@ type CheckResult = Either CheckFailure CheckSuccess
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
   , invariantChecks :: HM.HashMap Text (TableMap [CheckResult])
+  , pactChecks      :: HM.HashMap Text [CheckResult]
   , moduleWarnings  :: VerificationWarnings
   } deriving (Eq, Show)
 
@@ -575,14 +576,24 @@ parseModuleModelDecl exps = traverse parseDecl exps where
       _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")
 
--- Get the set (HashMap) of refs to functions in this module.
-moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
-moduleTypecheckableRefs ModuleData{..} = flip HM.filter _mdRefMap $ \case
-  Ref TDef{}   -> True
-  Ref TConst{} -> True
-  _            -> False
+data CheckableType
+  = CheckDefun
+  | CheckDefpact
+  | CheckDefconst
+
+-- | Get the set ('HM.HashMap') of refs to functions in this module.
+moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text (Ref, CheckableType)
+moduleTypecheckableRefs ModuleData{..} = flip HM.mapMaybe _mdRefMap $ \ref ->
+  case ref of
+    Ref (TDef def _) -> case _dDefType def of
+      Defun   -> Just (ref, CheckDefun)
+      Defpact -> Just (ref, CheckDefpact)
+      Defcap  -> Nothing
+    Ref TConst{} -> Just (ref, CheckDefconst)
+    _            -> Nothing
 
 
+-- | Module-level propery definitions and declarations
 data ModelDecl = ModelDecl
   { _moduleDefProperties :: !(HM.HashMap Text (DefinedProperty (Exp Info)))
   , _moduleProperties    :: ![ModuleProperty]
@@ -777,24 +788,28 @@ verifyModule modules moduleData = runExceptT $ do
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
 
-      typecheckableRefs :: HM.HashMap Text Ref
+      typecheckableRefs :: HM.HashMap Text (Ref, CheckableType)
       typecheckableRefs = moduleTypecheckableRefs moduleData
 
   -- For each ref, if it typechecks as a function (it'll be either a function
   -- or a constant), keep its signature.
   --
   ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType),
-    consts :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
-    (\name ref accum -> do
+    consts :: HM.HashMap Text (AST TC.Node),
+    pacts :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
+    (\name (ref, cType) accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
         (TopFun (FDefun _info _mod _name funType _args _body) _meta, _tcState)
-          -> accum & _1 . at name ?~ (ref, funType)
+          -> case cType of
+            CheckDefun   -> accum & _1 . at name ?~ (ref, funType)
+            CheckDefpact -> accum & _3 . at name ?~ (ref, funType)
+            _ -> error "invariant violation: this cannot be a constant"
         (TopConst _info _qualifiedName _type val _doc, _tcState)
           -> accum & _2 . at name ?~ val
         _ -> accum
     )
-    (HM.empty, HM.empty)
+    (HM.empty, HM.empty, HM.empty)
     typecheckableRefs
 
   let valueToProp' :: ETerm -> Except VerificationFailure EProp
@@ -813,28 +828,36 @@ verifyModule modules moduleData = runExceptT $ do
 
   caps <- moduleCapabilities moduleData
 
-  let funChecks' :: Either ParseFailure (HM.HashMap Text (Ref, [Located Check]))
-      funChecks' = traverse sequence funChecks
+  (pactChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
+    <- hoist generalize $ moduleFunChecks tables checkExps pacts consts' propDefs
 
-      modName :: ModuleName
+  let modName :: ModuleName
       modName = moduleDefName $ _mdModule moduleData
 
       verifyFunProps :: Ref -> Text -> [Located Check] -> IO [CheckResult]
       verifyFunProps = verifyFunctionProps modName tables caps
 
-  funChecks'' <- case funChecks' of
-    Left errs         -> throwError $ ModuleParseFailure errs
-    Right funChecks'' -> pure funChecks''
+  -- check for parse failures in any of the checks
+  funChecks' <- case traverse sequence funChecks of
+    Left errs        -> throwError $ ModuleParseFailure errs
+    Right funChecks' -> pure funChecks'
 
-  funChecks''' <- lift $ ifor funChecks'' $ \name (ref, check) ->
-    verifyFunProps ref name check
-  invariantChecks <- ifor typecheckableRefs $ \name ref ->
+  pactChecks' <- case traverse sequence pactChecks of
+    Left errs         -> throwError $ ModuleParseFailure errs
+    Right pactChecks' -> pure pactChecks'
+
+  -- actually check the checks
+  funChecks'' <- lift $ ifor funChecks' $ \name (ref, checks) ->
+    verifyFunProps ref name checks
+  pactChecks'' <- lift $ ifor pactChecks' $ \name (ref, checks) ->
+    verifyFunProps ref name checks
+  invariantChecks <- ifor typecheckableRefs $ \name (ref, _) ->
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants modName tables caps ref name
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
-  pure $ ModuleChecks funChecks''' invariantChecks warnings
+  pure $ ModuleChecks funChecks'' invariantChecks pactChecks'' warnings
 
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
 renderVerifiedModule = \case
@@ -848,10 +871,11 @@ renderVerifiedModule = \case
     ["Invalid reference type given to typechecker."]
   Left (FailedConstTranslation msg) ->
     [T.pack msg]
-  Right (ModuleChecks propResults invariantResults warnings) ->
+  Right (ModuleChecks propResults invariantResults pactResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         invariantResults' = toListOf (traverse.traverse.each) invariantResults
-    in (describeCheckResult <$> propResults' <> invariantResults') <>
+        pactResults'      = toListOf (traverse.each)          pactResults
+    in (describeCheckResult <$> propResults' <> invariantResults' <> pactResults') <>
          [describeVerificationWarnings warnings]
 
 -- | Verifies a one-off 'Check' for a function.

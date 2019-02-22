@@ -18,7 +18,7 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               _2, _Just)
 import           Control.Monad               (void)
 import           Control.Monad.Except        (Except, MonadError (throwError))
-import           Control.Monad.Reader        (MonadReader (local), runReaderT)
+import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
@@ -26,10 +26,10 @@ import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (EqSymbolic ((.==)), HasKind,
+import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind,
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymVal, ite,
-                                              literal, (.<))
+                                              literal, (.<), uninterpret)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.String             as SBV
 import           Data.SBV.Tuple              (tuple)
@@ -610,6 +610,52 @@ evalTerm = \case
       Some (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash` on lists"
       Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
+
+  Step mEntity (tm :< _) mRollback -> do
+    case mEntity of
+      Nothing -> pure ()
+      Just expectedEntity -> do
+        actualEntity    <- view currentEntity
+        expectedEntity' <- eval expectedEntity
+        markFailure $ actualEntity ./= expectedEntity'
+
+    case mRollback of
+      Nothing       -> eval tm
+      Just rollback -> local (analyzeEnv . aeRollbacks %~ (rollback:)) $ eval tm
+
+  IntraStepReset tm -> do
+    rollbacks <- view $ analyzeEnv . aeRollbacks
+    tables    <- view $ analyzeEnv . aeTables
+    oldState  <- use id
+    oldEnv    <- ask
+    let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
+                                  (mkFreeArray "txDecimals")
+                                  (mkFreeArray "txIntegers")
+
+        intCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) (mkSFunArray (const 0))
+        decCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
+        intColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) 0
+        decColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (fromInteger 0)
+        newState = oldState
+          & latticeState . lasIntCellDeltas        .~ intCellDeltas
+          & latticeState . lasDecCellDeltas        .~ decCellDeltas
+          & latticeState . lasIntColumnDeltas      .~ intColumnDeltas
+          & latticeState . lasDecColumnDeltas      .~ decColumnDeltas
+          & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
+          -- & latticeState . lasExtra . cvRowExists .~  i think this one is okay
+        newEnv = oldEnv
+          & aePactMetadata . pmEntity .~ uninterpretS "entity"
+          -- & registry                  .~ undefined
+          & aeTxMetadata              .~ txMetadata
+          -- & aeScope                   .~ undefined
+          -- & aeGuardPasses             .~ undefined
+
+    id .= newState
+    -- both continue and roll back via nondeterminism
+    local (analyzeEnv .~ newEnv) $ ite (uninterpret "nondet")
+      -- (return value never used)
+      (evalETerm tm            >> pure "step done")
+      (for rollbacks evalETerm >> pure "step done")
 
 -- For now we only allow these three types to be formatted.
 --

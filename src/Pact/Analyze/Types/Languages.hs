@@ -1342,6 +1342,15 @@ data Term (a :: Ty) where
   ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr -> Term 'TyTime
   Hash            :: ETerm                              -> Term 'TyStr
 
+  -- Pacts
+  Step
+    :: Maybe (Term 'TyStr) -- ^ entity
+    -> Term a :< SingTy a  -- ^ exec
+    -> Maybe ETerm         -- ^ rollback
+    -> Term a
+
+  IntraStepReset :: ETerm -> Term 'TyStr
+
 showsTerm :: SingTy ty -> Int -> Term ty -> ShowS
 showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   CoreTerm tm' -> showString "CoreTerm " . showsTm 11 tm'
@@ -1453,6 +1462,14 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
   PactId -> showString "PactId"
+  Step mEntity (exec :< _execTy) mRollback
+    -> showString "Step "
+     . showsPrec 11 mEntity
+     . showChar ' '
+     . showsTm 11 exec
+     . showChar ' '
+     . showsPrec 11 mRollback
+  IntraStepReset step -> showString "IntraStepReset " . showsPrec 11 step
 
 showsProp :: SingTy ty -> Int -> Prop ty -> ShowS
 showsProp ty p = withSing ty $ \case
@@ -1521,6 +1538,12 @@ prettyTerm ty = \case
   MkKsRefGuard name    -> parensSep ["keyset-ref-guard", pretty name]
   MkPactGuard name     -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard ty' o n  -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
+  Step mEntity (exec :< execTy) mRollback
+    -> parensSep $ ["step"]
+      ++ maybe [] (\entity -> [prettyTm entity]) mEntity
+      ++ [singPrettyTm execTy exec]
+      ++ maybe [] (\(Some  ty' tm) -> [singPrettyTm ty' tm]) mRollback
+  IntraStepReset step -> pretty step
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2
