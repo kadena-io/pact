@@ -517,6 +517,20 @@ instance Show ESchema where
       showString "ESchema "
     . showsPrec 11 ty
 
+mkESchema :: [(Text, EType)] -> ESchema
+mkESchema tys = case go tys of
+                  ESchema unsorted -> ESchema $ mkSchema unsorted
+  where
+    go :: [(Text, EType)] -> ESchema
+    go [] = ESchema SNil'
+    go ((name, (EType ty)):rest) =
+      case go rest of
+        ESchema restSchema ->
+          case someSymbolVal (T.unpack name) of
+            SomeSymbol (_ :: Proxy k) ->
+              withSing ty $ withTypeable ty $
+                ESchema $ SCons' (SSymbol @k) ty restSchema
+
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
 varIdColumns :: SingList m -> Map Text VarId

@@ -50,7 +50,6 @@ import qualified Data.List                 as List
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (mapMaybe)
-import           Data.Proxy                (Proxy)
 import           Data.SBV                  (Symbolic)
 import qualified Data.SBV                  as SBV
 import qualified Data.SBV.Control          as SBV
@@ -60,7 +59,6 @@ import qualified Data.Set                  as Set
 import           Data.Text                 (Text)
 import qualified Data.Text                 as T
 import           Data.Traversable          (for)
-import           GHC.TypeLits              (SomeSymbol(..), someSymbolVal)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
@@ -470,15 +468,6 @@ moduleCapabilities md = do
             Just ety -> pure (name, ety)
             Nothing  -> throwError $
               TypeTranslationFailure "couldn't translate argument type" ty
-
-        mkESchema :: [(Text, EType)] -> ESchema
-        mkESchema [] = ESchema SNil'
-        mkESchema ((name, (EType ty)):rest) =
-          case mkESchema rest of
-            ESchema restSchema ->
-              case someSymbolVal (T.unpack name) of
-                SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $
-                  ESchema $ SCons' (SSymbol @k) ty restSchema
 
         (capName, pactArgs) = case toplevel of
           TopFun FDefun{_fName,_fType} _ ->
