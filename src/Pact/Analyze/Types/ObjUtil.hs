@@ -32,7 +32,7 @@ module Pact.Analyze.Types.ObjUtil
 
   -- * Utilities
   , mkSObject
-  , mkSchema
+  , normalizeSchema
   ) where
 
 import           Data.Type.Bool           (If)
@@ -194,5 +194,5 @@ insert k v (SCons k' v' kvs) = case compareKeys k k' of
 mkSObject :: Sing schema -> Sing ('TyObject (Normalize schema))
 mkSObject = SObjectUnsafe . eraseList . normalize . UnSingList
 
-mkSchema :: SingList schema -> SingList (Normalize schema)
-mkSchema = eraseList . normalize . UnSingList
+normalizeSchema :: SingList schema -> SingList (Normalize schema)
+normalizeSchema = eraseList . normalize . UnSingList

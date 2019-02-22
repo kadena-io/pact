@@ -519,7 +519,7 @@ instance Show ESchema where
 
 mkESchema :: [(Text, EType)] -> ESchema
 mkESchema tys = case go tys of
-                  ESchema unsorted -> ESchema $ mkSchema unsorted
+                  ESchema unsorted -> ESchema $ normalizeSchema unsorted
   where
     go :: [(Text, EType)] -> ESchema
     go [] = ESchema SNil'
