@@ -375,7 +375,7 @@ capabilityAppToken (Capability schema capName) vids = do
         ( SBVI.SBV sval
         , buildObject tys avals
         )
-    buildObject _ _ = vacuousMatch "buildObject: list length mismatch"
+    buildObject _ _ = error "invariant violation: list length mismatch"
 
 addPendingGrant :: Token -> Analyze ()
 addPendingGrant token = pendingCapabilityGranted token .= sTrue

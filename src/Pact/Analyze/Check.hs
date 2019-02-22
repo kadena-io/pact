@@ -484,7 +484,7 @@ moduleCapabilities md = do
           TopFun FDefun{_fName,_fType} _ ->
             (CapName $ T.unpack _fName, _ftArgs _fType)
           _ ->
-            vacuousMatch "invariant: defcap toplevel must be a defun"
+            error "invariant violation: defcap toplevel must be a defun"
 
 data PropertyScope
   = Everywhere
