@@ -127,7 +127,9 @@ data AnalyzeEnv
     , _aeInfo         :: !Info
     , _aeTrivialGuard :: !(S Guard)
     , _aeEmptyGrants  :: CapabilityGrants
+    -- ^ the default, blank slate of grants, where no token is granted.
     , _aeActiveGrants :: CapabilityGrants
+    -- ^ the current set of tokens that are granted, manipulated as a stack
     } deriving Show
 
 mkAnalyzeEnv
