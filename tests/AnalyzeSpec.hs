@@ -813,6 +813,30 @@ spec = describe "analyze" $ do
           |]
     expectVerified code
 
+  describe "trivial capability which always fails" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              (enforce false "tx always fails"))
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                true))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "trivial capability which always succeeds" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                true))
+          |]
+    expectPass code $ Valid Success'
+
   describe "enforce-one.1" $ do
     let code =
           [text|

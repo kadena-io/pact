@@ -26,8 +26,9 @@ import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact
-import           Pact.Types.Pretty          hiding (indent)
+import qualified Pact.Types.Lang            as Pact
 import qualified Pact.Types.Persistence     as Pact
+import           Pact.Types.Pretty          hiding (indent)
 
 import           Pact.Analyze.Model.Graph   (linearize)
 import           Pact.Analyze.Types
@@ -181,25 +182,36 @@ showEvent ksProvs tags event = do
         let displayVids show' =
               (\vid -> indent1 $ display mtVars vid show') <$> vids
 
+            displayCallScope :: Text -> Pact.ModuleName -> Text -> [Text]
+            displayCallScope noun modName funName =
+              -- TODO(joel): convert all of this to Doc
+              let header = renderCompactText' $
+                           "entering " <> pretty noun <> " " <> pretty modName
+                        <> "." <> pretty funName <> " with "
+                        <> if length vids > 1 then "arguments" else "argument"
+              in header : (displayVids showArg ++ [emptyLine])
+
         pure $ case scopeTy of
           LetScope ->
             "let" : displayVids showVar
           ObjectScope ->
             "destructuring object" : displayVids showVar
           FunctionScope modName funName ->
-            -- TODO(joel): convert all of this to Doc
-            let header = renderCompactText' $
-                         "entering function " <> pretty modName <> "."
-                      <> pretty funName <> " with "
-                      <> if length vids > 1 then "arguments" else "argument"
-            in header : (displayVids showArg ++ [emptyLine])
+            displayCallScope "function" modName funName
+          CapabilityScope modName (CapName capName) ->
+            displayCallScope "capability" modName $ T.pack capName
+
       TracePopScope _ scopeTy tid _ -> do
         modify pred
+        let returnOutput =
+              [ "returning with " <> display mtReturns tid showTVal
+              , emptyLine
+              ]
         pure $ case scopeTy of
           LetScope -> []
           ObjectScope -> []
-          FunctionScope _ _ ->
-            ["returning with " <> display mtReturns tid showTVal, emptyLine]
+          FunctionScope _ _ -> returnOutput
+          CapabilityScope _ _ -> returnOutput
 
   where
     emptyLine :: Text
