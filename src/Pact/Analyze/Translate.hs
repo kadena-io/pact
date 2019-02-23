@@ -96,6 +96,7 @@ data TranslateFailureNoLoc
   | FreeVarInvariantViolation Text
   | UnhandledType Node (Pact.Type Pact.UserType)
   | SortLiteralObjError String (Existential (Core Term))
+  | CapabilityNotFound CapName
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -127,6 +128,7 @@ describeTranslateFailureNoLoc = \case
   FreeVarInvariantViolation msg -> msg
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   SortLiteralObjError msg tm -> T.pack $ msg ++ show tm
+  CapabilityNotFound (CapName cn) -> "Found a reference to capability that does not exist: " <> T.pack cn
 
 data TranslateEnv
   = TranslateEnv
@@ -527,16 +529,18 @@ translateBody = \case
     Some ty asts' <- translateBody asts
     pure $ Some ty $ Sequence ast' asts'
 
+lookupCapability :: CapName -> TranslateM Capability
+lookupCapability capName = do
+  mCap <- view $ teCapabilities.at capName
+  case mCap of
+    Just cap -> pure cap
+    Nothing  -> throwError' $ CapabilityNotFound capName
+
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
   bindingTs <- traverse translateBinding bindingAs
   rhsETs <- traverse translateNode rhsAs
   retTid <- genTagId
-  mCap <- case scopeTy of
-    CapabilityScope _ capName ->
-      view $ teCapabilities.at capName
-    _ ->
-      pure Nothing
 
   let -- Wrap the 'Term' body of clauses in a 'Let' for each of the bindings
       wrapWithLets :: Term a -> Term a
@@ -546,21 +550,20 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
         tm
         (zip rhsETs bindingTs)
 
-      possiblyGranting :: Term a -> Term a
-      possiblyGranting tm = case mCap of
-        Just cap ->
-          Granting cap vids tm
-        Nothing  ->
-          tm
-
       vids :: [VarId]
       vids = toListOf (traverse.located.bVid) bindingTs
 
   fmap (mapExistential wrapWithLets) $
-    withNewScope scopeTy bindingTs retTid $
-      withNodeVars bindingAs bindingTs $
-        fmap (mapExistential possiblyGranting) $
-          translateBody body
+    withNodeVars bindingAs bindingTs $
+      withNewScope scopeTy bindingTs retTid $
+        case scopeTy of
+          CapabilityScope _ capName -> do
+            cap <- lookupCapability capName
+            fmap (mapExistential $ Granting cap vids) $
+              translateBody body
+
+          _ ->
+            translateBody body
 
 translateObjBinding
   :: [(Named Node, AST Node)]
