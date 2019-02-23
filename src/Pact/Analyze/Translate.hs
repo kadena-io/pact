@@ -543,12 +543,15 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
       wrapWithLets tm = foldr
         (\(rhsET, Located _ (Binding vid _ (Munged munged) _)) body' ->
           Let munged vid retTid rhsET body')
-        (case mCap of
-           Just cap ->
-             Granting cap vids tm
-           Nothing  ->
-             tm)
+        tm
         (zip rhsETs bindingTs)
+
+      possiblyGranting :: Term a -> Term a
+      possiblyGranting tm = case mCap of
+        Just cap ->
+          Granting cap vids tm
+        Nothing  ->
+          tm
 
       vids :: [VarId]
       vids = toListOf (traverse.located.bVid) bindingTs
@@ -556,7 +559,8 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
   fmap (mapExistential wrapWithLets) $
     withNewScope scopeTy bindingTs retTid $
       withNodeVars bindingAs bindingTs $
-        translateBody body
+        fmap (mapExistential possiblyGranting) $
+          translateBody body
 
 translateObjBinding
   :: [(Named Node, AST Node)]
