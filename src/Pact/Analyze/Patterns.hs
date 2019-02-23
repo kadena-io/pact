@@ -197,12 +197,11 @@ pattern AST_Bind node object bindings schema body <-
       [object]
 
 pattern AST_WithCapability
-  :: Node
-  -> AST Node
+  :: AST Node
   -> [AST Node]
   -> AST Node
-pattern AST_WithCapability node app body <-
-  App node
+pattern AST_WithCapability app body <-
+  App _node
       (NativeFuncSpecial "with-capability" (List _ body))
       [app]
 

@@ -985,7 +985,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     objectT               <- translateNode objectA
     withNodeContext node $ translateObjBinding bindings objTy body objectT
 
-  AST_WithCapability _ appA bodyA -> do
+  AST_WithCapability appA bodyA -> do
     appET <- translateNode appA
     Some ty bodyT <- translateBody bodyA
     pure $ Some ty $ WithCapability appET bodyT
