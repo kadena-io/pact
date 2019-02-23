@@ -345,8 +345,15 @@ tagGuard node = do
   pure tid
 
 -- Note: uses left-biased union to prefer new vars
-withNodeVars :: Map Node (Munged, VarId) -> TranslateM a -> TranslateM a
-withNodeVars nodeVars = local (teNodeVars %~ Map.union nodeVars)
+withNodeVars :: [Named Node] -> [Located Binding] -> TranslateM a -> TranslateM a
+withNodeVars bindingAs bindingTs = local (teNodeVars %~ Map.union nodeVars)
+  where
+    nodeVars :: Map Node (Munged, VarId)
+    nodeVars = Map.fromList
+      [ (node, (munged, vid))
+      | ((Named _ node _), _located -> Binding vid _ munged _)
+          <- zip bindingAs bindingTs
+      ]
 
 maybeTranslateUserType
   :: Maybe (Set Text)
@@ -546,16 +553,9 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
       vids :: [VarId]
       vids = toListOf (traverse.located.bVid) bindingTs
 
-      nodeVars :: Map Node (Munged, VarId)
-      nodeVars = Map.fromList
-        [ (node, (munged, vid))
-        | ((Named _ node _), _located -> Binding vid _ munged _)
-            <- zip bindingAs bindingTs
-        ]
-
   fmap (mapExistential wrapWithLets) $
     withNewScope scopeTy bindingTs retTid $
-      withNodeVars nodeVars $
+      withNodeVars bindingAs bindingTs $
         translateBody body
 
 translateObjBinding
@@ -603,16 +603,9 @@ translateObjBinding pairs schema bodyA rhsT = do
           innerBody
           (zip cols bindingTs)
 
-      nodeVars :: Map Node (Munged, VarId)
-      nodeVars = Map.fromList
-        [ (node, (munged, vid))
-        | ((Named _ node _), _located -> Binding vid _ munged _)
-            <- zip bindingAs bindingTs
-        ]
-
   fmap (mapExistential wrapWithLets) $
     withNewScope ObjectScope bindingTs retTid $
-      withNodeVars nodeVars $
+      withNodeVars bindingAs bindingTs $
         translateBody bodyA
 
 pattern EmptyList :: Term ('TyList a)
