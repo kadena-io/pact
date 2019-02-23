@@ -346,13 +346,13 @@ tagGuard node = do
 
 -- Note: uses left-biased union to prefer new vars
 withNodeVars :: [Named Node] -> [Located Binding] -> TranslateM a -> TranslateM a
-withNodeVars bindingAs bindingTs = local (teNodeVars %~ Map.union nodeVars)
+withNodeVars namedNodes bindings = local (teNodeVars %~ Map.union nodeVars)
   where
     nodeVars :: Map Node (Munged, VarId)
     nodeVars = Map.fromList
       [ (node, (munged, vid))
       | ((Named _ node _), _located -> Binding vid _ munged _)
-          <- zip bindingAs bindingTs
+          <- zip namedNodes bindings
       ]
 
 maybeTranslateUserType
