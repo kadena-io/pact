@@ -89,8 +89,7 @@ number = do
     Nothing -> return $ LInteger (neg (strToNum 0 num))
     Just d ->
       if length d > 255
-      then fail $ "decimal literal with too many digits to the right of the \
-        \decimal point (255 max): " ++ show num ++ "." ++ show d
+      then fail $ "decimal precision overflow (255 max): " ++ show num ++ "." ++ show d
       else return $ LDecimal $ Decimal
         (fromIntegral (length d))
         (neg (strToNum (strToNum 0 num) d))
