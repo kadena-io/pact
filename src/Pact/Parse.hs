@@ -88,11 +88,12 @@ number = do
   case dec of
     Nothing -> return $ LInteger (neg (strToNum 0 num))
     Just d ->
-      if length d > 255
-      then fail $ "decimal precision overflow (255 max): " ++ show num ++ "." ++ show d
-      else return $ LDecimal $ Decimal
-        (fromIntegral (length d))
-        (neg (strToNum (strToNum 0 num) d))
+      let precision = length d
+      in if precision > 255
+         then fail $ "decimal precision overflow (255 max): " ++ show num ++ "." ++ show d
+         else return $ LDecimal $ Decimal
+           (fromIntegral precision)
+           (neg (strToNum (strToNum 0 num) d))
 {-# INLINE number #-}
 
 
