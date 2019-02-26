@@ -837,6 +837,35 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "requesting token that was never granted" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (require-capability (CAP 100)))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "requesting token that was granted" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              (enforce-keyset "foo"))
+
+            (defun do-require ()
+              (require-capability (CAP 100)))
+
+            (defun test:bool ()
+              @model [(property (authorized-by "foo"))]
+              (with-capability (CAP 100)
+                (do-require)))
+          |]
+    expectPass code $ Satisfiable Success'
+    expectPass code $ Valid $ Success' .=> Inj (GuardPassed "foo")
+    expectVerified code
+
   describe "enforce-one.1" $ do
     let code =
           [text|

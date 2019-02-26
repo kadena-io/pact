@@ -205,6 +205,10 @@ pattern AST_WithCapability app body <-
       (NativeFuncSpecial "with-capability" (List _ body))
       [app]
 
+pattern AST_RequireCapability :: forall a. AST a -> AST a
+pattern AST_RequireCapability app <-
+  App _node (NativeFunc "require-capability") [app]
+
 -- pattern RawTableName :: Text -> AST Node
 -- pattern RawTableName t <- Table (Node (TcId _ t _) _) _
 

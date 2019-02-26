@@ -1309,6 +1309,7 @@ data Term (a :: Ty) where
   -- Capabilities
   WithCapability  :: ETerm      -> Term a            -> Term a
   Granting        :: Capability -> [VarId] -> Term a -> Term a
+  HasGrant        :: Capability -> [(Text, VarId)] -> Term 'TyBool
 
   -- Reading from environment
   ReadKeySet      :: Term 'TyStr -> Term 'TyGuard
@@ -1388,6 +1389,11 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 b
     . showChar ' '
     . showsPrec 11 c
+  HasGrant a b ->
+      showString "HasGrant "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
   MkKsRefGuard a ->
       showString "MkKsRefGuard "
     . showsPrec 11 a
@@ -1499,13 +1505,15 @@ prettyTerm ty = \case
   --
   -- TODO: perhaps track whether -guard or -keyset was used for this?
   --
-  Enforce _ (GuardPasses _ x)    -> parensSep ["enforce-guard", pretty x]
-  Enforce _ x                    -> parensSep ["enforce", pretty x]
+  Enforce _ (GuardPasses _ x) -> parensSep ["enforce-guard", pretty x]
+  Enforce _ (HasGrant c vs)   -> parensSep ["require-capability", parensSep (pretty c : map (pretty . fst) vs)]
+  Enforce _ x                 -> parensSep ["enforce", pretty x]
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
 
   WithCapability a x   -> parensSep ["with-capability", pretty a, prettyTerm ty x]
   Granting _ _ x       -> prettyTerm ty x
+  HasGrant _ _         -> error "HasGrant should only appear inside of an Enforce"
   Read _ _ tab x       -> parensSep ["read", pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
   PactVersion          -> parensSep ["pact-version"]

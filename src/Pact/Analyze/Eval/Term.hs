@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 -- | Symbolic evaluation of program 'Term's (as opposed to the 'Invariant' or
 -- 'Prop' languages).
@@ -383,6 +384,9 @@ addPendingGrant token = pendingTokenGranted token .= sTrue
 extendingGrants :: TokenGrants -> Analyze (S a) -> Analyze (S a)
 extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
 
+isGranted :: Token -> Analyze (S Bool)
+isGranted t = view $ activeGrants.tokenGranted t
+
 evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
@@ -442,6 +446,9 @@ evalTerm = \case
     r <- evalTerm t
     addPendingGrant =<< capabilityAppToken cap vids
     pure r
+
+  HasGrant cap (unzip -> (_, vids)) ->
+    isGranted =<< capabilityAppToken cap vids
 
   Read objTy tid tn rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey

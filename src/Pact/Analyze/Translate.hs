@@ -985,6 +985,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty withBodyT <- translateBody withBodyA
     pure $ Some ty $ WithCapability appET withBodyT
 
+  AST_RequireCapability (AST_InlinedApp _ funName bindings _) -> do
+    let capName = CapName $ T.unpack funName
+    cap <- lookupCapability capName
+    withTranslatedBindings bindings $ \bindingTs _retTid -> do
+      let vars = (\b -> (_mungedName . _bmName $ b, _bVid b)) . _located <$>
+            bindingTs
+      pure $ Some SBool $ Enforce Nothing $ HasGrant cap vars
+
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
       seconds ^. aNode . aTy == TyPrim Pact.TyDecimal -> do
