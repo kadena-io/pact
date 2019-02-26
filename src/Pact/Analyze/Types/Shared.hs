@@ -74,6 +74,7 @@ import qualified Pact.Types.Pretty            as Pretty
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString)
 
+import           Pact.Analyze.LegacySFunArray (SFunArray)
 import           Pact.Analyze.Feature         hiding (Constraint, Doc, Type,
                                                dec, ks, obj, str, time)
 import           Pact.Analyze.Orphans         ()
@@ -214,6 +215,13 @@ instance HasKind ColumnName where
 
 instance IsString ColumnName where
   fromString = ColumnName
+
+newtype CapName
+  = CapName String
+  deriving (Eq, Ord, Show)
+
+instance IsString CapName where
+  fromString = CapName
 
 newtype Str = Str String
   deriving (Eq, Ord, Show, SMTValue, HasKind, Typeable, IsString)
@@ -508,6 +516,20 @@ instance Show ESchema where
   showsPrec p (ESchema ty) = showParen (p > 10) $
       showString "ESchema "
     . showsPrec 11 ty
+
+mkESchema :: [(Text, EType)] -> ESchema
+mkESchema tys = case go tys of
+                  ESchema unsorted -> ESchema $ normalizeSchema unsorted
+  where
+    go :: [(Text, EType)] -> ESchema
+    go [] = ESchema SNil'
+    go ((name, (EType ty)):rest) =
+      case go rest of
+        ESchema restSchema ->
+          case someSymbolVal (T.unpack name) of
+            SomeSymbol (_ :: Proxy k) ->
+              withSing ty $ withTypeable ty $
+                ESchema $ SCons' (SSymbol @k) ty restSchema
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
@@ -1084,6 +1106,80 @@ data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]
   , propertyBody :: a
   } deriving Show
+
+-- | SFunArray with existential value type
+data EValSFunArray k where
+  EValSFunArray :: HasKind k => SingTy v -> SFunArray k (Concrete v) -> EValSFunArray k
+
+instance Show (EValSFunArray k) where
+  showsPrec p (EValSFunArray ty sfunarr) = showParen (p > 10) $
+      showString "EValSFunArray "
+    . showsPrec 11 ty
+    . showChar ' '
+    . withHasKind ty (showsPrec 11 sfunarr)
+
+eVArrayAt
+  :: forall k v
+   . SingTy v
+  -> S k
+  -> Lens' (EValSFunArray k) (SBV (Concrete v))
+eVArrayAt ty (S _ symKey) = lens getter setter where
+
+  getter :: EValSFunArray k -> SBV (Concrete v)
+  getter (EValSFunArray ty' arr) = case singEq ty ty' of
+    Just Refl -> SBV.readArray arr symKey
+    Nothing   -> error $
+      "eVArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
+
+  setter :: EValSFunArray k -> SBV (Concrete v) -> EValSFunArray k
+  setter (EValSFunArray ty' arr) val = case singEq ty ty' of
+    Just Refl -> withSymVal ty $ EValSFunArray ty $ SBV.writeArray arr symKey val
+    Nothing   -> error $
+      "eVArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
+
+instance Mergeable (EValSFunArray k) where
+  symbolicMerge force test (EValSFunArray ty1 arr1) (EValSFunArray ty2 arr2)
+    = case singEq ty1 ty2 of
+      Nothing   -> error "mismatched types when merging two EValSFunArrays"
+      Just Refl -> withSymVal ty1 $
+        EValSFunArray ty1 $ symbolicMerge force test arr1 arr2
+
+-- | SFunArray with existential key type
+data EKeySFunArray v where
+  EKeySFunArray :: SingTy k -> SFunArray (Concrete k) v -> EKeySFunArray v
+
+instance SymVal v => Show (EKeySFunArray v) where
+  showsPrec p (EKeySFunArray ty sfunarr) = showParen (p > 10) $
+      showString "EKeySFunArray "
+    . showsPrec 11 ty
+    . showChar ' '
+    . withHasKind ty (showsPrec 11 sfunarr)
+
+eKArrayAt
+  :: forall k v
+   . SymVal v
+  => SingTy k
+  -> S (Concrete k)
+  -> Lens' (EKeySFunArray v) (SBV v)
+eKArrayAt ty (S _ symKey) = lens getter setter
+  where
+    getter :: EKeySFunArray v -> SBV v
+    getter (EKeySFunArray ty' arr) = case singEq ty ty' of
+      Just Refl -> SBV.readArray arr symKey
+      Nothing   -> error $
+        "eKArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
+
+    setter :: EKeySFunArray v -> SBV v -> EKeySFunArray v
+    setter (EKeySFunArray ty' arr) val = case singEq ty ty' of
+      Just Refl -> EKeySFunArray ty $ SBV.writeArray arr symKey val
+      Nothing   -> error $
+        "eKArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
+
+instance SymVal v => Mergeable (EKeySFunArray v) where
+  symbolicMerge f t (EKeySFunArray ty1 arr1) (EKeySFunArray ty2 arr2) =
+    case singEq ty1 ty2 of
+      Nothing   -> error "mismatched types when merging two EKeySFunArrays"
+      Just Refl -> EKeySFunArray ty1 $ symbolicMerge f t arr1 arr2
 
 makeLenses ''Located
 makePrisms ''AVal

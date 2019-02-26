@@ -261,7 +261,7 @@ the `ks` column in the `accounts` table for the row keyed by the variable
 `name`, and enforce it using `enforce-keyset`:
 
 ```lisp
-(row-enforced 'accounts 'ks name)
+(row-enforced accounts 'ks name)
 ```
 
 For some examples of `row-enforced` in action, see "A simple balance transfer
@@ -272,10 +272,10 @@ example" and the section on "universal and existential quantification" below.
 To describe database table access, the property language has the following
 properties:
 
-- `(table-written 'accounts)` - that any cell of the table `accounts` is written
-- `(table-read 'accounts)` - that any cell of the table `accounts` is read
-- `(row-written 'accounts k)` - that the row keyed by the variable `k` is written
-- `(row-read 'accounts k)` - that the row keyed by the variable `k` is read
+- `(table-written accounts)` - that any cell of the table `accounts` is written
+- `(table-read accounts)` - that any cell of the table `accounts` is read
+- `(row-written accounts k)` - that the row keyed by the variable `k` is written
+- `(row-read accounts k)` - that the row keyed by the variable `k` is read
 
 For more details, see an example in "universal and existential quantification"
 below.
@@ -285,36 +285,31 @@ below.
 In some situations, it's desirable that the total sum of the values in a column
 remains the same before and after a transaction. Or to put it another way, that
 the sum of all updates to a column zeroes-out by the end of a transaction. To
-capture this pattern, we have the `conserves-mass` property which takes a table
-and column name:
+capture this pattern, we can express a "mass conservation" property using
+`column-delta`:
 
 ```lisp
-(conserves-mass 'accounts 'balance)
+(= (column-delta accounts 'balance) 0.0)
 ```
+
+This property asserts that the "column delta" is zero, where `column-delta`
+returns a numeric value of the sum of all changes to the column during the
+transaction.
 
 For an example using this property, see "A simple balance transfer example"
 below.
 
-It turns out that `conserves-mass` is actually just a trivial application of
-another property called `column-delta`, which returns a numeric value of the
-sum of all changes to the column during the transaction. So
-`(conserves-mass 'accounts 'balance)` is actually just the same as:
-
-```lisp
-(= 0 (column-delta 'accounts 'balance))
-```
-
 We can also use `column-delta` to ensure that a column only ever increases
-monotonically:
+during a transaction:
 
 ```lisp
-(>= 0 (column-delta 'accounts 'balance))
+(>= 0 (column-delta accounts 'balance))
 ```
 
 or that it increases by a set amount during a transaction:
 
 ```lisp
-(= 1 (column-delta 'accounts 'balance))
+(= 1 (column-delta accounts 'balance))
 ```
 
 `column-delta` is defined in terms of the increase of the column from before to
@@ -323,8 +318,8 @@ change. So here `1` means an increase of `1` to the column's total sum.
 
 ### Universal and existential quantification
 
-In examples like `(row-enforced 'accounts 'ks key)` or
-`(row-written 'accounts key)` above, we've so far only referred to function
+In examples like `(row-enforced accounts 'ks key)` or
+`(row-written accounts key)` above, we've so far only referred to function
 arguments by the use of the variable named `key`. But what if we wanted to
 talk about all possible rows that will be written, if a function doesn't simply
 update a single row?
@@ -335,8 +330,8 @@ such row:
 ```lisp
 (property
   (forall (key:string)
-   (when (row-written 'accounts key)
-     (row-enforced 'accounts 'ks key))))
+   (when (row-written accounts key)
+     (row-enforced accounts 'ks key))))
 ```
 
 This property says that for any possible row written by the function, the
@@ -349,7 +344,7 @@ use existential quantification like so:
 ```lisp
 (property
   (exists (key:string)
-    (row-read 'accounts key)))
+    (row-read accounts key)))
 ```
 
 For both universal and existential quantification, note that a type annotation
@@ -360,10 +355,10 @@ is required.
 With `defproperty`, properties can be defined at the module level:
 
 ```lisp
-(defmodule accounts
+(module accounts 'admin-keyset
   @model
     [(defproperty conserves-mass
-       (= (column-delta 'accounts 'balance) 0.0))
+       (= (column-delta accounts 'balance) 0.0))
      (defproperty auth-required
        (authorized-by 'accounts-admin-keyset))]
 
@@ -404,7 +399,7 @@ table.
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   @doc   "Transfer money between accounts"
-  @model [(property (row-enforced 'accounts 'ks from))]
+  @model [(property (row-enforced accounts 'ks from))]
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -435,7 +430,7 @@ try again:
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   @doc   "Transfer money between accounts"
-  @model [(property (row-enforced 'accounts 'ks from))]
+  @model [(property (row-enforced accounts 'ks from))]
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -447,15 +442,23 @@ try again:
 ```
 
 The property checker validates the code at this point, but let's add another
-property `(conserves-mass 'accounts 'balance)` to ensure that it's not possible
-for the function to be used to create or destroy any money:
+property `conserves-mass` to ensure that it's not possible for the function to
+be used to create or destroy any money. We define it within `@model` at the
+module level:
+
+```lisp
+(defproperty conserves-mass
+  (= (column-delta accounts 'balance) 0.0))
+```
+
+And then we can use it within `@model` at the function level:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   @doc   "Transfer money between accounts"
   @model
-    [(property (row-enforced 'accounts 'ks from))
-     (property (conserves-mass 'accounts 'balance))]
+    [(property (row-enforced accounts 'ks from))
+     (property conserves-mass)]
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -491,8 +494,8 @@ this unintended behavior:
 (defun transfer (from:string to:string amount:integer)
   @doc   "Transfer money between accounts"
   @model
-    [(property (row-enforced 'accounts 'ks from))
-     (property (conserves-mass 'accounts 'balance))]
+    [(property (row-enforced accounts 'ks from))
+     (property conserves-mass)]
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }

@@ -96,6 +96,7 @@ library
       Pact.Analyze.PrenexNormalize
       Pact.Analyze.Translate
       Pact.Analyze.Types
+      Pact.Analyze.Types.Capability
       Pact.Analyze.Types.Eval
       Pact.Analyze.Types.Languages
       Pact.Analyze.Types.Model

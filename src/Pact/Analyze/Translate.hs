@@ -22,9 +22,9 @@ module Pact.Analyze.Translate where
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
-                                             to, use, view, zoom, (%=), (%~),
-                                             (+~), (.=), (.~), (<>~), (?=),
-                                             (^.))
+                                             to, toListOf, use, view, zoom,
+                                             (%=), (%~), (+~), (.=), (.~),
+                                             (<>~), (?=), (^.), (<&>))
 import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -131,6 +131,7 @@ describeTranslateFailureNoLoc = \case
 data TranslateEnv
   = TranslateEnv
     { _teInfo           :: Info
+    , _teCapabilities   :: Map CapName Capability
     , _teNodeVars       :: Map Node (Munged, VarId)
     , _teRecoverability :: Recoverability
     , _teScopesEntered  :: Natural
@@ -141,9 +142,9 @@ data TranslateEnv
     , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
     }
 
-mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
-mkTranslateEnv info args
-  = TranslateEnv info nodeVars mempty 0 (genId id) (genId id)
+mkTranslateEnv :: Info -> [Capability] -> [Arg] -> TranslateEnv
+mkTranslateEnv info caps args
+  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id)
   where
     -- NOTE: like in Check's moduleFunChecks, this assumes that toplevel
     -- function arguments are the only variables for which we do not use munged
@@ -153,6 +154,8 @@ mkTranslateEnv info args
         Map.insert node (coerceUnmungedToMunged nm, vid) m)
       Map.empty
       args
+
+    caps' = Map.fromList $ caps <&> \c@(Capability _ capName) -> (capName, c)
 
     coerceUnmungedToMunged :: Unmunged -> Munged
     coerceUnmungedToMunged (Unmunged nm) = Munged nm
@@ -513,7 +516,7 @@ translateBody = \case
     throwError $ TranslateFailure info EmptyBody
   [ast]    -> translateNode ast
   ast:asts -> do
-    ast'                 <- translateNode ast
+    ast'          <- translateNode ast
     Some ty asts' <- translateBody asts
     pure $ Some ty $ Sequence ast' asts'
 
@@ -521,16 +524,27 @@ translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> Translate
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
   bindingTs <- traverse translateBinding bindingAs
   rhsETs <- traverse translateNode rhsAs
-
   retTid <- genTagId
+  mCap <- case scopeTy of
+    CapabilityScope _ capName ->
+      view $ teCapabilities.at capName
+    _ ->
+      pure Nothing
 
   let -- Wrap the 'Term' body of clauses in a 'Let' for each of the bindings
       wrapWithLets :: Term a -> Term a
       wrapWithLets tm = foldr
         (\(rhsET, Located _ (Binding vid _ (Munged munged) _)) body' ->
           Let munged vid retTid rhsET body')
-        tm
+        (case mCap of
+           Just cap ->
+             Granting cap vids tm
+           Nothing  ->
+             tm)
         (zip rhsETs bindingTs)
+
+      vids :: [VarId]
+      vids = toListOf (traverse.located.bVid) bindingTs
 
       nodeVars :: Map Node (Munged, VarId)
       nodeVars = Map.fromList
@@ -621,8 +635,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
     translateLet LetScope bindings body
 
-  AST_InlinedApp modName funName bindings body ->
-    translateLet (FunctionScope modName funName) bindings body
+  AST_InlinedApp modName funName bindings body -> do
+    let capName = CapName $ T.unpack funName
+    mCap <- view $ teCapabilities.at capName
+    let scope = case mCap of
+                  Nothing ->
+                    FunctionScope modName funName
+                  Just _ ->
+                    CapabilityScope modName capName
+    translateLet scope bindings body
 
   AST_Var node -> do
     mVar     <- view $ teNodeVars.at node
@@ -956,14 +977,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
     EType objTy@(SObject schema) <- translateType schemaNode
     Some SStr key'               <- translateNode key
     tid                          <- tagRead node $ ESchema schema
-    let readT = Some objTy $
-          Read objTy tid (TableName (T.unpack table)) key'
+    let readT = Some objTy $ Read objTy tid (TableName (T.unpack table)) key'
     withNodeContext node $ translateObjBinding bindings objTy body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
     EType objTy@SObject{} <- translateType schemaNode
     objectT               <- translateNode objectA
     withNodeContext node $ translateObjBinding bindings objTy body objectT
+
+  AST_WithCapability _ appA bodyA -> do
+    appET <- translateNode appA
+    Some ty bodyT <- translateBody bodyA
+    pure $ Some ty $ WithCapability appET bodyT
 
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
@@ -1250,10 +1275,11 @@ runTranslation
   :: Pact.ModuleName
   -> Text
   -> Info
+  -> [Capability]
   -> [Named Node]
   -> [AST Node]
   -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
-runTranslation modName funName info pactArgs body = do
+runTranslation modName funName info caps pactArgs body = do
     (args, translationVid) <- runArgsTranslation
     (tm, graph) <- runBodyTranslation args translationVid
     pure (args, tm, graph)
@@ -1288,7 +1314,7 @@ runTranslation modName funName info pactArgs body = do
             _ <- extendPath -- form final edge for any remaining events
             pure res
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
-           runReaderT (unTranslateM translation) (mkTranslateEnv info args)
+           runReaderT (unTranslateM translation) (mkTranslateEnv info caps args)
 
 -- | Translate a node ignoring the execution graph. This is useful in cases
 -- where we don't show an execution trace. Those two places (currently) are:
@@ -1296,6 +1322,11 @@ runTranslation modName funName info pactArgs body = do
 -- properties, as opposed to in execution.
 -- * Translating terms for property testing. Here we don't show a trace -- we
 -- just test that pact and analysis come to the same result.
+--
+-- TODO: is it possible for certain effects to work in `defconst` that we're
+--       not permitting here? e.g. in the pact repl, it seems that at least
+--       `read-keyset` works.
+--
 translateNodeNoGraph :: AST Node -> Except TranslateFailure ETerm
 translateNodeNoGraph node =
   let vertex0    = 0
@@ -1306,7 +1337,7 @@ translateNodeNoGraph node =
       translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
         Map.empty mempty path0 Map.empty []
 
-      translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
+      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $

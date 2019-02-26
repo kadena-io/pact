@@ -38,7 +38,6 @@ import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
-import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.Generics                 hiding (S)
 import           GHC.Stack                    (HasCallStack)
 
@@ -55,7 +54,6 @@ import           Pact.Analyze.Translate       (maybeTranslateType,
 import           Pact.Analyze.Types           hiding (tableName)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
-
 
 newtype SymbolicSuccess = SymbolicSuccess { successBool :: SBV Bool }
   deriving (Show, Generic, Mergeable)
@@ -128,6 +126,10 @@ data AnalyzeEnv
     , _aeModelTags    :: !(ModelTags 'Symbolic)
     , _aeInfo         :: !Info
     , _aeTrivialGuard :: !(S Guard)
+    , _aeEmptyGrants  :: TokenGrants
+    -- ^ the default, blank slate of grants, where no token is granted.
+    , _aeActiveGrants :: TokenGrants
+    -- ^ the current set of tokens that are granted, manipulated as a stack
     } deriving Show
 
 mkAnalyzeEnv
@@ -135,11 +137,12 @@ mkAnalyzeEnv
   -> PactMetadata
   -> Registry
   -> [Table]
+  -> [Capability]
   -> Map VarId AVal
   -> ModelTags 'Symbolic
   -> Info
   -> Maybe AnalyzeEnv
-mkAnalyzeEnv modName pactMetadata registry tables args tags info = do
+mkAnalyzeEnv modName pactMetadata registry tables caps args tags info = do
   let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
                                 (mkFreeArray "txDecimals")
                                 (mkFreeArray "txIntegers")
@@ -166,10 +169,13 @@ mkAnalyzeEnv modName pactMetadata registry tables args tags info = do
         (TableName (T.unpack tname), varIdColumns ty)
       _ -> Nothing
 
-  let columnIds' = TableMap (Map.fromList columnIds)
+  let columnIds'   = TableMap (Map.fromList columnIds)
+      emptyGrants  = mkTokenGrants caps
+      activeGrants = emptyGrants
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args guardPasses
-    invariants' columnIds' tags info (sansProv trivialGuard)
+    invariants' columnIds' tags info (sansProv trivialGuard) emptyGrants
+    activeGrants
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -186,41 +192,9 @@ data QueryEnv
     , _qeColumnScope   :: Map VarId ColumnName
     }
 
-data ESFunArray where
-  SomeSFunArray :: SingTy a -> SFunArray RowKey (Concrete a) -> ESFunArray
-
-instance Show ESFunArray where
-  showsPrec p (SomeSFunArray ty sfunarr) = showParen (p > 10) $
-      showString "SomeSFunArray "
-    . showsPrec 11 ty
-    . showChar ' '
-    . withHasKind ty (showsPrec 11 sfunarr)
-
-data SymbolicCells = SymbolicCells { _scValues :: ColumnMap ESFunArray }
+data SymbolicCells
+  = SymbolicCells { _scValues :: ColumnMap (EValSFunArray RowKey) }
   deriving (Show)
-
-eArrayAt :: forall a.
-  SingTy a -> S RowKey -> Lens' ESFunArray (SBV (Concrete a))
-eArrayAt ty (S _ symKey) = lens getter setter where
-
-  getter :: ESFunArray -> SBV (Concrete a)
-  getter (SomeSFunArray ty' arr) = case singEq ty ty' of
-    Just Refl -> readArray arr symKey
-    Nothing   -> error $
-      "eArrayAt: bad getter access: " ++ show ty ++ " vs " ++ show ty'
-
-  setter :: ESFunArray -> SBV (Concrete a) -> ESFunArray
-  setter (SomeSFunArray ty' arr) val = case singEq ty ty' of
-    Just Refl -> withSymVal ty $ SomeSFunArray ty $ writeArray arr symKey val
-    Nothing   -> error $
-      "eArrayAt: bad setter access: " ++ show ty ++ " vs " ++ show ty'
-
-instance Mergeable ESFunArray where
-  symbolicMerge force test (SomeSFunArray ty1 arr1) (SomeSFunArray ty2 arr2)
-    = case singEq ty1 ty2 of
-      Nothing   -> error "mismatched types when merging two ESFunArrays"
-      Just Refl -> withSymVal ty1 $
-        SomeSFunArray ty1 $ symbolicMerge force test arr1 arr2
 
 instance Mergeable SymbolicCells where
   symbolicMerge force test (SymbolicCells left) (SymbolicCells right)
@@ -266,6 +240,7 @@ data LatticeAnalyzeState a
     -- enforcement of the keyset.
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
+    , _lasPendingGrants       :: TokenGrants
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -328,8 +303,8 @@ mkQueryEnv env state cv0 cv1 result =
   let state' = state & latticeState . lasExtra .~ BeforeAndAfter cv0 cv1
   in QueryEnv env state' result Map.empty Map.empty
 
-mkInitialAnalyzeState :: [Table] -> EvalAnalyzeState
-mkInitialAnalyzeState tables = AnalyzeState
+mkInitialAnalyzeState :: [Table] -> [Capability] -> EvalAnalyzeState
+mkInitialAnalyzeState tables caps = AnalyzeState
     { _latticeState = LatticeAnalyzeState
         { _lasSucceeds            = SymbolicSuccess sTrue
         , _lasPurelyReachable     = sTrue
@@ -347,9 +322,10 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasCellsEnforced       = cellsEnforced
         , _lasCellsWritten        = cellsWritten
         , _lasConstraints         = sansProv sTrue
+        , _lasPendingGrants       = mkTokenGrants caps
         , _lasExtra               = CellValues
-          { _cvTableCells          = mkSymbolicCells tables
-          , _cvRowExists           = mkRowExists
+          { _cvTableCells = mkSymbolicCells tables
+          , _cvRowExists  = mkRowExists
           }
         }
     , _globalState = GlobalAnalyzeState
@@ -409,8 +385,8 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
       (\colName cells ty ->
         let col      = ColumnName $ T.unpack colName
 
-            mkArray :: SingTy a -> ESFunArray
-            mkArray sTy = withHasKind sTy $ SomeSFunArray sTy $ mkFreeArray $
+            mkArray :: SingTy a -> EValSFunArray RowKey
+            mkArray sTy = withHasKind sTy $ EValSFunArray sTy $ mkFreeArray $
               "cells__" <> tableName <> "__" <> colName
 
         in cells & case maybeTranslateType ty of
@@ -585,6 +561,25 @@ cellWritten
 cellWritten tn cn sRk = latticeState.lasCellsWritten.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
+tokenGranted
+  :: HasCallStack
+  => Token
+  -> Lens' TokenGrants (S Bool)
+tokenGranted (Token schema capName sObj)
+  = capabilityGrants
+  . singular (ix capName)
+  . eKArrayAt (SObjectUnsafe schema) sObj
+  . sbv2S
+
+pendingTokenGranted
+  :: HasCallStack
+  => Token
+  -> Lens' (AnalyzeState a) (S Bool)
+pendingTokenGranted token
+  = latticeState
+  . lasPendingGrants
+  . tokenGranted token
+
 typedCell
   :: HasCallStack
   => SingTy b
@@ -602,7 +597,7 @@ typedCell ty cellValues tn cn sRk sDirty
   . singular (ix tn)
   . scValues
   . singular (ix cn)
-  . eArrayAt ty sRk
+  . eVArrayAt ty sRk
   . sbv2SFrom (fromCell tn cn sRk sDirty)
 
 symArrayAt

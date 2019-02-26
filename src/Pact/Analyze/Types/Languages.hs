@@ -70,28 +70,29 @@ module Pact.Analyze.Types.Languages
   , singPrettyListTm
   ) where
 
-import           Control.Monad                ((>=>))
-import           Data.Maybe                   (fromMaybe)
-import           Data.String                  (IsString (..))
-import           Data.Text                    (Text)
-import qualified Data.Text                    as Text
-import           Data.Typeable                ((:~:) (Refl), Proxy)
-import           GHC.TypeLits                 (symbolVal, someSymbolVal,
-                                               SomeSymbol(SomeSymbol))
-import           Prelude                      hiding (Float)
-import           Text.Show                    (showListWith)
+import           Control.Monad                 ((>=>))
+import           Data.Maybe                    (fromMaybe)
+import           Data.String                   (IsString (..))
+import           Data.Text                     (Text)
+import qualified Data.Text                     as Text
+import           Data.Typeable                 ((:~:) (Refl), Proxy)
+import           GHC.TypeLits                  (symbolVal, someSymbolVal,
+                                                SomeSymbol(SomeSymbol))
+import           Prelude                       hiding (Float)
+import           Text.Show                     (showListWith)
 
-import           Pact.Types.Pretty            (commaBraces, commaBrackets,
-                                               parens, parensSep,
-                                               Pretty(pretty), Doc, viaShow,
-                                               vsep)
-import           Pact.Types.Persistence       (WriteType)
+import           Pact.Types.Pretty             (commaBraces, commaBrackets,
+                                                parens, parensSep,
+                                                Pretty(pretty), Doc, viaShow,
+                                                vsep)
+import           Pact.Types.Persistence        (WriteType)
 
-import           Pact.Analyze.Feature         hiding (Doc, Sym, Var,
-                                               col, str, obj, dec, ks)
+import           Pact.Analyze.Feature          hiding (Doc, Sym, Var, col, str,
+                                                obj, dec, ks)
+import           Pact.Analyze.Types.Capability
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
-import           Pact.Analyze.Types.ObjUtil   (mkSObject, normalize)
+import           Pact.Analyze.Types.ObjUtil    (mkSObject, normalize)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Util
@@ -1272,6 +1273,9 @@ type ETerm = Existential Term
 data Term (a :: Ty) where
   CoreTerm        :: Core Term a -> Term a
 
+  -- Control flow
+  Sequence        :: ETerm -> Term a -> Term a
+
   -- In principle, this should be a pure term, however, the analyze monad needs
   -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
   -- `Symbolic` in its stack.
@@ -1285,9 +1289,6 @@ data Term (a :: Ty) where
   -- Variable binding
   Let             :: Text -> VarId -> TagId -> ETerm -> Term a -> Term a
 
-  -- Control flow
-  Sequence        :: ETerm     -> Term a ->           Term a
-
   -- Conditional transaction abort
   Enforce         :: Maybe TagId -> Term 'TyBool   -> Term 'TyBool -- Only a TagId for an assertion; i.e. not keyset enforcement
   -- Left to be tagged if the list of cases is empty. We do this because we
@@ -1295,6 +1296,10 @@ data Term (a :: Ty) where
   -- reporting. Right _1 to be tagged if the case fails, Right _2 to be tagged
   -- if the case succeeds:
   EnforceOne      :: Either TagId [((Path, Path), Term 'TyBool)] -> Term 'TyBool
+
+  -- Capabilities
+  WithCapability  :: ETerm      -> Term a            -> Term a
+  Granting        :: Capability -> [VarId] -> Term a -> Term a
 
   -- Reading from environment
   ReadKeySet      :: Term 'TyStr -> Term 'TyGuard
@@ -1362,7 +1367,18 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
-
+  WithCapability a b ->
+      showString "WithCapability "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+  Granting a b c ->
+      showString "Granting "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+    . showChar ' '
+    . showsPrec 11 c
   MkKsRefGuard a ->
       showString "MkKsRefGuard "
     . showsPrec 11 a
@@ -1479,6 +1495,8 @@ prettyTerm ty = \case
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
 
+  WithCapability a x   -> parensSep ["with-capability", pretty a, prettyTerm ty x]
+  Granting _ _ x       -> prettyTerm ty x
   Read _ _ tab x       -> parensSep ["read", pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
   PactVersion          -> parensSep ["pact-version"]

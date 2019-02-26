@@ -8,7 +8,8 @@
 
 -- | Toplevel module for types related to symbolic analysis of Pact programs.
 module Pact.Analyze.Types
-  ( module Pact.Analyze.Types.Languages
+  ( module Pact.Analyze.Types.Capability
+  , module Pact.Analyze.Types.Languages
   , module Pact.Analyze.Types.Model
   , module Pact.Analyze.Types.Numerical
   , module Pact.Analyze.Types.ObjUtil
@@ -38,6 +39,7 @@ import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Typecheck         as TC
 
+import           Pact.Analyze.Types.Capability
 import           Pact.Analyze.Types.Languages
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical

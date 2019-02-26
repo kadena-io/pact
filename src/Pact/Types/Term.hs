@@ -40,7 +40,7 @@ module Pact.Types.Term
    defTypeRep,
    NativeDefName(..),DefName(..),
    FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
-   Ref(..),
+   Ref(..),_Direct,_Ref,
    NativeDFun(..),
    BindType(..),
    TableName(..),
@@ -109,7 +109,6 @@ import Pact.Types.Util
 import Pact.Types.Info
 import Pact.Types.Type
 import Pact.Types.Exp
-
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
@@ -866,10 +865,10 @@ instance Pretty n => Pretty (Term n) where
     TModule{..} -> pretty _tModuleDef
     TList{..} -> bracketsSep $ pretty <$> _tList
     TDef{..} -> pretty _tDef
-    TNative{..} -> annotate Header ("native `" <> pretty (asString' _tNativeName) <> "`")
+    TNative{..} -> annotate Header ("native `" <> pretty _tNativeName <> "`")
       <> nest 2 (
          line
-      <> line <> pretty _tNativeDocs
+      <> line <> fillSep (pretty <$> T.words _tNativeDocs)
       <> examples
       <> line
       <> line <> annotate Header "Type:"
@@ -1125,6 +1124,7 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 makeLenses ''Term
 makeLenses ''Namespace
 makeLenses ''FunApp
+makePrisms ''Ref
 makeLenses ''Meta
 makeLenses ''Module
 makeLenses ''Interface

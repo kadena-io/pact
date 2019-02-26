@@ -196,6 +196,16 @@ pattern AST_Bind node object bindings schema body <-
       (NativeFuncSpecial "bind" (AST_BindSchema _ bindings schema body))
       [object]
 
+pattern AST_WithCapability
+  :: Node
+  -> AST Node
+  -> [AST Node]
+  -> AST Node
+pattern AST_WithCapability node app body <-
+  App node
+      (NativeFuncSpecial "with-capability" (List _ body))
+      [app]
+
 -- pattern RawTableName :: Text -> AST Node
 -- pattern RawTableName t <- Table (Node (TcId _ t _) _) _
 

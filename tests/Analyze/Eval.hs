@@ -98,8 +98,9 @@ analyzeEval' :: ETerm -> SingTy a -> GenState -> IO (Either String ETerm)
 analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
   -- analyze setup
   let tables = []
+      caps   = []
       args   = Map.empty
-      state0 = mkInitialAnalyzeState tables
+      state0 = mkInitialAnalyzeState tables caps
 
       tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty
         -- this 'Located TVal' is never forced so we don't provide it
@@ -110,7 +111,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       pactMd  = mkPactMetadata
       reg     = mkRegistry
 
-  Just aEnv <- pure $ mkAnalyzeEnv modName pactMd reg tables args tags dummyInfo
+  Just aEnv <- pure $ mkAnalyzeEnv modName pactMd reg tables caps args tags dummyInfo
 
   let writeArray' k v env = writeArray env k v
 
