@@ -87,7 +87,7 @@ import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
 -- being the JSON serialization of 'Payload Text', where the 'Text' is the pact code; when
 -- executed this is parsed to 'ParsedCode'.
--- Thus, 'Command (Payload ParsedCode)' is the fully executable specialization.
+-- Thus, 'Command (Payload PublicMeta ParsedCode)' is the fully executable specialization.
 data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
