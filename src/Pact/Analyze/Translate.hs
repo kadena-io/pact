@@ -536,8 +536,11 @@ lookupCapability capName = do
     Just cap -> pure cap
     Nothing  -> throwError' $ CapabilityNotFound capName
 
-translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
-translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
+withTranslatedBindings
+  :: [(Named Node, AST Node)]
+  -> ([Located Binding] -> TagId -> TranslateM ETerm)
+  -> TranslateM ETerm
+withTranslatedBindings (unzip -> (bindingAs, rhsAs)) k = do
   bindingTs <- traverse translateBinding bindingAs
   rhsETs <- traverse translateNode rhsAs
   retTid <- genTagId
@@ -550,20 +553,9 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
         tm
         (zip rhsETs bindingTs)
 
-      vids :: [VarId]
-      vids = toListOf (traverse.located.bVid) bindingTs
-
   fmap (mapExistential wrapWithLets) $
     withNodeVars bindingAs bindingTs $
-      withNewScope scopeTy bindingTs retTid $
-        case scopeTy of
-          CapabilityScope _ capName -> do
-            cap <- lookupCapability capName
-            fmap (mapExistential $ Granting cap vids) $
-              translateBody body
-
-          _ ->
-            translateBody body
+      k bindingTs retTid
 
 translateObjBinding
   :: [(Named Node, AST Node)]
@@ -633,17 +625,14 @@ translateGuard guardA = do
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
-    translateLet LetScope bindings body
+    withTranslatedBindings bindings $ \bindingTs tid ->
+      withNewScope LetScope bindingTs tid $
+        translateBody body
 
   AST_InlinedApp modName funName bindings body -> do
-    let capName = CapName $ T.unpack funName
-    mCap <- view $ teCapabilities.at capName
-    let scope = case mCap of
-                  Nothing ->
-                    FunctionScope modName funName
-                  Just _ ->
-                    CapabilityScope modName capName
-    translateLet scope bindings body
+    withTranslatedBindings bindings $ \bindingTs tid -> do
+      withNewScope (FunctionScope modName funName) bindingTs tid $
+        translateBody body
 
   AST_Var node -> do
     mVar     <- view $ teNodeVars.at node
@@ -985,10 +974,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
     objectT               <- translateNode objectA
     withNodeContext node $ translateObjBinding bindings objTy body objectT
 
-  AST_WithCapability appA bodyA -> do
-    appET <- translateNode appA
-    Some ty bodyT <- translateBody bodyA
-    pure $ Some ty $ WithCapability appET bodyT
+  AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
+    let capName = CapName $ T.unpack funName
+    cap <- lookupCapability capName
+    appET <- withTranslatedBindings bindings $ \bindingTs tid -> do
+      withNewScope (CapabilityScope modName capName) bindingTs tid $ do
+        let vids = toListOf (traverse.located.bVid) bindingTs
+        fmap (mapExistential $ Granting cap vids) $
+          translateBody appBodyA
+    Some ty withBodyT <- translateBody withBodyA
+    pure $ Some ty $ WithCapability appET withBodyT
 
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
