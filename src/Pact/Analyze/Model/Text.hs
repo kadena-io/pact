@@ -188,7 +188,7 @@ showEvent ksProvs tags event = do
               let header = renderCompactText' $
                            "entering " <> pretty noun <> " " <> pretty modName
                         <> "." <> pretty funName <> " with "
-                        <> if length vids > 1 then "arguments" else "argument"
+                        <> if length vids == 1 then "argument" else "arguments"
               in header : (displayVids showArg ++ [emptyLine])
 
         pure $ case scopeTy of
