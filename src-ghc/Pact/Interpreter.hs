@@ -12,7 +12,23 @@
 -- enforce transaction rollback (and then re-thrown). It is
 -- the responsibility of the calling context to catch exceptions.
 --
-module Pact.Interpreter where
+module Pact.Interpreter
+  ( PactDbEnv(..)
+  , MsgData(..)
+  , EvalResult(..)
+  , initMsgData
+  , evalExec
+  , evalExecState
+  , evalContinuation
+  , evalContinuationState
+  , setupEvalEnv
+  , initRefStore
+  , mkSQLiteEnv
+  , mkPureEnv
+  , mkPactDbEnv
+  , initSchema
+  , interpret
+  ) where
 
 import Control.Concurrent
 import qualified Data.Set as S
