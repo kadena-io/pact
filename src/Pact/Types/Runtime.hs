@@ -112,7 +112,7 @@ data PactError = PactError
   { peType :: PactErrorType
   , peInfo :: Info
   , peCallStack :: [StackFrame]
-  , peText :: Doc }
+  , peDoc :: Doc }
 
 instance Exception PactError
 

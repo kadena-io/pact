@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Pact.Types.Pretty
   ( (<+>)
+  , Abbrev(..)
   , Annot(..)
   , Doc
   , Pretty(..)
@@ -206,3 +207,6 @@ instance (Pretty a, Pretty b) => Pretty (Var a b) where
   pretty = \case
     B b -> pretty b
     F a -> pretty a
+
+class Pretty a => Abbrev a where
+  abbrev :: a -> String

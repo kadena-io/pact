@@ -548,7 +548,7 @@ resolveArg :: Info -> [Term n] -> Int -> Term n
 resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index " <> pretty i) $
                      as `atMay` i
 
-appCall :: Show t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
+appCall :: Abbrev t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map (pack.abbrev) as)))
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)

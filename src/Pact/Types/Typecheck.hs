@@ -48,6 +48,7 @@ import qualified Data.Set as S
 import Control.Monad.State
 import Data.Aeson hiding (Object)
 import Data.Foldable
+import qualified Data.Text as T
 
 import Pact.Types.Lang hiding (App)
 import Pact.Types.Pretty
@@ -85,6 +86,8 @@ instance Ord TcId where
 -- show instance is important, used as variable name
 instance Show TcId where show TcId {..} = unpack _tiName ++ show _tiId
 instance Pretty TcId where pretty = viaShow
+instance Abbrev TcId where
+  abbrev = T.unpack . _tiName
 
 
 -- | Role of an AST in an overload.
@@ -250,7 +253,6 @@ instance Pretty t => Pretty (Fun t) where
     , ""
     ]
 
-
 -- | Pair an AST with its type.
 data Node = Node {
   _aId :: TcId,
@@ -260,6 +262,8 @@ instance Show Node where
   show (Node i t) = show i ++ "::" ++ show t
 instance Pretty Node where
   pretty (Node i t) = pretty i <> "::" <> pretty t
+instance Abbrev Node where
+  abbrev (Node i t) = abbrev i <> "::" <> abbrev t
 
 -- | Pair an unescaped, unmangled "bare" name with something.
 data Named i = Named {
@@ -373,6 +377,16 @@ instance Pretty t => Pretty (AST t) where
             ]
    where pn = pretty (_aNode a)
 
+instance Abbrev t => Abbrev (AST t) where
+  abbrev a = case a of
+    App{}     -> "<app>"
+    Binding{} -> "<binding>"
+    List{}    -> "<list>"
+    Object{}  -> "<object>"
+    Prim{}    -> "<prim>"
+    Var v     -> abbrev v
+    Table{}   -> "<table>"
+    Step{}    -> "<step>"
 
 
 makeLenses ''AST

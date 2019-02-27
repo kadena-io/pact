@@ -295,6 +295,10 @@ instance Pretty Ref where
   pretty (Direct tm) = pretty tm
   pretty (Ref tm)    = pretty tm
 
+instance Abbrev Ref where
+  abbrev (Direct tm) = abbrev tm
+  abbrev (Ref    tm) = abbrev tm
+
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
   deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON)
@@ -385,6 +389,9 @@ instance Pretty Name where
   pretty = \case
     QName modName nName _ -> pretty modName <> "." <> pretty nName
     Name nName _          -> pretty nName
+
+instance Abbrev Name where
+  abbrev = renderCompactString
 
 instance ToJSON Name where
   toJSON = toJSON . renderCompactString
@@ -920,9 +927,9 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tMeta
       ]
 
-showParamType :: Show n => Type n -> String
+showParamType :: Pretty n => Type n -> String
 showParamType TyAny = ""
-showParamType t = ":" ++ show t
+showParamType t = ":" ++ abbrev t
 
 -- We currently need this instance to satisfy the 'Eq instance for 'Scope':
 -- @(Monad f, Eq b, Eq1 f) => Eq1 (Scope b f)@
@@ -994,7 +1001,7 @@ instance FromJSON (Term n) where
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 
-instance Show n => ToJSON (Term n) where
+instance Abbrev n => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
     toJSON (TGuard k _) = toJSON k
@@ -1096,28 +1103,26 @@ termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && d
 termEq _ _ = False
 
 
-
-
-abbrev :: Show t => Term t -> String
-abbrev (TModule m _ _) =
-  case m of
-    MDModule Module{..} -> "<module " ++ asString' _mName ++ ">"
-    MDInterface Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
-abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
-abbrev TDef {..} = "<defun " ++ asString' (_dDefName _tDef) ++ ">"
-abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
-abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
-abbrev TApp {..} = "<app " ++ abbrev (_appFun _tApp) ++ ">"
-abbrev TBinding {} = "<binding>"
-abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
-abbrev (TLiteral l _) = show l
-abbrev TGuard {} = "<guard>"
-abbrev (TUse (Use m h _) _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
-abbrev (TVar s _) = show s
-abbrev (TValue v _) = show v
-abbrev TStep {} = "<step>"
-abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
-abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
+instance Abbrev t => Abbrev (Term t) where
+  abbrev (TModule m _ _) =
+    case m of
+      MDModule Module{..} -> "<module " ++ asString' _mName ++ ">"
+      MDInterface Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
+  abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
+  abbrev TDef {..} = "<defun " ++ asString' (_dDefName _tDef) ++ ">"
+  abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
+  abbrev TConst {..} = "<defconst " ++ T.unpack (_aName _tConstArg) ++ ">"
+  abbrev TApp {..} = "<app " ++ abbrev (_appFun _tApp) ++ ">"
+  abbrev TBinding {} = "<binding>"
+  abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
+  abbrev (TLiteral l _) = renderCompactString l
+  abbrev TGuard {} = "<guard>"
+  abbrev (TUse (Use m h _) _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
+  abbrev (TVar s _) = abbrev s
+  abbrev (TValue v _) = renderCompactString v
+  abbrev TStep {} = "<step>"
+  abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
+  abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 
 
 
