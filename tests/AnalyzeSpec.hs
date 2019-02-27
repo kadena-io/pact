@@ -863,6 +863,18 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ Inj (GuardPassed "foo") .=> Success'
 
+  describe "requesting token that was not granted for the same args" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 2)
+                (require-capability (CAP 1))))
+          |]
+    expectPass code $ Valid Abort'
+
   describe "enforce-one.1" $ do
     let code =
           [text|
