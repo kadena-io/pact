@@ -198,7 +198,7 @@ instance Pretty Delta where
             -> Int64  -- Column
             -> Doc
         prettyDelta source line' column'
-          = pretty source
+          = prettyString source
             <> pretty ':' <> pretty (line'+1)
             <> pretty ':' <> pretty (column'+1)
         interactive = "(interactive)"

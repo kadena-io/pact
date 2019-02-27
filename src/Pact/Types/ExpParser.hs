@@ -140,7 +140,7 @@ runCompile act cs a =
         (Label s:_) -> doErr def (pretty (toList s))
         er -> doErr def (viaShow er)
       Label ne -> doErr def (pretty (toList ne))
-      Tokens (x :| _) -> doErr (getInfo x) $ pretty $ showExpect expect
+      Tokens (x :| _) -> doErr (getInfo x) $ prettyString $ showExpect expect
     (Left e) -> doErr def (viaShow e)
     where doErr :: Info -> Doc -> Either PactError a
           doErr i s = Left $ PactError SyntaxError i def s
