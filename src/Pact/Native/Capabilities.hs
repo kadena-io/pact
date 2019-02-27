@@ -137,7 +137,8 @@ composeCapability =
       return $ toTerm True
     composeCapability' i as = argsError' i as
 
-
+-- | Traverse up the call stack returning 'True' if a containing
+-- defcap application is found.
 defcapInStack :: Eval e Bool
 defcapInStack = fmap isJust $ uses evalCallStack $ preview (traverse . sfApp . _Just . _1 . faDefType . _Defcap)
 
