@@ -70,12 +70,12 @@ import Pact.Types.Util
 
 data Capability
   = ModuleAdminCapability ModuleName
-  | UserCapability ModuleName DefName [Term Name]
+  | UserCapability DefName [Term Name]
   deriving (Eq,Show)
 
 instance Pretty Capability where
   pretty (ModuleAdminCapability mn) = pretty mn
-  pretty (UserCapability mn name tms)  = parensSep (pretty mn <> colon <> pretty name : fmap pretty tms)
+  pretty (UserCapability name tms)  = parensSep (pretty name : fmap pretty tms)
 
 data CapAcquireResult = NewlyAcquired|AlreadyAcquired
   deriving (Eq,Show)

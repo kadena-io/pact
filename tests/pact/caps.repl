@@ -65,24 +65,10 @@
 
   (defun test-granted ()
     (require-capability (GRANTED)))
-
-  (defcap BAD_WITH_CAP ()
-    (with-capability (GRANTED) true))
-
-  (defun bad-with-cap ()
-    (with-capability (BAD_WITH_CAP) true))
 )
 
 (create-table guard-table)
 
-(commit-tx)
-
-(begin-tx)
-(module caps-shadow 'kadmin
-  (defcap KEYSET-ID-CAP (id:string) true)
-  (defun bad-shadow-granted (id)
-    (with-capability (KEYSET-ID-CAP id)
-                     (caps.test-require id))))
 (commit-tx)
 
 (typecheck 'caps)
@@ -146,11 +132,11 @@
 (let ((g (get-guard "a"))) ;; doing let so db failure doesn't confuse below
   (expect-failure "enforcing pact guard outside of pact" (enforce-guard g)))
 
-(env-pactid "4")
+(env-pactid "3")
 (test-pact-guards "a")
 (expect "pact enforce succeeds" 1 (at 'result (at 'yield (pact-state))))
 
-(env-pactid "5")
+(env-pactid "4")
 (expect-failure "pact enforce fails" (test-pact-guards "a"))
 
 (env-keys ["a" "b" "c"])
@@ -171,7 +157,3 @@
 (use caps)
 ; revocation now makes functions requiring certain caps to now fail
 (expect-failure "functions requiring restricted governance should fail after revocation" (test-granted))
-
-(expect-failure "nested with-capability fails" (bad-with-cap))
-
-(expect-failure "shadowed cap fails" (caps-shadow.bad-shadow-granted "k1"))

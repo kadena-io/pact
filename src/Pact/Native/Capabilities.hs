@@ -22,7 +22,6 @@ import Pact.Types.Runtime
 import Control.Lens
 import Control.Monad.State (state)
 import Pact.Types.Pretty
-import Data.Maybe (isJust)
 
 
 capDefs :: NativeModule
@@ -51,15 +50,13 @@ withCapability =
   \that the token is granted in the environment during execution of BODY. \
   \'with-capability' can only be called in the same module that declares the \
   \corresponding 'defcap', otherwise module-admin rights are required. \
-  \If token is not present, the CAPABILITY is evaluated, with successful completion \
+  \If token is not present, the CAPABILITY is applied, with successful completion \
   \resulting in the installation/granting of the token, which will then be revoked \
   \upon completion of BODY. Nested 'with-capability' calls for the same token \
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
-  \but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap."
+  \but simply execute BODY."
   where
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
-      -- ensure not within defcap
-      defcapInStack >>= \p -> when p $ evalError' i "with-capability not allowed within defcap execution"
       -- erase composed
       evalCapabilities . capComposed .= []
       -- evaluate in-module cap
@@ -82,7 +79,7 @@ evalCap :: Bool -> App (Term Ref) -> Eval e (Maybe Capability)
 evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
       when inModule $ guardForModuleCall _appInfo _dModule $ return ()
       prep@(args,_) <- prepareUserAppArgs d _appArgs
-      let cap = UserCapability _dModule _dDefName args
+      let cap = UserCapability _dDefName args
       acquired <- acquireCapability cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
@@ -107,7 +104,7 @@ requireCapability =
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
       (args,_) <- prepareUserAppArgs d _appArgs
-      let cap = UserCapability _dModule _dDefName args
+      let cap = UserCapability _dDefName args
       granted <- capabilityGranted cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
@@ -129,17 +126,16 @@ composeCapability =
     composeCapability' :: NativeFun e
     composeCapability' i [TApp app _] = gasUnreduced i [] $ do
       -- enforce in defcap
-      defcapInStack >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
-      -- should be granted in-module
-      granted <- evalCap True app
-      -- if newly granted, add to composed list
-      forM_ granted $ \newcap -> evalCapabilities . capComposed %= (newcap:)
+      isDefCap <- uses evalCallStack $ preview (traverse . sfApp . _Just . _1 . faDefType . _Defcap)
+      void $ case isDefCap of
+        Nothing -> evalError' i "compose-capability valid only within defcap body"
+        Just {} -> do
+          -- should be granted in-module
+          granted <- evalCap True app
+          -- if newly granted, add to composed list
+          forM_ granted $ \newcap -> evalCapabilities . capComposed %= (newcap:)
       return $ toTerm True
     composeCapability' i as = argsError' i as
-
-
-defcapInStack :: Eval e Bool
-defcapInStack = fmap isJust $ uses evalCallStack $ preview (traverse . sfApp . _Just . _1 . faDefType . _Defcap)
 
 
 
