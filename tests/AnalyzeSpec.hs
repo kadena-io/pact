@@ -858,13 +858,10 @@ spec = describe "analyze" $ do
               (require-capability (CAP 100)))
 
             (defun test:bool ()
-              @model [(property (authorized-by "foo"))]
               (with-capability (CAP 100)
                 (do-require)))
           |]
-    expectPass code $ Satisfiable Success'
-    expectPass code $ Valid $ Success' .=> Inj (GuardPassed "foo")
-    expectVerified code
+    expectPass code $ Valid $ Inj (GuardPassed "foo") .=> Success'
 
   describe "enforce-one.1" $ do
     let code =
