@@ -201,6 +201,9 @@ instance HasKind TableName where
 instance IsString TableName where
   fromString = TableName
 
+instance Pretty TableName where
+  pretty (TableName tn) = dquotes $ prettyString tn
+
 newtype ColumnName
   = ColumnName String
   deriving (Eq, Ord, Show)
@@ -235,7 +238,7 @@ instance SymVal Str where
   fromCV = wrappedStringFromCV Str
 
 instance Pretty Str where
-  pretty (Str str) = dquotes $ pretty str
+  pretty (Str str) = dquotes $ prettyString str
 
 type RowKey = Str
 
@@ -1096,11 +1099,8 @@ instance Pretty (Quantifiable q) where
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> pretty tn <> ")"
 
-instance Pretty TableName where
-  pretty (TableName tn) = pretty tn
-
 instance Pretty ColumnName where
-  pretty (ColumnName cn) = pretty cn
+  pretty (ColumnName cn) = dquotes $ prettyString cn
 
 data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]
