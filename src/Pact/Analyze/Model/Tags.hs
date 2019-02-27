@@ -82,6 +82,7 @@ allocModelTags argsMap locatedTm graph = ModelTags
     <*> allocWrites
     <*> allocAsserts
     <*> allocGEs
+    <*> allocGrantReqs
     <*> allocResult
     <*> allocPaths
     <*> allocReturns
@@ -142,6 +143,12 @@ allocModelTags argsMap locatedTm graph = ModelTags
             <$> allocS @'TyGuard "guard"
             <*> allocSbv @'TyBool "guard_success")
 
+    allocGrantReqs :: Alloc (Map TagId (Located GrantRequest))
+    allocGrantReqs = fmap Map.fromList $
+      for (toListOf (traverse._TraceRequireGrant) events) $ \(_, capName, _, Located info tid) ->
+        (tid,) . Located info <$>
+          (GrantRequest capName <$> allocSbv @'TyBool "grant_request")
+
     allocResult :: Alloc (TagId, Located TVal)
     allocResult = do
       let tid :: TagId = last $ toListOf (traverse._TracePopScope._3) events
@@ -172,6 +179,7 @@ saturateModel =
     traverseOf (modelTags.mtWrites.traversed.located)            fetchAccess >=>
     traverseOf (modelTags.mtAsserts.traversed.located)           fetchSbv    >=>
     traverseOf (modelTags.mtGuardEnforcements.traversed.located) fetchGE     >=>
+    traverseOf (modelTags.mtGrantRequests.traversed.located)     fetchGR     >=>
     traverseOf (modelTags.mtResult._2.located)                   fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)                     fetchSbv    >=>
     traverseOf (modelTags.mtReturns.traversed)                   fetchTVal   >=>
@@ -208,6 +216,9 @@ saturateModel =
     fetchGE :: GuardEnforcement -> SBV.Query GuardEnforcement
     fetchGE (GuardEnforcement sg sbool) = GuardEnforcement <$>
       fetchS sg <*> fetchSbv sbool
+
+    fetchGR :: GrantRequest -> SBV.Query GrantRequest
+    fetchGR (GrantRequest capName sb) = GrantRequest capName <$> fetchSbv sb
 
     fetchProv :: Provenance -> SBV.Query Provenance
     fetchProv = traverseOf (_FromCell.ocRowKey) fetchS

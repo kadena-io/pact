@@ -156,6 +156,13 @@ tagGuard tid sg sPasses = do
       addConstraint $ sansProv $ passes' .== _sSbv sPasses
       globalState.gasGuardProvenances.at tid .= (sg ^. sProv)
 
+tagGrantRequest :: TagId -> S Bool -> Analyze ()
+tagGrantRequest tid sb = do
+  mTag <- preview $ aeModelTags.mtGrantRequests.at tid._Just.located
+  case mTag of
+    Nothing  -> pure ()
+    Just (GrantRequest _ sbv) -> addConstraint $ sansProv $ sbv .== _sSbv sb
+
 tagSubpathStart :: Path -> S Bool -> Analyze ()
 tagSubpathStart p active = do
   mTag <- preview $ aeModelTags.mtPaths.at p._Just
@@ -447,8 +454,10 @@ evalTerm = \case
     addPendingGrant =<< capabilityAppToken cap vids
     pure r
 
-  HasGrant cap (unzip -> (_, vids)) ->
-    isGranted =<< capabilityAppToken cap vids
+  HasGrant tid cap (unzip -> (_, vids)) -> do
+    granted <- isGranted =<< capabilityAppToken cap vids
+    tagGrantRequest tid granted
+    pure granted
 
   Read objTy tid tn rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
