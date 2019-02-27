@@ -12,7 +12,23 @@
 -- enforce transaction rollback (and then re-thrown). It is
 -- the responsibility of the calling context to catch exceptions.
 --
-module Pact.Interpreter where
+module Pact.Interpreter
+  ( PactDbEnv(..)
+  , MsgData(..)
+  , EvalResult(..)
+  , initMsgData
+  , evalExec
+  , evalExecState
+  , evalContinuation
+  , evalContinuationState
+  , setupEvalEnv
+  , initRefStore
+  , mkSQLiteEnv
+  , mkPureEnv
+  , mkPactDbEnv
+  , initSchema
+  , interpret
+  ) where
 
 import Control.Concurrent
 import qualified Data.Set as S
@@ -61,14 +77,19 @@ data EvalResult = EvalResult
 
 
 evalExec :: EvalEnv e -> ParsedCode -> IO EvalResult
-evalExec evalEnv ParsedCode {..} = do
+evalExec env pc = evalExecState def env pc
+
+evalExecState :: EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
+evalExecState initState evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
-  interpret evalEnv terms
+  interpret initState evalEnv terms
 
 
 evalContinuation :: EvalEnv e -> Term Name -> IO EvalResult
-evalContinuation ee pact = interpret ee [pact]
+evalContinuation ee pact = evalContinuationState def ee pact
 
+evalContinuationState :: EvalState -> EvalEnv e -> Term Name -> IO EvalResult
+evalContinuationState initState ee pact = interpret initState ee [pact]
 
 setupEvalEnv
   :: PactDbEnv e
@@ -120,11 +141,11 @@ initSchema :: PactDbEnv (DbEnv p) -> IO ()
 initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 
-interpret :: EvalEnv e -> [Term Name] -> IO EvalResult
-interpret evalEnv terms = do
+interpret :: EvalState -> EvalEnv e -> [Term Name] -> IO EvalResult
+interpret initState evalEnv terms = do
   let tx = _eeTxId evalEnv
   ((rs,logs),state) <-
-    runEval def evalEnv $ evalTerms tx terms
+    runEval initState evalEnv $ evalTerms tx terms
   let gas = _evalGas state
       refStore = newRefs . _eeRefStore $ evalEnv
       pactExec = _evalPactExec state

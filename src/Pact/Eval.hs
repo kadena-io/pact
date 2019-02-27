@@ -72,7 +72,7 @@ import Pact.Gas
 
 
 evalBeginTx :: Info -> Eval e ()
-evalBeginTx i = revokeAllCapabilities >> view eeTxId >>= beginTx i
+evalBeginTx i = view eeTxId >>= beginTx i
 {-# INLINE evalBeginTx #-}
 
 evalRollbackTx :: Info -> Eval e ()
