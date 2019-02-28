@@ -851,17 +851,32 @@ spec = describe "analyze" $ do
   describe "requesting token that was granted" $ do
     let code =
           [text|
-            (defcap CAP (i:integer)
+            (defcap CAP (i:integer b:bool)
               (enforce-keyset "foo"))
 
             (defun do-require ()
-              (require-capability (CAP 100)))
+              (require-capability (CAP 100 false)))
 
             (defun test:bool ()
-              (with-capability (CAP 100)
+              (with-capability (CAP 100 false)
                 (do-require)))
           |]
     expectPass code $ Valid $ Inj (GuardPassed "foo") .=> Success'
+
+  describe "requesting different capability fails" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              true)
+
+            (defcap BAR (b:bool)
+              true)
+
+            (defun test:bool ()
+              (with-capability (FOO 2)
+                (require-capability (BAR false))))
+          |]
+    expectPass code $ Valid Abort'
 
   describe "requesting token that was not granted for the same args" $ do
     let code =
@@ -874,6 +889,35 @@ spec = describe "analyze" $ do
                 (require-capability (CAP 1))))
           |]
     expectPass code $ Valid Abort'
+
+  describe "require-capability does not execute the capability" $ do
+    let code =
+          [text|
+            (defcap CAP (k:string)
+              ;; Insert can only succeed the *first and only* time it's run
+              (insert accounts k {"balance": 0})
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP "bob")
+                (require-capability (CAP "bob"))))
+          |]
+    expectPass code $ Valid $
+      (PNot (Inj (RowExists "accounts" "bob" Before)) .&& Inj (TableWrite "accounts"))
+      .<=>
+      Success'
+
+  describe "token caching works for expressions which perform computation" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (FOO (+ 3 0))
+                (require-capability (FOO (+ 2 1)))))
+          |]
+    expectPass code $ Valid Success'
 
   describe "enforce-one.1" $ do
     let code =
