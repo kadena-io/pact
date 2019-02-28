@@ -967,6 +967,24 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Abort'
 
+  describe "capabilities are not granted until the body of with-capability" $ do
+    let code =
+          [text|
+            (defcap BAR ()
+              true)
+
+            (defcap FOO ()
+              (compose-capability (BAR))
+              ; BAR is not yet granted here:
+              (require-capability (BAR)))
+
+            (defun test:bool ()
+              (with-capability (FOO)
+                ; FOO and BAR are granted here.
+                true))
+          |]
+    expectPass code $ Valid Abort'
+
   describe "enforce-one.1" $ do
     let code =
           [text|
