@@ -919,6 +919,53 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "compose-capability grants a capability" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              (if (> i 0)
+                (compose-capability (BAR false))
+                false))
+
+            (defcap BAR (b:bool)
+              true)
+
+            (defun test:bool ()
+              (with-capability (FOO 2)
+                (require-capability (BAR false))))
+          |]
+    expectPass code $ Valid Success'
+
+  describe "compose-capability can fail" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              (compose-capability (BAR false)))
+
+            (defcap BAR (b:bool)
+              (enforce b "enforce failed"))
+
+            (defun test:bool ()
+              (with-capability (FOO 2)
+                (require-capability (BAR false))))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "compose-capability only grants for specific arguments" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              (compose-capability (BAR i)))
+
+            (defcap BAR (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (FOO 2)
+                (require-capability (BAR 3))))
+          |]
+    expectPass code $ Valid Abort'
+
   describe "enforce-one.1" $ do
     let code =
           [text|

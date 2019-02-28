@@ -622,6 +622,20 @@ translateGuard guardA = do
   tid <- tagGuard $ guardA ^. aNode
   return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
 
+translateCapabilityApp
+  :: Pact.ModuleName
+  -> CapName
+  -> [(Named Node, AST Node)]
+  -> [AST Node]
+  -> TranslateM ETerm
+translateCapabilityApp modName capName bindingsA appBodyA = do
+  cap <- lookupCapability capName
+  withTranslatedBindings bindingsA $ \bindingTs tid -> do
+    withNewScope (CapabilityScope modName capName) bindingTs tid $ do
+      let vids = toListOf (traverse.located.bVid) bindingTs
+      fmap (mapExistential $ Granting cap vids) $
+        translateBody appBodyA
+
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
@@ -976,12 +990,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
     let capName = CapName $ T.unpack funName
-    cap <- lookupCapability capName
-    appET <- withTranslatedBindings bindings $ \bindingTs tid -> do
-      withNewScope (CapabilityScope modName capName) bindingTs tid $ do
-        let vids = toListOf (traverse.located.bVid) bindingTs
-        fmap (mapExistential $ Granting cap vids) $
-          translateBody appBodyA
+    appET <- translateCapabilityApp modName capName bindings appBodyA
     Some ty withBodyT <- translateBody withBodyA
     pure $ Some ty $ WithCapability appET withBodyT
 
@@ -995,6 +1004,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
       tid <- genTagId
       emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
       pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
+
+  AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) ->
+    translateCapabilityApp modName (CapName $ T.unpack funName) bindings appBodyA
 
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||

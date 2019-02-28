@@ -209,6 +209,10 @@ pattern AST_RequireCapability :: Node -> AST Node -> AST Node
 pattern AST_RequireCapability node app <-
   App node (NativeFunc "require-capability") [app]
 
+pattern AST_ComposeCapability :: AST Node -> AST Node
+pattern AST_ComposeCapability app <-
+  App _node (NativeFunc "compose-capability") [app]
+
 -- pattern RawTableName :: Text -> AST Node
 -- pattern RawTableName t <- Table (Node (TcId _ t _) _) _
 
