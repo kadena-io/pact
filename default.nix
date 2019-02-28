@@ -88,12 +88,12 @@ in
             hlint = self.callHackage "hlint" "2.0.14" {};
             # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-            # sbv with a patch to disable "unsupported query call" until it's fixed upstream
+            # this is pre-sbv-8.1 (switch when it's released)
             sbv = dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
-              owner = "joelburget";
+              owner = "LeventErkok";
               repo = "sbv";
-              rev = "25d9357ff8eaac697eb6fde96598d7beb587b4e9";
-              sha256 = "0i0ajrw8j9hc208hizi4rnj5giqhbawjfgdbacswwfvgfqvvb69z";
+              rev = "68375576f87d17a2da759c56f7147f4e559471a2";
+              sha256 = "11qmgc8jnsx1m2hy3x28ihl941ik4wsdpj0bkbsz226zncad13dp";
             }) {});
 
             # need crackNum 2.3

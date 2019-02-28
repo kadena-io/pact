@@ -302,7 +302,7 @@ verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body = ru
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       lift $ SBV.setTimeOut 1000 -- one second
       modelArgs' <- lift $ runAlloc $ allocArgs args
-      tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+      tags       <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
       let rootPath = _egRootPath graph
       resultsTable <- withExceptT analyzeToCheckFailure $
         runInvariantAnalysis modName tables caps (analysisArgs modelArgs') tm
@@ -333,7 +333,7 @@ verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body = ru
     goal = Validation
 
     config :: SBV.SMTConfig
-    config = SBV.z3 -- { SBVI.verbose = True }
+    config = SBV.z3 { SBVI.allowQuantifiedQueries = True } -- , SBVI.verbose = True }
 
     -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
@@ -363,33 +363,35 @@ verifyFunctionProperty modName funName funInfo tables caps pactArgs body (Locate
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       lift $ SBV.setTimeOut 1000 -- one second
       modelArgs' <- lift $ runAlloc $ allocArgs args
-      tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+      tags       <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
       let rootPath = _egRootPath graph
       AnalysisResult _querySucceeds prop ksProvs
         <- withExceptT analyzeToCheckFailure $
           runPropertyAnalysis modName check tables caps
             (analysisArgs modelArgs') tm rootPath tags funInfo
 
+      let model = Model modelArgs' tags ksProvs graph
+
       -- TODO: bring back the query success check when we've resolved the SBV
       -- query / quantified variables issue:
       -- https://github.com/LeventErkok/sbv/issues/407
       --
       -- _ <- hoist SBV.query $ do
-      --   void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
-      --   withExceptT (smtToQueryFailure (getInfo check)) $
+      --   void $ lift $ SBV.constrain $ SBV.sNot $ successBool querySucceeds
+      --   withExceptT (smtToQueryFailure propInfo) $
       --     resultQuery Validation model
 
       void $ lift $ SBV.output prop
       hoist SBV.query $
         withExceptT (smtToCheckFailure propInfo) $
-          resultQuery goal $ Model modelArgs' tags ksProvs graph
+          resultQuery goal model
 
   where
     goal :: Goal
     goal = checkGoal check
 
     config :: SBV.SMTConfig
-    config = SBV.z3 -- { SBVI.verbose = True }
+    config = SBV.z3 { SBVI.allowQuantifiedQueries = True } -- , SBVI.verbose = True }
 
     -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
@@ -400,7 +402,7 @@ verifyFunctionProperty modName funName funInfo tables caps pactArgs body (Locate
 
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = fmap fst .
-      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
+      SBVI.runSymbolic (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup (goal == Satisfaction) config)
 
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
@@ -855,5 +857,6 @@ verifyCheck moduleData funName check = do
   tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
-      Right . head <$> verifyFunctionProps moduleName tables caps funRef funName [Located info check]
+      Right . head <$> verifyFunctionProps moduleName tables caps funRef funName
+        [Located info check]
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName

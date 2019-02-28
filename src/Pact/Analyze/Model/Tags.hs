@@ -30,7 +30,7 @@ import           Data.SBV             (SBV, SymVal)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
-import           Data.Text            (pack)
+import           Data.Text            (pack, unpack)
 import           Data.Traversable     (for)
 import           GHC.TypeLits         (symbolVal)
 
@@ -39,32 +39,36 @@ import qualified Pact.Types.Typecheck as TC
 import           Pact.Analyze.Alloc   (Alloc, free, singFree)
 import           Pact.Analyze.Types
 
-allocS :: forall a. SingI a => Alloc (S (Concrete a))
-allocS = free @a
+allocS :: forall a. SingI a => String -> Alloc (S (Concrete a))
+allocS name = free @a ("tag_" ++ name)
 
-allocSbv :: forall a. SingI a => Alloc (SBV (Concrete a))
-allocSbv = _sSbv <$> allocS @a
+allocSbv :: forall a. SingI a => String -> Alloc (SBV (Concrete a))
+allocSbv name = _sSbv <$> allocS @a name
 
 allocSchema :: SingList schema -> Alloc UObject
 allocSchema = fmap UObject . allocSchema' where
   allocSchema' = foldrSingList (pure Map.empty) $ \k ty m -> do
-    let ety = EType ty
-    val <- allocAVal ety
-    Map.insert (pack (symbolVal k)) (ety, val) <$> m
+    let ety  = EType ty
+        name = symbolVal k
+    val <- allocAVal name ety
+    Map.insert (pack name) (ety, val) <$> m
 
-allocAVal :: EType -> Alloc AVal
-allocAVal (EType ty) = mkAVal <$> singFree ty
+allocAVal :: String -> EType -> Alloc AVal
+allocAVal name (EType ty) = mkAVal <$> singFree name ty
 
-allocTVal :: EType -> Alloc TVal
-allocTVal ety = (ety,) <$> allocAVal ety
+allocTVal :: String -> EType -> Alloc TVal
+allocTVal name ety = (ety,) <$> allocAVal name ety
 
-allocForETerm :: ETerm -> Alloc TVal
-allocForETerm (existentialType -> ety) = allocTVal ety
+allocForETerm :: String -> ETerm -> Alloc TVal
+allocForETerm name (existentialType -> ety) = allocTVal name ety
+
+unmungedStr :: Unmunged -> String
+unmungedStr (Unmunged name) = unpack name
 
 allocArgs :: [Arg] -> Alloc (Map VarId (Located (Unmunged, TVal)))
 allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   let info = node ^. TC.aId . TC.tiInfo
-  av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
+  av <- allocAVal (unmungedStr nm) ety <&> _AVal._1 ?~ FromInput nm
   pure (vid, Located info (nm, (ety, av)))
 
 allocModelTags
@@ -98,7 +102,8 @@ allocModelTags argsMap locatedTm graph = ModelTags
       for (toListOf (traverse._TracePushScope._3.traverse) events) $
         \(Located info (Binding vid nm _ ety)) ->
           case Map.lookup vid argsMap of
-            Nothing  -> allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
+            Nothing  -> allocTVal ("binding_" ++ unmungedStr nm) ety <&>
+              \tv -> (vid, Located info (nm, tv))
             Just arg -> pure (vid, arg)
 
     allocAccesses
@@ -107,9 +112,9 @@ allocModelTags argsMap locatedTm graph = ModelTags
     allocAccesses p = fmap Map.fromList $
       for (toListOf (traverse.p) events) $
         \(ESchema schema, Located info tid) -> do
-          srk <- allocS @TyRowKey
+          srk <- allocS @TyRowKey "row_key"
           obj <- allocSchema schema
-          suc <- allocSbv @'TyBool
+          suc <- allocSbv @'TyBool "access_success"
           pure (tid, Located info (Access srk obj suc))
 
     allocReads :: Alloc (Map TagId (Located Access))
@@ -127,18 +132,20 @@ allocModelTags argsMap locatedTm graph = ModelTags
     allocAsserts :: Alloc (Map TagId (Located (SBV Bool)))
     allocAsserts = fmap Map.fromList $
       for (toListOf (traverse._TraceAssert._2) events) $ \(Located info tid) ->
-        (tid,) . Located info <$> allocSbv @'TyBool
+        (tid,) . Located info <$> allocSbv @'TyBool "assert"
 
     allocGEs :: Alloc (Map TagId (Located GuardEnforcement))
     allocGEs = fmap Map.fromList $
       for (toListOf (traverse._TraceGuard._2) events) $ \(Located info tid) ->
         (tid,) . Located info <$>
-          (GuardEnforcement <$> allocS @'TyGuard <*> allocSbv @'TyBool)
+          (GuardEnforcement
+            <$> allocS @'TyGuard "guard"
+            <*> allocSbv @'TyBool "guard_success")
 
     allocResult :: Alloc (TagId, Located TVal)
     allocResult = do
       let tid :: TagId = last $ toListOf (traverse._TracePopScope._3) events
-      fmap (tid,) $ sequence $ allocForETerm <$> locatedTm
+      fmap (tid,) $ sequence $ allocForETerm "result" <$> locatedTm
 
     -- NOTE: the root path we manually set to true. translation only emits the
     -- start of "subpaths" on either side of a conditional. the root path is
@@ -148,12 +155,12 @@ allocModelTags argsMap locatedTm graph = ModelTags
     allocPaths = do
       let rootPath = _egRootPath graph
           paths    = rootPath : toListOf (traverse._TraceSubpathStart) events
-      Map.fromList <$> for paths (\p -> (p,) <$> allocSbv @'TyBool)
+      Map.fromList <$> for paths (\p -> (p,) <$> allocSbv @'TyBool "path")
 
     allocReturns :: Alloc (Map TagId TVal)
     allocReturns = fmap Map.fromList $
       for (toListOf (traverse._TracePopScope) events) $ \(_, _, tid, ety) ->
-        (tid,) <$> allocTVal ety
+        (tid,) <$> allocTVal "trace_pop_scope" ety
 
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided
 -- symbolic 'Model'.

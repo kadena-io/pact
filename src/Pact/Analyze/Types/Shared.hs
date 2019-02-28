@@ -361,7 +361,7 @@ instance (SymVal a) => Mergeable (S a) where
 instance EqSymbolic (S a) where
   S _ x .== S _ y = x .== y
 
-instance SymVal a => OrdSymbolic (S a) where
+instance (Ord a, SymVal a) => OrdSymbolic (S a) where
   S _ x .< S _ y = x .< y
 
 instance Boolean (S Bool) where
@@ -400,7 +400,7 @@ instance {-# OVERLAPPING #-} Num (S Decimal) where
   fromInteger i  = sansProv $ fromInteger i
   negate (S _ x) = sansProv $ negate x
 
-instance (Num a, SymVal a) => Num (S a) where
+instance (Num a, Ord a, SymVal a) => Num (S a) where
   S _ x + S _ y  = sansProv $ x + y
   S _ x * S _ y  = sansProv $ x * y
   abs (S _ x)    = sansProv $ abs x
@@ -414,7 +414,7 @@ instance {-# OVERLAPPING #-} Fractional (S Decimal) where
   fromRational  = literalS . fromRational
   S _ x / S _ y = sansProv $ x / y
 
-instance (Fractional a, SymVal a) => Fractional (S a) where
+instance (Fractional a, Ord a, SymVal a) => Fractional (S a) where
   fromRational = literalS . fromRational
   S _ x / S _ y = sansProv $ x / y
 
@@ -636,7 +636,7 @@ fromIntegralS
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral
 
-oneIfS :: (Num a, SymVal a) => S Bool -> S a
+oneIfS :: (Num a, Ord a, SymVal a) => S Bool -> S a
 oneIfS = over s2Sbv oneIf
 
 isConcreteS :: SymVal a => S a -> Bool
@@ -869,6 +869,24 @@ withEq = withDict . singMkEq
       SObjectUnsafe SNil'   -> Dict
       SObjectUnsafe (SCons' _ ty' tys)
         -> withEq ty' $ withDict (singMkEq (SObjectUnsafe tys)) Dict
+
+withOrd :: SingTy a -> (Ord (Concrete a) => b) -> b
+withOrd = withDict . singMkOrd
+  where
+
+    singMkOrd :: SingTy a -> Dict (Ord (Concrete a))
+    singMkOrd = \case
+      SInteger     -> Dict
+      SBool        -> Dict
+      SStr         -> Dict
+      STime        -> Dict
+      SDecimal     -> Dict
+      SGuard       -> Dict
+      SAny         -> Dict
+      SList ty'    -> withOrd ty' Dict
+      SObjectUnsafe SNil'   -> Dict
+      SObjectUnsafe (SCons' _ ty' tys)
+        -> withOrd ty' $ withDict (singMkOrd (SObjectUnsafe tys)) Dict
 
 withShow :: SingTy a -> (Show (Concrete a) => b) -> b
 withShow = withDict . singMkShow

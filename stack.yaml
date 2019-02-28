@@ -16,7 +16,6 @@ extra-deps:
   - git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   - constraints-extras-0.2.0.0
-  # temporarily using a patched fork of sbv to disable "unsupported query call"
-  # until it's fixed upstream
-  - git: https://github.com/joelburget/sbv.git
-    commit: 8d13e26255178c5ee5b5b3fad97873ff214d7470
+  # this is pre-sbv-8.1 (switch when it's released)
+  - git: https://github.com/LeventErkok/sbv.git
+    commit: 68375576f87d17a2da759c56f7147f4e559471a2
