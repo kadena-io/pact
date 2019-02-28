@@ -909,9 +909,6 @@ newtype AbbrevNode = AbbrevNode (Either Ref (AST Node))
 instance Pretty AbbrevNode where
   pretty (AbbrevNode node) = either pretty pretty node
 
-instance Abbrev AbbrevNode where
-  abbrev (AbbrevNode node) = either abbrev abbrev node
-
 -- | Convert a top-level Term to a TopLevel.
 mkTop :: Term (Either Ref (AST Node)) -> TC (TopLevel Node)
 mkTop t@TDef {..} = do

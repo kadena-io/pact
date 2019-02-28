@@ -223,9 +223,6 @@ instance (Pretty o) => Pretty (Type o) where
     TyPrim t       -> pretty t
     TyAny          -> "*"
 
-instance Pretty v => Abbrev (Type v) where
-  abbrev = renderCompactString
-
 mkTyVar :: TypeVarName -> [Type n] -> Type n
 mkTyVar n cs = TyVar (TypeVar n cs)
 mkTyVar' :: TypeVarName -> Type n

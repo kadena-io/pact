@@ -5,11 +5,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Pact.Types.Pretty
   ( (<+>)
-  , Abbrev(..)
   , Annot(..)
   , Doc
   , Pretty(..)
   , RenderColor(..)
+  , abbrev
   , align
   , angles
   , annotate
@@ -208,5 +208,16 @@ instance (Pretty a, Pretty b) => Pretty (Var a b) where
     B b -> pretty b
     F a -> pretty a
 
-class Pretty a => Abbrev a where
-  abbrev :: a -> String
+-- | Abbreviated 'pretty'
+abbrev :: Pretty a => a -> String
+abbrev a = case take' 50 (renderCompactString a) of
+  (str, True)  -> str ++ "..."
+  (str, False) -> str
+
+-- | 'take' modified to also return a boolean whether there are leftover
+-- elements not consumed
+take' :: Int -> [a] -> ([a], Bool)
+take' _ []     = ([], False)
+take' 0 _      = ([], True)
+take' m (x:xs) = case take' (m - 1) xs of
+  (xs', b) -> (x:xs', b)
