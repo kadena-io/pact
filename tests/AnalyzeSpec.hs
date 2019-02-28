@@ -919,7 +919,7 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
-  describe "compose-capability grants a capability" $ do
+  describe "compose-capability grants an additional capability" $ do
     let code =
           [text|
             (defcap FOO (i:integer)
@@ -932,6 +932,7 @@ spec = describe "analyze" $ do
 
             (defun test:bool ()
               (with-capability (FOO 2)
+                (require-capability (FOO 2))
                 (require-capability (BAR false))))
           |]
     expectPass code $ Valid Success'
