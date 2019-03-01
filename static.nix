@@ -23,6 +23,7 @@ in (rp.ghcMusl64.override {
         optparse-applicative = dontHaddock super.optparse-applicative;
         scientific = dontCheck super.scientific;
         servant-client = dontCheck super.servant-client;
+        wai-app-static = dontHaddock super.wai-app-static;
         cryptonite = dontCheck super.cryptonite;
         parsers = dontHaddock super.parsers;
         statistics = dontHaddock super.statistics;
@@ -57,12 +58,12 @@ in (rp.ghcMusl64.override {
           hlint = self.callHackage "hlint" "2.0.14" {};
           # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-          # sbv >= 7.9
+          # sbv with a patch to disable "unsupported query call" until it's fixed upstream
           sbv = dontHaddock (dontCheck (self.callCabal2nix "sbv" (rp.nixpkgs.fetchFromGitHub {
-            owner = "LeventErkok";
+            owner = "joelburget";
             repo = "sbv";
-            rev = "3dc60340634c82f39f6c5dca2b3859d10925cfdf";
-            sha256 = "18xcxg1h19zx6gdzk3dfs87447k3xjqn40raghjz53bg5k8cdc31";
+            rev = "25d9357ff8eaac697eb6fde96598d7beb587b4e9";
+            sha256 = "0i0ajrw8j9hc208hizi4rnj5giqhbawjfgdbacswwfvgfqvvb69z";
           }) {}));
 
           # Our own custom fork
