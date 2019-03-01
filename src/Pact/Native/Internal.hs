@@ -172,8 +172,7 @@ enforceGuard i g = case g of
       MDModule Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} -> do
-    void $ runReadOnly (_faInfo i) $
-      enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
+    void $ runReadOnly (_faInfo i) $ evalByName _ugPredFun [_ugData] (_faInfo i)
 
 findCallingModule :: Eval e (Maybe ModuleName)
 findCallingModule = uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))

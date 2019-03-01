@@ -71,6 +71,10 @@
 
   (defun bad-with-cap ()
     (with-capability (BAD_WITH_CAP) true))
+
+  (defun loop (x:integer)
+    (enforce-guard (create-user-guard x "loop")))
+
 )
 
 (create-table guard-table)
@@ -175,3 +179,5 @@
 (expect-failure "nested with-capability fails" (bad-with-cap))
 
 (expect-failure "shadowed cap fails" (caps-shadow.bad-shadow-granted "k1"))
+
+(expect-failure "loop in guard detected" (loop 1))
