@@ -77,7 +77,6 @@ import           Pact.Types.Util              (AsString)
 import           Pact.Analyze.LegacySFunArray (SFunArray)
 import           Pact.Analyze.Feature         hiding (Constraint, Doc, Type,
                                                dec, ks, obj, str, time)
-import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Types

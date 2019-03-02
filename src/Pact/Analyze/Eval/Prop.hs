@@ -30,7 +30,6 @@ import           Pact.Analyze.Alloc         (Alloc, MonadAlloc, singExists,
                                              singForAll)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
-import           Pact.Analyze.Orphans       ()
 import           Pact.Analyze.Types         hiding (objFields, tableName)
 import qualified Pact.Analyze.Types         as Types
 import           Pact.Analyze.Types.Eval
