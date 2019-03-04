@@ -1,9 +1,6 @@
-{-# LANGUAGE PackageImports #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -45,8 +42,8 @@ module Pact.Types.Crypto
 import Prelude
 import GHC.Generics
 
-import "crypto-api" Crypto.Random
-import qualified    Crypto.Hash    as H
+import qualified Crypto.Error as E
+import qualified Crypto.Hash  as H
 
 import Data.Aeson.Types   (toJSONKeyText)
 import Data.Text.Encoding
@@ -60,7 +57,7 @@ import qualified Data.Serialize          as S
 
 import Pact.Types.Util
 import Pact.Types.Scheme               as ST
-import qualified Crypto.Ed25519.Pure   as Ed25519
+import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Pact.Types.ECDSA      as ECDSA
 
 
@@ -158,11 +155,11 @@ toPPKScheme SETH     = ETH
 
 instance Scheme (SPPKScheme 'ED25519) where
   type PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
-  type PrivateKey (SPPKScheme 'ED25519) = Ed25519.PrivateKey
+  type PrivateKey (SPPKScheme 'ED25519) = Ed25519.SecretKey
   type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
 
-  _sign _ (Hash msg) pub priv = return $ Ed25519.sign msg priv pub
-  _valid _ (Hash msg) pub sig = Ed25519.valid msg pub sig
+  _sign _ (Hash msg) pub priv = return $ Ed25519.sign priv pub msg
+  _valid _ (Hash msg) pub sig = Ed25519.verify pub msg sig
   _genKeyPair _ = ed25519GenKeyPair
   _getPublic _ = Just . ed25519GetPublicKey
   _formatPublicKey _ p = toBS p
@@ -170,16 +167,23 @@ instance Scheme (SPPKScheme 'ED25519) where
 
 
 instance ConvertBS (Ed25519.PublicKey) where
-  toBS = Ed25519.exportPublic
-  fromBS s = maybeToEither ("Invalid ED25519 Public Key: " ++ show (toB16Text s))
-             (Ed25519.importPublic s)
-instance ConvertBS (Ed25519.PrivateKey) where
-  toBS = Ed25519.exportPrivate
-  fromBS s = maybeToEither ("Invalid ED25519 Private Key: " ++ show (toB16Text s))
-             (Ed25519.importPrivate s)
+  toBS = B.convert
+  fromBS s = E.onCryptoFailure
+             (const $ Left ("Invalid ED25519 Public Key: " ++ show (toB16Text s)))
+             Right
+             (Ed25519.publicKey s)
+instance ConvertBS (Ed25519.SecretKey) where
+  toBS = B.convert
+  fromBS s = E.onCryptoFailure
+             (const $ Left ("Invalid ED25519 Private Key: " ++ show (toB16Text s)))
+             Right
+             (Ed25519.secretKey s)
 instance ConvertBS Ed25519.Signature where
-  toBS (Ed25519.Sig bs) = bs
-  fromBS = Right . Ed25519.Sig
+  toBS = B.convert
+  fromBS s = E.onCryptoFailure
+             (const $ Left ("Invalid ED25519 Signature: " ++ show (toB16Text s)))
+             Right
+             (Ed25519.signature s)
 
 
 
@@ -343,44 +347,39 @@ instance FromJSONKey ByteString where
 
 --------- ED25519 FUNCTIONS AND INSTANCES ---------
 
-ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.PrivateKey)
+ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.SecretKey)
 ed25519GenKeyPair = do
-    g :: SystemRandom <- newGenIO
-    case Ed25519.generateKeyPair g of
-      Left _ -> error "Something went wrong in genKeyPairs"
-      Right (s,p,_) -> return (p, s)
+    secret <- Ed25519.generateSecretKey
+    let public = Ed25519.toPublic secret
+    return (public, secret)
 
 
-ed25519GetPublicKey :: Ed25519.PrivateKey -> Ed25519.PublicKey
-ed25519GetPublicKey = Ed25519.generatePublic
+ed25519GetPublicKey :: Ed25519.SecretKey -> Ed25519.PublicKey
+ed25519GetPublicKey = Ed25519.toPublic
 
 
 
 
-instance Eq Ed25519.PublicKey where
-  b == b' = (Ed25519.exportPublic b) == (Ed25519.exportPublic b')
 instance Ord Ed25519.PublicKey where
-  b <= b' = (Ed25519.exportPublic b) <= (Ed25519.exportPublic b')
+  b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
 instance Serialize Ed25519.PublicKey where
-  put s = S.putByteString (Ed25519.exportPublic s)
+  put s = S.putByteString (B.convert s :: ByteString)
   get = maybe (fail "Invalid ED25519 Public Key") return =<<
-        (Ed25519.importPublic <$> S.getByteString 32)
+        (E.maybeCryptoError . Ed25519.publicKey <$> S.getByteString 32)
 
 
-
-instance Eq Ed25519.PrivateKey where
-  b == b' = (Ed25519.exportPrivate b) == (Ed25519.exportPrivate b')
-instance Ord Ed25519.PrivateKey where
-  b <= b' = (Ed25519.exportPrivate b) <= (Ed25519.exportPrivate b')
-instance Serialize Ed25519.PrivateKey where
-  put s = S.putByteString (Ed25519.exportPrivate s)
+instance Ord Ed25519.SecretKey where
+  b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
+instance Serialize Ed25519.SecretKey where
+  put s = S.putByteString (B.convert s :: ByteString)
   get = maybe (fail "Invalid ED25519 Private Key") return =<<
-        (Ed25519.importPrivate <$> S.getByteString 32)
+        (E.maybeCryptoError . Ed25519.secretKey <$> S.getByteString 32)
 
 
 
-deriving instance Eq Ed25519.Signature
-deriving instance Ord Ed25519.Signature
+instance Ord Ed25519.Signature where
+  b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
 instance Serialize Ed25519.Signature where
-  put (Ed25519.Sig s) = S.put s
-  get = Ed25519.Sig <$> (S.get >>= S.getByteString)
+  put s = S.put (B.convert s :: ByteString)
+  get = maybe (fail "Invalide ED25519 Signature") return =<<
+        (E.maybeCryptoError . Ed25519.signature <$> (S.get >>= S.getByteString))
