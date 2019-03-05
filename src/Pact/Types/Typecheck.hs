@@ -250,6 +250,7 @@ instance Pretty t => Pretty (Fun t) where
     , ""
     ]
 
+
 -- | Pair an AST with its type.
 data Node = Node {
   _aId :: TcId,
@@ -371,6 +372,7 @@ instance Pretty t => Pretty (AST t) where
             , indent 2 $ pretty _aExec
             ]
    where pn = pretty (_aNode a)
+
 
 
 makeLenses ''AST
