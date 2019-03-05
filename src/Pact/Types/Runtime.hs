@@ -393,7 +393,7 @@ argsError :: FunApp -> [Term Name] -> Eval e a
 argsError i as = throwArgsError i as "Invalid arguments"
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
-argsError' i as = throwArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
+argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
 
 
 --

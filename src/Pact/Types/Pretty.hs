@@ -10,6 +10,7 @@ module Pact.Types.Pretty
   , Pretty(..)
   , RenderColor(..)
   , abbrev
+  , abbrevStr
   , align
   , angles
   , annotate
@@ -58,6 +59,7 @@ import           Data.Foldable        (toList)
 import qualified Data.HashMap.Strict  as HM
 import           Data.Int
 import           Data.Text            (Text, pack, unpack)
+import qualified Data.Text            as Text
 import           Data.Text.Prettyprint.Convert.AnsiWlPprint (fromAnsiWlPprint)
 import           Data.Text.Prettyprint.Doc
   (SimpleDocStream, annotate, unAnnotate, layoutPretty,
@@ -209,15 +211,12 @@ instance (Pretty a, Pretty b) => Pretty (Var a b) where
     F a -> pretty a
 
 -- | Abbreviated 'pretty'
-abbrev :: Pretty a => a -> String
-abbrev a = case take' 50 (renderCompactString a) of
-  (str, True)  -> str ++ "..."
-  (str, False) -> str
+abbrev :: Pretty a => a -> Text
+abbrev a =
+  let fullText = renderCompactText a
+  in case Text.compareLength fullText 50 of
+       GT -> Text.take 50 fullText <> "..."
+       _  -> fullText
 
--- | 'take' modified to also return a boolean whether there are leftover
--- elements not consumed
-take' :: Int -> [a] -> ([a], Bool)
-take' _ []     = ([], False)
-take' 0 _      = ([], True)
-take' m (x:xs) = case take' (m - 1) xs of
-  (xs', b) -> (x:xs', b)
+abbrevStr :: Pretty a => a -> String
+abbrevStr = unpack . abbrev

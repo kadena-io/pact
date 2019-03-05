@@ -912,21 +912,21 @@ instance Pretty AbbrevNode where
 -- | Convert a top-level Term to a TopLevel.
 mkTop :: Term (Either Ref (AST Node)) -> TC (TopLevel Node)
 mkTop t@TDef {..} = do
-  debug $ "===== Fun: " ++ abbrev (AbbrevNode <$> t)
+  debug $ "===== Fun: " ++ abbrevStr (AbbrevNode <$> t)
   TopFun <$> toFun t <*> pure (_dMeta _tDef)
 mkTop t@TConst {..} = do
-  debug $ "===== Const: " ++ abbrev (AbbrevNode <$> t)
+  debug $ "===== Const: " ++ abbrevStr (AbbrevNode <$> t)
   TopConst _tInfo (asString _tModule <> "." <> _aName _tConstArg) <$>
     traverse toUserType (_aType _tConstArg) <*>
     toAST (_cvRaw _tConstVal) <*> pure (_mDocs _tMeta)
 mkTop t@TTable {..} = do
-  debug $ "===== Table: " ++ abbrev (AbbrevNode <$> t)
+  debug $ "===== Table: " ++ abbrevStr (AbbrevNode <$> t)
   TopTable _tInfo (asString _tModule <> "." <> asString _tTableName) <$>
     traverse toUserType _tTableType <*> pure _tMeta
 mkTop t@TSchema {..} = do
-  debug $ "===== Schema: " ++ abbrev (AbbrevNode <$> t)
+  debug $ "===== Schema: " ++ abbrevStr (AbbrevNode <$> t)
   TopUserType _tInfo <$> toUserType' t <*> pure (_mDocs _tMeta)
-mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrev (AbbrevNode <$> t)
+mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrevStr (AbbrevNode <$> t)
 
 
 -- | Recursively compute the "leaf type" where
@@ -1031,9 +1031,9 @@ typecheckTopLevel :: Ref -> TC (TopLevel Node)
 typecheckTopLevel (Ref r) = do
   tl <- mkTop (fmap Left r)
   tl' <- typecheck tl
-  debug $ "===== Done: " ++ abbrev r
+  debug $ "===== Done: " ++ abbrevStr r
   return tl'
-typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrev d
+typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrevStr d
 
 -- | Typecheck all productions in a module.
 typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[Failure])
