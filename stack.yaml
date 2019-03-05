@@ -11,6 +11,7 @@ extra-deps:
   - crackNum-2.3
   - FloatingHex-0.4
   - compactable-0.1.2.2
+  - ed25519-donna-0.1.1
   - hw-hspec-hedgehog-0.1.0.5
   - git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
