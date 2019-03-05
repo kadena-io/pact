@@ -41,10 +41,10 @@ module Pact.Eval
     ,capabilityGranted
     ,revokeCapability,revokeAllCapabilities
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
-    ,enscopeApply
+    ,evalByName
     ) where
 
-import Control.Lens
+import Control.Lens hiding (DefName)
 import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Monad.Catch (throwM)
@@ -111,8 +111,7 @@ enforceKeySet i ksn KeySet{..} = do
     Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
     Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
     Nothing -> do
-      r <- enscopeApply $
-        App (TVar _ksPredFun def) [toTerm count,toTerm matched] i
+      r <- evalByName _ksPredFun [toTerm count,toTerm matched] i
       case r of
         (TLiteral (LBool b) _) | b -> return ()
                                | otherwise -> failTx i $ "Keyset failure: " <>
@@ -121,14 +120,42 @@ enforceKeySet i ksn KeySet{..} = do
 {-# INLINE enforceKeySet #-}
 
 
--- Hoist Name back to ref
+-- | Hoist Name back to ref
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
 
-enscopeApply :: App (Term Name) -> Eval e (Term Name)
-enscopeApply a = do
-  a' <- enscope $ TApp a (_appInfo a)
-  reduce a'
+-- | Eval a function by name with supplied args, and guard against recursive execution.
+evalByName :: Name -> [Term Name] -> Info -> Eval e (Term Name)
+evalByName n as i = do
+
+  -- Build and resolve TApp
+
+  app <- enscope (TApp (App (TVar n def) as i) i)
+
+  -- lens into user function if any to test for loop
+
+  case preview (tApp . appFun . tVar . _Ref . tDef) app of
+    Nothing -> return ()
+    Just Def{..} -> do
+
+      -- lens into call stack to find first app with matching name/module, blowup if found
+
+      let sameName :: DefName -> ModuleName -> FunApp -> Maybe ()
+          sameName dn mn FunApp{..}
+            | (DefName _faName) == dn && Just mn == _faModule = Just ()
+            | otherwise = Nothing
+
+      found <- uses evalCallStack $
+               preview (traverse . sfApp . _Just . _1 . to (sameName _dDefName _dModule) . _Just)
+
+      case found of
+        Just () -> evalError i $ "evalByName: loop detected: " <> pretty n
+        _ -> return ()
+
+  -- success: evaluate
+
+  reduce app
+
 
 -- | Application with additional args.
 apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
