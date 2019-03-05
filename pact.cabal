@@ -92,7 +92,6 @@ library
       Pact.Analyze.Parse.Prop
       Pact.Analyze.Parse.Types
       Pact.Analyze.Patterns
-      Pact.Analyze.PrenexNormalize
       Pact.Analyze.Translate
       Pact.Analyze.Types
       Pact.Analyze.Types.Capability

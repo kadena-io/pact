@@ -48,7 +48,6 @@ import           Pact.Analyze.Eval.Numerical  (banker'sMethodS)
 import qualified Pact.Analyze.Model           as Model
 import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
-import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
@@ -1984,61 +1983,6 @@ spec = describe "analyze" $ do
     expectVerified code
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable Success'
-
-  describe "prenex conversion" $ do
-    -- These test a somewhat irrelevant implementation detail -- the specific
-    -- unique id, which is not ideal, but will do for now.
-    let a1       = PVar 1 "a"
-        a2       = PVar 2 "a"
-        -- b        = PVar 1 "b"
-        ty       = EType SStr
-        intTy    = EType SInteger
-        allA1    = Inj ... Forall 1 "a"
-        allA2    = Inj ... Forall 2 "a"
-        existsA1 = Inj ... Exists 1 "a"
-        existsA2 = Inj ... Exists 2 "a"
-
-    it "lifts all over not (becomes exists)" $
-      prenexConvert (PNot (allA1 ty a1))
-      `shouldBe`
-      existsA1 ty (PNot a1)
-
-    it "lifts exists over not (becomes all)" $
-      prenexConvert (PNot (existsA1 ty a1))
-      `shouldBe`
-      allA1 ty (PNot a1)
-
-    it "lifts all over or" $
-      prenexConvert (POr (allA1 ty a1) (allA2 ty a2))
-      `shouldBe`
-      allA1 ty (allA2 ty (POr a1 a2))
-
-    it "lifts all over and" $
-      prenexConvert (PAnd (allA1 ty a1) (allA2 ty a2))
-      `shouldBe`
-      allA1 ty (allA2 ty (PAnd a1 a2))
-
-    it "lifts exists over or" $
-      prenexConvert (POr (existsA1 ty a1) (existsA2 ty a2))
-      `shouldBe`
-      existsA1 ty (existsA2 ty (POr a1 a2))
-
-    it "lifts exists over and" $
-      prenexConvert (PAnd (existsA1 ty a1) (existsA2 ty a2))
-      `shouldBe`
-      existsA1 ty (existsA2 ty (PAnd a1 a2))
-
-    it "lifts forall string" $
-      prenexConvert (PAnd (Lit' True)
-        (allA1 intTy (CoreProp $ StrComparison Gte a1 a1)))
-      `shouldBe`
-      allA1 intTy (PAnd (Lit' True) (CoreProp $ StrComparison Gte a1 a1))
-
-    it "lifts over a list" $
-      prenexConvert (CoreProp (ListAt SBool 0
-        (CoreProp (LiteralList SBool [ allA1 ty a1 ]))))
-      `shouldBe`
-      allA1 ty (CoreProp (ListAt SBool 0 (CoreProp (LiteralList SBool [ a1 ]))))
 
   describe "prop parse / typecheck" $ do
     let parseExprs' :: Text -> Either String [Exp Info]

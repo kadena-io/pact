@@ -70,7 +70,6 @@ import           Pact.Types.Util              (tShow)
 import           Pact.Analyze.Feature         hiding (Doc, Type, Var, ks, obj,
                                                str)
 import           Pact.Analyze.Parse.Types
-import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
@@ -700,7 +699,7 @@ expToCheck
   -- ^ Exp to convert
   -> Either String Check
 expToCheck tableEnv' genStart nameEnv idEnv consts propDefs body =
-  PropertyHolds . prenexConvert
+  PropertyHolds
     <$> expToProp tableEnv' genStart nameEnv idEnv consts propDefs SBool body
 
 expToProp
