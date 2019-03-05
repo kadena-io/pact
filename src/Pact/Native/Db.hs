@@ -108,12 +108,12 @@ dbDefs =
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      [LitExample "(txids accounts 123849535)"] "Return all txid values greater than or equal to TXID in TABLE."
 
-    ,defRNative "write" (write Write FullSchema) (writeArgs FullSchema)
+    ,defNative "write" (write Write FullSchema) (writeArgs FullSchema)
      [LitExample "(write accounts id { \"balance\": 100.0 })"] (writeDocs ".")
-    ,defRNative "insert" (write Insert FullSchema) (writeArgs FullSchema)
+    ,defNative "insert" (write Insert FullSchema) (writeArgs FullSchema)
      [LitExample "(insert accounts id { \"balance\": 0.0, \"note\": \"Created account.\" })"]
      (writeDocs ", failing if data already exists for KEY.")
-    ,defRNative "update" (write Update AnySubschema) (writeArgs AnySubschema)
+    ,defNative "update" (write Update AnySubschema) (writeArgs AnySubschema)
      [LitExample "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })"]
      (writeDocs ", failing if data does not exist for KEY.")
     ,defGasRNative "txlog" txlog
@@ -331,16 +331,20 @@ keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
 
 keylog _ i as = argsError i as
 
-
-write :: WriteType -> SchemaPartial -> RNativeFun e
-write wt partial i [table@TTable {..},TLitString key,TObject ps _ _] = do
-  guardTable i table
-  case _tTableType of
-    TyAny -> return ()
-    TyVar {} -> return ()
-    tty -> void $ checkUserType partial (_faInfo i) ps tty
-  success "Write succeeded" . writeRow (_faInfo i) wt (userTable table) (RowKey key) =<< toColumns i ps
-write _ _ i as = argsError i as
+write :: WriteType -> SchemaPartial -> NativeFun e
+write wt partial i as = do
+  ts <- mapM reduce as
+  case ts of
+    [table@TTable {..},TLitString key,obj@(TObject ps _ _)] -> do
+      cost <- computeGas (Right i) (GWrite wt table obj)
+      guardTable i table
+      case _tTableType of
+        TyAny -> return ()
+        TyVar {} -> return ()
+        tty -> void $ checkUserType partial (_faInfo i) ps tty
+      r <- success "Write succeeded" . writeRow (_faInfo i) wt (userTable table) (RowKey key) =<< toColumns i ps
+      return (cost, r)
+    _ -> argsError i ts
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
 toColumns i = fmap (Columns . M.fromList) . mapM conv where

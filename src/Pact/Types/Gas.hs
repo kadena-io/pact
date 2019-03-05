@@ -16,10 +16,11 @@ module Pact.Types.Gas
     ReadValue(..),GasModel(..),GasArgs(..),GasLimit(..)
   ) where
 
-import Control.Lens (makeLenses)
-import Data.Word (Word64)
-import Data.Decimal (Decimal)
 import Control.DeepSeq (NFData)
+import Control.Lens (makeLenses)
+import Data.Decimal (Decimal)
+import qualified Data.Text as T
+import Data.Word (Word64)
 
 import Pact.Types.Lang
 import Pact.Types.Persistence
@@ -43,24 +44,31 @@ data ReadValue
 data GasArgs
   = GPostRead ReadValue
   | GSelect (Maybe [(Info,ColumnId)]) (Term Ref) (Term Name)
+  | GSortFieldLookup Int
   | GUnreduced [Term Ref]
-  | GReduced [Term Name]
+  | GWrite WriteType (Term Name) (Term Name)
   | GUse ModuleName (Maybe Hash)
   | GModuleDecl (Module (Term Name))
   | GInterfaceDecl Interface
   | GModuleMember (ModuleDef (Term Name))
   | GUserApp
 
-
 newtype GasLimit = GasLimit Word64
   deriving (Eq,Ord,Num,Real,Integral,Enum,Show)
 instance Pretty GasLimit where
   pretty (GasLimit g) = viaShow g
 
+data GasModel = GasModel
+  { gasModelName :: Text
+  , gasModelDesc :: Text
+  , runGasModel :: Text -> GasArgs -> Gas
+  }
 
-newtype GasModel = GasModel { runGasModel :: Text -> GasArgs -> Gas }
+instance Show GasModel where
+  show m = "[GasModel: " <> T.unpack (gasModelName m) <> "]"
+
 instance Pretty GasModel where
-  pretty _ = "[GasModel]"
+  pretty m = viaShow m
 
 data GasEnv = GasEnv
   { _geGasLimit :: GasLimit

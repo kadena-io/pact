@@ -58,6 +58,7 @@ import Pact.Types.Logger
 import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
+import Pact.Gas.Table
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -150,6 +151,9 @@ replDefs = ("Repl",
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        []
        "Update gas model to charge constant RATE."
+     ,defZRNative "env-gasmodel" setGasModel (funType tTyString [("model",tTyString)])
+       []
+       "Update gas model to the model named MODEL."
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
        []
        "Verify MODULE, checking that all properties hold."
@@ -475,9 +479,25 @@ setGasPrice i as = argsError i as
 
 setGasRate :: RNativeFun LibState
 setGasRate _ [TLitInteger r] = do
-    setenv (eeGasEnv . geGasModel) (constGasModel $ fromIntegral r)
-    return $ tStr $ "Set gas rate to " <> tShow r
+  let model = constGasModel $ fromIntegral r
+  setenv (eeGasEnv . geGasModel) model
+  return $ tStr $ "Set gas model to " <> gasModelDesc model
 setGasRate i as = argsError i as
+
+setGasModel :: RNativeFun LibState
+setGasModel _ [] = do
+  model <- asks (_geGasModel . _eeGasEnv)
+  return $ tStr $ "Current gas model is '" <> gasModelName model <> "': " <> gasModelDesc model
+setGasModel _ as = do
+  let mMod = case as of
+        [TLitString "table"] -> Just $ tableGasModel defaultGasConfig
+        [TLitString "fixed", TLitInteger r] -> Just $ constGasModel (fromIntegral r)
+        _ -> Nothing
+  case mMod of
+    Nothing -> return $ tStr "Unrecognized model, perhaps try (env-gasmodel \"table\") or (env-gasmodel \"fixed\" 1)"
+    Just model -> do
+      setenv (eeGasEnv . geGasModel) model
+      return $ tStr $ "Set gas model to " <> gasModelDesc model
 
 -- | This is the only place we can do an external call to a capability,
 -- using 'evalCap False'.
