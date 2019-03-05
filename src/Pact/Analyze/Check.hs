@@ -183,7 +183,7 @@ describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
   Invalid model  -> "Wow. We (the compiler) have bad news for you. You know that property / invariant you wrote? It's great. Really. It's just that it divides by zero or somesuch and we don't know what to do with this. Good news is we have a model which may (fingers crossed) help debug the problem:\n" <> showModel model
   Unknown reason -> "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one (actually, please report this as an issue: https://github.com/kadena-io/pact/issues).\n\nGood luck...\n" <> tShow reason
-  err@SortMismatch{} -> describeSmtFailure err
+  err@SortMismatch{} -> "(QueryFailure): " <> describeSmtFailure err
   Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
   UnexpectedFailure smtE -> T.pack $ show smtE
 
@@ -313,14 +313,16 @@ verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body = ru
       ExceptT $ fmap Right $
         SBV.query $
           for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
+            let model = Model modelArgs' tags ksProvs graph
+
             _ <- runExceptT $ inNewAssertionStack $ do
               void $ lift $ SBV.constrain $ sNot $ successBool querySucceeds
               withExceptT (smtToQueryFailure info) $
-                resultQuery Validation $ Model modelArgs' tags ksProvs graph
+                resultQuery Validation model
 
             queryResult <- runExceptT $ inNewAssertionStack $ do
               void $ lift $ SBV.constrain $ sNot prop
-              resultQuery goal $ Model modelArgs' tags ksProvs graph
+              resultQuery goal model
 
             -- Either SmtFailure CheckSuccess -> CheckResult
             pure $ case queryResult of
@@ -360,29 +362,38 @@ verifyFunctionProperty modName funName funInfo tables caps pactArgs body (Locate
     (args, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation modName funName funInfo caps pactArgs body
-    ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      lift $ SBV.setTimeOut 1000 -- one second
-      modelArgs' <- lift $ runAlloc $ allocArgs args
-      tags       <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
-      let rootPath = _egRootPath graph
-      AnalysisResult _querySucceeds prop ksProvs
-        <- withExceptT analyzeToCheckFailure $
-          runPropertyAnalysis modName check tables caps
-            (analysisArgs modelArgs') tm rootPath tags funInfo
 
-      let model = Model modelArgs' tags ksProvs graph
+    -- Set up the model and our query
+    let setupSmtProblem = do
+          lift $ SBV.setTimeOut 1000 -- one second
+          modelArgs' <- lift $ runAlloc $ allocArgs args
+          tags       <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+          let rootPath = _egRootPath graph
+          ar@(AnalysisResult _querySucceeds _prop ksProvs)
+            <- withExceptT analyzeToCheckFailure $
+              runPropertyAnalysis modName check tables caps
+                (analysisArgs modelArgs') tm rootPath tags funInfo
 
-      -- TODO: bring back the query success check when we've resolved the SBV
-      -- query / quantified variables issue:
-      -- https://github.com/LeventErkok/sbv/issues/407
-      --
-      -- _ <- hoist SBV.query $ do
-      --   void $ lift $ SBV.constrain $ SBV.sNot $ successBool querySucceeds
-      --   withExceptT (smtToQueryFailure propInfo) $
-      --     resultQuery Validation model
+          let model = Model modelArgs' tags ksProvs graph
+
+          pure (ar, model)
+
+    -- First we check whether the query definitely succeeds. Queries don't
+    -- succeed if the (pure) property throws an error (eg division by 0 or
+    -- indexing to an invalid array position). If the query fails we bail.
+    _ <- ExceptT $ catchingExceptions $ runSymbolicSat $ runExceptT $ do
+      (AnalysisResult querySucceeds _ _, model) <- setupSmtProblem
+
+      void $ lift $ SBV.output $ SBV.sNot $ successBool querySucceeds
+      hoist SBV.query $ do
+        withExceptT (smtToQueryFailure propInfo) $
+          resultQuery Validation model
+
+    ExceptT $ catchingExceptions $ runSymbolicGoal $ runExceptT $ do
+      (AnalysisResult _ prop _, model) <- setupSmtProblem
 
       void $ lift $ SBV.output prop
-      hoist SBV.query $
+      hoist SBV.query $ do
         withExceptT (smtToCheckFailure propInfo) $
           resultQuery goal model
 
@@ -400,9 +411,14 @@ verifyFunctionProperty modName funName funInfo tables caps pactArgs body (Locate
     catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
       pure $ Left $ smtToCheckFailure propInfo $ UnexpectedFailure e
 
-    runSymbolic :: Symbolic a -> IO a
-    runSymbolic = fmap fst .
-      SBVI.runSymbolic (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup (goal == Satisfaction) config)
+    -- Run a 'Symbolic' in sat mode
+    runSymbolicSat :: Symbolic a -> IO a
+    runSymbolicSat = SBV.runSMTWith config
+
+    -- Run a 'Symbolic' in the mode corresponding to our goal
+    runSymbolicGoal :: Symbolic a -> IO a
+    runSymbolicGoal = fmap fst
+      . SBVI.runSymbolic (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup (goal == Satisfaction) config)
 
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules

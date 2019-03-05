@@ -1433,7 +1433,7 @@ spec = describe "analyze" $ do
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
-    expectPass code $ Valid $ Inj $ Exists 1 "row" (EType SStr) $
+    expectPass code $ PropertyHolds $ Inj $ Exists 1 "row" (EType SStr) $
       CoreProp (IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
@@ -2817,10 +2817,18 @@ spec = describe "analyze" $ do
 
     let code6'' = [text|
           (defun test:integer (list:[integer])
-            @model [(property (= result (at 2 list)))]
+            @model [(property (when (> (length list) 2) (= result (at 2 list))))]
             (at 2 list))
           |]
     expectVerified code6''
+
+    let code6''' = [text|
+          (defun test:integer (list:[integer])
+            @model [(property (= result (at 2 list)))]
+            (at 2 list))
+          |]
+    result <- runIO $ runVerification code6'''
+    it "query fails" $ result `shouldSatisfy` isJust
 
   describe "string contains" $ do
     let code7 = [text|
