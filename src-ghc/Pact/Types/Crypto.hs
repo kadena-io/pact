@@ -1,9 +1,9 @@
-{-# LANGUAGE PackageImports #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -45,8 +45,7 @@ module Pact.Types.Crypto
 import Prelude
 import GHC.Generics
 
-import "crypto-api" Crypto.Random
-import qualified    Crypto.Hash    as H
+import qualified Crypto.Hash  as H
 
 import Data.Aeson.Types   (toJSONKeyText)
 import Data.Text.Encoding
@@ -60,9 +59,15 @@ import qualified Data.Serialize          as S
 
 import Pact.Types.Util
 import Pact.Types.Scheme               as ST
-import qualified Crypto.Ed25519.Pure   as Ed25519
 import qualified Pact.Types.ECDSA      as ECDSA
 
+#ifdef CRYPTONITE_ED25519
+import qualified Crypto.Error          as E
+import qualified Crypto.PubKey.Ed25519 as Ed25519
+#else
+import "crypto-api" Crypto.Random
+import qualified Crypto.Ed25519.Pure as Ed25519
+#endif
 
 
 
@@ -156,6 +161,39 @@ toPPKScheme SETH     = ETH
 
 --------- SCHEME ED25519 INSTANCES --------
 
+#ifdef CRYPTONITE_ED25519
+instance Scheme (SPPKScheme 'ED25519) where
+  type PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
+  type PrivateKey (SPPKScheme 'ED25519) = Ed25519.SecretKey
+  type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
+
+  _sign _ (Hash msg) pub priv = return $ Ed25519.sign priv pub msg
+  _valid _ (Hash msg) pub sig = Ed25519.verify pub msg sig
+  _genKeyPair _ = ed25519GenKeyPair
+  _getPublic _ = Just . ed25519GetPublicKey
+  _formatPublicKey _ p = toBS p
+
+
+
+instance ConvertBS (Ed25519.PublicKey) where
+  toBS = B.convert
+  fromBS s = E.onCryptoFailure
+             (const $ Left ("Invalid ED25519 Public Key: " ++ show (toB16Text s)))
+             Right
+             (Ed25519.publicKey s)
+instance ConvertBS (Ed25519.SecretKey) where
+  toBS = B.convert
+  fromBS s = E.onCryptoFailure
+             (const $ Left ("Invalid ED25519 Private Key: " ++ show (toB16Text s)))
+             Right
+             (Ed25519.secretKey s)
+instance ConvertBS Ed25519.Signature where
+  toBS = B.convert
+  fromBS s = E.onCryptoFailure
+             (const $ Left ("Invalid ED25519 Signature: " ++ show (toB16Text s)))
+             Right
+             (Ed25519.signature s)
+#else
 instance Scheme (SPPKScheme 'ED25519) where
   type PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
   type PrivateKey (SPPKScheme 'ED25519) = Ed25519.PrivateKey
@@ -180,7 +218,7 @@ instance ConvertBS (Ed25519.PrivateKey) where
 instance ConvertBS Ed25519.Signature where
   toBS (Ed25519.Sig bs) = bs
   fromBS = Right . Ed25519.Sig
-
+#endif
 
 
 
@@ -343,6 +381,44 @@ instance FromJSONKey ByteString where
 
 --------- ED25519 FUNCTIONS AND INSTANCES ---------
 
+#ifdef CRYPTONITE_ED25519
+ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.SecretKey)
+ed25519GenKeyPair = do
+    secret <- Ed25519.generateSecretKey
+    let public = Ed25519.toPublic secret
+    return (public, secret)
+
+
+ed25519GetPublicKey :: Ed25519.SecretKey -> Ed25519.PublicKey
+ed25519GetPublicKey = Ed25519.toPublic
+
+
+
+
+instance Ord Ed25519.PublicKey where
+  b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
+instance Serialize Ed25519.PublicKey where
+  put s = S.putByteString (B.convert s :: ByteString)
+  get = maybe (fail "Invalid ED25519 Public Key") return =<<
+        (E.maybeCryptoError . Ed25519.publicKey <$> S.getByteString 32)
+
+
+instance Ord Ed25519.SecretKey where
+  b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
+instance Serialize Ed25519.SecretKey where
+  put s = S.putByteString (B.convert s :: ByteString)
+  get = maybe (fail "Invalid ED25519 Private Key") return =<<
+        (E.maybeCryptoError . Ed25519.secretKey <$> S.getByteString 32)
+
+
+
+instance Ord Ed25519.Signature where
+  b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
+instance Serialize Ed25519.Signature where
+  put s = S.put (B.convert s :: ByteString)
+  get = maybe (fail "Invalide ED25519 Signature") return =<<
+        (E.maybeCryptoError . Ed25519.signature <$> (S.get >>= S.getByteString))
+#else
 ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.PrivateKey)
 ed25519GenKeyPair = do
     g :: SystemRandom <- newGenIO
@@ -384,3 +460,4 @@ deriving instance Ord Ed25519.Signature
 instance Serialize Ed25519.Signature where
   put (Ed25519.Sig s) = S.put s
   get = Ed25519.Sig <$> (S.get >>= S.getByteString)
+#endif
