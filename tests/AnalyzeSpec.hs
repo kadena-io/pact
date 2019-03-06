@@ -2793,19 +2793,12 @@ spec = describe "analyze" $ do
     expectVerified code5
 
   describe "list at" $ do
-    -- next two tests disabled pending https://github.com/kadena-io/pact/issues/312
-    -- let code5 = [text|
-    --       (defun test:integer (a:integer b:integer c:integer)
-    --         @model [(property (= result a))]
-    --         (at 0 [a b c]))
-    --       |]
-    -- expectVerified code5
-
-    -- let code6 = [text|
-    --       (defun test:integer (a:integer b:integer c:integer)
-    --         (at 2 [a b c]))
-    --       |]
-    -- expectPass code6 $ Valid Abort'
+    let code5 = [text|
+          (defun test:integer (a:integer b:integer c:integer)
+            @model [(property (= result a))]
+            (at 0 [a b c]))
+          |]
+    expectVerified code5
 
     let code6' = [text|
           (defun test:integer (ix:integer)
