@@ -1164,17 +1164,16 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Success' .=> Inj (RowExists "tokens" "stu" After)
 
-  it "table-written.insert.partial" $ do
-    pendingWith "issue #360"
-    -- let code =
-    --       [text|
-    --         (defschema token-row balance:integer)
-    --         (deftable tokens:{token-row})
+  describe "table-written.insert.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
-    --         (defun test:string ()
-    --           (insert tokens "stu" {}))
-    --       |]
-    -- expectFail code $ Satisfiable (Inj Success)
+            (defun test:string ()
+              (insert tokens "stu" {}))
+          |]
+    expectFail code $ Satisfiable (Inj Success)
 
   describe "table-written.update" $ do
     let code =
@@ -1210,17 +1209,16 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ Inj $ TableWrite "tokens"
 
-  it "table-written.write.partial" $ do
-    pendingWith "issue #360"
-    -- let code =
-    --       [text|
-    --         (defschema token-row balance:integer)
-    --         (deftable tokens:{token-row})
+  describe "table-written.write.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
-    --         (defun test:string ()
-    --           (write tokens "stu" {}))
-    --       |]
-    -- expectFail code $ Satisfiable (Inj Success)
+            (defun test:string ()
+              (write tokens "stu" {}))
+          |]
+    expectFail code $ Satisfiable (Inj Success)
 
   describe "table-written.conditional" $ do
     let code =
@@ -3006,7 +3004,7 @@ spec = describe "analyze" $ do
 
       --         (defun test:integer ()
       --           (let ((joel (read tokens 'joel ['name])))
-      --             (at ('balance joel))))
+      --             (at 'balance joel)))
       --       |]
 
       -- expectPass code $ Valid Abort'
