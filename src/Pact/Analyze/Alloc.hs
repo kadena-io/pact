@@ -33,33 +33,33 @@ import           Pact.Analyze.Types          (Concrete, S, SingI (sing), SingTy,
 -- is permitted.
 class Monad m => MonadAlloc m where
 
-  singForAll :: SingTy a -> m (S (Concrete a)) -- ^ universally quantified
-  singExists :: SingTy a -> m (S (Concrete a)) -- ^ existentially quantified
-  singFree   :: SingTy a -> m (S (Concrete a)) -- ^ quantified per the context of sat vs prove
+  singForAll :: String -> SingTy a -> m (S (Concrete a)) -- ^ universally quantified
+  singExists :: String -> SingTy a -> m (S (Concrete a)) -- ^ existentially quantified
+  singFree   :: String -> SingTy a -> m (S (Concrete a)) -- ^ quantified per the context of sat vs prove
 
   default singForAll
     :: (MonadTrans t, MonadAlloc m', m ~ t m')
-    => SingTy a -> m (S (Concrete a))
-  singForAll ty = lift (singForAll ty)
+    => String -> SingTy a -> m (S (Concrete a))
+  singForAll name ty = lift (singForAll name ty)
 
   default singExists
     :: (MonadTrans t, MonadAlloc m', m ~ t m')
-    => SingTy a -> m (S (Concrete a))
-  singExists ty = lift (singExists ty)
+    => String -> SingTy a -> m (S (Concrete a))
+  singExists name ty = lift (singExists name ty)
 
   default singFree
     :: (MonadTrans t, MonadAlloc m', m ~ t m')
-    => SingTy a -> m (S (Concrete a))
-  singFree   = lift . singFree
+    => String -> SingTy a -> m (S (Concrete a))
+  singFree name  = lift . singFree name
 
-forAll :: forall a m. (MonadAlloc m, SingI a) => m (S (Concrete a))
-forAll = singForAll (sing @a)
+forAll :: forall a m. (MonadAlloc m, SingI a) => String -> m (S (Concrete a))
+forAll name = singForAll name (sing @a)
 
-exists :: forall a m. (MonadAlloc m, SingI a) => m (S (Concrete a))
-exists = singExists (sing @a)
+exists :: forall a m. (MonadAlloc m, SingI a) => String -> m (S (Concrete a))
+exists name = singExists name (sing @a)
 
-free :: forall a m. (MonadAlloc m, SingI a) => m (S (Concrete a))
-free = singFree (sing @a)
+free :: forall a m. (MonadAlloc m, SingI a) => String -> m (S (Concrete a))
+free name = singFree name (sing @a)
 
 instance MonadAlloc m             => MonadAlloc (ExceptT e m)
 instance MonadAlloc m             => MonadAlloc (MaybeT m)
@@ -78,6 +78,6 @@ newtype Alloc a = Alloc { runAlloc :: Symbolic a }
   deriving (Functor, Applicative, Monad)
 
 instance MonadAlloc Alloc where
-  singForAll ty = Alloc $ withSymVal ty $ sansProv <$> SBV.forall_
-  singExists ty = Alloc $ withSymVal ty $ sansProv <$> SBV.exists_
-  singFree   ty = Alloc $ withSymVal ty $ sansProv <$> SBV.free_
+  singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.forall name
+  singExists name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.exists name
+  singFree   name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.free   name

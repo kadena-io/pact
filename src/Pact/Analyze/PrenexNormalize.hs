@@ -126,7 +126,7 @@ singFloat ty p = case p of
 
   -- - logical
   CoreProp (Logical AndOp [a, b]) -> PAnd <$> float a <*> float b
-  CoreProp (Logical OrOp [a, b]) -> POr  <$> float a <*> float b
+  CoreProp (Logical OrOp  [a, b]) -> POr  <$> float a <*> float b
   CoreProp (Logical NotOp [a]) -> bimap (fmap flipQuantifier) PNot (float a)
   CoreProp (Logical _ _) -> error ("ill-defined logical op: " ++ showTm p)
   CoreProp (AndQ ty' f g a) -> CoreProp <$>

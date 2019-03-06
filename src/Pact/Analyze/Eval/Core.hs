@@ -99,7 +99,7 @@ evalComparisonOp
   -> TermOf m a
   -> TermOf m a
   -> m (S Bool)
-evalComparisonOp ty op xT yT = do
+evalComparisonOp ty op xT yT = withOrd ty $ do
   x <- withSing ty $ eval xT
   y <- withSing ty $ eval yT
   let f :: SymVal (Concrete a) => SBV Bool
@@ -254,7 +254,7 @@ evalCore (ListConcat ty p1 p2) = withSymVal ty $ withSing ty $ do
 evalCore (ListReverse ty l) = withSymVal ty $ withSing ty $ do
   S prov l' <- eval l
   pure $ S prov $ breverse listBound l'
-evalCore (ListSort ty l) = withSymVal ty $ withSing ty $ do
+evalCore (ListSort ty l) = withSymVal ty $ withSing ty $ withOrd ty $ do
   S prov l' <- eval l
   pure $ S prov $ bsort listBound l'
 evalCore (MakeList ty i a) = withSymVal ty $ withSing ty $ do
