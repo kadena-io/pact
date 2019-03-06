@@ -20,8 +20,10 @@
 -- main languages of programs ('Term'), invariants ('Invariant'), and
 -- properties ('Prop').
 module Pact.Analyze.Types.Languages
-  ( (:<:)(inject, project)
-  , (:*<:)(inject', project')
+  ( (:<:)(subP)
+  , inject, project
+  , (:*<:)(subP')
+  , inject', project'
   , EInvariant
   , EProp
   , ETerm
@@ -70,6 +72,7 @@ module Pact.Analyze.Types.Languages
   , singPrettyListTm
   ) where
 
+import           Control.Lens                  (Prism', review, preview, prism')
 import           Control.Monad                 ((>=>))
 import           Data.Maybe                    (fromMaybe)
 import           Data.String                   (IsString (..))
@@ -102,12 +105,18 @@ import           Pact.Analyze.Util
 -- This can be read as "subtype", where we can always 'inject' the subtype into
 -- its supertype and sometimes 'project' the supertype down.
 class (sub :: Ty -> *) :<: (sup :: Ty -> *) where
-  inject  :: sub a -> sup a
-  project :: sup a -> Maybe (sub a)
+  subP :: Prism' (sup a) (sub a)
+
+-- | Inject a subtype into a supertype via 'subP'
+inject  :: sub :<: sup => sub a -> sup a
+inject = review subP
+
+-- | Try to project a subtype from a supertype via 'subP'
+project :: sub :<: sup => sup a -> Maybe (sub a)
+project = preview subP
 
 instance f :<: f where
-  inject  = id
-  project = Just
+  subP = id
 
 pattern Inj :: sub :<: sup => sub a -> sup a
 pattern Inj a <- (project -> Just a) where
@@ -120,8 +129,15 @@ pattern Inj a <- (project -> Just a) where
 -- Integer@ is injectable into @Term TyInteger@ because @Integer ~ Concrete
 -- TyInteger@.
 class (sub :: * -> *) :*<: (sup :: Ty -> *) where
-  inject'  :: sub (Concrete a) -> sup a
-  project' :: sup a            -> Maybe (sub (Concrete a))
+  subP' :: Prism' (sup a) (sub (Concrete a))
+
+-- | Inject a subtype into a supertype via 'subP''
+inject'  :: sub :*<: sup => sub (Concrete a) -> sup a
+inject' = review subP'
+
+-- | Try to project a subtype from a supertype via 'subP''
+project' :: sub :*<: sup => sup a -> Maybe (sub (Concrete a))
+project' = preview subP'
 
 -- | An open term (: 'b') with a free variable (: 'a').
 data Open (a :: Ty) (tm :: Ty -> *) (b :: Ty) = Open !VarId !Text !(tm b)
@@ -1087,26 +1103,22 @@ instance Pretty (PropSpecific a) where
     PropRead _ty ba tn rk   -> parensSep [pretty SPropRead, prettyTm tn, prettyTm rk, pretty ba]
 
 instance S :*<: Prop where
-  inject' = CoreProp . Sym
-  project' = \case
+  subP' = prism' (CoreProp . Sym) $ \case
     CoreProp (Sym a) -> Just a
     _                -> Nothing
 
 instance PropSpecific :<: Prop where
-  inject = PropSpecific
-  project = \case
+  subP = prism' PropSpecific $ \case
     PropSpecific a -> Just a
     _              -> Nothing
 
 instance Core Prop :<: Prop where
-  inject = CoreProp
-  project = \case
+  subP = prism' CoreProp $ \case
     CoreProp a -> Just a
     _          -> Nothing
 
 instance Numerical Prop :<: Prop where
-  inject = Inj . Numerical
-  project = \case
+  subP = prism' (Inj . Numerical) $ \case
     Inj (Numerical a) -> Just a
     _                 -> Nothing
 
@@ -1245,18 +1257,15 @@ pattern PNot a = CoreProp (Logical NotOp [a])
 newtype Invariant a = CoreInvariant (Core Invariant a)
 
 instance Core Invariant :<: Invariant where
-  inject                    = CoreInvariant
-  project (CoreInvariant a) = Just a
+  subP = prism' CoreInvariant $ \(CoreInvariant a) -> Just a
 
 instance Numerical Invariant :<: Invariant where
-  inject = Inj . Numerical
-  project = \case
+  subP = prism' (Inj . Numerical) $ \case
     Inj (Numerical a) -> Just a
     _                 -> Nothing
 
 instance S :*<: Invariant where
-  inject' = CoreInvariant . Sym
-  project' = \case
+  subP' = prism' (CoreInvariant . Sym) $ \case
     CoreInvariant (Sym a) -> Just a
     _                     -> Nothing
 
@@ -1548,20 +1557,17 @@ eqTerm _ty (Hash a1) (Hash a2) = a1 == a2
 eqTerm _ _ _ = False
 
 instance S :*<: Term where
-  inject' = CoreTerm . Sym
-  project' = \case
+  subP' = prism' (CoreTerm . Sym) $ \case
     CoreTerm (Sym a) -> Just a
     _                -> Nothing
 
 instance Core Term :<: Term where
-  inject = CoreTerm
-  project = \case
+  subP = prism' CoreTerm $ \case
     CoreTerm a -> Just a
     _          -> Nothing
 
 instance Numerical Term :<: Term where
-  inject = Inj . Numerical
-  project = \case
+  subP = prism' (Inj . Numerical) $ \case
     Inj (Numerical a) -> Just a
     _                 -> Nothing
 
