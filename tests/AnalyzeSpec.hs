@@ -1164,17 +1164,16 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Success' .=> Inj (RowExists "tokens" "stu" After)
 
-  it "table-written.insert.partial" $ do
-    pendingWith "issue #360"
-    -- let code =
-    --       [text|
-    --         (defschema token-row balance:integer)
-    --         (deftable tokens:{token-row})
+  describe "table-written.insert.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
-    --         (defun test:string ()
-    --           (insert tokens "stu" {}))
-    --       |]
-    -- expectFail code $ Satisfiable (Inj Success)
+            (defun test:string ()
+              (insert tokens "stu" {}))
+          |]
+    expectFail code $ Satisfiable (Inj Success)
 
   describe "table-written.update" $ do
     let code =
@@ -1210,17 +1209,16 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ Inj $ TableWrite "tokens"
 
-  it "table-written.write.partial" $ do
-    pendingWith "issue #360"
-    -- let code =
-    --       [text|
-    --         (defschema token-row balance:integer)
-    --         (deftable tokens:{token-row})
+  describe "table-written.write.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
 
-    --         (defun test:string ()
-    --           (write tokens "stu" {}))
-    --       |]
-    -- expectFail code $ Satisfiable (Inj Success)
+            (defun test:string ()
+              (write tokens "stu" {}))
+          |]
+    expectFail code $ Satisfiable (Inj Success)
 
   describe "table-written.conditional" $ do
     let code =
@@ -1433,7 +1431,7 @@ spec = describe "analyze" $ do
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
-    expectPass code $ Valid $ Inj $ Exists 1 "row" (EType SStr) $
+    expectPass code $ PropertyHolds $ Inj $ Exists 1 "row" (EType SStr) $
       CoreProp (IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
@@ -2793,19 +2791,12 @@ spec = describe "analyze" $ do
     expectVerified code5
 
   describe "list at" $ do
-    -- next two tests disabled pending https://github.com/kadena-io/pact/issues/312
-    -- let code5 = [text|
-    --       (defun test:integer (a:integer b:integer c:integer)
-    --         @model [(property (= result a))]
-    --         (at 0 [a b c]))
-    --       |]
-    -- expectVerified code5
-
-    -- let code6 = [text|
-    --       (defun test:integer (a:integer b:integer c:integer)
-    --         (at 2 [a b c]))
-    --       |]
-    -- expectPass code6 $ Valid Abort'
+    let code5 = [text|
+          (defun test:integer (a:integer b:integer c:integer)
+            @model [(property (= result a))]
+            (at 0 [a b c]))
+          |]
+    expectVerified code5
 
     let code6' = [text|
           (defun test:integer (ix:integer)
@@ -2817,10 +2808,18 @@ spec = describe "analyze" $ do
 
     let code6'' = [text|
           (defun test:integer (list:[integer])
-            @model [(property (= result (at 2 list)))]
+            @model [(property (when (> (length list) 2) (= result (at 2 list))))]
             (at 2 list))
           |]
     expectVerified code6''
+
+    let code6''' = [text|
+          (defun test:integer (list:[integer])
+            @model [(property (= result (at 2 list)))]
+            (at 2 list))
+          |]
+    result <- runIO $ runVerification code6'''
+    it "query fails" $ result `shouldSatisfy` isJust
 
   describe "string contains" $ do
     let code7 = [text|
@@ -3005,7 +3004,7 @@ spec = describe "analyze" $ do
 
       --         (defun test:integer ()
       --           (let ((joel (read tokens 'joel ['name])))
-      --             (at ('balance joel))))
+      --             (at 'balance joel)))
       --       |]
 
       -- expectPass code $ Valid Abort'
