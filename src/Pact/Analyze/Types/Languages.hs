@@ -1296,7 +1296,9 @@ data Term (a :: Ty) where
   IfThenElse      :: SingTy a -> Term 'TyBool -> (Path, Term a) -> (Path, Term a) -> Term a
 
   -- Variable binding
-  Let             :: Text -> VarId -> TagId -> ETerm -> Term a -> Term a
+  Let             :: Text  -> VarId -> ETerm -> Term a -> Term a
+  -- A return value from a scope; this exists only so we can "tag" the return value
+  Return          :: TagId -> Term a                   -> Term a
 
   -- Conditional transaction abort
   Enforce         :: Maybe TagId -> Term 'TyBool   -> Term 'TyBool -- Only a TagId for an assertion; i.e. not keyset enforcement
@@ -1355,7 +1357,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 y
     . showChar ' '
     . showsPrec 11 z
-  Let a b c d e ->
+  Let a b c d ->
       showString "Let "
     . showsPrec 11 a
     . showChar ' '
@@ -1364,8 +1366,11 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 c
     . showChar ' '
     . showsPrec 11 d
+  Return a b ->
+      showString "Return "
+    . showsPrec 11 a
     . showChar ' '
-    . showsPrec 11 e
+    . showsPrec 11 b
   Sequence x y ->
       showString "Sequence "
     . showsPrec 11 x
@@ -1481,7 +1486,7 @@ prettyTerm ty = \case
     , singPrettyTm ty' y
     , singPrettyTm ty' z
     ]
-  Let var _ _ x y -> parensSep
+  Let var _ x y -> parensSep
     [ "let"
     , parensSep
       [ parensSep
@@ -1491,6 +1496,7 @@ prettyTerm ty = \case
       ]
     , prettyTerm ty y
     ]
+  Return _ t -> prettyTerm ty t
   Sequence x y -> vsep [pretty x, prettyTerm ty y]
 
   EnforceOne (Left _)        -> parensSep
@@ -1534,8 +1540,8 @@ eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2
 eqTerm ty (IfThenElse _ty1 a1 (b1, c1) (d1, e1))
           (IfThenElse _ty2 a2 (b2, c2) (d2, e2))
   = eqTm a1 a2 && b1 == b2 && singEqTm ty c1 c2 && d1 == d2 && singEqTm ty e1 e2
-eqTerm ty (Let a1 b1 c1 d1 e1) (Let a2 b2 c2 d2 e2)
-  = a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && singEqTm ty e1 e2
+eqTerm ty (Let a1 b1 c1 d1) (Let a2 b2 c2 d2)
+  = a1 == a2 && b1 == b2 && c1 == c2 && singEqTm ty d1 d2
 eqTerm ty (Sequence a1 b1) (Sequence a2 b2)
   = a1 == a2 && singEqTm ty b1 b2
 eqTerm _ty (Enforce a1 b1) (Enforce a2 b2)

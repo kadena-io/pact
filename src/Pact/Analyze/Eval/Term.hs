@@ -505,13 +505,17 @@ evalTerm = \case
     --
     pure $ literalS "Write succeeded"
 
-  Let _name vid retTid eterm body -> do
+  Let _name vid eterm body -> do
     av <- evalETerm eterm
     tagVarBinding vid av
     local (scope.at vid ?~ av) $ do
       res <- evalTerm body
-      tagReturn retTid $ mkAVal res
       pure res
+
+  Return tid body -> do
+    res <- evalTerm body
+    tagReturn tid $ mkAVal res
+    pure res
 
   -- Read values from tx metadata
   ReadKeySet  nameT -> readKeySet  =<< evalTerm nameT

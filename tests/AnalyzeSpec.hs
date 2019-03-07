@@ -11,7 +11,6 @@
 
 module AnalyzeSpec (spec) where
 
-
 import           Control.Lens                 (at, findOf, ix, matching, (&),
                                                (.~), (^.), (^..), _Left)
 import           Control.Monad                (unless)
@@ -983,6 +982,21 @@ spec = describe "analyze" $ do
                 ; FOO and BAR are granted here.
                 true))
           |]
+    expectPass code $ Valid Abort'
+
+  describe "compose-capability calls produce return values" $ do
+    let code =
+          [text|
+            (defcap BAR ()
+              false)
+            (defcap FOO ()
+              (enforce (compose-capability (BAR)) "BAR returned false"))
+
+            (defun test:bool ()
+              (with-capability (FOO)
+                true))
+          |]
+
     expectPass code $ Valid Abort'
 
   describe "enforce-one.1" $ do

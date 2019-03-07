@@ -288,15 +288,15 @@ withNestedRecoverability r = local $ teRecoverability <>~ r
 withNewScope
   :: ScopeType
   -> [Located Binding]
-  -> TagId
   -> TranslateM ETerm
   -> TranslateM ETerm
-withNewScope scopeType bindings retTid act = local (teScopesEntered +~ 1) $ do
+withNewScope scopeType bindings act = local (teScopesEntered +~ 1) $ do
+  tid <- genTagId
   depth <- view teScopesEntered
   emit $ TracePushScope depth scopeType bindings
-  res <- act
+  res <- mapExistential (Return tid) <$> act
   let ty = existentialType res
-  emit $ TracePopScope depth scopeType retTid ty
+  emit $ TracePopScope depth scopeType tid ty
   pure res
 
 genTagId :: TranslateM TagId
@@ -538,24 +538,23 @@ lookupCapability capName = do
 
 withTranslatedBindings
   :: [(Named Node, AST Node)]
-  -> ([Located Binding] -> TagId -> TranslateM ETerm)
+  -> ([Located Binding] -> TranslateM ETerm)
   -> TranslateM ETerm
 withTranslatedBindings (unzip -> (bindingAs, rhsAs)) k = do
   bindingTs <- traverse translateBinding bindingAs
   rhsETs <- traverse translateNode rhsAs
-  retTid <- genTagId
 
   let -- Wrap the 'Term' body of clauses in a 'Let' for each of the bindings
       wrapWithLets :: Term a -> Term a
       wrapWithLets tm = foldr
         (\(rhsET, Located _ (Binding vid _ (Munged munged) _)) body' ->
-          Let munged vid retTid rhsET body')
+          Let munged vid rhsET body')
         tm
         (zip rhsETs bindingTs)
 
   fmap (mapExistential wrapWithLets) $
     withNodeVars bindingAs bindingTs $
-      k bindingTs retTid
+      k bindingTs
 
 translateObjBinding
   :: [(Named Node, AST Node)]
@@ -571,8 +570,6 @@ translateObjBinding pairs schema bodyA rhsT = do
       pure $ T.unpack colName
     (Named _ node _, x) ->
       withNodeContext node $ throwError' $ NonStringLitInBinding x
-
-  retTid <- genTagId
 
   -- We create one synthetic binding for the object, which then only the column
   -- bindings use.
@@ -590,7 +587,7 @@ translateObjBinding pairs schema bodyA rhsT = do
   --
 
   let wrapWithLets :: Term a -> Term a
-      wrapWithLets innerBody = Let "binding" objBindingId retTid rhsT $
+      wrapWithLets innerBody = Let "binding" objBindingId rhsT $
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         foldl'
           (\body ( colName
@@ -598,12 +595,12 @@ translateObjBinding pairs schema bodyA rhsT = do
                  ) ->
             let colTerm = StrLit @Term colName
                 rhs = Some ty $ CoreTerm $ ObjAt schema colTerm objVar
-            in Let varName vid retTid rhs body)
+            in Let varName vid rhs body)
           innerBody
           (zip cols bindingTs)
 
   fmap (mapExistential wrapWithLets) $
-    withNewScope ObjectScope bindingTs retTid $
+    withNewScope ObjectScope bindingTs $
       withNodeVars bindingAs bindingTs $
         translateBody bodyA
 
@@ -630,8 +627,8 @@ translateCapabilityApp
   -> TranslateM ETerm
 translateCapabilityApp modName capName bindingsA appBodyA = do
   cap <- lookupCapability capName
-  withTranslatedBindings bindingsA $ \bindingTs tid -> do
-    withNewScope (CapabilityScope modName capName) bindingTs tid $ do
+  withTranslatedBindings bindingsA $ \bindingTs -> do
+    withNewScope (CapabilityScope modName capName) bindingTs $ do
       let vids = toListOf (traverse.located.bVid) bindingTs
       fmap (mapExistential $ Granting cap vids) $
         translateBody appBodyA
@@ -639,13 +636,13 @@ translateCapabilityApp modName capName bindingsA appBodyA = do
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
-    withTranslatedBindings bindings $ \bindingTs tid ->
-      withNewScope LetScope bindingTs tid $
+    withTranslatedBindings bindings $ \bindingTs -> do
+      withNewScope LetScope bindingTs $
         translateBody body
 
   AST_InlinedApp modName funName bindings body -> do
-    withTranslatedBindings bindings $ \bindingTs tid -> do
-      withNewScope (FunctionScope modName funName) bindingTs tid $
+    withTranslatedBindings bindings $ \bindingTs -> do
+      withNewScope (FunctionScope modName funName) bindingTs $
         translateBody body
 
   AST_Var node -> do
@@ -997,7 +994,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_RequireCapability node (AST_InlinedApp _ funName bindings _) -> do
     let capName = CapName $ T.unpack funName
     cap <- lookupCapability capName
-    withTranslatedBindings bindings $ \bindingTs _retTid -> do
+    withTranslatedBindings bindings $ \bindingTs -> do
       let vars = (\b -> (_mungedName . _bmName $ b, _bVid b)) . _located <$>
             bindingTs
       recov <- view teRecoverability
@@ -1323,11 +1320,10 @@ runTranslation modName funName info caps pactArgs body = do
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty []
           translation = do
-            retTid    <- genTagId
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
             let bindingTs = fmap argToBinding args
-            res <- withNewScope (FunctionScope modName funName) bindingTs retTid $
+            res <- withNewScope (FunctionScope modName funName) bindingTs $
               translateBody body
             _ <- extendPath -- form final edge for any remaining events
             pure res
