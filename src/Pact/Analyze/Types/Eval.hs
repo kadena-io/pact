@@ -133,8 +133,6 @@ data AnalyzeEnv
     -- ^ the default, blank slate of grants, where no token is granted.
     , _aeActiveGrants :: !TokenGrants
     -- ^ the current set of tokens that are granted, manipulated as a stack
-    , _aeRollbacks    :: ![ETerm]
-    -- ^ the stack of rollbacks to perform on failure
     , _aeTables       :: ![Table]
     } deriving Show
 
@@ -181,7 +179,7 @@ mkAnalyzeEnv modName pactMetadata registry tables caps args tags info = do
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args guardPasses
     invariants' columnIds' tags info (sansProv trivialGuard) emptyGrants
-    activeGrants [] tables
+    activeGrants tables
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -258,6 +256,8 @@ data GlobalAnalyzeState
   = GlobalAnalyzeState
     { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
     , _gasNextUninterpId   :: Integer
+    , _gasRollbacks        :: ![ETerm]
+    -- ^ the stack of rollbacks to perform on failure
     }
   deriving (Show)
 
@@ -337,6 +337,7 @@ mkInitialAnalyzeState tables caps = AnalyzeState
     , _globalState = GlobalAnalyzeState
         { _gasGuardProvenances = mempty
         , _gasNextUninterpId   = 0
+        , _gasRollbacks        = []
         }
     }
 

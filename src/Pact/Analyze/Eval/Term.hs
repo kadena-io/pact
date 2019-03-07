@@ -11,6 +11,8 @@
 -- 'Prop' languages).
 module Pact.Analyze.Eval.Term where
 
+import Debug.Trace
+
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', preview, use,
                                               view, (%=), (%~), (&), (+=), (.=),
@@ -619,12 +621,15 @@ evalTerm = \case
         expectedEntity' <- eval expectedEntity
         markFailure $ actualEntity ./= expectedEntity'
 
+    traceM $ "step rollback: " ++ show mRollback
     case mRollback of
-      Nothing       -> eval tm
-      Just rollback -> local (analyzeEnv . aeRollbacks %~ (rollback:)) $ eval tm
+      Nothing       -> pure ()
+      Just rollback -> globalState . gasRollbacks %= (rollback:)
+    eval tm
+
 
   IntraStepReset tm -> do
-    rollbacks <- view $ analyzeEnv . aeRollbacks
+    rollbacks <- use $ globalState . gasRollbacks
     tables    <- view $ analyzeEnv . aeTables
     oldState  <- use id
     oldEnv    <- ask
@@ -632,15 +637,15 @@ evalTerm = \case
                                   (mkFreeArray "txDecimals")
                                   (mkFreeArray "txIntegers")
 
-        intCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) (mkSFunArray (const 0))
-        decCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
-        intColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) 0
-        decColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (fromInteger 0)
+        -- intCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) (mkSFunArray (const 0))
+        -- decCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
+        -- intColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) 0
+        -- decColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (fromInteger 0)
         newState = oldState
-          & latticeState . lasIntCellDeltas        .~ intCellDeltas
-          & latticeState . lasDecCellDeltas        .~ decCellDeltas
-          & latticeState . lasIntColumnDeltas      .~ intColumnDeltas
-          & latticeState . lasDecColumnDeltas      .~ decColumnDeltas
+          -- & latticeState . lasIntCellDeltas        .~ intCellDeltas
+          -- & latticeState . lasDecCellDeltas        .~ decCellDeltas
+          -- & latticeState . lasIntColumnDeltas      .~ intColumnDeltas
+          -- & latticeState . lasDecColumnDeltas      .~ decColumnDeltas
           & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
           -- & latticeState . lasExtra . cvRowExists .~  i think this one is okay
         newEnv = oldEnv
@@ -652,10 +657,12 @@ evalTerm = \case
 
     id .= newState
     -- both continue and roll back via nondeterminism
-    local (analyzeEnv .~ newEnv) $ ite (uninterpret "nondet")
+    traceM $ "rollbacks: " ++ show (length rollbacks)
+    local (analyzeEnv .~ newEnv) $ ite (uninterpret "nondet") -- XXX need to alloc?
       -- (return value never used)
-      (evalETerm tm            >> pure "step done")
-      (for rollbacks evalETerm >> pure "step done")
+      (traceM "here (not rollback)" >> evalETerm tm            >> pure "step done")
+      -- XXX must exit here!
+      (for rollbacks (do { traceM "here (rollback)"; evalETerm; }) >> pure "step done")
 
 -- For now we only allow these three types to be formatted.
 --

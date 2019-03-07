@@ -19,6 +19,9 @@
 -- execution graph to be used during symbolic analysis and model reporting.
 module Pact.Analyze.Translate where
 
+-- import Debug.Trace
+-- import Pact.Types.Pretty (renderCompactString)
+
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
@@ -138,15 +141,11 @@ data TranslateEnv
     -- (see @mkTranslateEnv@) but in testing these return a constant @0@.
     , _teGenTagId       :: forall m. MonadState TagId  m => m TagId
     , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
-
-    -- If we've already entered a step, we need to emit intra-step resets
-    -- between this and following steps
-    , _teInStep         :: !Bool
     }
 
 mkTranslateEnv :: Info -> [Capability] -> [Arg] -> TranslateEnv
 mkTranslateEnv info caps args
-  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id) False
+  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id)
   where
     -- NOTE: like in Check's moduleFunChecks, this assumes that toplevel
     -- function arguments are the only variables for which we do not use munged
@@ -236,6 +235,10 @@ data TranslateState
       -- correspond to successful exit early due to the lack of a failure.
       -- These three "success" edges all join together at the same vertex.
     , _tsFoundVars     :: [(VarId, Text, EType)]
+
+    -- If we've already entered a step, we need to emit intra-step resets
+    -- between this and following steps
+    , _teInStep         :: !Bool
     }
 
 makeLenses ''TranslateFailure
@@ -520,6 +523,7 @@ translateBody = \case
   ast:asts -> do
     ast'          <- translateNode ast
     Some ty asts' <- translateBody asts
+    -- traceM $ "outputting sequence: " ++ renderCompactString ast' ++ " -----------> " ++ renderCompactString (Some ty asts')
     pure $ Some ty $ Sequence ast' asts'
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
@@ -1243,7 +1247,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     rollback' <- case rollback of
       Nothing -> pure Nothing
       Just tm -> Just <$> translateNode tm
-    inStep <- view teInStep
+    inStep <- use teInStep
+    teInStep .= True
     let step = Some SStr $ Sequence
           (Some ty (Step entity' (exec' :< ty) rollback'))
           (StrLit "step done")
@@ -1319,7 +1324,7 @@ runTranslation modName funName info caps pactArgs body = do
           path0      = Path 0
           nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
-          state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty []
+          state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty [] False
           translation = do
             retTid    <- genTagId
             -- For our toplevel 'FunctionScope', we reuse variables we've
@@ -1351,9 +1356,9 @@ translateNodeNoGraph node =
       nextTagId  = succ $ _pathTag path0
       graph0     = pure vertex0
       translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty []
+        Map.empty mempty path0 Map.empty [] False
 
-      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0) False
+      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $

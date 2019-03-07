@@ -87,7 +87,7 @@ import           Text.Show                     (showListWith)
 import           Pact.Types.Pretty             (commaBraces, commaBrackets,
                                                 parens, parensSep,
                                                 Pretty(pretty), Doc, viaShow,
-                                                vsep)
+                                                vsep, prettyString)
 import           Pact.Types.Persistence        (WriteType)
 
 import           Pact.Analyze.Feature          hiding (Doc, Sym, Var, col, str,
@@ -401,7 +401,7 @@ singPrettyObject SObjectNil (Object SNil) = [""]
 singPrettyObject
   (SObjectUnsafe (SingList (SCons _ _ objty)))
   (Object (SCons k (Column vTy v) obj))
-    = (pretty (symbolVal k) <> ": " <> singPrettyTm vTy v)
+    = ("'" <> prettyString (symbolVal k) <> ": " <> singPrettyTm vTy v)
       : singPrettyObject (SObjectUnsafe (SingList objty)) (Object obj)
 singPrettyObject _ _ = error "malformed object"
 
@@ -1539,7 +1539,7 @@ prettyTerm ty = \case
   MkPactGuard name     -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard ty' o n  -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
   Step mEntity (exec :< execTy) mRollback
-    -> parensSep $ ["step"]
+    -> parensSep $ maybe ["step"] (\_ -> ["step-with-rollback"]) mRollback
       ++ maybe [] (\entity -> [prettyTm entity]) mEntity
       ++ [singPrettyTm execTy exec]
       ++ maybe [] (\(Some  ty' tm) -> [singPrettyTm ty' tm]) mRollback

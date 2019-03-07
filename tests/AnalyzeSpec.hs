@@ -3053,7 +3053,7 @@ spec = describe "analyze" $ do
                               payee-entity amount)
               @doc "this is a pact"
               @model
-                [ (property (= (column-delta accounts 'balance) 1))
+                [ (property (= (column-delta accounts 'balance) 0))
                 ]
               (step-with-rollback payer-entity
                 (debit payer amount)
