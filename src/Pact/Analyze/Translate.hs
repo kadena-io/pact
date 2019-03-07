@@ -353,7 +353,7 @@ withNodeVars namedNodes bindings = local (teNodeVars %~ Map.union nodeVars)
     nodeVars :: Map Node (Munged, VarId)
     nodeVars = Map.fromList
       [ (node, (munged, vid))
-      | ((Named _ node _), _located -> Binding vid _ munged _)
+      | ((Named _ node _), Located _ (Binding vid _ munged _))
           <- zip namedNodes bindings
       ]
 
