@@ -1,0 +1,20 @@
+packages:
+    pact.cabal
+
+allow-newer: pact:all
+
+package pact
+    ghc-options: -Wwarn -Wall -fmax-pmcheck-iterations=1000
+
+source-repository-package
+    type: git
+    location: https://github.com/LeventErkok/sbv.git
+    tag: 68375576f87d17a2da759c56f7147f4e559471a2
+
+source-repository-package
+    type: git
+    location: git@github.com:kadena-io/thyme.git
+    tag: 6ee9fcb026ebdb49b810802a981d166680d867c9
+
+constraints:
+    megaparsec <7.0
