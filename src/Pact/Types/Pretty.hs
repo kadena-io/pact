@@ -9,6 +9,8 @@ module Pact.Types.Pretty
   , Doc
   , Pretty(..)
   , RenderColor(..)
+  , abbrev
+  , abbrevStr
   , align
   , angles
   , annotate
@@ -57,6 +59,7 @@ import           Data.Foldable        (toList)
 import qualified Data.HashMap.Strict  as HM
 import           Data.Int
 import           Data.Text            (Text, pack, unpack)
+import qualified Data.Text            as Text
 import           Data.Text.Prettyprint.Convert.AnsiWlPprint (fromAnsiWlPprint)
 import           Data.Text.Prettyprint.Doc
   (SimpleDocStream, annotate, unAnnotate, layoutPretty,
@@ -197,7 +200,7 @@ instance Pretty Delta where
             -> Int64  -- Column
             -> Doc
         prettyDelta source line' column'
-          = pretty source
+          = prettyString source
             <> pretty ':' <> pretty (line'+1)
             <> pretty ':' <> pretty (column'+1)
         interactive = "(interactive)"
@@ -206,3 +209,14 @@ instance (Pretty a, Pretty b) => Pretty (Var a b) where
   pretty = \case
     B b -> pretty b
     F a -> pretty a
+
+-- | Abbreviated 'pretty'
+abbrev :: Pretty a => a -> Text
+abbrev a =
+  let fullText = renderCompactText a
+  in case Text.compareLength fullText 50 of
+       GT -> Text.take 50 fullText <> "..."
+       _  -> fullText
+
+abbrevStr :: Pretty a => a -> String
+abbrevStr = unpack . abbrev

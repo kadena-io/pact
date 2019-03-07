@@ -61,7 +61,7 @@ addDef = defRNative "+" plus plusTy
       (if aty == bty then aty else TyAny)
       def
     plus _ [TObject as aty _,TObject bs bty _] =
-      let reps (a,b) = (abbrev a,(a,b))
+      let reps (a,b) = (renderCompactText a,(a,b))
           mapit = M.fromList . map reps
       in return $ TObject
            (M.elems $ M.union (mapit as) (mapit bs))

@@ -169,8 +169,8 @@ handleCompile src exp a =
             Just (_,d) -> do
                         mode <- use rMode
                         outStr HErr (renderPrettyString (colors mode) (_pDelta d))
-                        outStrLn HErr $ ": error: " ++ renderCompactString' (peText er)
-            Nothing -> outStrLn HErr $ "[No location]: " ++ renderCompactString' (peText er)
+                        outStrLn HErr $ ": error: " ++ renderCompactString' (peDoc er)
+            Nothing -> outStrLn HErr $ "[No location]: " ++ renderCompactString' (peDoc er)
           Left <$> renderErr er
 
 compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
@@ -229,8 +229,8 @@ renderErr a
       let i = case m of
                 Script _ f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
                 _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
-      return $ renderInfo i ++ ":" ++ renderCompactString' (peText a)
-  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peText a)
+      return $ renderInfo i ++ ":" ++ renderCompactString' (peDoc a)
+  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peDoc a)
 
 updateForOp :: Term Name -> Repl (Either String (Term Name))
 updateForOp a = do

@@ -66,7 +66,7 @@ module Pact.Types.Term
    toTermList,toTObject,toTList,
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
-   tLit,tStr,termEq,abbrev,
+   tLit,tStr,termEq,
    Gas(..)
    ) where
 
@@ -920,10 +920,6 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tMeta
       ]
 
-showParamType :: Show n => Type n -> String
-showParamType TyAny = ""
-showParamType t = ":" ++ show t
-
 -- We currently need this instance to satisfy the 'Eq instance for 'Scope':
 -- @(Monad f, Eq b, Eq1 f) => Eq1 (Scope b f)@
 instance Eq1 Term where
@@ -994,16 +990,16 @@ instance FromJSON (Term n) where
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 
-instance Show n => ToJSON (Term n) where
+instance Pretty n => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
     toJSON (TGuard k _) = toJSON k
     toJSON (TObject kvs _ _) =
         object $ map (kToJSON *** toJSON) kvs
             where kToJSON (TLitString s) = s
-                  kToJSON t = pack (abbrev t)
+                  kToJSON t = renderCompactText t
     toJSON (TList ts _ _) = toJSON ts
-    toJSON t = toJSON (abbrev t)
+    toJSON t = toJSON (renderCompactText t)
     {-# INLINE toJSON #-}
 
 class ToTerm a where
@@ -1094,31 +1090,6 @@ termEq (TValue a _) (TValue b _) = a == b
 termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g && d == h && x == y
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && d == h
 termEq _ _ = False
-
-
-
-
-abbrev :: Show t => Term t -> String
-abbrev (TModule m _ _) =
-  case m of
-    MDModule Module{..} -> "<module " ++ asString' _mName ++ ">"
-    MDInterface Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
-abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
-abbrev TDef {..} = "<defun " ++ asString' (_dDefName _tDef) ++ ">"
-abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
-abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
-abbrev TApp {..} = "<app " ++ abbrev (_appFun _tApp) ++ ">"
-abbrev TBinding {} = "<binding>"
-abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
-abbrev (TLiteral l _) = show l
-abbrev TGuard {} = "<guard>"
-abbrev (TUse (Use m h _) _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
-abbrev (TVar s _) = show s
-abbrev (TValue v _) = show v
-abbrev TStep {} = "<step>"
-abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
-abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
-
 
 
 makeLenses ''Term

@@ -194,7 +194,7 @@ class ToPersistable t where
 instance ToPersistable Literal where toPersistable = PLiteral
 instance ToPersistable Guard where toPersistable = PGuard
 instance ToPersistable Value where toPersistable = PValue
-instance Show n => ToPersistable (Term n) where
+instance Pretty n => ToPersistable (Term n) where
   toPersistable (TLiteral v _) = toPersistable v
   toPersistable (TGuard ks _) = toPersistable ks
   toPersistable (TValue v _) = toPersistable v
