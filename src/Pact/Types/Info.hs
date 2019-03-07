@@ -32,6 +32,7 @@ import Data.String
 import Data.Default
 import GHC.Generics (Generic)
 import Control.DeepSeq
+import Data.SBV (Mergeable (symbolicMerge))
 
 import Pact.Types.Orphans ()
 import Pact.Types.Pretty
@@ -81,6 +82,11 @@ instance Ord Info where
   _ <= Info Nothing = False
 
 instance Default Info where def = Info Nothing
+
+instance Mergeable Info where
+  -- Because Info values have no effect on execution we just take the max
+  -- (which could possibly have more info)
+  symbolicMerge _ _ a b = max a b
 
 
 -- renderer for line number output.

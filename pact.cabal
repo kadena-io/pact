@@ -92,7 +92,6 @@ library
       Pact.Analyze.Model.Graph
       Pact.Analyze.Model.Tags
       Pact.Analyze.Model.Text
-      Pact.Analyze.Orphans
       Pact.Analyze.Parse
       Pact.Analyze.Parse.Invariant
       Pact.Analyze.Parse.Prop
