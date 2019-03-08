@@ -123,6 +123,7 @@ data AnalyzeEnv
     , _aeRegistry     :: !Registry
     , _aeTxMetadata   :: !TxMetadata
     , _aeScope        :: !(Map VarId AVal) -- used as a stack
+    , _aeNondets      :: !(Map VarId (SBV Bool))
     , _aeGuardPasses  :: !(SFunArray Guard Bool)
     , _invariants     :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds    :: !(TableMap (Map Text VarId))
@@ -143,10 +144,11 @@ mkAnalyzeEnv
   -> [Table]
   -> [Capability]
   -> Map VarId AVal
+  -> Map VarId (SBV Bool)
   -> ModelTags 'Symbolic
   -> Info
   -> Maybe AnalyzeEnv
-mkAnalyzeEnv modName pactMetadata registry tables caps args tags info = do
+mkAnalyzeEnv modName pactMetadata registry tables caps args nondets tags info = do
   let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
                                 (mkFreeArray "txDecimals")
                                 (mkFreeArray "txIntegers")
@@ -177,7 +179,7 @@ mkAnalyzeEnv modName pactMetadata registry tables caps args tags info = do
       emptyGrants  = mkTokenGrants caps
       activeGrants = emptyGrants
 
-  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args guardPasses
+  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args nondets guardPasses
     invariants' columnIds' tags info (sansProv trivialGuard) emptyGrants
     activeGrants tables
 

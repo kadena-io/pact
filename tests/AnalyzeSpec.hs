@@ -3047,6 +3047,13 @@ spec = describe "analyze" $ do
 -}
 
   describe "checking pacts" $ do
+    -- TODO:
+    -- * longer pacts
+    -- * shorter pacts?
+    -- * steps with / without rollbacks
+    -- * public / private
+    -- * steps with / without specified entities
+
     describe "translating a pact" $ do
       let code = [text|
             (defpact payment (payer payer-entity payee
@@ -3073,3 +3080,32 @@ spec = describe "analyze" $ do
                 (update accounts acct { "balance": (+ bal amount) })))
             |]
       expectVerified code
+
+      let code' = [text|
+            (defpact payment (payer:string payer-entity:string payee:string
+                              payee-entity:string amount:integer
+                              payer-bal:integer payee-bal:integer)
+              @doc "this is a pact"
+              @model
+                ; assumptions
+                [ (property (>= payer-bal amount))
+                , (property (= payer-bal (at 'balance (read accounts payer 'before))))
+                , (property (= payee-bal (at 'balance (read accounts payee 'before))))
+
+                ; dubious assumptions
+                , (property (!= payer payee))
+
+                ; conclusion
+                , (property (= (column-delta accounts 'balance) 0))
+                ]
+              (step-with-rollback payer-entity
+                (update-bal payer (- payer-bal amount))
+                (update-bal payer payer-bal))
+              (step payee-entity
+                (update-bal payee (+ payee-bal amount))))
+
+            (defun update-bal (acct balance)
+              (enforce (> balance 0)    "Non-positive balance")
+              (update accounts acct { "balance": balance }))
+            |]
+      expectVerified code'

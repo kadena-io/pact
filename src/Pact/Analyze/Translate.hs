@@ -19,7 +19,7 @@
 -- execution graph to be used during symbolic analysis and model reporting.
 module Pact.Analyze.Translate where
 
--- import Debug.Trace
+import Debug.Trace
 -- import Pact.Types.Pretty (renderCompactString)
 
 import qualified Algebra.Graph              as Alga
@@ -238,7 +238,8 @@ data TranslateState
 
     -- If we've already entered a step, we need to emit intra-step resets
     -- between this and following steps
-    , _teInStep         :: !Bool
+    , _tsInStep         :: !Bool
+    , _tsNondets        :: ![VarId]
     }
 
 makeLenses ''TranslateFailure
@@ -514,6 +515,26 @@ translateBinding (Named unmunged' node _) = do
   varType <- translateType node
   pure $ Located info $ Binding vid (Unmunged unmunged') munged varType
 
+makeSteps :: ETerm -> Maybe ETerm
+makeSteps (Some SStr steps@(Sequence (Some SStr Step{}) _))
+  = Some SStr <$> makeSteps' steps
+makeSteps x@(Some _          (Sequence (Some SStr Step{}) _))
+  = trace ("x: " ++ show x) $ Nothing
+makeSteps tm
+  = Just tm
+
+makeSteps' :: Term 'TyStr -> Maybe (Term 'TyStr)
+makeSteps' (Sequence (Some SStr (Step a b c Nothing)) steps)
+  = Step a b c . Just <$> makeSteps' steps
+makeSteps' y@(Sequence (Some SStr Step{}) _)
+  = trace ("y: " ++ show y) $ Nothing
+makeSteps' step@Step{}
+  = Just step
+makeSteps' (IntraStepReset vid step)
+  = IntraStepReset vid <$> makeSteps' step
+makeSteps' z
+  = trace ("z: " ++ show z) $ Nothing
+
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody = \case
   []       -> do
@@ -521,10 +542,9 @@ translateBody = \case
     throwError $ TranslateFailure info EmptyBody
   [ast]    -> translateNode ast
   ast:asts -> do
-    ast'          <- translateNode ast
-    Some ty asts' <- translateBody asts
-    -- traceM $ "outputting sequence: " ++ renderCompactString ast' ++ " -----------> " ++ renderCompactString (Some ty asts')
-    pure $ Some ty $ Sequence ast' asts'
+    someExpr      <- translateNode ast
+    Some ty exprs <- translateBody asts
+    pure $ Some ty $ Sequence someExpr exprs
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -1244,15 +1264,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Just tm -> do
         Some SStr entity' <- translateNode tm
         pure $ Just entity'
+    failureVid <- genVarId
+    tsNondets %= (failureVid:)
     rollback' <- case rollback of
       Nothing -> pure Nothing
-      Just tm -> Just <$> translateNode tm
-    inStep <- use teInStep
-    teInStep .= True
-    let step = Some SStr $ Sequence
-          (Some ty (Step entity' (exec' :< ty) rollback'))
-          (StrLit "step done")
-    pure $ if inStep then Some SStr (IntraStepReset step) else step
+      Just tm -> do
+        tm' <- translateNode tm
+        pure $ Just (tm', failureVid)
+    inStep <- use tsInStep
+    tsInStep .= True
+    let step = Step entity' (exec' :< ty) rollback' Nothing
+    pure $ Some SStr $ if inStep then IntraStepReset failureVid step else step
 
   AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
 
@@ -1299,11 +1321,11 @@ runTranslation
   -> [Capability]
   -> [Named Node]
   -> [AST Node]
-  -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
+  -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph)
 runTranslation modName funName info caps pactArgs body = do
     (args, translationVid) <- runArgsTranslation
-    (tm, graph) <- runBodyTranslation args translationVid
-    pure (args, tm, graph)
+    (tm, (nondets, graph)) <- runBodyTranslation args translationVid
+    pure (args, nondets, tm, graph)
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
@@ -1317,14 +1339,17 @@ runTranslation modName funName info caps pactArgs body = do
         Binding vid unmunged (node ^. aId.tiName.to Munged) ety
 
     runBodyTranslation
-      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
+      :: [Arg]
+      -> VarId
+      -> Except TranslateFailure (ETerm, ([VarId], ExecutionGraph))
     runBodyTranslation args nextVarId =
       let vertex0    = 0
           nextVertex = succ vertex0
           path0      = Path 0
           nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
-          state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty [] False
+          state0     = TranslateState nextTagId nextVarId graph0 vertex0
+            nextVertex Map.empty mempty path0 Map.empty [] False []
           translation = do
             retTid    <- genTagId
             -- For our toplevel 'FunctionScope', we reuse variables we've
@@ -1333,8 +1358,15 @@ runTranslation modName funName info caps pactArgs body = do
             res <- withNewScope (FunctionScope modName funName) bindingTs retTid $
               translateBody body
             _ <- extendPath -- form final edge for any remaining events
-            pure res
-      in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
+            case makeSteps res of
+              Nothing   -> throwError undefined
+              Just res' -> pure res'
+
+          handleState translateState =
+            ( _tsNondets translateState
+            , mkExecutionGraph vertex0 path0 translateState
+            )
+      in fmap (fmap handleState) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info caps args)
 
 -- | Translate a node ignoring the execution graph. This is useful in cases
@@ -1350,13 +1382,13 @@ runTranslation modName funName info caps pactArgs body = do
 --
 translateNodeNoGraph :: AST Node -> Except TranslateFailure ETerm
 translateNodeNoGraph node =
-  let vertex0    = 0
-      nextVertex = succ vertex0
-      path0      = Path 0
-      nextTagId  = succ $ _pathTag path0
-      graph0     = pure vertex0
-      translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty [] False
+  let vertex0        = 0
+      nextVertex     = succ vertex0
+      path0          = Path 0
+      nextTagId      = succ $ _pathTag path0
+      graph0         = pure vertex0
+      translateState = TranslateState nextTagId 0 graph0 vertex0 nextVertex
+        Map.empty mempty path0 Map.empty [] False []
 
       translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
 

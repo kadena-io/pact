@@ -11,8 +11,6 @@
 -- 'Prop' languages).
 module Pact.Analyze.Eval.Term where
 
-import Debug.Trace
-
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', preview, use,
                                               view, (%=), (%~), (&), (+=), (.=),
@@ -31,7 +29,7 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind,
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymVal, ite,
-                                              literal, (.<), uninterpret)
+                                              literal, (.<))
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.String             as SBV
 import           Data.SBV.Tuple              (tuple)
@@ -493,6 +491,7 @@ evalTerm = \case
   Let _name vid retTid eterm body -> do
     av <- evalETerm eterm
     tagVarBinding vid av
+    -- TODO: withVar
     local (scope.at vid ?~ av) $ do
       res <- evalTerm body
       tagReturn retTid $ mkAVal res
@@ -613,7 +612,7 @@ evalTerm = \case
       Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
-  Step mEntity (tm :< _) mRollback -> do
+  Step mEntity (tm :< ty) mRollback mContinue -> do
     case mEntity of
       Nothing -> pure ()
       Just expectedEntity -> do
@@ -621,14 +620,17 @@ evalTerm = \case
         expectedEntity' <- eval expectedEntity
         markFailure $ actualEntity ./= expectedEntity'
 
-    traceM $ "step rollback: " ++ show mRollback
     case mRollback of
-      Nothing       -> pure ()
-      Just rollback -> globalState . gasRollbacks %= (rollback:)
-    eval tm
+      Nothing               -> pure ()
+      Just (rollback, _tid) -> globalState . gasRollbacks %= (rollback:)
+
+    _tmVal <- withSing ty $ eval tm
+    case mContinue of
+      Nothing       -> pure "step done"
+      Just continue -> eval continue
 
 
-  IntraStepReset tm -> do
+  IntraStepReset failureVid tm -> do
     rollbacks <- use $ globalState . gasRollbacks
     tables    <- view $ analyzeEnv . aeTables
     oldState  <- use id
@@ -637,15 +639,7 @@ evalTerm = \case
                                   (mkFreeArray "txDecimals")
                                   (mkFreeArray "txIntegers")
 
-        -- intCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) (mkSFunArray (const 0))
-        -- decCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
-        -- intColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) 0
-        -- decColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (fromInteger 0)
         newState = oldState
-          -- & latticeState . lasIntCellDeltas        .~ intCellDeltas
-          -- & latticeState . lasDecCellDeltas        .~ decCellDeltas
-          -- & latticeState . lasIntColumnDeltas      .~ intColumnDeltas
-          -- & latticeState . lasDecColumnDeltas      .~ decColumnDeltas
           & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
           -- & latticeState . lasExtra . cvRowExists .~  i think this one is okay
         newEnv = oldEnv
@@ -655,14 +649,17 @@ evalTerm = \case
           -- & aeScope                   .~ undefined
           -- & aeGuardPasses             .~ undefined
 
-    id .= newState
-    -- both continue and roll back via nondeterminism
-    traceM $ "rollbacks: " ++ show (length rollbacks)
-    local (analyzeEnv .~ newEnv) $ ite (uninterpret "nondet") -- XXX need to alloc?
-      -- (return value never used)
-      (traceM "here (not rollback)" >> evalETerm tm            >> pure "step done")
-      -- XXX must exit here!
-      (for rollbacks (do { traceM "here (rollback)"; evalETerm; }) >> pure "step done")
+    view (aeNondets . at failureVid) >>= \case
+      Nothing      -> throwError undefined
+      Just failure -> do
+        id .= newState
+
+        -- both continue and roll back via nondeterminism
+        local (analyzeEnv .~ newEnv) $ ite failure
+          -- (return value never used)
+          (evalTerm tm             >> pure "step done")
+          (for rollbacks evalETerm >> pure "step done")
+
 
 -- For now we only allow these three types to be formatted.
 --
