@@ -74,7 +74,7 @@ allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
 
 allocNondets :: [VarId] -> Alloc (Map VarId (SBV Bool))
 allocNondets vids = fmap Map.fromList $ for vids $ \vid ->
-  (vid,) <$> allocSbv @'TyBool
+  (vid,) <$> allocSbv @'TyBool "nondet"
 
 allocModelTags
   :: Map VarId (Located (Unmunged, TVal))
