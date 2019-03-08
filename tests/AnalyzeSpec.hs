@@ -3085,16 +3085,16 @@ spec = describe "analyze" $ do
                               payer-bal:integer payee-bal:integer)
               @doc "this is a pact"
               @model
-                ; assumptions
-                [ (property (>= payer-bal amount))
-                , (property (= payer-bal (at 'balance (read accounts payer 'before))))
-                , (property (= payee-bal (at 'balance (read accounts payee 'before))))
+                [ (property
+                    (when
+                      ; assumptions
+                      (and (>= payer-bal amount)
+                      (and (= payer-bal (at 'balance (read accounts payer 'before)))
+                      (and (= payee-bal (at 'balance (read accounts payee 'before)))
+                           (!= payer payee))))
 
-                ; dubious assumptions
-                , (property (!= payer payee))
-
-                ; conclusion
-                , (property (= (column-delta accounts 'balance) 0))
+                      ; conclusion
+                      (= (column-delta accounts 'balance) 0)))
                 ]
               (step-with-rollback payer-entity
                 (update-bal payer (- payer-bal amount))
@@ -3103,7 +3103,7 @@ spec = describe "analyze" $ do
                 (update-bal payee (+ payee-bal amount))))
 
             (defun update-bal (acct balance)
-              (enforce (> balance 0)    "Non-positive balance")
+              (enforce (>= balance 0)    "Non-positive balance")
               (update accounts acct { "balance": balance }))
             |]
       expectVerified code'
