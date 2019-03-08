@@ -2040,7 +2040,7 @@ spec = describe "analyze" $ do
 
     describe "evaluation by sbv" $ do
       -- SBV assumes formulas are always written in prenex-normal form.
-      -- `exists i. i > 0 /\ not (exists i. i > 0)` is clearly not true.
+      -- `(exists i. i > 0) /\ not (exists i. i > 0)` is clearly not true.
       -- however, in the absence of prenex normalization, SBV interprets this
       -- as `exists i j. i > 0 /\ not (j > 0)`, which _is_ true.
       --
