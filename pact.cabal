@@ -288,21 +288,3 @@ test-suite hspec
       , cryptonite
       , http-client
       , servant-client
-    other-modules:
-        DocgenSpec
-      , PactTestsSpec
-      , ParserSpec
-      , PersistSpec
-      , RemoteVerifySpec
-      , SignatureSpec
-      , TypecheckSpec
-      , PactContinuationSpec
-      , Utils.TestRunner
-      , AnalyzePropertiesSpec
-      , AnalyzeSpec
-      , Analyze.Eval
-      , Analyze.Gen
-      , Analyze.TimeGen
-      , Analyze.Translate
-      , ClientSpec
-      , SchemeSpec
