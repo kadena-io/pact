@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -32,7 +33,9 @@ import Data.String
 import Data.Default
 import GHC.Generics (Generic)
 import Control.DeepSeq
+#if !defined(ghcjs_HOST_OS)
 import Data.SBV (Mergeable (symbolicMerge))
+#endif
 
 import Pact.Types.Orphans ()
 import Pact.Types.Pretty
@@ -83,10 +86,12 @@ instance Ord Info where
 
 instance Default Info where def = Info Nothing
 
+#if !defined(ghcjs_HOST_OS)
 instance Mergeable Info where
   -- Because Info values have no effect on execution we just take the max
   -- (which could possibly have more info)
   symbolicMerge _ _ a b = max a b
+#endif
 
 
 -- renderer for line number output.
