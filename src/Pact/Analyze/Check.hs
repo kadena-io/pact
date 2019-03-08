@@ -34,8 +34,7 @@ import           Control.Exception         as E
 import           Control.Lens              (at, each, filtered, ifoldrM, ifor,
                                             itraversed, ix, toListOf, traversed,
                                             view, (%~), (&), (<&>), (?~), (^.),
-                                            (^?), (^?!), (^@..), _1, _2, _3,
-                                            _Left)
+                                            (^?), (^?!), (^@..), _1, _2, _Left)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -144,7 +143,6 @@ type CheckResult = Either CheckFailure CheckSuccess
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
   , invariantChecks :: HM.HashMap Text (TableMap [CheckResult])
-  , pactChecks      :: HM.HashMap Text [CheckResult]
   , moduleWarnings  :: VerificationWarnings
   } deriving (Eq, Show)
 
@@ -578,6 +576,7 @@ parseModuleModelDecl exps = traverse parseDecl exps where
       _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")
 
+-- | The three things we can check properties of
 data CheckableType
   = CheckDefun
   | CheckDefpact
@@ -797,21 +796,19 @@ verifyModule modules moduleData = runExceptT $ do
   -- or a constant), keep its signature.
   --
   ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType),
-    consts :: HM.HashMap Text (AST TC.Node),
-    pacts :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
+    consts   :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
     (\name (ref, cType) accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
         (TopFun (FDefun _info _mod _name funType _args _body) _meta, _tcState)
           -> case cType of
-            CheckDefun   -> accum & _1 . at name ?~ (ref, funType)
-            CheckDefpact -> accum & _3 . at name ?~ (ref, funType)
-            _ -> error "invariant violation: this cannot be a constant"
+            CheckDefconst -> error "invariant violation: this cannot be a constant"
+            _             -> accum & _1 . at name ?~ (ref, funType)
         (TopConst _info _qualifiedName _type val _doc, _tcState)
           -> accum & _2 . at name ?~ val
         _ -> accum
     )
-    (HM.empty, HM.empty, HM.empty)
+    (HM.empty, HM.empty)
     typecheckableRefs
 
   let valueToProp' :: ETerm -> Except VerificationFailure EProp
@@ -830,9 +827,6 @@ verifyModule modules moduleData = runExceptT $ do
 
   caps <- moduleCapabilities moduleData
 
-  (pactChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-    <- hoist generalize $ moduleFunChecks tables checkExps pacts consts' propDefs
-
   let modName :: ModuleName
       modName = moduleDefName $ _mdModule moduleData
 
@@ -844,14 +838,8 @@ verifyModule modules moduleData = runExceptT $ do
     Left errs        -> throwError $ ModuleParseFailure errs
     Right funChecks' -> pure funChecks'
 
-  pactChecks' <- case traverse sequence pactChecks of
-    Left errs         -> throwError $ ModuleParseFailure errs
-    Right pactChecks' -> pure pactChecks'
-
   -- actually check the checks
   funChecks'' <- lift $ ifor funChecks' $ \name (ref, checks) ->
-    verifyFunProps ref name checks
-  pactChecks'' <- lift $ ifor pactChecks' $ \name (ref, checks) ->
     verifyFunProps ref name checks
   invariantChecks <- ifor typecheckableRefs $ \name (ref, _) ->
     withExceptT ModuleCheckFailure $ ExceptT $
@@ -859,7 +847,7 @@ verifyModule modules moduleData = runExceptT $ do
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
-  pure $ ModuleChecks funChecks'' invariantChecks pactChecks'' warnings
+  pure $ ModuleChecks funChecks'' invariantChecks warnings
 
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
 renderVerifiedModule = \case
@@ -873,11 +861,10 @@ renderVerifiedModule = \case
     ["Invalid reference type given to typechecker."]
   Left (FailedConstTranslation msg) ->
     [T.pack msg]
-  Right (ModuleChecks propResults invariantResults pactResults warnings) ->
+  Right (ModuleChecks propResults invariantResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         invariantResults' = toListOf (traverse.traverse.each) invariantResults
-        pactResults'      = toListOf (traverse.each)          pactResults
-    in (describeCheckResult <$> propResults' <> invariantResults' <> pactResults') <>
+    in (describeCheckResult <$> propResults' <> invariantResults') <>
          [describeVerificationWarnings warnings]
 
 -- | Verifies a one-off 'Check' for a function.

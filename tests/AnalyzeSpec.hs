@@ -142,15 +142,13 @@ runVerification code = do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
-        Right (ModuleChecks propResults invariantResults pactResults _) -> pure $
+        Right (ModuleChecks propResults invariantResults _) -> pure $
           case findOf (traverse . traverse) isLeft propResults of
             Just (Left failure) -> Just $ TestCheckFailure failure
-            _ -> case findOf (traverse . traverse) isLeft pactResults of
+            _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
               Just (Left failure) -> Just $ TestCheckFailure failure
-              _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
-                Just (Left failure) -> Just $ TestCheckFailure failure
-                Just (Right _)      -> error "impossible: result of isLeft"
-                Nothing             -> Nothing
+              Just (Right _)      -> error "impossible: result of isLeft"
+              Nothing             -> Nothing
 
 runCheck :: Text -> Check -> IO (Maybe TestFailure)
 runCheck code check = do
