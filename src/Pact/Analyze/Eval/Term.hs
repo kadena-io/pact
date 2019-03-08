@@ -491,8 +491,7 @@ evalTerm = \case
   Let _name vid retTid eterm body -> do
     av <- evalETerm eterm
     tagVarBinding vid av
-    -- TODO: withVar
-    local (scope.at vid ?~ av) $ do
+    withVar vid av $ do
       res <- evalTerm body
       tagReturn retTid $ mkAVal res
       pure res
