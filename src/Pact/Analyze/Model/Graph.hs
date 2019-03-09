@@ -79,6 +79,9 @@ linearize model = go traceEvents
              TraceGuard recov (_located -> tid) ->
                handleEnforce recov $
                  mtGuardEnforcements.at tid._Just.located.geSuccess
+             TraceRequireGrant recov _ _ (_located -> tid) ->
+               handleEnforce recov $
+                 mtGrantRequests.at tid._Just.located.grSuccess
              TraceRead _schema (Located _i tid) ->
                handleDbAccess $ mtReads.at tid._Just.located.accSuccess
              TraceWrite _writeType _schema (Located _i tid) ->

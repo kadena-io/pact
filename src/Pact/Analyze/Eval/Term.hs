@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 -- | Symbolic evaluation of program 'Term's (as opposed to the 'Invariant' or
 -- 'Prop' languages).
@@ -153,6 +154,13 @@ tagGuard tid sg sPasses = do
       addConstraint $ sansProv $ sg' .== sg
       addConstraint $ sansProv $ passes' .== _sSbv sPasses
       globalState.gasGuardProvenances.at tid .= (sg ^. sProv)
+
+tagGrantRequest :: TagId -> S Bool -> Analyze ()
+tagGrantRequest tid sb = do
+  mTag <- preview $ aeModelTags.mtGrantRequests.at tid._Just.located
+  case mTag of
+    Nothing  -> pure ()
+    Just (GrantRequest _ sbv) -> addConstraint $ sansProv $ sbv .== _sSbv sb
 
 tagSubpathStart :: Path -> S Bool -> Analyze ()
 tagSubpathStart p active = do
@@ -382,6 +390,9 @@ addPendingGrant token = pendingTokenGranted token .= sTrue
 extendingGrants :: TokenGrants -> Analyze (S a) -> Analyze (S a)
 extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
 
+isGranted :: Token -> Analyze (S Bool)
+isGranted t = view $ activeGrants.tokenGranted t
+
 evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
@@ -442,6 +453,11 @@ evalTerm = \case
     addPendingGrant =<< capabilityAppToken cap vids
     pure r
 
+  HasGrant tid cap (unzip -> (_, vids)) -> do
+    granted <- isGranted =<< capabilityAppToken cap vids
+    tagGrantRequest tid granted
+    pure granted
+
   Read objTy tid tn rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
     tableRead tn .= sTrue
@@ -488,13 +504,17 @@ evalTerm = \case
     --
     pure $ literalS "Write succeeded"
 
-  Let _name vid retTid eterm body -> do
+  Let _name vid eterm body -> do
     av <- evalETerm eterm
     tagVarBinding vid av
     local (scope.at vid ?~ av) $ do
       res <- evalTerm body
-      tagReturn retTid $ mkAVal res
       pure res
+
+  Return tid body -> do
+    res <- evalTerm body
+    tagReturn tid $ mkAVal res
+    pure res
 
   -- Read values from tx metadata
   ReadKeySet  nameT -> readKeySet  =<< evalTerm nameT

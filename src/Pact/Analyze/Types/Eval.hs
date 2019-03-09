@@ -430,6 +430,9 @@ class HasAnalyzeEnv a where
   currentPactId :: Lens' a (S Integer)
   currentPactId = analyzeEnv.aePactMetadata.pmPactId
 
+  activeGrants :: Lens' a TokenGrants
+  activeGrants = analyzeEnv.aeActiveGrants
+
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
