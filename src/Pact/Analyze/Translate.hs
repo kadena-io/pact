@@ -19,9 +19,6 @@
 -- execution graph to be used during symbolic analysis and model reporting.
 module Pact.Analyze.Translate where
 
-import Debug.Trace
--- import Pact.Types.Pretty (renderCompactString)
-
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
@@ -518,22 +515,22 @@ translateBinding (Named unmunged' node _) = do
 makeSteps :: ETerm -> Maybe ETerm
 makeSteps (Some SStr steps@(Sequence (Some SStr Step{}) _))
   = Some SStr <$> makeSteps' steps
-makeSteps x@(Some _          (Sequence (Some SStr Step{}) _))
-  = trace ("x: " ++ show x) $ Nothing
+makeSteps (Some _          (Sequence (Some SStr Step{}) _))
+  = Nothing
 makeSteps tm
   = Just tm
 
 makeSteps' :: Term 'TyStr -> Maybe (Term 'TyStr)
 makeSteps' (Sequence (Some SStr (Step a b c Nothing)) steps)
   = Step a b c . Just <$> makeSteps' steps
-makeSteps' y@(Sequence (Some SStr Step{}) _)
-  = trace ("y: " ++ show y) $ Nothing
+makeSteps' (Sequence (Some SStr Step{}) _)
+  = Nothing
 makeSteps' step@Step{}
   = Just step
 makeSteps' (IntraStepReset vid step)
   = IntraStepReset vid <$> makeSteps' step
-makeSteps' z
-  = trace ("z: " ++ show z) $ Nothing
+makeSteps' _
+  = Nothing
 
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody = \case
