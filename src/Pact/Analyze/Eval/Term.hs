@@ -628,13 +628,13 @@ evalTerm = \case
           -- all the existing rollbacks. Note that we use 'rollbacks', ie all
           -- rollbacks prior to this step, not 'rollbacks'', because we don't
           -- want to execute the rollback associated with this step.
-          Just (_rollback, failureVid) -> do
-            failure <- view (aeNondets . at failureVid)
-              ??? "couldn't find failure var"
+          Just (_rollback, cancelVid) -> do
+            cancel <- view (aeNondets . at cancelVid)
+              ??? "couldn't find cancel var"
 
-            ite failure
-              (void $ evalTermWithEntity mEntity tm)
+            ite cancel
               (for_ rollbacks (withReset . evalETerm))
+              (void $ evalTermWithEntity mEntity tm)
 
         let rollbacks' = case mRollback of
               Nothing               -> rollbacks

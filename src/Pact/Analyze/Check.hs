@@ -359,8 +359,8 @@ verifyFunctionProperty
   -> CheckableType
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty modName funName funInfo tables caps pactArgs body checkType (Located propInfo check) =
-  runExceptT $ do
+verifyFunctionProperty modName funName funInfo tables caps pactArgs body
+  checkType (Located propInfo check) = runExceptT $ do
     (args, nondets, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation modName funName funInfo caps pactArgs body checkType

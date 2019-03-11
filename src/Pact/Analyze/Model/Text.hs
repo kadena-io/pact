@@ -213,7 +213,7 @@ showEvent ksProvs tags event = do
           LetScope            -> []
           ObjectScope         -> []
           FunctionScope _ _   -> returnOutput
-          PactScope _ _       -> returnOutput
+          PactScope _ _       -> []
           CapabilityScope _ _ -> returnOutput
 
   where
