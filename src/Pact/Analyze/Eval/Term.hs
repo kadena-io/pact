@@ -23,7 +23,7 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
-import           Data.Foldable               (foldl', foldlM)
+import           Data.Foldable               (foldl', foldlM, for_)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind,
@@ -611,54 +611,75 @@ evalTerm = \case
       Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
-  Step mEntity (tm :< ty) mRollback mContinue -> do
-    case mEntity of
-      Nothing -> pure ()
-      Just expectedEntity -> do
-        actualEntity    <- view currentEntity
-        expectedEntity' <- eval expectedEntity
-        markFailure $ actualEntity ./= expectedEntity'
+  Pact steps -> do
+    _ <- foldlM
+      (\(rollbacks, afterFirstStep)
+        (Step mEntity (tm :< ty) mRollback) -> withSing ty $ do
 
-    case mRollback of
-      Nothing               -> pure ()
-      Just (rollback, _tid) -> globalState . gasRollbacks %= (rollback:)
+            -- We reset the environment unless this is the first step
+        let withReset' = if afterFirstStep then withReset else id
 
-    _tmVal <- withSing ty $ eval tm
-    case mContinue of
-      Nothing       -> pure "step done"
-      Just continue -> eval continue
+        _ <- withReset' $ case mRollback of
 
+          -- If there's no rollback then we just evaluate this term
+          Nothing -> void $ evalTermWithEntity mEntity tm
 
-  IntraStepReset failureVid tm -> do
-    rollbacks <- use $ globalState . gasRollbacks
-    tables    <- view $ analyzeEnv . aeTables
-    oldState  <- use id
-    oldEnv    <- ask
-    let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
-                                  (mkFreeArray "txDecimals")
-                                  (mkFreeArray "txIntegers")
+          -- ... otherwise, we nondeterministically either execute the step or
+          -- all the existing rollbacks. Note that we use 'rollbacks', ie all
+          -- rollbacks prior to this step, not 'rollbacks'', because we don't
+          -- want to execute the rollback associated with this step.
+          Just (_rollback, failureVid) -> do
+            failure <- view (aeNondets . at failureVid)
+              ??? "couldn't find failure var"
 
-        newState = oldState
-          & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
-          -- & latticeState . lasExtra . cvRowExists .~  i think this one is okay
-        newEnv = oldEnv
-          & aePactMetadata . pmEntity .~ uninterpretS "entity"
-          -- & registry                  .~ undefined
-          & aeTxMetadata              .~ txMetadata
-          -- & aeScope                   .~ undefined
-          -- & aeGuardPasses             .~ undefined
+            ite failure
+              (void $ evalTermWithEntity mEntity tm)
+              (for_ rollbacks (withReset . evalETerm))
 
-    view (aeNondets . at failureVid) >>= \case
-      Nothing      -> throwError undefined
-      Just failure -> do
-        id .= newState
+        let rollbacks' = case mRollback of
+              Nothing               -> rollbacks
+              Just (rollback, _vid) -> rollback:rollbacks
 
-        -- both continue and roll back via nondeterminism
-        local (analyzeEnv .~ newEnv) $ ite failure
-          -- (return value never used)
-          (evalTerm tm             >> pure "step done")
-          (for rollbacks evalETerm >> pure "step done")
+        pure (rollbacks', True))
+      ([], False)
+      steps
+    pure "pact done"
 
+-- | Private pacts must be evaluated by the right entity. Fail if the current
+-- entity doesn't match the provided.
+evalTermWithEntity
+  :: SingI a => Maybe (Term 'TyStr) -> Term a -> Analyze (S (Concrete a))
+evalTermWithEntity mEntity tm = do
+  case mEntity of
+    Nothing -> pure ()
+    Just expectedEntity -> do
+      actualEntity    <- view currentEntity
+      expectedEntity' <- eval expectedEntity
+      markFailure $ actualEntity ./= expectedEntity'
+  evalTerm tm
+
+-- | Reset to perform between different transactions
+withReset :: Analyze a -> Analyze a
+withReset action = do
+  tables    <- view $ analyzeEnv . aeTables
+  oldState  <- use id
+  oldEnv    <- ask
+  let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
+                                (mkFreeArray "txDecimals")
+                                (mkFreeArray "txIntegers")
+
+      newState = oldState
+        & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
+        -- & latticeState . lasExtra . cvRowExists .~  i think this one is okay
+      newEnv = oldEnv
+        & aePactMetadata . pmEntity .~ uninterpretS "entity"
+        -- & registry                  .~ undefined
+        & aeTxMetadata              .~ txMetadata
+        -- & aeScope                   .~ undefined
+        -- & aeGuardPasses             .~ undefined
+
+  id .= newState
+  local (analyzeEnv .~ newEnv) action
 
 -- For now we only allow these three types to be formatted.
 --

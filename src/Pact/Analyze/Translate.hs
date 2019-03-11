@@ -80,6 +80,7 @@ data TranslateFailureNoLoc
   | NotConvertibleToSchema (Pact.Type Pact.UserType)
   | TypeMismatch EType EType
   | UnexpectedNode (AST Node)
+  | UnexpectedPactNode (AST Node)
   | MissingConcreteType (Pact.Type Pact.UserType)
   | MonadFailure String
   | NonStaticColumns (AST Node)
@@ -110,6 +111,7 @@ describeTranslateFailureNoLoc = \case
   -- Uncomment for debugging
   -- UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
   UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
+  UnexpectedPactNode ast -> "Unexpected node in translation of a pact: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   MonadFailure str -> "Translation failure: " <> T.pack str
   NonStaticColumns col -> "When reading only certain columns we require all columns to be concrete in order to do analysis. We found " <> tShow col
@@ -233,9 +235,6 @@ data TranslateState
       -- These three "success" edges all join together at the same vertex.
     , _tsFoundVars     :: [(VarId, Text, EType)]
 
-    -- If we've already entered a step, we need to emit intra-step resets
-    -- between this and following steps
-    , _tsInStep         :: !Bool
     , _tsNondets        :: ![VarId]
     }
 
@@ -512,26 +511,6 @@ translateBinding (Named unmunged' node _) = do
   varType <- translateType node
   pure $ Located info $ Binding vid (Unmunged unmunged') munged varType
 
-makeSteps :: ETerm -> Maybe ETerm
-makeSteps (Some SStr steps@(Sequence (Some SStr Step{}) _))
-  = Some SStr <$> makeSteps' steps
-makeSteps (Some _          (Sequence (Some SStr Step{}) _))
-  = Nothing
-makeSteps tm
-  = Just tm
-
-makeSteps' :: Term 'TyStr -> Maybe (Term 'TyStr)
-makeSteps' (Sequence (Some SStr (Step a b c Nothing)) steps)
-  = Step a b c . Just <$> makeSteps' steps
-makeSteps' (Sequence (Some SStr Step{}) _)
-  = Nothing
-makeSteps' step@Step{}
-  = Just step
-makeSteps' (IntraStepReset vid step)
-  = IntraStepReset vid <$> makeSteps' step
-makeSteps' _
-  = Nothing
-
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody = \case
   []       -> do
@@ -542,6 +521,11 @@ translateBody = \case
     someExpr      <- translateNode ast
     Some ty exprs <- translateBody asts
     pure $ Some ty $ Sequence someExpr exprs
+
+translatePact :: [AST Node] -> TranslateM [PactStep]
+translatePact = \case
+  []       -> pure []
+  ast:asts -> (:) <$> translateStep ast <*> translatePact asts
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -652,6 +636,25 @@ translateGuard guardA = do
   Some SGuard guardT <- translateNode guardA
   tid <- tagGuard $ guardA ^. aNode
   return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
+
+translateStep :: AST Node -> TranslateM PactStep
+translateStep = \case
+  AST_Step _node entity exec rollback -> do
+    Some ty exec' <- translateNode exec
+    entity' <- case entity of
+      Nothing -> pure Nothing
+      Just tm -> do
+        Some SStr entity' <- translateNode tm
+        pure $ Just entity'
+    failureVid <- genVarId
+    tsNondets %= (failureVid:)
+    rollback' <- case rollback of
+      Nothing -> pure Nothing
+      Just tm -> do
+        tm' <- translateNode tm
+        pure $ Just (tm', failureVid)
+    pure $ Step entity' (exec' :< ty) rollback'
+  astNode -> throwError' $ UnexpectedPactNode astNode
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
@@ -1254,25 +1257,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_Step _node entity exec rollback -> do
-    Some ty exec' <- translateNode exec
-    entity' <- case entity of
-      Nothing -> pure Nothing
-      Just tm -> do
-        Some SStr entity' <- translateNode tm
-        pure $ Just entity'
-    failureVid <- genVarId
-    tsNondets %= (failureVid:)
-    rollback' <- case rollback of
-      Nothing -> pure Nothing
-      Just tm -> do
-        tm' <- translateNode tm
-        pure $ Just (tm', failureVid)
-    inStep <- use tsInStep
-    tsInStep .= True
-    let step = Step entity' (exec' :< ty) rollback' Nothing
-    pure $ Some SStr $ if inStep then IntraStepReset failureVid step else step
-
   AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
@@ -1318,8 +1302,9 @@ runTranslation
   -> [Capability]
   -> [Named Node]
   -> [AST Node]
+  -> CheckableType
   -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph)
-runTranslation modName funName info caps pactArgs body = do
+runTranslation modName funName info caps pactArgs body checkType = do
     (args, translationVid) <- runArgsTranslation
     (tm, (nondets, graph)) <- runBodyTranslation args translationVid
     pure (args, nondets, tm, graph)
@@ -1346,18 +1331,23 @@ runTranslation modName funName info caps pactArgs body = do
           nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId graph0 vertex0
-            nextVertex Map.empty mempty path0 Map.empty [] False []
+            nextVertex Map.empty mempty path0 Map.empty [] []
           translation = do
             retTid    <- genTagId
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
             let bindingTs = fmap argToBinding args
-            res <- withNewScope (FunctionScope modName funName) bindingTs retTid $
-              translateBody body
+
+            res <- case checkType of
+              CheckDefun ->
+                withNewScope (FunctionScope modName funName) bindingTs retTid $
+                  translateBody body
+              CheckDefpact ->
+                withNewScope (PactScope modName funName) bindingTs retTid $
+                  Some SStr . Pact <$> translatePact body
+              _ -> throwError $ error "TODO"
             _ <- extendPath -- form final edge for any remaining events
-            case makeSteps res of
-              Nothing   -> throwError undefined
-              Just res' -> pure res'
+            pure res
 
           handleState translateState =
             ( _tsNondets translateState
@@ -1385,7 +1375,7 @@ translateNodeNoGraph node =
       nextTagId      = succ $ _pathTag path0
       graph0         = pure vertex0
       translateState = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty [] False []
+        Map.empty mempty path0 Map.empty [] []
 
       translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
 

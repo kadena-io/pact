@@ -20,6 +20,7 @@ module Pact.Analyze.Types
   , HasVarId(varId)
   , Quantifier(..)
   , Table(..)
+  , CheckableType(..)
 
   , checkGoal
   , genId
@@ -93,5 +94,11 @@ pattern TableNameLit str = StrLit str
 
 pattern ColumnNameLit :: String -> Prop TyColumnName
 pattern ColumnNameLit str = StrLit str
+
+-- | The three things we can check properties of
+data CheckableType
+  = CheckDefun
+  | CheckDefpact
+  | CheckDefconst
 
 makeLenses ''Table

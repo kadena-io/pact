@@ -80,6 +80,19 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
         ) => b)
     -> b
 
+(??)
+  :: Analyzer m
+  => Maybe a -> AnalyzeFailureNoLoc -> m a
+Just a  ?? _   = pure a
+Nothing ?? err = throwErrorNoLoc err
+infix 0 ??
+
+(???) :: Analyzer m => m (Maybe a) -> AnalyzeFailureNoLoc -> m a
+m ??? err = do
+  m' <- m
+  m' ?? err
+infix 0 ???
+
 data PactMetadata
   = PactMetadata
     { _pmInPact :: !(S Bool)

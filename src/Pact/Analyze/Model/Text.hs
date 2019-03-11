@@ -198,6 +198,8 @@ showEvent ksProvs tags event = do
             "destructuring object" : displayVids showVar
           FunctionScope modName funName ->
             displayCallScope "function" modName funName
+          PactScope modName funName ->
+            displayCallScope "pact" modName funName
           CapabilityScope modName (CapName capName) ->
             displayCallScope "capability" modName $ T.pack capName
 
@@ -208,9 +210,10 @@ showEvent ksProvs tags event = do
               , emptyLine
               ]
         pure $ case scopeTy of
-          LetScope -> []
-          ObjectScope -> []
-          FunctionScope _ _ -> returnOutput
+          LetScope            -> []
+          ObjectScope         -> []
+          FunctionScope _ _   -> returnOutput
+          PactScope _ _       -> returnOutput
           CapabilityScope _ _ -> returnOutput
 
   where

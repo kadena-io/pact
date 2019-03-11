@@ -34,6 +34,7 @@ module Pact.Analyze.Types.Languages
   , Term(..)
   , BeforeOrAfter(..)
   , Open(..)
+  , PactStep(..)
 
   , toPact
   , fromPact
@@ -1342,16 +1343,14 @@ data Term (a :: Ty) where
   ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr -> Term 'TyTime
   Hash            :: ETerm                              -> Term 'TyStr
 
-  -- Pacts
+  Pact :: [PactStep] -> Term 'TyStr
+
+data PactStep where
   Step
     :: Maybe (Term 'TyStr)  -- ^ entity
     -> Term a :< SingTy a   -- ^ exec
     -> Maybe (ETerm, VarId) -- ^ rollback
-    -> Maybe (Term 'TyStr)  -- ^ next step
-    -> Term 'TyStr
-
-  -- TODO: change subterm to TyStr
-  IntraStepReset :: VarId -> Term 'TyStr -> Term 'TyStr
+    -> PactStep
 
 showsTerm :: SingTy ty -> Int -> Term ty -> ShowS
 showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
@@ -1464,20 +1463,16 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
   PactId -> showString "PactId"
-  Step mEntity (exec :< execTy) mRollback mContinue
-    -> showString "Step "
-     . showsPrec 11 mEntity
-     . showChar ' '
-     . withSing execTy (showsTm 11 exec)
-     . showChar ' '
-     . showsPrec 11 mRollback
-     . showChar ' '
-     . showsPrec 11 mContinue
-  IntraStepReset vid step ->
-      showString "IntraStepReset "
-    . showsPrec 11 vid
-    . showChar ' '
-    . showsTm 11 step
+  Pact steps -> showString "Pact " . showList steps
+
+instance Show PactStep where
+  showsPrec _ (Step mEntity (exec :< execTy) mRollback) =
+     showString "Step "
+   . showsPrec 11 mEntity
+   . showChar ' '
+   . withSing execTy (showsTm 11 exec)
+   . showChar ' '
+   . showsPrec 11 mRollback
 
 showsProp :: SingTy ty -> Int -> Prop ty -> ShowS
 showsProp ty p = withSing ty $ \case
@@ -1546,14 +1541,14 @@ prettyTerm ty = \case
   MkKsRefGuard name    -> parensSep ["keyset-ref-guard", pretty name]
   MkPactGuard name     -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard ty' o n  -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
-  Step mEntity (exec :< execTy) mRollback mContinue ->
-    let thisStep = parensSep $ maybe ["step"] (\_ -> ["step-with-rollback"]) mRollback
-          ++ maybe [] (\entity -> [prettyTm entity]) mEntity
-          ++ [singPrettyTm execTy exec]
-          ++ maybe [] (\(Some  ty' tm, _vid) -> [singPrettyTm ty' tm]) mRollback
-        nextStep = maybe mempty (\step' -> pretty step') mContinue
-    in vsep [thisStep, nextStep]
-  IntraStepReset _ step -> prettyTm step
+  Pact steps -> vsep (pretty <$> steps)
+
+instance Pretty PactStep where
+  pretty (Step mEntity (exec :< execTy) mRollback) = parensSep $
+    maybe ["step"] (\_ -> ["step-with-rollback"]) mRollback
+      ++ maybe [] (\entity -> [prettyTm entity]) mEntity
+      ++ [singPrettyTm execTy exec]
+      ++ maybe [] (\(Some  ty' tm, _vid) -> [singPrettyTm ty' tm]) mRollback
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2

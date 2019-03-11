@@ -296,7 +296,8 @@ verifyFunctionInvariants'
   -> IO (Either CheckFailure (TableMap [CheckResult]))
 verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body = runExceptT $ do
     (args, nondets, tm, graph) <- hoist generalize $
-      withExcept translateToCheckFailure $ runTranslation modName funName funInfo caps pactArgs body
+      withExcept translateToCheckFailure $ runTranslation modName funName
+        funInfo caps pactArgs body CheckDefun
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       lift $ SBV.setTimeOut 1000 -- one second
@@ -355,13 +356,14 @@ verifyFunctionProperty
   -> [Capability]
   -> [Named Node]
   -> [AST Node]
+  -> CheckableType
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty modName funName funInfo tables caps pactArgs body (Located propInfo check) =
+verifyFunctionProperty modName funName funInfo tables caps pactArgs body checkType (Located propInfo check) =
   runExceptT $ do
     (args, nondets, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
-        runTranslation modName funName funInfo caps pactArgs body
+        runTranslation modName funName funInfo caps pactArgs body checkType
 
     -- Set up the model and our query
     let setupSmtProblem = do
@@ -576,12 +578,6 @@ parseModuleModelDecl exps = traverse parseDecl exps where
       _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")
 
--- | The three things we can check properties of
-data CheckableType
-  = CheckDefun
-  | CheckDefpact
-  | CheckDefconst
-
 -- | Get the set ('HM.HashMap') of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text (Ref, CheckableType)
 moduleTypecheckableRefs ModuleData{..} = flip HM.mapMaybe _mdRefMap $ \ref ->
@@ -610,15 +606,15 @@ moduleModelDecl ModuleData{..} = do
 moduleFunChecks
   :: [Table]
   -> [ModuleProperty]
-  -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  -> HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType)
   -> HM.HashMap Text EProp
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -> Except VerificationFailure
-       (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
+       (HM.HashMap Text ((Ref, CheckableType), Either ParseFailure [Located Check]))
 moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \case
   -- TODO How better to handle the type mismatch?
-  (Pact.Direct _, _) -> throwError InvalidRefType
-  (ref@(Ref defn), Pact.FunType argTys resultTy) -> do
+  (Pact.Direct _, _, _) -> throwError InvalidRefType
+  (ref@(Ref defn), Pact.FunType argTys resultTy, checkType) -> do
 
     let -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
         --       not there yet:
@@ -665,6 +661,7 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
                   \(Pact.Arg argName ty _) ->
                     (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
             in (TableName (T.unpack _tableName), colMap)
+
     -- TODO: this was very hard code to debug as the unsafe lenses just result
     -- in properties not showing up, instead of a compile error when I changed 'TDef'
     -- to a safe constructor. Please consider
@@ -686,7 +683,7 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
           runExpParserOver (applicableModuleChecks <> exps) $
             expToCheck tableEnv vidStart nameVids vidTys consts propDefs
 
-    pure (ref, Right checks)
+    pure ((ref, checkType), Right checks)
 
 -- | Remove the "invariant" or "property" application from every exp
 collectExps :: Text -> [Exp Info] -> Either ParseFailure [Exp Info]
@@ -721,8 +718,9 @@ verifyFunctionProps
   -> Ref
   -> Text
   -> [Located Check]
+  -> CheckableType
   -> IO [CheckResult]
-verifyFunctionProps modName tables caps ref funName props = do
+verifyFunctionProps modName tables caps ref funName props checkType = do
   eToplevel <- typecheck ref
   case eToplevel of
     Left failure ->
@@ -730,6 +728,7 @@ verifyFunctionProps modName tables caps ref funName props = do
     Right (TopFun FDefun {_fInfo, _fArgs, _fBody} _) ->
       for props $
         verifyFunctionProperty modName funName _fInfo tables caps _fArgs _fBody
+          checkType
     Right _ ->
       pure []
 
@@ -795,7 +794,7 @@ verifyModule modules moduleData = runExceptT $ do
   -- For each ref, if it typechecks as a function (it'll be either a function
   -- or a constant), keep its signature.
   --
-  ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType),
+  ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType),
     consts   :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
     (\name (ref, cType) accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
@@ -803,7 +802,7 @@ verifyModule modules moduleData = runExceptT $ do
         (TopFun (FDefun _info _mod _name funType _args _body) _meta, _tcState)
           -> case cType of
             CheckDefconst -> error "invariant violation: this cannot be a constant"
-            _             -> accum & _1 . at name ?~ (ref, funType)
+            _             -> accum & _1 . at name ?~ (ref, funType, cType)
         (TopConst _info _qualifiedName _type val _doc, _tcState)
           -> accum & _2 . at name ?~ val
         _ -> accum
@@ -822,15 +821,17 @@ verifyModule modules moduleData = runExceptT $ do
   consts' <- hoist generalize $
     traverse (valueToProp' <=< translateNodeNoGraph') consts
 
-  (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-    <- hoist generalize $ moduleFunChecks tables checkExps funTypes consts' propDefs
+  (funChecks :: HM.HashMap Text ((Ref, CheckableType), Either ParseFailure [Located Check]))
+    <- hoist generalize $
+      moduleFunChecks tables checkExps funTypes consts' propDefs
 
   caps <- moduleCapabilities moduleData
 
   let modName :: ModuleName
       modName = moduleDefName $ _mdModule moduleData
 
-      verifyFunProps :: Ref -> Text -> [Located Check] -> IO [CheckResult]
+      verifyFunProps
+        :: Ref -> Text -> [Located Check] -> CheckableType -> IO [CheckResult]
       verifyFunProps = verifyFunctionProps modName tables caps
 
   -- check for parse failures in any of the checks
@@ -839,8 +840,8 @@ verifyModule modules moduleData = runExceptT $ do
     Right funChecks' -> pure funChecks'
 
   -- actually check the checks
-  funChecks'' <- lift $ ifor funChecks' $ \name (ref, checks) ->
-    verifyFunProps ref name checks
+  funChecks'' <- lift $ ifor funChecks' $ \name ((ref, checkType), checks) ->
+    verifyFunProps ref name checks checkType
   invariantChecks <- ifor typecheckableRefs $ \name (ref, _) ->
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants modName tables caps ref name
@@ -887,5 +888,5 @@ verifyCheck moduleData funName check = do
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps moduleName tables caps funRef funName
-        [Located info check]
+        [Located info check] CheckDefun
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName

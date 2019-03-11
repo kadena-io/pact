@@ -75,6 +75,7 @@ data ScopeType
   = LetScope
   | ObjectScope
   | FunctionScope Pact.ModuleName Text
+  | PactScope Pact.ModuleName Text
   | CapabilityScope Pact.ModuleName CapName
   deriving (Eq, Show)
 
