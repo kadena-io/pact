@@ -613,35 +613,31 @@ evalTerm = \case
 
   Pact steps -> do
     _ <- foldlM
-      (\(rollbacks, afterFirstStep)
-        (Step mEntity (tm :< ty) mRollback) -> withSing ty $ do
+      (\rollbacks
+        (Step (tm :< ty) mEntity mCancelVid mRollback) -> withSing ty $ do
 
-            -- We reset the environment unless this is the first step
-        let withReset' = if afterFirstStep then withReset else id
+        -- The first step has no cancel var. All other steps do.
+        _ <- case mCancelVid of
 
-        _ <- withReset' $ case mRollback of
-
-          -- If there's no rollback then we just evaluate this term
+          -- If this is the first step we just evaluate this term
           Nothing -> void $ evalTermWithEntity mEntity tm
 
           -- ... otherwise, we nondeterministically either execute the step or
           -- all the existing rollbacks. Note that we use 'rollbacks', ie all
-          -- rollbacks prior to this step, not 'rollbacks'', because we don't
-          -- want to execute the rollback associated with this step.
-          Just (_rollback, cancelVid) -> do
+          -- rollbacks prior to this step, because we don't want to execute the
+          -- rollback associated with this step.
+          Just cancelVid -> withReset $ do
             cancel <- view (aeNondets . at cancelVid)
               ??? "couldn't find cancel var"
 
             ite cancel
-              (for_ rollbacks (withReset . evalETerm))
+              (for_ rollbacks $ withReset . evalETerm)
               (void $ evalTermWithEntity mEntity tm)
 
-        let rollbacks' = case mRollback of
-              Nothing               -> rollbacks
-              Just (rollback, _vid) -> rollback:rollbacks
-
-        pure (rollbacks', True))
-      ([], False)
+        pure $ case mRollback of
+          Nothing       -> rollbacks
+          Just rollback -> rollback:rollbacks)
+      []
       steps
     pure "pact done"
 

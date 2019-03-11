@@ -523,9 +523,12 @@ translateBody = \case
     pure $ Some ty $ Sequence someExpr exprs
 
 translatePact :: [AST Node] -> TranslateM [PactStep]
-translatePact = \case
-  []       -> pure []
-  ast:asts -> (:) <$> translateStep ast <*> translatePact asts
+translatePact = go True where
+  -- We don't generate a cancel var on the first step but we do for all
+  -- subsequent steps.
+  go firstStep = \case
+    []       -> pure []
+    ast:asts -> (:) <$> translateStep firstStep ast <*> go False asts
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -637,23 +640,21 @@ translateGuard guardA = do
   tid <- tagGuard $ guardA ^. aNode
   return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
 
-translateStep :: AST Node -> TranslateM PactStep
-translateStep = \case
+translateStep :: Bool -> AST Node -> TranslateM PactStep
+translateStep firstStep = \case
   AST_Step _node entity exec rollback -> do
     Some ty exec' <- translateNode exec
-    entity' <- case entity of
-      Nothing -> pure Nothing
-      Just tm -> do
-        Some SStr entity' <- translateNode tm
-        pure $ Just entity'
-    failureVid <- genVarId
-    tsNondets %= (failureVid:)
-    rollback' <- case rollback of
-      Nothing -> pure Nothing
-      Just tm -> do
-        tm' <- translateNode tm
-        pure $ Just (tm', failureVid)
-    pure $ Step entity' (exec' :< ty) rollback'
+    mEntity <- for entity $ \tm -> do
+      Some SStr entity' <- translateNode tm
+      pure entity'
+    mCancelVid <- case firstStep of
+      False -> pure Nothing
+      True  -> do
+        cancelVid <- genVarId
+        tsNondets %= (cancelVid:)
+        pure $ Just cancelVid
+    mRollback <- traverse translateNode rollback
+    pure $ Step (exec' :< ty) mEntity mCancelVid mRollback
   astNode -> throwError' $ UnexpectedPactNode astNode
 
 translateNode :: AST Node -> TranslateM ETerm
