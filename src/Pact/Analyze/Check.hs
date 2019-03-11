@@ -293,11 +293,13 @@ verifyFunctionInvariants'
   -> [Capability]
   -> [Named Node]
   -> [AST Node]
+  -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body = runExceptT $ do
+verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body
+  checkType = runExceptT $ do
     (args, nondets, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation modName funName
-        funInfo caps pactArgs body CheckDefun
+        funInfo caps pactArgs body checkType
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       lift $ SBV.setTimeOut 1000 -- one second
@@ -738,14 +740,16 @@ verifyFunctionInvariants
   -> [Capability]
   -> Ref
   -> Text
+  -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants modName tables caps ref funName = do
+verifyFunctionInvariants modName tables caps ref funName checkType = do
   eToplevel <- typecheck ref
   case eToplevel of
     Left failure ->
       pure $ Left failure
     Right (TopFun FDefun {_fInfo, _fArgs, _fBody} _) ->
-      verifyFunctionInvariants' modName funName _fInfo tables caps _fArgs _fBody
+      verifyFunctionInvariants' modName funName _fInfo tables caps _fArgs
+        _fBody checkType
     Right _ ->
       pure $ Right $ TableMap Map.empty
 
@@ -842,9 +846,9 @@ verifyModule modules moduleData = runExceptT $ do
   -- actually check the checks
   funChecks'' <- lift $ ifor funChecks' $ \name ((ref, checkType), checks) ->
     verifyFunProps ref name checks checkType
-  invariantChecks <- ifor typecheckableRefs $ \name (ref, _) ->
+  invariantChecks <- ifor typecheckableRefs $ \name (ref, checkType) ->
     withExceptT ModuleCheckFailure $ ExceptT $
-      verifyFunctionInvariants modName tables caps ref name
+      verifyFunctionInvariants modName tables caps ref name checkType
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
