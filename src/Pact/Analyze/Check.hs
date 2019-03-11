@@ -18,6 +18,7 @@ module Pact.Analyze.Check
   , describeCheckFailure
   , describeParseFailure
   , describeVerificationWarnings
+  , describeVerificationFailure
   , falsifyingModel
   , showModel
   , CheckFailure(..)
@@ -65,6 +66,7 @@ import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
                                             Def (..), DefType (..), Info, dMeta,
                                             mModel, renderInfo, renderParsed,
                                             tDef, tInfo, tMeta, _tDef)
+import           Pact.Types.Pretty         (renderCompactText)
 import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
                                             Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
@@ -153,6 +155,14 @@ data VerificationFailure
   | InvalidRefType
   | FailedConstTranslation String
   deriving Show
+
+describeVerificationFailure :: VerificationFailure -> Text
+describeVerificationFailure = \case
+  ModuleParseFailure pf         -> describeParseFailure pf
+  ModuleCheckFailure cf         -> describeCheckFailure cf
+  TypeTranslationFailure msg ty -> msg <> ": " <> renderCompactText ty
+  InvalidRefType                -> "invalid ref type"
+  FailedConstTranslation msg    -> "failed constant translation: " <> T.pack msg
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case

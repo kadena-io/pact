@@ -116,7 +116,7 @@ renderTestFailure = \case
     pure $ T.unpack (describeCheckFailure cf) ++ svgInfo
   NoTestModule -> pure "example is missing a module named 'test'"
   ReplError err -> pure $ "ReplError: " ++ err
-  VerificationFailure vf -> pure $ "VerificationFailure: " ++ show vf
+  VerificationFailure vf -> pure $ T.unpack $ describeVerificationFailure vf
 
 --
 -- TODO: use ExceptT
