@@ -4,7 +4,7 @@
 
 
 -- |
--- Module      :  Pact.Native.Capabilities
+-- Module      :  Pact.Native.SPV
 -- Copyright   :  (C) 2019 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
