@@ -37,7 +37,6 @@ module Pact.Types.Runtime
    Capabilities(..),capGranted,capComposed,
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
-   SPVSupport(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -192,11 +191,6 @@ class PureNoDb e
 -- | Marker class for 'PReadOnly' environments.
 -- SysRead supports pure operations as well.
 class PureNoDb e => PureSysRead e
-
-
-newtype SPVSupport = SPVSupport {
-  _spvSupport :: Text -> (Term Name -> IO (Either Text (Term Name)))
-  }
 
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
