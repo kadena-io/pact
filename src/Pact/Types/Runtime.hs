@@ -23,7 +23,8 @@ module Pact.Types.Runtime
    ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
+   eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
@@ -37,6 +38,7 @@ module Pact.Types.Runtime
    Capabilities(..),capGranted,capComposed,
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
+   SPVSupport(..),noSPVSupport,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -51,7 +53,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
-import Data.Aeson
+import Data.Aeson hiding (Object)
 import qualified Data.Set as S
 import Data.String
 import Data.Default
@@ -192,6 +194,16 @@ class PureNoDb e
 -- SysRead supports pure operations as well.
 class PureNoDb e => PureSysRead e
 
+-- | Backend for SPV
+newtype SPVSupport = SPVSupport {
+  -- | Attempt to verify an SPV proof of a given type,
+  -- given a payload object. On success, returns the
+  -- specific data represented by the proof.
+  _spvSupport :: Text -> Object Name -> IO (Either Text (Object Name))
+}
+
+noSPVSupport :: SPVSupport
+noSPVSupport = SPVSupport $ \_ _ -> return $ Left $ "SPV verify not supported"
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
@@ -219,7 +231,9 @@ data EvalEnv e = EvalEnv {
     , _eeGasEnv :: GasEnv
       -- | Namespace Policy
     , _eeNamespacePolicy :: NamespacePolicy
-    } -- deriving (Eq,Show)
+      -- | SPV backend
+    , _eeSPVSupport :: SPVSupport
+    }
 makeLenses ''EvalEnv
 
 
@@ -443,6 +457,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eeHash
     _eeGasEnv
     permissiveNamespacePolicy
+    _eeSPVSupport
 
 
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))

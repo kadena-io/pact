@@ -6,7 +6,7 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri
+  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV
   , Tx(..)
   ) where
 
@@ -17,8 +17,9 @@ import Control.Monad.State.Strict (StateT)
 import Control.Concurrent (MVar)
 import Pact.PersistPactDb (DbEnv)
 import Pact.Persist.Pure (PureDb)
-import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name,FunApp,Info)
+import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name,FunApp,Info,Object)
 import Data.Text (Text)
+import qualified Data.Map.Strict as M
 
 data ReplMode =
     Interactive |
@@ -65,6 +66,7 @@ data LibState = LibState {
     , _rlsTxName :: Maybe Text
     , _rlsTests :: [TestResult]
     , _rlsVerifyUri :: Maybe String
+    , _rlsMockSPV :: M.Map Text (Object Name)
 }
 
 

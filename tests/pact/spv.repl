@@ -1,0 +1,2 @@
+(mock-spv "TXOUT" { "foo": "bar" })
+(expect "exercise mock spv" { "foo": "bar" } (verify-spv "TXOUT" { "baz": "quux" }))
