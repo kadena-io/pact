@@ -545,8 +545,8 @@ reduce t@TNative {} = return $ toTerm $ pack $ show t
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
   CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
-reduce (TObject ps t i) =
-  TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> traverse reduce t <*> pure i
+reduce (TObject (Object ps t oi) i) =
+  TObject <$> (Object <$> (forM ps (\(k,v) -> (k,) <$> reduce v)) <*> traverse reduce t <*> pure oi) <*> pure i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
@@ -763,7 +763,7 @@ typecheckTerm i spec t = do
       paramCheck lspec lty (checkList _tList)
     -- check object
     (TySchema TyObject ospec specPartial,TySchema TyObject oty _,TObject {..}) ->
-      paramCheck ospec oty (checkUserType specPartial i _tObject)
+      paramCheck ospec oty (checkUserType specPartial i (_oObject _tObject))
     (TyPrim (TyGuard a),TyPrim (TyGuard b),_) -> case (a,b) of
       (Nothing,Just _) -> tcOK
       (Just _,Nothing) -> tcOK
@@ -772,14 +772,12 @@ typecheckTerm i spec t = do
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
 -- Total flag allows for partial row types if False.
-checkUserType :: SchemaPartial -> Info  -> [(Term Name,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
+checkUserType :: SchemaPartial -> Info  -> [(FieldKey,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
 checkUserType partial i ps (TyUser tu@TSchema {..}) = do
   let fields = M.fromList . map (_aName &&& id) $ _tFields
-  aps <- forM ps $ \(k,v) -> case k of
-    TLitString ks -> case M.lookup ks fields of
-      Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty ks
+  aps <- forM ps $ \(FieldKey k,v) -> case M.lookup k fields of
+      Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty k
       Just a -> return (a,v)
-    t -> evalError i $ "Invalid object, non-String key found: " <> pretty t
   let findMissing fs = do
         let missing = M.difference fs (M.fromList (map (first _aName) aps))
         unless (M.null missing) $ evalError i $

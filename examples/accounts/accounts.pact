@@ -20,7 +20,7 @@
      ccy:string
      rowguard:guard
      date:time
-     data
+     data:object
      )
 
   (deftable accounts:{account}
@@ -43,7 +43,7 @@
       , "ccy": ccy
       , "rowguard": guard
       , "date": date
-      , "data": "Created account"
+      , "data": { "note": "Created account" }
       }
     )))
 
@@ -82,7 +82,7 @@
               { "balance": amount
               , "amount": amount
               , "date": date
-              , "data": "Admin account funding" }
+              , "data": { "note": "Admin account funding" } }
       )))
 
   (defun read-all ()
@@ -96,18 +96,18 @@
         (debit payer amount date
           { "payee": payee
           , "payee-entity": payee-entity
-          , PACT_REF: (pact-id)
+          , "ref": (pact-id)
           }))
       (with-capability (TRANSFER)
         (credit payer amount date
-          { PACT_REF: (pact-id), "note": "rollback" })))
+          { "ref": (pact-id), "note": "rollback" })))
 
     (step payee-entity
       (with-capability (TRANSFER)
         (credit payee amount date
           { "payer": payer
           , "payer-entity": payer-entity
-          , PACT_REF: (pact-id)
+          , "ref": (pact-id)
           })))
   )
 
@@ -140,11 +140,6 @@
               , "data": data
               }
       )))
-
-  (defconst PACT_REF "ref")
-
-
-
 
 
   (defconst ESCROW_ACCT "escrow-account")
@@ -209,7 +204,7 @@
         , "ccy": ccy
         , "rowguard": (create-pact-guard pfx)
         , "date": (get-system-time)
-        , "data": "Created pact account"
+        , "data": { "note": "Created pact account" }
         }
       )
       a))

@@ -1069,13 +1069,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> throwError' $ TypeError node
 
   AST_Obj _node kvs -> do
-    kvs' <- for kvs $ \(k, v) -> do
-      k' <- case k of
-        AST_Lit (LString t) -> pure t
-        -- TODO: support non-const keys
-        _                   -> throwError' $ NonConstKey k
+    kvs' <- for kvs $ \(Pact.FieldKey k, v) -> do
       v' <- translateNode v
-      pure (k', v')
+      pure (k, v')
     Some objTy litObj
       <- mkLiteralObject (fmap throwError' . SortLiteralObjError) kvs'
     pure $ Some objTy $ CoreTerm litObj

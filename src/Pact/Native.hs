@@ -57,7 +57,7 @@ import qualified Data.Text as T (isInfixOf, length, all, splitOn, null, append, 
 import Safe hiding (atDef)
 import Control.Arrow hiding (app)
 import Data.Foldable
-import Data.Aeson hiding ((.=))
+import Data.Aeson hiding ((.=),Object)
 import Data.List
 import Data.Function (on)
 import Data.ByteString.Lazy (toStrict)
@@ -514,23 +514,29 @@ filter' i as = argsError' i as
 length' :: RNativeFun e
 length' _ [TList ls _ _] = return $ toTerm (length ls)
 length' _ [TLitString s] = return $ toTerm (T.length s)
-length' _ [TObject ps _ _] = return $ toTerm (length ps)
+length' _ [TObject (Object ps _ _) _] = return $ toTerm (length ps)
 length' i as = argsError i as
 
 take' :: RNativeFun e
 take' _ [TLitInteger c',TList l t _] = return $ TList (tord take c' l) t def
 take' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tord take c' (unpack l)
-take' _ [l@TList {},TObject {..}] =
-  return $ toTObject _tObjectType def $ (`filter` _tObject) $ \(k,_) -> searchTermList k (_tList l)
+take' _ [TList {..},TObject Object {..} _] = asKeyList _tList >>= \l ->
+  return $ toTObject _oObjectType def $ (`filter` _oObject) $ \(k,_) -> elem k l
 
 take' i as = argsError i as
 
 drop' :: RNativeFun e
 drop' _ [TLitInteger c',TList l t _] = return $ TList (tord drop c' l) t def
 drop' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tord drop c' (unpack l)
-drop' _ [l@TList {},TObject {..}] =
-  return $ toTObject _tObjectType def $ (`filter` _tObject) $ \(k,_) -> not $ searchTermList k (_tList l)
+drop' _ [TList {..},TObject Object {..} _] = asKeyList _tList >>= \l ->
+  return $ toTObject _oObjectType def $ (`filter` _oObject) $ \(k,_) -> not $ elem k l
 drop' i as = argsError i as
+
+asKeyList :: [Term Name] -> Eval e [FieldKey]
+asKeyList = mapM $ \t -> case t of
+  TLitString k -> return $ FieldKey k
+  _ -> evalError (_tInfo t) "String required"
+
 
 tord :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
 tord f c' l | c' >= 0 = f (fromIntegral c') l
@@ -542,16 +548,18 @@ at' _ [li@(TLitInteger idx),TList ls _ _] =
       Just t -> return t
       Nothing -> evalError (_tInfo li) $ "at: bad index " <>
         pretty idx <> ", length " <> pretty (length ls)
-at' _ [idx,TObject ls _ _] = lookupObj idx ls
+at' _ [idx,TObject (Object ls _ _) _] = lookupObj idx ls
 at' i as = argsError i as
 
-lookupObj :: (Eq n, Pretty n) => Term n -> [(Term n, Term n)] -> Eval m (Term n)
-lookupObj idx ls = case lookup (unsetInfo idx) (map (first unsetInfo) ls) of
+lookupObj :: Term n -> [(FieldKey, Term n)] -> Eval m (Term n)
+lookupObj t@(TLitString idx) ls = case lookup (FieldKey idx) ls of
   Just v -> return v
-  Nothing -> evalError (_tInfo idx) $ "at: key not found: " <> pretty idx
+  Nothing -> evalError (_tInfo t) $ "key not found in object: " <> pretty idx
+lookupObj t _ = evalError (_tInfo t) $ "object lookup only supported with strings"
 
 remove :: RNativeFun e
-remove _ [key,TObject ps t _] = return $ TObject (filter (\(k,_) -> unsetInfo key /= unsetInfo k) ps) t def
+remove _ [TLitString key,TObject (Object ps t _) _] = return $ (`TObject` def) $
+  Object (filter (\(k,_) -> FieldKey key /= k) ps) t def
 remove i as = argsError i as
 
 compose :: NativeFun e
@@ -587,12 +595,8 @@ bind i as@[src,TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $
 bind i as = argsError' i as
 
 bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Ref))
-bindObjectLookup TObject {..} = do
-  !m <- fmap M.fromList $ forM _tObject $ \(k,v) -> case k of
-    TLitString k' -> return (k',liftTerm v)
-    tk -> evalError _tInfo $
-      "Bad object (non-string key) in bind: " <> pretty tk
-  return (\s -> M.lookup s m)
+bindObjectLookup (TObject (Object o _ _) _) =
+  return $ \s -> M.lookup s $ M.fromList $ map (asString *** liftTerm) o
 bindObjectLookup t = evalError (_tInfo t) $
   "bind: expected object: " <> pretty t
 
@@ -604,10 +608,6 @@ listModules :: RNativeFun e
 listModules _ _ = do
   mods <- view $ eeRefStore.rsModules
   return $ toTermList tTyString $ map asString $ M.keys mods
-
-unsetInfo :: Term a -> Term a
-unsetInfo a' = set tInfo def a'
-{-# INLINE unsetInfo #-}
 
 yield :: RNativeFun e
 yield i [t@TObject {}] = do
@@ -629,7 +629,7 @@ resume i as = argsError' i as
 
 where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
-  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply (_tApp app) [v]
+  (k,r@TObject {}) -> lookupObj k (_oObject $ _tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
 where' i as = argsError' i as
 
@@ -656,7 +656,7 @@ sort' _ [fields@TList{},l@TList{}]
       sortPairs <- forM (_tList l) $ \el -> case firstOf tObject el of
         Nothing -> evalError (_tInfo l) $ "Non-object found: " <> pretty el
         Just o -> fmap ((,el) . reverse) $ (\f -> foldM f [] (_tList fields)) $ \lits fld -> do
-          v <- lookupObj fld o
+          v <- lookupObj fld (_oObject o)
           case firstOf tLiteral v of
             Nothing -> evalError (_tInfo l) $
               "Non-literal found at field " <> pretty fld <>
@@ -693,9 +693,9 @@ enforceVersion i as = case as of
 
 contains :: RNativeFun e
 contains _i [val,TList {..}] = return $ toTerm $ searchTermList val _tList
-contains _i [k,TObject {..}] = return $ toTerm $ foldl search False _tObject
+contains _i [TLitString k,TObject (Object {..}) _] = return $ toTerm $ foldl search False _oObject
   where search True _ = True
-        search _ (t,_) = t `termEq` k
+        search _ (FieldKey t,_) = t == k
 contains _i [TLitString s,TLitString t] = return $ toTerm $ T.isInfixOf s t
 contains i as = argsError i as
 
