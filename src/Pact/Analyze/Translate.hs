@@ -523,12 +523,21 @@ translateBody = \case
     pure $ Some ty $ Sequence someExpr exprs
 
 translatePact :: [AST Node] -> TranslateM [PactStep]
-translatePact = go True where
-  -- We don't generate a cancel var on the first step but we do for all
-  -- subsequent steps.
-  go firstStep = \case
-    []       -> pure []
-    ast:asts -> (:) <$> translateStep firstStep ast <*> go False asts
+translatePact = do
+  -- steps <- go True
+  preStepsPath <- use tsCurrentPath
+
+  _todo
+
+  -- TODO: loop edge from after final step to the sink should have the same path
+  --       as the final step
+
+  where
+    -- We don't generate a cancel var on the first step but we do for all
+    -- subsequent steps.
+    go firstStep = \case
+      []       -> pure []
+      ast:asts -> (:) <$> translateStep firstStep ast <*> go False asts
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -975,17 +984,21 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_If _ cond tBranch fBranch -> do
     Some SBool cond' <- translateNode cond
-    preTestPath      <- use tsCurrentPath
+    preBranchPath    <- use tsCurrentPath
     postTest         <- extendPath
-    truePath         <- startNewSubpath
-    Some ta a        <- translateNode tBranch
-    postTrue         <- extendPath
+
+    truePath  <- startNewSubpath
+    Some ta a <- translateNode tBranch
+    postTrue  <- extendPath
+
     tsPathHead .= postTest -- reset to before true branch
+
     falsePath <- startNewSubpath
     Some tb b <- translateNode fBranch
     postFalse <- extendPath
+
     joinPaths [(postTrue, truePath), (postFalse, falsePath)]
-    tsCurrentPath .= preTestPath -- reset to before conditional
+    tsCurrentPath .= preBranchPath -- reset to before conditional
     Refl <- singEq ta tb ?? BranchesDifferentTypes (EType ta) (EType tb)
     pure $ Some ta $ IfThenElse ta cond' (truePath, a) (falsePath, b)
 
