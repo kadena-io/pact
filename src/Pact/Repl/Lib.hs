@@ -316,10 +316,10 @@ pactState i [] = do
   e <- use evalPactExec
   case e of
     Nothing -> evalError' i "pact-state: no pact exec in context"
-    Just PactExec{..} -> return $ (\o -> TObject o TyAny def)
-      [(tStr "yield",fromMaybe (toTerm False) _peYield)
-      ,(tStr "executed",toTerm _peExecuted)
-      ,(tStr "step",toTerm _peStep)]
+    Just PactExec{..} -> return $ toTObject TyAny def $
+      [("yield",fromMaybe (toTerm False) _peYield)
+      ,("executed",toTerm _peExecuted)
+      ,("step",toTerm _peStep)]
 pactState i as = argsError i as
 
 txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name

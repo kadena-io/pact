@@ -37,7 +37,8 @@ import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 import Control.Monad (forM)
-import Data.Aeson
+import Data.Aeson hiding (Object)
+import qualified Data.Aeson as A
 import Data.Aeson.Types (Parser)
 import qualified Data.ByteString.Lazy.UTF8 as BSL
 import Data.Decimal (Decimal,DecimalRaw(..))
@@ -78,7 +79,7 @@ integerCodec = Codec encodeInteger decodeInteger
                         else object [ field .= show i ]
     {-# INLINE encodeInteger #-}
     decodeInteger (Number i) = return (round i)
-    decodeInteger (Object o) = do
+    decodeInteger (A.Object o) = do
       s <- o .: field
       case readMaybe (unpack s) of
         Just i -> return i
@@ -181,7 +182,7 @@ instance FromJSON Persistable where
     parseJSON (String s) = return (PLiteral (LString s))
     parseJSON (Number n) = return (PLiteral (LInteger (round n)))
     parseJSON (Bool b) = return (PLiteral (LBool b))
-    parseJSON v@Object {} = (PLiteral . LInteger <$> decoder integerCodec v) <|>
+    parseJSON v@A.Object {} = (PLiteral . LInteger <$> decoder integerCodec v) <|>
                             (PLiteral . LDecimal <$> decoder decimalCodec v) <|>
                             (PLiteral . LTime <$> decoder timeCodec v) <|>
                             (PValue <$> decoder valueCodec v) <|>

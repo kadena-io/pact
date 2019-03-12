@@ -138,9 +138,9 @@ dbDefs =
 
 descTable :: RNativeFun e
 descTable _ [TTable {..}] = return $ toTObject TyAny def [
-  (tStr "name",tStr $ asString _tTableName),
-  (tStr "module", tStr $ asString _tModule),
-  (tStr "type", toTerm $ pack $ show _tTableType)]
+  ("name",tStr $ asString _tTableName),
+  ("module", tStr $ asString _tModule),
+  ("type", toTerm $ pack $ show _tTableType)]
 descTable i as = argsError i as
 
 descKeySet :: RNativeFun e
@@ -158,19 +158,19 @@ descModule i [TLitString t] = do
     Just m ->
       case m of
         MDModule Module{..} ->
-          return $ TObject
-            [ (tStr "name"      , tStr $ asString _mName)
-            , (tStr "hash"      , tStr $ asString _mHash)
-            , (tStr "keyset"    , tStr $ pack $ show _mGovernance)
-            , (tStr "blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
-            , (tStr "code"      , tStr $ asString _mCode)
-            , (tStr "interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
-            ] TyAny def
+          return $ toTObject TyAny def
+            [ ("name"      , tStr $ asString _mName)
+            , ("hash"      , tStr $ asString _mHash)
+            , ("keyset"    , tStr $ pack $ show _mGovernance)
+            , ("blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
+            , ("code"      , tStr $ asString _mCode)
+            , ("interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
+            ]
         MDInterface Interface{..} ->
-          return $ TObject
-            [ (tStr "name", tStr $ asString _interfaceName)
-            , (tStr "code", tStr $ asString _interfaceCode)
-            ] TyAny def
+          return $ toTObject TyAny def
+            [ ("name", tStr $ asString _interfaceName)
+            , ("code", tStr $ asString _interfaceCode)
+            ]
     Nothing -> evalError' i $ "Module not found: " <> pretty t
 descModule i as = argsError i as
 
@@ -215,15 +215,16 @@ gasPostReads i g0 postProcess action = do
   (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
 columnsToObject :: ToTerm a => Type (Term n) -> Columns a -> Term n
-columnsToObject ty = (\ps -> TObject ps ty def) . map (toTerm *** toTerm) . M.toList . _columns
+columnsToObject ty = (\ps -> TObject (Object ps ty def) def) .
+  map ((FieldKey . asString) *** toTerm) . M.toList . _columns
 
 columnsToObject' :: ToTerm a => Type (Term n) -> [(Info,ColumnId)] -> Columns a -> Eval m (Term n)
 columnsToObject' ty cols (Columns m) = do
   ps <- forM cols $ \(ci,col) ->
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
-                  Just v -> return (toTerm col,toTerm v)
-  return $ TObject ps ty def
+                  Just v -> return (FieldKey $ asString col,toTerm v)
+  return $ TObject (Object ps ty def) def
 
 
 
@@ -266,11 +267,11 @@ withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
   (!g0,!tkd) <- preGas fi [table',key',defaultRow']
   case tkd of
-    [table@TTable {..}, TLitString key, TObject defaultRow _ _] -> do
+    [table@TTable {..}, TLitString key, TObject (Object defaultRow _ _) _] -> do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> (g0,) <$> (bindToRow ps bd b =<< toColumns fi defaultRow)
+        Nothing -> (g0,) <$> (bindToRow ps bd b (toColumns defaultRow))
         (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
@@ -322,7 +323,7 @@ keylog :: GasRNativeFun e
 keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
   let postProc = toTList tTyValue def . map toTxidObj
         where toTxidObj (t,r) =
-                toTObject TyAny def [(tStr "txid", toTerm t),(tStr "value",columnsToObject _tTableType (_txValue r))]
+                toTObject TyAny def [("txid", toTerm t),("value",columnsToObject _tTableType (_txValue r))]
   gasPostReads i g postProc $ do
     guardTable i table
     tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
@@ -335,21 +336,21 @@ write :: WriteType -> SchemaPartial -> NativeFun e
 write wt partial i as = do
   ts <- mapM reduce as
   case ts of
-    [table@TTable {..},TLitString key,obj@(TObject ps _ _)] -> do
+    [table@TTable {..},TLitString key,obj@(TObject (Object ps _ _) _)] -> do
       cost <- computeGas (Right i) (GWrite wt table obj)
       guardTable i table
       case _tTableType of
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      r <- success "Write succeeded" . writeRow (_faInfo i) wt (userTable table) (RowKey key) =<< toColumns i ps
+      r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) (toColumns ps)
       return (cost, r)
     _ -> argsError i ts
 
-toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
-toColumns i = fmap (Columns . M.fromList) . mapM conv where
-    conv (TLitString k, v) = return (ColumnId k,toPersistable v)
-    conv (k,_) = evalError' i $ "Only string keys are supported for database writes: " <> pretty (k, typeof' k)
+toColumns :: [(FieldKey,Term Name)] -> Columns Persistable
+toColumns = Columns . M.fromList . map conv where
+    conv (FieldKey k, v) = (ColumnId k,toPersistable v)
+
 
 
 createTable' :: RNativeFun e

@@ -49,7 +49,7 @@ import Control.Monad.State
 import Data.Aeson hiding (Object)
 import Data.Foldable
 
-import Pact.Types.Lang hiding (App)
+import Pact.Types.Lang hiding (App,Object)
 import Pact.Types.Pretty
 import Pact.Types.Native
 
@@ -309,7 +309,7 @@ data AST n =
   } |
   Object {
   _aNode :: n,
-  _aObject :: [(AST n,AST n)]
+  _aObject :: [(FieldKey,AST n)]
   } |
   Prim {
   _aNode :: n,

@@ -898,7 +898,7 @@ pact> (= [1 2 3] [1 2 3])
 true
 pact> (= 'foo "foo")
 true
-pact> (= { 1: 2 } { 1: 2})
+pact> (= { 'a: 2 } { 'a: 2})
 true
 ```
 
@@ -1383,6 +1383,14 @@ Query gas state, or set it to GAS.
 
 
 Set environment gas limit to LIMIT.
+
+
+### env-gasmodel {#env-gasmodel}
+
+*model*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Update gas model to the model named MODEL.
 
 
 ### env-gasprice {#env-gasprice}

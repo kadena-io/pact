@@ -56,11 +56,13 @@ module Pact.Types.Term
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
    Example(..),
    derefDef,
+   Object(..),oObject,oObjectType,oInfo,
+   FieldKey(..),
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
-   tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
+   tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
    toTermList,toTObject,toTList,
@@ -82,7 +84,8 @@ import Bound
 import Data.Text (Text,pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.Aeson hiding (pairs)
+import Data.Aeson hiding (pairs,Object)
+import qualified Data.Aeson as A
 import qualified Data.ByteString.UTF8 as BS
 import Data.String
 import Data.Default
@@ -687,8 +690,8 @@ instance Show1 Term where
       . showsPrec 11 _tInfo
     TObject{..} ->
         showString "TObject"
-      . liftShowList2 shows1 showList1 shows1 showList1 _tObject
-      . shows2 11 _tObjectType
+      . shows1 11 _tObject
+      . showChar ' '
       . showsPrec 11 _tInfo
     TSchema{..} ->
         showString "TSchema "
@@ -770,6 +773,20 @@ instance Pretty Example where
 instance IsString Example where
   fromString = ExecExample . fromString
 
+newtype FieldKey = FieldKey Text
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show)
+instance Pretty FieldKey where
+  pretty (FieldKey k) = dquotes $ pretty k
+
+data Object n = Object
+  { _oObject :: ![(FieldKey,Term n)]
+  , _oObjectType :: !(Type (Term n))
+  , _oInfo :: !Info
+  } deriving (Functor,Foldable,Traversable,Eq,Show)
+instance Pretty n => Pretty (Object n) where
+  pretty (Object bs _ _) = annotate Val $ commaBraces $
+      fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
+
 -- | Pact evaluable term.
 data Term n =
     TModule {
@@ -817,8 +834,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TObject {
-      _tObject :: ![(Term n,Term n)]
-    , _tObjectType :: !(Type (Term n))
+      _tObject :: !(Object n)
     , _tInfo :: !Info
     } |
     TSchema {
@@ -891,8 +907,7 @@ instance Pretty n => Pretty (Term n) where
       [ commaBraces $ pairs <&> \(arg, body') -> pretty arg <+> pretty body'
       , pretty $ unscope body
       ]
-    TObject bs _ _ -> annotate Val $ commaBraces $
-      fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
+    TObject o _ -> pretty o
     TLiteral l _ -> annotate Val $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
@@ -938,8 +953,8 @@ instance Eq1 Term where
   liftEq eq (TBinding a b c d) (TBinding m n o p) =
     liftEq (\(w,x) (y,z) -> liftEq (liftEq eq) w y && liftEq eq x z) a m &&
     liftEq eq b n && liftEq (liftEq (liftEq eq)) c o && d == p
-  liftEq eq (TObject a b c) (TObject m n o) =
-    liftEq (\(w,x) (y,z) -> liftEq eq w y && liftEq eq x z) a m && liftEq (liftEq eq) b n && c == o
+  liftEq eq (TObject (Object a b c) d) (TObject (Object m n o) p) =
+    liftEq (\(w,x) (y,z) -> w == y && liftEq eq x z) a m && liftEq (liftEq eq) b n && c == o && d == p
   liftEq _ (TLiteral a b) (TLiteral m n) =
     a == m && b == n
   liftEq _ (TGuard a b) (TGuard m n) =
@@ -971,7 +986,7 @@ instance Monad Term where
     TApp a i >>= f = TApp (fmap (>>= f) a) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
-    TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
+    TObject (Object bs t oi) i >>= f = TObject (Object (map (id *** (>>= f)) bs) (fmap (>>= f) t) oi) i
     TLiteral l i >>= _ = TLiteral l i
     TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
@@ -986,7 +1001,7 @@ instance FromJSON (Term n) where
     parseJSON (Bool b) = return $ toTerm b
     parseJSON (String s) = return $ toTerm s
     parseJSON (Array a) = toTList TyAny def . toList <$> mapM parseJSON a
-    parseJSON (Object o) = toTObject TyAny def <$> mapM (traverse parseJSON . first toTerm) (HM.toList o)
+    parseJSON (A.Object o) = toTObject TyAny def <$> mapM (traverse parseJSON . first FieldKey) (HM.toList o)
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 
@@ -994,10 +1009,8 @@ instance Pretty n => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
     toJSON (TGuard k _) = toJSON k
-    toJSON (TObject kvs _ _) =
-        object $ map (kToJSON *** toJSON) kvs
-            where kToJSON (TLitString s) = s
-                  kToJSON t = renderCompactText t
+    toJSON (TObject (Object kvs _ _) _) =
+        object $ map (asString *** toJSON) kvs
     toJSON (TList ts _ _) = toJSON ts
     toJSON t = toJSON (renderCompactText t)
     {-# INLINE toJSON #-}
@@ -1016,8 +1029,8 @@ instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
 
 
-toTObject :: Type (Term n) -> Info -> [(Term n,Term n)] -> Term n
-toTObject ty i ps = TObject ps ty i
+toTObject :: Type (Term n) -> Info -> [(FieldKey,Term n)] -> Term n
+toTObject ty i ps = TObject (Object ps ty i) i
 
 toTList :: Type (Term n) -> Info -> [Term n] -> Term n
 toTList ty i vs = TList vs ty i
@@ -1048,7 +1061,7 @@ typeof t = case t of
       TBinding {..} -> case _tBindType of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt def
-      TObject {..} -> Right $ TySchema TyObject _tObjectType def
+      TObject (Object {..}) _ -> Right $ TySchema TyObject _oObjectType def
       TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
       TUse {} -> Left "use"
       TValue {} -> Right $ TyPrim TyValue
@@ -1080,9 +1093,9 @@ tStr = toTerm
 -- | Support pact `=` for value-level terms
 termEq :: Eq n => Term n -> Term n -> Bool
 termEq (TList a _ _) (TList b _ _) = length a == length b && and (zipWith termEq a b)
-termEq (TObject a _ _) (TObject b _ _) = length a == length b && all (lkpEq b) a
+termEq (TObject (Object a _ _) _) (TObject (Object b _ _) _) = length a == length b && all (lkpEq b) a
     where lkpEq [] _ = False
-          lkpEq ((k',v'):ts) p@(k,v) | termEq k k' && termEq v v' = True
+          lkpEq ((k',v'):ts) p@(k,v) | k == k' && termEq v v' = True
                                      | otherwise = lkpEq ts p
 termEq (TLiteral a _) (TLiteral b _) = a == b
 termEq (TGuard a _) (TGuard b _) = a == b
@@ -1104,6 +1117,7 @@ makeLenses ''App
 makeLenses ''Def
 makeLenses ''ModuleName
 makePrisms ''DefType
+makeLenses ''Object
 
 deriveEq1 ''App
 deriveEq1 ''BindType
@@ -1112,7 +1126,10 @@ deriveEq1 ''Def
 deriveEq1 ''ModuleDef
 deriveEq1 ''Module
 deriveEq1 ''Governance
+deriveEq1 ''Object
+
 deriveShow1 ''App
+deriveShow1 ''Object
 deriveShow1 ''BindType
 deriveShow1 ''ConstVal
 deriveShow1 ''Def
