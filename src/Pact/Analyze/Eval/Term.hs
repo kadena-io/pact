@@ -625,9 +625,7 @@ evalTerm = \case
         cancel <- case mCancelVid of
 
           -- If this is the first step we just evaluate this term
-          Nothing -> do
-            void $ evalTermWithEntity mEntity tm
-            pure sFalse
+          Nothing -> pure sFalse
 
           -- ... otherwise, we nondeterministically either succeed or cancel
           Just (cancelPath {- c_n -}, cancelVid) -> withReset $ do
