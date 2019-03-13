@@ -654,11 +654,14 @@ evalTerm = \case
       steps
 
     void $ foldlM
-      (\alreadyRollingBack (path {- r_n -}, rollbackTriggered, rollback) -> do
-        let nowRollingBack = alreadyRollingBack .|| rollbackTriggered
-        tagSubpathStart path $ sansProv nowRollingBack
-        ite nowRollingBack (void $ withReset $ evalETerm rollback) (pure ())
-        pure nowRollingBack)
+      (\rollingBack (path {- r_n -}, rollbackTriggered, rollback) -> do
+        -- If a rollback was triggered on this step, we don't execute *this*
+        -- rollback, but we execute all subsequent rollbacks (ie rollbacks for
+        -- steps earlier than the one that failed):
+
+        tagSubpathStart path $ sansProv rollingBack
+        ite rollingBack (void $ withReset $ evalETerm rollback) (pure ())
+        pure $ rollingBack .|| rollbackTriggered)
       sFalse
       rollbacks
 
