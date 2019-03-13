@@ -23,7 +23,7 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
-import           Data.Foldable               (foldl', foldlM, for_)
+import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind,
@@ -618,7 +618,7 @@ evalTerm = \case
     (rollbacks, _) <- foldlM
       (\(rollbacks, successChoice)
         --          ^ do we make it to this step?
-        (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) -> 
+        (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) ->
         withSing ty $ do
 
         -- The first step has no cancel var. All other steps do.
@@ -633,9 +633,9 @@ evalTerm = \case
           Just (cancelPath {- c_n -}, cancelVid) -> withReset $ do
             cancel <- view (aeNondets . at cancelVid)
               ??? "couldn't find cancel var"
-            
-            tagSubpathStart successPath $ sansProv successChoice
-            tagSubpathStart cancelPath $ sansProv $ successChoice .&& cancel
+
+            tagFork successPath cancelPath (sansProv successChoice)
+              (sansProv $ sNot cancel)
 
             ite cancel
               (pure ())
@@ -643,19 +643,24 @@ evalTerm = \case
             pure cancel
 
         let rollbacks' = case mRollback of
-              Nothing       
+              Nothing
                 -> rollbacks
-              Just (rollbackPath {- r_n -}, rollback) 
+              Just (rollbackPath {- r_n -}, rollback)
                 -> (rollbackPath, successChoice .&& cancel, rollback):rollbacks
-                --                ^ should this rollback execute?
-        
+                --                ^ was rollback triggered on this step?
+
         pure (rollbacks', successChoice .&& sNot cancel))
       ([], sTrue)
       steps
 
-    for_ rollbacks $ \(path {- r_n -}, execMe, rollback) -> do
-      tagSubpathStart path $ sansProv execMe
-      ite execMe (void $ withReset $ evalETerm rollback) (pure ())
+    void $ foldlM
+      (\alreadyRollingBack (path {- r_n -}, rollbackTriggered, rollback) -> do
+        let nowRollingBack = alreadyRollingBack .|| rollbackTriggered
+        tagSubpathStart path $ sansProv nowRollingBack
+        ite nowRollingBack (void $ withReset $ evalETerm rollback) (pure ())
+        pure nowRollingBack)
+      sFalse
+      rollbacks
 
     pure "pact done"
 
