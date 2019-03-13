@@ -621,8 +621,6 @@ evalTerm = \case
         (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) -> 
         withSing ty $ do
 
-        tagSubpathStart successPath $ sansProv successChoice
-
         -- The first step has no cancel var. All other steps do.
         cancel <- case mCancelVid of
 
@@ -636,6 +634,7 @@ evalTerm = \case
             cancel <- view (aeNondets . at cancelVid)
               ??? "couldn't find cancel var"
             
+            tagSubpathStart successPath $ sansProv successChoice
             tagSubpathStart cancelPath $ sansProv $ successChoice .&& cancel
 
             ite cancel
