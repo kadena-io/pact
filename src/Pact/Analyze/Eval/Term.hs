@@ -627,7 +627,7 @@ evalTerm = \case
           -- If this is the first step we just evaluate this term
           Nothing -> do
             void $ evalTermWithEntity mEntity tm
-            pure successChoice
+            pure $ sNot successChoice
 
           -- ... otherwise, we nondeterministically either succeed or cancel
           Just (cancelPath {- c_n -}, cancelVid) -> withReset $ do
