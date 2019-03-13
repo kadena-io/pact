@@ -637,9 +637,6 @@ evalTerm = \case
             tagFork successPath cancelPath (sansProv successChoice)
               (sansProv $ sNot cancel)
 
-            ite (successChoice .&& sNot cancel)
-              (void $ evalTermWithEntity mEntity tm)
-              (pure ())
             pure cancel
 
         let rollbacks' = case mRollback of
@@ -649,7 +646,13 @@ evalTerm = \case
                 -> (rollbackPath, successChoice .&& cancel, rollback):rollbacks
                 --                ^ was rollback triggered on this step?
 
-        pure (rollbacks', successChoice .&& sNot cancel))
+            reachesStep = successChoice .&& sNot cancel
+
+        ite reachesStep
+          (void $ evalTermWithEntity mEntity tm)
+          (pure ())
+
+        pure (rollbacks', reachesStep))
       ([], sTrue)
       steps
 
