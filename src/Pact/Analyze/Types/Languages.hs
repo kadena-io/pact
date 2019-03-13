@@ -1470,9 +1470,11 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   Pact steps -> showString "Pact " . showList steps
 
 instance Show PactStep where
-  showsPrec _ (Step (exec :< execTy) mEntity mCancelVid mRollback) =
+  showsPrec _ (Step (exec :< execTy) path mEntity mCancelVid mRollback) =
      showString "Step "
    . withSing execTy (showsTm 11 exec)
+   . showChar ' '
+   . showsPrec 11 path
    . showChar ' '
    . showsPrec 11 mEntity
    . showChar ' '
@@ -1550,11 +1552,11 @@ prettyTerm ty = \case
   Pact steps -> vsep (pretty <$> steps)
 
 instance Pretty PactStep where
-  pretty (Step (exec :< execTy) mEntity _ mRollback) = parensSep $
+  pretty (Step (exec :< execTy) _ mEntity _ mRollback) = parensSep $
     maybe ["step"] (\_ -> ["step-with-rollback"]) mRollback
       ++ maybe [] (\entity -> [prettyTm entity]) mEntity
       ++ [singPrettyTm execTy exec]
-      ++ maybe [] (\(Some  ty' tm) -> [singPrettyTm ty' tm]) mRollback
+      ++ maybe [] (\(_path, Some  ty' tm) -> [singPrettyTm ty' tm]) mRollback
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2
