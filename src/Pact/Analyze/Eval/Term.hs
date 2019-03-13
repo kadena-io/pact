@@ -612,33 +612,52 @@ evalTerm = \case
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
   Pact steps -> do
-    _ <- foldlM
-      (\rollbacks
-        (Step (tm :< ty) mEntity mCancelVid mRollback) -> withSing ty $ do
+    -- We execute through all the steps once (via a left fold), then we execute
+    -- all the rollbacks (via for), in reverse order.
+
+    (rollbacks, _) <- foldlM
+      (\(rollbacks, successChoice)
+        --          ^ do we make it to this step?
+        (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) -> 
+        withSing ty $ do
+
+        tagSubpathStart successPath $ sansProv successChoice
 
         -- The first step has no cancel var. All other steps do.
-        _ <- case mCancelVid of
+        cancel <- case mCancelVid of
 
           -- If this is the first step we just evaluate this term
-          Nothing -> void $ evalTermWithEntity mEntity tm
+          Nothing -> do
+            void $ evalTermWithEntity mEntity tm
+            pure successChoice
 
-          -- ... otherwise, we nondeterministically either execute the step or
-          -- all the existing rollbacks. Note that we use 'rollbacks', ie all
-          -- rollbacks prior to this step, because we don't want to execute the
-          -- rollback associated with this step.
-          Just cancelVid -> withReset $ do
+          -- ... otherwise, we nondeterministically either succeed or cancel
+          Just (cancelPath {- c_n -}, cancelVid) -> withReset $ do
             cancel <- view (aeNondets . at cancelVid)
               ??? "couldn't find cancel var"
+            
+            tagSubpathStart cancelPath $ sansProv $ successChoice .&& cancel
 
             ite cancel
-              (for_ rollbacks $ withReset . evalETerm)
+              (pure ())
               (void $ evalTermWithEntity mEntity tm)
+            pure cancel
 
-        pure $ case mRollback of
-          Nothing       -> rollbacks
-          Just rollback -> rollback:rollbacks)
-      []
+        let rollbacks' = case mRollback of
+              Nothing       
+                -> rollbacks
+              Just (rollbackPath {- r_n -}, rollback) 
+                -> (rollbackPath, successChoice .&& cancel, rollback):rollbacks
+                --                ^ should this rollback execute?
+        
+        pure (rollbacks', successChoice .&& sNot cancel))
+      ([], sTrue)
       steps
+
+    for_ rollbacks $ \(path {- r_n -}, execMe, rollback) -> do
+      tagSubpathStart path $ sansProv execMe
+      ite execMe (void $ withReset $ evalETerm rollback) (pure ())
+
     pure "pact done"
 
 -- | Private pacts must be evaluated by the right entity. Fail if the current

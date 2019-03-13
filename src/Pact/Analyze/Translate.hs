@@ -15,6 +15,8 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ViewPatterns               #-}
 
+{-# LANGUAGE TupleSections              #-}
+
 -- | Translation from typechecked 'AST' to 'Term', while accumulating an
 -- execution graph to be used during symbolic analysis and model reporting.
 module Pact.Analyze.Translate where
@@ -523,21 +525,23 @@ translateBody = \case
     pure $ Some ty $ Sequence someExpr exprs
 
 translatePact :: [AST Node] -> TranslateM [PactStep]
-translatePact = do
-  -- steps <- go True
-  preStepsPath <- use tsCurrentPath
+translatePact = undefined
 
-  _todo
+-- nodes = do
+--   -- steps <- go True
+--   preStepsPath <- use tsCurrentPath
 
-  -- TODO: loop edge from after final step to the sink should have the same path
-  --       as the final step
+--   _todo
 
-  where
-    -- We don't generate a cancel var on the first step but we do for all
-    -- subsequent steps.
-    go firstStep = \case
-      []       -> pure []
-      ast:asts -> (:) <$> translateStep firstStep ast <*> go False asts
+--   -- TODO: loop edge from after final step to the sink should have the same path
+--   --       as the final step
+
+--   where
+--     -- We don't generate a cancel var on the first step but we do for all
+--     -- subsequent steps.
+--     go firstStep = \case
+--       []       -> pure []
+--       ast:asts -> (:) <$> translateStep firstStep ast <*> go False asts
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -663,7 +667,9 @@ translateStep firstStep = \case
         tsNondets %= (cancelVid:)
         pure $ Just cancelVid
     mRollback <- traverse translateNode rollback
-    pure $ Step (exec' :< ty) mEntity mCancelVid mRollback
+    pure $ Step (exec' :< ty) (error "TODO") mEntity 
+      ((error "TODO",) <$> mCancelVid)
+      ((error "TODO",) <$> mRollback)
   astNode -> throwError' $ UnexpectedPactNode astNode
 
 translateNode :: AST Node -> TranslateM ETerm
