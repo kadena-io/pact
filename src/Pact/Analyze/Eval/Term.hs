@@ -15,7 +15,7 @@ import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', preview, use,
                                               view, (%=), (%~), (&), (+=), (.=),
                                               (.~), (<&>), (?~), (^.), (^?), _1,
-                                              _2, _Just)
+                                              _2, _head, _Just)
 import           Control.Monad               (void)
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
@@ -624,7 +624,7 @@ evalTerm = \case
         -- The first step has no cancel var. All other steps do.
         cancel <- case mCancelVid of
 
-          -- If this is the first step we just evaluate this term
+          -- We can never cancel before executing the first step
           Nothing -> pure sFalse
 
           -- ... otherwise, we nondeterministically either succeed or cancel
@@ -637,12 +637,15 @@ evalTerm = \case
 
             pure cancel
 
-        let rollbacks' = case mRollback of
+        let -- Trigger the latest rollback if we cancel on this step
+            rollbacks' = rollbacks & _head . _2 %~ (.|| cancel)
+            rollbacks'' = case mRollback of
               Nothing
-                -> rollbacks
+                -> rollbacks'
               Just (rollbackPath {- r_n -}, rollback)
-                -> (rollbackPath, successChoice .&& cancel, rollback):rollbacks
+                -> (rollbackPath, sFalse, rollback):rollbacks'
                 --                ^ was rollback triggered on this step?
+                --                  (not yet)
 
             reachesStep = successChoice .&& sNot cancel
 
@@ -650,19 +653,18 @@ evalTerm = \case
           (void $ evalTermWithEntity mEntity tm)
           (pure ())
 
-        pure (rollbacks', reachesStep))
+        pure (rollbacks'', reachesStep))
       ([], sTrue)
       steps
 
     void $ foldlM
-      (\rollingBack (path {- r_n -}, rollbackTriggered, rollback) -> do
-        -- If a rollback was triggered on this step, we don't execute *this*
-        -- rollback, but we execute all subsequent rollbacks (ie rollbacks for
-        -- steps earlier than the one that failed):
-
-        tagSubpathStart path $ sansProv rollingBack
-        ite rollingBack (void $ withReset $ evalETerm rollback) (pure ())
-        pure $ rollingBack .|| rollbackTriggered)
+      (\alreadyRollingBack (path {- r_n -}, rollbackTriggered, rollback) -> do
+        -- If this rollback was triggered, we execute this and all earlier
+        -- rollbacks
+        let nowRollingBack = alreadyRollingBack .|| rollbackTriggered
+        tagSubpathStart path $ sansProv nowRollingBack
+        ite nowRollingBack (void $ withReset $ evalETerm rollback) (pure ())
+        pure nowRollingBack)
       sFalse
       rollbacks
 
