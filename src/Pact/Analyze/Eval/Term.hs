@@ -644,8 +644,8 @@ evalTerm = \case
                 -> rollbacks'
               Just (rollbackPath {- r_n -}, rollback)
                 -> (rollbackPath, sFalse, rollback):rollbacks'
-                --                ^ was rollback triggered on this step?
-                --                  (not yet)
+                --                ^ should we run this rollback, and every
+                --                  rollback before it?
 
             reachesStep = successChoice .&& sNot cancel
 
