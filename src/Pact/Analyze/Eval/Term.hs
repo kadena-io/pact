@@ -637,9 +637,9 @@ evalTerm = \case
             tagFork successPath cancelPath (sansProv successChoice)
               (sansProv $ sNot cancel)
 
-            ite (successChoice .&& cancel)
-              (pure ())
+            ite (successChoice .&& sNot cancel)
               (void $ evalTermWithEntity mEntity tm)
+              (pure ())
             pure cancel
 
         let rollbacks' = case mRollback of
