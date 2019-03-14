@@ -178,9 +178,9 @@ replDefs = ("Repl",
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
      "blockchain environment."
      ,defZRNative "mock-spv" mockSPV
-      (funType tTyString [("type",tTyString),("output",tTyObject TyAny)])
-      [LitExample "(mock-spv \"TXOUT\" { 'amount: 10.0, 'account: \"Dave\", 'chainId: 1 })"]
-      "Instrument a hardcoded return OUTPUT for a particular spv prover TYPE."
+      (funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
+      [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: 1 })"]
+      "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -229,8 +229,8 @@ setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 mockSPV :: RNativeFun LibState
-mockSPV _i [TLitString spvType, TObject out _] = do
-  setLibState $ over rlsMockSPV (M.insert spvType out)
+mockSPV _i [TLitString spvType, TObject payload _, TObject out _] = do
+  setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
   return $ tStr $ "Added mock SPV for " <> spvType
 mockSPV i as = argsError i as
 

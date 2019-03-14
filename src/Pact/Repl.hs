@@ -107,9 +107,10 @@ initPureEvalEnv verifyUri = do
   return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0)
     def def mv repldb def initialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv)
 
+
 spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
-spv mv ty _ = readMVar mv >>= \LibState{..} -> case M.lookup ty _rlsMockSPV of
-  Nothing -> return $ Left $ "Unsupported SPV proof type: " <> ty
+spv mv ty pay = readMVar mv >>= \LibState{..} -> case M.lookup (SPVMockKey (ty,pay)) _rlsMockSPV of
+  Nothing -> return $ Left $ "SPV verification failure"
   Just o -> return $ Right o
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
