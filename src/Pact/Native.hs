@@ -71,6 +71,7 @@ import Pact.Native.Time
 import Pact.Native.Ops
 import Pact.Native.Keysets
 import Pact.Native.Capabilities
+import Pact.Native.SPV
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
@@ -85,7 +86,8 @@ natives = [
   timeDefs,
   opDefs,
   keyDefs,
-  capDefs]
+  capDefs,
+  spvDefs]
 
 
 -- | Production native modules as a dispatch map.

@@ -1301,6 +1301,18 @@ Specifies and requests grant of CAPABILITY which is an application of a 'defcap'
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```
 
+## SPV {#SPV}
+
+### verify-spv {#verify-spv}
+
+*type*&nbsp;`string` *payload*&nbsp;`object:[]<in>` *&rarr;*&nbsp;`object:[]<out>`
+
+
+Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of the PAYLOAD object depends on TYPE, as does the format of the return object. Platforms such as Chainweb will document the specific payload types and return values.
+```lisp
+(verify-spv "TXOUT" (read-msg "proof"))
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
@@ -1515,6 +1527,17 @@ pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
 Load and evaluate FILE, resetting repl state beforehand if optional RESET is true.
 ```lisp
 (load "accounts.repl")
+```
+
+
+### mock-spv {#mock-spv}
+
+*type*&nbsp;`string` *payload*&nbsp;`object:[]*` *output*&nbsp;`object:[]*` *&rarr;*&nbsp;`string`
+
+
+Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT.
+```lisp
+(mock-spv "TXOUT" { 'proof: "a54f54de54c54d89e7f" } { 'amount: 10.0, 'account: "Dave", 'chainId: 1 })
 ```
 
 

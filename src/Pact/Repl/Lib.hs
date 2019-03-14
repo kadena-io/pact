@@ -33,13 +33,13 @@ import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Maybe
+import qualified Data.Map as M
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 #else
 import Control.Monad.State.Strict (get)
 import Criterion
 import Criterion.Types
-import qualified Data.Map as M
 import qualified Pact.Analyze.Check as Check
 import Statistics.Types (Estimate(..))
 import qualified Pact.Types.Crypto as Crypto
@@ -67,7 +67,7 @@ initLibState loggers verifyUri = do
                 (newLogger loggers "Repl")
                 def def)
   createSchema m
-  return (LibState m Noop def def verifyUri)
+  return (LibState m Noop def def verifyUri M.empty)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -177,6 +177,10 @@ replDefs = ("Repl",
      "Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope " <>
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
      "blockchain environment."
+     ,defZRNative "mock-spv" mockSPV
+      (funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
+      [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: 1 })"]
+      "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -224,10 +228,11 @@ setop v = setLibState $ set rlsOp v
 setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
-{-
-overenv :: Setter' (EvalEnv LibState) a -> (a -> a) -> Eval LibState ()
-overenv l f = setop $ UpdateEnv $ Endo (over l f)
--}
+mockSPV :: RNativeFun LibState
+mockSPV _i [TLitString spvType, TObject payload _, TObject out _] = do
+  setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
+  return $ tStr $ "Added mock SPV for " <> spvType
+mockSPV i as = argsError i as
 
 formatAddr :: RNativeFun LibState
 #if !defined(ghcjs_HOST_OS)

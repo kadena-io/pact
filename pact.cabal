@@ -31,6 +31,7 @@ library
                      , Pact.Native.Capabilities
                      , Pact.Native.Db
                      , Pact.Native.Internal
+                     , Pact.Native.SPV
                      , Pact.Native.Time
                      , Pact.Native.Ops
                      , Pact.Native.Keysets

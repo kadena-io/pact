@@ -1,0 +1,4 @@
+(mock-spv "TXOUT" { "baz": "quux" } { "foo": "bar" })
+(expect-failure "fail on unmocked type" (verify-spv "BLAH" { "baz": "quux" }))
+(expect-failure "fail on unmocked payload" (verify-spv "TXOUT" { "here": "gone" }))
+(expect "succeed with mock" { "foo": "bar" } (verify-spv "TXOUT" { "baz": "quux" }))
