@@ -13,6 +13,7 @@ module Pact.Persist.SQLite
 
 import Control.Arrow
 import Control.Monad
+import Control.Monad.Except hiding (liftEither)
 import Data.Aeson
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -201,7 +202,17 @@ initSQLite conf@SQLiteConfig {..} loggers = do
   return s
 
 closeSQLite :: SQLite -> IO (Either String ())
-closeSQLite = fmap (either (Left . show) Right) . close . conn
+closeSQLite SQLite{..} = fmap (either (Left . show) Right) $ runExceptT $ do
+  let finalizeT = ExceptT . finalize
+  forM_ tableStmts $ \TableStmts{..} -> do
+    finalizeT sInsertReplace
+    finalizeT sInsert
+    finalizeT sReplace
+    finalizeT sRead
+  finalizeT $ tBegin txStmts
+  finalizeT $ tCommit txStmts
+  finalizeT $ tRollback txStmts
+  ExceptT $ close $ conn
 
 refresh :: SQLite -> IO SQLite
 refresh s = do
