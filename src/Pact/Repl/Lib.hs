@@ -33,13 +33,13 @@ import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Maybe
+import qualified Data.Map as M
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 #else
 import Control.Monad.State.Strict (get)
 import Criterion
 import Criterion.Types
-import qualified Data.Map as M
 import qualified Pact.Analyze.Check as Check
 import Statistics.Types (Estimate(..))
 import qualified Pact.Types.Crypto as Crypto
