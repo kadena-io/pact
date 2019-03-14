@@ -437,13 +437,9 @@ throwError' err = do
   info <- view envInfo
   throwError $ TranslateFailure info err
 
--- | Generates a new 'Vertex', setting it as the head. Does *not* add this new
--- 'Vertex' to the graph.
-issueVertex :: TranslateM Vertex
-issueVertex = do
-  v <- TranslateM $ zoom tsNextVertex $ join $ view teGenVertex
-  tsPathHead .= v
-  pure v
+-- | Generates a new 'Vertex'. Does *not* add this new 'Vertex' to the graph.
+genVertex :: TranslateM Vertex
+genVertex = TranslateM $ zoom tsNextVertex $ join $ view teGenVertex
 
 -- | Flushes-out events accumulated for the current edge of the execution path.
 flushEvents :: TranslateM [TraceEvent]
@@ -456,18 +452,23 @@ addPathEdge :: Path -> Edge -> TranslateM ()
 addPathEdge path e =
   tsPathEdges.at path %= pure . cons e . fromMaybe []
 
+extendPathTo :: Vertex -> TranslateM ()
+extendPathTo toV = do
+  path <- use tsCurrentPath
+  v    <- use tsPathHead
+  tsGraph %= Alga.overlay (Alga.edge v toV)
+  edgeTrace <- flushEvents
+  let e = (v, toV)
+  tsEdgeEvents.at e ?= edgeTrace
+  addPathEdge path e
+
 -- | Extends the previous path head to a new 'Vertex', flushing accumulated
 -- events to 'tsEdgeEvents'.
 extendPath :: TranslateM Vertex
 extendPath = do
-  path <- use tsCurrentPath
-  v    <- use tsPathHead
-  v'   <- issueVertex
-  tsGraph %= Alga.overlay (Alga.edge v v')
-  edgeTrace <- flushEvents
-  let e = (v, v')
-  tsEdgeEvents.at e ?= edgeTrace
-  addPathEdge path e
+  v' <- genVertex
+  tsPathHead .= v'
+  extendPathTo v'
   pure v'
 
 -- | Extends multiple separate paths to a single join point. Assumes that each
@@ -476,7 +477,8 @@ extendPath = do
 joinPaths :: [(Vertex, Path)] -> TranslateM ()
 joinPaths branches = do
   let vs = map fst branches
-  v' <- issueVertex
+  v' <- genVertex
+  tsPathHead .= v'
   tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
   for_ branches $ \(v, path) -> do
     isNewPath <- use $ tsPathEdges.at path.to isNothing
