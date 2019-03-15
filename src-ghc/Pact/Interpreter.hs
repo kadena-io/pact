@@ -42,7 +42,8 @@ import qualified Data.HashMap.Strict as HM
 import Pact.Types.Term
 import Pact.Types.Runtime
 import Pact.Compile
-import Pact.Eval
+import Pact.Eval hiding (evalContinuation)
+import qualified Pact.Eval as Eval (evalContinuation)
 import Pact.Types.Command
 import Pact.Native (nativeDefs)
 import Pact.PersistPactDb
@@ -67,7 +68,7 @@ initMsgData :: Hash -> MsgData
 initMsgData = MsgData def Null def
 
 data EvalResult = EvalResult
-  { _erInput :: ![Term Name]
+  { _erInput :: !(Either PactContinuation [Term Name])
   , _erOutput :: ![Term Name]
   , _erLogs :: ![TxLog Value]
   , _erRefStore :: !RefStore
@@ -82,14 +83,14 @@ evalExec env pc = evalExecState def env pc
 evalExecState :: EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
 evalExecState initState evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
-  interpret initState evalEnv terms
+  interpret initState evalEnv (Right terms)
 
 
-evalContinuation :: EvalEnv e -> Term Name -> IO EvalResult
+evalContinuation :: EvalEnv e -> PactContinuation -> IO EvalResult
 evalContinuation ee pact = evalContinuationState def ee pact
 
-evalContinuationState :: EvalState -> EvalEnv e -> Term Name -> IO EvalResult
-evalContinuationState initState ee pact = interpret initState ee [pact]
+evalContinuationState :: EvalState -> EvalEnv e -> PactContinuation -> IO EvalResult
+evalContinuationState initState ee pact = interpret initState ee (Left pact)
 
 setupEvalEnv
   :: PactDbEnv e
@@ -143,7 +144,7 @@ initSchema :: PactDbEnv (DbEnv p) -> IO ()
 initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 
-interpret :: EvalState -> EvalEnv e -> [Term Name] -> IO EvalResult
+interpret :: EvalState -> EvalEnv e -> Either PactContinuation [Term Name] -> IO EvalResult
 interpret initState evalEnv terms = do
   let tx = _eeTxId evalEnv
   ((rs,logs),state) <-
@@ -155,13 +156,15 @@ interpret initState evalEnv terms = do
                        | otherwise = updateRefStore (_evalRefs state) oldStore
   return $! EvalResult terms rs logs refStore pactExec gas
 
-evalTerms :: Maybe TxId -> [Term Name] -> Eval e ([Term Name],[TxLog Value])
+evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do
   let safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
   handle (\(e :: SomeException) -> safeRollback >> throwM e) $ do
         evalBeginTx def
-        rs <- mapM eval terms
+        rs <- case terms of
+          Right ts -> mapM eval ts
+          Left pc -> (:[]) <$> Eval.evalContinuation pc
         logs <- case tx of
           Just _ -> evalCommitTx def
           Nothing -> evalRollbackTx def >> return []

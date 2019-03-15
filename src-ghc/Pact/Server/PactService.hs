@@ -99,20 +99,17 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   newCmdPact <- join <$> mapM (handlePactExec _erInput) _erExec
   let newPacts = case newCmdPact of
         Nothing -> pacts
-        Just cmdPact -> M.insert (_cpTxId cmdPact) cmdPact pacts
+        Just cmdPact -> M.insert (_pePactId cmdPact) cmdPact pacts
   void $ liftIO $ swapMVar _ceState $ CommandState _erRefStore newPacts
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) newCmdPact
   return $ jsonResult _ceMode rk _erGas $ CommandSuccess (last _erOutput)
 
-handlePactExec :: [Term Name] -> PactExec -> CommandM p (Maybe CommandPact)
-handlePactExec em PactExec{..} = do
-  CommandEnv{..} <- ask
+handlePactExec :: Either PactContinuation [Term Name] -> PactExec -> CommandM p (Maybe PactExec)
+handlePactExec (Left pc) _ = throwCmdEx $ "handlePactExec: internal error, continuation input: " ++ show pc
+handlePactExec (Right em) pe = do
   unless (length em == 1) $
     throwCmdEx $ "handlePactExec: defpact execution must occur as a single command: " ++ show em
-  case _ceMode of
-    Local -> return Nothing
-    Transactional tid -> do
-      return $ Just $ CommandPact tid (head em) _peStepCount _peStep _peYield
+  return $ Just pe
 
 
 applyContinuation :: RequestKey -> ContMsg -> Command a -> CommandM p CommandResult
@@ -122,24 +119,24 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
     Local -> throwCmdEx "Local continuation exec not supported"
     Transactional _ -> do
       state@CommandState{..} <- liftIO $ readMVar _ceState
-      case M.lookup _cmTxId _csPacts of
-        Nothing -> throwCmdEx $ "applyContinuation: txid not found: " ++ show _cmTxId
-        Just pact@CommandPact{..} -> do
+      case M.lookup _cmPactId _csPacts of
+        Nothing -> throwCmdEx $ "applyContinuation: pact ID not found: " ++ show _cmPactId
+        Just pact@PactExec{..} -> do
           -- Verify valid ContMsg Step
-          when (_cmStep < 0 || _cmStep >= _cpStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
+          when (_cmStep < 0 || _cmStep >= _peStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
           if _cmRollback
-            then when (_cmStep /= _cpStep) $ throwCmdEx $ "Invalid rollback step value: Received "
-                 ++ show _cmStep ++ " but expected " ++ show _cpStep
-            else when (_cmStep /= (_cpStep + 1)) $ throwCmdEx $ "Invalid continuation step value: Received "
-                 ++ show _cmStep ++ " but expected " ++ show (_cpStep + 1)
+            then when (_cmStep /= _peStep) $ throwCmdEx $ "Invalid rollback step value: Received "
+                 ++ show _cmStep ++ " but expected " ++ show _peStep
+            else when (_cmStep /= (_peStep + 1)) $ throwCmdEx $ "Invalid continuation step value: Received "
+                 ++ show _cmStep ++ " but expected " ++ show (_peStep + 1)
 
-          -- Setup environement and get result
+          -- Setup environment and get result
           let sigs = userSigsToPactKeySet _cmdSigs
-              pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show _cmTxId) _cpYield
+              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId _peYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport
-          res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
+          res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
 
           -- Update pacts state
           case res of
@@ -156,24 +153,23 @@ rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
 rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
   -- if step doesn't have a rollback function, no error thrown. Therefore, pact will be deleted
   -- from state.
-  let newState = CommandState _csRefStore $ M.delete _cmTxId _csPacts
+  let newState = CommandState _csRefStore $ M.delete _cmPactId _csPacts
   liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: rollbackUpdate: reaping pact "
-    ++ show _cmTxId
+    ++ show _cmPactId
   void $ liftIO $ swapMVar _ceState newState
 
-continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandPact -> PactExec -> CommandM p ()
-continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} PactExec{..} = do
-  let nextStep = _cmStep + 1
-      isLast = nextStep >= _cpStepCount
+continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> PactExec -> PactExec -> CommandM p ()
+continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} oldPactExec newPactExec = do
+  let nextStep = succ _cmStep
+      isLast = nextStep >= (_peStepCount oldPactExec)
       updateState pacts = CommandState _csRefStore pacts -- never loading modules during continuations
-
+      pactId = _pePactId oldPactExec
   if isLast
     then do
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: continuationUpdate: reaping pact: "
-        ++ show _cmTxId
-      void $ liftIO $ swapMVar _ceState $ updateState $ M.delete _cmTxId _csPacts
+        ++ show pactId
+      void $ liftIO $ swapMVar _ceState $ updateState $ M.delete pactId _csPacts
     else do
-      let newPact = CommandPact _cpTxId _cpContinuation _cpStepCount _cmStep _peYield
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
-        ++ show _cmTxId ++ ": " ++ show newPact
-      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert _cmTxId newPact _csPacts
+        ++ show pactId ++ ": " ++ show newPactExec
+      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert pactId newPactExec _csPacts

@@ -104,6 +104,7 @@ import Data.Int (Int64)
 import Data.Serialize (Serialize)
 import Data.Eq.Deriving
 import Text.Show.Deriving
+import Data.Word (Word64)
 
 
 import Pact.Types.Parser
@@ -179,10 +180,11 @@ newtype KeySetName = KeySetName Text
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
-newtype PactId = PactId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default,Show)
-
-instance Pretty PactId where pretty (PactId s) = pretty s
+newtype PactId = PactId Word64
+    deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON,Generic)
+instance Show PactId where show (PactId p) = show p
+instance Pretty PactId where pretty = viaShow
+instance NFData PactId
 
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
@@ -1027,6 +1029,7 @@ instance ToTerm Guard where toTerm = (`TGuard` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
+instance ToTerm PactId where toTerm = tLit . LInteger . fromIntegral
 
 
 toTObject :: Type (Term n) -> Info -> [(FieldKey,Term n)] -> Term n

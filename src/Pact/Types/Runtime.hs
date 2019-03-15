@@ -27,7 +27,7 @@ module Pact.Types.Runtime
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
-   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
+   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
    RefState(..),rsLoaded,rsLoadedModules,rsNewModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',
@@ -39,6 +39,7 @@ module Pact.Types.Runtime
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
    SPVSupport(..),noSPVSupport,
+   PactContinuation(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -166,14 +167,23 @@ newtype EntityName = EntityName Text
   deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
 instance Show EntityName where show (EntityName t) = show t
 
+newtype PactContinuation = PactContinuation (App (Term Ref))
+  deriving (Eq,Show)
 
 -- | Runtime capture of pact execution.
 data PactExec = PactExec
-  { _peStepCount :: Int
+  { -- | Count of steps in pact (discovered when code is executed)
+    _peStepCount :: Int
+    -- | Yield value if invoked
   , _peYield :: !(Maybe (Term Name))
+    -- | Whether step was executed (in private cases, it can be skipped)
   , _peExecuted :: Bool
+    -- | Step that was executed or skipped
   , _peStep :: Int
+    -- | Pact id. On a new pact invocation, is copied from tx id.
   , _pePactId :: PactId
+    -- | Strict (in arguments) application of pact, for future step invocations.
+  , _peContinuation :: PactContinuation
   } deriving (Eq,Show)
 makeLenses ''PactExec
 

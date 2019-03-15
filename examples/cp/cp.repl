@@ -101,19 +101,15 @@
 (runpact-scenario-1 "order2" "cusip2")
 (expect "agent has inventory" 1 (at "qty" (cp.read-inventory "agent" "cusip2")))
 
-(env-step 1)
 (env-keys ["trader-key"])
-(runpact-scenario-1 "order2" "cusip2")
+(continue-pact 5 1)
 (expect "order NEW" ORDER_NEW (at "status" (read-order "order2")))
 
-(env-step 2)
 (env-keys ["agent-key"])
-(runpact-scenario-1 "order2" "cusip2")
+(continue-pact 5 2)
 (expect "trader inventory" 1 (at "qty" (read-inventory "trader" "cusip2")))
 
-(env-step 3)
 (env-keys ["trader-key"])
-(runpact-scenario-1 "order2" "cusip2")
-(env-step 4)
-(runpact-scenario-1 "order2" "cusip2")
+(continue-pact 5 3)
+(continue-pact 5 4)
 (expect "order paid" ORDER_PAID (at "status" (read-order "order2")))

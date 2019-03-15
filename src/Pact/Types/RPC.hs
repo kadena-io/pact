@@ -67,7 +67,7 @@ instance ToJSON c => ToJSON (ExecMsg c) where
     toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
 
 data ContMsg = ContMsg
-  { _cmTxId :: !TxId
+  { _cmPactId :: !PactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
   , _cmData :: !Value
@@ -77,9 +77,9 @@ instance NFData ContMsg
 instance FromJSON ContMsg where
     parseJSON =
         withObject "ContMsg" $ \o ->
-            ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
+            ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
     {-# INLINE parseJSON #-}
 
 instance ToJSON ContMsg where
     toJSON ContMsg{..} = object
-      [ "txid" .= _cmTxId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData]
+      [ "pactId" .= _cmPactId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData]
