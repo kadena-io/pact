@@ -1364,6 +1364,7 @@ Commit transaction.
 
 Continue previously-initiated pact identified by PACT-ID at STEP, optionally specifying ROLLBACK (default is false), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
 ```lisp
+(continue-pact 2 1)
 (continue-pact 2 1 true)
 (continue-pact 2 1 false { "rate": 0.9 })
 ```
