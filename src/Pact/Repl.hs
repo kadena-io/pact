@@ -194,6 +194,10 @@ pureEval ei e = do
   case r of
     Right a -> do
         doOut ei mode a
+        case _evalPactExec es of
+          Nothing -> return ()
+          Just pe -> do
+            use (rEnv.eePactDbVar) >>= \mv -> liftIO $ modifyMVar_ mv $ return . over rlsPacts (M.insert (_pePactId pe) pe)
         rEvalState .= es
         updateForOp a
     Left err -> do

@@ -61,7 +61,7 @@ instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
 
 data ApiReq = ApiReq {
   _ylType :: Maybe String,
-  _ylTxId :: Maybe TxId,
+  _ylPactId :: Maybe PactId,
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
   _ylResume :: Maybe Value,
@@ -128,7 +128,7 @@ mkExec code mdata pubMeta kps ridm = do
 
 mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqCont ar@ApiReq{..} kps fp = do
-  txId <- case _ylTxId of
+  txId <- case _ylPactId of
     Just t  -> return t
     Nothing -> dieAR "Expected a 'txid' entry"
 
@@ -151,7 +151,7 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
   let pubMeta = def
   ((ar,"",cdata,pubMeta),) <$> mkCont txId step rollback cdata pubMeta kps _ylNonce
 
-mkCont :: TxId -> Int -> Bool  -> Value -> PublicMeta -> [SomeKeyPair]
+mkCont :: PactId -> Int -> Bool  -> Value -> PublicMeta -> [SomeKeyPair]
   -> Maybe String -> IO (Command Text)
 mkCont txid step rollback mdata pubMeta kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
@@ -185,7 +185,7 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
               (expectAddr, actualAddr)
                 | expectAddr == actualAddr  -> return kp
                 | otherwise                 -> dieAR $ "Address provided "
-                                               ++ (show $ toB16Text $ expectAddr)
+                                               ++ show (toB16Text expectAddr)
                                                ++ " does not match actual Address "
                                                ++ show (toB16Text actualAddr)
 

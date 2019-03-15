@@ -6,7 +6,7 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV
+  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts
   , Tx(..)
   , SPVMockKey(..)
   ) where
@@ -18,7 +18,7 @@ import Control.Monad.State.Strict (StateT)
 import Control.Concurrent (MVar)
 import Pact.PersistPactDb (DbEnv)
 import Pact.Persist.Pure (PureDb)
-import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name,FunApp,Info,Object,Term(..))
+import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name,FunApp,Info,Object,Term(..),PactId,PactExec)
 import Data.Text (Text)
 import qualified Data.Map.Strict as M
 import Pact.Types.Pretty (Pretty,pretty,renderCompactText)
@@ -77,6 +77,7 @@ data LibState = LibState {
     , _rlsTests :: [TestResult]
     , _rlsVerifyUri :: Maybe String
     , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
+    , _rlsPacts :: M.Map PactId PactExec
 }
 
 

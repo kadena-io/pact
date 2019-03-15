@@ -67,7 +67,7 @@ initLibState loggers verifyUri = do
                 (newLogger loggers "Repl")
                 def def)
   createSchema m
-  return (LibState m Noop def def verifyUri M.empty)
+  return (LibState m Noop def def verifyUri M.empty M.empty)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -98,30 +98,29 @@ replDefs = ("Repl",
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
-     ,defZRNative "env-step"
-      setstep (funType tTyString [] <>
-               funType tTyString [("step-idx",tTyInteger)] <>
-               funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)] <>
-               funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool),
-                                  ("resume",TySchema TyObject (mkSchemaVar "y") def)])
-      [LitExample "(env-step 1)", LitExample "(env-step 0 true)"]
-      ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
-       "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
-       "Clears any previous pact execution state.")
-     ,defZRNative "env-pactid" envPactId
-      (funType tTyString [] <>
-       funType tTyString [("id",tTyString)]) []
-       "Query environment pact id, or set to ID."
-     ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
-      [LitExample "(pact-state)"]
-      ("Inspect state from previous pact execution. Returns object with fields " <>
-      "'yield': yield result or 'false' if none; 'step': executed step; " <>
-      "'executed': indicates if step was skipped because entity did not match.")
+
+     ,defZRNative "continue-pact" continuePact
+      (funType tTyString [("pact-id",tTyInteger),("step",tTyInteger)] <>
+       funType tTyString [("pact-id",tTyInteger),("step",tTyInteger),("rollback",tTyBool)] <>
+       funType tTyString [("pact-id",tTyInteger),("step",tTyInteger),("rollback",tTyBool),("yielded",tTyObject (mkSchemaVar "y"))])
+      [LitExample "(continue-pact 2 1)", LitExample "(continue-pact 2 1 true)",
+       LitExample "(continue-pact 2 1 false { \"rate\": 0.9 })"]
+      ("Continue previously-initiated pact identified by PACT-ID at STEP, " <>
+       "optionally specifying ROLLBACK (default is false), and " <>
+       "YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).")
+
+     ,defZRNative "pact-state" pactState
+      (funType (tTyObject TyAny) [] <> funType (tTyObject TyAny) [("clear",tTyBool)])
+      [LitExample "(pact-state)", LitExample "(pact-state true)"]
+      ("Inspect state from most recent pact execution. Returns object with fields " <>
+      "'pactId': pact ID; 'yield': yield result or 'false' if none; 'step': executed step; " <>
+      "'executed': indicates if step was skipped because entity did not match. " <>
+      "With CLEAR argument, erases pact from repl state.")
+
      ,defZRNative "env-entity" setentity
       (funType tTyString [] <> funType tTyString [("entity",tTyString)])
       [LitExample "(env-entity \"my-org\")", LitExample "(env-entity)"]
-      ("Set environment confidential ENTITY id, or unset with no argument. " <>
-      "Clears any previous pact execution state.")
+      ("Set environment confidential ENTITY id, or unset with no argument.")
      ,defZRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
       [LitExample "(begin-tx \"load module\")"] "Begin transaction with optional NAME."
@@ -275,57 +274,56 @@ setmsg i [TLitString j] =
 setmsg _ [a] = setenv eeMsgBody (toJSON a) >> return (tStr "Setting transaction data")
 setmsg i as = argsError i as
 
-
-setstep :: RNativeFun LibState
-setstep i as = case as of
-  [] -> setstep' Nothing >> return (tStr "Un-setting step")
-  [TLitInteger j] -> do
-    setstep' (Just $ PactStep (fromIntegral j) False def def)
-    return $ tStr "Setting step"
-  [TLitInteger j,TLiteral (LBool b) _] -> do
-    setstep' (Just $ PactStep (fromIntegral j) b def def)
-    return $ tStr "Setting step and rollback"
-  [TLitInteger j,TLiteral (LBool b) _,o@TObject{}] -> do
-    setstep' (Just $ PactStep (fromIntegral j) b def (Just o))
-    return $ tStr "Setting step, rollback, and resume value"
+continuePact :: RNativeFun LibState
+continuePact i as = case as of
+  [TLitInteger pid,TLitInteger step] -> go pid step False Nothing
+  [TLitInteger pid,TLitInteger step,TLitBool rollback] -> go pid step rollback Nothing
+  [TLitInteger pid,TLitInteger step,TLitBool rollback,o@TObject {}] -> go pid step rollback (Just o)
   _ -> argsError i as
   where
-    setstep' s = do
-      setenv eePactStep s
-      evalPactExec .= Nothing
+    go :: Integer -> Integer -> Bool -> Maybe (Term Name) -> Eval LibState (Term Name)
+    go pid step rollback userResume = do
+      resume <- case userResume of
+        Just r -> return $ Just r
+        Nothing -> use evalPactExec >>= \pe -> case pe of
+          Nothing -> return Nothing
+          Just PactExec{..} -> return $ _peYield
+      let pactId = (PactId $ fromIntegral pid)
+          pactStep = PactStep (fromIntegral step) rollback pactId resume
+      viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of
+        Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
+        Just PactExec{..} -> do
+          evalPactExec .= Nothing
+          local (set eePactStep $ Just pactStep) $ evalContinuation _peContinuation
 
-envPactId :: RNativeFun LibState
-envPactId i as = view eePactStep >>= \psm -> case psm of
-  Nothing -> evalError' i "no pact state set currently"
-  Just ps@PactStep{..} -> case as of
-    [] -> return $ toTerm _psPactId
-    [TLitString pid] -> do
-      setenv eePactStep $ Just $ set psPactId (PactId pid) ps
-      return $ tStr $ "Setting pact id to " <> tShow pid
-    _ -> argsError i as
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
   [TLitString s] -> do
     setenv eeEntity $ Just (EntityName s)
-    evalPactExec .= Nothing
     return (tStr $ "Set entity to " <> s)
   [] -> do
     setenv eeEntity Nothing
-    evalPactExec .= Nothing
     return (tStr "Unset entity")
   _ -> argsError i as
 
 pactState :: RNativeFun LibState
-pactState i [] = do
-  e <- use evalPactExec
-  case e of
-    Nothing -> evalError' i "pact-state: no pact exec in context"
-    Just PactExec{..} -> return $ toTObject TyAny def $
-      [("yield",fromMaybe (toTerm False) _peYield)
-      ,("executed",toTerm _peExecuted)
-      ,("step",toTerm _peStep)]
-pactState i as = argsError i as
+pactState i as = case as of
+  [] -> go False
+  [TLitBool clear] -> go clear
+  _ -> argsError i as
+  where
+    go clear = do
+      e <- use evalPactExec
+      when clear $ evalPactExec .= Nothing
+      case e of
+        Nothing -> evalError' i "pact-state: no pact exec in context"
+        Just PactExec{..} -> return $ toTObject TyAny def $
+          [("yield",fromMaybe (toTerm False) _peYield)
+          ,("executed",toTerm _peExecuted)
+          ,("step",toTerm _peStep)
+          ,("pactId",toTerm _pePactId)]
+
 
 txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name
 txmsg n tid s = tStr $ s <> " Tx " <> pack (show tid) <> maybe "" (": " <>) n

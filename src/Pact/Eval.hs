@@ -42,6 +42,7 @@ module Pact.Eval
     ,revokeCapability,revokeAllCapabilities
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
+    ,evalContinuation
     ) where
 
 import Control.Lens hiding (DefName)
@@ -273,6 +274,10 @@ eval (TModule (MDInterface m) bod i) =
     writeRow i Write Modules (_interfaceName mangledI) (derefDef <$> govI)
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 eval t = enscope t >>= reduce
+
+
+evalContinuation :: PactContinuation -> Eval e (Term Name)
+evalContinuation (PactContinuation app) = reduceApp app
 
 
 evalUse :: Use -> Eval e ()
@@ -581,14 +586,20 @@ appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App (TDef d@Def{..} _) as ai) = do
+reduceApp (App td@(TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
   af <- prepareUserAppArgs d as
   evalUserAppBody d af ai g $ \bod' ->
     case _dDefType of
-      Defun -> reduceBody bod'
-      Defpact -> applyPact bod'
-      Defcap -> evalError ai "Cannot directly evaluate defcap"
+      Defun ->
+        reduceBody bod'
+      Defpact ->
+        -- the pact continuation is an App of the defpact plus the strictly-evaluated args,
+        -- re-lifted to support calling `reduceApp` again later.
+        let continuation = (App td (map liftTerm $ fst af) ai)
+        in applyPact continuation bod'
+      Defcap ->
+        evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App r _ ai) = evalError ai $ "Expected def: " <> pretty r
 
@@ -632,14 +643,15 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
 -- defaulting to the first step.
-applyPact ::  Term Ref ->  Eval e (Term Name)
-applyPact (TList steps _ i) = do
+applyPact :: App (Term Ref) -> Term Ref -> Eval e (Term Name)
+applyPact app (TList steps _ i) = do
   -- only one pact allowed in a transaction
   use evalPactExec >>= \bad -> unless (isNothing bad) $ evalError i "Nested pact execution, aborting"
   -- get step from environment or create a new one
   PactStep{..} <- view eePactStep >>= \ps -> case ps of
-    Nothing -> view eeTxId >>= \tid ->
-      return $ PactStep 0 False (PactId $ maybe "[localPactId]" (pack . show) tid) Nothing
+    Nothing -> view eeTxId >>= \tid -> case tid of
+      Just (TxId t) -> return $ PactStep 0 False (PactId t) Nothing
+      Nothing -> evalError i $ "applyPact: pacts not executable in local context"
     Just v -> return v
   -- retrieve indicated step from code
   s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps `atMay` _psStep
@@ -647,7 +659,8 @@ applyPact (TList steps _ i) = do
     step@TStep {} -> do
       stepEntity <- traverse reduce (_tStepEntity step)
       let
-        initExec executing = evalPactExec .= Just (PactExec (length steps) Nothing executing _psStep _psPactId)
+        initExec executing = evalPactExec .=
+          Just (PactExec (length steps) Nothing executing _psStep _psPactId (PactContinuation app))
         execStep = do
           initExec True
           case (_psRollback,_tStepRollback step) of
@@ -663,7 +676,7 @@ applyPact (TList steps _ i) = do
         Just t -> evalError (_tInfo t) "step entity must be String value"
         Nothing -> execStep -- "public" step exec
     t -> evalError (_tInfo t) "expected step"
-applyPact t = evalError (_tInfo t) "applyPact: expected list of steps"
+applyPact _ t = evalError (_tInfo t) "applyPact: expected list of steps"
 
 
 -- | Create special error form handled in 'reduceApp'

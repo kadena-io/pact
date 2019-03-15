@@ -1,6 +1,6 @@
 # Debtor (Alice) cannot finish alone
 type: "cont"
-txId: 5
+pactId: 5
 step: 1
 rollback: False
 keyPairs:
