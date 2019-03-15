@@ -170,7 +170,7 @@ instance Show EntityName where show (EntityName t) = show t
 newtype PactContinuation = PactContinuation (App (Term Ref))
   deriving (Eq,Show)
 
--- | Runtime capture of pact execution.
+-- | Result of evaluation of a 'defpact'.
 data PactExec = PactExec
   { -- | Count of steps in pact (discovered when code is executed)
     _peStepCount :: Int

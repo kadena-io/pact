@@ -121,7 +121,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
       state@CommandState{..} <- liftIO $ readMVar _ceState
       case M.lookup _cmPactId _csPacts of
         Nothing -> throwCmdEx $ "applyContinuation: pact ID not found: " ++ show _cmPactId
-        Just pact@PactExec{..} -> do
+        Just PactExec{..} -> do
           -- Verify valid ContMsg Step
           when (_cmStep < 0 || _cmStep >= _peStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
           if _cmRollback
@@ -146,7 +146,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
                                    return _erExec
               if _cmRollback
                 then rollbackUpdate env msg state
-                else continuationUpdate env msg state pact exec
+                else continuationUpdate env msg state exec
               return $ jsonResult _ceMode rk _erGas $ CommandSuccess (last _erOutput)
 
 rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
@@ -158,18 +158,17 @@ rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
     ++ show _cmPactId
   void $ liftIO $ swapMVar _ceState newState
 
-continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> PactExec -> PactExec -> CommandM p ()
-continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} oldPactExec newPactExec = do
+continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> PactExec -> CommandM p ()
+continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} newPactExec@PactExec{..} = do
   let nextStep = succ _cmStep
-      isLast = nextStep >= (_peStepCount oldPactExec)
+      isLast = nextStep >= _peStepCount
       updateState pacts = CommandState _csRefStore pacts -- never loading modules during continuations
-      pactId = _pePactId oldPactExec
   if isLast
     then do
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: continuationUpdate: reaping pact: "
-        ++ show pactId
-      void $ liftIO $ swapMVar _ceState $ updateState $ M.delete pactId _csPacts
+        ++ show _pePactId
+      void $ liftIO $ swapMVar _ceState $ updateState $ M.delete _pePactId _csPacts
     else do
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
-        ++ show pactId ++ ": " ++ show newPactExec
-      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert pactId newPactExec _csPacts
+        ++ show _pePactId ++ ": " ++ show newPactExec
+      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert _pePactId newPactExec _csPacts

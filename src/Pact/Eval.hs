@@ -591,9 +591,15 @@ reduceApp (App td@(TDef d@Def{..} _) as ai) = do
   af <- prepareUserAppArgs d as
   evalUserAppBody d af ai g $ \bod' ->
     case _dDefType of
-      Defun -> reduceBody bod'
-      Defpact -> applyPact (App td (map liftTerm $ fst af) ai) bod'
-      Defcap -> evalError ai "Cannot directly evaluate defcap"
+      Defun ->
+        reduceBody bod'
+      Defpact ->
+        -- the pact continuation is an App of the defpact plus the strictly-evaluated args,
+        -- re-lifted to support calling `reduceApp` again later.
+        let continuation = (App td (map liftTerm $ fst af) ai)
+        in applyPact continuation bod'
+      Defcap ->
+        evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App r _ ai) = evalError ai $ "Expected def: " <> pretty r
 
