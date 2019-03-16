@@ -1,19 +1,26 @@
-build: off
+---
+build: false
+
+cache:
+  - "c:\\sr"
 
 before_test:
-# http://help.appveyor.com/discussions/problems/6312-curl-command-not-found
-- set PATH=C:\Program Files\Git\mingw64\bin;%PATH%
+  - "curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64"
+  - "7z x stack.zip stack.exe"
+  - "curl -sS -oz3.zip -L --insecure https://github.com/Z3Prover/z3/releases/download/z3-4.8.3/z3-4.8.3.7f5d66c3c299-x64-win.zip"
+  - "7z x z3.zip -oc:\\z3 -r"
+  - "set PATH=C:\\z3\\z3-4.8.3.7f5d66c3c299-x64-win\\bin;%PATH%"
 
-- curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64
-- 7z x stack.zip stack.exe
-
-clone_folder: "c:\\stack"
 environment:
   global:
     STACK_ROOT: "c:\\sr"
 
+    # Override the temp directory to avoid sed escaping issues
+    # See https://github.com/haskell/cabal/issues/5386
+    TMP: "C:\\Users\\appveyor\\AppData\\Local\\Temp"
+
+image: "Visual Studio 2017"
+
 test_script:
-- stack setup > nul
-# The ugly echo "" hack is to avoid complaints about 0 being an invalid file
-# descriptor
-- echo "" | stack --no-terminal test
+  - "stack build --only-dependencies"
+  - "stack build"
