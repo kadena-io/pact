@@ -15,7 +15,4 @@ extra-deps:
   - hw-hspec-hedgehog-0.1.0.5
   - git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
-  - constraints-extras-0.2.0.0
-  # this is pre-sbv-8.1 (switch when it's released)
-  - git: https://github.com/LeventErkok/sbv.git
-    commit: 68375576f87d17a2da759c56f7147f4e559471a2
+  - sbv-8.1
