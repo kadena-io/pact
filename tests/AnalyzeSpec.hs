@@ -2200,6 +2200,25 @@ spec = describe "analyze" $ do
       `shouldBe`
       allA1 ty (CoreProp (ListAt SBool 0 (CoreProp (LiteralList SBool [ a1 ]))))
 
+    describe "evaluation by sbv" $ do
+      -- SBV assumes formulas are always written in prenex-normal form.
+      -- `(exists i. i > 0) /\ not (exists i. i > 0)` is clearly not true.
+      -- however, in the absence of prenex normalization, SBV interprets this
+      -- as `exists i j. i > 0 /\ not (j > 0)`, which _is_ true.
+      --
+      -- https://github.com/LeventErkok/sbv/issues/256
+      let code' = [text|
+            (defun test:bool ()
+              @model
+                [ (property
+                    (and
+                      (exists (i:integer) (> i 0))
+                      (not (exists (i:integer) (> i 0)))))
+                ]
+              true)
+            |]
+      expectFalsified code'
+
   describe "prop parse / typecheck" $ do
     let parseExprs' :: Text -> Either String [Exp Info]
         parseExprs' t = parseExprs t & traverse . traverse . traverse .~ dummyInfo
