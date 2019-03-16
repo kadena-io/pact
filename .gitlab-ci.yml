@@ -35,3 +35,10 @@ pages:
   artifacts:
     paths:
     - public/
+
+pact-linux-static:
+  stage: build
+  script:
+    - nix-build static.nix --argstr system x86_64-linux
+  tags:
+    - linux
