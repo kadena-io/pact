@@ -77,6 +77,7 @@ library
   if !impl(ghcjs)
     hs-source-dirs: src-ghc
     exposed-modules:
+      Pact.Analyze
       Pact.Analyze.Alloc
       Pact.Analyze.Eval
       Pact.Analyze.Eval.Invariant

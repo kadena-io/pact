@@ -139,7 +139,7 @@ inject' = review subP'
 project' :: sub :*<: sup => sup a -> Maybe (sub (Concrete a))
 project' = preview subP'
 
--- | An open term (: 'b') with a free variable (: 'a').
+-- | An open term (@: b@) with a free variable (@: a@).
 data Open (a :: Ty) (tm :: Ty -> *) (b :: Ty) = Open !VarId !Text !(tm b)
   deriving (Eq, Show)
 
@@ -153,14 +153,14 @@ data Open (a :: Ty) (tm :: Ty -> *) (b :: Ty) = Open !VarId !Text !(tm b)
 -- This consists of:
 --
 -- * comparisons
---   - { <, >, <=, >= } apply to { integer, decimal, string, time }
---   - { =, != } apply to { integer, decimal, string, time, bool, keyset }
+--     - @{ '<', '>', '<=', '>=' }@ apply to @{ integer, decimal, string, time }@
+--     - @{ =, != }@ apply to @{ integer, decimal, string, time, bool, keyset }@
 -- * literals
 -- * variables
 -- * logical operations
 -- * string length and concatenation
--- * 'add-time'
--- * 'at'
+-- * @add-time@
+-- * @at@
 -- * lit operations
 data Core (t :: Ty -> *) (a :: Ty) where
   Lit :: Concrete a -> Core t a
