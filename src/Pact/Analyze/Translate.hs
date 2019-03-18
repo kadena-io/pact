@@ -530,7 +530,7 @@ translatePact :: [AST Node] -> TranslateM [PactStep]
 translatePact nodes = do
   preStepsPath <- use tsCurrentPath
 
-  preSteps <- go True nodes
+  protoSteps <- go True nodes
 
   postSnVertex <- use tsPathHead
   snPath <- use tsCurrentPath
@@ -555,10 +555,10 @@ translatePact nodes = do
           pure (postRollback, cancel:cancels, Just rollback : rollbacks)
       )
     (postLastCancelV, [], [])
-    (tail $ reverse preSteps)
+    (tail $ reverse protoSteps)
 
   let steps =
-        zip3 (preSteps ^.. traverse . _1)
+        zip3 (protoSteps ^.. traverse . _1)
              (Nothing : fmap Just cancels) (rollbacks <> [Nothing]) <&>
           \(Step exec p mEntity _ _, mCancel, mRollback)
             -> Step exec p mEntity mCancel mRollback
