@@ -26,7 +26,7 @@ import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, toListOf, use, view, zoom,
                                              (%=), (%~), (+~), (.=), (.~),
-                                             (<>~), (?=), (^.), (<&>))
+                                             (<>~), (?=), (^.), (<&>), _1, (^..))
 import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -34,7 +34,7 @@ import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, evalStateT,
                                              modify', runStateT)
-import           Data.Foldable              (foldl', for_)
+import           Data.Foldable              (foldl', for_, foldlM)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe, isNothing)
@@ -527,23 +527,77 @@ translateBody = \case
     pure $ Some ty $ Sequence someExpr exprs
 
 translatePact :: [AST Node] -> TranslateM [PactStep]
-translatePact = undefined
+translatePact nodes = do
+  preStepsPath <- use tsCurrentPath
 
--- nodes = do
---   -- steps <- go True
---   preStepsPath <- use tsCurrentPath
+  preSteps <- go True nodes
 
---   _todo
+  postSnVertex <- use tsPathHead
+  snPath <- use tsCurrentPath
 
---   -- TODO: loop edge from after final step to the sink should have the same path
---   --       as the final step
+  postLastCancelV <- extendPath
 
---   where
---     -- We don't generate a cancel var on the first step but we do for all
---     -- subsequent steps.
---     go firstStep = \case
---       []       -> pure []
---       ast:asts -> (:) <$> translateStep firstStep ast <*> go False asts
+  (sinkV, reverse -> cancels, reverse -> rollbacks) <- foldlM
+    (\(rightV, cancels, rollbacks) (_step, leftV, mRollback) -> do
+      tsPathHead .= leftV
+      cancelPath <- Path <$> genTagId
+      extendPathTo rightV
+      cancelVid <- genVarId
+      let cancel = (cancelPath, cancelVid)
+      case mRollback of
+        Nothing
+          -> pure (rightV, cancel:cancels, Nothing : rollbacks)
+        Just rollbackA -> do
+          rollback <- (,)
+            <$> startNewSubpath
+            <*> translateNode rollbackA
+          postRollback <- extendPath
+          pure (postRollback, cancel:cancels, Just rollback : rollbacks)
+      )
+    (postLastCancelV, [], [])
+    (tail $ reverse preSteps)
+
+  let steps =
+        zip3 (preSteps ^.. traverse . _1)
+             (Nothing : fmap Just cancels) (rollbacks <> [Nothing]) <&>
+          \(Step exec p mEntity _ _, mCancel, mRollback)
+            -> Step exec p mEntity mCancel mRollback
+
+  tsNondets .= fmap snd cancels
+
+  -- connect sink
+  tsPathHead .= postSnVertex
+  tsCurrentPath .= snPath
+  extendPathTo sinkV
+
+  -- restore initial path
+  tsCurrentPath .= preStepsPath
+
+  pure steps
+
+  where
+    -- We don't generate a cancel var on the first step but we do for all
+    -- subsequent steps.
+    go firstStep = \case
+      []       -> pure []
+      ast:asts -> (:) <$> translateStep firstStep ast <*> go False asts
+
+translateStep
+  :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
+translateStep firstStep = \case
+  AST_Step _node entity exec rollback -> do
+    let genPath = Path <$> genTagId
+    p <- if firstStep then use tsCurrentPath else do
+      p <- genPath
+      startSubpath p
+      pure p
+    mEntity <- for entity $ \tm -> do
+      Some SStr entity' <- translateNode tm
+      pure entity'
+    Some ty exec' <- translateNode exec
+    postVertex <- extendPath
+    pure (Step (exec' :< ty) p mEntity Nothing Nothing, postVertex, rollback)
+  astNode -> throwError' $ UnexpectedPactNode astNode
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -654,25 +708,6 @@ translateGuard guardA = do
   Some SGuard guardT <- translateNode guardA
   tid <- tagGuard $ guardA ^. aNode
   return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
-
-translateStep :: Bool -> AST Node -> TranslateM PactStep
-translateStep firstStep = \case
-  AST_Step _node entity exec rollback -> do
-    Some ty exec' <- translateNode exec
-    mEntity <- for entity $ \tm -> do
-      Some SStr entity' <- translateNode tm
-      pure entity'
-    mCancelVid <- case firstStep of
-      False -> pure Nothing
-      True  -> do
-        cancelVid <- genVarId
-        tsNondets %= (cancelVid:)
-        pure $ Just cancelVid
-    mRollback <- traverse translateNode rollback
-    pure $ Step (exec' :< ty) (error "TODO") mEntity 
-      ((error "TODO",) <$> mCancelVid)
-      ((error "TODO",) <$> mRollback)
-  astNode -> throwError' $ UnexpectedPactNode astNode
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of

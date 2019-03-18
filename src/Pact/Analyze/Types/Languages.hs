@@ -1350,9 +1350,13 @@ data PactStep where
     :: Term a :< SingTy a  -- ^ exec
     -> Path                -- ^ corresponds to the graph edge for this step
     -> Maybe (Term 'TyStr) -- ^ entity
+    -- first:  Nothing
+    -- others: Just
     -> Maybe (Path, VarId) -- ^ does this step cancel. invariant: the first
                            -- step does not have this vid. all other steps do.
                            -- "C"
+    -- last:   Nothing
+    -- others: Just or Nothing
     -> Maybe (Path, ETerm) -- ^ rollback (R1)
     -> PactStep
 
