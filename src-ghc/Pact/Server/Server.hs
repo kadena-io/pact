@@ -29,7 +29,8 @@ import qualified Data.ByteString.Char8 as B8
 
 import qualified Data.HashMap.Strict as HashMap
 
-import Data.Word (Word16)
+import Data.Int
+import Data.Word
 import GHC.Generics
 import System.Log.FastLogger
 import Data.Default
@@ -51,7 +52,10 @@ data Config = Config {
   _verbose :: Bool,
   _entity :: Maybe EntityName,
   _gasLimit :: Maybe Int,
-  _gasRate :: Maybe Int
+  _gasRate :: Maybe Int,
+  _chainId :: Maybe Word32,
+  _blockHeight :: Maybe Word64,
+  _blockTime :: Maybe Int64
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
@@ -91,6 +95,9 @@ setupServer configFile = do
           _entity
           _gasLimit
           _gasRate
+          _chainId
+          _blockHeight
+          _blockTime
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
   asyncHist <- async (runHistoryService histConf Nothing)

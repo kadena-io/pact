@@ -104,8 +104,7 @@ import Data.Int (Int64)
 import Data.Serialize (Serialize)
 import Data.Eq.Deriving
 import Text.Show.Deriving
-import Data.Word (Word64)
-
+import Data.Word (Word64, Word32)
 
 import Pact.Types.Parser
 import Pact.Types.Pretty hiding (dot)
@@ -1030,6 +1029,9 @@ instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
 instance ToTerm PactId where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm Word32 where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm Word64 where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm Int64 where toTerm = tLit . LInteger . fromIntegral
 
 
 toTObject :: Type (Term n) -> Info -> [(FieldKey,Term n)] -> Term n

@@ -31,10 +31,6 @@ module Pact.Types.Command
   , PPKScheme(..)
 #endif
   , ProcessedCommand(..),_ProcSucc,_ProcFail
-  , Address(..),aFrom,aTo
-  , PrivateMeta(..),pmAddress
-  , PublicMeta(..),pmChainId,pmSender,pmGasLimit,pmGasPrice,pmFee
-  , HasPlafMeta(..)
   , Payload(..),pMeta,pNonce,pPayload
   , ParsedCode(..),pcCode,pcExps
   , UserSig(..),usScheme,usPubKey,usAddress,usSig
@@ -59,8 +55,6 @@ import Data.String
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text hiding (filter, all)
-import qualified Data.Set as S
-import Data.Default (Default,def)
 import Data.Maybe  (fromMaybe)
 
 
@@ -189,55 +183,6 @@ data ParsedCode = ParsedCode
 instance NFData ParsedCode
 
 
--- | Confidential/Encrypted addressing info, for use in metadata on privacy-supporting platforms.
-data Address = Address {
-    _aFrom :: EntityName
-  , _aTo :: S.Set EntityName
-  } deriving (Eq,Show,Ord,Generic)
-instance NFData Address
-instance Serialize Address
-instance ToJSON Address where toJSON = lensyToJSON 2
-instance FromJSON Address where parseJSON = lensyParseJSON 2
-
-data PrivateMeta = PrivateMeta
-  { _pmAddress :: Maybe Address
-  } deriving (Eq,Show,Generic)
-instance Default PrivateMeta where def = PrivateMeta def
-instance ToJSON PrivateMeta where toJSON = lensyToJSON 3
-instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
-instance NFData PrivateMeta
-instance Serialize PrivateMeta
-
--- | Contains all necessary metadata for a Chainweb-style public chain.
-data PublicMeta = PublicMeta
-  { _pmChainId :: Text
-  , _pmSender :: Text
-  , _pmGasLimit :: ParsedInteger
-  , _pmGasPrice :: ParsedDecimal
-  , _pmFee :: ParsedDecimal
-  } deriving (Eq,Show,Generic)
-instance Default PublicMeta where def = PublicMeta "" "" 0 0 0
-instance ToJSON PublicMeta where toJSON = lensyToJSON 3
-instance FromJSON PublicMeta where parseJSON = lensyParseJSON 3
-instance NFData PublicMeta
-instance Serialize PublicMeta
-
-class HasPlafMeta a where
-  getPrivateMeta :: a -> PrivateMeta
-  getPublicMeta :: a -> PublicMeta
-
-instance HasPlafMeta PrivateMeta where
-  getPrivateMeta = id
-  getPublicMeta = const def
-
-instance HasPlafMeta PublicMeta where
-  getPrivateMeta = const def
-  getPublicMeta = id
-
-instance HasPlafMeta () where
-  getPrivateMeta = const def
-  getPublicMeta = const def
-
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
 data Payload m c = Payload
   { _pPayload :: !(PactRPC c)
@@ -352,9 +297,6 @@ initialRequestKey = RequestKey initialHash
 makeLenses ''UserSig
 makeLenses ''CommandExecInterface
 makeLenses ''ExecutionMode
-makeLenses ''Address
-makeLenses ''PrivateMeta
-makeLenses ''PublicMeta
 makeLenses ''Command
 makeLenses ''ParsedCode
 makeLenses ''Payload

@@ -105,7 +105,7 @@ initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
   return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0)
-    def def mv repldb def initialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv)
+    def def mv repldb def initialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv) def
 
 
 spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
