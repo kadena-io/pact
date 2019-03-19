@@ -587,10 +587,7 @@ translateStep
 translateStep firstStep = \case
   AST_Step _node entity exec rollback -> do
     let genPath = Path <$> genTagId
-    p <- if firstStep then use tsCurrentPath else do
-      p <- genPath
-      startSubpath p
-      pure p
+    p <- if firstStep then use tsCurrentPath else startNewSubpath
     mEntity <- for entity $ \tm -> do
       Some SStr entity' <- translateNode tm
       pure entity'
