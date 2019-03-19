@@ -467,8 +467,8 @@ extendPathTo toV = do
 extendPath :: TranslateM Vertex
 extendPath = do
   v' <- genVertex
-  tsPathHead .= v'
   extendPathTo v'
+  tsPathHead .= v'
   pure v'
 
 -- | Extends multiple separate paths to a single join point. Assumes that each
