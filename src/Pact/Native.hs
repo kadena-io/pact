@@ -313,15 +313,6 @@ chainDataDef = defRNative "chain-data" chainData (funType obj [])
         ]
     chainData i as = argsError i as
 
-envChainDataDef :: NativeDef
-envChainDataDef = defRNative "env-chain-data" envChainData
-    (funType tTyString [("new-data", obj)])
-    ["(env-chain-data { \"chain-id\": 2, \"block-height\": 20 })"]
-    "Update existing entries 'chain-data' with new values, replacing those items only."
-  where
-    envChainData :: RNativeFun e
-    envChainData = undefined
-
 mapDef :: NativeDef
 mapDef = defNative "map" map'
   (funType (TyList a) [("app",lam b a),("list",TyList b)])
@@ -485,7 +476,6 @@ langDefs =
     ,defineNamespaceDef
     ,namespaceDef
     ,chainDataDef
-    ,envChainDataDef
     ])
     where
           d = mkTyVar "d" []

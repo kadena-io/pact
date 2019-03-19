@@ -1123,6 +1123,7 @@ makeLenses ''Def
 makeLenses ''ModuleName
 makePrisms ''DefType
 makeLenses ''Object
+makeLenses ''FieldKey
 
 deriveEq1 ''App
 deriveEq1 ''BindType
