@@ -461,6 +461,7 @@ extendPathTo toV = do
   let e = (v, toV)
   tsEdgeEvents.at e ?= edgeTrace
   addPathEdge path e
+  tsPathHead .= v'
 
 -- | Extends the previous path head to a new 'Vertex', flushing accumulated
 -- events to 'tsEdgeEvents'.
@@ -468,7 +469,6 @@ extendPath :: TranslateM Vertex
 extendPath = do
   v' <- genVertex
   extendPathTo v'
-  tsPathHead .= v'
   pure v'
 
 -- | Extends multiple separate paths to a single join point. Assumes that each
