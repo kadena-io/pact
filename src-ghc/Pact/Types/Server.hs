@@ -23,7 +23,7 @@
 --
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
-  , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate, ccChainId, ccBlockHeight, ccBlockTime
+  , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
   , CommandState(..), csRefStore, csPacts
   , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger, cePublicData, ceGasEnv
   , CommandM, runCommand, throwCmdEx
@@ -79,9 +79,6 @@ data CommandConfig = CommandConfig {
     , _ccEntity :: Maybe EntityName
     , _ccGasLimit :: Maybe Int
     , _ccGasRate :: Maybe Int
-    , _ccChainId :: Maybe Word32
-    , _ccBlockHeight :: Maybe Word64
-    , _ccBlockTime :: Maybe Int64
     }
 $(makeLenses ''CommandConfig)
 

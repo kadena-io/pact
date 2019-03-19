@@ -53,9 +53,6 @@ data Config = Config {
   _entity :: Maybe EntityName,
   _gasLimit :: Maybe Int,
   _gasRate :: Maybe Int,
-  _chainId :: Maybe Word32,
-  _blockHeight :: Maybe Word64,
-  _blockTime :: Maybe Int64
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1

@@ -11,12 +11,13 @@
 -- Meta data and its types
 --
 module Pact.Types.ChainMeta
-  ( -- * data
+  ( -- * types
     Address(..)
   , PrivateMeta(..)
   , PublicMeta(..)
   , HasPlafMeta(..)
   , PublicData(..)
+  , EntityName(..)
     -- * optics
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmFee

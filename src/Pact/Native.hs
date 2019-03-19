@@ -289,7 +289,8 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
 chainDataDef :: NativeDef
 chainDataDef = defRNative "chain-data" chainData (funType (tTyObject a) [])
     ["(chain-data)"]
-    "Read transaction public metadata."
+    "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
+    \'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
   where
     chainData :: RNativeFun e
     chainData i as = case as of

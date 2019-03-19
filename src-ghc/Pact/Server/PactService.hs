@@ -44,9 +44,9 @@ initPactService CommandConfig {..} loggers = do
       klog s = logLog logger "INIT" s
       gasRate = fromMaybe 0 _ccGasRate
       gasModel = constGasModel (fromIntegral gasRate)
-      chainId = fromMaybe 0 _ccChainId
-      blockHeight = fromMaybe 0 _ccBlockHeight
-      blockTime = fromMaybe 0 _ccBlockTime
+      chainId = 0
+      blockHeight = 0
+      blockTime = 0
 
   let mkCEI p@PactDbEnv {..} = do
         cmdVar <- newMVar (CommandState initRefStore M.empty)
