@@ -61,10 +61,10 @@ import Data.Maybe  (fromMaybe)
 import GHC.Generics
 import Prelude
 
+import Pact.Parse (parseExprs)
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Orphans ()
 import Pact.Types.RPC
-import Pact.Parse
 
 
 #if !defined(ghcjs_HOST_OS)

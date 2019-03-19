@@ -12,7 +12,7 @@ import qualified Crypto.Hash              as H
 
 import Pact.ApiReq
 import Pact.Types.Crypto
-import Pact.Types.ChainMeta hiding (Address)
+import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromJSON')
 
 
