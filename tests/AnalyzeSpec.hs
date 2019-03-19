@@ -3046,11 +3046,13 @@ spec = describe "analyze" $ do
 
   describe "checking pacts" $ do
     -- TODO:
-    -- * longer pacts
-    -- * shorter pacts?
+    -- X longer pacts
+    -- X shorter pacts?
     -- * steps with / without rollbacks
     -- * public / private
     -- * steps with / without specified entities
+    -- * yield / resume
+    -- * pact-id
 
     describe "translating a pact" $ do
       let code = [text|
@@ -3107,3 +3109,30 @@ spec = describe "analyze" $ do
               (update accounts acct { "balance": balance }))
             |]
       expectVerified code'
+
+      -- single step pact:
+      let code'' = [text|
+            (defpact payment (payer)
+              @doc "this is a pact"
+              @model
+                [ (property (= (column-delta accounts 'balance) 0))
+                ]
+              (step (update accounts acct { "balance": (- bal 0) })))
+            |]
+      expectVerified code''
+
+      -- many step pact:
+      let code'' = [text|
+            (defpact payment (payer)
+              @doc "this is a pact"
+              @model
+                [ (property (= (column-delta accounts 'balance) 0))
+                ]
+              (step (update accounts acct { "balance": (- bal 1) }))
+              (step (update accounts acct { "balance": (+ bal 1) }))
+              (step (update accounts acct { "balance": (- bal 2) }))
+              (step (update accounts acct { "balance": (+ bal 2) }))
+              (step (update accounts acct { "balance": (- bal 3) }))
+              (step (update accounts acct { "balance": (+ bal 3) })))
+            |]
+      expectVerified code''
