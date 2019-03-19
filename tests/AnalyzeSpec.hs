@@ -3097,12 +3097,12 @@ spec = describe "analyze" $ do
                       (= (column-delta accounts 'balance) 0)))
                 ]
               (step-with-rollback payer-entity
-                (update-bal payer (- payer-bal amount))
-                (update-bal payer payer-bal))
+                (update-bal payer (- payer-bal amount) "step 1")
+                (update-bal payer payer-bal "rollback 1"))
               (step payee-entity
-                (update-bal payee (+ payee-bal amount))))
+                (update-bal payee (+ payee-bal amount) "step 2")))
 
-            (defun update-bal (acct balance)
+            (defun update-bal (acct balance msg:string)
               (enforce (>= balance 0)    "Non-positive balance")
               (update accounts acct { "balance": balance }))
             |]
