@@ -461,7 +461,7 @@ extendPathTo toV = do
   let e = (v, toV)
   tsEdgeEvents.at e ?= edgeTrace
   addPathEdge path e
-  tsPathHead .= v'
+  tsPathHead .= toV
 
 -- | Extends the previous path head to a new 'Vertex', flushing accumulated
 -- events to 'tsEdgeEvents'.
@@ -535,7 +535,7 @@ translatePact nodes = do
   postSnVertex <- use tsPathHead
   snPath <- use tsCurrentPath
 
-  postLastCancelV <- extendPath
+  postLastCancelV <- genVertex
 
   (sinkV, reverse -> cancels, reverse -> rollbacks) <- foldlM
     (\(rightV, cancels, rollbacks) (_step, leftV, mRollback) -> do
@@ -586,7 +586,6 @@ translateStep
   :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
 translateStep firstStep = \case
   AST_Step _node entity exec rollback -> do
-    let genPath = Path <$> genTagId
     p <- if firstStep then use tsCurrentPath else startNewSubpath
     mEntity <- for entity $ \tm -> do
       Some SStr entity' <- translateNode tm
