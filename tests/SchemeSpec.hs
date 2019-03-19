@@ -12,7 +12,7 @@ import qualified Crypto.Hash              as H
 
 import Pact.ApiReq
 import Pact.Types.Crypto
-import Pact.Types.Command hiding (Address)
+import Pact.Types.ChainMeta hiding (Address)
 import Pact.Types.Util (toB16Text, fromJSON')
 
 
@@ -65,7 +65,7 @@ testKeyPairImport = do
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
     kp <- mkKeyPairs [apiKP]
     (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
-    
+
   it "imports ETH Key Pair" $ do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
