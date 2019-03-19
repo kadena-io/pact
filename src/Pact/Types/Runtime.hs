@@ -47,11 +47,9 @@ module Pact.Types.Runtime
    module Pact.Types.ChainMeta
    ) where
 
-import GHC.Generics
 
 import Control.Arrow ((&&&))
 import Control.Lens hiding ((.=),DefName)
-import Control.DeepSeq
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
@@ -61,15 +59,10 @@ import qualified Data.HashMap.Strict as HM
 import Data.Aeson hiding (Object)
 import Data.String
 import Data.Default
-import Data.Int
 import Control.Monad.Catch
 import Control.Concurrent.MVar
-import Data.Serialize (Serialize)
-import Data.Hashable
 import qualified Data.Set as S
-import Data.Word (Word32, Word64)
 
-import Pact.Parse
 import Pact.Types.ChainMeta
 import Pact.Types.Gas
 import Pact.Types.Lang

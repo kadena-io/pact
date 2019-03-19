@@ -53,7 +53,6 @@ import Data.Text.Encoding
 import Data.Aeson
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
-import Data.Word
 import Data.Int
 
 import Prelude

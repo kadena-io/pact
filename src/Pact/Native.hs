@@ -287,32 +287,40 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
           "namespace: '" <> pretty name <> "' not defined"
 
 chainDataDef :: NativeDef
-chainDataDef = defRNative "chain-data" chainData (funType (tTyObject a) [])
+chainDataDef = defRNative "chain-data" chainData (funType obj [])
     ["(chain-data)"]
     "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
     \'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
   where
     chainData :: RNativeFun e
-    chainData i as = case as of
-      [] -> do
-        PublicData{..} <- view eePublicData
-        PublicMeta{..} <- view (eePublicData . pdPublicMeta)
+    chainData _ [] = do
+      PublicData{..} <- view eePublicData
 
-        let (ParsedInteger gl) = _pmGasLimit
-            (ParsedDecimal gp) = _pmGasPrice
-            (ParsedDecimal gf) = _pmFee
+      let PublicMeta{..} = _pdPublicMeta
 
-        pure $ toTObject TyAny def
-          [ ("chain-id"    , toTerm _pdChainId    )
-          , ("block-height", toTerm _pdBlockHeight)
-          , ("block-time"  , toTerm _pdBlockTime  )
-          , ("sender"      , toTerm _pmSender     )
-          , ("gas-limit"   , toTerm gl            )
-          , ("gas-price"   , toTerm gp            )
-          , ("gas-fee"     , toTerm gf            )
-          ]
-      _ -> argsError i as
+      let (ParsedInteger gl) = _pmGasLimit
+          (ParsedDecimal gp) = _pmGasPrice
+          (ParsedDecimal gf) = _pmFee
 
+      pure $ toTObject TyAny def
+        [ ("chain-id"    , toTerm _pdChainId    )
+        , ("block-height", toTerm _pdBlockHeight)
+        , ("block-time"  , toTerm _pdBlockTime  )
+        , ("sender"      , toTerm _pmSender     )
+        , ("gas-limit"   , toTerm gl            )
+        , ("gas-price"   , toTerm gp            )
+        , ("gas-fee"     , toTerm gf            )
+        ]
+    chainData i as = argsError i as
+
+envChainDataDef :: NativeDef
+envChainDataDef = defRNative "env-chain-data" envChainData
+    (funType tTyString [("new-data", obj)])
+    ["(env-chain-data { \"chain-id\": 2, \"block-height\": 20 })"]
+    "Update existing entries 'chain-data' with new values, replacing those items only."
+  where
+    envChainData :: RNativeFun e
+    envChainData = undefined
 
 mapDef :: NativeDef
 mapDef = defNative "map" map'
@@ -477,6 +485,7 @@ langDefs =
     ,defineNamespaceDef
     ,namespaceDef
     ,chainDataDef
+    ,envChainDataDef
     ])
     where
           d = mkTyVar "d" []
