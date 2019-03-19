@@ -26,9 +26,6 @@ import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.Catch
 
-import Criterion
-import Criterion.Types
-
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
@@ -43,6 +40,10 @@ import Data.Text.Encoding
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 #else
+
+import Criterion
+import Criterion.Types
+
 import Control.Monad.State.Strict (get)
 
 import Statistics.Types (Estimate(..))
