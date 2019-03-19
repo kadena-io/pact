@@ -294,13 +294,11 @@ chainDataDef = defRNative "chain-data" chainData (funType obj [])
   where
     chainData :: RNativeFun e
     chainData _ [] = do
-      PublicData{..} <- view eePublicData
+      pd <- view eePublicData
 
-      let PublicMeta{..} = _pdPublicMeta
-
-      let (ParsedInteger gl) = _pmGasLimit
-          (ParsedDecimal gp) = _pmGasPrice
-          (ParsedDecimal gf) = _pmFee
+      let (ParsedInteger gl) = _pmGasLimit _pdPublicMeta $ pd
+          (ParsedDecimal gp) = _pmGasPrice _pdPublicMeta $ pd
+          (ParsedDecimal gf) = _pmFee _pdPublicMeta $ pd
 
       pure $ toTObject TyAny def
         [ ("chain-id"    , toTerm _pdChainId    )
