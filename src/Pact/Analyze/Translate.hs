@@ -540,9 +540,9 @@ translatePact nodes = do
   (sinkV, reverse -> cancels, reverse -> rollbacks) <- foldlM
     (\(rightV, cancels, rollbacks) (_step, leftV, mRollback) -> do
       tsPathHead .= leftV
-      cancelPath <- Path <$> genTagId
-      extendPathTo rightV
+      cancelPath <- startNewSubpath
       cancelVid <- genVarId
+      extendPathTo rightV
       let cancel = (cancelPath, cancelVid)
       case mRollback of
         Nothing
