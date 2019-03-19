@@ -61,7 +61,6 @@ import Data.Maybe  (fromMaybe)
 import GHC.Generics
 import Prelude
 
-import Pact.Parse (parseExprs)
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Orphans ()
 import Pact.Types.RPC
@@ -69,8 +68,10 @@ import Pact.Types.RPC
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
-import Pact.Types.Crypto              as Base
 import qualified Crypto.Hash          as H
+
+import Pact.Parse (parseExprs)
+import Pact.Types.Crypto              as Base
 #else
 import Pact.Types.Hash
 import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
