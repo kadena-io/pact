@@ -528,20 +528,17 @@ translateBody = \case
 
 translatePact :: [AST Node] -> TranslateM [PactStep]
 translatePact nodes = do
-  preStepsPath <- use tsCurrentPath
-
-  protoSteps <- go True nodes
-
-  postSnVertex <- use tsPathHead
-  snPath <- use tsCurrentPath
-
+  preStepsPath    <- use tsCurrentPath
+  protoSteps      <- go True nodes
+  postSnVertex    <- use tsPathHead
+  snPath          <- use tsCurrentPath
   postLastCancelV <- genVertex
 
-  (sinkV, reverse -> cancels, reverse -> rollbacks) <- foldlM
+  (sinkV, cancels, rollbacks) <- foldlM
     (\(rightV, cancels, rollbacks) (_step, leftV, mRollback) -> do
       tsPathHead .= leftV
       cancelPath <- startNewSubpath
-      cancelVid <- genVarId
+      cancelVid  <- genVarId
       extendPathTo rightV
       let cancel = (cancelPath, cancelVid)
       case mRollback of
@@ -555,6 +552,7 @@ translatePact nodes = do
           pure (postRollback, cancel:cancels, Just rollback : rollbacks)
       )
     (postLastCancelV, [], [])
+    -- all but the last step, in reverse order
     (tail $ reverse protoSteps)
 
   let steps =
@@ -566,7 +564,7 @@ translatePact nodes = do
   tsNondets .= fmap snd cancels
 
   -- connect sink
-  tsPathHead .= postSnVertex
+  tsPathHead    .= postSnVertex
   tsCurrentPath .= snPath
   extendPathTo sinkV
 

@@ -3112,27 +3112,68 @@ spec = describe "analyze" $ do
 
       -- single step pact:
       let code'' = [text|
-            (defpact payment (payer)
+            (defpact payment ()
               @doc "this is a pact"
               @model
                 [ (property (= (column-delta accounts 'balance) 0))
                 ]
-              (step (update accounts acct { "balance": (- bal 0) })))
+              (step (doit 0)))
+
+              (defun doit (amt:integer)
+                (let ((acct "joel"))
+                  (with-read accounts acct { "balance" := bal }
+                    (update accounts acct { "balance": (+ bal amt) }))))
             |]
       expectVerified code''
 
       -- many step pact:
       let code'' = [text|
-            (defpact payment (payer)
+            (defpact payment ()
               @doc "this is a pact"
               @model
                 [ (property (= (column-delta accounts 'balance) 0))
                 ]
-              (step (update accounts acct { "balance": (- bal 1) }))
-              (step (update accounts acct { "balance": (+ bal 1) }))
-              (step (update accounts acct { "balance": (- bal 2) }))
-              (step (update accounts acct { "balance": (+ bal 2) }))
-              (step (update accounts acct { "balance": (- bal 3) }))
-              (step (update accounts acct { "balance": (+ bal 3) })))
+              (step (doit 0))
+              (step (doit 0))
+              (step (doit 0))
+              (step (doit 0))
+              (step (doit 0))
+              (step (doit 0)))
+
+              (defun doit (amt:integer)
+                (let ((acct "joel"))
+                  (with-read accounts acct { "balance" := bal }
+                    (update accounts acct { "balance": (+ bal amt) }))))
+            |]
+      expectVerified code''
+
+      -- many step pact:
+      let code'' = [text|
+            (defpact payment ()
+              @doc "this is a pact"
+              @model
+                [ (property (= (column-delta accounts 'balance) 0))
+                ]
+              (step-with-rollback
+                (doit (- 1))
+                (doit 1))
+              (step-with-rollback
+                (doit (- 2))
+                (doit 2))
+              (step-with-rollback
+                (doit (- 3))
+                (doit 3))
+              (step-with-rollback
+                (doit (- 4))
+                (doit 4))
+              (step-with-rollback
+                (doit (- 5))
+                (doit 5))
+              (step (doit 15)))
+
+              (defun doit (amt:integer)
+                (let ((acct "joel"))
+                  (with-read accounts acct { "balance" := bal }
+                    (update accounts acct { "balance": (+ bal amt) }))))
             |]
       expectVerified code''

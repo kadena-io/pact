@@ -635,7 +635,7 @@ evalTerm = \case
             tagFork successPath cancelPath (sansProv successChoice)
               (sansProv $ sNot cancel)
 
-            pure cancel
+            pure $ successChoice .&& cancel
 
         let -- Trigger the latest rollback if we cancel on this step
             rollbacks' = rollbacks & _head . _2 %~ (.|| cancel)
