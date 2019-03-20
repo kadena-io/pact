@@ -59,7 +59,7 @@ in (rp.ghcMusl64.override {
           # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
           # sbv 8.1
-          sbv = dontHaddock (dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
+          sbv = dontHaddock (dontCheck (self.callCabal2nix "sbv" (rp.nixpkgs.fetchFromGitHub {
             owner = "LeventErkok";
             repo = "sbv";
             rev = "365b1a369a2550d6284608df3fbc17e2663c4d3c";
