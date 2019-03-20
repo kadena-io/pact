@@ -300,7 +300,6 @@ chainDataDef = defRNative "chain-data" chainData (funType obj [])
 
       let (ParsedInteger gl) = _pmGasLimit
           (ParsedDecimal gp) = _pmGasPrice
-          (ParsedDecimal gf) = _pmFee
 
       pure $ toTObject TyAny def
         [ ("chain-id"    , toTerm _pdChainId    )
@@ -309,7 +308,6 @@ chainDataDef = defRNative "chain-data" chainData (funType obj [])
         , ("sender"      , toTerm _pmSender     )
         , ("gas-limit"   , toTerm gl            )
         , ("gas-price"   , toTerm gp            )
-        , ("gas-fee"     , toTerm gf            )
         ]
     chainData i as = argsError i as
 

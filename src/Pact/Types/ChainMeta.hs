@@ -20,7 +20,7 @@ module Pact.Types.ChainMeta
   , EntityName(..)
     -- * optics
   , aFrom, aTo
-  , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmFee
+  , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice
   , pdChainId, pdPublicMeta, pdBlockHeight, pdBlockTime
   ) where
 
@@ -81,11 +81,10 @@ data PublicMeta = PublicMeta
   , _pmSender :: Text
   , _pmGasLimit :: ParsedInteger
   , _pmGasPrice :: ParsedDecimal
-  , _pmFee :: ParsedDecimal
   } deriving (Eq, Show, Generic)
 makeLenses ''PublicMeta
 
-instance Default PublicMeta where def = PublicMeta "" "" 0 0 0
+instance Default PublicMeta where def = PublicMeta "" "" 0 0
 instance ToJSON PublicMeta where toJSON = lensyToJSON 3
 instance FromJSON PublicMeta where parseJSON = lensyParseJSON 3
 instance NFData PublicMeta

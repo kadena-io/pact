@@ -539,7 +539,7 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
         let ts = fmap fst ks
             ts' = S.fromList ts
             info = _faInfo i
-        
+
         unless (length ts == length ts') $ evalError info $
           "envChainData: cannot update duplicate keys: " <> pretty (ts \\ (S.toList ts'))
 
@@ -557,7 +557,6 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
 
     go i pd ((FieldKey k), (TLiteral (LDecimal l) _)) = case Text.unpack k of
       "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (ParsedDecimal l) pd
-      "gas-fee"   -> pure $ set (pdPublicMeta . pmFee) (ParsedDecimal l) pd
       t           -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
 
     go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of

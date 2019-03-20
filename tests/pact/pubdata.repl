@@ -5,7 +5,6 @@
 (expect "chain data sender initializes with \"\"" "" (at "sender" (chain-data)))
 (expect "chain data gas limit initializes with 0" 0 (at "gas-limit" (chain-data)))
 (expect "chain data gas price initializes with 0.0" 0.0 (at "gas-price" (chain-data)))
-(expect "chain data gas fee initializes with 0.0" 0.0 (at "gas-fee" (chain-data)))
 
 ;; Chain public metadata should reflect updates
 (env-chain-data { "chain-id": 2, "block-height": 20 })
