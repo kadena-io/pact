@@ -526,6 +526,76 @@ translateBody = \case
     Some ty exprs <- translateBody asts
     pure $ Some ty $ Sequence someExpr exprs
 
+-- Pact translation:
+--
+-- We translate steps in the order they'll be eventually evaluated, meaning we
+-- first translate each step, then each rollback. In the diagram we translate
+-- s1, s2, s3, r2, r1. Note that the c edges have no computation / translation.
+--
+--      src          sink
+--       +      /---->+
+--       |      |     ^
+--    s1 |      |     |
+--       |      | r1  |
+--       v  c2  |     |
+--       +----->+     |
+--       |      ^     |
+--    s2 |      |     |
+--       |      | r2  |
+--       v  c3  |     |
+--       +----->+     |
+--       |            |
+--    s3 |            |
+--       |            |
+--       v            |
+--       +------------/
+--
+-- This first diagram is for a pact with the following structure:
+--
+--     (defpact
+--       (step-with-rollback s1 r1)
+--       (step-with-rollback s2 r2)
+--       (step s3))
+--
+-- Note the numbering scheme:
+-- * steps are numbered how you might expect
+-- * rollbacks are numbered to match their corresponding step
+-- * cancels are numbered to match the step they're an alternative to
+--
+-- This means that if there are n step edges, there are:
+-- * n-1 cancel edges
+-- * from 0 to n-1 (inclusive) rollback edges
+--
+-- Furthermore, there are:
+-- * n vertices following a step (including the sink)
+-- * from 0 to n-1 (inclusive) vertices preceding a rollback
+--
+-- What if we drop the first rollback?
+--
+--     (defpact
+--       (step s1)
+--       (step-with-rollback s2 r2)
+--       (step s3))
+--
+-- The corresponding graph ends up looking like:
+--
+--      src    c2    sink
+--       +    /------>+
+--       |   /       /^
+--    s1 |  /       / |
+--       | /       /  |
+--       v/       /   |
+--       +       /    |
+--       |      /     |
+--    s2 |      |     |
+--       |      | r2  |
+--       v  c3  |     |
+--       +----->+     |
+--       |            |
+--    s3 |            |
+--       |            |
+--       v            |
+--       +------------/
 translatePact :: [AST Node] -> TranslateM [PactStep]
 translatePact nodes = do
   preStepsPath    <- use tsCurrentPath
@@ -537,29 +607,27 @@ translatePact nodes = do
   (sinkV, cancels, rollbacks) <- foldlM
     (\(rightV, cancels, rollbacks) (_step, leftV, mRollback) -> do
       tsPathHead .= leftV
-      cancelPath <- startNewSubpath
-      cancelVid  <- genVarId
+      cancel <- (,) <$> startNewSubpath <*> genVarId
       extendPathTo rightV
-      let cancel = (cancelPath, cancelVid)
       case mRollback of
         Nothing
-          -> pure (rightV, cancel:cancels, Nothing : rollbacks)
+          -> pure (rightV, cancel : cancels, Nothing : rollbacks)
         Just rollbackA -> do
           rollback <- (,)
             <$> startNewSubpath
             <*> translateNode rollbackA
           postRollback <- extendPath
-          pure (postRollback, cancel:cancels, Just rollback : rollbacks)
+          pure (postRollback, cancel : cancels, Just rollback : rollbacks)
       )
     (postLastCancelV, [], [])
     -- all but the last step, in reverse order
     (tail $ reverse protoSteps)
 
-  let steps =
-        zip3 (protoSteps ^.. traverse . _1)
-             (Nothing : fmap Just cancels) (rollbacks <> [Nothing]) <&>
-          \(Step exec p mEntity _ _, mCancel, mRollback)
-            -> Step exec p mEntity mCancel mRollback
+  let steps = zipWith3
+        (\(Step exec p e _ _) mCancel mRb -> Step exec p e mCancel mRb)
+        (protoSteps ^.. traverse . _1)
+        (Nothing : fmap Just cancels)
+        (rollbacks <> [Nothing])
 
   tsNondets .= fmap snd cancels
 
@@ -589,7 +657,7 @@ translateStep firstStep = \case
       Some SStr entity' <- translateNode tm
       pure entity'
     Some ty exec' <- translateNode exec
-    postVertex <- extendPath
+    postVertex    <- extendPath
     pure (Step (exec' :< ty) p mEntity Nothing Nothing, postVertex, rollback)
   astNode -> throwError' $ UnexpectedPactNode astNode
 
