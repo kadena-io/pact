@@ -22,17 +22,21 @@ import Control.Monad.Reader
 import qualified Data.Map.Strict as M
 
 import Data.Aeson as A
+import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
+import Data.Word (Word32, Word64)
 
+import Pact.Gas
+import Pact.Interpreter
+import Pact.Parse (ParsedDecimal(..))
 import Pact.Types.Command
+import Pact.Types.Gas
+import Pact.Types.Logger
+import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
-import Pact.Types.Logger
-import Pact.Gas
-import Pact.Parse (ParsedDecimal(..))
 
-import Pact.Interpreter
 
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode)
 initPactService CommandConfig {..} loggers = do
@@ -40,13 +44,19 @@ initPactService CommandConfig {..} loggers = do
       klog s = logLog logger "INIT" s
       gasRate = fromMaybe 0 _ccGasRate
       gasModel = constGasModel (fromIntegral gasRate)
-      mkCEI p@PactDbEnv {..} = do
+      chainId = 0
+      blockHeight = 0
+      blockTime = 0
+
+  let mkCEI p@PactDbEnv {..} = do
         cmdVar <- newMVar (CommandState initRefStore M.empty)
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
-          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccEntity p cmdVar gasModel eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasModel }
+          { _ceiApplyCmd = \eMode cmd ->
+              applyCmd logger _ccEntity p cmdVar gasModel chainId
+                blockHeight blockTime eMode cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasModel chainId blockHeight blockTime }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -57,14 +67,17 @@ initPactService CommandConfig {..} loggers = do
 
 
 applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState ->
-            GasModel -> ExecutionMode -> Command a ->
+            GasModel -> Word32 -> Word64 -> Int64 -> ExecutionMode -> Command a ->
             ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
-applyCmd _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
-applyCmd logger conf dbv cv gasModel exMode _ (ProcSucc cmd) = do
+applyCmd _ _ _ _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
+applyCmd logger conf dbv cv gasModel cid bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
       gasEnv = GasEnv (fromIntegral $ _pmGasLimit pubMeta) (GasPrice gasPrice) gasModel
-  r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv logger gasEnv) $ runPayload cmd
+
+  let pd = PublicData pubMeta cid bh bt
+
+  r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv logger gasEnv pd) $ runPayload cmd
   case r of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
@@ -93,8 +106,8 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet _cmdSigs
-      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv permissiveNamespacePolicy noSPVSupport
+      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing _cmdHash)
+        refStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec _erInput) _erExec
   let newPacts = case newCmdPact of
@@ -135,7 +148,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
               pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId _peYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
-                        _ceGasEnv permissiveNamespacePolicy noSPVSupport
+                        _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
           res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
 
           -- Update pacts state

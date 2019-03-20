@@ -101,8 +101,9 @@ setupEvalEnv
   -> GasEnv
   -> NamespacePolicy
   -> SPVSupport
+  -> PublicData
   -> EvalEnv e
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv =
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
   EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mdSigs msgData
@@ -117,6 +118,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv =
   , _eeGasEnv = gasEnv
   , _eeNamespacePolicy = np
   , _eeSPVSupport = spv
+  , _eePublicData = pd
   }
   where modeToTx (Transactional t) = Just t
         modeToTx Local = Nothing

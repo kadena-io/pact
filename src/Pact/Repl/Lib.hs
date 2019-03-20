@@ -19,34 +19,44 @@
 
 module Pact.Repl.Lib where
 
+
 import Control.Arrow ((&&&))
-import Data.Default
-import Data.Semigroup (Endo(..))
-import qualified Data.HashMap.Strict as HM
+import Control.Concurrent.MVar
+import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.Catch
-import Control.Lens
-import qualified Data.Set as S
-import qualified Data.ByteString.Lazy as BSL
-import Control.Concurrent.MVar
+
 import Data.Aeson (eitherDecode,toJSON)
-import qualified Data.Text as Text
-import Data.Text.Encoding
+import qualified Data.ByteString.Lazy as BSL
+import Data.Default
+import Data.List ((\\))
+import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import qualified Data.Map as M
+import Data.Semigroup (Endo(..))
+import qualified Data.Set as S
+import qualified Data.Text as Text
+import Data.Text.Encoding
+
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 #else
-import Control.Monad.State.Strict (get)
+
 import Criterion
 import Criterion.Types
-import qualified Pact.Analyze.Check as Check
+
+import Control.Monad.State.Strict (get)
+
 import Statistics.Types (Estimate(..))
+
+import qualified Pact.Analyze.Check as Check
 import qualified Pact.Types.Crypto as Crypto
 import Pact.Types.Util (fromText')
 #endif
+
+import Pact.Parse
 import Pact.Typechecker
-import Pact.Types.Typecheck
+import qualified Pact.Types.Typecheck as TC
 -- intentionally hidden unused functions to prevent lib functions from consuming gas
 import Pact.Native.Internal hiding (defRNative,defGasRNative,defNative)
 import qualified Pact.Native.Internal as Native
@@ -180,6 +190,7 @@ replDefs = ("Repl",
       (funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
       [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: 1 })"]
       "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
+     , envChainDataDef
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -411,14 +422,14 @@ tc i as = case as of
       case mdm of
         Nothing -> evalError' i $ "No such module: " <> pretty modname
         Just md -> do
-          r :: Either CheckerException ([TopLevel Node],[Failure]) <-
+          r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
             try $ liftIO $ typecheckModule dbg md
           case r of
-            Left (CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> pretty e)
+            Left (TC.CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> pretty e)
             Right (_,fails) -> case fails of
               [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
               _ -> do
-                setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
+                setop $ TcErrors $ map (\(TC.Failure ti s) -> renderInfo (TC._tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
 verify :: RNativeFun LibState
@@ -511,3 +522,44 @@ testCapability _ [ c@TApp{} ] = do
     Nothing -> "Capability granted"
     Just cap' -> "Capability granted: " <> tShow cap'
 testCapability i as = argsError' i as
+
+-- | Modify existing env chain data with new data, replacing just those
+-- environment items only.
+envChainDataDef :: NativeDef
+envChainDataDef = defZRNative "env-chain-data" envChainData
+    (funType tTyString [("new-data", tTyObject TyAny)])
+    ["(env-chain-data { \"chain-id\": 2, \"block-height\": 20 })"]
+    "Update existing entries 'chain-data' with NEW-DATA, replacing those items only."
+  where
+    envChainData :: RNativeFun LibState
+    envChainData i as = case as of
+      [TObject (Object ks _ _) _] -> do
+        pd <- view eePublicData
+
+        let ts = fmap fst ks
+            ts' = S.fromList ts
+            info = _faInfo i
+
+        unless (length ts == length ts') $ evalError info $
+          "envChainData: cannot update duplicate keys: " <> pretty (ts \\ (S.toList ts'))
+
+        ud <- foldM (go info) pd ks
+        setenv eePublicData ud
+        return $ tStr "Updated public metadata"
+      _ -> argsError i as
+
+    go i pd ((FieldKey k), (TLiteral (LInteger l) _)) = case Text.unpack k of
+      "chain-id"     -> pure $ set pdChainId (fromIntegral l) pd
+      "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (ParsedInteger . fromIntegral $ l) pd
+      "block-height" -> pure $ set pdBlockHeight (fromIntegral l) pd
+      "block-time"   -> pure $ set pdBlockTime (fromIntegral l) pd
+      t              -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+
+    go i pd ((FieldKey k), (TLiteral (LDecimal l) _)) = case Text.unpack k of
+      "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (ParsedDecimal l) pd
+      t           -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+
+    go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of
+      "sender" -> pure $ set (pdPublicMeta . pmSender) l pd
+      t        -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+    go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as

@@ -29,7 +29,7 @@ import qualified Data.ByteString.Char8 as B8
 
 import qualified Data.HashMap.Strict as HashMap
 
-import Data.Word (Word16)
+import Data.Word
 import GHC.Generics
 import System.Log.FastLogger
 import Data.Default
@@ -91,6 +91,7 @@ setupServer configFile = do
           _entity
           _gasLimit
           _gasRate
+
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
   asyncHist <- async (runHistoryService histConf Nothing)

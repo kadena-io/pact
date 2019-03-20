@@ -22,9 +22,8 @@ module Pact.Types.Runtime
    PactStep(..),psStep,psRollback,psPactId,psResume,
    ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
-   EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
-   eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,
+   eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
@@ -43,26 +42,27 @@ module Pact.Types.Runtime
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
-   module Pact.Types.Gas
+   module Pact.Types.Gas,
+   module Pact.Types.ChainMeta
    ) where
+
 
 import Control.Arrow ((&&&))
 import Control.Lens hiding ((.=),DefName)
-import Control.DeepSeq
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
+
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.Aeson hiding (Object)
-import qualified Data.Set as S
 import Data.String
 import Data.Default
 import Control.Monad.Catch
 import Control.Concurrent.MVar
-import Data.Serialize (Serialize)
-import Data.Hashable
+import qualified Data.Set as S
 
+import Pact.Types.ChainMeta
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
@@ -163,10 +163,6 @@ data RefStore = RefStore {
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
 
-newtype EntityName = EntityName Text
-  deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
-instance Show EntityName where show (EntityName t) = show t
-
 newtype PactContinuation = PactContinuation (App (Term Ref))
   deriving (Eq,Show)
 
@@ -243,6 +239,8 @@ data EvalEnv e = EvalEnv {
     , _eeNamespacePolicy :: NamespacePolicy
       -- | SPV backend
     , _eeSPVSupport :: SPVSupport
+      -- | Env public data
+    , _eePublicData :: PublicData
     }
 makeLenses ''EvalEnv
 
@@ -468,6 +466,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eeGasEnv
     permissiveNamespacePolicy
     _eeSPVSupport
+    _eePublicData
 
 
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))

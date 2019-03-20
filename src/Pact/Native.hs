@@ -286,6 +286,31 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
         Nothing  -> evalError info $
           "namespace: '" <> pretty name <> "' not defined"
 
+chainDataDef :: NativeDef
+chainDataDef = defRNative "chain-data" chainData (funType obj [])
+    ["(chain-data)"]
+    "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
+    \'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
+  where
+    chainData :: RNativeFun e
+    chainData _ [] = do
+      PublicData{..} <- view eePublicData
+
+      let PublicMeta{..} = _pdPublicMeta
+
+      let (ParsedInteger gl) = _pmGasLimit
+          (ParsedDecimal gp) = _pmGasPrice
+
+      pure $ toTObject TyAny def
+        [ ("chain-id"    , toTerm _pdChainId    )
+        , ("block-height", toTerm _pdBlockHeight)
+        , ("block-time"  , toTerm _pdBlockTime  )
+        , ("sender"      , toTerm _pmSender     )
+        , ("gas-limit"   , toTerm gl            )
+        , ("gas-price"   , toTerm gp            )
+        ]
+    chainData i as = argsError i as
+
 mapDef :: NativeDef
 mapDef = defNative "map" map'
   (funType (TyList a) [("app",lam b a),("list",TyList b)])
@@ -448,6 +473,7 @@ langDefs =
     ,hashDef
     ,defineNamespaceDef
     ,namespaceDef
+    ,chainDataDef
     ])
     where
           d = mkTyVar "d" []
