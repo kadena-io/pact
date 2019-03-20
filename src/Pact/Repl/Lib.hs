@@ -539,13 +539,13 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
         let ts = fmap fst ks
             ts' = S.fromList ts
             info = _faInfo i
-
+        
         unless (length ts == length ts') $ evalError info $
           "envChainData: cannot update duplicate keys: " <> pretty (ts \\ (S.toList ts'))
 
         ud <- foldM (go info) pd ks
         setenv eePublicData ud
-        return $ tStr $ "Updated public metadata"
+        return $ tStr "Updated public metadata"
       _ -> argsError i as
 
     go i pd ((FieldKey k), (TLiteral (LInteger l) _)) = case Text.unpack k of
