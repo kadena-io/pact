@@ -58,12 +58,12 @@ in (rp.ghcMusl64.override {
           hlint = self.callHackage "hlint" "2.0.14" {};
           # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-          # sbv with a patch to disable "unsupported query call" until it's fixed upstream
-          sbv = dontHaddock (dontCheck (self.callCabal2nix "sbv" (rp.nixpkgs.fetchFromGitHub {
-            owner = "joelburget";
+          # sbv 8.1
+          sbv = dontHaddock (dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
+            owner = "LeventErkok";
             repo = "sbv";
-            rev = "25d9357ff8eaac697eb6fde96598d7beb587b4e9";
-            sha256 = "0i0ajrw8j9hc208hizi4rnj5giqhbawjfgdbacswwfvgfqvvb69z";
+            rev = "365b1a369a2550d6284608df3fbc17e2663c4d3c";
+            sha256 = "134f148g28dg7b3c1rvkh85pfl9pdlvrvl6al4vlz72f3y5mb2xg";
           }) {}));
 
           # Our own custom fork
