@@ -25,3 +25,6 @@
 
 ;; Show failure on wrongly-typed keys
 (expect-failure "chain data should fail for wrongly-typed keys" (env-chain-data { "chain-id": 0.0 }))
+
+;; Show failure on duplicate keys
+(expect-failure "chain data should not accept duplicate updates" (env-chain-data { "chain-id": 1, "chain-id:": 2 }))

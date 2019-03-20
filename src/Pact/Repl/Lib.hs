@@ -29,6 +29,7 @@ import Control.Monad.Catch
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
+import Data.List ((\\))
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import qualified Data.Map as M
@@ -534,6 +535,13 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
     envChainData i as = case as of
       [TObject (Object ks _ _) _] -> do
         pd <- view eePublicData
+
+        let ts = fmap fst ks
+            ts' = S.fromList ts
+
+        unless (length ts == length ts') $ evalError (_faInfo i) $
+          "envChainData: cannot update duplicate keys: " <> pretty (ts \\ (S.toList ts'))
+
         ud <- foldM (go . _faInfo $ i) pd ks
         setenv eePublicData ud
         return $ tStr $ "Updated public metadata"
@@ -544,14 +552,14 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (ParsedInteger . fromIntegral $ l) pd
       "block-height" -> pure $ set pdBlockHeight (fromIntegral l) pd
       "block-time"   -> pure $ set pdBlockTime (fromIntegral l) pd
-      t              -> evalError i $ "Bad public metadata key: " <> pretty t
+      t              -> evalError i $ "envChainData: found bad public metadata key: " <> pretty t
 
     go i pd ((FieldKey k), (TLiteral (LDecimal l) _)) = case Text.unpack k of
       "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (ParsedDecimal l) pd
       "gas-fee"   -> pure $ set (pdPublicMeta . pmFee) (ParsedDecimal l) pd
-      t           -> evalError i $ "Bad public metadata key: " <> pretty t
+      t           -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
 
     go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of
       "sender" -> pure $ set (pdPublicMeta . pmSender) l pd
-      t        -> evalError i $ "Bad public metadata key: " <> pretty t
-    go i _ as = evalError i $ "Bad public metadata values: " <> pretty as
+      t        -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+    go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as
