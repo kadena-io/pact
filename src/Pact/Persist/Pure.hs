@@ -29,7 +29,7 @@ import Data.Typeable
 import Pact.Persist hiding (compileQuery)
 import Pact.Types.Pretty
 
-data PValue = forall a . (PactValue a, Pretty a) => PValue a
+data PValue = forall a . (PactValue a) => PValue a
 instance Show PValue where show (PValue a) = show a
 
 

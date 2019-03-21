@@ -190,7 +190,7 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn Namespaces = TxTable namespacesTable
     tn (UserTables t) = userTxRecord t
     convLog tl = case fromJSON (_txValue tl) of
-      Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> pretty s
+      Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
       Success v -> return $ set txValue v tl
 {-# INLINE getLogs #-}
 

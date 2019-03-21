@@ -35,6 +35,7 @@ module Pact.Types.Pretty
   , nest
   , parens
   , parensSep
+  , prettyList
   , prettyString
   , punctuate
   , putDoc
@@ -91,13 +92,20 @@ type Doc = PP.Doc Annot
 
 -- | Pact's version of 'Pretty', with 'Annot' annotations.
 class Pretty a where
-  pretty :: a -> Doc
+  pretty     :: a   -> Doc
+
+prettyList :: Pretty a => [a] -> Doc
+prettyList = list . map pretty
+
+-- prettyList :: Pretty a => [a] -> Doc
 
 instance Pretty a => Pretty [a] where
   pretty = list . map pretty
 
 instance Pretty Text where pretty = PP.pretty
-instance Pretty Char where pretty = PP.pretty
+instance Pretty Char where
+  pretty     = PP.pretty
+  -- prettyList = prettyString
 instance Pretty Bool where pretty = PP.pretty
 instance Pretty Integer where pretty = PP.pretty
 instance Pretty Int where pretty = PP.pretty

@@ -188,7 +188,7 @@ pureEval ei e = do
   (ReplState evalE evalS _ _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
-                 Left (SomeException ex) -> (Left (PactError EvalError def def (pretty (show ex))),evalS)
+                 Left (SomeException ex) -> (Left (PactError EvalError def def (prettyString (show ex))),evalS)
                  Right v -> v
   mode <- use rMode
   case r of

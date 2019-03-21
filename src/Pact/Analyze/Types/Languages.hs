@@ -87,7 +87,7 @@ import           Text.Show                     (showListWith)
 import           Pact.Types.Pretty             (commaBraces, commaBrackets,
                                                 parens, parensSep,
                                                 Pretty(pretty), Doc, viaShow,
-                                                vsep)
+                                                vsep, prettyString, prettyList)
 import           Pact.Types.Persistence        (WriteType)
 
 import           Pact.Analyze.Feature          hiding (Doc, Sym, Var, col, str,
@@ -401,7 +401,7 @@ singPrettyObject SObjectNil (Object SNil) = [""]
 singPrettyObject
   (SObjectUnsafe (SingList (SCons _ _ objty)))
   (Object (SCons k (Column vTy v) obj))
-    = (pretty (symbolVal k) <> ": " <> singPrettyTm vTy v)
+    = (prettyString (symbolVal k) <> ": " <> singPrettyTm vTy v)
       : singPrettyObject (SObjectUnsafe (SingList objty)) (Object obj)
 singPrettyObject _ _ = error "malformed object"
 
@@ -1502,12 +1502,12 @@ prettyTerm ty = \case
   EnforceOne (Left _)        -> parensSep
     [ "enforce-one"
     , "\"(generated enforce-one)\""
-    , pretty ([] :: [Integer])
+    , prettyList ([] :: [Integer])
     ]
   EnforceOne (Right x)       -> parensSep
     [ "enforce-one"
     , "\"(generated enforce-one)\""
-    , pretty $ fmap snd x
+    , prettyList $ fmap snd x
     ]
 
   Enforce _ (GuardPasses _ x) -> parensSep ["enforce-guard", pretty x]
@@ -1522,7 +1522,7 @@ prettyTerm ty = \case
   Read _ _ tab x       -> parensSep ["read", pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
   PactVersion          -> parensSep ["pact-version"]
-  Format x y           -> parensSep ["format", pretty x, pretty y]
+  Format x y           -> parensSep ["format", pretty x, prettyList y]
   FormatTime x y       -> parensSep ["format", pretty x, pretty y]
   ParseTime Nothing y  -> parensSep ["parse-time", pretty y]
   ParseTime (Just x) y -> parensSep ["parse-time", pretty x, pretty y]

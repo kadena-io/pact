@@ -165,7 +165,7 @@ data Persistable =
 instance Pretty Persistable where
     pretty (PLiteral l) = pretty l
     pretty (PGuard k) = pretty k
-    pretty (PValue v) = pretty $ BSL.toString $ encode v
+    pretty (PValue v) = prettyString $ BSL.toString $ encode v
 instance ToTerm Persistable where
     toTerm (PLiteral l) = toTerm l
     toTerm (PGuard k) = toTerm k

@@ -396,7 +396,9 @@ evaluateDefs info defs = do
       case c of
         AcyclicSCC v -> return v
         CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
-          "Recursion detected: " <> pretty (vs & traverse . _1 %~ fmap mkSomeDoc)
+          "Recursion detected: " <>
+            prettyList (vs & traverse . _1 %~ fmap mkSomeDoc
+                           & traverse . _3 %~ (SomeDoc . prettyList))
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
       unifiedDefs = foldl dresolve HM.empty sortedDefs
   traverse (runPure . evalConsts) unifiedDefs
@@ -468,7 +470,7 @@ solveConstraint info refName (Ref t) evalMap = do
           TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _) _) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " <> pretty dt <> line <> pretty dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " <> pretty rty <> line <> pretty rty'
-          when (length args /= length args') $ evalError info $ "mismatching argument lists: " <> pretty args <> line <> pretty args'
+          when (length args /= length args') $ evalError info $ "mismatching argument lists: " <> prettyList args <> line <> prettyList args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
             when (n /= n') $ evalError info $ "mismatching argument names: " <> pretty n <> " and " <> pretty n'
             when (ty /= ty') $ evalError info $ "mismatching types: " <> pretty ty <> " and " <> pretty ty'
@@ -794,7 +796,7 @@ checkUserType partial i ps (TyUser tu@TSchema {..}) = do
   let findMissing fs = do
         let missing = M.difference fs (M.fromList (map (first _aName) aps))
         unless (M.null missing) $ evalError i $
-          "Missing fields for {" <> pretty _tSchemaName <> "}: " <> pretty (M.elems missing)
+          "Missing fields for {" <> pretty _tSchemaName <> "}: " <> prettyList (M.elems missing)
   case partial of
     FullSchema -> findMissing fields
     PartialSchema fs -> findMissing (M.restrictKeys fields fs)

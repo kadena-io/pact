@@ -137,9 +137,9 @@ runCompile act cs a =
     (Left (TrivialError _ (Just err) expect)) -> case err of
       EndOfInput -> case S.toList expect of
         (Tokens (x :| _):_) -> doErr (getInfo x) "unexpected end of input"
-        (Label s:_) -> doErr def (pretty (toList s))
+        (Label s:_) -> doErr def (prettyString (toList s))
         er -> doErr def (viaShow er)
-      Label ne -> doErr def (pretty (toList ne))
+      Label ne -> doErr def (prettyString (toList ne))
       Tokens (x :| _) -> doErr (getInfo x) $ prettyString $ showExpect expect
     (Left e) -> doErr def (viaShow e)
     where doErr :: Info -> Doc -> Either PactError a
