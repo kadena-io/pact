@@ -403,12 +403,6 @@ evaluateDefs info defs = do
       unifiedDefs = foldl dresolve HM.empty sortedDefs
   traverse (runPure . evalConsts) unifiedDefs
 
--- | Helper to use 'pretty' on an 'Either'
-newtype SomeDoc = SomeDoc Doc
-
-instance Pretty SomeDoc where
-  pretty (SomeDoc doc) = doc
-
 mkSomeDoc :: (Pretty a, Pretty b) => Either a b -> SomeDoc
 mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 

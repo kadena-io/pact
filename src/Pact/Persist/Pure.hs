@@ -125,7 +125,7 @@ qry t kq s = case firstOf (temp . tblType t . tbls . ix t . tbl) s of
 
 conv :: (PactValue v) => PValue -> IO v
 conv (PValue v) = case cast v of
-  Nothing -> throwDbError $ "Failed to reify DB value: " <> pretty v
+  Nothing -> throwDbError $ "Failed to reify DB value: " <> prettyPactValue v
   Just s -> return s
 {-# INLINE conv #-}
 

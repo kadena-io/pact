@@ -75,7 +75,7 @@ instance Pretty UserTableInfo where
     [ "module: " <> pretty mod'
     ]
 
-instance PactValue UserTableInfo
+instance PactValue UserTableInfo where prettyPactValue = pretty
 instance FromJSON UserTableInfo
 instance ToJSON UserTableInfo
 
