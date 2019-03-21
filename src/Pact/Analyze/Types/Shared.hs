@@ -921,7 +921,7 @@ withPretty = withDict . singMkPretty
       SDecimal     -> Dict
       SGuard       -> Dict
       SAny         -> Dict
-      SList _ty'    -> undefined -- withPretty ty' Dict
+      SList ty'    -> withPretty ty' Dict
       SObjectUnsafe SNil'   -> Dict
       SObjectUnsafe (SCons' _ ty' tys)
         -> withPretty ty' $

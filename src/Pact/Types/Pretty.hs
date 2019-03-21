@@ -97,6 +97,11 @@ class Pretty a where
   prettyList :: [a] -> Doc
   prettyList = list . map pretty
 
+-- Warning: you should avoid this instance since it does the wrong thing for
+-- strings.
+instance Pretty a => Pretty [a] where
+  pretty = prettyList
+
 instance Pretty Char where
   pretty     = PP.pretty
   prettyList = prettyString
