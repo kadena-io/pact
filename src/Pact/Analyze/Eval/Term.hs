@@ -30,7 +30,8 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind,
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymVal, ite,
-                                              literal, (.<))
+                                              literal, (.<), uninterpret,
+                                              writeArray)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.String             as SBV
 import           Data.SBV.Tuple              (tuple)
@@ -55,6 +56,7 @@ import           Pact.Types.Version          (pactVersion)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Invariant
+import           Pact.Analyze.LegacySFunArray
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
@@ -715,14 +717,27 @@ withReset number action = do
                                 (mkFreeArray $ "txDecimals" <> tShow number)
                                 (mkFreeArray $ "txIntegers" <> tShow number)
 
+      newRegistry = Registry $ mkFreeArray $ "registry" <> tShow number
+      trivialGuard = uninterpret $ "trivial_guard" ++ show number
+      newGuardPasses = writeArray (mkFreeArray $ "guardPasses" <> tShow number)
+        trivialGuard sTrue
+
+      -- If `rowExists` is already set to true, then it won't change. If it's
+      -- set to false, this will unset it.
+      updateTableMap (TableMap tm) = TableMap $ flip Map.mapWithKey tm $
+        \(TableName tn) sFunArr ->
+          let newArr = mkFreeArray $
+                "row_exists__" <> T.pack tn <> "_" <> tShow number
+          in eitherArray sFunArr newArr
+
       newState = oldState
         & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
-        -- & latticeState . lasExtra . cvRowExists .~  i think this one is okay
+        & latticeState . lasExtra . cvRowExists  %~ updateTableMap
       newEnv = oldEnv
         & aePactMetadata . pmEntity .~ uninterpretS "entity"
-        -- & registry                  .~ undefined
+        & aeRegistry                .~ newRegistry
         & aeTxMetadata              .~ txMetadata
-        -- & aeGuardPasses             .~ undefined
+        & aeGuardPasses             .~ newGuardPasses
 
   id .= newState
   local (analyzeEnv .~ newEnv) action
