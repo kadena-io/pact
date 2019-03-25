@@ -216,7 +216,6 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
-  {-
   describe "decimal arithmetic" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
@@ -1364,11 +1363,9 @@ spec = describe "analyze" $ do
         case results of
           Left failure -> it "unexpectedly failed verification" $
             expectationFailure $ show failure
-          Right (ModuleChecks propResults invariantResults pactResults _) -> do
+          Right (ModuleChecks propResults invariantResults _) -> do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
-            it "should have no prop results" $
-              pactResults `shouldBe` HM.singleton "test" []
 
             case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
               -- see https://github.com/Z3Prover/z3/issues/1819
@@ -3042,7 +3039,6 @@ spec = describe "analyze" $ do
               )
             |]
       expectVerified code
--}
 
   describe "checking pacts" $ do
     -- TODO:
@@ -3124,7 +3120,7 @@ spec = describe "analyze" $ do
       expectVerified code''
 
       -- many step pact:
-      let code'' = [text|
+      let code''' = [text|
             (defpact payment ()
               @doc "this is a pact"
               @model
@@ -3142,10 +3138,10 @@ spec = describe "analyze" $ do
                   (with-read accounts acct { "balance" := bal }
                     (update accounts acct { "balance": (+ bal amt) }))))
             |]
-      expectVerified code''
+      expectVerified code'''
 
       -- nontrivial many step pact:
-      let code'' = [text|
+      let code'''' = [text|
             (defpact payment ()
               @doc "this is a pact"
               @model
@@ -3176,6 +3172,6 @@ spec = describe "analyze" $ do
                   (with-read accounts acct { "balance" := bal }
                     (update accounts acct { "balance": (+ bal amt) }))))
             |]
-      expectVerified code''
+      expectVerified code''''
 
       it "checks yield / resume" $ pendingWith "yield / resume typechecking"
