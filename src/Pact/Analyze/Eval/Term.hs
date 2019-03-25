@@ -14,8 +14,9 @@ module Pact.Analyze.Eval.Term where
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', preview, use,
                                               view, (%=), (%~), (&), (+=), (.=),
-                                              (.~), (<&>), (?~), (^.), (^?), _1,
-                                              _2, _head, _Just)
+                                              (.~), (<&>), (?~), (?=), (^.),
+                                              (^?), _1, _2, _head, _Just,
+                                              ifoldlM)
 import           Control.Monad               (void)
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
@@ -40,12 +41,14 @@ import qualified Data.Text                   as T
 import           Data.Text.Encoding          (encodeUtf8)
 import           Data.Thyme                  (formatTime, parseTime)
 import           Data.Traversable            (for)
+import           Data.Type.Equality          ((:~:)(Refl))
 import           GHC.TypeLits
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
 import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Pretty           (renderCompactString', pretty)
+import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
 
@@ -382,7 +385,7 @@ addPendingGrant token = pendingTokenGranted token .= sTrue
 extendingGrants :: TokenGrants -> Analyze (S a) -> Analyze (S a)
 extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
 
-evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
+evalTerm :: forall a. SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
 
@@ -611,12 +614,15 @@ evalTerm = \case
       Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
-  Pact steps -> do
+  Pact steps -> local (inPact .~ sTrue) $ do
+    -- TODO: pending #442
+    _previouslyYielded <- use $ latticeState . lasYielded
+
     -- We execute through all the steps once (via a left fold), then we execute
     -- all the rollbacks (via for), in reverse order.
 
-    (rollbacks, _) <- foldlM
-      (\(rollbacks, successChoice)
+    (rollbacks, _) <- ifoldlM
+      (\stepNo (rollbacks, successChoice)
         --          ^ do we make it to this step?
         (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) ->
         withSing ty $ do
@@ -628,7 +634,7 @@ evalTerm = \case
           Nothing -> pure sFalse
 
           -- ... otherwise, we nondeterministically either succeed or cancel
-          Just (cancelPath {- c_n -}, cancelVid) -> withReset $ do
+          Just (cancelPath {- c_n -}, cancelVid) -> withReset stepNo $ do
             cancel <- view (aeNondets . at cancelVid)
               ??? "couldn't find cancel var"
 
@@ -657,18 +663,33 @@ evalTerm = \case
       ([], sTrue)
       steps
 
-    void $ foldlM
-      (\alreadyRollingBack (path {- r_n -}, rollbackTriggered, rollback) -> do
+    void $ ifoldlM
+      (\rbNo alreadyRollingBack
+        (path {- r_n -}, rollbackTriggered, rollback) -> do
         -- If this rollback was triggered, we execute this and all earlier
         -- rollbacks
         let nowRollingBack = alreadyRollingBack .|| rollbackTriggered
         tagSubpathStart path $ sansProv nowRollingBack
-        ite nowRollingBack (void $ withReset $ evalETerm rollback) (pure ())
+        ite nowRollingBack
+          (void $ withReset (length steps + rbNo) $ evalETerm rollback)
+          (pure ())
         pure nowRollingBack)
       sFalse
       rollbacks
 
     pure "pact done"
+
+  -- Caution: yield / resume are not yet working pending #442
+  Yield ty tm -> do
+    val <- eval tm
+    latticeState . lasYielded ?= SomeVal ty val
+    pure val
+
+  Resume -> use (latticeState . lasYielded) >>= \case
+    Nothing -> throwErrorNoLoc "No previously yielded value for resume"
+    Just (SomeVal ty val) -> case singEq ty (sing :: SingTy a) of
+      Nothing   -> throwErrorNoLoc "Resume of unexpected type"
+      Just Refl -> pure val
 
 -- | Private pacts must be evaluated by the right entity. Fail if the current
 -- entity doesn't match the provided.
@@ -684,14 +705,15 @@ evalTermWithEntity mEntity tm = do
   evalTerm tm
 
 -- | Reset to perform between different transactions
-withReset :: Analyze a -> Analyze a
-withReset action = do
+withReset :: Int -> Analyze a -> Analyze a
+withReset number action = do
   tables    <- view $ analyzeEnv . aeTables
   oldState  <- use id
   oldEnv    <- ask
-  let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
-                                (mkFreeArray "txDecimals")
-                                (mkFreeArray "txIntegers")
+  -- TODO: remove duplication with mkAnalyzeEnv
+  let txMetadata   = TxMetadata (mkFreeArray $ "txKeySets"  <> tShow number)
+                                (mkFreeArray $ "txDecimals" <> tShow number)
+                                (mkFreeArray $ "txIntegers" <> tShow number)
 
       newState = oldState
         & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
@@ -700,7 +722,6 @@ withReset action = do
         & aePactMetadata . pmEntity .~ uninterpretS "entity"
         -- & registry                  .~ undefined
         & aeTxMetadata              .~ txMetadata
-        -- & aeScope                   .~ undefined
         -- & aeGuardPasses             .~ undefined
 
   id .= newState

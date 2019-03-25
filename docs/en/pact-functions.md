@@ -1385,6 +1385,14 @@ Query gas state, or set it to GAS.
 Set environment gas limit to LIMIT.
 
 
+### env-gasmodel {#env-gasmodel}
+
+*model*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Update gas model to the model named MODEL.
+
+
 ### env-gasprice {#env-gasprice}
 
 *price*&nbsp;`decimal` *&rarr;*&nbsp;`string`

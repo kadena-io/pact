@@ -3046,13 +3046,9 @@ spec = describe "analyze" $ do
 
   describe "checking pacts" $ do
     -- TODO:
-    -- X longer pacts
-    -- X shorter pacts?
-    -- * steps with / without rollbacks
-    -- * public / private
-    -- * steps with / without specified entities
     -- * yield / resume
     -- * pact-id
+    -- * shorter pacts (0 / 1 steps)
 
     describe "translating a pact" $ do
       let code = [text|
@@ -3108,7 +3104,8 @@ spec = describe "analyze" $ do
               (enforce (>= balance 0)    "Non-positive balance")
               (update accounts acct { "balance": balance }))
             |]
-      expectVerified code'
+      -- TODO: check trace
+      expectFalsified code'
 
       -- single step pact:
       let code'' = [text|
@@ -3147,7 +3144,7 @@ spec = describe "analyze" $ do
             |]
       expectVerified code''
 
-      -- many step pact:
+      -- nontrivial many step pact:
       let code'' = [text|
             (defpact payment ()
               @doc "this is a pact"
@@ -3160,12 +3157,15 @@ spec = describe "analyze" $ do
               (step-with-rollback
                 (doit (- 2))
                 (doit 2))
+              (step (doit 0))
               (step-with-rollback
                 (doit (- 3))
                 (doit 3))
+              (step (doit 0))
               (step-with-rollback
                 (doit (- 4))
                 (doit 4))
+              (step (doit 0))
               (step-with-rollback
                 (doit (- 5))
                 (doit 5))
@@ -3177,3 +3177,5 @@ spec = describe "analyze" $ do
                     (update accounts acct { "balance": (+ bal amt) }))))
             |]
       expectVerified code''
+
+      it "checks yield / resume" $ pendingWith "yield / resume typechecking"

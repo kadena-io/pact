@@ -38,6 +38,7 @@ import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
+import           Data.Type.Equality           ((:~:)(Refl))
 import           GHC.Generics                 hiding (S)
 import           GHC.Stack                    (HasCallStack)
 
@@ -85,22 +86,40 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
   => Maybe a -> AnalyzeFailureNoLoc -> m a
 Just a  ?? _   = pure a
 Nothing ?? err = throwErrorNoLoc err
-infix 0 ??
+infix 1 ??
 
 (???) :: Analyzer m => m (Maybe a) -> AnalyzeFailureNoLoc -> m a
 m ??? err = do
   m' <- m
   m' ?? err
-infix 0 ???
+infix 1 ???
 
 data PactMetadata
   = PactMetadata
-    { _pmInPact :: !(S Bool)
-    , _pmPactId :: !(S Integer)
-    , _pmEntity :: !(S Str)
-    -- , _pmStep   :: S Integer
+    { _pmInPact  :: !(S Bool)
+    , _pmPactId  :: !(S Integer)
+    , _pmEntity  :: !(S Str)
     }
   deriving Show
+
+data ExistentialVal where
+  SomeVal :: SingTy a -> S (Concrete a) -> ExistentialVal
+
+instance Mergeable ExistentialVal where
+  symbolicMerge force test (SomeVal lTy lVal) (SomeVal rTy rVal)
+    = case singEq lTy rTy of
+      Nothing   -> error $ "failed symbolic merge with different types: " ++
+        show lTy ++ " vs " ++ show rTy
+      Just Refl -> SomeVal lTy $ withSymVal lTy $
+        symbolicMerge force test lVal rVal
+
+instance Show ExistentialVal where
+  showsPrec p (SomeVal ty s)
+    = showParen (p > 10)
+    $ showString "SomeVal "
+    . showsPrec 11 ty
+    . showChar ' '
+    . showsPrec 11 s
 
 -- We just use `uninterpret` for now until we need to extract these values from
 -- the model.
@@ -260,6 +279,7 @@ data LatticeAnalyzeState a
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
     , _lasPendingGrants       :: TokenGrants
+    , _lasYielded             :: !(Maybe ExistentialVal)
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -344,6 +364,7 @@ mkInitialAnalyzeState tables caps = AnalyzeState
         , _lasCellsWritten        = cellsWritten
         , _lasConstraints         = sansProv sTrue
         , _lasPendingGrants       = mkTokenGrants caps
+        , _lasYielded             = Nothing
         , _lasExtra               = CellValues
           { _cvTableCells = mkSymbolicCells tables
           , _cvRowExists  = mkRowExists

@@ -1338,12 +1338,14 @@ data Term (a :: Ty) where
 
   PactVersion     :: Term 'TyStr
 
-  Format          :: Term 'TyStr         -> [ETerm]     -> Term 'TyStr
-  FormatTime      :: Term 'TyStr         -> Term 'TyTime   -> Term 'TyStr
-  ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr -> Term 'TyTime
-  Hash            :: ETerm                              -> Term 'TyStr
+  Format          :: Term 'TyStr         -> [ETerm]      -> Term 'TyStr
+  FormatTime      :: Term 'TyStr         -> Term 'TyTime -> Term 'TyStr
+  ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr  -> Term 'TyTime
+  Hash            :: ETerm                               -> Term 'TyStr
 
-  Pact :: [PactStep] -> Term 'TyStr
+  Pact   :: [PactStep] -> Term 'TyStr
+  Yield  :: SingTy a -> Term a -> Term a
+  Resume ::                       Term a
 
 data PactStep where
   Step
@@ -1466,12 +1468,14 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
-  Hash a -> showString "Hash " . showsPrec 11 a
+  Hash a           -> showString "Hash " . showsPrec 11 a
   ReadKeySet  name -> showString "ReadKeySet " . showsPrec 11 name
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
-  PactId -> showString "PactId"
-  Pact steps -> showString "Pact " . showList steps
+  PactId           -> showString "PactId"
+  Pact steps       -> showString "Pact " . showList steps
+  Yield ty' a      -> showString "Yield " . showsPrec 11 ty' . singShowsTm ty 11 a
+  Resume           -> showString "Resume"
 
 instance Show PactStep where
   showsPrec _ (Step (exec :< execTy) path mEntity mCancelVid mRollback) =
@@ -1536,24 +1540,26 @@ prettyTerm ty = \case
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
 
-  WithCapability a x   -> parensSep ["with-capability", pretty a, prettyTerm ty x]
-  Granting _ _ x       -> prettyTerm ty x
-  Read _ _ tab x       -> parensSep ["read", pretty tab, pretty x]
+  WithCapability a x    -> parensSep ["with-capability", pretty a, prettyTerm ty x]
+  Granting _ _ x        -> prettyTerm ty x
+  Read _ _ tab x        -> parensSep ["read", pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
-  PactVersion          -> parensSep ["pact-version"]
-  Format x y           -> parensSep ["format", pretty x, pretty y]
-  FormatTime x y       -> parensSep ["format", pretty x, pretty y]
-  ParseTime Nothing y  -> parensSep ["parse-time", pretty y]
-  ParseTime (Just x) y -> parensSep ["parse-time", pretty x, pretty y]
-  Hash x               -> parensSep ["hash", pretty x]
-  ReadKeySet name      -> parensSep ["read-keyset", pretty name]
-  ReadDecimal name     -> parensSep ["read-decimal", pretty name]
-  ReadInteger name     -> parensSep ["read-integer", pretty name]
-  PactId               -> parensSep ["pact-id"]
-  MkKsRefGuard name    -> parensSep ["keyset-ref-guard", pretty name]
-  MkPactGuard name     -> parensSep ["create-pact-guard", pretty name]
-  MkUserGuard ty' o n  -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
-  Pact steps -> vsep (pretty <$> steps)
+  PactVersion           -> parensSep ["pact-version"]
+  Format x y            -> parensSep ["format", pretty x, pretty y]
+  FormatTime x y        -> parensSep ["format", pretty x, pretty y]
+  ParseTime Nothing y   -> parensSep ["parse-time", pretty y]
+  ParseTime (Just x) y  -> parensSep ["parse-time", pretty x, pretty y]
+  Hash x                -> parensSep ["hash", pretty x]
+  ReadKeySet name       -> parensSep ["read-keyset", pretty name]
+  ReadDecimal name      -> parensSep ["read-decimal", pretty name]
+  ReadInteger name      -> parensSep ["read-integer", pretty name]
+  PactId                -> parensSep ["pact-id"]
+  MkKsRefGuard name     -> parensSep ["keyset-ref-guard", pretty name]
+  MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
+  MkUserGuard ty' o n   -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
+  Pact steps            -> vsep (pretty <$> steps)
+  Yield ty' tm          -> parensSep [ "yield", singPrettyTm ty' tm ]
+  Resume                -> "resume"
 
 instance Pretty PactStep where
   pretty (Step (exec :< execTy) _ mEntity _ mRollback) = parensSep $
