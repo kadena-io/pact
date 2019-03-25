@@ -665,15 +665,15 @@ evalTerm = \case
       ([], sTrue)
       steps
 
-    void $ ifoldlM
-      (\rbNo alreadyRollingBack
+    void $ foldlM
+      (\alreadyRollingBack
         (path {- r_n -}, rollbackTriggered, rollback) -> do
         -- If this rollback was triggered, we execute this and all earlier
         -- rollbacks
         let nowRollingBack = alreadyRollingBack .|| rollbackTriggered
         tagSubpathStart path $ sansProv nowRollingBack
         ite nowRollingBack
-          (void $ withReset (length steps + rbNo) $ evalETerm rollback)
+          (void $ evalETerm rollback)
           (pure ())
         pure nowRollingBack)
       sFalse
