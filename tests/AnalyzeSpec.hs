@@ -11,7 +11,6 @@
 
 module AnalyzeSpec (spec) where
 
-
 import           Control.Lens                 (at, findOf, ix, matching, (&),
                                                (.~), (^.), (^..), _Left)
 import           Control.Monad                (unless)
@@ -835,6 +834,169 @@ spec = describe "analyze" $ do
                 true))
           |]
     expectPass code $ Valid Success'
+
+  describe "requesting token that was never granted" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (require-capability (CAP 100)))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "requesting token that was granted" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer b:bool)
+              (enforce-keyset "foo"))
+
+            (defun do-require ()
+              (require-capability (CAP 100 false)))
+
+            (defun test:bool ()
+              (with-capability (CAP 100 false)
+                (do-require)))
+          |]
+    expectPass code $ Valid $ Inj (GuardPassed "foo") .=> Success'
+
+  describe "requesting different capability fails" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              true)
+
+            (defcap BAR (b:bool)
+              true)
+
+            (defun test:bool ()
+              (with-capability (FOO 2)
+                (require-capability (BAR false))))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "requesting token that was not granted for the same args" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 2)
+                (require-capability (CAP 1))))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "require-capability does not execute the capability" $ do
+    let code =
+          [text|
+            (defcap CAP (k:string)
+              ;; Insert can only succeed the *first and only* time it's run
+              (insert accounts k {"balance": 0})
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP "bob")
+                (require-capability (CAP "bob"))))
+          |]
+    expectPass code $ Valid $
+      (PNot (Inj (RowExists "accounts" "bob" Before)) .&& Inj (TableWrite "accounts"))
+      .<=>
+      Success'
+
+  describe "token caching works for expressions which perform computation" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (FOO (+ 3 0))
+                (require-capability (FOO (+ 2 1)))))
+          |]
+    expectPass code $ Valid Success'
+
+  describe "compose-capability grants an additional capability" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              (if (> i 0)
+                (compose-capability (BAR false))
+                false))
+
+            (defcap BAR (b:bool)
+              true)
+
+            (defun test:bool ()
+              (with-capability (FOO 2)
+                (require-capability (FOO 2))
+                (require-capability (BAR false))))
+          |]
+    expectPass code $ Valid Success'
+
+  describe "compose-capability can fail" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              (compose-capability (BAR false)))
+
+            (defcap BAR (b:bool)
+              (enforce b "enforce failed"))
+
+            (defun test:bool ()
+              (with-capability (FOO 2)
+                (require-capability (BAR false))))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "compose-capability only grants for specific arguments" $ do
+    let code =
+          [text|
+            (defcap FOO (i:integer)
+              (compose-capability (BAR i)))
+
+            (defcap BAR (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (FOO 2)
+                (require-capability (BAR 3))))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "capabilities are not granted until the body of with-capability" $ do
+    let code =
+          [text|
+            (defcap BAR ()
+              true)
+
+            (defcap FOO ()
+              (compose-capability (BAR))
+              ; BAR is not yet granted here:
+              (require-capability (BAR)))
+
+            (defun test:bool ()
+              (with-capability (FOO)
+                ; FOO and BAR are granted here.
+                true))
+          |]
+    expectPass code $ Valid Abort'
+
+  describe "compose-capability calls produce return values" $ do
+    let code =
+          [text|
+            (defcap BAR ()
+              false)
+            (defcap FOO ()
+              (enforce (compose-capability (BAR)) "BAR returned false"))
+
+            (defun test:bool ()
+              (with-capability (FOO)
+                true))
+          |]
+
+    expectPass code $ Valid Abort'
 
   describe "enforce-one.1" $ do
     let code =
@@ -2036,6 +2198,25 @@ spec = describe "analyze" $ do
         (CoreProp (LiteralList SBool [ allA1 ty a1 ]))))
       `shouldBe`
       allA1 ty (CoreProp (ListAt SBool 0 (CoreProp (LiteralList SBool [ a1 ]))))
+
+    describe "evaluation by sbv" $ do
+      -- SBV assumes formulas are always written in prenex-normal form.
+      -- `(exists i. i > 0) /\ not (exists i. i > 0)` is clearly not true.
+      -- however, in the absence of prenex normalization, SBV interprets this
+      -- as `exists i j. i > 0 /\ not (j > 0)`, which _is_ true.
+      --
+      -- https://github.com/LeventErkok/sbv/issues/256
+      let code' = [text|
+            (defun test:bool ()
+              @model
+                [ (property
+                    (and
+                      (exists (i:integer) (> i 0))
+                      (not (exists (i:integer) (> i 0)))))
+                ]
+              true)
+            |]
+      expectFalsified code'
 
   describe "prop parse / typecheck" $ do
     let parseExprs' :: Text -> Either String [Exp Info]

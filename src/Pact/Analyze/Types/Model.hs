@@ -87,6 +87,7 @@ data TraceEvent
   | TraceSubpathStart Path
   | TracePushScope Natural ScopeType [Located Binding]
   | TracePopScope Natural ScopeType TagId EType
+  | TraceRequireGrant Recoverability CapName [Located Binding] (Located TagId)
   deriving (Eq, Show)
 
 -- | An @ExecutionGraph@ is produced by translation, and contains all
@@ -123,6 +124,14 @@ data GuardEnforcement
     }
   deriving (Eq, Show)
 
+data GrantRequest
+  = GrantRequest
+    { _grCapability :: CapName
+    -- TODO: args, probably.
+    , _grSuccess    :: SBV Bool
+    }
+  deriving (Eq, Show)
+
 data ModelTags (c :: Concreteness)
   = ModelTags
     { _mtVars              :: Map VarId (Located (Unmunged, TVal))
@@ -135,6 +144,8 @@ data ModelTags (c :: Concreteness)
     -- ^ one per non-keyset enforcement
     , _mtGuardEnforcements :: Map TagId (Located GuardEnforcement)
     -- ^ one per each guard enforcement.
+    , _mtGrantRequests     :: Map TagId (Located GrantRequest)
+    -- ^ one per each require-capability call
     , _mtResult            :: (TagId, Located TVal)
     -- ^ return value of the function being checked
     , _mtPaths             :: Map Path (SBV Bool)
@@ -179,5 +190,6 @@ makePrisms ''TraceEvent
 makeLenses ''ExecutionGraph
 makeLenses ''Access
 makeLenses ''GuardEnforcement
+makeLenses ''GrantRequest
 makeLenses ''ModelTags
 makeLenses ''Model

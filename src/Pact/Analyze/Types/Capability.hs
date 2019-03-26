@@ -13,6 +13,8 @@ import qualified Data.Map.Strict              as Map
 import           Data.SBV                     (Mergeable(..), sFalse)
 import           Data.Type.Equality           ((:~:) (Refl))
 
+import           Pact.Types.Pretty
+
 import           Pact.Analyze.LegacySFunArray (eitherArray, mkSFunArray)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
@@ -27,6 +29,9 @@ instance Show Capability where
     . showsPrec 11 sch
     . showChar ' '
     . showsPrec 11 capName
+
+instance Pretty Capability where
+  pretty (Capability _ (CapName cn)) = pretty cn
 
 -- | The index into the family that is a 'Capability'. Think of this of the
 -- arguments to a particular call of a capability.

@@ -103,7 +103,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       nondets = Map.empty
       state0  = mkInitialAnalyzeState tables caps
 
-      tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty
+      tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
         -- this 'Located TVal' is never forced so we don't provide it
         (error "analyzeEval: Located TVal unexpectedly forced")
         Map.empty Map.empty

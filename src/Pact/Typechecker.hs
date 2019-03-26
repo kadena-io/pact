@@ -56,7 +56,7 @@ import Data.Maybe (isJust)
 
 import Pact.Types.Pretty
 import Pact.Types.Typecheck
-import Pact.Types.Runtime hiding (App,appInfo)
+import Pact.Types.Runtime hiding (App,appInfo,Object)
 import qualified Pact.Types.Runtime as Term
 import Pact.Types.Native
 
@@ -91,7 +91,7 @@ walkAST f t@Table {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
   Object {..} <- f Pre t
   t' <- Object _aNode <$>
-         forM _aObject (\(k,v) -> (,) <$> walkAST f k <*> walkAST f v)
+         forM _aObject (\(k,v) -> (k,) <$> walkAST f v)
   f Post t'
 walkAST f t@List {} = do
   List {..} <- f Pre t
@@ -269,10 +269,9 @@ applySchemas Pre ast = case ast of
 
   (Object n ps) -> findSchema n $ \sch partial -> do
     debug $ "applySchemas [object]: " ++ show (n,sch,partial)
-    pmap <- forM ps $ \(k,v) -> do
-      kstr <- asPrimString k
+    pmap <- forM ps $ \(FieldKey kstr,v) -> do
       vt' <- lookupAndResolveTy (_aNode v)
-      return (kstr,(v,_aId (_aNode k),vt'))
+      return (kstr,(v,_aId (_aNode v),vt'))
     validateSchema sch partial (M.fromList pmap) >>= \pm -> forM_ pm $ \pkeys -> case partial of
       FullSchema -> addFailure (_aId n) "Invalid partial schema found"
       _ -> do
@@ -847,11 +846,11 @@ toAST TBinding {..} = do
 toAST TList {..} = do
   ty <- TyList <$> traverse toUserType _tListType
   List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST _tList
-toAST TObject {..} = do
-  debug $ "TObject: " ++ show _tObjectType
-  ty <- TySchema TyObject <$> traverse toUserType _tObjectType <*> pure FullSchema
-  Object <$> (trackNode ty =<< freshId _tInfo "object")
-    <*> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject
+toAST (TObject Term.Object {..} _) = do
+  debug $ "TObject: " ++ show _oObjectType
+  ty <- TySchema TyObject <$> traverse toUserType _oObjectType <*> pure FullSchema
+  Object <$> (trackNode ty =<< freshId _oInfo "object")
+    <*> mapM (\(k,v) -> (k,) <$> toAST v) _oObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
 toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
 toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)

@@ -29,6 +29,10 @@ module Pact.Analyze.Check
   , SmtFailure(..)
   , ParseFailure
   , VerificationFailure(..)
+
+  -- Exported just for inclusion in haddocks:
+  , verifyFunctionProperty
+  , verifyFunctionInvariants'
   ) where
 
 import           Control.Exception         as E

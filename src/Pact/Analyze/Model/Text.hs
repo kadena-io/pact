@@ -155,6 +155,15 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
       Just (FromMetadata sName) ->
         guard <> " from tx metadata attribute named " <> showS sName
 
+showGR :: Recoverability -> Located GrantRequest -> Text
+showGR recov (_located -> GrantRequest (CapName (T.pack -> capName)) sbool) =
+  let requirement = "requirement of capability " <> capName
+  in
+    case SBV.unliteral sbool of
+      Nothing    -> "[ERROR:symbolic grant request]"
+      Just True  -> "satisfied " <> requirement
+      Just False -> showFailure recov <> " to satisfy " <> requirement
+
 -- TODO: after factoring Location out of TraceEvent, include source locations
 --       in trace
 showEvent
@@ -174,6 +183,8 @@ showEvent ksProvs tags event = do
         pure [display mtAsserts tid (showAssert recov)]
       TraceGuard recov (_located -> tid) ->
         pure [display mtGuardEnforcements tid (showGE recov $ tid `Map.lookup` ksProvs)]
+      TraceRequireGrant recov _capName _bindings (_located -> tid) ->
+        pure [display mtGrantRequests tid (showGR recov)]
       TraceSubpathStart _ ->
         pure [] -- not shown to end-users
       TracePushScope _ scopeTy locatedBindings -> do
@@ -185,11 +196,17 @@ showEvent ksProvs tags event = do
             displayCallScope :: Text -> Pact.ModuleName -> Text -> [Text]
             displayCallScope noun modName funName =
               -- TODO(joel): convert all of this to Doc
-              let header = renderCompactText' $
-                           "entering " <> pretty noun <> " " <> pretty modName
-                        <> "." <> pretty funName <> " with "
-                        <> if length vids > 1 then "arguments" else "argument"
-              in header : (displayVids showArg ++ [emptyLine])
+              let withArgs = case length vids of
+                               0 -> ""
+                               1 -> " with argument"
+                               _ -> " with arguments"
+                  headerLine = renderCompactText' $ "entering " <> pretty noun
+                            <> " " <> pretty modName <> "." <> pretty funName
+                            <> withArgs
+                  argLines = case length vids of
+                               0 -> []
+                               _ -> displayVids showArg ++ [emptyLine]
+              in headerLine : argLines
 
         pure $ case scopeTy of
           LetScope ->

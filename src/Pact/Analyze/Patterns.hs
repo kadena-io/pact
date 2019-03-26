@@ -197,14 +197,21 @@ pattern AST_Bind node object bindings schema body <-
       [object]
 
 pattern AST_WithCapability
-  :: Node
-  -> AST Node
+  :: AST Node
   -> [AST Node]
   -> AST Node
-pattern AST_WithCapability node app body <-
-  App node
+pattern AST_WithCapability app body <-
+  App _node
       (NativeFuncSpecial "with-capability" (List _ body))
       [app]
+
+pattern AST_RequireCapability :: Node -> AST Node -> AST Node
+pattern AST_RequireCapability node app <-
+  App node (NativeFunc "require-capability") [app]
+
+pattern AST_ComposeCapability :: AST Node -> AST Node
+pattern AST_ComposeCapability app <-
+  App _node (NativeFunc "compose-capability") [app]
 
 -- pattern RawTableName :: Text -> AST Node
 -- pattern RawTableName t <- Table (Node (TcId _ t _) _) _
@@ -243,7 +250,7 @@ pattern AST_Take node num list <- App node (NativeFunc SListTake) [num, list]
 pattern AST_MakeList :: a -> AST a -> AST a -> AST a
 pattern AST_MakeList node num val <- App node (NativeFunc SMakeList) [num, val]
 
-pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
+pattern AST_Obj :: forall a. a -> [(Lang.FieldKey, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
 
 pattern AST_List :: forall a. a -> [AST a] -> AST a

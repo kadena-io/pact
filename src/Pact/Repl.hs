@@ -45,7 +45,7 @@ import Control.Applicative
 import Control.Lens hiding (op)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
-import Data.Aeson hiding ((.=))
+import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.UTF8 as BS
@@ -53,6 +53,7 @@ import Data.Char
 import Data.Default
 import Data.List
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as M
 import Prelude hiding (exp)
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import qualified Data.Text as Text
@@ -104,8 +105,13 @@ initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
   return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0)
-    def def mv repldb def initialHash freeGasEnv permissiveNamespacePolicy
+    def def mv repldb def initialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv) def
 
+
+spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
+spv mv ty pay = readMVar mv >>= \LibState{..} -> case M.lookup (SPVMockKey (ty,pay)) _rlsMockSPV of
+  Nothing -> return $ Left $ "SPV verification failure"
+  Just o -> return $ Right o
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a
@@ -188,6 +194,10 @@ pureEval ei e = do
   case r of
     Right a -> do
         doOut ei mode a
+        case _evalPactExec es of
+          Nothing -> return ()
+          Just pe -> do
+            use (rEnv.eePactDbVar) >>= \mv -> liftIO $ modifyMVar_ mv $ return . over rlsPacts (M.insert (_pePactId pe) pe)
         rEvalState .= es
         updateForOp a
     Left err -> do

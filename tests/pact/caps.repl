@@ -41,7 +41,7 @@
 
   (defpact test-pact-guards (id:string)
     (step (step1 id))
-    (step (step2 id)))
+    (step (step2 (read-msg "id"))))
 
   (defun step1 (id:string)
     (insert guard-table id { "g": (create-pact-guard "test")}))
@@ -146,16 +146,17 @@
 
 (test-pact-guards "a")
 
-(env-step 1) ;;clears pact state
+(pact-state true) ;;clears pact state
 (let ((g (get-guard "a"))) ;; doing let so db failure doesn't confuse below
   (expect-failure "enforcing pact guard outside of pact" (enforce-guard g)))
 
-(env-pactid "4")
-(test-pact-guards "a")
+(env-data { "id": "a"})
+(continue-pact 4 1)
 (expect "pact enforce succeeds" 1 (at 'result (at 'yield (pact-state))))
 
-(env-pactid "5")
-(expect-failure "pact enforce fails" (test-pact-guards "a"))
+(pact-state true)
+(test-pact-guards "b")
+(expect-failure "pact enforce fails in pact 5 for id 'a'" (continue-pact 5 1))
 
 (env-keys ["a" "b" "c"])
 (expect-failure "cannot compose caps at toplevel" (compose-capability (KALL-CAP)))

@@ -13,7 +13,7 @@
   (+ { "a": 4} {"a": true}))
 (expect-failure "+ integer string" (+ 2 "hello"))
 (expect-failure "+ list string" (+ [2] "hello"))
-(expect-failure "+ object decimal" (+ {3: 4} 1.0))
+(expect-failure "+ object decimal" (+ {'a: 4} 1.0))
 
 "===== -"
 (expect "- integer, - integer integer" (- 2) (- 0 2))

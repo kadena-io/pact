@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
 module PersistSpec (spec) where
 
 import Test.Hspec
@@ -6,18 +8,21 @@ import qualified Pact.Persist.SQLite as SQLite
 import System.Directory
 import Control.Monad
 import Pact.Types.Logger
+import Control.Concurrent
 
 spec :: Spec
 spec = do
   it "regress Pure" (void regressPure)
-  it "regress SQLite" regressSQLite
+  describe "regress SQLite" regressSQLite
 
 
-regressSQLite :: IO ()
+regressSQLite :: Spec
 regressSQLite = do
   let f = "deleteme.sqllite"
-  doesFileExist f >>= \b -> when b (removeFile f)
-  sl <- SQLite.initSQLite (SQLite.SQLiteConfig "deleteme.sqllite" []) alwaysLog
-  void $ runRegression (initDbEnv alwaysLog SQLite.persister sl)
-  void $ SQLite.closeSQLite sl
-  removeFile f
+  db <- runIO $ do
+    doesFileExist f >>= \b -> when b (removeFile f)
+    sl <- SQLite.initSQLite (SQLite.SQLiteConfig "deleteme.sqllite" []) alwaysLog
+    mv <- runRegression (initDbEnv alwaysLog SQLite.persister sl)
+    _db <$> readMVar mv
+  it "SQLite successfully closes" $ SQLite.closeSQLite db `shouldReturn` (Right ())
+  runIO $ removeFile f

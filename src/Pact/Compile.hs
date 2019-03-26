@@ -300,11 +300,11 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
 objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
   let pair = do
-        key <- valueLevel
+        key <- FieldKey <$> str
         val <- sep Colon *> valueLevel
         return (key,val)
   ps <- (pair `sepBy` sep Comma) <* eof
-  return $ TObject ps TyAny _listInfo
+  return $ TObject (Object ps TyAny _listInfo) _listInfo
 
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->

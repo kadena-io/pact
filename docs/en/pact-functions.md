@@ -898,7 +898,7 @@ pact> (= [1 2 3] [1 2 3])
 true
 pact> (= 'foo "foo")
 true
-pact> (= { 1: 2 } { 1: 2})
+pact> (= { 'a: 2 } { 'a: 2})
 true
 ```
 
@@ -1301,6 +1301,18 @@ Specifies and requests grant of CAPABILITY which is an application of a 'defcap'
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```
 
+## SPV {#SPV}
+
+### verify-spv {#verify-spv}
+
+*type*&nbsp;`string` *payload*&nbsp;`object:[]<in>` *&rarr;*&nbsp;`object:[]<out>`
+
+
+Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of the PAYLOAD object depends on TYPE, as does the format of the return object. Platforms such as Chainweb will document the specific payload types and return values.
+```lisp
+(verify-spv "TXOUT" (read-msg "proof"))
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
@@ -1341,6 +1353,23 @@ Commit transaction.
 ```
 
 
+### continue-pact {#continue-pact}
+
+*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *yielded*&nbsp;`object:[]<{y}>` *&rarr;*&nbsp;`string`
+
+
+Continue previously-initiated pact identified by PACT-ID at STEP, optionally specifying ROLLBACK (default is false), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
+```lisp
+(continue-pact 2 1)
+(continue-pact 2 1 true)
+(continue-pact 2 1 false { "rate": 0.9 })
+```
+
+
 ### env-data {#env-data}
 
 *json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset,value]>` *&rarr;*&nbsp;`string`
@@ -1360,7 +1389,7 @@ pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any"
 *entity*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set environment confidential ENTITY id, or unset with no argument. Clears any previous pact execution state.
+Set environment confidential ENTITY id, or unset with no argument.
 ```lisp
 (env-entity "my-org")
 (env-entity)
@@ -1433,34 +1462,6 @@ pact> (env-keys ["my-key" "admin-key"])
 ```
 
 
-### env-pactid {#env-pactid}
-
- *&rarr;*&nbsp;`string`
-
-*id*&nbsp;`string` *&rarr;*&nbsp;`string`
-
-
-Query environment pact id, or set to ID.
-
-
-### env-step {#env-step}
-
- *&rarr;*&nbsp;`string`
-
-*step-idx*&nbsp;`integer` *&rarr;*&nbsp;`string`
-
-*step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
-
-*step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *resume*&nbsp;`object:[]<{y}>` *&rarr;*&nbsp;`string`
-
-
-Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'.Clears any previous pact execution state.
-```lisp
-(env-step 1)
-(env-step 0 true)
-```
-
-
 ### expect {#expect}
 
 *doc*&nbsp;`string` *expected*&nbsp;`<a>` *actual*&nbsp;`<a>` *&rarr;*&nbsp;`string`
@@ -1518,14 +1519,28 @@ Load and evaluate FILE, resetting repl state beforehand if optional RESET is tru
 ```
 
 
+### mock-spv {#mock-spv}
+
+*type*&nbsp;`string` *payload*&nbsp;`object:[]*` *output*&nbsp;`object:[]*` *&rarr;*&nbsp;`string`
+
+
+Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT.
+```lisp
+(mock-spv "TXOUT" { 'proof: "a54f54de54c54d89e7f" } { 'amount: 10.0, 'account: "Dave", 'chainId: 1 })
+```
+
+
 ### pact-state {#pact-state}
 
  *&rarr;*&nbsp;`object:[]*`
 
+*clear*&nbsp;`bool` *&rarr;*&nbsp;`object:[]*`
 
-Inspect state from previous pact execution. Returns object with fields 'yield': yield result or 'false' if none; 'step': executed step; 'executed': indicates if step was skipped because entity did not match.
+
+Inspect state from most recent pact execution. Returns object with fields 'pactId': pact ID; 'yield': yield result or 'false' if none; 'step': executed step; 'executed': indicates if step was skipped because entity did not match. With CLEAR argument, erases pact from repl state.
 ```lisp
 (pact-state)
+(pact-state true)
 ```
 
 

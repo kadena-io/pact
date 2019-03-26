@@ -24,9 +24,8 @@
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
-  , CommandPact(..), cpTxId, cpContinuation, cpStepCount, cpStep, cpYield
   , CommandState(..), csRefStore, csPacts
-  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger, ceGasEnv
+  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger, cePublicData, ceGasEnv
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -52,9 +51,9 @@ import qualified Data.Map.Strict         as M
 import qualified Data.Set                as S
 import Data.Text.Encoding
 import Data.Aeson
-
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
+import Data.Int
 
 import Prelude
 
@@ -83,18 +82,10 @@ data CommandConfig = CommandConfig {
 $(makeLenses ''CommandConfig)
 
 
-data CommandPact = CommandPact
-  { _cpTxId :: TxId
-  , _cpContinuation :: Term Name
-  , _cpStepCount :: Int
-  , _cpStep :: Int
-  , _cpYield :: Maybe (Term Name)
-  } deriving Show
-$(makeLenses ''CommandPact)
 
 data CommandState = CommandState {
        _csRefStore :: RefStore
-     , _csPacts :: M.Map TxId CommandPact -- comment copied from Kadena code: TODO need hashable for TxId mebbe
+     , _csPacts :: M.Map PactId PactExec
      } deriving Show
 $(makeLenses ''CommandState)
 
@@ -105,6 +96,7 @@ data CommandEnv p = CommandEnv {
     , _ceState :: MVar CommandState
     , _ceLogger :: Logger
     , _ceGasEnv :: GasEnv
+    , _cePublicData :: PublicData
     }
 $(makeLenses ''CommandEnv)
 

@@ -478,6 +478,9 @@ class HasAnalyzeEnv a where
   currentEntity :: Lens' a (S Str)
   currentEntity = analyzeEnv.aePactMetadata.pmEntity
 
+  activeGrants :: Lens' a TokenGrants
+  activeGrants = analyzeEnv.aeActiveGrants
+
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 

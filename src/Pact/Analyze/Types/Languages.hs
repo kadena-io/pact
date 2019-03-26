@@ -140,7 +140,7 @@ inject' = review subP'
 project' :: sub :*<: sup => sup a -> Maybe (sub (Concrete a))
 project' = preview subP'
 
--- | An open term (: 'b') with a free variable (: 'a').
+-- | An open term (@: b@) with a free variable (@: a@).
 data Open (a :: Ty) (tm :: Ty -> *) (b :: Ty) = Open !VarId !Text !(tm b)
   deriving (Eq, Show)
 
@@ -154,14 +154,14 @@ data Open (a :: Ty) (tm :: Ty -> *) (b :: Ty) = Open !VarId !Text !(tm b)
 -- This consists of:
 --
 -- * comparisons
---   - { <, >, <=, >= } apply to { integer, decimal, string, time }
---   - { =, != } apply to { integer, decimal, string, time, bool, keyset }
+--     - @{ '<', '>', '<=', '>=' }@ apply to @{ integer, decimal, string, time }@
+--     - @{ =, != }@ apply to @{ integer, decimal, string, time, bool, keyset }@
 -- * literals
 -- * variables
 -- * logical operations
 -- * string length and concatenation
--- * 'add-time'
--- * 'at'
+-- * @add-time@
+-- * @at@
 -- * lit operations
 data Core (t :: Ty -> *) (a :: Ty) where
   Lit :: Concrete a -> Core t a
@@ -1297,7 +1297,9 @@ data Term (a :: Ty) where
   IfThenElse      :: SingTy a -> Term 'TyBool -> (Path, Term a) -> (Path, Term a) -> Term a
 
   -- Variable binding
-  Let             :: Text -> VarId -> TagId -> ETerm -> Term a -> Term a
+  Let             :: Text  -> VarId -> ETerm -> Term a -> Term a
+  -- A return value from a scope; this exists only so we can "tag" the return value
+  Return          :: TagId -> Term a                   -> Term a
 
   -- Conditional transaction abort
   Enforce         :: Maybe TagId -> Term 'TyBool   -> Term 'TyBool -- Only a TagId for an assertion; i.e. not keyset enforcement
@@ -1310,6 +1312,7 @@ data Term (a :: Ty) where
   -- Capabilities
   WithCapability  :: ETerm      -> Term a            -> Term a
   Granting        :: Capability -> [VarId] -> Term a -> Term a
+  HasGrant        :: TagId -> Capability -> [(Text, VarId)] -> Term 'TyBool
 
   -- Reading from environment
   ReadKeySet      :: Term 'TyStr -> Term 'TyGuard
@@ -1374,7 +1377,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 y
     . showChar ' '
     . showsPrec 11 z
-  Let a b c d e ->
+  Let a b c d ->
       showString "Let "
     . showsPrec 11 a
     . showChar ' '
@@ -1383,8 +1386,11 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 c
     . showChar ' '
     . showsPrec 11 d
+  Return a b ->
+      showString "Return "
+    . showsPrec 11 a
     . showChar ' '
-    . showsPrec 11 e
+    . showsPrec 11 b
   Sequence x y ->
       showString "Sequence "
     . showsPrec 11 x
@@ -1403,6 +1409,13 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 b
   Granting a b c ->
       showString "Granting "
+    . showsPrec 11 a
+    . showChar ' '
+    . showsPrec 11 b
+    . showChar ' '
+    . showsPrec 11 c
+  HasGrant a b c ->
+      showString "HasGrant "
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
@@ -1509,7 +1522,7 @@ prettyTerm ty = \case
     , singPrettyTm ty' y
     , singPrettyTm ty' z
     ]
-  Let var _ _ x y -> parensSep
+  Let var _ x y -> parensSep
     [ "let"
     , parensSep
       [ parensSep
@@ -1519,6 +1532,7 @@ prettyTerm ty = \case
       ]
     , prettyTerm ty y
     ]
+  Return _ t -> prettyTerm ty t
   Sequence x y -> vsep [pretty x, prettyTerm ty y]
 
   EnforceOne (Left _)        -> parensSep
@@ -1532,16 +1546,15 @@ prettyTerm ty = \case
     , pretty $ fmap snd x
     ]
 
-  --
-  -- TODO: perhaps track whether -guard or -keyset was used for this?
-  --
-  Enforce _ (GuardPasses _ x)    -> parensSep ["enforce-guard", pretty x]
-  Enforce _ x                    -> parensSep ["enforce", pretty x]
+  Enforce _ (GuardPasses _ x) -> parensSep ["enforce-guard", pretty x]
+  Enforce _ (HasGrant _ c vs) -> parensSep ["require-capability", parensSep (pretty c : map (pretty . fst) vs)]
+  Enforce _ x                 -> parensSep ["enforce", pretty x]
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
 
   WithCapability a x    -> parensSep ["with-capability", pretty a, prettyTerm ty x]
   Granting _ _ x        -> prettyTerm ty x
+  HasGrant _ _ _        -> error "HasGrant should only appear inside of an Enforce"
   Read _ _ tab x        -> parensSep ["read", pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
   PactVersion           -> parensSep ["pact-version"]
@@ -1573,8 +1586,8 @@ eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2
 eqTerm ty (IfThenElse _ty1 a1 (b1, c1) (d1, e1))
           (IfThenElse _ty2 a2 (b2, c2) (d2, e2))
   = eqTm a1 a2 && b1 == b2 && singEqTm ty c1 c2 && d1 == d2 && singEqTm ty e1 e2
-eqTerm ty (Let a1 b1 c1 d1 e1) (Let a2 b2 c2 d2 e2)
-  = a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && singEqTm ty e1 e2
+eqTerm ty (Let a1 b1 c1 d1) (Let a2 b2 c2 d2)
+  = a1 == a2 && b1 == b2 && c1 == c2 && singEqTm ty d1 d2
 eqTerm ty (Sequence a1 b1) (Sequence a2 b2)
   = a1 == a2 && singEqTm ty b1 b2
 eqTerm _ty (Enforce a1 b1) (Enforce a2 b2)

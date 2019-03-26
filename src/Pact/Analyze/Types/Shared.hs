@@ -698,8 +698,11 @@ newtype VarId
 -- unique identifier. These names are generated upstream in the typechecker
 -- (using 'freshId').
 newtype Munged
-  = Munged Text
+  = Munged { _mungedName :: Text }
   deriving (Eq, Show)
+
+instance Pretty Munged where
+  pretty (Munged nm) = pretty nm
 
 -- | A user-supplied (i.e. non-unique) identifer name.
 newtype Unmunged

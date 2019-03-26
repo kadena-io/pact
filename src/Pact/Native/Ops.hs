@@ -60,10 +60,10 @@ addDef = defRNative "+" plus plusTy
       (a <> b)
       (if aty == bty then aty else TyAny)
       def
-    plus _ [TObject as aty _,TObject bs bty _] =
+    plus _ [TObject (Object as aty _) _,TObject (Object bs bty _) _] =
       let reps (a,b) = (renderCompactText a,(a,b))
           mapit = M.fromList . map reps
-      in return $ TObject
+      in return $ (`TObject` def) $ Object
            (M.elems $ M.union (mapit as) (mapit bs))
            (if aty == bty then aty else TyAny)
            def
@@ -155,7 +155,7 @@ lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
 
 eqDef :: NativeDef
 eqDef = defRNative "=" (eq id) eqTy
-  ["(= [1 2 3] [1 2 3])", "(= 'foo \"foo\")", "(= { 1: 2 } { 1: 2})"]
+  ["(= [1 2 3] [1 2 3])", "(= 'foo \"foo\")", "(= { 'a: 2 } { 'a: 2})"]
   "True if X equals Y."
 
 neqDef :: NativeDef

@@ -31,6 +31,7 @@ library
                      , Pact.Native.Capabilities
                      , Pact.Native.Db
                      , Pact.Native.Internal
+                     , Pact.Native.SPV
                      , Pact.Native.Time
                      , Pact.Native.Ops
                      , Pact.Native.Keysets
@@ -44,6 +45,7 @@ library
                      , Pact.Server.API
                      , Pact.Server.Client
                      , Pact.Types.API
+                     , Pact.Types.ChainMeta
                      , Pact.Types.Command
                      , Pact.Types.Scheme
                      , Pact.Types.Exp
@@ -76,6 +78,7 @@ library
   if !impl(ghcjs)
     hs-source-dirs: src-ghc
     exposed-modules:
+      Pact.Analyze
       Pact.Analyze.Alloc
       Pact.Analyze.Eval
       Pact.Analyze.Eval.Invariant
