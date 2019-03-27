@@ -18,7 +18,7 @@
 module Pact.Analyze.Model.Tags
   ( allocArgs
   , allocModelTags
-  , allocNondets
+  , allocStepChoices
   , saturateModel
   ) where
 
@@ -72,8 +72,8 @@ allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   av <- allocAVal (unmungedStr nm) ety <&> _AVal._1 ?~ FromInput nm
   pure (vid, Located info (nm, (ety, av)))
 
-allocNondets :: [VarId] -> Alloc (Map VarId (SBV Bool))
-allocNondets vids = fmap Map.fromList $ for vids $ \vid ->
+allocStepChoices :: [VarId] -> Alloc (Map VarId (SBV Bool))
+allocStepChoices vids = fmap Map.fromList $ for vids $ \vid ->
   (vid,) <$> allocSbv @'TyBool "nondet"
 
 allocModelTags

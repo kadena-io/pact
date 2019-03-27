@@ -241,7 +241,7 @@ data TranslateState
 
       -- Vars representing nondeterministic choice between two branches. These
       -- are used for continuing on or rolling back in evaluation of pacts.
-    , _tsNondets       :: ![VarId]
+    , _tsStepChoices   :: ![VarId]
     }
 
 makeLenses ''TranslateFailure
@@ -640,7 +640,7 @@ translatePact nodes = do
         (Nothing : fmap Just cancels)
         (rollbacks <> [Nothing])
 
-  tsNondets .= fmap snd cancels
+  tsStepChoices .= fmap snd cancels
 
   -- connect sink
   tsPathHead    .= postSnVertex
@@ -1437,9 +1437,9 @@ runTranslation
   -> CheckableType
   -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph)
 runTranslation modName funName info caps pactArgs body checkType = do
-    (args, translationVid) <- runArgsTranslation
-    (tm, (nondets, graph)) <- runBodyTranslation args translationVid
-    pure (args, nondets, tm, graph)
+    (args, translationVid)     <- runArgsTranslation
+    (tm, (stepChoices, graph)) <- runBodyTranslation args translationVid
+    pure (args, stepChoices, tm, graph)
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
@@ -1482,7 +1482,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
             pure res
 
           handleState translateState =
-            ( _tsNondets translateState
+            ( _tsStepChoices translateState
             , mkExecutionGraph vertex0 path0 translateState
             )
       in fmap (fmap handleState) $ flip runStateT state0 $

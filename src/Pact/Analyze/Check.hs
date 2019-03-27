@@ -92,7 +92,8 @@ import qualified Pact.Types.Typecheck      as TC
 import           Pact.Analyze.Alloc        (runAlloc)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval         hiding (invariants)
-import           Pact.Analyze.Model        (allocArgs, allocModelTags, allocNondets,
+import           Pact.Analyze.Model        (allocArgs, allocModelTags,
+                                            allocStepChoices,
                                             saturateModel, showModel)
 import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Analyze.Translate
@@ -311,19 +312,19 @@ verifyFunctionInvariants'
   -> IO (Either CheckFailure (TableMap [CheckResult]))
 verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body
   checkType = runExceptT $ do
-    (args, nondets, tm, graph) <- hoist generalize $
+    (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation modName funName
         funInfo caps pactArgs body checkType
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       lift $ SBV.setTimeOut 1000 -- one second
-      modelArgs' <- lift $ runAlloc $ allocArgs args
-      nondets'   <- lift $ runAlloc $ allocNondets nondets
-      tags       <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+      modelArgs'   <- lift $ runAlloc $ allocArgs args
+      stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
+      tags         <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
       let rootPath = _egRootPath graph
       resultsTable <- withExceptT analyzeToCheckFailure $
         runInvariantAnalysis modName tables caps (analysisArgs modelArgs')
-          nondets' tm rootPath tags funInfo
+          stepChoices' tm rootPath tags funInfo
 
       -- Iterate through each invariant in a single query so we can reuse our
       -- assertion stack.
@@ -377,21 +378,21 @@ verifyFunctionProperty
   -> IO (Either CheckFailure CheckSuccess)
 verifyFunctionProperty modName funName funInfo tables caps pactArgs body
   checkType (Located propInfo check) = runExceptT $ do
-    (args, nondets, tm, graph) <- hoist generalize $
+    (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation modName funName funInfo caps pactArgs body checkType
 
     -- Set up the model and our query
     let setupSmtProblem = do
           lift $ SBV.setTimeOut 1000 -- one second
-          modelArgs' <- lift $ runAlloc $ allocArgs args
-          nondets'   <- lift $ runAlloc $ allocNondets nondets
-          tags       <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+          modelArgs'   <- lift $ runAlloc $ allocArgs args
+          stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
+          tags         <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
           let rootPath = _egRootPath graph
           ar@(AnalysisResult _querySucceeds _prop ksProvs)
             <- withExceptT analyzeToCheckFailure $
               runPropertyAnalysis modName check tables caps
-                (analysisArgs modelArgs') nondets' tm rootPath tags funInfo
+                (analysisArgs modelArgs') stepChoices' tm rootPath tags funInfo
 
           let model = Model modelArgs' tags ksProvs graph
 

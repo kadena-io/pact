@@ -657,7 +657,7 @@ evalTerm = \case
 
           -- ... otherwise, we nondeterministically either succeed or cancel
           Just (cancelPath {- c_n -}, cancelVid) -> withReset stepNo $ do
-            cancel <- view (aeNondets . at cancelVid)
+            cancel <- view (aeStepChoices . at cancelVid)
               ??? "couldn't find cancel var"
 
             tagFork successPath cancelPath (sansProv successChoice)
@@ -699,7 +699,7 @@ evalTerm = \case
       sFalse
       rollbacks
 
-    pure "pact done"
+    pure "INTERNAL: pact done"
 
   -- Caution: yield / resume are not yet working pending #442
   Yield ty tm -> do

@@ -157,7 +157,7 @@ data AnalyzeEnv
     , _aeRegistry     :: !Registry
     , _aeTxMetadata   :: !TxMetadata
     , _aeScope        :: !(Map VarId AVal) -- used as a stack
-    , _aeNondets      :: !(Map VarId (SBV Bool))
+    , _aeStepChoices  :: !(Map VarId (SBV Bool))
     , _aeGuardPasses  :: !(SFunArray Guard Bool)
     , _invariants     :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds    :: !(TableMap (Map Text VarId))
@@ -182,7 +182,7 @@ mkAnalyzeEnv
   -> ModelTags 'Symbolic
   -> Info
   -> Maybe AnalyzeEnv
-mkAnalyzeEnv modName pactMetadata registry tables caps args nondets tags info = do
+mkAnalyzeEnv modName pactMetadata registry tables caps args stepChoices tags info = do
   let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
                                 (mkFreeArray "txDecimals")
                                 (mkFreeArray "txIntegers")
@@ -213,9 +213,9 @@ mkAnalyzeEnv modName pactMetadata registry tables caps args nondets tags info = 
       emptyGrants  = mkTokenGrants caps
       activeGrants = emptyGrants
 
-  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args nondets guardPasses
-    invariants' columnIds' tags info (sansProv trivialGuard) emptyGrants
-    activeGrants tables
+  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args
+    stepChoices guardPasses invariants' columnIds' tags info
+    (sansProv trivialGuard) emptyGrants activeGrants tables
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
