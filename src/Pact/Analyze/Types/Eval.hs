@@ -81,6 +81,7 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
         ) => b)
     -> b
 
+-- | Expect a 'Just' in an 'Analyzer'.
 (??)
   :: Analyzer m
   => Maybe a -> AnalyzeFailureNoLoc -> m a
@@ -88,6 +89,7 @@ Just a  ?? _   = pure a
 Nothing ?? err = throwErrorNoLoc err
 infix 1 ??
 
+-- | Expect a computation to evaluate to a 'Just' in an 'Analyzer'.
 (???) :: Analyzer m => m (Maybe a) -> AnalyzeFailureNoLoc -> m a
 m ??? err = do
   m' <- m

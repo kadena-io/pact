@@ -1346,6 +1346,7 @@ data Term (a :: Ty) where
   ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr  -> Term 'TyTime
   Hash            :: ETerm                               -> Term 'TyStr
 
+  -- Pacts
   Pact   :: [PactStep] -> Term 'TyStr
   Yield  :: SingTy a -> Term a -> Term a
   Resume ::                       Term a

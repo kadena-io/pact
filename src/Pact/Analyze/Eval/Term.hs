@@ -726,14 +726,17 @@ evalTermWithEntity mEntity tm = do
       markFailure $ actualEntity ./= expectedEntity'
   evalTerm tm
 
--- | Reset to perform between different transactions
+-- | Reset to perform between different transactions.
+--
+-- This encompasses anything in 'AnalyzeState' or 'AnalyzeEnv' that could have
+-- changed between transactions.
 withReset :: Int -> Analyze a -> Analyze a
 withReset number action = do
-  tables    <- view $ analyzeEnv . aeTables
-  oldState  <- use id
-  oldEnv    <- ask
-  -- TODO: remove duplication with mkAnalyzeEnv
-  let txMetadata   = TxMetadata (mkFreeArray $ "txKeySets"  <> tShow number)
+  oldState <- use id
+  oldEnv   <- ask
+
+  let tables = oldEnv ^. aeTables
+      txMetadata   = TxMetadata (mkFreeArray $ "txKeySets"  <> tShow number)
                                 (mkFreeArray $ "txDecimals" <> tShow number)
                                 (mkFreeArray $ "txIntegers" <> tShow number)
 

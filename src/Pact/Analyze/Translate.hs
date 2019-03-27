@@ -239,7 +239,9 @@ data TranslateState
       -- These three "success" edges all join together at the same vertex.
     , _tsFoundVars     :: [(VarId, Text, EType)]
 
-    , _tsNondets        :: ![VarId]
+      -- Vars representing nondeterministic choice between two branches. These
+      -- are used for continuing on or rolling back in evaluation of pacts.
+    , _tsNondets       :: ![VarId]
     }
 
 makeLenses ''TranslateFailure
