@@ -29,6 +29,18 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 ```
 
 
+### chain-data {#chain-data}
+
+ *&rarr;*&nbsp;`object:[]<{o}>`
+
+
+Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
+```lisp
+pact> (chain-data)
+{"chain-id": 0,"block-height": 0,"block-time": 0,"sender": "","gas-limit": 0,"gas-price": 0}
+```
+
+
 ### compose {#compose}
 
 *x*&nbsp;`x:<a> -> <b>` *y*&nbsp;`x:<b> -> <c>` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
@@ -1367,6 +1379,18 @@ Continue previously-initiated pact identified by PACT-ID at STEP, optionally spe
 (continue-pact 2 1)
 (continue-pact 2 1 true)
 (continue-pact 2 1 false { "rate": 0.9 })
+```
+
+
+### env-chain-data {#env-chain-data}
+
+*new-data*&nbsp;`object:[]*` *&rarr;*&nbsp;`string`
+
+
+Update existing entries 'chain-data' with NEW-DATA, replacing those items only.
+```lisp
+pact> (env-chain-data { "chain-id": 2, "block-height": 20 })
+"Updated public metadata"
 ```
 
 
