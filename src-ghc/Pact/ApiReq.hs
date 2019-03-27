@@ -72,7 +72,7 @@ data ApiReq = ApiReq {
   _ylCodeFile :: Maybe FilePath,
   _ylKeyPairs :: [ApiKeyPair],
   _ylNonce :: Maybe String,
-  _ylPublicData :: Maybe PublicMeta
+  _ylPublicMeta :: Maybe PublicMeta
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
@@ -114,7 +114,7 @@ mkApiReqExec ar@ApiReq{..} kps fp = do
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
     return (code,cdata)
-  let pubMeta = fromMaybe def _ylPublicData
+  let pubMeta = fromMaybe def _ylPublicMeta
   ((ar,code,cdata,pubMeta),) <$> mkExec code cdata pubMeta kps _ylNonce
 
 mkExec :: String -> Value -> PublicMeta -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
@@ -150,7 +150,7 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
                           eitherDecode
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
-  let pubMeta = fromMaybe def _ylPublicData
+  let pubMeta = fromMaybe def _ylPublicMeta
   ((ar,"",cdata,pubMeta),) <$> mkCont txId step rollback cdata pubMeta kps _ylNonce
 
 mkCont :: PactId -> Int -> Bool  -> Value -> PublicMeta -> [SomeKeyPair]
