@@ -223,7 +223,7 @@ pactWithRollbackCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
             (defpact tester ()
               (step-with-rollback "step 0" "rollback 0")
               (step-with-rollback "step 1" "rollback 1")
-              (step-with-rollback "step 2" "rollback 2")))
+              (step               "step 2")))
             |]
 
 pactWithRollbackErrCode :: String -> T.Text
@@ -234,7 +234,7 @@ pactWithRollbackErrCode moduleName = T.concat [begCode, T.pack moduleName, endCo
             (defpact tester ()
               (step-with-rollback "step 0" "rollback 0")
               (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
-              (step-with-rollback "step 2" "rollback 2")))
+              (step               "step 2")))
             |]
 
 pactWithYield :: String -> T.Text
