@@ -256,5 +256,5 @@ pattern AST_Obj objNode kvs <- Object objNode kvs
 pattern AST_List :: forall a. a -> [AST a] -> AST a
 pattern AST_List node elems <- List node elems
 
-pattern AST_Step :: AST a
-pattern AST_Step <- Step {}
+pattern AST_Step :: a -> Maybe (AST a) -> AST a -> Maybe (AST a) -> AST a
+pattern AST_Step node entity exec rollback <- Step node entity exec rollback

@@ -148,8 +148,6 @@
     (let ((partial { "name": "dave" }))
       (update persons "foo" partial)
       partial))
-
-
 )
 
 (create-table persons)

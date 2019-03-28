@@ -34,6 +34,7 @@ module Pact.Analyze.Types.Languages
   , Term(..)
   , BeforeOrAfter(..)
   , Open(..)
+  , PactStep(..)
 
   , toPact
   , fromPact
@@ -87,7 +88,7 @@ import           Text.Show                     (showListWith)
 import           Pact.Types.Pretty             (commaBraces, commaBrackets,
                                                 parens, parensSep,
                                                 Pretty(pretty), Doc, viaShow,
-                                                vsep)
+                                                vsep, prettyString)
 import           Pact.Types.Persistence        (WriteType)
 
 import           Pact.Analyze.Feature          hiding (Doc, Sym, Var, col, str,
@@ -401,7 +402,7 @@ singPrettyObject SObjectNil (Object SNil) = [""]
 singPrettyObject
   (SObjectUnsafe (SingList (SCons _ _ objty)))
   (Object (SCons k (Column vTy v) obj))
-    = (pretty (symbolVal k) <> ": " <> singPrettyTm vTy v)
+    = ("'" <> prettyString (symbolVal k) <> ": " <> singPrettyTm vTy v)
       : singPrettyObject (SObjectUnsafe (SingList objty)) (Object obj)
 singPrettyObject _ _ = error "malformed object"
 
@@ -1340,10 +1341,30 @@ data Term (a :: Ty) where
 
   PactVersion     :: Term 'TyStr
 
-  Format          :: Term 'TyStr         -> [ETerm]     -> Term 'TyStr
-  FormatTime      :: Term 'TyStr         -> Term 'TyTime   -> Term 'TyStr
-  ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr -> Term 'TyTime
-  Hash            :: ETerm                              -> Term 'TyStr
+  Format          :: Term 'TyStr         -> [ETerm]      -> Term 'TyStr
+  FormatTime      :: Term 'TyStr         -> Term 'TyTime -> Term 'TyStr
+  ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr  -> Term 'TyTime
+  Hash            :: ETerm                               -> Term 'TyStr
+
+  -- Pacts
+  Pact   :: [PactStep] -> Term 'TyStr
+  Yield  :: SingTy a -> Term a -> Term a
+  Resume ::                       Term a
+
+data PactStep where
+  Step
+    :: Term a :< SingTy a  -- exec
+    -> Path                -- corresponds to the graph edge for this step
+    -> Maybe (Term 'TyStr) -- entity
+    -- first:  Nothing
+    -- others: Just
+    -> Maybe (Path, VarId) -- does this step cancel. invariant: the first
+                           -- step does not have this vid. all other steps do.
+                           -- "C"
+    -- last:   Nothing
+    -- others: Just or Nothing
+    -> Maybe (Path, ETerm) -- rollback (R1)
+    -> PactStep
 
 showsTerm :: SingTy ty -> Int -> Term ty -> ShowS
 showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
@@ -1461,11 +1482,27 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
-  Hash a -> showString "Hash " . showsPrec 11 a
+  Hash a           -> showString "Hash " . showsPrec 11 a
   ReadKeySet  name -> showString "ReadKeySet " . showsPrec 11 name
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
-  PactId -> showString "PactId"
+  PactId           -> showString "PactId"
+  Pact steps       -> showString "Pact " . showList steps
+  Yield ty' a      -> showString "Yield " . showsPrec 11 ty' . singShowsTm ty 11 a
+  Resume           -> showString "Resume"
+
+instance Show PactStep where
+  showsPrec _ (Step (exec :< execTy) path mEntity mCancelVid mRollback) =
+     showString "Step "
+   . withSing execTy (showsTm 11 exec)
+   . showChar ' '
+   . showsPrec 11 path
+   . showChar ' '
+   . showsPrec 11 mEntity
+   . showChar ' '
+   . showsPrec 11 mCancelVid
+   . showChar ' '
+   . showsPrec 11 mRollback
 
 showsProp :: SingTy ty -> Int -> Prop ty -> ShowS
 showsProp ty p = withSing ty $ \case
@@ -1516,24 +1553,34 @@ prettyTerm ty = \case
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
 
-  WithCapability a x   -> parensSep ["with-capability", pretty a, prettyTerm ty x]
-  Granting _ _ x       -> prettyTerm ty x
-  HasGrant _ _ _       -> error "HasGrant should only appear inside of an Enforce"
-  Read _ _ tab x       -> parensSep ["read", pretty tab, pretty x]
+  WithCapability a x    -> parensSep ["with-capability", pretty a, prettyTerm ty x]
+  Granting _ _ x        -> prettyTerm ty x
+  HasGrant _ _ _        -> error "HasGrant should only appear inside of an Enforce"
+  Read _ _ tab x        -> parensSep ["read", pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
-  PactVersion          -> parensSep ["pact-version"]
-  Format x y           -> parensSep ["format", pretty x, pretty y]
-  FormatTime x y       -> parensSep ["format", pretty x, pretty y]
-  ParseTime Nothing y  -> parensSep ["parse-time", pretty y]
-  ParseTime (Just x) y -> parensSep ["parse-time", pretty x, pretty y]
-  Hash x               -> parensSep ["hash", pretty x]
-  ReadKeySet name      -> parensSep ["read-keyset", pretty name]
-  ReadDecimal name     -> parensSep ["read-decimal", pretty name]
-  ReadInteger name     -> parensSep ["read-integer", pretty name]
-  PactId               -> parensSep ["pact-id"]
-  MkKsRefGuard name    -> parensSep ["keyset-ref-guard", pretty name]
-  MkPactGuard name     -> parensSep ["create-pact-guard", pretty name]
-  MkUserGuard ty' o n  -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
+  PactVersion           -> parensSep ["pact-version"]
+  Format x y            -> parensSep ["format", pretty x, pretty y]
+  FormatTime x y        -> parensSep ["format", pretty x, pretty y]
+  ParseTime Nothing y   -> parensSep ["parse-time", pretty y]
+  ParseTime (Just x) y  -> parensSep ["parse-time", pretty x, pretty y]
+  Hash x                -> parensSep ["hash", pretty x]
+  ReadKeySet name       -> parensSep ["read-keyset", pretty name]
+  ReadDecimal name      -> parensSep ["read-decimal", pretty name]
+  ReadInteger name      -> parensSep ["read-integer", pretty name]
+  PactId                -> parensSep ["pact-id"]
+  MkKsRefGuard name     -> parensSep ["keyset-ref-guard", pretty name]
+  MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
+  MkUserGuard ty' o n   -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
+  Pact steps            -> vsep (pretty <$> steps)
+  Yield ty' tm          -> parensSep [ "yield", singPrettyTm ty' tm ]
+  Resume                -> "resume"
+
+instance Pretty PactStep where
+  pretty (Step (exec :< execTy) _ mEntity _ mRollback) = parensSep $
+    maybe ["step"] (\_ -> ["step-with-rollback"]) mRollback
+      ++ maybe [] (\entity -> [prettyTm entity]) mEntity
+      ++ [singPrettyTm execTy exec]
+      ++ maybe [] (\(_path, Some  ty' tm) -> [singPrettyTm ty' tm]) mRollback
 
 eqTerm :: SingTy ty -> Term ty -> Term ty -> Bool
 eqTerm ty (CoreTerm a1) (CoreTerm a2) = singEqTm ty a1 a2

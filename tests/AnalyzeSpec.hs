@@ -115,7 +115,7 @@ renderTestFailure = \case
     pure $ T.unpack (describeCheckFailure cf) ++ svgInfo
   NoTestModule -> pure "example is missing a module named 'test'"
   ReplError err -> pure $ "ReplError: " ++ err
-  VerificationFailure vf -> pure $ "VerificationFailure: " ++ show vf
+  VerificationFailure vf -> pure $ T.unpack $ describeVerificationFailure vf
 
 --
 -- TODO: use ExceptT
@@ -145,7 +145,6 @@ runVerification code = do
           case findOf (traverse . traverse) isLeft propResults of
             Just (Left failure) -> Just $ TestCheckFailure failure
             _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
-
               Just (Left failure) -> Just $ TestCheckFailure failure
               Just (Right _)      -> error "impossible: result of isLeft"
               Nothing             -> Nothing
@@ -3221,3 +3220,147 @@ spec = describe "analyze" $ do
               )
             |]
       expectVerified code
+
+  describe "checking pacts" $ do
+    -- TODO:
+    -- * yield / resume
+    -- * pact-id
+    let code1 = [text|
+          (defpact payment (payer payer-entity payee
+                            payee-entity amount)
+            @doc "this is a pact"
+            @model
+              [ (property (= (column-delta accounts 'balance) 0))
+              ]
+            (step-with-rollback payer-entity
+              (debit payer amount)
+              (credit payer amount))
+            (step payee-entity
+              (credit payee amount)))
+
+          (defun debit (acct amount)
+            (let ((bal (at 'balance (read accounts acct))))
+              (enforce (> amount 0)    "Non-positive amount")
+              (enforce (>= bal amount) "Insufficient Funds")
+              (update accounts acct { "balance": (- bal amount) })))
+
+          (defun credit (acct amount)
+            (let ((bal (at 'balance (read accounts acct))))
+              (enforce (> amount 0)    "Non-positive amount")
+              (update accounts acct { "balance": (+ bal amount) })))
+          |]
+    expectVerified code1
+
+    let code2 = [text|
+          (defpact payment (payer:string payer-entity:string payee:string
+                            payee-entity:string amount:integer
+                            payer-bal:integer payee-bal:integer)
+            @doc "this is a pact"
+            @model
+              [ (property
+                  (when
+                    ; assumptions
+                    (and (>= payer-bal amount)
+                    (and (= payer-bal (at 'balance (read accounts payer 'before)))
+                    (and (= payee-bal (at 'balance (read accounts payee 'before)))
+                         (!= payer payee))))
+
+                    ; conclusion
+                    (= (column-delta accounts 'balance) 0)))
+              ]
+            (step-with-rollback payer-entity
+              (update-bal payer (- payer-bal amount) "step 1")
+              (update-bal payer payer-bal "rollback 1"))
+            (step payee-entity
+              (update-bal payee (+ payee-bal amount) "step 2")))
+
+          (defun update-bal (acct balance msg:string)
+            (enforce (>= balance 0)    "Non-positive balance")
+            (update accounts acct { "balance": balance }))
+          |]
+    -- TODO: check trace
+    expectFalsified code2
+
+    -- single step pact:
+    let code3 = [text|
+          (defpact payment ()
+            @doc "this is a pact"
+            @model
+              [ (property (= (column-delta accounts 'balance) 0))
+              ]
+            (step (doit 0)))
+
+          (defun doit (amt:integer)
+            (let ((acct "joel"))
+              (with-read accounts acct { "balance" := bal }
+                (update accounts acct { "balance": (+ bal amt) }))))
+          |]
+    expectVerified code3
+
+    -- many step pact:
+    let code4 = [text|
+          (defpact payment ()
+            @doc "this is a pact"
+            @model
+              [ (property (= (column-delta accounts 'balance) 0))
+              ]
+            (step (doit 0))
+            (step (doit 0))
+            (step (doit 0))
+            (step (doit 0))
+            (step (doit 0))
+            (step (doit 0)))
+
+          (defun doit (amt:integer)
+            (let ((acct "joel"))
+              (with-read accounts acct { "balance" := bal }
+                (update accounts acct { "balance": (+ bal amt) }))))
+          |]
+    expectVerified code4
+
+    -- nontrivial many step pact:
+    let code5 = [text|
+          (defpact payment ()
+            @doc "this is a pact"
+            @model
+              [ (property (= (column-delta accounts 'balance) 0))
+              ]
+            (step-with-rollback
+              (doit (- 1))
+              (doit 1))
+            (step-with-rollback
+              (doit (- 2))
+              (doit 2))
+            (step (doit 0))
+            (step-with-rollback
+              (doit (- 3))
+              (doit 3))
+            (step (doit 0))
+            (step-with-rollback
+              (doit (- 4))
+              (doit 4))
+            (step (doit 0))
+            (step-with-rollback
+              (doit (- 5))
+              (doit 5))
+            (step (doit 15)))
+
+          (defun doit (amt:integer)
+            (let ((acct "joel"))
+              (with-read accounts acct { "balance" := bal }
+                (update accounts acct { "balance": (+ bal amt) }))))
+          |]
+    expectVerified code5
+
+    -- checking a pact with only one step
+    -- Note: there is a vestigial rollback step here. something should probably
+    -- disallow this, but it's not exactly clear what stage should be
+    -- responsible.
+    let code6 = [text|
+          (defpact payment ()
+            @model [ (property (= (column-delta accounts 'balance) 0)) ]
+            (step-with-rollback "foo" "bar"))
+          |]
+    expectVerified code6
+
+    it "checks yield / resume" $ pendingWith "yield / resume typechecking"

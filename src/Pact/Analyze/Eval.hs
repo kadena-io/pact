@@ -89,12 +89,13 @@ runAnalysis'
   -> [Table]
   -> [Capability]
   -> Map VarId AVal
+  -> Map VarId (SBV Bool)
   -> ETerm
   -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' modName query tables caps args tm rootPath tags info = do
+runAnalysis' modName query tables caps args stepChoices tm rootPath tags info = do
   let --
       --
       -- TODO: pass this in (from a previous analysis) when we analyze >1
@@ -107,7 +108,7 @@ runAnalysis' modName query tables caps args tm rootPath tags info = do
       --
       pactMetadata = mkPactMetadata
 
-  aEnv <- case mkAnalyzeEnv modName pactMetadata reg tables caps args tags info of
+  aEnv <- case mkAnalyzeEnv modName pactMetadata reg tables caps args stepChoices tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"
@@ -141,14 +142,15 @@ runPropertyAnalysis
   -> [Table]
   -> [Capability]
   -> Map VarId AVal
+  -> Map VarId (SBV Bool)
   -> ETerm
   -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis modName check tables caps args tm rootPath tags info =
+runPropertyAnalysis modName check tables caps args stepChoices tm rootPath tags info =
   runIdentity <$>
-    runAnalysis' modName (Identity <$> analyzeCheck check) tables caps args tm
+    runAnalysis' modName (Identity <$> analyzeCheck check) tables caps args stepChoices tm
       rootPath tags info
 
 runInvariantAnalysis
@@ -156,11 +158,12 @@ runInvariantAnalysis
   -> [Table]
   -> [Capability]
   -> Map VarId AVal
+  -> Map VarId (SBV Bool)
   -> ETerm
   -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis modName tables caps args tm rootPath tags info =
+runInvariantAnalysis modName tables caps args stepChoices tm rootPath tags info =
   unInvariantsF <$>
-    runAnalysis' modName analyzeInvariants tables caps args tm rootPath tags info
+    runAnalysis' modName analyzeInvariants tables caps args stepChoices tm rootPath tags info
