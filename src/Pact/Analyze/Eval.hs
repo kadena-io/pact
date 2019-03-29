@@ -148,10 +148,11 @@ runPropertyAnalysis
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis modName check tables caps args stepChoices tm rootPath tags info =
-  runIdentity <$>
-    runAnalysis' modName (Identity <$> analyzeCheck check) tables caps args stepChoices tm
-      rootPath tags info
+runPropertyAnalysis modName check tables caps args stepChoices tm rootPath tags
+  info
+  = runIdentity <$>
+    runAnalysis' modName (Identity <$> analyzeCheck check) tables caps args
+      stepChoices tm rootPath tags info
 
 runInvariantAnalysis
   :: ModuleName
@@ -164,6 +165,7 @@ runInvariantAnalysis
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis modName tables caps args stepChoices tm rootPath tags info =
-  unInvariantsF <$>
-    runAnalysis' modName analyzeInvariants tables caps args stepChoices tm rootPath tags info
+runInvariantAnalysis modName tables caps args stepChoices tm rootPath tags info
+  = unInvariantsF <$>
+    runAnalysis' modName analyzeInvariants tables caps args stepChoices tm
+      rootPath tags info
