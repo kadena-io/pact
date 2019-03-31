@@ -121,7 +121,11 @@ walkAST f t@App {} = do
   f Post t'
 walkAST f t@Step {} = do
   Step {..} <- f Pre t
-  t' <- Step _aNode <$> traverse (walkAST f) _aEntity <*> walkAST f _aExec <*> traverse (walkAST f) _aRollback
+  t' <- Step _aNode
+    <$> traverse (walkAST f) _aEntity
+    <*> walkAST f _aExec
+    <*> traverse (walkAST f) _aRollback
+    <*> pure _aYieldResume
   f Post t'
 
 isConcreteTy :: Type n -> Bool
@@ -606,7 +610,7 @@ assocParams i x y = case (x,y) of
     assoc a (TyVar b) | a /= TyAny = createMaybe b >> assocTy i b a
     assoc _ _ = return ()
 
--- | Substitute AST types to most specialized.
+-- | Associate an id with another AST node, substituting to most specialized.
 -- Not as thorough as `assocTy`, should probably use it.
 assocAST :: TcId -> AST Node -> TC ()
 assocAST ai b = do
@@ -774,24 +778,33 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Right t) -> return t
 
 toAST (TApp Term.App{..} _) = do
+
   fun <- toFun _appFun
   i <- freshId _appInfo $ _fName fun
   n <- trackIdNode i
   args <- mapM toAST _appArgs
   let mkApp fun' args' = return $ App n fun' args'
+
   case fun of
+
     FDefun {..} -> do
+
       assocAST i (last _fBody)
       mkApp fun args
+
     FNative {} -> do
+
       let special = isSpecialForm (NativeDefName $ _fName fun)
           argCount = length args
-      -- handle select special overload selection
+
+      -- Select special form: aggressively specialize overload based on arg count
       fun' <- case special of
         Just Select -> case NE.filter ((== argCount) . length . _ftArgs) (_fTypes fun) of
           ft@[_] -> return $ set fTypes (NE.fromList ft) fun
-          _ -> die _appInfo $ "arg count mismatch, expected: " ++ show (_fTypes fun)
+          _ -> die _appInfo $ "select arg count mismatch, expected: " ++ show (_fTypes fun)
         _ -> return fun
+
+      -- detect partial app args: for funtype args, add phantom arg to partial app
       args' <- if NE.length (_fTypes fun') > 1 then return args else do
         let funType = NE.head (_fTypes fun')
         (\f -> zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST ->
@@ -805,10 +818,15 @@ toAST (TApp Term.App{..} _) = do
                 return $ over aAppArgs (++ [Var freshArg]) argAST'
             (TyFun t,_) -> die'' argAST $ "App required for funtype argument: " ++ show t
             _ -> return argAST
+
+      -- other special forms: bindings, yield/resume
       case special of
+
         Nothing -> mkApp fun' args'
+
         Just sf -> do
           let specialBind = do
+                -- remove body form arg from end of arg list and put in 'SBinding'
                 args'' <- notEmpty _appInfo "Expected >1 arg" (init args')
                 mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') args''
           case sf of
@@ -870,9 +888,11 @@ toAST TStep {..} = do
     return e'
   si <- freshId _tInfo "step"
   sn <- trackIdNode si
+  tcYieldResume .= Nothing
   ex <- toAST _tStepExec
   assocAST si ex
-  Step sn ent ex <$> traverse toAST _tStepRollback
+  yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
+  Step sn ent ex <$> traverse toAST _tStepRollback <*> pure yr
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do
