@@ -33,14 +33,14 @@ module Pact.Types.Typecheck
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
-    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,
+    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,fDefType,
     Node (..),aId,aTy,
     Named (..),
     AstBindType (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
     aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,
     Visit(..),Visitor,
-    YieldResume(..)
+    YieldResume(..),yrYield,yrResume
   ) where
 
 import Control.Monad.Catch
@@ -238,6 +238,7 @@ data Fun t =
     _fInfo   :: Info,
     _fModule :: ModuleName,
     _fName   :: Text,
+    _fDefType :: DefType,
     _fType   :: FunType UserType,
     _fArgs   :: [Named t],
     _fBody   :: [AST t]
@@ -254,7 +255,7 @@ instance Pretty t => Pretty (Fun t) where
            _ -> mempty)
     ]
   pretty FDefun {..} = parensSep
-    [ "defun " <> pretty _fName
+    [ pretty _fDefType <> " " <> pretty _fName
     , indent 2 $ "::" <+> pretty _fType
     , indent 2 $ sep [ "(", indent 2 (sep (map pretty _fArgs)), ")" ]
     , indent 2 $ vsep (map pretty _fBody)
@@ -392,6 +393,7 @@ makeLenses ''Fun
 makeLenses ''TopLevel
 makeLenses ''Node
 makeLenses ''TcId
+makeLenses ''YieldResume
 
 makeLenses ''TcState
 makeLenses ''Overload

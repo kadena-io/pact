@@ -830,7 +830,7 @@ verifyModule modules moduleData = runExceptT $ do
     (\name (ref, cType) accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
-        (TopFun (FDefun _info _mod _name funType _args _body) _meta, _tcState)
+        (TopFun (FDefun _info _mod _name _defType funType _args _body) _meta, _tcState)
           -> case cType of
             CheckDefconst -> error "invariant violation: this cannot be a constant"
             _             -> accum & _1 . at name ?~ (ref, funType, cType)

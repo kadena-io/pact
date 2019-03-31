@@ -613,8 +613,11 @@ assocParams i x y = case (x,y) of
 -- | Associate an id with another AST node, substituting to most specialized.
 -- Not as thorough as `assocTy`, should probably use it.
 assocAST :: TcId -> AST Node -> TC ()
-assocAST ai b = do
-  let bi = _aId (_aNode b)
+assocAST ai b = assocNode ai (_aNode b)
+
+assocNode :: TcId -> Node -> TC ()
+assocNode ai bn = do
+  let bi = _aId bn
   (av,aty) <- lookupAst "assocAST" ai
   (bv,bty) <- lookupAst "assocAST" bi
   let doSub si sv sty fi fv fty = do
@@ -757,8 +760,46 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
-  return $ FDefun _tInfo mn fn funType args tcs
+  assocStepYieldReturns (_dDefType _tDef) tcs
+  return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
+
+
+assocStepYieldReturns :: DefType -> [AST Node] -> TC ()
+assocStepYieldReturns Defpact steps = void $ toStepYRs >>= foldM go (Nothing,0::Int)
+  where
+    lastStep = pred $ length steps
+    toStepYRs = forM steps $ \step -> case step of
+      Step{..} -> return (_aNode,_aYieldResume)
+      _ -> die'' step "Non-step in defpact"
+    yrMay l yr = preview (_Just . l . _Just) yr
+    go :: (Maybe (YieldResume Node),Int) -> (Node, Maybe (YieldResume Node)) -> TC (Maybe (YieldResume Node),Int)
+    go (prev,idx) (n,curr) = do
+      case (yrMay yrYield prev, yrMay yrYield curr, yrMay yrResume curr) of
+        -- resume in first step
+        (_,_,Just{}) | idx == 0 -> die' (_aId n) "Illegal resume in first step"
+        -- yield in last step
+        (_,Just{},_) | idx == lastStep -> die' (_aId n) "Illegal yield in last step"
+        -- yield in previous step, no resume in current step
+        (Just{},_,Nothing) -> die' (_aId n) "Missing resume after yield"
+        -- resume in current step, no yield in last step
+        (Nothing,_,Just {}) -> die' (_aId n) "Missing yield before resume"
+        -- yield in previous step, resume in current step: associate
+        (Just y,_,Just r) -> assocYRSchemas y r
+        -- just yield in current: noop
+        (Nothing,Just {},Nothing) -> return ()
+        -- nothing: noop
+        (Nothing,Nothing,Nothing) -> return ()
+      return (curr,succ idx)
+    lookupSchemaTy n = (resolveTy . snd) =<< lookupAst "assocStepYieldReturns" (_aId n)
+    assocYRSchemas a b = do
+      a' <- lookupSchemaTy a
+      b' <- lookupSchemaTy b
+      debug $ "assocYRSchemas: " ++ show (a,a',b,b')
+      assocParams (_aId a) a' b'
+
+assocStepYieldReturns _ _ = return ()
+
 
 
 notEmpty :: MonadThrow m => Info -> String -> [a] -> m [a]
@@ -825,15 +866,36 @@ toAST (TApp Term.App{..} _) = do
         Nothing -> mkApp fun' args'
 
         Just sf -> do
+
           let specialBind = do
-                -- remove body form arg from end of arg list and put in 'SBinding'
-                args'' <- notEmpty _appInfo "Expected >1 arg" (init args')
-                mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') args''
+                initArgs <- init <$> notEmpty _appInfo "Invalid binding invocation" args'
+                -- bind forms have binding in last position, move into SBinding
+                mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') initArgs
+
+              setOrAssocYR :: Lens' (YieldResume Node) (Maybe Node) -> Node -> TC ()
+              setOrAssocYR yrLens target = do
+                use tcYieldResume >>= \yrm -> case yrm of
+                  Nothing -> tcYieldResume .= Just (set yrLens (Just $ target) def)
+                  Just yr -> case view yrLens yr of
+                    Nothing -> tcYieldResume .= Just (set yrLens (Just $ target) yr)
+                    Just prevYr -> assocNode (_aId prevYr) target
+
           case sf of
             Bind -> specialBind
             WithRead -> specialBind
             WithDefaultRead -> specialBind
             WithCapability -> specialBind
+            Yield -> do
+              app' <- mkApp fun' args'
+              setOrAssocYR yrYield (_aNode app')
+              return app'
+            Resume -> do
+              app' <- specialBind
+              case head args' of -- 'specialBind' ensures non-empty args
+                (Binding _ _ _ (AstBindSchema sty)) ->
+                  setOrAssocYR yrResume sty
+                a -> die'' a "Expected binding"
+              return app'
             _ -> mkApp fun' args'
 
 toAST TBinding {..} = do

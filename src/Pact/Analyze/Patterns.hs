@@ -43,7 +43,7 @@ pattern NativeFunc f <- FNative _ f _ _
 
 pattern AST_InlinedApp :: Lang.ModuleName -> Text -> [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_InlinedApp modName funName bindings body <-
-  App _ (FDefun _ modName funName _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
+  App _ (FDefun _ modName funName _ _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
 
 pattern AST_Let :: forall a. [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Let bindings body <- Binding _ bindings body AstBindLet
