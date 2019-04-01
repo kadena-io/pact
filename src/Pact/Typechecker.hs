@@ -760,13 +760,13 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
-  assocStepYieldReturns (_dDefType _tDef) tcs
   return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
-assocStepYieldReturns :: DefType -> [AST Node] -> TC ()
-assocStepYieldReturns Defpact steps = void $ toStepYRs >>= foldM go (Nothing,0::Int)
+assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
+assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
+  void $ toStepYRs >>= foldM go (Nothing,0::Int)
   where
     lastStep = pred $ length steps
     toStepYRs = forM steps $ \step -> case step of
@@ -1093,6 +1093,8 @@ typecheckBody tl bodyLens = do
   appSub <- mapM (walkAST $ substAppDefun Nothing) body
   debug "Substitute natives"
   nativesProc <- mapM (walkAST processNatives) appSub
+  debug "Assoc Yield/Resume"
+  assocStepYieldReturns tl nativesProc
   debug "Apply Schemas"
   schEnforced <- mapM (walkAST applySchemas) nativesProc
   debug "Solve Overloads"

@@ -382,7 +382,7 @@ pact> (remove "bar" { "foo": 1, "bar": 2 })
 
 ### resume {#resume}
 
-*binding*&nbsp;`binding:[]<{y}>` *body*&nbsp;`*` *&rarr;*&nbsp;`<a>`
+*binding*&nbsp;`binding:[]<{r}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form binds to a yielded object value from the prior step execution in a pact.
