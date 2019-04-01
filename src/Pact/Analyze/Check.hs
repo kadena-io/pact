@@ -39,7 +39,8 @@ import           Control.Exception         as E
 import           Control.Lens              (at, each, filtered, ifoldrM, ifor,
                                             itraversed, ix, toListOf, traversed,
                                             view, (%~), (&), (<&>), (?~), (^.),
-                                            (^?), (^?!), (^@..), _1, _2, _Left)
+                                            (^..), (^?), (^?!), (^@..), (.~),
+                                            _1, _2, _Left)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -316,37 +317,48 @@ verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body
       withExcept translateToCheckFailure $ runTranslation modName funName
         funInfo caps pactArgs body checkType
 
-    ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      lift $ SBV.setTimeOut 1000 -- one second
-      modelArgs'   <- lift $ runAlloc $ allocArgs args
-      stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
-      tags         <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
-      let rootPath = _egRootPath graph
-      resultsTable <- withExceptT analyzeToCheckFailure $
-        runInvariantAnalysis modName tables caps (analysisArgs modelArgs')
-          stepChoices' tm rootPath tags funInfo
+    let invsMap = TableMap $ Map.fromList $
+          tables <&> \Table { _tableName, _tableInvariants } ->
+            ( TableName (T.unpack _tableName)
+            , fmap (const ()) <$> _tableInvariants
+            )
 
-      -- Iterate through each invariant in a single query so we can reuse our
-      -- assertion stack.
-      ExceptT $ fmap Right $
-        SBV.query $
-          for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
-            let model = Model modelArgs' tags ksProvs graph
+    -- Check to see if there are any invariants in this module. If there aren't
+    -- we can skip these checks.
+    case invsMap ^.. traverse . traverse of
+      [] -> pure $ invsMap & traverse .~ []
 
-            _ <- runExceptT $ inNewAssertionStack $ do
-              void $ lift $ SBV.constrain $ sNot $ successBool querySucceeds
-              withExceptT (smtToQueryFailure info) $
-                resultQuery Validation model
+      _ -> ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
+        lift $ SBV.setTimeOut 1000 -- one second
+        modelArgs'   <- lift $ runAlloc $ allocArgs args
+        stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
+        tags         <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+        let rootPath = _egRootPath graph
+        resultsTable <- withExceptT analyzeToCheckFailure $
+          runInvariantAnalysis modName tables caps (analysisArgs modelArgs')
+            stepChoices' tm rootPath tags funInfo
 
-            queryResult <- runExceptT $ inNewAssertionStack $ do
-              void $ lift $ SBV.constrain $ sNot prop
-              resultQuery goal model
+        -- Iterate through each invariant in a single query so we can reuse our
+        -- assertion stack.
+        ExceptT $ fmap Right $
+          SBV.query $
+            for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
+              let model = Model modelArgs' tags ksProvs graph
 
-            -- Either SmtFailure CheckSuccess -> CheckResult
-            pure $ case queryResult of
-               Left smtFailure -> Left $
-                 CheckFailure info (SmtFailure smtFailure)
-               Right pass      -> Right pass
+              _ <- runExceptT $ inNewAssertionStack $ do
+                void $ lift $ SBV.constrain $ sNot $ successBool querySucceeds
+                withExceptT (smtToQueryFailure info) $
+                  resultQuery Validation model
+
+              queryResult <- runExceptT $ inNewAssertionStack $ do
+                void $ lift $ SBV.constrain $ sNot prop
+                resultQuery goal model
+
+              -- Either SmtFailure CheckSuccess -> CheckResult
+              pure $ case queryResult of
+                 Left smtFailure -> Left $
+                   CheckFailure info (SmtFailure smtFailure)
+                 Right pass      -> Right pass
 
   where
     goal :: Goal
