@@ -121,7 +121,11 @@ walkAST f t@App {} = do
   f Post t'
 walkAST f t@Step {} = do
   Step {..} <- f Pre t
-  t' <- Step _aNode <$> traverse (walkAST f) _aEntity <*> walkAST f _aExec <*> traverse (walkAST f) _aRollback
+  t' <- Step _aNode
+    <$> traverse (walkAST f) _aEntity
+    <*> walkAST f _aExec
+    <*> traverse (walkAST f) _aRollback
+    <*> pure _aYieldResume
   f Post t'
 
 isConcreteTy :: Type n -> Bool
@@ -606,11 +610,14 @@ assocParams i x y = case (x,y) of
     assoc a (TyVar b) | a /= TyAny = createMaybe b >> assocTy i b a
     assoc _ _ = return ()
 
--- | Substitute AST types to most specialized.
+-- | Associate an id with another AST node, substituting to most specialized.
 -- Not as thorough as `assocTy`, should probably use it.
 assocAST :: TcId -> AST Node -> TC ()
-assocAST ai b = do
-  let bi = _aId (_aNode b)
+assocAST ai b = assocNode ai (_aNode b)
+
+assocNode :: TcId -> Node -> TC ()
+assocNode ai bn = do
+  let bi = _aId bn
   (av,aty) <- lookupAst "assocAST" ai
   (bv,bty) <- lookupAst "assocAST" bi
   let doSub si sv sty fi fv fty = do
@@ -753,8 +760,46 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
-  return $ FDefun _tInfo mn fn funType args tcs
+  return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
+
+
+assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
+assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
+  void $ toStepYRs >>= foldM go (Nothing,0::Int)
+  where
+    lastStep = pred $ length steps
+    toStepYRs = forM steps $ \step -> case step of
+      Step{..} -> return (_aNode,_aYieldResume)
+      _ -> die'' step "Non-step in defpact"
+    yrMay l yr = preview (_Just . l . _Just) yr
+    go :: (Maybe (YieldResume Node),Int) -> (Node, Maybe (YieldResume Node)) -> TC (Maybe (YieldResume Node),Int)
+    go (prev,idx) (n,curr) = do
+      case (yrMay yrYield prev, yrMay yrYield curr, yrMay yrResume curr) of
+        -- resume in first step
+        (_,_,Just{}) | idx == 0 -> die' (_aId n) "Illegal resume in first step"
+        -- yield in last step
+        (_,Just{},_) | idx == lastStep -> die' (_aId n) "Illegal yield in last step"
+        -- yield in previous step, no resume in current step
+        (Just{},_,Nothing) -> die' (_aId n) "Missing resume after yield"
+        -- resume in current step, no yield in last step
+        (Nothing,_,Just {}) -> die' (_aId n) "Missing yield before resume"
+        -- yield in previous step, resume in current step: associate
+        (Just y,_,Just r) -> assocYRSchemas y r
+        -- just yield in current: noop
+        (Nothing,Just {},Nothing) -> return ()
+        -- nothing: noop
+        (Nothing,Nothing,Nothing) -> return ()
+      return (curr,succ idx)
+    lookupSchemaTy n = (resolveTy . snd) =<< lookupAst "assocStepYieldReturns" (_aId n)
+    assocYRSchemas a b = do
+      a' <- lookupSchemaTy a
+      b' <- lookupSchemaTy b
+      debug $ "assocYRSchemas: " ++ show (a,a',b,b')
+      assocParams (_aId a) a' b'
+
+assocStepYieldReturns _ _ = return ()
+
 
 
 notEmpty :: MonadThrow m => Info -> String -> [a] -> m [a]
@@ -774,24 +819,33 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Right t) -> return t
 
 toAST (TApp Term.App{..} _) = do
+
   fun <- toFun _appFun
   i <- freshId _appInfo $ _fName fun
   n <- trackIdNode i
   args <- mapM toAST _appArgs
   let mkApp fun' args' = return $ App n fun' args'
+
   case fun of
+
     FDefun {..} -> do
+
       assocAST i (last _fBody)
       mkApp fun args
+
     FNative {} -> do
+
       let special = isSpecialForm (NativeDefName $ _fName fun)
           argCount = length args
-      -- handle select special overload selection
+
+      -- Select special form: aggressively specialize overload based on arg count
       fun' <- case special of
         Just Select -> case NE.filter ((== argCount) . length . _ftArgs) (_fTypes fun) of
           ft@[_] -> return $ set fTypes (NE.fromList ft) fun
-          _ -> die _appInfo $ "arg count mismatch, expected: " ++ show (_fTypes fun)
+          _ -> die _appInfo $ "select arg count mismatch, expected: " ++ show (_fTypes fun)
         _ -> return fun
+
+      -- detect partial app args: for funtype args, add phantom arg to partial app
       args' <- if NE.length (_fTypes fun') > 1 then return args else do
         let funType = NE.head (_fTypes fun')
         (\f -> zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST ->
@@ -805,17 +859,43 @@ toAST (TApp Term.App{..} _) = do
                 return $ over aAppArgs (++ [Var freshArg]) argAST'
             (TyFun t,_) -> die'' argAST $ "App required for funtype argument: " ++ show t
             _ -> return argAST
+
+      -- other special forms: bindings, yield/resume
       case special of
+
         Nothing -> mkApp fun' args'
+
         Just sf -> do
+
           let specialBind = do
-                args'' <- notEmpty _appInfo "Expected >1 arg" (init args')
-                mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') args''
+                initArgs <- init <$> notEmpty _appInfo "Invalid binding invocation" args'
+                -- bind forms have binding in last position, move into SBinding
+                mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') initArgs
+
+              setOrAssocYR :: Lens' (YieldResume Node) (Maybe Node) -> Node -> TC ()
+              setOrAssocYR yrLens target = do
+                use tcYieldResume >>= \yrm -> case yrm of
+                  Nothing -> tcYieldResume .= Just (set yrLens (Just $ target) def)
+                  Just yr -> case view yrLens yr of
+                    Nothing -> tcYieldResume .= Just (set yrLens (Just $ target) yr)
+                    Just prevYr -> assocNode (_aId prevYr) target
+
           case sf of
             Bind -> specialBind
             WithRead -> specialBind
             WithDefaultRead -> specialBind
             WithCapability -> specialBind
+            Yield -> do
+              app' <- mkApp fun' args'
+              setOrAssocYR yrYield (_aNode app')
+              return app'
+            Resume -> do
+              app' <- specialBind
+              case head args' of -- 'specialBind' ensures non-empty args
+                (Binding _ _ _ (AstBindSchema sty)) ->
+                  setOrAssocYR yrResume sty
+                a -> die'' a "Expected binding"
+              return app'
             _ -> mkApp fun' args'
 
 toAST TBinding {..} = do
@@ -870,9 +950,11 @@ toAST TStep {..} = do
     return e'
   si <- freshId _tInfo "step"
   sn <- trackIdNode si
+  tcYieldResume .= Nothing
   ex <- toAST _tStepExec
   assocAST si ex
-  Step sn ent ex <$> traverse toAST _tStepRollback
+  yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
+  Step sn ent ex <$> traverse toAST _tStepRollback <*> pure yr
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do
@@ -1011,6 +1093,8 @@ typecheckBody tl bodyLens = do
   appSub <- mapM (walkAST $ substAppDefun Nothing) body
   debug "Substitute natives"
   nativesProc <- mapM (walkAST processNatives) appSub
+  debug "Assoc Yield/Resume"
+  assocStepYieldReturns tl nativesProc
   debug "Apply Schemas"
   schEnforced <- mapM (walkAST applySchemas) nativesProc
   debug "Solve Overloads"

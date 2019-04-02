@@ -425,7 +425,7 @@ tc i as = case as of
           r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
             try $ liftIO $ typecheckModule dbg md
           case r of
-            Left (TC.CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> pretty e)
+            Left (TC.CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> prettyString e)
             Right (_,fails) -> case fails of
               [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
               _ -> do

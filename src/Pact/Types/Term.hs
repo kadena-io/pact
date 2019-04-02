@@ -269,7 +269,7 @@ defTypeRep Defpact = "defpact"
 defTypeRep Defcap = "defcap"
 
 instance Pretty DefType where
-  pretty = pretty . defTypeRep
+  pretty = prettyString . defTypeRep
 
 newtype NativeDefName = NativeDefName Text
     deriving (Eq,Ord,IsString,ToJSON,AsString,Show)
@@ -582,7 +582,7 @@ data Def n = Def
 
 instance Pretty n => Pretty (Def n) where
   pretty Def{..} = parensSep $
-    [ pretty $ defTypeRep _dDefType
+    [ pretty _dDefType
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
     , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
