@@ -1124,8 +1124,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
     EType objTy@(SObject schema) <- translateType schemaNode
     Some SStr key'               <- translateNode key
     tid                          <- tagRead node $ ESchema schema
-    let readT = Some objTy $ Read objTy tid (TableName (T.unpack table)) key'
+    let readT = Some objTy $ Read Nothing objTy tid (TableName (T.unpack table)) key'
     withNodeContext node $ translateObjBinding bindings objTy body readT
+
+  AST_WithDefaultRead node table key bindings schemaNode defaultNode body -> do
+    schema            <- translateSchema schemaNode
+    EObject _ defobj  <- translateNode defaultNode
+    ESimple TStr key' <- translateNode key
+    tid <- tagRead node schema
+    let readT = EObject schema $ Read (Just defobj) tid (TableName (T.unpack table)) schema key'
+    withNodeContext node $
+      translateObjBinding bindings schema body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
     EType objTy@SObject{} <- translateType schemaNode
@@ -1170,7 +1179,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr key'               <- translateNode key
     EType objTy@(SObject schema) <- translateType node
     tid                          <- tagRead node $ ESchema schema
-    pure $ Some objTy $ Read objTy tid (TableName (T.unpack table)) key'
+    pure $ Some objTy $ Read Nothing objTy tid (TableName (T.unpack table)) key'
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
@@ -1201,7 +1210,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         pure $ Some filteredObjTy $
           CoreTerm $ ObjTake tableObjTy
             (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> litColumns)))
-            (Read tableObjTy tid (TableName (T.unpack table)) key')
+            (Read Nothing tableObjTy tid (TableName (T.unpack table)) key')
 
   AST_At node index obj -> do
     obj'     <- translateNode obj
