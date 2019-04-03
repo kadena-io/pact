@@ -1332,6 +1332,7 @@ data Term (a :: Ty) where
   -- Table access
   Read
     :: SingTy ('TyObject m)
+    -> Maybe (Term ('TyObject m))
     -> TagId -> TableName -> Term 'TyStr
     -> Term ('TyObject m)
   Write
@@ -1441,7 +1442,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showChar ' '
     . showsPrec 11 b
 
-  Read a b c d ->
+  Read a b c d e ->
       showString "Read "
     . showsPrec 11 a
     . showChar ' '
@@ -1450,6 +1451,8 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 c
     . showChar ' '
     . showsPrec 11 d
+    . showChar ' '
+    . showsPrec 11 e
 
   Write a b c d e f -> withSing a $
       showString "Write "
@@ -1556,7 +1559,8 @@ prettyTerm ty = \case
   WithCapability a x    -> parensSep ["with-capability", pretty a, prettyTerm ty x]
   Granting _ _ x        -> prettyTerm ty x
   HasGrant _ _ _        -> error "HasGrant should only appear inside of an Enforce"
-  Read _ _ tab x        -> parensSep ["read", pretty tab, pretty x]
+  Read _ Nothing    _ tab x -> parensSep ["read", pretty tab, pretty x]
+  Read _ (Just def) _ tab x -> parensSep ["with-default-read", singPrettyTm ty def, pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
   PactVersion           -> parensSep ["pact-version"]
   Format x y            -> parensSep ["format", pretty x, pretty y]
@@ -1603,8 +1607,12 @@ eqTerm _ty (ReadInteger a) (ReadInteger b)
   = a == b
 eqTerm _ty (GuardPasses a1 b1) (GuardPasses a2 b2)
   = a1 == a2 && b1 == b2
-eqTerm _ty (Read _ a1 b1 c1) (Read _ a2 b2 c2)
+eqTerm _ty (Read _ Nothing a1 b1 c1) (Read _ Nothing a2 b2 c2)
   = a1 == a2 && b1 == b2 && c1 == c2
+eqTerm ty (Read _ (Just a1) b1 c1 d1) (Read _ (Just a2) b2 c2 d2)
+  = singEqTm ty a1 a2 && b1 == b2 && c1 == c2 && d1 == d2
+eqTerm _ty Read{} Read{}
+  = False
 eqTerm _ty (Write ty1 a1 b1 c1 d1 e1) (Write ty2 a2 b2 c2 d2 e2)
   = case singEq ty1 ty2 of
       Nothing   -> False

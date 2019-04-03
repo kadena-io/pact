@@ -463,7 +463,7 @@ evalTerm = \case
     tagGrantRequest tid granted
     pure granted
 
-  Read defObj objTy tid tn rowKey -> do
+  Read objTy Nothing tid tn rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
     tableRead tn .= sTrue
     rowReadCount tn sRk += 1
@@ -477,6 +477,23 @@ evalTerm = \case
     applyInvariants tn aValFields $ mapM_ addConstraint
 
     pure sObj
+
+  Read objTy (Just defObj) tid tn rowKey -> do
+    sRk <- symRowKey <$> evalTerm rowKey
+    tableRead tn .= sTrue
+    rowReadCount tn sRk += 1
+
+    readSucceeds <- use $ rowExists id tn sRk
+    tagAccessKey mtReads tid sRk readSucceeds
+    -- succeeds %= (.&& readSucceeds)
+
+    withSymVal objTy $ iteS readSucceeds
+      (do (sObj, aValFields) <- readFields tn sRk tid objTy
+
+          applyInvariants tn aValFields $ mapM_ addConstraint
+
+          pure sObj)
+      (eval defObj)
 
   Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     obj <- withSing objTy $ evalTerm objT

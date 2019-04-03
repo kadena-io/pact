@@ -3369,7 +3369,7 @@ spec = describe "analyze" $ do
               (resume { 'pact-id:= yielded-id }
                 (if (= yielded-id (pact-id))
                   "noop"
-                  (with-default-read accounts acct { 'balance := bal }
+                  (with-default-read accounts acct { 'balance: 0 } { 'balance := bal }
                     (write accounts acct { 'balance: (+ bal amount) }))))))
           |]
     expectVerified code7
