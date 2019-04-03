@@ -112,8 +112,8 @@ describeTranslateFailureNoLoc = \case
   NotConvertibleToSchema ty -> "Expected a schema, but found " <> tShow ty
   TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
   -- Uncomment for debugging
-  UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
-  -- UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
+  -- UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
+  UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
   UnexpectedPactNode ast -> "Unexpected node in translation of a pact: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   MonadFailure str -> "Translation failure: " <> T.pack str
