@@ -205,6 +205,13 @@ pattern AST_WithCapability app body <-
       (NativeFuncSpecial "with-capability" (List _ body))
       [app]
 
+pattern AST_Resume
+  :: Node -> [(Named Node, AST Node)] -> Node -> [AST Node] -> AST Node
+pattern AST_Resume node bindings schema body <-
+  App node
+      (NativeFuncSpecial "resume" (AST_BindSchema _ bindings schema body))
+      []
+
 pattern AST_RequireCapability :: Node -> AST Node -> AST Node
 pattern AST_RequireCapability node app <-
   App node (NativeFunc "require-capability") [app]

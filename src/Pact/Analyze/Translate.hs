@@ -112,8 +112,8 @@ describeTranslateFailureNoLoc = \case
   NotConvertibleToSchema ty -> "Expected a schema, but found " <> tShow ty
   TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
   -- Uncomment for debugging
-  -- UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
-  UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
+  UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
+  -- UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
   UnexpectedPactNode ast -> "Unexpected node in translation of a pact: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   MonadFailure str -> "Translation failure: " <> T.pack str
@@ -1390,6 +1390,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
   AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
+
+  -- TODO: can't we remove objTy from Yield?
+  AST_NFun _node "yield" [ obj ] -> do
+    Some objTy obj' <- translateNode obj
+    pure $ Some objTy $ Yield objTy obj'
+
+  -- Translate into a resume-and-bind
+  AST_Resume node bindings schemaNode body -> do
+    EType objTy@SObject{} <- translateType schemaNode
+    withNodeContext node $ translateObjBinding bindings objTy body $
+      Some objTy Resume
 
   _ -> throwError' $ UnexpectedNode astNode
 
