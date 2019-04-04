@@ -1401,8 +1401,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
-
   AST_NFun _node "yield" [ obj ] -> do
     Some objTy obj' <- translateNode obj
     pure $ Some objTy $ Yield obj'
@@ -1412,6 +1410,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     EType objTy@SObject{} <- translateType schemaNode
     withNodeContext node $ translateObjBinding bindings objTy body $
       Some objTy Resume
+
+  AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
 
