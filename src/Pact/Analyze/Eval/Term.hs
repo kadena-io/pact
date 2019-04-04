@@ -654,17 +654,19 @@ evalTerm = \case
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
   Pact steps -> local (inPact .~ sTrue) $ do
-    -- TODO: pending #442
-    _previouslyYielded <- use $ latticeState . lasYielded
-
     -- We execute through all the steps once (via a left fold), then we execute
     -- all the rollbacks (via for), in reverse order.
 
     (rollbacks, _) <- ifoldlM
       (\stepNo (rollbacks, successChoice)
-        --          ^ do we make it to this step?
+        --                 ^ do we make it to this step?
         (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) ->
         withSing ty $ do
+
+        -- update yielded values
+        previouslyYielded <- use $ latticeState . lasYieldedInCurrent
+        latticeState . lasYieldedInPrevious .= previouslyYielded
+        latticeState . lasYieldedInCurrent  .= Nothing
 
         -- The first step has no cancel var. All other steps do.
         cancel <- case mCancelVid of
@@ -702,6 +704,9 @@ evalTerm = \case
       ([], sTrue)
       steps
 
+    latticeState . lasYieldedInPrevious .= Nothing
+    latticeState . lasYieldedInCurrent  .= Nothing
+
     void $ foldlM
       (\alreadyRollingBack
         (path {- r_n -}, rollbackTriggered, rollback) -> do
@@ -721,10 +726,10 @@ evalTerm = \case
   -- Caution: yield / resume are not yet working pending #442
   Yield ty tm -> do
     val <- eval tm
-    latticeState . lasYielded ?= SomeVal ty val
+    latticeState . lasYieldedInCurrent ?= SomeVal ty val
     pure val
 
-  Resume -> use (latticeState . lasYielded) >>= \case
+  Resume -> use (latticeState . lasYieldedInPrevious) >>= \case
     Nothing -> throwErrorNoLoc "No previously yielded value for resume"
     Just (SomeVal ty val) -> case singEq ty (sing :: SingTy a) of
       Nothing   -> throwErrorNoLoc "Resume of unexpected type"
