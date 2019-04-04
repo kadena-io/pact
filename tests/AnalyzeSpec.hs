@@ -3028,15 +3028,14 @@ spec = describe "analyze" $ do
     expectVerified  $ code9 "[(property (= result (+ [a] [b c])))]"
 
   describe "list reverse" $ do
-    let code10 = [text|
+    expectVerified [text|
           (defun test:[integer] (a:integer b:integer c:integer)
             @model [(property (= result (reverse [a b c])))]
             [c b a])
           |]
-    expectVerified code10
 
   describe "list sort" $ do
-    let code11 = [text|
+    expectVerified [text|
           (defun min:integer (x:integer y:integer)
             (if (< x y) x y))
 
@@ -3044,105 +3043,92 @@ spec = describe "analyze" $ do
             @model [(property (= result (at 0 (sort [a b c]))))]
             (min a (min b c)))
           |]
-    expectVerified code11
 
   describe "identity" $ do
-    let code = [text|
+    expectVerified [text|
           (defun test:integer ()
             @model []
             (identity 1))
           |]
-    expectVerified code
 
   describe "list map" $ do
-    let code1 = [text|
+    expectVerified [text|
           (defun test:[integer] ()
             @model [(property (= result [1 2 3]))]
             (map (identity) [1 2 3]))
           |]
-    expectVerified code1
 
-    let code2 = [text|
+    expectVerified [text|
           (defun test:[integer] ()
             @model [(property (= result [2 3 4]))]
             (map (+ 1) [1 2 3]))
           |]
-    expectVerified code2
 
-    let code3 = [text|
+    expectVerified [text|
           (defun test:[integer] ()
             @model [(property (= result [1 1 1]))]
             (map (constantly 1) [1 2 3]))
           |]
-    expectVerified code3
 
     describe "constantly" $ do
-      let code4 = [text|
+      expectVerified [text|
             (defun test:[integer] ()
               @model [(property (= result [2 2 2]))]
               (map (compose (constantly 1) (+ 1)) [1 2 3]))
             |]
-      expectVerified code4
 
       it "ignores multiple variables" $ pendingWith "implementation"
 
-    let code5 = [text|
+    expectVerified [text|
           (defun test:[integer] ()
             @model [(property (= result [1 1 1]))]
             (map (compose (+ 1) (constantly 1)) [1 2 3]))
           |]
-    expectVerified code5
 
   describe "list filter" $ do
-    let code = [text|
-          (defun test:[integer] ()
-            @model [(property (= result [2 3 4]))]
-            (filter (> 5) [2 6 3 7 4 8]))
-          |]
-    expectVerified code
+    expectVerified [text|
+      (defun test:[integer] ()
+        @model [(property (= result [2 3 4]))]
+        (filter (> 5) [2 6 3 7 4 8]))
+      |]
 
-    let code' = [text|
-          (defun test:[string] ()
-            @model [(property (= result ["dog" "has" "fleas"]))]
-            (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"]))
-          |]
-    expectVerified code'
+    expectVerified [text|
+      (defun test:[string] ()
+        @model [(property (= result ["dog" "has" "fleas"]))]
+        (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"]))
+      |]
 
   describe "list fold" $ do
-    let code = [text|
-          (defun test:integer ()
-            @model [(property (= result 115))]
-            (fold (+) 0 [100 10 5]))
-          |]
-    expectVerified code
+    expectVerified [text|
+      (defun test:integer ()
+        @model [(property (= result 115))]
+        (fold (+) 0 [100 10 5]))
+      |]
 
   describe "and?" $ do
-    let code = [text|
+    expectVerified [text|
           (defun test:bool ()
             @model [(property (= result false))]
             (and? (> 20) (> 10) 15))
           |]
-    expectVerified code
 
   describe "or?" $ do
-    let code = [text|
-          (defun test:bool ()
-            @model [(property (= result true))]
-            (or? (> 20) (> 10) 15))
-          |]
-    expectVerified code
+    expectVerified [text|
+      (defun test:bool ()
+        @model [(property (= result true))]
+        (or? (> 20) (> 10) 15))
+      |]
 
 --  describe "where" $
 --    it "works" $
 --      pendingWith "implementation"
 
   describe "typeof" $ do
-    let code = [text|
-          (defun test:string ()
-            @model [(property (= result "string"))]
-            (typeof "foo"))
-          |]
-    expectVerified code
+    expectVerified [text|
+      (defun test:string ()
+        @model [(property (= result "string"))]
+        (typeof "foo"))
+      |]
 
   -- TODO: pending sbv unicode fix
   -- describe "unicode strings" $
@@ -3191,93 +3177,88 @@ spec = describe "analyze" $ do
 
   describe "using a separate function to state properties of multiple function calls" $ do
     describe "associativity of addition" $ do
-      let code = [text|
-            (defun test:bool (a:integer b:integer c:integer)
-              @model [ (property result) ]
-              (= (+ a (+ b c)) (+ (+ a b) c)))
-            |]
-      expectVerified code
+      expectVerified [text|
+        (defun test:bool (a:integer b:integer c:integer)
+          @model [ (property result) ]
+          (= (+ a (+ b c)) (+ (+ a b) c)))
+        |]
 
     describe "associativity of list concatenation" $ do
-      let code = [text|
-            (defun test:bool (a:[integer] b:[integer] c:[integer])
-              @model [ (property result) ]
-              (= (+ a (+ b c)) (+ (+ a b) c)))
-            |]
-      expectVerified code
+      expectVerified [text|
+        (defun test:bool (a:[integer] b:[integer] c:[integer])
+          @model [ (property result) ]
+          (= (+ a (+ b c)) (+ (+ a b) c)))
+        |]
 
     describe "testing monotonicity of a function" $ do
-      let code = [text|
-            (defun f:integer (x:integer)
-              (if (< x 0) (- x 5) (- x 3)))
+      expectVerified [text|
+        (defun f:integer (x:integer)
+          (if (< x 0) (- x 5) (- x 3)))
 
-            (defun test:bool (a:integer b:integer)
-              @model [ (property result) ]
-              ; a < b => f(a) < f(b)
-              (or (< a b)
-                  (not (< (f a) (f b)))
-                  )
+        (defun test:bool (a:integer b:integer)
+          @model [ (property result) ]
+          ; a < b => f(a) < f(b)
+          (or (< a b)
+              (not (< (f a) (f b)))
               )
-            |]
-      expectVerified code
+          )
+        |]
 
   describe "checking pacts" $ do
-    let code1 = [text|
-          (defpact payment (payer payer-entity payee
-                            payee-entity amount)
-            @model
-              [ (property (= (column-delta accounts 'balance) 0))
-              ]
-            (step-with-rollback payer-entity
-              (debit payer amount)
-              (credit payer amount))
-            (step payee-entity
-              (credit payee amount)))
+    expectVerified [text|
+      (defpact payment (payer payer-entity payee
+                        payee-entity amount)
+        @model
+          [ (property (= (column-delta accounts 'balance) 0))
+          ]
+        (step-with-rollback payer-entity
+          (debit payer amount)
+          (credit payer amount))
+        (step payee-entity
+          (credit payee amount)))
 
-          (defun debit (acct amount)
-            (let ((bal (at 'balance (read accounts acct))))
-              (enforce (> amount 0)    "Non-positive amount")
-              (enforce (>= bal amount) "Insufficient Funds")
-              (update accounts acct { "balance": (- bal amount) })))
+      (defun debit (acct amount)
+        (let ((bal (at 'balance (read accounts acct))))
+          (enforce (> amount 0)    "Non-positive amount")
+          (enforce (>= bal amount) "Insufficient Funds")
+          (update accounts acct { "balance": (- bal amount) })))
 
-          (defun credit (acct amount)
-            (let ((bal (at 'balance (read accounts acct))))
-              (enforce (> amount 0)    "Non-positive amount")
-              (update accounts acct { "balance": (+ bal amount) })))
-          |]
-    expectVerified code1
+      (defun credit (acct amount)
+        (let ((bal (at 'balance (read accounts acct))))
+          (enforce (> amount 0)    "Non-positive amount")
+          (update accounts acct { "balance": (+ bal amount) })))
+      |]
 
-    let code2 = [text|
-          (defpact payment (payer:string payer-entity:string payee:string
-                            payee-entity:string amount:integer
-                            payer-bal:integer payee-bal:integer)
-            @model
-              [ (property
-                  (when
-                    ; assumptions
-                    (and (>= payer-bal amount)
-                    (and (= payer-bal (at 'balance (read accounts payer 'before)))
-                    (and (= payee-bal (at 'balance (read accounts payee 'before)))
-                         (!= payer payee))))
-
-                    ; conclusion
-                    (= (column-delta accounts 'balance) 0)))
-              ]
-            (step-with-rollback payer-entity
-              (update-bal payer (- payer-bal amount) "step 1")
-              (update-bal payer payer-bal "rollback 1"))
-            (step payee-entity
-              (update-bal payee (+ payee-bal amount) "step 2")))
-
-          (defun update-bal (acct balance msg:string)
-            (enforce (>= balance 0)    "Non-positive balance")
-            (update accounts acct { "balance": balance }))
-          |]
     -- TODO: check trace
-    expectFalsified code2
+    expectVerified [text|
+      (defpact payment (payer:string payer-entity:string payee:string
+                        payee-entity:string amount:integer
+                        payer-bal:integer payee-bal:integer)
+        @model
+          [ (property
+              (when
+                ; assumptions
+                (and (>= payer-bal amount)
+                (and (= payer-bal (at 'balance (read accounts payer 'before)))
+                (and (= payee-bal (at 'balance (read accounts payee 'before)))
+                     (!= payer payee))))
+
+                ; conclusion
+                (= (column-delta accounts 'balance) 0)))
+          ]
+        (step-with-rollback payer-entity
+          (update-bal payer (- payer-bal amount) "step 1")
+          (update-bal payer payer-bal "rollback 1"))
+        (step payee-entity
+          (update-bal payee (+ payee-bal amount) "step 2")))
+
+      (defun update-bal (acct balance msg:string)
+        (enforce (>= balance 0)    "Non-positive balance")
+        (update accounts acct { "balance": balance }))
+      |]
 
     -- single step pact:
-    let code3 = [text|
+    expectVerified [text|
           (defpact payment ()
             @model
               [ (property (= (column-delta accounts 'balance) 0))
@@ -3289,88 +3270,83 @@ spec = describe "analyze" $ do
               (with-read accounts acct { "balance" := bal }
                 (update accounts acct { "balance": (+ bal amt) }))))
           |]
-    expectVerified code3
 
     -- many step pact:
-    let code4 = [text|
-          (defpact payment ()
-            @model
-              [ (property (= (column-delta accounts 'balance) 0))
-              ]
-            (step (doit 0))
-            (step (doit 0))
-            (step (doit 0))
-            (step (doit 0))
-            (step (doit 0))
-            (step (doit 0)))
+    expectVerified [text|
+      (defpact payment ()
+        @model
+          [ (property (= (column-delta accounts 'balance) 0))
+          ]
+        (step (doit 0))
+        (step (doit 0))
+        (step (doit 0))
+        (step (doit 0))
+        (step (doit 0))
+        (step (doit 0)))
 
-          (defun doit (amt:integer)
-            (let ((acct "joel"))
-              (with-read accounts acct { "balance" := bal }
-                (update accounts acct { "balance": (+ bal amt) }))))
-          |]
-    expectVerified code4
+      (defun doit (amt:integer)
+        (let ((acct "joel"))
+          (with-read accounts acct { "balance" := bal }
+            (update accounts acct { "balance": (+ bal amt) }))))
+      |]
 
     -- nontrivial many step pact:
-    let code5 = [text|
-          (defpact payment ()
-            @model
-              [ (property (= (column-delta accounts 'balance) 0))
-              ]
-            (step-with-rollback
-              (doit (- 1))
-              (doit 1))
-            (step-with-rollback
-              (doit (- 2))
-              (doit 2))
-            (step (doit 0))
-            (step-with-rollback
-              (doit (- 3))
-              (doit 3))
-            (step (doit 0))
-            (step-with-rollback
-              (doit (- 4))
-              (doit 4))
-            (step (doit 0))
-            (step-with-rollback
-              (doit (- 5))
-              (doit 5))
-            (step (doit 15)))
+    expectVerified [text|
+      (defpact payment ()
+        @model
+          [ (property (= (column-delta accounts 'balance) 0))
+          ]
+        (step-with-rollback
+          (doit (- 1))
+          (doit 1))
+        (step-with-rollback
+          (doit (- 2))
+          (doit 2))
+        (step (doit 0))
+        (step-with-rollback
+          (doit (- 3))
+          (doit 3))
+        (step (doit 0))
+        (step-with-rollback
+          (doit (- 4))
+          (doit 4))
+        (step (doit 0))
+        (step-with-rollback
+          (doit (- 5))
+          (doit 5))
+        (step (doit 15)))
 
-          (defun doit (amt:integer)
-            (let ((acct "joel"))
-              (with-read accounts acct { "balance" := bal }
-                (update accounts acct { "balance": (+ bal amt) }))))
-          |]
-    expectVerified code5
+      (defun doit (amt:integer)
+        (let ((acct "joel"))
+          (with-read accounts acct { "balance" := bal }
+            (update accounts acct { "balance": (+ bal amt) }))))
+      |]
 
     -- checking a pact with only one step
     -- Note: there is a vestigial rollback step here. something should probably
     -- disallow this, but it's not exactly clear what stage should be
     -- responsible.
-    let code6 = [text|
-          (defpact payment ()
-            @model [ (property (= (column-delta accounts 'balance) 0)) ]
-            (step-with-rollback "foo" "bar"))
-          |]
-    expectVerified code6
+    expectVerified [text|
+      (defpact payment ()
+        @model [ (property (= (column-delta accounts 'balance) 0)) ]
+        (step-with-rollback "foo" "bar"))
+      |]
 
-    let code7 = [text|
-          (defschema schema-pact-id pact-id:integer)
+    expectVerified [text|
+      (defschema schema-pact-id pact-id:integer)
 
-          (defpact payment (acct amount)
-            @model [ (property (= (column-delta accounts 'balance) 0)) ]
-            (step
-              (let ((pid:object{schema-pact-id} { 'pact-id: (pact-id) }))
-                (yield pid)))
-            (step
-              (resume { 'pact-id:= yielded-id }
-                (if (= yielded-id (pact-id))
-                  "noop"
-                  (with-default-read accounts acct { 'balance: 0 } { 'balance := bal }
-                    (write accounts acct { 'balance: (+ bal amount) }))))))
-          |]
-    expectVerified code7
+      (defpact payment (acct amount)
+        @model [ (property (= (column-delta accounts 'balance) 0)) ]
+        (step
+          (let ((pid:object{schema-pact-id} { 'pact-id: (pact-id) }))
+            (yield pid)))
+        (step
+          (resume { 'pact-id:= yielded-id }
+            (if (= yielded-id (pact-id))
+              "noop"
+              (with-default-read accounts acct { 'balance: 0 } { 'balance := bal }
+                (write accounts acct { 'balance: (+ bal amount) }))))))
+      |]
 
   describe "with-default-read" $ do
     expectVerified [text|
