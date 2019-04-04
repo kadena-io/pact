@@ -463,37 +463,31 @@ evalTerm = \case
     tagGrantRequest tid granted
     pure granted
 
-  Read objTy Nothing tid tn rowKey -> do
+  Read objTy mDefault tid tn rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
     tableRead tn .= sTrue
     rowReadCount tn sRk += 1
 
     readSucceeds <- use $ rowExists id tn sRk
     tagAccessKey mtReads tid sRk readSucceeds
-    succeeds %= (.&& readSucceeds)
 
-    (sObj, aValFields) <- readFields tn sRk tid objTy
+    case mDefault of
+      Nothing -> do
+        succeeds %= (.&& readSucceeds)
 
-    applyInvariants tn aValFields $ mapM_ addConstraint
+        (sObj, aValFields) <- readFields tn sRk tid objTy
 
-    pure sObj
+        applyInvariants tn aValFields $ mapM_ addConstraint
 
-  Read objTy (Just defObj) tid tn rowKey -> do
-    sRk <- symRowKey <$> evalTerm rowKey
-    tableRead tn .= sTrue
-    rowReadCount tn sRk += 1
+        pure sObj
 
-    readSucceeds <- use $ rowExists id tn sRk
-    tagAccessKey mtReads tid sRk readSucceeds
-    -- succeeds %= (.&& readSucceeds)
+      Just defObj -> withSymVal objTy $ iteS readSucceeds
+        (do (sObj, aValFields) <- readFields tn sRk tid objTy
 
-    withSymVal objTy $ iteS readSucceeds
-      (do (sObj, aValFields) <- readFields tn sRk tid objTy
+            applyInvariants tn aValFields $ mapM_ addConstraint
 
-          applyInvariants tn aValFields $ mapM_ addConstraint
-
-          pure sObj)
-      (eval defObj)
+            pure sObj)
+        (eval defObj)
 
   Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     obj <- withSing objTy $ evalTerm objT
