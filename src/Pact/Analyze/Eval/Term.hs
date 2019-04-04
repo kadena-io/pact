@@ -717,9 +717,9 @@ evalTerm = \case
 
     pure "INTERNAL: pact done"
 
-  Yield ty tm -> do
+  Yield tm -> do
     val <- eval tm
-    latticeState . lasYieldedInCurrent ?= SomeVal ty val
+    latticeState . lasYieldedInCurrent ?= SomeVal (sing :: SingTy a) val
     pure val
 
   Resume -> use (latticeState . lasYieldedInPrevious) >>= \case

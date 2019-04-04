@@ -1349,8 +1349,8 @@ data Term (a :: Ty) where
 
   -- Pacts
   Pact   :: [PactStep] -> Term 'TyStr
-  Yield  :: SingTy a -> Term a -> Term a
-  Resume ::                       Term a
+  Yield  ::     Term a -> Term a
+  Resume ::               Term a
 
 data PactStep where
   Step
@@ -1491,7 +1491,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
   PactId           -> showString "PactId"
   Pact steps       -> showString "Pact " . showList steps
-  Yield ty' a      -> showString "Yield " . showsPrec 11 ty' . singShowsTm ty 11 a
+  Yield a          -> showString "Yield " . singShowsTm ty 11 a
   Resume           -> showString "Resume"
 
 instance Show PactStep where
@@ -1576,7 +1576,7 @@ prettyTerm ty = \case
   MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard ty' o n   -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
   Pact steps            -> vsep (pretty <$> steps)
-  Yield ty' tm          -> parensSep [ "yield", singPrettyTm ty' tm ]
+  Yield tm              -> parensSep [ "yield", singPrettyTm ty tm ]
   Resume                -> "resume"
 
 instance Pretty PactStep where

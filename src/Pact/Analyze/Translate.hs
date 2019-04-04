@@ -1403,10 +1403,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
 
-  -- TODO: can't we remove objTy from Yield?
   AST_NFun _node "yield" [ obj ] -> do
     Some objTy obj' <- translateNode obj
-    pure $ Some objTy $ Yield objTy obj'
+    pure $ Some objTy $ Yield obj'
 
   -- Translate into a resume-and-bind
   AST_Resume node bindings schemaNode body -> do
