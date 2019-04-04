@@ -3374,3 +3374,25 @@ spec = describe "analyze" $ do
           |]
     expectVerified code7
 
+  describe "with-default-read" $ do
+    expectVerified [text|
+      (defun test:integer (acct:string)
+        @model
+          [(property
+            (when (not (row-exists accounts acct 'before))
+                  (= result 0)))
+          ]
+        (with-default-read accounts acct { 'balance: 0 } { 'balance := balance }
+          balance))
+      |]
+
+    expectVerified [text|
+      (defun test:integer (acct:string)
+        @model
+          [(property
+            (when (row-exists accounts acct 'before)
+                  (= result (at 'balance (read accounts acct 'before)))))
+          ]
+        (with-default-read accounts acct { 'balance: 0 } { 'balance := balance }
+          balance))
+      |]
