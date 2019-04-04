@@ -215,7 +215,6 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
-  {-
   describe "decimal arithmetic" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
@@ -3221,7 +3220,6 @@ spec = describe "analyze" $ do
               )
             |]
       expectVerified code
--}
 
   describe "checking pacts" $ do
     let code1 = [text|
