@@ -74,6 +74,8 @@ instance Monoid Recoverability where
 data ScopeType
   = LetScope
   | ObjectScope
+  | StepScope
+  | RollbackScope
   | FunctionScope Pact.ModuleName Text
   | PactScope Pact.ModuleName Text
   | CapabilityScope Pact.ModuleName CapName

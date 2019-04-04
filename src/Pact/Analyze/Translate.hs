@@ -291,6 +291,16 @@ withAstContext ast = local (envInfo .~ astToInfo ast)
 withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
 withNestedRecoverability r = local $ teRecoverability <>~ r
 
+-- | Enter a pact step or rollback
+withNewStep :: ScopeType -> TranslateM a -> TranslateM a
+withNewStep scopeType act = local (teScopesEntered +~ 1) $ do
+  tid <- genTagId
+  depth <- view teScopesEntered
+  emit $ TracePushScope depth scopeType [] -- no bindings
+  res <- act
+  emit $ TracePopScope depth scopeType tid $ EType SStr
+  pure res
+
 withNewScope
   :: ScopeType
   -> [Located Binding]
@@ -623,7 +633,7 @@ translatePact nodes = do
       case mRollback of
         Nothing
           -> pure (rightV, cancel : cancels, Nothing : rollbacks)
-        Just rollbackA -> do
+        Just rollbackA -> withNewStep RollbackScope $ do
           rollback <- (,)
             <$> startNewSubpath
             <*> translateNode rollbackA
@@ -662,7 +672,7 @@ translatePact nodes = do
 translateStep
   :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
 translateStep firstStep = \case
-  AST_Step _node entity exec rollback _yr -> do
+  AST_Step _node entity exec rollback _yr -> withNewStep StepScope $ do
     p <- if firstStep then use tsCurrentPath else startNewSubpath
     mEntity <- for entity $ \tm -> do
       Some SStr entity' <- translateNode tm

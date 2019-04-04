@@ -213,6 +213,10 @@ showEvent ksProvs tags event = do
             "let" : displayVids showVar
           ObjectScope ->
             "destructuring object" : displayVids showVar
+          StepScope ->
+            [ "entering step" ]
+          RollbackScope ->
+            [ "entering rollback" ]
           FunctionScope modName funName ->
             displayCallScope "function" modName funName
           PactScope modName funName ->
@@ -229,6 +233,8 @@ showEvent ksProvs tags event = do
         pure $ case scopeTy of
           LetScope            -> []
           ObjectScope         -> []
+          StepScope           -> []
+          RollbackScope       -> []
           FunctionScope _ _   -> returnOutput
           PactScope _ _       -> []
           CapabilityScope _ _ -> returnOutput
