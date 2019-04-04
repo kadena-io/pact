@@ -717,7 +717,6 @@ evalTerm = \case
 
     pure "INTERNAL: pact done"
 
-  -- Caution: yield / resume are not yet working pending #442
   Yield ty tm -> do
     val <- eval tm
     latticeState . lasYieldedInCurrent ?= SomeVal ty val
