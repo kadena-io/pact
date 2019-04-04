@@ -3230,7 +3230,7 @@ spec = describe "analyze" $ do
       |]
 
     -- TODO: check trace
-    expectVerified [text|
+    expectFalsified [text|
       (defpact payment (payer:string payer-entity:string payee:string
                         payee-entity:string amount:integer
                         payer-bal:integer payee-bal:integer)
