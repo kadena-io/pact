@@ -1132,13 +1132,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr key'               <- translateNode key
     Some objTy' def              <- translateNode defaultNode
     tid                          <- tagRead node $ ESchema schema
-    let readT = Some objTy $
-          Read objTy Nothing tid (TableName (T.unpack table)) key'
     case singEq objTy objTy' of
-      Nothing
-        -> throwError' $ TypeError node
-      Just Refl
-        -> withNodeContext node $ translateObjBinding bindings objTy body readT
+      Nothing   -> throwError' $ TypeError node
+      Just Refl -> do
+        let readT = Some objTy $
+              Read objTy (Just def) tid (TableName (T.unpack table)) key'
+        withNodeContext node $ translateObjBinding bindings objTy body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
     EType objTy@SObject{} <- translateType schemaNode
