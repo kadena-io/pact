@@ -698,6 +698,8 @@ evalTerm = \case
       ([], sTrue)
       steps
 
+    -- clear yields before evaluating rollbacks. (though there shouldn't be any
+    -- resumes in the rollbacks anyway)
     latticeState . lasYieldedInPrevious .= Nothing
     latticeState . lasYieldedInCurrent  .= Nothing
 
