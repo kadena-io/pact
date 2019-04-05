@@ -38,6 +38,7 @@ import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
+import           Data.Type.Equality           ((:~:)(Refl))
 import           GHC.Generics                 hiding (S)
 import           GHC.Stack                    (HasCallStack)
 
@@ -80,18 +81,55 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
         ) => b)
     -> b
 
+-- | Expect a 'Just' in an 'Analyzer'.
+(??)
+  :: Analyzer m
+  => Maybe a -> AnalyzeFailureNoLoc -> m a
+Just a  ?? _   = pure a
+Nothing ?? err = throwErrorNoLoc err
+infix 1 ??
+
+-- | Expect a computation to evaluate to a 'Just' in an 'Analyzer'.
+(???) :: Analyzer m => m (Maybe a) -> AnalyzeFailureNoLoc -> m a
+m ??? err = do
+  m' <- m
+  m' ?? err
+infix 1 ???
+
 data PactMetadata
   = PactMetadata
-    { _pmInPact :: S Bool
-    , _pmPactId :: S Integer
-    -- , _pmStep   :: S Integer
+    { _pmInPact  :: !(S Bool)
+    , _pmPactId  :: !(S Integer)
+    , _pmEntity  :: !(S Str)
     }
   deriving Show
+
+data ExistentialVal where
+  SomeVal :: SingTy a -> S (Concrete a) -> ExistentialVal
+
+instance Mergeable ExistentialVal where
+  symbolicMerge force test (SomeVal lTy lVal) (SomeVal rTy rVal)
+    = case singEq lTy rTy of
+      Nothing   -> error $ "failed symbolic merge with different types: " ++
+        show lTy ++ " vs " ++ show rTy
+      Just Refl -> SomeVal lTy $ withSymVal lTy $
+        symbolicMerge force test lVal rVal
+
+instance Show ExistentialVal where
+  showsPrec p (SomeVal ty s)
+    = showParen (p > 10)
+    $ showString "SomeVal "
+    . showsPrec 11 ty
+    . showChar ' '
+    . showsPrec 11 s
 
 -- We just use `uninterpret` for now until we need to extract these values from
 -- the model.
 mkPactMetadata :: PactMetadata
-mkPactMetadata = PactMetadata (uninterpretS "in_pact") (uninterpretS "pact_id")
+mkPactMetadata = PactMetadata
+  (uninterpretS "in_pact")
+  (uninterpretS "pact_id")
+  (uninterpretS "entity")
 
 -- | The registry of names to keysets that is shared across multiple modules in
 -- a namespace.
@@ -119,16 +157,18 @@ data AnalyzeEnv
     , _aeRegistry     :: !Registry
     , _aeTxMetadata   :: !TxMetadata
     , _aeScope        :: !(Map VarId AVal) -- used as a stack
+    , _aeStepChoices  :: !(Map VarId (SBV Bool))
     , _aeGuardPasses  :: !(SFunArray Guard Bool)
     , _invariants     :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds    :: !(TableMap (Map Text VarId))
     , _aeModelTags    :: !(ModelTags 'Symbolic)
     , _aeInfo         :: !Info
     , _aeTrivialGuard :: !(S Guard)
-    , _aeEmptyGrants  :: TokenGrants
+    , _aeEmptyGrants  :: !TokenGrants
     -- ^ the default, blank slate of grants, where no token is granted.
-    , _aeActiveGrants :: TokenGrants
+    , _aeActiveGrants :: !TokenGrants
     -- ^ the current set of tokens that are granted, manipulated as a stack
+    , _aeTables       :: ![Table]
     } deriving Show
 
 mkAnalyzeEnv
@@ -138,10 +178,11 @@ mkAnalyzeEnv
   -> [Table]
   -> [Capability]
   -> Map VarId AVal
+  -> Map VarId (SBV Bool)
   -> ModelTags 'Symbolic
   -> Info
   -> Maybe AnalyzeEnv
-mkAnalyzeEnv modName pactMetadata registry tables caps args tags info = do
+mkAnalyzeEnv modName pactMetadata registry tables caps args stepChoices tags info = do
   let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
                                 (mkFreeArray "txDecimals")
                                 (mkFreeArray "txIntegers")
@@ -172,9 +213,9 @@ mkAnalyzeEnv modName pactMetadata registry tables caps args tags info = do
       emptyGrants  = mkTokenGrants caps
       activeGrants = emptyGrants
 
-  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args guardPasses
-    invariants' columnIds' tags info (sansProv trivialGuard) emptyGrants
-    activeGrants
+  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args
+    stepChoices guardPasses invariants' columnIds' tags info
+    (sansProv trivialGuard) emptyGrants activeGrants tables
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -240,6 +281,7 @@ data LatticeAnalyzeState a
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
     , _lasPendingGrants       :: TokenGrants
+    , _lasYielded             :: !(Maybe ExistentialVal)
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -251,6 +293,8 @@ data GlobalAnalyzeState
   = GlobalAnalyzeState
     { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
     , _gasNextUninterpId   :: Integer
+    , _gasRollbacks        :: ![ETerm]
+    -- ^ the stack of rollbacks to perform on failure
     }
   deriving (Show)
 
@@ -310,8 +354,8 @@ mkInitialAnalyzeState tables caps = AnalyzeState
         , _lasMaintainsInvariants = mkMaintainsInvariants
         , _lasTablesRead          = mkSFunArray $ const sFalse
         , _lasTablesWritten       = mkSFunArray $ const sFalse
-        , _lasColumnsRead         = mkTableColumnMap (const True) sFalse
-        , _lasColumnsWritten      = mkTableColumnMap (const True) sFalse
+        , _lasColumnsRead         = mkTableColumnMap tables (const True) sFalse
+        , _lasColumnsWritten      = mkTableColumnMap tables (const True) sFalse
         , _lasIntCellDeltas       = intCellDeltas
         , _lasDecCellDeltas       = decCellDeltas
         , _lasIntColumnDeltas     = intColumnDeltas
@@ -322,6 +366,7 @@ mkInitialAnalyzeState tables caps = AnalyzeState
         , _lasCellsWritten        = cellsWritten
         , _lasConstraints         = sansProv sTrue
         , _lasPendingGrants       = mkTokenGrants caps
+        , _lasYielded             = Nothing
         , _lasExtra               = CellValues
           { _cvTableCells = mkSymbolicCells tables
           , _cvRowExists  = mkRowExists
@@ -330,6 +375,7 @@ mkInitialAnalyzeState tables caps = AnalyzeState
     , _globalState = GlobalAnalyzeState
         { _gasGuardProvenances = mempty
         , _gasNextUninterpId   = 0
+        , _gasRollbacks        = []
         }
     }
 
@@ -337,26 +383,12 @@ mkInitialAnalyzeState tables caps = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
-    intCellDeltas   = mkTableColumnMap (== TyPrim Pact.TyInteger) (mkSFunArray (const 0))
-    decCellDeltas   = mkTableColumnMap (== TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
-    intColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyInteger) 0
-    decColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyDecimal) (fromInteger 0)
-    cellsEnforced   = mkTableColumnMap isGuardTy (mkSFunArray (const sFalse))
-    cellsWritten    = mkTableColumnMap (const True) (mkSFunArray (const sFalse))
-
-    mkTableColumnMap
-      :: (Pact.Type Pact.UserType -> Bool) -- ^ Include this column in the mapping?
-      -> a                                 -- ^ Default value
-      -> TableMap (ColumnMap a)
-    mkTableColumnMap f defValue = TableMap $ Map.fromList $
-      tables <&> \Table { _tableName, _tableType } ->
-        let fields = Pact._utFields _tableType
-            colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-              \(Pact.Arg argName ty _) ->
-                if f ty
-                then Just (ColumnName (T.unpack argName), defValue)
-                else Nothing
-        in (TableName (T.unpack _tableName), colMap)
+    intCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyInteger) (mkSFunArray (const 0))
+    decCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
+    intColumnDeltas = mkTableColumnMap tables (== TyPrim Pact.TyInteger) 0
+    decColumnDeltas = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (fromInteger 0)
+    cellsEnforced   = mkTableColumnMap tables isGuardTy (mkSFunArray (const sFalse))
+    cellsWritten    = mkTableColumnMap tables (const True) (mkSFunArray (const sFalse))
 
     mkPerTableSFunArray :: SBV v -> TableMap (SFunArray k v)
     mkPerTableSFunArray defaultV = TableMap $ Map.fromList $ zip
@@ -369,6 +401,21 @@ mkInitialAnalyzeState tables caps = AnalyzeState
 
     mkRowExists = TableMap $ Map.fromList $ tableNames <&> \tn@(TableName tn')
       -> (tn, mkFreeArray $ "row_exists__" <> T.pack tn')
+
+mkTableColumnMap
+  :: [Table]
+  -> (Pact.Type Pact.UserType -> Bool) -- ^ Include this column in the mapping?
+  -> a                                 -- ^ Default value
+  -> TableMap (ColumnMap a)
+mkTableColumnMap tables f defValue = TableMap $ Map.fromList $
+  tables <&> \Table { _tableName, _tableType } ->
+    let fields = Pact._utFields _tableType
+        colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+          \(Pact.Arg argName ty _) ->
+            if f ty
+            then Just (ColumnName (T.unpack argName), defValue)
+            else Nothing
+    in (TableName (T.unpack _tableName), colMap)
 
 mkSymbolicCells :: [Table] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
@@ -429,6 +476,9 @@ class HasAnalyzeEnv a where
 
   currentPactId :: Lens' a (S Integer)
   currentPactId = analyzeEnv.aePactMetadata.pmPactId
+
+  currentEntity :: Lens' a (S Str)
+  currentEntity = analyzeEnv.aePactMetadata.pmEntity
 
   activeGrants :: Lens' a TokenGrants
   activeGrants = analyzeEnv.aeActiveGrants

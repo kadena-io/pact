@@ -583,7 +583,7 @@ data Def n = Def
 
 instance Pretty n => Pretty (Def n) where
   pretty Def{..} = parensSep $
-    [ prettyString $ defTypeRep _dDefType
+    [ prettyString (defTypeRep _dDefType)
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
     , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)

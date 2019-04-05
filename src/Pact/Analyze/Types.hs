@@ -20,6 +20,7 @@ module Pact.Analyze.Types
   , HasVarId(varId)
   , Quantifier(..)
   , Table(..)
+  , CheckableType(..)
 
   , checkGoal
   , genId
@@ -86,12 +87,18 @@ data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
   , _tableInvariants :: [Located (Invariant 'TyBool)]
-  }
+  } deriving Show
 
 pattern TableNameLit :: String -> Prop TyTableName
 pattern TableNameLit str = StrLit str
 
 pattern ColumnNameLit :: String -> Prop TyColumnName
 pattern ColumnNameLit str = StrLit str
+
+-- | The three things we can check properties of
+data CheckableType
+  = CheckDefun
+  | CheckDefpact
+  | CheckDefconst
 
 makeLenses ''Table

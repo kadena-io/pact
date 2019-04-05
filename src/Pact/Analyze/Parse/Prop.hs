@@ -641,7 +641,7 @@ checkPreProp ty preProp
 
 typeError :: (HasCallStack, Pretty a, Pretty b) => PreProp -> a -> b -> PropCheck c
 typeError preProp a b = throwErrorIn preProp $
-  "type error: " <> pretty a <> " vs " <> pretty b <> "(" <>
+  "type error: " <> pretty a <> " vs " <> pretty b <> " (" <>
   prettyString (prettyCallStack callStack) <> ")"
 
 expectColumnType

@@ -149,6 +149,21 @@
       (update persons "foo" partial)
       partial))
 
+  (defschema schema-a a:integer)
+  (defschema schema-b b:integer)
+
+  (defpact tc-yield-resume-1 (foo bar x:integer)
+    (step (if foo
+              (let ((y:object{schema-a} {'a: x}))
+                (yield y))
+            (yield {'a: (+ x 1)})))
+    (step (if bar
+              (resume {'a := z}
+                (let ((y:object{schema-b} {'b: (+ z 1)}))
+                  (yield y)))
+            (resume {'a:= z} (yield {'b: z}))))
+    (step (resume {'b:= q} q))
+  )
 
 )
 

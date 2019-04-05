@@ -15,11 +15,12 @@ module Pact.Analyze.Eval.Term where
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', preview, use,
                                               view, (%=), (%~), (&), (+=), (.=),
-                                              (.~), (<&>), (?~), (^.), (^?), _1,
-                                              _2, _Just)
+                                              (.~), (<&>), (?~), (?=), (^.),
+                                              (^?), _1, _2, _head, _Just,
+                                              ifoldlM)
 import           Control.Monad               (void)
 import           Control.Monad.Except        (Except, MonadError (throwError))
-import           Control.Monad.Reader        (MonadReader (local), runReaderT)
+import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
@@ -27,10 +28,11 @@ import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (EqSymbolic ((.==)), HasKind,
+import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind,
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymVal, ite,
-                                              literal, (.<))
+                                              literal, (.<), uninterpret,
+                                              writeArray)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.String             as SBV
 import           Data.SBV.Tuple              (tuple)
@@ -41,18 +43,21 @@ import qualified Data.Text                   as T
 import           Data.Text.Encoding          (encodeUtf8)
 import           Data.Thyme                  (formatTime, parseTime)
 import           Data.Traversable            (for)
+import           Data.Type.Equality          ((:~:)(Refl))
 import           GHC.TypeLits
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
 import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Pretty           (renderCompactString', pretty)
+import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Invariant
+import           Pact.Analyze.LegacySFunArray
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
@@ -393,7 +398,7 @@ extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
 isGranted :: Token -> Analyze (S Bool)
 isGranted t = view $ activeGrants.tokenGranted t
 
-evalTerm :: SingI a => Term a -> Analyze (S (Concrete a))
+evalTerm :: forall a. SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
 
@@ -507,7 +512,7 @@ evalTerm = \case
   Let _name vid eterm body -> do
     av <- evalETerm eterm
     tagVarBinding vid av
-    local (scope.at vid ?~ av) $ do
+    withVar vid av $ do
       res <- evalTerm body
       pure res
 
@@ -630,6 +635,135 @@ evalTerm = \case
       Some (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash` on lists"
       Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
+
+  Pact steps -> local (inPact .~ sTrue) $ do
+    -- TODO: pending #442
+    _previouslyYielded <- use $ latticeState . lasYielded
+
+    -- We execute through all the steps once (via a left fold), then we execute
+    -- all the rollbacks (via for), in reverse order.
+
+    (rollbacks, _) <- ifoldlM
+      (\stepNo (rollbacks, successChoice)
+        --          ^ do we make it to this step?
+        (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) ->
+        withSing ty $ do
+
+        -- The first step has no cancel var. All other steps do.
+        cancel <- case mCancelVid of
+
+          -- We can never cancel before executing the first step
+          Nothing -> pure sFalse
+
+          -- ... otherwise, we nondeterministically either succeed or cancel
+          Just (cancelPath {- c_n -}, cancelVid) -> withReset stepNo $ do
+            cancel <- view (aeStepChoices . at cancelVid)
+              ??? "couldn't find cancel var"
+
+            tagFork successPath cancelPath (sansProv successChoice)
+              (sansProv $ sNot cancel)
+
+            pure $ successChoice .&& cancel
+
+        let -- Trigger the latest rollback if we cancel on this step
+            rollbacks' = rollbacks & _head . _2 %~ (.|| cancel)
+            rollbacks'' = case mRollback of
+              Nothing
+                -> rollbacks'
+              Just (rollbackPath {- r_n -}, rollback)
+                -> (rollbackPath, sFalse, rollback):rollbacks'
+                --                ^ should we run this rollback, and every
+                --                  rollback before it?
+
+            reachesStep = successChoice .&& sNot cancel
+
+        ite reachesStep
+          (void $ evalTermWithEntity mEntity tm)
+          (pure ())
+
+        pure (rollbacks'', reachesStep))
+      ([], sTrue)
+      steps
+
+    void $ foldlM
+      (\alreadyRollingBack
+        (path {- r_n -}, rollbackTriggered, rollback) -> do
+        -- If this rollback was triggered, we execute this and all earlier
+        -- rollbacks
+        let nowRollingBack = alreadyRollingBack .|| rollbackTriggered
+        tagSubpathStart path $ sansProv nowRollingBack
+        ite nowRollingBack
+          (void $ evalETerm rollback)
+          (pure ())
+        pure nowRollingBack)
+      sFalse
+      rollbacks
+
+    pure "INTERNAL: pact done"
+
+  -- Caution: yield / resume are not yet working pending #442
+  Yield ty tm -> do
+    val <- eval tm
+    latticeState . lasYielded ?= SomeVal ty val
+    pure val
+
+  Resume -> use (latticeState . lasYielded) >>= \case
+    Nothing -> throwErrorNoLoc "No previously yielded value for resume"
+    Just (SomeVal ty val) -> case singEq ty (sing :: SingTy a) of
+      Nothing   -> throwErrorNoLoc "Resume of unexpected type"
+      Just Refl -> pure val
+
+-- | Private pacts must be evaluated by the right entity. Fail if the current
+-- entity doesn't match the provided.
+evalTermWithEntity
+  :: SingI a => Maybe (Term 'TyStr) -> Term a -> Analyze (S (Concrete a))
+evalTermWithEntity mEntity tm = do
+  case mEntity of
+    Nothing -> pure ()
+    Just expectedEntity -> do
+      actualEntity    <- view currentEntity
+      expectedEntity' <- eval expectedEntity
+      markFailure $ actualEntity ./= expectedEntity'
+  evalTerm tm
+
+-- | Reset to perform between different transactions.
+--
+-- This encompasses anything in 'AnalyzeState' or 'AnalyzeEnv' that could have
+-- changed between transactions.
+withReset :: Int -> Analyze a -> Analyze a
+withReset number action = do
+  oldState <- use id
+  oldEnv   <- ask
+
+  let tables = oldEnv ^. aeTables
+      txMetadata   = TxMetadata (mkFreeArray $ "txKeySets"  <> tShow number)
+                                (mkFreeArray $ "txDecimals" <> tShow number)
+                                (mkFreeArray $ "txIntegers" <> tShow number)
+
+      newRegistry = Registry $ mkFreeArray $ "registry" <> tShow number
+      trivialGuard = uninterpret $ "trivial_guard" ++ show number
+      newGuardPasses = writeArray (mkFreeArray $ "guardPasses" <> tShow number)
+        trivialGuard sTrue
+
+      -- If `rowExists` is already set to true, then it won't change. If it's
+      -- set to false, this will unset it.
+      updateTableMap (TableMap tm) = TableMap $ flip Map.mapWithKey tm $
+        \(TableName tn) sFunArr ->
+          let newArr = mkFreeArray $
+                "row_exists__" <> T.pack tn <> "_" <> tShow number
+          in eitherArray sFunArr newArr
+
+      newState = oldState
+        & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
+        & latticeState . lasExtra . cvRowExists  %~ updateTableMap
+      newEnv = oldEnv
+        & aePactMetadata . pmEntity .~ uninterpretS "entity"
+        & aeRegistry                .~ newRegistry
+        & aeTxMetadata              .~ txMetadata
+        & aeGuardPasses             .~ newGuardPasses
+
+  id .= newState
+  local (analyzeEnv .~ newEnv) action
 
 -- For now we only allow these three types to be formatted.
 --

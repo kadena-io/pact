@@ -18,6 +18,7 @@ module Pact.Analyze.Check
   , describeCheckFailure
   , describeParseFailure
   , describeVerificationWarnings
+  , describeVerificationFailure
   , falsifyingModel
   , showModel
   , CheckFailure(..)
@@ -36,9 +37,9 @@ module Pact.Analyze.Check
 
 import           Control.Exception         as E
 import           Control.Lens              (at, each, filtered, ifoldrM, ifor,
-                                            itraversed, ix, toListOf,
-                                            traversed, view, (%~), (&), (<&>),
-                                            (?~), (^.), (^?), (^?!), (^@..),
+                                            itraversed, ix, toListOf, traversed,
+                                            view, (%~), (&), (<&>), (?~), (^.),
+                                            (^..), (^?), (^?!), (^@..), (.~),
                                             _1, _2, _Left)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
@@ -67,31 +68,33 @@ import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
-                                            Info, dMeta, mModel, renderInfo,
-                                            renderParsed, tDef, tInfo, tMeta,
-                                            _dDefName, _tDef)
+                                            Def (..), DefType (..), Info, dMeta,
+                                            mModel, renderInfo, renderParsed,
+                                            tDef, tInfo, tMeta, _tDef)
+import           Pact.Types.Pretty         (renderCompactText)
 import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
                                             Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, mdModule,
                                             mdRefMap, tShow)
 import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Term           (DefName (..), DefType(Defcap),
-                                            _Ref, dDefType, moduleDefName,
-                                            moduleDefMeta)
+import           Pact.Types.Term           (DefName (..), DefType (Defcap),
+                                            dDefType, moduleDefMeta,
+                                            moduleDefName, _Ref)
+import           Pact.Types.Type           (_ftArgs)
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
                                             TopLevel (TopConst, TopFun, TopTable),
                                             UserType (_utFields, _utName),
                                             runTC, tcFailures, toplevelInfo)
-import           Pact.Types.Type           (_ftArgs)
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Alloc        (runAlloc)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval         hiding (invariants)
 import           Pact.Analyze.Model        (allocArgs, allocModelTags,
+                                            allocStepChoices,
                                             saturateModel, showModel)
 import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Analyze.Translate
@@ -158,6 +161,14 @@ data VerificationFailure
   | InvalidRefType
   | FailedConstTranslation String
   deriving Show
+
+describeVerificationFailure :: VerificationFailure -> Text
+describeVerificationFailure = \case
+  ModuleParseFailure pf         -> describeParseFailure pf
+  ModuleCheckFailure cf         -> describeCheckFailure cf
+  TypeTranslationFailure msg ty -> msg <> ": " <> renderCompactText ty
+  InvalidRefType                -> "invalid ref type"
+  FailedConstTranslation msg    -> "failed constant translation: " <> T.pack msg
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
@@ -298,41 +309,56 @@ verifyFunctionInvariants'
   -> [Capability]
   -> [Named Node]
   -> [AST Node]
+  -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body = runExceptT $ do
-    (args, tm, graph) <- hoist generalize $
-      withExcept translateToCheckFailure $ runTranslation modName funName funInfo caps pactArgs body
+verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body
+  checkType = runExceptT $ do
+    (args, stepChoices, tm, graph) <- hoist generalize $
+      withExcept translateToCheckFailure $ runTranslation modName funName
+        funInfo caps pactArgs body checkType
 
-    ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      lift $ SBV.setTimeOut 1000 -- one second
-      modelArgs' <- lift $ runAlloc $ allocArgs args
-      tags       <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
-      let rootPath = _egRootPath graph
-      resultsTable <- withExceptT analyzeToCheckFailure $
-        runInvariantAnalysis modName tables caps (analysisArgs modelArgs') tm
-          rootPath tags funInfo
+    let invsMap = TableMap $ Map.fromList $
+          tables <&> \Table { _tableName, _tableInvariants } ->
+            ( TableName (T.unpack _tableName)
+            , fmap (const ()) <$> _tableInvariants
+            )
 
-      -- Iterate through each invariant in a single query so we can reuse our
-      -- assertion stack.
-      ExceptT $ fmap Right $
-        SBV.query $
-          for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
-            let model = Model modelArgs' tags ksProvs graph
+    -- Check to see if there are any invariants in this module. If there aren't
+    -- we can skip these checks.
+    case invsMap ^.. traverse . traverse of
+      [] -> pure $ invsMap & traverse .~ []
 
-            _ <- runExceptT $ inNewAssertionStack $ do
-              void $ lift $ SBV.constrain $ sNot $ successBool querySucceeds
-              withExceptT (smtToQueryFailure info) $
-                resultQuery Validation model
+      _ -> ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
+        lift $ SBV.setTimeOut 1000 -- one second
+        modelArgs'   <- lift $ runAlloc $ allocArgs args
+        stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
+        tags         <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+        let rootPath = _egRootPath graph
+        resultsTable <- withExceptT analyzeToCheckFailure $
+          runInvariantAnalysis modName tables caps (analysisArgs modelArgs')
+            stepChoices' tm rootPath tags funInfo
 
-            queryResult <- runExceptT $ inNewAssertionStack $ do
-              void $ lift $ SBV.constrain $ sNot prop
-              resultQuery goal model
+        -- Iterate through each invariant in a single query so we can reuse our
+        -- assertion stack.
+        ExceptT $ fmap Right $
+          SBV.query $
+            for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
+              let model = Model modelArgs' tags ksProvs graph
 
-            -- Either SmtFailure CheckSuccess -> CheckResult
-            pure $ case queryResult of
-               Left smtFailure -> Left $
-                 CheckFailure info (SmtFailure smtFailure)
-               Right pass      -> Right pass
+              _ <- runExceptT $ inNewAssertionStack $ do
+                void $ lift $ SBV.constrain $ sNot $ successBool querySucceeds
+                withExceptT (smtToQueryFailure info) $
+                  resultQuery Validation model
+
+              queryResult <- runExceptT $ inNewAssertionStack $ do
+                void $ lift $ SBV.constrain $ sNot prop
+                resultQuery goal model
+
+              -- Either SmtFailure CheckSuccess -> CheckResult
+              pure $ case queryResult of
+                 Left smtFailure -> Left $
+                   CheckFailure info (SmtFailure smtFailure)
+                 Right pass      -> Right pass
 
   where
     goal :: Goal
@@ -359,24 +385,26 @@ verifyFunctionProperty
   -> [Capability]
   -> [Named Node]
   -> [AST Node]
+  -> CheckableType
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty modName funName funInfo tables caps pactArgs body (Located propInfo check) =
-  runExceptT $ do
-    (args, tm, graph) <- hoist generalize $
+verifyFunctionProperty modName funName funInfo tables caps pactArgs body
+  checkType (Located propInfo check) = runExceptT $ do
+    (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
-        runTranslation modName funName funInfo caps pactArgs body
+        runTranslation modName funName funInfo caps pactArgs body checkType
 
     -- Set up the model and our query
     let setupSmtProblem = do
           lift $ SBV.setTimeOut 1000 -- one second
-          modelArgs' <- lift $ runAlloc $ allocArgs args
-          tags       <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+          modelArgs'   <- lift $ runAlloc $ allocArgs args
+          stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
+          tags         <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
           let rootPath = _egRootPath graph
           ar@(AnalysisResult _querySucceeds _prop ksProvs)
             <- withExceptT analyzeToCheckFailure $
               runPropertyAnalysis modName check tables caps
-                (analysisArgs modelArgs') tm rootPath tags funInfo
+                (analysisArgs modelArgs') stepChoices' tm rootPath tags funInfo
 
           let model = Model modelArgs' tags ksProvs graph
 
@@ -579,14 +607,19 @@ parseModuleModelDecl exps = traverse parseDecl exps where
       _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")
 
--- Get the set (HashMap) of refs to functions in this module.
-moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
-moduleTypecheckableRefs ModuleData{..} = flip HM.filter _mdRefMap $ \case
-  Ref TDef{}   -> True
-  Ref TConst{} -> True
-  _            -> False
+-- | Get the set ('HM.HashMap') of refs to functions in this module.
+moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text (Ref, CheckableType)
+moduleTypecheckableRefs ModuleData{..} = flip HM.mapMaybe _mdRefMap $ \ref ->
+  case ref of
+    Ref (TDef def _) -> case _dDefType def of
+      Defun   -> Just (ref, CheckDefun)
+      Defpact -> Just (ref, CheckDefpact)
+      Defcap  -> Nothing
+    Ref TConst{} -> Just (ref, CheckDefconst)
+    _            -> Nothing
 
 
+-- | Module-level propery definitions and declarations
 data ModelDecl = ModelDecl
   { _moduleDefProperties :: !(HM.HashMap Text (DefinedProperty (Exp Info)))
   , _moduleProperties    :: ![ModuleProperty]
@@ -602,15 +635,15 @@ moduleModelDecl ModuleData{..} = do
 moduleFunChecks
   :: [Table]
   -> [ModuleProperty]
-  -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  -> HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType)
   -> HM.HashMap Text EProp
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -> Except VerificationFailure
-       (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
+       (HM.HashMap Text ((Ref, CheckableType), Either ParseFailure [Located Check]))
 moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \case
   -- TODO How better to handle the type mismatch?
-  (Pact.Direct _, _) -> throwError InvalidRefType
-  (ref@(Ref defn), Pact.FunType argTys resultTy) -> do
+  (Pact.Direct _, _, _) -> throwError InvalidRefType
+  (ref@(Ref defn), Pact.FunType argTys resultTy, checkType) -> do
 
     let -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
         --       not there yet:
@@ -657,6 +690,7 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
                   \(Pact.Arg argName ty _) ->
                     (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
             in (TableName (T.unpack _tableName), colMap)
+
     -- TODO: this was very hard code to debug as the unsafe lenses just result
     -- in properties not showing up, instead of a compile error when I changed 'TDef'
     -- to a safe constructor. Please consider
@@ -678,7 +712,7 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
           runExpParserOver (applicableModuleChecks <> exps) $
             expToCheck tableEnv vidStart nameVids vidTys consts propDefs
 
-    pure (ref, Right checks)
+    pure ((ref, checkType), Right checks)
 
 -- | Remove the "invariant" or "property" application from every exp
 collectExps :: Text -> [Exp Info] -> Either ParseFailure [Exp Info]
@@ -713,8 +747,9 @@ verifyFunctionProps
   -> Ref
   -> Text
   -> [Located Check]
+  -> CheckableType
   -> IO [CheckResult]
-verifyFunctionProps modName tables caps ref funName props = do
+verifyFunctionProps modName tables caps ref funName props checkType = do
   eToplevel <- typecheck ref
   case eToplevel of
     Left failure ->
@@ -722,6 +757,7 @@ verifyFunctionProps modName tables caps ref funName props = do
     Right (TopFun FDefun {_fInfo, _fArgs, _fBody} _) ->
       for props $
         verifyFunctionProperty modName funName _fInfo tables caps _fArgs _fBody
+          checkType
     Right _ ->
       pure []
 
@@ -731,14 +767,16 @@ verifyFunctionInvariants
   -> [Capability]
   -> Ref
   -> Text
+  -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants modName tables caps ref funName = do
+verifyFunctionInvariants modName tables caps ref funName checkType = do
   eToplevel <- typecheck ref
   case eToplevel of
     Left failure ->
       pure $ Left failure
     Right (TopFun FDefun {_fInfo, _fArgs, _fBody} _) ->
-      verifyFunctionInvariants' modName funName _fInfo tables caps _fArgs _fBody
+      verifyFunctionInvariants' modName funName _fInfo tables caps _fArgs
+        _fBody checkType
     Right _ ->
       pure $ Right $ TableMap Map.empty
 
@@ -781,19 +819,21 @@ verifyModule modules moduleData = runExceptT $ do
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
 
-      typecheckableRefs :: HM.HashMap Text Ref
+      typecheckableRefs :: HM.HashMap Text (Ref, CheckableType)
       typecheckableRefs = moduleTypecheckableRefs moduleData
 
   -- For each ref, if it typechecks as a function (it'll be either a function
   -- or a constant), keep its signature.
   --
-  ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType),
-    consts :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
-    (\name ref accum -> do
+  ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType),
+    consts   :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
+    (\name (ref, cType) accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
-        (TopFun (FDefun _info _mod _name funType _args _body) _meta, _tcState)
-          -> accum & _1 . at name ?~ (ref, funType)
+        (TopFun (FDefun _info _mod _name _defType funType _args _body) _meta, _tcState)
+          -> case cType of
+            CheckDefconst -> error "invariant violation: this cannot be a constant"
+            _             -> accum & _1 . at name ?~ (ref, funType, cType)
         (TopConst _info _qualifiedName _type val _doc, _tcState)
           -> accum & _2 . at name ?~ val
         _ -> accum
@@ -812,33 +852,34 @@ verifyModule modules moduleData = runExceptT $ do
   consts' <- hoist generalize $
     traverse (valueToProp' <=< translateNodeNoGraph') consts
 
-  (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-    <- hoist generalize $ moduleFunChecks tables checkExps funTypes consts' propDefs
+  (funChecks :: HM.HashMap Text ((Ref, CheckableType), Either ParseFailure [Located Check]))
+    <- hoist generalize $
+      moduleFunChecks tables checkExps funTypes consts' propDefs
 
   caps <- moduleCapabilities moduleData
 
-  let funChecks' :: Either ParseFailure (HM.HashMap Text (Ref, [Located Check]))
-      funChecks' = traverse sequence funChecks
-
-      modName :: ModuleName
+  let modName :: ModuleName
       modName = moduleDefName $ _mdModule moduleData
 
-      verifyFunProps :: Ref -> Text -> [Located Check] -> IO [CheckResult]
+      verifyFunProps
+        :: Ref -> Text -> [Located Check] -> CheckableType -> IO [CheckResult]
       verifyFunProps = verifyFunctionProps modName tables caps
 
-  funChecks'' <- case funChecks' of
-    Left errs         -> throwError $ ModuleParseFailure errs
-    Right funChecks'' -> pure funChecks''
+  -- check for parse failures in any of the checks
+  funChecks' <- case traverse sequence funChecks of
+    Left errs        -> throwError $ ModuleParseFailure errs
+    Right funChecks' -> pure funChecks'
 
-  funChecks''' <- lift $ ifor funChecks'' $ \name (ref, check) ->
-    verifyFunProps ref name check
-  invariantChecks <- ifor typecheckableRefs $ \name ref ->
+  -- actually check the checks
+  funChecks'' <- lift $ ifor funChecks' $ \name ((ref, checkType), checks) ->
+    verifyFunProps ref name checks checkType
+  invariantChecks <- ifor typecheckableRefs $ \name (ref, checkType) ->
     withExceptT ModuleCheckFailure $ ExceptT $
-      verifyFunctionInvariants modName tables caps ref name
+      verifyFunctionInvariants modName tables caps ref name checkType
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
-  pure $ ModuleChecks funChecks''' invariantChecks warnings
+  pure $ ModuleChecks funChecks'' invariantChecks warnings
 
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
 renderVerifiedModule = \case
@@ -878,5 +919,5 @@ verifyCheck moduleData funName check = do
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps moduleName tables caps funRef funName
-        [Located info check]
+        [Located info check] CheckDefun
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName

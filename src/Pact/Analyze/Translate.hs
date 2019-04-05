@@ -15,6 +15,8 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ViewPatterns               #-}
 
+{-# LANGUAGE TupleSections              #-}
+
 -- | Translation from typechecked 'AST' to 'Term', while accumulating an
 -- execution graph to be used during symbolic analysis and model reporting.
 module Pact.Analyze.Translate where
@@ -24,7 +26,7 @@ import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, toListOf, use, view, zoom,
                                              (%=), (%~), (+~), (.=), (.~),
-                                             (<>~), (?=), (^.), (<&>))
+                                             (<>~), (?=), (^.), (<&>), _1, (^..))
 import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -32,7 +34,7 @@ import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, evalStateT,
                                              modify', runStateT)
-import           Data.Foldable              (foldl', for_)
+import           Data.Foldable              (foldl', for_, foldlM)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe, isNothing)
@@ -80,6 +82,7 @@ data TranslateFailureNoLoc
   | NotConvertibleToSchema (Pact.Type Pact.UserType)
   | TypeMismatch EType EType
   | UnexpectedNode (AST Node)
+  | UnexpectedPactNode (AST Node)
   | MissingConcreteType (Pact.Type Pact.UserType)
   | MonadFailure String
   | NonStaticColumns (AST Node)
@@ -87,7 +90,6 @@ data TranslateFailureNoLoc
   | BadTimeType (AST Node)
   | NonConstKey (AST Node)
   | FailedVarLookup Text
-  | NoPacts (AST Node)
   | NoKeys (AST Node)
   | NoReadMsg (AST Node)
   | DeprecatedList Node
@@ -112,6 +114,7 @@ describeTranslateFailureNoLoc = \case
   -- Uncomment for debugging
   -- UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
   UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
+  UnexpectedPactNode ast -> "Unexpected node in translation of a pact: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   MonadFailure str -> "Translation failure: " <> T.pack str
   NonStaticColumns col -> "When reading only certain columns we require all columns to be concrete in order to do analysis. We found " <> tShow col
@@ -119,7 +122,6 @@ describeTranslateFailureNoLoc = \case
   BadTimeType node -> "Invalid: days / hours / minutes applied to non-integer / decimal: " <> tShow node
   NonConstKey k -> "Pact can currently only analyze constant keys in objects. Found " <> tShow k
   FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
-  NoPacts _node -> "Analysis of pacts is not yet supported"
   NoKeys _node  -> "`keys` is not yet supported"
   NoReadMsg _ -> "`read-msg` is not yet supported"
   DeprecatedList node -> "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
@@ -236,6 +238,10 @@ data TranslateState
       -- correspond to successful exit early due to the lack of a failure.
       -- These three "success" edges all join together at the same vertex.
     , _tsFoundVars     :: [(VarId, Text, EType)]
+
+      -- Vars representing nondeterministic choice between two branches. These
+      -- are used for continuing on or rolling back in evaluation of pacts.
+    , _tsStepChoices   :: ![VarId]
     }
 
 makeLenses ''TranslateFailure
@@ -442,13 +448,9 @@ throwError' err = do
   info <- view envInfo
   throwError $ TranslateFailure info err
 
--- | Generates a new 'Vertex', setting it as the head. Does *not* add this new
--- 'Vertex' to the graph.
-issueVertex :: TranslateM Vertex
-issueVertex = do
-  v <- TranslateM $ zoom tsNextVertex $ join $ view teGenVertex
-  tsPathHead .= v
-  pure v
+-- | Generates a new 'Vertex'. Does *not* add this new 'Vertex' to the graph.
+genVertex :: TranslateM Vertex
+genVertex = TranslateM $ zoom tsNextVertex $ join $ view teGenVertex
 
 -- | Flushes-out events accumulated for the current edge of the execution path.
 flushEvents :: TranslateM [TraceEvent]
@@ -461,18 +463,23 @@ addPathEdge :: Path -> Edge -> TranslateM ()
 addPathEdge path e =
   tsPathEdges.at path %= pure . cons e . fromMaybe []
 
+extendPathTo :: Vertex -> TranslateM ()
+extendPathTo toV = do
+  path <- use tsCurrentPath
+  v    <- use tsPathHead
+  tsGraph %= Alga.overlay (Alga.edge v toV)
+  edgeTrace <- flushEvents
+  let e = (v, toV)
+  tsEdgeEvents.at e ?= edgeTrace
+  addPathEdge path e
+  tsPathHead .= toV
+
 -- | Extends the previous path head to a new 'Vertex', flushing accumulated
 -- events to 'tsEdgeEvents'.
 extendPath :: TranslateM Vertex
 extendPath = do
-  path <- use tsCurrentPath
-  v    <- use tsPathHead
-  v'   <- issueVertex
-  tsGraph %= Alga.overlay (Alga.edge v v')
-  edgeTrace <- flushEvents
-  let e = (v, v')
-  tsEdgeEvents.at e ?= edgeTrace
-  addPathEdge path e
+  v' <- genVertex
+  extendPathTo v'
   pure v'
 
 -- | Extends multiple separate paths to a single join point. Assumes that each
@@ -481,7 +488,8 @@ extendPath = do
 joinPaths :: [(Vertex, Path)] -> TranslateM ()
 joinPaths branches = do
   let vs = map fst branches
-  v' <- issueVertex
+  v' <- genVertex
+  tsPathHead .= v'
   tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
   for_ branches $ \(v, path) -> do
     isNewPath <- use $ tsPathEdges.at path.to isNothing
@@ -525,9 +533,144 @@ translateBody = \case
     throwError $ TranslateFailure info EmptyBody
   [ast]    -> translateNode ast
   ast:asts -> do
-    ast'          <- translateNode ast
-    Some ty asts' <- translateBody asts
-    pure $ Some ty $ Sequence ast' asts'
+    someExpr      <- translateNode ast
+    Some ty exprs <- translateBody asts
+    pure $ Some ty $ Sequence someExpr exprs
+
+-- Pact translation:
+--
+-- We translate steps in the order they'll be eventually evaluated, meaning we
+-- first translate each step, then each rollback. In the diagram we translate
+-- s1, s2, s3, r2, r1. Note that the c edges have no computation / translation.
+--
+--      src          sink
+--       +      /---->+
+--       |      |     ^
+--    s1 |      |     |
+--       |      | r1  |
+--       v  c2  |     |
+--       +----->+     |
+--       |      ^     |
+--    s2 |      |     |
+--       |      | r2  |
+--       v  c3  |     |
+--       +----->+     |
+--       |            |
+--    s3 |            |
+--       |            |
+--       v            |
+--       +------------/
+--
+-- This first diagram is for a pact with the following structure:
+--
+--     (defpact
+--       (step-with-rollback s1 r1)
+--       (step-with-rollback s2 r2)
+--       (step s3))
+--
+-- Note the numbering scheme:
+-- * steps are numbered how you might expect
+-- * rollbacks are numbered to match their corresponding step
+-- * cancels are numbered to match the step they're an alternative to
+--
+-- This means that if there are n step edges, there are:
+-- * n-1 cancel edges
+-- * from 0 to n-1 (inclusive) rollback edges
+--
+-- Furthermore, there are:
+-- * n vertices following a step (including the sink)
+-- * from 0 to n-1 (inclusive) vertices preceding a rollback
+--
+-- What if we drop the first rollback?
+--
+--     (defpact
+--       (step s1)
+--       (step-with-rollback s2 r2)
+--       (step s3))
+--
+-- The corresponding graph ends up looking like:
+--
+--      src    c2    sink
+--       +    /------>+
+--       |   /       /^
+--    s1 |  /       / |
+--       | /       /  |
+--       v/       /   |
+--       +       /    |
+--       |      /     |
+--    s2 |      |     |
+--       |      | r2  |
+--       v  c3  |     |
+--       +----->+     |
+--       |            |
+--    s3 |            |
+--       |            |
+--       v            |
+--       +------------/
+translatePact :: [AST Node] -> TranslateM [PactStep]
+translatePact nodes = do
+  preStepsPath    <- use tsCurrentPath
+  protoSteps      <- go True nodes
+  postSnVertex    <- use tsPathHead
+  snPath          <- use tsCurrentPath
+  postLastCancelV <- genVertex
+
+  (sinkV, cancels, rollbacks) <- foldlM
+    (\(rightV, cancels, rollbacks) (_step, leftV, mRollback) -> do
+      tsPathHead .= leftV
+      cancel <- (,) <$> startNewSubpath <*> genVarId
+      extendPathTo rightV
+      case mRollback of
+        Nothing
+          -> pure (rightV, cancel : cancels, Nothing : rollbacks)
+        Just rollbackA -> do
+          rollback <- (,)
+            <$> startNewSubpath
+            <*> translateNode rollbackA
+          postRollback <- extendPath
+          pure (postRollback, cancel : cancels, Just rollback : rollbacks)
+      )
+    (postLastCancelV, [], [])
+    -- all but the last step, in reverse order
+    (tail $ reverse protoSteps)
+
+  let steps = zipWith3
+        (\(Step exec p e _ _) mCancel mRb -> Step exec p e mCancel mRb)
+        (protoSteps ^.. traverse . _1)
+        (Nothing : fmap Just cancels)
+        (rollbacks <> [Nothing])
+
+  tsStepChoices .= fmap snd cancels
+
+  -- connect sink
+  tsPathHead    .= postSnVertex
+  tsCurrentPath .= snPath
+  extendPathTo sinkV
+
+  -- restore initial path
+  tsCurrentPath .= preStepsPath
+
+  pure steps
+
+  where
+    -- We don't generate a cancel var on the first step but we do for all
+    -- subsequent steps.
+    go firstStep = \case
+      []       -> pure []
+      ast:asts -> (:) <$> translateStep firstStep ast <*> go False asts
+
+translateStep
+  :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
+translateStep firstStep = \case
+  AST_Step _node entity exec rollback _yr -> do
+    p <- if firstStep then use tsCurrentPath else startNewSubpath
+    mEntity <- for entity $ \tm -> do
+      Some SStr entity' <- translateNode tm
+      pure entity'
+    Some ty exec' <- translateNode exec
+    postVertex    <- extendPath
+    pure (Step (exec' :< ty) p mEntity Nothing Nothing, postVertex, rollback)
+  astNode -> throwError' $ UnexpectedPactNode astNode
 
 lookupCapability :: CapName -> TranslateM Capability
 lookupCapability capName = do
@@ -948,17 +1091,21 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_If _ cond tBranch fBranch -> do
     Some SBool cond' <- translateNode cond
-    preTestPath      <- use tsCurrentPath
+    preBranchPath    <- use tsCurrentPath
     postTest         <- extendPath
-    truePath         <- startNewSubpath
-    Some ta a        <- translateNode tBranch
-    postTrue         <- extendPath
+
+    truePath  <- startNewSubpath
+    Some ta a <- translateNode tBranch
+    postTrue  <- extendPath
+
     tsPathHead .= postTest -- reset to before true branch
+
     falsePath <- startNewSubpath
     Some tb b <- translateNode fBranch
     postFalse <- extendPath
+
     joinPaths [(postTrue, truePath), (postFalse, falsePath)]
-    tsCurrentPath .= preTestPath -- reset to before conditional
+    tsCurrentPath .= preBranchPath -- reset to before conditional
     Refl <- singEq ta tb ?? BranchesDifferentTypes (EType ta) (EType tb)
     pure $ Some ta $ IfThenElse ta cond' (truePath, a) (falsePath, b)
 
@@ -1242,8 +1389,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_Step                -> throwError' $ NoPacts astNode
-  AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
   AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
@@ -1289,11 +1434,12 @@ runTranslation
   -> [Capability]
   -> [Named Node]
   -> [AST Node]
-  -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
-runTranslation modName funName info caps pactArgs body = do
-    (args, translationVid) <- runArgsTranslation
-    (tm, graph) <- runBodyTranslation args translationVid
-    pure (args, tm, graph)
+  -> CheckableType
+  -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph)
+runTranslation modName funName info caps pactArgs body checkType = do
+    (args, translationVid)     <- runArgsTranslation
+    (tm, (stepChoices, graph)) <- runBodyTranslation args translationVid
+    pure (args, stepChoices, tm, graph)
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
@@ -1307,23 +1453,39 @@ runTranslation modName funName info caps pactArgs body = do
         Binding vid unmunged (node ^. aId.tiName.to Munged) ety
 
     runBodyTranslation
-      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
+      :: [Arg]
+      -> VarId
+      -> Except TranslateFailure (ETerm, ([VarId], ExecutionGraph))
     runBodyTranslation args nextVarId =
       let vertex0    = 0
           nextVertex = succ vertex0
           path0      = Path 0
           nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
-          state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty []
+          state0     = TranslateState nextTagId nextVarId graph0 vertex0
+            nextVertex Map.empty mempty path0 Map.empty [] []
           translation = do
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
             let bindingTs = fmap argToBinding args
-            res <- withNewScope (FunctionScope modName funName) bindingTs $
-              translateBody body
+
+            res <- case checkType of
+              CheckDefun ->
+                withNewScope (FunctionScope modName funName) bindingTs $
+                  translateBody body
+              CheckDefpact ->
+                withNewScope (PactScope modName funName) bindingTs $
+                  Some SStr . Pact <$> translatePact body
+              CheckDefconst
+                -> error "invariant violation: this cannot be a constant"
             _ <- extendPath -- form final edge for any remaining events
             pure res
-      in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
+
+          handleState translateState =
+            ( _tsStepChoices translateState
+            , mkExecutionGraph vertex0 path0 translateState
+            )
+      in fmap (fmap handleState) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info caps args)
 
 -- | Translate a node ignoring the execution graph. This is useful in cases
@@ -1339,13 +1501,13 @@ runTranslation modName funName info caps pactArgs body = do
 --
 translateNodeNoGraph :: AST Node -> Except TranslateFailure ETerm
 translateNodeNoGraph node =
-  let vertex0    = 0
-      nextVertex = succ vertex0
-      path0      = Path 0
-      nextTagId  = succ $ _pathTag path0
-      graph0     = pure vertex0
-      translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty []
+  let vertex0        = 0
+      nextVertex     = succ vertex0
+      path0          = Path 0
+      nextTagId      = succ $ _pathTag path0
+      graph0         = pure vertex0
+      translateState = TranslateState nextTagId 0 graph0 vertex0 nextVertex
+        Map.empty mempty path0 Map.empty [] []
 
       translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
 

@@ -16,7 +16,7 @@ import           Pact.Types.Runtime   (Literal (LString))
 import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
                                        AstBindType (..), Fun (FDefun, FNative),
                                        Named, Node, PrimValue (PrimLit),
-                                       Special (SBinding), aNode, aTy)
+                                       Special (SBinding), aNode, aTy, YieldResume)
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature
@@ -43,7 +43,7 @@ pattern NativeFunc f <- FNative _ f _ _
 
 pattern AST_InlinedApp :: Lang.ModuleName -> Text -> [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_InlinedApp modName funName bindings body <-
-  App _ (FDefun _ modName funName _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
+  App _ (FDefun _ modName funName _ _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
 
 pattern AST_Let :: forall a. [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Let bindings body <- Binding _ bindings body AstBindLet
@@ -256,5 +256,5 @@ pattern AST_Obj objNode kvs <- Object objNode kvs
 pattern AST_List :: forall a. a -> [AST a] -> AST a
 pattern AST_List node elems <- List node elems
 
-pattern AST_Step :: AST a
-pattern AST_Step <- Step {}
+pattern AST_Step :: a -> Maybe (AST a) -> AST a -> Maybe (AST a) -> Maybe (YieldResume a) -> AST a
+pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback yr
