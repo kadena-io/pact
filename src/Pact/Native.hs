@@ -54,13 +54,14 @@ import qualified Data.Attoparsec.Text as AP
 import Prelude
 import qualified Data.HashMap.Strict as M
 import qualified Data.Text as T (isInfixOf, length, all, splitOn, null, append, unpack, singleton)
-import Safe hiding (atDef)
+import Safe hiding (atDef, at)
 import Control.Arrow hiding (app)
 import Data.Foldable
 import Data.Aeson hiding ((.=),Object)
 import Data.List
 import Data.Function (on)
 import Data.ByteString.Lazy (toStrict)
+import qualified Data.HashSet as HS
 import Data.Text.Encoding
 
 
@@ -474,6 +475,10 @@ langDefs =
     ,defineNamespaceDef
     ,namespaceDef
     ,chainDataDef
+    ,setTopLevelOnly $ defRNative "describe-module" descModule
+     (funType tTyValue [("module",tTyString)])
+     [LitExample "(describe-module 'my-module)"]
+     "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ])
     where
           d = mkTyVar "d" []
@@ -786,3 +791,26 @@ baseStrToInt base t =
          else Left $ "baseStrToInt - character '" <> T.singleton c' <>
                 "' is out of range for base " <> tShow base <> ": " <> t
 {-# INLINE baseStrToInt #-}
+
+descModule :: RNativeFun e
+descModule i [TLitString t] = do
+  mods <- view $ eeRefStore . rsModules . at (ModuleName t Nothing)
+  case _mdModule <$> mods of
+    Just m ->
+      case m of
+        MDModule Module{..} ->
+          return $ toTObject TyAny def
+            [ ("name"      , tStr $ asString _mName)
+            , ("hash"      , tStr $ asString _mHash)
+            , ("keyset"    , tStr $ pack $ show _mGovernance)
+            , ("blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
+            , ("code"      , tStr $ asString _mCode)
+            , ("interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
+            ]
+        MDInterface Interface{..} ->
+          return $ toTObject TyAny def
+            [ ("name", tStr $ asString _interfaceName)
+            , ("code", tStr $ asString _interfaceCode)
+            ]
+    Nothing -> evalError' i $ "Module not found: " <> pretty t
+descModule i as = argsError i as

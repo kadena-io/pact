@@ -11,6 +11,7 @@ import Control.Arrow
 data SpecialForm =
   WithRead |
   WithDefaultRead |
+  InsertOrUpdate |
   Bind |
   Select |
   Where |
@@ -28,6 +29,7 @@ instance AsString SpecialForm where
   asString WithCapability = asString RWithCapability
   asString Yield = "yield"
   asString Resume = "resume"
+  asString InsertOrUpdate = "insert-or-update"
 
 instance Show SpecialForm where show = show . asString
 

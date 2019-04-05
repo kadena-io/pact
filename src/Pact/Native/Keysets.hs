@@ -13,8 +13,11 @@ module Pact.Native.Keysets where
 
 import Control.Lens
 
+import Data.Aeson (toJSON)
+
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 
 readKeysetDef :: NativeDef
@@ -46,6 +49,8 @@ keyDefs =
      "Define keyset as NAME with KEYSET, or if unspecified, read NAME from message payload as keyset, \
      \similarly to 'read-keyset'. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value."
+    ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
+     (funType tTyValue [("keyset",tTyString)]) [] "Get metadata for KEYSET."
     ,enforceGuardDef "enforce-keyset"
     ,defKeyPred KeysAll (==)
      ["(keys-all 3 3)"] "Keyset predicate function to match all keys in keyset."
@@ -55,6 +60,13 @@ keyDefs =
      ["(keys-2 3 1)"] "Keyset predicate function to match at least 2 keys in keyset."
     ])
 
+descKeySet :: RNativeFun e
+descKeySet i [TLitString t] = do
+  r <- readRow (_faInfo i) KeySets (KeySetName t)
+  case r of
+    Just v -> return $ toTerm (toJSON v)
+    Nothing -> evalError' i $ "Keyset not found: " <> pretty t
+descKeySet i as = argsError i as
 
 readKeySet' :: FunApp -> Text -> Eval e KeySet
 readKeySet' i key = parseMsgKey i "read-keyset" key

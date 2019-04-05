@@ -32,8 +32,8 @@ import Data.Aeson (toJSON)
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Pact.Types.Pretty
 
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Native.Internal
 
@@ -128,12 +128,6 @@ dbDefs =
      (funType tTyValue [("table",tableTy)])
      [LitExample "(describe-table accounts)"]
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
-    ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
-     (funType tTyValue [("keyset",tTyString)]) [] "Get metadata for KEYSET."
-    ,setTopLevelOnly $ defRNative "describe-module" descModule
-     (funType tTyValue [("module",tTyString)])
-     [LitExample "(describe-module 'my-module)"]
-     "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ])
 
 descTable :: RNativeFun e
@@ -142,37 +136,6 @@ descTable _ [TTable {..}] = return $ toTObject TyAny def [
   ("module", tStr $ asString _tModule),
   ("type", toTerm $ pack $ show _tTableType)]
 descTable i as = argsError i as
-
-descKeySet :: RNativeFun e
-descKeySet i [TLitString t] = do
-  r <- readRow (_faInfo i) KeySets (KeySetName t)
-  case r of
-    Just v -> return $ toTerm (toJSON v)
-    Nothing -> evalError' i $ "Keyset not found: " <> pretty t
-descKeySet i as = argsError i as
-
-descModule :: RNativeFun e
-descModule i [TLitString t] = do
-  mods <- view $ eeRefStore . rsModules . at (ModuleName t Nothing)
-  case _mdModule <$> mods of
-    Just m ->
-      case m of
-        MDModule Module{..} ->
-          return $ toTObject TyAny def
-            [ ("name"      , tStr $ asString _mName)
-            , ("hash"      , tStr $ asString _mHash)
-            , ("keyset"    , tStr $ pack $ show _mGovernance)
-            , ("blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
-            , ("code"      , tStr $ asString _mCode)
-            , ("interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
-            ]
-        MDInterface Interface{..} ->
-          return $ toTObject TyAny def
-            [ ("name", tStr $ asString _interfaceName)
-            , ("code", tStr $ asString _interfaceCode)
-            ]
-    Nothing -> evalError' i $ "Module not found: " <> pretty t
-descModule i as = argsError i as
 
 -- | unsafe function to create domain from TTable.
 userTable :: Show n => Term n -> Domain RowKey (Columns Persistable)
