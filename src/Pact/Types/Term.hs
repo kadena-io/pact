@@ -886,10 +886,10 @@ instance Pretty n => Pretty (Term n) where
       <> nest 2 (
          line
       <> line <> fillSep (pretty <$> T.words _tNativeDocs)
-      <> examples
       <> line
       <> line <> annotate Header "Type:"
       <> line <> align (vsep (pretty <$> toList _tFunTypes))
+      <> examples
       ) where examples = case _tNativeExamples of
                 [] -> mempty
                 exs ->
