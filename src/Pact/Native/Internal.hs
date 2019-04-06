@@ -70,7 +70,7 @@ parseMsgKey i msg key = do
     Nothing -> evalError' i $ "No such key in message: " <> pretty key
     Just v -> case fromJSON v of
                 Success t -> return t
-                Error e -> evalError' i $ pretty msg <> ": parse failed: " <> pretty e <> ": " <> pretty v
+                Error e -> evalError' i $ prettyString msg <> ": parse failed: " <> prettyString e <> ": " <> pretty v
 
 
 bindReduce :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> (Text -> Maybe (Term Ref)) -> Eval e (Term Name)

@@ -48,7 +48,7 @@
 
   (defun step2:object{yieldschema} (id:string)
     (enforce-guard (get-guard id))
-    (yield { "result": 1 }))
+    { "result": 1 })
 
   (defun get-guard (id:string)
     (at 'g (read guard-table id)))
@@ -151,8 +151,8 @@
   (expect-failure "enforcing pact guard outside of pact" (enforce-guard g)))
 
 (env-data { "id": "a"})
-(continue-pact 4 1)
-(expect "pact enforce succeeds" 1 (at 'result (at 'yield (pact-state))))
+
+(expect "pact enforce succeeds" 1 (at 'result (continue-pact 4 1)))
 
 (pact-state true)
 (test-pact-guards "b")

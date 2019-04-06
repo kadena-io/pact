@@ -27,17 +27,20 @@ module Pact.Types.Typecheck
     OverloadSpecial (..),
     Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
     Failure (..),prettyFails,
-    TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,tcVarToTypes,
+    TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,
+    tcVarToTypes,tcYieldResume,
     TC (..), runTC,
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
-    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,
+    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,fDefType,
     Node (..),aId,aTy,
     Named (..),
     AstBindType (..),
-    AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,aPrimValue,aEntity,aExec,aRollback,aTableName,
-    Visit(..),Visitor
+    AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
+    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,
+    Visit(..),Visitor,
+    YieldResume(..),yrYield,yrResume
   ) where
 
 import Control.Monad.Catch
@@ -115,6 +118,12 @@ instance Pretty m => Pretty (Overload m) where
 
 data Failure = Failure TcId String deriving (Eq,Ord,Show)
 
+data YieldResume n = YieldResume
+  { _yrYield :: Maybe n
+  , _yrResume :: Maybe n }
+  deriving (Eq,Show,Functor,Foldable,Traversable)
+instance Default (YieldResume n) where def = YieldResume def def
+
 -- | Typechecker state.
 data TcState = TcState {
   _tcDebug :: Bool,
@@ -126,11 +135,13 @@ data TcState = TcState {
   -- | Maps ASTs to a type var.
   _tcAstToVar :: M.Map TcId (TypeVar UserType),
   -- | Maps type vars to types.
-  _tcVarToTypes :: M.Map (TypeVar UserType) (Type UserType)
+  _tcVarToTypes :: M.Map (TypeVar UserType) (Type UserType),
+  -- | Used in AST walk to track step yields and resumes.
+  _tcYieldResume :: Maybe (YieldResume Node)
   } deriving (Eq,Show)
 
 mkTcState :: Int -> Bool -> TcState
-mkTcState sup dbg = TcState dbg sup def def def def def
+mkTcState sup dbg = TcState dbg sup def def def def def def
 
 instance Pretty TcState where
   pretty TcState {..} = vsep
@@ -227,6 +238,7 @@ data Fun t =
     _fInfo   :: Info,
     _fModule :: ModuleName,
     _fName   :: Text,
+    _fDefType :: DefType,
     _fType   :: FunType UserType,
     _fArgs   :: [Named t],
     _fBody   :: [AST t]
@@ -243,7 +255,7 @@ instance Pretty t => Pretty (Fun t) where
            _ -> mempty)
     ]
   pretty FDefun {..} = parensSep
-    [ "defun " <> pretty _fName
+    [ pretty _fDefType <> " " <> pretty _fName
     , indent 2 $ "::" <+> pretty _fType
     , indent 2 $ sep [ "(", indent 2 (sep (map pretty _fArgs)), ")" ]
     , indent 2 $ vsep (map pretty _fBody)
@@ -326,7 +338,8 @@ data AST n =
   _aNode :: n,
   _aEntity :: Maybe (AST n),
   _aExec :: AST n,
-  _aRollback :: Maybe (AST n)
+  _aRollback :: Maybe (AST n),
+  _aYieldResume :: Maybe (YieldResume n)
   }
 
   deriving (Eq,Functor,Foldable,Traversable,Show)
@@ -380,6 +393,7 @@ makeLenses ''Fun
 makeLenses ''TopLevel
 makeLenses ''Node
 makeLenses ''TcId
+makeLenses ''YieldResume
 
 makeLenses ''TcState
 makeLenses ''Overload
