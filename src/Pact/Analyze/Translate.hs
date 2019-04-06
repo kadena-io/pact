@@ -662,7 +662,7 @@ translatePact nodes = do
 translateStep
   :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
 translateStep firstStep = \case
-  AST_Step _node entity exec rollback -> do
+  AST_Step _node entity exec rollback _yr -> do
     p <- if firstStep then use tsCurrentPath else startNewSubpath
     mEntity <- for entity $ \tm -> do
       Some SStr entity' <- translateNode tm

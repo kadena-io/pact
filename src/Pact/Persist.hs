@@ -9,7 +9,7 @@ module Pact.Persist
   (Persist,
    Table(..),DataTable,TxTable,
    TableId(..),tableId,
-   PactKey,PactValue,
+   PactKey,PactValue(..),
    DataKey(..),TxKey(..),
    KeyCmp(..),cmpToOp,
    KeyConj(..),conjToOp,
@@ -117,14 +117,18 @@ class (Ord k,Show k,Eq k,Hashable k,Pretty k) => PactKey k
 instance PactKey TxKey
 instance PactKey DataKey
 
-class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v,Pretty v) => PactValue v
-instance PactValue v => PactValue (TxLog v)
-instance PactValue (Columns Persistable)
-instance PactValue a => PactValue [a]
-instance PactValue (ModuleDef Name)
-instance PactValue KeySet
-instance PactValue Value
-instance PactValue Namespace
+class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactValue v where
+  prettyPactValue :: v -> Doc
+
+instance PactValue v => PactValue (TxLog v) where
+  prettyPactValue = pretty . fmap (SomeDoc . prettyPactValue)
+instance PactValue (Columns Persistable)    where prettyPactValue = pretty
+instance PactValue a => PactValue [a]       where
+  prettyPactValue = prettyList . fmap (SomeDoc . prettyPactValue)
+instance PactValue (ModuleDef Name)         where prettyPactValue = pretty
+instance PactValue KeySet                   where prettyPactValue = pretty
+instance PactValue Value                    where prettyPactValue = pretty
+instance PactValue Namespace                where prettyPactValue = pretty
 
 data Persister s = Persister {
   createTable :: forall k . PactKey k => Table k -> Persist s ()

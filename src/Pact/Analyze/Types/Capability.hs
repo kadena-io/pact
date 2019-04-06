@@ -31,7 +31,7 @@ instance Show Capability where
     . showsPrec 11 capName
 
 instance Pretty Capability where
-  pretty (Capability _ (CapName cn)) = pretty cn
+  pretty (Capability _ (CapName cn)) = prettyString cn
 
 -- | The index into the family that is a 'Capability'. Think of this of the
 -- arguments to a particular call of a capability.

@@ -322,7 +322,7 @@ binop :: (Decimal -> Decimal -> Either String Decimal) ->
        (Integer -> Integer -> Either String Integer) -> RNativeFun e
 binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
   let hdl (Right v) = return $ toTerm v
-      hdl (Left err) = evalError' fi $ pretty err <> ": " <> pretty (a,b)
+      hdl (Left err) = evalError' fi $ prettyString err <> ": " <> pretty (a,b)
   case (a,b) of
     (LInteger i,LInteger j) -> hdl (i `iop` j)
     (LDecimal i,LDecimal j) -> hdl (i `dop` j)

@@ -191,7 +191,7 @@ parseBindings mkBinding = \case
     (nameTy:) <$> parseBindings mkBinding exps
   exp@(EAtom _):_exps -> throwErrorIn exp
     "type annotation required for all property bindings."
-  exp -> throwErrorD $ "in " <> pretty exp <> ", unexpected binding form"
+  exp -> throwErrorD $ "in " <> prettyList exp <> ", unexpected binding form"
 
 parseType :: Exp Info -> Maybe QType
 parseType = \case
@@ -288,7 +288,7 @@ inferPreProp preProp = case preProp of
     as' <- traverse inferPreProp as
     Some listTy litList <- maybe
       (throwErrorD
-        ("unable to make list of a single type from " <> pretty as'))
+        ("unable to make list of a single type from " <> prettyList as'))
       pure
       $ mkLiteralList as'
 
@@ -337,7 +337,7 @@ inferPreProp preProp = case preProp of
       (Some SStr (StrLit ix''), Some objty@(SObject schema) objProp)
         -> case lookupKeyInType ix'' schema of
           Nothing -> throwErrorIn preProp $
-            "could not find expected key " <> pretty ix''
+            "could not find expected key " <> prettyString ix''
           Just (EType ty) -> pure $
             Some ty $ PObjAt objty (StrLit ix'') objProp
 

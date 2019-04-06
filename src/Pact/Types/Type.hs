@@ -91,7 +91,7 @@ funTypes ft = ft :| []
 
 prettyFunTypes :: Pretty o => FunTypes o -> Doc
 prettyFunTypes (t :| []) = pretty t
-prettyFunTypes ts = pretty (toList ts)
+prettyFunTypes ts = prettyList (toList ts)
 
 data GuardType
   = GTyKeySet
@@ -218,7 +218,7 @@ instance (Pretty o) => Pretty (Type o) where
     TyVar n        -> pretty n
     TyUser v       -> pretty v
     TyFun f        -> pretty f
-    TySchema s t p -> pretty s <> colon <> pretty (showPartial p) <> pretty t
+    TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
     TyAny          -> "*"
