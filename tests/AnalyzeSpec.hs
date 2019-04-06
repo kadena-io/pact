@@ -3359,7 +3359,7 @@ spec = describe "analyze" $ do
     let code6 = [text|
           (defpact payment ()
             @model [ (property (= (column-delta accounts 'balance) 0)) ]
-            (step-with-rollback "foo" "bar"))
+            (step "foo" ))
           |]
     expectVerified code6
 
