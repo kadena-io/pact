@@ -9,6 +9,7 @@ module Pact.Types.Pretty
   , Doc
   , Pretty(..)
   , RenderColor(..)
+  , SomeDoc(..)
   , abbrev
   , abbrevStr
   , align
@@ -93,21 +94,28 @@ type Doc = PP.Doc Annot
 class Pretty a where
   pretty :: a -> Doc
 
-instance Pretty a => Pretty [a] where
-  pretty = list . map pretty
+  prettyList :: [a] -> Doc
+  prettyList = list . map pretty
 
-instance Pretty Text where pretty = PP.pretty
-instance Pretty Char where pretty = PP.pretty
-instance Pretty Bool where pretty = PP.pretty
-instance Pretty Integer where pretty = PP.pretty
-instance Pretty Int where pretty = PP.pretty
-instance Pretty Int64 where pretty = viaShow
-instance Pretty () where pretty = PP.pretty
+-- Warning: you should avoid this instance since it does the wrong thing for
+-- strings.
+instance Pretty a => Pretty [a] where
+  pretty = prettyList
+
+instance Pretty Char where
+  pretty     = PP.pretty
+  prettyList = prettyString
+instance Pretty Text                  where pretty = PP.pretty
+instance Pretty Bool                  where pretty = PP.pretty
+instance Pretty Integer               where pretty = PP.pretty
+instance Pretty Int                   where pretty = PP.pretty
+instance Pretty Int64                 where pretty = viaShow
+instance Pretty ()                    where pretty = PP.pretty
+instance Pretty a => Pretty (Maybe a) where pretty = maybe mempty pretty
 instance (Pretty a, Pretty b) => Pretty (a, b) where
   pretty (a, b) = tupled [pretty a, pretty b]
 instance (Pretty a, Pretty b, Pretty c) => Pretty (a, b, c) where
   pretty (a, b, c) = tupled [pretty a, pretty b, pretty c]
-instance Pretty a => Pretty (Maybe a) where pretty = maybe mempty pretty
 
 prettyString :: String -> Doc
 prettyString = PP.pretty . pack
@@ -220,3 +228,9 @@ abbrev a =
 
 abbrevStr :: Pretty a => a -> String
 abbrevStr = unpack . abbrev
+
+-- | Helper to use 'pretty' on functors
+newtype SomeDoc = SomeDoc Doc
+
+instance Pretty SomeDoc where
+  pretty (SomeDoc doc) = doc
