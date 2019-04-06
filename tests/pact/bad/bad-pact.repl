@@ -1,0 +1,5 @@
+(define-keyset 'k (sig-keyset))
+(module parensfordays 'k
+  (defpact foo ()
+    (step "foo")
+    (step-with-rollback "foo" "bar"))) ; rollbacks not allowed on the last step
