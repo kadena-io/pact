@@ -45,31 +45,30 @@ module Pact.Eval
     ,evalContinuation
     ) where
 
-import Control.Lens hiding (DefName)
-import Control.Monad.IO.Class
-import Control.Applicative
-import Control.Monad.Catch (throwM)
-import Data.List
-import Control.Monad
-import Prelude
 import Bound
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Map.Strict as M
-import Safe
-import Data.Default
 import Control.Arrow hiding (app)
-import Data.Maybe
+import Control.Lens hiding (DefName)
+import Control.Monad
+import Control.Monad.Catch (throwM)
+import Control.Monad.IO.Class
+import Control.Monad.Reader
+import Control.Monad.State.Strict
+import Data.Aeson (Value)
+import Data.Default
 import Data.Foldable
 import Data.Graph
+import qualified Data.HashMap.Strict as HM
+import Data.List
+import qualified Data.Map.Strict as M
+import Data.Maybe
 import qualified Data.Set as S
-import Control.Monad.State.Strict
-import Control.Monad.Reader
+import qualified Data.Vector as V
+import Safe
 import Unsafe.Coerce
-import Data.Aeson (Value)
-import Pact.Types.Pretty
 
-import Pact.Types.Runtime
 import Pact.Gas
+import Pact.Types.Pretty
+import Pact.Types.Runtime
 
 
 evalBeginTx :: Info -> Eval e ()
@@ -547,7 +546,7 @@ reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
   CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
 reduce (TObject (Object ps t oi) i) =
-  TObject <$> (Object <$> (forM ps (\(k,v) -> (k,) <$> reduce v)) <*> traverse reduce t <*> pure oi) <*> pure i
+  TObject <$> (Object <$> traverse reduce ps <*> traverse reduce t <*> pure oi) <*> pure i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
@@ -561,7 +560,9 @@ mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
 
 reduceBody :: Term Ref -> Eval e (Term Name)
-reduceBody (TList bs _ _) = last <$> mapM reduce bs
+reduceBody (TList bs _ _) =
+  -- unsafe but only called in validated body contexts
+  V.last <$> V.mapM reduce bs
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
 reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
@@ -650,7 +651,7 @@ applyPact app (TList steps _ i) = do
       Nothing -> evalError i $ "applyPact: pacts not executable in local context"
     Just v -> return v
   -- retrieve indicated step from code
-  s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps `atMay` _psStep
+  s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
   case s of
     step@TStep {} -> do
       stepEntity <- traverse reduce (_tStepEntity step)
@@ -755,7 +756,7 @@ typecheckTerm i spec t = do
 
     -- | infer list value type
     checkList es lty = return $ TyList $
-                    case nub (map typeof es) of
+                    case nub (map typeof $ V.toList es) of
                       [Right a] -> a -- uniform value type: return it
                       [] -> lty -- empty: return specified
                       _ -> TyAny -- otherwise untyped
@@ -781,19 +782,21 @@ typecheckTerm i spec t = do
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
 -- Total flag allows for partial row types if False.
-checkUserType :: SchemaPartial -> Info  -> [(FieldKey,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
-checkUserType partial i ps (TyUser tu@TSchema {..}) = do
-  let fields = M.fromList . map (_aName &&& id) $ _tFields
-  aps <- forM ps $ \(FieldKey k,v) -> case M.lookup k fields of
+checkUserType :: SchemaPartial -> Info -> ObjectMap (Term Name) -> Type (Term Name) -> Eval e (Type (Term Name))
+checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
+  -- fields is lookup from name to arg.
+  -- TODO consider OMap or equivalent for schema fields
+  let fields = M.fromList . map (FieldKey . _aName &&& id) $ _tFields
+  aps <- forM (M.toList ps) $ \(k,v) -> case M.lookup k fields of
       Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty k
       Just a -> return (a,v)
   let findMissing fs = do
-        let missing = M.difference fs (M.fromList (map (first _aName) aps))
+        let missing = M.difference fs (M.fromList (map (first $ FieldKey . _aName) aps))
         unless (M.null missing) $ evalError i $
           "Missing fields for {" <> pretty _tSchemaName <> "}: " <> prettyList (M.elems missing)
   case partial of
     FullSchema -> findMissing fields
-    PartialSchema fs -> findMissing (M.restrictKeys fields fs)
+    PartialSchema fs -> findMissing (M.restrictKeys fields (S.map FieldKey fs))
     AnySubschema -> return ()
   typecheck aps
   return $ TySchema TyObject (TyUser tu) partial

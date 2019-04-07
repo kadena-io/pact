@@ -196,12 +196,12 @@ createUserGuard =
   (funType (tTyGuard (Just GTyUser)) [("data",tvA),("predfun",tTyString)])
   []
   "Defines a custom guard predicate, where DATA will be passed to PREDFUN at time \
-  \of enforcement. PREDFUN is a valid name in the declaring environment. \
+  \of enforcement. DATA must be an object. PREDFUN is a valid name in the declaring environment. \
   \PREDFUN must refer to a pure function or enforcement will fail at runtime."
   where
     createUserGuard' :: RNativeFun e
-    createUserGuard' i [udata,TLitString predfun] = case typeof udata of
-      Right {} -> case parseName (_faInfo i) predfun of
+    createUserGuard' i [TObject udata _,TLitString predfun] =
+      case parseName (_faInfo i) predfun of
         Right n -> do
           rn <- resolveRef n >>= \nm -> case nm of
             Just (Direct {}) -> return n
@@ -212,5 +212,4 @@ createUserGuard =
           return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard udata rn)
         Left s -> evalError' i $
           "Invalid name " <> pretty predfun <> ": " <> prettyString s
-      Left {} -> evalError' i "Data must be value"
     createUserGuard' i as = argsError i as

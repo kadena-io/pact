@@ -174,6 +174,7 @@ library
                      , unordered-containers >= 0.2.7.2 && < 0.3
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.13
+                     , vector-algorithms >= 0.7
                      , vector-space >= 0.10.4 && < 0.14
                      , mmorph >= 1.1 && < 1.2
                      , constraints
@@ -279,6 +280,7 @@ test-suite hspec
               , hedgehog == 0.6.*
               , hw-hspec-hedgehog == 0.1.*
               , intervals
+              , vector
   other-modules:
                 Blake2Spec
                 KeysetSpec

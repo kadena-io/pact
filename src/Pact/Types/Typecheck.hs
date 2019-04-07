@@ -321,7 +321,7 @@ data AST n =
   } |
   Object {
   _aNode :: n,
-  _aObject :: [(FieldKey,AST n)]
+  _aObject :: ObjectMap (AST n)
   } |
   Prim {
   _aNode :: n,
@@ -350,10 +350,7 @@ instance Pretty t => Pretty (AST t) where
      Var {..} -> pn
      Object {..} -> sep
        [ pn
-       , bracesSep
-         [ indent 2 $ vsep $ _aObject <&> \(k,v) ->
-           pretty k <> sep [ ":", indent 4 (pretty v) ]
-         ]
+       , pretty _aObject
        ]
      List {..} -> sep
        [ pn

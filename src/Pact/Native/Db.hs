@@ -21,21 +21,22 @@ module Pact.Native.Db
     (dbDefs)
     where
 
-import Control.Monad
-import Prelude
 import Bound
-import qualified Data.Map.Strict as M
-import Data.Default
 import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
+import Control.Monad
 import Data.Aeson (toJSON)
-import Pact.Eval
+import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Pact.Types.Pretty
+import qualified Data.Map.Strict as M
+import qualified Data.Vector as V
 
-import Pact.Types.Runtime
+import Pact.Eval
 import Pact.Native.Internal
+import Pact.Types.Pretty
+import Pact.Types.Runtime
+import Prelude
 
 
 class Readable a where
@@ -215,7 +216,7 @@ gasPostReads i g0 postProcess action = do
   (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
 columnsToObject :: ToTerm a => Type (Term n) -> Columns a -> Term n
-columnsToObject ty = (\ps -> TObject (Object ps ty def) def) .
+columnsToObject ty = (\ps -> TObject (Object (ObjectMap (M.fromList ps)) ty def) def) .
   map ((FieldKey . asString) *** toTerm) . M.toList . _columns
 
 columnsToObject' :: ToTerm a => Type (Term n) -> [(Info,ColumnId)] -> Columns a -> Eval m (Term n)
@@ -224,7 +225,7 @@ columnsToObject' ty cols (Columns m) = do
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
                   Just v -> return (FieldKey $ asString col,toTerm v)
-  return $ TObject (Object ps ty def) def
+  return $ TObject (Object (ObjectMap (M.fromList ps)) ty def) def
 
 
 
@@ -245,7 +246,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
     let fi = _faInfo i
         tblTy = _tTableType tbl
     ks <- keys fi (userTable' tbl)
-    fmap (second (\b -> TList (reverse b) tblTy def)) $ (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
+    fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $ (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
       mrow <- readRow fi (userTable tbl) k
       case mrow of
         Nothing -> evalError fi $ "select: unexpected error, key not found in select: " <> pretty k <> ", table: " <> pretty tbl
@@ -297,7 +298,7 @@ bindToRow ps bd b (Columns row) =
 keys' :: GasRNativeFun e
 keys' g i [table@TTable {..}] =
   gasPostReads i g
-    ((\b -> TList b tTyString def) . map toTerm) $ do
+    ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
       guardTable i table
       keys (_faInfo i) (userTable' table)
 keys' _ i as = argsError i as
@@ -306,7 +307,7 @@ keys' _ i as = argsError i as
 txids' :: GasRNativeFun e
 txids' g i [table@TTable {..},TLitInteger key] =
   gasPostReads i g
-    ((\b -> TList b tTyInteger def) . map toTerm) $ do
+    ((\b -> TList (V.fromList b) tTyInteger def) . map toTerm) $ do
       guardTable i table
       txids (_faInfo i) (userTable' table) (fromIntegral key)
 txids' _ i as = argsError i as
@@ -347,8 +348,8 @@ write wt partial i as = do
       return (cost, r)
     _ -> argsError i ts
 
-toColumns :: [(FieldKey,Term Name)] -> Columns Persistable
-toColumns = Columns . M.fromList . map conv where
+toColumns :: ObjectMap (Term Name) -> Columns Persistable
+toColumns (ObjectMap m) = Columns . M.fromList . map conv . M.toList $ m where
     conv (FieldKey k, v) = (ColumnId k,toPersistable v)
 
 

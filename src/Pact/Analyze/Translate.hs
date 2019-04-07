@@ -1215,8 +1215,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
         pure $ Some listOfTy $ CoreTerm $ ListAt listOfTy index' list
       _ -> throwError' $ TypeError node
 
-  AST_Obj _node kvs -> do
-    kvs' <- for kvs $ \(Pact.FieldKey k, v) -> do
+  AST_Obj _node (Pact.ObjectMap kvs) -> do
+    kvs' <- for (Map.toList kvs) $ \(Pact.FieldKey k, v) -> do
       v' <- translateNode v
       pure (k, v')
     Some objTy litObj

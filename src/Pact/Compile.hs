@@ -26,35 +26,37 @@ module Pact.Compile
   , Reserved(..)
   ) where
 
-import qualified Text.Trifecta as TF hiding (expected)
+import Bound
 import Control.Applicative hiding (some,many)
-import Text.Megaparsec as MP
-import Data.List
+import Control.Arrow ((&&&),first)
+import Control.Exception hiding (try)
+import Control.Lens hiding (prism)
 import Control.Monad
 import Control.Monad.State
-import Control.Arrow ((&&&),first)
-import Prelude hiding (exp)
-import Bound
-import Control.Exception hiding (try)
-import Data.String
-import Control.Lens hiding (prism)
-import Data.Maybe
 import Data.Default
+import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
+import Data.List
+import qualified Data.Map.Strict as M
+import Data.Maybe
+import Data.String
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding (encodeUtf8)
-import qualified Data.HashSet as HS
-import qualified Data.HashMap.Strict as HM
+import qualified Data.Vector as V
+import Prelude hiding (exp)
+import Text.Megaparsec as MP
+import qualified Text.Trifecta as TF hiding (expected)
 
-import Pact.Types.ExpParser
-import Pact.Types.Exp
 import Pact.Parse (exprsOnly,parseExprs)
+import Pact.Types.Exp
+import Pact.Types.ExpParser
 import Pact.Types.Hash
-import Pact.Types.Term
-import Pact.Types.Util
 import Pact.Types.Info
-import Pact.Types.Type
-import Pact.Types.Runtime (PactError)
 import Pact.Types.Pretty hiding (nest, sep)
+import Pact.Types.Runtime (PactError)
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 
 
 data ModuleState = ModuleState
@@ -295,7 +297,7 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
     _ : CommaExp : _ -> valueLevel `sepBy` sep Comma
     _                -> many valueLevel
   lty <- freshTyVar
-  return $ TList ls lty _listInfo
+  return $ TList (V.fromList ls) lty _listInfo
 
 objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
@@ -304,7 +306,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         val <- sep Colon *> valueLevel
         return (key,val)
   ps <- (pair `sepBy` sep Comma) <* eof
-  return $ TObject (Object ps TyAny _listInfo) _listInfo
+  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny _listInfo) _listInfo
 
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
@@ -319,7 +321,7 @@ withCapability = do
   capApp <- sexp app
   body@(top:_) <- some valueLevel
   i <- contextInfo
-  return $ TApp (App wcVar [capApp,TList body TyAny (_tInfo top)] i) i
+  return $ TApp (App wcVar [capApp,TList (V.fromList body) TyAny (_tInfo top)] i) i
 
 deftable :: Compile (Term Name)
 deftable = do
@@ -413,7 +415,7 @@ defpact = do
     _ -> pure ()
   i <- contextInfo
   return $ TDef (Def (DefName defname) modName Defpact (FunType args returnTy)
-                  (abstractBody' args (TList body TyAny bi)) m i) i
+                  (abstractBody' args (TList (V.fromList body) TyAny bi)) m i) i
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
@@ -435,7 +437,7 @@ moduleForm = do
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
     (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
-    (abstract (const Nothing) (TList (concat bd) TyAny bi)) i
+    (abstract (const Nothing) (TList (V.fromList (concat bd)) TyAny bi)) i
 
 implements :: Compile ()
 implements = do
@@ -475,7 +477,7 @@ emptyDef = do
   info <- contextInfo
   return $ (`TDef` info) $
     Def (DefName defName) modName Defun
-    (FunType args returnTy) (abstract (const Nothing) (TList [] TyAny info)) m info
+    (FunType args returnTy) (abstract (const Nothing) (TList V.empty TyAny info)) m info
 
 
 step :: Compile (Term Name)
@@ -522,7 +524,7 @@ letsForm = do
           [] -> bodyForm valueLevel
           _ -> do
             rest' <- nest rest
-            pure $ TList [rest'] TyAny def
+            pure $ TList (V.singleton rest') TyAny def
         TBinding [binding] scope BindLet <$> contextInfo
       nest [] =  syntaxError "letsForm: invalid state (bug)"
   nest bindings
@@ -589,7 +591,7 @@ parseUserSchemaType = withList Braces $ \ListExp{..} -> do
 bodyForm :: Compile (Term Name) -> Compile (Term Name)
 bodyForm term = do
   (bs,i) <- bodyForm' term
-  return $ TList bs TyAny i
+  return $ TList (V.fromList bs) TyAny i
 
 bodyForm' :: Compile a -> Compile ([a],Info)
 bodyForm' term = (,) <$> some term <*> contextInfo

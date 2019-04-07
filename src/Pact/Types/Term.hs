@@ -67,7 +67,7 @@ module Pact.Types.Term
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
-   toTermList,toTObject,toTList,
+   toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,
@@ -1071,10 +1071,16 @@ instance ToTerm Int64 where toTerm = tLit . LInteger . fromIntegral
 
 
 toTObject :: Type (Term n) -> Info -> [(FieldKey,Term n)] -> Term n
-toTObject ty i ps = TObject (Object (ObjectMap (M.fromList ps)) ty i) i
+toTObject ty i = toTObjectMap ty i . ObjectMap . M.fromList
+
+toTObjectMap :: Type (Term n) -> Info -> ObjectMap (Term n) -> Term n
+toTObjectMap ty i m = TObject (Object m ty i) i
 
 toTList :: Type (Term n) -> Info -> [Term n] -> Term n
-toTList ty i vs = TList (V.fromList vs) ty i
+toTList ty i = toTListV ty i . V.fromList
+
+toTListV :: Type (Term n) -> Info -> V.Vector (Term n) -> Term n
+toTListV ty i vs = TList vs ty i
 
 toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
 toTermList ty l = TList (V.map toTerm (V.fromList (toList l))) ty def

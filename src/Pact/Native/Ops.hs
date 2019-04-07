@@ -60,11 +60,9 @@ addDef = defRNative "+" plus plusTy
       (a <> b)
       (if aty == bty then aty else TyAny)
       def
-    plus _ [TObject (Object as aty _) _,TObject (Object bs bty _) _] =
-      let reps (a,b) = (renderCompactText a,(a,b))
-          mapit = M.fromList . map reps
-      in return $ (`TObject` def) $ Object
-           (M.elems $ M.union (mapit as) (mapit bs))
+    plus _ [TObject (Object (ObjectMap as) aty _) _,TObject (Object (ObjectMap bs) bty _) _] =
+      return $ (`TObject` def) $ Object
+           (ObjectMap $ M.union as bs)
            (if aty == bty then aty else TyAny)
            def
     plus i as = binop' (+) (+) i as

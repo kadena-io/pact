@@ -29,7 +29,6 @@ import Control.Monad.Catch
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
-import Data.List ((\\))
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import qualified Data.Map as M
@@ -37,6 +36,7 @@ import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import qualified Data.Text as Text
 import Data.Text.Encoding
+import qualified Data.Vector as V
 
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
@@ -272,8 +272,8 @@ setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
-          _ -> argsError i ts
-  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) ks))
+          _ -> argsError i (V.toList ts)
+  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) (V.toList ks)))
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
@@ -533,17 +533,10 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
   where
     envChainData :: RNativeFun LibState
     envChainData i as = case as of
-      [TObject (Object ks _ _) _] -> do
+      [TObject (Object (ObjectMap ks) _ _) _] -> do
         pd <- view eePublicData
 
-        let ts = fmap fst ks
-            ts' = S.fromList ts
-            info = _faInfo i
-
-        unless (length ts == length ts') $ evalError info $
-          "envChainData: cannot update duplicate keys: " <> prettyList (ts \\ (S.toList ts'))
-
-        ud <- foldM (go info) pd ks
+        ud <- foldM (go (_faInfo i)) pd (M.toList ks)
         setenv eePublicData ud
         return $ tStr "Updated public metadata"
       _ -> argsError i as

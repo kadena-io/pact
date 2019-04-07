@@ -11,6 +11,7 @@ import           Control.Monad.Reader      (ReaderT (runReaderT))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT),
                                             exceptToMaybeT)
+import qualified Data.Vector               as V
 
 import           Pact.Analyze.Translate    (translateNodeNoGraph)
 import           Pact.Analyze.Types        hiding (Object, Term)
@@ -202,7 +203,7 @@ toPactTm = \case
       arg'     <- toPactTm arg
       argList' <- traverse toPactTm argList
       pure $ (`TApp` dummyInfo) $ App (liftTerm defTm)
-        [arg', Pact.TList argList' (Pact.TyList Pact.TyAny) dummyInfo]
+        [arg', Pact.TList (V.fromList argList') (Pact.TyList Pact.TyAny) dummyInfo]
         dummyInfo
 
     arithOpToDef :: ArithOp -> NativeDef
