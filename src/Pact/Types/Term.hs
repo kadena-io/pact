@@ -58,7 +58,7 @@ module Pact.Types.Term
    Example(..),
    derefDef,
    ObjectMap(..),objectMapToListWith,
-   Object(..),oObject,oObjectType,oInfo,
+   Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
@@ -75,48 +75,49 @@ module Pact.Types.Term
    ) where
 
 
-import Control.Lens (makeLenses,makePrisms, (<&>))
-import Control.Applicative
-import Data.List
-import Control.Monad
-import Prelude
-import Control.Arrow ((***),first)
-import Data.Functor.Classes
 import Bound
+import Control.Applicative
+import Control.Arrow ((***),first)
+import Control.DeepSeq
+import Control.Lens (makeLenses,makePrisms, (<&>))
+import Control.Monad
+import qualified Data.Aeson as A
+import Data.Aeson hiding (pairs,Object)
+import qualified Data.Attoparsec.Text as AP
+import qualified Data.ByteString.UTF8 as BS
+import Data.Decimal
+import Data.Default
+import Data.Eq.Deriving
+import Data.Foldable
+import Data.Function
+import Data.Functor.Classes
+import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
+import Data.Hashable
+import Data.Int (Int64)
+import Data.List
+import qualified Data.Map.Strict as M
+import Data.Maybe
+import Data.Serialize (Serialize)
+import Data.String
 import Data.Text (Text,pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.Aeson hiding (pairs,Object)
-import qualified Data.Aeson as A
-import qualified Data.ByteString.UTF8 as BS
-import Data.String
-import Data.Default
 import Data.Thyme (UTCTime)
-import GHC.Generics (Generic)
-import Data.Decimal
-import Data.Hashable
-import Data.Foldable
-import qualified Data.Attoparsec.Text as AP
-import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
-import Control.DeepSeq
-import Data.Maybe
-import qualified Data.HashSet as HS
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Map.Strict as M
-import Data.Int (Int64)
-import Data.Serialize (Serialize)
-import Data.Eq.Deriving
-import Text.Show.Deriving
-import Data.Word (Word64, Word32)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import Data.Word (Word64, Word32)
+import GHC.Generics (Generic)
+import Prelude
+import Text.Show.Deriving
+import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 
+import Pact.Types.Exp
+import Pact.Types.Info
 import Pact.Types.Parser
 import Pact.Types.Pretty hiding (dot)
-import Pact.Types.Util
-import Pact.Types.Info
 import Pact.Types.Type
-import Pact.Types.Exp
+import Pact.Types.Util
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
@@ -813,17 +814,24 @@ instance FromJSON v => FromJSON (ObjectMap v)
 data Object n = Object
   { _oObject :: !(ObjectMap (Term n))
   , _oObjectType :: !(Type (Term n))
+  , _oKeyOrder :: Maybe [FieldKey]
   , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show)
 instance Pretty n => Pretty (Object n) where
-  pretty (Object bs _ _) = pretty bs
+  pretty (Object bs _ Nothing _) = pretty bs
+  pretty (Object (ObjectMap om) _ (Just ko) _) =
+    annotate Val $ commaBraces $
+    map (\(k,v) -> pretty k <> ": " <> pretty v) $
+    sortBy (compare `on` (keyOrder . fst)) $
+    M.toList om
+    where keyOrder f = elemIndex f ko
 
 -- JSON instances are just for Guard above
 instance (Pretty n, ToJSON n) => ToJSON (Object n) where
   toJSON = toJSON . _oObject
 
 instance FromJSON n => FromJSON (Object n) where
-  parseJSON v = Object <$> parseJSON v <*> pure TyAny <*> pure def
+  parseJSON v = Object <$> parseJSON v <*> pure TyAny <*> pure def <*> pure def
 
 -- | Pact evaluable term.
 data Term n =
@@ -991,7 +999,7 @@ instance Eq1 Term where
   liftEq eq (TBinding a b c d) (TBinding m n o p) =
     liftEq (\(w,x) (y,z) -> liftEq (liftEq eq) w y && liftEq eq x z) a m &&
     liftEq eq b n && liftEq (liftEq (liftEq eq)) c o && d == p
-  liftEq eq (TObject (Object a b c) d) (TObject (Object m n o) p) =
+  liftEq eq (TObject (Object a b _ c) d) (TObject (Object m n _ o) p) =
     liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o && d == p
   liftEq _ (TLiteral a b) (TLiteral m n) =
     a == m && b == n
@@ -1024,7 +1032,7 @@ instance Monad Term where
     TApp a i >>= f = TApp (fmap (>>= f) a) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
-    TObject (Object bs t oi) i >>= f = TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) oi) i
+    TObject (Object bs t kf oi) i >>= f = TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i
     TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
@@ -1047,7 +1055,7 @@ instance Pretty n => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
     toJSON (TGuard k _) = toJSON k
-    toJSON (TObject (Object kvs _ _) _) = toJSON kvs
+    toJSON (TObject (Object kvs _ _ _) _) = toJSON kvs
     toJSON (TList ts _ _) = toJSON ts
     toJSON t = toJSON (renderCompactText t)
     {-# INLINE toJSON #-}
@@ -1074,7 +1082,7 @@ toTObject :: Type (Term n) -> Info -> [(FieldKey,Term n)] -> Term n
 toTObject ty i = toTObjectMap ty i . ObjectMap . M.fromList
 
 toTObjectMap :: Type (Term n) -> Info -> ObjectMap (Term n) -> Term n
-toTObjectMap ty i m = TObject (Object m ty i) i
+toTObjectMap ty i m = TObject (Object m ty def i) i
 
 toTList :: Type (Term n) -> Info -> [Term n] -> Term n
 toTList ty i = toTListV ty i . V.fromList
@@ -1140,7 +1148,7 @@ tStr = toTerm
 -- | Support pact `=` for value-level terms
 termEq :: Eq n => Term n -> Term n -> Bool
 termEq (TList a _ _) (TList b _ _) = length a == length b && and (V.zipWith termEq a b)
-termEq (TObject (Object (ObjectMap a) _ _) _) (TObject (Object (ObjectMap b) _ _) _) =
+termEq (TObject (Object (ObjectMap a) _ _ _) _) (TObject (Object (ObjectMap b) _ _ _) _) =
   -- O(3n), 2x M.toList + short circuiting walk
   M.size a == M.size b && go (M.toList a) (M.toList b) True
     where go _ _ False = False

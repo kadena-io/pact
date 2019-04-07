@@ -306,7 +306,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         val <- sep Colon *> valueLevel
         return (key,val)
   ps <- (pair `sepBy` sep Comma) <* eof
-  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny _listInfo) _listInfo
+  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny (Just (map fst ps)) _listInfo) _listInfo
 
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->

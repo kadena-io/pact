@@ -216,7 +216,7 @@ gasPostReads i g0 postProcess action = do
   (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
 columnsToObject :: ToTerm a => Type (Term n) -> Columns a -> Term n
-columnsToObject ty = (\ps -> TObject (Object (ObjectMap (M.fromList ps)) ty def) def) .
+columnsToObject ty = (\ps -> TObject (Object (ObjectMap (M.fromList ps)) ty def def) def) .
   map ((FieldKey . asString) *** toTerm) . M.toList . _columns
 
 columnsToObject' :: ToTerm a => Type (Term n) -> [(Info,ColumnId)] -> Columns a -> Eval m (Term n)
@@ -225,7 +225,7 @@ columnsToObject' ty cols (Columns m) = do
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
                   Just v -> return (FieldKey $ asString col,toTerm v)
-  return $ TObject (Object (ObjectMap (M.fromList ps)) ty def) def
+  return $ TObject (Object (ObjectMap (M.fromList ps)) ty def def) def
 
 
 
@@ -268,7 +268,7 @@ withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
   (!g0,!tkd) <- preGas fi [table',key',defaultRow']
   case tkd of
-    [table@TTable {..}, TLitString key, TObject (Object defaultRow _ _) _] -> do
+    [table@TTable {..}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
@@ -337,7 +337,7 @@ write :: WriteType -> SchemaPartial -> NativeFun e
 write wt partial i as = do
   ts <- mapM reduce as
   case ts of
-    [table@TTable {..},TLitString key,obj@(TObject (Object ps _ _) _)] -> do
+    [table@TTable {..},TLitString key,obj@(TObject (Object ps _ _ _) _)] -> do
       cost <- computeGas (Right i) (GWrite wt table obj)
       guardTable i table
       case _tTableType of

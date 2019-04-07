@@ -533,7 +533,7 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
   where
     envChainData :: RNativeFun LibState
     envChainData i as = case as of
-      [TObject (Object (ObjectMap ks) _ _) _] -> do
+      [TObject (Object (ObjectMap ks) _ _ _) _] -> do
         pd <- view eePublicData
 
         ud <- foldM (go (_faInfo i)) pd (M.toList ks)

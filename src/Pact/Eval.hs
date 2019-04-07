@@ -545,8 +545,8 @@ reduce t@TNative {} = return $ toTerm $ pack $ show t
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
   CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
-reduce (TObject (Object ps t oi) i) =
-  TObject <$> (Object <$> traverse reduce ps <*> traverse reduce t <*> pure oi) <*> pure i
+reduce (TObject (Object ps t ko oi) i) =
+  TObject <$> (Object <$> traverse reduce ps <*> traverse reduce t <*> pure ko <*> pure oi) <*> pure i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"

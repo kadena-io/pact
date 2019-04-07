@@ -543,13 +543,13 @@ filter' i as = argsError' i as
 length' :: RNativeFun e
 length' _ [TList ls _ _] = return $ toTerm (length ls)
 length' _ [TLitString s] = return $ toTerm (T.length s)
-length' _ [TObject (Object ps _ _) _] = return $ toTerm (length ps)
+length' _ [TObject (Object ps _ _ _) _] = return $ toTerm (length ps)
 length' i as = argsError i as
 
 take' :: RNativeFun e
 take' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.take c' l) t def
 take' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tordL take c' (unpack l)
-take' _ [TList {..},TObject (Object (ObjectMap o) oTy _) _] = asKeyList _tList >>= \l ->
+take' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList >>= \l ->
   return $ toTObjectMap oTy def $ ObjectMap $ M.restrictKeys o l
 
 take' i as = argsError i as
@@ -557,7 +557,7 @@ take' i as = argsError i as
 drop' :: RNativeFun e
 drop' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.drop c' l) t def
 drop' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tordL drop c' (unpack l)
-drop' _ [TList {..},TObject (Object (ObjectMap o) oTy _) _] = asKeyList _tList >>= \l ->
+drop' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList >>= \l ->
   return $ toTObjectMap oTy def $ ObjectMap $ M.withoutKeys o l
 drop' i as = argsError i as
 
@@ -584,7 +584,7 @@ at' _ [li@(TLitInteger idx),TList ls _ _] =
       Just t -> return t
       Nothing -> evalError (_tInfo li) $ "at: bad index " <>
         pretty idx <> ", length " <> pretty (length ls)
-at' _ [idx,TObject (Object ls _ _) _] = lookupObj idx ls
+at' _ [idx,TObject (Object ls _ _ _) _] = lookupObj idx ls
 at' i as = argsError i as
 
 lookupObj :: Term n -> ObjectMap (Term n) -> Eval m (Term n)
@@ -594,7 +594,7 @@ lookupObj t@(TLitString idx) (ObjectMap ls) = case M.lookup (FieldKey idx) ls of
 lookupObj t _ = evalError (_tInfo t) $ "object lookup only supported with strings"
 
 remove :: RNativeFun e
-remove _ [TLitString key,TObject (Object (ObjectMap ps) t _) _] =
+remove _ [TLitString key,TObject (Object (ObjectMap ps) t _ _) _] =
   return $ toTObjectMap t def $ ObjectMap $ M.delete (FieldKey key) ps
 remove i as = argsError i as
 
@@ -631,7 +631,7 @@ bind i as@[src,TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $
 bind i as = argsError' i as
 
 bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Ref))
-bindObjectLookup (TObject (Object (ObjectMap o) _ _) _) =
+bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
   return $ \s -> M.lookup (FieldKey s) $ fmap liftTerm o
 bindObjectLookup t = evalError (_tInfo t) $
   "bind: expected object: " <> pretty t
@@ -686,7 +686,7 @@ sort' _ [TList fields _ fi,l@(TList vs lty _)]
       liftIO $ do
         m <- V.thaw vs
         (`V.sortBy` m) $ \x y -> case (x,y) of
-          (TObject (Object (ObjectMap xo) _ _) _,TObject (Object (ObjectMap yo) _ _) _) ->
+          (TObject (Object (ObjectMap xo) _ _ _) _,TObject (Object (ObjectMap yo) _ _ _) _) ->
             let go field EQ = case (M.lookup field xo, M.lookup field yo) of
                   (Just (TLiteral lx _), Just (TLiteral ly _)) -> lx `compare` ly
                   _ -> EQ
@@ -723,7 +723,7 @@ enforceVersion i as = case as of
 
 contains :: RNativeFun e
 contains _i [val,TList {..}] = return $ toTerm $ searchTermList val _tList
-contains _i [TLitString k,TObject (Object (ObjectMap o) _ _) _] =
+contains _i [TLitString k,TObject (Object (ObjectMap o) _ _ _) _] =
   return $ toTerm $ M.member (FieldKey k) o
 contains _i [TLitString s,TLitString t] = return $ toTerm $ T.isInfixOf s t
 contains i as = argsError i as
