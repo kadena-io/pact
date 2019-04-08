@@ -23,6 +23,9 @@ loadBadParens = do
   (r',_s) <- runIO $ execScript' Quiet "tests/pact/parsing.repl"
   it "should parse correctly" $ r' `shouldSatisfy` isRight
 
+  (r'',_s) <- runIO $ execScript' Quiet "tests/pact/bad/bad-pact.repl"
+  it "should fail due to a rollback on the last step" $ r'' `shouldSatisfy` isLeft
+
 runBadTests :: Spec
 runBadTests = do
   (r,_s) <- runIO $ evalString' "{ 'a: 1 'b: 2}"

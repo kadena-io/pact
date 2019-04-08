@@ -406,6 +406,11 @@ defpact = do
     RStep -> return step
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
+  case last body of -- note: `last` is safe, since bodyForm uses `some`
+    TStep _ _ (Just _) _ -> syntaxError "rollbacks aren't allowed on the last \
+      \step (the last step can never roll back -- once it's executed the pact \
+      \is complete)"
+    _ -> pure ()
   i <- contextInfo
   return $ TDef (Def (DefName defname) modName Defpact (FunType args returnTy)
                   (abstractBody' args (TList body TyAny bi)) m i) i

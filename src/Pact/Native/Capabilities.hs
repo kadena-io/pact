@@ -211,6 +211,6 @@ createUserGuard =
             _ -> evalError' i $ "Could not resolve predfun: " <> pretty n
           return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard udata rn)
         Left s -> evalError' i $
-          "Invalid name " <> pretty predfun <> ": " <> pretty s
+          "Invalid name " <> pretty predfun <> ": " <> prettyString s
       Left {} -> evalError' i "Data must be value"
     createUserGuard' i as = argsError i as

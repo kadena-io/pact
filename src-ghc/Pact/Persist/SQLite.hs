@@ -111,11 +111,11 @@ encodeBlob a = SText $ Utf8 $ BSL.toStrict $ encode a
 
 expectSing :: Show a => String -> [a] -> IO a
 expectSing _ [s] = return s
-expectSing desc v = throwDbError $ "Expected single-" <> pretty desc <> " result, got: " <> viaShow v
+expectSing desc v = throwDbError $ "Expected single-" <> prettyString desc <> " result, got: " <> viaShow v
 
 expectTwo :: Show a => String -> [a] -> IO (a,a)
 expectTwo _ [a,b] = return (a,b)
-expectTwo desc v = throwDbError $ "Expected two-" <> pretty desc <> " result, got: " <> viaShow v
+expectTwo desc v = throwDbError $ "Expected two-" <> prettyString desc <> " result, got: " <> viaShow v
 
 kTextTys :: KeyTys DataKey
 kTextTys = KeyTys "text" (SText . toUtf8 . asString) RText decodeText

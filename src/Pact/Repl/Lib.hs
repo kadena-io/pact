@@ -250,7 +250,7 @@ formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
   let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
       eitherEvalErr res effectStr transformFunc =
         case res of
-          Left e  -> evalError' i $ pretty effectStr <> ": " <> pretty e
+          Left e  -> evalError' i $ prettyString effectStr <> ": " <> prettyString e
           Right v -> return (transformFunc v)
   sppk  <- eitherEvalErr (fromText' scheme)
            "Invalid PPKScheme"
@@ -280,7 +280,7 @@ setsigs i as = argsError i as
 setmsg :: RNativeFun LibState
 setmsg i [TLitString j] =
   case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
-    Left f -> evalError' i ("Invalid JSON: " <> pretty f)
+    Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
     Right v -> setenv eeMsgBody v >> return (tStr "Setting transaction data")
 setmsg _ [a] = setenv eeMsgBody (toJSON a) >> return (tStr "Setting transaction data")
 setmsg i as = argsError i as
@@ -466,7 +466,7 @@ print' i as = argsError i as
 
 envHash :: RNativeFun LibState
 envHash i [TLitString s] = case fromText' s of
-  Left err -> evalError' i $ "Bad hash value: " <> pretty s <> ": " <> pretty err
+  Left err -> evalError' i $ "Bad hash value: " <> pretty s <> ": " <> prettyString err
   Right h -> do
     setenv eeHash h
     return $ tStr $ "Set tx hash to " <> s
@@ -541,7 +541,7 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
             info = _faInfo i
 
         unless (length ts == length ts') $ evalError info $
-          "envChainData: cannot update duplicate keys: " <> pretty (ts \\ (S.toList ts'))
+          "envChainData: cannot update duplicate keys: " <> prettyList (ts \\ (S.toList ts'))
 
         ud <- foldM (go info) pd ks
         setenv eePublicData ud
@@ -553,13 +553,13 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (ParsedInteger . fromIntegral $ l) pd
       "block-height" -> pure $ set pdBlockHeight (fromIntegral l) pd
       "block-time"   -> pure $ set pdBlockTime (fromIntegral l) pd
-      t              -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+      t              -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LDecimal l) _)) = case Text.unpack k of
       "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (ParsedDecimal l) pd
-      t           -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+      t           -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of
       "sender" -> pure $ set (pdPublicMeta . pmSender) l pd
-      t        -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+      t        -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
     go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as

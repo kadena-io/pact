@@ -148,7 +148,8 @@ instance FromJSON PublicKey where
 instance ToJSON PublicKey where
   toJSON = toJSON . decodeUtf8 . _pubKey
 
-instance Pretty PublicKey where pretty (PublicKey s) = pretty (BS.toString s)
+instance Pretty PublicKey where
+  pretty (PublicKey s) = prettyString (BS.toString s)
 
 -- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet {
@@ -158,7 +159,7 @@ data KeySet = KeySet {
 
 instance Pretty KeySet where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
-    [ "keys: " <> pretty ks
+    [ "keys: " <> prettyList ks
     , "pred: " <> pretty f
     ]
 
@@ -582,7 +583,7 @@ data Def n = Def
 
 instance Pretty n => Pretty (Def n) where
   pretty Def{..} = parensSep $
-    [ pretty _dDefType
+    [ prettyString (defTypeRep _dDefType)
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
     , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
@@ -601,7 +602,7 @@ data Namespace = Namespace
   } deriving (Eq, Show)
 
 instance Pretty Namespace where
-  pretty Namespace{..} = "(namespace " <> pretty (asString' _nsName) <> ")"
+  pretty Namespace{..} = "(namespace " <> prettyString (asString' _nsName) <> ")"
 
 instance FromJSON Namespace where
   parseJSON = withObject "Namespace" $ \o -> Namespace
@@ -886,10 +887,10 @@ instance Pretty n => Pretty (Term n) where
       <> nest 2 (
          line
       <> line <> fillSep (pretty <$> T.words _tNativeDocs)
-      <> examples
       <> line
       <> line <> annotate Header "Type:"
       <> line <> align (vsep (pretty <$> toList _tFunTypes))
+      <> examples
       ) where examples = case _tNativeExamples of
                 [] -> mempty
                 exs ->
@@ -928,7 +929,7 @@ instance Pretty n => Pretty (Term n) where
       [ "defschema"
       , pretty _tSchemaName
       , pretty _tMeta
-      , pretty _tFields
+      , prettyList _tFields
       ]
     TTable{..} -> parensSep
       [ "deftable"

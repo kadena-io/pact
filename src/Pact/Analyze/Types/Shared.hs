@@ -484,7 +484,7 @@ data EObject tm where
 instance Pretty (tm ('TyObject m)) => Pretty (Object tm m) where
   pretty (Object vals) = commaBraces (prettyVals vals) where
     prettyVals = foldHList $ \k (Column ty v) ->
-      [pretty (symbolVal k) <> " := " <> singPrettyTm ty v]
+      [prettyString (symbolVal k) <> " := " <> singPrettyTm ty v]
 
 instance Show (tm ('TyObject m)) => Show (Object tm m) where
   showsPrec p (Object vals) = showParen (p > 10) $
