@@ -76,6 +76,7 @@ import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
 import Pact.Types.Hash
+import Pact.Types.PactOutput
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
 import Pact.Types.Version
@@ -646,12 +647,12 @@ listModules _ _ = do
   return $ toTermList tTyString $ map asString $ HM.keys mods
 
 yield :: RNativeFun e
-yield i [t@TObject {}] = do
+yield i [t@(TObject (Object o _ _ _) _)] = do
   eym <- use evalPactExec
   case eym of
     Nothing -> evalError' i "Yield not in defpact context"
     Just {} -> do
-      (evalPactExec . _Just . peYield) .= Just t
+      (evalPactExec . _Just . peYield) .= Just (fmap toPactOutput' o)
       return t
 yield i as = argsError i as
 
@@ -660,7 +661,7 @@ resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
   rm <- asks $ firstOf $ eePactStep . _Just . psResume . _Just
   case rm of
     Nothing -> evalError' i "Resume: no yielded value in context"
-    Just rval -> bindObjectLookup rval >>= bindReduce ps bd bi
+    Just rval -> bindObjectLookup (toTObjectMap TyAny def rval) >>= bindReduce ps bd bi
 resume i as = argsError' i as
 
 where' :: NativeFun e

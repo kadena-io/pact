@@ -16,30 +16,29 @@
 --
 
 module Pact.Types.PactOutput
-  ( PactOutput(..),
-    toPactOutput,
-    fromPactOutput
+  ( PactOutput(..)
+  , toPactOutput
+  , toPactOutput'
+  , fromPactOutput
   ) where
 
-import Data.Aeson hiding (Value(..))
 import qualified Data.Aeson as A
+import Data.Aeson hiding (Value(..))
 import Data.Decimal
 import Data.Default (def)
 import Data.Scientific
+import Data.Text (Text)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Data.Text (Text)
-import Data.String (IsString(..))
 
 import Pact.Types.Exp (Literal(..))
+import Pact.Types.Pretty (renderCompactText)
 import Pact.Types.Term (ObjectMap(..),PactGuard(..),KeySet(..),KeySetName(..),
                         ModuleGuard(..),Term(..),Name(..),Object(..),Guard(..),
-                        UserGuard(..),parseName)
-import Pact.Types.Util (AsString(..))
-import Pact.Types.Pretty (renderCompactText)
+                        UserGuard(..))
 import Pact.Types.Type (Type(TyAny))
 
-data UserGuard' = UserGuard' (ObjectMap PactOutput) Text
+data UserGuard' = UserGuard' (ObjectMap PactOutput) Name
    deriving (Eq,Show,Ord)
 
 instance ToJSON UserGuard' where
@@ -108,7 +107,8 @@ pToJSON t v = object [ "t" .= t, "v" .= v ]
 instance ToJSON PactOutput where
   toJSON (PLiteral l) = case l of
     LInteger i -> A.Number (scientific i 0)
-    LDecimal (Decimal p m) -> pToJSON ODecimal $ object [ "p" .= p, "m" .= m ]
+    LDecimal d -> case normalizeDecimal d of
+      (Decimal p m) -> pToJSON ODecimal $ object [ "p" .= p, "m" .= m ]
     LString s -> toJSON s
     LBool b -> toJSON b
     LTime t -> pToJSON OTime t
@@ -132,7 +132,7 @@ instance FromJSON PactOutput where
   parseJSON (A.Object o) = o .: "t" >>= \t -> case t of
     OObject -> PObject <$> pj o
     ODecimal -> pj o >>= fmap (PLiteral . LDecimal) . withObject "PDecimal"
-      (\d -> Decimal <$> d .: "p" <*> d .: "m")
+      (\d -> normalizeDecimal <$> (Decimal <$> d .: "p" <*> d .: "m"))
     OTime -> PLiteral . LTime <$> pj o
     OGPact -> PGuard . GPact' <$> pj o
     OGKeySet -> PGuard . GKeySet' <$> pj o
@@ -144,26 +144,29 @@ instance FromJSON PactOutput where
 
 toPactOutput :: Term Name -> Either Text PactOutput
 toPactOutput (TLiteral l _) = pure $ PLiteral l
-toPactOutput (TObject (Object o _ _) _) = PObject <$> traverse toPactOutput o
+toPactOutput (TObject (Object o _ _ _) _) = PObject <$> traverse toPactOutput o
 toPactOutput (TList l _ _) = PList <$> V.mapM toPactOutput l
 toPactOutput (TGuard x _) = fmap PGuard $ case x of
   GPact g -> pure $ GPact' g
   GKeySet g -> pure $ GKeySet' g
   GKeySetRef g -> pure $ GKeySetRef' g
   GModule g -> pure $ GModule' g
-  GUser (UserGuard (Object o _ _) n) -> GUser' <$> (UserGuard' <$> traverse toPactOutput o <*> pure (asString n))
+  GUser (UserGuard (Object o _ _ _) n) -> GUser' <$> (UserGuard' <$> traverse toPactOutput o <*> pure n)
 toPactOutput t = Left $ "Unable to convert Term: " <> renderCompactText t
 
 fromPactOutput :: PactOutput -> Term Name
 fromPactOutput (PLiteral l) = TLiteral l def
-fromPactOutput (PObject o) = TObject (Object (fmap fromPactOutput o) TyAny def) def
+fromPactOutput (PObject o) = TObject (Object (fmap fromPactOutput o) TyAny def def) def
 fromPactOutput (PList l) = TList (fmap fromPactOutput l) TyAny def
 fromPactOutput (PGuard x) = (`TGuard` def) $ case x of
   GPact' g -> GPact g
   GKeySet' g -> GKeySet g
   GKeySetRef' g -> GKeySetRef g
   GModule' g -> GModule g
-  GUser' (UserGuard' d p) -> GUser $ UserGuard (Object (fmap fromPactOutput d) TyAny def) unsafeParseName
-    where unsafeParseName = case parseName def p of
-            Left t -> Name ("unsafe parse failed: " <> fromString t) def
-            Right n -> n
+  GUser' (UserGuard' d p) -> GUser $ UserGuard (Object (fmap fromPactOutput d) TyAny def def) p
+
+
+toPactOutput' :: Term Name -> PactOutput
+toPactOutput' t = case toPactOutput t of
+  Right r -> r
+  Left _ -> PLiteral $ LString $ renderCompactText t

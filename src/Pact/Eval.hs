@@ -67,6 +67,7 @@ import Safe
 import Unsafe.Coerce
 
 import Pact.Gas
+import Pact.Types.PactOutput
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -276,7 +277,7 @@ eval t = enscope t >>= reduce
 
 
 evalContinuation :: PactContinuation -> Eval e (Term Name)
-evalContinuation (PactContinuation app) = reduceApp app
+evalContinuation (PactContinuation d args) = reduceApp (App (TDef d def) (map (liftTerm . fromPactOutput) args) def)
 
 
 evalUse :: Use -> Eval e ()
@@ -583,7 +584,7 @@ appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App td@(TDef d@Def{..} _) as ai) = do
+reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
   af <- prepareUserAppArgs d as
   evalUserAppBody d af ai g $ \bod' ->
@@ -591,9 +592,7 @@ reduceApp (App td@(TDef d@Def{..} _) as ai) = do
       Defun ->
         reduceBody bod'
       Defpact ->
-        -- the pact continuation is an App of the defpact plus the strictly-evaluated args,
-        -- re-lifted to support calling `reduceApp` again later.
-        let continuation = (App td (map liftTerm $ fst af) ai)
+        let continuation = PactContinuation d (map toPactOutput' (fst af))
         in applyPact continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
@@ -640,7 +639,7 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
 -- defaulting to the first step.
-applyPact :: App (Term Ref) -> Term Ref -> Eval e (Term Name)
+applyPact :: PactContinuation -> Term Ref -> Eval e (Term Name)
 applyPact app (TList steps _ i) = do
   -- only one pact allowed in a transaction
   use evalPactExec >>= \bad -> unless (isNothing bad) $ evalError i "Nested pact execution, aborting"
@@ -657,7 +656,7 @@ applyPact app (TList steps _ i) = do
       stepEntity <- traverse reduce (_tStepEntity step)
       let
         initExec executing = evalPactExec .=
-          Just (PactExec (length steps) Nothing executing _psStep _psPactId (PactContinuation app))
+          Just (PactExec (length steps) Nothing executing _psStep _psPactId app)
         execStep = do
           initExec True
           case (_psRollback,_tStepRollback step) of

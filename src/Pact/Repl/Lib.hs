@@ -30,7 +30,6 @@ import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import qualified Data.HashMap.Strict as HM
-import Data.Maybe
 import qualified Data.Map as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
@@ -69,6 +68,7 @@ import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
+import Pact.Types.PactOutput
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -289,16 +289,16 @@ continuePact :: RNativeFun LibState
 continuePact i as = case as of
   [TLitInteger pid,TLitInteger step] -> go pid step False Nothing
   [TLitInteger pid,TLitInteger step,TLitBool rollback] -> go pid step rollback Nothing
-  [TLitInteger pid,TLitInteger step,TLitBool rollback,o@TObject {}] -> go pid step rollback (Just o)
+  [TLitInteger pid,TLitInteger step,TLitBool rollback,TObject (Object o _ _ _) _] -> go pid step rollback (Just o)
   _ -> argsError i as
   where
-    go :: Integer -> Integer -> Bool -> Maybe (Term Name) -> Eval LibState (Term Name)
+    go :: Integer -> Integer -> Bool -> Maybe (ObjectMap (Term Name)) -> Eval LibState (Term Name)
     go pid step rollback userResume = do
       resume <- case userResume of
         Just r -> return $ Just r
         Nothing -> use evalPactExec >>= \pe -> case pe of
           Nothing -> return Nothing
-          Just PactExec{..} -> return $ _peYield
+          Just PactExec{..} -> return $ fmap (fmap fromPactOutput) _peYield
       let pactId = (PactId $ fromIntegral pid)
           pactStep = PactStep (fromIntegral step) rollback pactId resume
       viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of
@@ -330,7 +330,7 @@ pactState i as = case as of
       case e of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
-          [("yield",fromMaybe (toTerm False) _peYield)
+          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactOutput) _peYield)
           ,("executed",toTerm _peExecuted)
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]

@@ -19,10 +19,9 @@ import Control.Concurrent
 import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Reader
-import qualified Data.Map.Strict as M
-
 import Data.Aeson as A
 import Data.Int (Int64)
+import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe)
 import Data.Word (Word32, Word64)
 
@@ -32,6 +31,7 @@ import Pact.Parse (ParsedDecimal(..))
 import Pact.Types.Command
 import Pact.Types.Gas
 import Pact.Types.Logger
+import Pact.Types.PactOutput
 import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
@@ -145,7 +145,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
 
           -- Setup environment and get result
           let sigs = userSigsToPactKeySet _cmdSigs
-              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId _peYield
+              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactOutput) _peYield)
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
