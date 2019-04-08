@@ -39,6 +39,7 @@ import qualified Data.Vector as V
 
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
+import Data.Maybe
 #else
 
 import Criterion
