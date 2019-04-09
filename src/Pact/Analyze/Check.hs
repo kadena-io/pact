@@ -55,7 +55,7 @@ import qualified Data.List                 as List
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (mapMaybe)
-import           Data.SBV                  (Symbolic, setOption)
+import           Data.SBV                  (Symbolic)
 import qualified Data.SBV                  as SBV
 import qualified Data.SBV.Control          as SBV
 import qualified Data.SBV.Internals        as SBVI
@@ -329,9 +329,7 @@ verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body
       [] -> pure $ invsMap & traverse .~ []
 
       _ -> ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-        lift $ do
-          setOption $ SBV.OptionKeyword ":smt.string_solver" ["z3str3"]
-          SBV.setTimeOut 1000 -- one second
+        lift $ SBV.setTimeOut 1000 -- one second
         modelArgs'   <- lift $ runAlloc $ allocArgs args
         stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
         tags         <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
@@ -398,9 +396,7 @@ verifyFunctionProperty modName funName funInfo tables caps pactArgs body
 
     -- Set up the model and our query
     let setupSmtProblem = do
-          lift $ do
-            setOption $ SBV.OptionKeyword ":smt.string_solver" ["z3str3"]
-            SBV.setTimeOut 1000 -- one second
+          lift $ SBV.setTimeOut 1000 -- one second
           modelArgs'   <- lift $ runAlloc $ allocArgs args
           stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
           tags         <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
