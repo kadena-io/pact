@@ -105,7 +105,7 @@ data PactMetadata
   deriving Show
 
 data ExistentialVal where
-  SomeVal :: SingTy a -> S (Concrete a) -> ExistentialVal
+  SomeVal :: SingTy a -> S (Maybe (Concrete a)) -> ExistentialVal
 
 instance Mergeable ExistentialVal where
   symbolicMerge force test (SomeVal lTy lVal) (SomeVal rTy rVal)

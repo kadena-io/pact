@@ -34,6 +34,7 @@ import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind
                                               literal, (.<), uninterpret,
                                               writeArray)
 import qualified Data.SBV.Internals          as SBVI
+import qualified Data.SBV.Maybe              as SBV
 import qualified Data.SBV.String             as SBV
 import           Data.SBV.Tuple              (tuple)
 import qualified Data.SBV.Tuple              as SBVT
@@ -720,15 +721,19 @@ evalTerm = \case
     pure "INTERNAL: pact done"
 
   Yield tm -> do
-    val <- eval tm
-    latticeState . lasYieldedInCurrent ?= SomeVal (sing :: SingTy a) val
-    pure val
+    sVal@(S prov val) <- eval tm
+    let ty = sing :: SingTy a
+    withSymVal ty $
+      latticeState . lasYieldedInCurrent ?= SomeVal ty (S prov (SBV.sJust val))
+    pure sVal
 
   Resume -> use (latticeState . lasYieldedInPrevious) >>= \case
     Nothing -> throwErrorNoLoc "No previously yielded value for resume"
-    Just (SomeVal ty val) -> case singEq ty (sing :: SingTy a) of
+    Just (SomeVal ty (S prov mVal)) -> case singEq ty (sing :: SingTy a) of
       Nothing   -> throwErrorNoLoc "Resume of unexpected type"
-      Just Refl -> pure val
+      Just Refl -> withSymVal ty $ do
+        markFailure $ SBV.isNothing mVal
+        pure $ S prov $ SBV.fromJust mVal
 
 -- | Private pacts must be evaluated by the right entity. Fail if the current
 -- entity doesn't match the provided.
