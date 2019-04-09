@@ -215,6 +215,7 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
+  {-
   describe "decimal arithmetic" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
@@ -2908,7 +2909,6 @@ spec = describe "analyze" $ do
               ]
             (make-list 5 a))
           |]
-    -- we expect this to give an error
     expectVerified code
 
   describe "list drop" $ do
@@ -2969,6 +2969,7 @@ spec = describe "analyze" $ do
             (= [] (take 0 [a b c])))
           |]
     expectVerified code5
+-}
 
   describe "list at" $ do
     let code5 = [text|
@@ -2978,6 +2979,7 @@ spec = describe "analyze" $ do
           |]
     expectVerified code5
 
+{-
     let code6' = [text|
           (defun test:integer (ix:integer)
             @model [(property (= result ix))]
@@ -3370,3 +3372,4 @@ spec = describe "analyze" $ do
         (with-default-read accounts acct { 'balance: 0 } { 'balance := balance }
           balance))
       |]
+      -}
