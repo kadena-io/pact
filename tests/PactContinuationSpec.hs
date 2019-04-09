@@ -9,11 +9,13 @@ import qualified Data.HashMap.Strict as HM
 import Data.Aeson
 import qualified Network.HTTP.Client as HTTP
 import Data.Default (def)
+import Data.Decimal
 
 import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
-import Pact.Types.Runtime
+import Pact.Types.Runtime hiding (Persistable(..))
+import Pact.Types.PactOutput
 import qualified Data.Text as T
 
 shouldMatch :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Expectation
@@ -447,13 +449,15 @@ twoPartyEscrow testCmds testChecks mgr = do
       createAcctCheck     = makeCheck createAcctCmd False Nothing -- Alice should be funded with $100
       resetTimeCheck      = makeCheck resetTimeCmd False Nothing
       runEscrowCheck      = makeCheck runEscrowCmd False Nothing
-      balanceCheck        = makeCheck balanceCmd False $ Just "98.00"
+      balanceCheck        = makeCheck balanceCmd False $ decValue 98.00
       allChecks           = sysModuleCheck : acctModuleCheck : testModuleCheck
                             : createAcctCheck : resetTimeCheck : runEscrowCheck
                             : balanceCheck : testChecks
 
   allResults `shouldMatch` allChecks
 
+decValue :: Decimal -> Maybe Value
+decValue = Just . toJSON . PLiteral . LDecimal
 
 testDebtorPreTimeoutCancel :: HTTP.Manager -> Expectation
 testDebtorPreTimeoutCancel mgr = do
@@ -467,7 +471,7 @@ testDebtorPreTimeoutCancel mgr = do
                             " Tx Failed: Cancel can only be effected by",
                             " creditor, or debitor after timeout"]
       tryCancelCheck        = makeCheck tryCancelCmd True $ Just $ String cancelMsg
-      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "98.00"
+      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ decValue 98.00
       allChecks             = [tryCancelCheck, checkStillEscrowCheck]
 
   twoPartyEscrow allCmds allChecks mgr
@@ -483,7 +487,7 @@ testDebtorPostTimeoutCancel mgr = do
 
   let setTimeCheck = makeCheck setTimeCmd False Nothing
       tryCancelCheck = makeCheck tryCancelCmd False Nothing
-      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "100.00"
+      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ decValue 100.00
       allChecks = [setTimeCheck, tryCancelCheck, checkStillEscrowCheck]
 
   twoPartyEscrow allCmds allChecks mgr
@@ -499,7 +503,7 @@ testCreditorCancel mgr = do
 
   let resetTimeCheck = makeCheck resetTimeCmd False Nothing
       credCancelCheck = makeCheck credCancelCmd False Nothing
-      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "100.00"
+      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ decValue 100.00
       allChecks = [resetTimeCheck, credCancelCheck, checkStillEscrowCheck]
 
   twoPartyEscrow allCmds allChecks mgr
@@ -542,8 +546,8 @@ testValidEscrowFinish mgr = do
 
   let tryNegDownCheck  = makeCheck tryNegDownCmd False
                          (Just "Escrow completed with 1.75 paid and 0.25 refunded")
-      credBalanceCheck = makeCheck credBalanceCmd False $ Just "1.75"
-      debBalanceCheck  = makeCheck debBalanceCmd False $ Just "98.25"
+      credBalanceCheck = makeCheck credBalanceCmd False $ decValue 1.75
+      debBalanceCheck  = makeCheck debBalanceCmd False $ decValue 98.25
       allChecks        = [tryNegDownCheck, credBalanceCheck, debBalanceCheck]
 
   twoPartyEscrow allCmds allChecks mgr

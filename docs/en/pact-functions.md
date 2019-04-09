@@ -37,7 +37,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"chain-id": 0,"block-height": 0,"block-time": 0,"sender": "","gas-limit": 0,"gas-price": 0}
+{"block-height": 0,"block-time": 0,"chain-id": 0,"gas-limit": 0,"gas-price": 0,"sender": ""}
 ```
 
 
@@ -1267,7 +1267,7 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 *data*&nbsp;`<a>` *predfun*&nbsp;`string` *&rarr;*&nbsp;`guard`
 
 
-Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
+Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. DATA must be an object. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
 
 
 ### enforce-guard {#enforce-guard}

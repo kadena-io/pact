@@ -40,12 +40,13 @@ import Data.Default
 import Pact.Eval
 import Unsafe.Coerce
 import Control.Lens hiding (Fold)
-import Data.Aeson
+import Data.Aeson hiding (Object)
 import Control.Arrow
 import qualified Data.Aeson.Lens as A
 import Bound
 import qualified Data.HashMap.Strict as HM
 import Pact.Types.Pretty
+import qualified Data.Vector as V
 
 import Pact.Types.Runtime
 import Pact.Types.Native
@@ -57,7 +58,7 @@ success = fmap . const . toTerm
 
 colsToList
   :: Eval m [(Info,ColumnId)] -> Term n -> Eval m [(Info,ColumnId)]
-colsToList _ (TList cs _ _) = forM cs $ \c -> case c of
+colsToList _ (TList cs _ _) = forM (V.toList cs) $ \c -> case c of
     TLitString col -> return (_tInfo c,ColumnId col)
     _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
 colsToList argFail _ = argFail
@@ -172,7 +173,7 @@ enforceGuard i g = case g of
       MDModule Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} -> do
-    void $ runReadOnly (_faInfo i) $ evalByName _ugPredFun [_ugData] (_faInfo i)
+    void $ runReadOnly (_faInfo i) $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
 
 findCallingModule :: Eval e (Maybe ModuleName)
 findCallingModule = uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))

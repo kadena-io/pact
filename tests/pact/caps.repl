@@ -14,6 +14,8 @@
 
   (defschema yieldschema result:integer)
 
+  (defschema guardschema key:string)
+
   (defcap GRANTED () true)
 
   (defcap KALL-CAP () (enforce-keyset 'kall))
@@ -34,10 +36,10 @@
     (create-module-guard "test"))
 
   (defun msg-keyset-user-guard (key:string)
-    (create-user-guard key "enforce-msg-keyset"))
+    (create-user-guard {'key: key} "enforce-msg-keyset"))
 
-  (defun enforce-msg-keyset (key:string)
-    (enforce-keyset (read-keyset key)))
+  (defun enforce-msg-keyset (key:object{guardschema})
+    (enforce-keyset (read-keyset (at 'key key))))
 
   (defpact test-pact-guards (id:string)
     (step (step1 id))

@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -56,7 +57,8 @@ module Pact.Types.Term
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
    Example(..),
    derefDef,
-   Object(..),oObject,oObjectType,oInfo,
+   ObjectMap(..),objectMapToListWith,
+   Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
@@ -65,7 +67,7 @@ module Pact.Types.Term
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
-   toTermList,toTObject,toTList,
+   toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,
@@ -73,45 +75,49 @@ module Pact.Types.Term
    ) where
 
 
-import Control.Lens (makeLenses,makePrisms, (<&>))
-import Control.Applicative
-import Data.List
-import Control.Monad
-import Prelude
-import Control.Arrow ((***),first)
-import Data.Functor.Classes
 import Bound
+import Control.Applicative
+import Control.Arrow ((***),first)
+import Control.DeepSeq
+import Control.Lens (makeLenses,makePrisms, (<&>))
+import Control.Monad
+import qualified Data.Aeson as A
+import Data.Aeson hiding (pairs,Object)
+import qualified Data.Attoparsec.Text as AP
+import qualified Data.ByteString.UTF8 as BS
+import Data.Decimal
+import Data.Default
+import Data.Eq.Deriving
+import Data.Foldable
+import Data.Function
+import Data.Functor.Classes
+import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
+import Data.Hashable
+import Data.Int (Int64)
+import Data.List
+import qualified Data.Map.Strict as M
+import Data.Maybe
+import Data.Serialize (Serialize)
+import Data.String
 import Data.Text (Text,pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.Aeson hiding (pairs,Object)
-import qualified Data.Aeson as A
-import qualified Data.ByteString.UTF8 as BS
-import Data.String
-import Data.Default
-import Data.Thyme
-import GHC.Generics (Generic)
-import Data.Decimal
-import Data.Hashable
-import Data.Foldable
-import qualified Data.Attoparsec.Text as AP
-import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
-import Control.DeepSeq
-import Data.Maybe
-import qualified Data.HashSet as HS
-import qualified Data.HashMap.Strict as HM
-import Data.Int (Int64)
-import Data.Serialize (Serialize)
-import Data.Eq.Deriving
-import Text.Show.Deriving
+import Data.Thyme (UTCTime)
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 import Data.Word (Word64, Word32)
+import GHC.Generics (Generic)
+import Prelude
+import Text.Show.Deriving
+import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 
+import Pact.Types.Exp
+import Pact.Types.Info
 import Pact.Types.Parser
 import Pact.Types.Pretty hiding (dot)
-import Pact.Types.Util
-import Pact.Types.Info
 import Pact.Types.Type
-import Pact.Types.Exp
+import Pact.Types.Util
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
@@ -155,7 +161,7 @@ instance Pretty PublicKey where
 data KeySet = KeySet {
       _ksKeys :: ![PublicKey]
     , _ksPredFun :: !Name
-    } deriving (Eq,Generic,Show)
+    } deriving (Eq,Generic,Show,Ord)
 
 instance Pretty KeySet where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
@@ -189,7 +195,7 @@ instance NFData PactId
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
   , _pgName :: !Text
-  } deriving (Eq,Generic,Show)
+  } deriving (Eq,Generic,Show,Ord)
 
 instance Pretty PactGuard where
   pretty PactGuard{..} = "PactGuard" <+> commaBraces
@@ -203,7 +209,7 @@ instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 data ModuleGuard = ModuleGuard
   { _mgModuleName :: !ModuleName
   , _mgName :: !Text
-  } deriving (Eq,Generic,Show)
+  } deriving (Eq,Generic,Show,Ord)
 
 instance Pretty ModuleGuard where
   pretty ModuleGuard{..} = "ModuleGuard" <+> commaBraces
@@ -215,7 +221,7 @@ instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
 data UserGuard = UserGuard
-  { _ugData :: !(Term Name) -- TODO when Term is safe, use "object" type
+  { _ugData :: !(Object Name) -- TODO when Term is safe, use "object" type
   , _ugPredFun :: !Name
   } deriving (Eq,Generic,Show)
 
@@ -229,11 +235,11 @@ instance ToJSON UserGuard where toJSON = lensyToJSON 3
 instance FromJSON UserGuard where parseJSON = lensyParseJSON 3
 
 data Guard
-  = GPact PactGuard
-  | GKeySet KeySet
-  | GKeySetRef KeySetName
-  | GModule ModuleGuard
-  | GUser UserGuard
+  = GPact !PactGuard
+  | GKeySet !KeySet
+  | GKeySetRef !KeySetName
+  | GModule !ModuleGuard
+  | GUser !UserGuard
   deriving (Eq,Show)
 
 instance Pretty Guard where
@@ -390,6 +396,8 @@ instance Pretty Name where
   pretty = \case
     QName modName nName _ -> pretty modName <> "." <> pretty nName
     Name nName _          -> pretty nName
+
+instance AsString Name where asString = renderCompactText
 
 instance ToJSON Name where
   toJSON = toJSON . renderCompactString
@@ -638,7 +646,7 @@ instance Show1 Term where
       . showsPrec 11 _tInfo
     TList{..} ->
         showString "TList "
-      . showList1 _tList
+      . showList1 (V.toList _tList)
       . showChar ' '
       . shows2 11 _tListType
       . showChar ' '
@@ -775,19 +783,55 @@ instance Pretty Example where
 instance IsString Example where
   fromString = ExecExample . fromString
 
+-- | Label type for objects.
 newtype FieldKey = FieldKey Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show)
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
+-- | Simple dictionary for object values.
+newtype ObjectMap v = ObjectMap (M.Map FieldKey v)
+  deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
+
+-- | O(n) conversion to list. Adapted from 'M.toAscList'
+objectMapToListWith :: (FieldKey -> v -> r) -> ObjectMap v -> [r]
+objectMapToListWith f (ObjectMap m) = M.foldrWithKey (\k x xs -> (f k x):xs) [] m
+
+instance Pretty v => Pretty (ObjectMap v) where
+  pretty om = annotate Val $ commaBraces $
+    objectMapToListWith (\k v -> pretty k <> ": " <> pretty v) om
+
+instance ToJSON v => ToJSON (ObjectMap v)
+  where toJSON om =
+          object $ objectMapToListWith (\k v -> (asString k,toJSON v)) om
+
+instance FromJSON v => FromJSON (ObjectMap v)
+  where parseJSON = withObject "ObjectMap" $ \o ->
+          ObjectMap . M.fromList <$>
+            traverse (\(k,v) -> (FieldKey k,) <$> parseJSON v) (HM.toList o)
+
+-- | Full Term object.
 data Object n = Object
-  { _oObject :: ![(FieldKey,Term n)]
+  { _oObject :: !(ObjectMap (Term n))
   , _oObjectType :: !(Type (Term n))
+  , _oKeyOrder :: Maybe [FieldKey]
   , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show)
 instance Pretty n => Pretty (Object n) where
-  pretty (Object bs _ _) = annotate Val $ commaBraces $
-      fmap (\(a, b) -> pretty a <> ": " <> pretty b) bs
+  pretty (Object bs _ Nothing _) = pretty bs
+  pretty (Object (ObjectMap om) _ (Just ko) _) =
+    annotate Val $ commaBraces $
+    map (\(k,v) -> pretty k <> ": " <> pretty v) $
+    sortBy (compare `on` (keyOrder . fst)) $
+    M.toList om
+    where keyOrder f = elemIndex f ko
+
+-- JSON instances are just for Guard above
+instance (Pretty n, ToJSON n) => ToJSON (Object n) where
+  toJSON = toJSON . _oObject
+
+instance FromJSON n => FromJSON (Object n) where
+  parseJSON v = Object <$> parseJSON v <*> pure TyAny <*> pure def <*> pure def
 
 -- | Pact evaluable term.
 data Term n =
@@ -797,7 +841,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TList {
-      _tList :: ![Term n]
+      _tList :: !(Vector (Term n))
     , _tListType :: Type (Term n)
     , _tInfo :: !Info
     } |
@@ -881,7 +925,7 @@ data Term n =
 instance Pretty n => Pretty (Term n) where
   pretty = \case
     TModule{..} -> pretty _tModuleDef
-    TList{..} -> bracketsSep $ pretty <$> _tList
+    TList{..} -> bracketsSep $ pretty <$> V.toList _tList
     TDef{..} -> pretty _tDef
     TNative{..} -> annotate Header ("native `" <> pretty _tNativeName <> "`")
       <> nest 2 (
@@ -955,8 +999,8 @@ instance Eq1 Term where
   liftEq eq (TBinding a b c d) (TBinding m n o p) =
     liftEq (\(w,x) (y,z) -> liftEq (liftEq eq) w y && liftEq eq x z) a m &&
     liftEq eq b n && liftEq (liftEq (liftEq eq)) c o && d == p
-  liftEq eq (TObject (Object a b c) d) (TObject (Object m n o) p) =
-    liftEq (\(w,x) (y,z) -> w == y && liftEq eq x z) a m && liftEq (liftEq eq) b n && c == o && d == p
+  liftEq eq (TObject (Object a b _ c) d) (TObject (Object m n _ o) p) =
+    liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o && d == p
   liftEq _ (TLiteral a b) (TLiteral m n) =
     a == m && b == n
   liftEq _ (TGuard a b) (TGuard m n) =
@@ -981,14 +1025,14 @@ instance Applicative Term where
 instance Monad Term where
     return a = TVar a def
     TModule m b i >>= f = TModule (fmap (>>= f) m) (b >>>= f) i
-    TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
+    TList bs t i >>= f = TList (V.map (>>= f) bs) (fmap (>>= f) t) i
     TDef (Def n m dt ft b d i) i' >>= f = TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d i) i'
     TNative n fn t exs d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) exs d tl i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp a i >>= f = TApp (fmap (>>= f) a) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
-    TObject (Object bs t oi) i >>= f = TObject (Object (map (id *** (>>= f)) bs) (fmap (>>= f) t) oi) i
+    TObject (Object bs t kf oi) i >>= f = TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i
     TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
@@ -1011,8 +1055,7 @@ instance Pretty n => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
     toJSON (TGuard k _) = toJSON k
-    toJSON (TObject (Object kvs _ _) _) =
-        object $ map (asString *** toJSON) kvs
+    toJSON (TObject (Object kvs _ _ _) _) = toJSON kvs
     toJSON (TList ts _ _) = toJSON ts
     toJSON t = toJSON (renderCompactText t)
     {-# INLINE toJSON #-}
@@ -1036,13 +1079,19 @@ instance ToTerm Int64 where toTerm = tLit . LInteger . fromIntegral
 
 
 toTObject :: Type (Term n) -> Info -> [(FieldKey,Term n)] -> Term n
-toTObject ty i ps = TObject (Object ps ty i) i
+toTObject ty i = toTObjectMap ty i . ObjectMap . M.fromList
+
+toTObjectMap :: Type (Term n) -> Info -> ObjectMap (Term n) -> Term n
+toTObjectMap ty i m = TObject (Object m ty def i) i
 
 toTList :: Type (Term n) -> Info -> [Term n] -> Term n
-toTList ty i vs = TList vs ty i
+toTList ty i = toTListV ty i . V.fromList
+
+toTListV :: Type (Term n) -> Info -> V.Vector (Term n) -> Term n
+toTListV ty i vs = TList vs ty i
 
 toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
-toTermList ty l = TList (map toTerm (toList l)) ty def
+toTermList ty l = TList (V.map toTerm (V.fromList (toList l))) ty def
 
 guardTypeOf :: Guard -> GuardType
 guardTypeOf g = case g of
@@ -1098,11 +1147,14 @@ tStr = toTerm
 
 -- | Support pact `=` for value-level terms
 termEq :: Eq n => Term n -> Term n -> Bool
-termEq (TList a _ _) (TList b _ _) = length a == length b && and (zipWith termEq a b)
-termEq (TObject (Object a _ _) _) (TObject (Object b _ _) _) = length a == length b && all (lkpEq b) a
-    where lkpEq [] _ = False
-          lkpEq ((k',v'):ts) p@(k,v) | k == k' && termEq v v' = True
-                                     | otherwise = lkpEq ts p
+termEq (TList a _ _) (TList b _ _) = length a == length b && and (V.zipWith termEq a b)
+termEq (TObject (Object (ObjectMap a) _ _ _) _) (TObject (Object (ObjectMap b) _ _ _) _) =
+  -- O(3n), 2x M.toList + short circuiting walk
+  M.size a == M.size b && go (M.toList a) (M.toList b) True
+    where go _ _ False = False
+          go ((k1,v1):r1) ((k2,v2):r2) _ = go r1 r2 $ k1 == k2 && v1 `termEq` v2
+          go [] [] _ = True
+          go _ _ _ = False
 termEq (TLiteral a _) (TLiteral b _) = a == b
 termEq (TGuard a _) (TGuard b _) = a == b
 termEq (TValue a _) (TValue b _) = a == b
@@ -1132,9 +1184,11 @@ deriveEq1 ''Def
 deriveEq1 ''ModuleDef
 deriveEq1 ''Module
 deriveEq1 ''Governance
+deriveEq1 ''ObjectMap
 deriveEq1 ''Object
 
 deriveShow1 ''App
+deriveShow1 ''ObjectMap
 deriveShow1 ''Object
 deriveShow1 ''BindType
 deriveShow1 ''ConstVal

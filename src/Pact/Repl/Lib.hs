@@ -29,17 +29,17 @@ import Control.Monad.Catch
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
-import Data.List ((\\))
 import qualified Data.HashMap.Strict as HM
-import Data.Maybe
 import qualified Data.Map as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import qualified Data.Text as Text
 import Data.Text.Encoding
+import qualified Data.Vector as V
 
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
+import Data.Maybe
 #else
 
 import Criterion
@@ -69,6 +69,7 @@ import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
+import Pact.Types.PactOutput
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -272,8 +273,8 @@ setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
-          _ -> argsError i ts
-  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) ks))
+          _ -> argsError i (V.toList ts)
+  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) (V.toList ks)))
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
@@ -289,16 +290,16 @@ continuePact :: RNativeFun LibState
 continuePact i as = case as of
   [TLitInteger pid,TLitInteger step] -> go pid step False Nothing
   [TLitInteger pid,TLitInteger step,TLitBool rollback] -> go pid step rollback Nothing
-  [TLitInteger pid,TLitInteger step,TLitBool rollback,o@TObject {}] -> go pid step rollback (Just o)
+  [TLitInteger pid,TLitInteger step,TLitBool rollback,TObject (Object o _ _ _) _] -> go pid step rollback (Just o)
   _ -> argsError i as
   where
-    go :: Integer -> Integer -> Bool -> Maybe (Term Name) -> Eval LibState (Term Name)
+    go :: Integer -> Integer -> Bool -> Maybe (ObjectMap (Term Name)) -> Eval LibState (Term Name)
     go pid step rollback userResume = do
       resume <- case userResume of
         Just r -> return $ Just r
         Nothing -> use evalPactExec >>= \pe -> case pe of
           Nothing -> return Nothing
-          Just PactExec{..} -> return $ _peYield
+          Just PactExec{..} -> return $ fmap (fmap fromPactOutput) _peYield
       let pactId = (PactId $ fromIntegral pid)
           pactStep = PactStep (fromIntegral step) rollback pactId resume
       viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of
@@ -330,7 +331,7 @@ pactState i as = case as of
       case e of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
-          [("yield",fromMaybe (toTerm False) _peYield)
+          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactOutput) _peYield)
           ,("executed",toTerm _peExecuted)
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]
@@ -533,17 +534,10 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
   where
     envChainData :: RNativeFun LibState
     envChainData i as = case as of
-      [TObject (Object ks _ _) _] -> do
+      [TObject (Object (ObjectMap ks) _ _ _) _] -> do
         pd <- view eePublicData
 
-        let ts = fmap fst ks
-            ts' = S.fromList ts
-            info = _faInfo i
-
-        unless (length ts == length ts') $ evalError info $
-          "envChainData: cannot update duplicate keys: " <> prettyList (ts \\ (S.toList ts'))
-
-        ud <- foldM (go info) pd ks
+        ud <- foldM (go (_faInfo i)) pd (M.toList ks)
         setenv eePublicData ud
         return $ tStr "Updated public metadata"
       _ -> argsError i as
