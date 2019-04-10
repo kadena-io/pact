@@ -3348,6 +3348,34 @@ spec = describe "analyze" $ do
                 (write accounts acct { 'balance: (+ bal amount) }))))))
       |]
 
+    -- different yields
+    expectVerified [text|
+      (defschema schema-pact-id pact-id:integer)
+
+      (defpact payment (yield-choice:bool acct:string)
+        @model
+          [ (property (or
+              (= 1 (at 'balance (read accounts acct 'after)))
+              (= 0 (at 'balance (read accounts acct 'after)))))
+            ; (property (not (= 0 (at 'balance (read accounts acct 'after)))))
+            ; (property (not (= 1 (at 'balance (read accounts acct 'after)))))
+          ]
+        (step
+          (write accounts acct
+            (if yield-choice
+              { 'balance: 1 }
+              { 'balance: 0 }))
+          (if yield-choice
+            (let ((pid:object{schema-pact-id} { 'pact-id: 0 }))
+              (yield pid))
+            (let ((pid:object{schema-pact-id} { 'pact-id: 1 }))
+              (yield pid))))
+        (step
+          (resume { 'pact-id:= yielded-id }
+            (write accounts acct { 'balance: yielded-id })))
+        )
+      |]
+
   describe "with-default-read" $ do
     expectVerified [text|
       (defun test:integer (acct:string)
