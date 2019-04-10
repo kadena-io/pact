@@ -472,23 +472,18 @@ evalTerm = \case
     readSucceeds <- use $ rowExists id tn sRk
     tagAccessKey mtReads tid sRk readSucceeds
 
+    let readObject = do
+          (sObj, aValFields) <- readFields tn sRk tid objTy
+          applyInvariants tn aValFields $ mapM_ addConstraint
+          pure sObj
+
     case mDefault of
       Nothing -> do
         succeeds %= (.&& readSucceeds)
+        readObject
 
-        (sObj, aValFields) <- readFields tn sRk tid objTy
-
-        applyInvariants tn aValFields $ mapM_ addConstraint
-
-        pure sObj
-
-      Just defObj -> withSymVal objTy $ iteS readSucceeds
-        (do (sObj, aValFields) <- readFields tn sRk tid objTy
-
-            applyInvariants tn aValFields $ mapM_ addConstraint
-
-            pure sObj)
-        (eval defObj)
+      Just defObj -> withSymVal objTy $
+        iteS readSucceeds readObject (eval defObj)
 
   Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     obj <- withSing objTy $ evalTerm objT
