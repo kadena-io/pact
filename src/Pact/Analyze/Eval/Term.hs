@@ -194,6 +194,20 @@ tagReturn tid av = do
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ tagAv .== av
 
+tagYield :: TagId -> AVal -> Analyze ()
+tagYield tid av = do
+  mTag <- preview $ aeModelTags.mtYields.at tid._Just.located._2
+  case mTag of
+    Nothing    -> pure ()
+    Just tagAv -> addConstraint $ sansProv $ tagAv .== av
+
+tagResume :: TagId -> AVal -> Analyze ()
+tagResume tid av = do
+  mTag <- preview $ aeModelTags.mtResumes.at tid._Just.located._2
+  case mTag of
+    Nothing    -> pure ()
+    Just tagAv -> addConstraint $ sansProv $ tagAv .== av
+
 tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do
   mTag <- preview $ aeModelTags.mtVars.at vid._Just.located._2._2
@@ -715,19 +729,21 @@ evalTerm = \case
 
     pure "INTERNAL: pact done"
 
-  Yield tm -> do
+  Yield tid tm -> do
     sVal@(S prov val) <- eval tm
+    tagYield tid $ mkAVal sVal
     let ty = sing :: SingTy a
     withSymVal ty $
       latticeState . lasYieldedInCurrent ?= SomeVal ty (S prov (SBV.sJust val))
     pure sVal
 
-  Resume -> use (latticeState . lasYieldedInPrevious) >>= \case
+  Resume tid -> use (latticeState . lasYieldedInPrevious) >>= \case
     Nothing -> throwErrorNoLoc "No previously yielded value for resume"
     Just (SomeVal ty (S prov mVal)) -> case singEq ty (sing :: SingTy a) of
       Nothing   -> throwErrorNoLoc "Resume of unexpected type"
       Just Refl -> withSymVal ty $ do
         markFailure $ SBV.isNothing mVal
+        tagResume tid $ mkAVal' $ SBV.fromJust mVal
         pure $ S prov $ SBV.fromJust mVal
 
 -- | Private pacts must be evaluated by the right entity. Fail if the current

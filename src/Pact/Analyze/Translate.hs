@@ -348,6 +348,18 @@ tagRead = tagDbAccess TraceRead
 tagWrite :: WriteType -> Node -> ESchema -> TranslateM TagId
 tagWrite = tagDbAccess . TraceWrite
 
+tagYield :: EType -> Node -> TranslateM TagId
+tagYield ety node = do
+  tid <- genTagId
+  emit $ TraceYield ety $ Located (nodeInfo node) tid
+  pure tid
+
+tagResume :: EType -> Node -> TranslateM TagId
+tagResume ety node = do
+  tid <- genTagId
+  emit $ TraceResume ety $ Located (nodeInfo node) tid
+  pure tid
+
 tagAssert :: Node -> TranslateM TagId
 tagAssert node = do
   tid <- genTagId
@@ -1411,15 +1423,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_NFun _node "yield" [ obj ] -> do
+  AST_NFun node "yield" [ obj ] -> do
     Some objTy obj' <- translateNode obj
-    pure $ Some objTy $ Yield obj'
+    ety <- translateType node
+    tid <- tagYield ety node
+    pure $ Some objTy $ Yield tid obj'
 
   -- Translate into a resume-and-bind
   AST_Resume node bindings schemaNode body -> do
-    EType objTy@SObject{} <- translateType schemaNode
+    ety@(EType objTy@SObject{}) <- translateType schemaNode
+    tid <- tagResume ety node
     withNodeContext node $ translateObjBinding bindings objTy body $
-      Some objTy Resume
+      Some objTy $ Resume tid
 
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 

@@ -1348,9 +1348,9 @@ data Term (a :: Ty) where
   Hash            :: ETerm                               -> Term 'TyStr
 
   -- Pacts
-  Pact   :: [PactStep] -> Term 'TyStr
-  Yield  ::     Term a -> Term a
-  Resume ::               Term a
+  Pact   :: [PactStep]      -> Term 'TyStr
+  Yield  :: TagId -> Term a -> Term a
+  Resume :: TagId ->           Term a
 
 data PactStep where
   Step
@@ -1491,8 +1491,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
   PactId           -> showString "PactId"
   Pact steps       -> showString "Pact " . showList steps
-  Yield a          -> showString "Yield " . singShowsTm ty 11 a
-  Resume           -> showString "Resume"
+  Yield tid a      ->
+    showString "Yield " . showsPrec 11 tid . showChar ' ' . singShowsTm ty 11 a
+  Resume tid       -> showString "Resume " . showsPrec 11 tid
 
 instance Show PactStep where
   showsPrec _ (Step (exec :< execTy) path mEntity mCancelVid mRollback) =
@@ -1576,8 +1577,8 @@ prettyTerm ty = \case
   MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard ty' o n   -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
   Pact steps            -> vsep (pretty <$> steps)
-  Yield tm              -> parensSep [ "yield", singPrettyTm ty tm ]
-  Resume                -> "resume"
+  Yield _tid tm         -> parensSep [ "yield", singPrettyTm ty tm ]
+  Resume _tid           -> "resume"
 
 instance Pretty PactStep where
   pretty (Step (exec :< execTy) _ mEntity _ mRollback) = parensSep $
