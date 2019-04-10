@@ -196,14 +196,14 @@ tagReturn tid av = do
 
 tagYield :: TagId -> AVal -> Analyze ()
 tagYield tid av = do
-  mTag <- preview $ aeModelTags.mtYields.at tid._Just.located._2
+  mTag <- preview $ aeModelTags.mtYields.at tid._Just._2
   case mTag of
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ tagAv .== av
 
 tagResume :: TagId -> AVal -> Analyze ()
 tagResume tid av = do
-  mTag <- preview $ aeModelTags.mtResumes.at tid._Just.located._2
+  mTag <- preview $ aeModelTags.mtResumes.at tid._Just._2
   case mTag of
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ tagAv .== av

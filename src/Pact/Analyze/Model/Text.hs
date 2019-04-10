@@ -84,11 +84,11 @@ showRead (Located _ (Access srk obj suc)) = case SBV.unliteral suc of
   Just False
     -> "read for key " <> showS srk <> " fails because the row was not present"
 
-showYield :: Located TVal -> Text
-showYield (Located _ tval) = "yield " <> showTVal tval
+showYield :: TVal -> Text
+showYield tval = "yield " <> showTVal tval
 
-showResume :: Located TVal -> Text
-showResume (Located _ tval) = "resume (" <> showTVal tval <> ")"
+showResume :: TVal -> Text
+showResume tval = "resume (" <> showTVal tval <> ")"
 
 --
 -- TODO: this should display the table name
@@ -185,9 +185,9 @@ showEvent ksProvs tags event = do
         pure [display mtReads tid showRead]
       TraceWrite writeType _ (_located -> tid) ->
         pure [display mtWrites tid (showWrite writeType)]
-      TraceYield _ (_located -> tid) ->
+      TraceYield _ tid ->
         pure [display mtYields tid showYield]
-      TraceResume _ (_located -> tid) ->
+      TraceResume _ tid ->
         pure [display mtResumes tid showResume]
       TraceAssert recov (_located -> tid) ->
         pure [display mtAsserts tid (showAssert recov)]

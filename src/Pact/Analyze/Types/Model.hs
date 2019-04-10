@@ -90,8 +90,8 @@ data TraceEvent
   | TracePushScope Natural ScopeType [Located Binding]
   | TracePopScope Natural ScopeType TagId EType
   | TraceRequireGrant Recoverability CapName [Located Binding] (Located TagId)
-  | TraceYield EType (Located TagId)
-  | TraceResume EType (Located TagId)
+  | TraceYield EType TagId
+  | TraceResume EType TagId
   deriving (Eq, Show)
 
 -- | An @ExecutionGraph@ is produced by translation, and contains all
@@ -144,9 +144,9 @@ data ModelTags (c :: Concreteness)
     -- ^ one per each read
     , _mtWrites            :: Map TagId (Located Access)
     -- ^ one per each write
-    , _mtYields            :: Map TagId (Located TVal)
+    , _mtYields            :: Map TagId TVal
     -- ^ one per each yield
-    , _mtResumes           :: Map TagId (Located TVal)
+    , _mtResumes           :: Map TagId TVal
     -- ^ one per each resume
     , _mtAsserts           :: Map TagId (Located (SBV Bool))
     -- ^ one per non-keyset enforcement

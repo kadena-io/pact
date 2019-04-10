@@ -348,16 +348,16 @@ tagRead = tagDbAccess TraceRead
 tagWrite :: WriteType -> Node -> ESchema -> TranslateM TagId
 tagWrite = tagDbAccess . TraceWrite
 
-tagYield :: EType -> Node -> TranslateM TagId
-tagYield ety node = do
+tagYield :: EType -> TranslateM TagId
+tagYield ety = do
   tid <- genTagId
-  emit $ TraceYield ety $ Located (nodeInfo node) tid
+  emit $ TraceYield ety tid
   pure tid
 
-tagResume :: EType -> Node -> TranslateM TagId
-tagResume ety node = do
+tagResume :: EType -> TranslateM TagId
+tagResume ety = do
   tid <- genTagId
-  emit $ TraceResume ety $ Located (nodeInfo node) tid
+  emit $ TraceResume ety tid
   pure tid
 
 tagAssert :: Node -> TranslateM TagId
@@ -1426,13 +1426,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun node "yield" [ obj ] -> do
     Some objTy obj' <- translateNode obj
     ety <- translateType node
-    tid <- tagYield ety node
+    tid <- tagYield ety
     pure $ Some objTy $ Yield tid obj'
 
   -- Translate into a resume-and-bind
   AST_Resume node bindings schemaNode body -> do
     ety@(EType objTy@SObject{}) <- translateType schemaNode
-    tid <- tagResume ety node
+    tid <- tagResume ety
     withNodeContext node $ translateObjBinding bindings objTy body $
       Some objTy $ Resume tid
 

@@ -139,18 +139,17 @@ allocModelTags argsMap locatedTm graph = ModelTags
 
     allocYieldResume
       :: String
-      -> Traversal' TraceEvent (EType, Located TagId)
-      -> Alloc (Map TagId (Located TVal))
+      -> Traversal' TraceEvent (EType, TagId)
+      -> Alloc (Map TagId TVal)
     allocYieldResume description p = fmap Map.fromList $
-      for (toListOf (traverse.p) events) $
-        \(ety, Located info tid) -> do
-          tv <- allocTVal description ety
-          pure (tid, Located info tv)
+      for (toListOf (traverse.p) events) $ \(ety, tid) -> do
+        tv <- allocTVal description ety
+        pure (tid, tv)
 
-    allocYields :: Alloc (Map TagId (Located TVal))
+    allocYields :: Alloc (Map TagId TVal)
     allocYields = allocYieldResume "yield" _TraceYield
 
-    allocResumes :: Alloc (Map TagId (Located TVal))
+    allocResumes :: Alloc (Map TagId TVal)
     allocResumes = allocYieldResume "resume" _TraceResume
 
     allocAsserts :: Alloc (Map TagId (Located (SBV Bool)))
@@ -200,8 +199,8 @@ saturateModel =
     traverseOf (modelTags.mtVars.traversed.located._2)           fetchTVal   >=>
     traverseOf (modelTags.mtReads.traversed.located)             fetchAccess >=>
     traverseOf (modelTags.mtWrites.traversed.located)            fetchAccess >=>
-    traverseOf (modelTags.mtYields.traversed.located)            fetchTVal   >=>
-    traverseOf (modelTags.mtResumes.traversed.located)           fetchTVal   >=>
+    traverseOf (modelTags.mtYields.traversed)                    fetchTVal   >=>
+    traverseOf (modelTags.mtResumes.traversed)                   fetchTVal   >=>
     traverseOf (modelTags.mtAsserts.traversed.located)           fetchSbv    >=>
     traverseOf (modelTags.mtGuardEnforcements.traversed.located) fetchGE     >=>
     traverseOf (modelTags.mtGrantRequests.traversed.located)     fetchGR     >=>
