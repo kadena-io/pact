@@ -133,11 +133,14 @@ mkCommand' creds env = makeCommand <$> (traverse makeSigs creds)
         makeSigs kp = mkUserSig hsh kp
 
 mkUserSig :: Hash -> SomeKeyPair -> IO UserSig
-mkUserSig hsh kp =
-  let pub = toB16Text $ getPublic kp
-      formattedPub = toB16Text $ formatPublicKey kp
-      sig = toB16Text <$> sign kp hsh
-  in UserSig (kpToPPKScheme kp) pub formattedPub <$> sig
+mkUserSig hsh kp = do
+  let (PubBS pub) = getPublic kp
+      (AddrBS addr) = formatPublicKey kp
+  (SigBS sig) <- sign kp hsh
+  return $ UserSig (kpToPPKScheme kp)
+                   (toB16Text pub)
+                   (toB16Text addr)
+                   (toB16Text sig)
 
 
 
@@ -163,13 +166,13 @@ verifyUserSig :: Hash -> UserSig -> Bool
 verifyUserSig msg UserSig{..} =
   case (pubT, sigT, addrT) of
     (Right p, Right sig, Right addr) ->
-      (isValidAddr addr p) && verify (toScheme _usScheme) msg (PubBS p) (SigBS sig)
+      (isValidAddr addr p) && verify (toScheme _usScheme) msg p sig
     _ -> False
-  where pubT = parseB16TextOnly _usPubKey
-        sigT = parseB16TextOnly _usSig
-        addrT = parseB16TextOnly _usAddress
+  where pubT = fromText' _usPubKey
+        sigT = fromText' _usSig
+        addrT = fromText' _usAddress
         isValidAddr givenAddr pubBS =
-          case formatPublicKeyBS (toScheme _usScheme) (PubBS pubBS) of
+          case formatPublicKeyBS (toScheme _usScheme) pubBS of
             Right expectAddr -> givenAddr == expectAddr
             Left _           -> False
 

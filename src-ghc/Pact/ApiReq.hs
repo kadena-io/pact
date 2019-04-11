@@ -54,7 +54,7 @@ import Pact.Types.API
 data ApiKeyPair = ApiKeyPair {
   _akpSecret  :: PrivateKeyBS,
   _akpPublic  :: Maybe PublicKeyBS,
-  _akpAddress :: Maybe Text,
+  _akpAddress :: Maybe AddressBS,
   _akpScheme  :: Maybe PPKScheme
   } deriving (Eq, Show, Generic)
 instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
@@ -176,7 +176,7 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
         mkPair akp = case _akpAddress akp of
           Nothing    -> either dieAR return (isValidKeyPair akp)
           Just addrT -> do
-            addrBS <- either dieAR return (parseB16TextOnly addrT)
+            addrBS <- either dieAR return (fromText' addrT)
             kp     <- either dieAR return (isValidKeyPair akp)
 
             -- Enforces that user provided address matches the address derived from the Public Key

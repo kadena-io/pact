@@ -30,6 +30,7 @@ module Pact.Types.Crypto
   , PublicKeyBS(..)
   , PrivateKeyBS(..)
   , SignatureBS(..)
+  , AddressBS(..)
   , sign
   , verify
   , formatPublicKey
@@ -272,9 +273,13 @@ newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
 instance ToJSON PublicKeyBS where
   toJSON (PubBS p) = toB16JSON p
 instance FromJSON PublicKeyBS where
-  parseJSON = withText "PublicKeyBS" $ \s -> do
+  parseJSON = withText "PublicKeyBS" parseText
+  {-# INLINE parseJSON #-}
+instance ParseText PublicKeyBS where
+  parseText s = do
     s' <- parseB16Text s
     return $ PubBS s'
+  {-# INLINE parseText #-}
 
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
@@ -282,21 +287,42 @@ newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
 instance ToJSON PrivateKeyBS where
   toJSON (PrivBS p) = toB16JSON p
 instance FromJSON PrivateKeyBS where
-  parseJSON = withText "PrivateKeyBS" $ \s -> do
+  parseJSON = withText "PrivateKeyBS" parseText
+  {-# INLINE parseJSON #-}
+instance ParseText PrivateKeyBS where
+  parseText s = do
     s' <- parseB16Text s
     return $ PrivBS s'
+  {-# INLINE parseText #-}
 
 
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic)
+instance ParseText SignatureBS where
+  parseText s = do
+    s' <- parseB16Text s
+    return $ SigBS s'
+  {-# INLINE parseText #-}
 
 
+newtype AddressBS = AddrBS ByteString
+  deriving (Eq, Show, Generic)
+instance ToJSON AddressBS where
+  toJSON (AddrBS p) = toB16JSON p
+instance FromJSON AddressBS where
+  parseJSON = withText "PrivateKeyBS" parseText
+  {-# INLINE parseJSON #-}
+instance ParseText AddressBS where
+  parseText s = do
+    s' <- parseB16Text s
+    return $ AddrBS s'
+  {-# INLINE parseText #-}
 
 
 --------- SCHEME HELPER FUNCTIONS ---------
 
-sign :: SomeKeyPair -> Hash -> IO ByteString
-sign (SomeKeyPair KeyPair{..}) msg = toBS <$> _sign _kpScheme msg _kpPublicKey _kpPrivateKey
+sign :: SomeKeyPair -> Hash -> IO SignatureBS
+sign (SomeKeyPair KeyPair{..}) msg = SigBS . toBS <$> _sign _kpScheme msg _kpPublicKey _kpPrivateKey
 
 
 verify :: SomeScheme -> Hash -> PublicKeyBS -> SignatureBS -> Bool
@@ -308,13 +334,13 @@ verify (SomeScheme scheme) msg (PubBS pBS) (SigBS sigBS) =
        _ -> False
 
 
-formatPublicKey :: SomeKeyPair -> ByteString
-formatPublicKey (SomeKeyPair KeyPair{..}) = _formatPublicKey _kpScheme _kpPublicKey
+formatPublicKey :: SomeKeyPair -> AddressBS
+formatPublicKey (SomeKeyPair KeyPair{..}) = AddrBS $ _formatPublicKey _kpScheme _kpPublicKey
 
-formatPublicKeyBS :: SomeScheme -> PublicKeyBS -> Either String ByteString
+formatPublicKeyBS :: SomeScheme -> PublicKeyBS -> Either String AddressBS
 formatPublicKeyBS (SomeScheme scheme) (PubBS pBS) = do
   pub <- fromBS pBS
-  return $ _formatPublicKey scheme pub
+  return $ AddrBS $ _formatPublicKey scheme pub
 
 
 
@@ -323,11 +349,11 @@ formatPublicKeyBS (SomeScheme scheme) (PubBS pBS) = do
 kpToPPKScheme :: SomeKeyPair -> PPKScheme
 kpToPPKScheme (SomeKeyPair kp) = toPPKScheme (_kpScheme kp)
 
-getPublic :: SomeKeyPair -> ByteString
-getPublic (SomeKeyPair kp) = toBS (_kpPublicKey kp)
+getPublic :: SomeKeyPair -> PublicKeyBS
+getPublic (SomeKeyPair kp) = PubBS $ toBS (_kpPublicKey kp)
 
-getPrivate :: SomeKeyPair -> ByteString
-getPrivate (SomeKeyPair kp) = toBS (_kpPrivateKey kp)
+getPrivate :: SomeKeyPair -> PrivateKeyBS
+getPrivate (SomeKeyPair kp) = PrivBS $ toBS (_kpPrivateKey kp)
 
 
 

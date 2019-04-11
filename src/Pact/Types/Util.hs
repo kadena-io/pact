@@ -122,9 +122,6 @@ parseB16Text t = case B16.decode (encodeUtf8 t) of
                                | otherwise -> fail $ "Base16 decode failed: " ++ show t
 {-# INLINE parseB16Text #-}
 
-parseB16TextOnly :: Text -> Either String ByteString
-parseB16TextOnly t = resultToEither $ parse parseB16Text t
-
 toB16JSON :: ByteString -> Value
 toB16JSON s = String $ toB16Text s
 
