@@ -904,8 +904,9 @@ verifyCheck
   :: ModuleData     -- ^ the module we're verifying
   -> Text           -- ^ the name of the function
   -> Check          -- ^ the check we're running
+  -> CheckableType
   -> ExceptT VerificationFailure IO CheckResult
-verifyCheck moduleData funName check = do
+verifyCheck moduleData funName check checkType = do
   let info       = dummyInfo
       module'    = moduleData ^. mdModule
       moduleName = moduleDefName module'
@@ -919,5 +920,5 @@ verifyCheck moduleData funName check = do
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps moduleName tables caps funRef funName
-        [Located info check] CheckDefun
+        [Located info check] checkType
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName

@@ -149,13 +149,13 @@ runVerification code = do
               Just (Right _)      -> error "impossible: result of isLeft"
               Nothing             -> Nothing
 
-runCheck :: Text -> Check -> IO (Maybe TestFailure)
-runCheck code check = do
+runCheck :: CheckableType -> Text -> Check -> IO (Maybe TestFailure)
+runCheck checkType code check = do
   eModuleData <- compile code
   case eModuleData of
     Left tf -> pure $ Just tf
     Right moduleData -> do
-      result <- runExceptT $ verifyCheck moduleData "test" check
+      result <- runExceptT $ verifyCheck moduleData "test" check checkType
       pure $ case result of
         Left failure    -> Just $ VerificationFailure failure
         Right (Left cf) -> Just $ TestCheckFailure cf
@@ -186,12 +186,12 @@ expectFalsified' model code = do
 
 expectPass :: Text -> Check -> Spec
 expectPass code check = do
-  res <- runIO $ runCheck (wrap code "") check
+  res <- runIO $ runCheck CheckDefun (wrap code "") check
   it (show check) $ handlePositiveTestResult res
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
-  res <- runIO $ runCheck (wrap code "") check
+  res <- runIO $ runCheck CheckDefun (wrap code "") check
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
@@ -2649,6 +2649,10 @@ spec = describe "analyze" $ do
         path   = isRight . matching _TraceSubpathStart
         push   = isRight . matching _TracePushScope
         pop    = isRight . matching _TracePopScope
+        reset  = isRight . matching _TraceReset
+        cancel = isRight . matching _TraceCancel
+        yield  = isRight . matching _TraceYield
+        -- resume = isRight . matching _TraceResume
 
         match :: [a -> Bool] -> [a] -> Bool
         tests `match` items
@@ -2657,9 +2661,9 @@ spec = describe "analyze" $ do
           | otherwise
           = False
 
-        expectTrace :: Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
-        expectTrace code prop tests = do
-          res <- runIO $ runCheck (wrap code "") $ Valid prop
+        expectTrace :: CheckableType -> Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
+        expectTrace checkType code prop tests = do
+          res <- runIO $ runCheck checkType (wrap code "") $ Valid prop
           it "produces the correct trace" $
             case res of
               Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
@@ -2684,7 +2688,7 @@ spec = describe "analyze" $ do
                   (update accounts to   { "balance": (+ to-bal amount) })))
             |]
 
-      expectTrace code
+      expectTrace CheckDefun code
         (sNot Success')
         [push, read, read, push, assert, assert, write, write, pop, pop]
 
@@ -2696,7 +2700,7 @@ spec = describe "analyze" $ do
                   (insert accounts "stu" {"balance": 5}) ; impossible
                   "didn't write"))
             |]
-      expectTrace code (Lit' False) [push, {- else -} path, pop]
+      expectTrace CheckDefun code (Lit' False) [push, {- else -} path, pop]
 
     describe "doesn't include events after a failed enforce" $ do
       let code =
@@ -2706,7 +2710,7 @@ spec = describe "analyze" $ do
                 (enforce false)
                 (at 'balance (read accounts "test")))
             |]
-      expectTrace code Success' [push, write, assert]
+      expectTrace CheckDefun code Success' [push, write, assert]
 
     describe "doesn't include cases after a successful enforce-one case" $ do
       let code =
@@ -2718,11 +2722,34 @@ spec = describe "analyze" $ do
                    (enforce false)
                   ]))
             |]
-      expectTrace code (sNot Success')
+      expectTrace CheckDefun code (sNot Success')
         [push, assert, {- failure -} path, {- success -} path, pop]
 
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
+
+    -- The falsifying model we should get executes the first step successfully,
+    -- then cancels.
+    describe "trace of a pact execution" $ do
+      let code = [text|
+        (defpact test (acct:string)
+          (step
+            (let ((yield-me:object{account} { 'balance: 1 }))
+              (write accounts acct { 'balance: 1 })
+              (yield yield-me)))
+          (step
+            (resume { 'balance:= yielded-balance }
+              (write accounts acct { 'balance: yielded-balance })))
+          )
+        |]
+
+      let acct = PVar 1 "acct"
+          objTy = mkSObject $ SCons' (SSymbol @"balance") SInteger SNil'
+          readBalance ba = PObjAt objTy "balance"
+            (PropSpecific $ PropRead objTy ba "accounts" acct)
+      expectTrace CheckDefpact code
+        (Inj (IntegerComparison Eq (readBalance After) 1))
+        [push, push, push, write, yield, pop, pop, reset, path, cancel, pop]
 
   describe "references to module constants" $ do
     expectVerified [text|
@@ -3346,34 +3373,6 @@ spec = describe "analyze" $ do
               "noop"
               (with-default-read accounts acct { 'balance: 0 } { 'balance := bal }
                 (write accounts acct { 'balance: (+ bal amount) }))))))
-      |]
-
-    -- different yields
-    expectVerified [text|
-      (defschema schema-pact-id pact-id:integer)
-
-      (defpact payment (yield-choice:bool acct:string)
-        @model
-          [ (property (or
-              (= 1 (at 'balance (read accounts acct 'after)))
-              (= 0 (at 'balance (read accounts acct 'after)))))
-            ; (property (not (= 0 (at 'balance (read accounts acct 'after)))))
-            ; (property (not (= 1 (at 'balance (read accounts acct 'after)))))
-          ]
-        (step
-          (write accounts acct
-            (if yield-choice
-              { 'balance: 1 }
-              { 'balance: 0 }))
-          (if yield-choice
-            (let ((pid:object{schema-pact-id} { 'pact-id: 0 }))
-              (yield pid))
-            (let ((pid:object{schema-pact-id} { 'pact-id: 1 }))
-              (yield pid))))
-        (step
-          (resume { 'pact-id:= yielded-id }
-            (write accounts acct { 'balance: yielded-id })))
-        )
       |]
 
   describe "with-default-read" $ do
