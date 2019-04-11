@@ -93,6 +93,7 @@ allocModelTags argsMap locatedTm graph = ModelTags
     <*> allocResult
     <*> allocPaths
     <*> allocReturns
+    <*> allocCancels
 
   where
     -- For the purposes of symbolic value allocation, we just grab all of the
@@ -191,6 +192,11 @@ allocModelTags argsMap locatedTm graph = ModelTags
       for (toListOf (traverse._TracePopScope) events) $ \(_, _, tid, ety) ->
         (tid,) <$> allocTVal "trace_pop_scope" ety
 
+    allocCancels :: Alloc (Map TagId (SBV Bool))
+    allocCancels = fmap Map.fromList $
+      for (toListOf (traverse._TraceCancel) events) $ \tid ->
+        (tid,) <$> allocSbv @'TyBool "cancel"
+
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided
 -- symbolic 'Model'.
 saturateModel :: Model 'Symbolic -> SBV.Query (Model 'Concrete)
@@ -207,6 +213,7 @@ saturateModel =
     traverseOf (modelTags.mtResult._2.located)                   fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)                     fetchSbv    >=>
     traverseOf (modelTags.mtReturns.traversed)                   fetchTVal   >=>
+    traverseOf (modelTags.mtCancels.traversed)                   fetchSbv    >=>
     traverseOf (modelGuardProvs.traversed)                       fetchProv
 
   where

@@ -92,6 +92,8 @@ data TraceEvent
   | TraceRequireGrant Recoverability CapName [Located Binding] (Located TagId)
   | TraceYield EType TagId
   | TraceResume EType TagId
+  | TraceReset
+  | TraceCancel TagId
   deriving (Eq, Show)
 
 -- | An @ExecutionGraph@ is produced by translation, and contains all
@@ -163,6 +165,8 @@ data ModelTags (c :: Concreteness)
     -- @enforce-one@.
     , _mtReturns           :: Map TagId TVal
     -- ^ return values from function calls
+    , _mtCancels           :: Map TagId (SBV Bool)
+    -- ^ whether each cancel fires
     }
   deriving (Eq, Show)
 

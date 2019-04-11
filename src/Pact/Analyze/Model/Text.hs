@@ -197,6 +197,18 @@ showEvent ksProvs tags event = do
         pure [display mtGrantRequests tid (showGR recov)]
       TraceSubpathStart _ ->
         pure [] -- not shown to end-users
+
+      TraceReset -> pure
+        [ emptyLine
+        , "time passes between steps (arbitrary db updates can occur here)"
+        ]
+      TraceCancel tid -> pure $ case tags ^. mtCancels.at tid of
+        Nothing  -> [ "[ERROR:missing tag]" ]
+        Just tag -> case SBV.unliteral tag of
+          Nothing       -> [ "[ERROR:symbolic]" ]
+          Just doCancel ->
+            if doCancel then [ "pact cancelled" ] else []
+
       TracePushScope _ scopeTy locatedBindings -> do
         let vids = view (located.bVid) <$> locatedBindings
         modify succ

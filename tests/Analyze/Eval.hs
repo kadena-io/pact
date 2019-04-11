@@ -107,7 +107,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
         Map.empty Map.empty Map.empty
         -- this 'Located TVal' is never forced so we don't provide it
         (error "analyzeEval: Located TVal unexpectedly forced")
-        Map.empty Map.empty
+        Map.empty Map.empty Map.empty
 
       modName = Pact.ModuleName "test" Nothing
       pactMd  = mkPactMetadata

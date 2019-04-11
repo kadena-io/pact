@@ -180,6 +180,13 @@ tagFork pathL pathR reachable lPasses = do
   tagSubpathStart pathL $ reachable .&& lPasses
   tagSubpathStart pathR $ reachable .&& sNot lPasses
 
+tagCancel :: TagId -> SBV Bool -> Analyze ()
+tagCancel tid cancelHappens = do
+  mTag <- view $ aeModelTags.mtCancels.at tid
+  case mTag of
+    Nothing  -> pure ()
+    Just tag -> addConstraint $ sansProv $ cancelHappens .== tag
+
 tagResult :: AVal -> Analyze ()
 tagResult av = do
   tid <- view $ aeModelTags.mtResult._1
@@ -685,6 +692,7 @@ evalTerm = \case
 
             tagFork successPath cancelPath (sansProv successChoice)
               (sansProv $ sNot cancel)
+            tagCancel (_pathTag cancelPath) cancel
 
             pure $ successChoice .&& cancel
 
