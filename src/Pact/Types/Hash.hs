@@ -22,7 +22,7 @@ import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
 
 hash :: ByteString -> Hash
-hash = Hash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_512
+hash = Hash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
 {-# INLINE hash #-}
 
 #else

@@ -22,8 +22,10 @@ import GHC.Generics
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
+import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Char
+import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
@@ -33,6 +35,7 @@ import Data.Hashable (Hashable)
 import Data.Serialize (Serialize)
 import qualified Data.Serialize as S
 import Pact.Types.Pretty
+
 
 
 class ParseText a where
@@ -68,21 +71,36 @@ lensyParseJSON n = genericParseJSON (lensyOptions n)
 newtype Hash = Hash { unHash :: ByteString }
   deriving (Eq, Ord, Generic, Hashable)
 instance Show Hash where
-  show (Hash h) = show $ B16.encode h
+  show (Hash h) = show $ b64URL_encode h
 instance Pretty Hash where
   pretty = pretty . asString
-instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
+instance AsString Hash where asString (Hash h) = decodeUtf8 (b64URL_encode h)
 instance NFData Hash
 
+-- | TODO make PR for https://github.com/haskell/base64-bytestring/issues/18
+b64URL_encode :: ByteString -> ByteString
+b64URL_encode = B.init . B64URL.encode
 
--- NB: this hash is also used for the bloom filter, which needs 32bit keys
--- if you want to change this, you need to retool the bloom filter as well
--- So long as this is divisible by 4 you're fine
+b64URL_decode :: ByteString -> Either String ByteString
+b64URL_decode = B64URL.decode . (`B.snoc` equalWord8)
+
+equalWord8 :: Word8
+equalWord8 = toEnum $ fromEnum '='
+
+parseB64URLText :: Text -> Parser ByteString
+parseB64URLText t = case b64URL_decode (encodeUtf8 t) of
+  Right s -> return s
+  Left e -> fail $ "Base64URL decode failed: " ++ e
+{-# INLINE parseB64URLText #-}
+
+toB64URLText :: ByteString -> Text
+toB64URLText s = decodeUtf8 $ b64URL_encode s
+
+
+-- | All pact hashes are Blake2b_256, thus length 32.
 hashLengthAsBS :: Int
-hashLengthAsBS = 64
+hashLengthAsBS = 32
 
-hashLengthAsBase16 :: Int
-hashLengthAsBase16 = hashLengthAsBS * 2
 
 instance Serialize Hash where
   put (Hash h) = S.put h
@@ -94,16 +112,16 @@ instance Serialize Hash where
                 ++ show (B.length raw)
                 ++ " from original bytestring " ++ show raw
 
-hashToB16Text :: Hash -> Text
-hashToB16Text (Hash h) = toB16Text h
+hashToText :: Hash -> Text
+hashToText (Hash h) = toB64URLText h
 
 instance ToJSON Hash where
-  toJSON = String . hashToB16Text
+  toJSON = String . hashToText
 instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
   {-# INLINE parseJSON #-}
 instance ParseText Hash where
-  parseText s = Hash <$> parseB16Text s
+  parseText s = Hash <$> parseB64URLText s
   {-# INLINE parseText #-}
 
 lensyConstructorToNiceJson :: Int -> String -> String

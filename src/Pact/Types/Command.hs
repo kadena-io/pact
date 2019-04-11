@@ -272,7 +272,7 @@ data CommandExecInterface m a = CommandExecInterface
 
 
 requestKeyToB16Text :: RequestKey -> Text
-requestKeyToB16Text (RequestKey h) = hashToB16Text h
+requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
