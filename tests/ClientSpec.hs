@@ -27,7 +27,10 @@ _testPort = "8080"
 _serverPath = "http://localhost:" ++ _testPort
 
 bracket :: IO a -> IO a
-bracket action = Exception.bracket (startServer _testConfigFilePath) stopServer (const action)
+bracket action = Exception.bracket
+  (flushDb >> startServer _testConfigFilePath)
+  (\a -> stopServer a >> flushDb)
+  (const action)
 
 simpleServerCmd :: IO (Command Text)
 simpleServerCmd = do
@@ -61,4 +64,4 @@ spec = describe "Servant API client tests" $ do
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
     let cmdData = (toJSON . CommandSuccess . Number) 3
-    res' `shouldBe` (Right (ApiResult cmdData (Just 0) Nothing))
+    (_arResult <$> res') `shouldBe` (Right cmdData)
