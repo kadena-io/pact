@@ -17,6 +17,7 @@ module Pact.Types.SQLite
   , bindParams
   , liftEither
   , prepStmt
+  , closeStmt
   , qry
   , qry_
   , qrys
@@ -92,6 +93,9 @@ prepStmt c q = do
       Left e -> dbError (show e)
       Right Nothing -> dbError "Statement prep failed"
       Right (Just s) -> return s
+
+closeStmt :: Statement -> IO (Either String ())
+closeStmt s = either (Left . show) Right <$> finalize s
 
 
 -- | Prepare/execute query with params
