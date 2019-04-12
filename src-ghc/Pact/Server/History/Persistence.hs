@@ -9,6 +9,7 @@ module Pact.Server.History.Persistence
   , queryForExisting
   , selectCompletedCommands
   , selectAllCommands
+  , closeDB
   ) where
 
 
@@ -89,6 +90,14 @@ createDB f = do
         <*> prepStmt conn' sqlQueryForExisting
         <*> prepStmt conn' sqlSelectCompletedCommands
         <*> prepStmt conn' sqlSelectAllCommands
+
+closeDB :: DbEnv -> IO ()
+closeDB DbEnv{..} = do
+  liftEither $ closeStmt _insertStatement
+  liftEither $ closeStmt _qryExistingStmt
+  liftEither $ closeStmt _qryCompletedStmt
+  liftEither $ closeStmt _qrySelectAllCmds
+  liftEither $ close _conn
 
 sqlInsertHistoryRow :: Utf8
 sqlInsertHistoryRow =
