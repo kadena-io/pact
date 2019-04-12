@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes       #-}
@@ -34,7 +35,7 @@ simpleServerCmd = do
   mkExec  "(+ 1 2)" Null def [simpleKeys] (Just "test1")
 
 spec :: Spec
-spec = around_ bracket $ describe "Servant API client tests" $ do
+spec = describe "Servant API client tests" $ do
   mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
   url <- runIO $ parseBaseUrl _serverPath
   let clientEnv = mkClientEnv mgr url
@@ -45,14 +46,19 @@ spec = around_ bracket $ describe "Servant API client tests" $ do
   --   res `shouldBe` expt
   it "correctly runs a simple command locally" $ do
     cmd <- simpleServerCmd
-    res <- runClientM (local pactServerApiClient cmd) clientEnv
+    res <- bracket $! do
+      r <- runClientM (local pactServerApiClient cmd) clientEnv
+      return r
     let cmdData = (CommandSuccess . Number) 3
     res `shouldBe` (Right cmdData)
   it "correctly runs a simple command publicly and listens to the result" $ do
     cmd <- simpleServerCmd
-    res <- runClientM (send pactServerApiClient (SubmitBatch [cmd])) clientEnv
     let rk = cmdToRequestKey cmd
+    (res,res') <- bracket $! do
+      !res <- runClientM (send pactServerApiClient (SubmitBatch [cmd])) clientEnv
+      !res' <- runClientM (listen pactServerApiClient (ListenerRequest rk)) clientEnv
+      -- print (res,res')
+      return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
-    res' <- runClientM (listen pactServerApiClient (ListenerRequest rk)) clientEnv
     let cmdData = (toJSON . CommandSuccess . Number) 3
     res' `shouldBe` (Right (ApiResult cmdData (Just 0) Nothing))

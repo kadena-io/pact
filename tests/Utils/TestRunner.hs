@@ -32,7 +32,7 @@ import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
 import Pact.Types.Util (toB16JSON)
 
-
+import Control.Exception
 import Data.Aeson
 import Test.Hspec
 import qualified Data.Text as T
@@ -82,11 +82,12 @@ startServer configFile = do
   asyncServer <- async runServer
   link2 asyncServer asyncCmd
   link2 asyncServer asyncHist
-  waitUntilStarted
+  waitUntilStarted 0
   return (asyncServer, asyncCmd, asyncHist)
 
-waitUntilStarted :: IO ()
-waitUntilStarted = do
+waitUntilStarted :: Int -> IO ()
+waitUntilStarted i | i > 10 = throwIO $ userError "waitUntilStarted: failing after 10 attempts"
+waitUntilStarted i = do
   mgr <- HTTP.newManager HTTP.defaultManagerSettings
   baseUrl <- _serverBaseUrl
   let clientEnv = mkClientEnv mgr baseUrl
@@ -95,7 +96,7 @@ waitUntilStarted = do
     Right _ -> pure ()
     Left _ -> do
       threadDelay 500
-      waitUntilStarted
+      waitUntilStarted (succ i)
 
 stopServer :: (Async (), Async (), Async ()) -> IO ()
 stopServer (asyncServer, asyncCmd, asyncHist) = do
