@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 
 module SchemeSpec (spec) where
 
@@ -49,6 +50,7 @@ someETHPair = (PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b
 
 ---- HSPEC TESTS ----
 
+#if !defined(ghcjs_HOST_OS)
 spec :: Spec
 spec = describe "working with crypto schemes" $ do
   describe "test importing Key Pair for each Scheme" testKeyPairImport
@@ -56,7 +58,9 @@ spec = describe "working with crypto schemes" $ do
   describe "test for correct address in ApiKeyPair" testAddrApiKeyPair
   describe "test PublicKey import" testPublicKeyImport
   describe "test UserSig creation and verificaton" testUserSig
-
+#else
+spec = return ()
+#endif
 
 testKeyPairImport :: Spec
 testKeyPairImport = do
