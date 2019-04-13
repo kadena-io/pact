@@ -138,7 +138,7 @@ reserved = HM.keys reserveds
 reservedAtom :: Compile Reserved
 reservedAtom = bareAtom >>= \AtomExp{..} -> case HM.lookup _atomAtom reserveds of
   Nothing -> expected "reserved word"
-  Just r -> return r
+  Just r -> commit >> return r
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
 compile mi e = let ei = mi <$> e in runCompile topLevel (initParseState ei) ei
@@ -356,7 +356,9 @@ data ModelAllowed
 data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
 
 meta :: ModelAllowed -> Compile Meta
-meta modelAllowed = atPairs <|> try docStr <|> return def
+meta modelAllowed =
+  -- hiding labels/errors here because otherwise they hang around for all module errors
+  hidden (atPairs) <|> hidden (try docStr) <|> return def
   where
     docStr = Meta <$> (Just <$> str) <*> pure []
     docPair = symbol "@doc" >> (DocPair <$> str)
@@ -594,7 +596,7 @@ bodyForm term = do
   return $ TList (V.fromList bs) TyAny i
 
 bodyForm' :: Compile a -> Compile ([a],Info)
-bodyForm' term = (,) <$> (some term <?> "expected body") <*> contextInfo
+bodyForm' term = (,) <$> some term <*> contextInfo
 
 _compileAccounts :: IO (Either PactError [Term Name])
 _compileAccounts = _compileF "examples/accounts/accounts.pact"
@@ -623,6 +625,9 @@ _compileStrInModule = fmap concat . _compileStr' moduleLevel (set (psUser . csMo
 
 _compileStr :: String -> IO [Term Name]
 _compileStr = _compileStr' topLevel id
+
+_compileStrWith :: Compile a -> String -> IO [a]
+_compileStrWith parser code = _compileStr' parser id code
 
 _compileStr' :: Compile a -> (ParseState CompileState -> ParseState CompileState) -> String -> IO [a]
 _compileStr' parser sfun code = do

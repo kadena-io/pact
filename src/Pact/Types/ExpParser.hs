@@ -134,7 +134,6 @@ runCompile :: ExpParse s a -> ParseState s -> Exp Info -> Either PactError a
 runCompile act cs a =
   case runParser (runStateT act cs) "" (Cursor Nothing [a]) of
     (Right (r,_)) -> Right r
-    -- Left e -> Left $ PactError SyntaxError def def $ prettyString $ show e
     (Left (TrivialError _ itemMay expect)) -> Left $ PactError SyntaxError inf [] (prettyString msg)
       where expectList = S.toList expect
             items = maybe expectList (:expectList) itemMay
@@ -157,9 +156,8 @@ tokenErr s = tokenErr' s . Just
 
 {-# INLINE tokenErr' #-}
 tokenErr' :: String -> Maybe (Exp Info) -> ExpParse s a
-tokenErr' ty i = failure
-  (fmap (\e -> Tokens (e:|[])) i)
-  (S.singleton (strErr ty))
+tokenErr' ty i = failure (Just $ strErr ty) $
+  maybe S.empty (\e -> S.singleton (Tokens (e:|[]))) i
 
 {-# INLINE context #-}
 context :: ExpParse s (Maybe (Exp Info))
