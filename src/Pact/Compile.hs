@@ -358,7 +358,7 @@ data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
 meta :: ModelAllowed -> Compile Meta
 meta modelAllowed =
   -- hiding labels/errors here because otherwise they hang around for all module errors
-  hidden (atPairs) <|> hidden (try docStr) <|> return def
+  hidden atPairs <|> hidden (try docStr) <|> return def
   where
     docStr = Meta <$> (Just <$> str) <*> pure []
     docPair = symbol "@doc" >> (DocPair <$> str)
