@@ -596,7 +596,11 @@ bodyForm term = do
   return $ TList (V.fromList bs) TyAny i
 
 bodyForm' :: Compile a -> Compile ([a],Info)
-bodyForm' term = (,) <$> some term <*> contextInfo
+bodyForm' term = (,) <$> go <*> contextInfo
+  where go = getInput >>= \c -> case _cStream c of
+          [] -> pure <$> term -- will fail, similar to 'some'
+          es -> replicateM (length es) term
+
 
 _compileAccounts :: IO (Either PactError [Term Name])
 _compileAccounts = _compileF "examples/accounts/accounts.pact"

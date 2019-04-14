@@ -228,8 +228,8 @@ exp ty prism = do
   let test i = case firstOf prism i of
         Just a -> Right (a,i)
         Nothing -> err i ("Expected: " ++ ty)
-      err i s = Left (pure (Tokens (i:|[])),
-                      S.singleton (strErr s))
+      err i s = Left (pure (strErr s),
+                      S.singleton (Tokens (i:|[])))
   r <- context >>= (lift . pTokenEpsilon test)
   psCurrent .= snd r
   return r
