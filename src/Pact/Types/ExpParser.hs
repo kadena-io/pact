@@ -134,23 +134,16 @@ runCompile :: ExpParse s a -> ParseState s -> Exp Info -> Either PactError a
 runCompile act cs a =
   case runParser (runStateT act cs) "" (Cursor Nothing [a]) of
     (Right (r,_)) -> Right r
-    (Left (TrivialError _ (Just err) expect)) -> case err of
-      EndOfInput -> case S.toList expect of
-        (Tokens (x :| _):_) -> doErr (getInfo x) "unexpected end of input"
-        (Label s:_) -> doErr def (prettyString (toList s))
-        er -> doErr def (viaShow er)
-      Label ne -> doErr def (prettyString (toList ne))
-      Tokens (x :| _) -> doErr (getInfo x) $ prettyString $ showExpect expect
-    (Left e) -> doErr def (viaShow e)
-    where doErr :: Info -> Doc -> Either PactError a
-          doErr i s = Left $ PactError SyntaxError i def s
-          showExpect e = case labelText $ S.toList e of
-            [] -> show (S.toList e)
-            ss -> intercalate "," ss
-          labelText [] = []
-          labelText (Label s:r) = toList s:labelText r
-          labelText (EndOfInput:r) = "Expected: end of expression or input":labelText r
-          labelText (_:r) = labelText r
+    (Left (TrivialError _ itemMay expect)) -> Left $ PactError SyntaxError inf [] (prettyString msg)
+      where expectList = S.toList expect
+            items = maybe expectList (:expectList) itemMay
+            msg = intercalate ", " msgs
+            (inf,msgs) = foldr go (def,[]) items
+            go item (ri,rmsgs) = case item of
+              Label s -> (ri,toList s:rmsgs)
+              EndOfInput -> (ri,"Unexpected end of input":rmsgs)
+              Tokens (x :| _) -> (getInfo x,rmsgs)
+    (Left (FancyError _ errs)) -> Left $ PactError SyntaxError def [] (prettyString $ show errs)
 
 
 {-# INLINE strErr #-}
@@ -163,9 +156,8 @@ tokenErr s = tokenErr' s . Just
 
 {-# INLINE tokenErr' #-}
 tokenErr' :: String -> Maybe (Exp Info) -> ExpParse s a
-tokenErr' ty i = failure
-  (fmap (\e -> Tokens (e:|[])) i)
-  (S.singleton (strErr ty))
+tokenErr' ty i = failure (Just $ strErr ty) $
+  maybe S.empty (\e -> S.singleton (Tokens (e:|[]))) i
 
 {-# INLINE context #-}
 context :: ExpParse s (Maybe (Exp Info))
@@ -236,8 +228,8 @@ exp ty prism = do
   let test i = case firstOf prism i of
         Just a -> Right (a,i)
         Nothing -> err i ("Expected: " ++ ty)
-      err i s = Left (pure (Tokens (i:|[])),
-                      S.singleton (strErr s))
+      err i s = Left (pure (strErr s),
+                      S.singleton (Tokens (i:|[])))
   r <- context >>= (lift . pTokenEpsilon test)
   psCurrent .= snd r
   return r

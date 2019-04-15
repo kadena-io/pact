@@ -138,7 +138,7 @@ reserved = HM.keys reserveds
 reservedAtom :: Compile Reserved
 reservedAtom = bareAtom >>= \AtomExp{..} -> case HM.lookup _atomAtom reserveds of
   Nothing -> expected "reserved word"
-  Just r -> return r
+  Just r -> commit >> return r
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
 compile mi e = let ei = mi <$> e in runCompile topLevel (initParseState ei) ei
@@ -356,7 +356,9 @@ data ModelAllowed
 data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
 
 meta :: ModelAllowed -> Compile Meta
-meta modelAllowed = atPairs <|> try docStr <|> return def
+meta modelAllowed =
+  -- hiding labels/errors here because otherwise they hang around for all module errors
+  hidden atPairs <|> hidden (try docStr) <|> return def
   where
     docStr = Meta <$> (Just <$> str) <*> pure []
     docPair = symbol "@doc" >> (DocPair <$> str)
@@ -594,7 +596,11 @@ bodyForm term = do
   return $ TList (V.fromList bs) TyAny i
 
 bodyForm' :: Compile a -> Compile ([a],Info)
-bodyForm' term = (,) <$> some term <*> contextInfo
+bodyForm' term = (,) <$> go <*> contextInfo
+  where go = getInput >>= \c -> case _cStream c of
+          [] -> pure <$> term -- will fail, similar to 'some'
+          es -> replicateM (length es) term
+
 
 _compileAccounts :: IO (Either PactError [Term Name])
 _compileAccounts = _compileF "examples/accounts/accounts.pact"
@@ -602,38 +608,49 @@ _compileAccounts = _compileF "examples/accounts/accounts.pact"
 _compileF :: FilePath -> IO (Either PactError [Term Name])
 _compileF f = _parseF f >>= _compile id
 
+handleParseError :: TF.Result a -> IO a
+handleParseError (TF.Failure f) = putDoc (fromAnsiWlPprint (TF._errDoc f)) >> error "parseFailed"
+handleParseError (TF.Success a) = return a
+
+_compileWith :: Compile a -> (ParseState CompileState -> ParseState CompileState) ->
+            TF.Result ([Exp Parsed],MkInfo) -> IO (Either PactError [a])
+_compileWith parser sfun r = handleParseError r >>= \(a,mk) -> return $ forM a $ \e ->
+  let ei = mk <$> e
+  in runCompile parser (sfun (initParseState ei)) ei
+
 _compile :: (ParseState CompileState -> ParseState CompileState) ->
-            TF.Result ([Exp Parsed],String) -> IO (Either PactError [Term Name])
-_compile _ (TF.Failure f) = putDoc (fromAnsiWlPprint (TF._errDoc f)) >> error "Parse failed"
-_compile sfun (TF.Success (a,s)) = return $ forM a $ \e ->
-  let ei = mkStringInfo s <$> e
-  in runCompile topLevel (sfun (initParseState ei)) ei
+            TF.Result ([Exp Parsed],MkInfo) -> IO (Either PactError [Term Name])
+_compile = _compileWith topLevel
+
 
 -- | run a string as though you were in a module (test deftable, etc)
 _compileStrInModule :: String -> IO [Term Name]
-_compileStrInModule = _compileStr' (set (psUser . csModule) (Just (initModuleState "mymodule" (hash mempty))))
+_compileStrInModule = fmap concat . _compileStr' moduleLevel (set (psUser . csModule) (Just (initModuleState "mymodule" (hash mempty))))
 
 _compileStr :: String -> IO [Term Name]
-_compileStr = _compileStr' id
+_compileStr = _compileStr' topLevel id
 
-_compileStr' :: (ParseState CompileState -> ParseState CompileState) -> String -> IO [Term Name]
-_compileStr' sfun code = do
-    r <- _compile sfun ((,code) <$> _parseS code)
+_compileStrWith :: Compile a -> String -> IO [a]
+_compileStrWith parser code = _compileStr' parser id code
+
+_compileStr' :: Compile a -> (ParseState CompileState -> ParseState CompileState) -> String -> IO [a]
+_compileStr' parser sfun code = do
+    r <- _compileWith parser sfun $ _parseS code
     case r of Left e -> throwIO $ userError (show e)
               Right t -> return t
 
-_parseS :: String -> TF.Result [Exp Parsed]
-_parseS = TF.parseString exprsOnly mempty
+_parseS :: String -> TF.Result ([Exp Parsed],MkInfo)
+_parseS s = (,mkStringInfo s) <$> TF.parseString exprsOnly mempty s
 
-_parseF :: FilePath -> IO (TF.Result ([Exp Parsed],String))
-_parseF fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx exprsOnly fp
+_parseF :: FilePath -> IO (TF.Result ([Exp Parsed],MkInfo))
+_parseF fp = readFile fp >>= \s -> fmap (,mkStringInfo s) <$> TF.parseFromFileEx exprsOnly fp
 
 _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
     p <- _parseF f
     rs <- case p of
             (TF.Failure e) -> putDoc (fromAnsiWlPprint (TF._errDoc e)) >> error "Parse failed"
-            (TF.Success (es,s)) -> return $ map (compile (mkStringInfo s)) es
+            (TF.Success (es,s)) -> return $ map (compile s) es
     case sequence rs of
       Left e -> throwIO $ userError (show e)
       Right ts -> return ts
