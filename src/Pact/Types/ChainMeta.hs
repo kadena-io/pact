@@ -14,6 +14,7 @@ module Pact.Types.ChainMeta
   ( -- * types
     Address(..)
   , PrivateMeta(..)
+  , ChainId(..)
   , PublicMeta(..)
   , HasPlafMeta(..)
   , PublicData(..)
@@ -21,6 +22,7 @@ module Pact.Types.ChainMeta
     -- * optics
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice
+  , ciId, ciNetworkVersion
   , pdChainId, pdPublicMeta, pdBlockHeight, pdBlockTime
   ) where
 
@@ -75,16 +77,31 @@ instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
 instance Serialize PrivateMeta
 
+
+-- | Contains ChainId and Chainweb network version, for preventing sending Testnet  to Mainet.
+data ChainId = ChainId
+  { _ciId :: Word32
+  , _ciNetworkVersion :: Text
+  } deriving (Eq, Show, Generic)
+makeLenses ''ChainId
+
+instance Default ChainId where def = ChainId 0 "Testnet00"
+instance ToJSON ChainId where toJSON = lensyToJSON 3
+instance FromJSON ChainId where parseJSON = lensyParseJSON 3
+instance NFData ChainId
+instance Serialize ChainId
+
+
 -- | Contains all necessary metadata for a Chainweb-style public chain.
 data PublicMeta = PublicMeta
-  { _pmChainId :: Text
+  { _pmChainId :: ChainId
   , _pmSender :: Text
   , _pmGasLimit :: ParsedInteger
   , _pmGasPrice :: ParsedDecimal
   } deriving (Eq, Show, Generic)
 makeLenses ''PublicMeta
 
-instance Default PublicMeta where def = PublicMeta "" "" 0 0
+instance Default PublicMeta where def = PublicMeta def "" 0 0
 instance ToJSON PublicMeta where toJSON = lensyToJSON 3
 instance FromJSON PublicMeta where parseJSON = lensyParseJSON 3
 instance NFData PublicMeta
@@ -108,7 +125,7 @@ instance HasPlafMeta () where
 
 data PublicData = PublicData
   { _pdPublicMeta :: PublicMeta
-  , _pdChainId :: Word32
+  , _pdChainId :: Word32  -- TODO: Replicate of PublicMeta's ChainId
   , _pdBlockHeight :: Word64
   , _pdBlockTime :: Int64
   }
