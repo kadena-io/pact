@@ -78,10 +78,10 @@ instance NFData PrivateMeta
 instance Serialize PrivateMeta
 
 
--- | Contains ChainId and Chainweb network version, for preventing sending Testnet  to Mainet.
+-- | Contains ChainId and Chainweb network version, for preventing sending Testnet txs to Mainet.
 data ChainId = ChainId
   { _ciId :: Word32
-  , _ciNetworkVersion :: Text
+  , _ciNetworkVersion :: Text  -- TODO Ensure that only textual representations of ChainwebVersion are permissable
   } deriving (Eq, Show, Generic)
 makeLenses ''ChainId
 

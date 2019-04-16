@@ -9,11 +9,14 @@ import Data.ByteString (ByteString)
 import Data.Aeson as A
 import qualified Data.ByteString.Base16   as B16
 import qualified Crypto.Hash              as H
+import qualified Data.ByteString.Lazy     as BSL
 
 import Pact.ApiReq
 import Pact.Types.Crypto
 import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromJSON')
+import Pact.Types.RPC
+
 
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----
@@ -45,6 +48,9 @@ someETHPair = (PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b
                ETH)
 
 
+toExecPayload :: [SomeKeyPair] -> Text -> ByteString
+toExecPayload kps t = BSL.toStrict $ A.encode payload
+  where payload = (Payload (Exec (ExecMsg t Null)) "nonce" () (toSigners kps))
 
 
 ---- HSPEC TESTS ----
@@ -112,8 +118,11 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
     kp <- mkKeyPairs [apiKP]
-    cmd <- mkCommand' kp "(somePactFunction)"
-    (map (verifyUserSig $ _cmdHash cmd) (_cmdSigs cmd)) `shouldBe` [True]
+    cmd <- mkCommand' kp $ toExecPayload kp "(somePactFunction)"
+    let signers = toSigners kp
+        hsh = _cmdHash cmd
+        sigs = _cmdSigs cmd
+    (map (\(sig, signer) -> verifyUserSig hsh sig signer) (zip sigs signers)) `shouldBe` [True]
 
 
 
@@ -127,8 +136,9 @@ testUserSig = do
         hsh = hashTx "(somePactFunction)" H.SHA3_256
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh
-    let myUserSig = UserSig scheme (toB16Text pubBS) addr (toB16Text sig)
-    (verifyUserSig hsh myUserSig) `shouldBe` True
+    let myUserSig = UserSig (toB16Text sig)
+        mySigner = Signer scheme (toB16Text pubBS) addr
+    (verifyUserSig hsh myUserSig mySigner) `shouldBe` True
 
 
 
@@ -141,8 +151,9 @@ testUserSig = do
         wrongAddr = (toB16Text pubBS)
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh
-    let myUserSig = UserSig scheme (toB16Text pubBS) wrongAddr (toB16Text sig)
-    (verifyUserSig hsh myUserSig) `shouldBe` False
+    let myUserSig = UserSig (toB16Text sig)
+        mySigner = Signer scheme (toB16Text pubBS) wrongAddr
+    (verifyUserSig hsh myUserSig mySigner) `shouldBe` False
 
 
 
@@ -155,8 +166,9 @@ testUserSig = do
         wrongScheme = ED25519
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh
-    let myUserSig = UserSig wrongScheme (toB16Text pubBS) addr (toB16Text sig)
-    (verifyUserSig hsh myUserSig) `shouldBe` False
+    let myUserSig = UserSig (toB16Text sig)
+        mySigner = Signer wrongScheme (toB16Text pubBS) addr
+    (verifyUserSig hsh myUserSig mySigner) `shouldBe` False
 
 
 
@@ -164,7 +176,7 @@ testUserSig = do
   it "provides default ppkscheme when one not provided" $ do
     let sigJSON = A.object ["addr" .= String "SomeAddr", "pubKey" .= String "SomePubKey",
                             "sig" .= String "SomeSig"]
-        sig = UserSig defPPKScheme "SomePubKey" "SomeAddr" "SomeSig"
+        sig = UserSig "SomeSig"
     (fromJSON' sigJSON) `shouldBe` (Right sig)
 
 
@@ -172,5 +184,5 @@ testUserSig = do
 
   it "makes address field the full public key when one not provided" $ do
     let sigJSON = A.object ["pubKey" .= String "SomePubKey", "sig" .= String "SomeSig"]
-        sig = UserSig defPPKScheme "SomePubKey" "SomePubKey" "SomeSig"
+        sig = UserSig "SomeSig"
     (fromJSON' sigJSON) `shouldBe` (Right sig)
