@@ -27,7 +27,7 @@ histFile :: FilePath
 histFile = fp ++ "/commands.sqlite"
 
 spec :: Spec
-spec = describe "roundtrip" $ before_ deleteTempFile $ after_ deleteTempFile $ testHistoryDB
+spec = describe "roundtrip" $ after_ deleteTempFile $ testHistoryDB
 
 deleteTempFile :: IO ()
 deleteTempFile = do
@@ -36,7 +36,7 @@ deleteTempFile = do
 
 
 dbg :: String -> IO ()
--- dbg = putStrLn   <- USE THIS TO DEBUG HISTORY STUFF
+-- dbg = putStrLn   -- <- USE THIS TO DEBUG HISTORY STUFF
 dbg = const $ return ()
 
 fp :: FilePath
@@ -65,7 +65,7 @@ initHistory = do
 
 testHistoryDB :: Spec
 testHistoryDB = do
-
+  runIO $ deleteTempFile
   pirs <- runIO $ do
     (env,hstate) <- initHistory
     (pirs,_,_) <- runRWST startup env hstate
