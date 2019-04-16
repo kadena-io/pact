@@ -313,3 +313,4 @@ test-suite hspec
       , Analyze.Translate
       , ClientSpec
       , SchemeSpec
+      , HistoryServiceSpec

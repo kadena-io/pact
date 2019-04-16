@@ -9,6 +9,7 @@ module Pact.Server.History.Persistence
   , queryForExisting
   , selectCompletedCommands
   , selectAllCommands
+  , closeDB
   ) where
 
 
@@ -90,6 +91,14 @@ createDB f = do
         <*> prepStmt conn' sqlSelectCompletedCommands
         <*> prepStmt conn' sqlSelectAllCommands
 
+closeDB :: DbEnv -> IO ()
+closeDB DbEnv{..} = do
+  liftEither $ closeStmt _insertStatement
+  liftEither $ closeStmt _qryExistingStmt
+  liftEither $ closeStmt _qryCompletedStmt
+  liftEither $ closeStmt _qrySelectAllCmds
+  liftEither $ close _conn
+
 sqlInsertHistoryRow :: Utf8
 sqlInsertHistoryRow =
     "INSERT INTO 'main'.'pactCommands' \
@@ -146,13 +155,13 @@ selectCompletedCommands e v = foldM f HashMap.empty v
           r -> dbError $ "Invalid result from query: " ++ show r
 
 sqlSelectAllCommands :: Utf8
-sqlSelectAllCommands = "SELECT txid,hash,command,userSigs,gas FROM 'main'.'pactCommands' ORDER BY txid ASC"
+sqlSelectAllCommands = "SELECT hash,command,userSigs FROM 'main'.'pactCommands' ORDER BY txid ASC"
 
 selectAllCommands :: DbEnv -> IO [Command ByteString]
 selectAllCommands e = do
-  let rowToCmd [_, SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs'), _] =
+  let rowToCmd [SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
               Command { _cmdPayload = cmd'
                       , _cmdSigs = userSigsFromField userSigs'
                       , _cmdHash = hashFromField hash'}
-      rowToCmd err = error $ "During selectAllCommands, we encountered a non-SText type: " ++ show err
-  fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RInt,RText,RText,RText]
+      rowToCmd err = error $ "selectAllCommands: unexpected result schema: " ++ show err
+  fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RText,RText,RText]
