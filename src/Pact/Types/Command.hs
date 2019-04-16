@@ -180,7 +180,7 @@ hasInvalidSigs :: Hash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers = if (length sigsWithIssues == 0)
                                   then Nothing else formatIssues
   where hasIssue (sig, signer) = not $ verifyUserSig hsh sig signer
-        sigsWithIssues = filter hasIssue (zip sigs signers)
+        sigsWithIssues = filter hasIssue (zip sigs signers)   -- assumes nth Signer is responsible for the nth UserSig
         formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode sigsWithIssues)
 
 
@@ -226,7 +226,7 @@ instance ToJSON Signer where
     "pubKey" .= _siPubKey,
     "addr" .= _siAddress]
 instance FromJSON Signer where
-  parseJSON = withObject "UserSig" $ \o -> do
+  parseJSON = withObject "Signer" $ \o -> do
     pub <- o .: "pubKey"
     scheme <- o .:? "scheme"   -- defaults to PPKScheme default
     addr <- o .:? "addr"       -- defaults to full Public Key
