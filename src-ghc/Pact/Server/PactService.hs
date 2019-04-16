@@ -96,17 +96,17 @@ exToTx Local = Nothing
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p CommandResult
 runPayload c@Command{..} = case (_pPayload _cmdPayload) of
-  Exec pm -> applyExec (cmdToRequestKey c) pm c
-  Continuation ym -> applyContinuation (cmdToRequestKey c) ym c
+  Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) pm
+  Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) ym
 
 
-applyExec :: RequestKey -> ExecMsg ParsedCode -> Command a -> CommandM p CommandResult
-applyExec rk (ExecMsg parsedCode edata) Command{..} = do
+applyExec :: RequestKey -> Hash -> [Signer] -> ExecMsg ParsedCode -> CommandM p CommandResult
+applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
-  let sigs = userSigsToPactKeySet _cmdSigs
-      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing _cmdHash)
+  let sigs = userSigsToPactKeySet signers
+      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing hsh)
         refStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec _erInput) _erExec
@@ -125,8 +125,8 @@ handlePactExec (Right em) pe = do
   return $ Just pe
 
 
-applyContinuation :: RequestKey -> ContMsg -> Command a -> CommandM p CommandResult
-applyContinuation rk msg@ContMsg{..} Command{..} = do
+applyContinuation :: RequestKey -> Hash -> [Signer] -> ContMsg -> CommandM p CommandResult
+applyContinuation rk hsh signers msg@ContMsg{..} = do
   env@CommandEnv{..} <- ask
   case _ceMode of
     Local -> throwCmdEx "Local continuation exec not supported"
@@ -144,10 +144,10 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
                  ++ show _cmStep ++ " but expected " ++ show (_peStep + 1)
 
           -- Setup environment and get result
-          let sigs = userSigsToPactKeySet _cmdSigs
+          let sigs = userSigsToPactKeySet signers
               pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactOutput) _peYield)
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                        (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
+                        (MsgData sigs _cmData pactStep hsh) _csRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
           res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
 

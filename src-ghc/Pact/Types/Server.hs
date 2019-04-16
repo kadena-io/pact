@@ -65,11 +65,11 @@ import Pact.Types.Logger
 import Pact.Interpreter
 
 
-userSigToPactPubKey :: UserSig -> Pact.PublicKey
-userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usAddress
+userSigToPactPubKey :: Signer -> Pact.PublicKey
+userSigToPactPubKey Signer{..} = Pact.PublicKey $ encodeUtf8 _siAddress
 
 
-userSigsToPactKeySet :: [UserSig] -> S.Set Pact.PublicKey
+userSigsToPactKeySet :: [Signer] -> S.Set Pact.PublicKey
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 
 

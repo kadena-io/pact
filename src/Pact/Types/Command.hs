@@ -26,13 +26,14 @@
 module Pact.Types.Command
   ( Command(..),cmdPayload,cmdSigs,cmdHash
 #if !defined(ghcjs_HOST_OS)
-  , mkCommand, mkCommand', verifyUserSig, verifyCommand
+  , mkCommand, toSigners, mkCommand', verifyUserSig, verifyCommand
 #else
   , PPKScheme(..)
 #endif
   , ProcessedCommand(..),_ProcSucc,_ProcFail
-  , Payload(..),pMeta,pNonce,pPayload
+  , Payload(..),pMeta,pNonce,pPayload,pSigners
   , ParsedCode(..),pcCode,pcExps
+  , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
   , CommandError(..),ceMsg,ceDetail
   , CommandSuccess(..),csData
@@ -55,7 +56,7 @@ import Data.String
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text hiding (filter, map, zip, length)
-import Data.Maybe  (fromMaybe, isNothing)
+import Data.Maybe  (fromMaybe)
 
 
 import GHC.Generics
@@ -130,8 +131,11 @@ mkCommand :: (ToJSON m, ToJSON c) =>
              IO (Command ByteString)
 mkCommand creds meta nonce rpc = mkCommand' creds encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
-        payload = Payload rpc nonce meta (map toSigner creds)
-        toSigner cred = Signer
+        payload = Payload rpc nonce meta $ toSigners creds
+
+toSigners :: [SomeKeyPair] -> [Signer]
+toSigners creds = map toSigner creds
+  where toSigner cred = Signer
                         (kpToPPKScheme cred)
                         (toB16Text $ getPublic cred)
                         (toB16Text $ formatPublicKey cred)
