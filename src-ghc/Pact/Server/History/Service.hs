@@ -6,6 +6,10 @@
 module Pact.Server.History.Service
   ( initHistoryEnv
   , runHistoryService
+  , setupPersistence
+  , addNewKeys
+  , updateExistingKeys
+  , queryForResults
   ) where
 
 import Control.Lens hiding (Index)

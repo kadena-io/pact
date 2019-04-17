@@ -85,7 +85,7 @@ testSingleModule = do
   resp <- runIO $ serveAndRequest 3000 $ Remote.Request [derefDef <$> mod1] "mod1"
 
   it "verifies over the network" $
-    "Property proven valid" == resp ^. _Right . Remote.responseLines . ix 0
+    (Right ["Property proven valid",""]) `shouldBe` fmap (view Remote.responseLines) resp
 
 testUnsortedModules :: Spec
 testUnsortedModules = do
@@ -123,4 +123,4 @@ testUnsortedModules = do
   resp <- runIO $ serveAndRequest 3001 $ Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
 
   it "verifies over the network" $
-    "Property proven valid" == resp ^. _Right . Remote.responseLines . ix 0
+    (Right ["Property proven valid",""]) `shouldBe` fmap (view Remote.responseLines) resp

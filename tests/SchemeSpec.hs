@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 
 module SchemeSpec (spec) where
 
@@ -53,6 +54,7 @@ toExecPayload kps t = BSL.toStrict $ A.encode payload
 
 ---- HSPEC TESTS ----
 
+#if !defined(ghcjs_HOST_OS)
 spec :: Spec
 spec = describe "working with crypto schemes" $ do
   describe "test importing Key Pair for each Scheme" testKeyPairImport
@@ -61,7 +63,9 @@ spec = describe "working with crypto schemes" $ do
   describe "test PublicKey import" testPublicKeyImport
   describe "test UserSig creation and verificaton" testUserSig
   describe "test signature non-malleability" testSigNonMalleability
-
+#else
+spec = return ()
+#endif
 
 testKeyPairImport :: Spec
 testKeyPairImport = do
