@@ -5,9 +5,7 @@ step: 1
 rollback: False
 data: {final-price: 12.0}
 publicMeta:
-  chainId:
-    id: 0
-    networkVersion: "Testnet10"
+  chainId: "Testnet00/0"
   sender: "Sender0"
   gasLimit: 0
   gasPrice: 0

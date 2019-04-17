@@ -177,11 +177,14 @@ verifyCommand orig@Command{..} =
 
 
 hasInvalidSigs :: Hash -> [UserSig] -> [Signer] -> Maybe String
-hasInvalidSigs hsh sigs signers = if (length sigsWithIssues == 0)
-                                  then Nothing else formatIssues
+hasInvalidSigs hsh sigs signers
+  | not (length sigs == length signers)  = Just "Number of sig(s) does not match number of signer(s)"
+  | otherwise                            = if (length sigsWithIssues == 0)
+                                           then Nothing else formatIssues
   where hasIssue (sig, signer) = not $ verifyUserSig hsh sig signer
-        sigsWithIssues = filter hasIssue (zip sigs signers)   -- assumes nth Signer is responsible for the nth UserSig
-        formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode sigsWithIssues)
+        -- assumes nth Signer is responsible for the nth UserSig
+        sigsWithIssues = filter hasIssue (zip sigs signers)
+        formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode <$> sigsWithIssues)
 
 
 verifyUserSig :: Hash -> UserSig -> Signer -> Bool

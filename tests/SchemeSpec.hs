@@ -34,7 +34,6 @@ getKeyPairComponents kp = (PubBS $ getPublic kp,
                            kpToPPKScheme kp)
 
 
-
 someED25519Pair :: (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
 someED25519Pair = (PubBS $ getByteString "ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d",
                    PrivBS $ getByteString "8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332",
@@ -46,7 +45,6 @@ someETHPair = (PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b
                PrivBS $ getByteString "208065a247edbe5df4d86fbdc0171303f23a76961be9f6013850dd2bdc759bbb",
                "0bed7abd61247635c1973eb38474a2516ed1d884",
                ETH)
-
 
 toExecPayload :: [SomeKeyPair] -> Text -> ByteString
 toExecPayload kps t = BSL.toStrict $ A.encode payload
@@ -62,6 +60,7 @@ spec = describe "working with crypto schemes" $ do
   describe "test for correct address in ApiKeyPair" testAddrApiKeyPair
   describe "test PublicKey import" testPublicKeyImport
   describe "test UserSig creation and verificaton" testUserSig
+  describe "test signature non-malleability" testSigNonMalleability
 
 
 testKeyPairImport :: Spec
@@ -186,3 +185,36 @@ testUserSig = do
     let sigJSON = A.object ["pubKey" .= String "SomePubKey", "sig" .= String "SomeSig"]
         sig = UserSig "SomeSig"
     (fromJSON' sigJSON) `shouldBe` (Right sig)
+
+
+testSigNonMalleability :: Spec
+testSigNonMalleability = do
+  it "fails when invalid signature provided for signer specified in the payload" $ do
+    let (pub1, priv1, addr1, scheme1) = someETHPair
+        apiKP1 = ApiKeyPair priv1 (Just pub1) (Just addr1) (Just scheme1)
+        (pub2, priv2, addr2, scheme2) = someED25519Pair
+        apiKP2 = ApiKeyPair priv2 (Just pub2) (Just addr2) (Just scheme2)
+    kp1 <- mkKeyPairs [apiKP1]
+    wrongPair <- mkKeyPairs [apiKP2]
+    
+    cmdWithWrogSig <- mkCommand' wrongPair $ toExecPayload kp1 "(somePactFunction)"
+    (verifyCommand cmdWithWrogSig :: ProcessedCommand () ParsedCode)
+      `shouldSatisfy`
+      (\t -> case t of
+          ProcFail _ -> True
+          _ -> False)
+
+  it "fails when number of signatures does not match number of payload signers" $ do
+    let (pub1, priv1, addr1, scheme1) = someETHPair
+        apiKP1 = ApiKeyPair priv1 (Just pub1) (Just addr1) (Just scheme1)
+        (pub2, priv2, addr2, scheme2) = someED25519Pair
+        apiKP2 = ApiKeyPair priv2 (Just pub2) (Just addr2) (Just scheme2)
+    [kp1] <- mkKeyPairs [apiKP1]
+    [wrongPair] <- mkKeyPairs [apiKP2]
+    
+    cmdWithWrogSig <- mkCommand' [kp1, wrongPair] $ toExecPayload [kp1] "(somePactFunction)"
+    (verifyCommand cmdWithWrogSig :: ProcessedCommand () ParsedCode)
+      `shouldSatisfy`
+      (\t -> case t of
+          ProcFail _ -> True
+          _ -> False)
