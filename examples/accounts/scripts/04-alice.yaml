@@ -1,5 +1,5 @@
 code: |-
-    (use 'accounts)
+    (use accounts)
     (transfer "Alice" "Bob" 12.50 (system.get-system-time))
     (read-account-user "Alice")
 keyPairs:

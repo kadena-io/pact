@@ -1,8 +1,8 @@
 # Provides mock system module for 'accounts'
 
 code: |-
-  (use 'accounts)
-  (use 'system)
+  (use accounts)
+  (use system)
   (create-account "Alice" (read-keyset "alice-keyset") "USD" (get-system-time))
   (create-account "Bob" (read-keyset "bob-keyset") "USD" (get-system-time))
   (fund-account "Alice" 100.0 (get-system-time))
