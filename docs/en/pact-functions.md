@@ -37,7 +37,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"block-height": 0,"block-time": 0,"chain-id": 0,"gas-limit": 0,"gas-price": 0,"sender": ""}
+{"block-height": 0,"block-time": 0,"chain-id": "Testnet00/0","gas-limit": 0,"gas-price": 0,"sender": ""}
 ```
 
 
@@ -1389,7 +1389,7 @@ Continue previously-initiated pact identified by PACT-ID at STEP, optionally spe
 
 Update existing entries 'chain-data' with NEW-DATA, replacing those items only.
 ```lisp
-pact> (env-chain-data { "chain-id": 2, "block-height": 20 })
+pact> (env-chain-data { "chain-id": "TestNet00/2", "block-height": 20 })
 "Updated public metadata"
 ```
 

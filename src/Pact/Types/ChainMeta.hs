@@ -22,8 +22,7 @@ module Pact.Types.ChainMeta
     -- * optics
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice
-  , ciId, ciNetworkVersion
-  , pdChainId, pdPublicMeta, pdBlockHeight, pdBlockTime
+  , pdPublicMeta, pdBlockHeight, pdBlockTime
   ) where
 
 
@@ -40,12 +39,13 @@ import Data.Serialize (Serialize)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text
-import Data.Word (Word32, Word64)
+import Data.Word (Word64)
 
 -- internal pact modules
 
 import Pact.Parse
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
+import Pact.Types.Term (ToTerm(..))
 
 
 newtype EntityName = EntityName Text
@@ -78,18 +78,17 @@ instance NFData PrivateMeta
 instance Serialize PrivateMeta
 
 
--- | Contains ChainId and Chainweb network version, for preventing sending Testnet txs to Mainet.
-data ChainId = ChainId
-  { _ciId :: Word32
-  , _ciNetworkVersion :: Text  -- TODO Ensure that only textual representations of ChainwebVersion are permissable
-  } deriving (Eq, Show, Generic)
-makeLenses ''ChainId
+-- | Contains ChainId, Chainweb network version, ect.
+--   Meant to prevent sending Testnet txs to Mainet.
+newtype ChainId = ChainId Text
+  deriving (Eq, Show, Generic)
 
-instance Default ChainId where def = ChainId 0 "Testnet00"
-instance ToJSON ChainId where toJSON = lensyToJSON 3
-instance FromJSON ChainId where parseJSON = lensyParseJSON 3
+instance ToJSON ChainId
+instance FromJSON ChainId
 instance NFData ChainId
 instance Serialize ChainId
+instance Default ChainId where def = ChainId "Testnet00/0"
+instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
 
 
 -- | Contains all necessary metadata for a Chainweb-style public chain.
@@ -125,7 +124,6 @@ instance HasPlafMeta () where
 
 data PublicData = PublicData
   { _pdPublicMeta :: PublicMeta
-  , _pdChainId :: Word32  -- TODO: Replicate of PublicMeta's ChainId
   , _pdBlockHeight :: Word64
   , _pdBlockTime :: Int64
   }
@@ -134,4 +132,4 @@ makeLenses ''PublicData
 
 instance ToJSON PublicData where toJSON = lensyToJSON 3
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
-instance Default PublicData where def = PublicData def def def def
+instance Default PublicData where def = PublicData def def def

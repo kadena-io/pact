@@ -23,7 +23,7 @@ import Data.Aeson as A
 import Data.Int (Int64)
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe)
-import Data.Word (Word32, Word64)
+import Data.Word (Word64)
 
 import Pact.Gas
 import Pact.Interpreter
@@ -44,7 +44,6 @@ initPactService CommandConfig {..} loggers = do
       klog s = logLog logger "INIT" s
       gasRate = fromMaybe 0 _ccGasRate
       gasModel = constGasModel (fromIntegral gasRate)
-      chainId = 0
       blockHeight = 0
       blockTime = 0
 
@@ -54,9 +53,9 @@ initPactService CommandConfig {..} loggers = do
         initSchema p
         return CommandExecInterface
           { _ceiApplyCmd = \eMode cmd ->
-              applyCmd logger _ccEntity p cmdVar gasModel chainId
+              applyCmd logger _ccEntity p cmdVar gasModel
                 blockHeight blockTime eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasModel chainId blockHeight blockTime }
+          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasModel blockHeight blockTime }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -67,15 +66,15 @@ initPactService CommandConfig {..} loggers = do
 
 
 applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState ->
-            GasModel -> Word32 -> Word64 -> Int64 -> ExecutionMode -> Command a ->
+            GasModel -> Word64 -> Int64 -> ExecutionMode -> Command a ->
             ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
-applyCmd _ _ _ _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
-applyCmd logger conf dbv cv gasModel cid bh bt exMode _ (ProcSucc cmd) = do
+applyCmd _ _ _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
+applyCmd logger conf dbv cv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
       gasEnv = GasEnv (fromIntegral $ _pmGasLimit pubMeta) (GasPrice gasPrice) gasModel
 
-  let pd = PublicData pubMeta cid bh bt
+  let pd = PublicData pubMeta bh bt
 
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv logger gasEnv pd) $ runPayload cmd
   case r of
