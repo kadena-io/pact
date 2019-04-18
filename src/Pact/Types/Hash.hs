@@ -21,7 +21,7 @@ module Pact.Types.Hash
   , TypedHash(..)
   , toUntypedHash, fromUntypedHash
   , HashAlgo(..)
-  , pactHash, pactInitialHash
+  , PactHash, pactHash, pactInitialHash
   ) where
 
 
@@ -142,11 +142,13 @@ toUntypedHash (TypedHash h) = Hash h
 fromUntypedHash :: Hash -> TypedHash h
 fromUntypedHash (Hash h) = TypedHash h
 
+type PactHash = TypedHash 'Blake2b_256
+
 pactHash :: ByteString -> Hash
-pactHash = toUntypedHash . (hash :: ByteString -> TypedHash 'Blake2b_256)
+pactHash = toUntypedHash . (hash :: ByteString -> PactHash)
 
 pactInitialHash :: Hash
-pactInitialHash = toUntypedHash $ (initialHash :: TypedHash 'Blake2b_256)
+pactInitialHash = toUntypedHash $ (initialHash :: PactHash)
 
 
 #if !defined(ghcjs_HOST_OS)

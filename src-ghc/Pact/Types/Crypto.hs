@@ -18,8 +18,7 @@
 -- Hashing types and Scheme class.
 --
 module Pact.Types.Crypto
-  ( hashTx
-  , verifyHashTx
+  ( verifyHashTx
   , initialHashTx
   , ST.PPKScheme(..)
   , ST.defPPKScheme
@@ -95,10 +94,9 @@ class (ConvertBS (PublicKey a),  Eq (PublicKey a),
   type PublicKey a
   type PrivateKey a
   type Signature a
-  type HashType a :: HashAlgo
 
-  _sign :: a -> TypedHash (HashType a) -> PublicKey a -> PrivateKey a -> IO (Signature a)
-  _valid :: a -> TypedHash (HashType a) -> PublicKey a -> Signature a -> Bool
+  _sign :: a -> Hash -> PublicKey a -> PrivateKey a -> IO (Signature a)
+  _valid :: a -> Hash -> PublicKey a -> Signature a -> Bool
   _genKeyPair :: a -> IO (PublicKey a, PrivateKey a)
 
 
@@ -119,20 +117,17 @@ class (ConvertBS (PublicKey a),  Eq (PublicKey a),
 
 --------- HASHING ---------
 
-hashTx :: ByteString -> HashAlgo -> Hash
-hashTx b algo = case algo of
-  Blake2b_256 -> toUntypedHash (hash b :: TypedHash 'Blake2b_256)
-  SHA3_256 -> toUntypedHash (hash b :: TypedHash 'SHA3_256)
 
-verifyHashTx :: Hash -> ByteString -> HashAlgo -> Either String Hash
-verifyHashTx h b algo = if hashTx b algo == h
-  then Right h
+verifyHashTx :: PactHash -> ByteString -> Either String Hash
+verifyHashTx h b = if hashed == h
+  then Right (toUntypedHash h)
   else Left $ "Hash Mismatch, received " ++ show h
-       ++ " but our hashing resulted in " ++ show (hashTx b algo)
+       ++ " but our hashing resulted in " ++ show hashed
+  where hashed = hash b
 {-# INLINE verifyHashTx #-}
 
-initialHashTx :: HashAlgo -> Hash
-initialHashTx algo = hashTx mempty algo
+initialHashTx :: Hash
+initialHashTx = pactInitialHash
 
 
 
@@ -201,10 +196,9 @@ instance Scheme (SPPKScheme 'ED25519) where
   type PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
   type PrivateKey (SPPKScheme 'ED25519) = Ed25519.PrivateKey
   type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
-  type HashType (SPPKScheme 'ED25519) = 'Blake2b_256
 
-  _sign _ (TypedHash msg) pub priv = return $ Ed25519.sign msg priv pub
-  _valid _ (TypedHash msg) pub sig = Ed25519.valid msg pub sig
+  _sign _ (Hash msg) pub priv = return $ Ed25519.sign msg priv pub
+  _valid _ (Hash msg) pub sig = Ed25519.valid msg pub sig
   _genKeyPair _ = ed25519GenKeyPair
   _getPublic _ = Just . ed25519GetPublicKey
   _formatPublicKey _ p = toBS p
@@ -232,12 +226,10 @@ instance Scheme (SPPKScheme 'ETH) where
   type PublicKey (SPPKScheme 'ETH) = ECDSA.PublicKey
   type PrivateKey (SPPKScheme 'ETH) = ECDSA.PrivateKey
   type Signature (SPPKScheme 'ETH) = ECDSA.Signature
-  type HashType (SPPKScheme 'ETH) = 'SHA3_256
 
 
-
-  _sign _ (TypedHash msg) pub priv = ECDSA.signETH msg pub priv
-  _valid _ (TypedHash msg) pub sig = ECDSA.validETH msg pub sig
+  _sign _ (Hash msg) pub priv = ECDSA.signETH msg pub priv
+  _valid _ (Hash msg) pub sig = ECDSA.validETH msg pub sig
   _genKeyPair _ = ECDSA.genKeyPair
   _getPublic _ = Just . ECDSA.getPublicKey
   _formatPublicKey _ p = ECDSA.formatPublicKeyETH (toBS p)
@@ -303,7 +295,7 @@ newtype SignatureBS = SigBS ByteString
 --------- SCHEME HELPER FUNCTIONS ---------
 
 sign :: SomeKeyPair -> Hash -> IO ByteString
-sign (SomeKeyPair KeyPair{..}) msg = toBS <$> _sign _kpScheme (fromUntypedHash msg) _kpPublicKey _kpPrivateKey
+sign (SomeKeyPair KeyPair{..}) msg = toBS <$> _sign _kpScheme msg _kpPublicKey _kpPrivateKey
 
 
 verify :: SomeScheme -> Hash -> PublicKeyBS -> SignatureBS -> Bool
@@ -311,7 +303,7 @@ verify (SomeScheme scheme) msg (PubBS pBS) (SigBS sigBS) =
   let pParsed = fromBS pBS
       sigParsed = fromBS sigBS
   in case (pParsed, sigParsed) of
-       (Right p, Right sig) -> _valid scheme (fromUntypedHash msg) p sig
+       (Right p, Right sig) -> _valid scheme msg p sig
        _ -> False
 
 

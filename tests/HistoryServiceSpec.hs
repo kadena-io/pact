@@ -43,7 +43,7 @@ fp :: FilePath
 fp = "tests/test-log"
 
 cmd :: Command ByteString
-cmd = Command "" [] pactInitialHash
+cmd = Command "" [] initialHash
 
 rq :: RequestKey
 rq = RequestKey pactInitialHash

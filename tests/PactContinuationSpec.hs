@@ -85,7 +85,7 @@ testSimpleServerCmd mgr = do
   cmd <- mkExec  "(+ 1 2)" Null def
              [simpleKeys] (Just "test1")
   allResults <- runAll mgr [cmd]
-  return $ HM.lookup (RequestKey (_cmdHash cmd)) allResults
+  return $ HM.lookup (cmdToRequestKey cmd) allResults
 
 
 testCorrectNextStep :: HTTP.Manager -> Expectation

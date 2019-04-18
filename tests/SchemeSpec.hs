@@ -39,6 +39,9 @@ someED25519Pair = (PubBS $ getByteString "ba54b224d1924dd98403f5c751abdd10de6cd8
                    "ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d",
                    ED25519)
 
+
+
+
 someETHPair :: (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
 someETHPair = (PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e",
                PrivBS $ getByteString "208065a247edbe5df4d86fbdc0171303f23a76961be9f6013850dd2bdc759bbb",
@@ -117,7 +120,7 @@ testUserSig = do
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
     kp <- mkKeyPairs [apiKP]
     cmd <- mkCommand' kp "(somePactFunction)"
-    (map (verifyUserSig $ _cmdHash cmd) (_cmdSigs cmd)) `shouldBe` [True]
+    (map (verifyUserSig $ toUntypedHash $ _cmdHash cmd) (_cmdSigs cmd)) `shouldBe` [True]
 
 
 
@@ -128,7 +131,7 @@ testUserSig = do
         (PubBS pubBS) = pub
         -- UserSig verification will pass but Command verification might fail
         -- if hash algorithm provided not supported for hashing commands.
-        hsh = hashTx "(somePactFunction)" SHA3_256
+        hsh = pactHash "(somePactFunction)"
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh
     let myUserSig = UserSig scheme (toB16Text pubBS) addr (toB16Text sig)
@@ -141,7 +144,7 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
         (PubBS pubBS) = pub
-        hsh = hashTx "(somePactFunction)" Blake2b_256
+        hsh = pactHash "(somePactFunction)"
         wrongAddr = (toB16Text pubBS)
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh
@@ -155,7 +158,7 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
         (PubBS pubBS) = pub
-        hsh = hashTx "(somePactFunction)" Blake2b_256
+        hsh = pactHash "(somePactFunction)"
         wrongScheme = ED25519
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh

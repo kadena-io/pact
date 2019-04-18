@@ -106,7 +106,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet _cmdSigs
-      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing _cmdHash)
+      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing (toUntypedHash _cmdHash))
         refStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec _erInput) _erExec
@@ -147,7 +147,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
           let sigs = userSigsToPactKeySet _cmdSigs
               pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactOutput) _peYield)
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                        (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
+                        (MsgData sigs _cmData pactStep (toUntypedHash _cmdHash)) _csRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
           res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
 

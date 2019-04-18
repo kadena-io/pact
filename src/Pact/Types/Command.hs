@@ -85,7 +85,7 @@ import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
 data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
-  , _cmdHash :: !Hash
+  , _cmdHash :: !PactHash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
@@ -114,9 +114,6 @@ instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 #if !defined(ghcjs_HOST_OS)
 
-requestKeyHash :: HashAlgo
-requestKeyHash = Blake2b_256
-
 
 mkCommand :: (ToJSON m, ToJSON c) =>
              [SomeKeyPair] -> m ->
@@ -127,14 +124,14 @@ mkCommand creds meta nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Paylo
 mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = makeCommand <$> (traverse makeSigs creds)
   where makeCommand sigs = Command env sigs hsh
-        hsh = hashTx env requestKeyHash    -- hash associated with a Command, aka a Command's Request Key
+        hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
         makeSigs kp = mkUserSig hsh kp
 
-mkUserSig :: Hash -> SomeKeyPair -> IO UserSig
+mkUserSig :: PactHash -> SomeKeyPair -> IO UserSig
 mkUserSig hsh kp =
   let pub = toB16Text $ getPublic kp
       formattedPub = toB16Text $ formatPublicKey kp
-      sig = toB16Text <$> sign kp hsh
+      sig = toB16Text <$> sign kp (toUntypedHash hsh)
   in UserSig (kpToPPKScheme kp) pub formattedPub <$> sig
 
 
@@ -147,8 +144,8 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     ppcmdPayload' = traverse parsePact =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
-    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
-    ppcmdHash' = verifyHashTx _cmdHash _cmdPayload requestKeyHash
+    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig (toUntypedHash _cmdHash) u)) <$> _cmdSigs
+    ppcmdHash' = verifyHashTx _cmdHash _cmdPayload
     mSigIssue = if all snd ppcmdSigs' then Nothing
       else Just $ "Invalid sig(s) found: " ++ show (A.encode . fst <$> filter (not.snd) ppcmdSigs')
     toErrStr :: Either String a -> String
@@ -251,7 +248,7 @@ data CommandResult = CommandResult
 
 
 cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey Command {..} = RequestKey _cmdHash
+cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
 
 
 data ExecutionMode =
