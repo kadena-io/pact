@@ -73,7 +73,7 @@ loadBenchModule db = do
   let md = MsgData S.empty
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
-           initialHashTx
+           pactInitialHash
   let e = setupEvalEnv db entity (Transactional 1) md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
   _erRefStore <$> evalExec e pc
@@ -87,7 +87,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  let e = setupEvalEnv dbEnv entity t (initMsgData initialHashTx)
+  let e = setupEvalEnv dbEnv entity t (initMsgData pactInitialHash)
           refStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
   toJSON . _erOutput <$> evalExec e pc
 

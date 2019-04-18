@@ -144,8 +144,8 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     ppcmdPayload' = traverse parsePact =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
-    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig (toUntypedHash _cmdHash) u)) <$> _cmdSigs
-    ppcmdHash' = verifyHashTx _cmdHash _cmdPayload
+    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
+    ppcmdHash' = verifyHash _cmdHash _cmdPayload
     mSigIssue = if all snd ppcmdSigs' then Nothing
       else Just $ "Invalid sig(s) found: " ++ show (A.encode . fst <$> filter (not.snd) ppcmdSigs')
     toErrStr :: Either String a -> String
@@ -154,11 +154,11 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
 {-# INLINE verifyCommand #-}
 
 
-verifyUserSig :: Hash -> UserSig -> Bool
+verifyUserSig :: PactHash -> UserSig -> Bool
 verifyUserSig msg UserSig{..} =
   case (pubT, sigT, addrT) of
     (Right p, Right sig, Right addr) ->
-      (isValidAddr addr p) && verify (toScheme _usScheme) msg (PubBS p) (SigBS sig)
+      (isValidAddr addr p) && verify (toScheme _usScheme) (toUntypedHash msg) (PubBS p) (SigBS sig)
     _ -> False
   where pubT = parseB16TextOnly _usPubKey
         sigT = parseB16TextOnly _usSig

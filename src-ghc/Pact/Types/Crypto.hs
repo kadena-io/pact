@@ -18,9 +18,7 @@
 -- Hashing types and Scheme class.
 --
 module Pact.Types.Crypto
-  ( verifyHashTx
-  , initialHashTx
-  , ST.PPKScheme(..)
+  ( ST.PPKScheme(..)
   , ST.defPPKScheme
   , SomeScheme
   , defaultScheme
@@ -115,22 +113,6 @@ class (ConvertBS (PublicKey a),  Eq (PublicKey a),
 
 
 
---------- HASHING ---------
-
-
-verifyHashTx :: PactHash -> ByteString -> Either String Hash
-verifyHashTx h b = if hashed == h
-  then Right (toUntypedHash h)
-  else Left $ "Hash Mismatch, received " ++ show h
-       ++ " but our hashing resulted in " ++ show hashed
-  where hashed = hash b
-{-# INLINE verifyHashTx #-}
-
-initialHashTx :: Hash
-initialHashTx = pactInitialHash
-
-
-
 
 --------- CONNECTS PPKSCHEME TO SPPKSCHEME ---------
 
@@ -163,7 +145,6 @@ instance Scheme (SPPKScheme 'ED25519) where
   type PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
   type PrivateKey (SPPKScheme 'ED25519) = Ed25519.SecretKey
   type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
-  type HashType (SPPKScheme 'ED25519) = 'Blake2b_256
 
   _sign _ (Hash msg) pub priv = return $ Ed25519.sign priv pub msg
   _valid _ (Hash msg) pub sig = Ed25519.verify pub msg sig
