@@ -201,7 +201,7 @@ pact> (format "My {} has {}" ["dog" "fleas"])
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are converted using their JSON representation.
+Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. Strings are converted directly while other values are converted using their JSON representation.
 ```lisp
 pact> (hash "hello")
 "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
@@ -1467,7 +1467,7 @@ Update gas model to charge constant RATE.
 *hash*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash.
+Set current transaction hash. HASH must be an unpadded base64-url encoded BLAKE2b 256-bit hash.
 ```lisp
 pact> (env-hash (hash "hello"))
 "Set tx hash to Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"

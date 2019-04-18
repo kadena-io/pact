@@ -41,7 +41,7 @@ module Pact.Types.Command
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
-  , cmdToRequestKey, requestKeyToB16Text, initialRequestKey
+  , cmdToRequestKey, requestKeyToB16Text
   ) where
 
 
@@ -281,18 +281,6 @@ newtype RequestKey = RequestKey { unRequestKey :: Hash}
 instance Show RequestKey where
   show (RequestKey rk) = show rk
 
-
-#if !defined(ghcjs_HOST_OS)
-
-initialRequestKey :: RequestKey
-initialRequestKey = RequestKey $ initialHashTx H.Blake2b_512
-
-#else
-
-initialRequestKey :: RequestKey
-initialRequestKey = RequestKey initialHash
-
-#endif
 
 
 makeLenses ''UserSig

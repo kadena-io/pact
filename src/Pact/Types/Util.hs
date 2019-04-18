@@ -14,7 +14,21 @@
 --
 -- Utility types and functions.
 --
-module Pact.Types.Util where
+module Pact.Types.Util
+  ( ParseText(..)
+  , fromText, fromText'
+  , lensyToJSON, lensyParseJSON
+  , unsafeFromJSON, outputJSON
+  , fromJSON'
+  , Hash(..), hashToText
+  , parseB16JSON, parseB16Text, parseB16TextOnly
+  , toB16JSON, toB16Text
+  , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
+  , AsString(..), asString'
+  , tShow, maybeDelim
+  , modifyMVar', modifyingMVar, useMVar
+  , failMaybe, maybeToEither
+  ) where
 
 import Data.Aeson
 import Data.Aeson.Types
@@ -57,9 +71,6 @@ fromText' = resultToEither . fromText
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
 
-lensyOptions :: Int -> Options
-lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
-
 lensyToJSON
   :: (Generic a, GToJSON Zero (Rep a)) => Int -> a -> Value
 lensyToJSON n = genericToJSON (lensyOptions n)
@@ -68,33 +79,42 @@ lensyParseJSON
   :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
 lensyParseJSON n = genericParseJSON (lensyOptions n)
 
+lensyOptions :: Int -> Options
+lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
+
+lensyConstructorToNiceJson :: Int -> String -> String
+lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
+  where
+    firstToLower (c:cs) = toLower c : cs
+    firstToLower _ = error $ "lensyConstructorToNiceJson: bad arguments: " ++ show (n,fieldName)
+
 newtype Hash = Hash { unHash :: ByteString }
   deriving (Eq, Ord, Generic, Hashable)
 instance Show Hash where
-  show (Hash h) = show $ b64URL_encode h
+  show (Hash h) = show $ encodeBase64UrlUnpadded h
 instance Pretty Hash where
   pretty = pretty . asString
-instance AsString Hash where asString (Hash h) = decodeUtf8 (b64URL_encode h)
+instance AsString Hash where asString (Hash h) = decodeUtf8 (encodeBase64UrlUnpadded h)
 instance NFData Hash
 
--- | TODO make PR for https://github.com/haskell/base64-bytestring/issues/18
-b64URL_encode :: ByteString -> ByteString
-b64URL_encode = B.init . B64URL.encode
+encodeBase64UrlUnpadded :: ByteString -> ByteString
+encodeBase64UrlUnpadded = fst . B.spanEnd (== equalWord8) . B64URL.encode
 
-b64URL_decode :: ByteString -> Either String ByteString
-b64URL_decode = B64URL.decode . (`B.snoc` equalWord8)
+decodeBase64UrlUnpadded :: ByteString -> Either String ByteString
+decodeBase64UrlUnpadded = B64URL.decode . pad
+  where pad t = let s = B.length t `mod` 4 in t <> B.replicate ((4 - s) `mod` 4) equalWord8
 
 equalWord8 :: Word8
 equalWord8 = toEnum $ fromEnum '='
 
-parseB64URLText :: Text -> Parser ByteString
-parseB64URLText t = case b64URL_decode (encodeUtf8 t) of
+parseB64UrlUnpaddedText :: Text -> Parser ByteString
+parseB64UrlUnpaddedText t = case decodeBase64UrlUnpadded (encodeUtf8 t) of
   Right s -> return s
   Left e -> fail $ "Base64URL decode failed: " ++ e
-{-# INLINE parseB64URLText #-}
+{-# INLINE parseB64UrlUnpaddedText #-}
 
-toB64URLText :: ByteString -> Text
-toB64URLText s = decodeUtf8 $ b64URL_encode s
+toB64UrlUnpaddedText :: ByteString -> Text
+toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 
 
 -- | All pact hashes are Blake2b_256, thus length 32.
@@ -113,7 +133,7 @@ instance Serialize Hash where
                 ++ " from original bytestring " ++ show raw
 
 hashToText :: Hash -> Text
-hashToText (Hash h) = toB64URLText h
+hashToText (Hash h) = toB64UrlUnpaddedText h
 
 instance ToJSON Hash where
   toJSON = String . hashToText
@@ -121,14 +141,9 @@ instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
   {-# INLINE parseJSON #-}
 instance ParseText Hash where
-  parseText s = Hash <$> parseB64URLText s
+  parseText s = Hash <$> parseB64UrlUnpaddedText s
   {-# INLINE parseText #-}
 
-lensyConstructorToNiceJson :: Int -> String -> String
-lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
-  where
-    firstToLower (c:cs) = toLower c : cs
-    firstToLower _ = error "You've managed to screw up the drop number or the field name"
 
 parseB16JSON :: Value -> Parser ByteString
 parseB16JSON = withText "Base16" parseB16Text
@@ -167,11 +182,15 @@ outputJSON a = BSL8.putStrLn $ encode a
 
 -- | Provide unquoted string representation.
 class AsString a where asString :: a -> Text
+
 instance AsString String where asString = pack
 instance AsString Text where asString = id
 instance AsString B.ByteString where asString = asString . decodeUtf8
 instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
 instance AsString Integer where asString = pack . show
+
+asString' :: AsString a => a -> String
+asString' = unpack . asString
 
 -- | Pure version of 'modifyMVar_'
 modifyMVar' :: MVar a -> (a -> a) -> IO ()
@@ -188,13 +207,10 @@ useMVar :: MVar s -> Getting a s a -> IO a
 useMVar e l = view l <$> readMVar e
 {-# INLINE useMVar #-}
 
+-- | Text-y show
 tShow :: Show a => a -> Text
 tShow = pack . show
 
-
-asString' :: AsString a => a -> String
-asString' = unpack . asString
-
-
+-- | Show with prepended delimter if not 'Nothing'
 maybeDelim :: Show a => String -> Maybe a -> String
 maybeDelim d t = maybe "" ((d ++) . show) t
