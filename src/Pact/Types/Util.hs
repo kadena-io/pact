@@ -20,10 +20,10 @@ module Pact.Types.Util
   , lensyToJSON, lensyParseJSON
   , unsafeFromJSON, outputJSON
   , fromJSON'
-  , Hash(..), hashToText
   , parseB16JSON, parseB16Text, parseB16TextOnly
   , toB16JSON, toB16Text
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
+  , parseB64UrlUnpaddedText, toB64UrlUnpaddedText
   , AsString(..), asString'
   , tShow, maybeDelim
   , modifyMVar', modifyingMVar, useMVar
@@ -44,11 +44,7 @@ import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty)
-import Control.DeepSeq
-import Data.Hashable (Hashable)
-import Data.Serialize (Serialize)
-import qualified Data.Serialize as S
-import Pact.Types.Pretty
+
 
 
 
@@ -88,15 +84,6 @@ lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
     firstToLower (c:cs) = toLower c : cs
     firstToLower _ = error $ "lensyConstructorToNiceJson: bad arguments: " ++ show (n,fieldName)
 
-newtype Hash = Hash { unHash :: ByteString }
-  deriving (Eq, Ord, Generic, Hashable)
-instance Show Hash where
-  show (Hash h) = show $ encodeBase64UrlUnpadded h
-instance Pretty Hash where
-  pretty = pretty . asString
-instance AsString Hash where asString (Hash h) = decodeUtf8 (encodeBase64UrlUnpadded h)
-instance NFData Hash
-
 encodeBase64UrlUnpadded :: ByteString -> ByteString
 encodeBase64UrlUnpadded = fst . B.spanEnd (== equalWord8) . B64URL.encode
 
@@ -117,32 +104,7 @@ toB64UrlUnpaddedText :: ByteString -> Text
 toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 
 
--- | All pact hashes are Blake2b_256, thus length 32.
-hashLengthAsBS :: Int
-hashLengthAsBS = 32
 
-
-instance Serialize Hash where
-  put (Hash h) = S.put h
-  get = do
-    raw <- S.get >>= S.getByteString
-    if hashLengthAsBS == B.length raw
-      then return $ Hash raw
-      else fail $ "Unable to decode hash, wrong length: "
-                ++ show (B.length raw)
-                ++ " from original bytestring " ++ show raw
-
-hashToText :: Hash -> Text
-hashToText (Hash h) = toB64UrlUnpaddedText h
-
-instance ToJSON Hash where
-  toJSON = String . hashToText
-instance FromJSON Hash where
-  parseJSON = withText "Hash" parseText
-  {-# INLINE parseJSON #-}
-instance ParseText Hash where
-  parseText s = Hash <$> parseB64UrlUnpaddedText s
-  {-# INLINE parseText #-}
 
 
 parseB16JSON :: Value -> Parser ByteString

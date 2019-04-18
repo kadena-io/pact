@@ -25,7 +25,6 @@ import Pact.Types.Logger
 import System.CPUTime
 import Pact.MockDb
 import qualified Data.Map.Strict as M
-import qualified Crypto.Hash as H
 import Pact.Persist.MockPersist
 import Pact.Persist
 import Unsafe.Coerce
@@ -74,7 +73,7 @@ loadBenchModule db = do
   let md = MsgData S.empty
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
-           (initialHashTx H.Blake2b_512)
+           (initialHashTx Blake2b_256)
   let e = setupEvalEnv db entity (Transactional 1) md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
   _erRefStore <$> evalExec e pc
@@ -88,7 +87,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  let e = setupEvalEnv dbEnv entity t (initMsgData (initialHashTx H.Blake2b_512))
+  let e = setupEvalEnv dbEnv entity t (initMsgData (initialHashTx Blake2b_256))
           refStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
   toJSON . _erOutput <$> evalExec e pc
 

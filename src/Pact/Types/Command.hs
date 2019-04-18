@@ -68,7 +68,6 @@ import Pact.Types.RPC
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
-import qualified Crypto.Hash          as H
 
 import Pact.Parse (parseExprs)
 import Pact.Types.Crypto              as Base
@@ -116,8 +115,8 @@ instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 #if !defined(ghcjs_HOST_OS)
 
-requestKeyHash :: H.Blake2b_512
-requestKeyHash = H.Blake2b_512
+requestKeyHash :: HashAlgo
+requestKeyHash = Blake2b_256
 
 
 mkCommand :: (ToJSON m, ToJSON c) =>

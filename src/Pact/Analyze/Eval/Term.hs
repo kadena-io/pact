@@ -609,7 +609,7 @@ evalTerm = \case
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
 
   Hash value -> do
-    let sHash = literalS . Str . T.unpack . Pact.asString . Pact.hash
+    let sHash = literalS . Str . T.unpack . Pact.asString . Pact.pactHash
         notStaticErr :: AnalyzeFailure
         notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of

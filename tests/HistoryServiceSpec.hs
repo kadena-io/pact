@@ -43,10 +43,10 @@ fp :: FilePath
 fp = "tests/test-log"
 
 cmd :: Command ByteString
-cmd = Command "" [] initialHash
+cmd = Command "" [] pactInitialHash
 
 rq :: RequestKey
-rq = RequestKey initialHash
+rq = RequestKey pactInitialHash
 
 cr :: CommandResult
 cr = CommandResult rq Nothing Null (Gas 0)

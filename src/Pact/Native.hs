@@ -203,7 +203,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
       [TLitString s] -> go $ encodeUtf8 s
       [a'] -> go $ toStrict $ encode a'
       _ -> argsError i as
-      where go = return . tStr . asString . hash
+      where go = return . tStr . asString . pactHash
 
 ifDef :: NativeDef
 ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])

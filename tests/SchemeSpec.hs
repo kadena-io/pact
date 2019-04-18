@@ -9,12 +9,12 @@ import Data.Text (Text)
 import Data.ByteString (ByteString)
 import Data.Aeson as A
 import qualified Data.ByteString.Base16   as B16
-import qualified Crypto.Hash              as H
 
 import Pact.ApiReq
 import Pact.Types.Crypto
 import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromJSON')
+import Pact.Types.Hash
 
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----
@@ -128,7 +128,7 @@ testUserSig = do
         (PubBS pubBS) = pub
         -- UserSig verification will pass but Command verification might fail
         -- if hash algorithm provided not supported for hashing commands.
-        hsh = hashTx "(somePactFunction)" H.SHA3_256
+        hsh = hashTx "(somePactFunction)" SHA3_256
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh
     let myUserSig = UserSig scheme (toB16Text pubBS) addr (toB16Text sig)
@@ -141,7 +141,7 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
         (PubBS pubBS) = pub
-        hsh = hashTx "(somePactFunction)" H.Blake2b_512
+        hsh = hashTx "(somePactFunction)" Blake2b_256
         wrongAddr = (toB16Text pubBS)
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh
@@ -155,7 +155,7 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
         (PubBS pubBS) = pub
-        hsh = hashTx "(somePactFunction)" H.Blake2b_512
+        hsh = hashTx "(somePactFunction)" Blake2b_256
         wrongScheme = ED25519
     [kp] <- mkKeyPairs [apiKP]
     sig <- sign kp hsh

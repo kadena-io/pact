@@ -238,8 +238,8 @@ _testHistoryDB = do
 
 _go :: HistoryService ()
 _go = do
-  addNewKeys [Command "" [] initialHash]
-  let rq = RequestKey initialHash
+  addNewKeys [Command "" [] pactInitialHash]
+  let rq = RequestKey pactInitialHash
   updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null (Gas 0))])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)

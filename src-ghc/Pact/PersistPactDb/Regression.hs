@@ -47,7 +47,7 @@ runRegression p = do
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
   let mod' = MDModule $ Module "mod1" (Governance (Left "mod-admin-keyset")) (Meta Nothing [])
-             "code" (H.hash "code") mempty mempty mempty
+             "code" (H.pactHash "code") mempty mempty mempty
   _writeRow pactdb Write Modules "mod1" mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
   assertEquals' "result of commit 3"
