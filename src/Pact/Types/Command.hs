@@ -26,7 +26,7 @@
 module Pact.Types.Command
   ( Command(..),cmdPayload,cmdSigs,cmdHash
 #if !defined(ghcjs_HOST_OS)
-  , mkCommand, toSigners, mkCommand', verifyUserSig, verifyCommand
+  , mkCommand, keyPairsToSigners, mkCommand', verifyUserSig, verifyCommand
 #else
   , PPKScheme(..)
 #endif
@@ -55,7 +55,7 @@ import Data.Serialize as SZ
 import Data.String
 import Data.Hashable (Hashable)
 import Data.Aeson as A
-import Data.Text hiding (filter, map, zip, length)
+import Data.Text (Text)
 import Data.Maybe  (fromMaybe)
 
 
@@ -131,10 +131,10 @@ mkCommand :: (ToJSON m, ToJSON c) =>
              IO (Command ByteString)
 mkCommand creds meta nonce rpc = mkCommand' creds encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
-        payload = Payload rpc nonce meta $ toSigners creds
+        payload = Payload rpc nonce meta $ keyPairsToSigners creds
 
-toSigners :: [SomeKeyPair] -> [Signer]
-toSigners creds = map toSigner creds
+keyPairsToSigners :: [SomeKeyPair] -> [Signer]
+keyPairsToSigners creds = map toSigner creds
   where toSigner cred = Signer
                         (kpToPPKScheme cred)
                         (toB16Text $ getPublic cred)
@@ -156,35 +156,35 @@ mkCommand' creds env = do
 
 verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
 verifyCommand orig@Command{..} =
-  case isValidPayload of
-    Right env' -> case isValidPayloadHash of
+  case parsedPayload of
+    Right env' -> case verifiedHash of
       Right hsh -> case (hasInvalidSigs hsh _cmdSigs $ _pSigners env') of
         Nothing -> toProcSucc env'
         Just sigErr -> toProcFail sigErr
       Left hshErr -> toProcFail hshErr
     Left payloadErr -> toProcFail payloadErr
   where
-    toProcSucc parsedPayload = ProcSucc $ orig { _cmdPayload = parsedPayload }
+    toProcSucc payload = ProcSucc $ orig { _cmdPayload = payload }
     toProcFail errStr = ProcFail $ "Invalid command: " ++ errStr
 
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
-    isValidPayload = traverse parsePact
-                     =<< A.eitherDecodeStrict' _cmdPayload
+    parsedPayload = traverse parsePact
+                    =<< A.eitherDecodeStrict' _cmdPayload
 
-    isValidPayloadHash = verifyHashTx _cmdHash _cmdPayload requestKeyHash
+    verifiedHash = verifyHashTx _cmdHash _cmdPayload requestKeyHash
 {-# INLINE verifyCommand #-}
 
 
 hasInvalidSigs :: Hash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers
   | not (length sigs == length signers)  = Just "Number of sig(s) does not match number of signer(s)"
-  | otherwise                            = if (length sigsWithIssues == 0)
+  | otherwise                            = if (length failedSigs == 0)
                                            then Nothing else formatIssues
-  where hasIssue (sig, signer) = not $ verifyUserSig hsh sig signer
+  where verifyFailed (sig, signer) = not $ verifyUserSig hsh sig signer
         -- assumes nth Signer is responsible for the nth UserSig
-        sigsWithIssues = filter hasIssue (zip sigs signers)
-        formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode <$> sigsWithIssues)
+        failedSigs = filter verifyFailed (zip sigs signers)
+        formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode <$> failedSigs)
 
 
 verifyUserSig :: Hash -> UserSig -> Signer -> Bool

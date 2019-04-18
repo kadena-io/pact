@@ -78,16 +78,9 @@ instance NFData PrivateMeta
 instance Serialize PrivateMeta
 
 
--- | Contains ChainId, Chainweb network version, ect.
---   Meant to prevent sending Testnet txs to Mainet.
+-- | Expresses unique platform-specific chain identifier.
 newtype ChainId = ChainId Text
-  deriving (Eq, Show, Generic)
-
-instance ToJSON ChainId
-instance FromJSON ChainId
-instance NFData ChainId
-instance Serialize ChainId
-instance Default ChainId where def = ChainId "Testnet00/0"
+  deriving (Eq, Show, Generic, IsString, ToJSON, FromJSON, Serialize, NFData)
 instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
 
 
@@ -100,7 +93,7 @@ data PublicMeta = PublicMeta
   } deriving (Eq, Show, Generic)
 makeLenses ''PublicMeta
 
-instance Default PublicMeta where def = PublicMeta def "" 0 0
+instance Default PublicMeta where def = PublicMeta "" "" 0 0
 instance ToJSON PublicMeta where toJSON = lensyToJSON 3
 instance FromJSON PublicMeta where parseJSON = lensyParseJSON 3
 instance NFData PublicMeta
