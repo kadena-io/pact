@@ -120,7 +120,7 @@ testUserSig = do
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
     kp <- mkKeyPairs [apiKP]
     cmd <- mkCommand' kp "(somePactFunction)"
-    (map (verifyUserSig $ toUntypedHash $ _cmdHash cmd) (_cmdSigs cmd)) `shouldBe` [True]
+    (map (verifyUserSig $ _cmdHash cmd) (_cmdSigs cmd)) `shouldBe` [True]
 
 
 
@@ -131,9 +131,9 @@ testUserSig = do
         (PubBS pubBS) = pub
         -- UserSig verification will pass but Command verification might fail
         -- if hash algorithm provided not supported for hashing commands.
-        hsh = pactHash "(somePactFunction)"
+        hsh = hash "(somePactFunction)"
     [kp] <- mkKeyPairs [apiKP]
-    sig <- sign kp hsh
+    sig <- sign kp (toUntypedHash hsh)
     let myUserSig = UserSig scheme (toB16Text pubBS) addr (toB16Text sig)
     (verifyUserSig hsh myUserSig) `shouldBe` True
 
@@ -144,10 +144,10 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
         (PubBS pubBS) = pub
-        hsh = pactHash "(somePactFunction)"
+        hsh = hash "(somePactFunction)"
         wrongAddr = (toB16Text pubBS)
     [kp] <- mkKeyPairs [apiKP]
-    sig <- sign kp hsh
+    sig <- sign kp (toUntypedHash hsh)
     let myUserSig = UserSig scheme (toB16Text pubBS) wrongAddr (toB16Text sig)
     (verifyUserSig hsh myUserSig) `shouldBe` False
 
@@ -158,10 +158,10 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
         (PubBS pubBS) = pub
-        hsh = pactHash "(somePactFunction)"
+        hsh = hash "(somePactFunction)"
         wrongScheme = ED25519
     [kp] <- mkKeyPairs [apiKP]
-    sig <- sign kp hsh
+    sig <- sign kp (toUntypedHash hsh)
     let myUserSig = UserSig wrongScheme (toB16Text pubBS) addr (toB16Text sig)
     (verifyUserSig hsh myUserSig) `shouldBe` False
 
