@@ -113,6 +113,7 @@ import Text.Show.Deriving
 import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 
 import Pact.Types.Exp
+import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Parser
 import Pact.Types.Pretty hiding (dot)

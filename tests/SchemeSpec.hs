@@ -9,12 +9,12 @@ import Data.Text (Text)
 import Data.ByteString (ByteString)
 import Data.Aeson as A
 import qualified Data.ByteString.Base16   as B16
-import qualified Crypto.Hash              as H
 
 import Pact.ApiReq
 import Pact.Types.Crypto
 import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromJSON')
+import Pact.Types.Hash
 
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----
@@ -38,6 +38,9 @@ someED25519Pair = (PubBS $ getByteString "ba54b224d1924dd98403f5c751abdd10de6cd8
                    PrivBS $ getByteString "8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332",
                    "ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d",
                    ED25519)
+
+
+
 
 someETHPair :: (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
 someETHPair = (PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e",
@@ -128,9 +131,9 @@ testUserSig = do
         (PubBS pubBS) = pub
         -- UserSig verification will pass but Command verification might fail
         -- if hash algorithm provided not supported for hashing commands.
-        hsh = hashTx "(somePactFunction)" H.SHA3_256
+        hsh = hash "(somePactFunction)"
     [kp] <- mkKeyPairs [apiKP]
-    sig <- sign kp hsh
+    sig <- sign kp (toUntypedHash hsh)
     let myUserSig = UserSig scheme (toB16Text pubBS) addr (toB16Text sig)
     (verifyUserSig hsh myUserSig) `shouldBe` True
 
@@ -141,10 +144,10 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
         (PubBS pubBS) = pub
-        hsh = hashTx "(somePactFunction)" H.Blake2b_512
+        hsh = hash "(somePactFunction)"
         wrongAddr = (toB16Text pubBS)
     [kp] <- mkKeyPairs [apiKP]
-    sig <- sign kp hsh
+    sig <- sign kp (toUntypedHash hsh)
     let myUserSig = UserSig scheme (toB16Text pubBS) wrongAddr (toB16Text sig)
     (verifyUserSig hsh myUserSig) `shouldBe` False
 
@@ -155,10 +158,10 @@ testUserSig = do
     let (pub, priv, addr, scheme) = someETHPair
         apiKP = ApiKeyPair priv (Just pub) (Just addr) (Just scheme)
         (PubBS pubBS) = pub
-        hsh = hashTx "(somePactFunction)" H.Blake2b_512
+        hsh = hash "(somePactFunction)"
         wrongScheme = ED25519
     [kp] <- mkKeyPairs [apiKP]
-    sig <- sign kp hsh
+    sig <- sign kp (toUntypedHash hsh)
     let myUserSig = UserSig wrongScheme (toB16Text pubBS) addr (toB16Text sig)
     (verifyUserSig hsh myUserSig) `shouldBe` False
 
