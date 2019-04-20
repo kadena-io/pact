@@ -45,6 +45,7 @@ module Pact.Types.Term
    Ref(..),_Direct,_Ref,
    NativeDFun(..),
    BindType(..),
+   BindPair(..),bpArg,bpVal,
    TableName(..),
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
@@ -706,8 +707,6 @@ instance (Pretty n, ToJSON n) => ToJSON (Object n) where
 instance FromJSON n => FromJSON (Object n) where
   parseJSON v = Object <$> parseJSON v <*> pure TyAny <*> pure def <*> pure def
 
---instance Show1 (Scope b f) where
-
 -- | Pact evaluable term.
 data Term n =
     TModule {
@@ -873,7 +872,7 @@ instance Monad Term where
     TApp a i >>= f = TApp (fmap (>>= f) a) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f =
-      TBinding (map (\bp -> fmap (>>= f) bp) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
+      TBinding (map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject (Object bs t kf oi) i >>= f = TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i
     TGuard k i >>= _ = TGuard k i
@@ -1040,6 +1039,7 @@ makeLenses ''Def
 makeLenses ''ModuleName
 makePrisms ''DefType
 makeLenses ''Object
+makeLenses ''BindPair
 
 deriveEq1 ''Term
 deriveEq1 ''BindPair

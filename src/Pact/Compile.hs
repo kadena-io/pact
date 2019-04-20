@@ -269,10 +269,10 @@ bindingForm = do
   let pair = do
         col <- valueLevel
         a <- sep ColonEquals *> arg
-        return (a,col)
+        return $ BindPair a col
   (bindings,bi) <- withList' Braces $
     (,) <$> pair `sepBy1` sep Comma <*> contextInfo
-  TBinding bindings <$> abstractBody valueLevel (map fst bindings) <*>
+  TBinding bindings <$> abstractBody valueLevel (map _bpArg bindings) <*>
     pure (BindSchema TyAny) <*> pure bi
 
 varAtom :: Compile (Term Name)
@@ -496,10 +496,10 @@ stepWithRollback = do
 
 
 
-letBindings :: Compile [(Arg (Term Name),Term Name)]
+letBindings :: Compile [BindPair (Term Name)]
 letBindings = withList' Parens $
               some $ withList' Parens $
-              (,) <$> arg <*> valueLevel
+              BindPair <$> arg <*> valueLevel
 
 abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)
 abstractBody term args = abstractBody' args <$> bodyForm term
@@ -512,7 +512,7 @@ abstractBody' args = abstract (`elemIndex` bNames)
 letForm :: Compile (Term Name)
 letForm = do
   bindings <- letBindings
-  TBinding bindings <$> abstractBody valueLevel (map fst bindings) <*>
+  TBinding bindings <$> abstractBody valueLevel (map _bpArg bindings) <*>
     pure BindLet <*> contextInfo
 
 -- | let* is a macro to nest lets for referencing previous
@@ -521,7 +521,7 @@ letsForm :: Compile (Term Name)
 letsForm = do
   bindings <- letBindings
   let nest (binding:rest) = do
-        let bName = [arg2Name (fst binding)]
+        let bName = [arg2Name (_bpArg binding)]
         scope <- abstract (`elemIndex` bName) <$> case rest of
           [] -> bodyForm valueLevel
           _ -> do

@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -23,12 +24,14 @@ module Pact.Types.Info
    ) where
 
 
-import Text.Trifecta.Delta hiding (Columns)
+import Text.Trifecta.Delta
 import Data.List
 import Prelude
 import Data.Text (Text,unpack)
+import Data.Text.Encoding
 import qualified Data.Text as T
 import Data.Aeson
+import Data.Aeson.Types
 import Data.String
 import Data.Default
 import GHC.Generics (Generic)
@@ -36,6 +39,7 @@ import Control.DeepSeq
 #if !defined(ghcjs_HOST_OS)
 import Data.SBV (Mergeable (symbolicMerge))
 #endif
+import qualified Data.Vector as V
 
 import Pact.Types.Orphans ()
 import Pact.Types.Pretty
@@ -67,22 +71,12 @@ instance Pretty Code where
 
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
-newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Generic)
+newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Eq,Ord,Generic)
 
 instance NFData Info
--- show instance uses Trifecta renderings
 instance Show Info where
     show (Info Nothing) = ""
     show (Info (Just (r,_d))) = renderCompactString r
-instance Eq Info where
-    Info Nothing == Info Nothing = True
-    Info (Just (_,d)) == Info (Just (_,e)) = d == e
-    _ == _ = False
-instance Ord Info where
-  Info Nothing <= Info Nothing = True
-  Info (Just (_,d)) <= Info (Just (_,e)) = d <= e
-  Info Nothing <= _ = True
-  _ <= Info Nothing = False
 
 instance Default Info where def = Info Nothing
 
@@ -103,10 +97,39 @@ renderParsed :: Parsed -> String
 renderParsed (Parsed d _) = case d of
   (Directed f l c _ _) -> asString' f ++ ":" ++ show (succ l) ++ ":" ++ show c
   (Lines l c _ _) -> "<interactive>:" ++ show (succ l) ++ ":" ++ show c
-  _ -> "<interactive>:0:0"
+  (Columns c _) -> "<interactive>:0:" ++ show c
+  (Tab _ c _ ) -> "<interactive>:0:" ++ show c
 
 
 class HasInfo a where
   getInfo :: a -> Info
 
 instance HasInfo Info where getInfo = id
+
+instance ToJSON Info where
+  toJSON (Info Nothing) = Null
+  toJSON (Info (Just (code,Parsed{..}))) = object
+    [ "c" .= code
+    , "d" .= case _pDelta of
+        (Directed a b c d e) -> [pl,toJSON (decodeUtf8 a),toJSON b,toJSON c,toJSON d,toJSON e]
+        (Lines a b c d) -> [pl,toJSON a,toJSON b,toJSON c,toJSON d]
+        (Columns a b) -> [pl,toJSON a,toJSON b]
+        (Tab a b c) -> [pl,toJSON a,toJSON b,toJSON c]
+
+    ] where pl = toJSON _pLength
+
+instance FromJSON Info where
+  parseJSON Null = pure $ Info Nothing
+  parseJSON v = withObject "Info" go v
+    where
+      go o = Info . Just <$>
+        ((,) <$> o .: "c" <*> (o .: "d" >>= withArray "Delta" doParsed))
+      doParsed d = parsed $ case V.length d of
+        6 -> Directed <$> (encodeUtf8 <$> col 1) <*> col 2 <*> col 3 <*> col 4 <*> col 5
+        5 -> Lines <$> col 1 <*> col 2 <*> col 3 <*> col 4
+        4 -> Tab <$> col 1 <*> col 2 <*> col 3
+        3 -> Columns <$> col 1 <*> col 2
+        _ -> fail "Delta: invalid JSON"
+        where col :: FromJSON v => Int -> Parser v
+              col i = parseJSON (d V.! i)
+              parsed p = Parsed <$> p <*> col 0
