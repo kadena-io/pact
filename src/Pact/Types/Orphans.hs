@@ -26,6 +26,9 @@ import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Default
 import Control.DeepSeq
+import Bound
+import Control.Applicative ((<|>))
+
 
 instance Serialize Micro
 instance Serialize NominalDiffTime
@@ -63,3 +66,17 @@ instance Default Text where def = ""
 instance Serialize Text where
   put = put . encodeUtf8
   get = decodeUtf8 <$> get
+
+
+instance (A.ToJSON b, Functor f, A.ToJSON (f A.Value)) => A.ToJSON (Scope b f A.Value) where
+  toJSON (Scope s) = A.object [ "scope" A..= A.toJSON (fmap go s) ]
+    where
+      go (B b) = A.object [ "b" A..= b ]
+      go (F a) = A.object [ "f" A..= a ]
+
+instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value)) => A.FromJSON (Scope b f A.Value) where
+  parseJSON = A.withObject "Scope" $ \o -> do
+    f <- o A..: "scope"
+    let go = A.withObject "Var" $ \v ->
+          ((B <$> v A..: "b") <|> (F <$> v A..: "f"))
+    Scope <$> traverse go f

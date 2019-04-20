@@ -1043,22 +1043,30 @@ instance Monad Term where
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
 
 
-instance FromJSON (Term n) where
+instance FromJSON n => FromJSON (Term n) where
     parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
     parseJSON (Bool b) = return $ toTerm b
     parseJSON (String s) = return $ toTerm s
     parseJSON (Array a) = toTList TyAny def . toList <$> mapM parseJSON a
-    parseJSON (A.Object o) = toTObject TyAny def <$> mapM (traverse parseJSON . first FieldKey) (HM.toList o)
+    parseJSON (A.Object o) = do
+      md <- o .: "mdef"
+      (bv :: Scope () Term Value) <- o .: "mbody"
+      bv' <- traverse parseJSON bv
+      return $ TModule md bv' def
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 
-instance Pretty n => ToJSON (Term n) where
+instance (ToJSON n, Pretty n) => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
     toJSON (TGuard k _) = toJSON k
     toJSON (TObject (Object kvs _ _ _) _) = toJSON kvs
     toJSON (TList ts _ _) = toJSON ts
-    toJSON t = toJSON (renderCompactText t)
+    toJSON (TModule md ms mi) = object
+      [ "mdef" .= toJSON md
+      , "mbody" .= toJSON (fmap toJSON ms)
+      , "minfo" .= True -- toJSON mi
+      ]
     {-# INLINE toJSON #-}
 
 class ToTerm a where
