@@ -1,3 +1,4 @@
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -77,7 +78,6 @@ module Pact.Types.Term
 
 import Bound
 import Control.Applicative
-import Control.Arrow ((***),first)
 import Control.DeepSeq
 import Control.Lens (makeLenses,makePrisms, (<&>))
 import Control.Monad
@@ -90,7 +90,6 @@ import Data.Default
 import Data.Eq.Deriving
 import Data.Foldable
 import Data.Function
-import Data.Functor.Classes
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Data.Hashable
@@ -342,6 +341,11 @@ instance (Pretty n) => Pretty (BindType n) where
   pretty BindLet = "let"
   pretty (BindSchema b) = "bind" <> pretty b
 
+
+data BindPair n = BindPair
+  { _bpArg :: Arg n
+  , _bpVal :: n } deriving (Eq,Show,Functor,Traversable,Foldable)
+
 newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show)
 instance Pretty TableName where pretty (TableName s) = pretty s
@@ -588,7 +592,10 @@ data Def n = Def
   , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
   , _dInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq,Show)
+  } deriving (Functor,Foldable,Traversable)
+
+deriving instance Show n => Show (Def n)
+deriving instance Eq n => Eq (Def n)
 
 instance Pretty n => Pretty (Def n) where
   pretty Def{..} = parensSep $
@@ -630,141 +637,6 @@ data ConstVal n =
          , _cvEval :: !n }
   deriving (Eq,Functor,Foldable,Traversable,Generic,Show)
 
--- Note: I believe this entire thing could be derived automatically if we go
--- rid of bound (@Scope@). We currently need this instance to satisfy the
--- 'Show' instance for 'Scope':
--- @(Show b, Show1 f, Show a) => Show (Scope b f a)@.
-instance Show1 Term where
-  liftShowsPrec :: forall a.
-    (Int -> a -> ShowS) -> ([a] -> ShowS) -> Int -> Term a -> ShowS
-  liftShowsPrec showsA showListA p tm = showParen (p > 10) $ case tm of
-    TModule{..} ->
-        showString "TModule "
-      . shows2 11 _tModuleDef
-      . showChar ' '
-      . shows1 11 _tModuleBody
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TList{..} ->
-        showString "TList "
-      . showList1 (V.toList _tList)
-      . showChar ' '
-      . shows2 11 _tListType
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TDef{..} ->
-        showString "TDef "
-      . shows1 11 _tDef
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TNative{..} ->
-        showString "TNative "
-      . showsPrec 11 _tNativeName
-      . showChar ' '
-      . showsPrec 11 _tNativeFun
-      . showChar ' '
-      . shows3 11 _tFunTypes
-      . showChar ' '
-      . showsPrec 11 _tNativeExamples
-      . showChar ' '
-      . showsPrec 11 _tNativeDocs
-      . showChar ' '
-      . showsPrec 11 _tNativeTopLevelOnly
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TConst{..} ->
-        showString "TConst "
-      . shows2 11 _tConstArg
-      . showChar ' '
-      . showsPrec 11 _tModule
-      . showChar ' '
-      . shows2 11 _tConstVal
-      . showChar ' '
-      . showsPrec 11 _tMeta
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TApp{..} ->
-        showString "TApp "
-      . shows2 11 _tApp
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TVar{..} ->
-        showString "TVar "
-      . showsA 11 _tVar
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TBinding{..} ->
-        showString "TBinding"
-      . liftShowList2 shows2 showList2 shows1 showList1 _tBindPairs
-      . shows1 11 _tBindBody
-      . shows3 11 _tBindType
-      . showsPrec 11 _tInfo
-    TObject{..} ->
-        showString "TObject"
-      . shows1 11 _tObject
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TSchema{..} ->
-        showString "TSchema "
-      . showsPrec 11 _tSchemaName
-      . showChar ' '
-      . showsPrec 11 _tModule
-      . showChar ' '
-      . showsPrec 11 _tMeta
-      . showChar ' '
-      . showList2 _tFields
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TLiteral{..} ->
-        showString "TLiteral "
-      . showsPrec 11 _tLiteral
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TGuard{..} ->
-        showString "TGuard "
-      . showsPrec 11 _tGuard
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TUse{..} ->
-        showString "TUse "
-      . showsPrec 11 _tUse
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TValue{..} ->
-        showString "TValue "
-      . showsPrec 11 _tValue
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    TStep{..} ->
-        showString "TStep "
-      . shows2 11 _tStepEntity
-      . shows1 11 _tStepExec
-      . shows2 11 _tStepRollback
-      . showsPrec 11 _tInfo
-    TTable{..} ->
-        showString "TTable "
-      . showsPrec 11 _tTableName
-      . showChar ' '
-      . showsPrec 11 _tModule
-      . showChar ' '
-      . showsPrec 11 _tHash
-      . showChar ' '
-      . shows2
-        11 _tTableType
-      . showChar ' '
-      . showsPrec 11 _tMeta
-      . showChar ' '
-      . showsPrec 11 _tInfo
-    where shows1 :: Show1 f => Int -> f a -> ShowS
-          shows1 = liftShowsPrec showsA showListA
-          showList1 :: Show1 f => [f a] -> ShowS
-          showList1 = liftShowList showsA showListA
-          shows2 :: (Show1 f, Show1 g) => Int -> f (g a) -> ShowS
-          shows2 = liftShowsPrec shows1 showList1
-          showList2 :: (Show1 f, Show1 g) => [f (g a)] -> ShowS
-          showList2 = liftShowList shows1 showList1
-          shows3 :: (Show1 f, Show1 g, Show1 h) => Int -> f (g (h a)) -> ShowS
-          shows3 = liftShowsPrec shows2 showList2
 
 data Example
   = ExecExample !Text
@@ -834,6 +706,8 @@ instance (Pretty n, ToJSON n) => ToJSON (Object n) where
 instance FromJSON n => FromJSON (Object n) where
   parseJSON v = Object <$> parseJSON v <*> pure TyAny <*> pure def <*> pure def
 
+--instance Show1 (Scope b f) where
+
 -- | Pact evaluable term.
 data Term n =
     TModule {
@@ -875,7 +749,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TBinding {
-      _tBindPairs :: ![(Arg (Term n),Term n)]
+      _tBindPairs :: ![BindPair (Term n)]
     , _tBindBody :: !(Scope Int Term n)
     , _tBindType :: BindType (Type (Term n))
     , _tInfo :: !Info
@@ -921,7 +795,10 @@ data Term n =
     , _tMeta :: !Meta
     , _tInfo :: !Info
     }
-    deriving (Functor,Foldable,Traversable,Eq,Show)
+    deriving (Functor,Foldable,Traversable)
+
+deriving instance Show n => Show (Term n)
+deriving instance Eq n => Eq (Term n)
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
@@ -947,11 +824,11 @@ instance Pretty n => Pretty (Term n) where
     TVar n _ -> pretty n
     TBinding pairs body BindLet _i -> parensSep
       [ "let"
-      , parensSep $ pairs <&> \(arg, body') -> pretty arg <+> pretty body'
+      , parensSep $ pairs <&> \(BindPair arg body') -> pretty arg <+> pretty body'
       , pretty $ unscope body
       ]
     TBinding pairs body (BindSchema _) _i -> parensSep
-      [ commaBraces $ pairs <&> \(arg, body') -> pretty arg <+> pretty body'
+      [ commaBraces $ pairs <&> \(BindPair arg body') -> pretty arg <+> pretty body'
       , pretty $ unscope body
       ]
     TObject o _ -> pretty o
@@ -982,43 +859,6 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tMeta
       ]
 
--- We currently need this instance to satisfy the 'Eq instance for 'Scope':
--- @(Monad f, Eq b, Eq1 f) => Eq1 (Scope b f)@
-instance Eq1 Term where
-  liftEq eq (TModule a b c) (TModule m n o) =
-    liftEq (liftEq eq) a m && liftEq eq b n && c == o
-  liftEq eq (TList a b c) (TList m n o) =
-    liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o
-  liftEq eq (TDef (Def a b c d e f g) i) (TDef (Def m n o p q r s) t) =
-    a == m && b == n && c == o && liftEq (liftEq eq) d p && liftEq eq e q && f == r && g == s && i == t
-  liftEq eq (TConst a b c d e) (TConst m n o q r) =
-    liftEq (liftEq eq) a m && b == n && liftEq (liftEq eq) c o && d == q && e == r
-  liftEq eq (TApp (App a b c) d) (TApp (App m n o) p) =
-    liftEq eq a m && liftEq (liftEq eq) b n && c == o && d == p
-  liftEq eq (TVar a b) (TVar m n) =
-    eq a m && b == n
-  liftEq eq (TBinding a b c d) (TBinding m n o p) =
-    liftEq (\(w,x) (y,z) -> liftEq (liftEq eq) w y && liftEq eq x z) a m &&
-    liftEq eq b n && liftEq (liftEq (liftEq eq)) c o && d == p
-  liftEq eq (TObject (Object a b _ c) d) (TObject (Object m n _ o) p) =
-    liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o && d == p
-  liftEq _ (TLiteral a b) (TLiteral m n) =
-    a == m && b == n
-  liftEq _ (TGuard a b) (TGuard m n) =
-    a == m && b == n
-  liftEq _ (TUse a b) (TUse m n) =
-    a == m && b == n
-  liftEq _ (TValue a b) (TValue m n) =
-    a == m && b == n
-  liftEq eq (TStep a b c d) (TStep m n o p) =
-    liftEq (liftEq eq) a m && liftEq eq b n && liftEq (liftEq eq) c o && d == p
-  liftEq eq (TSchema a b c d e) (TSchema m n o p q) =
-    a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
-  liftEq eq (TTable a b c d e f) (TTable m n o p q r) =
-    a == m && b == n && c == o && liftEq (liftEq eq) d p && e == q && f == r
-  liftEq _ _ _ = False
-
-
 instance Applicative Term where
     pure = return
     (<*>) = ap
@@ -1032,7 +872,8 @@ instance Monad Term where
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp a i >>= f = TApp (fmap (>>= f) a) i
     TVar n i >>= f = (f n) { _tInfo = i }
-    TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
+    TBinding bs b c i >>= f =
+      TBinding (map (\bp -> fmap (>>= f) bp) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject (Object bs t kf oi) i >>= f = TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i
     TGuard k i >>= _ = TGuard k i
@@ -1200,6 +1041,8 @@ makeLenses ''ModuleName
 makePrisms ''DefType
 makeLenses ''Object
 
+deriveEq1 ''Term
+deriveEq1 ''BindPair
 deriveEq1 ''App
 deriveEq1 ''BindType
 deriveEq1 ''ConstVal
@@ -1210,6 +1053,8 @@ deriveEq1 ''Governance
 deriveEq1 ''ObjectMap
 deriveEq1 ''Object
 
+deriveShow1 ''Term
+deriveShow1 ''BindPair
 deriveShow1 ''App
 deriveShow1 ''ObjectMap
 deriveShow1 ''Object
@@ -1220,21 +1065,29 @@ deriveShow1 ''ModuleDef
 deriveShow1 ''Module
 deriveShow1 ''Governance
 
--- | Demonstrate Bound JSON marshalling with let binding nested in module.
-_roundtripJSON :: Bool
-_roundtripJSON = r == t
+-- | Demonstrate Term/Bound JSON marshalling with nested bound and free vars.
+_roundtripJSON :: String
+_roundtripJSON | r == (Success tmod) = show r
+               | otherwise = error ("Mismatch: " ++ show r ++ ", " ++ show tmod)
   where
-    (Success r) = traverse fromJSON tv
-    (Success tv) = fromJSON v :: Result (Term Value)
-    v = toJSON t
-    t = TModule (MDModule (Module "foo"
-                           (Governance (Right (tStr "hi")))
-                           def "" pactInitialHash HS.empty [] []))
-        (abstract (const (Just ())) $
-         TList (V.singleton
-                (TBinding []
-                 (abstract (\b -> if b == a then Just 0 else Nothing) (TVar a def))
-                 BindLet def))
-          TyAny def)
-        def
-    a = Name "a" def
+    r = fromJSON v
+    v = toJSON tmod
+    tmod = TModule
+           (MDModule (Module "foo" (Governance (Right (tStr "hi")))
+                      def "" pactInitialHash HS.empty [] []))
+           (abstract (const (Just ()))
+            (toTList TyAny def
+             [tlet1]))
+           def
+    tlet1 = TBinding []
+           (abstract (\b -> if b == na then Just 0 else Nothing)
+            (toTList TyAny def
+             [(TVar na def),tlet2])) -- bound var + let
+           BindLet def
+    tlet2 = TBinding []
+           (abstract (\b -> if b == nb then Just 0 else Nothing)
+            (toTList TyAny def
+             [(TVar na def),(TVar nb def)])) -- free var + bound var
+           BindLet def
+    na = Name "a" def
+    nb = Name "b" def

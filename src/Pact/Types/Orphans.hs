@@ -67,16 +67,24 @@ instance Serialize Text where
   put = put . encodeUtf8
   get = decodeUtf8 <$> get
 
+------ Bound/Scope/Var instances ------
 
-instance (A.ToJSON b, Functor f, A.ToJSON (f A.Value)) => A.ToJSON (Scope b f A.Value) where
-  toJSON (Scope s) = A.object [ "scope" A..= A.toJSON (fmap go s) ]
-    where
-      go (B b) = A.object [ "b" A..= b ]
-      go (F a) = A.object [ "f" A..= a ]
+instance (A.ToJSON a, A.ToJSON b) =>
+  A.ToJSON (Var b a) where
+  toJSON (B b) = A.object [ "b" A..= b ]
+  toJSON (F a) = A.object [ "f" A..= a ]
 
-instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value)) => A.FromJSON (Scope b f A.Value) where
+instance (A.FromJSON a, A.FromJSON b) =>
+  A.FromJSON (Var b a) where
+  parseJSON = A.withObject "Var" $ \v ->
+    ((B <$> v A..: "b") <|> (F <$> v A..: "f"))
+
+instance (A.ToJSON b, Functor f, A.ToJSON (f A.Value), A.ToJSON (f a)) =>
+  A.ToJSON (Scope b f a) where
+  toJSON (Scope s) = A.object [ "scope" A..= (fmap A.toJSON s) ]
+
+instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value), A.FromJSON (f a)) =>
+  A.FromJSON (Scope b f a) where
   parseJSON = A.withObject "Scope" $ \o -> do
     f <- o A..: "scope"
-    let go = A.withObject "Var" $ \v ->
-          ((B <$> v A..: "b") <|> (F <$> v A..: "f"))
-    Scope <$> traverse go f
+    Scope <$> traverse A.parseJSON f
