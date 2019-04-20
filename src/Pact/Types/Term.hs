@@ -1048,11 +1048,18 @@ instance FromJSON n => FromJSON (Term n) where
     parseJSON (Bool b) = return $ toTerm b
     parseJSON (String s) = return $ toTerm s
     parseJSON (Array a) = toTList TyAny def . toList <$> mapM parseJSON a
-    parseJSON (A.Object o) = do
-      md <- o .: "mdef"
-      (bv :: Scope () Term Value) <- o .: "mbody"
-      bv' <- traverse parseJSON bv
-      return $ TModule md bv' def
+    parseJSON (A.Object o) = parseModule <|> parseLet <|> parseVar
+      where
+        parseModule = do
+          md <- o .: "mdef"
+          (bv :: Scope () Term Value) <- o .: "mbody"
+          bv' <- traverse parseJSON bv
+          return $ TModule md bv' def
+        parseLet = do
+          (bv :: Scope Int Term Value) <- o .: "body"
+          bv' <- traverse parseJSON bv
+          return $ TBinding [] bv' BindLet def
+        parseVar = TVar <$> o .: "var" <*> pure def
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 
@@ -1062,11 +1069,18 @@ instance (ToJSON n, Pretty n) => ToJSON (Term n) where
     toJSON (TGuard k _) = toJSON k
     toJSON (TObject (Object kvs _ _ _) _) = toJSON kvs
     toJSON (TList ts _ _) = toJSON ts
-    toJSON (TModule md ms mi) = object
+    toJSON (TModule md ms _mi) = object
       [ "mdef" .= toJSON md
       , "mbody" .= toJSON (fmap toJSON ms)
       , "minfo" .= True -- toJSON mi
       ]
+    toJSON (TBinding args body BindLet _inf) = object
+      [ "bargs" .= True -- toJSON args
+      , "body" .= toJSON (fmap toJSON body)
+      , "info" .= True -- toJSON inf
+      ]
+    toJSON (TVar v _) = object
+      [ "var" .= v ]
     {-# INLINE toJSON #-}
 
 class ToTerm a where
@@ -1205,3 +1219,22 @@ deriveShow1 ''Def
 deriveShow1 ''ModuleDef
 deriveShow1 ''Module
 deriveShow1 ''Governance
+
+-- | Demonstrate Bound JSON marshalling with let binding nested in module.
+_roundtripJSON :: Bool
+_roundtripJSON = r == t
+  where
+    (Success r) = traverse fromJSON tv
+    (Success tv) = fromJSON v :: Result (Term Value)
+    v = toJSON t
+    t = TModule (MDModule (Module "foo"
+                           (Governance (Right (tStr "hi")))
+                           def "" pactInitialHash HS.empty [] []))
+        (abstract (const (Just ())) $
+         TList (V.singleton
+                (TBinding []
+                 (abstract (\b -> if b == a then Just 0 else Nothing) (TVar a def))
+                 BindLet def))
+          TyAny def)
+        def
+    a = Name "a" def
