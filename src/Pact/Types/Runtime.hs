@@ -65,7 +65,7 @@ import Pact.Types.ChainMeta
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Util
@@ -165,7 +165,7 @@ instance Default RefStore where def = RefStore HM.empty HM.empty
 
 data PactContinuation = PactContinuation
   { _pcDef :: Def Ref
-  , _pcArgs :: [PactOutput]
+  , _pcArgs :: [PactValue]
   } deriving (Eq,Show)
 
 -- | Result of evaluation of a 'defpact'.
@@ -173,7 +173,7 @@ data PactExec = PactExec
   { -- | Count of steps in pact (discovered when code is executed)
     _peStepCount :: Int
     -- | Yield value if invoked
-  , _peYield :: !(Maybe (ObjectMap PactOutput))
+  , _peYield :: !(Maybe (ObjectMap PactValue))
     -- | Whether step was executed (in private cases, it can be skipped)
   , _peExecuted :: Bool
     -- | Step that was executed or skipped

@@ -46,6 +46,7 @@ import Data.Word (Word64)
 import GHC.Generics (Generic)
 
 import Pact.Types.Lang
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Util (AsString(..))
 
@@ -82,7 +83,7 @@ makeLenses ''Columns
 
 -- | Specify key and value types for database domains.
 data Domain k v where
-  UserTables :: !TableName -> Domain RowKey (Columns (Term Name))
+  UserTables :: !TableName -> Domain RowKey (Columns PactValue)
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName (ModuleDef Name)
   Namespaces :: Domain NamespaceName Namespace
@@ -95,9 +96,6 @@ instance AsString (Domain k v) where
     asString Namespaces = "SYS:Namespaces"
 
 -- | Transaction record.
--- Backends are expected to return "user-visible" values
--- for '_txValue', namely that internal JSON formats for 'Persistable'
--- need to be converted to Term JSON formats.
 data TxLog v =
     TxLog {
       _txDomain :: !Text

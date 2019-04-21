@@ -57,7 +57,7 @@ library
                      , Pact.Types.Lang
                      , Pact.Types.Logger
                      , Pact.Types.Native
-                     , Pact.Types.PactOutput
+                     , Pact.Types.PactValue
                      , Pact.Types.Parser
                      , Pact.Types.Persistence
                      , Pact.Types.Pretty
