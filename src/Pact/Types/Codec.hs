@@ -27,6 +27,7 @@ module Pact.Types.Codec
   , pactISO8601Format
   , highPrecFormat
   , roundtripCodec
+  , withThisText
   ) where
 
 
@@ -34,7 +35,7 @@ import Control.Applicative
 import qualified Data.Aeson as A
 import Data.Aeson hiding (Object)
 import Data.Aeson.Types (Parser,parse)
-import Data.Text (unpack)
+import Data.Text (Text,unpack)
 import Data.Decimal (Decimal,DecimalRaw(..))
 import Data.Thyme.Time.Core
 import Text.Read (readMaybe)
@@ -141,3 +142,9 @@ valueCodec = Codec enc dec
 
 roundtripCodec :: Codec t -> t -> Result t
 roundtripCodec c t = parse (decoder c) $ encoder c t
+
+withThisText :: String -> Text -> Value -> Parser a -> Parser a
+withThisText s t v p = withText s go v
+  where
+    go tv | tv == t = p
+          | otherwise = fail $ s ++ ": Expected " ++ show t

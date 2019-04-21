@@ -43,7 +43,6 @@ import Data.List
 import Control.Monad
 import Prelude
 import Data.Aeson
-import Data.Aeson.Types (Parser)
 import Data.String
 import Data.Set (Set, isSubsetOf)
 import qualified Data.Set as Set
@@ -59,6 +58,7 @@ import Data.Default (Default(..))
 import Pact.Types.Pretty
 import Pact.Types.Util
 import Pact.Types.Info
+import Pact.Types.Codec
 
 
 newtype TypeName = TypeName Text
@@ -259,11 +259,6 @@ instance FromJSON SchemaPartial where
     (withThisText "AnySubschema" "any" v $ pure AnySubschema) <|>
     (PartialSchema <$> parseJSON v)
 
-withThisText :: String -> Text -> Value -> Parser a -> Parser a
-withThisText s t v p = withText s go v
-  where
-    go tv | tv == t = p
-          | otherwise = fail $ s ++ ": Expected " ++ show t
 
 showPartial :: SchemaPartial -> String
 showPartial FullSchema = ""

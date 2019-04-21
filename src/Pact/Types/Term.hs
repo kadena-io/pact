@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -79,6 +80,7 @@ module Pact.Types.Term
 
 import Bound
 import Control.Applicative
+import Control.Arrow ((&&&))
 import Control.DeepSeq
 import Control.Lens (makeLenses,makePrisms, (<&>))
 import Control.Monad
@@ -373,6 +375,11 @@ instance ToJSON n => ToJSON (BindType n) where
   toJSON BindLet = "let"
   toJSON (BindSchema s) = object [ "bind" .= s ]
 
+instance FromJSON n => FromJSON (BindType n) where
+  parseJSON v =
+    withThisText "BindLet" "let" v (pure BindLet) <|>
+    withObject "BindSchema" (\o -> BindSchema <$> o .: "bind") v
+
 instance NFData n => NFData (BindType n)
 
 
@@ -387,7 +394,7 @@ instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
 newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show,NFData)
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show,NFData,ToJSON,FromJSON)
 instance Pretty TableName where pretty (TableName s) = pretty s
 
 data ModuleName = ModuleName
@@ -484,6 +491,8 @@ data Use = Use
   , _uInfo :: !Info
   } deriving (Eq, Show, Generic)
 
+instance HasInfo Use where getInfo = _uInfo
+
 instance Pretty Use where
   pretty Use{..} =
     let args = pretty _uModuleName : maybe [] (\mh -> [pretty mh]) _uModuleHash
@@ -506,6 +515,8 @@ data App t = App
   , _appArgs :: ![t]
   , _appInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
+
+instance HasInfo (App t) where getInfo = _appInfo
 
 instance ToJSON t => ToJSON (App t) where toJSON = lensyToJSON 4
 instance FromJSON t => FromJSON (App t) where parseJSON = lensyParseJSON 4
@@ -616,6 +627,8 @@ deriving instance Show n => Show (Def n)
 deriving instance Eq n => Eq (Def n)
 instance NFData n => NFData (Def n)
 
+instance HasInfo (Def n) where getInfo = _dInfo
+
 instance Pretty n => Pretty (Def n) where
   pretty Def{..} = parensSep $
     [ prettyString (defTypeRep _dDefType)
@@ -623,8 +636,8 @@ instance Pretty n => Pretty (Def n) where
     , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
 
-instance ToJSON n => ToJSON (Def n) where toJSON = lensyToJSON 2
-instance FromJSON n => FromJSON (Def n) where parseJSON = lensyParseJSON 2
+instance (ToJSON n, FromJSON n) => ToJSON (Def n) where toJSON = lensyToJSON 2
+instance (ToJSON n, FromJSON n) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
 
 derefDef :: Def Ref -> Name
 derefDef Def{..} = QName _dModule (asString _dDefName) _dInfo
@@ -723,6 +736,10 @@ data Object n = Object
   , _oKeyOrder :: Maybe [FieldKey]
   , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
+
+instance HasInfo (Object n) where getInfo = _oInfo
+
+
 instance Pretty n => Pretty (Object n) where
   pretty (Object bs _ Nothing _) = pretty bs
   pretty (Object (ObjectMap om) _ (Just ko) _) =
@@ -734,14 +751,14 @@ instance Pretty n => Pretty (Object n) where
 
 instance NFData n => NFData (Object n)
 
-instance (Pretty n, ToJSON n) => ToJSON (Object n) where
+instance (ToJSON n, FromJSON n) => ToJSON (Object n) where
   toJSON Object{..} = object $
     [ "obj" .= _oObject
     , "type" .= _oObjectType
     , "i" .= _oInfo ] ++
     maybe [] (pure . ("keyorder" .=)) _oKeyOrder
 
-instance FromJSON n => FromJSON (Object n) where
+instance (ToJSON n, FromJSON n) => FromJSON (Object n) where
   parseJSON = withObject "Object" $ \o ->
     Object <$> o .: "obj" <*> o .: "type" <*> o .:? "keyorder" <*> o .: "i"
 
@@ -922,45 +939,97 @@ instance Monad Term where
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
 
 
-instance FromJSON n => FromJSON (Term n) where
-    parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
-    parseJSON (Bool b) = return $ toTerm b
-    parseJSON (String s) = return $ toTerm s
-    parseJSON (Array a) = toTList TyAny def . toList <$> mapM parseJSON a
-    parseJSON (A.Object o) = parseModule <|> parseLet <|> parseVar
-      where
-        parseModule = do
-          md <- o .: "mdef"
-          (bv :: Scope () Term Value) <- o .: "mbody"
-          bv' <- traverse parseJSON bv
-          return $ TModule md bv' def
-        parseLet = do
-          (bv :: Scope Int Term Value) <- o .: "body"
-          bv' <- traverse parseJSON bv
-          return $ TBinding [] bv' BindLet def
-        parseVar = TVar <$> o .: "var" <*> pure def
-    parseJSON v = return $ toTerm v
-    {-# INLINE parseJSON #-}
+termCodec :: (ToJSON n,FromJSON n) => Codec (Term n)
+termCodec = Codec enc dec
+  where
+    enc t = case t of
+      TModule d b i -> ob [ moduleDef .= d, body .= b, inf i ]
+      TList ts ty i -> ob [ list' .= ts, type' .= ty, inf i ]
+      TDef d _i -> toJSON d
+      -- TODO native is all statically-declared
+      TNative n _fn tys _exs d tl i ->
+        ob [ natName .= n, natFun .= Null {- TODO fn -}, natFunTypes .= tys, natExamples .= Null {- TODO exs -},
+             natDocs .= d, natTopLevel .= tl, inf i ]
+      TConst d m c met i -> ob [ constArg .= d, modName .= m, constVal .= c, meta .= met, inf i ]
+      TApp a _i -> toJSON a
+      TVar n i -> ob [ var .= n, inf i ]
+      TBinding bs b c i -> ob [pairs .= bs, body .= b, type' .= c, inf i]
+      TObject o _i -> toJSON o
+      TLiteral l i -> ob [literal .= l, inf i]
+      TGuard k i -> ob [guard' .= k, inf i]
+      TUse u _i -> toJSON u
+      TValue v i -> ob [value .= v, inf i]
+      TStep ent e r i -> ob [entity .= ent, exec .= e, rollback .= r, inf i]
+      TSchema sn smod smeta sfs i ->
+        ob [ schemaName .= sn, modName .= smod, meta .= smeta, fields .= sfs, inf i ]
+      TTable tn tmod th tty tmeta i ->
+        ob [ tblName .= tn, modName .= tmod, hash' .= th, type' .= tty, meta .= tmeta,
+             inf i ]
+    dec decval =
+      let wo n f = withObject n f decval
+          parseWithInfo f = uncurry f . (id &&& getInfo) <$> parseJSON decval
+      in
+        wo "Module" (\o -> TModule <$> o .: moduleDef <*> o .: body <*> inf' o)
+        <|> wo "List" (\o -> TList <$> o .: list' <*> o .: type' <*> inf' o)
+        <|> parseWithInfo TDef
+      -- TODO native is all statically-declared
+      --(wo "Native" $ \o -> TNative <$>  natName <*> pure Null {- TODO fn -}, natFunTypes <*> natExamples .= Null {- TODO exs -},
+      --natDocs <*> natTopLevel <*> inf i )
+        <|> wo "Const"
+            (\o -> TConst <$> o .: constArg <*> o .: modName <*> o .: constVal <*> o .: meta <*> inf' o )
+        <|> parseWithInfo TApp
+        <|> wo "Var" (\o -> TVar <$>  o .: var <*> inf' o )
+        <|> wo "Binding" (\o -> TBinding <$> o .: pairs <*> o .: body <*> o .: type' <*> inf' o)
+        <|> parseWithInfo TObject
+        <|> wo "Literal" (\o -> TLiteral <$> o .: literal <*> inf' o)
+        <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
+        <|> parseWithInfo TUse
+        <|> wo "Value" (\o -> TValue <$> o .: value <*> inf' o)
+        <|> wo "Step" (\o -> TStep <$> o .: entity <*> o .: exec <*> o .: rollback <*> inf' o)
+        <|> wo "Schema"
+            (\o -> TSchema <$>  o .: schemaName <*> o .: modName <*> o .: meta <*> o .: fields <*> inf' o )
+        <|> wo "Table"
+            (\o -> TTable <$>  o .: tblName <*> o .: modName <*> o .: hash' <*> o .: type'
+                   <*> o .: meta <*> inf' o )
 
-instance ToJSON n => ToJSON (Term n) where
-    toJSON (TLiteral l _) = toJSON l
-    toJSON (TValue v _) = v
-    toJSON (TGuard k _) = toJSON k
-    toJSON (TObject (Object kvs _ _ _) _) = toJSON kvs
-    toJSON (TList ts _ _) = toJSON ts
-    toJSON (TModule md ms _mi) = object
-      [ "mdef" .= toJSON md
-      , "mbody" .= toJSON (fmap toJSON ms)
-      , "minfo" .= True -- toJSON mi
-      ]
-    toJSON (TBinding args body BindLet _inf) = object
-      [ "bargs" .= True -- toJSON args
-      , "body" .= toJSON (fmap toJSON body)
-      , "info" .= True -- toJSON inf
-      ]
-    toJSON (TVar v _) = object
-      [ "var" .= v ]
-    {-# INLINE toJSON #-}
+
+    ob = object
+    moduleDef = "module"
+    body = "body"
+    meta = "meta"
+    inf i = "i" .= i
+    inf' o = o .: "i"
+    list' = "list"
+    type' = "type"
+    natName = "name"
+    natFun = "fun"
+    natFunTypes = "types"
+    natExamples = "examples"
+    natDocs = "docs"
+    natTopLevel = "tl"
+    constArg = "arg"
+    modName = "modname"
+    constVal = "val"
+    var = "var"
+    pairs = "pairs"
+    literal = "lit"
+    guard' = "guard"
+    value = "value"
+    entity = "ent"
+    exec = "exec"
+    rollback = "rb"
+    schemaName = "name"
+    fields = "fields"
+    tblName = "name"
+    hash' = "hash"
+
+
+
+instance (ToJSON n, FromJSON n) => FromJSON (Term n) where
+  parseJSON = decoder termCodec
+
+instance (ToJSON n, FromJSON n) => ToJSON (Term n) where
+  toJSON = encoder termCodec
 
 class ToTerm a where
     toTerm :: a -> Term m
