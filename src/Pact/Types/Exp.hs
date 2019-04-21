@@ -46,7 +46,6 @@ import Data.Text (Text,pack)
 import Data.Aeson
 import Data.Thyme
 import System.Locale
-import Data.Scientific
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
@@ -126,6 +125,7 @@ instance FromJSON ListDelimiter where
     "()" -> pure Parens
     "[]" -> pure Brackets
     "{}" -> pure Braces
+    _ -> fail "Invalid ListDelimiter"
 
 listDelims :: IsString a => ListDelimiter -> (a, a)
 listDelims Parens   = ("(",")")
@@ -150,6 +150,7 @@ instance FromJSON Separator where
     ":" -> pure Colon
     ":=" -> pure ColonEquals
     "," -> pure Comma
+    _ -> fail "Invalid separator"
 
 expInfoField :: Text
 expInfoField = "i"

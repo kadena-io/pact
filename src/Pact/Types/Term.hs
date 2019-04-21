@@ -130,13 +130,14 @@ instance Pretty Meta where
   pretty (Meta (Just doc) model) = pretty doc <> line <> prettyModel model
   pretty (Meta Nothing    model) = prettyModel model
 
+instance NFData Meta
+
 prettyModel :: [Exp Info] -> Doc
 prettyModel []    = mempty
 prettyModel props = "@model " <> list (pretty <$> props)
 
-instance ToJSON Meta where
-  toJSON Meta {..} = object
-    [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
+instance ToJSON Meta where toJSON = lensyToJSON 2
+instance FromJSON Meta where parseJSON = lensyParseJSON 2
 
 instance Default Meta where def = Meta def def
 
@@ -165,6 +166,8 @@ data KeySet = KeySet {
     , _ksPredFun :: !Name
     } deriving (Eq,Generic,Show,Ord)
 
+instance NFData KeySet
+
 instance Pretty KeySet where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
     [ "keys: " <> prettyList ks
@@ -184,20 +187,21 @@ instance ToJSON KeySet where
 
 
 newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show)
+    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData)
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
 newtype PactId = PactId Word64
-    deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON,Generic)
+    deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON,Generic,NFData)
 instance Show PactId where show (PactId p) = show p
 instance Pretty PactId where pretty = viaShow
-instance NFData PactId
 
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
   , _pgName :: !Text
   } deriving (Eq,Generic,Show,Ord)
+
+instance NFData PactGuard
 
 instance Pretty PactGuard where
   pretty PactGuard{..} = "PactGuard" <+> commaBraces
@@ -213,6 +217,8 @@ data ModuleGuard = ModuleGuard
   , _mgName :: !Text
   } deriving (Eq,Generic,Show,Ord)
 
+instance NFData ModuleGuard
+
 instance Pretty ModuleGuard where
   pretty ModuleGuard{..} = "ModuleGuard" <+> commaBraces
     [ "module: " <> pretty _mgModuleName
@@ -226,6 +232,8 @@ data UserGuard = UserGuard
   { _ugData :: !(Object Name)
   , _ugPredFun :: !Name
   } deriving (Eq,Generic,Show)
+
+instance NFData UserGuard
 
 instance Pretty UserGuard where
   pretty UserGuard{..} = "UserGuard" <+> commaBraces
@@ -242,7 +250,9 @@ data Guard
   | GKeySetRef !KeySetName
   | GModule !ModuleGuard
   | GUser !UserGuard
-  deriving (Eq,Show)
+  deriving (Eq,Show,Generic)
+
+instance NFData Guard
 
 instance Pretty Guard where
   pretty (GPact g)      = pretty g
@@ -283,6 +293,7 @@ data DefType
 
 instance FromJSON DefType
 instance ToJSON DefType
+instance NFData DefType
 
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
@@ -293,7 +304,7 @@ instance Pretty DefType where
   pretty = prettyString . defTypeRep
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,AsString,Show)
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData)
 
 instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name
@@ -343,25 +354,40 @@ instance Show NativeDFun where
   showsPrec p (NativeDFun name _) = showParen (p > 10) $
     showString "NativeDFun " . showsPrec 11 name . showString " _"
 
+instance NFData NativeDFun where
+  rnf (NativeDFun n _f) = seq n ()
+
 -- | Binding forms.
 data BindType n =
   -- | Normal "let" bind
   BindLet |
   -- | Schema-style binding, with string value for key
   BindSchema { _bType :: n }
-  deriving (Eq,Functor,Foldable,Traversable,Ord,Show)
+  deriving (Eq,Functor,Foldable,Traversable,Ord,Show,Generic)
 
 instance (Pretty n) => Pretty (BindType n) where
   pretty BindLet = "let"
   pretty (BindSchema b) = "bind" <> pretty b
 
+instance ToJSON n => ToJSON (BindType n) where
+  toJSON BindLet = "let"
+  toJSON (BindSchema s) = object [ "bind" .= s ]
+
+instance NFData n => NFData (BindType n)
+
 
 data BindPair n = BindPair
   { _bpArg :: Arg n
-  , _bpVal :: n } deriving (Eq,Show,Functor,Traversable,Foldable)
+  , _bpVal :: n }
+  deriving (Eq,Show,Functor,Traversable,Foldable,Generic)
+
+instance NFData n => NFData (BindPair n)
+
+instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
+instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
 newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show)
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show,NFData)
 instance Pretty TableName where pretty (TableName s) = pretty s
 
 data ModuleName = ModuleName
@@ -374,6 +400,8 @@ instance Hashable ModuleName where
     s `hashWithSalt` (0::Int) `hashWithSalt` n
   hashWithSalt s (ModuleName n (Just ns)) =
     s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
+
+instance NFData ModuleName
 
 instance AsString ModuleName where
   asString (ModuleName n Nothing) = n
@@ -391,19 +419,11 @@ instance Pretty ModuleName where
   pretty (ModuleName n Nothing)   = pretty n
   pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
 
-instance ToJSON ModuleName where
-  toJSON ModuleName{..} = object
-    [ "name"      .= _mnName
-    , "namespace" .= _mnNamespace
-    ]
-
-instance FromJSON ModuleName where
-  parseJSON = withObject "ModuleName" $ \o -> ModuleName
-    <$> o .:  "name"
-    <*> o .:? "namespace"
+instance ToJSON ModuleName where toJSON = lensyToJSON 3
+instance FromJSON ModuleName where parseJSON = lensyParseJSON 3
 
 newtype DefName = DefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show)
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
 
 -- | A named reference from source.
 data Name
@@ -425,6 +445,8 @@ instance FromJSON Name where
   parseJSON = withText "Name" $ \t -> case parseName def t of
     Left s  -> fail s
     Right n -> return n
+
+instance NFData Name
 
 parseName :: Info -> Text -> Either String Name
 parseName i = AP.parseOnly (nameParser i <* eof)
@@ -460,7 +482,7 @@ data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe Hash)
   , _uInfo :: !Info
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
 
 instance Pretty Use where
   pretty Use{..} =
@@ -469,25 +491,33 @@ instance Pretty Use where
 
 instance ToJSON Use where
   toJSON Use{..} =
-    object $ ("module" .= _uModuleName) : (maybe [] (return . ("hash" .=)) _uModuleHash)
+    object $ ("module" .= _uModuleName) : ("i" .= _uInfo) :
+    (maybe [] (return . ("hash" .=)) _uModuleHash)
 instance FromJSON Use where
   parseJSON = withObject "Use" $ \o ->
     Use <$> o .: "module"
         <*> o .:? "hash"
-        <*> pure def
+        <*> o .: "i"
+
+instance NFData Use
 
 data App t = App
   { _appFun :: !t
   , _appArgs :: ![t]
   , _appInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq,Show)
+  } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
+
+instance ToJSON t => ToJSON (App t) where toJSON = lensyToJSON 4
+instance FromJSON t => FromJSON (App t) where parseJSON = lensyParseJSON 4
 
 instance Pretty n => Pretty (App n) where
   pretty App{..} = parensSep $ pretty _appFun : map pretty _appArgs
 
+instance NFData t => NFData (App t)
+
 
 newtype Governance g = Governance { _gGovernance :: Either KeySetName g }
-  deriving (Eq,Ord,Functor,Foldable,Traversable,Show)
+  deriving (Eq,Ord,Functor,Foldable,Traversable,Show,NFData)
 
 instance Pretty g => Pretty (Governance g) where
   pretty = \case
@@ -513,64 +543,38 @@ data Module g = Module
   , _mBlessed :: !(HS.HashSet Hash)
   , _mInterfaces :: [ModuleName]
   , _mImports :: [Use]
-  } deriving (Eq,Functor,Foldable,Traversable,Show)
+  } deriving (Eq,Functor,Foldable,Traversable,Show,Generic)
+
+instance NFData g => NFData (Module g)
 
 instance Pretty g => Pretty (Module g) where
   pretty Module{..} = parensSep
     [ "module" , pretty _mName , pretty _mGovernance , pretty _mHash ]
 
-instance ToJSON g => ToJSON (Module g) where
-  toJSON Module{..} = object
-    [ "name" .= _mName
-    , "governance" .= _mGovernance
-    , "meta" .= _mMeta
-    , "code" .= _mCode
-    , "hash" .= _mHash
-    , "blessed" .= _mBlessed
-    , "interfaces" .= _mInterfaces
-    , "imports" .= _mImports
-    ]
-
-instance FromJSON g => FromJSON (Module g) where
-  parseJSON = withObject "Module" $ \o -> Module
-    <$> o .: "name"
-    <*> o .: "governance"
-    <*> pure (Meta Nothing []) {- o .:? "meta" -}
-    <*> o .: "code"
-    <*> o .: "hash"
-    <*> (HS.fromList <$> o .: "blessed")
-    <*> o .: "interfaces"
-    <*> o .: "imports"
+instance ToJSON g => ToJSON (Module g) where toJSON = lensyToJSON 2
+instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 
 data Interface = Interface
   { _interfaceName :: !ModuleName
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
   , _interfaceImports :: [Use]
-  } deriving (Eq,Show)
+  } deriving (Eq,Show,Generic)
 instance Pretty Interface where
   pretty Interface{..} = parensSep [ "interface", pretty _interfaceName ]
 
-instance ToJSON Interface where
-  toJSON Interface{..} = object
-    [ "name" .= _interfaceName
-    , "code" .= _interfaceCode
-    , "meta" .= _interfaceMeta
-    , "imports" .= _interfaceImports
-    ]
+instance ToJSON Interface where toJSON = lensyToJSON 10
+instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
-instance FromJSON Interface where
-  parseJSON = withObject "Interface" $ \o -> Interface
-    <$> o .: "name"
-    <*> o .: "code"
-    <*> pure (Meta Nothing [])
-    <*> o .: "imports"
+instance NFData Interface
 
 
 data ModuleDef g
   = MDModule !(Module g)
   | MDInterface !Interface
- deriving (Eq,Functor,Foldable,Traversable,Show)
+ deriving (Eq,Functor,Foldable,Traversable,Show,Generic)
+
+instance NFData g => NFData (ModuleDef g)
 
 instance Pretty g => Pretty (ModuleDef g) where
   pretty = \case
@@ -606,10 +610,11 @@ data Def n = Def
   , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
   , _dInfo :: !Info
-  } deriving (Functor,Foldable,Traversable)
+  } deriving (Functor,Foldable,Traversable,Generic)
 
 deriving instance Show n => Show (Def n)
 deriving instance Eq n => Eq (Def n)
+instance NFData n => NFData (Def n)
 
 instance Pretty n => Pretty (Def n) where
   pretty Def{..} = parensSep $
@@ -618,38 +623,48 @@ instance Pretty n => Pretty (Def n) where
     , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
 
+instance ToJSON n => ToJSON (Def n) where toJSON = lensyToJSON 2
+instance FromJSON n => FromJSON (Def n) where parseJSON = lensyParseJSON 2
+
 derefDef :: Def Ref -> Name
 derefDef Def{..} = QName _dModule (asString _dDefName) _dInfo
 
 
 
 newtype NamespaceName = NamespaceName Text
-  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic)
+  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData)
 
 data Namespace = Namespace
   { _nsName   :: NamespaceName
   , _nsGuard  :: Guard
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
 
 instance Pretty Namespace where
   pretty Namespace{..} = "(namespace " <> prettyString (asString' _nsName) <> ")"
 
-instance FromJSON Namespace where
-  parseJSON = withObject "Namespace" $ \o -> Namespace
-    <$> o .: "name"
-    <*> o .: "guard"
+instance ToJSON Namespace where toJSON = lensyToJSON 3
+instance FromJSON Namespace where parseJSON = lensyParseJSON 3
 
-instance ToJSON Namespace where
-  toJSON Namespace{..} = object
-    [ "name"   .= _nsName
-    , "guard"  .= _nsGuard
-    ]
+instance NFData Namespace
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
   CVEval { _cvRaw :: !n
          , _cvEval :: !n }
   deriving (Eq,Functor,Foldable,Traversable,Generic,Show)
+
+instance NFData n => NFData (ConstVal n)
+
+instance ToJSON n => ToJSON (ConstVal n) where
+  toJSON (CVRaw n) = object [ "raw" .= n ]
+  toJSON (CVEval n m) = object [ "raw" .= n, "eval" .= m ]
+
+instance FromJSON n => FromJSON (ConstVal n) where
+  parseJSON v =
+    (withObject "CVRaw"
+     (\o -> CVRaw <$> o .: "raw") v) <|>
+    (withObject "CVEval"
+     (\o -> CVEval <$> o .: "raw" <*> o .: "eval") v)
 
 
 data Example
@@ -659,7 +674,7 @@ data Example
   -- ^ An example shown as a failing execution
   | LitExample !Text
   -- ^ An example shown as a literal
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 
 instance Pretty Example where
   pretty = \case
@@ -670,15 +685,19 @@ instance Pretty Example where
 instance IsString Example where
   fromString = ExecExample . fromString
 
+instance NFData Example
+
 -- | Label type for objects.
 newtype FieldKey = FieldKey Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData)
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
 -- | Simple dictionary for object values.
 newtype ObjectMap v = ObjectMap (M.Map FieldKey v)
-  deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
+  deriving (Eq,Ord,Show,Functor,Foldable,Traversable,Generic)
+
+instance NFData v => NFData (ObjectMap v)
 
 -- | O(n) conversion to list. Adapted from 'M.toAscList'
 objectMapToListWith :: (FieldKey -> v -> r) -> ObjectMap v -> [r]
@@ -703,7 +722,7 @@ data Object n = Object
   , _oObjectType :: !(Type (Term n))
   , _oKeyOrder :: Maybe [FieldKey]
   , _oInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq,Show)
+  } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
 instance Pretty n => Pretty (Object n) where
   pretty (Object bs _ Nothing _) = pretty bs
   pretty (Object (ObjectMap om) _ (Just ko) _) =
@@ -713,12 +732,18 @@ instance Pretty n => Pretty (Object n) where
     M.toList om
     where keyOrder f = elemIndex f ko
 
--- JSON instances are just for Guard above
+instance NFData n => NFData (Object n)
+
 instance (Pretty n, ToJSON n) => ToJSON (Object n) where
-  toJSON = toJSON . _oObject
+  toJSON Object{..} = object $
+    [ "obj" .= _oObject
+    , "type" .= _oObjectType
+    , "i" .= _oInfo ] ++
+    maybe [] (pure . ("keyorder" .=)) _oKeyOrder
 
 instance FromJSON n => FromJSON (Object n) where
-  parseJSON v = Object <$> parseJSON v <*> pure TyAny <*> pure def <*> pure def
+  parseJSON = withObject "Object" $ \o ->
+    Object <$> o .: "obj" <*> o .: "type" <*> o .:? "keyorder" <*> o .: "i"
 
 -- | Pact evaluable term.
 data Term n =
@@ -807,10 +832,11 @@ data Term n =
     , _tMeta :: !Meta
     , _tInfo :: !Info
     }
-    deriving (Functor,Foldable,Traversable)
+    deriving (Functor,Foldable,Traversable,Generic)
 
 deriving instance Show n => Show (Term n)
 deriving instance Eq n => Eq (Term n)
+instance NFData n => NFData (Term n)
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
@@ -916,7 +942,7 @@ instance FromJSON n => FromJSON (Term n) where
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 
-instance (ToJSON n, Pretty n) => ToJSON (Term n) where
+instance ToJSON n => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
     toJSON (TGuard k _) = toJSON k
