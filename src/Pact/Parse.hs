@@ -72,8 +72,6 @@ expr = do
     ]
 {-# INLINE expr #-}
 
--- TODO As number parsing is a solved problem, consider something like:
--- http://hackage.haskell.org/package/megaparsec-7.0.0/docs/Text-Megaparsec-Char-Lexer.html#v:float
 number :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m Literal
 number = do
   -- Tricky: note that we use `char :: CharParsing m => Char -> m Char` rather
@@ -152,6 +150,8 @@ instance A.FromJSON ParsedInteger where
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
 instance A.ToJSON ParsedInteger where
   toJSON (ParsedInteger i) = A.Number (fromIntegral i)
+
+
 
 
 -- | "Production" parser: atto, parse multiple exps.

@@ -112,6 +112,7 @@ import Prelude
 import Text.Show.Deriving
 import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 
+import Pact.Types.Codec
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info
@@ -222,7 +223,7 @@ instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
 data UserGuard = UserGuard
-  { _ugData :: !(Object Name) -- TODO when Term is safe, use "object" type
+  { _ugData :: !(Object Name)
   , _ugPredFun :: !Name
   } deriving (Eq,Generic,Show)
 
@@ -250,26 +251,38 @@ instance Pretty Guard where
   pretty (GUser g)      = pretty g
   pretty (GModule g)    = pretty g
 
-instance ToJSON Guard where
-  toJSON (GPact g) = toJSON g
-  toJSON (GKeySet g) = toJSON g
-  toJSON (GKeySetRef g) = toJSON g
-  toJSON (GUser g) = toJSON g
-  toJSON (GModule m) = toJSON m
 
-instance FromJSON Guard where
-  parseJSON v =
-    (GPact <$> parseJSON v) <|>
-    (GKeySet <$> parseJSON v) <|>
-    (GUser <$> parseJSON v) <|>
-    (GKeySetRef <$> parseJSON v) <|>
-    (GModule <$> parseJSON v)
+guardCodec :: Codec Guard
+guardCodec = Codec enc dec
+  where
+    enc (GKeySet k) = toJSON k
+    enc (GKeySetRef n) = object [ keyNamef .= n ]
+    enc (GPact g) = toJSON g
+    enc (GModule g) = toJSON g
+    enc (GUser g) = toJSON g
+    {-# INLINE enc #-}
+    dec v =
+      (GKeySet <$> parseJSON v) <|>
+      (withObject "KeySetRef" $ \o ->
+          GKeySetRef . KeySetName <$> o .: keyNamef) v <|>
+      (GPact <$> parseJSON v) <|>
+      (GModule <$> parseJSON v) <|>
+      (GUser <$> parseJSON v)
+    {-# INLINE dec #-}
+    keyNamef = "keysetref"
+
+
+instance ToJSON Guard where toJSON = encoder guardCodec
+instance FromJSON Guard where parseJSON = decoder guardCodec
 
 data DefType
   = Defun
   | Defpact
   | Defcap
   deriving (Eq,Show,Generic)
+
+instance FromJSON DefType
+instance ToJSON DefType
 
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"

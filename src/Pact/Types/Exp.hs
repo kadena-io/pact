@@ -37,6 +37,7 @@ module Pact.Types.Exp
    ) where
 
 
+import Control.Applicative
 import Control.Lens (makePrisms)
 import Data.List
 import Control.Monad
@@ -55,6 +56,7 @@ import Data.String (IsString)
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.Type
+import Pact.Types.Codec
 
 
 data Literal =
@@ -87,12 +89,23 @@ instance Pretty Literal where
     pretty (LTime t)     = dquotes $ pretty $ formatLTime t
 
 instance ToJSON Literal where
-    toJSON (LString s)  = String s
-    toJSON (LInteger i) = Number (scientific i 0)
-    toJSON (LDecimal r) = toJSON (show r)
+    toJSON (LString s)  = toJSON s
+    toJSON (LInteger i) = encoder integerCodec i
+    toJSON (LDecimal r) = encoder decimalCodec r
     toJSON (LBool b)    = toJSON b
-    toJSON (LTime t)    = toJSON (formatLTime t)
+    toJSON (LTime t)    = encoder timeCodec t
     {-# INLINE toJSON #-}
+
+instance FromJSON Literal where
+  parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
+  parseJSON (String s) = pure $ LString s
+  parseJSON (Bool b) = pure $ LBool b
+  parseJSON o@Object {} =
+    (LInteger <$> decoder integerCodec o) <|>
+    (LTime <$> decoder timeCodec o) <|>
+    (LDecimal <$> decoder decimalCodec o)
+  parseJSON _t = fail "Literal parse failed"
+
 
 
 litToPrim :: Literal -> PrimType
@@ -104,6 +117,15 @@ litToPrim LTime {} = TyTime
 
 data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
 instance NFData ListDelimiter
+instance ToJSON ListDelimiter where
+  toJSON Parens = "()"
+  toJSON Brackets = "[]"
+  toJSON Braces = "{}"
+instance FromJSON ListDelimiter where
+  parseJSON = withText "ListDelimiter" $ \t -> case t of
+    "()" -> pure Parens
+    "[]" -> pure Brackets
+    "{}" -> pure Braces
 
 listDelims :: IsString a => ListDelimiter -> (a, a)
 listDelims Parens   = ("(",")")
@@ -119,6 +141,18 @@ instance Pretty Separator where
   pretty Colon = ":"
   pretty ColonEquals = ":="
   pretty Comma = ","
+instance ToJSON Separator where
+  toJSON Colon = ":"
+  toJSON ColonEquals = ":="
+  toJSON Comma = ","
+instance FromJSON Separator where
+  parseJSON = withText "Separator" $ \t -> case t of
+    ":" -> pure Colon
+    ":=" -> pure ColonEquals
+    "," -> pure Comma
+
+expInfoField :: Text
+expInfoField = "i"
 
 data LiteralExp i = LiteralExp
   { _litLiteral :: !Literal
@@ -127,6 +161,11 @@ data LiteralExp i = LiteralExp
 instance HasInfo (LiteralExp Info) where
   getInfo = _litInfo
 instance NFData i => NFData (LiteralExp i)
+instance ToJSON i => ToJSON (LiteralExp i) where
+  toJSON (LiteralExp l i) = object [ "lit" .= l, expInfoField .= i ]
+instance FromJSON i => FromJSON (LiteralExp i) where
+  parseJSON = withObject "LiteralExp" $ \o ->
+    LiteralExp <$> o .: "lit" <*> o .: expInfoField
 
 instance Pretty (LiteralExp i) where
   pretty (LiteralExp l _) = pretty l
@@ -139,6 +178,12 @@ data AtomExp i = AtomExp
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
+instance ToJSON i => ToJSON (AtomExp i) where
+  toJSON (AtomExp l q i) =
+    object [ "atom" .= l, "q" .= q, expInfoField .= i ]
+instance FromJSON i => FromJSON (AtomExp i) where
+  parseJSON = withObject "AtomExp" $ \o ->
+    AtomExp <$> o .: "atom" <*> o .: "q" <*> o .: expInfoField
 
 instance Pretty (AtomExp i) where
   pretty (AtomExp atom qs _)
@@ -152,6 +197,12 @@ data ListExp i = ListExp
 instance HasInfo (ListExp Info) where
   getInfo = _listInfo
 instance NFData i => NFData (ListExp i)
+instance ToJSON i => ToJSON (ListExp i) where
+  toJSON (ListExp l d i) =
+    object [ "list" .= l, "d" .= d, expInfoField .= i ]
+instance FromJSON i => FromJSON (ListExp i) where
+  parseJSON = withObject "ListExp" $ \o ->
+    ListExp <$> o .: "list" <*> o .: "d" <*> o .: expInfoField
 
 instance Pretty (ListExp i) where
   pretty (ListExp exps delim _) =
@@ -165,6 +216,11 @@ data SeparatorExp i = SeparatorExp
 instance HasInfo (SeparatorExp Info) where
   getInfo = _sepInfo
 instance NFData i => NFData (SeparatorExp i)
+instance ToJSON i => ToJSON (SeparatorExp i) where
+  toJSON (SeparatorExp s i) = object [ "sep" .= s, expInfoField .= i ]
+instance FromJSON i => FromJSON (SeparatorExp i) where
+  parseJSON = withObject "SeparatorExp" $ \o ->
+    SeparatorExp <$> o .: "sep" <*> o.: expInfoField
 
 instance Pretty (SeparatorExp i) where
   pretty (SeparatorExp sep' _) = pretty sep'
@@ -191,6 +247,20 @@ instance HasInfo (Exp Info) where
     EAtom a -> getInfo a
     EList l -> getInfo l
     ESeparator s -> getInfo s
+
+instance ToJSON i => ToJSON (Exp i) where
+  toJSON (ELiteral a) = toJSON a
+  toJSON (EAtom a) = toJSON a
+  toJSON (EList a) = toJSON a
+  toJSON (ESeparator a) = toJSON a
+
+instance FromJSON i => FromJSON (Exp i) where
+  parseJSON v =
+    (ELiteral <$> parseJSON v) <|>
+    (EAtom <$> parseJSON v) <|>
+    (EList <$> parseJSON v) <|>
+    (ESeparator <$> parseJSON v)
+
 
 makePrisms ''Exp
 

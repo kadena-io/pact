@@ -39,121 +39,21 @@ import Control.Lens (makeLenses)
 import Control.Monad (forM)
 import Data.Aeson hiding (Object)
 import qualified Data.Aeson as A
-import Data.Aeson.Types (Parser)
 import qualified Data.ByteString.Lazy.UTF8 as BSL
-import Data.Decimal (Decimal,DecimalRaw(..))
 import Data.Default (Default)
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.String (IsString(..))
-import Data.Thyme.Time.Core (Day(..),UTCTime,UTCView(..),fromMicroseconds,mkUTCTime,unUTCTime,toMicroseconds)
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
-import Text.Read (readMaybe)
 
 import Pact.Types.Lang
 import Pact.Types.Pretty
 import Pact.Types.Util (AsString(..))
+import Pact.Types.Codec
 
--- | Min, max values that Javascript doesn't mess up.
---
---   http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html
---   "The integer part of the Number type in Javascript is safe in [-2^53 .. 2^53] (253 = 9 007 199 254 740 992).
---    Beyond this there will be precision loss on the least significant numbers."
-jsIntegerBounds :: (Integer, Integer)
-jsIntegerBounds = (-9007199254740991,9007199254740991)
-
--- | JSON codec pair.
-data Codec a = Codec {
-  encoder :: a -> Value,
-  decoder :: Value -> Parser a
-  }
-
-integerCodec :: Codec Integer
-integerCodec = Codec encodeInteger decodeInteger
-  where
-    encodeInteger i = let (l,h) = jsIntegerBounds in
-                        if i >= l && i <= h then Number (fromIntegral i)
-                        else object [ field .= show i ]
-    {-# INLINE encodeInteger #-}
-    decodeInteger (Number i) = return (round i)
-    decodeInteger (A.Object o) = do
-      s <- o .: field
-      case readMaybe (unpack s) of
-        Just i -> return i
-        Nothing -> fail $ "Invalid integer value: " ++ show o
-    decodeInteger v = fail $ "Invalid integer value: " ++ show v
-    {-# INLINE decodeInteger #-}
-    field = "_P_int"
-
-decimalCodec :: Codec Decimal
-decimalCodec = Codec enc dec
-  where
-    enc (Decimal dp dm) =
-      object [ places .= dp,
-               mantissa .= encoder integerCodec dm ]
-    {-# INLINE enc #-}
-    dec = withObject "Decimal" $ \o ->
-      Decimal <$> o .: places <*>
-      (o .: mantissa >>= decoder integerCodec)
-    {-# INLINE dec #-}
-    places = "_P_decp"
-    mantissa = "_P_decm"
-
-timeCodec :: Codec UTCTime
-timeCodec = Codec enc dec
-  where
-    enc t = object [ day .= d,
-                     micros .= encoder integerCodec (fromIntegral (toMicroseconds s)) ]
-      where (UTCTime (ModifiedJulianDay d) s) = unUTCTime t
-    {-# INLINE enc #-}
-    dec = withObject "UTCTime" $ \o ->
-      mkUTCTime <$> (ModifiedJulianDay <$> o .: day) <*>
-      (fromMicroseconds . fromIntegral <$> (o .: micros >>= decoder integerCodec))
-    {-# INLINE dec #-}
-    day = "_P_timed"
-    micros = "_P_timems"
-
-valueCodec :: Codec Value
-valueCodec = Codec enc dec
-  where
-    enc v = object [field .= v]
-    {-# INLINE enc #-}
-    dec = withObject "Value" $ \o -> o .: field
-    {-# INLINE dec #-}
-    field = "_P_val"
-
-guardCodec :: Codec Guard
-guardCodec = Codec enc dec
-  where
-    enc (GKeySet (KeySet ks p)) = object [ keyf .= ks, predf .= p ]
-    enc (GKeySetRef n) = object [ keyNamef .= n ]
-    enc (GPact (PactGuard{..})) =
-      object [ pactNamef .= _pgName, pactIdf .= _pgPactId ]
-    enc (GModule (ModuleGuard{..})) =
-      object [ modModNamef .= _mgModuleName, modNamef .= _mgName ]
-    enc (GUser (UserGuard{..})) =
-      object [ userDataf .= _ugData, userPredf .= _ugPredFun ]
-      -- TODO ^^^ is too loose, needs better object type of only persistables
-    {-# INLINE enc #-}
-    dec = withObject "Guard" $ \o ->
-      (GKeySet <$> (KeySet <$> o .: keyf <*> o .: predf)) <|>
-      (GKeySetRef <$> o .: keyNamef) <|>
-      (GPact <$> (PactGuard <$> o .: pactIdf <*> o .: pactNamef)) <|>
-      (GModule <$> (ModuleGuard <$> o .: modModNamef <*> o .: modNamef)) <|>
-      (GUser <$> (UserGuard <$> o .: userDataf <*> o .: userPredf))
-    {-# INLINE dec #-}
-    keyf = "_P_keys"
-    predf = "_P_pred"
-    keyNamef = "_P_ksn"
-    pactNamef = "_P_gpn"
-    pactIdf = "_P_gpi"
-    modModNamef = "_P_mmn"
-    modNamef = "_P_mn"
-    userDataf = "_P_gud"
-    userPredf = "_P_gup"
 
 
 -- | Represent Pact 'Term' values that can be stored in a database.

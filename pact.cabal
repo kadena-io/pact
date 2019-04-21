@@ -46,6 +46,7 @@ library
                      , Pact.Server.Client
                      , Pact.Types.API
                      , Pact.Types.ChainMeta
+                     , Pact.Types.Codec
                      , Pact.Types.Command
                      , Pact.Types.Scheme
                      , Pact.Types.Exp
