@@ -76,6 +76,7 @@ import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
 import Pact.Types.Hash
+import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
 import Pact.Types.Version
@@ -610,7 +611,7 @@ compose i as = argsError' i as
 
 
 readMsg :: RNativeFun e
-readMsg i [TLitString key] = parseMsgKey i "read-msg" key
+readMsg i [TLitString key] = fromPactValue <$> parseMsgKey i "read-msg" key
 readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
 readMsg i as = argsError i as
 

@@ -279,12 +279,15 @@ setsigs i [TList ts _ _] = do
 setsigs i as = argsError i as
 
 setmsg :: RNativeFun LibState
-setmsg i [TLitString j] =
-  case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
-    Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
-    Right v -> setenv eeMsgBody v >> return (tStr "Setting transaction data")
-setmsg _ [a] = setenv eeMsgBody (toJSON a) >> return (tStr "Setting transaction data")
-setmsg i as = argsError i as
+setmsg i as = case as of
+  [TLitString j] ->
+    case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
+      Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
+      Right v -> go v
+  [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))
+  [a] -> go (toJSON a)
+  _ -> argsError i as
+  where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 
 continuePact :: RNativeFun LibState
 continuePact i as = case as of
@@ -369,7 +372,9 @@ expect :: RNativeFun LibState
 expect i [TLitString a,b,c] =
   if b `termEq` c
   then testSuccess a $ "Expect: success: " <> a
-  else testFailure i a $ "FAILURE: " <> a <> ": expected " <> pack (show b) <> ", received " <> pack (show c)
+  else testFailure i a $ renderCompactText' $
+       "FAILURE: " <> pretty a <> ": expected " <> pretty b <> ":" <> pretty (typeof' b) <>
+       ", received " <> pretty c <> ":" <> pretty (typeof' c)
 expect i as = argsError i as
 
 expectFail :: ZNativeFun LibState

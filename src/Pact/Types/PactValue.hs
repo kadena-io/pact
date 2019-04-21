@@ -18,7 +18,7 @@
 module Pact.Types.PactValue
   ( PactValue(..)
   , toPactValue
-  , toPactValue'
+  , toPactValueLenient
   , fromPactValue
   ) where
 
@@ -54,9 +54,9 @@ instance ToJSON PactValue where
 instance FromJSON PactValue where
   parseJSON v =
     (PLiteral <$> parseJSON v) <|>
-    (PObject <$> parseJSON v) <|>
     (PList <$> parseJSON v) <|>
-    (PGuard <$> parseJSON v)
+    (PGuard <$> parseJSON v) <|>
+    (PObject <$> parseJSON v)
 
 instance Pretty PactValue where
   pretty (PLiteral l) = pretty l
@@ -64,7 +64,7 @@ instance Pretty PactValue where
   pretty (PList l) = pretty (V.toList l)
   pretty (PGuard l) = pretty l
 
-
+-- | Strict conversion.
 toPactValue :: Term Name -> Either Text PactValue
 toPactValue (TLiteral l _) = pure $ PLiteral l
 toPactValue (TObject (Object o _ _ _) _) = PObject <$> traverse toPactValue o
@@ -78,8 +78,11 @@ fromPactValue (PObject o) = TObject (Object (fmap fromPactValue o) TyAny def def
 fromPactValue (PList l) = TList (fmap fromPactValue l) TyAny def
 fromPactValue (PGuard x) = TGuard x def
 
-
-toPactValue' :: Term Name -> PactValue
-toPactValue' t = case toPactValue t of
-  Right r -> r
+-- | Lenient conversion, implying that conversion back won't necc. succeed.
+-- Integers are coerced to Decimal for simple representation.
+-- Non-value types are turned into their String representation.
+toPactValueLenient :: Term Name -> PactValue
+toPactValueLenient t = case toPactValue t of
+  Right (PLiteral (LInteger l)) -> PLiteral (LDecimal (fromIntegral l))
+  Right v -> v
   Left _ -> PLiteral $ LString $ renderCompactText t

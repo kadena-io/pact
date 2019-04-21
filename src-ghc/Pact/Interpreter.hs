@@ -157,8 +157,8 @@ interpret initState evalEnv terms = do
       pactExec = _evalPactExec state
       newRefs oldStore | isNothing tx = oldStore
                        | otherwise = updateRefStore (_evalRefs state) oldStore
-  -- note using toPactValue' here as enforcing PV would kill an already-successful tx
-  return $! EvalResult terms (map toPactValue' rs) logs refStore pactExec gas
+  -- output uses lenient conversion
+  return $! EvalResult terms (map toPactValueLenient rs) logs refStore pactExec gas
 
 evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do

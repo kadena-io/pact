@@ -30,7 +30,7 @@ runRegression p = do
   let user1 = "user1"
       usert = UserTables user1
       toPV :: ToTerm a => a -> PactValue
-      toPV = toPactValue' . toTerm'
+      toPV = toPactValueLenient . toTerm'
   createUserTable' v user1 "someModule"
   assertEquals' "output of commit 2"
     [TxLog "SYS_usertables" "user1" $
@@ -53,29 +53,44 @@ runRegression p = do
              "code" (H.pactHash "code") mempty mempty mempty
   _writeRow pactdb Write Modules "mod1" mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
+  let empty :: [()] = []
   assertEquals' "result of commit 3"
-    [ TxLog "SYS_keysets" "ks1" $
-      object [("pred" .= String "predfun")
-             ,("keys" .= [String "skdjhfskj"])]
-     ,TxLog "SYS_modules" "mod1" $
-       object [("hash" .= String "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY")
-              ,("blessed" .= ([]::[Text]))
-              ,("governance" .= object ["keyset" .= String "mod-admin-keyset"])
-              ,("interfaces" .= ([]::[Text]))
-              ,("name" .= object [ ("name" .= String "mod1"), ("namespace" .= Null)])
-              ,("code" .= String "code")
-              ,("meta" .= object [("model" .= ([] :: [Text]))
-                                 ,("docs" .= Null)])
-              ,("imports" .= ([]::[Text]))]
 
-     ,TxLog "USER_user1" "key1" $
-       object [("gah" .= object [("_P_decm" .= Number 1.23454345e8)
-                                ,("_P_decp" .= Number 6.0)])]
-     ,TxLog "USER_user1" "key1" $
-       object [("fh" .= object [("_P_val" .= Null)])
-              ,("gah" .= Bool False)]
-     ]
-
+    [ TxLog { _txDomain = "SYS_keysets"
+            , _txKey = "ks1"
+            , _txValue = object
+              [ "pred" .= String "predfun"
+              , "keys" .= [String "skdjhfskj"]
+              ] }
+    , TxLog { _txDomain = "SYS_modules"
+            , _txKey = "mod1"
+            , _txValue = object
+              [ "hash" .= String "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY"
+              , "blessed" .= empty
+              , "interfaces" .= empty
+              , "imports" .= empty
+              , "name" .= object
+                [ "namespace" .= Null
+                , "name" .= String "mod1" ]
+              , "code" .= String "code"
+              , "meta" .= object
+                [ "model" .= empty
+                , "docs" .= Null ]
+              , "governance" .= object
+                ["keyset" .= String "mod-admin-keyset"]
+              ] }
+    , TxLog { _txDomain = "USER_user1"
+            , _txKey = "key1"
+            , _txValue = object
+              [ "gah" .= Number 123.454345
+              ] }
+    , TxLog { _txDomain = "USER_user1"
+            , _txKey = "key1"
+            , _txValue = object
+              [ "fh" .= Number 1.0
+              , "gah" .= False
+              ] }
+    ]
     (commit v)
   _t4 <- begin v t3
   tids <- _txids pactdb user1 t1 v
