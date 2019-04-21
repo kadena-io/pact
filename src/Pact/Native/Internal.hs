@@ -71,21 +71,24 @@ parseMsgKey i msg key = do
     Nothing -> evalError' i $ "No such key in message: " <> pretty key
     Just v -> case fromJSON v of
                 Success t -> return t
-                Error e -> evalError' i $ prettyString msg <> ": parse failed: " <> prettyString e <> ": " <> pretty v
+                Error e -> evalError' i $ prettyString msg <> ": parse failed: "
+                           <> prettyString e <> ": " <> pretty v
 
 
-bindReduce :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> (Text -> Maybe (Term Ref)) -> Eval e (Term Name)
+bindReduce :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info ->
+              (Text -> Maybe (Term Name)) -> Eval e (Term Name)
 bindReduce ps bd bi lkpFun = do
-  !(vs :: [(Arg (Term Ref),Term Ref)]) <- forM ps $ mapM $ \var -> do
-          var' <- reduce var
+  !(vs :: [BindPair (Term Ref)]) <- forM ps $ \(BindPair a k) -> do
+          var' <- reduce k
           case var' of
-            (TLitString s) -> case lkpFun s of
-                                Nothing -> evalError bi $ "Bad column in binding: " <> pretty s
-                                Just v -> return v
+            (TLitString s) ->
+              case lkpFun s of
+                Nothing -> evalError bi $ "Bad column in binding: " <> pretty s
+                Just v -> return (BindPair a (liftTerm v))
             t -> evalError bi $ "Invalid column identifier in binding: " <> pretty t
-  let bd'' = instantiate (resolveArg bi (map snd vs)) bd
+  let bd'' = instantiate (resolveArg bi (map _bpVal vs)) bd
   -- NB stack frame here just documents scope, but does not incur gas
-  call (StackFrame (pack $ "(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $!
+  call (StackFrame (pack $ "(bind: " ++ show (map (fmap abbrev) vs) ++ ")") bi Nothing) $!
     ((0,) <$> reduceBody bd'')
 
 setTopLevelOnly :: NativeDef -> NativeDef

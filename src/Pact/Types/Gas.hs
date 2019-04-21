@@ -36,7 +36,7 @@ instance Pretty GasPrice where
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
 data ReadValue
-  = ReadData (Columns Persistable)
+  = ReadData (Columns (Term Name))
   | ReadKey RowKey
   | ReadTxId
 

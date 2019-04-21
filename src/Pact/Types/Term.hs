@@ -46,7 +46,7 @@ module Pact.Types.Term
    Ref(..),_Direct,_Ref,
    NativeDFun(..),
    BindType(..),
-   BindPair(..),bpArg,bpVal,
+   BindPair(..),bpArg,bpVal,toBindPairs,
    TableName(..),
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
@@ -387,6 +387,9 @@ data BindPair n = BindPair
   { _bpArg :: Arg n
   , _bpVal :: n }
   deriving (Eq,Show,Functor,Traversable,Foldable,Generic)
+
+toBindPairs :: BindPair n -> (Arg n,n)
+toBindPairs (BindPair a v) = (a,v)
 
 instance NFData n => NFData (BindPair n)
 

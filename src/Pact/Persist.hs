@@ -122,7 +122,7 @@ class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactValue v where
 
 instance PactValue v => PactValue (TxLog v) where
   prettyPactValue = pretty . fmap (SomeDoc . prettyPactValue)
-instance PactValue (Columns Persistable)    where prettyPactValue = pretty
+instance PactValue (Columns (Term Name))    where prettyPactValue = pretty
 instance PactValue a => PactValue [a]       where
   prettyPactValue = prettyList . fmap (SomeDoc . prettyPactValue)
 instance PactValue (ModuleDef Name)         where prettyPactValue = pretty

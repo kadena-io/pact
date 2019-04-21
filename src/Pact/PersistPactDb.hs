@@ -207,11 +207,11 @@ rollback = do
     Right _ -> return ()
   resetTemp
 
-readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (Columns Persistable))
+readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (Columns (Term Name)))
 readUserTable e t k = runMVState e $ readUserTable' t k
 {-# INLINE readUserTable #-}
 
-readUserTable' :: TableName -> RowKey -> MVState p (Maybe (Columns Persistable))
+readUserTable' :: TableName -> RowKey -> MVState p (Maybe (Columns (Term Name)))
 readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ asString k)
 {-# INLINE readUserTable' #-}
 
@@ -231,7 +231,7 @@ writeSys s wt tbl k v = runMVState s $ do
 
 {-# INLINE writeSys #-}
 
-writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> Columns Persistable -> IO ()
+writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> Columns (Term Name) -> IO ()
 writeUser s wt tn rk row = runMVState s $ do
   let ut = userDataTable tn
       tt = userTxRecord tn

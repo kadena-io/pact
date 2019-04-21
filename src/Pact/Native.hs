@@ -632,9 +632,9 @@ bind i as@[src,TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $
   reduce src >>= bindObjectLookup >>= bindReduce ps bd bi
 bind i as = argsError' i as
 
-bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Ref))
+bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
 bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
-  return $ \s -> M.lookup (FieldKey s) $ fmap liftTerm o
+  return $ \s -> M.lookup (FieldKey s) o
 bindObjectLookup t = evalError (_tInfo t) $
   "bind: expected object: " <> pretty t
 

@@ -38,11 +38,11 @@ runRegression p = do
   t3 <- begin v t2
   assertEquals' "user table info correct" "someModule" $ _getUserTableInfo pactdb user1 v
   let row = Columns $ M.fromList [("gah",toTerm' (LDecimal 123.454345))]
-  _writeRow pactdb Insert usert "key1" (fmap toPersistable row) v
-  assertEquals' "user insert" (Just row) (fmap (fmap toTerm) <$> _readRow pactdb usert "key1" v)
+  _writeRow pactdb Insert usert "key1" row v
+  assertEquals' "user insert" (Just row) (_readRow pactdb usert "key1" v)
   let row' = Columns $ M.fromList [("gah",toTerm' False),("fh",toTerm' Null)]
-  _writeRow pactdb Update usert "key1" (fmap toPersistable row') v
-  assertEquals' "user update" (Just row') (fmap (fmap toTerm) <$> _readRow pactdb usert "key1" v)
+  _writeRow pactdb Update usert "key1" row' v
+  assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
   let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
@@ -80,10 +80,9 @@ runRegression p = do
   assertEquals' "user txlogs"
     [TxLog "USER_user1" "key1" row,
      TxLog "USER_user1" "key1" row'] $
-    fmap (map (fmap (fmap toTerm))) $
     _getTxLog pactdb usert (head tids) v
-  _writeRow pactdb Insert usert "key2" (fmap toPersistable row) v
-  assertEquals' "user insert key2 pre-rollback" (Just row) (fmap (fmap toTerm) <$> _readRow pactdb usert "key2" v)
+  _writeRow pactdb Insert usert "key2" row v
+  assertEquals' "user insert key2 pre-rollback" (Just row) (_readRow pactdb usert "key2" v)
   assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pactdb user1 v
   _rollbackTx pactdb v
   assertEquals' "rollback erases key2" Nothing $ _readRow pactdb usert "key2" v

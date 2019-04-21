@@ -20,7 +20,6 @@
 --
 module Pact.Types.Persistence
   (
-   Persistable(..),ToPersistable(..),
    ColumnId(..),
    RowKey(..),
    Columns(..),columns,
@@ -32,14 +31,11 @@ module Pact.Types.Persistence
    TxId(..)
    ) where
 
-import Control.Applicative ((<|>))
 import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 import Control.Monad (forM)
 import Data.Aeson hiding (Object)
-import qualified Data.Aeson as A
-import qualified Data.ByteString.Lazy.UTF8 as BSL
 import Data.Default (Default)
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Strict as HM
@@ -52,54 +48,9 @@ import GHC.Generics (Generic)
 import Pact.Types.Lang
 import Pact.Types.Pretty
 import Pact.Types.Util (AsString(..))
-import Pact.Types.Codec
 
 
 
--- | Represent Pact 'Term' values that can be stored in a database.
-data Persistable =
-    PLiteral Literal |
-    PGuard Guard |
-    PValue Value
-    deriving (Eq,Generic,Show)
-instance Pretty Persistable where
-    pretty (PLiteral l) = pretty l
-    pretty (PGuard k) = pretty k
-    pretty (PValue v) = prettyString $ BSL.toString $ encode v
-instance ToTerm Persistable where
-    toTerm (PLiteral l) = toTerm l
-    toTerm (PGuard k) = toTerm k
-    toTerm (PValue v) = toTerm v
-instance ToJSON Persistable where
-    toJSON (PLiteral (LString s)) = String s
-    toJSON (PLiteral (LBool b)) = Bool b
-    toJSON (PLiteral (LInteger n)) = encoder integerCodec n
-    toJSON (PLiteral (LDecimal d)) = encoder decimalCodec d
-    toJSON (PLiteral (LTime t)) = encoder timeCodec t
-    toJSON (PGuard k) = encoder guardCodec k
-    toJSON (PValue v) = encoder valueCodec v
-instance FromJSON Persistable where
-    parseJSON (String s) = return (PLiteral (LString s))
-    parseJSON (Number n) = return (PLiteral (LInteger (round n)))
-    parseJSON (Bool b) = return (PLiteral (LBool b))
-    parseJSON v@A.Object {} = (PLiteral . LInteger <$> decoder integerCodec v) <|>
-                            (PLiteral . LDecimal <$> decoder decimalCodec v) <|>
-                            (PLiteral . LTime <$> decoder timeCodec v) <|>
-                            (PValue <$> decoder valueCodec v) <|>
-                            (PGuard <$> decoder guardCodec v)
-    parseJSON Null = return (PValue Null)
-    parseJSON va@Array {} = return (PValue va)
-
-class ToPersistable t where
-  toPersistable :: t -> Persistable
-instance ToPersistable Literal where toPersistable = PLiteral
-instance ToPersistable Guard where toPersistable = PGuard
-instance ToPersistable Value where toPersistable = PValue
-instance (ToJSON n, Pretty n) => ToPersistable (Term n) where
-  toPersistable (TLiteral v _) = toPersistable v
-  toPersistable (TGuard ks _) = toPersistable ks
-  toPersistable (TValue v _) = toPersistable v
-  toPersistable t = toPersistable (toJSON t)
 
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
@@ -131,7 +82,7 @@ makeLenses ''Columns
 
 -- | Specify key and value types for database domains.
 data Domain k v where
-  UserTables :: !TableName -> Domain RowKey (Columns Persistable)
+  UserTables :: !TableName -> Domain RowKey (Columns (Term Name))
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName (ModuleDef Name)
   Namespaces :: Domain NamespaceName Namespace

@@ -566,9 +566,9 @@ reduceBody (TList bs _ _) =
   V.last <$> V.mapM reduce bs
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
-reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
+reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(a,t) -> (,) <$> traverse reduce a <*> reduce t) ps
+  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduce t) ps
   typecheck ps'
   reduceBody (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
 

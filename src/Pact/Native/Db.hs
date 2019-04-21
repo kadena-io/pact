@@ -42,15 +42,15 @@ import Prelude
 class Readable a where
   readable :: a -> ReadValue
 
-instance Readable (Columns Persistable) where
+instance Readable (Columns (Term Name)) where
   readable = ReadData
 instance Readable RowKey where
   readable = ReadKey
 instance Readable TxId where
   readable = const ReadTxId
-instance Readable (TxLog (Columns Persistable)) where
+instance Readable (TxLog (Columns (Term Name))) where
   readable = ReadData . _txValue
-instance Readable (TxId, TxLog (Columns Persistable)) where
+instance Readable (TxId, TxLog (Columns (Term Name))) where
   readable = ReadData . _txValue . snd
 
 
@@ -176,7 +176,7 @@ descModule i [TLitString t] = do
 descModule i as = argsError i as
 
 -- | unsafe function to create domain from TTable.
-userTable :: Show n => Term n -> Domain RowKey (Columns Persistable)
+userTable :: Show n => Term n -> Domain RowKey (Columns (Term Name))
 userTable = UserTables . userTable'
 
 -- | unsafe function to create TableName from TTable.
@@ -215,16 +215,16 @@ gasPostReads i g0 postProcess action = do
   rs <- action
   (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
-columnsToObject :: ToTerm a => Type (Term n) -> Columns a -> Term n
+columnsToObject :: Type (Term n) -> Columns (Term n) -> Term n
 columnsToObject ty = (\ps -> TObject (Object (ObjectMap (M.fromList ps)) ty def def) def) .
-  map ((FieldKey . asString) *** toTerm) . M.toList . _columns
+  map (first (FieldKey . asString)) . M.toList . _columns
 
-columnsToObject' :: ToTerm a => Type (Term n) -> [(Info,ColumnId)] -> Columns a -> Eval m (Term n)
+columnsToObject' :: Type (Term n) -> [(Info,ColumnId)] -> Columns (Term n) -> Eval m (Term n)
 columnsToObject' ty cols (Columns m) = do
   ps <- forM cols $ \(ci,col) ->
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
-                  Just v -> return (FieldKey $ asString col,toTerm v)
+                  Just v -> return (FieldKey $ asString col, v)
   return $ TObject (Object (ObjectMap (M.fromList ps)) ty def def) def
 
 
@@ -290,10 +290,10 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
-bindToRow :: [(Arg (Term Ref),Term Ref)] ->
-             Scope Int Term Ref -> Term Ref -> Columns Persistable -> Eval e (Term Name)
+bindToRow :: [BindPair (Term Ref)] ->
+             Scope Int Term Ref -> Term Ref -> Columns (Term Name) -> Eval e (Term Name)
 bindToRow ps bd b (Columns row) =
-  bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (ColumnId s) row)
+  bindReduce ps bd (_tInfo b) (\s -> M.lookup (ColumnId s) row)
 
 keys' :: GasRNativeFun e
 keys' g i [table@TTable {..}] =
@@ -348,9 +348,9 @@ write wt partial i as = do
       return (cost, r)
     _ -> argsError i ts
 
-toColumns :: ObjectMap (Term Name) -> Columns Persistable
+toColumns :: ObjectMap (Term Name) -> Columns (Term Name)
 toColumns (ObjectMap m) = Columns . M.fromList . map conv . M.toList $ m where
-    conv (FieldKey k, v) = (ColumnId k,toPersistable v)
+    conv (FieldKey k, v) = (ColumnId k, v)
 
 
 
