@@ -206,7 +206,7 @@ Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. String
 pact> (hash "hello")
 "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
 pact> (hash { 'foo: 1 })
-"njeoJOdMu4SEI7x7zkb9rQcl44irAn61o1F7IiDge7s"
+"h8BquXIAyxHDh9WgYRWiBmzRnXSzNDiI5u7d2exPvhE"
 ```
 
 
@@ -1526,7 +1526,7 @@ Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending 
 Encode pact expression EXP as a JSON value. This is only needed for tests, as Pact values are automatically represented as JSON in API output. 
 ```lisp
 pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
-[{"age": 10.0,"name": "joe"} {"age": 25.0,"name": "mary"}]
+{"list": [{"obj": {"age": {"i": {"d": [3.0 31.0 31.0],"c": "10 "},"lit": {"int": 10.0}},"name": {"i": {"d": [5.0 17.0 17.0],"c": ""joe""},"lit": "joe"}},"keyorder": ["name" "age"],"type": "*","i": {"d": [29.0 7.0 7.0],"c": "{ "name": "joe", "age": 10 } "}} {"obj": {"age": {"i": {"d": [3.0 60.0 60.0],"c": "25 "},"lit": {"int": 25.0}},"name": {"i": {"d": [6.0 45.0 45.0],"c": ""mary""},"lit": "mary"}},"keyorder": ["name" "age"],"type": "*","i": {"d": [28.0 36.0 36.0],"c": "{"name": "mary", "age": 25 }"}}],"type": {"tag": "TypeVar","name": "a","constraint": []},"i": {"d": [59.0 6.0 6.0],"c": "[{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }]"}}
 ```
 
 

@@ -50,7 +50,7 @@ import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
 import Pact.Types.Command
 import Pact.Types.Logger
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 import Pact.Types.Runtime
 
 data PactDbEnv e = PactDbEnv {
@@ -70,7 +70,7 @@ initMsgData = MsgData def Null def
 
 data EvalResult = EvalResult
   { _erInput :: !(Either PactContinuation [Term Name])
-  , _erOutput :: ![PactOutput]
+  , _erOutput :: ![PactValue]
   , _erLogs :: ![TxLog Value]
   , _erRefStore :: !RefStore
   , _erExec :: !(Maybe PactExec)
@@ -157,7 +157,8 @@ interpret initState evalEnv terms = do
       pactExec = _evalPactExec state
       newRefs oldStore | isNothing tx = oldStore
                        | otherwise = updateRefStore (_evalRefs state) oldStore
-  return $! EvalResult terms (map toPactOutput' rs) logs refStore pactExec gas
+  -- note using toPactValue' here as enforcing PV would kill an already-successful tx
+  return $! EvalResult terms (map toPactValue' rs) logs refStore pactExec gas
 
 evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do

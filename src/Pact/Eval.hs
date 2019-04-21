@@ -43,6 +43,7 @@ module Pact.Eval
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,evalContinuation
+    ,enforcePactValue
     ) where
 
 import Bound
@@ -67,7 +68,7 @@ import Safe
 import Unsafe.Coerce
 
 import Pact.Gas
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -277,7 +278,8 @@ eval t = enscope t >>= reduce
 
 
 evalContinuation :: PactContinuation -> Eval e (Term Name)
-evalContinuation (PactContinuation d args) = reduceApp (App (TDef d def) (map (liftTerm . fromPactOutput) args) def)
+evalContinuation (PactContinuation d args) =
+  reduceApp (App (TDef d def) (map (liftTerm . fromPactValue) args) def)
 
 
 evalUse :: Use -> Eval e ()
@@ -581,6 +583,12 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
+
+enforcePactValue :: Traversable f => f (Term Name) -> Eval e (f PactValue)
+enforcePactValue = traverse $ \t -> case toPactValue t of
+  Left s -> evalError' t $ "Attempting to persist a non-value term: " <> pretty s
+  Right v -> return v
+
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
@@ -591,9 +599,9 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
     case _dDefType of
       Defun ->
         reduceBody bod'
-      Defpact ->
-        let continuation = PactContinuation d (map toPactOutput' (fst af))
-        in applyPact continuation bod'
+      Defpact -> do
+        continuation <- PactContinuation d <$> enforcePactValue (fst af)
+        applyPact continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg

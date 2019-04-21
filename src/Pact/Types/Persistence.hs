@@ -20,9 +20,7 @@
 --
 module Pact.Types.Persistence
   (
-   ColumnId(..),
    RowKey(..),
-   Columns(..),columns,
    Domain(..),
    TxLog(..),txDomain,txKey,txValue,
    WriteType(..),
@@ -34,12 +32,9 @@ module Pact.Types.Persistence
 import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
-import Control.Monad (forM)
 import Data.Aeson hiding (Object)
 import Data.Default (Default)
 import Data.Hashable (Hashable)
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Map.Strict as M
 import Data.String (IsString(..))
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
@@ -57,33 +52,10 @@ import Pact.Types.Util (AsString(..))
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty)
 
--- | Column key type.
-newtype ColumnId = ColumnId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default,Show,Pretty)
-
--- | User table row-value type, mapping column ids to values.
-newtype Columns v = Columns { _columns :: M.Map ColumnId v }
-    deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
-instance (ToJSON v) => ToJSON (Columns v) where
-    toJSON (Columns m) = object . map (\(k,v) -> asString k .= toJSON v) . M.toList $ m
-    {-# INLINE toJSON #-}
-instance (FromJSON v) => FromJSON (Columns v) where
-    parseJSON = withObject "Columns" $ \o ->
-                Columns . M.fromList <$>
-                 forM (HM.toList o)
-                  (\(k,v) -> ((,) <$> pure (ColumnId k) <*> parseJSON v))
-    {-# INLINE parseJSON #-}
-
-instance Pretty v => Pretty (Columns v) where
-  pretty (Columns cols) = commaBraces
-    $ fmap (\(k, v) -> pretty k <> ": " <> pretty v)
-    $ M.toList cols
-
-makeLenses ''Columns
 
 -- | Specify key and value types for database domains.
 data Domain k v where
-  UserTables :: !TableName -> Domain RowKey (Columns PactValue)
+  UserTables :: !TableName -> Domain RowKey (ObjectMap PactValue)
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName (ModuleDef Name)
   Namespaces :: Domain NamespaceName Namespace

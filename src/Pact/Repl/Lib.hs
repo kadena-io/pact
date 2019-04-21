@@ -69,7 +69,7 @@ import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -299,7 +299,7 @@ continuePact i as = case as of
         Just r -> return $ Just r
         Nothing -> use evalPactExec >>= \pe -> case pe of
           Nothing -> return Nothing
-          Just PactExec{..} -> return $ fmap (fmap fromPactOutput) _peYield
+          Just PactExec{..} -> return $ fmap (fmap fromPactValue) _peYield
       let pactId = (PactId $ fromIntegral pid)
           pactStep = PactStep (fromIntegral step) rollback pactId resume
       viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of
@@ -331,7 +331,7 @@ pactState i as = case as of
       case e of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
-          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactOutput) _peYield)
+          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactValue) _peYield)
           ,("executed",toTerm _peExecuted)
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]

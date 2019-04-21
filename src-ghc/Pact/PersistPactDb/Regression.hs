@@ -18,6 +18,7 @@ import Data.Aeson
 import Pact.Types.Logger
 import qualified Pact.Types.Hash as H
 import Data.Default (def)
+import Pact.Types.PactValue
 
 
 runRegression :: DbEnv p -> IO (MVar (DbEnv p))
@@ -28,6 +29,8 @@ runRegression p = do
   t2 <- begin v (Just t1)
   let user1 = "user1"
       usert = UserTables user1
+      toPV :: ToTerm a => a -> PactValue
+      toPV = toPactValue' . toTerm'
   createUserTable' v user1 "someModule"
   assertEquals' "output of commit 2"
     [TxLog "SYS_usertables" "user1" $
@@ -37,10 +40,10 @@ runRegression p = do
     (commit v)
   t3 <- begin v t2
   assertEquals' "user table info correct" "someModule" $ _getUserTableInfo pactdb user1 v
-  let row = Columns $ M.fromList [("gah",toTerm' (LDecimal 123.454345))]
+  let row = ObjectMap $ M.fromList [("gah",PLiteral (LDecimal 123.454345))]
   _writeRow pactdb Insert usert "key1" row v
   assertEquals' "user insert" (Just row) (_readRow pactdb usert "key1" v)
-  let row' = Columns $ M.fromList [("gah",toTerm' False),("fh",toTerm' Null)]
+  let row' = ObjectMap $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
   _writeRow pactdb Update usert "key1" row' v
   assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
   let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)

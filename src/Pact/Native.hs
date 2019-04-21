@@ -76,7 +76,6 @@ import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
 import Pact.Types.Hash
-import Pact.Types.PactOutput
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
 import Pact.Types.Version
@@ -653,7 +652,8 @@ yield i [t@(TObject (Object o _ _ _) _)] = do
   case eym of
     Nothing -> evalError' i "Yield not in defpact context"
     Just {} -> do
-      (evalPactExec . _Just . peYield) .= Just (fmap toPactOutput' o)
+      o' <- enforcePactValue o
+      (evalPactExec . _Just . peYield) .= Just o'
       return t
 yield i as = argsError i as
 

@@ -208,11 +208,11 @@ rollback = do
     Right _ -> return ()
   resetTemp
 
-readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (Columns PactValue))
+readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (ObjectMap PactValue))
 readUserTable e t k = runMVState e $ readUserTable' t k
 {-# INLINE readUserTable #-}
 
-readUserTable' :: TableName -> RowKey -> MVState p (Maybe (Columns PactValue))
+readUserTable' :: TableName -> RowKey -> MVState p (Maybe (ObjectMap PactValue))
 readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ asString k)
 {-# INLINE readUserTable' #-}
 
@@ -232,7 +232,7 @@ writeSys s wt tbl k v = runMVState s $ do
 
 {-# INLINE writeSys #-}
 
-writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> Columns PactValue -> IO ()
+writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> ObjectMap PactValue -> IO ()
 writeUser s wt tn rk row = runMVState s $ do
   let ut = userDataTable tn
       tt = userTxRecord tn
@@ -243,7 +243,7 @@ writeUser s wt tn rk row = runMVState s $ do
         doPersist $ \p -> writeValue p ut Insert rk' row
         finish row
       upd oldrow = do
-        let row' = Columns (M.union (_columns row) (_columns oldrow))
+        let row' = ObjectMap (M.union (_objectMap row) (_objectMap oldrow))
         doPersist $ \p -> writeValue p ut Update rk' row'
         finish row'
       finish row' = record tt rk row'

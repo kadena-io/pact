@@ -902,7 +902,7 @@ toAST (TApp Term.App{..} _) = do
 toAST TBinding {..} = do
   bi <- freshId _tInfo (pack $ show _tBindType)
   bn <- trackIdNode bi
-  bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
+  bs <- forM _tBindPairs $ \(BindPair (Arg n t ai) v) -> do
     aid <- freshId ai (pfx (pack $ show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
     an <- trackNode t' aid

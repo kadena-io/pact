@@ -41,7 +41,6 @@ import Pact.Eval
 import Unsafe.Coerce
 import Control.Lens hiding (Fold)
 import Data.Aeson hiding (Object)
-import Control.Arrow
 import qualified Data.Aeson.Lens as A
 import Bound
 import qualified Data.HashMap.Strict as HM
@@ -57,9 +56,9 @@ success = fmap . const . toTerm
 
 
 colsToList
-  :: Eval m [(Info,ColumnId)] -> Term n -> Eval m [(Info,ColumnId)]
+  :: Eval m [(Info,FieldKey)] -> Term n -> Eval m [(Info,FieldKey)]
 colsToList _ (TList cs _ _) = forM (V.toList cs) $ \c -> case c of
-    TLitString col -> return (_tInfo c,ColumnId col)
+    TLitString col -> return (_tInfo c,FieldKey col)
     _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
 colsToList argFail _ = argFail
 

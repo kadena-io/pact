@@ -321,6 +321,8 @@ data FunApp = FunApp {
     , _faDocs :: !(Maybe Text)
     } deriving Show
 
+instance HasInfo FunApp where getInfo = _faInfo
+
 -- | Variable type for an evaluable 'Term'.
 data Ref =
   -- | "Reduced" (evaluated) or native (irreducible) term.
@@ -710,7 +712,7 @@ instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
 -- | Simple dictionary for object values.
-newtype ObjectMap v = ObjectMap (M.Map FieldKey v)
+newtype ObjectMap v = ObjectMap { _objectMap :: (M.Map FieldKey v) }
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable,Generic)
 
 instance NFData v => NFData (ObjectMap v)
@@ -857,6 +859,25 @@ data Term n =
 deriving instance Show n => Show (Term n)
 deriving instance Eq n => Eq (Term n)
 instance NFData n => NFData (Term n)
+
+instance HasInfo (Term n) where
+  getInfo t = case t of
+    TApp{..} -> getInfo _tApp
+    TBinding{..} -> _tInfo
+    TConst{..} -> _tInfo
+    TDef{..} -> getInfo _tDef
+    TGuard{..} -> _tInfo
+    TList{..} -> _tInfo
+    TLiteral{..} -> _tInfo
+    TModule{..} -> _tInfo
+    TNative{..} -> _tInfo
+    TObject{..} -> getInfo _tObject
+    TSchema{..} -> _tInfo
+    TStep{..} -> _tInfo
+    TTable{..} -> _tInfo
+    TUse{..} -> getInfo _tUse
+    TValue{..} -> _tInfo
+    TVar{..} -> _tInfo
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case

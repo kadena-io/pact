@@ -14,8 +14,8 @@ import Data.Decimal
 import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
-import Pact.Types.Runtime hiding (Persistable(..))
-import Pact.Types.PactOutput
+import Pact.Types.Runtime
+import Pact.Types.PactValue
 import qualified Data.Text as T
 
 shouldMatch :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Expectation

@@ -399,8 +399,8 @@ throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) 
 evalError :: Info -> Doc -> Eval e a
 evalError i = throwErr EvalError i
 
-evalError' :: FunApp -> Doc -> Eval e a
-evalError' = evalError . _faInfo
+evalError' :: HasInfo i => i -> Doc -> Eval e a
+evalError' = evalError . getInfo
 
 failTx :: Info -> Doc -> Eval e a
 failTx i = throwErr TxFailure i

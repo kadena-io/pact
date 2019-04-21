@@ -36,21 +36,21 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Prelude
+import Pact.Types.PactValue
 
 
 class Readable a where
   readable :: a -> ReadValue
 
-instance Readable (Columns (Term Name)) where
+instance Readable (ObjectMap PactValue) where
   readable = ReadData
 instance Readable RowKey where
   readable = ReadKey
 instance Readable TxId where
   readable = const ReadTxId
-instance Readable (TxLog (Columns (Term Name))) where
+instance Readable (TxLog (ObjectMap PactValue)) where
   readable = ReadData . _txValue
-instance Readable (TxId, TxLog (Columns (Term Name))) where
+instance Readable (TxId, TxLog (ObjectMap PactValue)) where
   readable = ReadData . _txValue . snd
 
 
@@ -176,7 +176,7 @@ descModule i [TLitString t] = do
 descModule i as = argsError i as
 
 -- | unsafe function to create domain from TTable.
-userTable :: Show n => Term n -> Domain RowKey (Columns (Term Name))
+userTable :: Show n => Term n -> Domain RowKey (ObjectMap PactValue)
 userTable = UserTables . userTable'
 
 -- | unsafe function to create TableName from TTable.
@@ -215,16 +215,15 @@ gasPostReads i g0 postProcess action = do
   rs <- action
   (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
-columnsToObject :: Type (Term n) -> Columns (Term n) -> Term n
-columnsToObject ty = (\ps -> TObject (Object (ObjectMap (M.fromList ps)) ty def def) def) .
-  map (first (FieldKey . asString)) . M.toList . _columns
+columnsToObject :: Type (Term Name) -> ObjectMap PactValue -> Term Name
+columnsToObject ty m = TObject (Object (fmap fromPactValue m) ty def def) def
 
-columnsToObject' :: Type (Term n) -> [(Info,ColumnId)] -> Columns (Term n) -> Eval m (Term n)
-columnsToObject' ty cols (Columns m) = do
+columnsToObject' :: Type (Term Name) -> [(Info,FieldKey)] -> ObjectMap PactValue -> Eval m (Term Name)
+columnsToObject' ty cols (ObjectMap m) = do
   ps <- forM cols $ \(ci,col) ->
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
-                  Just v -> return (FieldKey $ asString col, v)
+                  Just v -> return (col, fromPactValue v)
   return $ TObject (Object (ObjectMap (M.fromList ps)) ty def def) def
 
 
@@ -238,7 +237,7 @@ select i as@[tbl',cols',app] = do
 select i as@[tbl',app] = reduce tbl' >>= select' i as Nothing app
 select i as = argsError' i as
 
-select' :: FunApp -> [Term Ref] -> Maybe [(Info,ColumnId)] ->
+select' :: FunApp -> [Term Ref] -> Maybe [(Info,FieldKey)] ->
            Term Ref -> Term Name -> Eval e (Gas,Term Name)
 select' i _ cols' app@TApp{} tbl@TTable{} = do
     g0 <- computeGas (Right i) $ GSelect cols' app tbl
@@ -272,7 +271,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> (g0,) <$> (bindToRow ps bd b (toColumns defaultRow))
+        Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue defaultRow)
         (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
@@ -291,9 +290,9 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
 withRead fi as = argsError' fi as
 
 bindToRow :: [BindPair (Term Ref)] ->
-             Scope Int Term Ref -> Term Ref -> Columns (Term Name) -> Eval e (Term Name)
-bindToRow ps bd b (Columns row) =
-  bindReduce ps bd (_tInfo b) (\s -> M.lookup (ColumnId s) row)
+             Scope Int Term Ref -> Term Ref -> ObjectMap PactValue -> Eval e (Term Name)
+bindToRow ps bd b (ObjectMap row) =
+  bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
 
 keys' :: GasRNativeFun e
 keys' g i [table@TTable {..}] =
@@ -344,14 +343,10 @@ write wt partial i as = do
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) (toColumns ps)
+      ps' <- enforcePactValue ps
+      r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) ps'
       return (cost, r)
     _ -> argsError i ts
-
-toColumns :: ObjectMap (Term Name) -> Columns (Term Name)
-toColumns (ObjectMap m) = Columns . M.fromList . map conv . M.toList $ m where
-    conv (FieldKey k, v) = (ColumnId k, v)
-
 
 
 createTable' :: RNativeFun e
