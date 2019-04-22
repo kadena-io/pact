@@ -68,7 +68,7 @@ module Pact.Types.Term
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tVar,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -836,10 +836,6 @@ data Term n =
       _tUse :: Use
     , _tInfo :: Info
     } |
-    TValue {
-      _tValue :: !Value
-    , _tInfo :: !Info
-    } |
     TStep {
       _tStepEntity :: !(Maybe (Term n))
     , _tStepExec :: !(Term n)
@@ -876,7 +872,6 @@ instance HasInfo (Term n) where
     TStep{..} -> _tInfo
     TTable{..} -> _tInfo
     TUse{..} -> getInfo _tUse
-    TValue{..} -> _tInfo
     TVar{..} -> _tInfo
 
 instance Pretty n => Pretty (Term n) where
@@ -914,7 +909,6 @@ instance Pretty n => Pretty (Term n) where
     TLiteral l _ -> annotate Val $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
-    TValue v _ -> annotate Val $ pretty v
     TStep mEntity exec Nothing _i -> parensSep $
       [ "step"
       ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
@@ -957,7 +951,6 @@ instance Monad Term where
     TLiteral l i >>= _ = TLiteral l i
     TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
-    TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
@@ -982,7 +975,6 @@ termCodec = Codec enc dec
       TLiteral l i -> ob [literal .= l, inf i]
       TGuard k i -> ob [guard' .= k, inf i]
       TUse u _i -> toJSON u
-      TValue v i -> ob [value .= v, inf i]
       TStep ent e r i -> ob [entity .= ent, exec .= e, rollback .= r, inf i]
       TSchema sn smod smeta sfs i ->
         ob [ schemaName .= sn, modName .= smod, meta .= smeta, fields .= sfs, inf i ]
@@ -1008,7 +1000,6 @@ termCodec = Codec enc dec
         <|> wo "Literal" (\o -> TLiteral <$> o .: literal <*> inf' o)
         <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
         <|> parseWithInfo TUse
-        <|> wo "Value" (\o -> TValue <$> o .: value <*> inf' o)
         <|> wo "Step" (\o -> TStep <$> o .: entity <*> o .: exec <*> o .: rollback <*> inf' o)
         <|> wo "Schema"
             (\o -> TSchema <$>  o .: schemaName <*> o .: modName <*> o .: meta <*> o .: fields <*> inf' o )
@@ -1038,7 +1029,6 @@ termCodec = Codec enc dec
     pairs = "pairs"
     literal = "lit"
     guard' = "guard"
-    value = "value"
     entity = "ent"
     exec = "exec"
     rollback = "rb"
@@ -1065,7 +1055,6 @@ instance ToTerm Text where toTerm = tLit . LString
 instance ToTerm KeySet where toTerm k = TGuard (GKeySet k) def
 instance ToTerm Guard where toTerm = (`TGuard` def)
 instance ToTerm Literal where toTerm = tLit
-instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
 instance ToTerm PactId where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Word32 where toTerm = tLit . LInteger . fromIntegral
@@ -1114,7 +1103,6 @@ typeof t = case t of
       TObject (Object {..}) _ -> Right $ TySchema TyObject _oObjectType def
       TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
       TUse {} -> Left "use"
-      TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
@@ -1152,7 +1140,6 @@ termEq (TObject (Object (ObjectMap a) _ _ _) _) (TObject (Object (ObjectMap b) _
           go _ _ _ = False
 termEq (TLiteral a _) (TLiteral b _) = a == b
 termEq (TGuard a _) (TGuard b _) = a == b
-termEq (TValue a _) (TValue b _) = a == b
 termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g && d == h && x == y
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && d == h
 termEq _ _ = False

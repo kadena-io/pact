@@ -25,7 +25,6 @@ import Bound
 import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
 import Control.Monad
-import Data.Aeson (toJSON)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -118,7 +117,7 @@ dbDefs =
      [LitExample "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })"]
      (writeDocs ", failing if data does not exist for KEY.")
     ,defGasRNative "txlog" txlog
-     (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
+     (funType (TyList tTyObjectAny) [("table",tableTy),("txid",tTyInteger)])
       [LitExample "(txlog accounts 123485945)"] "Return all updates to TABLE performed in transaction TXID."
     ,defGasRNative "keylog" keylog
      (funType (TyList (tTyObject TyAny)) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
@@ -126,13 +125,13 @@ dbDefs =
       \indexed by txid."
 
     ,setTopLevelOnly $ defRNative "describe-table" descTable
-     (funType tTyValue [("table",tableTy)])
+     (funType tTyObjectAny [("table",tableTy)])
      [LitExample "(describe-table accounts)"]
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
-     (funType tTyValue [("keyset",tTyString)]) [] "Get metadata for KEYSET."
+     (funType tTyObjectAny [("keyset",tTyString)]) [] "Get metadata for KEYSET."
     ,setTopLevelOnly $ defRNative "describe-module" descModule
-     (funType tTyValue [("module",tTyString)])
+     (funType tTyObjectAny [("module",tTyString)])
      [LitExample "(describe-module 'my-module)"]
      "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ])
@@ -148,7 +147,7 @@ descKeySet :: RNativeFun e
 descKeySet i [TLitString t] = do
   r <- readRow (_faInfo i) KeySets (KeySetName t)
   case r of
-    Just v -> return $ toTerm (toJSON v)
+    Just v -> return $ toTerm $ v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t
 descKeySet i as = argsError i as
 
@@ -313,15 +312,21 @@ txids' _ i as = argsError i as
 
 txlog :: GasRNativeFun e
 txlog g i [table@TTable {..},TLitInteger tid] =
-  gasPostReads i g
-    ((`TValue` def) . toJSON . over (traverse . txValue) (columnsToObject _tTableType)) $ do
+  gasPostReads i g (toTList TyAny def . map txlogToObj) $ do
       guardTable i table
       getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
 txlog _ i as = argsError i as
 
+txlogToObj :: TxLog (ObjectMap PactValue) -> Term Name
+txlogToObj TxLog{..} = toTObject TyAny def
+  [ ("table", toTerm _txDomain)
+  , ("key", toTerm _txKey)
+  , ("value", toTObjectMap TyAny def (fmap fromPactValue _txValue))
+  ]
+
 keylog :: GasRNativeFun e
 keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
-  let postProc = toTList tTyValue def . map toTxidObj
+  let postProc = toTList TyAny def . map toTxidObj
         where toTxidObj (t,r) =
                 toTObject TyAny def [("txid", toTerm t),("value",columnsToObject _tTableType (_txValue r))]
   gasPostReads i g postProc $ do

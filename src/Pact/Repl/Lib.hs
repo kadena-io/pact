@@ -168,10 +168,6 @@ replDefs = ("Repl",
        []
        "Verify MODULE, checking that all properties hold."
 
-     ,defZRNative "json" json' (funType tTyValue [("exp",a)])
-      ["(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])"] $
-      "Encode pact expression EXP as a JSON value. " <>
-      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. "
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
        []
        "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
@@ -195,7 +191,7 @@ replDefs = ("Repl",
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
-                         TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet,tTyValue]
+                         TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
        a = mkTyVar "a" []
 
 invokeEnv :: (MVar (DbEnv PureDb) -> IO b) -> MVar LibState -> IO b
@@ -458,10 +454,6 @@ verify i as = case as of
         return (tStr $ mconcat renderedLines)
 
   _ -> argsError i as
-
-json' :: RNativeFun LibState
-json' _ [a] = return $ TValue (toJSON a) def
-json' i as = argsError i as
 
 sigKeyset :: RNativeFun LibState
 sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (Name (asString KeysAll) def)

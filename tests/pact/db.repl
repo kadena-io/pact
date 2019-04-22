@@ -41,7 +41,7 @@
 (expect "keys works" [ID_A] (keys persons))
 (expect "txids works" [2] (txids persons 2))
 (expect "txlog works"
-        (json [{"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"}])
+        [{"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"}]
         (txlog persons 2))
 
 (expect "keylog works" [{"txid": 2, "value": ROW_A}] (keylog persons ID_A 1))

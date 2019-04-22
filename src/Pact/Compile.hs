@@ -572,7 +572,6 @@ parseType = msum
   , TyPrim TyBool    <$ symbol tyBool
   , TyPrim TyString  <$ symbol tyString
   , TyList TyAny     <$ symbol tyList
-  , TyPrim TyValue   <$ symbol tyValue
   , TyPrim (TyGuard $ Just GTyKeySet)  <$ symbol tyKeySet
   , TyPrim (TyGuard Nothing) <$ symbol tyGuard
   ]

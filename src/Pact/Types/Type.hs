@@ -24,7 +24,7 @@ module Pact.Types.Type
    PrimType(..),
    GuardType(..),
    tyInteger,tyDecimal,tyTime,tyBool,tyString,
-   tyList,tyObject,tyValue,tyKeySet,tyTable,
+   tyList,tyObject,tyKeySet,tyTable,
    SchemaType(..),
    SchemaPartial(..),
    TypeVarName(..),typeVarName,
@@ -134,7 +134,6 @@ data PrimType =
   TyTime |
   TyBool |
   TyString |
-  TyValue |
   TyGuard (Maybe GuardType)
   deriving (Eq,Ord,Generic,Show)
 
@@ -146,7 +145,6 @@ instance ToJSON PrimType where
     TyTime -> String tyTime
     TyBool -> String tyBool
     TyString -> String tyString
-    TyValue -> String tyValue
     TyGuard g -> object [ "guard" .= g ]
 instance FromJSON PrimType where
   parseJSON v = withText "PrimType" doStr v <|> withObject "PrimType" doObj v
@@ -157,12 +155,11 @@ instance FromJSON PrimType where
         | s == tyTime = pure TyTime
         | s == tyBool = pure TyBool
         | s == tyString = pure TyString
-        | s == tyValue = pure TyValue
         | otherwise = fail "Bad PrimType Value"
       doObj o = TyGuard <$> o .: "guard"
 
 
-tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,
+tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,
   tyKeySet,tyTable,tyGuard :: Text
 tyInteger = "integer"
 tyDecimal = "decimal"
@@ -171,7 +168,6 @@ tyBool = "bool"
 tyString = "string"
 tyList = "list"
 tyObject = "object"
-tyValue = "value"
 tyKeySet = "keyset"
 tyGuard = "guard"
 tyTable = "table"
@@ -183,7 +179,6 @@ instance Pretty PrimType where
     TyTime -> tyTime
     TyBool -> tyBool
     TyString -> tyString
-    TyValue -> tyValue
     TyGuard tg -> case tg of
       Just GTyKeySet -> tyKeySet
       _ -> tyGuard

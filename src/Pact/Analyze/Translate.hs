@@ -438,7 +438,6 @@ maybeTranslateType' restrictKeys = \case
   --
   -- TODO: handle these:
   --
-  TyPrim Pact.TyValue -> empty
   TyFun _             -> empty
 
 throwError'

@@ -424,7 +424,7 @@ langDefs =
      [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
-     \List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type."
+     \List -> list, Object -> object."
 
 
     ,defRNative "tx-hash" txHash (funType tTyString []) ["(tx-hash)"]
@@ -612,7 +612,7 @@ compose i as = argsError' i as
 
 readMsg :: RNativeFun e
 readMsg i [TLitString key] = fromPactValue <$> parseMsgKey i "read-msg" key
-readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
+readMsg i [] = fromPactValue <$> parseMsgKey' i "read-msg" Nothing
 readMsg i as = argsError i as
 
 

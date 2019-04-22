@@ -934,7 +934,6 @@ toAST (TObject Term.Object {..} _) = do
     <*> mapM toAST _oObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
 toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
-toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType

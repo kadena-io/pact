@@ -361,7 +361,7 @@ Parse KEY string or number value from top level of message data body as integer.
 *key*&nbsp;`string` *&rarr;*&nbsp;`<a>`
 
 
-Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type.
+Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object.
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -513,7 +513,7 @@ Top level only: this function will fail if used in module code.
 
 ### describe-keyset {#describe-keyset}
 
-*keyset*&nbsp;`string` *&rarr;*&nbsp;`value`
+*keyset*&nbsp;`string` *&rarr;*&nbsp;`object:*`
 
 
 Get metadata for KEYSET.
@@ -523,7 +523,7 @@ Top level only: this function will fail if used in module code.
 
 ### describe-module {#describe-module}
 
-*module*&nbsp;`string` *&rarr;*&nbsp;`value`
+*module*&nbsp;`string` *&rarr;*&nbsp;`object:*`
 
 
 Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields.
@@ -536,7 +536,7 @@ Top level only: this function will fail if used in module code.
 
 ### describe-table {#describe-table}
 
-*table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`value`
+*table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`object:*`
 
 
 Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields.
@@ -620,7 +620,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 
 ### txlog {#txlog}
 
-*table*&nbsp;`table:<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[value]`
+*table*&nbsp;`table:<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:*]`
 
 
 Return all updates to TABLE performed in transaction TXID.
@@ -1396,7 +1396,7 @@ pact> (env-chain-data { "chain-id": 2, "block-height": 20 })
 
 ### env-data {#env-data}
 
-*json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,value]>` *&rarr;*&nbsp;`string`
+*json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`string`
 
 
 Set transaction JSON data, either as encoded string, or as pact types coerced to JSON.
@@ -1516,18 +1516,6 @@ pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 
 
 Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME.
-
-
-### json {#json}
-
-*exp*&nbsp;`<a>` *&rarr;*&nbsp;`value`
-
-
-Encode pact expression EXP as a JSON value. This is only needed for tests, as Pact values are automatically represented as JSON in API output. 
-```lisp
-pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
-{"list": [{"obj": {"age": {"i": {"d": [3.0 31.0 31.0],"c": "10 "},"lit": {"int": 10.0}},"name": {"i": {"d": [5.0 17.0 17.0],"c": ""joe""},"lit": "joe"}},"keyorder": ["name" "age"],"type": "*","i": {"d": [29.0 7.0 7.0],"c": "{ "name": "joe", "age": 10 } "}} {"obj": {"age": {"i": {"d": [3.0 60.0 60.0],"c": "25 "},"lit": {"int": 25.0}},"name": {"i": {"d": [6.0 45.0 45.0],"c": ""mary""},"lit": "mary"}},"keyorder": ["name" "age"],"type": "*","i": {"d": [28.0 36.0 36.0],"c": "{"name": "mary", "age": 25 }"}}],"type": {"tag": "TypeVar","name": "a","constraint": []},"i": {"d": [59.0 6.0 6.0],"c": "[{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }]"}}
-```
 
 
 ### load {#load}

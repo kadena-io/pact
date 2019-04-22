@@ -16,7 +16,7 @@
 
 module Pact.Native.Internal
   (success
-  ,parseMsgKey
+  ,parseMsgKey,parseMsgKey'
   ,bindReduce
   ,enforceGuard
   ,defNative,defGasRNative,defRNative
@@ -26,7 +26,7 @@ module Pact.Native.Internal
   ,getModule
   ,module Pact.Types.Native
   ,tTyInteger,tTyDecimal,tTyTime,tTyBool
-  ,tTyString,tTyValue,tTyKeySet,tTyObject,tTyGuard
+  ,tTyString,tTyKeySet,tTyObject,tTyObjectAny,tTyGuard
   ,colsToList
   ,module Pact.Gas
   ,(<>)
@@ -64,14 +64,20 @@ colsToList argFail _ = argFail
 
 
 parseMsgKey :: (FromJSON t) => FunApp -> String -> Text -> Eval e t
-parseMsgKey i msg key = do
-  vm <- firstOf (A.key key) <$> view eeMsgBody
-  case vm of
-    Nothing -> evalError' i $ "No such key in message: " <> pretty key
-    Just v -> case fromJSON v of
-                Success t -> return t
-                Error e -> evalError' i $ prettyString msg <> ": parse failed: "
-                           <> prettyString e <> ": " <> pretty v
+parseMsgKey f s t = parseMsgKey' f s (Just t)
+
+parseMsgKey' :: (FromJSON t) => FunApp -> String -> (Maybe Text) -> Eval e t
+parseMsgKey' i msg key = do
+  b <- view eeMsgBody
+  let go v = case fromJSON v of
+        Success t -> return t
+        Error e -> evalError' i $ prettyString msg <> ": parse failed: "
+                   <> prettyString e <> ": " <> pretty v
+  case key of
+    Nothing -> go b
+    Just k -> case preview (A.key k) b of
+      Nothing -> evalError' i $ "No such key in message: " <> pretty k
+      Just v -> go v
 
 
 bindReduce :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info ->
@@ -135,9 +141,9 @@ tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal
 tTyTime :: Type n; tTyTime = TyPrim TyTime
 tTyBool :: Type n; tTyBool = TyPrim TyBool
 tTyString :: Type n; tTyString = TyPrim TyString
-tTyValue :: Type n; tTyValue = TyPrim TyValue
 tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard $ Just GTyKeySet)
 tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o def
+tTyObjectAny :: Type n; tTyObjectAny = tTyObject TyAny
 tTyGuard :: Maybe GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
 
 getPactId :: FunApp -> Eval e PactId
