@@ -139,8 +139,7 @@ keyPairsToSigners creds = map toSigner creds
 mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
-      toUserSig cred = UserSig <$>
-                       toB16Text <$>
+      toUserSig cred = UserSig . toB16Text <$>
                        sign cred (toUntypedHash hsh)
   sigs <- traverse toUserSig creds
   return $ Command env sigs hsh
@@ -248,7 +247,7 @@ instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = len
 
 
 
-data UserSig = UserSig { _usSig :: !Text }
+newtype UserSig = UserSig { _usSig :: Text }
   deriving (Eq, Ord, Show, Generic)
 
 instance NFData UserSig
