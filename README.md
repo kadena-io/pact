@@ -206,7 +206,7 @@ three separate local packages.
 
 ### z3 Troubleshooting
 
-Note for users of property and invariant verification: z3 version 4.8.4 hangs when checking `str-to-int` calls (this causes one test to fail). The fix is to use the older version 4.8.3, or a newer version in the future (4.8.4 is the latest release at time of writing). Our Nix install uses a working version. For non-Nix Mac users, `brew install` defaults to 4.8.4, but 4.8.3 can be installed via `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/a7e7806193f7605c7fef6110655911012d3f1eb3/Formula/z3.rb`. For non-brew users, binaries are available [on github](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.3) for manual installation.
+Note for users of property and invariant verification: z3 version 4.8.4 hangs when checking `str-to-int` calls (this causes one test to fail). The fix is to use the older version 4.8.3, or a newer version in the future (4.8.4 is the latest release at time of writing). Our Nix install uses a working version. For non-Nix Mac users, `brew install` defaults to 4.8.4, but 4.8.3 can be installed via `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/a7e7806193f7605c7fef6110655911012d3f1eb3/Formula/z3.rb`. For non-brew users, binaries are available [on github](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.3) for manual installation (Pact uses the z3 in your `$PATH`).
 
 License
 ---
