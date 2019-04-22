@@ -204,6 +204,10 @@ replace `[p.pact]` with a list of all the locally defined projects to include.
 For example: `[p.backend p.common p.frontend]` for a project that has those
 three separate local packages.
 
+### z3 Troubleshooting
+
+Note for users of property and invariant verification: z3 version 4.8.4 hangs when checking `str-to-int` calls (this causes one test to fail). The fix is to use the older version 4.8.3, or a newer version in the future (4.8.4 is the latest release at time of writing). Our Nix install uses a working version. For non-Nix Mac users, `brew install` defaults to 4.8.4, but 4.8.3 can be installed via `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/a7e7806193f7605c7fef6110655911012d3f1eb3/Formula/z3.rb`.
+
 License
 ---
 
