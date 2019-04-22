@@ -2084,7 +2084,7 @@ spec = describe "analyze" $ do
 
               (enforce (=
                 (hash (- 2 1))
-                "ks31eMRwhaWZIlbw3Pl9Cxnx8cneTV_jDDrOYZG25ds"))
+                "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"))
 
               (enforce (=
                 (hash (or true false))

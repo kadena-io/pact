@@ -201,12 +201,12 @@ pact> (format "My {} has {}" ["dog" "fleas"])
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. Strings are converted directly while other values are converted using their JSON representation.
+Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. Strings are converted directly while other values are converted using their JSON representation. Non-value-level arguments are not allowed.
 ```lisp
 pact> (hash "hello")
 "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
 pact> (hash { 'foo: 1 })
-"h8BquXIAyxHDh9WgYRWiBmzRnXSzNDiI5u7d2exPvhE"
+"h9BZgylRf_M4HxcBXr15IcSXXXSz74ZC2IAViGle_z4"
 ```
 
 

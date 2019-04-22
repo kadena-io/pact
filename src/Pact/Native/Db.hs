@@ -270,7 +270,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue defaultRow)
+        Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue' defaultRow)
         (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
@@ -348,7 +348,7 @@ write wt partial i as = do
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      ps' <- enforcePactValue ps
+      ps' <- enforcePactValue' ps
       r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) ps'
       return (cost, r)
     _ -> argsError i ts

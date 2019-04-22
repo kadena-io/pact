@@ -43,7 +43,7 @@ module Pact.Eval
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,evalContinuation
-    ,enforcePactValue
+    ,enforcePactValue,enforcePactValue'
     ) where
 
 import Bound
@@ -583,10 +583,13 @@ appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
 
-enforcePactValue :: Traversable f => f (Term Name) -> Eval e (f PactValue)
-enforcePactValue = traverse $ \t -> case toPactValue t of
-  Left s -> evalError' t $ "Attempting to persist a non-value term: " <> pretty s
+enforcePactValue :: (Term Name) -> Eval e PactValue
+enforcePactValue t = case toPactValue t of
+  Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
   Right v -> return v
+
+enforcePactValue' :: Traversable f => f (Term Name) -> Eval e (f PactValue)
+enforcePactValue' = traverse enforcePactValue
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
@@ -599,7 +602,7 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
       Defun ->
         reduceBody bod'
       Defpact -> do
-        continuation <- PactContinuation d <$> enforcePactValue (fst af)
+        continuation <- PactContinuation d <$> enforcePactValue' (fst af)
         applyPact continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
