@@ -99,13 +99,13 @@ runPayload c@Command{..} = case (_pPayload _cmdPayload) of
   Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) ym
 
 
-applyExec :: RequestKey -> Hash -> [Signer] -> ExecMsg ParsedCode -> CommandM p CommandResult
+applyExec :: RequestKey -> PactHash -> [Signer] -> ExecMsg ParsedCode -> CommandM p CommandResult
 applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet signers
-      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing hsh)
+      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing (toUntypedHash hsh))
         refStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec _erInput) _erExec
@@ -124,7 +124,7 @@ handlePactExec (Right em) pe = do
   return $ Just pe
 
 
-applyContinuation :: RequestKey -> Hash -> [Signer] -> ContMsg -> CommandM p CommandResult
+applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p CommandResult
 applyContinuation rk hsh signers msg@ContMsg{..} = do
   env@CommandEnv{..} <- ask
   case _ceMode of
@@ -146,7 +146,7 @@ applyContinuation rk hsh signers msg@ContMsg{..} = do
           let sigs = userSigsToPactKeySet signers
               pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactOutput) _peYield)
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                        (MsgData sigs _cmData pactStep hsh) _csRefStore
+                        (MsgData sigs _cmData pactStep (toUntypedHash hsh)) _csRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
           res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
 

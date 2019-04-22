@@ -62,7 +62,7 @@
 
 (module impure 'k
   (defconst VERSION 3)
-  (bless "66ccab1b8248d95db2662b2b5bcb6cc4cfb287d8d40a0636aa108351ad3a20ba915c51840ecf576be38d93a49f18da1f38e2cb0239beaca51f0e7d0a19bc75cf")
+  (bless "74d20rfD3baZiITTChOUbIb8tlHGjMVMGRHuTFBuKAk")
   (deftable foo)
   (defun ins (k v) (insert foo k v)))
 

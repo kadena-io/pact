@@ -42,7 +42,7 @@ module Pact.Types.Command
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
-  , cmdToRequestKey, requestKeyToB16Text, initialRequestKey
+  , cmdToRequestKey, requestKeyToB16Text
   ) where
 
 
@@ -69,12 +69,10 @@ import Pact.Types.RPC
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
-import qualified Crypto.Hash          as H
 
 import Pact.Parse (parseExprs)
 import Pact.Types.Crypto              as Base
 #else
-import Pact.Types.Hash
 import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
 #endif
 
@@ -88,7 +86,7 @@ import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
 data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
-  , _cmdHash :: !Hash
+  , _cmdHash :: !PactHash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
@@ -117,9 +115,6 @@ instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 #if !defined(ghcjs_HOST_OS)
 
-requestKeyHash :: H.Blake2b_512
-requestKeyHash = H.Blake2b_512
-
 
 -- CREATING AND SIGNING TRANSACTIONS
 
@@ -143,13 +138,12 @@ keyPairsToSigners creds = map toSigner creds
 
 mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
-  let hsh = hashTx env requestKeyHash    -- hash associated with a Command, aka a Command's Request Key
+  let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
       toUserSig cred = UserSig <$>
                        toB16Text <$>
-                       sign cred hsh
+                       sign cred (toUntypedHash hsh)
   sigs <- traverse toUserSig creds
   return $ Command env sigs hsh
-
 
 
 -- VALIDATING TRANSACTIONS
@@ -158,7 +152,7 @@ verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCo
 verifyCommand orig@Command{..} =
   case parsedPayload of
     Right env' -> case verifiedHash of
-      Right hsh -> case (hasInvalidSigs hsh _cmdSigs $ _pSigners env') of
+      Right _ -> case (hasInvalidSigs _cmdHash _cmdSigs $ _pSigners env') of
         Nothing -> toProcSucc env'
         Just sigErr -> toProcFail sigErr
       Left hshErr -> toProcFail hshErr
@@ -172,11 +166,11 @@ verifyCommand orig@Command{..} =
     parsedPayload = traverse parsePact
                     =<< A.eitherDecodeStrict' _cmdPayload
 
-    verifiedHash = verifyHashTx _cmdHash _cmdPayload requestKeyHash
+    verifiedHash = verifyHash _cmdHash _cmdPayload
 {-# INLINE verifyCommand #-}
 
 
-hasInvalidSigs :: Hash -> [UserSig] -> [Signer] -> Maybe String
+hasInvalidSigs :: PactHash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers
   | not (length sigs == length signers)  = Just "Number of sig(s) does not match number of signer(s)"
   | otherwise                            = if (length failedSigs == 0)
@@ -187,11 +181,11 @@ hasInvalidSigs hsh sigs signers
         formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode <$> failedSigs)
 
 
-verifyUserSig :: Hash -> UserSig -> Signer -> Bool
+verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
 verifyUserSig msg UserSig{..} Signer{..} =
   case (pubT, sigT, addrT) of
     (Right p, Right sig, Right addr) ->
-      (isValidAddr addr p) && verify (toScheme _siScheme) msg (PubBS p) (SigBS sig)
+      (isValidAddr addr p) && verify (toScheme _siScheme) (toUntypedHash msg) (PubBS p) (SigBS sig)
     _ -> False
   where pubT = parseB16TextOnly _siPubKey
         sigT = parseB16TextOnly _usSig
@@ -298,7 +292,7 @@ data CommandResult = CommandResult
 
 
 cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey Command {..} = RequestKey _cmdHash
+cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
 
 
 data ExecutionMode =
@@ -317,7 +311,7 @@ data CommandExecInterface m a = CommandExecInterface
 
 
 requestKeyToB16Text :: RequestKey -> Text
-requestKeyToB16Text (RequestKey h) = hashToB16Text h
+requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
@@ -326,18 +320,6 @@ newtype RequestKey = RequestKey { unRequestKey :: Hash}
 instance Show RequestKey where
   show (RequestKey rk) = show rk
 
-
-#if !defined(ghcjs_HOST_OS)
-
-initialRequestKey :: RequestKey
-initialRequestKey = RequestKey $ initialHashTx H.Blake2b_512
-
-#else
-
-initialRequestKey :: RequestKey
-initialRequestKey = RequestKey initialHash
-
-#endif
 
 
 makeLenses ''UserSig

@@ -10,7 +10,6 @@ import Data.ByteString (ByteString)
 import Data.Aeson as A
 import qualified Control.Lens             as Lens
 import qualified Data.ByteString.Base16   as B16
-import qualified Crypto.Hash              as H
 import qualified Data.ByteString.Lazy     as BSL
 
 import Pact.ApiReq
@@ -18,7 +17,7 @@ import Pact.Types.Crypto
 import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromJSON')
 import Pact.Types.RPC
-
+import Pact.Types.Hash
 
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----
@@ -43,6 +42,9 @@ someED25519Pair = (PubBS $ getByteString
                    "8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332",
                    "ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d",
                    ED25519)
+
+
+
 
 someETHPair :: (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
 someETHPair = (PubBS $ getByteString
@@ -161,22 +163,20 @@ testUserSig = do
 
 
   it "successfully verifies ETH UserSig when provided by user" $ do
-    -- UserSig verification will pass but Command verification might fail
-    -- if hash algorithm provided not supported for hashing commands.
-    let hsh = hashTx "(somePactFunction)" H.SHA3_256
+    let hsh = hash "(somePactFunction)"
     [signer] <- toSigners [someETHPair]
     [kp]     <- mkKeyPairs $ toApiKeyPairs [someETHPair]
-    sig      <- sign kp hsh
+    sig      <- sign kp (toUntypedHash hsh)
     let myUserSig = UserSig (toB16Text sig)
     (verifyUserSig hsh myUserSig signer) `shouldBe` True
 
 
 
   it "fails UserSig validation when UserSig has unexpected Address" $ do
-    let hsh = hashTx "(somePactFunction)" H.Blake2b_512
+    let hsh = hash "(somePactFunction)"
     [signer] <- toSigners [someETHPair]
     [kp]     <- mkKeyPairs $ toApiKeyPairs [someETHPair]
-    sig      <- sign kp hsh
+    sig      <- sign kp (toUntypedHash hsh)
     let myUserSig   = UserSig (toB16Text sig)
         wrongAddr   = Lens.view siPubKey signer
         wrongSigner = Lens.set siAddress wrongAddr signer
@@ -185,10 +185,10 @@ testUserSig = do
 
 
   it "fails UserSig validation when UserSig has unexpected Scheme" $ do
-    let hsh = hashTx "(somePactFunction)" H.Blake2b_512
+    let hsh = hash "(somePactFunction)"
     [signer] <- toSigners [someETHPair]
     [kp]     <- mkKeyPairs $ toApiKeyPairs [someETHPair]
-    sig      <- sign kp hsh
+    sig      <- sign kp (toUntypedHash hsh)
     let myUserSig   = UserSig (toB16Text sig)
         wrongScheme = ED25519
         wrongSigner = Lens.set siScheme wrongScheme signer

@@ -112,7 +112,7 @@ sqlInsertHistoryRow =
 
 insertRow :: Statement -> (Command ByteString, CommandResult) -> IO ()
 insertRow s (Command{..},CommandResult {..}) =
-    execs s [hashToField _cmdHash
+    execs s [hashToField (toUntypedHash _cmdHash)
             ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
             ,SText $ Utf8 _cmdPayload
             ,crToField _crResult
@@ -162,6 +162,6 @@ selectAllCommands e = do
   let rowToCmd [SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
               Command { _cmdPayload = cmd'
                       , _cmdSigs = userSigsFromField userSigs'
-                      , _cmdHash = hashFromField hash'}
+                      , _cmdHash = fromUntypedHash $ hashFromField hash'}
       rowToCmd err = error $ "selectAllCommands: unexpected result schema: " ++ show err
   fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RText,RText,RText]

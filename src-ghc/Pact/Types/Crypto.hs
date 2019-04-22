@@ -18,10 +18,7 @@
 -- Hashing types and Scheme class.
 --
 module Pact.Types.Crypto
-  ( hashTx
-  , verifyHashTx
-  , initialHashTx
-  , ST.PPKScheme(..)
+  ( ST.PPKScheme(..)
   , ST.defPPKScheme
   , SomeScheme
   , defaultScheme
@@ -39,25 +36,25 @@ module Pact.Types.Crypto
   , getPrivate
   , genKeyPair
   , importKeyPair
+  , KeyPair(..)
+  , Scheme(..)
   ) where
 
 
 import Prelude
 import GHC.Generics
 
-import qualified Crypto.Hash  as H
-
 import Data.Aeson.Types   (toJSONKeyText)
 import Data.Text.Encoding
 import Data.ByteString    (ByteString)
 
 import Data.Aeson                        as A
-import qualified Data.ByteArray          as B
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
 
 
 import Pact.Types.Util
+import Pact.Types.Hash
 import Pact.Types.Scheme               as ST
 import qualified Pact.Types.ECDSA      as ECDSA
 
@@ -113,24 +110,6 @@ class (ConvertBS (PublicKey a),  Eq (PublicKey a),
   -- Certain schemes (i.e. Ethereum) call Runtime public keys 'addresses'.
 
   _formatPublicKey :: a -> PublicKey a -> ByteString
-
-
-
-
---------- HASHING ---------
-
-hashTx :: (H.HashAlgorithm a) => ByteString -> a -> Hash
-hashTx b algo = (Hash . B.convert . H.hashWith algo) b
-
-verifyHashTx :: (H.HashAlgorithm a) => Hash -> ByteString -> a -> Either String Hash
-verifyHashTx h b algo = if hashTx b algo == h
-  then Right h
-  else Left $ "Hash Mismatch, received " ++ show h
-       ++ " but our hashing resulted in " ++ show (hashTx b algo)
-{-# INLINE verifyHashTx #-}
-
-initialHashTx :: (H.HashAlgorithm a) => a -> Hash
-initialHashTx algo = hashTx mempty algo
 
 
 
@@ -228,6 +207,7 @@ instance Scheme (SPPKScheme 'ETH) where
   type PublicKey (SPPKScheme 'ETH) = ECDSA.PublicKey
   type PrivateKey (SPPKScheme 'ETH) = ECDSA.PrivateKey
   type Signature (SPPKScheme 'ETH) = ECDSA.Signature
+
 
   _sign _ (Hash msg) pub priv = ECDSA.signETH msg pub priv
   _valid _ (Hash msg) pub sig = ECDSA.validETH msg pub sig

@@ -194,7 +194,8 @@ strToIntDef = defRNative "str-to-int" strToInt
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   ["(hash \"hello\")", "(hash { 'foo: 1 })"]
-  "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
+  "Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. \
+  \Strings are converted directly while other values are \
   \converted using their JSON representation."
   where
     hash' :: RNativeFun e
@@ -202,7 +203,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
       [TLitString s] -> go $ encodeUtf8 s
       [a'] -> go $ toStrict $ encode a'
       _ -> argsError i as
-      where go = return . tStr . asString . hash
+      where go = return . tStr . asString . pactHash
 
 ifDef :: NativeDef
 ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])

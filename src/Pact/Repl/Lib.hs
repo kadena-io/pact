@@ -180,7 +180,7 @@ replDefs = ("Repl",
        "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
        ["(env-hash (hash \"hello\"))"]
-       "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash."
+       "Set current transaction hash. HASH must be an unpadded base64-url encoded BLAKE2b 256-bit hash."
      ,defZNative "test-capability" testCapability
       (funType tTyString [("capability", TyFun $ funType' tTyBool [])])
       [LitExample "(test-capability (MY-CAP))"] $

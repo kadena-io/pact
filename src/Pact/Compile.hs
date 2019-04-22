@@ -435,7 +435,7 @@ moduleForm = do
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       modName = ModuleName modName' Nothing
-      modHash = hash $ encodeUtf8 $ _unCode code
+      modHash = pactHash $ encodeUtf8 $ _unCode code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
     (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
@@ -459,7 +459,7 @@ interface = do
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       iname = ModuleName iname' Nothing
-      ihash = hash $ encodeUtf8 (_unCode code)
+      ihash = pactHash $ encodeUtf8 (_unCode code)
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
             bodyForm $ specialForm $ \r -> case r of
               RDefun -> return emptyDef
@@ -601,7 +601,6 @@ bodyForm' term = (,) <$> go <*> contextInfo
           [] -> pure <$> term -- will fail, similar to 'some'
           es -> replicateM (length es) term
 
-
 _compileAccounts :: IO (Either PactError [Term Name])
 _compileAccounts = _compileF "examples/accounts/accounts.pact"
 
@@ -625,7 +624,8 @@ _compile = _compileWith topLevel
 
 -- | run a string as though you were in a module (test deftable, etc)
 _compileStrInModule :: String -> IO [Term Name]
-_compileStrInModule = fmap concat . _compileStr' moduleLevel (set (psUser . csModule) (Just (initModuleState "mymodule" (hash mempty))))
+_compileStrInModule = fmap concat . _compileStr' moduleLevel
+  (set (psUser . csModule) (Just (initModuleState "mymodule" (pactHash mempty))))
 
 _compileStr :: String -> IO [Term Name]
 _compileStr = _compileStr' topLevel id
