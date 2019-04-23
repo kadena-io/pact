@@ -24,6 +24,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
+   toPactId,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
@@ -59,6 +60,7 @@ import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import qualified Data.Text as T
 import Data.String
 
 import Pact.Types.ChainMeta
@@ -246,6 +248,11 @@ data EvalEnv e = EvalEnv {
     }
 makeLenses ''EvalEnv
 
+
+toPactId :: TxId -> ChainId -> PactId
+toPactId txId (ChainId chainId) = (PactId . T.concat)
+                                  ["tx-id:",asString txId, ":",
+                                   "chain-id:",chainId]
 
 
 -- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.

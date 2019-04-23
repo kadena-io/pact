@@ -1,6 +1,8 @@
 # Creditor (Bob) can cancel anytime
 type: "cont"
-pactId: 5
+pactId:
+  txId: 5
+  chainId: ""
 step: 0
 rollback: True
 keyPairs:

@@ -187,10 +187,11 @@ newtype KeySetName = KeySetName Text
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
-newtype PactId = PactId Word64
-    deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON,Generic)
+newtype PactId = PactId Text
+    deriving (Eq,Ord,IsString,FromJSON,ToJSON,Generic)
 instance Show PactId where show (PactId p) = show p
 instance Pretty PactId where pretty = viaShow
+instance ToTerm PactId where toTerm (PactId p) = (tLit . LString) p
 instance NFData PactId
 
 data PactGuard = PactGuard
@@ -1073,7 +1074,6 @@ instance ToTerm Guard where toTerm = (`TGuard` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
-instance ToTerm PactId where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Word32 where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Word64 where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Int64 where toTerm = tLit . LInteger . fromIntegral

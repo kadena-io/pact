@@ -1367,18 +1367,18 @@ Commit transaction.
 
 ### continue-pact {#continue-pact}
 
-*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *&rarr;*&nbsp;`string`
+*tx-id*&nbsp;`integer` *chain-id*&nbsp;`string` *step*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
-*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
+*tx-id*&nbsp;`integer` *chain-id*&nbsp;`string` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
-*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *yielded*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
+*tx-id*&nbsp;`integer` *chain-id*&nbsp;`string` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *yielded*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
 
 
-Continue previously-initiated pact identified by PACT-ID at STEP, optionally specifying ROLLBACK (default is false), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
+Continue previously-initiated pact identified by TX-ID and CHAIN-ID at STEP, optionally specifying ROLLBACK (default is false), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
 ```lisp
-(continue-pact 2 1)
+(continue-pact 2 "" 1)
 (continue-pact 2 1 true)
-(continue-pact 2 1 false { "rate": 0.9 })
+(continue-pact 2 "" 1 false { "rate": 0.9 })
 ```
 
 
