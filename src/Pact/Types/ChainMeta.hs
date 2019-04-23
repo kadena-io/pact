@@ -14,6 +14,7 @@ module Pact.Types.ChainMeta
   ( -- * types
     Address(..)
   , PrivateMeta(..)
+  , ChainId(..)
   , PublicMeta(..)
   , HasPlafMeta(..)
   , PublicData(..)
@@ -21,7 +22,7 @@ module Pact.Types.ChainMeta
     -- * optics
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice
-  , pdChainId, pdPublicMeta, pdBlockHeight, pdBlockTime
+  , pdPublicMeta, pdBlockHeight, pdBlockTime
   ) where
 
 
@@ -38,12 +39,13 @@ import Data.Serialize (Serialize)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text
-import Data.Word (Word32, Word64)
+import Data.Word (Word64)
 
 -- internal pact modules
 
 import Pact.Parse
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
+import Pact.Types.Term (ToTerm(..))
 
 
 newtype EntityName = EntityName Text
@@ -75,9 +77,16 @@ instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
 instance Serialize PrivateMeta
 
+
+-- | Expresses unique platform-specific chain identifier.
+newtype ChainId = ChainId Text
+  deriving (Eq, Show, Generic, IsString, ToJSON, FromJSON, Serialize, NFData)
+instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
+
+
 -- | Contains all necessary metadata for a Chainweb-style public chain.
 data PublicMeta = PublicMeta
-  { _pmChainId :: Text
+  { _pmChainId :: ChainId
   , _pmSender :: Text
   , _pmGasLimit :: ParsedInteger
   , _pmGasPrice :: ParsedDecimal
@@ -108,7 +117,6 @@ instance HasPlafMeta () where
 
 data PublicData = PublicData
   { _pdPublicMeta :: PublicMeta
-  , _pdChainId :: Word32
   , _pdBlockHeight :: Word64
   , _pdBlockTime :: Int64
   }
@@ -117,4 +125,4 @@ makeLenses ''PublicData
 
 instance ToJSON PublicData where toJSON = lensyToJSON 3
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
-instance Default PublicData where def = PublicData def def def def
+instance Default PublicData where def = PublicData def def def

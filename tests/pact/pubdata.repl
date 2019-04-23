@@ -1,5 +1,5 @@
 ;; Chain public metadata should initialize with defaults
-(expect "chain data chain id initializes with 0" 0 (at "chain-id" (chain-data)))
+(expect "chain data chain id initializes with \"\"" "" (at "chain-id" (chain-data)))
 (expect "chain data block height initializes with 0" 0 (at "block-height" (chain-data)))
 (expect "chain data block time id initializes with 0" 0 (at "block-time" (chain-data)))
 (expect "chain data sender initializes with \"\"" "" (at "sender" (chain-data)))
@@ -7,8 +7,8 @@
 (expect "chain data gas price initializes with 0.0" 0.0 (at "gas-price" (chain-data)))
 
 ;; Chain public metadata should reflect updates
-(env-chain-data { "chain-id": 2, "block-height": 20 })
-(expect "chain data chain id reflects updated value" 2 (at "chain-id" (chain-data)))
+(env-chain-data { "chain-id": "Testnet00/2", "block-height": 20 })
+(expect "chain data chain id reflects updated value" "Testnet00/2" (at "chain-id" (chain-data)))
 (expect "chain data block height reflects updated value" 20 (at "block-height" (chain-data)))
 
 ;; show that updates are granular
@@ -16,7 +16,7 @@
 (expect "chain data sender reflects updated value" "squawk" (at "sender" (chain-data)))
 
 ;; show that updates are cumulative
-(expect "chain data chain id reflects updated value" 2 (at "chain-id" (chain-data)))
+(expect "chain data chain id reflects updated value" "Testnet00/2" (at "chain-id" (chain-data)))
 (expect "chain data block height reflects updated value" 20 (at "block-height" (chain-data)))
 
 ;; Show failure on improper keys
@@ -26,4 +26,4 @@
 (expect-failure "chain data should fail for wrongly-typed keys" (env-chain-data { "chain-id": 0.0 }))
 
 ;; Show failure on duplicate keys
-(expect-failure "chain data should not accept duplicate updates" (env-chain-data { "chain-id": 1, "chain-id:": 2 }))
+(expect-failure "chain data should not accept duplicate updates" (env-chain-data { "chain-id": "Testnet00/1", "chain-id:": "Testnet00/2" }))

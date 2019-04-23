@@ -306,7 +306,7 @@ chainDataDef = defRNative "chain-data" chainData (funType obj [])
           (ParsedDecimal gp) = _pmGasPrice
 
       pure $ toTObject TyAny def
-        [ ("chain-id"    , toTerm _pdChainId    )
+        [ ("chain-id"    , toTerm _pmChainId    )
         , ("block-height", toTerm _pdBlockHeight)
         , ("block-time"  , toTerm _pdBlockTime  )
         , ("sender"      , toTerm _pmSender     )
