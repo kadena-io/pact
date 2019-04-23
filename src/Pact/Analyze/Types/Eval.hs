@@ -99,7 +99,7 @@ infix 1 ???
 data PactMetadata
   = PactMetadata
     { _pmInPact  :: !(S Bool)
-    , _pmPactId  :: !(S Integer)
+    , _pmPactId  :: !(S Str)
     , _pmEntity  :: !(S Str)
     }
   deriving Show
@@ -474,7 +474,7 @@ class HasAnalyzeEnv a where
   inPact :: Lens' a (S Bool)
   inPact = analyzeEnv.aePactMetadata.pmInPact
 
-  currentPactId :: Lens' a (S Integer)
+  currentPactId :: Lens' a (S Str)
   currentPactId = analyzeEnv.aePactMetadata.pmPactId
 
   currentEntity :: Lens' a (S Str)

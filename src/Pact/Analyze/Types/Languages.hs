@@ -1321,7 +1321,7 @@ data Term (a :: Ty) where
 
   -- TODO: ReadMsg
 
-  PactId          :: Term 'TyInteger
+  PactId          :: Term 'TyStr
 
   -- Guards
   MkKsRefGuard :: Term 'TyStr                                               -> Term 'TyGuard
