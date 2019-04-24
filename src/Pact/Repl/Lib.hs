@@ -111,12 +111,12 @@ replDefs = ("Repl",
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
 
      ,defZRNative "continue-pact" continuePact
-      (funType tTyString [("tx-id",tTyInteger),("chain-id",tTyString),("step",tTyInteger)] <>
-       funType tTyString [("tx-id",tTyInteger),("chain-id",tTyString),("step",tTyInteger),("rollback",tTyBool)] <>
-       funType tTyString [("tx-id",tTyInteger),("chain-id",tTyString),("step",tTyInteger),("rollback",tTyBool),("yielded",tTyObject (mkSchemaVar "y"))])
-      [LitExample "(continue-pact 2 \"\" 1)", LitExample "(continue-pact 2 1 true)",
-       LitExample "(continue-pact 2 \"\" 1 false { \"rate\": 0.9 })"]
-      ("Continue previously-initiated pact identified by TX-ID and CHAIN-ID at STEP, " <>
+      (funType tTyString [("pact-id",tTyString),("step",tTyInteger)] <>
+       funType tTyString [("pact-id",tTyString),("step",tTyInteger),("rollback",tTyBool)] <>
+       funType tTyString [("pact-id",tTyString),("step",tTyInteger),("rollback",tTyBool),("yielded",tTyObject (mkSchemaVar "y"))])
+      [LitExample "(continue-pact (hash \"some-pact-tx\") 1)", LitExample "(continue-pact 2 1 true)",
+       LitExample "(continue-pact (hash \"some-pact-tx\") 1 false { \"rate\": 0.9 })"]
+      ("Continue previously-initiated pact identified by PACT-ID at STEP, " <>
        "optionally specifying ROLLBACK (default is false), and " <>
        "YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).")
 
@@ -288,20 +288,22 @@ setmsg i as = argsError i as
 
 continuePact :: RNativeFun LibState
 continuePact i as = case as of
-  [TLitInteger tid,TLitString cid,TLitInteger step] -> go tid cid step False Nothing
-  [TLitInteger tid,TLitString cid,TLitInteger step,TLitBool rollback] -> go tid cid step rollback Nothing
-  [TLitInteger tid,TLitString cid,TLitInteger step,TLitBool rollback,TObject (Object o _ _ _) _] -> go tid cid step rollback (Just o)
+  [TLitString pid,TLitInteger step] -> go pid step False Nothing
+  [TLitString pid,TLitInteger step,TLitBool rollback] -> go pid step rollback Nothing
+  [TLitString pid,TLitInteger step,TLitBool rollback,TObject (Object o _ _ _) _] -> go pid step rollback (Just o)
   _ -> argsError i as
   where
-    go :: Integer -> Text -> Integer -> Bool -> Maybe (ObjectMap (Term Name)) -> Eval LibState (Term Name)
-    go tid cid step rollback userResume = do
+    go :: Text -> Integer -> Bool -> Maybe (ObjectMap (Term Name)) -> Eval LibState (Term Name)
+    go pid step rollback userResume = do
       resume <- case userResume of
         Just r -> return $ Just r
         Nothing -> use evalPactExec >>= \pe -> case pe of
           Nothing -> return Nothing
           Just PactExec{..} -> return $ fmap (fmap fromPactOutput) _peYield
-      let pactId = toPactId (TxId $ fromIntegral tid) (ChainId cid)
-          pactStep = PactStep (fromIntegral step) rollback pactId resume
+      pactId <- case (fromText' pid) of
+        Left err -> evalError' i $ "Invalid pact id: " <> pretty err
+        Right hsh -> return $ PactId hsh
+      let pactStep = PactStep (fromIntegral step) rollback pactId resume
       viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of
         Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
         Just PactExec{..} -> do

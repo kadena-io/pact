@@ -63,7 +63,8 @@ instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
 
 data ApiPactId = ApiPactId {
   _apiTxId :: TxId,
-  _apiChainId :: ChainId
+  _apiChainId :: ChainId,
+  _apiTxHash :: Hash
 } deriving (Eq, Show, Generic)
 instance ToJSON ApiPactId where toJSON = lensyToJSON 4
 instance FromJSON ApiPactId where parseJSON = lensyParseJSON 4
@@ -160,7 +161,7 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
   let pubMeta = fromMaybe def _ylPublicMeta
-      pactId = toPactId (_apiTxId apiPactId) (_apiChainId apiPactId)
+      pactId = toPactId (_apiTxId apiPactId) (_apiChainId apiPactId) (_apiTxHash apiPactId)
   ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce
 
 mkCont :: PactId -> Int -> Bool -> Value -> PublicMeta -> [SomeKeyPair]

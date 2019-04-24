@@ -646,8 +646,10 @@ applyPact app (TList steps _ i) = do
   -- get step from environment or create a new one
   PactStep{..} <- view eePactStep >>= \ps -> case ps of
     Nothing -> view eeTxId >>= \tid -> case tid of
-      Just txId -> view (eePublicData . pdPublicMeta . pmChainId) >>=
-                   \chainId -> return $ PactStep 0 False (toPactId txId chainId) Nothing
+      Just txId -> do
+        chainId <- view $ eePublicData . pdPublicMeta . pmChainId
+        hsh <- view eeHash
+        return $ PactStep 0 False (toPactId txId chainId hsh) Nothing
       Nothing -> evalError i "applyPact: pacts not executable in local context"
     Just v -> return v
   -- retrieve indicated step from code

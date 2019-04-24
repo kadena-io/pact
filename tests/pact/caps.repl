@@ -154,11 +154,11 @@
 
 (env-data { "id": "a"})
 
-(expect "pact enforce succeeds" 1 (at 'result (continue-pact 4 "" 1)))
+(expect "pact enforce succeeds" 1 (at 'result (continue-pact "4" 1)))
 
 (pact-state true)
 (test-pact-guards "b")
-(expect-failure "pact enforce fails in pact 5 for id 'a'" (continue-pact 5 "" 1))
+(expect-failure "pact enforce fails in pact 5 for id 'a'" (continue-pact "5" 1))
 
 (env-keys ["a" "b" "c"])
 (expect-failure "cannot compose caps at toplevel" (compose-capability (KALL-CAP)))

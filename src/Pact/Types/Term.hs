@@ -187,11 +187,9 @@ newtype KeySetName = KeySetName Text
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
-newtype PactId = PactId Text
-    deriving (Eq,Ord,IsString,FromJSON,ToJSON,Generic)
-instance Show PactId where show (PactId p) = show p
-instance Pretty PactId where pretty = viaShow
-instance ToTerm PactId where toTerm (PactId p) = (tLit . LString) p
+newtype PactId = PactId Hash
+    deriving (Eq,Ord,Show,Pretty,AsString,FromJSON,ToJSON,Generic)
+instance ToTerm PactId where toTerm (PactId p) = (tLit . LString) (hashToText p)
 instance NFData PactId
 
 data PactGuard = PactGuard

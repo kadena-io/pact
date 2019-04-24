@@ -97,7 +97,8 @@
           { "payee": payee
           , "payee-entity": payee-entity
           , "ref": (pact-id)
-          }))
+          })
+	  (pact-id))
       (with-capability (TRANSFER)
         (credit payer amount date
           { "ref": (pact-id), "note": "rollback" })))
@@ -160,7 +161,7 @@
     (with-capability (USER_GUARD deb-acct)
       (with-read accounts deb-acct { 'ccy:= ccy }
         (let ((pact-acct (new-pact-account ESCROW_ACCT ccy)))
-          (transfer deb-acct pact-acct amount (get-system-time))))))
+          (transfer deb-acct pact-acct amount (get-system-time))(pact-id)))))
 
   (defun cancel-escrow (timeout deb-acct cred-acct amount)
     (with-capability (CANCEL-ESCROW deb-acct cred-acct timeout)
