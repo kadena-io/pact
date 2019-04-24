@@ -48,6 +48,7 @@ library
                      , Pact.Types.ChainMeta
                      , Pact.Types.Codec
                      , Pact.Types.Command
+                     , Pact.Types.Continuation
                      , Pact.Types.Scheme
                      , Pact.Types.Exp
                      , Pact.Types.ExpParser

@@ -27,7 +27,7 @@ module Pact.Types.API
 
 import Data.Aeson hiding (Success)
 import Control.Lens hiding ((.=))
-qimport GHC.Generics
+import GHC.Generics
 import qualified Data.HashMap.Strict as HM
 import Control.Arrow
 import Control.Monad
