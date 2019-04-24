@@ -30,6 +30,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 import qualified Data.Vector as V
+import Data.Text (pack)
 
 import Pact.Eval
 import Pact.Native.Internal

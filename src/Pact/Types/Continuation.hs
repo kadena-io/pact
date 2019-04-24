@@ -11,39 +11,25 @@ module Pact.Types.Continuation
     PactStep(..)
   , PactContinuation(..)
   , Yield(..)
-  , ChainId(..)
     -- * combinators
   , endorse
     -- * optics
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
   , yData, yTarget, yEndorsement
-  , chainId
   )where
 
 
-import GHC.Generics
-
 import Control.Lens
 
-import Data.Aeson (ToJSON, FromJSON, encode)
+import Data.Aeson (encode)
 import Data.ByteString.Lazy (toStrict)
 import Data.Semigroup ((<>))
-import Data.String
-import Data.Text (Text)
 
+import Pact.Types.ChainMeta (ChainId)
 import Pact.Types.Hash
 import Pact.Types.PactValue
 import Pact.Types.Term
-
-
-newtype ChainId = ChainId { _chainId :: Text }
-  deriving (Eq, Ord, Show, IsString, Generic, ToJSON, FromJSON)
-
-instance Wrapped ChainId
-
-chainId :: Lens' ChainId Text
-chainId = lens _chainId (\_ t -> ChainId t)
 
 
 -- | The type of a set of yielded values of a pact step.

@@ -23,13 +23,14 @@ module Pact.Types.ChainMeta
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice
   , pdPublicMeta, pdBlockHeight, pdBlockTime
+  , chainId
   ) where
 
 
 import GHC.Generics
 
 import Control.DeepSeq (NFData)
-import Control.Lens (makeLenses)
+import Control.Lens (Wrapped, Lens', makeLenses, lens)
 
 import Data.Aeson
 import Data.Default (Default, def)
@@ -79,10 +80,14 @@ instance Serialize PrivateMeta
 
 
 -- | Expresses unique platform-specific chain identifier.
-newtype ChainId = ChainId Text
+newtype ChainId = ChainId { _chainId :: Text }
   deriving (Eq, Show, Generic, IsString, ToJSON, FromJSON, Serialize, NFData)
 instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
 
+instance Wrapped ChainId
+
+chainId :: Lens' ChainId Text
+chainId = lens _chainId (\_ t -> ChainId t)
 
 -- | Contains all necessary metadata for a Chainweb-style public chain.
 data PublicMeta = PublicMeta

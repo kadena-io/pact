@@ -33,6 +33,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
+import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
 import qualified Data.Vector as V
@@ -298,7 +299,10 @@ continuePact i as = case as of
         Just r -> return $ Just r
         Nothing -> use evalPactExec >>= \pe -> case pe of
           Nothing -> return Nothing
-          Just PactExec{..} -> return $ fmap (fmap fromPactValue) _peYield
+          Just PactExec{..} -> return $ fmap (_oObject . _yData) _peYield
+
+      let cid = preview (eePublicData . pdPublicMeta . pmChainId)
+      let r = Yield resume cid (Hash "TODO")
       let pactId = (PactId $ fromIntegral pid)
           pactStep = PactStep (fromIntegral step) rollback pactId resume
       viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of

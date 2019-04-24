@@ -46,6 +46,7 @@ import Bound
 import qualified Data.HashMap.Strict as HM
 import Pact.Types.Pretty
 import qualified Data.Vector as V
+import Data.Text (Text, pack)
 
 import Pact.Types.Runtime
 import Pact.Types.Native

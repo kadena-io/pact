@@ -22,6 +22,7 @@ module Pact.Persist
 import Data.Aeson
 import Data.String
 import Data.Hashable
+import Data.Text (Text)
 import Data.Typeable
 
 import Pact.Types.PactValue

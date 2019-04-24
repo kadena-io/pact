@@ -19,7 +19,7 @@ module Pact.Types.Gas
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 import Data.Decimal (Decimal)
-import qualified Data.Text as T
+import Data.Text (Text, unpack)
 import Data.Word (Word64)
 
 import Pact.Types.Lang
@@ -65,7 +65,7 @@ data GasModel = GasModel
   }
 
 instance Show GasModel where
-  show m = "[GasModel: " <> T.unpack (gasModelName m) <> "]"
+  show m = "[GasModel: " <> unpack (gasModelName m) <> "]"
 
 instance Pretty GasModel where
   pretty m = viaShow m

@@ -31,6 +31,7 @@ import GHC.Generics
 import qualified Data.HashMap.Strict as HM
 import Control.Arrow
 import Control.Monad
+import Data.Text (Text)
 
 import Pact.Types.Command
 import Pact.Types.Util

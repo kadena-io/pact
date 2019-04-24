@@ -13,6 +13,8 @@ module Pact.Native.Keysets where
 
 import Control.Lens
 
+import Data.Text (Text)
+
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Runtime

@@ -48,7 +48,6 @@ import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Reader (asks)
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import Data.ByteString.Lazy (toStrict)
@@ -59,6 +58,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import qualified Data.Vector as V
@@ -438,7 +438,7 @@ langDefs =
      ["(typeof \"hello\")"] "Returns type of X as string."
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
-    ,defRNative (specialForm Yield) yield (funType yieldv [("OBJECT",yieldv)])
+    ,defRNative (specialForm YieldForm) yield (funType yieldv [("OBJECT",yieldv)])
      [LitExample "(yield { \"amount\": 100.0 })"]
      "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
      \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values."
@@ -648,22 +648,27 @@ listModules _ _ = do
   return $ toTermList tTyString $ map asString $ HM.keys mods
 
 yield :: RNativeFun e
-yield i [t@(TObject (Object o _ _ _) _)] = do
-  eym <- use evalPactExec
-  case eym of
-    Nothing -> evalError' i "Yield not in defpact context"
-    Just {} -> do
-      o' <- enforcePactValue' o
-      (evalPactExec . _Just . peYield) .= Just o'
-      return t
-yield i as = argsError i as
+yield i as = case as of
+  [u@(TObject t _)] -> go "" t >> return u
+  [(TLitString t), v@(TObject u _)] -> go (ChainId t) u >> return v
+  _ -> argsError i as
+  where
+    go tid t@(Object o _ _ _) = do
+      eym <- use evalPactExec
+      case eym of
+        Nothing -> evalError' i "Yield not in defpact context"
+        Just {} -> do
+          void $ enforcePactValue' o
+          let y = Yield t tid undefined
+          (evalPactExec . _Just . peYield) .= Just y
 
 resume :: NativeFun e
 resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
-  rm <- asks $ firstOf $ eePactStep . _Just . psResume . _Just
+  rm <- preview $ eePactStep . _Just . psResume . _Just . yData . oObject
   case rm of
     Nothing -> evalError' i "Resume: no yielded value in context"
-    Just rval -> bindObjectLookup (toTObjectMap TyAny def rval) >>= bindReduce ps bd bi
+    Just r ->
+      bindObjectLookup (toTObjectMap TyAny def r) >>= bindReduce ps bd bi
 resume i as = argsError' i as
 
 where' :: NativeFun e

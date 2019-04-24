@@ -64,6 +64,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Vector as V
+import Data.Text (Text, pack)
 import Safe
 import Unsafe.Coerce
 

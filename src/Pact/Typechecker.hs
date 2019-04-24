@@ -52,6 +52,7 @@ import qualified Data.Set as S
 import qualified Data.Set as Set
 import Data.String
 import qualified Data.Vector as V
+import Data.Text (Text, unpack, pack)
 import Safe hiding (at)
 
 
@@ -886,7 +887,7 @@ toAST (TApp Term.App{..} _) = do
             WithRead -> specialBind
             WithDefaultRead -> specialBind
             WithCapability -> specialBind
-            Yield -> do
+            YieldForm -> do
               app' <- mkApp fun' args'
               setOrAssocYR yrYield (_aNode app')
               return app'

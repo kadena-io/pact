@@ -19,7 +19,6 @@ module Pact.Types.Runtime
  ( PactError(..),PactErrorType(..),
    evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
-   PactStep(..),psStep,psRollback,psPactId,psResume,
    ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
@@ -60,6 +59,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
+import Data.Text (Text, unpack)
 
 import Pact.Types.ChainMeta
 import Pact.Types.Continuation
