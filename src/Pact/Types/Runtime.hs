@@ -62,10 +62,10 @@ import qualified Data.Set as S
 import Data.String
 
 import Pact.Types.ChainMeta
+import Pact.Types.Continuation
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
-import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Util
@@ -139,15 +139,6 @@ instance AsString KeyPredBuiltins where
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
 
--- | Environment setup for pact execution.
-data PactStep = PactStep {
-      _psStep :: !Int
-    , _psRollback :: !Bool
-    , _psPactId :: !PactId
-    , _psResume :: !(Maybe (ObjectMap (Term Name)))
-} deriving (Eq,Show)
-makeLenses ''PactStep
-
 -- | Module ref store
 data ModuleData = ModuleData
   { _mdModule :: ModuleDef (Def Ref)
@@ -163,17 +154,12 @@ data RefStore = RefStore {
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
 
-data PactContinuation = PactContinuation
-  { _pcDef :: Def Ref
-  , _pcArgs :: [PactValue]
-  } deriving (Eq,Show)
-
 -- | Result of evaluation of a 'defpact'.
 data PactExec = PactExec
   { -- | Count of steps in pact (discovered when code is executed)
     _peStepCount :: Int
     -- | Yield value if invoked
-  , _peYield :: !(Maybe (ObjectMap PactValue))
+  , _peYield :: !(Maybe Yield)
     -- | Whether step was executed (in private cases, it can be skipped)
   , _peExecuted :: Bool
     -- | Step that was executed or skipped
