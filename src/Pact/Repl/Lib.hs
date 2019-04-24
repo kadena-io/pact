@@ -301,16 +301,17 @@ continuePact i as = case as of
           Nothing -> return Nothing
           Just PactExec{..} -> return $ fmap (_oObject . _yData) _peYield
 
-      let cid = preview (eePublicData . pdPublicMeta . pmChainId)
-      let r = Yield resume cid (Hash "TODO")
+      cid <- view (eePublicData . pdPublicMeta . pmChainId)
+      let r = fmap (yieldOf cid) resume
       let pactId = (PactId $ fromIntegral pid)
-          pactStep = PactStep (fromIntegral step) rollback pactId resume
+          pactStep = PactStep (fromIntegral step) rollback pactId r
       viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of
         Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
         Just PactExec{..} -> do
           evalPactExec .= Nothing
           local (set eePactStep $ Just pactStep) $ evalContinuation _peContinuation
-
+    yieldOf cid t@(ObjectMap o) =
+      Yield (Object t TyAny (Just . fmap fst . M.toList $ o) def) cid (Hash "TODO")
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
@@ -334,7 +335,7 @@ pactState i as = case as of
       case e of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
-          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactValue) _peYield)
+          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . _oObject . _yData) _peYield)
           ,("executed",toTerm _peExecuted)
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]

@@ -6,13 +6,17 @@ module Pact.Bench where
 import Control.Arrow
 import Control.DeepSeq
 import Control.Exception
+
 import Criterion.Main
+
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import Data.Text (Text, unpack, pack)
+
 import System.CPUTime
 import Unsafe.Coerce
 

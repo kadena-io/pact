@@ -41,10 +41,17 @@ module Pact.Repl
   , utf8BytesLength
   ) where
 
-import Control.Applicative
+import Prelude hiding (exp)
+
+import GHC.Word (Word8)
+import System.IO
+import System.FilePath
+
+import Control.Concurrent
 import Control.Lens hiding (op)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
+
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
@@ -54,16 +61,12 @@ import Data.Default
 import Data.List
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import Prelude hiding (exp)
-import Text.Trifecta as TF hiding (line,err,try,newline)
-import qualified Data.Text as Text
-import Data.Text.Encoding (encodeUtf8)
-import GHC.Word (Word8)
-import System.IO
-import Text.Trifecta.Delta
-import Control.Concurrent
 import Data.Monoid (appEndo)
-import System.FilePath
+import Data.Text (Text, pack, unpack)
+import Data.Text.Encoding (encodeUtf8)
+
+import Text.Trifecta as TF hiding (line,err,try,newline)
+import Text.Trifecta.Delta
 
 import Pact.Compile
 import Pact.Parse
@@ -116,7 +119,7 @@ errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a
 
 toUTF8Bytes :: String -> [Word8]
-toUTF8Bytes = BS.unpack . encodeUtf8 . Text.pack
+toUTF8Bytes = BS.unpack . encodeUtf8 . pack
 
 utf8BytesLength :: String -> Int
 utf8BytesLength = length . toUTF8Bytes
