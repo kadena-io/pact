@@ -526,7 +526,7 @@ testCapability i as = argsError' i as
 envChainDataDef :: NativeDef
 envChainDataDef = defZRNative "env-chain-data" envChainData
     (funType tTyString [("new-data", tTyObject TyAny)])
-    ["(env-chain-data { \"chain-id\": 2, \"block-height\": 20 })"]
+    ["(env-chain-data { \"chain-id\": \"TestNet00/2\", \"block-height\": 20 })"]
     "Update existing entries 'chain-data' with NEW-DATA, replacing those items only."
   where
     envChainData :: RNativeFun LibState
@@ -540,7 +540,6 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       _ -> argsError i as
 
     go i pd ((FieldKey k), (TLiteral (LInteger l) _)) = case Text.unpack k of
-      "chain-id"     -> pure $ set pdChainId (fromIntegral l) pd
       "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (ParsedInteger . fromIntegral $ l) pd
       "block-height" -> pure $ set pdBlockHeight (fromIntegral l) pd
       "block-time"   -> pure $ set pdBlockTime (fromIntegral l) pd
@@ -551,6 +550,7 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       t           -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of
-      "sender" -> pure $ set (pdPublicMeta . pmSender) l pd
-      t        -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
+      "chain-id" -> pure $ set (pdPublicMeta . pmChainId) (ChainId l) pd
+      "sender"   -> pure $ set (pdPublicMeta . pmSender) l pd
+      t          -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
     go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as

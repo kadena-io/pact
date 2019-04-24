@@ -1560,7 +1560,7 @@ a string for large values.
 What is considered a "large integer"
 in JSON/Javascript is subject to debate; we use the range `[-2^53 .. 2^53]` as specified
 [here](http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html). For
-large integers, we we encode a JSON singleton object with the stringified integer value:
+large integers, we encode a JSON singleton object with the stringified integer value:
 
 ```javascript
 /* small integers are just a number */
