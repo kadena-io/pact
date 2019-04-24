@@ -8,7 +8,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Pact.Types.Gas
-import Pact.Types.Persistence
 import Pact.Types.Term
 
 -- NB: If pact ends up not having any variadic primitives (currently, I didn't spot any thus far, but also the types don't rule it out)
@@ -149,10 +148,10 @@ defaultGasTable =
     ]
 
 tableGasModel :: GasCostConfig -> GasModel
-tableGasModel gasConfig = 
+tableGasModel gasConfig =
   let run name ga = case ga of
         GPostRead r -> case r of
-          ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_columns cols))
+          ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
           ReadTxId -> _gasCostConfig_readColumnCost gasConfig
         GSelect mColumns _expression _tableTerm -> _gasCostConfig_selectColumnCost gasConfig * case mColumns of

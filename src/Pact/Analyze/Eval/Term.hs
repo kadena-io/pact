@@ -48,6 +48,7 @@ import           GHC.TypeLits
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
+import qualified Pact.Types.PactValue        as Pact
 import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Pretty           (renderCompactString', pretty)
 import           Pact.Types.Runtime          (tShow)
@@ -621,7 +622,7 @@ evalTerm = \case
       -- Everything else is hashed by first converting it to JSON:
       Some SInteger tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
-        Just int -> pure $ sHash $ toStrict $ Aeson.encode int
+        Just int -> pure $ sHash $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger int
       Some SBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool

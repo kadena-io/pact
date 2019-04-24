@@ -43,6 +43,7 @@ module Pact.Eval
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,evalContinuation
+    ,enforcePactValue,enforcePactValue'
     ) where
 
 import Bound
@@ -67,7 +68,7 @@ import Safe
 import Unsafe.Coerce
 
 import Pact.Gas
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -277,7 +278,8 @@ eval t = enscope t >>= reduce
 
 
 evalContinuation :: PactContinuation -> Eval e (Term Name)
-evalContinuation (PactContinuation d args) = reduceApp (App (TDef d def) (map (liftTerm . fromPactOutput) args) def)
+evalContinuation (PactContinuation d args) =
+  reduceApp (App (TDef d def) (map (liftTerm . fromPactValue) args) def)
 
 
 evalUse :: Use -> Eval e ()
@@ -539,7 +541,6 @@ reduce (TApp a _) = reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
-reduce t@TValue {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
 reduce t@TNative {} = return $ toTerm $ pack $ show t
@@ -566,9 +567,9 @@ reduceBody (TList bs _ _) =
   V.last <$> V.mapM reduce bs
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
-reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
+reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(a,t) -> (,) <$> traverse reduce a <*> reduce t) ps
+  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduce t) ps
   typecheck ps'
   reduceBody (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
 
@@ -581,6 +582,15 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
+
+enforcePactValue :: (Term Name) -> Eval e PactValue
+enforcePactValue t = case toPactValue t of
+  Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
+  Right v -> return v
+
+enforcePactValue' :: Traversable f => f (Term Name) -> Eval e (f PactValue)
+enforcePactValue' = traverse enforcePactValue
+
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
@@ -591,9 +601,9 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
     case _dDefType of
       Defun ->
         reduceBody bod'
-      Defpact ->
-        let continuation = PactContinuation d (map toPactOutput' (fst af))
-        in applyPact continuation bod'
+      Defpact -> do
+        continuation <- PactContinuation d <$> enforcePactValue' (fst af)
+        applyPact continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg

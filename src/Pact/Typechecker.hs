@@ -902,7 +902,7 @@ toAST (TApp Term.App{..} _) = do
 toAST TBinding {..} = do
   bi <- freshId _tInfo (pack $ show _tBindType)
   bn <- trackIdNode bi
-  bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
+  bs <- forM _tBindPairs $ \(BindPair (Arg n t ai) v) -> do
     aid <- freshId ai (pfx (pack $ show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
     an <- trackNode t' aid
@@ -934,7 +934,6 @@ toAST (TObject Term.Object {..} _) = do
     <*> mapM toAST _oObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
 toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
-toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType

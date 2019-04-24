@@ -5,10 +5,10 @@ module TypesSpec (spec) where
 import Test.Hspec
 
 import Data.Aeson
-import Data.Maybe
 import Data.Map.Strict (fromList)
 
 import Pact.Types.Runtime
+import Pact.Types.PactValue
 import Data.Default (def)
 
 spec :: Spec
@@ -28,11 +28,10 @@ testJSONPersist = do
   rt (PLiteral (LString "hello"))
   rt (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
   rt (PGuard (GKeySet (KeySet [PublicKey "askjh",PublicKey "dfgh"] (Name "predfun" def))))
-  rt (PValue (fromJust (decode "{ \"stuff\": [ 1.0, false ] }" :: Maybe Value)))
 
 testJSONColumns :: Spec
 testJSONColumns =
-  rt (Columns (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
+  rt (ObjectMap (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
 
 {- major TODO for module code!
 testJSONModules :: Spec

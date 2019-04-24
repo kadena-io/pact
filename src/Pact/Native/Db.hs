@@ -25,7 +25,6 @@ import Bound
 import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
 import Control.Monad
-import Data.Aeson (toJSON)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -36,21 +35,21 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Prelude
+import Pact.Types.PactValue
 
 
 class Readable a where
   readable :: a -> ReadValue
 
-instance Readable (Columns Persistable) where
+instance Readable (ObjectMap PactValue) where
   readable = ReadData
 instance Readable RowKey where
   readable = ReadKey
 instance Readable TxId where
   readable = const ReadTxId
-instance Readable (TxLog (Columns Persistable)) where
+instance Readable (TxLog (ObjectMap PactValue)) where
   readable = ReadData . _txValue
-instance Readable (TxId, TxLog (Columns Persistable)) where
+instance Readable (TxId, TxLog (ObjectMap PactValue)) where
   readable = ReadData . _txValue . snd
 
 
@@ -118,7 +117,7 @@ dbDefs =
      [LitExample "(update accounts id { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })"]
      (writeDocs ", failing if data does not exist for KEY.")
     ,defGasRNative "txlog" txlog
-     (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
+     (funType (TyList tTyObjectAny) [("table",tableTy),("txid",tTyInteger)])
       [LitExample "(txlog accounts 123485945)"] "Return all updates to TABLE performed in transaction TXID."
     ,defGasRNative "keylog" keylog
      (funType (TyList (tTyObject TyAny)) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
@@ -126,13 +125,13 @@ dbDefs =
       \indexed by txid."
 
     ,setTopLevelOnly $ defRNative "describe-table" descTable
-     (funType tTyValue [("table",tableTy)])
+     (funType tTyObjectAny [("table",tableTy)])
      [LitExample "(describe-table accounts)"]
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
-     (funType tTyValue [("keyset",tTyString)]) [] "Get metadata for KEYSET."
+     (funType tTyObjectAny [("keyset",tTyString)]) [] "Get metadata for KEYSET."
     ,setTopLevelOnly $ defRNative "describe-module" descModule
-     (funType tTyValue [("module",tTyString)])
+     (funType tTyObjectAny [("module",tTyString)])
      [LitExample "(describe-module 'my-module)"]
      "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
     ])
@@ -148,7 +147,7 @@ descKeySet :: RNativeFun e
 descKeySet i [TLitString t] = do
   r <- readRow (_faInfo i) KeySets (KeySetName t)
   case r of
-    Just v -> return $ toTerm (toJSON v)
+    Just v -> return $ toTerm v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t
 descKeySet i as = argsError i as
 
@@ -176,7 +175,7 @@ descModule i [TLitString t] = do
 descModule i as = argsError i as
 
 -- | unsafe function to create domain from TTable.
-userTable :: Show n => Term n -> Domain RowKey (Columns Persistable)
+userTable :: Show n => Term n -> Domain RowKey (ObjectMap PactValue)
 userTable = UserTables . userTable'
 
 -- | unsafe function to create TableName from TTable.
@@ -215,16 +214,15 @@ gasPostReads i g0 postProcess action = do
   rs <- action
   (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
-columnsToObject :: ToTerm a => Type (Term n) -> Columns a -> Term n
-columnsToObject ty = (\ps -> TObject (Object (ObjectMap (M.fromList ps)) ty def def) def) .
-  map ((FieldKey . asString) *** toTerm) . M.toList . _columns
+columnsToObject :: Type (Term Name) -> ObjectMap PactValue -> Term Name
+columnsToObject ty m = TObject (Object (fmap fromPactValue m) ty def def) def
 
-columnsToObject' :: ToTerm a => Type (Term n) -> [(Info,ColumnId)] -> Columns a -> Eval m (Term n)
-columnsToObject' ty cols (Columns m) = do
+columnsToObject' :: Type (Term Name) -> [(Info,FieldKey)] -> ObjectMap PactValue -> Eval m (Term Name)
+columnsToObject' ty cols (ObjectMap m) = do
   ps <- forM cols $ \(ci,col) ->
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
-                  Just v -> return (FieldKey $ asString col,toTerm v)
+                  Just v -> return (col, fromPactValue v)
   return $ TObject (Object (ObjectMap (M.fromList ps)) ty def def) def
 
 
@@ -238,7 +236,7 @@ select i as@[tbl',cols',app] = do
 select i as@[tbl',app] = reduce tbl' >>= select' i as Nothing app
 select i as = argsError' i as
 
-select' :: FunApp -> [Term Ref] -> Maybe [(Info,ColumnId)] ->
+select' :: FunApp -> [Term Ref] -> Maybe [(Info,FieldKey)] ->
            Term Ref -> Term Name -> Eval e (Gas,Term Name)
 select' i _ cols' app@TApp{} tbl@TTable{} = do
     g0 <- computeGas (Right i) $ GSelect cols' app tbl
@@ -272,7 +270,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> (g0,) <$> (bindToRow ps bd b (toColumns defaultRow))
+        Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue' defaultRow)
         (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
@@ -290,10 +288,10 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
-bindToRow :: [(Arg (Term Ref),Term Ref)] ->
-             Scope Int Term Ref -> Term Ref -> Columns Persistable -> Eval e (Term Name)
-bindToRow ps bd b (Columns row) =
-  bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (ColumnId s) row)
+bindToRow :: [BindPair (Term Ref)] ->
+             Scope Int Term Ref -> Term Ref -> ObjectMap PactValue -> Eval e (Term Name)
+bindToRow ps bd b (ObjectMap row) =
+  bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
 
 keys' :: GasRNativeFun e
 keys' g i [table@TTable {..}] =
@@ -314,15 +312,21 @@ txids' _ i as = argsError i as
 
 txlog :: GasRNativeFun e
 txlog g i [table@TTable {..},TLitInteger tid] =
-  gasPostReads i g
-    ((`TValue` def) . toJSON . over (traverse . txValue) (columnsToObject _tTableType)) $ do
+  gasPostReads i g (toTList TyAny def . map txlogToObj) $ do
       guardTable i table
       getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
 txlog _ i as = argsError i as
 
+txlogToObj :: TxLog (ObjectMap PactValue) -> Term Name
+txlogToObj TxLog{..} = toTObject TyAny def
+  [ ("table", toTerm _txDomain)
+  , ("key", toTerm _txKey)
+  , ("value", toTObjectMap TyAny def (fmap fromPactValue _txValue))
+  ]
+
 keylog :: GasRNativeFun e
 keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
-  let postProc = toTList tTyValue def . map toTxidObj
+  let postProc = toTList TyAny def . map toTxidObj
         where toTxidObj (t,r) =
                 toTObject TyAny def [("txid", toTerm t),("value",columnsToObject _tTableType (_txValue r))]
   gasPostReads i g postProc $ do
@@ -344,14 +348,10 @@ write wt partial i as = do
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) (toColumns ps)
+      ps' <- enforcePactValue' ps
+      r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) ps'
       return (cost, r)
     _ -> argsError i ts
-
-toColumns :: ObjectMap (Term Name) -> Columns Persistable
-toColumns (ObjectMap m) = Columns . M.fromList . map conv . M.toList $ m where
-    conv (FieldKey k, v) = (ColumnId k,toPersistable v)
-
 
 
 createTable' :: RNativeFun e
