@@ -129,8 +129,13 @@ Request JSON:
        "sigs": [
          {
            "sig": "[crypto signature by secret key of 'hash' value]",
-           "pubKey": "[base16-format of public key of signing keypair]",
-           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+           "pubKey": "[base16-format of public key of signing keypair]"
+
+           /* optional field, defaults to full public key */
+       "addr": "[base16-format of address derived from public key]"
+
+           /* optional field, defaults to ED25519, will support other curves as needed */
+           "scheme": "ED25519 or ETH"
          }
        ]
        "cmd": "[stringified transaction JSON]"
@@ -171,12 +176,18 @@ Request JSON:
        "sigs": [
          {
            "sig": "[crypto signature by secret key of 'hash' value]",
-           "pubKey": "[base16-format of public key of signing keypair]",
-           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+           "pubKey": "[base16-format of public key of signing keypair]"
+
+           /* optional field, defaults to full public key */
+       "addr": "[base16-format of address derived from public key]"
+
+           /* optional field, defaults to ED25519, will support other curves as needed */
+           "scheme": "ED25519 or ETH"
          }
        ]
        "cmd": "[stringified transaction JSON]"
      }
+     // ... more commands
      ]
    }
 
@@ -265,18 +276,28 @@ data.
 
 Request JSON:
 
-::
+.. code:: javascript
 
    {
-     "hash": "[blake2 hash in base16 of 'cmd' value]",
-     "sigs": [
-       {
-         "sig": "[crypto signature by secret key of 'hash' value]",
-         "pubKey": "[base16-format of public key of signing keypair]",
-         "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-       }
+     "cmds": [
+     {
+       "hash": "[blake2 hash in base16 of 'cmd' string value]",
+       "sigs": [
+         {
+           "sig": "[crypto signature by secret key of 'hash' value]",
+           "pubKey": "[base16-format of public key of signing keypair]"
+
+           /* optional field, defaults to full public key */
+       "addr": "[base16-format of address derived from public key]"
+
+           /* optional field, defaults to ED25519, will support other curves as needed */
+           "scheme": "ED25519 or ETH"
+         }
+       ]
+       "cmd": "[stringified transaction JSON]"
+     }
+     // ... more commands
      ]
-     "cmd": "[stringified transaction JSON]"
    }
 
 Response JSON:
@@ -317,7 +338,7 @@ can be fed into ``pact`` to obtain a valid API request:
 ::
 
    $ pact -a tests/apireq.yaml -l
-   {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
+   {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d","addr":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
 
 Here’s an example of piping into curl, hitting a pact server running on
 port 8080:
@@ -820,7 +841,6 @@ Pact’s supported types are:
 -  `Lists <#lists>`__
 -  `Objects <#objects>`__
 -  `Function <#defun>`__ and `pact <#defpact>`__ definitions
--  `JSON values <#json>`__
 -  `Tables <#deftable>`__
 -  `Schemas <#defschema>`__
 
@@ -998,15 +1018,14 @@ When reading values from a message via
 `read-msg <pact-functions.html#read-msg>`__, Pact coerces JSON types as
 follows:
 
--  String -> String
--  Number -> Integer (rounded)
--  Boolean -> Boolean
--  Object -> Object
--  Array -> List
--  Null -> JSON Value
+-  String -> ``string``
+-  Number -> ``decimal``
+-  Boolean -> ``bool``
+-  Object -> ``object``
+-  Array -> ``list``
 
-Decimal values are represented as Strings and read using
-`read-decimal <pact-functions.html#read-decimal>`__.
+Integer values are represented as objects and read using
+`read-integer <pact-functions.html#read-integer>`__.
 
 Confidentiality
 ---------------
@@ -1164,13 +1183,14 @@ Module Hashes
 
 Once loaded, a Pact module is associated with a hash computed from the
 module’s source code text. This module hash uniquely identifies the
-version of the module. Module hashes can be examined with
+version of the module. Hashes are base64url-encoded BLAKE2 256-bit
+hashes. Module hashes can be examined with
 `describe-module <pact-functions.html#describe-module>`__:
 
 ::
 
    pact> (at "hash" (describe-module 'accounts))
-   "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+   "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY"
 
 Pinning module versions with ``use``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1208,8 +1228,8 @@ declaration:
 .. code:: lisp
 
    (module provider 'keyset
-     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+     (bless "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY")
+     (bless "bctSHEz4N5Y1XQaic6eOoBmjty88HMMGfAdQLPuIGMw")
      ...
    )
 
@@ -1334,7 +1354,7 @@ keys must be strings.
 ::
 
    pact> { "foo": (+ 1 2), "bar": "baz" }
-   (TObject [("foo",3),("bar","baz")])
+   { "foo": (+ 1 2), "bar": "baz" }
 
 Bindings
 ~~~~~~~~
@@ -1371,7 +1391,6 @@ Type literals
 -  ``list``, or ``[type]`` to specify the list type
 -  ``object``, which can be further typed with a schema
 -  ``table``, which can be further typed with a schema
--  ``value`` (JSON values)
 
 Schema type literals
 ~~~~~~~~~~~~~~~~~~~~
@@ -1467,8 +1486,8 @@ mechanism.
 .. code:: lisp
 
    (module provider 'keyset
-     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+     (bless "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY")
+     (bless "bctSHEz4N5Y1XQaic6eOoBmjty88HMMGfAdQLPuIGMw")
      ...
    )
 
@@ -1940,17 +1959,12 @@ even non-RDBMS backends like RocksDB etc, and also keeps SQL DDL very
 straightforward, with simple primary key structure. Indexing is not
 supported nor required.
 
-Pact Datatype Codec
--------------------
-
-For all supported Pact datatypes, they are encoded into JSON using a
-special codec that is different than the JSON format used in the
-front-end API, designed for serialization speed and correctness.
-
 Integer
 ~~~~~~~
 
-For non-large integers, values are directly encoded as JSON numbers.
+Integers are encoded as an JSON object with a single field “int”
+referring to a Number value for non-large integers, or a string for
+large values.
 
 What is considered a “large integer” in JSON/Javascript is subject to
 debate; we use the range ``[-2^53 .. 2^53]`` as specified
@@ -1961,30 +1975,25 @@ stringified integer value:
 .. code:: javascript
 
    /* small integers are just a number */
-   1
-   /* large integers are objects */
-   { "_P_int": "123..." /* integer string representation */
+   { "int": 1 }
+   /* large integers are string */
+   { "int": "1231289371891238912983712983712098908937"
    }
 
 Decimal
 ~~~~~~~
 
-Decimals are encoded using *places* and *mantissa* following the
-`Haskell Decimal
-format <https://hackage.haskell.org/package/Decimal-0.5.1/docs/Data-Decimal.html#t:DecimalRaw>`__:
+Decimals are directly encoded to JSON scientific format, unless the
+mantissa is greater than a safe JS integer, in which case it is encoded
+as an JSON object with key “decimal” referring to the string
+representation.
 
 .. code:: javascript
 
-   { "_P_decp": 4     /* decimal places */
-   , "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
-   }
-
-Note that the mantissa value uses the integer format described above. As
-described in the Decimal docs, the value can be computed as follows:
-
-::
-
-   MANTISSA / (10 ^ PLACES)
+   /* decimal with safe mantissa */
+   10.234
+   /* decimal with unsafe mantissa */
+   { "decimal": "34985794739875934875348957394875349835.39587348953495875394534" }
 
 Boolean
 ~~~~~~~
@@ -1999,41 +2008,33 @@ Strings are stored as JSON strings.
 Time
 ~~~~
 
-Times are stored in a JSON object capturing a Modified Julian Day value
-and a day-local microsecond value.
+Times are stored in a JSON object with key “time” for second-resolution
+values, or “timep” for microsecond-resolution values, as a ISO8601 UTC
+string (modified for high-resolution).
 
 .. code:: javascript
 
-   { "_P_timed": 234 /* "modified julian day value */
-   , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
-   }
-
-Suggestions for converting MJDs can be found
-`here <https://stackoverflow.com/questions/11889553/convert-modified-julian-date-to-utc>`__.
-
-JSON Value/Blob
-~~~~~~~~~~~~~~~
-
-Raw JSON blobs are encoded unmodified in a container object.
-
-.. code:: javascript
-
-   { "_P_val": { "foo": "bar" } /* unmodified user JSON object */
-   }
+   /* second-resolution time */
+   { "time": "2016-12-23T08:23:13Z"
+   /* microsecond-resolution time */
+   { "timep": "2016-12-23T08:23:13.006032Z" }
 
 Keyset
 ~~~~~~
 
-Keysets store the key list and predicate name in a JSON object.
+Keysets use the built-in JSON representation.
 
 .. code:: javascript
 
-   { "_P_keys": ["key1","key2"] /* public key string representations */
-   , "_P_pred": "keys-all"      /* predicate function name */
+   { "keys": ["key1","key2"] /* public key string representations */
+   , "pred": "keys-all"      /* predicate function name */
    }
 
 Module (User) Tables
 --------------------
+
+NOTE/WARNING: This does not apply to Chainweb table backends, and may be
+discontinued.
 
 For each module table specified in Pact code, two backend tables are
 created: the “data table” and the “transaction table”.

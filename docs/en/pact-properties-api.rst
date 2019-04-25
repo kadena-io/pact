@@ -485,6 +485,42 @@ Logical implication. Equivalent to ``(or (not x) y)``.
 
 Supported in either invariants or properties.
 
+.. _FAndQ:
+
+and?
+~~~~
+
+.. code:: lisp
+
+   (and? f g a)
+
+-  takes ``f``: *a* -> ``bool``
+-  takes ``g``: *a* -> ``bool``
+-  takes ``a``: *a*
+-  produces ``bool``
+
+``and`` the results of applying both ``f`` and ``g`` to ``a``
+
+Supported in either invariants or properties.
+
+.. _FOrQ:
+
+or?
+~~~
+
+.. code:: lisp
+
+   (or? f g a)
+
+-  takes ``f``: *a* -> ``bool``
+-  takes ``g``: *a* -> ``bool``
+-  takes ``a``: *a*
+-  produces ``bool``
+
+``or`` the results of applying both ``f`` and ``g`` to ``a``
+
+Supported in either invariants or properties.
+
 .. _Object:
 
 Object operators
@@ -501,9 +537,17 @@ at
 
 -  takes ``k``: ``string``
 -  takes ``o``: ``object``
+-  produces *a*
+
+.. code:: lisp
+
+   (at i l)
+
+-  takes ``i``: ``integer``
+-  takes ``o``: ``list``
 -  produces ``bool``
 
-Object projection
+projection
 
 Supported in either invariants or properties.
 
@@ -521,6 +565,256 @@ Supported in either invariants or properties.
 -  produces ``object``
 
 Object merge
+
+Supported in either invariants or properties.
+
+.. _FObjectDrop:
+
+drop
+~~~~
+
+.. code:: lisp
+
+   (drop keys o)
+
+-  takes ``keys``: [``string``]
+-  takes ``o``: ``object``
+-  produces ``object``
+
+drop entries having the specified keys from an object
+
+Supported in either invariants or properties.
+
+.. _FObjectTake:
+
+take
+~~~~
+
+.. code:: lisp
+
+   (take keys o)
+
+-  takes ``keys``: [``string``]
+-  takes ``o``: ``object``
+-  produces ``object``
+
+take entries having the specified keys from an object
+
+Supported in either invariants or properties.
+
+.. _List:
+
+List operators
+--------------
+
+.. _FListProjection:
+
+at
+~~
+
+.. code:: lisp
+
+   (at k l)
+
+-  takes ``k``: ``string``
+-  takes ``l``: [*a*]
+-  produces *a*
+
+.. code:: lisp
+
+   (at i l)
+
+-  takes ``i``: ``integer``
+-  takes ``o``: ``list``
+-  produces ``bool``
+
+projection
+
+Supported in either invariants or properties.
+
+.. _FListLength:
+
+length
+~~~~~~
+
+.. code:: lisp
+
+   (length s)
+
+-  takes ``s``: [*a*]
+-  produces ``integer``
+
+List length
+
+Supported in either invariants or properties.
+
+.. _FContains:
+
+contains
+~~~~~~~~
+
+.. code:: lisp
+
+   (contains x xs)
+
+-  takes ``x``: *a*
+-  takes ``xs``: [*a*]
+-  produces ``bool``
+
+.. code:: lisp
+
+   (contains k o)
+
+-  takes ``k``: ``string``
+-  takes ``o``: ``object``
+-  produces ``bool``
+
+.. code:: lisp
+
+   (contains value string)
+
+-  takes ``value``: ``string``
+-  takes ``string``: ``string``
+-  produces ``bool``
+
+List / string / object contains
+
+Supported in either invariants or properties.
+
+.. _FReverse:
+
+reverse
+~~~~~~~
+
+.. code:: lisp
+
+   (reverse xs)
+
+-  takes ``xs``: [*a*]
+-  produces [*a*]
+
+reverse a list of values
+
+Supported in either invariants or properties.
+
+.. _FSort:
+
+sort
+~~~~
+
+.. code:: lisp
+
+   (sort xs)
+
+-  takes ``xs``: [*a*]
+-  produces [*a*]
+
+sort a list of values
+
+Supported in either invariants or properties.
+
+.. _FListDrop:
+
+drop
+~~~~
+
+.. code:: lisp
+
+   (drop n xs)
+
+-  takes ``n``: ``integer``
+-  takes ``xs``: [*a*]
+-  produces [*a*]
+
+drop the first ``n`` values from the beginning of a list (or the end if
+``n`` is negative)
+
+Supported in either invariants or properties.
+
+.. _FListTake:
+
+take
+~~~~
+
+.. code:: lisp
+
+   (take n xs)
+
+-  takes ``n``: ``integer``
+-  takes ``xs``: [*a*]
+-  produces [*a*]
+
+take the first ``n`` values from ``xs`` (taken from the end if ``n`` is
+negative)
+
+Supported in either invariants or properties.
+
+.. _FMakeList:
+
+make-list
+~~~~~~~~~
+
+.. code:: lisp
+
+   (make-list n a)
+
+-  takes ``n``: ``integer``
+-  takes ``a``: *a*
+-  produces [*a*]
+
+create a new list with ``n`` copies of ``a``
+
+Supported in either invariants or properties.
+
+.. _FMap:
+
+map
+~~~
+
+.. code:: lisp
+
+   (map f as)
+
+-  takes ``f``: *a* -> *b*
+-  takes ``as``: [*a*]
+-  produces [*b*]
+
+apply ``f`` to each element in a list
+
+Supported in either invariants or properties.
+
+.. _FFilter:
+
+filter
+~~~~~~
+
+.. code:: lisp
+
+   (filter f as)
+
+-  takes ``f``: *a* -> ``bool``
+-  takes ``as``: [*a*]
+-  produces [*a*]
+
+filter a list by keeping the values for which ``f`` returns ``true``
+
+Supported in either invariants or properties.
+
+.. _FFold:
+
+fold
+~~~~
+
+.. code:: lisp
+
+   (fold f a bs)
+
+-  takes ``f``: *a* -> *b* -> *a*
+-  takes ``a``: *a*
+-  takes ``bs``: [*b*]
+-  produces [*a*]
+
+reduce a list by applying ``f`` to each element and the previous result
 
 Supported in either invariants or properties.
 
@@ -545,7 +839,7 @@ String length
 
 Supported in either invariants or properties.
 
-.. _FStringConcatenation:
+.. _FConcatenation:
 
 \+
 ~~
@@ -558,7 +852,15 @@ Supported in either invariants or properties.
 -  takes ``t``: ``string``
 -  produces ``string``
 
-String concatenation
+.. code:: lisp
+
+   (+ s t)
+
+-  takes ``s``: [*a*]
+-  takes ``t``: [*a*]
+-  produces [*a*]
+
+String / list concatenation
 
 Supported in either invariants or properties.
 
@@ -931,7 +1233,7 @@ row-exists
 
 -  takes ``t``: *a*
 -  takes ``r``: ``string``
--  takes ``time``: one of {“before”, “after”}
+-  takes ``time``: one of {“before”,“after”}
 -  produces ``bool``
 -  where *a* is of type ``table`` or ``string``
 
@@ -950,7 +1252,7 @@ read
 
 -  takes ``t``: *a*
 -  takes ``r``: ``string``
--  takes ``time``: one of {“before”, “after”}
+-  takes ``time``: one of {“before”,“after”}
 -  produces ``object``
 -  where *a* is of type ``table`` or ``string``
 
@@ -975,7 +1277,7 @@ authorized-by
 -  takes ``k``: ``string``
 -  produces ``bool``
 
-Whether the named keyset is enforced by the function under analysis
+Whether the named keyset/guard is satisfied by the executing transaction
 
 Supported in properties only.
 
@@ -998,3 +1300,99 @@ row-enforced
 Whether the keyset in the row is enforced by the function under analysis
 
 Supported in properties only.
+
+.. _Function:
+
+Function operators
+------------------
+
+.. _FIdentity:
+
+identity
+~~~~~~~~
+
+.. code:: lisp
+
+   (identity a)
+
+-  takes ``a``: *a*
+-  produces *a*
+-  where *a* is of type ``table`` or ``string``
+
+identity returns its argument unchanged
+
+Supported in either invariants or properties.
+
+.. _FConstantly:
+
+constantly
+~~~~~~~~~~
+
+.. code:: lisp
+
+   (constantly a)
+
+-  takes ``a``: *a*
+-  takes ``b``: *b*
+-  produces *a*
+
+constantly returns its first argument, ignoring the second
+
+Supported in either invariants or properties.
+
+.. _FCompose:
+
+compose
+~~~~~~~
+
+.. code:: lisp
+
+   (compose f g)
+
+-  takes ``f``: *a* -> *b*
+-  takes ``g``: *b* -> *c*
+-  produces *c*
+
+compose two functions
+
+Supported in either invariants or properties.
+
+.. _Other:
+
+Other operators
+---------------
+
+.. _FWhere:
+
+where
+~~~~~
+
+.. code:: lisp
+
+   (where field f obj)
+
+-  takes ``field``: ``string``
+-  takes ``f``: *a* -> ``bool``
+-  takes ``obj``: ``object``
+-  produces ``bool``
+
+utility for use in ``filter`` and ``select`` applying ``f`` to ``field``
+in ``obj``
+
+Supported in either invariants or properties.
+
+.. _FTypeof:
+
+typeof
+~~~~~~
+
+.. code:: lisp
+
+   (typeof a)
+
+-  takes ``a``: *a*
+-  produces ``string``
+
+return the type of ``a`` as a string
+
+Supported in either invariants or properties.
