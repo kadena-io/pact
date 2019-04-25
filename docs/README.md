@@ -114,7 +114,7 @@ $ cp en/conf.py hr/
 
 ```
 $ cd hr/
-$ ln -s ../img/ img
+$ ln -s ../img img
 ```
 
 4. Add your translation as a file named `pact-reference.md` within your language's subdirectory.
