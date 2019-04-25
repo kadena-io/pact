@@ -37,24 +37,11 @@ over subsequent body statements.
    pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
    1
 
-chain-data
-~~~~~~~~~~
-
-*→* ``object:<{o}>``
-
-Get transaction public metadata. Returns an object with ‘chain-id’,
-‘block-height’, ‘block-time’, ‘sender’, ‘gas-limit’, ‘gas-price’, and
-‘gas-fee’ fields.
-
-.. code:: lisp
-
-   pact> (chain-data)
-   {"block-height": 0,"block-time": 0,"chain-id": "","gas-limit": 0,"gas-price": 0,"sender": ""}
-
 compose
 ~~~~~~~
 
-*x* ``x:<a> -> <b>`` *y* ``x:<b> -> <c>`` *value* ``<a>`` *→* ``<c>``
+*x* ``(x:<a> -> <b>)`` *y* ``(x:<b> -> <c>)`` *value* ``<a>``
+*→* ``<c>``
 
 Compose X and Y, such that X operates on VALUE, and Y on the results of
 X.
@@ -100,22 +87,6 @@ Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry.
    true
    pact> (contains "foo" "foobar")
    true
-
-define-namespace
-~~~~~~~~~~~~~~~~
-
-*namespace* ``string`` *guard* ``guard`` *→* ``string``
-
-Create a namespace called NAMESPACE where ownership and use of the
-namespace is controlled by GUARD. If NAMESPACE is already defined, then
-the guard previously defined in NAMESPACE will be enforced, and GUARD
-will be rotated in its place.
-
-.. code:: lisp
-
-   (define-namespace 'my-namespace (read-keyset 'my-keyset))
-
-Top level only: this function will fail if used in module code.
 
 drop
 ~~~~
@@ -185,7 +156,7 @@ Top level only: this function will fail if used in module code.
 filter
 ~~~~~~
 
-*app* ``x:<a> -> bool`` *list* ``[<a>]`` *→* ``[<a>]``
+*app* ``(x:<a> -> bool)`` *list* ``[<a>]`` *→* ``[<a>]``
 
 Filter LIST by applying APP to each element. For each true result, the
 original value is kept.
@@ -198,7 +169,8 @@ original value is kept.
 fold
 ~~~~
 
-*app* ``x:<a> y:<b> -> <a>`` *init* ``<a>`` *list* ``[<b>]`` *→* ``<a>``
+*app* ``(x:<a> y:<b> -> <a>)`` *init* ``<a>`` *list* ``[<b>]``
+*→* ``<a>``
 
 Iteratively reduce LIST by applying APP to last result and element,
 starting with INIT.
@@ -211,7 +183,7 @@ starting with INIT.
 format
 ~~~~~~
 
-*template* ``string`` *vars* ``[*]`` *→* ``string``
+*template* ``string`` *vars* ``list`` *→* ``string``
 
 Interpolate VARS into TEMPLATE using {}.
 
@@ -225,17 +197,15 @@ hash
 
 *value* ``<a>`` *→* ``string``
 
-Compute BLAKE2b 256-bit hash of VALUE represented in unpadded
-base64-url. Strings are converted directly while other values are
-converted using their JSON representation. Non-value-level arguments are
-not allowed.
+Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly
+while other values are converted using their JSON representation.
 
 .. code:: lisp
 
    pact> (hash "hello")
-   "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
+   "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
    pact> (hash { 'foo: 1 })
-   "h9BZgylRf_M4HxcBXr15IcSXXXSz74ZC2IAViGle_z4"
+   "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
 
 identity
 ~~~~~~~~
@@ -280,7 +250,7 @@ Compute length of X, which can be a list, a string, or an object.
 list
 ~~~~
 
-*elems* ``*`` *→* ``[*]``
+*elems* ``*`` *→* ``list``
 
 Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list
 support.
@@ -314,7 +284,7 @@ Create list by repeating VALUE LENGTH times.
 map
 ~~~
 
-*app* ``x:<b> -> <a>`` *list* ``[<b>]`` *→* ``[<a>]``
+*app* ``(x:<b> -> <a>)`` *list* ``[<b>]`` *→* ``[<a>]``
 
 Apply APP to each element in LIST, returning a new list of results.
 
@@ -322,24 +292,6 @@ Apply APP to each element in LIST, returning a new list of results.
 
    pact> (map (+ 1) [1 2 3])
    [2 3 4]
-
-namespace
-~~~~~~~~~
-
-*namespace* ``string`` *→* ``string``
-
-Set the current namespace to NAMESPACE. All expressions that occur in a
-current transaction will be contained in NAMESPACE, and once committed,
-may be accessed via their fully qualified name, which will include the
-namespace. Subsequent namespace calls in the same tx will set a new
-namespace for all declarations until either the next namespace
-declaration, or the end of the tx.
-
-.. code:: lisp
-
-   (namespace 'my-namespace)
-
-Top level only: this function will fail if used in module code.
 
 pact-id
 ~~~~~~~
@@ -397,7 +349,7 @@ read-msg
 Read KEY from top level of message data body, or data body itself if not
 provided. Coerces value to their corresponding pact type: String ->
 string, Number -> integer, Boolean -> bool, List -> list, Object ->
-object.
+object. However, top-level values are provided as a ‘value’ JSON type.
 
 .. code:: lisp
 
@@ -419,7 +371,7 @@ Remove entry for KEY from OBJECT.
 resume
 ~~~~~~
 
-*binding* ``binding:<{r}>`` *→* ``<a>``
+*binding* ``binding:<{y}>`` *body* ``*`` *→* ``<a>``
 
 Special form binds to a yielded object value from the prior step
 execution in a pact.
@@ -451,7 +403,7 @@ FIELDS list.
    pact> (sort [3 1 2])
    [1 2 3]
    pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
-   [{"name": "Val","age": 25} {"name": "Lin","age": 30}]
+   [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
 
 str-to-int
 ~~~~~~~~~~
@@ -501,7 +453,7 @@ Obtain hash of current transaction as a string.
 .. code:: lisp
 
    pact> (tx-hash)
-   "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g"
+   "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
 
 typeof
 ~~~~~~
@@ -518,7 +470,7 @@ Returns type of X as string.
 where
 ~~~~~
 
-*field* ``string`` *app* ``x:<a> -> bool`` *value* ``object:<{row}>``
+*field* ``string`` *app* ``(x:<a> -> bool)`` *value* ``object:<{row}>``
 *→* ``bool``
 
 Utility for use in ‘filter’ and ‘select’ applying APP to FIELD in VALUE.
@@ -526,7 +478,7 @@ Utility for use in ‘filter’ and ‘select’ applying APP to FIELD in VALUE.
 .. code:: lisp
 
    pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
-   [{"name": "Juan","age": 15}]
+   [{"name": "Juan", "age": 15}]
 
 yield
 ~~~~~
@@ -562,7 +514,7 @@ Top level only: this function will fail if used in module code.
 describe-keyset
 ~~~~~~~~~~~~~~~
 
-*keyset* ``string`` *→* ``object:*``
+*keyset* ``string`` *→* ``value``
 
 Get metadata for KEYSET.
 
@@ -571,7 +523,7 @@ Top level only: this function will fail if used in module code.
 describe-module
 ~~~~~~~~~~~~~~~
 
-*module* ``string`` *→* ``object:*``
+*module* ``string`` *→* ``value``
 
 Get metadata for MODULE. Returns an object with ‘name’, ‘hash’,
 ‘blessed’, ‘code’, and ‘keyset’ fields.
@@ -585,7 +537,7 @@ Top level only: this function will fail if used in module code.
 describe-table
 ~~~~~~~~~~~~~~
 
-*table* ``table:<{row}>`` *→* ``object:*``
+*table* ``table:<{row}>`` *→* ``value``
 
 Get metadata for TABLE. Returns an object with ‘name’, ‘hash’,
 ‘blessed’, ‘code’, and ‘keyset’ fields.
@@ -613,7 +565,7 @@ keylog
 ~~~~~~
 
 *table* ``table:<{row}>`` *key* ``string`` *txid* ``integer``
-*→* ``[object:*]``
+*→* ``[object]``
 
 Return updates to TABLE for a KEY in transactions at or after TXID, in a
 list of objects indexed by txid.
@@ -651,11 +603,11 @@ COLUMNS if specified.
 select
 ~~~~~~
 
-*table* ``table:<{row}>`` *where* ``row:object:<{row}> -> bool``
+*table* ``table:<{row}>`` *where* ``(row:object:<{row}> -> bool)``
 *→* ``[object:<{row}>]``
 
 *table* ``table:<{row}>`` *columns* ``[string]``
-*where* ``row:object:<{row}> -> bool`` *→* ``[object:<{row}>]``
+*where* ``(row:object:<{row}> -> bool)`` *→* ``[object:<{row}>]``
 
 Select full rows or COLUMNS from table by applying WHERE to each row to
 get a boolean determining inclusion.
@@ -663,7 +615,7 @@ get a boolean determining inclusion.
 .. code:: lisp
 
    (select people ['firstName,'lastName] (where 'name (= "Fatima")))
-   (select people (where 'age (> 30)))?
+   (select people (where 'age (> 30)))
 
 txids
 ~~~~~
@@ -679,7 +631,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 txlog
 ~~~~~
 
-*table* ``table:<{row}>`` *txid* ``integer`` *→* ``[object:*]``
+*table* ``table:<{row}>`` *txid* ``integer`` *→* ``[value]``
 
 Return all updates to TABLE performed in transaction TXID.
 
@@ -690,7 +642,7 @@ Return all updates to TABLE performed in transaction TXID.
 update
 ~~~~~~
 
-*table* ``table:<{row}>`` *key* ``string`` *object* ``object:~<{row}>``
+*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
 *→* ``string``
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does
@@ -703,9 +655,8 @@ not exist for KEY.
 with-default-read
 ~~~~~~~~~~~~~~~~~
 
-*table* ``table:<{row}>`` *key* ``string``
-*defaults* ``object:~<{row}>`` *bindings* ``binding:~<{row}>``
-*→* ``<a>``
+*table* ``table:<{row}>`` *key* ``string`` *defaults* ``object:<{row}>``
+*bindings* ``binding:<{row}>`` *→* ``<a>``
 
 Special form to read row from TABLE for KEY and bind columns per
 BINDINGS over subsequent body statements. If row not found, read columns
@@ -714,7 +665,7 @@ from DEFAULTS, an object with matching key names.
 .. code:: lisp
 
    (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
-     (format "Balance for {} is {} {}" [id bal ccy]))
+      (format "Balance for {} is {} {}" [id bal ccy]))
 
 with-read
 ~~~~~~~~~
@@ -728,7 +679,7 @@ BINDINGS over subsequent body statements.
 .. code:: lisp
 
    (with-read accounts id { "balance":= bal, "ccy":= ccy }
-     (format "Balance for {} is {} {}" [id bal ccy]))
+      (format "Balance for {} is {} {}" [id bal ccy]))
 
 write
 ~~~~~
@@ -922,7 +873,7 @@ Add numbers, concatenate strings/lists, or merge objects.
    pact> (+ [1 2] [3 4])
    [1 2 3 4]
    pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-   {"bar": 2,"foo": 100}
+   {"bar": 2, "foo": 100}
 
 .. _minus:
 
@@ -1021,7 +972,7 @@ True if X equals Y.
    true
    pact> (= 'foo "foo")
    true
-   pact> (= { 'a: 2 } { 'a: 2})
+   pact> (= { 1: 2 } { 1: 2})
    true
 
 .. _gt:
@@ -1109,7 +1060,8 @@ Boolean logic with short-circuit.
 and? {#and?}
 ~~~~~~~~~~~~
 
-*a* ``x:<r> -> bool`` *b* ``x:<r> -> bool`` *value* ``<r>`` *→* ``bool``
+*a* ``(x:<r> -> bool)`` *b* ``(x:<r> -> bool)`` *value* ``<r>``
+*→* ``bool``
 
 Apply logical ‘and’ to the results of applying VALUE to A and B, with
 short-circuit.
@@ -1210,7 +1162,7 @@ not
 
 *x* ``bool`` *→* ``bool``
 
-Boolean not.
+Boolean logic.
 
 .. code:: lisp
 
@@ -1220,7 +1172,7 @@ Boolean not.
 not? {#not?}
 ~~~~~~~~~~~~
 
-*app* ``x:<r> -> bool`` *value* ``<r>`` *→* ``bool``
+*app* ``(x:<r> -> bool)`` *value* ``<r>`` *→* ``bool``
 
 Apply logical ‘not’ to the results of applying VALUE to APP.
 
@@ -1244,7 +1196,8 @@ Boolean logic with short-circuit.
 or? {#or?}
 ~~~~~~~~~~
 
-*a* ``x:<r> -> bool`` *b* ``x:<r> -> bool`` *value* ``<r>`` *→* ``bool``
+*a* ``(x:<r> -> bool)`` *b* ``(x:<r> -> bool)`` *value* ``<r>``
+*→* ``bool``
 
 Apply logical ‘or’ to the results of applying VALUE to A and B, with
 short-circuit.
@@ -1373,23 +1326,6 @@ PREDFUN }). PREDFUN should resolve to a keys predicate.
 Capabilities
 ------------
 
-compose-capability
-~~~~~~~~~~~~~~~~~~
-
-*capability* ``-> bool`` *→* ``bool``
-
-Specifies and requests grant of CAPABILITY which is an application of a
-‘defcap’ production, only valid within a (distinct) ‘defcap’ body, as a
-way to compose CAPABILITY with the outer capability such that the scope
-of the containing ‘with-capability’ call will “import” this capability.
-Thus, a call to ‘(with-capability (OUTER-CAP) OUTER-BODY)’, where the
-OUTER-CAP defcap calls ‘(compose-capability (INNER-CAP))’, will result
-in INNER-CAP being granted in the scope of OUTER-BODY.
-
-.. code:: lisp
-
-   (compose-capability (TRANSFER src dest))
-
 create-module-guard
 ~~~~~~~~~~~~~~~~~~~
 
@@ -1415,9 +1351,9 @@ create-user-guard
 *data* ``<a>`` *predfun* ``string`` *→* ``guard``
 
 Defines a custom guard predicate, where DATA will be passed to PREDFUN
-at time of enforcement. DATA must be an object. PREDFUN is a valid name
-in the declaring environment. PREDFUN must refer to a pure function or
-enforcement will fail at runtime.
+at time of enforcement. PREDFUN is a valid name in the declaring
+environment. PREDFUN must refer to a pure function or enforcement will
+fail at runtime.
 
 enforce-guard
 ~~~~~~~~~~~~~
@@ -1447,7 +1383,7 @@ the database, etc.
 require-capability
 ~~~~~~~~~~~~~~~~~~
 
-*capability* ``-> bool`` *→* ``bool``
+*capability* ``( -> bool)`` *→* ``bool``
 
 Specifies and tests for existing grant of CAPABILITY, failing if not
 found in environment.
@@ -1459,43 +1395,22 @@ found in environment.
 with-capability
 ~~~~~~~~~~~~~~~
 
-*capability* ``-> bool`` *body* ``[*]`` *→* ``<a>``
+*capability* ``( -> bool)`` *body* ``list`` *→* ``<a>``
 
 Specifies and requests grant of CAPABILITY which is an application of a
 ‘defcap’ production. Given the unique token specified by this
 application, ensure that the token is granted in the environment during
 execution of BODY. ‘with-capability’ can only be called in the same
 module that declares the corresponding ‘defcap’, otherwise module-admin
-rights are required. If token is not present, the CAPABILITY is
-evaluated, with successful completion resulting in the
-installation/granting of the token, which will then be revoked upon
-completion of BODY. Nested ‘with-capability’ calls for the same token
-will detect the presence of the token, and will not re-apply CAPABILITY,
-but simply execute BODY. ‘with-capability’ cannot be called from within
-an evaluating defcap.
+rights are required. If token is not present, the CAPABILITY is applied,
+with successful completion resulting in the installation/granting of the
+token, which will then be revoked upon completion of BODY. Nested
+‘with-capability’ calls for the same token will detect the presence of
+the token, and will not re-apply CAPABILITY, but simply execute BODY.
 
 .. code:: lisp
 
-   (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
-
-.. _SPV:
-
-SPV
----
-
-verify-spv
-~~~~~~~~~~
-
-*type* ``string`` *payload* ``object:<in>`` *→* ``object:<out>``
-
-Performs a platform-specific spv proof of type TYPE on PAYLOAD. The
-format of the PAYLOAD object depends on TYPE, as does the format of the
-return object. Platforms such as Chainweb will document the specific
-payload types and return values.
-
-.. code:: lisp
-
-   (verify-spv "TXOUT" (read-msg "proof"))
+   (with-capability (update-users id) (update users id { salary: new-salary }))
 
 .. _repl-lib:
 
@@ -1541,45 +1456,10 @@ Commit transaction.
 
    (commit-tx)
 
-continue-pact
-~~~~~~~~~~~~~
-
-*pact-id* ``integer`` *step* ``integer`` *→* ``string``
-
-*pact-id* ``integer`` *step* ``integer`` *rollback* ``bool``
-*→* ``string``
-
-*pact-id* ``integer`` *step* ``integer`` *rollback* ``bool``
-*yielded* ``object:<{y}>`` *→* ``string``
-
-Continue previously-initiated pact identified by PACT-ID at STEP,
-optionally specifying ROLLBACK (default is false), and YIELDED value to
-be read with ‘resume’ (if not specified, uses yield in most recent pact
-exec, if any).
-
-.. code:: lisp
-
-   (continue-pact 2 1)
-   (continue-pact 2 1 true)
-   (continue-pact 2 1 false { "rate": 0.9 })
-
-env-chain-data
-~~~~~~~~~~~~~~
-
-*new-data* ``object:*`` *→* ``string``
-
-Update existing entries ‘chain-data’ with NEW-DATA, replacing those
-items only.
-
-.. code:: lisp
-
-   pact> (env-chain-data { "chain-id": "TestNet00/2", "block-height": 20 })
-   "Updated public metadata"
-
 env-data
 ~~~~~~~~
 
-*json* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*json* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,value]>``
 *→* ``string``
 
 Set transaction JSON data, either as encoded string, or as pact types
@@ -1598,6 +1478,7 @@ env-entity
 *entity* ``string`` *→* ``string``
 
 Set environment confidential ENTITY id, or unset with no argument.
+Clears any previous pact execution state.
 
 .. code:: lisp
 
@@ -1620,13 +1501,6 @@ env-gaslimit
 
 Set environment gas limit to LIMIT.
 
-env-gasmodel
-~~~~~~~~~~~~
-
-*model* ``string`` *→* ``string``
-
-Update gas model to the model named MODEL.
-
 env-gasprice
 ~~~~~~~~~~~~
 
@@ -1646,13 +1520,12 @@ env-hash
 
 *hash* ``string`` *→* ``string``
 
-Set current transaction hash. HASH must be an unpadded base64-url
-encoded BLAKE2b 256-bit hash.
+Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash.
 
 .. code:: lisp
 
    pact> (env-hash (hash "hello"))
-   "Set tx hash to Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
+   "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
 
 env-keys
 ~~~~~~~~
@@ -1665,6 +1538,37 @@ Set transaction signature KEYS.
 
    pact> (env-keys ["my-key" "admin-key"])
    "Setting transaction keys"
+
+env-pactid
+~~~~~~~~~~
+
+*→* ``string``
+
+*id* ``string`` *→* ``string``
+
+Query environment pact id, or set to ID.
+
+env-step
+~~~~~~~~
+
+*→* ``string``
+
+*step-idx* ``integer`` *→* ``string``
+
+*step-idx* ``integer`` *rollback* ``bool`` *→* ``string``
+
+*step-idx* ``integer`` *rollback* ``bool`` *resume* ``object:<{y}>``
+*→* ``string``
+
+Set pact step state. With no arguments, unset step. With STEP-IDX, set
+step index to execute. ROLLBACK instructs to execute rollback
+expression, if any. RESUME sets a value to be read via ‘resume’.Clears
+any previous pact execution state.
+
+.. code:: lisp
+
+   (env-step 1)
+   (env-step 0 true)
 
 expect
 ~~~~~~
@@ -1690,13 +1594,19 @@ Evaluate EXP and succeed only if it throws an error.
    pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
    "Expect failure: success: Enforce fails on false"
 
-format-address
-~~~~~~~~~~~~~~
+json
+~~~~
 
-*scheme* ``string`` *public-key* ``string`` *→* ``string``
+*exp* ``<a>`` *→* ``value``
 
-Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key)
-depending on its SCHEME.
+Encode pact expression EXP as a JSON value. This is only needed for
+tests, as Pact values are automatically represented as JSON in API
+output.
+
+.. code:: lisp
+
+   pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
+   [{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
 
 load
 ~~~~
@@ -1712,35 +1622,18 @@ RESET is true.
 
    (load "accounts.repl")
 
-mock-spv
-~~~~~~~~
-
-*type* ``string`` *payload* ``object:*`` *output* ``object:*``
-*→* ``string``
-
-Mock a successful call to ‘spv-verify’ with TYPE and PAYLOAD to return
-OUTPUT.
-
-.. code:: lisp
-
-   (mock-spv "TXOUT" { 'proof: "a54f54de54c54d89e7f" } { 'amount: 10.0, 'account: "Dave", 'chainId: 1 })
-
 pact-state
 ~~~~~~~~~~
 
-*→* ``object:*``
+*→* ``object``
 
-*clear* ``bool`` *→* ``object:*``
-
-Inspect state from most recent pact execution. Returns object with
-fields ‘pactId’: pact ID; ‘yield’: yield result or ‘false’ if none;
-‘step’: executed step; ‘executed’: indicates if step was skipped because
-entity did not match. With CLEAR argument, erases pact from repl state.
+Inspect state from previous pact execution. Returns object with fields
+‘yield’: yield result or ‘false’ if none; ‘step’: executed step;
+‘executed’: indicates if step was skipped because entity did not match.
 
 .. code:: lisp
 
    (pact-state)
-   (pact-state true)
 
 print
 ~~~~~
@@ -1767,20 +1660,6 @@ sig-keyset
 
 Convenience function to build a keyset from keys present in message
 signatures, using ‘keys-all’ as the predicate.
-
-test-capability
-~~~~~~~~~~~~~~~
-
-*capability* ``-> bool`` *→* ``string``
-
-Specify and request grant of CAPABILITY. Once granted, CAPABILITY and
-any composed capabilities are in scope for the rest of the transaction.
-Allows direct invocation of capabilities, which is not available in the
-blockchain environment.
-
-.. code:: lisp
-
-   (test-capability (MY-CAP))
 
 typecheck
 ~~~~~~~~~
