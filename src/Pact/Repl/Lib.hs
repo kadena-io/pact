@@ -114,8 +114,8 @@ replDefs = ("Repl",
       (funType tTyString [("pact-id",tTyString),("step",tTyInteger)] <>
        funType tTyString [("pact-id",tTyString),("step",tTyInteger),("rollback",tTyBool)] <>
        funType tTyString [("pact-id",tTyString),("step",tTyInteger),("rollback",tTyBool),("yielded",tTyObject (mkSchemaVar "y"))])
-      [LitExample "(continue-pact (hash \"some-pact-tx\") 1)", LitExample "(continue-pact 2 1 true)",
-       LitExample "(continue-pact (hash \"some-pact-tx\") 1 false { \"rate\": 0.9 })"]
+      [LitExample "(continue-pact (hash \"some-pact-id\") 1)", LitExample "(continue-pact 2 1 true)",
+       LitExample "(continue-pact (hash \"some-pact-id\") 1 false { \"rate\": 0.9 })"]
       ("Continue previously-initiated pact identified by PACT-ID at STEP, " <>
        "optionally specifying ROLLBACK (default is false), and " <>
        "YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).")

@@ -18,6 +18,9 @@ import Pact.Types.Runtime hiding (Persistable(..))
 import Pact.Types.PactOutput
 import qualified Data.Text as T
 
+
+----- UTILS ------
+
 shouldMatch :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Expectation
 shouldMatch results checks = mapM_ match checks
   where match ApiResultCheck{..} = do
@@ -32,9 +35,22 @@ makeExecCmd keyPairs code =
 
 makeContCmd :: SomeKeyPair -> Bool -> Value -> TxId -> Command Text -> Int -> String -> IO (Command Text)
 makeContCmd keyPairs isRollback cmdData txId pactExecCmd step nonce =
-  mkCont (toPactId txId (ChainId "") hsh) step isRollback cmdData def [keyPairs] (Just nonce)
-  where hsh = (toUntypedHash . _cmdHash) pactExecCmd
+  mkCont (getPactId txId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce)
 
+
+getPactId :: TxId -> Command Text -> PactId
+getPactId txId cmd = toPactId txId (ChainId "") hsh
+  where hsh = (toUntypedHash . _cmdHash) cmd
+
+
+pactIdNotFoundMsg :: TxId -> Command Text -> Maybe Value
+pactIdNotFoundMsg txId cmd = (Just . String) escaped
+  where txtPact = asString (getPactId txId cmd)
+        escaped = "applyContinuation: pact ID not found: PactId "
+                  <> "\"" <> txtPact <> "\""
+
+
+---- TESTS -----
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
@@ -160,12 +176,13 @@ testLastStep mgr = do
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStep1Cmd,
                               contNextStep2Cmd, checkStateCmd]
 
+
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
       contNextStep1Check = makeCheck contNextStep1Cmd False $ Just "step 1"
       contNextStep2Check = makeCheck contNextStep2Cmd False $ Just "step 2"
-      checkStateCheck    = makeCheck checkStateCmd True
-                           (Just "applyContinuation: pact ID not found: \"tx-id:1:chain-id:\"")
+      checkStateCheck    = makeCheck checkStateCmd True $
+                           pactIdNotFoundMsg (TxId 1) executePactCmd
       allChecks          = [moduleCheck, executePactCheck, contNextStep1Check,
                             contNextStep2Check, checkStateCheck]
 
@@ -239,8 +256,8 @@ testCorrectRollbackStep mgr = do
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"
       rollbackStepCheck = makeCheck rollbackStepCmd False $ Just "rollback 1"
-      checkStateCheck   = makeCheck checkStateCmd True
-                          (Just "applyContinuation: pact ID not found: \"tx-id:1:chain-id:\"")
+      checkStateCheck   = makeCheck checkStateCmd True $
+                          pactIdNotFoundMsg (TxId 1) executePactCmd
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
                            rollbackStepCheck, checkStateCheck]
 
@@ -325,8 +342,8 @@ testNoRollbackFunc mgr = do
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck  = makeCheck contNextStepCmd False $ Just "step 1"
       noRollbackCheck    = makeCheck noRollbackCmd False $ Just "No rollback on step 1" -- not a failure
-      checkStateCheck    = makeCheck checkStateCmd True
-                           (Just "applyContinuation: pact ID not found: \"tx-id:1:chain-id:\"")
+      checkStateCheck    = makeCheck checkStateCmd True $
+                           pactIdNotFoundMsg (TxId 1) executePactCmd
       allChecks          = [moduleCheck, executePactCheck, contNextStepCheck,
                             noRollbackCheck, checkStateCheck]
 
@@ -371,8 +388,8 @@ testValidYield mgr = do
       executePactCheck    = makeCheck executePactCmd False $ Just "testing->Step0"
       resumeAndYieldCheck = makeCheck resumeAndYieldCmd False $ Just "testing->Step0->Step1"
       resumeOnlyCheck     = makeCheck resumeOnlyCmd False $ Just "testing->Step0->Step1->Step2"
-      checkStateCheck     = makeCheck checkStateCmd True
-                            (Just "applyContinuation: pact ID not found: \"tx-id:1:chain-id:\"")
+      checkStateCheck     = makeCheck checkStateCmd True $
+                            pactIdNotFoundMsg (TxId 1) executePactCmd
       allChecks           = [moduleCheck, executePactCheck, resumeAndYieldCheck,
                              resumeOnlyCheck, checkStateCheck]
 
@@ -427,8 +444,8 @@ testResetYield mgr = do
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       yieldSameKeyCheck = makeCheck yieldSameKeyCmd False $ Just "step 1"
       resumeStepCheck   = makeCheck resumeStepCmd False $ Just "step 1"
-      checkStateCheck   = makeCheck checkStateCmd True
-                           (Just "applyContinuation: pact ID not found: \"tx-id:1:chain-id:\"")
+      checkStateCheck   = makeCheck checkStateCmd True $
+                          pactIdNotFoundMsg (TxId 1) executePactCmd
       allChecks         = [moduleCheck, executePactCheck, yieldSameKeyCheck,
                            resumeStepCheck, checkStateCheck]
 
