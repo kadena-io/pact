@@ -26,15 +26,19 @@ module Pact.Types.Persistence
    WriteType(..),
    Method,
    PactDb(..),
-   TxId(..)
+   TxId(..),
+   PersistDirect(..),
+   ModuleData(..),mdModule,mdRefMap
    ) where
 
+import Control.Applicative ((<|>))
 import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 import Data.Aeson hiding (Object)
 import Data.Default (Default)
 import Data.Hashable (Hashable)
+import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
@@ -46,6 +50,36 @@ import Pact.Types.Pretty
 import Pact.Types.Util (AsString(..))
 
 
+data PersistDirect =
+    PDValue PactValue
+  | PDNative NativeDefName
+  deriving (Eq,Show)
+
+instance ToJSON PersistDirect where
+  toJSON (PDValue v) = object [ "pdval" .= v ]
+  toJSON (PDNative n) = object [ "pdnat" .= n ]
+
+instance FromJSON PersistDirect where
+  parseJSON v =
+    withObject "PDValue" (\o -> PDValue <$> o .: "pdval") v <|>
+    withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v
+
+-- | Module ref store
+data ModuleData r = ModuleData
+  { _mdModule :: ModuleDef (Def r)
+  , _mdRefMap :: HM.HashMap Text r
+  } deriving (Eq, Show)
+makeLenses ''ModuleData
+
+type PersistModuleData = ModuleData (Ref' PersistDirect)
+
+instance ToJSON (Ref' PersistDirect) where
+  toJSON (Ref t) = object [ "ref" .= t ]
+  toJSON (Direct pd) = object [ "direct" .= pd ]
+
+instance FromJSON (Ref' PersistDirect) where
+  parseJSON v =
+    withObject "Ref" (\o ->
 
 
 -- | Row key type for user tables.
@@ -57,7 +91,7 @@ newtype RowKey = RowKey Text
 data Domain k v where
   UserTables :: !TableName -> Domain RowKey (ObjectMap PactValue)
   KeySets :: Domain KeySetName KeySet
-  Modules :: Domain ModuleName (ModuleDef Name)
+  Modules :: Domain ModuleName PersistModuleData
   Namespaces :: Domain NamespaceName Namespace
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)

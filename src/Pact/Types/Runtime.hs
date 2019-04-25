@@ -20,7 +20,6 @@ module Pact.Types.Runtime
    evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
-   ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
@@ -148,17 +147,12 @@ data PactStep = PactStep {
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
--- | Module ref store
-data ModuleData = ModuleData
-  { _mdModule :: ModuleDef (Def Ref)
-  , _mdRefMap :: HM.HashMap Text Ref
-  } deriving (Eq, Show)
-makeLenses ''ModuleData
+
 
 -- | Storage for loaded modules, interfaces, and natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
-    , _rsModules :: HM.HashMap ModuleName ModuleData
+    , _rsModules :: HM.HashMap ModuleName (ModuleData Ref)
     } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
@@ -255,7 +249,7 @@ data RefState = RefState {
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleDef (Def Ref))
       -- | Modules that were compiled and loaded in this tx.
-    , _rsNewModules :: HM.HashMap ModuleName ModuleData
+    , _rsNewModules :: HM.HashMap ModuleName (ModuleData Ref)
       -- | Current Namespace
     , _rsNamespace :: Maybe Namespace
     } deriving (Eq,Show)
