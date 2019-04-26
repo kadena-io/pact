@@ -1,0 +1,5 @@
+;; used in Pact.PersistPactDb.Regression
+
+(module simple GOV
+  (defcap GOV () true)
+  (defun f (a) a))

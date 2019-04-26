@@ -17,7 +17,7 @@ import Pact.Types.Info (Info(..))
 import Pact.Types.Runtime (RefStore(..), ModuleData(..),
                            eeRefStore, rsModules)
 import Pact.Types.Term (Module(..), Interface(..), ModuleName(..), ModuleDef(..),
-                        Meta(..), Term(..), Ref(..), Def(..))
+                        Meta(..), Term(..), Ref'(..), Ref, Def(..))
 
 
 spec :: Spec
@@ -48,7 +48,7 @@ hasAllExps mexps iexps = forM_ iexps $ \e ->
   it "should find all exps defined in interface in corresponding module" $
     (e,mexps) `shouldSatisfy` (\_ -> any (expEquality e) mexps)
 
-aggregateFunctionModels :: ModuleData -> [Exp Info]
+aggregateFunctionModels :: ModuleData Ref -> [Exp Info]
 aggregateFunctionModels ModuleData{..} =
   foldMap (extractExp . snd) $ HM.toList _mdRefMap
   where
@@ -69,7 +69,7 @@ loadRefStore fp = do
     Just md -> return md
     Nothing -> die def $ "Could not load module data from " ++ show fp
 
-loadModuleData :: RefStore -> ModuleName -> IO ModuleData
+loadModuleData :: RefStore -> ModuleName -> IO (ModuleData Ref)
 loadModuleData rs mn =
   case preview (rsModules . ix mn) rs of
     Just md -> pure md

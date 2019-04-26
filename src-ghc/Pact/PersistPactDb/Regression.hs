@@ -9,6 +9,7 @@ module Pact.PersistPactDb.Regression
 import Control.Concurrent.MVar
 import Control.Exception
 import qualified Data.Map.Strict as M
+import Control.Lens hiding ((.=))
 
 import Pact.PersistPactDb
 import Pact.Persist
@@ -16,10 +17,25 @@ import Pact.Types.Runtime
 import Pact.Persist.Pure (initPureDb,persister,PureDb)
 import Data.Aeson
 import Pact.Types.Logger
-import qualified Pact.Types.Hash as H
+-- import qualified Pact.Types.Hash as H
 import Data.Default (def)
 import Pact.Types.PactValue
+import Pact.Repl
+import Pact.Repl.Types
 
+
+loadModule :: IO (ModuleName, PersistModuleData)
+loadModule = do
+  let fn = "tests/pact/simple.repl"
+  (r,s) <- execScript' (Script False fn) fn
+  let mn = ModuleName "simple" Nothing
+  case r of
+    Left a -> throwFail $ "module load failed: " ++ show a
+    Right _ -> case preview (rEvalState . evalRefs . rsNewModules . ix mn) s of
+      Just md -> case traverse (traverse toPersistDirect) md of
+        Right md' -> return (mn,md')
+        Left e -> throwFail $ "toPersistDirect failed: " ++ show e
+      Nothing -> throwFail $ "Failed to find module 'simple': " ++ show (view (rEvalState . evalRefs . rsNewModules) s)
 
 runRegression :: DbEnv p -> IO (MVar (DbEnv p))
 runRegression p = do
@@ -49,47 +65,27 @@ runRegression p = do
   let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
-  let mod' = MDModule $ Module "mod1" (Governance (Left "mod-admin-keyset")) (Meta Nothing [])
-             "code" (H.pactHash "code") mempty mempty mempty
-  _writeRow pactdb Write Modules "mod1" mod' v
-  assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
-  let empty :: [()] = []
+  (modName,mod') <- loadModule
+  _writeRow pactdb Write Modules modName mod' v
+  assertEquals' "module write" (Just mod') $ _readRow pactdb Modules modName v
   assertEquals' "result of commit 3"
 
     [ TxLog { _txDomain = "SYS_keysets"
             , _txKey = "ks1"
-            , _txValue = object
-              [ "pred" .= String "predfun"
-              , "keys" .= [String "skdjhfskj"]
-              ] }
+            , _txValue = toJSON ks
+            }
     , TxLog { _txDomain = "SYS_modules"
-            , _txKey = "mod1"
-            , _txValue = object
-              [ "hash" .= String "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY"
-              , "blessed" .= empty
-              , "interfaces" .= empty
-              , "imports" .= empty
-              , "name" .= object
-                [ "namespace" .= Null
-                , "name" .= String "mod1" ]
-              , "code" .= String "code"
-              , "meta" .= object
-                [ "model" .= empty
-                , "docs" .= Null ]
-              , "governance" .= object
-                ["keyset" .= String "mod-admin-keyset"]
-              ] }
+            , _txKey = asString modName
+            , _txValue = toJSON mod'
+            }
     , TxLog { _txDomain = "USER_user1"
             , _txKey = "key1"
-            , _txValue = object
-              [ "gah" .= Number 123.454345
-              ] }
+            , _txValue = toJSON row
+            }
     , TxLog { _txDomain = "USER_user1"
             , _txKey = "key1"
-            , _txValue = object
-              [ "fh" .= Number 1.0
-              , "gah" .= False
-              ] }
+            , _txValue = toJSON row'
+            }
     ]
     (commit v)
   _t4 <- begin v t3

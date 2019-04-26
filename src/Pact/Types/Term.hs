@@ -328,8 +328,8 @@ data Ref' d =
   -- | "Reduced" (evaluated) or native (irreducible) term.
   Direct d |
   -- | Unevaulated/un-reduced term, never a native.
-  Ref (Term Ref)
-  deriving (Eq,Show)
+  Ref (Term (Ref' d))
+  deriving (Eq,Show,Functor,Foldable,Traversable)
 
 type Ref = Ref' (Term Name)
 

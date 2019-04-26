@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -27,8 +28,9 @@ module Pact.Types.Persistence
    Method,
    PactDb(..),
    TxId(..),
-   PersistDirect(..),
-   ModuleData(..),mdModule,mdRefMap
+   PersistDirect(..),toPersistDirect,
+   ModuleData(..),mdModule,mdRefMap,
+   PersistModuleData
    ) where
 
 import Control.Applicative ((<|>))
@@ -64,12 +66,27 @@ instance FromJSON PersistDirect where
     withObject "PDValue" (\o -> PDValue <$> o .: "pdval") v <|>
     withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v
 
+instance Pretty PersistDirect where
+  pretty (PDValue v) = pretty v
+  pretty (PDNative n) = pretty $ "<native>" <> asString n
+
+toPersistDirect :: Term Name -> Either Text PersistDirect
+toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
+toPersistDirect t = case toPactValue t of
+  Right v -> pure $ PDValue v
+  Left e -> Left e
+
 -- | Module ref store
 data ModuleData r = ModuleData
   { _mdModule :: ModuleDef (Def r)
   , _mdRefMap :: HM.HashMap Text r
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
+
+instance (ToJSON r,FromJSON r) =>
+  ToJSON (ModuleData r) where toJSON = lensyToJSON 3
+instance (ToJSON r, FromJSON r) =>
+  FromJSON (ModuleData r) where parseJSON = lensyParseJSON 3
 
 type PersistModuleData = ModuleData (Ref' PersistDirect)
 
@@ -79,7 +96,8 @@ instance ToJSON (Ref' PersistDirect) where
 
 instance FromJSON (Ref' PersistDirect) where
   parseJSON v =
-    withObject "Ref" (\o ->
+    withObject "Ref" (\o -> Ref <$> o .: "ref") v <|>
+    withObject "Direct" (\o -> Direct <$> o .: "direct") v
 
 
 -- | Row key type for user tables.

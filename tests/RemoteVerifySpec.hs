@@ -40,7 +40,7 @@ loadCode code = do
     Left err -> Left $ ReplError err
     Right _t -> Right replState
 
-stateModuleData :: ModuleName -> ReplState -> Maybe ModuleData
+stateModuleData :: ModuleName -> ReplState -> Maybe (ModuleData Ref)
 stateModuleData nm replState = replState ^. rEnv . eeRefStore . rsModules . at nm
 
 serve :: Int -> IO ThreadId
