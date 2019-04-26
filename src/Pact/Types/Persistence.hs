@@ -28,7 +28,7 @@ module Pact.Types.Persistence
    Method,
    PactDb(..),
    TxId(..),
-   PersistDirect(..),toPersistDirect,
+   PersistDirect(..),toPersistDirect,fromPersistDirect,
    ModuleData(..),mdModule,mdRefMap,
    PersistModuleData
    ) where
@@ -55,7 +55,9 @@ import Pact.Types.Util (AsString(..))
 data PersistDirect =
     PDValue PactValue
   | PDNative NativeDefName
-  deriving (Eq,Show)
+  deriving (Eq,Show,Generic)
+
+instance NFData PersistDirect
 
 instance ToJSON PersistDirect where
   toJSON (PDValue v) = object [ "pdval" .= v ]
@@ -76,12 +78,20 @@ toPersistDirect t = case toPactValue t of
   Right v -> pure $ PDValue v
   Left e -> Left e
 
+fromPersistDirect :: (NativeDefName -> Maybe (Term Name)) -> PersistDirect -> Either Text (Term Name)
+fromPersistDirect _ (PDValue v) = return $ fromPactValue v
+fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
+  Just t -> return t
+  Nothing -> Left $ "Native lookup failed: " <> tShow nn
+
 -- | Module ref store
 data ModuleData r = ModuleData
   { _mdModule :: ModuleDef (Def r)
   , _mdRefMap :: HM.HashMap Text r
   } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
+
+instance NFData r => NFData (ModuleData r)
 
 instance (ToJSON r,FromJSON r) =>
   ToJSON (ModuleData r) where toJSON = lensyToJSON 3
@@ -102,7 +112,7 @@ instance FromJSON (Ref' PersistDirect) where
 
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty)
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty,Generic,NFData)
 
 
 -- | Specify key and value types for database domains.
@@ -128,6 +138,7 @@ data TxLog v =
     } deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
 makeLenses ''TxLog
 instance Hashable v => Hashable (TxLog v)
+instance NFData v => NFData (TxLog v)
 
 instance ToJSON v => ToJSON (TxLog v) where
     toJSON (TxLog d k v) =

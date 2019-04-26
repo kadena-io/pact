@@ -329,7 +329,9 @@ data Ref' d =
   Direct d |
   -- | Unevaulated/un-reduced term, never a native.
   Ref (Term (Ref' d))
-  deriving (Eq,Show,Functor,Foldable,Traversable)
+  deriving (Eq,Show,Functor,Foldable,Traversable,Generic)
+
+instance NFData d => NFData (Ref' d)
 
 type Ref = Ref' (Term Name)
 

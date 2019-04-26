@@ -9,7 +9,9 @@ module Pact.PersistPactDb.Regression
 import Control.Concurrent.MVar
 import Control.Exception
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import Control.Lens hiding ((.=))
+import Control.DeepSeq
 
 import Pact.PersistPactDb
 import Pact.Persist
@@ -17,14 +19,14 @@ import Pact.Types.Runtime
 import Pact.Persist.Pure (initPureDb,persister,PureDb)
 import Data.Aeson
 import Pact.Types.Logger
--- import qualified Pact.Types.Hash as H
 import Data.Default (def)
 import Pact.Types.PactValue
 import Pact.Repl
 import Pact.Repl.Types
+import Pact.Native (nativeDefs)
 
 
-loadModule :: IO (ModuleName, PersistModuleData)
+loadModule :: IO (ModuleName, ModuleData Ref, PersistModuleData)
 loadModule = do
   let fn = "tests/pact/simple.repl"
   (r,s) <- execScript' (Script False fn) fn
@@ -33,9 +35,14 @@ loadModule = do
     Left a -> throwFail $ "module load failed: " ++ show a
     Right _ -> case preview (rEvalState . evalRefs . rsNewModules . ix mn) s of
       Just md -> case traverse (traverse toPersistDirect) md of
-        Right md' -> return (mn,md')
+        Right md' -> return (mn,md,md')
         Left e -> throwFail $ "toPersistDirect failed: " ++ show e
       Nothing -> throwFail $ "Failed to find module 'simple': " ++ show (view (rEvalState . evalRefs . rsNewModules) s)
+
+nativeLookup :: NativeDefName -> Maybe (Term Name)
+nativeLookup (NativeDefName n) = case HM.lookup (Name n def) nativeDefs of
+  Just (Direct t) -> Just t
+  _ -> Nothing
 
 runRegression :: DbEnv p -> IO (MVar (DbEnv p))
 runRegression p = do
@@ -65,9 +72,11 @@ runRegression p = do
   let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
-  (modName,mod') <- loadModule
+  (modName,modRef,mod') <- loadModule
   _writeRow pactdb Write Modules modName mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules modName v
+  assertEquals "module native repopulation" (Right modRef) $
+    traverse (traverse (fromPersistDirect nativeLookup)) mod'
   assertEquals' "result of commit 3"
 
     [ TxLog { _txDomain = "SYS_keysets"
@@ -117,12 +126,12 @@ commit v = _commitTx pactdb v
 throwFail :: String -> IO a
 throwFail = throwIO . userError
 
-assertEquals :: (Eq a,Show a) => String -> a -> a -> IO ()
-assertEquals msg a b | a == b = return ()
+assertEquals :: (Eq a,Show a,NFData a) => String -> a -> a -> IO ()
+assertEquals msg a b | [a,b] `deepseq` a == b = return ()
                      | otherwise =
                          throwFail $ "FAILURE: " ++ msg ++ ": expected \n  " ++ show a ++ "\n got \n  " ++ show b
 
-assertEquals' :: (Eq a, Show a) => String -> a -> IO a -> IO ()
+assertEquals' :: (Eq a, Show a, NFData a) => String -> a -> IO a -> IO ()
 assertEquals' msg a b = assertEquals msg a =<< b
 
 regressPure :: IO (MVar (DbEnv PureDb))
