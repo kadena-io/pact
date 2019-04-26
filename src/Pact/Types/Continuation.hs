@@ -10,14 +10,16 @@ module Pact.Types.Continuation
   ( -- * data
     PactStep(..)
   , PactContinuation(..)
+  , PactExec(..)
   , Yield(..)
     -- * combinators
   , endorse
     -- * optics
+  , peStepCount, peYield, peExecuted, pePactId, peStep, peContinuation
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
   , yData, yTarget, yEndorsement
-  )where
+  ) where
 
 
 import Control.Lens
@@ -30,7 +32,6 @@ import Pact.Types.ChainMeta (ChainId)
 import Pact.Types.Hash
 import Pact.Types.PactValue
 import Pact.Types.Term
-
 
 -- | The type of a set of yielded values of a pact step.
 -- Endorsement hashes ('_yEndorsement') are a combination of
@@ -84,7 +85,23 @@ data PactContinuation = PactContinuation
   , _pcArgs :: [PactValue]
   } deriving (Eq, Show)
 
+-- | Result of evaluation of a 'defpact'.
+data PactExec = PactExec
+  { -- | Count of steps in pact (discovered when code is executed)
+    _peStepCount :: Int
+    -- | Yield value if invoked
+  , _peYield :: !(Maybe Yield)
+    -- | Whether step was executed (in private cases, it can be skipped)
+  , _peExecuted :: Bool
+    -- | Step that was executed or skipped
+  , _peStep :: Int
+    -- | Pact id. On a new pact invocation, is copied from tx id.
+  , _pePactId :: PactId
+    -- | Strict (in arguments) application of pact, for future step invocations.
+  , _peContinuation :: PactContinuation
+  } deriving (Eq, Show)
 
+makeLenses ''PactExec
 makeLenses ''PactStep
 makeLenses ''PactContinuation
 makeLenses ''Yield

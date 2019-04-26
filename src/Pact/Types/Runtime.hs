@@ -25,7 +25,6 @@ module Pact.Types.Runtime
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
-   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
    RefState(..),rsLoaded,rsLoadedModules,rsNewModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',
@@ -37,7 +36,6 @@ module Pact.Types.Runtime
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
    SPVSupport(..),noSPVSupport,
-   PactContinuation(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -154,23 +152,6 @@ data RefStore = RefStore {
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
 
--- | Result of evaluation of a 'defpact'.
-data PactExec = PactExec
-  { -- | Count of steps in pact (discovered when code is executed)
-    _peStepCount :: Int
-    -- | Yield value if invoked
-  , _peYield :: !(Maybe Yield)
-    -- | Whether step was executed (in private cases, it can be skipped)
-  , _peExecuted :: Bool
-    -- | Step that was executed or skipped
-  , _peStep :: Int
-    -- | Pact id. On a new pact invocation, is copied from tx id.
-  , _pePactId :: PactId
-    -- | Strict (in arguments) application of pact, for future step invocations.
-  , _peContinuation :: PactContinuation
-  } deriving (Eq,Show)
-makeLenses ''PactExec
-
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
   -- | No database access at all.
@@ -231,8 +212,6 @@ data EvalEnv e = EvalEnv {
     , _eePublicData :: PublicData
     }
 makeLenses ''EvalEnv
-
-
 
 -- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.
 data RefState = RefState {
