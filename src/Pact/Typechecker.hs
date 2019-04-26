@@ -32,33 +32,34 @@
 
 module Pact.Typechecker where
 
-import Data.Set (Set, isSubsetOf)
-import qualified Data.Set as Set
-import Data.Bitraversable (bimapM)
-import Control.Monad.Catch
-import Control.Lens hiding (List,Fold)
 import Bound.Scope
-import Safe hiding (at)
-import Data.Default
-import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Set as S
+import Control.Arrow hiding ((<+>))
+import Control.Lens hiding (List,Fold)
 import Control.Monad
+import Control.Monad.Catch
 import Control.Monad.State
+import Data.Bitraversable (bimapM)
+import Data.Default
+import Data.Foldable
+import qualified Data.HashMap.Strict as HM
+import Data.List
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
-import Control.Arrow hiding ((<+>))
-import Data.Foldable
-import Data.String
-import Data.List
+import qualified Data.Map.Strict as M
 import Data.Maybe (isJust)
+import Data.Set (Set, isSubsetOf)
+import qualified Data.Set as S
+import qualified Data.Set as Set
+import Data.String
+import qualified Data.Vector as V
+import Safe hiding (at)
 
 
-import Pact.Types.Pretty
-import Pact.Types.Typecheck
-import Pact.Types.Runtime hiding (App,appInfo,Object)
-import qualified Pact.Types.Runtime as Term
 import Pact.Types.Native
+import Pact.Types.Pretty
+import qualified Pact.Types.Runtime as Term
+import Pact.Types.Runtime hiding (App,appInfo,Object)
+import Pact.Types.Typecheck
 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
@@ -91,7 +92,7 @@ walkAST f t@Table {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
   Object {..} <- f Pre t
   t' <- Object _aNode <$>
-         forM _aObject (\(k,v) -> (k,) <$> walkAST f v)
+         mapM (walkAST f) _aObject
   f Post t'
 walkAST f t@List {} = do
   List {..} <- f Pre t
@@ -271,12 +272,12 @@ asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " +
 applySchemas :: Visitor TC Node
 applySchemas Pre ast = case ast of
 
-  (Object n ps) -> findSchema n $ \sch partial -> do
+  (Object n (ObjectMap ps)) -> findSchema n $ \sch partial -> do
     debug $ "applySchemas [object]: " ++ show (n,sch,partial)
-    pmap <- forM ps $ \(FieldKey kstr,v) -> do
+    pmap <- forM ps $ \v -> do
       vt' <- lookupAndResolveTy (_aNode v)
-      return (kstr,(v,_aId (_aNode v),vt'))
-    validateSchema sch partial (M.fromList pmap) >>= \pm -> forM_ pm $ \pkeys -> case partial of
+      return (v,_aId (_aNode v),vt')
+    validateSchema sch partial pmap >>= \pm -> forM_ pm $ \pkeys -> case partial of
       FullSchema -> addFailure (_aId n) "Invalid partial schema found"
       _ -> do
         debug $ "Specializing schema ty for sublist: " ++ show pkeys
@@ -288,7 +289,7 @@ applySchemas Pre ast = case ast of
     pmapM <- forM bs $ \(Named _ node ni,bv) -> case bv of
       Prim _ (PrimLit (LString bn)) -> do
         vt' <- lookupAndResolveTy node
-        return $ Just (bn,(Var node,ni,vt'))
+        return $ Just (FieldKey bn,(Var node,ni,vt'))
       _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
     case sequence pmapM of
       Just pmap -> validateSchema sch partial (M.fromList pmap) >>= \pm ->
@@ -316,7 +317,7 @@ applySchemas Pre ast = case ast of
     -- Given map of object text key to (value,key id,value ty) ...
     -- (returns partial keys list if subset of specified)
     validateSchema :: UserType -> SchemaPartial
-                   -> M.Map Text (AST Node, TcId, Type UserType) -> TC (Maybe (Set Text))
+                   -> M.Map FieldKey (AST Node, TcId, Type UserType) -> TC (Maybe (Set Text))
     validateSchema sch partial pmap = do
       -- smap: lookup from field name to ty
       let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
@@ -324,7 +325,7 @@ applySchemas Pre ast = case ast of
           filterPartial AnySubschema = id
           filterPartial (PartialSchema ks) = (`M.restrictKeys` ks)
       -- over each object field ...
-      pks <- fmap (Set.fromList . concat) $ forM (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
+      pks <- fmap (Set.fromList . concat) $ forM (M.toList pmap) $ \(FieldKey k,(v,ki,vty)) -> case M.lookup k smap of
         -- validate field exists ...
         Nothing -> do
           addFailure ki $ "Invalid field in schema object: " ++ show k ++ ", expected " ++ show (M.keys smap)
@@ -711,7 +712,7 @@ scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> T
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
-    (TList ts@(_:_) _ _) -> mapM toAST ts -- verifies non-empty body.
+    (TList ts _ _) | not (V.null ts) -> mapM toAST (V.toList ts) -- verifies non-empty body.
     _ -> die i "Malformed def body"
 
 pfx :: Text -> Text -> Text
@@ -901,7 +902,7 @@ toAST (TApp Term.App{..} _) = do
 toAST TBinding {..} = do
   bi <- freshId _tInfo (pack $ show _tBindType)
   bn <- trackIdNode bi
-  bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
+  bs <- forM _tBindPairs $ \(BindPair (Arg n t ai) v) -> do
     aid <- freshId ai (pfx (pack $ show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
     an <- trackNode t' aid
@@ -925,15 +926,14 @@ toAST TBinding {..} = do
 
 toAST TList {..} = do
   ty <- TyList <$> traverse toUserType _tListType
-  List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST _tList
+  List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST (V.toList _tList)
 toAST (TObject Term.Object {..} _) = do
   debug $ "TObject: " ++ show _oObjectType
   ty <- TySchema TyObject <$> traverse toUserType _oObjectType <*> pure FullSchema
   Object <$> (trackNode ty =<< freshId _oInfo "object")
-    <*> mapM (\(k,v) -> (k,) <$> toAST v) _oObject
+    <*> mapM toAST _oObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
 toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
-toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType

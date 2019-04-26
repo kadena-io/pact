@@ -43,6 +43,7 @@ import Data.Serialize (Serialize)
 import Control.DeepSeq (NFData)
 
 import Pact.Types.Exp
+import Pact.Types.PactValue
 import Pact.Types.Parser
 import Pact.Types.Info
 
@@ -72,8 +73,6 @@ expr = do
     ]
 {-# INLINE expr #-}
 
--- TODO As number parsing is a solved problem, consider something like:
--- http://hackage.haskell.org/package/megaparsec-7.0.0/docs/Text-Megaparsec-Char-Lexer.html#v:float
 number :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m Literal
 number = do
   -- Tricky: note that we use `char :: CharParsing m => Char -> m Char` rather
@@ -139,8 +138,8 @@ instance A.ToJSON ParsedDecimal where
 
 
 -- | JSON serialization for 'readInteger' and public meta info;
--- accepts both a String version (parsed as a Pact integer) or
--- a Number.
+-- accepts both a String version (parsed as a Pact integer),
+-- a Number, or a PactValue { "int": ... } integer
 newtype ParsedInteger = ParsedInteger Integer
   deriving (Eq,Show,Ord,Num,Real,Enum,Integral,Generic,NFData,Serialize)
 instance A.FromJSON ParsedInteger where
@@ -149,9 +148,14 @@ instance A.FromJSON ParsedInteger where
                         Right (LInteger i) -> return i
                         _ -> fail $ "Failure parsing integer string: " ++ show s
   parseJSON (A.Number n) = return $ ParsedInteger (round n)
+  parseJSON v@A.Object{} = A.parseJSON v >>= \i -> case i of
+    PLiteral (LInteger li) -> return $ ParsedInteger li
+    _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
 instance A.ToJSON ParsedInteger where
   toJSON (ParsedInteger i) = A.Number (fromIntegral i)
+
+
 
 
 -- | "Production" parser: atto, parse multiple exps.

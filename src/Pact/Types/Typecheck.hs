@@ -49,7 +49,6 @@ import Data.Default
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Control.Monad.State
-import Data.Aeson hiding (Object)
 import Data.Foldable
 
 import Pact.Types.Lang hiding (App,Object)
@@ -171,13 +170,11 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
 -- | Storage for literal values.
 data PrimValue =
   PrimLit Literal |
-  PrimGuard Guard |
-  PrimValue Value
+  PrimGuard Guard
   deriving (Eq,Show)
 instance Pretty PrimValue where
   pretty (PrimLit   l) = viaShow l
   pretty (PrimGuard k) = viaShow k
-  pretty (PrimValue v) = viaShow v
 
 
 -- | A top-level module production.
@@ -321,7 +318,7 @@ data AST n =
   } |
   Object {
   _aNode :: n,
-  _aObject :: [(FieldKey,AST n)]
+  _aObject :: ObjectMap (AST n)
   } |
   Prim {
   _aNode :: n,
@@ -350,10 +347,7 @@ instance Pretty t => Pretty (AST t) where
      Var {..} -> pn
      Object {..} -> sep
        [ pn
-       , bracesSep
-         [ indent 2 $ vsep $ _aObject <&> \(k,v) ->
-           pretty k <> sep [ ":", indent 4 (pretty v) ]
-         ]
+       , pretty _aObject
        ]
      List {..} -> sep
        [ pn

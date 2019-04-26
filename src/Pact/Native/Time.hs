@@ -92,7 +92,7 @@ timeDef = defRNative "time" time
     time i [TLitString s] =
       case parseTime defaultTimeLocale simpleISO8601 (unpack s) of
         Nothing -> evalError' i $
-          "Invalid time, expecting '" <> pretty simpleISO8601 <> "': " <> pretty s
+          "Invalid time, expecting '" <> prettyString simpleISO8601 <> "': " <> pretty s
         Just t -> return (tLit (LTime t))
     time i as = argsError i as
 

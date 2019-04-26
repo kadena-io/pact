@@ -60,12 +60,11 @@ addDef = defRNative "+" plus plusTy
       (a <> b)
       (if aty == bty then aty else TyAny)
       def
-    plus _ [TObject (Object as aty _) _,TObject (Object bs bty _) _] =
-      let reps (a,b) = (renderCompactText a,(a,b))
-          mapit = M.fromList . map reps
-      in return $ (`TObject` def) $ Object
-           (M.elems $ M.union (mapit as) (mapit bs))
+    plus _ [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
+      return $ (`TObject` def) $ Object
+           (ObjectMap $ M.union as bs)
            (if aty == bty then aty else TyAny)
+           def
            def
     plus i as = binop' (+) (+) i as
     {-# INLINE plus #-}
@@ -322,7 +321,7 @@ binop :: (Decimal -> Decimal -> Either String Decimal) ->
        (Integer -> Integer -> Either String Integer) -> RNativeFun e
 binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
   let hdl (Right v) = return $ toTerm v
-      hdl (Left err) = evalError' fi $ pretty err <> ": " <> pretty (a,b)
+      hdl (Left err) = evalError' fi $ prettyString err <> ": " <> pretty (a,b)
   case (a,b) of
     (LInteger i,LInteger j) -> hdl (i `iop` j)
     (LDecimal i,LDecimal j) -> hdl (i `dop` j)

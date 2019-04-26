@@ -74,7 +74,6 @@ import Pact.Native
 import Pact.Repl.Lib
 import Pact.Types.Logger
 import Pact.Repl.Types
-import Pact.Types.Hash
 import Pact.Gas
 
 -- | for use in GHCI
@@ -105,7 +104,7 @@ initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
   return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0)
-    def def mv repldb def initialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv) def
+    def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv) def
 
 
 spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
@@ -188,7 +187,7 @@ pureEval ei e = do
   (ReplState evalE evalS _ _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
-                 Left (SomeException ex) -> (Left (PactError EvalError def def (pretty (show ex))),evalS)
+                 Left (SomeException ex) -> (Left (PactError EvalError def def (prettyString (show ex))),evalS)
                  Right v -> v
   mode <- use rMode
   case r of

@@ -43,40 +43,43 @@ module Pact.Native
     , atDef
     ) where
 
+import Control.Arrow hiding (app)
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
-import Control.Monad.Reader (asks)
 import Control.Monad.Catch
-
+import Control.Monad.IO.Class
+import Control.Monad.Reader (asks)
+import Data.Aeson hiding ((.=),Object)
+import qualified Data.Attoparsec.Text as AP
+import Data.ByteString.Lazy (toStrict)
 import Data.Char (isHexDigit, digitToInt)
 import Data.Default
-import qualified Data.Attoparsec.Text as AP
-import Prelude
-import qualified Data.HashMap.Strict as M
-import qualified Data.Text as T (isInfixOf, length, all, splitOn, null, append, unpack, singleton)
-import Safe hiding (atDef)
-import Control.Arrow hiding (app)
 import Data.Foldable
-import Data.Aeson hiding ((.=),Object)
+import qualified Data.HashMap.Strict as HM
 import Data.List
-import Data.Function (on)
-import Data.ByteString.Lazy (toStrict)
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
+import qualified Data.Text as T
 import Data.Text.Encoding
+import qualified Data.Vector as V
+import qualified Data.Vector.Algorithms.Intro as V
+import Prelude
 
 
 import Pact.Eval
+import Pact.Native.Capabilities
 import Pact.Native.Db
 import Pact.Native.Internal
-import Pact.Native.Time
-import Pact.Native.Ops
 import Pact.Native.Keysets
-import Pact.Native.Capabilities
+import Pact.Native.Ops
 import Pact.Native.SPV
-import Pact.Types.Runtime
+import Pact.Native.Time
 import Pact.Parse
-import Pact.Types.Version
 import Pact.Types.Hash
+import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
+import Pact.Types.Runtime
+import Pact.Types.Version
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -91,11 +94,11 @@ natives = [
 
 
 -- | Production native modules as a dispatch map.
-nativeDefs :: M.HashMap Name Ref
+nativeDefs :: HM.HashMap Name Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
-moduleToMap :: NativeModule -> M.HashMap Name Ref
-moduleToMap = M.fromList . map (((`Name` def) . asString) *** Direct) . snd
+moduleToMap :: NativeModule -> HM.HashMap Name Ref
+moduleToMap = HM.fromList . map (((`Name` def) . asString) *** Direct) . snd
 
 
 lengthDef :: NativeDef
@@ -176,7 +179,7 @@ formatDef =
                 foldl'
                   (\r (e,t) -> r <> rep e <> t)
                   (head parts)
-                  (zip es (tail parts))
+                  (zip (V.toList es) (tail parts))
     format i as = argsError i as
 
 strToIntDef :: NativeDef
@@ -191,15 +194,16 @@ strToIntDef = defRNative "str-to-int" strToInt
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   ["(hash \"hello\")", "(hash { 'foo: 1 })"]
-  "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
-  \converted using their JSON representation."
+  "Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. \
+  \Strings are converted directly while other values are \
+  \converted using their JSON representation. Non-value-level arguments are not allowed."
   where
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ encodeUtf8 s
-      [a'] -> go $ toStrict $ encode a'
+      [a'] -> enforcePactValue a' >>= \pv -> go $ toStrict $ encode pv
       _ -> argsError i as
-      where go = return . tStr . asString . hash
+      where go = return . tStr . asString . pactHash
 
 ifDef :: NativeDef
 ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
@@ -302,7 +306,7 @@ chainDataDef = defRNative "chain-data" chainData (funType obj [])
           (ParsedDecimal gp) = _pmGasPrice
 
       pure $ toTObject TyAny def
-        [ ("chain-id"    , toTerm _pdChainId    )
+        [ ("chain-id"    , toTerm _pmChainId    )
         , ("block-height", toTerm _pdBlockHeight)
         , ("block-time"  , toTerm _pdBlockTime  )
         , ("sender"      , toTerm _pmSender     )
@@ -420,7 +424,7 @@ langDefs =
      [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
-     \List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type."
+     \List -> list, Object -> object."
 
 
     ,defRNative "tx-hash" txHash (funType tTyString []) ["(tx-hash)"]
@@ -508,7 +512,7 @@ map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
 map' i as = argsError' i as
 
 list :: RNativeFun e
-list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here
+list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set type here
 
 makeList :: RNativeFun e
 makeList i [TLitInteger len,value] = case typeof value of
@@ -517,7 +521,7 @@ makeList i [TLitInteger len,value] = case typeof value of
 makeList i as = argsError i as
 
 reverse' :: RNativeFun e
-reverse' _ [l@TList{}] = return $ over tList reverse l
+reverse' _ [l@TList{}] = return $ over tList V.reverse l
 reverse' i as = argsError i as
 
 fold' :: NativeFun e
@@ -530,64 +534,70 @@ fold' i as = argsError' i as
 
 filter' :: NativeFun e
 filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls lt _ -> ((\b' -> TList b' lt def) . concat) <$>
-                         forM ls (\a' -> do
+           TList ls lt _ -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
                            t <- apply (_tApp app) [a']
                            case t of
-                             (TLiteral (LBool True) _) -> return [a']
-                             _ -> return []) -- hmm, too permissive here, select is stricter
+                             (TLiteral (LBool bo) _) -> return bo
+                             _ -> return False -- hmm, too permissive here, select is stricter
            t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
 filter' i as = argsError' i as
 
 length' :: RNativeFun e
 length' _ [TList ls _ _] = return $ toTerm (length ls)
 length' _ [TLitString s] = return $ toTerm (T.length s)
-length' _ [TObject (Object ps _ _) _] = return $ toTerm (length ps)
+length' _ [TObject (Object ps _ _ _) _] = return $ toTerm (length ps)
 length' i as = argsError i as
 
 take' :: RNativeFun e
-take' _ [TLitInteger c',TList l t _] = return $ TList (tord take c' l) t def
-take' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tord take c' (unpack l)
-take' _ [TList {..},TObject Object {..} _] = asKeyList _tList >>= \l ->
-  return $ toTObject _oObjectType def $ (`filter` _oObject) $ \(k,_) -> elem k l
+take' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.take c' l) t def
+take' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tordL take c' (unpack l)
+take' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList >>= \l ->
+  return $ toTObjectMap oTy def $ ObjectMap $ M.restrictKeys o l
 
 take' i as = argsError i as
 
 drop' :: RNativeFun e
-drop' _ [TLitInteger c',TList l t _] = return $ TList (tord drop c' l) t def
-drop' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tord drop c' (unpack l)
-drop' _ [TList {..},TObject Object {..} _] = asKeyList _tList >>= \l ->
-  return $ toTObject _oObjectType def $ (`filter` _oObject) $ \(k,_) -> not $ elem k l
+drop' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.drop c' l) t def
+drop' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tordL drop c' (unpack l)
+drop' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList >>= \l ->
+  return $ toTObjectMap oTy def $ ObjectMap $ M.withoutKeys o l
 drop' i as = argsError i as
 
-asKeyList :: [Term Name] -> Eval e [FieldKey]
-asKeyList = mapM $ \t -> case t of
+asKeyList :: V.Vector (Term Name) -> Eval e (S.Set FieldKey)
+asKeyList l = fmap (S.fromList . V.toList) . V.forM l $ \t -> case t of
   TLitString k -> return $ FieldKey k
   _ -> evalError (_tInfo t) "String required"
 
+-- | "take or drop" handling negative "take/drop from reverse"
+tord :: (l -> l) -> (Int -> l -> l) -> Integer -> l -> l
+tord rev f c' l | c' >= 0 = f (fromIntegral c') l
+                | otherwise = rev $ f (fromIntegral (negate c')) (rev l)
 
-tord :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
-tord f c' l | c' >= 0 = f (fromIntegral c') l
-            | otherwise = reverse $ f (fromIntegral (negate c')) (reverse l)
+tordV
+  :: (Int -> V.Vector a -> V.Vector a)
+     -> Integer -> V.Vector a -> V.Vector a
+tordV = tord V.reverse
+tordL :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
+tordL = tord reverse
 
 at' :: RNativeFun e
 at' _ [li@(TLitInteger idx),TList ls _ _] =
-    case ls `atMay` fromIntegral idx of
+    case ls V.!? fromIntegral idx of
       Just t -> return t
       Nothing -> evalError (_tInfo li) $ "at: bad index " <>
         pretty idx <> ", length " <> pretty (length ls)
-at' _ [idx,TObject (Object ls _ _) _] = lookupObj idx ls
+at' _ [idx,TObject (Object ls _ _ _) _] = lookupObj idx ls
 at' i as = argsError i as
 
-lookupObj :: Term n -> [(FieldKey, Term n)] -> Eval m (Term n)
-lookupObj t@(TLitString idx) ls = case lookup (FieldKey idx) ls of
+lookupObj :: Term n -> ObjectMap (Term n) -> Eval m (Term n)
+lookupObj t@(TLitString idx) (ObjectMap ls) = case M.lookup (FieldKey idx) ls of
   Just v -> return v
   Nothing -> evalError (_tInfo t) $ "key not found in object: " <> pretty idx
 lookupObj t _ = evalError (_tInfo t) $ "object lookup only supported with strings"
 
 remove :: RNativeFun e
-remove _ [TLitString key,TObject (Object ps t _) _] = return $ (`TObject` def) $
-  Object (filter (\(k,_) -> FieldKey key /= k) ps) t def
+remove _ [TLitString key,TObject (Object (ObjectMap ps) t _ _) _] =
+  return $ toTObjectMap t def $ ObjectMap $ M.delete (FieldKey key) ps
 remove i as = argsError i as
 
 compose :: NativeFun e
@@ -601,8 +611,8 @@ compose i as = argsError' i as
 
 
 readMsg :: RNativeFun e
-readMsg i [TLitString key] = parseMsgKey i "read-msg" key
-readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
+readMsg i [TLitString key] = fromPactValue <$> parseMsgKey i "read-msg" key
+readMsg i [] = fromPactValue <$> parseMsgKey' i "read-msg" Nothing
 readMsg i as = argsError i as
 
 
@@ -622,9 +632,9 @@ bind i as@[src,TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $
   reduce src >>= bindObjectLookup >>= bindReduce ps bd bi
 bind i as = argsError' i as
 
-bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Ref))
-bindObjectLookup (TObject (Object o _ _) _) =
-  return $ \s -> M.lookup s $ M.fromList $ map (asString *** liftTerm) o
+bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
+bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
+  return $ \s -> M.lookup (FieldKey s) o
 bindObjectLookup t = evalError (_tInfo t) $
   "bind: expected object: " <> pretty t
 
@@ -635,15 +645,16 @@ typeof'' i as = argsError i as
 listModules :: RNativeFun e
 listModules _ _ = do
   mods <- view $ eeRefStore.rsModules
-  return $ toTermList tTyString $ map asString $ M.keys mods
+  return $ toTermList tTyString $ map asString $ HM.keys mods
 
 yield :: RNativeFun e
-yield i [t@TObject {}] = do
+yield i [t@(TObject (Object o _ _ _) _)] = do
   eym <- use evalPactExec
   case eym of
     Nothing -> evalError' i "Yield not in defpact context"
     Just {} -> do
-      (evalPactExec . _Just . peYield) .= Just t
+      o' <- enforcePactValue' o
+      (evalPactExec . _Just . peYield) .= Just o'
       return t
 yield i as = argsError i as
 
@@ -652,7 +663,7 @@ resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
   rm <- asks $ firstOf $ eePactStep . _Just . psResume . _Just
   case rm of
     Nothing -> evalError' i "Resume: no yielded value in context"
-    Just rval -> bindObjectLookup rval >>= bindReduce ps bd bi
+    Just rval -> bindObjectLookup (toTObjectMap TyAny def rval) >>= bindReduce ps bd bi
 resume i as = argsError' i as
 
 where' :: NativeFun e
@@ -663,35 +674,29 @@ where' i as = argsError' i as
 
 
 sort' :: RNativeFun e
-sort' _ [l@(TList [] _ _)] = pure l
-sort' _ [TList{..}] = case nub (map typeof _tList) of
-  [ty] -> case ty of
-    Right rty@(TyPrim pty) -> case pty of
-      TyValue -> badTy ty
-      TyGuard{} -> badTy ty
-      _ -> do
-        sl <- forM _tList $ \e -> case firstOf tLiteral e of
-          Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " <> pretty e
-          Just lit -> return (lit,e)
-        return $ TList (map snd $ sortBy (compare `on` fst) sl) rty def
-    _ -> badTy ty
-  ts -> evalError _tInfo $ "sort: non-uniform list: " <> bracketsSep (fmap renderMsgOrTm ts)
-  where renderMsgOrTm = either pretty pretty
-        badTy msgOrTm = evalError _tInfo $ "sort: bad list type: " <> renderMsgOrTm msgOrTm
-sort' _ [fields@TList{},l@TList{}]
-  | null (_tList fields) = evalError (_tInfo fields) "Empty fields list"
+sort' _ [l@(TList v _ _)] | V.null v = pure l
+sort' _ [TList{..}] = liftIO $ do
+  m <- V.thaw _tList
+  (`V.sortBy` m) $ \x y -> case (x,y) of
+    (TLiteral xl _,TLiteral yl _) -> xl `compare` yl
+    _ -> EQ
+  toTListV _tListType def <$> V.freeze m
+sort' _ [TList fields _ fi,l@(TList vs lty _)]
+  | V.null fields = evalError fi "Empty fields list"
+  | V.null vs = return l
   | otherwise = do
-      sortPairs <- forM (_tList l) $ \el -> case firstOf tObject el of
-        Nothing -> evalError (_tInfo l) $ "Non-object found: " <> pretty el
-        Just o -> fmap ((,el) . reverse) $ (\f -> foldM f [] (_tList fields)) $ \lits fld -> do
-          v <- lookupObj fld (_oObject o)
-          case firstOf tLiteral v of
-            Nothing -> evalError (_tInfo l) $
-              "Non-literal found at field " <> pretty fld <>
-              ": " <> pretty el
-            Just lit -> return (lit:lits)
-      return $ TList (map snd $ sortBy (compare `on` fst) sortPairs) (_tListType l) def
-
+      fields' <- asKeyList fields
+      liftIO $ do
+        m <- V.thaw vs
+        (`V.sortBy` m) $ \x y -> case (x,y) of
+          (TObject (Object (ObjectMap xo) _ _ _) _,TObject (Object (ObjectMap yo) _ _ _) _) ->
+            let go field EQ = case (M.lookup field xo, M.lookup field yo) of
+                  (Just (TLiteral lx _), Just (TLiteral ly _)) -> lx `compare` ly
+                  _ -> EQ
+                go _ ne = ne
+            in foldr go EQ fields'
+          _ -> EQ
+        toTListV lty def <$> V.freeze m
 sort' i as = argsError i as
 
 
@@ -721,9 +726,8 @@ enforceVersion i as = case as of
 
 contains :: RNativeFun e
 contains _i [val,TList {..}] = return $ toTerm $ searchTermList val _tList
-contains _i [TLitString k,TObject (Object {..}) _] = return $ toTerm $ foldl search False _oObject
-  where search True _ = True
-        search _ (FieldKey t,_) = t == k
+contains _i [TLitString k,TObject (Object (ObjectMap o) _ _ _) _] =
+  return $ toTerm $ M.member (FieldKey k) o
 contains _i [TLitString s,TLitString t] = return $ toTerm $ T.isInfixOf s t
 contains i as = argsError i as
 

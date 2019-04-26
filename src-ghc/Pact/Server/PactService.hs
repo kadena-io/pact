@@ -19,12 +19,11 @@ import Control.Concurrent
 import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Reader
-import qualified Data.Map.Strict as M
-
 import Data.Aeson as A
 import Data.Int (Int64)
+import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe)
-import Data.Word (Word32, Word64)
+import Data.Word (Word64)
 
 import Pact.Gas
 import Pact.Interpreter
@@ -32,6 +31,7 @@ import Pact.Parse (ParsedDecimal(..))
 import Pact.Types.Command
 import Pact.Types.Gas
 import Pact.Types.Logger
+import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
@@ -44,7 +44,6 @@ initPactService CommandConfig {..} loggers = do
       klog s = logLog logger "INIT" s
       gasRate = fromMaybe 0 _ccGasRate
       gasModel = constGasModel (fromIntegral gasRate)
-      chainId = 0
       blockHeight = 0
       blockTime = 0
 
@@ -54,9 +53,9 @@ initPactService CommandConfig {..} loggers = do
         initSchema p
         return CommandExecInterface
           { _ceiApplyCmd = \eMode cmd ->
-              applyCmd logger _ccEntity p cmdVar gasModel chainId
+              applyCmd logger _ccEntity p cmdVar gasModel
                 blockHeight blockTime eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasModel chainId blockHeight blockTime }
+          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasModel blockHeight blockTime }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -67,15 +66,15 @@ initPactService CommandConfig {..} loggers = do
 
 
 applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState ->
-            GasModel -> Word32 -> Word64 -> Int64 -> ExecutionMode -> Command a ->
+            GasModel -> Word64 -> Int64 -> ExecutionMode -> Command a ->
             ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
-applyCmd _ _ _ _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
-applyCmd logger conf dbv cv gasModel cid bh bt exMode _ (ProcSucc cmd) = do
+applyCmd _ _ _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
+applyCmd logger conf dbv cv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
       gasEnv = GasEnv (fromIntegral $ _pmGasLimit pubMeta) (GasPrice gasPrice) gasModel
 
-  let pd = PublicData pubMeta cid bh bt
+  let pd = PublicData pubMeta bh bt
 
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv logger gasEnv pd) $ runPayload cmd
   case r of
@@ -96,17 +95,17 @@ exToTx Local = Nothing
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p CommandResult
 runPayload c@Command{..} = case (_pPayload _cmdPayload) of
-  Exec pm -> applyExec (cmdToRequestKey c) pm c
-  Continuation ym -> applyContinuation (cmdToRequestKey c) ym c
+  Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) pm
+  Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) ym
 
 
-applyExec :: RequestKey -> ExecMsg ParsedCode -> Command a -> CommandM p CommandResult
-applyExec rk (ExecMsg parsedCode edata) Command{..} = do
+applyExec :: RequestKey -> PactHash -> [Signer] -> ExecMsg ParsedCode -> CommandM p CommandResult
+applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
-  let sigs = userSigsToPactKeySet _cmdSigs
-      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing _cmdHash)
+  let sigs = userSigsToPactKeySet signers
+      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing (toUntypedHash hsh))
         refStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec _erInput) _erExec
@@ -125,8 +124,8 @@ handlePactExec (Right em) pe = do
   return $ Just pe
 
 
-applyContinuation :: RequestKey -> ContMsg -> Command a -> CommandM p CommandResult
-applyContinuation rk msg@ContMsg{..} Command{..} = do
+applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p CommandResult
+applyContinuation rk hsh signers msg@ContMsg{..} = do
   env@CommandEnv{..} <- ask
   case _ceMode of
     Local -> throwCmdEx "Local continuation exec not supported"
@@ -144,10 +143,10 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
                  ++ show _cmStep ++ " but expected " ++ show (_peStep + 1)
 
           -- Setup environment and get result
-          let sigs = userSigsToPactKeySet _cmdSigs
-              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId _peYield
+          let sigs = userSigsToPactKeySet signers
+              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactValue) _peYield)
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                        (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
+                        (MsgData sigs _cmData pactStep (toUntypedHash hsh)) _csRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
           res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
 

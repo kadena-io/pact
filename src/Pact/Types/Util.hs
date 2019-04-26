@@ -14,7 +14,21 @@
 --
 -- Utility types and functions.
 --
-module Pact.Types.Util where
+module Pact.Types.Util
+  ( ParseText(..)
+  , fromText, fromText'
+  , lensyToJSON, lensyParseJSON
+  , unsafeFromJSON, outputJSON
+  , fromJSON'
+  , parseB16JSON, parseB16Text, parseB16TextOnly
+  , toB16JSON, toB16Text
+  , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
+  , parseB64UrlUnpaddedText, toB64UrlUnpaddedText
+  , AsString(..), asString'
+  , tShow, maybeDelim
+  , modifyMVar', modifyingMVar, useMVar
+  , failMaybe, maybeToEither
+  ) where
 
 import Data.Aeson
 import Data.Aeson.Types
@@ -22,17 +36,16 @@ import GHC.Generics
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
+import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Char
+import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty)
-import Control.DeepSeq
-import Data.Hashable (Hashable)
-import Data.Serialize (Serialize)
-import qualified Data.Serialize as S
-import Pact.Types.Pretty
+
+
 
 
 class ParseText a where
@@ -54,9 +67,6 @@ fromText' = resultToEither . fromText
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
 
-lensyOptions :: Int -> Options
-lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
-
 lensyToJSON
   :: (Generic a, GToJSON Zero (Rep a)) => Int -> a -> Value
 lensyToJSON n = genericToJSON (lensyOptions n)
@@ -65,52 +75,37 @@ lensyParseJSON
   :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
 lensyParseJSON n = genericParseJSON (lensyOptions n)
 
-newtype Hash = Hash { unHash :: ByteString }
-  deriving (Eq, Ord, Generic, Hashable)
-instance Show Hash where
-  show (Hash h) = show $ B16.encode h
-instance Pretty Hash where
-  pretty = pretty . asString
-instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
-instance NFData Hash
-
-
--- NB: this hash is also used for the bloom filter, which needs 32bit keys
--- if you want to change this, you need to retool the bloom filter as well
--- So long as this is divisible by 4 you're fine
-hashLengthAsBS :: Int
-hashLengthAsBS = 64
-
-hashLengthAsBase16 :: Int
-hashLengthAsBase16 = hashLengthAsBS * 2
-
-instance Serialize Hash where
-  put (Hash h) = S.put h
-  get = do
-    raw <- S.get >>= S.getByteString
-    if hashLengthAsBS == B.length raw
-      then return $ Hash raw
-      else fail $ "Unable to decode hash, wrong length: "
-                ++ show (B.length raw)
-                ++ " from original bytestring " ++ show raw
-
-hashToB16Text :: Hash -> Text
-hashToB16Text (Hash h) = toB16Text h
-
-instance ToJSON Hash where
-  toJSON = String . hashToB16Text
-instance FromJSON Hash where
-  parseJSON = withText "Hash" parseText
-  {-# INLINE parseJSON #-}
-instance ParseText Hash where
-  parseText s = Hash <$> parseB16Text s
-  {-# INLINE parseText #-}
+lensyOptions :: Int -> Options
+lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 
 lensyConstructorToNiceJson :: Int -> String -> String
 lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
   where
     firstToLower (c:cs) = toLower c : cs
-    firstToLower _ = error "You've managed to screw up the drop number or the field name"
+    firstToLower _ = error $ "lensyConstructorToNiceJson: bad arguments: " ++ show (n,fieldName)
+
+encodeBase64UrlUnpadded :: ByteString -> ByteString
+encodeBase64UrlUnpadded = fst . B.spanEnd (== equalWord8) . B64URL.encode
+
+decodeBase64UrlUnpadded :: ByteString -> Either String ByteString
+decodeBase64UrlUnpadded = B64URL.decode . pad
+  where pad t = let s = B.length t `mod` 4 in t <> B.replicate ((4 - s) `mod` 4) equalWord8
+
+equalWord8 :: Word8
+equalWord8 = toEnum $ fromEnum '='
+
+parseB64UrlUnpaddedText :: Text -> Parser ByteString
+parseB64UrlUnpaddedText t = case decodeBase64UrlUnpadded (encodeUtf8 t) of
+  Right s -> return s
+  Left e -> fail $ "Base64URL decode failed: " ++ e
+{-# INLINE parseB64UrlUnpaddedText #-}
+
+toB64UrlUnpaddedText :: ByteString -> Text
+toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
+
+
+
+
 
 parseB16JSON :: Value -> Parser ByteString
 parseB16JSON = withText "Base16" parseB16Text
@@ -149,11 +144,15 @@ outputJSON a = BSL8.putStrLn $ encode a
 
 -- | Provide unquoted string representation.
 class AsString a where asString :: a -> Text
+
 instance AsString String where asString = pack
 instance AsString Text where asString = id
 instance AsString B.ByteString where asString = asString . decodeUtf8
 instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
 instance AsString Integer where asString = pack . show
+
+asString' :: AsString a => a -> String
+asString' = unpack . asString
 
 -- | Pure version of 'modifyMVar_'
 modifyMVar' :: MVar a -> (a -> a) -> IO ()
@@ -170,13 +169,10 @@ useMVar :: MVar s -> Getting a s a -> IO a
 useMVar e l = view l <$> readMVar e
 {-# INLINE useMVar #-}
 
+-- | Text-y show
 tShow :: Show a => a -> Text
 tShow = pack . show
 
-
-asString' :: AsString a => a -> String
-asString' = unpack . asString
-
-
+-- | Show with prepended delimter if not 'Nothing'
 maybeDelim :: Show a => String -> Maybe a -> String
 maybeDelim d t = maybe "" ((d ++) . show) t

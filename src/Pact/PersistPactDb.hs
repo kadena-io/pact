@@ -42,6 +42,7 @@ import GHC.Generics
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Persist as P
@@ -75,7 +76,7 @@ instance Pretty UserTableInfo where
     [ "module: " <> pretty mod'
     ]
 
-instance PactValue UserTableInfo
+instance PactDbValue UserTableInfo where prettyPactDbValue = pretty
 instance FromJSON UserTableInfo
 instance ToJSON UserTableInfo
 
@@ -190,7 +191,7 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn Namespaces = TxTable namespacesTable
     tn (UserTables t) = userTxRecord t
     convLog tl = case fromJSON (_txValue tl) of
-      Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> pretty s
+      Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
       Success v -> return $ set txValue v tl
 {-# INLINE getLogs #-}
 
@@ -207,15 +208,15 @@ rollback = do
     Right _ -> return ()
   resetTemp
 
-readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (Columns Persistable))
+readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (ObjectMap PactValue))
 readUserTable e t k = runMVState e $ readUserTable' t k
 {-# INLINE readUserTable #-}
 
-readUserTable' :: TableName -> RowKey -> MVState p (Maybe (Columns Persistable))
+readUserTable' :: TableName -> RowKey -> MVState p (Maybe (ObjectMap PactValue))
 readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ asString k)
 {-# INLINE readUserTable' #-}
 
-readSysTable :: PactValue v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
+readSysTable :: PactDbValue v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
 readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t (DataKey k)
 {-# INLINE readSysTable #-}
 
@@ -223,7 +224,7 @@ resetTemp :: MVState p ()
 resetTemp = txRecord .= M.empty >> txId .= Nothing
 {-# INLINE resetTemp #-}
 
-writeSys :: (AsString k,PactValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
+writeSys :: (AsString k,PactDbValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
 writeSys s wt tbl k v = runMVState s $ do
   debug "writeSys" (tbl,asString k)
   doPersist $ \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) v
@@ -231,7 +232,7 @@ writeSys s wt tbl k v = runMVState s $ do
 
 {-# INLINE writeSys #-}
 
-writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> Columns Persistable -> IO ()
+writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> ObjectMap PactValue -> IO ()
 writeUser s wt tn rk row = runMVState s $ do
   let ut = userDataTable tn
       tt = userTxRecord tn
@@ -242,7 +243,7 @@ writeUser s wt tn rk row = runMVState s $ do
         doPersist $ \p -> writeValue p ut Insert rk' row
         finish row
       upd oldrow = do
-        let row' = Columns (M.union (_columns row) (_columns oldrow))
+        let row' = ObjectMap (M.union (_objectMap row) (_objectMap oldrow))
         doPersist $ \p -> writeValue p ut Update rk' row'
         finish row'
       finish row' = record tt rk row'
@@ -255,7 +256,7 @@ writeUser s wt tn rk row = runMVState s $ do
     (Nothing,Update) -> throwDbError $ "Update: no row found for key " <> pretty rk
 {-# INLINE writeUser #-}
 
-record :: (AsString k, PactValue v) => TxTable -> k -> v -> MVState p ()
+record :: (AsString k, PactDbValue v) => TxTable -> k -> v -> MVState p ()
 record tt k v = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
 {-# INLINE record #-}
 

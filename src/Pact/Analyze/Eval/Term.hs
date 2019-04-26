@@ -49,6 +49,7 @@ import           GHC.TypeLits
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
+import qualified Pact.Types.PactValue        as Pact
 import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Pretty           (renderCompactString', pretty)
 import           Pact.Types.Runtime          (tShow)
@@ -637,7 +638,7 @@ evalTerm = \case
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
 
   Hash value -> do
-    let sHash = literalS . Str . T.unpack . Pact.asString . Pact.hash
+    let sHash = literalS . Str . T.unpack . Pact.asString . Pact.pactHash
         notStaticErr :: AnalyzeFailure
         notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of
@@ -649,7 +650,7 @@ evalTerm = \case
       -- Everything else is hashed by first converting it to JSON:
       Some SInteger tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
-        Just int -> pure $ sHash $ toStrict $ Aeson.encode int
+        Just int -> pure $ sHash $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger int
       Some SBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool

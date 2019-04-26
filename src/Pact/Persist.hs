@@ -9,7 +9,7 @@ module Pact.Persist
   (Persist,
    Table(..),DataTable,TxTable,
    TableId(..),tableId,
-   PactKey,PactValue,
+   PactDbKey,PactDbValue(..),
    DataKey(..),TxKey(..),
    KeyCmp(..),cmpToOp,
    KeyConj(..),conjToOp,
@@ -24,6 +24,7 @@ import Data.String
 import Data.Hashable
 import Data.Typeable
 
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -113,21 +114,25 @@ compileQuery keyfield (Just kq) = ("WHERE " <> qs,pms)
 {-# INLINE compileQuery #-}
 
 
-class (Ord k,Show k,Eq k,Hashable k,Pretty k) => PactKey k
-instance PactKey TxKey
-instance PactKey DataKey
+class (Ord k,Show k,Eq k,Hashable k,Pretty k) => PactDbKey k
+instance PactDbKey TxKey
+instance PactDbKey DataKey
 
-class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v,Pretty v) => PactValue v
-instance PactValue v => PactValue (TxLog v)
-instance PactValue (Columns Persistable)
-instance PactValue a => PactValue [a]
-instance PactValue (ModuleDef Name)
-instance PactValue KeySet
-instance PactValue Value
-instance PactValue Namespace
+class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactDbValue v where
+  prettyPactDbValue :: v -> Doc
+
+instance PactDbValue v => PactDbValue (TxLog v) where
+  prettyPactDbValue = pretty . fmap (SomeDoc . prettyPactDbValue)
+instance PactDbValue (ObjectMap PactValue)    where prettyPactDbValue = pretty
+instance PactDbValue a => PactDbValue [a]       where
+  prettyPactDbValue = prettyList . fmap (SomeDoc . prettyPactDbValue)
+instance PactDbValue (ModuleDef Name)         where prettyPactDbValue = pretty
+instance PactDbValue KeySet                   where prettyPactDbValue = pretty
+instance PactDbValue Value                    where prettyPactDbValue = pretty
+instance PactDbValue Namespace                where prettyPactDbValue = pretty
 
 data Persister s = Persister {
-  createTable :: forall k . PactKey k => Table k -> Persist s ()
+  createTable :: forall k . PactDbKey k => Table k -> Persist s ()
   ,
   -- | Boolean argument to indicate if this is "transactional for real":
   -- local execution mode starts a tx knowing full well it will roll back.
@@ -138,13 +143,13 @@ data Persister s = Persister {
   ,
   rollbackTx :: Persist s ()
   ,
-  queryKeys :: forall k . PactKey k => Table k -> Maybe (KeyQuery k) -> Persist s [k]
+  queryKeys :: forall k . PactDbKey k => Table k -> Maybe (KeyQuery k) -> Persist s [k]
   ,
-  query :: forall k v . (PactKey k, PactValue v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
+  query :: forall k v . (PactDbKey k, PactDbValue v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
   ,
-  readValue :: forall k v . (PactKey k, PactValue v) => Table k -> k -> Persist s (Maybe v)
+  readValue :: forall k v . (PactDbKey k, PactDbValue v) => Table k -> k -> Persist s (Maybe v)
   ,
-  writeValue :: forall k v . (PactKey k, PactValue v) => Table k -> WriteType -> k -> v -> Persist s ()
+  writeValue :: forall k v . (PactDbKey k, PactDbValue v) => Table k -> WriteType -> k -> v -> Persist s ()
   ,
   refreshConn :: Persist s ()
   }

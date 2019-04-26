@@ -11,6 +11,8 @@ References
 
 [Pact Homepage](http://kadena.io/pact)
 
+[Pact Tutorials](http://pactlang.org)
+
 [Pact Reference Docs](http://pact-language.readthedocs.io)
 
 [Pact Whitepaper](http://kadena.io/docs/Kadena-PactWhitepaper.pdf)
@@ -19,7 +21,7 @@ References
 Quick Start: Browser
 ---
 
-The easiest way to try Pact is [in the browser](http://kadena.io/try-pact).
+The easiest way to try Pact is [in the browser](http://pact.kadena.io).
 
 Quick Start: Atom
 ---
@@ -44,7 +46,7 @@ Installing Pact with Binary Distributions
 ---
 Pact can also be installed by following the instructions below:
 - Install [z3](https://github.com/Z3Prover/z3/wiki)
-- Download the [prebuilt binaries](http://kadena.io/pact/downloads.html) for your distribution. Or see [Building](#Building) for instructions on how to build Pact from the source code.
+- Download the [prebuilt binaries](http://install.kadena.io/pact/downloads.html) for your distribution. Or see [Building](#Building) for instructions on how to build Pact from the source code.
 - Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
 - Put the binary somewhere in your PATH.
 
@@ -201,6 +203,10 @@ function](https://github.com/kadena-io/pact/blob/master/default.nix#L12)
 replace `[p.pact]` with a list of all the locally defined projects to include.
 For example: `[p.backend p.common p.frontend]` for a project that has those
 three separate local packages.
+
+### z3 Troubleshooting
+
+Note for users of property and invariant verification: z3 version 4.8.4 hangs when checking `str-to-int` calls (this causes one test to fail). The fix is to use the older version 4.8.3, or a newer version in the future (4.8.4 is the latest release at time of writing). Our Nix install uses a working version. For non-Nix Mac users, `brew install` defaults to 4.8.4, but 4.8.3 can be installed via `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/a7e7806193f7605c7fef6110655911012d3f1eb3/Formula/z3.rb`. For non-brew users, binaries are available [on github](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.3) for manual installation (Pact uses the z3 in your `$PATH`).
 
 License
 ---

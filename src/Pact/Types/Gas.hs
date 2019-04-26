@@ -25,7 +25,7 @@ import Data.Word (Word64)
 import Pact.Types.Lang
 import Pact.Types.Persistence
 import Pact.Types.Pretty
-
+import Pact.Types.PactValue
 
 -- | Price per 'Gas' unit.
 newtype GasPrice = GasPrice Decimal
@@ -36,14 +36,14 @@ instance Pretty GasPrice where
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
 data ReadValue
-  = ReadData (Columns Persistable)
+  = ReadData (ObjectMap PactValue)
   | ReadKey RowKey
   | ReadTxId
 
 
 data GasArgs
   = GPostRead ReadValue
-  | GSelect (Maybe [(Info,ColumnId)]) (Term Ref) (Term Name)
+  | GSelect (Maybe [(Info,FieldKey)]) (Term Ref) (Term Name)
   | GSortFieldLookup Int
   | GUnreduced [Term Ref]
   | GWrite WriteType (Term Name) (Term Name)

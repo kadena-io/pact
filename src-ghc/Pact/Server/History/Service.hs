@@ -6,6 +6,10 @@
 module Pact.Server.History.Service
   ( initHistoryEnv
   , runHistoryService
+  , setupPersistence
+  , addNewKeys
+  , updateExistingKeys
+  , queryForResults
   ) where
 
 import Control.Lens hiding (Index)
@@ -95,17 +99,17 @@ addNewKeys :: [Command ByteString] -> HistoryService ()
 addNewKeys cmds = do
   pers <- use persistence
   let writeNewCmds newCmdsHM = do
-        newCmdsList <- return $ filter (\cmd -> HashMap.member (RequestKey $ _cmdHash cmd) newCmdsHM) cmds
+        newCmdsList <- return $ filter (\cmd -> HashMap.member (cmdToRequestKey cmd) newCmdsHM) cmds
         pactChan <- view inboundPactChannel
         liftIO $ writeInbound pactChan (TxCmds newCmdsList)
   case pers of
     InMemory m -> do
-      asHM <- return $ HashMap.fromList $! (\cmd -> (RequestKey $ _cmdHash cmd,(cmd, Nothing))) <$> cmds
+      asHM <- return $ HashMap.fromList $! (\cmd -> (cmdToRequestKey cmd,(cmd, Nothing))) <$> cmds
       newCmdsHM <- return $ HashMap.difference asHM m
       writeNewCmds newCmdsHM
       persistence .= InMemory (HashMap.union m newCmdsHM)
     OnDisk{..} -> do
-      asHM <- return $ HashMap.fromList $! (\cmd -> (RequestKey $ _cmdHash cmd,cmd)) <$> cmds
+      asHM <- return $ HashMap.fromList $! (\cmd -> (cmdToRequestKey cmd,cmd)) <$> cmds
       notInMem <- return $ HashMap.difference asHM incompleteRequestKeys
       if HashMap.null notInMem
       -- unlikely but worth a O(1) check
@@ -235,7 +239,7 @@ _testHistoryDB = do
 _go :: HistoryService ()
 _go = do
   addNewKeys [Command "" [] initialHash]
-  let rq = RequestKey initialHash
+  let rq = RequestKey pactInitialHash
   updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null (Gas 0))])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)

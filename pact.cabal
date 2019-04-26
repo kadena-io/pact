@@ -46,6 +46,7 @@ library
                      , Pact.Server.Client
                      , Pact.Types.API
                      , Pact.Types.ChainMeta
+                     , Pact.Types.Codec
                      , Pact.Types.Command
                      , Pact.Types.Scheme
                      , Pact.Types.Exp
@@ -56,6 +57,7 @@ library
                      , Pact.Types.Lang
                      , Pact.Types.Logger
                      , Pact.Types.Native
+                     , Pact.Types.PactValue
                      , Pact.Types.Parser
                      , Pact.Types.Persistence
                      , Pact.Types.Pretty
@@ -143,6 +145,7 @@ library
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.9.0.0 && < 4.12
                      , base16-bytestring >=0.1.1.6 && < 0.2
+                     , base64-bytestring >= 1.0.0.1
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
                      , cereal >=0.5.4.0 && < 0.6
@@ -162,6 +165,7 @@ library
                      , old-locale >= 1.0.0.7 && < 1.1
                      , optparse-applicative >= 0.12.1.0 && < 0.15
                      , parsers >= 0.12.4 && < 0.13
+                     , reflection
                      , safe >= 0.3.11 && < 0.4
                      , scientific >= 0.3.4.9 && < 0.4
                      , semigroups >= 0.18.2 && < 0.19
@@ -174,6 +178,7 @@ library
                      , unordered-containers >= 0.2.7.2 && < 0.3
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.13
+                     , vector-algorithms >= 0.7
                      , vector-space >= 0.10.4 && < 0.14
                      , mmorph >= 1.1 && < 1.2
                      , constraints
@@ -279,6 +284,7 @@ test-suite hspec
               , hedgehog == 0.6.*
               , hw-hspec-hedgehog == 0.1.*
               , intervals
+              , vector
   other-modules:
                 Blake2Spec
                 KeysetSpec
@@ -309,3 +315,4 @@ test-suite hspec
       , Analyze.Translate
       , ClientSpec
       , SchemeSpec
+      , HistoryServiceSpec

@@ -31,8 +31,9 @@ import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
 import Pact.Types.Util (toB16JSON)
+import qualified Data.ByteString.Base16   as B16
 
-
+import Control.Exception
 import Data.Aeson
 import Test.Hspec
 import qualified Data.Text as T
@@ -82,11 +83,12 @@ startServer configFile = do
   asyncServer <- async runServer
   link2 asyncServer asyncCmd
   link2 asyncServer asyncHist
-  waitUntilStarted
+  waitUntilStarted 0
   return (asyncServer, asyncCmd, asyncHist)
 
-waitUntilStarted :: IO ()
-waitUntilStarted = do
+waitUntilStarted :: Int -> IO ()
+waitUntilStarted i | i > 10 = throwIO $ userError "waitUntilStarted: failing after 10 attempts"
+waitUntilStarted i = do
   mgr <- HTTP.newManager HTTP.defaultManagerSettings
   baseUrl <- _serverBaseUrl
   let clientEnv = mkClientEnv mgr baseUrl
@@ -95,7 +97,7 @@ waitUntilStarted = do
     Right _ -> pure ()
     Left _ -> do
       threadDelay 500
-      waitUntilStarted
+      waitUntilStarted (succ i)
 
 stopServer :: (Async (), Async (), Async ()) -> IO ()
 stopServer (asyncServer, asyncCmd, asyncHist) = do
@@ -147,15 +149,20 @@ flushDb = mapM_ deleteIfExists _logFiles
 genKeys :: IO SomeKeyPair
 genKeys = genKeyPair defaultScheme
 
+-- Note: some randomly-generated keys were failing so using static one here
 genKeysEth :: IO SomeKeyPair
-genKeysEth = genKeyPair (toScheme ETH)
+genKeysEth = return k
+  where k = either error id $ importKeyPair (toScheme ETH) (Just $ pub) priv
+        pub = PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
+        priv = PrivBS $ getByteString "208065a247edbe5df4d86fbdc0171303f23a76961be9f6013850dd2bdc759bbb"
+        getByteString = fst . B16.decode
 
 formatPubKeyForCmd :: SomeKeyPair -> Value
 formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
 
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
-makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect
+makeCheck c@Command{..} isFailure expect = ApiResultCheck (cmdToRequestKey c) isFailure expect
 
 checkResult :: Bool -> Maybe Value -> Maybe ApiResult -> Expectation
 checkResult isFailure expect result =
@@ -223,7 +230,7 @@ pactWithRollbackCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
             (defpact tester ()
               (step-with-rollback "step 0" "rollback 0")
               (step-with-rollback "step 1" "rollback 1")
-              (step-with-rollback "step 2" "rollback 2")))
+              (step               "step 2")))
             |]
 
 pactWithRollbackErrCode :: String -> T.Text
@@ -234,7 +241,7 @@ pactWithRollbackErrCode moduleName = T.concat [begCode, T.pack moduleName, endCo
             (defpact tester ()
               (step-with-rollback "step 0" "rollback 0")
               (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
-              (step-with-rollback "step 2" "rollback 2")))
+              (step               "step 2")))
             |]
 
 pactWithYield :: String -> T.Text

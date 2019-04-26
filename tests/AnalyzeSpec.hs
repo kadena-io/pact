@@ -2080,30 +2080,30 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce (=
                 (hash "hello")
-                "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"))
+                "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"))
 
               (enforce (=
                 (hash (- 2 1))
-                "1ced8f5be2db23a6513eba4d819c73806424748a7bc6fa0d792cc1c7d1775a9778e894aa91413f6eb79ad5ae2f871eafcc78797e4c82af6d1cbfb1a294a10d10"))
+                "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"))
 
               (enforce (=
                 (hash (or true false))
-                "5c07e85b3afb949077f2fa42181bb0498f5945f2086d37df5676ebf424ec137d0c21292c943098e22914cdca350e9140d185ca1b2b2bf0522acfcdde09b395dd"))
+                "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"))
 
               (enforce (=
                 (hash (and true false))
-                "625ad9c6965af1a145e3c7514065eab913702c615a8fc9f4699767684f9e97e65dd50f715eae7fdbceee39a03cecf29d5f6a7e79e6a802244b65f6f915283491"))
+                "W916vIYivbAEzKIDWpFi3aPZvPoSBhloENpwZ8tcaQA"))
 
 
               ; TODO:
               ; (enforce (=
               ;   (hash 3.14)
-              ;   "dee8179a1755a745174f334ddc81ade0cf3e2d0bdfd1170cc42c1a1d1d0b16f9bfab86592e9ad31123ce9d470f6aa9388cc2a4f9cda1eb7328ae0a7e26cd450e"))
+              ;   "gMjZ6T4J6fexaH7KaSIQxgyat9drIvbBkLx4qVJtztE"))
 
               ; TODO:
               ; (enforce (=
               ;   (hash { 'foo: 1 })
-              ;   "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"))
+              ;   "njeoJOdMu4SEI7x7zkb9rQcl44irAn61o1F7IiDge7s"))
             )
           |]
     expectPass code $ Valid Success'
@@ -3349,14 +3349,10 @@ spec = describe "analyze" $ do
             (update accounts acct { "balance": (+ bal amt) }))))
       |]
 
-    -- checking a pact with only one step
-    -- Note: there is a vestigial rollback step here. something should probably
-    -- disallow this, but it's not exactly clear what stage should be
-    -- responsible.
     expectVerified [text|
       (defpact payment ()
         @model [ (property (= (column-delta accounts 'balance) 0)) ]
-        (step-with-rollback "foo" "bar"))
+        (step "foo"))
       |]
 
     expectVerified [text|

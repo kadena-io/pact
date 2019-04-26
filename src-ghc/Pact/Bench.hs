@@ -3,33 +3,33 @@
 {-# LANGUAGE GADTs #-}
 module Pact.Bench where
 
-import Criterion.Main
-
-import Pact.Parse
-import Pact.Compile
-import Pact.Types.Lang
-import Control.Exception
 import Control.Arrow
+import Control.DeepSeq
+import Control.Exception
+import Criterion.Main
+import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
+import Data.Default
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
+import System.CPUTime
+import Unsafe.Coerce
+
+import Pact.Compile
+import Pact.Gas
+import Pact.Interpreter
+import Pact.MockDb
+import Pact.Parse
+import Pact.Persist
+import Pact.Persist.MockPersist
 import Pact.Types.Command
-import Control.DeepSeq
-import Data.Aeson
 import Pact.Types.Crypto
+import Pact.Types.Lang
+import Pact.Types.Logger
+import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
-import Pact.Interpreter
-import qualified Data.Set as S
-import Data.Default
-import Pact.Types.Logger
-import System.CPUTime
-import Pact.MockDb
-import qualified Data.Map.Strict as M
-import qualified Crypto.Hash as H
-import Pact.Persist.MockPersist
-import Pact.Persist
-import Unsafe.Coerce
-import Pact.Gas
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -74,7 +74,7 @@ loadBenchModule db = do
   let md = MsgData S.empty
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
-           (initialHashTx H.Blake2b_512)
+           pactInitialHash
   let e = setupEvalEnv db entity (Transactional 1) md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
   _erRefStore <$> evalExec e pc
@@ -88,15 +88,15 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  let e = setupEvalEnv dbEnv entity t (initMsgData (initialHashTx H.Blake2b_512))
+  let e = setupEvalEnv dbEnv entity t (initMsgData pactInitialHash)
           refStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
   toJSON . _erOutput <$> evalExec e pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
 
-acctRow :: Columns Persistable
-acctRow = Columns $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
+acctRow :: ObjectMap PactValue
+acctRow = ObjectMap $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
 
 benchRead :: Domain k v -> k -> Method () (Maybe v)
 benchRead KeySets _ = rc (Just benchKeySet)
@@ -114,7 +114,8 @@ benchReadValue (TxTable _t) _k = rcp Nothing
 
 mkBenchCmd :: [SomeKeyPair] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
-  cmd <- mkCommand' kps (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" ()))
+  cmd <- mkCommand' kps (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" ()
+                                            (keyPairsToSigners kps)))
   return (str, cmd)
 
 

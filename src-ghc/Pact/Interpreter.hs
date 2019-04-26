@@ -31,26 +31,27 @@ module Pact.Interpreter
   ) where
 
 import Control.Concurrent
-import qualified Data.Set as S
+import Control.Monad.Catch
+import Control.Monad.Except
 import Data.Aeson
 import Data.Default
-import Control.Monad.Except
-import Control.Monad.Catch
-import Data.Maybe
 import qualified Data.HashMap.Strict as HM
-
-import Pact.Types.Term
-import Pact.Types.Runtime
-import Pact.Compile
-import Pact.Eval hiding (evalContinuation)
-import qualified Pact.Eval as Eval (evalContinuation)
-import Pact.Types.Command
-import Pact.Native (nativeDefs)
-import Pact.PersistPactDb
-import qualified Pact.Persist.SQLite as PSL
+import Data.Maybe
+import qualified Data.Set as S
 import System.Directory
-import Pact.Types.Logger
+
+
+import Pact.Compile
+import qualified Pact.Eval as Eval (evalContinuation)
+import Pact.Eval hiding (evalContinuation)
+import Pact.Native (nativeDefs)
 import qualified Pact.Persist.Pure as Pure
+import qualified Pact.Persist.SQLite as PSL
+import Pact.PersistPactDb
+import Pact.Types.Command
+import Pact.Types.Logger
+import Pact.Types.PactValue
+import Pact.Types.Runtime
 
 data PactDbEnv e = PactDbEnv {
   pdPactDb :: !(PactDb e),
@@ -69,7 +70,7 @@ initMsgData = MsgData def Null def
 
 data EvalResult = EvalResult
   { _erInput :: !(Either PactContinuation [Term Name])
-  , _erOutput :: ![Term Name]
+  , _erOutput :: ![PactValue]
   , _erLogs :: ![TxLog Value]
   , _erRefStore :: !RefStore
   , _erExec :: !(Maybe PactExec)
@@ -156,7 +157,8 @@ interpret initState evalEnv terms = do
       pactExec = _evalPactExec state
       newRefs oldStore | isNothing tx = oldStore
                        | otherwise = updateRefStore (_evalRefs state) oldStore
-  return $! EvalResult terms rs logs refStore pactExec gas
+  -- output uses lenient conversion
+  return $! EvalResult terms (map toPactValueLenient rs) logs refStore pactExec gas
 
 evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do

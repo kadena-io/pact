@@ -270,7 +270,7 @@ pattern AST_Take node num list <- App node (NativeFunc SListTake) [num, list]
 pattern AST_MakeList :: a -> AST a -> AST a -> AST a
 pattern AST_MakeList node num val <- App node (NativeFunc SMakeList) [num, val]
 
-pattern AST_Obj :: forall a. a -> [(Lang.FieldKey, AST a)] -> AST a
+pattern AST_Obj :: forall a. a -> Lang.ObjectMap (AST a) -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
 
 pattern AST_List :: forall a. a -> [AST a] -> AST a

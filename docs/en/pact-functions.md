@@ -5,7 +5,7 @@
 
 *idx*&nbsp;`integer` *list*&nbsp;`[<l>]` *&rarr;*&nbsp;`<a>`
 
-*idx*&nbsp;`string` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`<a>`
+*idx*&nbsp;`string` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`<a>`
 
 
 Index LIST at IDX, or get value with key IDX from OBJECT.
@@ -19,7 +19,7 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 
 ### bind {#bind}
 
-*src*&nbsp;`object:[]<{row}>` *binding*&nbsp;`binding:[]<{row}>` *&rarr;*&nbsp;`<a>`
+*src*&nbsp;`object:<{row}>` *binding*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements.
@@ -31,13 +31,13 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 
 ### chain-data {#chain-data}
 
- *&rarr;*&nbsp;`object:[]<{o}>`
+ *&rarr;*&nbsp;`object:<{o}>`
 
 
 Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"chain-id": 0,"block-height": 0,"block-time": 0,"sender": "","gas-limit": 0,"gas-price": 0}
+{"block-height": 0,"block-time": 0,"chain-id": "","gas-limit": 0,"gas-price": 0,"sender": ""}
 ```
 
 
@@ -73,7 +73,7 @@ pact> (filter (constantly true) [1 2 3])
 
 *value*&nbsp;`<a>` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`bool`
 
-*key*&nbsp;`<a>` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`bool`
+*key*&nbsp;`<a>` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`bool`
 
 *value*&nbsp;`string` *string*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
@@ -106,7 +106,7 @@ Top level only: this function will fail if used in module code.
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
 
-*keys*&nbsp;`[string]` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`object:[]<{o}>`
+*keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
 Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end.
@@ -201,12 +201,12 @@ pact> (format "My {} has {}" ["dog" "fleas"])
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are converted using their JSON representation.
+Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. Strings are converted directly while other values are converted using their JSON representation. Non-value-level arguments are not allowed.
 ```lisp
 pact> (hash "hello")
-"e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+"Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
 pact> (hash { 'foo: 1 })
-"61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
+"h9BZgylRf_M4HxcBXr15IcSXXXSz74ZC2IAViGle_z4"
 ```
 
 
@@ -236,7 +236,7 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 
 ### length {#length}
 
-*x*&nbsp;`<a[[<l>],string,object:[]<{o}>]>` *&rarr;*&nbsp;`integer`
+*x*&nbsp;`<a[[<l>],string,object:<{o}>]>` *&rarr;*&nbsp;`integer`
 
 
 Compute length of X, which can be a list, a string, or an object.
@@ -361,7 +361,7 @@ Parse KEY string or number value from top level of message data body as integer.
 *key*&nbsp;`string` *&rarr;*&nbsp;`<a>`
 
 
-Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type.
+Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object.
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -370,7 +370,7 @@ Read KEY from top level of message data body, or data body itself if not provide
 
 ### remove {#remove}
 
-*key*&nbsp;`string` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`object:[]<{o}>`
+*key*&nbsp;`string` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
 Remove entry for KEY from OBJECT.
@@ -382,7 +382,7 @@ pact> (remove "bar" { "foo": 1, "bar": 2 })
 
 ### resume {#resume}
 
-*binding*&nbsp;`binding:[]<{r}>` *&rarr;*&nbsp;`<a>`
+*binding*&nbsp;`binding:<{r}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form binds to a yielded object value from the prior step execution in a pact.
@@ -404,7 +404,7 @@ pact> (reverse [1 2 3])
 
 *values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
-*fields*&nbsp;`[string]` *values*&nbsp;`[object:[]<{o}>]` *&rarr;*&nbsp;`[object:[]<{o}>]`
+*fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
 
 
 Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list.
@@ -436,7 +436,7 @@ pact> (str-to-int "123456")
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
 
-*keys*&nbsp;`[string]` *object*&nbsp;`object:[]<{o}>` *&rarr;*&nbsp;`object:[]<{o}>`
+*keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
 Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end.
@@ -458,7 +458,7 @@ pact> (take ['name] { 'name: "Vlad", 'active: false})
 Obtain hash of current transaction as a string.
 ```lisp
 pact> (tx-hash)
-"786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
+"DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g"
 ```
 
 
@@ -476,7 +476,7 @@ pact> (typeof "hello")
 
 ### where {#where}
 
-*field*&nbsp;`string` *app*&nbsp;`x:<a> -> bool` *value*&nbsp;`object:[]<{row}>` *&rarr;*&nbsp;`bool`
+*field*&nbsp;`string` *app*&nbsp;`x:<a> -> bool` *value*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`bool`
 
 
 Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE.
@@ -488,7 +488,7 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 
 ### yield {#yield}
 
-*OBJECT*&nbsp;`object:[]<{y}>` *&rarr;*&nbsp;`object:[]<{y}>`
+*OBJECT*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
 
 
 Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values.
@@ -500,7 +500,7 @@ Yield OBJECT for use with 'resume' in following pact step. The object is similar
 
 ### create-table {#create-table}
 
-*table*&nbsp;`table:[]<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`string`
 
 
 Create table TABLE.
@@ -513,7 +513,7 @@ Top level only: this function will fail if used in module code.
 
 ### describe-keyset {#describe-keyset}
 
-*keyset*&nbsp;`string` *&rarr;*&nbsp;`value`
+*keyset*&nbsp;`string` *&rarr;*&nbsp;`object:*`
 
 
 Get metadata for KEYSET.
@@ -523,7 +523,7 @@ Top level only: this function will fail if used in module code.
 
 ### describe-module {#describe-module}
 
-*module*&nbsp;`string` *&rarr;*&nbsp;`value`
+*module*&nbsp;`string` *&rarr;*&nbsp;`object:*`
 
 
 Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields.
@@ -536,7 +536,7 @@ Top level only: this function will fail if used in module code.
 
 ### describe-table {#describe-table}
 
-*table*&nbsp;`table:[]<{row}>` *&rarr;*&nbsp;`value`
+*table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`object:*`
 
 
 Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields.
@@ -549,7 +549,7 @@ Top level only: this function will fail if used in module code.
 
 ### insert {#insert}
 
-*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[]<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
@@ -560,7 +560,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data already exis
 
 ### keylog {#keylog}
 
-*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:[]*]`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:*]`
 
 
 Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects indexed by txid.
@@ -571,7 +571,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 
 ### keys {#keys}
 
-*table*&nbsp;`table:[]<{row}>` *&rarr;*&nbsp;`[string]`
+*table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`[string]`
 
 
 Return all keys in TABLE.
@@ -582,9 +582,9 @@ Return all keys in TABLE.
 
 ### read {#read}
 
-*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *&rarr;*&nbsp;`object:[]<{row}>`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *&rarr;*&nbsp;`object:<{row}>`
 
-*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object:[]<{row}>`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object:<{row}>`
 
 
 Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified.
@@ -595,9 +595,9 @@ Read row from TABLE for KEY, returning database record object, or just COLUMNS i
 
 ### select {#select}
 
-*table*&nbsp;`table:[]<{row}>` *where*&nbsp;`row:object:[]<{row}> -> bool` *&rarr;*&nbsp;`[object:[]<{row}>]`
+*table*&nbsp;`table:<{row}>` *where*&nbsp;`row:object:<{row}> -> bool` *&rarr;*&nbsp;`[object:<{row}>]`
 
-*table*&nbsp;`table:[]<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:[]<{row}> -> bool` *&rarr;*&nbsp;`[object:[]<{row}>]`
+*table*&nbsp;`table:<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:<{row}> -> bool` *&rarr;*&nbsp;`[object:<{row}>]`
 
 
 Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.
@@ -609,7 +609,7 @@ Select full rows or COLUMNS from table by applying WHERE to each row to get a bo
 
 ### txids {#txids}
 
-*table*&nbsp;`table:[]<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
+*table*&nbsp;`table:<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
 
 
 Return all txid values greater than or equal to TXID in TABLE.
@@ -620,7 +620,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 
 ### txlog {#txlog}
 
-*table*&nbsp;`table:[]<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[value]`
+*table*&nbsp;`table:<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:*]`
 
 
 Return all updates to TABLE performed in transaction TXID.
@@ -631,7 +631,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 ### update {#update}
 
-*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[~]<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:~<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY.
@@ -642,7 +642,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 
 ### with-default-read {#with-default-read}
 
-*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *defaults*&nbsp;`object:[~]<{row}>` *bindings*&nbsp;`binding:[~]<{row}>` *&rarr;*&nbsp;`<a>`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *defaults*&nbsp;`object:~<{row}>` *bindings*&nbsp;`binding:~<{row}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names.
@@ -654,7 +654,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 ### with-read {#with-read}
 
-*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *bindings*&nbsp;`binding:[]<{row}>` *&rarr;*&nbsp;`<a>`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *bindings*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.
@@ -666,7 +666,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 ### write {#write}
 
-*table*&nbsp;`table:[]<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:[]<{row}>` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data.
@@ -783,7 +783,7 @@ pact> (time "2016-07-22T11:26:35Z")
 
 ### != {#bangeq}
 
-*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
 True if X does not equal Y.
@@ -815,7 +815,7 @@ pact> (* 3 5)
 
 *x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
-*x*&nbsp;`<a[string,[<l>],object:[]<{o}>]>` *y*&nbsp;`<a[string,[<l>],object:[]<{o}>]>` *&rarr;*&nbsp;`<a[string,[<l>],object:[]<{o}>]>`
+*x*&nbsp;`<a[string,[<l>],object:<{o}>]>` *y*&nbsp;`<a[string,[<l>],object:<{o}>]>` *&rarr;*&nbsp;`<a[string,[<l>],object:<{o}>]>`
 
 
 Add numbers, concatenate strings/lists, or merge objects.
@@ -901,7 +901,7 @@ true
 
 ### = {#eq}
 
-*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
 True if X equals Y.
@@ -1267,7 +1267,7 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 *data*&nbsp;`<a>` *predfun*&nbsp;`string` *&rarr;*&nbsp;`guard`
 
 
-Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
+Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. DATA must be an object. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
 
 
 ### enforce-guard {#enforce-guard}
@@ -1317,7 +1317,7 @@ Specifies and requests grant of CAPABILITY which is an application of a 'defcap'
 
 ### verify-spv {#verify-spv}
 
-*type*&nbsp;`string` *payload*&nbsp;`object:[]<in>` *&rarr;*&nbsp;`object:[]<out>`
+*type*&nbsp;`string` *payload*&nbsp;`object:<in>` *&rarr;*&nbsp;`object:<out>`
 
 
 Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of the PAYLOAD object depends on TYPE, as does the format of the return object. Platforms such as Chainweb will document the specific payload types and return values.
@@ -1371,7 +1371,7 @@ Commit transaction.
 
 *pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
-*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *yielded*&nbsp;`object:[]<{y}>` *&rarr;*&nbsp;`string`
+*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *yielded*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
 
 
 Continue previously-initiated pact identified by PACT-ID at STEP, optionally specifying ROLLBACK (default is false), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
@@ -1384,19 +1384,19 @@ Continue previously-initiated pact identified by PACT-ID at STEP, optionally spe
 
 ### env-chain-data {#env-chain-data}
 
-*new-data*&nbsp;`object:[]*` *&rarr;*&nbsp;`string`
+*new-data*&nbsp;`object:*` *&rarr;*&nbsp;`string`
 
 
 Update existing entries 'chain-data' with NEW-DATA, replacing those items only.
 ```lisp
-pact> (env-chain-data { "chain-id": 2, "block-height": 20 })
+pact> (env-chain-data { "chain-id": "TestNet00/2", "block-height": 20 })
 "Updated public metadata"
 ```
 
 
 ### env-data {#env-data}
 
-*json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:[]<{o}>,keyset,value]>` *&rarr;*&nbsp;`string`
+*json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`string`
 
 
 Set transaction JSON data, either as encoded string, or as pact types coerced to JSON.
@@ -1467,10 +1467,10 @@ Update gas model to charge constant RATE.
 *hash*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash.
+Set current transaction hash. HASH must be an unpadded base64-url encoded BLAKE2b 256-bit hash.
 ```lisp
 pact> (env-hash (hash "hello"))
-"Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+"Set tx hash to Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
 ```
 
 
@@ -1518,18 +1518,6 @@ pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME.
 
 
-### json {#json}
-
-*exp*&nbsp;`<a>` *&rarr;*&nbsp;`value`
-
-
-Encode pact expression EXP as a JSON value. This is only needed for tests, as Pact values are automatically represented as JSON in API output. 
-```lisp
-pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
-[{"age": 10.0,"name": "joe"} {"age": 25.0,"name": "mary"}]
-```
-
-
 ### load {#load}
 
 *file*&nbsp;`string` *&rarr;*&nbsp;`string`
@@ -1545,7 +1533,7 @@ Load and evaluate FILE, resetting repl state beforehand if optional RESET is tru
 
 ### mock-spv {#mock-spv}
 
-*type*&nbsp;`string` *payload*&nbsp;`object:[]*` *output*&nbsp;`object:[]*` *&rarr;*&nbsp;`string`
+*type*&nbsp;`string` *payload*&nbsp;`object:*` *output*&nbsp;`object:*` *&rarr;*&nbsp;`string`
 
 
 Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT.
@@ -1556,9 +1544,9 @@ Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT.
 
 ### pact-state {#pact-state}
 
- *&rarr;*&nbsp;`object:[]*`
+ *&rarr;*&nbsp;`object:*`
 
-*clear*&nbsp;`bool` *&rarr;*&nbsp;`object:[]*`
+*clear*&nbsp;`bool` *&rarr;*&nbsp;`object:*`
 
 
 Inspect state from most recent pact execution. Returns object with fields 'pactId': pact ID; 'yield': yield result or 'false' if none; 'step': executed step; 'executed': indicates if step was skipped because entity did not match. With CLEAR argument, erases pact from repl state.

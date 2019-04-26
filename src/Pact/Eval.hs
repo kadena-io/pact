@@ -43,33 +43,34 @@ module Pact.Eval
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,evalContinuation
+    ,enforcePactValue,enforcePactValue'
     ) where
 
-import Control.Lens hiding (DefName)
-import Control.Monad.IO.Class
-import Control.Applicative
-import Control.Monad.Catch (throwM)
-import Data.List
-import Control.Monad
-import Prelude
 import Bound
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Map.Strict as M
-import Safe
-import Data.Default
 import Control.Arrow hiding (app)
-import Data.Maybe
+import Control.Lens hiding (DefName)
+import Control.Monad
+import Control.Monad.Catch (throwM)
+import Control.Monad.IO.Class
+import Control.Monad.Reader
+import Control.Monad.State.Strict
+import Data.Aeson (Value)
+import Data.Default
 import Data.Foldable
 import Data.Graph
+import qualified Data.HashMap.Strict as HM
+import Data.List
+import qualified Data.Map.Strict as M
+import Data.Maybe
 import qualified Data.Set as S
-import Control.Monad.State.Strict
-import Control.Monad.Reader
+import qualified Data.Vector as V
+import Safe
 import Unsafe.Coerce
-import Data.Aeson (Value)
-import Pact.Types.Pretty
 
-import Pact.Types.Runtime
 import Pact.Gas
+import Pact.Types.PactValue
+import Pact.Types.Pretty
+import Pact.Types.Runtime
 
 
 evalBeginTx :: Info -> Eval e ()
@@ -277,7 +278,8 @@ eval t = enscope t >>= reduce
 
 
 evalContinuation :: PactContinuation -> Eval e (Term Name)
-evalContinuation (PactContinuation app) = reduceApp app
+evalContinuation (PactContinuation d args) =
+  reduceApp (App (TDef d def) (map (liftTerm . fromPactValue) args) def)
 
 
 evalUse :: Use -> Eval e ()
@@ -396,16 +398,12 @@ evaluateDefs info defs = do
       case c of
         AcyclicSCC v -> return v
         CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
-          "Recursion detected: " <> pretty (vs & traverse . _1 %~ fmap mkSomeDoc)
+          "Recursion detected: " <>
+            prettyList (vs & traverse . _1 %~ fmap mkSomeDoc
+                           & traverse . _3 %~ (SomeDoc . prettyList))
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
       unifiedDefs = foldl dresolve HM.empty sortedDefs
   traverse (runPure . evalConsts) unifiedDefs
-
--- | Helper to use 'pretty' on an 'Either'
-newtype SomeDoc = SomeDoc Doc
-
-instance Pretty SomeDoc where
-  pretty (SomeDoc doc) = doc
 
 mkSomeDoc :: (Pretty a, Pretty b) => Either a b -> SomeDoc
 mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
@@ -468,7 +466,7 @@ solveConstraint info refName (Ref t) evalMap = do
           TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _) _) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " <> pretty dt <> line <> pretty dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " <> pretty rty <> line <> pretty rty'
-          when (length args /= length args') $ evalError info $ "mismatching argument lists: " <> pretty args <> line <> pretty args'
+          when (length args /= length args') $ evalError info $ "mismatching argument lists: " <> prettyList args <> line <> prettyList args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
             when (n /= n') $ evalError info $ "mismatching argument names: " <> pretty n <> " and " <> pretty n'
             when (ty /= ty') $ evalError info $ "mismatching types: " <> pretty ty <> " and " <> pretty ty'
@@ -543,15 +541,14 @@ reduce (TApp a _) = reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
-reduce t@TValue {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
 reduce t@TNative {} = return $ toTerm $ pack $ show t
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
   CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
-reduce (TObject (Object ps t oi) i) =
-  TObject <$> (Object <$> (forM ps (\(k,v) -> (k,) <$> reduce v)) <*> traverse reduce t <*> pure oi) <*> pure i
+reduce (TObject (Object ps t ko oi) i) =
+  TObject <$> (Object <$> traverse reduce ps <*> traverse reduce t <*> pure ko <*> pure oi) <*> pure i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
@@ -565,12 +562,14 @@ mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
 
 reduceBody :: Term Ref -> Eval e (Term Name)
-reduceBody (TList bs _ _) = last <$> mapM reduce bs
+reduceBody (TList bs _ _) =
+  -- unsafe but only called in validated body contexts
+  V.last <$> V.mapM reduce bs
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
-reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
+reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(a,t) -> (,) <$> traverse reduce a <*> reduce t) ps
+  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduce t) ps
   typecheck ps'
   reduceBody (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
 
@@ -583,21 +582,28 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
+
+enforcePactValue :: (Term Name) -> Eval e PactValue
+enforcePactValue t = case toPactValue t of
+  Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
+  Right v -> return v
+
+enforcePactValue' :: Traversable f => f (Term Name) -> Eval e (f PactValue)
+enforcePactValue' = traverse enforcePactValue
+
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App td@(TDef d@Def{..} _) as ai) = do
+reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
   af <- prepareUserAppArgs d as
   evalUserAppBody d af ai g $ \bod' ->
     case _dDefType of
       Defun ->
         reduceBody bod'
-      Defpact ->
-        -- the pact continuation is an App of the defpact plus the strictly-evaluated args,
-        -- re-lifted to support calling `reduceApp` again later.
-        let continuation = (App td (map liftTerm $ fst af) ai)
-        in applyPact continuation bod'
+      Defpact -> do
+        continuation <- PactContinuation d <$> enforcePactValue' (fst af)
+        applyPact continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
@@ -643,7 +649,7 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
 -- defaulting to the first step.
-applyPact :: App (Term Ref) -> Term Ref -> Eval e (Term Name)
+applyPact :: PactContinuation -> Term Ref -> Eval e (Term Name)
 applyPact app (TList steps _ i) = do
   -- only one pact allowed in a transaction
   use evalPactExec >>= \bad -> unless (isNothing bad) $ evalError i "Nested pact execution, aborting"
@@ -654,13 +660,13 @@ applyPact app (TList steps _ i) = do
       Nothing -> evalError i $ "applyPact: pacts not executable in local context"
     Just v -> return v
   -- retrieve indicated step from code
-  s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps `atMay` _psStep
+  s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
   case s of
     step@TStep {} -> do
       stepEntity <- traverse reduce (_tStepEntity step)
       let
         initExec executing = evalPactExec .=
-          Just (PactExec (length steps) Nothing executing _psStep _psPactId (PactContinuation app))
+          Just (PactExec (length steps) Nothing executing _psStep _psPactId app)
         execStep = do
           initExec True
           case (_psRollback,_tStepRollback step) of
@@ -759,7 +765,7 @@ typecheckTerm i spec t = do
 
     -- | infer list value type
     checkList es lty = return $ TyList $
-                    case nub (map typeof es) of
+                    case nub (map typeof $ V.toList es) of
                       [Right a] -> a -- uniform value type: return it
                       [] -> lty -- empty: return specified
                       _ -> TyAny -- otherwise untyped
@@ -785,19 +791,21 @@ typecheckTerm i spec t = do
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
 -- Total flag allows for partial row types if False.
-checkUserType :: SchemaPartial -> Info  -> [(FieldKey,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
-checkUserType partial i ps (TyUser tu@TSchema {..}) = do
-  let fields = M.fromList . map (_aName &&& id) $ _tFields
-  aps <- forM ps $ \(FieldKey k,v) -> case M.lookup k fields of
+checkUserType :: SchemaPartial -> Info -> ObjectMap (Term Name) -> Type (Term Name) -> Eval e (Type (Term Name))
+checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
+  -- fields is lookup from name to arg.
+  -- TODO consider OMap or equivalent for schema fields
+  let fields = M.fromList . map (FieldKey . _aName &&& id) $ _tFields
+  aps <- forM (M.toList ps) $ \(k,v) -> case M.lookup k fields of
       Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty k
       Just a -> return (a,v)
   let findMissing fs = do
-        let missing = M.difference fs (M.fromList (map (first _aName) aps))
+        let missing = M.difference fs (M.fromList (map (first $ FieldKey . _aName) aps))
         unless (M.null missing) $ evalError i $
-          "Missing fields for {" <> pretty _tSchemaName <> "}: " <> pretty (M.elems missing)
+          "Missing fields for {" <> pretty _tSchemaName <> "}: " <> prettyList (M.elems missing)
   case partial of
     FullSchema -> findMissing fields
-    PartialSchema fs -> findMissing (M.restrictKeys fields fs)
+    PartialSchema fs -> findMissing (M.restrictKeys fields (S.map FieldKey fs))
     AnySubschema -> return ()
   typecheck aps
   return $ TySchema TyObject (TyUser tu) partial

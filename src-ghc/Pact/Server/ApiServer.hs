@@ -157,7 +157,7 @@ die' str = throwError err404 { errBody = BSL8.pack str }
 buildCmdRpc :: (MonadReader ApiEnv m, MonadIO m) => Command T.Text -> m (RequestKey,Command ByteString)
 buildCmdRpc c@Command {..} = do
   log $ "Processing command with hash: " ++ show _cmdHash
-  return (RequestKey _cmdHash,fmap encodeUtf8 c)
+  return (cmdToRequestKey c,fmap encodeUtf8 c)
 
 group :: Int -> [a] -> [[a]]
 group _ [] = []

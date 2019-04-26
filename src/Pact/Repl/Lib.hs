@@ -29,17 +29,17 @@ import Control.Monad.Catch
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
-import Data.List ((\\))
 import qualified Data.HashMap.Strict as HM
-import Data.Maybe
 import qualified Data.Map as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import qualified Data.Text as Text
 import Data.Text.Encoding
+import qualified Data.Vector as V
 
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
+import Data.Maybe
 #else
 
 import Criterion
@@ -69,6 +69,7 @@ import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
+import Pact.Types.PactValue
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -167,10 +168,6 @@ replDefs = ("Repl",
        []
        "Verify MODULE, checking that all properties hold."
 
-     ,defZRNative "json" json' (funType tTyValue [("exp",a)])
-      ["(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])"] $
-      "Encode pact expression EXP as a JSON value. " <>
-      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. "
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
        []
        "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
@@ -179,7 +176,7 @@ replDefs = ("Repl",
        "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
        ["(env-hash (hash \"hello\"))"]
-       "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash."
+       "Set current transaction hash. HASH must be an unpadded base64-url encoded BLAKE2b 256-bit hash."
      ,defZNative "test-capability" testCapability
       (funType tTyString [("capability", TyFun $ funType' tTyBool [])])
       [LitExample "(test-capability (MY-CAP))"] $
@@ -194,7 +191,7 @@ replDefs = ("Repl",
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
-                         TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet,tTyValue]
+                         TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
        a = mkTyVar "a" []
 
 invokeEnv :: (MVar (DbEnv PureDb) -> IO b) -> MVar LibState -> IO b
@@ -250,7 +247,7 @@ formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
   let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
       eitherEvalErr res effectStr transformFunc =
         case res of
-          Left e  -> evalError' i $ pretty effectStr <> ": " <> pretty e
+          Left e  -> evalError' i $ prettyString effectStr <> ": " <> prettyString e
           Right v -> return (transformFunc v)
   sppk  <- eitherEvalErr (fromText' scheme)
            "Invalid PPKScheme"
@@ -272,33 +269,36 @@ setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
-          _ -> argsError i ts
-  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) ks))
+          _ -> argsError i (V.toList ts)
+  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) (V.toList ks)))
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
 setmsg :: RNativeFun LibState
-setmsg i [TLitString j] =
-  case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
-    Left f -> evalError' i ("Invalid JSON: " <> pretty f)
-    Right v -> setenv eeMsgBody v >> return (tStr "Setting transaction data")
-setmsg _ [a] = setenv eeMsgBody (toJSON a) >> return (tStr "Setting transaction data")
-setmsg i as = argsError i as
+setmsg i as = case as of
+  [TLitString j] ->
+    case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
+      Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
+      Right v -> go v
+  [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))
+  [a] -> go (toJSON a)
+  _ -> argsError i as
+  where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 
 continuePact :: RNativeFun LibState
 continuePact i as = case as of
   [TLitInteger pid,TLitInteger step] -> go pid step False Nothing
   [TLitInteger pid,TLitInteger step,TLitBool rollback] -> go pid step rollback Nothing
-  [TLitInteger pid,TLitInteger step,TLitBool rollback,o@TObject {}] -> go pid step rollback (Just o)
+  [TLitInteger pid,TLitInteger step,TLitBool rollback,TObject (Object o _ _ _) _] -> go pid step rollback (Just o)
   _ -> argsError i as
   where
-    go :: Integer -> Integer -> Bool -> Maybe (Term Name) -> Eval LibState (Term Name)
+    go :: Integer -> Integer -> Bool -> Maybe (ObjectMap (Term Name)) -> Eval LibState (Term Name)
     go pid step rollback userResume = do
       resume <- case userResume of
         Just r -> return $ Just r
         Nothing -> use evalPactExec >>= \pe -> case pe of
           Nothing -> return Nothing
-          Just PactExec{..} -> return $ _peYield
+          Just PactExec{..} -> return $ fmap (fmap fromPactValue) _peYield
       let pactId = (PactId $ fromIntegral pid)
           pactStep = PactStep (fromIntegral step) rollback pactId resume
       viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of
@@ -330,7 +330,7 @@ pactState i as = case as of
       case e of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
-          [("yield",fromMaybe (toTerm False) _peYield)
+          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactValue) _peYield)
           ,("executed",toTerm _peExecuted)
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]
@@ -368,7 +368,9 @@ expect :: RNativeFun LibState
 expect i [TLitString a,b,c] =
   if b `termEq` c
   then testSuccess a $ "Expect: success: " <> a
-  else testFailure i a $ "FAILURE: " <> a <> ": expected " <> pack (show b) <> ", received " <> pack (show c)
+  else testFailure i a $ renderCompactText' $
+       "FAILURE: " <> pretty a <> ": expected " <> pretty b <> ":" <> pretty (typeof' b) <>
+       ", received " <> pretty c <> ":" <> pretty (typeof' c)
 expect i as = argsError i as
 
 expectFail :: ZNativeFun LibState
@@ -453,10 +455,6 @@ verify i as = case as of
 
   _ -> argsError i as
 
-json' :: RNativeFun LibState
-json' _ [a] = return $ TValue (toJSON a) def
-json' i as = argsError i as
-
 sigKeyset :: RNativeFun LibState
 sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (Name (asString KeysAll) def)
 
@@ -466,7 +464,7 @@ print' i as = argsError i as
 
 envHash :: RNativeFun LibState
 envHash i [TLitString s] = case fromText' s of
-  Left err -> evalError' i $ "Bad hash value: " <> pretty s <> ": " <> pretty err
+  Left err -> evalError' i $ "Bad hash value: " <> pretty s <> ": " <> prettyString err
   Right h -> do
     setenv eeHash h
     return $ tStr $ "Set tx hash to " <> s
@@ -528,38 +526,31 @@ testCapability i as = argsError' i as
 envChainDataDef :: NativeDef
 envChainDataDef = defZRNative "env-chain-data" envChainData
     (funType tTyString [("new-data", tTyObject TyAny)])
-    ["(env-chain-data { \"chain-id\": 2, \"block-height\": 20 })"]
+    ["(env-chain-data { \"chain-id\": \"TestNet00/2\", \"block-height\": 20 })"]
     "Update existing entries 'chain-data' with NEW-DATA, replacing those items only."
   where
     envChainData :: RNativeFun LibState
     envChainData i as = case as of
-      [TObject (Object ks _ _) _] -> do
+      [TObject (Object (ObjectMap ks) _ _ _) _] -> do
         pd <- view eePublicData
 
-        let ts = fmap fst ks
-            ts' = S.fromList ts
-            info = _faInfo i
-
-        unless (length ts == length ts') $ evalError info $
-          "envChainData: cannot update duplicate keys: " <> pretty (ts \\ (S.toList ts'))
-
-        ud <- foldM (go info) pd ks
+        ud <- foldM (go (_faInfo i)) pd (M.toList ks)
         setenv eePublicData ud
         return $ tStr "Updated public metadata"
       _ -> argsError i as
 
     go i pd ((FieldKey k), (TLiteral (LInteger l) _)) = case Text.unpack k of
-      "chain-id"     -> pure $ set pdChainId (fromIntegral l) pd
       "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (ParsedInteger . fromIntegral $ l) pd
       "block-height" -> pure $ set pdBlockHeight (fromIntegral l) pd
       "block-time"   -> pure $ set pdBlockTime (fromIntegral l) pd
-      t              -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+      t              -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LDecimal l) _)) = case Text.unpack k of
       "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (ParsedDecimal l) pd
-      t           -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+      t           -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of
-      "sender" -> pure $ set (pdPublicMeta . pmSender) l pd
-      t        -> evalError i $ "envChainData: bad public metadata key: " <> pretty t
+      "chain-id" -> pure $ set (pdPublicMeta . pmChainId) (ChainId l) pd
+      "sender"   -> pure $ set (pdPublicMeta . pmSender) l pd
+      t          -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
     go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as

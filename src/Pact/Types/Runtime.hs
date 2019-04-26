@@ -48,24 +48,24 @@ module Pact.Types.Runtime
 
 
 import Control.Arrow ((&&&))
-import Control.Lens hiding ((.=),DefName)
-import Control.Monad.Except
-import Control.Monad.State.Strict
-import Control.Monad.Reader
-
-import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Strict as HM
-import Data.Aeson hiding (Object)
-import Data.String
-import Data.Default
-import Control.Monad.Catch
 import Control.Concurrent.MVar
+import Control.Lens hiding ((.=),DefName)
+import Control.Monad.Catch
+import Control.Monad.Except
+import Control.Monad.Reader
+import Control.Monad.State.Strict
+import Data.Aeson hiding (Object)
+import Data.Default
+import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import Data.String
 
 import Pact.Types.ChainMeta
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
+import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Util
@@ -144,7 +144,7 @@ data PactStep = PactStep {
       _psStep :: !Int
     , _psRollback :: !Bool
     , _psPactId :: !PactId
-    , _psResume :: !(Maybe (Term Name))
+    , _psResume :: !(Maybe (ObjectMap (Term Name)))
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
@@ -163,15 +163,17 @@ data RefStore = RefStore {
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
 
-newtype PactContinuation = PactContinuation (App (Term Ref))
-  deriving (Eq,Show)
+data PactContinuation = PactContinuation
+  { _pcDef :: Def Ref
+  , _pcArgs :: [PactValue]
+  } deriving (Eq,Show)
 
 -- | Result of evaluation of a 'defpact'.
 data PactExec = PactExec
   { -- | Count of steps in pact (discovered when code is executed)
     _peStepCount :: Int
     -- | Yield value if invoked
-  , _peYield :: !(Maybe (Term Name))
+  , _peYield :: !(Maybe (ObjectMap PactValue))
     -- | Whether step was executed (in private cases, it can be skipped)
   , _peExecuted :: Bool
     -- | Step that was executed or skipped
@@ -397,8 +399,8 @@ throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) 
 evalError :: Info -> Doc -> Eval e a
 evalError i = throwErr EvalError i
 
-evalError' :: FunApp -> Doc -> Eval e a
-evalError' = evalError . _faInfo
+evalError' :: HasInfo i => i -> Doc -> Eval e a
+evalError' = evalError . getInfo
 
 failTx :: Info -> Doc -> Eval e a
 failTx i = throwErr TxFailure i

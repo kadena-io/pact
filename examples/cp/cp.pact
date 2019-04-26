@@ -206,8 +206,6 @@
 
   )
 
-  (defun read-cp-master (ticker) (read cp-master ticker))
-
   (defun read-cp-inventory (inv-key) (read cp-inventory inv-key))
 
 )
