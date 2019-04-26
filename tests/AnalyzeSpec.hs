@@ -1150,7 +1150,7 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Success'
     expectPass code $ Satisfiable $ CoreProp $ StrComparison Eq
       (Inj Result :: Prop 'TyStr)
-      (Lit' "tx-id:1:chain-id:" :: Prop 'TyStr)
+      (Lit' "Tug6q-wmaru1QqUMjm7RiwhnsQMTRcMHus65HwF7laE" :: Prop 'TyStr)
 
   describe "logical short-circuiting" $ do
     describe "and" $ do
