@@ -3,6 +3,7 @@ type: "cont"
 pactId:
   txId: 5
   chainId: ""
+  txHash: "bNWr_FjKZ2sxzo7NNLTtWA64oysWw6Xqe_PZ_qSeEU0"
 step: 1
 rollback: False
 keyPairs:

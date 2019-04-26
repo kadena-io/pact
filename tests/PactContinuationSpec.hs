@@ -488,7 +488,7 @@ twoPartyEscrow testCmds testChecks mgr = do
   (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")
   (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
   (_, resetTimeCmd)  <- mkApiReq (setupPath ++ "05-reset.yaml")
-  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")
+  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")  -- When escrow pact executed
   (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
   let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
@@ -505,6 +505,7 @@ twoPartyEscrow testCmds testChecks mgr = do
                             : createAcctCheck : resetTimeCheck : runEscrowCheck
                             : balanceCheck : testChecks
 
+  (print . show) (getPactId (TxId 5) runEscrowCmd)
   allResults `shouldMatch` allChecks
 
 decValue :: Decimal -> Maybe Value
