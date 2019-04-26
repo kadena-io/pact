@@ -84,6 +84,12 @@ showRead (Located _ (Access srk obj suc)) = case SBV.unliteral suc of
   Just False
     -> "read for key " <> showS srk <> " fails because the row was not present"
 
+showYield :: TVal -> Text
+showYield tval = "yield " <> showTVal tval
+
+showResume :: TVal -> Text
+showResume tval = "resume (" <> showTVal tval <> ")"
+
 --
 -- TODO: this should display the table name
 --
@@ -179,6 +185,10 @@ showEvent ksProvs tags event = do
         pure [display mtReads tid showRead]
       TraceWrite writeType _ (_located -> tid) ->
         pure [display mtWrites tid (showWrite writeType)]
+      TraceYield _ tid ->
+        pure [display mtYields tid showYield]
+      TraceResume _ tid ->
+        pure [display mtResumes tid showResume]
       TraceAssert recov (_located -> tid) ->
         pure [display mtAsserts tid (showAssert recov)]
       TraceGuard recov (_located -> tid) ->
@@ -187,6 +197,18 @@ showEvent ksProvs tags event = do
         pure [display mtGrantRequests tid (showGR recov)]
       TraceSubpathStart _ ->
         pure [] -- not shown to end-users
+
+      TraceReset -> pure
+        [ emptyLine
+        , "time passes between steps (arbitrary db updates can occur here)"
+        ]
+      TraceCancel tid -> pure $ case tags ^. mtCancels.at tid of
+        Nothing  -> [ "[ERROR:missing tag]" ]
+        Just tag -> case SBV.unliteral tag of
+          Nothing       -> [ "[ERROR:symbolic]" ]
+          Just doCancel ->
+            if doCancel then [ "pact cancelled" ] else []
+
       TracePushScope _ scopeTy locatedBindings -> do
         let vids = view (located.bVid) <$> locatedBindings
         modify succ
@@ -213,6 +235,10 @@ showEvent ksProvs tags event = do
             "let" : displayVids showVar
           ObjectScope ->
             "destructuring object" : displayVids showVar
+          StepScope ->
+            [ "entering step" ]
+          RollbackScope ->
+            [ "entering rollback" ]
           FunctionScope modName funName ->
             displayCallScope "function" modName funName
           PactScope modName funName ->
@@ -229,6 +255,8 @@ showEvent ksProvs tags event = do
         pure $ case scopeTy of
           LetScope            -> []
           ObjectScope         -> []
+          StepScope           -> []
+          RollbackScope       -> []
           FunctionScope _ _   -> returnOutput
           PactScope _ _       -> []
           CapabilityScope _ _ -> returnOutput

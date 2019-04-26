@@ -74,6 +74,8 @@ instance Monoid Recoverability where
 data ScopeType
   = LetScope
   | ObjectScope
+  | StepScope
+  | RollbackScope
   | FunctionScope Pact.ModuleName Text
   | PactScope Pact.ModuleName Text
   | CapabilityScope Pact.ModuleName CapName
@@ -88,6 +90,10 @@ data TraceEvent
   | TracePushScope Natural ScopeType [Located Binding]
   | TracePopScope Natural ScopeType TagId EType
   | TraceRequireGrant Recoverability CapName [Located Binding] (Located TagId)
+  | TraceYield EType TagId
+  | TraceResume EType TagId
+  | TraceReset
+  | TraceCancel TagId
   deriving (Eq, Show)
 
 -- | An @ExecutionGraph@ is produced by translation, and contains all
@@ -140,6 +146,10 @@ data ModelTags (c :: Concreteness)
     -- ^ one per each read
     , _mtWrites            :: Map TagId (Located Access)
     -- ^ one per each write
+    , _mtYields            :: Map TagId TVal
+    -- ^ one per each yield
+    , _mtResumes           :: Map TagId TVal
+    -- ^ one per each resume
     , _mtAsserts           :: Map TagId (Located (SBV Bool))
     -- ^ one per non-keyset enforcement
     , _mtGuardEnforcements :: Map TagId (Located GuardEnforcement)
@@ -155,6 +165,8 @@ data ModelTags (c :: Concreteness)
     -- @enforce-one@.
     , _mtReturns           :: Map TagId TVal
     -- ^ return values from function calls
+    , _mtCancels           :: Map TagId (SBV Bool)
+    -- ^ whether each cancel fires
     }
   deriving (Eq, Show)
 

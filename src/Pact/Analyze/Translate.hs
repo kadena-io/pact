@@ -291,6 +291,16 @@ withAstContext ast = local (envInfo .~ astToInfo ast)
 withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
 withNestedRecoverability r = local $ teRecoverability <>~ r
 
+-- | Enter a pact step or rollback
+withNewStep :: ScopeType -> TranslateM a -> TranslateM a
+withNewStep scopeType act = local (teScopesEntered +~ 1) $ do
+  tid <- genTagId
+  depth <- view teScopesEntered
+  emit $ TracePushScope depth scopeType [] -- no bindings
+  res <- act
+  emit $ TracePopScope depth scopeType tid $ EType SStr
+  pure res
+
 withNewScope
   :: ScopeType
   -> [Located Binding]
@@ -337,6 +347,18 @@ tagRead = tagDbAccess TraceRead
 
 tagWrite :: WriteType -> Node -> ESchema -> TranslateM TagId
 tagWrite = tagDbAccess . TraceWrite
+
+tagYield :: EType -> TranslateM TagId
+tagYield ety = do
+  tid <- genTagId
+  emit $ TraceYield ety tid
+  pure tid
+
+tagResume :: EType -> TranslateM TagId
+tagResume ety = do
+  tid <- genTagId
+  emit $ TraceResume ety tid
+  pure tid
 
 tagAssert :: Node -> TranslateM TagId
 tagAssert node = do
@@ -617,12 +639,14 @@ translatePact nodes = do
   (sinkV, cancels, rollbacks) <- foldlM
     (\(rightV, cancels, rollbacks) (_step, leftV, mRollback) -> do
       tsPathHead .= leftV
+      emit TraceReset
       cancel <- (,) <$> startNewSubpath <*> genVarId
+      emit $ TraceCancel $ _pathTag $ fst cancel
       extendPathTo rightV
       case mRollback of
         Nothing
           -> pure (rightV, cancel : cancels, Nothing : rollbacks)
-        Just rollbackA -> do
+        Just rollbackA -> withNewStep RollbackScope $ do
           rollback <- (,)
             <$> startNewSubpath
             <*> translateNode rollbackA
@@ -661,7 +685,7 @@ translatePact nodes = do
 translateStep
   :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
 translateStep firstStep = \case
-  AST_Step _node entity exec rollback _yr -> do
+  AST_Step _node entity exec rollback _yr -> withNewStep StepScope $ do
     p <- if firstStep then use tsCurrentPath else startNewSubpath
     mEntity <- for entity $ \tm -> do
       Some SStr entity' <- translateNode tm
@@ -1123,8 +1147,20 @@ translateNode astNode = withAstContext astNode $ case astNode of
     EType objTy@(SObject schema) <- translateType schemaNode
     Some SStr key'               <- translateNode key
     tid                          <- tagRead node $ ESchema schema
-    let readT = Some objTy $ Read objTy tid (TableName (T.unpack table)) key'
+    let readT = Some objTy $ Read objTy Nothing tid (TableName (T.unpack table)) key'
     withNodeContext node $ translateObjBinding bindings objTy body readT
+
+  AST_WithDefaultRead node table key bindings schemaNode defaultNode body -> do
+    EType objTy@(SObject schema) <- translateType schemaNode
+    Some SStr key'               <- translateNode key
+    Some objTy' def              <- translateNode defaultNode
+    tid                          <- tagRead node $ ESchema schema
+    case singEq objTy objTy' of
+      Nothing   -> throwError' $ TypeError node
+      Just Refl -> do
+        let readT = Some objTy $
+              Read objTy (Just def) tid (TableName (T.unpack table)) key'
+        withNodeContext node $ translateObjBinding bindings objTy body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
     EType objTy@SObject{} <- translateType schemaNode
@@ -1169,7 +1205,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr key'               <- translateNode key
     EType objTy@(SObject schema) <- translateType node
     tid                          <- tagRead node $ ESchema schema
-    pure $ Some objTy $ Read objTy tid (TableName (T.unpack table)) key'
+    pure $ Some objTy $ Read objTy Nothing tid (TableName (T.unpack table)) key'
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
@@ -1200,7 +1236,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         pure $ Some filteredObjTy $
           CoreTerm $ ObjTake tableObjTy
             (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> litColumns)))
-            (Read tableObjTy tid (TableName (T.unpack table)) key')
+            (Read tableObjTy Nothing tid (TableName (T.unpack table)) key')
 
   AST_At node index obj -> do
     obj'     <- translateNode obj
@@ -1388,7 +1424,20 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_NFun _ "keys"   [_] -> throwError' $ NoKeys astNode
+  AST_NFun node "yield" [ obj ] -> do
+    Some objTy obj' <- translateNode obj
+    ety <- translateType node
+    tid <- tagYield ety
+    pure $ Some objTy $ Yield tid obj'
+
+  -- Translate into a resume-and-bind
+  AST_Resume node bindings schemaNode body -> do
+    ety@(EType objTy@SObject{}) <- translateType schemaNode
+    tid <- tagResume ety
+    withNodeContext node $ translateObjBinding bindings objTy body $
+      Some objTy $ Resume tid
+
+  AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
 
