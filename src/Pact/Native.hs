@@ -664,7 +664,7 @@ yield i as = case as of
 
 resume :: NativeFun e
 resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
-  rm <- preview $ eePactStep . _Just . psResume . _Just . yData . oObject
+  rm <- preview $ eePactStep . _Just . psResume . _Just
   case rm of
     Nothing -> evalError' i "Resume: no yielded value in context"
     Just r ->

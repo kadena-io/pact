@@ -141,9 +141,11 @@ applyContinuation rk hsh signers msg@ContMsg{..} = do
             else when (_cmStep /= (_peStep + 1)) $ throwCmdEx $ "Invalid continuation step value: Received "
                  ++ show _cmStep ++ " but expected " ++ show (_peStep + 1)
 
+         
+          let resume = fmap (_oObject . _yData) _peYield
           -- Setup environment and get result
           let sigs = userSigsToPactKeySet signers
-              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId _peYield
+              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId resume
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep (toUntypedHash hsh)) _csRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData

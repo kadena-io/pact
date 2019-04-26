@@ -43,6 +43,7 @@ import Pact.Types.Term
 -- 4. The hash of the defining module
 data Yield = Yield
   { _yData :: !(Object Name)
+  -- | Yield data from the pact continuation
   , _yTarget :: !ChainId
   , _yEndorsement :: !Hash
   } deriving (Eq, Show)
@@ -76,7 +77,7 @@ data PactStep = PactStep
   { _psStep :: !Int
   , _psRollback :: !Bool
   , _psPactId :: !PactId
-  , _psResume :: !(Maybe Yield)
+  , _psResume :: !(Maybe (ObjectMap (Term Name)))
   } deriving (Eq, Show)
 
 -- | The type of pact continuations (i.e. defpact)

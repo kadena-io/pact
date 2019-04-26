@@ -301,17 +301,13 @@ continuePact i as = case as of
           Nothing -> return Nothing
           Just PactExec{..} -> return $ fmap (_oObject . _yData) _peYield
 
-      cid <- view (eePublicData . pdPublicMeta . pmChainId)
-      let r = fmap (yieldOf cid) resume
       let pactId = (PactId $ fromIntegral pid)
-          pactStep = PactStep (fromIntegral step) rollback pactId r
+          pactStep = PactStep (fromIntegral step) rollback pactId resume
       viewLibState (view rlsPacts) >>= \pacts -> case M.lookup pactId pacts of
         Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
         Just PactExec{..} -> do
           evalPactExec .= Nothing
           local (set eePactStep $ Just pactStep) $ evalContinuation _peContinuation
-    yieldOf cid t@(ObjectMap o) =
-      Yield (Object t TyAny (Just . fmap fst . M.toList $ o) def) cid (Hash "TODO")
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
