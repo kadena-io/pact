@@ -63,8 +63,7 @@ endorse
   -- ^ the hash of the containing module for a pact
   -> PactId
   -- ^ the executing pact id
-  -> Object Name
-  -- ^ yield data
+  -> Object Name  -- ^ yield data
   -> ChainId
   -- ^ target chain id
   -> Hash

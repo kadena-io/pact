@@ -36,6 +36,9 @@ module Pact.Types.Runtime
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
    SPVSupport(..),noSPVSupport,
+   findCallingModuleName,
+   findCallingModule
+   findModuleDef,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -204,7 +207,7 @@ data EvalEnv e = EvalEnv {
     , _eeHash :: Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
-      -- | Namespace Policy
+      -- | Namespacqe Policy
     , _eeNamespacePolicy :: NamespacePolicy
       -- | SPV backend
     , _eeSPVSupport :: SPVSupport
@@ -248,13 +251,30 @@ data EvalState = EvalState {
     , _evalCallStack :: ![StackFrame]
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
-      -- | Gas tally
+      -- | Gas tally'
     , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
     } deriving (Show)
 makeLenses ''EvalState
 instance Default EvalState where def = EvalState def def def 0 def
+
+-- | Look up the name of the most current module in the stack
+findCallingModuleName :: Eval e (Maybe ModuleName)
+findCallingModuleName =
+  preuse $ evalCallStack . traverse . sfApp . _Just . _1 . faModule . _Just
+
+-- | Given a module name, find the corresponding module def
+-- in the refstore
+findModuleDef :: ModuleName -> Eval e (Maybe (ModuleDef (Def Ref)))
+findModuleDef n = do
+  md <- preview (eeRefStore . rsModules . ix n . mdModule)
+  case md of
+    Nothing -> preuse (evalRefs . rsLoadedModules . ix n)
+    Just m -> return (Just m)
+
+findCallingModule :: Eval e (Maybe (ModuleDef (Def Ref)))
+findCallingModule = maybe (pure Nothing) findModuleDef =<< findCallingModuleName
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =

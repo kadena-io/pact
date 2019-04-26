@@ -184,9 +184,6 @@ enforceGuard i g = case g of
   GUser UserGuard{..} -> do
     void $ runReadOnly (_faInfo i) $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
 
-findCallingModule :: Eval e (Maybe ModuleName)
-findCallingModule = uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))
-
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.
 guardForModuleCall :: Info -> ModuleName -> Eval e () -> Eval e ()

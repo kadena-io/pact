@@ -26,7 +26,6 @@ import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
 import Control.Monad
 import Data.Default
-import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 import qualified Data.Vector as V
@@ -369,10 +368,10 @@ guardTable i t = evalError' i $ "Internal error: guardTable called with non-tabl
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
 enforceBlessedHashes i mn h = do
-  mmRs <- fmap _mdModule . HM.lookup mn <$> view (eeRefStore . rsModules)
-  mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
+  mm <- findModuleDef mn
   case mm of
-    Nothing -> evalError' i $ "Internal error: Module " <> pretty mn <> " not found, could not enforce hashes"
+    Nothing -> evalError' i $
+      "Internal error: Module " <> pretty mn <> " not found, could not enforce hashes"
     Just m ->
       case m of
         MDModule Module{..}

@@ -657,9 +657,10 @@ yield i as = case as of
       eym <- use evalPactExec
       case eym of
         Nothing -> evalError' i "Yield not in defpact context"
-        Just {} -> do
+        Just PactExec{..} -> do
           void $ enforcePactValue' o
-          let y = Yield t tid undefined
+
+          let y = Yield t tid e
           (evalPactExec . _Just . peYield) .= Just y
 
 resume :: NativeFun e
