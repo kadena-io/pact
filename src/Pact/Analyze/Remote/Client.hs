@@ -27,7 +27,7 @@ import qualified GHCJS.DOM.XMLHttpRequest   as XHR
 import qualified Pact.Analyze.Remote.Types  as Remote
 import           Pact.Types.Runtime         (ModuleData (..))
 import           Pact.Types.Term            (ModuleName, derefDef,
-                                             moduleDefName)
+                                             moduleDefName, Ref)
 
 verifyModule
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
