@@ -37,7 +37,7 @@ import qualified Test.HUnit                   as HUnit
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState)
 import           Pact.Repl.Types              (ReplMode (StringEval), rEnv)
-import           Pact.Types.Runtime           (Exp, Info, ModuleData,
+import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref,
                                                eeRefStore, rsModules)
 import           Pact.Types.Pretty            (Pretty, renderCompactString)
 import           Pact.Types.Util              (tShow)
@@ -121,7 +121,7 @@ renderTestFailure = \case
 -- TODO: use ExceptT
 --
 
-compile :: Text -> IO (Either TestFailure ModuleData)
+compile :: Text -> IO (Either TestFailure (ModuleData Ref))
 compile code = do
   replState0 <- initReplState StringEval Nothing
   (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0

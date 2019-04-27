@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -23,12 +24,14 @@ module Pact.Types.PactValue
   ) where
 
 import Control.Applicative ((<|>))
+import Control.DeepSeq (NFData)
 import qualified Data.Aeson as A
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
 import Data.Text (Text)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import GHC.Generics
 
 import Pact.Types.Exp (Literal(..))
 import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
@@ -41,8 +44,9 @@ data PactValue
   | PList (Vector PactValue)
   | PObject (ObjectMap PactValue)
   | PGuard Guard
-  deriving (Eq,Show)
+  deriving (Eq,Show,Generic)
 
+instance NFData PactValue
 
 instance ToJSON PactValue where
   toJSON (PLiteral l) = toJSON l
