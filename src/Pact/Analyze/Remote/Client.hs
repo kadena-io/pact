@@ -30,8 +30,8 @@ import           Pact.Types.Term            (ModuleName, derefDef,
                                              moduleDefName)
 
 verifyModule
-  :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
-  -> ModuleData                       -- ^ the module we're verifying
+  :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
+  -> (ModuleData Ref)                       -- ^ the module we're verifying
   -> String
   -> IO [Text]
 verifyModule namedMods mod' uri = do
