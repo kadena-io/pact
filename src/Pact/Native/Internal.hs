@@ -187,7 +187,7 @@ enforceGuard i g = case g of
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.
 guardForModuleCall :: Info -> ModuleName -> Eval e () -> Eval e ()
-guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
+guardForModuleCall i modName onFound = findCallingModuleName >>= \r -> case r of
     (Just mn) | mn == modName -> onFound
     _ -> do
       md <- getModule i modName

@@ -85,12 +85,15 @@ allocModelTags argsMap locatedTm graph = ModelTags
     <$> allocVars
     <*> allocReads
     <*> allocWrites
+    <*> allocYields
+    <*> allocResumes
     <*> allocAsserts
     <*> allocGEs
     <*> allocGrantReqs
     <*> allocResult
     <*> allocPaths
     <*> allocReturns
+    <*> allocCancels
 
   where
     -- For the purposes of symbolic value allocation, we just grab all of the
@@ -135,6 +138,21 @@ allocModelTags argsMap locatedTm graph = ModelTags
           TraceWrite _writeType schema tid -> const event <$> f (schema, tid)
           _                                -> pure event
 
+    allocYieldResume
+      :: String
+      -> Traversal' TraceEvent (EType, TagId)
+      -> Alloc (Map TagId TVal)
+    allocYieldResume description p = fmap Map.fromList $
+      for (toListOf (traverse.p) events) $ \(ety, tid) -> do
+        tv <- allocTVal description ety
+        pure (tid, tv)
+
+    allocYields :: Alloc (Map TagId TVal)
+    allocYields = allocYieldResume "yield" _TraceYield
+
+    allocResumes :: Alloc (Map TagId TVal)
+    allocResumes = allocYieldResume "resume" _TraceResume
+
     allocAsserts :: Alloc (Map TagId (Located (SBV Bool)))
     allocAsserts = fmap Map.fromList $
       for (toListOf (traverse._TraceAssert._2) events) $ \(Located info tid) ->
@@ -174,6 +192,11 @@ allocModelTags argsMap locatedTm graph = ModelTags
       for (toListOf (traverse._TracePopScope) events) $ \(_, _, tid, ety) ->
         (tid,) <$> allocTVal "trace_pop_scope" ety
 
+    allocCancels :: Alloc (Map TagId (SBV Bool))
+    allocCancels = fmap Map.fromList $
+      for (toListOf (traverse._TraceCancel) events) $ \tid ->
+        (tid,) <$> allocSbv @'TyBool "cancel"
+
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided
 -- symbolic 'Model'.
 saturateModel :: Model 'Symbolic -> SBV.Query (Model 'Concrete)
@@ -182,12 +205,15 @@ saturateModel =
     traverseOf (modelTags.mtVars.traversed.located._2)           fetchTVal   >=>
     traverseOf (modelTags.mtReads.traversed.located)             fetchAccess >=>
     traverseOf (modelTags.mtWrites.traversed.located)            fetchAccess >=>
+    traverseOf (modelTags.mtYields.traversed)                    fetchTVal   >=>
+    traverseOf (modelTags.mtResumes.traversed)                   fetchTVal   >=>
     traverseOf (modelTags.mtAsserts.traversed.located)           fetchSbv    >=>
     traverseOf (modelTags.mtGuardEnforcements.traversed.located) fetchGE     >=>
     traverseOf (modelTags.mtGrantRequests.traversed.located)     fetchGR     >=>
     traverseOf (modelTags.mtResult._2.located)                   fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)                     fetchSbv    >=>
     traverseOf (modelTags.mtReturns.traversed)                   fetchTVal   >=>
+    traverseOf (modelTags.mtCancels.traversed)                   fetchSbv    >=>
     traverseOf (modelGuardProvs.traversed)                       fetchProv
 
   where

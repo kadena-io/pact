@@ -43,7 +43,7 @@ module Pact.Types.Term
    defTypeRep,
    NativeDefName(..),DefName(..),
    FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
-   Ref(..),_Direct,_Ref,
+   Ref'(..),_Direct,_Ref,Ref,
    NativeDFun(..),
    BindType(..),
    BindPair(..),bpArg,bpVal,toBindPairs,
@@ -324,14 +324,18 @@ data FunApp = FunApp {
 instance HasInfo FunApp where getInfo = _faInfo
 
 -- | Variable type for an evaluable 'Term'.
-data Ref =
+data Ref' d =
   -- | "Reduced" (evaluated) or native (irreducible) term.
-  Direct (Term Name) |
+  Direct d |
   -- | Unevaulated/un-reduced term, never a native.
-  Ref (Term Ref)
-  deriving (Eq,Show)
+  Ref (Term (Ref' d))
+  deriving (Eq,Show,Functor,Foldable,Traversable,Generic)
 
-instance Pretty Ref where
+instance NFData d => NFData (Ref' d)
+
+type Ref = Ref' (Term Name)
+
+instance Pretty d => Pretty (Ref' d) where
   pretty (Direct tm) = pretty tm
   pretty (Ref tm)    = pretty tm
 
@@ -1148,7 +1152,7 @@ termEq _ _ = False
 makeLenses ''Term
 makeLenses ''Namespace
 makeLenses ''FunApp
-makePrisms ''Ref
+makePrisms ''Ref'
 makeLenses ''Meta
 makeLenses ''Module
 makeLenses ''Interface

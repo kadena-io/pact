@@ -169,7 +169,7 @@ createModuleGuard =
   "Defines a guard by NAME that enforces the current module admin predicate."
   where
     createModuleGuard' :: RNativeFun e
-    createModuleGuard' i [TLitString name] = findCallingModule >>= \m -> case m of
+    createModuleGuard' i [TLitString name] = findCallingModuleName >>= \m -> case m of
       Just mn ->
         return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
       Nothing -> evalError' i "create-module-guard: must call within module"

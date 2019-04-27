@@ -44,6 +44,7 @@ module Pact.Eval
     ,evalByName
     ,evalContinuation
     ,enforcePactValue,enforcePactValue'
+    ,toPersistDirect
     ) where
 
 import Bound
@@ -260,7 +261,7 @@ eval (TModule (MDModule m) bod i) =
     void $ acquireCapability (ModuleAdminCapability $ _mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
-    writeRow i Write Modules (_mName mangledM) (derefDef <$> govM)
+    writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 
 eval (TModule (MDInterface m) bod i) =
@@ -271,11 +272,17 @@ eval (TModule (MDInterface m) bod i) =
     oldI <- readRow i Modules $ _interfaceName mangledI
     case oldI of
       Nothing -> return ()
-      Just old -> evalError i $ "Existing interface found: " <> pretty old
+      Just _old -> evalError i $ "Existing interface found (interfaces cannot be upgraded)"
     (g,govI) <- loadInterface mangledI bod i gas
-    writeRow i Write Modules (_interfaceName mangledI) (derefDef <$> govI)
+    writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 eval t = enscope t >>= reduce
+
+
+toPersistDirect' :: Term Name -> Eval e PersistDirect
+toPersistDirect' t = case toPersistDirect t of
+  Right v -> return v
+  Left e -> evalError (getInfo t) $ "Attempting to serialize non pact-value in module def: " <> pretty e
 
 
 evalContinuation :: PactContinuation -> Eval e (Term Name)
@@ -318,7 +325,7 @@ mangleDefs mn term = modifyMn term
 
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule :: Module (Term Name) -> Scope n Term Name -> Info -> Gas
-           -> Eval e (Gas,ModuleDef (Def Ref))
+           -> Eval e (Gas,ModuleData Ref)
 loadModule m@Module {} bod1 mi g0 = do
   (g1,mdefs) <-
     case instantiate' bod1 of
@@ -345,7 +352,7 @@ loadModule m@Module {} bod1 mi g0 = do
   let md = ModuleData mGov solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert (_mName m) md
-  return (g1,mGov)
+  return (g1,md)
 
 resolveGovernance :: HM.HashMap Text Ref
                   -> Module (Term Name) -> Eval e (ModuleDef (Def Ref))
@@ -360,7 +367,7 @@ resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
     _ -> evalError (_tInfo g) "Invalid module governance, should be var"
 
 loadInterface :: Interface -> Scope n Term Name -> Info -> Gas
-              -> Eval e (Gas,ModuleDef (Def Ref))
+              -> Eval e (Gas,ModuleData Ref)
 loadInterface i@Interface{..} body info gas0 = do
   (gas1,idefs) <- case instantiate' body of
     (TList bd _ _bi) -> do
@@ -383,7 +390,7 @@ loadInterface i@Interface{..} body info gas0 = do
   let md = ModuleData (MDInterface i) evaluatedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
-  return (gas1,_mdModule md)
+  return (gas1,md)
 
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
@@ -475,7 +482,7 @@ solveConstraint info refName (Ref t) evalMap = do
           pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " <> pretty t
 
-resolveName :: ModuleName -> Eval e (Maybe ModuleData)
+resolveName :: ModuleName -> Eval e (Maybe (ModuleData Ref))
 resolveName mn = do
   md <- preview $ eeRefStore . rsModules . ix mn
   case md of
@@ -696,7 +703,7 @@ resolveFreeVars i b = traverse r b where
              Nothing -> evalError i $ "Cannot resolve " <> pretty fv
              Just d -> return d
 
-installModule :: ModuleData ->  Eval e ()
+installModule :: ModuleData Ref ->  Eval e ()
 installModule ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
   (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) _mdModule

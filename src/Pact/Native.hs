@@ -660,7 +660,7 @@ yield i as = case as of
         Just PactExec{..} -> do
           void $ enforcePactValue' o
 
-          let y = Yield t tid e
+          let y = Yield t tid undefined
           (evalPactExec . _Just . peYield) .= Just y
 
 resume :: NativeFun e
