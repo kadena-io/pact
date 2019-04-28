@@ -31,6 +31,7 @@ import Pact.Types.Logger
 import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
+import Pact.Native.Internal
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -68,7 +69,7 @@ eitherDie = either (throwIO . userError) (return $!)
 entity :: Maybe EntityName
 entity = Just $ EntityName "entity"
 
-loadBenchModule :: PactDbEnv e -> IO ()
+loadBenchModule :: PactDbEnv e -> IO PersistModuleData
 loadBenchModule db = do
   m <- pack <$> readFile "tests/bench/bench.pact"
   pc <- parseCode m
@@ -79,6 +80,9 @@ loadBenchModule db = do
   let e = setupEvalEnv db entity (Transactional 1) md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
   void $ evalExec e pc
+  (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
+  either (throwIO . userError . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
+
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
@@ -99,18 +103,19 @@ benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
 acctRow :: ObjectMap PactValue
 acctRow = ObjectMap $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
 
-benchRead :: Domain k v -> k -> Method () (Maybe v)
-benchRead KeySets _ = rc (Just benchKeySet)
-benchRead UserTables {} _ = rc (Just acctRow)
-benchRead _ _ = rc Nothing
+benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)
+benchRead _ KeySets _ = rc (Just benchKeySet)
+benchRead _ UserTables {} _ = rc (Just acctRow)
+benchRead benchMod Modules _ = rc (Just benchMod)
+benchRead _ _ _ = rc Nothing
 
-benchReadValue :: Table k -> k -> Persist () (Maybe v)
-benchReadValue (DataTable t) _k
+benchReadValue :: PersistModuleData -> Table k -> k -> Persist () (Maybe v)
+benchReadValue benchMod (DataTable t) _k
   | t == "SYS_keysets" = rcp $ Just (unsafeCoerce benchKeySet)
   | t == "USER_bench_bench-accounts" = rcp $ Just (unsafeCoerce acctRow)
-  | t == "SYS_modules" = rcp Nothing
+  | t == "SYS_modules" = rcp $ Just (unsafeCoerce benchMod)
   | otherwise = error (show t)
-benchReadValue (TxTable _t) _k = rcp Nothing
+benchReadValue _ (TxTable _t) _k = rcp Nothing
 
 
 mkBenchCmd :: [SomeKeyPair] -> (String, Text) -> IO (String, Command ByteString)
@@ -128,15 +133,15 @@ main = do
   !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
   initSchema pureDb
-  loadBenchModule pureDb
+  benchMod <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
   print =<< runPactExec pureDb benchCmd
-  {- !mockDb <- mkMockEnv def { mockRead = MockRead benchRead }
-  loadBenchModule mockDb
+  !mockDb <- mkMockEnv def { mockRead = MockRead (benchRead benchMod) }
+  void $ loadBenchModule mockDb
   print =<< runPactExec mockDb benchCmd
-  !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue benchReadValue }
-  loadBenchModule mockPersistDb
-  print =<< runPactExec mockPersistDb benchCmd -}
+  !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue (benchReadValue benchMod) }
+  void $ loadBenchModule mockPersistDb
+  print =<< runPactExec mockPersistDb benchCmd
   cmds_ <- traverse (mkBenchCmd [keyPair]) exps
   !cmds <- return $!! cmds_
 
@@ -146,6 +151,6 @@ main = do
     , benchCompile parsedExps
     , benchVerify cmds
     , benchNFIO "puredb" (runPactExec pureDb benchCmd)
-    -- , benchNFIO "mockdb" (runPactExec mockDb benchCmd)
-    -- , benchNFIO "mockpersist" (runPactExec mockPersistDb benchCmd)
+    , benchNFIO "mockdb" (runPactExec mockDb benchCmd)
+    , benchNFIO "mockpersist" (runPactExec mockPersistDb benchCmd)
     ]
