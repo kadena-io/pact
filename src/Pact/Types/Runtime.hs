@@ -245,8 +245,8 @@ makeLenses ''EvalEnv
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
       _rsLoaded :: HM.HashMap Name Ref
-      -- | Modules that were loaded.
-    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref)
+      -- | Modules that were loaded, and flag if updated.
+    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe Namespace
     } deriving (Eq,Show)

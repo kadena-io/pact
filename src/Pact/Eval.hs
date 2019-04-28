@@ -33,7 +33,6 @@ module Pact.Eval
     ,enforceKeySet,enforceKeySetName
     ,checkUserType
     ,deref
-    ,installModule
     ,runPure,runReadOnly,Purity
     ,liftTerm,apply
     ,preGas
@@ -239,7 +238,7 @@ lookupModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
 lookupModule i mn = do
   loaded <- preuse $ evalRefs . rsLoadedModules . ix mn
   case loaded of
-    m@Just {} -> return m
+    Just (m,_) -> return $ Just m
     Nothing -> do
       stored <- readRow (getInfo i) Modules mn
       case stored of
@@ -250,7 +249,7 @@ lookupModule i mn = do
                 _ -> Nothing
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
             Right md -> do
-              evalRefs . rsLoadedModules %= HM.insert mn md
+              evalRefs . rsLoadedModules %= HM.insert mn (md,False)
               return $ Just md
             Left e -> evalError' i $ "Internal error: module restore failed: " <> pretty e
         Nothing -> return Nothing
@@ -331,7 +330,7 @@ evalUse (Use mn h i) = do
               "Interfaces should not have associated hashes: " <>
               pretty _interfaceName
 
-      installModule md
+      installModule False md
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
 mangleDefs mn term = modifyMn term
@@ -370,7 +369,7 @@ loadModule m@Module {} bod1 mi g0 = do
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
-  installModule md
+  installModule True md
   return (g1,md)
 
 resolveGovernance :: HM.HashMap Text Ref
@@ -407,7 +406,7 @@ loadInterface i@Interface{..} body info gas0 = do
   mapM_ evalUse _interfaceImports
   evaluatedDefs <- evaluateDefs info (fmap (mangleDefs _interfaceName) idefs)
   let md = ModuleData (MDInterface i) evaluatedDefs
-  installModule md
+  installModule True md
   return (gas1,md)
 
 -- | Definitions are transformed such that all free variables are resolved either to
@@ -729,10 +728,12 @@ resolveFreeVars i b = traverse r b where
              Nothing -> evalError i $ "Cannot resolve " <> pretty fv
              Just d -> return d
 
-installModule :: ModuleData Ref ->  Eval e ()
-installModule md@ModuleData{..} = do
+-- | Install module into local namespace. If updated/new, update loaded modules.
+installModule :: Bool -> ModuleData Ref ->  Eval e ()
+installModule updated md@ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
-  (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) md
+  when updated $
+    (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) (md,updated)
 
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'

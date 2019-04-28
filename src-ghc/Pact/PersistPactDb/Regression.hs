@@ -34,7 +34,7 @@ loadModule = do
   case r of
     Left a -> throwFail $ "module load failed: " ++ show a
     Right _ -> case preview (rEvalState . evalRefs . rsLoadedModules . ix mn) s of
-      Just md -> case traverse (traverse toPersistDirect) md of
+      Just (md,_) -> case traverse (traverse toPersistDirect) md of
         Right md' -> return (mn,md,md')
         Left e -> throwFail $ "toPersistDirect failed: " ++ show e
       Nothing -> throwFail $ "Failed to find module 'simple': " ++

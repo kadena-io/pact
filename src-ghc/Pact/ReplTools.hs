@@ -40,7 +40,7 @@ completeFn :: (MonadIO m, MonadState ReplState m) => CompletionFunc m
 completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') ("\"\'" ++ filenameWordBreakChars) $ \str -> do
     modules <- use (rEvalState . evalRefs . rsLoadedModules)
-    let namesInModules = toListOf (traverse . mdRefMap . to HM.keys . each) modules
+    let namesInModules = toListOf (traverse . _1 . mdRefMap . to HM.keys . each) modules
         allNames = concat
           [ namesInModules
           , nameOfModule <$> HM.keys modules

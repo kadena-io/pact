@@ -12,6 +12,7 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Default
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import System.CPUTime
@@ -69,7 +70,7 @@ eitherDie = either (throwIO . userError) (return $!)
 entity :: Maybe EntityName
 entity = Just $ EntityName "entity"
 
-loadBenchModule :: PactDbEnv e -> IO PersistModuleData
+loadBenchModule :: PactDbEnv e -> IO (ModuleData Ref,PersistModuleData)
 loadBenchModule db = do
   m <- pack <$> readFile "tests/bench/bench.pact"
   pc <- parseCode m
@@ -81,7 +82,8 @@ loadBenchModule db = do
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
   void $ evalExec e pc
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
-  either (throwIO . userError . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
+  p <- either (throwIO . userError . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
+  return (benchMod,p)
 
 
 parseCode :: Text -> IO ParsedCode
@@ -90,12 +92,13 @@ parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
 benchNFIO :: NFData a => String -> IO a -> Benchmark
 benchNFIO bname = bench bname . nfIO
 
-runPactExec :: PactDbEnv e -> ParsedCode -> IO Value
-runPactExec dbEnv pc = do
+runPactExec :: Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
+runPactExec benchMod dbEnv pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
   let e = setupEvalEnv dbEnv entity t (initMsgData pactInitialHash)
           initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  toJSON . _erOutput <$> evalExec e pc
+      s = maybe def (initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
+  toJSON . _erOutput <$> evalExecState s e pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
@@ -133,15 +136,15 @@ main = do
   !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
   initSchema pureDb
-  benchMod <- loadBenchModule pureDb
+  (benchMod',benchMod) <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
-  print =<< runPactExec pureDb benchCmd
+  print =<< runPactExec Nothing pureDb benchCmd
   !mockDb <- mkMockEnv def { mockRead = MockRead (benchRead benchMod) }
   void $ loadBenchModule mockDb
-  print =<< runPactExec mockDb benchCmd
+  print =<< runPactExec Nothing mockDb benchCmd
   !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue (benchReadValue benchMod) }
   void $ loadBenchModule mockPersistDb
-  print =<< runPactExec mockPersistDb benchCmd
+  print =<< runPactExec Nothing mockPersistDb benchCmd
   cmds_ <- traverse (mkBenchCmd [keyPair]) exps
   !cmds <- return $!! cmds_
 
@@ -150,7 +153,10 @@ main = do
     [ benchParse
     , benchCompile parsedExps
     , benchVerify cmds
-    , benchNFIO "puredb" (runPactExec pureDb benchCmd)
-    , benchNFIO "mockdb" (runPactExec mockDb benchCmd)
-    , benchNFIO "mockpersist" (runPactExec mockPersistDb benchCmd)
+    , benchNFIO "puredb" (runPactExec Nothing pureDb benchCmd)
+    , benchNFIO "mockdb" (runPactExec Nothing mockDb benchCmd)
+    , benchNFIO "mockpersist" (runPactExec Nothing mockPersistDb benchCmd)
+    , benchNFIO "puredb-withmod" (runPactExec (Just benchMod') pureDb benchCmd)
+    , benchNFIO "mockdb-withmod" (runPactExec (Just benchMod') mockDb benchCmd)
+    , benchNFIO "mockpersist-withmod" (runPactExec (Just benchMod') mockPersistDb benchCmd)
     ]

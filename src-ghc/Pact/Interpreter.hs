@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 -- | "Production" interpreter for Pact, as opposed to the REPL.
@@ -17,6 +18,7 @@ module Pact.Interpreter
   , MsgData(..)
   , EvalResult(..)
   , initMsgData
+  , initStateModules
   , evalExec
   , evalExecState
   , evalContinuation
@@ -33,8 +35,10 @@ module Pact.Interpreter
 import Control.Concurrent
 import Control.Monad.Catch
 import Control.Monad.Except
+import Control.Lens
 import Data.Aeson
 import Data.Default
+import Data.HashMap.Strict (HashMap)
 import qualified Data.Set as S
 import System.Directory
 
@@ -72,6 +76,7 @@ data EvalResult = EvalResult
   , _erLogs :: ![TxLog Value]
   , _erExec :: !(Maybe PactExec)
   , _erGas :: Gas
+  , _erLoadedModules :: HashMap ModuleName (ModuleData Ref,Bool)
   } deriving (Eq,Show)
 
 
@@ -83,6 +88,9 @@ evalExecState initState evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
   interpret initState evalEnv (Right terms)
 
+-- | For pre-installing modules into state.
+initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
+initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 evalContinuation :: EvalEnv e -> PactContinuation -> IO EvalResult
 evalContinuation ee pact = evalContinuationState def ee pact
@@ -151,8 +159,9 @@ interpret initState evalEnv terms = do
     runEval initState evalEnv $ evalTerms tx terms
   let gas = _evalGas state
       pactExec = _evalPactExec state
+      modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
-  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas
+  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules
 
 evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do
