@@ -97,9 +97,9 @@ loadModule :: FilePath -> ModuleName -> IO (ModuleData Ref)
 loadModule fp mn = do
   (r,s) <- execScript' Quiet fp
   either (die def) (const (return ())) r
-  case view (rEnv . eeRefStore . rsModules . at mn) s of
-    Just m -> return m
-    Nothing -> die def $ "Module not found: " ++ show (fp,mn)
+  replLookupModule s mn >>= \mr -> case mr of
+    Right m -> return m
+    Left e -> die def $ "Module not found: " ++ show (fp,mn,e)
 
 loadFun :: FilePath -> ModuleName -> Text -> IO Ref
 loadFun fp mn fn = loadModule fp mn >>= \(ModuleData _ m) -> case HM.lookup fn m of

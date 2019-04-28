@@ -11,8 +11,8 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (at, findOf, ix, matching, (&),
-                                               (.~), (^.), (^..), _Left)
+import           Control.Lens                 (findOf, ix, matching, (&),
+                                               (.~), (^..), _Left)
 import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
@@ -35,10 +35,9 @@ import           Test.Hspec                   (Spec, describe,
 import qualified Test.HUnit                   as HUnit
 
 import           Pact.Parse                   (parseExprs)
-import           Pact.Repl                    (evalRepl', initReplState)
-import           Pact.Repl.Types              (ReplMode (StringEval), rEnv)
-import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref,
-                                               eeRefStore, rsModules)
+import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
+import           Pact.Repl.Types              (ReplMode (StringEval))
+import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref)
 import           Pact.Types.Pretty            (Pretty, renderCompactString)
 import           Pact.Types.Util              (tShow)
 
@@ -124,13 +123,11 @@ renderTestFailure = \case
 compile :: Text -> IO (Either TestFailure (ModuleData Ref))
 compile code = do
   replState0 <- initReplState StringEval Nothing
-  (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
-  pure $ case eTerm of
-    Left err -> Left $ ReplError err
-    Right _t ->
-      case replState ^. rEnv . eeRefStore . rsModules . at "test" of
-        Nothing         -> Left NoTestModule
-        Just moduleData -> Right moduleData
+  (_, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
+  moduleM <- replLookupModule replState "test"
+  pure $ case moduleM of
+    Left err -> Left $ ReplError (show err)
+    Right m -> Right m
 
 runVerification :: Text -> IO (Maybe TestFailure)
 runVerification code = do

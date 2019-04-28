@@ -34,7 +34,7 @@ import qualified Text.Megaparsec.Char       as MP
 import qualified Pact.Analyze.Check        as Check
 import           Pact.Analyze.Remote.Types (Request(..), Response(..),
                                             ClientError(..))
-import           Pact.Repl                 (initReplState, evalRepl')
+import           Pact.Repl                 (initReplState, evalRepl', replGetModules)
 import           Pact.Repl.Types
 import           Pact.Types.Info           (Code(_unCode))
 import           Pact.Types.Runtime
@@ -87,8 +87,8 @@ initializeRepl = do
 
   pure $ rs & rEnv . eePactDb .~ dbImpl { _readRow = _readRow' }
 
-replStateModules :: ReplState -> HM.HashMap ModuleName (ModuleData Ref)
-replStateModules replState = replState ^. rEvalState . evalRefs . rsLoadedModules
+replStateModules :: ReplState -> IO (Either PactError (HM.HashMap ModuleName (ModuleData Ref)))
+replStateModules replState = fmap fst <$> replGetModules replState
 
 -- | Parser for strings like: @<interactive>:2:2: Module "mod2" not found@
 moduleNotFoundP :: MP.Parsec Void String ModuleName
@@ -113,30 +113,31 @@ loadModules mods0 = do
       --   still need to be loaded
       -- - try again. if we have promoted more times than we have modules left,
       --   we've encountered a cycle and exit.
-      go mods replState promotionsSinceLastSuccess = do
+      go mods replState promotionsSinceLastSuccess lastLoaded = do
         (eSuccess, replState') <-
           runStateT (runExceptT (traverse_ loadModule mods)) replState
-        case eSuccess of
-          Left msg ->
-            if promotionsSinceLastSuccess >= length mods
-            then pure $ Left $ ClientError "detected cycle in modules"
-            else
-              case MP.parseMaybe moduleNotFoundP msg of
-                Nothing       -> pure $ Left $ ClientError msg
-                Just depName -> do
-                  let numLoaded = HM.size (replStateModules replState')
-                                - HM.size (replStateModules replState)
-                  case promoteBy ((== depName) . moduleDefName) (drop numLoaded mods) of
-                    Nothing    -> pure $ Left $ ClientError msg
-                    Just mods' -> do
-                      let promos' = if numLoaded > 0 then 0 else succ promotionsSinceLastSuccess
-                      go mods' replState' promos'
+        replStateModules replState' >>= \rsm -> case rsm of
+          Left e -> pure $ Left $ ClientError $ show e
+          Right ms -> case eSuccess of
+            Left msg ->
+              if promotionsSinceLastSuccess >= length mods
+              then pure $ Left $ ClientError "detected cycle in modules"
+              else
+                case MP.parseMaybe moduleNotFoundP msg of
+                  Nothing       -> pure $ Left $ ClientError msg
+                  Just depName -> do
+                    let numLoaded = HM.size ms - lastLoaded
+                    case promoteBy ((== depName) . moduleDefName) (drop numLoaded mods) of
+                      Nothing    -> pure $ Left $ ClientError msg
+                      Just mods' -> do
+                        let promos' = if numLoaded > 0 then 0 else succ promotionsSinceLastSuccess
+                        go mods' replState' promos' (HM.size ms)
 
-          Right () ->
-            pure $ Right $ replStateModules replState'
+            Right () ->
+              pure $ Right ms
 
   replState0 <- initializeRepl
-  go mods0 replState0 0
+  go mods0 replState0 0 0
 
   where
     -- Promotes a value to the front of the list if it passes a test.

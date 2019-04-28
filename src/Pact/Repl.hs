@@ -41,6 +41,7 @@ module Pact.Repl
   , utf8BytesLength
   , evalReplEval
   , replGetModules
+  , replLookupModule
   ) where
 
 import Control.Applicative
@@ -367,6 +368,16 @@ replGetModules :: ReplState ->
                   IO (Either PactError
                       (HM.HashMap ModuleName (ModuleData Ref), ReplState))
 replGetModules rs = evalReplEval def rs (getAllModules (def :: Info))
+
+replLookupModule :: ReplState -> ModuleName -> IO (Either String (ModuleData Ref))
+replLookupModule rs mn = do
+  modulesM <- replGetModules rs
+  pure $ case modulesM of
+    Left err -> Left $ show err
+    Right (modules,_) ->
+      case HM.lookup mn modules of
+        Nothing         -> Left $ "module not found: " ++ show mn ++ ", modules=" ++ show (HM.keys modules)
+        Just moduleData -> Right moduleData
 
 -- | install repl lib functions into monad state
 useReplLib :: Repl ()
