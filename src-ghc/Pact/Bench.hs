@@ -4,6 +4,7 @@
 module Pact.Bench where
 
 import Control.Arrow
+import Control.Concurrent
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
@@ -16,6 +17,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import System.CPUTime
+import System.Directory
 import Unsafe.Coerce
 
 import Pact.Compile
@@ -33,6 +35,8 @@ import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Native.Internal
+import Pact.Persist.SQLite
+import Pact.PersistPactDb hiding (db)
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -147,7 +151,17 @@ main = do
   print =<< runPactExec Nothing mockPersistDb benchCmd
   cmds_ <- traverse (mkBenchCmd [keyPair]) exps
   !cmds <- return $!! cmds_
+  let sqliteFile = "log/bench.sqlite"
+  sqliteDb <- mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile []) neverLog
+  initSchema sqliteDb
+  void $ loadBenchModule sqliteDb
+  print =<< runPactExec Nothing sqliteDb benchCmd
 
+  let cleanupSqlite = do
+        c <- readMVar $ pdPactDbVar sqliteDb
+        void $ closeSQLite $ _db c
+        removeFile sqliteFile
+      sqlEnv b = envWithCleanup (return ()) (const cleanupSqlite) (const b)
 
   defaultMain
     [ benchParse
@@ -156,7 +170,9 @@ main = do
     , benchNFIO "puredb" (runPactExec Nothing pureDb benchCmd)
     , benchNFIO "mockdb" (runPactExec Nothing mockDb benchCmd)
     , benchNFIO "mockpersist" (runPactExec Nothing mockPersistDb benchCmd)
+    , benchNFIO "sqlite" (runPactExec Nothing sqliteDb benchCmd)
     , benchNFIO "puredb-withmod" (runPactExec (Just benchMod') pureDb benchCmd)
     , benchNFIO "mockdb-withmod" (runPactExec (Just benchMod') mockDb benchCmd)
     , benchNFIO "mockpersist-withmod" (runPactExec (Just benchMod') mockPersistDb benchCmd)
+    , sqlEnv $ benchNFIO "sqlite-withmod" (runPactExec (Just benchMod') sqliteDb benchCmd)
     ]
