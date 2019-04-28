@@ -549,13 +549,13 @@ unify _ (Right r) = r
 unify m (Left t) = m HM.! t
 
 evalConsts :: PureNoDb e => Ref -> Eval e Ref
-evalConsts (Ref r) = case r of
-  c@TConst {..} -> case _tConstVal of
+evalConsts rr@(Ref r) = case r of
+  TConst {..} -> case _tConstVal of
     CVRaw raw -> do
       v <- reduce =<< traverse evalConsts raw
       traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
       return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tMeta _tInfo)
-    _ -> return $ Ref c
+    _ -> return rr
   _ -> Ref <$> traverse evalConsts r
 evalConsts r = return r
 
