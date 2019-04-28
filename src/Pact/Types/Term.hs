@@ -447,6 +447,10 @@ data Name
   | Name { _nName :: Text, _nInfo :: Info }
   deriving (Generic, Show)
 
+instance HasInfo Name where
+  getInfo (QName _ _ i) = i
+  getInfo (Name _ i) = i
+
 instance Pretty Name where
   pretty = \case
     QName modName nName _ -> pretty modName <> "." <> pretty nName

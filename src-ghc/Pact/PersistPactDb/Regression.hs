@@ -33,11 +33,12 @@ loadModule = do
   let mn = ModuleName "simple" Nothing
   case r of
     Left a -> throwFail $ "module load failed: " ++ show a
-    Right _ -> case preview (rEvalState . evalRefs . rsNewModules . ix mn) s of
+    Right _ -> case preview (rEvalState . evalRefs . rsLoadedModules . ix mn) s of
       Just md -> case traverse (traverse toPersistDirect) md of
         Right md' -> return (mn,md,md')
         Left e -> throwFail $ "toPersistDirect failed: " ++ show e
-      Nothing -> throwFail $ "Failed to find module 'simple': " ++ show (view (rEvalState . evalRefs . rsNewModules) s)
+      Nothing -> throwFail $ "Failed to find module 'simple': " ++
+        show (view (rEvalState . evalRefs . rsLoadedModules) s)
 
 nativeLookup :: NativeDefName -> Maybe (Term Name)
 nativeLookup (NativeDefName n) = case HM.lookup (Name n def) nativeDefs of
@@ -106,10 +107,10 @@ runRegression p = do
     _getTxLog pactdb usert (head tids) v
   _writeRow pactdb Insert usert "key2" row v
   assertEquals' "user insert key2 pre-rollback" (Just row) (_readRow pactdb usert "key2" v)
-  assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pactdb user1 v
+  assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pactdb (UserTables user1) v
   _rollbackTx pactdb v
   assertEquals' "rollback erases key2" Nothing $ _readRow pactdb usert "key2" v
-  assertEquals' "keys" ["key1"] $ _keys pactdb user1 v
+  assertEquals' "keys" ["key1"] $ _keys pactdb (UserTables user1) v
   return v
 
 toTerm' :: ToTerm a => a -> Term Name

@@ -29,7 +29,7 @@ module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
-    ,resolveFreeVars,resolveArg,resolveRef
+    ,resolveFreeVars,resolveArg,resolveRef,lookupModule
     ,enforceKeySet,enforceKeySetName
     ,checkUserType
     ,deref
@@ -94,11 +94,12 @@ evalCommitTx i = do
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
-  runPure $ enforceKeySet mi (Just mksn) ks
+  runReadOnly mi $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
--- | Enforce keyset against environment
-enforceKeySet :: PureNoDb e => Info ->
+-- | Enforce keyset against environment.
+-- Runs as "read only" as custom predicate might require module load.
+enforceKeySet :: PureReadOnly e => Info ->
              Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
@@ -233,6 +234,28 @@ evalNamespace info setter m = do
         Nothing -> ModuleName nn (Just n)
         Just {} -> mn
 
+-- | Lookup module in state or database with exact match on 'ModuleName'.
+lookupModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
+lookupModule i mn = do
+  loaded <- preuse $ evalRefs . rsLoadedModules . ix mn
+  case loaded of
+    m@Just {} -> return m
+    Nothing -> do
+      stored <- readRow (getInfo i) Modules mn
+      case stored of
+        Just mdStored -> do
+          natives <- view $ eeRefStore . rsNatives
+          let natLookup (NativeDefName n) = case HM.lookup (Name n def) natives of
+                Just (Direct t) -> Just t
+                _ -> Nothing
+          case traverse (traverse (fromPersistDirect natLookup)) mdStored of
+            Right md -> do
+              evalRefs . rsLoadedModules %= HM.insert mn md
+              return $ Just md
+            Left e -> evalError' i $ "Internal error: module restore failed: " <> pretty e
+        Nothing -> return Nothing
+
+
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
@@ -242,7 +265,7 @@ eval (TModule (MDModule m) bod i) =
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
     -- enforce old module keysets
-    oldM <- preview $ eeRefStore . rsModules . ix (_mName m)
+    oldM <- lookupModule i (_mName m)
     case oldM of
       Nothing -> return ()
       Just (ModuleData omd _) ->
@@ -268,10 +291,8 @@ eval (TModule (MDInterface m) bod i) =
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m
     -- enforce no upgrades
-    oldI <- readRow i Modules $ _interfaceName mangledI
-    case oldI of
-      Nothing -> return ()
-      Just _old -> evalError i $ "Existing interface found (interfaces cannot be upgraded)"
+    void $ lookupModule i (_interfaceName mangledI) >>= traverse
+      (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
     (g,govI) <- loadInterface mangledI bod i gas
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
@@ -291,7 +312,7 @@ evalContinuation (PactContinuation d args) =
 
 evalUse :: Use -> Eval e ()
 evalUse (Use mn h i) = do
-  mm <- resolveName mn
+  mm <- resolveModule i mn
   case mm of
     Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
     Just md -> do
@@ -350,7 +371,6 @@ loadModule m@Module {} bod1 mi g0 = do
   mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
   installModule md
-  (evalRefs . rsNewModules) %= HM.insert (_mName m) md
   return (g1,md)
 
 resolveGovernance :: HM.HashMap Text Ref
@@ -388,7 +408,6 @@ loadInterface i@Interface{..} body info gas0 = do
   evaluatedDefs <- evaluateDefs info (fmap (mangleDefs _interfaceName) idefs)
   let md = ModuleData (MDInterface i) evaluatedDefs
   installModule md
-  (evalRefs . rsNewModules) %= HM.insert _interfaceName md
   return (gas1,md)
 
 -- | Definitions are transformed such that all free variables are resolved either to
@@ -418,7 +437,7 @@ mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 traverseGraph :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
 traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) $ \(dn,d) -> do
   d' <- forM d $ \(f :: Name) -> do
-    dm <- resolveRef f
+    dm <- resolveRef f f
     case (dm, f) of
       (Just t, _) -> return (Right t)
       (Nothing, Name fn _) ->
@@ -438,7 +457,7 @@ evaluateConstraints info m evalMap =
   foldM evaluateConstraint (m, evalMap) $ _mInterfaces m
   where
     evaluateConstraint (m', refMap) ifn = do
-      refData <- resolveName ifn
+      refData <- resolveModule info ifn
       case refData of
         Nothing -> evalError info $
           "Interface not defined: " <> pretty ifn
@@ -457,33 +476,48 @@ solveConstraint
   -> Eval e (HM.HashMap Text Ref)
   -> Eval e (HM.HashMap Text Ref)
 solveConstraint info refName (Direct t) _ =
-  evalError info $ "found native reference " <> pretty t <> " while resolving module contraints: " <> pretty refName
+  evalError info $ "found native reference " <> pretty t
+  <> " while resolving module contraints: " <> pretty refName
 solveConstraint info refName (Ref t) evalMap = do
   em <- evalMap
   case HM.lookup refName em of
     Nothing ->
       case t of
         TConst{..} -> evalMap
-        _ -> evalError info $ "found unimplemented member while resolving model constraints: " <> pretty refName
+        _ -> evalError info $
+          "found unimplemented member while resolving model constraints: " <> pretty refName
     Just (Direct s) ->
-      evalError info $ "found native reference " <> pretty s <> " while resolving module contraints: " <> pretty t
+      evalError info $ "found native reference " <> pretty s <>
+      " while resolving module contraints: " <> pretty t
     Just (Ref s) ->
       case (t, s) of
         (TDef (Def _n _mn dt (FunType args rty) _ m _) _,
           TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _) _) -> do
-          when (dt /= dt') $ evalError info $ "deftypes mismatching: " <> pretty dt <> line <> pretty dt'
-          when (rty /= rty') $ evalError info $ "return types mismatching: " <> pretty rty <> line <> pretty rty'
-          when (length args /= length args') $ evalError info $ "mismatching argument lists: " <> prettyList args <> line <> prettyList args'
+          when (dt /= dt') $ evalError info $ "deftypes mismatching: "
+            <> pretty dt <> line <> pretty dt'
+          when (rty /= rty') $ evalError info $ "return types mismatching: "
+            <> pretty rty <> line <> pretty rty'
+          when (length args /= length args') $ evalError info $ "mismatching argument lists: "
+            <> prettyList args <> line <> prettyList args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
-            when (n /= n') $ evalError info $ "mismatching argument names: " <> pretty n <> " and " <> pretty n'
-            when (ty /= ty') $ evalError info $ "mismatching types: " <> pretty ty <> " and " <> pretty ty'
+            when (n /= n') $ evalError info $ "mismatching argument names: "
+              <> pretty n <> " and " <> pretty n'
+            when (ty /= ty') $ evalError info $ "mismatching types: "
+              <> pretty ty <> " and " <> pretty ty'
           -- the model concatenation step: we reinsert the ref back into the map with new models
           pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " <> pretty t
 
-resolveName :: ModuleName -> Eval e (Maybe (ModuleData Ref))
-resolveName mn = do
-  md <- preview $ eeRefStore . rsModules . ix mn
+-- | Lookup module in state or db, resolving against current namespace if unqualified.
+resolveModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
+resolveModule = moduleResolver lookupModule
+
+-- | Perform some lookup involving a 'ModuleName' which if unqualified
+-- will re-perform the lookup with the current namespace, if any
+moduleResolver :: HasInfo i => (i -> ModuleName -> Eval e (Maybe a)) ->
+                  i -> ModuleName -> Eval e (Maybe a)
+moduleResolver lkp i mn = do
+  md <- lkp i mn
   case md of
     Just _ -> return md
     Nothing -> do
@@ -492,28 +526,21 @@ resolveName mn = do
         Nothing -> do
           mNs <- use $ evalRefs . rsNamespace
           case mNs of
-            Just ns -> preview $ eeRefStore . rsModules . ix (set mnNamespace (Just . _nsName $ ns) mn)
+            Just ns -> lkp i $ set mnNamespace (Just . _nsName $ ns) mn
             Nothing -> pure Nothing
 
-resolveRef :: Name -> Eval e (Maybe Ref)
-resolveRef (QName q n _) = do
-  let lookupQn q' n' = preview $ eeRefStore . rsModules . ix q' . mdRefMap . ix n'
-  dsm <- lookupQn q n
-  case dsm of
-    d@Just {} -> return d
-    Nothing -> do
-      case (_mnNamespace q) of
-        Just {} -> pure Nothing -- explicit namespace not found
-        Nothing -> do
-          mNs <- use $ evalRefs . rsNamespace
-          case mNs of
-            Just ns -> lookupQn (set mnNamespace (Just $ _nsName ns) q) n
-            Nothing -> pure Nothing -- no explicit namespace or decalared namespace
-resolveRef nn@(Name _ _) = do
+
+resolveRef :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
+resolveRef i (QName q n _) = moduleResolver (lookupQn n) i q
+  where
+    lookupQn n' i' q' = do
+      m <- lookupModule i' q'
+      return $ join $ HM.lookup n' . _mdRefMap <$> m
+resolveRef _i nn@(Name _ _) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
-    Nothing -> preview (evalRefs . rsLoaded . ix nn) <$> get
+    Nothing -> preuse $ evalRefs . rsLoaded . ix nn
 
 -- | This should be impure. See 'evaluateDefs'. Refs are
 -- expected to exist, and if they don't, it is a serious bug
@@ -698,14 +725,14 @@ appError i errDoc = TApp (App (msg errDoc) [] i) i
 
 resolveFreeVars ::  Info -> Scope d Term Name ->  Eval e (Scope d Term Ref)
 resolveFreeVars i b = traverse r b where
-    r fv = resolveRef fv >>= \m -> case m of
+    r fv = resolveRef i fv >>= \m -> case m of
              Nothing -> evalError i $ "Cannot resolve " <> pretty fv
              Just d -> return d
 
 installModule :: ModuleData Ref ->  Eval e ()
-installModule ModuleData{..} = do
+installModule md@ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
-  (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) _mdModule
+  (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) md
 
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'
@@ -823,9 +850,9 @@ runPure action = ask >>= \env -> case _eePurity env of
   PNoDb -> unsafeCoerce action -- yuck. would love safer coercion here
   _ -> mkNoDbEnv env >>= runPure' action
 
-runReadOnly :: Info -> Eval (EnvReadOnly e) a -> Eval e a
+runReadOnly :: HasInfo i => i -> Eval (EnvReadOnly e) a -> Eval e a
 runReadOnly i action = ask >>= \env -> case _eePurity env of
-  PNoDb -> evalError i "internal error: attempting sysread in pure context"
+  PNoDb -> evalError' i "internal error: attempting db read in pure context"
   PReadOnly -> unsafeCoerce action -- yuck. would love safer coercion here
   _ -> mkReadOnlyEnv env >>= runPure' action
 

@@ -39,6 +39,8 @@ module Pact.Repl
   , setReplLib
   , unsetReplLib
   , utf8BytesLength
+  , evalReplEval
+  , replGetModules
   ) where
 
 import Control.Applicative
@@ -103,9 +105,8 @@ initReplState m verifyUri =
 initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
-  return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0)
+  return $ EvalEnv (RefStore nativeDefs) def Null (Just 0)
     def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv) def
-
 
 spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
 spv mv ty pay = readMVar mv >>= \LibState{..} -> case M.lookup (SPVMockKey (ty,pay)) _rlsMockSPV of
@@ -184,11 +185,7 @@ compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
 
 pureEval :: Info -> Eval LibState (Term Name) -> Repl (Either String (Term Name))
 pureEval ei e = do
-  (ReplState evalE evalS _ _ _ _) <- get
-  er <- try (liftIO $ runEval' evalS evalE e)
-  let (r,es) = case er of
-                 Left (SomeException ex) -> (Left (PactError EvalError def def (prettyString (show ex))),evalS)
-                 Right v -> v
+  (r,es) <- evalEval ei e
   mode <- use rMode
   case r of
     Right a -> do
@@ -218,6 +215,14 @@ pureEval ei e = do
                 outStrLn HErr (" at " ++ serr)
               mapM_ (\c -> outStrLn HErr $ " at " ++ show c) cs
             return (Left serr)
+
+evalEval :: Info -> Eval LibState a -> Repl (Either PactError a, EvalState)
+evalEval ei e = do
+  (ReplState evalE evalS _ _ _ _) <- get
+  er <- try (liftIO $ runEval' evalS evalE e)
+  return $ case er of
+    Left (SomeException ex) -> (Left (PactError EvalError ei def (prettyString (show ex))),evalS)
+    Right v -> v
 
 doOut :: Info -> ReplMode -> Term Name -> Repl ()
 doOut ei mode a = case mode of
@@ -274,11 +279,6 @@ doTx i t n = do
     Rollback -> return $ evalRollbackTx i
     Commit -> return $ void $ evalCommitTx i
   pureEval i (e >> return (tStr "")) >>= \r -> forM r $ \_ -> do
-    case t of
-      Commit -> do
-        newmods <- use (rEvalState . evalRefs . rsNewModules)
-        rEnv . eeRefStore . rsModules %= HM.union newmods
-      _ -> return ()
     rEvalState .= def
     useReplLib
     tid <- use $ rEnv . eeTxId
@@ -356,6 +356,17 @@ execScript' m fp = do
   s <- initReplState m Nothing
   runStateT (useReplLib >> loadFile fp) s
 
+evalReplEval :: Info -> ReplState -> Eval LibState a -> IO (Either PactError (a, ReplState))
+evalReplEval i rs e = do
+  ((r,es),rs') <- runStateT (evalEval i e) rs
+  case r of
+    Left err -> return $ Left err
+    Right a -> return $ Right (a, set rEvalState es rs')
+
+replGetModules :: ReplState ->
+                  IO (Either PactError
+                      (HM.HashMap ModuleName (ModuleData Ref), ReplState))
+replGetModules rs = evalReplEval def rs (getAllModules (def :: Info))
 
 -- | install repl lib functions into monad state
 useReplLib :: Repl ()

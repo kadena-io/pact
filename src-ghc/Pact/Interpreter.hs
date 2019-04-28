@@ -35,8 +35,6 @@ import Control.Monad.Catch
 import Control.Monad.Except
 import Data.Aeson
 import Data.Default
-import qualified Data.HashMap.Strict as HM
-import Data.Maybe
 import qualified Data.Set as S
 import System.Directory
 
@@ -72,7 +70,6 @@ data EvalResult = EvalResult
   { _erInput :: !(Either PactContinuation [Term Name])
   , _erOutput :: ![PactValue]
   , _erLogs :: ![TxLog Value]
-  , _erRefStore :: !RefStore
   , _erExec :: !(Maybe PactExec)
   , _erGas :: Gas
   } deriving (Eq,Show)
@@ -125,7 +122,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
         modeToTx Local = Nothing
 
 initRefStore :: RefStore
-initRefStore = RefStore nativeDefs HM.empty
+initRefStore = RefStore nativeDefs
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
@@ -153,12 +150,9 @@ interpret initState evalEnv terms = do
   ((rs,logs),state) <-
     runEval initState evalEnv $ evalTerms tx terms
   let gas = _evalGas state
-      refStore = newRefs . _eeRefStore $ evalEnv
       pactExec = _evalPactExec state
-      newRefs oldStore | isNothing tx = oldStore
-                       | otherwise = updateRefStore (_evalRefs state) oldStore
   -- output uses lenient conversion
-  return $! EvalResult terms (map toPactValueLenient rs) logs refStore pactExec gas
+  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas
 
 evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do

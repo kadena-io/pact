@@ -17,7 +17,7 @@ newtype MockRead =
 instance Default MockRead where def = MockRead (\_t _k -> rc Nothing)
 
 newtype MockKeys =
-  MockKeys (TableName -> Method () [RowKey])
+  MockKeys (forall k v . (IsString k,AsString k) => Domain k v -> Method () [k])
 instance Default MockKeys where def = MockKeys (\_t -> rc [])
 
 newtype MockTxIds =

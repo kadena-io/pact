@@ -20,13 +20,13 @@ module Pact.Types.Runtime
    evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
-   RefStore(..),rsNatives,rsModules,updateRefStore,
+   RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
-   Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
+   Purity(..),PureNoDb,PureReadOnly,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
-   RefState(..),rsLoaded,rsLoadedModules,rsNewModules,rsNamespace,
+   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',
    call,method,
@@ -149,13 +149,12 @@ makeLenses ''PactStep
 
 
 
--- | Storage for loaded modules, interfaces, and natives.
+-- | Storage for natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
-    , _rsModules :: HM.HashMap ModuleName (ModuleData Ref)
     } deriving (Eq, Show)
 makeLenses ''RefStore
-instance Default RefStore where def = RefStore HM.empty HM.empty
+instance Default RefStore where def = RefStore HM.empty
 
 data PactContinuation = PactContinuation
   { _pcDef :: Def Ref
@@ -194,7 +193,7 @@ instance Default Purity where def = PImpure
 class PureNoDb e
 -- | Marker class for 'PReadOnly' environments.
 -- SysRead supports pure operations as well.
-class PureNoDb e => PureSysRead e
+class PureNoDb e => PureReadOnly e
 
 -- | Backend for SPV
 newtype SPVSupport = SPVSupport {
@@ -242,25 +241,17 @@ makeLenses ''EvalEnv
 
 
 
--- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.
+-- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
       _rsLoaded :: HM.HashMap Name Ref
       -- | Modules that were loaded.
-    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleDef (Def Ref))
-      -- | Modules that were compiled and loaded in this tx.
-    , _rsNewModules :: HM.HashMap ModuleName (ModuleData Ref)
+    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref)
       -- | Current Namespace
     , _rsNamespace :: Maybe Namespace
     } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty HM.empty Nothing
-
--- | Update for newly-loaded modules and interfaces.
-updateRefStore :: RefState -> RefStore -> RefStore
-updateRefStore RefState {..}
-  | HM.null _rsNewModules = id
-  | otherwise = over rsModules (HM.union _rsNewModules)
+instance Default RefState where def = RefState HM.empty HM.empty Nothing
 
 data Capabilities = Capabilities
   { _capGranted :: [Capability]
@@ -337,7 +328,7 @@ writeRow :: (AsString k,ToJSON v) => Info -> WriteType -> Domain k v -> k -> v -
 writeRow i w d k v = method i $ \db -> _writeRow db w d k v
 
 -- | Invoke '_keys'
-keys :: Info -> TableName -> Eval e [RowKey]
+keys :: (AsString k,IsString k) => Info -> Domain k v -> Eval e [k]
 keys i t = method i $ \db -> _keys db t
 
 -- | Invoke '_txids'
@@ -424,7 +415,7 @@ instance PureNoDb (EnvNoDb e)
 
 newtype EnvReadOnly e = EnvReadOnly (EvalEnv e)
 
-instance PureSysRead (EnvReadOnly e)
+instance PureReadOnly (EnvReadOnly e)
 instance PureNoDb (EnvReadOnly e)
 
 diePure :: Method e a

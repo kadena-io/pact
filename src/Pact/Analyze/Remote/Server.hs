@@ -35,12 +35,9 @@ import qualified Pact.Analyze.Check        as Check
 import           Pact.Analyze.Remote.Types (Request(..), Response(..),
                                             ClientError(..))
 import           Pact.Repl                 (initReplState, evalRepl')
-import           Pact.Repl.Types           (LibState, ReplMode(StringEval),
-                                            ReplState, rEnv)
+import           Pact.Repl.Types
 import           Pact.Types.Info           (Code(_unCode))
-import           Pact.Types.Runtime        (Domain(KeySets), Method,
-                                            ModuleData, PactDb(_readRow),
-                                            eePactDb, eeRefStore, rsModules)
+import           Pact.Types.Runtime
 import           Pact.Types.Term           (ModuleDef(..), moduleDefName, moduleDefCode,
                                             ModuleName(..), Name(..),
                                             KeySet(..),Ref)
@@ -91,7 +88,7 @@ initializeRepl = do
   pure $ rs & rEnv . eePactDb .~ dbImpl { _readRow = _readRow' }
 
 replStateModules :: ReplState -> HM.HashMap ModuleName (ModuleData Ref)
-replStateModules replState = replState ^. rEnv . eeRefStore . rsModules
+replStateModules replState = replState ^. rEvalState . evalRefs . rsLoadedModules
 
 -- | Parser for strings like: @<interactive>:2:2: Module "mod2" not found@
 moduleNotFoundP :: MP.Parsec Void String ModuleName
