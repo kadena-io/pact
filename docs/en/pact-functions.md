@@ -1373,12 +1373,15 @@ Commit transaction.
 
 *step*&nbsp;`integer` *rollback*&nbsp;`bool` *pact-id*&nbsp;`string` *&rarr;*&nbsp;`string`
 
+*step*&nbsp;`integer` *rollback*&nbsp;`bool` *pact-id*&nbsp;`string` *yielded*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
 
-Continue previously-initiated pact identified STEP, optionally specifying ROLLBACK (default is false), and PACT-ID of the pact to be continued (defaults to the pact initiated in the current transaction).
+
+Continue previously-initiated pact identified STEP, optionally specifying ROLLBACK (default is false), PACT-ID of the pact to be continued (defaults to the pact initiated in the current transaction, if one is present), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
 ```lisp
 (continue-pact 1)
 (continue-pact 1 true)
 (continue-pact 1 false (hash "some-pact-id"))
+(continue-pact 2 1 false (hash "some-pact-id") { "rate": 0.9 })
 ```
 
 

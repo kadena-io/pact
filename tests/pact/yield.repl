@@ -13,6 +13,8 @@
      (resume { "a-result" := ar }
              (+ ar "->B")))))
 (commit-tx)
+
+(begin-tx)
 (use yieldtest)
 
 (env-entity "B")
@@ -38,3 +40,19 @@
 (env-entity "B")
 (continue-pact 0 true)
 (expect "step 0 rollback skips B" false (at "executed" (pact-state)))
+(commit-tx)
+
+
+;; test overwriting yield with continue-pact
+(begin-tx)
+(use yieldtest)
+
+(env-entity "A")
+(expect "step 0 executes" "stu->A" (tester "stu"))
+(pact-state)
+
+(env-entity "B")
+(expect "step 1 executes with new yield value"
+	"someRandomStr->B"
+	(continue-pact 1 false "Qyc8qVb6Ez3hflhfsrI22Vta4vc90e7aQkpPAMHnfDQ" {"a-result": "someRandomStr"}))
+(commit-tx)
