@@ -23,6 +23,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
+   toPactId,
    Purity(..),PureNoDb,PureReadOnly,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
@@ -239,6 +240,9 @@ data EvalEnv e = EvalEnv {
     }
 makeLenses ''EvalEnv
 
+
+toPactId :: Hash -> PactId
+toPactId = PactId
 
 
 -- | Dynamic storage for loaded names and modules, and current namespace.

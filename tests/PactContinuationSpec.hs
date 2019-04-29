@@ -18,15 +18,39 @@ import Pact.Types.Runtime
 import Pact.Types.PactValue
 import qualified Data.Text as T
 
+
+----- UTILS ------
+
 shouldMatch :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Expectation
 shouldMatch results checks = mapM_ match checks
   where match ApiResultCheck{..} = do
           let apiRes = HM.lookup _arcReqKey results
           checkResult _arcIsFailure _arcExpect apiRes
 
+
 makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
 makeExecCmd keyPairs code =
   mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
+
+
+makeContCmd :: SomeKeyPair -> Bool -> Value -> Command Text -> Int -> String -> IO (Command Text)
+makeContCmd keyPairs isRollback cmdData pactExecCmd step nonce =
+  mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce)
+
+
+getPactId :: Command Text -> PactId
+getPactId cmd = toPactId hsh
+  where hsh = (toUntypedHash . _cmdHash) cmd
+
+
+pactIdNotFoundMsg :: Command Text -> Maybe Value
+pactIdNotFoundMsg cmd = (Just . String) escaped
+  where txtPact = asString (getPactId cmd)
+        escaped = "applyContinuation: pact ID not found: PactId "
+                  <> "\"" <> txtPact <> "\""
+
+
+---- TESTS -----
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
@@ -92,12 +116,14 @@ testCorrectNextStep :: HTTP.Manager -> Expectation
 testCorrectNextStep mgr = do
   let moduleName = "testCorrectNextStep"
   adminKeys <- genKeysEth
+  
   let makeExecCmdWith = makeExecCmd adminKeys
-
   moduleCmd       <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  checkStateCmd   <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test4")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+  contNextStepCmd <- makeContCmdWith 1 "test3"
+  checkStateCmd   <- makeContCmdWith 1 "test4"
   allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
@@ -114,12 +140,14 @@ testIncorrectNextStep :: HTTP.Manager -> Expectation
 testIncorrectNextStep mgr = do
   let moduleName = "testIncorrectNextStep"
   adminKeys <- genKeys
+  
   let makeExecCmdWith = makeExecCmd adminKeys
-
   moduleCmd         <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd    <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  incorrectStepCmd  <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test3")
-  checkStateCmd     <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test4")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+  incorrectStepCmd  <- makeContCmdWith 2 "test3"
+  checkStateCmd     <- makeContCmdWith 1 "test4"
   allResults        <- runAll mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -136,22 +164,25 @@ testLastStep :: HTTP.Manager -> Expectation
 testLastStep mgr = do
   let moduleName = "testLastStep"
   adminKeys <- genKeys
+  
   let makeExecCmdWith = makeExecCmd adminKeys
-
   moduleCmd        <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStep1Cmd <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  contNextStep2Cmd <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test4")
-  checkStateCmd    <- mkCont (PactId 1) 3 False Null def [adminKeys] (Just "test5")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+  contNextStep1Cmd <- makeContCmdWith 1 "test3"
+  contNextStep2Cmd <- makeContCmdWith 2 "test4"
+  checkStateCmd    <- makeContCmdWith 3 "test5"
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStep1Cmd,
                               contNextStep2Cmd, checkStateCmd]
+
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
       contNextStep1Check = makeCheck contNextStep1Cmd False $ Just "step 1"
       contNextStep2Check = makeCheck contNextStep2Cmd False $ Just "step 2"
-      checkStateCheck    = makeCheck checkStateCmd True
-                           (Just "applyContinuation: pact ID not found: 1")
+      checkStateCheck    = makeCheck checkStateCmd True $
+                           pactIdNotFoundMsg executePactCmd
       allChecks          = [moduleCheck, executePactCheck, contNextStep1Check,
                             contNextStep2Check, checkStateCheck]
 
@@ -162,12 +193,14 @@ testErrStep :: HTTP.Manager -> Expectation
 testErrStep mgr = do
   let moduleName = "testErrStep"
   adminKeys <- genKeys
+  
   let makeExecCmdWith = makeExecCmd adminKeys
-
   moduleCmd        <- makeExecCmdWith (T.unpack (errorStepPactCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contErrStepCmd   <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  checkStateCmd    <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test4")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+  contErrStepCmd   <- makeContCmdWith 1 "test3"
+  checkStateCmd    <- makeContCmdWith 2 "test4"
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -206,13 +239,16 @@ testCorrectRollbackStep :: HTTP.Manager -> Expectation
 testCorrectRollbackStep mgr = do
   let moduleName = "testCorrectRollbackStep"
   adminKeys <- genKeys
-  let makeExecCmdWith = makeExecCmd adminKeys
 
+  let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd       <- makeExecCmdWith (T.unpack (pactWithRollbackCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  rollbackStepCmd <- mkCont (PactId 1) 1 True Null def [adminKeys] (Just "test4") -- rollback = True
-  checkStateCmd   <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test5")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+      makeContCmdWithRollback = makeContCmd adminKeys True Null executePactCmd
+  contNextStepCmd <- makeContCmdWith 1 "test3"
+  rollbackStepCmd <- makeContCmdWithRollback 1 "test4" -- rollback = True
+  checkStateCmd   <- makeContCmdWith 2 "test5"
   allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                              rollbackStepCmd, checkStateCmd]
 
@@ -220,8 +256,8 @@ testCorrectRollbackStep mgr = do
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"
       rollbackStepCheck = makeCheck rollbackStepCmd False $ Just "rollback 1"
-      checkStateCheck   = makeCheck checkStateCmd True
-                          (Just "applyContinuation: pact ID not found: 1")
+      checkStateCheck   = makeCheck checkStateCmd True $
+                          pactIdNotFoundMsg executePactCmd
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
                            rollbackStepCheck, checkStateCheck]
 
@@ -232,13 +268,16 @@ testIncorrectRollbackStep :: HTTP.Manager -> Expectation
 testIncorrectRollbackStep mgr = do
   let moduleName = "testIncorrectRollbackStep"
   adminKeys <- genKeys
-  let makeExecCmdWith = makeExecCmd adminKeys
 
+  let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd       <- makeExecCmdWith (T.unpack (pactWithRollbackCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  incorrectRbCmd  <- mkCont (PactId 1) 2 True Null def [adminKeys] (Just "test4")
-  checkStateCmd   <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test5")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+      makeContCmdWithRollback = makeContCmd adminKeys True Null executePactCmd
+  contNextStepCmd <- makeContCmdWith 1 "test3"
+  incorrectRbCmd  <- makeContCmdWithRollback 2 "test4"
+  checkStateCmd   <- makeContCmdWith 2 "test5"
   allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                              incorrectRbCmd, checkStateCmd]
 
@@ -258,13 +297,16 @@ testRollbackErr :: HTTP.Manager -> Expectation
 testRollbackErr mgr = do
   let moduleName = "testRollbackErr"
   adminKeys <- genKeys
-  let makeExecCmdWith = makeExecCmd adminKeys
 
+  let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd        <- makeExecCmdWith (T.unpack (pactWithRollbackErrCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd  <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  rollbackErrCmd   <- mkCont (PactId 1) 1 True Null def [adminKeys] (Just "test4")
-  checkStateCmd    <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test5")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+      makeContCmdWithRollback = makeContCmd adminKeys True Null executePactCmd
+  contNextStepCmd  <- makeContCmdWith 1 "test3"
+  rollbackErrCmd   <- makeContCmdWithRollback 1 "test4"
+  checkStateCmd    <- makeContCmdWith 2 "test5"
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                               rollbackErrCmd, checkStateCmd]
 
@@ -283,13 +325,16 @@ testNoRollbackFunc :: HTTP.Manager -> Expectation
 testNoRollbackFunc mgr = do
   let moduleName = "testNoRollbackFunc"
   adminKeys <- genKeys
-  let makeExecCmdWith = makeExecCmd adminKeys
 
+  let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd        <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  contNextStepCmd  <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  noRollbackCmd    <- mkCont (PactId 1) 1 True Null def [adminKeys] (Just "test4")
-  checkStateCmd    <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test5")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+      makeContCmdWithRollback = makeContCmd adminKeys True Null executePactCmd
+  contNextStepCmd  <- makeContCmdWith 1 "test3"
+  noRollbackCmd    <- makeContCmdWithRollback 1 "test4"
+  checkStateCmd    <- makeContCmdWith 2 "test5"
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                               noRollbackCmd, checkStateCmd]
 
@@ -297,8 +342,8 @@ testNoRollbackFunc mgr = do
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck  = makeCheck contNextStepCmd False $ Just "step 1"
       noRollbackCheck    = makeCheck noRollbackCmd False $ Just "No rollback on step 1" -- not a failure
-      checkStateCheck    = makeCheck checkStateCmd True
-                           (Just "applyContinuation: pact ID not found: 1")
+      checkStateCheck    = makeCheck checkStateCmd True $
+                           pactIdNotFoundMsg executePactCmd
       allChecks          = [moduleCheck, executePactCheck, contNextStepCheck,
                             noRollbackCheck, checkStateCheck]
 
@@ -326,14 +371,16 @@ testValidYield :: HTTP.Manager -> Expectation
 testValidYield mgr = do
   let moduleName = "testValidYield"
   adminKeys <- genKeys
+  
   let makeExecCmdWith = makeExecCmd adminKeys
-
   moduleCmd          <- makeExecCmdWith (T.unpack (pactWithYield moduleName))
   executePactCmd     <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
                         -- pact takes an input
-  resumeAndYieldCmd  <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  resumeOnlyCmd      <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test4")
-  checkStateCmd      <- mkCont (PactId 1) 3 False Null def [adminKeys] (Just "test5")
+  resumeAndYieldCmd  <- makeContCmdWith 1 "test3"
+  resumeOnlyCmd      <- makeContCmdWith 2 "test4"
+  checkStateCmd      <- makeContCmdWith 3 "test5"
   allResults         <- runAll mgr [moduleCmd, executePactCmd, resumeAndYieldCmd,
                                 resumeOnlyCmd, checkStateCmd]
 
@@ -341,8 +388,8 @@ testValidYield mgr = do
       executePactCheck    = makeCheck executePactCmd False $ Just "testing->Step0"
       resumeAndYieldCheck = makeCheck resumeAndYieldCmd False $ Just "testing->Step0->Step1"
       resumeOnlyCheck     = makeCheck resumeOnlyCmd False $ Just "testing->Step0->Step1->Step2"
-      checkStateCheck     = makeCheck checkStateCmd True
-                            (Just "applyContinuation: pact ID not found: 1")
+      checkStateCheck     = makeCheck checkStateCmd True $
+                            pactIdNotFoundMsg executePactCmd
       allChecks           = [moduleCheck, executePactCheck, resumeAndYieldCheck,
                              resumeOnlyCheck, checkStateCheck]
 
@@ -353,13 +400,15 @@ testNoYield :: HTTP.Manager -> Expectation
 testNoYield mgr = do
   let moduleName = "testNoYield"
   adminKeys <- genKeys
-  let makeExecCmdWith = makeExecCmd adminKeys
 
+  let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd      <- makeExecCmdWith (T.unpack (pactWithYieldErr moduleName))
   executePactCmd <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
-  noYieldStepCmd <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  resumeErrCmd   <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test3")
-  checkStateCmd  <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test5")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+  noYieldStepCmd <- makeContCmdWith 1 "test3"
+  resumeErrCmd   <- makeContCmdWith 2 "test3"
+  checkStateCmd  <- makeContCmdWith 1 "test5"
   allResults     <- runAll mgr [moduleCmd, executePactCmd, noYieldStepCmd,
                            resumeErrCmd, checkStateCmd]
 
@@ -379,13 +428,15 @@ testResetYield :: HTTP.Manager -> Expectation
 testResetYield mgr = do
   let moduleName = "testResetYield"
   adminKeys <- genKeys
-  let makeExecCmdWith = makeExecCmd adminKeys
 
+  let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd        <- makeExecCmdWith (T.unpack (pactWithSameNameYield moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
-  yieldSameKeyCmd  <- mkCont (PactId 1) 1 False Null def [adminKeys] (Just "test3")
-  resumeStepCmd    <- mkCont (PactId 1) 2 False Null def [adminKeys] (Just "test4")
-  checkStateCmd    <- mkCont (PactId 1) 3 False Null def [adminKeys] (Just "test5")
+
+  let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
+  yieldSameKeyCmd  <- makeContCmdWith 1 "test3"
+  resumeStepCmd    <- makeContCmdWith 2 "test4"
+  checkStateCmd    <- makeContCmdWith 3 "test5"
   allResults       <- runAll mgr [moduleCmd, executePactCmd, yieldSameKeyCmd,
                               resumeStepCmd, checkStateCmd]
 
@@ -393,8 +444,8 @@ testResetYield mgr = do
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       yieldSameKeyCheck = makeCheck yieldSameKeyCmd False $ Just "step 1"
       resumeStepCheck   = makeCheck resumeStepCmd False $ Just "step 1"
-      checkStateCheck   = makeCheck checkStateCmd True
-                           (Just "applyContinuation: pact ID not found: 1")
+      checkStateCheck   = makeCheck checkStateCmd True $
+                          pactIdNotFoundMsg executePactCmd
       allChecks         = [moduleCheck, executePactCheck, yieldSameKeyCheck,
                            resumeStepCheck, checkStateCheck]
 
@@ -437,7 +488,7 @@ twoPartyEscrow testCmds testChecks mgr = do
   (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")
   (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
   (_, resetTimeCmd)  <- mkApiReq (setupPath ++ "05-reset.yaml")
-  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")
+  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")  -- When escrow pact executed
   (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
   let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
