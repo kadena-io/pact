@@ -26,7 +26,6 @@ import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
 import Control.Monad
 import Data.Default
-import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 import qualified Data.Vector as V
@@ -153,7 +152,7 @@ descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
-  mods <- view $ eeRefStore . rsModules . at (ModuleName t Nothing)
+  mods <- lookupModule i (ModuleName t Nothing)
   case _mdModule <$> mods of
     Just m ->
       case m of
@@ -217,15 +216,14 @@ gasPostReads i g0 postProcess action = do
 columnsToObject :: Type (Term Name) -> ObjectMap PactValue -> Term Name
 columnsToObject ty m = TObject (Object (fmap fromPactValue m) ty def def) def
 
-columnsToObject' :: Type (Term Name) -> [(Info,FieldKey)] -> ObjectMap PactValue -> Eval m (Term Name)
+columnsToObject' :: Type (Term Name) -> [(Info,FieldKey)] ->
+                    ObjectMap PactValue -> Eval m (Term Name)
 columnsToObject' ty cols (ObjectMap m) = do
   ps <- forM cols $ \(ci,col) ->
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
                   Just v -> return (col, fromPactValue v)
   return $ TObject (Object (ObjectMap (M.fromList ps)) ty def def) def
-
-
 
 
 
@@ -243,11 +241,14 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
     guardTable i tbl
     let fi = _faInfo i
         tblTy = _tTableType tbl
-    ks <- keys fi (userTable' tbl)
-    fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $ (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
+    ks <- keys fi (userTable tbl)
+    fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $
+      (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
+
       mrow <- readRow fi (userTable tbl) k
       case mrow of
-        Nothing -> evalError fi $ "select: unexpected error, key not found in select: " <> pretty k <> ", table: " <> pretty tbl
+        Nothing -> evalError fi $ "select: unexpected error, key not found in select: "
+                   <> pretty k <> ", table: " <> pretty tbl
         Just row -> do
           g <- gasPostRead i gPrev row
           let obj = columnsToObject tblTy row
@@ -258,7 +259,8 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
                   Nothing -> return (obj:rs)
                   Just cols -> (:rs) <$> columnsToObject' tblTy cols row
               | otherwise -> return rs
-            t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " <> pretty t
+            t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: "
+                 <> pretty t
 select' i as _ _ _ = argsError' i as
 
 
@@ -298,7 +300,7 @@ keys' g i [table@TTable {..}] =
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
       guardTable i table
-      keys (_faInfo i) (userTable' table)
+      keys (_faInfo i) (userTable table)
 keys' _ i as = argsError i as
 
 
@@ -367,13 +369,7 @@ guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModule $
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
-enforceBlessedHashes i mn h = do
-  mmRs <- fmap _mdModule . HM.lookup mn <$> view (eeRefStore . rsModules)
-  mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
-  case mm of
-    Nothing -> evalError' i $ "Internal error: Module " <> pretty mn <> " not found, could not enforce hashes"
-    Just m ->
-      case m of
+enforceBlessedHashes i mn h = getModule i mn >>= \m -> case (_mdModule m) of
         MDModule Module{..}
           | h == _mHash -> return () -- current version ok
           | h `HS.member` _mBlessed -> return () -- hash is blessed

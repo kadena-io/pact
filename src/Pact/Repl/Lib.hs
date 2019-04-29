@@ -29,7 +29,6 @@ import Control.Monad.Catch
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
@@ -420,38 +419,33 @@ tc i as = case as of
   _ -> argsError i as
   where
     go modname dbg = do
-      mdm <- HM.lookup (ModuleName modname Nothing) <$> view (eeRefStore . rsModules)
-      case mdm of
-        Nothing -> evalError' i $ "No such module: " <> pretty modname
-        Just md -> do
-          r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
-            try $ liftIO $ typecheckModule dbg md
-          case r of
-            Left (TC.CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> prettyString e)
-            Right (_,fails) -> case fails of
-              [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
-              _ -> do
-                setop $ TcErrors $ map (\(TC.Failure ti s) -> renderInfo (TC._tiInfo ti) ++ ":Warning: " ++ s) fails
-                return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
+      md <- getModule i (ModuleName modname Nothing)
+      r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
+        try $ liftIO $ typecheckModule dbg md
+      case r of
+        Left (TC.CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> prettyString e)
+        Right (_,fails) -> case fails of
+          [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
+          _ -> do
+            setop $ TcErrors $ map (\(TC.Failure ti s) -> renderInfo (TC._tiInfo ti) ++ ":Warning: " ++ s) fails
+            return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
-    modules <- view (eeRefStore . rsModules)
-    let mdm = HM.lookup (ModuleName modName Nothing) modules
-    case mdm of
-      Nothing -> evalError' i $ "No such module: " <> pretty modName
-      Just md -> do
+    md <- getModule i (ModuleName modName Nothing)
+    -- reading all modules from db here, but should be fine in repl
+    modules <- getAllModules i
 #if defined(ghcjs_HOST_OS)
-        uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
-        renderedLines <- liftIO $
-          RemoteClient.verifyModule modules md uri
+    uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
+    renderedLines <- liftIO $
+                     RemoteClient.verifyModule modules md uri
 #else
-        modResult <- liftIO $ Check.verifyModule modules md
-        let renderedLines = Check.renderVerifiedModule modResult
+    modResult <- liftIO $ Check.verifyModule modules md
+    let renderedLines = Check.renderVerifiedModule modResult
 #endif
-        setop $ TcErrors $ Text.unpack <$> renderedLines
-        return (tStr $ mconcat renderedLines)
+    setop $ TcErrors $ Text.unpack <$> renderedLines
+    return (tStr $ mconcat renderedLines)
 
   _ -> argsError i as
 

@@ -9,19 +9,23 @@ module Pact.Repl.Types
   , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts
   , Tx(..)
   , SPVMockKey(..)
+  , getAllModules
   ) where
 
 import Control.Lens (makeLenses)
+import Control.Monad
 import Data.Default (Default(..))
 import Data.Monoid (Endo(..))
 import Control.Monad.State.Strict (StateT)
 import Control.Concurrent (MVar)
 import Pact.PersistPactDb (DbEnv)
 import Pact.Persist.Pure (PureDb)
-import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name,FunApp,Info,Object,Term(..),PactId,PactExec)
+import Pact.Types.Runtime
 import Data.Text (Text)
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import Pact.Types.Pretty (Pretty,pretty,renderCompactText)
+import Pact.Native.Internal
 
 data ReplMode =
     Interactive |
@@ -83,3 +87,10 @@ data LibState = LibState {
 
 makeLenses ''LibState
 makeLenses ''ReplState
+
+getAllModules :: HasInfo i => i -> Eval e (HM.HashMap ModuleName (ModuleData Ref))
+getAllModules i = do
+  mks <- keys (getInfo i) Modules
+  fmap HM.fromList $ forM mks $ \mk -> do
+    m <- getModule i mk
+    return (mk,m)

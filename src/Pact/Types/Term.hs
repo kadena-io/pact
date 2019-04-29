@@ -452,6 +452,10 @@ data Name
   | Name { _nName :: Text, _nInfo :: Info }
   deriving (Generic, Show)
 
+instance HasInfo Name where
+  getInfo (QName _ _ i) = i
+  getInfo (Name _ i) = i
+
 instance Pretty Name where
   pretty = \case
     QName modName nName _ -> pretty modName <> "." <> pretty nName
@@ -688,10 +692,10 @@ instance ToJSON n => ToJSON (ConstVal n) where
 
 instance FromJSON n => FromJSON (ConstVal n) where
   parseJSON v =
-    (withObject "CVRaw"
-     (\o -> CVRaw <$> o .: "raw") v) <|>
     (withObject "CVEval"
-     (\o -> CVEval <$> o .: "raw" <*> o .: "eval") v)
+     (\o -> CVEval <$> o .: "raw" <*> o .: "eval") v) <|>
+    (withObject "CVRaw"
+     (\o -> CVRaw <$> o .: "raw") v)
 
 
 data Example

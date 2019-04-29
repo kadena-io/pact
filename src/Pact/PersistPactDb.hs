@@ -35,6 +35,7 @@ import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.State.Strict
 import Data.Typeable
+import Data.String
 
 import Data.Aeson hiding ((.=))
 import GHC.Generics
@@ -115,6 +116,11 @@ doPersist :: (Persister p -> Persist p a) -> MVState p a
 doPersist f = get >>= \m -> liftIO (f (_persist m) (_db m)) >>= \(db',r) -> db .= db' >> return r
 {-# INLINE doPersist #-}
 
+toTableId :: Domain k v -> TableId
+toTableId KeySets = keysetsTable
+toTableId Modules = modulesTable
+toTableId Namespaces = namespacesTable
+toTableId (UserTables t) = userTable t
 
 pactdb :: PactDb (DbEnv p)
 pactdb = PactDb
@@ -133,7 +139,7 @@ pactdb = PactDb
            (UserTables t) -> writeUser e wt t k v
 
  , _keys = \tn e -> runMVState e
-     (map (RowKey . asString) <$> doPersist (\p -> queryKeys p (userDataTable tn) Nothing))
+     (map (fromString . unpack . asString) <$> doPersist (\p -> queryKeys p (DataTable $ toTableId tn) Nothing))
 
 
  , _txids = \tn tid e -> runMVState e
