@@ -19,12 +19,14 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               (^?), _1, _2, _head, _Just,
                                               ifoldlM)
 import           Control.Monad               (void)
+import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
+import           Data.Default                (def)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
@@ -69,6 +71,9 @@ newtype Analyze a
     { runAnalyze :: RWST AnalyzeEnv () EvalAnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState EvalAnalyzeState, MonadError AnalyzeFailure)
+
+instance MonadFail Analyze where
+    fail = throwError . AnalyzeFailure def . fromString
 
 instance Analyzer Analyze where
   type TermOf Analyze = Term

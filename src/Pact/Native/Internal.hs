@@ -34,23 +34,23 @@ module Pact.Native.Internal
   ,findCallingModule
   ) where
 
-import Control.Monad
-import Prelude
-import Data.Default
-import Pact.Eval
-import Unsafe.Coerce
+import Bound
 import Control.Lens hiding (Fold)
+import Control.Monad
 import Data.Aeson hiding (Object)
 import qualified Data.Aeson.Lens as A
-import Bound
-import qualified Data.HashMap.Strict as HM
-import Pact.Types.Pretty
+import Data.Default
 import qualified Data.Vector as V
 import Data.Text (Text, pack)
 
-import Pact.Types.Runtime
-import Pact.Types.Native
+import Unsafe.Coerce
+
+
+import Pact.Eval
 import Pact.Gas
+import Pact.Types.Native
+import Pact.Types.Pretty
+import Pact.Types.Runtime
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -125,17 +125,11 @@ funType t as = funTypes $ funType' t as
 funType' :: Type n -> [(Text,Type n)] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
-
-getModule :: Info -> ModuleName -> Eval e (ModuleDef (Def Ref))
-getModule i n = do
-  lm <- HM.lookup n <$> use (evalRefs.rsLoadedModules)
-  case lm of
-    Just m -> return m
-    Nothing -> do
-      rm <- HM.lookup n <$> view (eeRefStore.rsModules)
-      case rm of
-        Just ModuleData{..} -> return _mdModule
-        Nothing -> evalError i $ "Unable to resolve module " <> pretty n
+-- | Lookup a module and fail if not found.
+getModule :: HasInfo i => i -> ModuleName -> Eval e (ModuleData Ref)
+getModule i mn = lookupModule i mn >>= \r -> case r of
+  Just m -> return m
+  Nothing -> evalError' i $ "Unable to resolve module " <> pretty mn
 
 tTyInteger :: Type n; tTyInteger = TyPrim TyInteger
 tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal
@@ -170,14 +164,14 @@ enforceGuardDef dn =
 
 enforceGuard :: FunApp -> Guard -> Eval e ()
 enforceGuard i g = case g of
-  GKeySet k -> runPure $ enforceKeySet (_faInfo i) Nothing k
+  GKeySet k -> runReadOnly i $ enforceKeySet (_faInfo i) Nothing k
   GKeySetRef n -> enforceKeySetName (_faInfo i) n
   GPact PactGuard{..} -> do
     pid <- getPactId i
     unless (pid == _pgPactId) $
       evalError' i $ "Pact guard failed, intended: " <> pretty _pgPactId <> ", active: " <> pretty pid
   GModule mg@ModuleGuard{..} -> do
-    m <- getModule (_faInfo i) _mgModuleName
+    m <- _mdModule <$> getModule (_faInfo i) _mgModuleName
     case m of
       MDModule Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
@@ -190,7 +184,7 @@ guardForModuleCall :: Info -> ModuleName -> Eval e () -> Eval e ()
 guardForModuleCall i modName onFound = findCallingModuleName >>= \r -> case r of
     (Just mn) | mn == modName -> onFound
     _ -> do
-      md <- getModule i modName
+      md <- _mdModule <$> getModule i modName
       case md of
         MDModule m -> void $ acquireModuleAdmin i (_mName m) (_mGovernance m)
         MDInterface iface -> evalError i $

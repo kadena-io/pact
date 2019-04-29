@@ -11,10 +11,12 @@
 -- 'Term' or 'Invariant' languages).
 module Pact.Analyze.Eval.Prop where
 
+import Control.Monad.Fail
 import           Control.Lens               (Lens', at, ix, view, (%=), (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT (..))
+import           Data.Default               (def)
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (EqSymbolic ((.==)),
                                              Mergeable (symbolicMerge), literal)
@@ -44,6 +46,9 @@ newtype Query a
     { queryAction :: StateT SymbolicSuccess (ReaderT QueryEnv (ExceptT AnalyzeFailure Alloc)) a }
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure, MonadState SymbolicSuccess, MonadAlloc)
+
+instance MonadFail Query where
+    fail = throwError . AnalyzeFailure def . fromString
 
 instance (Mergeable a) => Mergeable (Query a) where
   -- We merge the result and state, performing any 'Alloc' actions that occur

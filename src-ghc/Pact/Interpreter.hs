@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 -- | "Production" interpreter for Pact, as opposed to the REPL.
@@ -17,6 +18,7 @@ module Pact.Interpreter
   , MsgData(..)
   , EvalResult(..)
   , initMsgData
+  , initStateModules
   , evalExec
   , evalExecState
   , evalContinuation
@@ -33,10 +35,10 @@ module Pact.Interpreter
 import Control.Concurrent
 import Control.Monad.Catch
 import Control.Monad.Except
+import Control.Lens
 import Data.Aeson
 import Data.Default
-import qualified Data.HashMap.Strict as HM
-import Data.Maybe
+import Data.HashMap.Strict (HashMap)
 import qualified Data.Set as S
 import System.Directory
 
@@ -72,9 +74,9 @@ data EvalResult = EvalResult
   { _erInput :: !(Either PactContinuation [Term Name])
   , _erOutput :: ![PactValue]
   , _erLogs :: ![TxLog Value]
-  , _erRefStore :: !RefStore
   , _erExec :: !(Maybe PactExec)
   , _erGas :: Gas
+  , _erLoadedModules :: HashMap ModuleName (ModuleData Ref,Bool)
   } deriving (Eq,Show)
 
 
@@ -86,6 +88,9 @@ evalExecState initState evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
   interpret initState evalEnv (Right terms)
 
+-- | For pre-installing modules into state.
+initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
+initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 evalContinuation :: EvalEnv e -> PactContinuation -> IO EvalResult
 evalContinuation ee pact = evalContinuationState def ee pact
@@ -125,7 +130,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
         modeToTx Local = Nothing
 
 initRefStore :: RefStore
-initRefStore = RefStore nativeDefs HM.empty
+initRefStore = RefStore nativeDefs
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
@@ -153,12 +158,10 @@ interpret initState evalEnv terms = do
   ((rs,logs),state) <-
     runEval initState evalEnv $ evalTerms tx terms
   let gas = _evalGas state
-      refStore = newRefs . _eeRefStore $ evalEnv
       pactExec = _evalPactExec state
-      newRefs oldStore | isNothing tx = oldStore
-                       | otherwise = updateRefStore (_evalRefs state) oldStore
+      modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
-  return $! EvalResult terms (map toPactValueLenient rs) logs refStore pactExec gas
+  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules
 
 evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do

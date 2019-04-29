@@ -203,7 +203,7 @@ createUserGuard =
     createUserGuard' i [TObject udata _,TLitString predfun] =
       case parseName (_faInfo i) predfun of
         Right n -> do
-          rn <- resolveRef n >>= \nm -> case nm of
+          rn <- resolveRef i n >>= \nm -> case nm of
             Just (Direct {}) -> return n
             Just (Ref (TDef Def{..} _)) ->
               return $ QName _dModule (asString _dDefName) _dInfo

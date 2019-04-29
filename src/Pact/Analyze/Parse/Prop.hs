@@ -725,7 +725,7 @@ expToProp tableEnv' genStart nameEnv idEnv consts propDefs ty body = do
     <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
         preTypedPropDefs consts
-  runReaderT (checkPreProp ty preTypedBody) env
+  _getEither $ runReaderT (checkPreProp ty preTypedBody) env
 
 inferProp
   :: TableEnv
@@ -748,7 +748,7 @@ inferProp tableEnv' genStart nameEnv idEnv consts propDefs body = do
     <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
         preTypedPropDefs consts
-  runReaderT (inferPreProp preTypedBody) env
+  _getEither $ runReaderT (inferPreProp preTypedBody) env
 
 parseToPreProp
   :: Traversable t

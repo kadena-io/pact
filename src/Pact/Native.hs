@@ -643,9 +643,9 @@ typeof'' _ [t] = return $ tStr $ typeof' t
 typeof'' i as = argsError i as
 
 listModules :: RNativeFun e
-listModules _ _ = do
-  mods <- view $ eeRefStore.rsModules
-  return $ toTermList tTyString $ map asString $ HM.keys mods
+listModules i _ = do
+  mods <- keys (_faInfo i) Modules
+  return $ toTermList tTyString $ map asString mods
 
 yield :: RNativeFun e
 yield i as = case as of

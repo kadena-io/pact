@@ -9,7 +9,7 @@ import Control.Concurrent
 import Control.Exception (finally)
 import Control.Lens
 import Control.Monad.State.Strict
-import Data.Maybe
+import Data.Either
 import qualified Data.Text as T
 import Test.Hspec
 import NeatInterpolation (text)
@@ -40,8 +40,8 @@ loadCode code = do
     Left err -> Left $ ReplError err
     Right _t -> Right replState
 
-stateModuleData :: ModuleName -> ReplState -> Maybe (ModuleData Ref)
-stateModuleData nm replState = replState ^. rEnv . eeRefStore . rsModules . at nm
+stateModuleData :: ModuleName -> ReplState -> IO (Either String (ModuleData Ref))
+stateModuleData nm replState = replLookupModule replState nm
 
 serve :: Int -> IO ThreadId
 serve port = forkIO $ runServantServer port
@@ -59,7 +59,7 @@ serveAndRequest port body = do
 
 testSingleModule :: Spec
 testSingleModule = do
-  eReplState0 <- runIO $ loadCode
+  replState0 <- runIO $ either (error.show) id <$> loadCode
     [text|
       (env-keys ["admin"])
       (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
@@ -76,16 +76,15 @@ testSingleModule = do
     |]
 
   it "loads locally" $ do
-    Right replState0 <- pure eReplState0
-    stateModuleData "mod1" replState0 `shouldSatisfy` isJust
+    stateModuleData "mod1" replState0 >>= (`shouldSatisfy` isRight)
 
-  Right replState0 <- pure eReplState0
-  Just (ModuleData mod1 _refs) <- pure $ stateModuleData "mod1" replState0
+  (ModuleData mod1 _refs) <- runIO $ either error id <$> stateModuleData "mod1" replState0
 
   resp <- runIO $ serveAndRequest 3000 $ Remote.Request [derefDef <$> mod1] "mod1"
 
   it "verifies over the network" $
-    (Right ["Property proven valid",""]) `shouldBe` fmap (view Remote.responseLines) resp
+    fmap (view Remote.responseLines) resp `shouldBe`
+    (Right ["Property proven valid",""])
 
 testUnsortedModules :: Spec
 testUnsortedModules = do
@@ -114,13 +113,14 @@ testUnsortedModules = do
 
   it "loads when topologically sorted locally" $ do
     Right replState0 <- pure eReplState0
-    stateModuleData "mod2" replState0 `shouldSatisfy` isJust
+    stateModuleData "mod2" replState0 >>= (`shouldSatisfy` isRight)
 
   Right replState0 <- pure eReplState0
-  Just (ModuleData mod1 _refs) <- pure $ stateModuleData "mod1" replState0
-  Just (ModuleData mod2 _refs) <- pure $ stateModuleData "mod2" replState0
+  Right (ModuleData mod1 _refs) <- runIO $ stateModuleData "mod1" replState0
+  Right (ModuleData mod2 _refs) <- runIO $ stateModuleData "mod2" replState0
 
   resp <- runIO $ serveAndRequest 3001 $ Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
 
   it "verifies over the network" $
-    (Right ["Property proven valid",""]) `shouldBe` fmap (view Remote.responseLines) resp
+    fmap (view Remote.responseLines) resp `shouldBe`
+    (Right ["Property proven valid",""])

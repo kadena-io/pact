@@ -42,15 +42,28 @@ Once Homebrew is installed, run the following command to install `pact`:
 brew install kadena-io/pact/pact
 ```
 
+However, see note [below](#z3) about z3 compatibility.
+
 Installing Pact with Binary Distributions
 ---
 Pact can also be installed by following the instructions below:
-- Install [z3](https://github.com/Z3Prover/z3/wiki)
+- Install [z3](https://github.com/Z3Prover/z3/wiki). See note [below](#z3) about z3 compatibility.
 - Download the [prebuilt binaries](http://install.kadena.io/pact/downloads.html) for your distribution. Or see [Building](#Building) for instructions on how to build Pact from the source code.
 - Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
 - Put the binary somewhere in your PATH.
 
 For installing `pact` on Linux distributions in the Arch family, refer to [this package on the AUR](https://aur.archlinux.org/packages/pact/).
+
+z3 Compatibility
+---
+
+Pact users generally can use the production versions of Z3. However, with the current version at time of writing, 4.8.4, use of the function `str-to-int` can cause problems, and for those building from source or hacking Pact Haskell code, a unit test will fail/hang indefinitely because of this.
+
+The fix is to use the older version 4.8.3:
+- For Mac homebrew users, 4.8.3 can be installed via `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/a7e7806193f7605c7fef6110655911012d3f1eb3/Formula/z3.rb`.
+- Z3 binaries are available [on github](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.3) for manual installation (Pact uses the z3 in your `$PATH`).
+- Nix builds install the correct version.
+
 
 Verifying Install
 ---
@@ -110,19 +123,18 @@ verbose    - [True|False] Provide extra logging information
 When running pact-serve with persistence enabled, the server automatically replays from the database
 `commands.sqlite` in the persist dir. To prevent replay, simply delete this file before starting the server.
 
-Building
+Building Pact
 ---
 
-Building Pact used to require a working [Haskell Stack install](https://docs.haskellstack.org/en/stable/README/#how-to-install) . After which, building is as simple as 'stack build'.
+### Building with Stack
 
-To install for use with Atom and the command line, issue 'stack install' and then either add `$HOME/.local/bin` to your path, or symlink `$HOME/.local/bin/pact` somewhere in your PATH.
+[Install stack](https://docs.haskellstack.org/en/stable/README/#how-to-install)
 
-NOTE: We are currently transitioning to Nix build infrastructure.  Stack builds
-still work right now, but you should start transitioning to Nix using the
-instructions below.
+Issue `stack build` on the command line.
 
-Building with Nix / NixOS
----
+Use `stack install` to install on the command line and for Atom, ensuring that `$HOME/.local/bin` is on your PATH.
+
+### Building with Nix / NixOS
 
 1. Go to https://nixos.org/nix/, click "Get Nix", follow the instructions to install the Nix package manager.
 2. Edit `$NIX_CONF_DIR/nix.conf`.
@@ -156,7 +168,7 @@ sudo systemctl restart nix-daemon.service
 
 5. Run `nix-build` from the project root.
 
-### Incremental Builds
+#### Incremental Builds
 
 Building with `nix-build` does a full rebuild every time, which is usually not
 what you want when developing. To do incremental builds, you need to enter a nix
@@ -172,7 +184,7 @@ You can also build with stack inside this shell as follows:
 $ stack --stack-yaml stack-nix.yaml build
 ```
 
-### Hoogle Documentation
+#### Hoogle Documentation
 
 Nix has out-of-the-box Hoogle integration.  It allows you to run a local
 Hoogle server with docs for all of the project dependencies.  This is really
@@ -203,10 +215,6 @@ function](https://github.com/kadena-io/pact/blob/master/default.nix#L12)
 replace `[p.pact]` with a list of all the locally defined projects to include.
 For example: `[p.backend p.common p.frontend]` for a project that has those
 three separate local packages.
-
-### z3 Troubleshooting
-
-Note for users of property and invariant verification: z3 version 4.8.4 hangs when checking `str-to-int` calls (this causes one test to fail). The fix is to use the older version 4.8.3, or a newer version in the future (4.8.4 is the latest release at time of writing). Our Nix install uses a working version. For non-Nix Mac users, `brew install` defaults to 4.8.4, but 4.8.3 can be installed via `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/a7e7806193f7605c7fef6110655911012d3f1eb3/Formula/z3.rb`. For non-brew users, binaries are available [on github](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.3) for manual installation (Pact uses the z3 in your `$PATH`).
 
 License
 ---

@@ -47,7 +47,7 @@ initPactService CommandConfig {..} loggers = do
       blockTime = 0
 
   let mkCEI p@PactDbEnv {..} = do
-        cmdVar <- newMVar (CommandState initRefStore M.empty)
+        cmdVar <- newMVar (CommandState M.empty)
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
@@ -102,16 +102,16 @@ applyExec :: RequestKey -> PactHash -> [Signer] -> ExecMsg ParsedCode -> Command
 applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
-  (CommandState refStore pacts) <- liftIO $ readMVar _ceState
+  (CommandState pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet signers
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing (toUntypedHash hsh))
-        refStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
+        initRefStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec _erInput) _erExec
   let newPacts = case newCmdPact of
         Nothing -> pacts
         Just cmdPact -> M.insert (_pePactId cmdPact) cmdPact pacts
-  void $ liftIO $ swapMVar _ceState $ CommandState _erRefStore newPacts
+  void $ liftIO $ swapMVar _ceState $ CommandState newPacts
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) newCmdPact
   return $ jsonResult _ceMode rk _erGas $ CommandSuccess (last _erOutput)
 
@@ -147,7 +147,7 @@ applyContinuation rk hsh signers msg@ContMsg{..} = do
           let sigs = userSigsToPactKeySet signers
               pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId resume
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                        (MsgData sigs _cmData pactStep (toUntypedHash hsh)) _csRefStore
+                        (MsgData sigs _cmData pactStep (toUntypedHash hsh)) initRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
           res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
 
@@ -166,7 +166,7 @@ rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
 rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
   -- if step doesn't have a rollback function, no error thrown. Therefore, pact will be deleted
   -- from state.
-  let newState = CommandState _csRefStore $ M.delete _cmPactId _csPacts
+  let newState = CommandState $ M.delete _cmPactId _csPacts
   liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: rollbackUpdate: reaping pact "
     ++ show _cmPactId
   void $ liftIO $ swapMVar _ceState newState
@@ -175,7 +175,7 @@ continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> PactExec -> Com
 continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} newPactExec@PactExec{..} = do
   let nextStep = succ _cmStep
       isLast = nextStep >= _peStepCount
-      updateState pacts = CommandState _csRefStore pacts -- never loading modules during continuations
+      updateState pacts = CommandState pacts -- never loading modules during continuations
   if isLast
     then do
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: continuationUpdate: reaping pact: "

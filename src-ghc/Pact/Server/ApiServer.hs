@@ -1,11 +1,12 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Server.ApiServer
@@ -53,6 +54,10 @@ import Pact.Types.API
 import Pact.Types.Server
 import Pact.Types.Version
 
+#if !MIN_VERSION_servant(0,16,0)
+type ServerError = ServantErr
+#endif
+
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
   , _aiHistoryChan :: HistoryChannel
@@ -60,7 +65,7 @@ data ApiEnv = ApiEnv
   }
 makeLenses ''ApiEnv
 
-type Api a = ReaderT ApiEnv (ExceptT ServantErr IO) a
+type Api a = ReaderT ApiEnv (ExceptT ServerError IO) a
 
 runApiServer :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int -> FilePath -> IO ()
 runApiServer histChan inbChan logFn port _logDir = do
