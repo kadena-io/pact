@@ -24,7 +24,7 @@
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
-  , CommandState(..), csRefStore, csPacts
+  , CommandState(..), csPacts
   , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger, cePublicData, ceGasEnv
   , CommandM, runCommand, throwCmdEx
   , History(..)
@@ -83,9 +83,8 @@ $(makeLenses ''CommandConfig)
 
 
 
-data CommandState = CommandState {
-       _csRefStore :: RefStore
-     , _csPacts :: M.Map PactId PactExec
+newtype CommandState = CommandState {
+     _csPacts :: M.Map PactId PactExec
      } deriving Show
 $(makeLenses ''CommandState)
 

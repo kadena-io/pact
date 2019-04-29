@@ -72,7 +72,7 @@ defineKeyset fi as = case as of
       case old of
         Nothing -> writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do
-          runPure $ enforceKeySet i (Just ksn) oldKs
+          runReadOnly i $ enforceKeySet i (Just ksn) oldKs
           writeRow i Write KeySets ksn ks & success "Keyset defined"
 
 keyPred :: (Integer -> Integer -> Bool) -> RNativeFun e

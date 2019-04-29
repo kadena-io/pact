@@ -4,16 +4,20 @@
 module Pact.Bench where
 
 import Control.Arrow
+import Control.Concurrent
 import Control.DeepSeq
 import Control.Exception
+import Control.Monad
 import Criterion.Main
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Default
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import System.CPUTime
+import System.Directory
 import Unsafe.Coerce
 
 import Pact.Compile
@@ -30,6 +34,9 @@ import Pact.Types.Logger
 import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
+import Pact.Native.Internal
+import Pact.Persist.SQLite
+import Pact.PersistPactDb hiding (db)
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -67,7 +74,7 @@ eitherDie = either (throwIO . userError) (return $!)
 entity :: Maybe EntityName
 entity = Just $ EntityName "entity"
 
-loadBenchModule :: PactDbEnv e -> IO RefStore
+loadBenchModule :: PactDbEnv e -> IO (ModuleData Ref,PersistModuleData)
 loadBenchModule db = do
   m <- pack <$> readFile "tests/bench/bench.pact"
   pc <- parseCode m
@@ -77,7 +84,11 @@ loadBenchModule db = do
            pactInitialHash
   let e = setupEvalEnv db entity (Transactional 1) md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  _erRefStore <$> evalExec e pc
+  void $ evalExec e pc
+  (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
+  p <- either (throwIO . userError . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
+  return (benchMod,p)
+
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
@@ -85,12 +96,13 @@ parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
 benchNFIO :: NFData a => String -> IO a -> Benchmark
 benchNFIO bname = bench bname . nfIO
 
-runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
-runPactExec dbEnv refStore pc = do
+runPactExec :: Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
+runPactExec benchMod dbEnv pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
   let e = setupEvalEnv dbEnv entity t (initMsgData pactInitialHash)
-          refStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  toJSON . _erOutput <$> evalExec e pc
+          initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
+      s = maybe def (initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
+  toJSON . _erOutput <$> evalExecState s e pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
@@ -98,18 +110,19 @@ benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
 acctRow :: ObjectMap PactValue
 acctRow = ObjectMap $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
 
-benchRead :: Domain k v -> k -> Method () (Maybe v)
-benchRead KeySets _ = rc (Just benchKeySet)
-benchRead UserTables {} _ = rc (Just acctRow)
-benchRead _ _ = rc Nothing
+benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)
+benchRead _ KeySets _ = rc (Just benchKeySet)
+benchRead _ UserTables {} _ = rc (Just acctRow)
+benchRead benchMod Modules _ = rc (Just benchMod)
+benchRead _ _ _ = rc Nothing
 
-benchReadValue :: Table k -> k -> Persist () (Maybe v)
-benchReadValue (DataTable t) _k
+benchReadValue :: PersistModuleData -> Table k -> k -> Persist () (Maybe v)
+benchReadValue benchMod (DataTable t) _k
   | t == "SYS_keysets" = rcp $ Just (unsafeCoerce benchKeySet)
   | t == "USER_bench_bench-accounts" = rcp $ Just (unsafeCoerce acctRow)
-  | t == "SYS_modules" = rcp Nothing
+  | t == "SYS_modules" = rcp $ Just (unsafeCoerce benchMod)
   | otherwise = error (show t)
-benchReadValue (TxTable _t) _k = rcp Nothing
+benchReadValue _ (TxTable _t) _k = rcp Nothing
 
 
 mkBenchCmd :: [SomeKeyPair] -> (String, Text) -> IO (String, Command ByteString)
@@ -127,24 +140,39 @@ main = do
   !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
   initSchema pureDb
-  !refStore <- loadBenchModule pureDb
+  (benchMod',benchMod) <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
-  print =<< runPactExec pureDb refStore benchCmd
-  !mockDb <- mkMockEnv def { mockRead = MockRead benchRead }
-  !mdbRS <- loadBenchModule mockDb
-  print =<< runPactExec mockDb mdbRS benchCmd
-  !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue benchReadValue }
-  !mpdbRS <- loadBenchModule mockPersistDb
-  print =<< runPactExec mockPersistDb mpdbRS benchCmd
+  print =<< runPactExec Nothing pureDb benchCmd
+  !mockDb <- mkMockEnv def { mockRead = MockRead (benchRead benchMod) }
+  void $ loadBenchModule mockDb
+  print =<< runPactExec Nothing mockDb benchCmd
+  !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue (benchReadValue benchMod) }
+  void $ loadBenchModule mockPersistDb
+  print =<< runPactExec Nothing mockPersistDb benchCmd
   cmds_ <- traverse (mkBenchCmd [keyPair]) exps
   !cmds <- return $!! cmds_
+  let sqliteFile = "log/bench.sqlite"
+  sqliteDb <- mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile []) neverLog
+  initSchema sqliteDb
+  void $ loadBenchModule sqliteDb
+  print =<< runPactExec Nothing sqliteDb benchCmd
 
+  let cleanupSqlite = do
+        c <- readMVar $ pdPactDbVar sqliteDb
+        void $ closeSQLite $ _db c
+        removeFile sqliteFile
+      sqlEnv b = envWithCleanup (return ()) (const cleanupSqlite) (const b)
 
-  defaultMain [
-    benchParse,
-    benchCompile parsedExps,
-    benchVerify cmds,
-    benchNFIO "puredb" (runPactExec pureDb refStore benchCmd),
-    benchNFIO "mockdb" (runPactExec mockDb mdbRS benchCmd),
-    benchNFIO "mockpersist" (runPactExec mockPersistDb mpdbRS benchCmd)
+  defaultMain
+    [ benchParse
+    , benchCompile parsedExps
+    , benchVerify cmds
+    , benchNFIO "puredb" (runPactExec Nothing pureDb benchCmd)
+    , benchNFIO "mockdb" (runPactExec Nothing mockDb benchCmd)
+    , benchNFIO "mockpersist" (runPactExec Nothing mockPersistDb benchCmd)
+    , benchNFIO "sqlite" (runPactExec Nothing sqliteDb benchCmd)
+    , benchNFIO "puredb-withmod" (runPactExec (Just benchMod') pureDb benchCmd)
+    , benchNFIO "mockdb-withmod" (runPactExec (Just benchMod') mockDb benchCmd)
+    , benchNFIO "mockpersist-withmod" (runPactExec (Just benchMod') mockPersistDb benchCmd)
+    , sqlEnv $ benchNFIO "sqlite-withmod" (runPactExec (Just benchMod') sqliteDb benchCmd)
     ]

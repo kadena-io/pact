@@ -5,17 +5,15 @@ module SignatureSpec (spec) where
 import Test.Hspec
 
 import Control.Monad (forM_)
-import Control.Lens (preview, ix)
 import Data.Default (def)
-import qualified Data.HashMap.Lazy as HM
+import qualified Data.HashMap.Strict as HM
+
 
 import Pact.Repl
 import Pact.Repl.Types
-import Pact.Typechecker (die)
 import Pact.Types.Exp
 import Pact.Types.Info (Info(..))
-import Pact.Types.Runtime (RefStore(..), ModuleData(..),
-                           eeRefStore, rsModules)
+import Pact.Types.Runtime
 import Pact.Types.Term (Module(..), Interface(..), ModuleName(..), ModuleDef(..),
                         Meta(..), Term(..), Ref'(..), Ref, Def(..))
 
@@ -25,9 +23,13 @@ spec = compareModelSpec
 
 compareModelSpec :: Spec
 compareModelSpec = describe "Module models" $ do
-  rs  <- runIO $ loadRefStore "tests/pact/signatures.repl"
-  md  <- runIO $ loadModuleData rs (ModuleName "model-test1-impl" Nothing)
-  ifd <- runIO $ loadModuleData rs (ModuleName "model-test1" Nothing)
+  (r,s) <- runIO $ execScript' Quiet "tests/pact/signatures.repl"
+  case r of
+    Left e -> it "loaded script" $ expectationFailure e
+    Right _ -> return ()
+  Right (rs,_) <- runIO $ replGetModules s
+  Just md <- return $ HM.lookup (ModuleName "model-test1-impl" Nothing) rs
+  Just ifd <- return $ HM.lookup (ModuleName "model-test1" Nothing) rs
 
   let mModels = case _mdModule md of
         MDModule m -> _mModel $ _mMeta m
@@ -52,7 +54,7 @@ aggregateFunctionModels :: ModuleData Ref -> [Exp Info]
 aggregateFunctionModels ModuleData{..} =
   foldMap (extractExp . snd) $ HM.toList _mdRefMap
   where
-    extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=mModel} _) _)) = mModel
+    extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=m} _) _)) = m
     extractExp _ = []
 
 -- Because models will necessarily have conflicting Info values
@@ -60,17 +62,3 @@ aggregateFunctionModels ModuleData{..} =
 -- 'Info', and only compares relevant terms.
 expEquality :: Exp Info -> Exp Info -> Bool
 expEquality e1 e2 = ((def :: Info) <$ e1) == ((def :: Info) <$ e2)
-
-loadRefStore :: FilePath -> IO RefStore
-loadRefStore fp = do
-  (r,s) <- execScript' Quiet fp
-  either (die def) (const (return ())) r
-  case preview (rEnv . eeRefStore) s of
-    Just md -> return md
-    Nothing -> die def $ "Could not load module data from " ++ show fp
-
-loadModuleData :: RefStore -> ModuleName -> IO (ModuleData Ref)
-loadModuleData rs mn =
-  case preview (rsModules . ix mn) rs of
-    Just md -> pure md
-    Nothing -> die def $ "Could not load module data: " ++ show mn
