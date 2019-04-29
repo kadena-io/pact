@@ -19,12 +19,14 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               (^?), _1, _2, _head, _Just,
                                               ifoldlM)
 import           Control.Monad               (void)
+import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
+import           Data.Default                (def)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
@@ -34,6 +36,7 @@ import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind
                                               literal, (.<), uninterpret,
                                               writeArray)
 import qualified Data.SBV.Internals          as SBVI
+import qualified Data.SBV.Maybe              as SBV
 import qualified Data.SBV.String             as SBV
 import           Data.SBV.Tuple              (tuple)
 import qualified Data.SBV.Tuple              as SBVT
@@ -48,6 +51,7 @@ import           GHC.TypeLits
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
+import qualified Pact.Types.PactValue        as Pact
 import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Pretty           (renderCompactString', pretty)
 import           Pact.Types.Runtime          (tShow)
@@ -67,6 +71,9 @@ newtype Analyze a
     { runAnalyze :: RWST AnalyzeEnv () EvalAnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState EvalAnalyzeState, MonadError AnalyzeFailure)
+
+instance MonadFail Analyze where
+    fail = throwError . AnalyzeFailure def . fromString
 
 instance Analyzer Analyze where
   type TermOf Analyze = Term
@@ -179,6 +186,13 @@ tagFork pathL pathR reachable lPasses = do
   tagSubpathStart pathL $ reachable .&& lPasses
   tagSubpathStart pathR $ reachable .&& sNot lPasses
 
+tagCancel :: TagId -> SBV Bool -> Analyze ()
+tagCancel tid cancelHappens = do
+  mTag <- view $ aeModelTags.mtCancels.at tid
+  case mTag of
+    Nothing  -> pure ()
+    Just tag -> addConstraint $ sansProv $ cancelHappens .== tag
+
 tagResult :: AVal -> Analyze ()
 tagResult av = do
   tid <- view $ aeModelTags.mtResult._1
@@ -189,6 +203,20 @@ tagResult av = do
 tagReturn :: TagId -> AVal -> Analyze ()
 tagReturn tid av = do
   mTag <- preview $ aeModelTags.mtReturns.at tid._Just._2
+  case mTag of
+    Nothing    -> pure ()
+    Just tagAv -> addConstraint $ sansProv $ tagAv .== av
+
+tagYield :: TagId -> AVal -> Analyze ()
+tagYield tid av = do
+  mTag <- preview $ aeModelTags.mtYields.at tid._Just._2
+  case mTag of
+    Nothing    -> pure ()
+    Just tagAv -> addConstraint $ sansProv $ tagAv .== av
+
+tagResume :: TagId -> AVal -> Analyze ()
+tagResume tid av = do
+  mTag <- preview $ aeModelTags.mtResumes.at tid._Just._2
   case mTag of
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ tagAv .== av
@@ -463,20 +491,26 @@ evalTerm = \case
     tagGrantRequest tid granted
     pure granted
 
-  Read objTy tid tn rowKey -> do
+  Read objTy mDefault tid tn rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
     tableRead tn .= sTrue
     rowReadCount tn sRk += 1
 
     readSucceeds <- use $ rowExists id tn sRk
     tagAccessKey mtReads tid sRk readSucceeds
-    succeeds %= (.&& readSucceeds)
 
-    (sObj, aValFields) <- readFields tn sRk tid objTy
+    let readObject = do
+          (sObj, aValFields) <- readFields tn sRk tid objTy
+          applyInvariants tn aValFields $ mapM_ addConstraint
+          pure sObj
 
-    applyInvariants tn aValFields $ mapM_ addConstraint
+    case mDefault of
+      Nothing -> do
+        succeeds %= (.&& readSucceeds)
+        readObject
 
-    pure sObj
+      Just defObj -> withSymVal objTy $
+        iteS readSucceeds readObject (eval defObj)
 
   Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     obj <- withSing objTy $ evalTerm objT
@@ -621,7 +655,7 @@ evalTerm = \case
       -- Everything else is hashed by first converting it to JSON:
       Some SInteger tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
-        Just int -> pure $ sHash $ toStrict $ Aeson.encode int
+        Just int -> pure $ sHash $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger int
       Some SBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
@@ -637,17 +671,19 @@ evalTerm = \case
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
   Pact steps -> local (inPact .~ sTrue) $ do
-    -- TODO: pending #442
-    _previouslyYielded <- use $ latticeState . lasYielded
-
     -- We execute through all the steps once (via a left fold), then we execute
     -- all the rollbacks (via for), in reverse order.
 
     (rollbacks, _) <- ifoldlM
       (\stepNo (rollbacks, successChoice)
-        --          ^ do we make it to this step?
+        --                 ^ do we make it to this step?
         (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) ->
         withSing ty $ do
+
+        -- update yielded values
+        previouslyYielded <- use $ latticeState . lasYieldedInCurrent
+        latticeState . lasYieldedInPrevious .= previouslyYielded
+        latticeState . lasYieldedInCurrent  .= Nothing
 
         -- The first step has no cancel var. All other steps do.
         cancel <- case mCancelVid of
@@ -662,6 +698,7 @@ evalTerm = \case
 
             tagFork successPath cancelPath (sansProv successChoice)
               (sansProv $ sNot cancel)
+            tagCancel (_pathTag cancelPath) cancel
 
             pure $ successChoice .&& cancel
 
@@ -685,6 +722,11 @@ evalTerm = \case
       ([], sTrue)
       steps
 
+    -- clear yields before evaluating rollbacks. (though there shouldn't be any
+    -- resumes in the rollbacks anyway)
+    latticeState . lasYieldedInPrevious .= Nothing
+    latticeState . lasYieldedInCurrent  .= Nothing
+
     void $ foldlM
       (\alreadyRollingBack
         (path {- r_n -}, rollbackTriggered, rollback) -> do
@@ -701,17 +743,22 @@ evalTerm = \case
 
     pure "INTERNAL: pact done"
 
-  -- Caution: yield / resume are not yet working pending #442
-  Yield ty tm -> do
-    val <- eval tm
-    latticeState . lasYielded ?= SomeVal ty val
-    pure val
+  Yield tid tm -> do
+    sVal@(S prov val) <- eval tm
+    tagYield tid $ mkAVal sVal
+    let ty = sing :: SingTy a
+    withSymVal ty $
+      latticeState . lasYieldedInCurrent ?= SomeVal ty (S prov (SBV.sJust val))
+    pure sVal
 
-  Resume -> use (latticeState . lasYielded) >>= \case
+  Resume tid -> use (latticeState . lasYieldedInPrevious) >>= \case
     Nothing -> throwErrorNoLoc "No previously yielded value for resume"
-    Just (SomeVal ty val) -> case singEq ty (sing :: SingTy a) of
+    Just (SomeVal ty (S prov mVal)) -> case singEq ty (sing :: SingTy a) of
       Nothing   -> throwErrorNoLoc "Resume of unexpected type"
-      Just Refl -> pure val
+      Just Refl -> withSymVal ty $ do
+        markFailure $ SBV.isNothing mVal
+        tagResume tid $ mkAVal' $ SBV.fromJust mVal
+        pure $ S prov $ SBV.fromJust mVal
 
 -- | Private pacts must be evaluated by the right entity. Fail if the current
 -- entity doesn't match the provided.

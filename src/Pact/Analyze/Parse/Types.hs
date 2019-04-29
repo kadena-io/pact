@@ -1,4 +1,6 @@
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
@@ -8,14 +10,17 @@
 -- | Types related to parsing from 'Exp' to 'Prop' and 'Invariant'.
 module Pact.Analyze.Parse.Types where
 
+import           Control.Applicative        (Alternative)
 import           Control.Lens               (makeLenses, (<&>))
 import           Control.Monad.Except       (MonadError (throwError))
+import           Control.Monad.Fail
 import           Control.Monad.Reader       (ReaderT)
 import           Control.Monad.State.Strict (StateT)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map                   (Map)
 import qualified Data.Map                   as Map
 import           Data.Set                   (Set)
+import           Data.String                (fromString, IsString)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
@@ -135,10 +140,16 @@ data PropCheckEnv = PropCheckEnv
   , _localVars         :: HM.HashMap Text EProp
   }
 
+newtype EitherFail e a = EitherFail { _getEither :: Either e a }
+    deriving (Show, Eq, Ord, Functor, Applicative, Alternative, Monad, MonadError e)
+
+instance IsString str => MonadFail (EitherFail str) where
+    fail = EitherFail . Left . fromString
+
 type ParseEnv = Map Text VarId
 
 type PropParse      = ReaderT ParseEnv (StateT VarId (Either String))
-type PropCheck      = ReaderT PropCheckEnv (Either String)
+type PropCheck      = ReaderT PropCheckEnv (EitherFail String)
 type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 
 makeLenses ''PropCheckEnv

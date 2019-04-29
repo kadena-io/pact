@@ -682,7 +682,6 @@ Pact's supported types are:
 - [Lists](#lists)
 - [Objects](#objects)
 - [Function](#defun) and [pact](#defpact) definitions
-- [JSON values](#json)
 - [Tables](#deftable)
 - [Schemas](#defschema)
 
@@ -795,14 +794,13 @@ values.
 When reading values from a message via [read-msg](pact-functions.html#read-msg), Pact coerces JSON types
 as follows:
 
-- String -> String
-- Number -> Integer (rounded)
-- Boolean -> Boolean
-- Object -> Object
-- Array -> List
-- Null -> JSON Value
+- String -> `string`
+- Number -> `decimal`
+- Boolean -> `bool`
+- Object -> `object`
+- Array -> `list`
 
-Decimal values are represented as Strings and read using [read-decimal](pact-functions.html#read-decimal).
+Integer values are represented as objects and read using [read-integer](pact-functions.html#read-integer).
 
 
 Confidentiality {#confidentiality}
@@ -909,12 +907,13 @@ Pact supports a number of features to manage a module's dependencies on other Pa
 
 ### Module Hashes
 Once loaded, a Pact module is associated with a hash computed from the module's source code text.
-This module hash uniquely identifies the version of the module.
+This module hash uniquely identifies the version of the module. Hashes are base64url-encoded
+BLAKE2 256-bit hashes.
 Module hashes can be examined with [describe-module](pact-functions.html#describe-module):
 
 ```
 pact> (at "hash" (describe-module 'accounts))
-"9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+"ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY"
 ```
 
 ### Pinning module versions with `use`
@@ -942,8 +941,8 @@ is in a set of "blessed" hashes, as specified by [bless](#bless) in the module d
 
 ```lisp
 (module provider 'keyset
-  (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-  (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+  (bless "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY")
+  (bless "bctSHEz4N5Y1XQaic6eOoBmjty88HMMGfAdQLPuIGMw")
   ...
 )
 ```
@@ -1055,7 +1054,7 @@ For certain applications (database updates), keys must be strings.
 
 ```
 pact> { "foo": (+ 1 2), "bar": "baz" }
-(TObject [("foo",3),("bar","baz")])
+{ "foo": (+ 1 2), "bar": "baz" }
 ```
 
 ### Bindings {#bindings}
@@ -1087,7 +1086,6 @@ a type literal or user type specification.
 - `list`, or `[type]` to specify the list type
 - `object`, which can be further typed with a schema
 - `table`, which can be further typed with a schema
-- `value` (JSON values)
 
 ### Schema type literals
 
@@ -1162,8 +1160,8 @@ See [Dependency management](#dependency-management) for a discussion of the bles
 
 ```lisp
 (module provider 'keyset
-  (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-  (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+  (bless "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY")
+  (bless "bctSHEz4N5Y1XQaic6eOoBmjty88HMMGfAdQLPuIGMw")
   ...
 )
 ```
@@ -1552,14 +1550,12 @@ _Portability_: JSON enjoys strong support in nearly every database backend at ti
 structure allows using even non-RDBMS backends like RocksDB etc, and also keeps SQL DDL very straightforward,
 with simple primary key structure. Indexing is not supported nor required.
 
-## Pact Datatype Codec
-
-For all supported Pact datatypes, they are encoded into JSON using a special codec that is different than the
-JSON format used in the front-end API, designed for serialization speed and correctness.
 
 ### Integer
 
-For non-large integers, values are directly encoded as JSON numbers.
+Integers are encoded as an JSON object with a single field "int" referring to a
+Number value for non-large integers, or
+a string for large values.
 
 What is considered a "large integer"
 in JSON/Javascript is subject to debate; we use the range `[-2^53 .. 2^53]` as specified
@@ -1568,28 +1564,23 @@ large integers, we encode a JSON singleton object with the stringified integer v
 
 ```javascript
 /* small integers are just a number */
-1
-/* large integers are objects */
-{ "_P_int": "123..." /* integer string representation */
+{ "int": 1 }
+/* large integers are string */
+{ "int": "1231289371891238912983712983712098908937"
 }
 ```
 
 ### Decimal
 
-Decimals are encoded using _places_ and _mantissa_ following the
-[Haskell Decimal format](https://hackage.haskell.org/package/Decimal-0.5.1/docs/Data-Decimal.html#t:DecimalRaw):
+Decimals are directly encoded to JSON scientific format, unless the mantissa is greater than
+a safe JS integer, in which case it is encoded as an JSON object with key "decimal" referring to
+the string representation.
 
 ```javascript
-{ "_P_decp": 4     /* decimal places */
-, "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
-}
-```
-
-Note that the mantissa value uses the integer format described above.
-As described in the Decimal docs, the value can be computed as follows:
-
-```
-MANTISSA / (10 ^ PLACES)
+/* decimal with safe mantissa */
+10.234
+/* decimal with unsafe mantissa */
+{ "decimal": "34985794739875934875348957394875349835.39587348953495875394534" }
 ```
 
 ### Boolean
@@ -1602,36 +1593,29 @@ Strings are stored as JSON strings.
 
 ### Time
 
-Times are stored in a JSON object capturing a Modified Julian Day value and a day-local microsecond value.
+Times are stored in a JSON object with key "time" for second-resolution values, or "timep" for
+microsecond-resolution values, as a ISO8601 UTC string (modified for high-resolution).
 
 ```javascript
-{ "_P_timed": 234 /* "modified julian day value */
-, "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
-}
-```
-
-Suggestions for converting MJDs can be found [here](https://stackoverflow.com/questions/11889553/convert-modified-julian-date-to-utc).
-
-### JSON Value/Blob
-
-Raw JSON blobs are encoded unmodified in a container object.
-
-```javascript
-{ "_P_val": { "foo": "bar" } /* unmodified user JSON object */
-}
+/* second-resolution time */
+{ "time": "2016-12-23T08:23:13Z"
+/* microsecond-resolution time */
+{ "timep": "2016-12-23T08:23:13.006032Z" }
 ```
 
 ### Keyset
 
-Keysets store the key list and predicate name in a JSON object.
+Keysets use the built-in JSON representation.
 
 ```javascript
-{ "_P_keys": ["key1","key2"] /* public key string representations */
-, "_P_pred": "keys-all"      /* predicate function name */
+{ "keys": ["key1","key2"] /* public key string representations */
+, "pred": "keys-all"      /* predicate function name */
 }
 ```
 
 ## Module (User) Tables
+
+NOTE/WARNING: This does not apply to Chainweb table backends, and may be discontinued.
 
 For each module table specified in Pact code, two backend tables are created: the "data table" and the "transaction table".
 

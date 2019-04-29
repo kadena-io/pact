@@ -31,7 +31,7 @@ import Pact.Parse (ParsedDecimal(..))
 import Pact.Types.Command
 import Pact.Types.Gas
 import Pact.Types.Logger
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
@@ -144,7 +144,7 @@ applyContinuation rk hsh signers msg@ContMsg{..} = do
 
           -- Setup environment and get result
           let sigs = userSigsToPactKeySet signers
-              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactOutput) _peYield)
+              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactValue) _peYield)
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep (toUntypedHash hsh)) _csRefStore
                         _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData

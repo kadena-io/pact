@@ -24,7 +24,7 @@ module Pact.Types.Type
    PrimType(..),
    GuardType(..),
    tyInteger,tyDecimal,tyTime,tyBool,tyString,
-   tyList,tyObject,tyValue,tyKeySet,tyTable,
+   tyList,tyObject,tyKeySet,tyTable,
    SchemaType(..),
    SchemaPartial(..),
    TypeVarName(..),typeVarName,
@@ -37,7 +37,8 @@ module Pact.Types.Type
 import Data.Eq.Deriving
 import Text.Show.Deriving
 
-import Control.Lens
+import Control.Applicative
+import Control.Lens hiding ((.=))
 import Data.List
 import Control.Monad
 import Prelude
@@ -57,6 +58,7 @@ import Data.Default (Default(..))
 import Pact.Types.Pretty
 import Pact.Types.Util
 import Pact.Types.Info
+import Pact.Types.Codec
 
 
 newtype TypeName = TypeName Text
@@ -72,6 +74,8 @@ data Arg o = Arg {
 instance NFData o => NFData (Arg o)
 instance Pretty o => Pretty (Arg o) where
   pretty (Arg n t _) = pretty n <> colon <> pretty t
+instance ToJSON o => ToJSON (Arg o) where toJSON = lensyToJSON 2
+instance FromJSON o => FromJSON (Arg o) where parseJSON = lensyParseJSON 2
 
 -- | Function type
 data FunType o = FunType {
@@ -82,6 +86,9 @@ data FunType o = FunType {
 instance NFData o => NFData (FunType o)
 instance (Pretty o) => Pretty (FunType o) where
   pretty (FunType as t) = hsep (map pretty as) <+> "->" <+> pretty t
+
+instance ToJSON o => ToJSON (FunType o) where toJSON = lensyToJSON 3
+instance FromJSON o => FromJSON (FunType o) where parseJSON = lensyParseJSON 3
 
 -- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
@@ -101,6 +108,22 @@ data GuardType
   | GTyModule
   deriving (Eq,Ord,Generic,Show)
 
+instance ToJSON GuardType where
+  toJSON g = case g of
+    GTyKeySet -> "keyset"
+    GTyKeySetName -> "keysetref"
+    GTyPact -> "pact"
+    GTyUser -> "user"
+    GTyModule -> "module"
+instance FromJSON GuardType where
+  parseJSON = withText "GuardType" $ \t -> case t of
+    "keyset" -> pure GTyKeySet
+    "keysetref" -> pure GTyKeySetName
+    "pact" -> pure GTyPact
+    "user" -> pure GTyUser
+    "module" -> pure GTyModule
+    _ -> fail "Unrecognized guard type"
+
 instance NFData GuardType
 
 -- | Primitive/unvarying types.
@@ -111,14 +134,32 @@ data PrimType =
   TyTime |
   TyBool |
   TyString |
-  TyValue |
   TyGuard (Maybe GuardType)
   deriving (Eq,Ord,Generic,Show)
 
 instance NFData PrimType
+instance ToJSON PrimType where
+  toJSON a = case a of
+    TyInteger -> String tyInteger
+    TyDecimal -> String tyDecimal
+    TyTime -> String tyTime
+    TyBool -> String tyBool
+    TyString -> String tyString
+    TyGuard g -> object [ "guard" .= g ]
+instance FromJSON PrimType where
+  parseJSON v = withText "PrimType" doStr v <|> withObject "PrimType" doObj v
+    where
+      doStr s
+        | s == tyInteger = pure TyInteger
+        | s == tyDecimal = pure TyDecimal
+        | s == tyTime = pure TyTime
+        | s == tyBool = pure TyBool
+        | s == tyString = pure TyString
+        | otherwise = fail "Bad PrimType Value"
+      doObj o = TyGuard <$> o .: "guard"
 
 
-tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,
+tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,
   tyKeySet,tyTable,tyGuard :: Text
 tyInteger = "integer"
 tyDecimal = "decimal"
@@ -127,7 +168,6 @@ tyBool = "bool"
 tyString = "string"
 tyList = "list"
 tyObject = "object"
-tyValue = "value"
 tyKeySet = "keyset"
 tyGuard = "guard"
 tyTable = "table"
@@ -139,7 +179,6 @@ instance Pretty PrimType where
     TyTime -> tyTime
     TyBool -> tyBool
     TyString -> tyString
-    TyValue -> tyValue
     TyGuard tg -> case tg of
       Just GTyKeySet -> tyKeySet
       _ -> tyGuard
@@ -149,6 +188,17 @@ data SchemaType =
   TyObject |
   TyBinding
   deriving (Eq,Ord,Generic,Show)
+
+instance ToJSON SchemaType where
+  toJSON TyTable = "table"
+  toJSON TyObject = "object"
+  toJSON TyBinding = "binding"
+instance FromJSON SchemaType where
+  parseJSON = withText "SchemaType" $ \t -> case t of
+    "table" -> pure TyTable
+    "object" -> pure TyObject
+    "binding" -> pure TyBinding
+    _ -> fail "Bad SchemaType value"
 
 instance NFData SchemaType
 instance Pretty SchemaType where
@@ -164,6 +214,9 @@ data TypeVar v =
   TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
   SchemaVar { _tvName :: TypeVarName }
   deriving (Functor,Foldable,Traversable,Generic,Show)
+
+instance ToJSON v => ToJSON (TypeVar v) where toJSON = lensyToJSON 3
+instance FromJSON v => FromJSON (TypeVar v) where parseJSON = lensyParseJSON 3
 
 instance NFData v => NFData (TypeVar v)
 instance Eq (TypeVar v) where
@@ -190,6 +243,17 @@ data SchemaPartial = FullSchema | PartialSchema !(Set Text) | AnySubschema
   deriving (Eq,Ord,Show,Generic)
 instance NFData SchemaPartial
 instance Default SchemaPartial where def = FullSchema
+
+instance ToJSON SchemaPartial where
+  toJSON FullSchema = "full"
+  toJSON AnySubschema = "any"
+  toJSON (PartialSchema s) = toJSON s
+instance FromJSON SchemaPartial where
+  parseJSON v =
+    (withThisText "FullSchema" "full" v $ pure FullSchema) <|>
+    (withThisText "AnySubschema" "any" v $ pure AnySubschema) <|>
+    (PartialSchema <$> parseJSON v)
+
 
 showPartial :: SchemaPartial -> String
 showPartial FullSchema = ""
@@ -222,6 +286,30 @@ instance (Pretty o) => Pretty (Type o) where
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
     TyAny          -> "*"
+
+instance ToJSON v => ToJSON (Type v) where
+  toJSON t = case t of
+    TyAny -> "*"
+    TyVar n -> toJSON n
+    TyPrim pt -> toJSON pt
+    TyList l -> object [ "list" .= l ]
+    TySchema st ty p -> object [ "schema" .= st, "type" .= ty, "partial" .= p ]
+    TyFun f -> toJSON f
+    TyUser v -> toJSON v
+
+instance FromJSON v => FromJSON (Type v) where
+  parseJSON v =
+    (withThisText "TyAny" "*" v $ pure TyAny) <|>
+    (TyVar <$> parseJSON v) <|>
+    (TyPrim <$> parseJSON v) <|>
+    (TyFun <$> parseJSON v) <|>
+    (TyUser <$> parseJSON v) <|>
+    (withObject "TyList" (\o -> TyList <$> o .: "list") v) <|>
+    (withObject "TySchema"
+     (\o -> TySchema <$> o .: "schema" <*> o .: "type" <*> o .: "partial") v)
+
+
+
 
 mkTyVar :: TypeVarName -> [Type n] -> Type n
 mkTyVar n cs = TyVar (TypeVar n cs)

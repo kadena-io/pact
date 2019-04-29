@@ -43,6 +43,8 @@ module Pact.Eval
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,evalContinuation
+    ,enforcePactValue,enforcePactValue'
+    ,toPersistDirect
     ) where
 
 import Bound
@@ -67,7 +69,7 @@ import Safe
 import Unsafe.Coerce
 
 import Pact.Gas
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -258,7 +260,7 @@ eval (TModule (MDModule m) bod i) =
     void $ acquireCapability (ModuleAdminCapability $ _mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
-    writeRow i Write Modules (_mName mangledM) (derefDef <$> govM)
+    writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 
 eval (TModule (MDInterface m) bod i) =
@@ -269,15 +271,22 @@ eval (TModule (MDInterface m) bod i) =
     oldI <- readRow i Modules $ _interfaceName mangledI
     case oldI of
       Nothing -> return ()
-      Just old -> evalError i $ "Existing interface found: " <> pretty old
+      Just _old -> evalError i $ "Existing interface found (interfaces cannot be upgraded)"
     (g,govI) <- loadInterface mangledI bod i gas
-    writeRow i Write Modules (_interfaceName mangledI) (derefDef <$> govI)
+    writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 eval t = enscope t >>= reduce
 
 
+toPersistDirect' :: Term Name -> Eval e PersistDirect
+toPersistDirect' t = case toPersistDirect t of
+  Right v -> return v
+  Left e -> evalError (getInfo t) $ "Attempting to serialize non pact-value in module def: " <> pretty e
+
+
 evalContinuation :: PactContinuation -> Eval e (Term Name)
-evalContinuation (PactContinuation d args) = reduceApp (App (TDef d def) (map (liftTerm . fromPactOutput) args) def)
+evalContinuation (PactContinuation d args) =
+  reduceApp (App (TDef d def) (map (liftTerm . fromPactValue) args) def)
 
 
 evalUse :: Use -> Eval e ()
@@ -315,7 +324,7 @@ mangleDefs mn term = modifyMn term
 
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule :: Module (Term Name) -> Scope n Term Name -> Info -> Gas
-           -> Eval e (Gas,ModuleDef (Def Ref))
+           -> Eval e (Gas,ModuleData Ref)
 loadModule m@Module {} bod1 mi g0 = do
   (g1,mdefs) <-
     case instantiate' bod1 of
@@ -342,7 +351,7 @@ loadModule m@Module {} bod1 mi g0 = do
   let md = ModuleData mGov solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert (_mName m) md
-  return (g1,mGov)
+  return (g1,md)
 
 resolveGovernance :: HM.HashMap Text Ref
                   -> Module (Term Name) -> Eval e (ModuleDef (Def Ref))
@@ -357,7 +366,7 @@ resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
     _ -> evalError (_tInfo g) "Invalid module governance, should be var"
 
 loadInterface :: Interface -> Scope n Term Name -> Info -> Gas
-              -> Eval e (Gas,ModuleDef (Def Ref))
+              -> Eval e (Gas,ModuleData Ref)
 loadInterface i@Interface{..} body info gas0 = do
   (gas1,idefs) <- case instantiate' body of
     (TList bd _ _bi) -> do
@@ -380,7 +389,7 @@ loadInterface i@Interface{..} body info gas0 = do
   let md = ModuleData (MDInterface i) evaluatedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
-  return (gas1,_mdModule md)
+  return (gas1,md)
 
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
@@ -472,7 +481,7 @@ solveConstraint info refName (Ref t) evalMap = do
           pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " <> pretty t
 
-resolveName :: ModuleName -> Eval e (Maybe ModuleData)
+resolveName :: ModuleName -> Eval e (Maybe (ModuleData Ref))
 resolveName mn = do
   md <- preview $ eeRefStore . rsModules . ix mn
   case md of
@@ -539,7 +548,6 @@ reduce (TApp a _) = reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
-reduce t@TValue {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
 reduce t@TNative {} = return $ toTerm $ pack $ show t
@@ -566,9 +574,9 @@ reduceBody (TList bs _ _) =
   V.last <$> V.mapM reduce bs
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
-reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
+reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(a,t) -> (,) <$> traverse reduce a <*> reduce t) ps
+  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduce t) ps
   typecheck ps'
   reduceBody (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
 
@@ -581,6 +589,15 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
+
+enforcePactValue :: (Term Name) -> Eval e PactValue
+enforcePactValue t = case toPactValue t of
+  Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
+  Right v -> return v
+
+enforcePactValue' :: Traversable f => f (Term Name) -> Eval e (f PactValue)
+enforcePactValue' = traverse enforcePactValue
+
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
@@ -591,9 +608,9 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
     case _dDefType of
       Defun ->
         reduceBody bod'
-      Defpact ->
-        let continuation = PactContinuation d (map toPactOutput' (fst af))
-        in applyPact continuation bod'
+      Defpact -> do
+        continuation <- PactContinuation d <$> enforcePactValue' (fst af)
+        applyPact continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
@@ -688,7 +705,7 @@ resolveFreeVars i b = traverse r b where
              Nothing -> evalError i $ "Cannot resolve " <> pretty fv
              Just d -> return d
 
-installModule :: ModuleData ->  Eval e ()
+installModule :: ModuleData Ref ->  Eval e ()
 installModule ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
   (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) _mdModule

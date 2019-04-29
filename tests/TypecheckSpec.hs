@@ -93,7 +93,7 @@ customFunChecks name (tl,_) = case name of
       (Just $ PartialSchema $ Set.singleton "name")
   _ -> return ()
 
-loadModule :: FilePath -> ModuleName -> IO ModuleData
+loadModule :: FilePath -> ModuleName -> IO (ModuleData Ref)
 loadModule fp mn = do
   (r,s) <- execScript' Quiet fp
   either (die def) (const (return ())) r

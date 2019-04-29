@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -20,220 +21,105 @@
 --
 module Pact.Types.Persistence
   (
-   Persistable(..),ToPersistable(..),
-   ColumnId(..),
    RowKey(..),
-   Columns(..),columns,
    Domain(..),
    TxLog(..),txDomain,txKey,txValue,
    WriteType(..),
    Method,
    PactDb(..),
-   TxId(..)
+   TxId(..),
+   PersistDirect(..),toPersistDirect,fromPersistDirect,
+   ModuleData(..),mdModule,mdRefMap,
+   PersistModuleData
    ) where
 
 import Control.Applicative ((<|>))
 import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
-import Control.Monad (forM)
 import Data.Aeson hiding (Object)
-import qualified Data.Aeson as A
-import Data.Aeson.Types (Parser)
-import qualified Data.ByteString.Lazy.UTF8 as BSL
-import Data.Decimal (Decimal,DecimalRaw(..))
 import Data.Default (Default)
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Map.Strict as M
 import Data.String (IsString(..))
-import Data.Thyme.Time.Core (Day(..),UTCTime,UTCView(..),fromMicroseconds,mkUTCTime,unUTCTime,toMicroseconds)
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
-import Text.Read (readMaybe)
 
 import Pact.Types.Lang
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Util (AsString(..))
 
--- | Min, max values that Javascript doesn't mess up.
---
---   http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html
---   "The integer part of the Number type in Javascript is safe in [-2^53 .. 2^53] (253 = 9 007 199 254 740 992).
---    Beyond this there will be precision loss on the least significant numbers."
-jsIntegerBounds :: (Integer, Integer)
-jsIntegerBounds = (-9007199254740991,9007199254740991)
 
--- | JSON codec pair.
-data Codec a = Codec {
-  encoder :: a -> Value,
-  decoder :: Value -> Parser a
-  }
+data PersistDirect =
+    PDValue PactValue
+  | PDNative NativeDefName
+  deriving (Eq,Show,Generic)
 
-integerCodec :: Codec Integer
-integerCodec = Codec encodeInteger decodeInteger
-  where
-    encodeInteger i = let (l,h) = jsIntegerBounds in
-                        if i >= l && i <= h then Number (fromIntegral i)
-                        else object [ field .= show i ]
-    {-# INLINE encodeInteger #-}
-    decodeInteger (Number i) = return (round i)
-    decodeInteger (A.Object o) = do
-      s <- o .: field
-      case readMaybe (unpack s) of
-        Just i -> return i
-        Nothing -> fail $ "Invalid integer value: " ++ show o
-    decodeInteger v = fail $ "Invalid integer value: " ++ show v
-    {-# INLINE decodeInteger #-}
-    field = "_P_int"
+instance NFData PersistDirect
 
-decimalCodec :: Codec Decimal
-decimalCodec = Codec enc dec
-  where
-    enc (Decimal dp dm) =
-      object [ places .= dp,
-               mantissa .= encoder integerCodec dm ]
-    {-# INLINE enc #-}
-    dec = withObject "Decimal" $ \o ->
-      Decimal <$> o .: places <*>
-      (o .: mantissa >>= decoder integerCodec)
-    {-# INLINE dec #-}
-    places = "_P_decp"
-    mantissa = "_P_decm"
+instance ToJSON PersistDirect where
+  toJSON (PDValue v) = object [ "pdval" .= v ]
+  toJSON (PDNative n) = object [ "pdnat" .= n ]
 
-timeCodec :: Codec UTCTime
-timeCodec = Codec enc dec
-  where
-    enc t = object [ day .= d,
-                     micros .= encoder integerCodec (fromIntegral (toMicroseconds s)) ]
-      where (UTCTime (ModifiedJulianDay d) s) = unUTCTime t
-    {-# INLINE enc #-}
-    dec = withObject "UTCTime" $ \o ->
-      mkUTCTime <$> (ModifiedJulianDay <$> o .: day) <*>
-      (fromMicroseconds . fromIntegral <$> (o .: micros >>= decoder integerCodec))
-    {-# INLINE dec #-}
-    day = "_P_timed"
-    micros = "_P_timems"
+instance FromJSON PersistDirect where
+  parseJSON v =
+    withObject "PDValue" (\o -> PDValue <$> o .: "pdval") v <|>
+    withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v
 
-valueCodec :: Codec Value
-valueCodec = Codec enc dec
-  where
-    enc v = object [field .= v]
-    {-# INLINE enc #-}
-    dec = withObject "Value" $ \o -> o .: field
-    {-# INLINE dec #-}
-    field = "_P_val"
+instance Pretty PersistDirect where
+  pretty (PDValue v) = pretty v
+  pretty (PDNative n) = pretty $ "<native>" <> asString n
 
-guardCodec :: Codec Guard
-guardCodec = Codec enc dec
-  where
-    enc (GKeySet (KeySet ks p)) = object [ keyf .= ks, predf .= p ]
-    enc (GKeySetRef n) = object [ keyNamef .= n ]
-    enc (GPact (PactGuard{..})) =
-      object [ pactNamef .= _pgName, pactIdf .= _pgPactId ]
-    enc (GModule (ModuleGuard{..})) =
-      object [ modModNamef .= _mgModuleName, modNamef .= _mgName ]
-    enc (GUser (UserGuard{..})) =
-      object [ userDataf .= _ugData, userPredf .= _ugPredFun ]
-      -- TODO ^^^ is too loose, needs better object type of only persistables
-    {-# INLINE enc #-}
-    dec = withObject "Guard" $ \o ->
-      (GKeySet <$> (KeySet <$> o .: keyf <*> o .: predf)) <|>
-      (GKeySetRef <$> o .: keyNamef) <|>
-      (GPact <$> (PactGuard <$> o .: pactIdf <*> o .: pactNamef)) <|>
-      (GModule <$> (ModuleGuard <$> o .: modModNamef <*> o .: modNamef)) <|>
-      (GUser <$> (UserGuard <$> o .: userDataf <*> o .: userPredf))
-    {-# INLINE dec #-}
-    keyf = "_P_keys"
-    predf = "_P_pred"
-    keyNamef = "_P_ksn"
-    pactNamef = "_P_gpn"
-    pactIdf = "_P_gpi"
-    modModNamef = "_P_mmn"
-    modNamef = "_P_mn"
-    userDataf = "_P_gud"
-    userPredf = "_P_gup"
+toPersistDirect :: Term Name -> Either Text PersistDirect
+toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
+toPersistDirect t = case toPactValue t of
+  Right v -> pure $ PDValue v
+  Left e -> Left e
 
+fromPersistDirect :: (NativeDefName -> Maybe (Term Name)) -> PersistDirect -> Either Text (Term Name)
+fromPersistDirect _ (PDValue v) = return $ fromPactValue v
+fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
+  Just t -> return t
+  Nothing -> Left $ "Native lookup failed: " <> tShow nn
 
--- | Represent Pact 'Term' values that can be stored in a database.
-data Persistable =
-    PLiteral Literal |
-    PGuard Guard |
-    PValue Value
-    deriving (Eq,Generic,Show)
-instance Pretty Persistable where
-    pretty (PLiteral l) = pretty l
-    pretty (PGuard k) = pretty k
-    pretty (PValue v) = prettyString $ BSL.toString $ encode v
-instance ToTerm Persistable where
-    toTerm (PLiteral l) = toTerm l
-    toTerm (PGuard k) = toTerm k
-    toTerm (PValue v) = toTerm v
-instance ToJSON Persistable where
-    toJSON (PLiteral (LString s)) = String s
-    toJSON (PLiteral (LBool b)) = Bool b
-    toJSON (PLiteral (LInteger n)) = encoder integerCodec n
-    toJSON (PLiteral (LDecimal d)) = encoder decimalCodec d
-    toJSON (PLiteral (LTime t)) = encoder timeCodec t
-    toJSON (PGuard k) = encoder guardCodec k
-    toJSON (PValue v) = encoder valueCodec v
-instance FromJSON Persistable where
-    parseJSON (String s) = return (PLiteral (LString s))
-    parseJSON (Number n) = return (PLiteral (LInteger (round n)))
-    parseJSON (Bool b) = return (PLiteral (LBool b))
-    parseJSON v@A.Object {} = (PLiteral . LInteger <$> decoder integerCodec v) <|>
-                            (PLiteral . LDecimal <$> decoder decimalCodec v) <|>
-                            (PLiteral . LTime <$> decoder timeCodec v) <|>
-                            (PValue <$> decoder valueCodec v) <|>
-                            (PGuard <$> decoder guardCodec v)
-    parseJSON Null = return (PValue Null)
-    parseJSON va@Array {} = return (PValue va)
+-- | Module ref store
+data ModuleData r = ModuleData
+  { _mdModule :: ModuleDef (Def r)
+  , _mdRefMap :: HM.HashMap Text r
+  } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
+makeLenses ''ModuleData
 
-class ToPersistable t where
-  toPersistable :: t -> Persistable
-instance ToPersistable Literal where toPersistable = PLiteral
-instance ToPersistable Guard where toPersistable = PGuard
-instance ToPersistable Value where toPersistable = PValue
-instance Pretty n => ToPersistable (Term n) where
-  toPersistable (TLiteral v _) = toPersistable v
-  toPersistable (TGuard ks _) = toPersistable ks
-  toPersistable (TValue v _) = toPersistable v
-  toPersistable t = toPersistable (toJSON t)
+instance NFData r => NFData (ModuleData r)
+
+instance (ToJSON r,FromJSON r) =>
+  ToJSON (ModuleData r) where toJSON = lensyToJSON 3
+instance (ToJSON r, FromJSON r) =>
+  FromJSON (ModuleData r) where parseJSON = lensyParseJSON 3
+
+type PersistModuleData = ModuleData (Ref' PersistDirect)
+
+instance ToJSON (Ref' PersistDirect) where
+  toJSON (Ref t) = object [ "ref" .= t ]
+  toJSON (Direct pd) = object [ "direct" .= pd ]
+
+instance FromJSON (Ref' PersistDirect) where
+  parseJSON v =
+    withObject "Ref" (\o -> Ref <$> o .: "ref") v <|>
+    withObject "Direct" (\o -> Direct <$> o .: "direct") v
+
 
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty)
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty,Generic,NFData)
 
--- | Column key type.
-newtype ColumnId = ColumnId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default,Show,Pretty)
-
--- | User table row-value type, mapping column ids to values.
-newtype Columns v = Columns { _columns :: M.Map ColumnId v }
-    deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
-instance (ToJSON v) => ToJSON (Columns v) where
-    toJSON (Columns m) = object . map (\(k,v) -> asString k .= toJSON v) . M.toList $ m
-    {-# INLINE toJSON #-}
-instance (FromJSON v) => FromJSON (Columns v) where
-    parseJSON = withObject "Columns" $ \o ->
-                Columns . M.fromList <$>
-                 forM (HM.toList o)
-                  (\(k,v) -> ((,) <$> pure (ColumnId k) <*> parseJSON v))
-    {-# INLINE parseJSON #-}
-
-instance Pretty v => Pretty (Columns v) where
-  pretty (Columns cols) = commaBraces
-    $ fmap (\(k, v) -> pretty k <> ": " <> pretty v)
-    $ M.toList cols
-
-makeLenses ''Columns
 
 -- | Specify key and value types for database domains.
 data Domain k v where
-  UserTables :: !TableName -> Domain RowKey (Columns Persistable)
+  UserTables :: !TableName -> Domain RowKey (ObjectMap PactValue)
   KeySets :: Domain KeySetName KeySet
-  Modules :: Domain ModuleName (ModuleDef Name)
+  Modules :: Domain ModuleName PersistModuleData
   Namespaces :: Domain NamespaceName Namespace
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
@@ -244,9 +130,6 @@ instance AsString (Domain k v) where
     asString Namespaces = "SYS:Namespaces"
 
 -- | Transaction record.
--- Backends are expected to return "user-visible" values
--- for '_txValue', namely that internal JSON formats for 'Persistable'
--- need to be converted to Term JSON formats.
 data TxLog v =
     TxLog {
       _txDomain :: !Text
@@ -255,6 +138,7 @@ data TxLog v =
     } deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
 makeLenses ''TxLog
 instance Hashable v => Hashable (TxLog v)
+instance NFData v => NFData (TxLog v)
 
 instance ToJSON v => ToJSON (TxLog v) where
     toJSON (TxLog d k v) =

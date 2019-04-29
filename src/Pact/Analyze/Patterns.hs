@@ -184,6 +184,19 @@ pattern AST_WithRead node table key bindings schema body <-
       (NativeFuncSpecial "with-read" (AST_BindSchema _ bindings schema body))
       [ShortTableName table, key]
 
+pattern AST_WithDefaultRead
+  :: Node                     -- ^ node
+  -> Text                     -- ^ table name
+  -> AST Node                 -- ^ key
+  -> [(Named Node, AST Node)] -- ^ table bindings
+  -> Node                     -- ^ schema node
+  -> AST Node                 -- ^ default node
+  -> [AST Node]               -- ^ body
+  -> AST Node
+pattern AST_WithDefaultRead node table key bindings schema default' body <-
+  App node (NativeFuncSpecial "with-default-read" (AST_BindSchema _ bindings schema body))
+           [ShortTableName table, key, default']
+
 pattern AST_Bind
   :: Node
   -> AST Node
@@ -204,6 +217,13 @@ pattern AST_WithCapability app body <-
   App _node
       (NativeFuncSpecial "with-capability" (List _ body))
       [app]
+
+pattern AST_Resume
+  :: Node -> [(Named Node, AST Node)] -> Node -> [AST Node] -> AST Node
+pattern AST_Resume node bindings schema body <-
+  App node
+      (NativeFuncSpecial "resume" (AST_BindSchema _ bindings schema body))
+      []
 
 pattern AST_RequireCapability :: Node -> AST Node -> AST Node
 pattern AST_RequireCapability node app <-

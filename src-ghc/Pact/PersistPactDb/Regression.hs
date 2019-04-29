@@ -9,6 +9,9 @@ module Pact.PersistPactDb.Regression
 import Control.Concurrent.MVar
 import Control.Exception
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
+import Control.Lens hiding ((.=))
+import Control.DeepSeq
 
 import Pact.PersistPactDb
 import Pact.Persist
@@ -16,9 +19,30 @@ import Pact.Types.Runtime
 import Pact.Persist.Pure (initPureDb,persister,PureDb)
 import Data.Aeson
 import Pact.Types.Logger
-import qualified Pact.Types.Hash as H
 import Data.Default (def)
+import Pact.Types.PactValue
+import Pact.Repl
+import Pact.Repl.Types
+import Pact.Native (nativeDefs)
 
+
+loadModule :: IO (ModuleName, ModuleData Ref, PersistModuleData)
+loadModule = do
+  let fn = "tests/pact/simple.repl"
+  (r,s) <- execScript' (Script False fn) fn
+  let mn = ModuleName "simple" Nothing
+  case r of
+    Left a -> throwFail $ "module load failed: " ++ show a
+    Right _ -> case preview (rEvalState . evalRefs . rsNewModules . ix mn) s of
+      Just md -> case traverse (traverse toPersistDirect) md of
+        Right md' -> return (mn,md,md')
+        Left e -> throwFail $ "toPersistDirect failed: " ++ show e
+      Nothing -> throwFail $ "Failed to find module 'simple': " ++ show (view (rEvalState . evalRefs . rsNewModules) s)
+
+nativeLookup :: NativeDefName -> Maybe (Term Name)
+nativeLookup (NativeDefName n) = case HM.lookup (Name n def) nativeDefs of
+  Just (Direct t) -> Just t
+  _ -> Nothing
 
 runRegression :: DbEnv p -> IO (MVar (DbEnv p))
 runRegression p = do
@@ -28,6 +52,8 @@ runRegression p = do
   t2 <- begin v (Just t1)
   let user1 = "user1"
       usert = UserTables user1
+      toPV :: ToTerm a => a -> PactValue
+      toPV = toPactValueLenient . toTerm'
   createUserTable' v user1 "someModule"
   assertEquals' "output of commit 2"
     [TxLog "SYS_usertables" "user1" $
@@ -37,42 +63,39 @@ runRegression p = do
     (commit v)
   t3 <- begin v t2
   assertEquals' "user table info correct" "someModule" $ _getUserTableInfo pactdb user1 v
-  let row = Columns $ M.fromList [("gah",toTerm' (LDecimal 123.454345))]
-  _writeRow pactdb Insert usert "key1" (fmap toPersistable row) v
-  assertEquals' "user insert" (Just row) (fmap (fmap toTerm) <$> _readRow pactdb usert "key1" v)
-  let row' = Columns $ M.fromList [("gah",toTerm' False),("fh",toTerm' Null)]
-  _writeRow pactdb Update usert "key1" (fmap toPersistable row') v
-  assertEquals' "user update" (Just row') (fmap (fmap toTerm) <$> _readRow pactdb usert "key1" v)
+  let row = ObjectMap $ M.fromList [("gah",PLiteral (LDecimal 123.454345))]
+  _writeRow pactdb Insert usert "key1" row v
+  assertEquals' "user insert" (Just row) (_readRow pactdb usert "key1" v)
+  let row' = ObjectMap $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
+  _writeRow pactdb Update usert "key1" row' v
+  assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
   let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
-  let mod' = MDModule $ Module "mod1" (Governance (Left "mod-admin-keyset")) (Meta Nothing [])
-             "code" (H.pactHash "code") mempty mempty mempty
-  _writeRow pactdb Write Modules "mod1" mod' v
-  assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
+  (modName,modRef,mod') <- loadModule
+  _writeRow pactdb Write Modules modName mod' v
+  assertEquals' "module write" (Just mod') $ _readRow pactdb Modules modName v
+  assertEquals "module native repopulation" (Right modRef) $
+    traverse (traverse (fromPersistDirect nativeLookup)) mod'
   assertEquals' "result of commit 3"
-    [ TxLog "SYS_keysets" "ks1" $
-      object [("pred" .= String "predfun")
-             ,("keys" .= [String "skdjhfskj"])]
-     ,TxLog "SYS_modules" "mod1" $
-       object [("hash" .= String "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY")
-              ,("blessed" .= ([]::[Text]))
-              ,("governance" .= object ["keyset" .= String "mod-admin-keyset"])
-              ,("interfaces" .= ([]::[Text]))
-              ,("name" .= object [ ("name" .= String "mod1"), ("namespace" .= Null)])
-              ,("code" .= String "code")
-              ,("meta" .= object [("model" .= ([] :: [Text]))
-                                 ,("docs" .= Null)])
-              ,("imports" .= ([]::[Text]))]
 
-     ,TxLog "USER_user1" "key1" $
-       object [("gah" .= object [("_P_decm" .= Number 1.23454345e8)
-                                ,("_P_decp" .= Number 6.0)])]
-     ,TxLog "USER_user1" "key1" $
-       object [("fh" .= object [("_P_val" .= Null)])
-              ,("gah" .= Bool False)]
-     ]
-
+    [ TxLog { _txDomain = "SYS_keysets"
+            , _txKey = "ks1"
+            , _txValue = toJSON ks
+            }
+    , TxLog { _txDomain = "SYS_modules"
+            , _txKey = asString modName
+            , _txValue = toJSON mod'
+            }
+    , TxLog { _txDomain = "USER_user1"
+            , _txKey = "key1"
+            , _txValue = toJSON row
+            }
+    , TxLog { _txDomain = "USER_user1"
+            , _txKey = "key1"
+            , _txValue = toJSON row'
+            }
+    ]
     (commit v)
   _t4 <- begin v t3
   tids <- _txids pactdb user1 t1 v
@@ -80,10 +103,9 @@ runRegression p = do
   assertEquals' "user txlogs"
     [TxLog "USER_user1" "key1" row,
      TxLog "USER_user1" "key1" row'] $
-    fmap (map (fmap (fmap toTerm))) $
     _getTxLog pactdb usert (head tids) v
-  _writeRow pactdb Insert usert "key2" (fmap toPersistable row) v
-  assertEquals' "user insert key2 pre-rollback" (Just row) (fmap (fmap toTerm) <$> _readRow pactdb usert "key2" v)
+  _writeRow pactdb Insert usert "key2" row v
+  assertEquals' "user insert key2 pre-rollback" (Just row) (_readRow pactdb usert "key2" v)
   assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pactdb user1 v
   _rollbackTx pactdb v
   assertEquals' "rollback erases key2" Nothing $ _readRow pactdb usert "key2" v
@@ -104,12 +126,12 @@ commit v = _commitTx pactdb v
 throwFail :: String -> IO a
 throwFail = throwIO . userError
 
-assertEquals :: (Eq a,Show a) => String -> a -> a -> IO ()
-assertEquals msg a b | a == b = return ()
+assertEquals :: (Eq a,Show a,NFData a) => String -> a -> a -> IO ()
+assertEquals msg a b | [a,b] `deepseq` a == b = return ()
                      | otherwise =
                          throwFail $ "FAILURE: " ++ msg ++ ": expected \n  " ++ show a ++ "\n got \n  " ++ show b
 
-assertEquals' :: (Eq a, Show a) => String -> a -> IO a -> IO ()
+assertEquals' :: (Eq a, Show a, NFData a) => String -> a -> IO a -> IO ()
 assertEquals' msg a b = assertEquals msg a =<< b
 
 regressPure :: IO (MVar (DbEnv PureDb))

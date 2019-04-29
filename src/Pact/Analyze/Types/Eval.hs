@@ -105,7 +105,7 @@ data PactMetadata
   deriving Show
 
 data ExistentialVal where
-  SomeVal :: SingTy a -> S (Concrete a) -> ExistentialVal
+  SomeVal :: SingTy a -> S (Maybe (Concrete a)) -> ExistentialVal
 
 instance Mergeable ExistentialVal where
   symbolicMerge force test (SomeVal lTy lVal) (SomeVal rTy rVal)
@@ -281,7 +281,8 @@ data LatticeAnalyzeState a
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
     , _lasPendingGrants       :: TokenGrants
-    , _lasYielded             :: !(Maybe ExistentialVal)
+    , _lasYieldedInPrevious   :: !(Maybe ExistentialVal)
+    , _lasYieldedInCurrent    :: !(Maybe ExistentialVal)
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -366,7 +367,8 @@ mkInitialAnalyzeState tables caps = AnalyzeState
         , _lasCellsWritten        = cellsWritten
         , _lasConstraints         = sansProv sTrue
         , _lasPendingGrants       = mkTokenGrants caps
-        , _lasYielded             = Nothing
+        , _lasYieldedInPrevious   = Nothing
+        , _lasYieldedInCurrent    = Nothing
         , _lasExtra               = CellValues
           { _cvTableCells = mkSymbolicCells tables
           , _cvRowExists  = mkRowExists

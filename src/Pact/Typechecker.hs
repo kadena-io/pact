@@ -90,24 +90,24 @@ walkAST f t@Prim {} = f Pre t >>= f Post
 walkAST f t@Var {} = f Pre t >>= f Post
 walkAST f t@Table {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
-  Object {..} <- f Pre t
-  t' <- Object _aNode <$>
-         mapM (walkAST f) _aObject
+  a <- f Pre t
+  t' <- Object (_aNode a) <$>
+         mapM (walkAST f) (_aObject a)
   f Post t'
 walkAST f t@List {} = do
-  List {..} <- f Pre t
-  t' <- List _aNode <$> mapM (walkAST f) _aList
+  a <- f Pre t
+  t' <- List (_aNode a) <$> mapM (walkAST f) (_aList a)
   f Post t'
 walkAST f t@Binding {} = do
-  Binding {..} <- f Pre t
-  t' <- Binding _aNode <$>
-        forM _aBindings (\(k,v) -> (k,) <$> walkAST f v) <*>
-        mapM (walkAST f) _aBody <*> pure _aBindType
+  a <- f Pre t
+  t' <- Binding (_aNode a) <$>
+        forM (_aBindings a) (\(k,v) -> (k,) <$> walkAST f v) <*>
+        mapM (walkAST f) (_aBody a) <*> pure (_aBindType a)
   f Post t'
 walkAST f t@App {} = do
-  App {..} <- f Pre t
-  t' <- App _aNode <$>
-        (case _aAppFun of
+  a <- f Pre t
+  t' <- App (_aNode a) <$>
+        (case _aAppFun a of
            fun@FNative {..} -> case _fSpecial of
              Nothing -> return fun
              Just (fs,SBinding bod) -> do
@@ -118,15 +118,15 @@ walkAST f t@App {} = do
              db <- mapM (walkAST f) _fBody
              return $ set fBody db fun
         ) <*>
-        mapM (walkAST f) _aAppArgs
+        mapM (walkAST f) (_aAppArgs a)
   f Post t'
 walkAST f t@Step {} = do
-  Step {..} <- f Pre t
-  t' <- Step _aNode
-    <$> traverse (walkAST f) _aEntity
-    <*> walkAST f _aExec
-    <*> traverse (walkAST f) _aRollback
-    <*> pure _aYieldResume
+  a <- f Pre t
+  t' <- Step (_aNode a)
+    <$> traverse (walkAST f) (_aEntity a)
+    <*> walkAST f (_aExec a)
+    <*> traverse (walkAST f) (_aRollback a)
+    <*> pure (_aYieldResume a)
   f Post t'
 
 isConcreteTy :: Type n -> Bool
@@ -902,7 +902,7 @@ toAST (TApp Term.App{..} _) = do
 toAST TBinding {..} = do
   bi <- freshId _tInfo (pack $ show _tBindType)
   bn <- trackIdNode bi
-  bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
+  bs <- forM _tBindPairs $ \(BindPair (Arg n t ai) v) -> do
     aid <- freshId ai (pfx (pack $ show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
     an <- trackNode t' aid
@@ -934,7 +934,6 @@ toAST (TObject Term.Object {..} _) = do
     <*> mapM toAST _oObject
 toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
 toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
-toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
@@ -1120,7 +1119,7 @@ typecheckTopLevel (Ref r) = do
 typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrevStr d
 
 -- | Typecheck all productions in a module.
-typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[Failure])
+typecheckModule :: Bool -> ModuleData Ref -> IO ([TopLevel Node],[Failure])
 typecheckModule dbg ModuleData{..} = do
   debug' dbg $ "Typechecking module " ++ show (moduleDefName _mdModule)
   let tc ((tls,fails),sup) r = do

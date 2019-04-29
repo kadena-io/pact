@@ -69,7 +69,7 @@ import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -171,10 +171,6 @@ replDefs = ("Repl",
        []
        "Verify MODULE, checking that all properties hold."
 
-     ,defZRNative "json" json' (funType tTyValue [("exp",a)])
-      ["(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])"] $
-      "Encode pact expression EXP as a JSON value. " <>
-      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. "
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
        []
        "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
@@ -198,7 +194,7 @@ replDefs = ("Repl",
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
-                         TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet,tTyValue]
+                         TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
        a = mkTyVar "a" []
 
 invokeEnv :: (MVar (DbEnv PureDb) -> IO b) -> MVar LibState -> IO b
@@ -282,12 +278,15 @@ setsigs i [TList ts _ _] = do
 setsigs i as = argsError i as
 
 setmsg :: RNativeFun LibState
-setmsg i [TLitString j] =
-  case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
-    Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
-    Right v -> setenv eeMsgBody v >> return (tStr "Setting transaction data")
-setmsg _ [a] = setenv eeMsgBody (toJSON a) >> return (tStr "Setting transaction data")
-setmsg i as = argsError i as
+setmsg i as = case as of
+  [TLitString j] ->
+    case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
+      Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
+      Right v -> go v
+  [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))
+  [a] -> go (toJSON a)
+  _ -> argsError i as
+  where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 
 continuePact :: RNativeFun LibState
 continuePact i as = case as of
@@ -314,7 +313,7 @@ continuePact i as = case as of
         Nothing -> case pactExec of
                      Nothing           -> return Nothing
                      Just PactExec{..} -> return $ fmap
-                                          (fmap fromPactOutput) _peYield
+                                          (fmap fromPactValue) _peYield
       let pactStep = PactStep
                      (fromIntegral step)
                      rollback pactId resume
@@ -348,7 +347,7 @@ pactState i as = case as of
       case e of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
-          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactOutput) _peYield)
+          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactValue) _peYield)
           ,("executed",toTerm _peExecuted)
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]
@@ -386,7 +385,9 @@ expect :: RNativeFun LibState
 expect i [TLitString a,b,c] =
   if b `termEq` c
   then testSuccess a $ "Expect: success: " <> a
-  else testFailure i a $ "FAILURE: " <> a <> ": expected " <> pack (show b) <> ", received " <> pack (show c)
+  else testFailure i a $ renderCompactText' $
+       "FAILURE: " <> pretty a <> ": expected " <> pretty b <> ":" <> pretty (typeof' b) <>
+       ", received " <> pretty c <> ":" <> pretty (typeof' c)
 expect i as = argsError i as
 
 expectFail :: ZNativeFun LibState
@@ -470,10 +471,6 @@ verify i as = case as of
         return (tStr $ mconcat renderedLines)
 
   _ -> argsError i as
-
-json' :: RNativeFun LibState
-json' _ [a] = return $ TValue (toJSON a) def
-json' i as = argsError i as
 
 sigKeyset :: RNativeFun LibState
 sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (Name (asString KeysAll) def)

@@ -20,7 +20,6 @@ module Pact.Types.Runtime
    evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
-   ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
@@ -67,7 +66,7 @@ import Pact.Types.ChainMeta
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Util
@@ -150,24 +149,19 @@ data PactStep = PactStep {
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
--- | Module ref store
-data ModuleData = ModuleData
-  { _mdModule :: ModuleDef (Def Ref)
-  , _mdRefMap :: HM.HashMap Text Ref
-  } deriving (Eq, Show)
-makeLenses ''ModuleData
+
 
 -- | Storage for loaded modules, interfaces, and natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
-    , _rsModules :: HM.HashMap ModuleName ModuleData
+    , _rsModules :: HM.HashMap ModuleName (ModuleData Ref)
     } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
 
 data PactContinuation = PactContinuation
   { _pcDef :: Def Ref
-  , _pcArgs :: [PactOutput]
+  , _pcArgs :: [PactValue]
   } deriving (Eq,Show)
 
 -- | Result of evaluation of a 'defpact'.
@@ -175,7 +169,7 @@ data PactExec = PactExec
   { -- | Count of steps in pact (discovered when code is executed)
     _peStepCount :: Int
     -- | Yield value if invoked
-  , _peYield :: !(Maybe (ObjectMap PactOutput))
+  , _peYield :: !(Maybe (ObjectMap PactValue))
     -- | Whether step was executed (in private cases, it can be skipped)
   , _peExecuted :: Bool
     -- | Step that was executed or skipped
@@ -261,7 +255,7 @@ data RefState = RefState {
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleDef (Def Ref))
       -- | Modules that were compiled and loaded in this tx.
-    , _rsNewModules :: HM.HashMap ModuleName ModuleData
+    , _rsNewModules :: HM.HashMap ModuleName (ModuleData Ref)
       -- | Current Namespace
     , _rsNamespace :: Maybe Namespace
     } deriving (Eq,Show)
@@ -405,8 +399,8 @@ throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) 
 evalError :: Info -> Doc -> Eval e a
 evalError i = throwErr EvalError i
 
-evalError' :: FunApp -> Doc -> Eval e a
-evalError' = evalError . _faInfo
+evalError' :: HasInfo i => i -> Doc -> Eval e a
+evalError' = evalError . getInfo
 
 failTx :: Info -> Doc -> Eval e a
 failTx i = throwErr TxFailure i

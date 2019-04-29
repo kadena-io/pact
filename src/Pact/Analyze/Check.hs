@@ -73,7 +73,7 @@ import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
                                             tDef, tInfo, tMeta, _tDef)
 import           Pact.Types.Pretty         (renderCompactText)
 import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
-                                            Ref (Ref),
+                                            Ref' (Ref), Ref,
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, mdModule,
                                             mdRefMap, tShow)
@@ -453,8 +453,8 @@ verifyFunctionProperty modName funName funInfo tables caps pactArgs body
       . SBVI.runSymbolic (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup (goal == Satisfaction) config)
 
 moduleTables
-  :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
-  -> ModuleData                       -- ^ the module we're verifying
+  :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
+  -> (ModuleData Ref)                     -- ^ the module we're verifying
   -> ExceptT ParseFailure IO [Table]
 moduleTables modules ModuleData{..} = do
   -- All tables defined in this module, and imported by it. We're going to look
@@ -493,7 +493,7 @@ moduleTables modules ModuleData{..} = do
 
     pure $ Table tabName schema invariants
 
-moduleCapabilities :: ModuleData -> ExceptT VerificationFailure IO [Capability]
+moduleCapabilities :: ModuleData Ref -> ExceptT VerificationFailure IO [Capability]
 moduleCapabilities md = do
     toplevels <- withExceptT ModuleCheckFailure $
                    traverse (ExceptT . typecheck) defcapRefs
@@ -608,7 +608,7 @@ parseModuleModelDecl exps = traverse parseDecl exps where
     _ -> Left (exp, "expected a set of property / defproperty")
 
 -- | Get the set ('HM.HashMap') of refs to functions in this module.
-moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text (Ref, CheckableType)
+moduleTypecheckableRefs :: ModuleData Ref -> HM.HashMap Text (Ref, CheckableType)
 moduleTypecheckableRefs ModuleData{..} = flip HM.mapMaybe _mdRefMap $ \ref ->
   case ref of
     Ref (TDef def _) -> case _dDefType def of
@@ -626,7 +626,7 @@ data ModelDecl = ModelDecl
   }
 
 -- Get the model defined in this module
-moduleModelDecl :: ModuleData -> Either ParseFailure ModelDecl
+moduleModelDecl :: ModuleData Ref -> Either ParseFailure ModelDecl
 moduleModelDecl ModuleData{..} = do
   lst <- parseModuleModelDecl $ Pact._mModel $ moduleDefMeta _mdModule
   let (propList, checkList) = partitionEithers lst
@@ -787,8 +787,8 @@ liftEither = either throwError return
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
-  :: HM.HashMap ModuleName ModuleData   -- ^ all loaded modules
-  -> ModuleData                         -- ^ the module we're verifying
+  :: HM.HashMap ModuleName (ModuleData Ref)   -- ^ all loaded modules
+  -> ModuleData Ref                        -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
 verifyModule modules moduleData = runExceptT $ do
   tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
@@ -901,16 +901,17 @@ renderVerifiedModule = \case
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
-  :: ModuleData     -- ^ the module we're verifying
+  :: ModuleData Ref -- ^ the module we're verifying
   -> Text           -- ^ the name of the function
   -> Check          -- ^ the check we're running
+  -> CheckableType
   -> ExceptT VerificationFailure IO CheckResult
-verifyCheck moduleData funName check = do
+verifyCheck moduleData funName check checkType = do
   let info       = dummyInfo
       module'    = moduleData ^. mdModule
       moduleName = moduleDefName module'
       modules    = HM.fromList [(moduleName, moduleData)]
-      moduleFun :: ModuleData -> Text -> Maybe Ref
+      moduleFun :: ModuleData Ref -> Text -> Maybe Ref
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
 
   caps <- moduleCapabilities moduleData
@@ -919,5 +920,5 @@ verifyCheck moduleData funName check = do
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps moduleName tables caps funRef funName
-        [Located info check] CheckDefun
+        [Located info check] checkType
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName

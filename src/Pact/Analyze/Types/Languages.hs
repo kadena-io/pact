@@ -1332,6 +1332,7 @@ data Term (a :: Ty) where
   -- Table access
   Read
     :: SingTy ('TyObject m)
+    -> Maybe (Term ('TyObject m))
     -> TagId -> TableName -> Term 'TyStr
     -> Term ('TyObject m)
   Write
@@ -1347,9 +1348,9 @@ data Term (a :: Ty) where
   Hash            :: ETerm                               -> Term 'TyStr
 
   -- Pacts
-  Pact   :: [PactStep] -> Term 'TyStr
-  Yield  :: SingTy a -> Term a -> Term a
-  Resume ::                       Term a
+  Pact   :: [PactStep]      -> Term 'TyStr
+  Yield  :: TagId -> Term a -> Term a
+  Resume :: TagId ->           Term a
 
 data PactStep where
   Step
@@ -1441,7 +1442,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showChar ' '
     . showsPrec 11 b
 
-  Read a b c d ->
+  Read a b c d e ->
       showString "Read "
     . showsPrec 11 a
     . showChar ' '
@@ -1450,6 +1451,8 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 c
     . showChar ' '
     . showsPrec 11 d
+    . showChar ' '
+    . showsPrec 11 e
 
   Write a b c d e f -> withSing a $
       showString "Write "
@@ -1488,8 +1491,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
   PactId           -> showString "PactId"
   Pact steps       -> showString "Pact " . showList steps
-  Yield ty' a      -> showString "Yield " . showsPrec 11 ty' . singShowsTm ty 11 a
-  Resume           -> showString "Resume"
+  Yield tid a      ->
+    showString "Yield " . showsPrec 11 tid . showChar ' ' . singShowsTm ty 11 a
+  Resume tid       -> showString "Resume " . showsPrec 11 tid
 
 instance Show PactStep where
   showsPrec _ (Step (exec :< execTy) path mEntity mCancelVid mRollback) =
@@ -1556,7 +1560,8 @@ prettyTerm ty = \case
   WithCapability a x    -> parensSep ["with-capability", pretty a, prettyTerm ty x]
   Granting _ _ x        -> prettyTerm ty x
   HasGrant _ _ _        -> error "HasGrant should only appear inside of an Enforce"
-  Read _ _ tab x        -> parensSep ["read", pretty tab, pretty x]
+  Read _ Nothing    _ tab x -> parensSep ["read", pretty tab, pretty x]
+  Read _ (Just def) _ tab x -> parensSep ["with-default-read", singPrettyTm ty def, pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
   PactVersion           -> parensSep ["pact-version"]
   Format x y            -> parensSep ["format", pretty x, prettyList y]
@@ -1572,8 +1577,8 @@ prettyTerm ty = \case
   MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard ty' o n   -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
   Pact steps            -> vsep (pretty <$> steps)
-  Yield ty' tm          -> parensSep [ "yield", singPrettyTm ty' tm ]
-  Resume                -> "resume"
+  Yield _tid tm         -> parensSep [ "yield", singPrettyTm ty tm ]
+  Resume _tid           -> "resume"
 
 instance Pretty PactStep where
   pretty (Step (exec :< execTy) _ mEntity _ mRollback) = parensSep $
@@ -1603,8 +1608,12 @@ eqTerm _ty (ReadInteger a) (ReadInteger b)
   = a == b
 eqTerm _ty (GuardPasses a1 b1) (GuardPasses a2 b2)
   = a1 == a2 && b1 == b2
-eqTerm _ty (Read _ a1 b1 c1) (Read _ a2 b2 c2)
+eqTerm _ty (Read _ Nothing a1 b1 c1) (Read _ Nothing a2 b2 c2)
   = a1 == a2 && b1 == b2 && c1 == c2
+eqTerm ty (Read _ (Just a1) b1 c1 d1) (Read _ (Just a2) b2 c2 d2)
+  = singEqTm ty a1 a2 && b1 == b2 && c1 == c2 && d1 == d2
+eqTerm _ty Read{} Read{}
+  = False
 eqTerm _ty (Write ty1 a1 b1 c1 d1 e1) (Write ty2 a2 b2 c2 d2 e2)
   = case singEq ty1 ty2 of
       Nothing   -> False

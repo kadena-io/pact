@@ -46,6 +46,7 @@ library
                      , Pact.Server.Client
                      , Pact.Types.API
                      , Pact.Types.ChainMeta
+                     , Pact.Types.Codec
                      , Pact.Types.Command
                      , Pact.Types.Scheme
                      , Pact.Types.Exp
@@ -56,7 +57,7 @@ library
                      , Pact.Types.Lang
                      , Pact.Types.Logger
                      , Pact.Types.Native
-                     , Pact.Types.PactOutput
+                     , Pact.Types.PactValue
                      , Pact.Types.Parser
                      , Pact.Types.Persistence
                      , Pact.Types.Pretty

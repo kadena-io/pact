@@ -76,7 +76,7 @@ import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
 import Pact.Types.Hash
-import Pact.Types.PactOutput
+import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
 import Pact.Types.Version
@@ -196,12 +196,12 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   ["(hash \"hello\")", "(hash { 'foo: 1 })"]
   "Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. \
   \Strings are converted directly while other values are \
-  \converted using their JSON representation."
+  \converted using their JSON representation. Non-value-level arguments are not allowed."
   where
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ encodeUtf8 s
-      [a'] -> go $ toStrict $ encode a'
+      [a'] -> enforcePactValue a' >>= \pv -> go $ toStrict $ encode pv
       _ -> argsError i as
       where go = return . tStr . asString . pactHash
 
@@ -424,7 +424,7 @@ langDefs =
      [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
-     \List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type."
+     \List -> list, Object -> object."
 
 
     ,defRNative "tx-hash" txHash (funType tTyString []) ["(tx-hash)"]
@@ -611,8 +611,8 @@ compose i as = argsError' i as
 
 
 readMsg :: RNativeFun e
-readMsg i [TLitString key] = parseMsgKey i "read-msg" key
-readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
+readMsg i [TLitString key] = fromPactValue <$> parseMsgKey i "read-msg" key
+readMsg i [] = fromPactValue <$> parseMsgKey' i "read-msg" Nothing
 readMsg i as = argsError i as
 
 
@@ -632,9 +632,9 @@ bind i as@[src,TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $
   reduce src >>= bindObjectLookup >>= bindReduce ps bd bi
 bind i as = argsError' i as
 
-bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Ref))
+bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
 bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
-  return $ \s -> M.lookup (FieldKey s) $ fmap liftTerm o
+  return $ \s -> M.lookup (FieldKey s) o
 bindObjectLookup t = evalError (_tInfo t) $
   "bind: expected object: " <> pretty t
 
@@ -653,7 +653,8 @@ yield i [t@(TObject (Object o _ _ _) _)] = do
   case eym of
     Nothing -> evalError' i "Yield not in defpact context"
     Just {} -> do
-      (evalPactExec . _Just . peYield) .= Just (fmap toPactOutput' o)
+      o' <- enforcePactValue' o
+      (evalPactExec . _Just . peYield) .= Just o'
       return t
 yield i as = argsError i as
 

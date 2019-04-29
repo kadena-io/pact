@@ -35,8 +35,6 @@ expToInvariant ty exp = case (ty, exp) of
         (SStr,     Pact.TyString)  -> pure (CoreInvariant (Var vid varName))
         (SBool,    Pact.TyBool)    -> pure (CoreInvariant (Var vid varName))
         (SGuard,   Pact.TyGuard _) -> pure (CoreInvariant (Var vid varName))
-        (_,        Pact.TyValue)   -> throwErrorIn exp
-          "Invariants can't constrain opaque values"
         (_,        _)         -> throwErrorIn exp $
           "found variable " <> pretty varName <> " of type " <> pretty primTy <>
           " where " <> pretty ty <> " was expected"

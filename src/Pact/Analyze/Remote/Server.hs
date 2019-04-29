@@ -43,7 +43,7 @@ import           Pact.Types.Runtime        (Domain(KeySets), Method,
                                             eePactDb, eeRefStore, rsModules)
 import           Pact.Types.Term           (ModuleDef(..), moduleDefName, moduleDefCode,
                                             ModuleName(..), Name(..),
-                                            KeySet(..))
+                                            KeySet(..),Ref)
 
 type VerifyAPI = "verify" :> ReqBody '[JSON] Request :> Post '[JSON] Response
 
@@ -61,7 +61,7 @@ verifyHandler req = do
     makeServantErr (ClientError str) = err400 { errBody = BSL8.pack str }
 
 data ValidRequest
-  = ValidRequest (HM.HashMap ModuleName ModuleData) ModuleData
+  = ValidRequest (HM.HashMap ModuleName (ModuleData Ref)) (ModuleData Ref)
 
 validateRequest :: Request -> ExceptT ClientError IO ValidRequest
 validateRequest (Request mods modName) = do
@@ -90,7 +90,7 @@ initializeRepl = do
 
   pure $ rs & rEnv . eePactDb .~ dbImpl { _readRow = _readRow' }
 
-replStateModules :: ReplState -> HM.HashMap ModuleName ModuleData
+replStateModules :: ReplState -> HM.HashMap ModuleName (ModuleData Ref)
 replStateModules replState = replState ^. rEnv . eeRefStore . rsModules
 
 -- | Parser for strings like: @<interactive>:2:2: Module "mod2" not found@
@@ -107,7 +107,7 @@ moduleNotFoundP = MP.string "<interactive>:"
 
 loadModules
   :: [ModuleDef a]
-  -> IO (Either ClientError (HM.HashMap ModuleName ModuleData))
+  -> IO (Either ClientError (HM.HashMap ModuleName (ModuleData Ref)))
 loadModules mods0 = do
   let -- - try to load the remaining list of modules
       -- - when we hit a failure, see whether it's because we need to load a
