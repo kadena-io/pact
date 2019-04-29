@@ -45,20 +45,20 @@
 (env-entity "us")
 
 ; initiate pact with normal execution
+(env-hash (hash "payment123-pact-id")) ;; equivalent to setting pact-id hash
 (payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
-(pact-state)
 (expect "balance of 123 after debit step" 217.0 (with-read accounts "123" { "balance" := b } b))
 
 ; test rollback
-(continue-pact 0 true "Tug6q-wmaru1QqUMjm7RiwhnsQMTRcMHus65HwF7laE")
+(continue-pact 0 true)
 (expect "balance of 123 after rollback" 229.0 (with-read accounts "123" { "balance" := b } b))
 
 ; test success step 1
-(continue-pact 1 false "Tug6q-wmaru1QqUMjm7RiwhnsQMTRcMHus65HwF7laE")
+(continue-pact 1)
 (expect "balance of 456 unchanged" 5.0 (with-read accounts "456" { "balance" := b } b))
 
 (env-entity "them")
-(continue-pact 1 false "Tug6q-wmaru1QqUMjm7RiwhnsQMTRcMHus65HwF7laE")
+(continue-pact 1)
 (expect "balance of 456 after credit step" 17.0 (with-read accounts "456" { "balance" := b } b))
 (commit-tx)
 
@@ -76,8 +76,8 @@
 
 (begin-tx)
 (test.reset-time)
+(env-hash (hash "run-escrow-pact-id"))
 (test.run-escrow)
-(pact-state)
 
 (expect "2.0 escrowed" 227.0 (test.get-balance "123"))
 (commit-tx)
@@ -86,12 +86,12 @@
 ;;test cancel
 (begin-tx)
 ;; debtor cannot cancel
-(expect-failure "creditor cancel pre-timeout" (continue-pact 0 true "M5NbpsZVgzr1hf07XG20xJdJH8E00_dMQ3pRvsE9pPM"))
+(expect-failure "creditor cancel pre-timeout" (continue-pact 0 true (hash "run-escrow-pact-id")))
 (expect "still escrowed" 227.0 (test.get-balance "123"))
 
 (system.set-system-time test.TIMEOUT)
 ;; debtor can cancel
-(continue-pact 0 true "M5NbpsZVgzr1hf07XG20xJdJH8E00_dMQ3pRvsE9pPM")
+(continue-pact 0 true (hash "run-escrow-pact-id"))
 (expect "escrow canceled" 229.0 (test.get-balance "123"))
 
 (rollback-tx) ; back to first step
@@ -100,26 +100,26 @@
 ;; creditor can cancel immediately
 (test.reset-time)
 (env-keys ["user456"])
-(continue-pact 0 true "M5NbpsZVgzr1hf07XG20xJdJH8E00_dMQ3pRvsE9pPM")
+(continue-pact 0 true (hash "run-escrow-pact-id"))
 (env-keys ["user123"]) ; for balance check
 (expect "escrow canceled" 229.0 (test.get-balance "123"))
 
 (rollback-tx) ; back to first step
 ;; creditor cannot finish alone
 (env-keys ["user456"])
-(expect-failure "creditor cannot finish alone" (continue-pact 1 false "M5NbpsZVgzr1hf07XG20xJdJH8E00_dMQ3pRvsE9pPM"))
+(expect-failure "creditor cannot finish alone" (continue-pact 1 false (hash "run-escrow-pact-id")))
 
 ;; debtor cannot finish alone
 (env-keys ["user123"])
-(expect-failure "debtor cannot finish alone" (continue-pact 1 false "M5NbpsZVgzr1hf07XG20xJdJH8E00_dMQ3pRvsE9pPM"))
+(expect-failure "debtor cannot finish alone" (continue-pact 1 false (hash "run-escrow-pact-id")))
 
 ;; both can, but price cannot be nego'd up
 (env-keys ["user123" "user456"])
 (env-data { "final-price": 2.75 })
-(expect-failure "price cannot nego up" (continue-pact 1 false "M5NbpsZVgzr1hf07XG20xJdJH8E00_dMQ3pRvsE9pPM"))
+(expect-failure "price cannot nego up" (continue-pact 1 false (hash "run-escrow-pact-id")))
 
 (env-data { "final-price": 1.75 })
-(continue-pact 1 false "M5NbpsZVgzr1hf07XG20xJdJH8E00_dMQ3pRvsE9pPM")
+(continue-pact 1 false (hash "run-escrow-pact-id"))
 (expect "seller paid 1.75" 18.75 (test.get-balance "456"))
 (expect "buyer refunded .25" 227.25 (test.get-balance "123"))
 

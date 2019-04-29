@@ -116,8 +116,8 @@ replDefs = ("Repl",
        funType tTyString [("step",tTyInteger),("rollback",tTyBool),("pact-id",tTyString)] <>
        funType tTyString [("step",tTyInteger),("rollback",tTyBool),("pact-id",tTyString),("yielded",tTyObject (mkSchemaVar "y"))])
       [LitExample "(continue-pact 1)", LitExample "(continue-pact 1 true)",
-       LitExample "(continue-pact 1 false (hash \"some-pact-id\"))",
-       LitExample "(continue-pact 2 1 false (hash \"some-pact-id\") { \"rate\": 0.9 })"]
+       LitExample "(continue-pact 1 false \"[pact-id-hash]\"))",
+       LitExample "(continue-pact 2 1 false \"[pact-id-hash]\" { \"rate\": 0.9 })"]
       ("Continue previously-initiated pact identified STEP, " <>
        "optionally specifying ROLLBACK (default is false), " <>
        "PACT-ID of the pact to be continued (defaults to the pact initiated in the current transaction, if one is present), and " <>
@@ -290,10 +290,14 @@ setmsg i as = case as of
 
 continuePact :: RNativeFun LibState
 continuePact i as = case as of
-  [TLitInteger step] -> go step False Nothing Nothing
-  [TLitInteger step,TLitBool rollback] -> go step rollback Nothing Nothing
-  [TLitInteger step,TLitBool rollback,TLitString pid] -> go step rollback (Just pid) Nothing
-  [TLitInteger step,TLitBool rollback,TLitString pid,TObject (Object o _ _ _) _] -> go step rollback (Just pid) (Just o)
+  [TLitInteger step] ->
+    go step False Nothing Nothing
+  [TLitInteger step,TLitBool rollback] ->
+    go step rollback Nothing Nothing
+  [TLitInteger step,TLitBool rollback,TLitString pid] ->
+    go step rollback (Just pid) Nothing
+  [TLitInteger step,TLitBool rollback,TLitString pid,TObject (Object o _ _ _) _] ->
+    go step rollback (Just pid) (Just o)
   _ -> argsError i as
   where
     go :: Integer -> Bool -> Maybe Text -> Maybe (ObjectMap (Term Name)) -> Eval LibState (Term Name)

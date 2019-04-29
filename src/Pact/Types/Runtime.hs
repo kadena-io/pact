@@ -55,7 +55,6 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Aeson hiding (Object)
-import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
@@ -243,9 +242,8 @@ data EvalEnv e = EvalEnv {
 makeLenses ''EvalEnv
 
 
-toPactId :: TxId -> ChainId -> Hash -> PactId
-toPactId txId chainId hsh = (PactId . pactHash) str
-  where str = toStrict $ encode txId <> encode chainId <> encode hsh
+toPactId :: Hash -> PactId
+toPactId = PactId
 
 
 -- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.

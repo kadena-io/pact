@@ -1380,8 +1380,8 @@ Continue previously-initiated pact identified STEP, optionally specifying ROLLBA
 ```lisp
 (continue-pact 1)
 (continue-pact 1 true)
-(continue-pact 1 false (hash "some-pact-id"))
-(continue-pact 2 1 false (hash "some-pact-id") { "rate": 0.9 })
+(continue-pact 1 false "[pact-id-hash]"))
+(continue-pact 2 1 false "[pact-id-hash]" { "rate": 0.9 })
 ```
 
 

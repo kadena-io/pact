@@ -98,8 +98,8 @@
 (use orders)
 
 (env-keys ["agent-key"])
+(env-hash (hash "runpact-scenario-1-pact-id"))
 (runpact-scenario-1 "order2" "cusip2")
-(pact-state)
 (expect "agent has inventory" 1 (at "qty" (cp.read-inventory "agent" "cusip2")))
 
 (env-keys ["trader-key"])

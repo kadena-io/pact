@@ -61,18 +61,9 @@ instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
 
 
-data ApiPactId = ApiPactId {
-  _apiTxId :: TxId,
-  _apiChainId :: ChainId,
-  _apiTxHash :: Hash
-} deriving (Eq, Show, Generic)
-instance ToJSON ApiPactId where toJSON = lensyToJSON 4
-instance FromJSON ApiPactId where parseJSON = lensyParseJSON 4
-
-
 data ApiReq = ApiReq {
   _ylType :: Maybe String,
-  _ylPactId :: Maybe ApiPactId,
+  _ylPactTxHash :: Maybe Hash,
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
   _ylResume :: Maybe Value,
@@ -140,9 +131,9 @@ mkExec code mdata pubMeta kps ridm = do
 
 mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqCont ar@ApiReq{..} kps fp = do
-  apiPactId <- case _ylPactId of
+  apiPactId <- case _ylPactTxHash of
     Just t  -> return t
-    Nothing -> dieAR "Expected a 'pactId' entry"
+    Nothing -> dieAR "Expected a 'pactTxHash' entry"
 
   step <- case _ylStep of
     Just s  -> return s
@@ -161,7 +152,7 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
   let pubMeta = fromMaybe def _ylPublicMeta
-      pactId = toPactId (_apiTxId apiPactId) (_apiChainId apiPactId) (_apiTxHash apiPactId)
+      pactId = toPactId apiPactId
   ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce
 
 mkCont :: PactId -> Int -> Bool -> Value -> PublicMeta -> [SomeKeyPair]

@@ -146,19 +146,21 @@
 (expect-failure "keyset ref guard k2"
                 (enforce-guard (keyset-ref-guard "k2")))
 
+(env-hash (hash "pact-guards-a-id")) ;; equivalent of pact-id
 (test-pact-guards "a")
 
-(pact-state true) ;;clears pact state
+(pact-state true) ;; clears pact state
 (let ((g (get-guard "a"))) ;; doing let so db failure doesn't confuse below
   (expect-failure "enforcing pact guard outside of pact" (enforce-guard g)))
 
 (env-data { "id": "a"})
 
-(expect "pact enforce succeeds" 1 (at 'result (continue-pact 1 false "een4MmrWpjx5o4uwn9cTDPhXtBlBFG5gVuc7W2o0rF0")))
+(expect "pact enforce succeeds" 1 (at 'result (continue-pact 1 false (hash "pact-guards-a-id"))))
 
 (pact-state true)
+(env-hash (hash "pact-guards-b-id"))
 (test-pact-guards "b")
-(expect-failure "pact enforce fails in pact 5 for id 'a'" (continue-pact 1 false (hash "some-random-hash")))
+(expect-failure "pact enforce fails in pact 5 for id 'a'" (continue-pact 1 false (hash "pact-guards-b-id")))
 
 (env-keys ["a" "b" "c"])
 (expect-failure "cannot compose caps at toplevel" (compose-capability (KALL-CAP)))
