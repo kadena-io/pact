@@ -105,7 +105,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   (CommandState pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet signers
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing (toUntypedHash hsh))
-        initRefStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
+                initRefStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec _erInput) _erExec
   let newPacts = case newCmdPact of

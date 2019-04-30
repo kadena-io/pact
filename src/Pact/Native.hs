@@ -413,7 +413,7 @@ langDefs =
     ,enforceOneDef
     ,formatDef
 
-    ,defRNative "pact-id" pactId (funType tTyInteger []) []
+    ,defRNative "pact-id" pactId (funType tTyString []) []
      "Return ID if called during current pact execution, failing if not."
 
     ,readDecimalDef

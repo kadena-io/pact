@@ -1139,15 +1139,15 @@ spec = describe "analyze" $ do
   describe "pact-id" $ do
     let code =
           [text|
-            (defun test:integer ()
+            (defun test:string ()
               (pact-id))
           |]
 
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable Success'
-    expectPass code $ Satisfiable $ CoreProp $ IntegerComparison Eq
-      (Inj Result :: Prop 'TyInteger)
-      10
+    expectPass code $ Satisfiable $ CoreProp $ StrComparison Eq
+      (Inj Result :: Prop 'TyStr)
+      (Lit' "Tug6q-wmaru1QqUMjm7RiwhnsQMTRcMHus65HwF7laE" :: Prop 'TyStr)
 
   describe "logical short-circuiting" $ do
     describe "and" $ do
@@ -3353,7 +3353,7 @@ spec = describe "analyze" $ do
       |]
 
     expectVerified [text|
-      (defschema schema-pact-id pact-id:integer)
+      (defschema schema-pact-id pact-id:string)
 
       (defpact payment (acct amount)
         @model [ (property (= (column-delta accounts 'balance) 0)) ]

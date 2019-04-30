@@ -311,7 +311,7 @@ Top level only: this function will fail if used in module code.
 
 ### pact-id {#pact-id}
 
- *&rarr;*&nbsp;`integer`
+ *&rarr;*&nbsp;`string`
 
 
 Return ID if called during current pact execution, failing if not.
@@ -1367,18 +1367,21 @@ Commit transaction.
 
 ### continue-pact {#continue-pact}
 
-*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *&rarr;*&nbsp;`string`
+*step*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
-*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
+*step*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
-*pact-id*&nbsp;`integer` *step*&nbsp;`integer` *rollback*&nbsp;`bool` *yielded*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
+*step*&nbsp;`integer` *rollback*&nbsp;`bool` *pact-id*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+*step*&nbsp;`integer` *rollback*&nbsp;`bool` *pact-id*&nbsp;`string` *yielded*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
 
 
-Continue previously-initiated pact identified by PACT-ID at STEP, optionally specifying ROLLBACK (default is false), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
+Continue previously-initiated pact identified STEP, optionally specifying ROLLBACK (default is false), PACT-ID of the pact to be continued (defaults to the pact initiated in the current transaction, if one is present), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
 ```lisp
-(continue-pact 2 1)
-(continue-pact 2 1 true)
-(continue-pact 2 1 false { "rate": 0.9 })
+(continue-pact 1)
+(continue-pact 1 true)
+(continue-pact 1 false "[pact-id-hash]"))
+(continue-pact 2 1 false "[pact-id-hash]" { "rate": 0.9 })
 ```
 
 
