@@ -315,9 +315,8 @@ continuePact i as = case as of
       resume <- case userResume of
         Just r -> return $ Just r
         Nothing -> case pactExec of
-                     Nothing           -> return Nothing
-                     Just PactExec{..} -> return $ fmap
-                                          (fmap fromPactValue) _peYield
+                     Nothing -> return Nothing
+                     Just pe -> return $ fmap (_oObject . _yData) $ _peYield pe
       let pactStep = PactStep
                      (fromIntegral step)
                      rollback pactId resume

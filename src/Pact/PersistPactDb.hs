@@ -38,6 +38,7 @@ import Data.Typeable
 import Data.String
 
 import Data.Aeson hiding ((.=))
+import Data.Text (Text, unpack)
 import GHC.Generics
 
 import qualified Data.Map.Strict as M
