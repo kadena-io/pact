@@ -641,6 +641,10 @@ inferPreProp preProp = case preProp of
     haystack' <- checkPreProp SStr haystack
     pure $ Some SBool $ CoreProp $ StrContains needle' haystack'
 
+  PreApp s [arg] | s == STypeof -> do
+    Some ty arg' <- inferPreProp arg
+    pure $ Some SStr $ CoreProp $ Typeof ty arg'
+
   -- inline property definitions. see note [Inlining].
   PreApp fName args -> do
     defn <- view $ definedProps . at fName

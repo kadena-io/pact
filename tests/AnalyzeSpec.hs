@@ -2367,6 +2367,10 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right (Some schema dropObj)
 
+      inferProp'' "(typeof 1)"
+        `shouldBe`
+        Right (Some SStr (CoreProp (Typeof SInteger (CoreProp (Lit 1)))))
+
     it "infers forall / exists" $ do
       inferProp'' "(forall (x:string y:string) (= x y))"
         `shouldBe`
