@@ -578,6 +578,20 @@ inferPreProp preProp = case preProp of
     Some ty a' <- inferPreProp a
     pure $ Some (SList ty) $ CoreProp $ MakeList ty i' a'
 
+  PreApp s [str] | s == SStringToInteger -> do
+    str' <- checkPreProp SStr str
+    pure $ Some SInteger $ CoreProp $ StrToInt str'
+
+  PreApp s [str, base] | s == SStringToInteger -> do
+    str'  <- checkPreProp SStr str
+    base' <- checkPreProp SInteger base
+    pure $ Some SInteger $ CoreProp $ StrToIntBase base' str'
+
+  PreApp s [needle, haystack] | s == SContains -> do
+    -- TODO: ObjContains
+    needle'   <- checkPreProp SStr needle
+    haystack' <- checkPreProp SStr haystack
+    pure $ Some SBool $ CoreProp $ StrContains needle' haystack'
   -- inline property definitions. see note [Inlining].
   PreApp fName args -> do
     defn <- view $ definedProps . at fName
