@@ -442,7 +442,9 @@ langDefs =
     ,defRNative (specialForm YieldForm) yield
      (funType yieldv [("object",yieldv)] <>
       funType yieldv [("target-chain",tTyString),("object", yieldv)])
-     [LitExample "(yield { \"amount\": 100.0 })"]
+     [ LitExample "(yield { \"amount\": 100.0 })"
+     , LitExample "(yield \"Testnet00/2\" { \"amount\": 100.0 })"
+     ]
      "Yield OBJECT for use with 'resume' in following pact step on chain TARGET-CHAIN. If no chain is specified, \
      \the following pact step must execute on the current chain. The object is similar to database row objects, \
      \in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON \
