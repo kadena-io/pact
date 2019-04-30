@@ -445,8 +445,8 @@ langDefs =
      [LitExample "(yield { \"amount\": 100.0 })"]
      "Yield OBJECT for use with 'resume' in following pact step on chain TARGET-CHAIN. If no chain is specified, \
      \the following pact step must execute on the current chain. The object is similar to database row objects, \
-     \in that only the top level can be bound to in 'resume'; nested objects are converted \
-     \to opaque JSON values."
+     \in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON \
+     \values."
 
     ,defNative (specialForm Resume) resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "r") def)]) []
