@@ -33,6 +33,7 @@ module Pact.Analyze.Types.ObjUtil
   -- * Utilities
   , mkSObject
   , normalizeSchema
+  , sansProof
   ) where
 
 import           Data.Type.Bool           (If)

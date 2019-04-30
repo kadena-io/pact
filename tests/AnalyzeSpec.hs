@@ -2337,6 +2337,36 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right (Some nestedSchema nestedObj)
 
+      let schema = mkSObject $ SCons' (SSymbol @"x") SInteger SNil'
+          schema' = mkSObject $
+            SCons' (SSymbol @"x") SInteger $
+              SCons' (SSymbol @"y") SInteger
+                SNil'
+
+          takeObj = CoreProp $ ObjTake
+            schema'
+            (CoreProp $ Lit [Str "x"])
+            (CoreProp $ LiteralObject schema' $ Object $
+              SCons (SSymbol @"x") (Column sing 0) $
+              SCons (SSymbol @"y") (Column sing 1)
+              SNil)
+
+          dropObj = CoreProp $ ObjDrop
+            schema'
+            (CoreProp $ Lit [Str "y"])
+            (CoreProp $ LiteralObject schema' $ Object $
+              SCons (SSymbol @"x") (Column sing 0) $
+              SCons (SSymbol @"y") (Column sing 1)
+              SNil)
+
+      inferProp'' "(take ['x] { 'x: 0, 'y: 1 })"
+        `shouldBe`
+        Right (Some schema takeObj)
+
+      inferProp'' "(drop ['y] { 'x: 0, 'y: 1 })"
+        `shouldBe`
+        Right (Some schema dropObj)
+
     it "infers forall / exists" $ do
       inferProp'' "(forall (x:string y:string) (= x y))"
         `shouldBe`
