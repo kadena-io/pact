@@ -67,9 +67,9 @@ endorse
   -> ChainId
   -- ^ target chain id
   -> Hash
-endorse (Hash mh) pid d tid =
+endorse (Hash mh) pid o tid =
   toUntypedHash . hash @('Blake2b_256) $!
-    mh <> toStrict (encode pid <> encode d <> encode tid)
+    mh <> toStrict (encode pid <> encode o <> encode tid)
 
 -- | Environment setup for pact execution.
 data PactStep = PactStep
