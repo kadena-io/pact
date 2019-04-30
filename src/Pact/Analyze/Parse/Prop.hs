@@ -636,10 +636,13 @@ inferPreProp preProp = case preProp of
     pure $ Some SInteger $ CoreProp $ StrToIntBase base' str'
 
   PreApp s [needle, haystack] | s == SContains -> do
-    -- TODO: ObjContains
-    needle'   <- checkPreProp SStr needle
-    haystack' <- checkPreProp SStr haystack
-    pure $ Some SBool $ CoreProp $ StrContains needle' haystack'
+    needle' <- checkPreProp SStr needle
+    asum
+      [ do haystack' <- checkPreProp SStr haystack
+           pure $ Some SBool $ CoreProp $ StrContains needle' haystack'
+      , do Some objTy@SObject{} obj <- inferPreProp haystack
+           pure $ Some SBool $ CoreProp $ ObjContains objTy needle' obj
+      ]
 
   PreApp s [arg] | s == STypeof -> do
     Some ty arg' <- inferPreProp arg
