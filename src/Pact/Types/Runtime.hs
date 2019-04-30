@@ -196,7 +196,7 @@ data EvalEnv e = EvalEnv {
     , _eeHash :: Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
-      -- | Namespacqe Policy
+      -- | Namespace Policy
     , _eeNamespacePolicy :: NamespacePolicy
       -- | SPV backend
     , _eeSPVSupport :: SPVSupport
