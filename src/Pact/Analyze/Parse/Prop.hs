@@ -574,6 +574,12 @@ inferPreProp preProp = case preProp of
                 throwErrorIn preProp "can only concat lists of the same type"
               Just Refl -> pure $
                 Some aTy $ CoreProp $ ListConcat aTy' aProp bProp
+          (Some aTy@SObject{} aProp, Some bTy bProp) ->
+            case singEq aTy bTy of
+              Nothing ->
+                throwErrorIn preProp "can only concat lists of the same type"
+              Just Refl -> pure $
+                Some aTy $ CoreProp $ ObjMerge aTy bTy aProp bProp
           _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
       _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
 
