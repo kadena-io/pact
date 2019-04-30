@@ -5,15 +5,20 @@
 -- | Tests remote verification on the server side (i.e. no GHCJS involvement)
 module RemoteVerifySpec (spec) where
 
+import Test.Hspec
+
 import Control.Concurrent
 import Control.Exception (finally)
 import Control.Lens
 import Control.Monad.State.Strict
+
 import Data.Either
-import qualified Data.Text as T
-import Test.Hspec
+import Data.Text (Text, unpack)
+
 import NeatInterpolation (text)
+
 import qualified Network.HTTP.Client as HTTP
+
 import Servant.Client
 
 import qualified Pact.Analyze.Remote.Types as Remote
@@ -35,7 +40,7 @@ data TestFailure
 loadCode :: Text -> IO (Either TestFailure ReplState)
 loadCode code = do
   replState0 <- initReplState StringEval (Just "http://localhost:3000")
-  (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
+  (eTerm, replState) <- runStateT (evalRepl' $ unpack code) replState0
   pure $ case eTerm of
     Left err -> Left $ ReplError err
     Right _t -> Right replState
