@@ -254,15 +254,19 @@ findCallingModuleName =
 
 -- | Given a module name, find the corresponding module def
 -- in the refstore
-findModuleDef :: ModuleName -> Eval e (Maybe (ModuleDef (Def Ref)))
-findModuleDef _n = undefined -- do
-  -- md <- preview (eeRefStore . rsModules . ix n . mdModule)
-  -- case md of
-  --   Nothing -> preuse (evalRefs . rsLoadedModules . ix n)
-  --   Just m -> return (Just m)
+findModuleDef :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleDef (Def Ref)))
+findModuleDef i n = do
+  m <- preuse $ evalRefs . rsLoadedModules . ix n
+  case m of
+    Nothing -> notFoundErr
+    Just (m', b) ->
+      if b then return (Just . _mdModule $ m')
+      else notFoundErr
+  where
+    notFoundErr = evalError' i $ "Internal error: module not found"
 
-findCallingModule :: Eval e (Maybe (ModuleDef (Def Ref)))
-findCallingModule = maybe (pure Nothing) findModuleDef =<< findCallingModuleName
+findCallingModule :: HasInfo i => i -> Eval e (Maybe (ModuleDef (Def Ref)))
+findCallingModule i = maybe (pure Nothing) (findModuleDef i) =<< findCallingModuleName
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
