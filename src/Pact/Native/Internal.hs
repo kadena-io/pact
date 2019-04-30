@@ -23,7 +23,6 @@ module Pact.Native.Internal
   ,setTopLevelOnly
   ,foldDefs
   ,funType,funType'
-  ,getModule
   ,module Pact.Types.Native
   ,tTyInteger,tTyDecimal,tTyTime,tTyBool
   ,tTyString,tTyKeySet,tTyObject,tTyObjectAny,tTyGuard
@@ -32,6 +31,8 @@ module Pact.Native.Internal
   ,(<>)
   ,getPactId,enforceGuardDef,guardForModuleCall
   ,findCallingModule
+  ,getCallingModule
+  ,getModule
   ) where
 
 import Bound
@@ -131,6 +132,17 @@ getModule i mn = lookupModule i mn >>= \r -> case r of
   Just m -> return m
   Nothing -> evalError' i $ "Unable to resolve module " <> pretty mn
 
+-- | Look up the name of the most current module in the stack
+findCallingModule :: Eval e (Maybe ModuleName)
+findCallingModule =
+  preuse $ evalCallStack . traverse . sfApp . _Just . _1 . faModule . _Just
+
+-- | Retrieve current calling module data or fail if not found
+getCallingModule :: HasInfo i => i -> Eval e (ModuleData Ref)
+getCallingModule i = maybe resolveErr (getModule i) =<< findCallingModule
+  where
+    resolveErr = evalError' i $ "Unable to resolve current calling module"
+
 tTyInteger :: Type n; tTyInteger = TyPrim TyInteger
 tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal
 tTyTime :: Type n; tTyTime = TyPrim TyTime
@@ -181,7 +193,7 @@ enforceGuard i g = case g of
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.
 guardForModuleCall :: Info -> ModuleName -> Eval e () -> Eval e ()
-guardForModuleCall i modName onFound = findCallingModuleName >>= \r -> case r of
+guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
     (Just mn) | mn == modName -> onFound
     _ -> do
       md <- _mdModule <$> getModule i modName

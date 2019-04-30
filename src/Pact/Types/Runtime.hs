@@ -36,9 +36,6 @@ module Pact.Types.Runtime
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
    SPVSupport(..),noSPVSupport,
-   findCallingModuleName,
-   findCallingModule,
-   findModuleDef,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -246,27 +243,6 @@ data EvalState = EvalState {
     } deriving (Show)
 makeLenses ''EvalState
 instance Default EvalState where def = EvalState def def def 0 def
-
--- | Look up the name of the most current module in the stack
-findCallingModuleName :: Eval e (Maybe ModuleName)
-findCallingModuleName =
-  preuse $ evalCallStack . traverse . sfApp . _Just . _1 . faModule . _Just
-
--- | Given a module name, find the corresponding module def
--- in the refstore
-findModuleDef :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleDef (Def Ref)))
-findModuleDef i n = do
-  m <- preuse $ evalRefs . rsLoadedModules . ix n
-  case m of
-    Nothing -> notFoundErr
-    Just (m', b) ->
-      if b then return (Just . _mdModule $ m')
-      else notFoundErr
-  where
-    notFoundErr = evalError' i $ "Internal error: module not found"
-
-findCallingModule :: HasInfo i => i -> Eval e (Maybe (ModuleDef (Def Ref)))
-findCallingModule i = maybe (pure Nothing) (findModuleDef i) =<< findCallingModuleName
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
