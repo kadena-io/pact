@@ -438,10 +438,16 @@ langDefs =
      ["(typeof \"hello\")"] "Returns type of X as string."
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
-    ,defRNative (specialForm YieldForm) yield (funType yieldv [("OBJECT",yieldv)])
+
+    ,defRNative (specialForm YieldForm) yield
+     (funType yieldv [("object",yieldv)] <>
+      funType yieldv [("target-chain",tTyString),("object", yieldv)])
      [LitExample "(yield { \"amount\": 100.0 })"]
-     "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
-     \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values."
+     "Yield OBJECT for use with 'resume' in following pact step on chain TARGET-CHAIN. If no chain is specified, \
+     \the following pact step must execute on the current chain. The object is similar to database row objects, \
+     \in that only the top level can be bound to in 'resume'; nested objects are converted \
+     \to opaque JSON values."
+
     ,defNative (specialForm Resume) resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "r") def)]) []
      "Special form binds to a yielded object value from the prior step execution in a pact."
