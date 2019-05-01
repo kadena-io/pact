@@ -80,7 +80,7 @@ import           Pact.Analyze.Feature         hiding (Constraint, Doc, Type,
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Types
-import           Pact.Analyze.Util            (Boolean (..))
+import           Pact.Analyze.Util            (Boolean (..), vacuousMatch)
 
 class IsTerm tm where
   singEqTm     :: SingTy ty -> tm ty -> tm ty -> Bool
@@ -225,7 +225,7 @@ newtype CapName
 instance IsString CapName where
   fromString = CapName
 
-newtype Str = Str String
+newtype Str = Str { unStr :: String }
   deriving (Eq, Ord, Show, SMTValue, HasKind, Typeable, IsString)
 
 strToText :: Str -> Text
@@ -1094,14 +1094,36 @@ instance Mergeable a => Mergeable (ColumnMap a) where
     -- intersection is fine here; we know each map has all tables:
     Map.intersectionWith (symbolicMerge force test) left right
 
-columnMapToSchema :: ColumnMap EType -> Maybe EType
+columnMapToSchema :: ColumnMap EType -> EType
 columnMapToSchema (ColumnMap colMap) = go (Map.toList colMap) where
-  go [] = Just $ EType SObjectNil
+  go [] = EType SObjectNil
   go ((ColumnName colName, EType ty) : tys) = case someSymbolVal colName of
-    SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $ do
-      EType (SObject tys') <- go tys
-      pure $ EType $ mkSObject $ SCons' (SSymbol @k) ty tys'
-  go _ = Nothing
+    SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $ case go tys of
+      EType (SObject tys') -> EType $ mkSObject $ SCons' (SSymbol @k) ty tys'
+      _ -> vacuousMatch "columnMapToSchema always returns (EType SObject)"
+  go _ = vacuousMatch "both list constructors already covered"
+
+schemaToColumns :: SingTy ('TyObject schema) -> [(String, EType)]
+schemaToColumns (SObjectUnsafe schema) = case schema of
+  SNil'
+    -> []
+  SCons' k v vs
+    -> (symbolVal k, EType v) : schemaToColumns (SObjectUnsafe vs)
+
+objTypeFilter :: (String -> Bool) -> SingTy ('TyObject schema) -> EType
+objTypeFilter f objTy
+  = columnMapToSchema
+  $ ColumnMap
+  $ Map.fromList
+  $ fmap   (\(k,  v) -> (ColumnName k, v))
+  $ filter (\(k, _v) -> f k)
+  $ schemaToColumns objTy
+
+objTypeDrop :: [String] -> SingTy ('TyObject schema) -> EType
+objTypeDrop dropFields = objTypeFilter (`notElem` dropFields)
+
+objTypeTake :: [String] -> SingTy ('TyObject schema) -> EType
+objTypeTake keepFields = objTypeFilter (`elem` keepFields)
 
 newtype TableMap a
   = TableMap { _tableMap :: Map.Map TableName a }
