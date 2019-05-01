@@ -20,7 +20,7 @@
     (step-with-rollback
      "A"
      (let ((nameA (+ name "->A")))
-       (yield "new-tid" { "a-result": nameA })
+       (yield { "a-result": nameA } "new-tid")
        nameA)
 
      "rollback-a")
