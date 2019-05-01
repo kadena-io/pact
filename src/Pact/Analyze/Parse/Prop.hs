@@ -63,7 +63,7 @@ import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                PrimType (..), SchemaVar, TList,
-                                               TableName, TyObject, Type)
+                                               TableName, TyObject, Type, TyList)
 import           Pact.Types.Pretty
 import           Pact.Types.Util              (tShow)
 
@@ -262,6 +262,28 @@ lookupKeyInType :: String -> SingList schema -> Maybe EType
 lookupKeyInType name = getFirst . foldSingList
   (\k ty -> First $ if symbolVal k == name then Just (EType ty) else Nothing)
 
+-- | Extract the literal string from a @Prop 'TyStr@.
+extractLiteralString :: Prop 'TyStr -> Maybe String
+extractLiteralString = \case
+  CoreProp (Lit (Str str)) -> Just str
+  _                        -> Nothing
+
+-- | Extract the literal strings from a @Prop ('TyList 'TyStr)@. The first two
+-- arguments are used to build the error message.
+extractStringList
+  :: Doc -> PreProp -> Prop ('TyList 'TyStr) -> PropCheck [String]
+extractStringList name preProp fieldNames = do
+  let err = throwErrorIn preProp $ "In properties, `" <> name <>
+        "` on objects requires a list of literal keys"
+
+  case fieldNames of
+    CoreProp (Lit fieldNames') -> pure $ fmap unStr fieldNames'
+    CoreProp (LiteralList _ fieldNames') ->
+      case traverse extractLiteralString fieldNames' of
+        Just fieldNames'' -> pure fieldNames''
+        Nothing -> err
+    _ -> err
+
 --
 -- NOTE: because we have a lot of cases here and we are using pattern synonyms
 -- in conjunction with view patterns for feature symbols (see
@@ -354,7 +376,7 @@ inferPreProp preProp = case preProp of
         cm  <- view $ tableEnv . at (TableName litTn)
         case cm of
           Just cm' -> case columnMapToSchema cm' of
-            Just (EType objTy@SObject{}) -> pure $
+            EType objTy@SObject{} -> pure $
               Some objTy $ PropSpecific $ PropRead objTy ba' tn' rk'
             _ -> throwErrorIn preProp "expected an object"
           Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn
@@ -552,6 +574,12 @@ inferPreProp preProp = case preProp of
                 throwErrorIn preProp "can only concat lists of the same type"
               Just Refl -> pure $
                 Some aTy $ CoreProp $ ListConcat aTy' aProp bProp
+          (Some aTy@SObject{} aProp, Some bTy bProp) ->
+            case singEq aTy bTy of
+              Nothing ->
+                throwErrorIn preProp "can only concat lists of the same type"
+              Just Refl -> pure $
+                Some aTy $ CoreProp $ ObjMerge aTy bTy aProp bProp
           _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
       _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
 
@@ -563,20 +591,62 @@ inferPreProp preProp = case preProp of
     Some (SList ty) lst' <- inferPreProp lst
     pure $ Some (SList ty) $ CoreProp $ ListSort ty lst'
 
-  PreApp s [i, lst] | s == SListTake -> do
-    i' <- checkPreProp SInteger i
-    Some (SList ty) lst' <- inferPreProp lst
-    pure $ Some (SList ty) $ CoreProp $ ListTake ty i' lst'
+  PreApp s [index, lstOrObj] | s == SListTake {- == SObjectDrop -} -> do
+    Some ty lstOrObj' <- inferPreProp lstOrObj
+    case ty of
+      SList ty' -> do
+        index' <- checkPreProp SInteger index
+        pure $ Some ty $ CoreProp $ ListTake ty' index' lstOrObj'
+      SObject{} -> do
+        fieldNames  <- checkPreProp (SList SStr) index
+        fieldNames' <- extractStringList "take" preProp fieldNames
 
-  PreApp s [i, lst] | s == SListDrop -> do
-    i' <- checkPreProp SInteger i
-    Some (SList ty) lst' <- inferPreProp lst
-    pure $ Some (SList ty) $ CoreProp $ ListDrop ty i' lst'
+        case objTypeTake fieldNames' ty of
+          EType ty'' -> pure $ Some ty'' $ sansProof $
+            CoreProp $ ObjTake ty fieldNames lstOrObj'
+      _ -> throwErrorIn preProp "`take` works on only lists and objects"
+
+  PreApp s [index, lstOrObj] | s == SListDrop {- == SObjectDrop -} -> do
+    Some ty lstOrObj' <- inferPreProp lstOrObj
+    case ty of
+      SList ty' -> do
+        index' <- checkPreProp SInteger index
+        pure $ Some ty $ CoreProp $ ListDrop ty' index' lstOrObj'
+      SObject{} -> do
+        fieldNames  <- checkPreProp (SList SStr) index
+        fieldNames' <- extractStringList "drop" preProp fieldNames
+
+        case objTypeDrop fieldNames' ty of
+          EType ty'' -> pure $ Some ty'' $ sansProof $
+            CoreProp $ ObjDrop ty fieldNames lstOrObj'
+      _ -> throwErrorIn preProp "`drop` works on only lists and objects"
 
   PreApp s [i, a] | s == SMakeList -> do
     i' <- checkPreProp SInteger i
     Some ty a' <- inferPreProp a
     pure $ Some (SList ty) $ CoreProp $ MakeList ty i' a'
+
+  PreApp s [str] | s == SStringToInteger -> do
+    str' <- checkPreProp SStr str
+    pure $ Some SInteger $ CoreProp $ StrToInt str'
+
+  PreApp s [str, base] | s == SStringToInteger -> do
+    str'  <- checkPreProp SStr str
+    base' <- checkPreProp SInteger base
+    pure $ Some SInteger $ CoreProp $ StrToIntBase base' str'
+
+  PreApp s [needle, haystack] | s == SContains -> do
+    needle' <- checkPreProp SStr needle
+    asum
+      [ do haystack' <- checkPreProp SStr haystack
+           pure $ Some SBool $ CoreProp $ StrContains needle' haystack'
+      , do Some objTy@SObject{} obj <- inferPreProp haystack
+           pure $ Some SBool $ CoreProp $ ObjContains objTy needle' obj
+      ]
+
+  PreApp s [arg] | s == STypeof -> do
+    Some ty arg' <- inferPreProp arg
+    pure $ Some SStr $ CoreProp $ Typeof ty arg'
 
   -- inline property definitions. see note [Inlining].
   PreApp fName args -> do
