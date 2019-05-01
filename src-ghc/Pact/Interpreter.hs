@@ -77,6 +77,7 @@ data EvalResult = EvalResult
   , _erExec :: !(Maybe PactExec)
   , _erGas :: Gas
   , _erLoadedModules :: HashMap ModuleName (ModuleData Ref,Bool)
+  , _erTxId :: !(Maybe TxId)
   } deriving (Eq,Show)
 
 
@@ -114,7 +115,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
     _eeRefStore = refStore
   , _eeMsgSigs = mdSigs msgData
   , _eeMsgBody = mdData msgData
-  , _eeTxId = modeToTx mode
+  , _eeMode = mode
   , _eeEntity = ent
   , _eePactStep = mdStep msgData
   , _eePactDb = pdPactDb dbEnv
@@ -126,8 +127,6 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
   , _eeSPVSupport = spv
   , _eePublicData = pd
   }
-  where modeToTx (Transactional t) = Just t
-        modeToTx Local = Nothing
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
@@ -154,26 +153,23 @@ initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 interpret :: EvalState -> EvalEnv e -> Either PactContinuation [Term Name] -> IO EvalResult
 interpret initState evalEnv terms = do
-  let tx = _eeTxId evalEnv
-  ((rs,logs),state) <-
-    runEval initState evalEnv $ evalTerms tx terms
+  ((rs,logs,txid),state) <-
+    runEval initState evalEnv $ evalTerms terms
   let gas = _evalGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
-  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules
+  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
 
-evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
-evalTerms tx terms = do
+evalTerms :: Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value],Maybe TxId)
+evalTerms terms = do
   let safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
   handle (\(e :: SomeException) -> safeRollback >> throwM e) $ do
-        evalBeginTx def
+        txid <- evalBeginTx def
         rs <- case terms of
           Right ts -> mapM eval ts
           Left pc -> (:[]) <$> Eval.evalContinuation pc
-        logs <- case tx of
-          Just _ -> evalCommitTx def
-          Nothing -> evalRollbackTx def >> return []
-        return (rs,logs)
+        logs <- evalCommitTx def
+        return (rs,logs,txid)
 {-# INLINE evalTerms #-}

@@ -101,12 +101,12 @@ runPipedRepl' p s@ReplState{..} h =
 
 initReplState :: MonadIO m => ReplMode -> Maybe String -> m ReplState
 initReplState m verifyUri =
-  liftIO (initPureEvalEnv verifyUri) >>= \e -> return (ReplState e def m def def def)
+  liftIO (initPureEvalEnv verifyUri) >>= \e -> return (ReplState e def m def def def def)
 
 initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
-  return $ EvalEnv (RefStore nativeDefs) def Null (Just 0)
+  return $ EvalEnv (RefStore nativeDefs) def Null Transactional
     def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv) def
 
 spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
@@ -219,7 +219,7 @@ pureEval ei e = do
 
 evalEval :: Info -> Eval LibState a -> Repl (Either PactError a, EvalState)
 evalEval ei e = do
-  (ReplState evalE evalS _ _ _ _) <- get
+  (ReplState evalE evalS _ _ _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   return $ case er of
     Left (SomeException ex) -> (Left (PactError EvalError ei def (prettyString (show ex))),evalS)
@@ -274,16 +274,23 @@ updateForOp a = do
 doTx :: Info -> Tx -> Maybe Text -> Repl (Either String (Term Name))
 doTx i t n = do
   e <- case t of
-    Begin -> do
-      rEnv.eeTxId %= fmap succ
-      return $ evalBeginTx i
-    Rollback -> return $ evalRollbackTx i
-    Commit -> return $ void $ evalCommitTx i
-  pureEval i (e >> return (tStr "")) >>= \r -> forM r $ \_ -> do
+    Begin -> return $ do
+      tid <- evalBeginTx i
+      case tid of
+        Just txid -> return $ toTerm txid
+        Nothing -> evalError def "Internal error, no txid returned from beginTx"
+    Rollback -> return $ evalRollbackTx i >> return (tStr "Rollback complete")
+    Commit -> return $ evalCommitTx i >> return (tStr "Commit complete")
+  pureEval i e >>= \r -> forM r $ \er -> do
     rEvalState .= def
     useReplLib
-    tid <- use $ rEnv . eeTxId
-    return $ tStr $ tShow t <> " Tx " <> tShow tid <> maybe "" (": " <>) n
+    case er of
+      TLitInteger txid -> rTxId .= Just (fromIntegral txid)
+      _ -> return ()
+    tid <- use rTxId >>= \txm -> case txm of
+      Nothing -> return ""
+      Just t' -> return $ " Tx " <> tShow t'
+    return $ tStr $ tShow t <> tid <> maybe "" (": " <>) n
 
 
 -- | load and evaluate a Pact file.

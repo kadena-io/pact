@@ -73,8 +73,8 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime
 
 
-evalBeginTx :: Info -> Eval e ()
-evalBeginTx i = view eeTxId >>= beginTx i
+evalBeginTx :: Info -> Eval e (Maybe TxId)
+evalBeginTx i = view eeMode >>= beginTx i
 {-# INLINE evalBeginTx #-}
 
 evalRollbackTx :: Info -> Eval e ()
@@ -84,10 +84,8 @@ evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
 evalCommitTx :: Info -> Eval e [TxLog Value]
 evalCommitTx i = do
   revokeAllCapabilities
-  tid <- view eeTxId
-  case tid of
-    Nothing -> evalRollbackTx i >> return []
-    Just {} -> commitTx i
+  -- backend now handles local exec
+  commitTx i
 {-# INLINE evalCommitTx #-}
 
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
@@ -688,9 +686,8 @@ applyPact app (TList steps _ i) = do
   use evalPactExec >>= \bad -> unless (isNothing bad) $ evalError i "Nested pact execution, aborting"
   -- get step from environment or create a new one
   PactStep{..} <- view eePactStep >>= \ps -> case ps of
-    Nothing -> view eeTxId >>= \tid -> case tid of
-      Just _ -> view eeHash >>= \hsh -> return $ PactStep 0 False (toPactId hsh) Nothing
-      Nothing -> evalError i "applyPact: pacts not executable in local context"
+    Nothing -> view eeHash >>= \hsh ->
+      return $ PactStep 0 False (toPactId hsh) Nothing
     Just v -> return v
   -- retrieve indicated step from code
   s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep

@@ -75,7 +75,7 @@ initLibState :: Loggers -> Maybe String -> IO LibState
 initLibState loggers verifyUri = do
   m <- newMVar (DbEnv def persister
                 (newLogger loggers "Repl")
-                def def)
+                def 0 def)
   createSchema m
   return (LibState m Noop def def verifyUri M.empty M.empty)
 

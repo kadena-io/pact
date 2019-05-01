@@ -29,6 +29,7 @@ module Pact.PersistPactDb
 
 import Prelude hiding (log)
 
+import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
 import Control.Monad
@@ -55,7 +56,8 @@ data DbEnv p = DbEnv
   , _persist :: Persister p
   , _logger :: Logger
   , _txRecord :: M.Map TxTable [TxLog Value]
-  , _txId :: Maybe TxId
+  , _txId :: TxId
+  , _mode :: Maybe ExecutionMode
   }
 makeLenses ''DbEnv
 
@@ -65,7 +67,8 @@ initDbEnv loggers funrec p = DbEnv {
   _persist = funrec,
   _logger = newLogger loggers "PactPersist",
   _txRecord = M.empty,
-  _txId = Nothing
+  _txId = 0,
+  _mode = Nothing
   }
 
 data UserTableInfo = UserTableInfo
@@ -162,30 +165,46 @@ pactdb = PactDb
 
  }
 
-doBegin :: Maybe TxId -> MVState p ()
-doBegin tidm = do
-  use txId >>= \t -> case t of
-    Just _ -> do
+doBegin :: ExecutionMode -> MVState p (Maybe TxId)
+doBegin m = do
+  use mode >>= \m' -> case m' of
+    Just {} -> do
       logError "beginTx: In transaction, rolling back"
       rollback
     Nothing -> return ()
   resetTemp
-  doPersist $ \p -> P.beginTx p $ isJust tidm
-  txId .= tidm
+  doPersist $ \p -> P.beginTx p m
+  mode .= Just m
+  case m of
+    Transactional -> Just <$> use txId
+    Local -> pure Nothing
 {-# INLINE doBegin #-}
 
 doCommit :: MVState p [TxLog Value]
-doCommit = do
-  use txId >>= \otid -> case otid of
-    Nothing -> rollback >> throwDbError "Not in transaction"
-    Just tid -> do
-      let tid' = fromIntegral tid
+doCommit = use mode >>= \mm -> case mm of
+    Nothing -> rollback >> throwDbError "doCommit: Not in transaction"
+    Just m -> do
       txrs <- M.toList <$> use txRecord
-      forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
-      doPersist P.commitTx
-      resetTemp
+      if (m == Transactional) then do
+        -- grab current txid and increment in state
+        tid' <- state (fromIntegral . _txId &&& over txId succ)
+        -- write txlog
+        forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
+        -- commit
+        doPersist P.commitTx
+        resetTemp
+      else rollback
       return (concatMap snd txrs)
 {-# INLINE doCommit #-}
+
+
+rollback :: MVState p ()
+rollback = do
+  (r :: Either SomeException ()) <- try (doPersist P.rollbackTx)
+  case r of
+    Left e -> logError $ "rollback: " ++ show e
+    Right _ -> return ()
+  resetTemp
 
 
 getLogs :: FromJSON v => Domain k v -> TxId -> MVState p [TxLog v]
@@ -206,13 +225,6 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
 debug :: Show a => String -> a -> MVState p ()
 debug s a = logDebug $ s ++ ": " ++ show a
 
-rollback :: MVState p ()
-rollback = do
-  (r :: Either SomeException ()) <- try (doPersist P.rollbackTx)
-  case r of
-    Left e -> logError $ "rollback: " ++ show e
-    Right _ -> return ()
-  resetTemp
 
 readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (ObjectMap PactValue))
 readUserTable e t k = runMVState e $ readUserTable' t k
@@ -227,7 +239,7 @@ readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t (DataKey k)
 {-# INLINE readSysTable #-}
 
 resetTemp :: MVState p ()
-resetTemp = txRecord .= M.empty >> txId .= Nothing
+resetTemp = txRecord .= M.empty >> mode .= Nothing
 {-# INLINE resetTemp #-}
 
 writeSys :: (AsString k,PactDbValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
@@ -291,7 +303,7 @@ createTable' tn = do
 
 createSchema :: MVar (DbEnv p) -> IO ()
 createSchema e = runMVState e $ do
-  doPersist (\p -> P.beginTx p True)
+  doPersist (\p -> P.beginTx p Transactional)
   createTable' userTableInfo
   createTable' keysetsTable
   createTable' modulesTable

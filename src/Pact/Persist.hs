@@ -134,10 +134,7 @@ instance PactDbValue Namespace                where prettyPactDbValue = pretty
 data Persister s = Persister {
   createTable :: forall k . PactDbKey k => Table k -> Persist s ()
   ,
-  -- | Boolean argument to indicate if this is "transactional for real":
-  -- local execution mode starts a tx knowing full well it will roll back.
-  -- This allows backing layer to be aware of non-transactional exec.
-  beginTx :: Bool -> Persist s ()
+  beginTx :: ExecutionMode -> Persist s ()
   ,
   commitTx :: Persist s ()
   ,
