@@ -31,7 +31,9 @@ module Pact.Types.Persistence
    PersistDirect(..),toPersistDirect,fromPersistDirect,
    ModuleData(..),mdModule,mdRefMap,
    PersistModuleData,
-   ExecutionMode(..)
+   ExecutionMode(..),
+   PactContinuation(..),
+   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
    ) where
 
 import Control.Applicative ((<|>))
@@ -111,6 +113,37 @@ instance FromJSON (Ref' PersistDirect) where
     withObject "Direct" (\o -> Direct <$> o .: "direct") v
 
 
+data PactContinuation = PactContinuation
+  { _pcDef :: Name
+  , _pcArgs :: [PactValue]
+  } deriving (Eq,Show,Generic)
+
+instance NFData PactContinuation
+instance ToJSON PactContinuation where toJSON = lensyToJSON 3
+instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
+
+
+-- | Result of evaluation of a 'defpact'.
+data PactExec = PactExec
+  { -- | Count of steps in pact (discovered when code is executed)
+    _peStepCount :: Int
+    -- | Yield value if invoked
+  , _peYield :: !(Maybe (ObjectMap PactValue))
+    -- | Whether step was executed (in private cases, it can be skipped)
+  , _peExecuted :: Bool
+    -- | Step that was executed or skipped
+  , _peStep :: Int
+    -- | Pact id. On a new pact invocation, is copied from tx id.
+  , _pePactId :: PactId
+    -- | Strict (in arguments) application of pact, for future step invocations.
+  , _peContinuation :: PactContinuation
+  } deriving (Eq,Show,Generic)
+makeLenses ''PactExec
+instance NFData PactExec
+instance ToJSON PactExec where toJSON = lensyToJSON 3
+instance FromJSON PactExec where parseJSON = lensyParseJSON 3
+
+
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty,Generic,NFData)
@@ -122,13 +155,16 @@ data Domain k v where
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName PersistModuleData
   Namespaces :: Domain NamespaceName Namespace
+  Pacts :: Domain PactId PactExec
+
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
 instance AsString (Domain k v) where
     asString (UserTables t) = asString t
-    asString KeySets    = "SYS:KeySets"
-    asString Modules    = "SYS:Modules"
+    asString KeySets = "SYS:KeySets"
+    asString Modules = "SYS:Modules"
     asString Namespaces = "SYS:Namespaces"
+    asString Pacts = "SYS:Pacts"
 
 -- | Transaction record.
 data TxLog v =

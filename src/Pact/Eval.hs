@@ -682,36 +682,55 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 -- defaulting to the first step.
 applyPact :: PactContinuation -> Term Ref -> Eval e (Term Name)
 applyPact app (TList steps _ i) = do
+
   -- only one pact allowed in a transaction
-  use evalPactExec >>= \bad -> unless (isNothing bad) $ evalError i "Nested pact execution, aborting"
+  use evalPactExec >>= \bad -> unless (isNothing bad) $
+    evalError i "Nested pact execution, aborting"
+
   -- get step from environment or create a new one
   PactStep{..} <- view eePactStep >>= \ps -> case ps of
     Nothing -> view eeHash >>= \hsh ->
       return $ PactStep 0 False (toPactId hsh) Nothing
     Just v -> return v
+
   -- retrieve indicated step from code
   s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
   case s of
     step@TStep {} -> do
       stepEntity <- traverse reduce (_tStepEntity step)
+
       let
+
         initExec executing = evalPactExec .=
           Just (PactExec (length steps) Nothing executing _psStep _psPactId app)
+
         execStep = do
           initExec True
-          case (_psRollback,_tStepRollback step) of
+          r <- case (_psRollback,_tStepRollback step) of
             (False,_) -> reduce $ _tStepExec step
             (True,Just rexp) -> reduce rexp
-            (True,Nothing) -> return $ tStr $ renderCompactText' $
-              "No rollback on step " <> pretty _psStep
+            (True,Nothing) -> evalError' step $ "Rollback requested but none in step"
+          pe <- maybe (evalError' step "Internal error, no pact exec") return =<< use evalPactExec
+          writeRow (_tInfo step) Write Pacts _psPactId pe
+          return r
+
       case stepEntity of
+
+        -- private execution
         Just (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
-          Just (EntityName en) | se == en -> execStep -- matched for "private" step exec
-                               | otherwise -> initExec False >> return (tStr "Skip step")
+          Just (EntityName en)
+              -- matched for "private" step exec
+            | se == en -> execStep
+              -- unmatched, skip
+            | otherwise -> initExec False >> return (tStr "Skip step")
           Nothing -> evalError (_tInfo step) "Private step executed against non-private environment"
         Just t -> evalError (_tInfo t) "step entity must be String value"
+
+        -- public execution
         Nothing -> execStep -- "public" step exec
+
     t -> evalError (_tInfo t) "expected step"
+
 applyPact _ t = evalError (_tInfo t) "applyPact: expected list of steps"
 
 
