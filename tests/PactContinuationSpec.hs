@@ -115,7 +115,7 @@ testSimpleServerCmd mgr = do
 testCorrectNextStep :: HTTP.Manager -> Expectation
 testCorrectNextStep mgr = do
   let moduleName = "testCorrectNextStep"
-  adminKeys <- genKeysEth
+  adminKeys <- genKeys
   
   let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd       <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
