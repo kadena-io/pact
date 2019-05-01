@@ -21,7 +21,7 @@ module Pact.Types.Runtime
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
    toPactId,
    Purity(..),PureNoDb,PureReadOnly,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
@@ -215,8 +215,8 @@ data EvalEnv e = EvalEnv {
     , _eeMsgSigs :: !(S.Set PublicKey)
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
-      -- | Transaction id. 'Nothing' indicates local execution.
-    , _eeTxId :: !(Maybe TxId)
+      -- | Execution mode
+    , _eeMode :: ExecutionMode
       -- | Entity governing private/encrypted 'pact' executions.
     , _eeEntity :: !(Maybe EntityName)
       -- | Step value for 'pact' executions.
@@ -348,7 +348,7 @@ getUserTableInfo :: Info -> TableName -> Eval e ModuleName
 getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
 
 -- | Invoke _beginTx
-beginTx :: Info -> Maybe TxId -> Eval e ()
+beginTx :: Info -> ExecutionMode -> Eval e (Maybe TxId)
 beginTx i t = method i $ \db -> _beginTx db t
 
 -- | Invoke _commitTx
@@ -436,7 +436,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eeRefStore
     _eeMsgSigs
     _eeMsgBody
-    _eeTxId
+    _eeMode
     _eeEntity
     _eePactStep
     v

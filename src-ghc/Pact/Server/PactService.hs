@@ -68,7 +68,7 @@ initPactService CommandConfig {..} loggers = do
 applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState ->
             GasModel -> Word64 -> Int64 -> ExecutionMode -> Command a ->
             ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
-applyCmd _ _ _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
+applyCmd _ _ _ _ _ _ _ _ cmd (ProcFail s) = return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) s
 applyCmd logger conf dbv cv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
@@ -83,15 +83,12 @@ applyCmd logger conf dbv cv gasModel bh bt exMode _ (ProcSucc cmd) = do
       return cr
     Left e -> do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
-      return $ jsonResult exMode (cmdToRequestKey cmd) (Gas 0) $
+      return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $
                CommandError "Command execution failed" (Just $ show e)
 
-jsonResult :: ToJSON a => ExecutionMode -> RequestKey -> Gas -> a -> CommandResult
-jsonResult ex cmd gas a = CommandResult cmd (exToTx ex) (toJSON a) gas
+jsonResult :: ToJSON a => Maybe TxId -> RequestKey -> Gas -> a -> CommandResult
+jsonResult tx cmd gas a = CommandResult cmd tx (toJSON a) gas
 
-exToTx :: ExecutionMode -> Maybe TxId
-exToTx (Transactional t) = Just t
-exToTx Local = Nothing
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p CommandResult
 runPayload c@Command{..} = case (_pPayload _cmdPayload) of
@@ -114,7 +111,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
         Just cmdPact -> M.insert (_pePactId cmdPact) cmdPact pacts
   void $ liftIO $ swapMVar _ceState $ CommandState newPacts
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) newCmdPact
-  return $ jsonResult _ceMode rk _erGas $ CommandSuccess (last _erOutput)
+  return $ jsonResult _erTxId rk _erGas $ CommandSuccess (last _erOutput)
 
 handlePactExec :: Either PactContinuation [Term Name] -> PactExec -> CommandM p (Maybe PactExec)
 handlePactExec (Left pc) _ = throwCmdEx $ "handlePactExec: internal error, continuation input: " ++ show pc
@@ -127,39 +124,36 @@ handlePactExec (Right em) pe = do
 applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p CommandResult
 applyContinuation rk hsh signers msg@ContMsg{..} = do
   env@CommandEnv{..} <- ask
-  case _ceMode of
-    Local -> throwCmdEx "Local continuation exec not supported"
-    Transactional _ -> do
-      state@CommandState{..} <- liftIO $ readMVar _ceState
-      case M.lookup _cmPactId _csPacts of
-        Nothing -> throwCmdEx $ "applyContinuation: pact ID not found: " ++ show _cmPactId
-        Just PactExec{..} -> do
-          -- Verify valid ContMsg Step
-          when (_cmStep < 0 || _cmStep >= _peStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
+  state@CommandState{..} <- liftIO $ readMVar _ceState
+  case M.lookup _cmPactId _csPacts of
+    Nothing -> throwCmdEx $ "applyContinuation: pact ID not found: " ++ show _cmPactId
+    Just PactExec{..} -> do
+      -- Verify valid ContMsg Step
+      when (_cmStep < 0 || _cmStep >= _peStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
+      if _cmRollback
+        then when (_cmStep /= _peStep) $ throwCmdEx $ "Invalid rollback step value: Received "
+             ++ show _cmStep ++ " but expected " ++ show _peStep
+        else when (_cmStep /= (_peStep + 1)) $ throwCmdEx $ "Invalid continuation step value: Received "
+             ++ show _cmStep ++ " but expected " ++ show (_peStep + 1)
+
+      -- Setup environment and get result
+      let sigs = userSigsToPactKeySet signers
+          pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactValue) _peYield)
+          evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
+                    (MsgData sigs _cmData pactStep (toUntypedHash hsh)) initRefStore
+                    _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
+      res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
+
+      -- Update pacts state
+      case res of
+        Left (SomeException ex) -> throwM ex
+        Right EvalResult{..} -> do
+          exec@PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
+                               return _erExec
           if _cmRollback
-            then when (_cmStep /= _peStep) $ throwCmdEx $ "Invalid rollback step value: Received "
-                 ++ show _cmStep ++ " but expected " ++ show _peStep
-            else when (_cmStep /= (_peStep + 1)) $ throwCmdEx $ "Invalid continuation step value: Received "
-                 ++ show _cmStep ++ " but expected " ++ show (_peStep + 1)
-
-          -- Setup environment and get result
-          let sigs = userSigsToPactKeySet signers
-              pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId (fmap (fmap fromPactValue) _peYield)
-              evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                        (MsgData sigs _cmData pactStep (toUntypedHash hsh)) initRefStore
-                        _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
-          res <- tryAny (liftIO  $ evalContinuation evalEnv _peContinuation)
-
-          -- Update pacts state
-          case res of
-            Left (SomeException ex) -> throwM ex
-            Right EvalResult{..} -> do
-              exec@PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
-                                   return _erExec
-              if _cmRollback
-                then rollbackUpdate env msg state
-                else continuationUpdate env msg state exec
-              return $ jsonResult _ceMode rk _erGas $ CommandSuccess (last _erOutput)
+            then rollbackUpdate env msg state
+            else continuationUpdate env msg state exec
+          return $ jsonResult _erTxId rk _erGas $ CommandSuccess (last _erOutput)
 
 rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
 rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do

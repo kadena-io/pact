@@ -16,7 +16,6 @@ import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import System.CPUTime
 import System.Directory
 import Unsafe.Coerce
 
@@ -82,7 +81,7 @@ loadBenchModule db = do
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
            pactInitialHash
-  let e = setupEvalEnv db entity (Transactional 1) md initRefStore
+  let e = setupEvalEnv db entity Transactional md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
   void $ evalExec e pc
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
@@ -98,8 +97,7 @@ benchNFIO bname = bench bname . nfIO
 
 runPactExec :: Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
 runPactExec benchMod dbEnv pc = do
-  t <- Transactional . fromIntegral <$> getCPUTime
-  let e = setupEvalEnv dbEnv entity t (initMsgData pactInitialHash)
+  let e = setupEvalEnv dbEnv entity Transactional (initMsgData pactInitialHash)
           initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
       s = maybe def (initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
   toJSON . _erOutput <$> evalExecState s e pc
