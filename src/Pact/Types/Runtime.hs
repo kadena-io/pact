@@ -218,7 +218,7 @@ makeLenses ''EvalEnv
 
 
 toPactId :: Hash -> PactId
-toPactId = PactId
+toPactId = PactId . hashToText
 
 
 -- | Dynamic storage for loaded names and modules, and current namespace.

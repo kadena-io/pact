@@ -302,11 +302,6 @@ toPersistDirect' t = case toPersistDirect t of
   Left e -> evalError (getInfo t) $ "Attempting to serialize non pact-value in module def: " <> pretty e
 
 
-evalContinuation :: PactContinuation -> Eval e (Term Name)
-evalContinuation (PactContinuation d args) =
-  reduceApp (App (TDef d def) (map (liftTerm . fromPactValue) args) def)
-
-
 evalUse :: Use -> Eval e ()
 evalUse (Use mn h i) = do
   mm <- resolveModule i mn
@@ -633,7 +628,8 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
       Defun ->
         reduceBody bod'
       Defpact -> do
-        continuation <- PactContinuation d <$> enforcePactValue' (fst af)
+        continuation <- PactContinuation (QName _dModule (asString _dDefName) def)
+          <$> enforcePactValue' (fst af)
         applyPact continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
@@ -696,8 +692,8 @@ applyPact app (TList steps _ i) = do
   -- retrieve indicated step from code
   s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
   case s of
-    step@TStep {} -> do
-      stepEntity <- traverse reduce (_tStepEntity step)
+    TStep step _i -> do
+      stepEntity <- traverse reduce (_sEntity step)
 
       let
 
@@ -706,12 +702,12 @@ applyPact app (TList steps _ i) = do
 
         execStep = do
           initExec True
-          r <- case (_psRollback,_tStepRollback step) of
-            (False,_) -> reduce $ _tStepExec step
+          r <- case (_psRollback,_sRollback step) of
+            (False,_) -> reduce $ _sExec step
             (True,Just rexp) -> reduce rexp
             (True,Nothing) -> evalError' step $ "Rollback requested but none in step"
           pe <- maybe (evalError' step "Internal error, no pact exec") return =<< use evalPactExec
-          writeRow (_tInfo step) Write Pacts _psPactId pe
+          writeRow (getInfo step) Write Pacts _psPactId pe
           return r
 
       case stepEntity of
@@ -723,7 +719,7 @@ applyPact app (TList steps _ i) = do
             | se == en -> execStep
               -- unmatched, skip
             | otherwise -> initExec False >> return (tStr "Skip step")
-          Nothing -> evalError (_tInfo step) "Private step executed against non-private environment"
+          Nothing -> evalError (getInfo step) "Private step executed against non-private environment"
         Just t -> evalError (_tInfo t) "step entity must be String value"
 
         -- public execution
@@ -732,6 +728,26 @@ applyPact app (TList steps _ i) = do
     t -> evalError (_tInfo t) "expected step"
 
 applyPact _ t = evalError (_tInfo t) "applyPact: expected list of steps"
+
+resumePact :: Info -> Eval e (Term Name)
+resumePact i = do
+  ps@PactStep{..} <- view eePactStep >>= (`maybe` pure)
+    (evalError i "resumePact: no step in environment")
+
+  oldExec <- readRow i Pacts _psPactId >>= (`maybe` pure)
+    (evalError i $ "resumePact: no previous execution found for: " <> pretty _psPactId)
+
+  resumePactExec i ps oldExec
+
+resumePactExec :: Info -> PactStep -> PactExec -> Eval e (Term Name)
+resumePactExec i ps oldExec = undefined
+
+
+evalContinuation :: PactContinuation -> Eval e (Term Name)
+evalContinuation (PactContinuation d args) = undefined
+  -- reduceApp (App (TDef d def) (map (liftTerm . fromPactValue) args) def)
+
+
 
 
 -- | Create special error form handled in 'reduceApp'
