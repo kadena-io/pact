@@ -133,7 +133,7 @@ data PactExec = PactExec
   , _peExecuted :: Bool
     -- | Step that was executed or skipped
   , _peStep :: Int
-    -- | Pact id. On a new pact invocation, is copied from tx id.
+    -- | Pact id. Should be unique for a given invocation for entire network.
   , _pePactId :: PactId
     -- | Strict (in arguments) application of pact, for future step invocations.
   , _peContinuation :: PactContinuation
@@ -142,6 +142,7 @@ makeLenses ''PactExec
 instance NFData PactExec
 instance ToJSON PactExec where toJSON = lensyToJSON 3
 instance FromJSON PactExec where parseJSON = lensyParseJSON 3
+instance Pretty PactExec where pretty = viaShow
 
 
 -- | Row key type for user tables.
@@ -155,7 +156,7 @@ data Domain k v where
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName PersistModuleData
   Namespaces :: Domain NamespaceName Namespace
-  Pacts :: Domain PactId PactExec
+  Pacts :: Domain PactId (Maybe PactExec)
 
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)

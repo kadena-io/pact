@@ -307,25 +307,16 @@ continuePact i as = case as of
                    (evalError' i "continue-pact: no pact exec in context")
                    (return . _pePactId)
                    pactExec
-        Just pidTxt -> either
-                       (\err -> evalError' i $ "Invalid pact id: " <> pretty err)
-                       (return . PactId)
-                       (fromText' pidTxt)
-      resume <- case userResume of
-        Just r -> return $ Just r
-        Nothing -> case pactExec of
-                     Nothing           -> return Nothing
-                     Just PactExec{..} -> return $ fmap
-                                          (fmap fromPactValue) _peYield
+        Just pidTxt -> return $ PactId pidTxt
       let pactStep = PactStep
                      (fromIntegral step)
-                     rollback pactId resume
+                     rollback pactId userResume
       viewLibState (view rlsPacts) >>= \pacts ->
         case M.lookup pactId pacts of
           Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
           Just PactExec{..} -> do
             evalPactExec .= Nothing
-            local (set eePactStep $ Just pactStep) $ evalContinuation _peContinuation
+            local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
 
 
 setentity :: RNativeFun LibState

@@ -20,9 +20,7 @@ module Pact.Interpreter
   , initMsgData
   , initStateModules
   , evalExec
-  , evalExecState
   , evalContinuation
-  , evalContinuationState
   , setupEvalEnv
   , initRefStore
   , mkSQLiteEnv
@@ -44,8 +42,7 @@ import System.Directory
 
 
 import Pact.Compile
-import qualified Pact.Eval as Eval (evalContinuation)
-import Pact.Eval hiding (evalContinuation)
+import Pact.Eval
 import Pact.Native (nativeDefs)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
@@ -71,7 +68,7 @@ initMsgData :: Hash -> MsgData
 initMsgData = MsgData def Null def
 
 data EvalResult = EvalResult
-  { _erInput :: !(Either PactContinuation [Term Name])
+  { _erInput :: !(Either (Maybe PactExec) [Term Name])
   , _erOutput :: ![PactValue]
   , _erLogs :: ![TxLog Value]
   , _erExec :: !(Maybe PactExec)
@@ -81,11 +78,9 @@ data EvalResult = EvalResult
   } deriving (Eq,Show)
 
 
-evalExec :: EvalEnv e -> ParsedCode -> IO EvalResult
-evalExec env pc = evalExecState def env pc
-
-evalExecState :: EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
-evalExecState initState evalEnv ParsedCode {..} = do
+-- | Execute pact statements.
+evalExec :: EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
+evalExec initState evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
   interpret initState evalEnv (Right terms)
 
@@ -93,11 +88,9 @@ evalExecState initState evalEnv ParsedCode {..} = do
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
 initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
-evalContinuation :: EvalEnv e -> PactContinuation -> IO EvalResult
-evalContinuation ee pact = evalContinuationState def ee pact
-
-evalContinuationState :: EvalState -> EvalEnv e -> PactContinuation -> IO EvalResult
-evalContinuationState initState ee pact = interpret initState ee (Left pact)
+-- | Resume a defpact execution, with optional PactExec.
+evalContinuation :: EvalState -> EvalEnv e -> Maybe PactExec -> IO EvalResult
+evalContinuation initState ee pact = interpret initState ee (Left pact)
 
 setupEvalEnv
   :: PactDbEnv e
@@ -151,7 +144,7 @@ initSchema :: PactDbEnv (DbEnv p) -> IO ()
 initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 
-interpret :: EvalState -> EvalEnv e -> Either PactContinuation [Term Name] -> IO EvalResult
+interpret :: EvalState -> EvalEnv e -> Either (Maybe PactExec) [Term Name] -> IO EvalResult
 interpret initState evalEnv terms = do
   ((rs,logs,txid),state) <-
     runEval initState evalEnv $ evalTerms terms
@@ -161,7 +154,7 @@ interpret initState evalEnv terms = do
   -- output uses lenient conversion
   return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
 
-evalTerms :: Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value],Maybe TxId)
+evalTerms :: Either (Maybe PactExec) [Term Name] -> Eval e ([Term Name],[TxLog Value],Maybe TxId)
 evalTerms terms = do
   let safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
@@ -169,7 +162,7 @@ evalTerms terms = do
         txid <- evalBeginTx def
         rs <- case terms of
           Right ts -> mapM eval ts
-          Left pc -> (:[]) <$> Eval.evalContinuation pc
+          Left pc -> (:[]) <$> resumePact def pc
         logs <- evalCommitTx def
         return (rs,logs,txid)
 {-# INLINE evalTerms #-}

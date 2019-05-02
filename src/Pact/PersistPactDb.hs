@@ -102,6 +102,8 @@ modulesTable :: TableId
 modulesTable = "SYS_modules"
 namespacesTable :: TableId
 namespacesTable = "SYS_namespaces"
+pactsTable :: TableId
+pactsTable = "SYS_pacts"
 userTableInfo :: TableId
 userTableInfo = "SYS_usertables"
 
@@ -123,6 +125,7 @@ toTableId :: Domain k v -> TableId
 toTableId KeySets = keysetsTable
 toTableId Modules = modulesTable
 toTableId Namespaces = namespacesTable
+toTableId Pacts = pactsTable
 toTableId (UserTables t) = userTable t
 
 pactdb :: PactDb (DbEnv p)
@@ -132,6 +135,7 @@ pactdb = PactDb
            KeySets    -> readSysTable e (DataTable keysetsTable) (asString k)
            Modules    -> readSysTable e (DataTable modulesTable) (asString k)
            Namespaces -> readSysTable e (DataTable namespacesTable) (asString k)
+           Pacts -> readSysTable e (DataTable pactsTable) (asString k)
            (UserTables t) -> readUserTable e t k
 
  , _writeRow = \wt d k v e ->
@@ -139,6 +143,7 @@ pactdb = PactDb
            KeySets    -> writeSys e wt keysetsTable k v
            Modules    -> writeSys e wt modulesTable k v
            Namespaces -> writeSys e wt namespacesTable k v
+           Pacts -> writeSys e wt pactsTable k v
            (UserTables t) -> writeUser e wt t k v
 
  , _keys = \tn e -> runMVState e
@@ -214,6 +219,7 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn KeySets    = TxTable keysetsTable
     tn Modules    = TxTable modulesTable
     tn Namespaces = TxTable namespacesTable
+    tn Pacts = TxTable pactsTable
     tn (UserTables t) = userTxRecord t
     convLog tl = case fromJSON (_txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
@@ -308,4 +314,5 @@ createSchema e = runMVState e $ do
   createTable' keysetsTable
   createTable' modulesTable
   createTable' namespacesTable
+  createTable' pactsTable
   doPersist P.commitTx

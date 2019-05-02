@@ -70,7 +70,7 @@ module Pact.Types.Term
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
-   tTableName,tTableType,tVar,
+   tTableName,tTableType,tVar,tStep,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -342,6 +342,10 @@ type Ref = Ref' (Term Name)
 instance Pretty d => Pretty (Ref' d) where
   pretty (Direct tm) = pretty tm
   pretty (Ref tm)    = pretty tm
+
+instance HasInfo n => HasInfo (Ref' n) where
+  getInfo (Direct d) = getInfo d
+  getInfo (Ref r) = getInfo r
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64

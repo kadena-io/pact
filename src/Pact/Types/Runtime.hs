@@ -136,14 +136,22 @@ instance AsString KeyPredBuiltins where
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
 
--- | Environment setup for pact execution.
+-- | Environment setup for pact execution, from ContMsg request.
 data PactStep = PactStep {
+      -- | intended step to execute
       _psStep :: !Int
+      -- | rollback
     , _psRollback :: !Bool
+      -- | pact id
     , _psPactId :: !PactId
+      -- | resume value. Note that this is only set in Repl tests and in private use cases;
+      -- in all other cases resume value comes out of PactExec.
     , _psResume :: !(Maybe (ObjectMap (Term Name)))
 } deriving (Eq,Show)
 makeLenses ''PactStep
+
+instance Pretty PactStep where
+  pretty = viaShow
 
 
 
