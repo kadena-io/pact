@@ -1,6 +1,7 @@
 {-# language GADTs #-}
 {-# language LambdaCase #-}
 {-# language PatternSynonyms #-}
+{-# language TupleSections #-}
 module Pact.Analyze.Typecheck where
 
 import Control.Lens ((%=), (%~), (<<+=), (&), _1, _2, (<&>))
@@ -57,8 +58,11 @@ type Check a = StateT (Int, [[(Ty, Ty)]]) (Except String) a
 genVar :: Check Int
 genVar = _1 <<+= 1
 
-constrain :: Int -> Ty -> Check ()
-constrain v ty = _2 %= ([(TyVar v, ty)]:)
+constrain :: Int -> [Ty] -> Check ()
+constrain v tys =
+  -- v is equal to any of these types
+  let tys' = (TyVar v,) <$> tys
+  in _2 %= (tys':)
 
 checkPreProp :: Fix PreProp -> Check (Cofree PreProp Ty)
 checkPreProp (Fix prop) = case prop of
@@ -71,7 +75,8 @@ checkPreProp (Fix prop) = case prop of
   PreListLit xs -> do
     v   <- genVar
     xs' <- traverse checkPreProp xs
-    for_ xs' $ \(ty :< _) -> constrain v ty
+    for_ xs' $ \(ty :< _) -> -- constrain v [ty]
+      _2 %= ([(TyVar v, ty)]:)
     pure $ TyVar v :< PreListLit xs'
 
   PreAbort   -> pure $ TyBool :< PreAbort
@@ -91,10 +96,11 @@ checkPreProp (Fix prop) = case prop of
     Nothing -> throwError $ "couldn't find function type: " ++ unpack name
     Just candidates -> do
       let candidates' = filter (\(args' :-> _) -> length args' == length args)
-      v <- genVar
-      args' <- traverse checkPreProp args
-      options <- candidates' <&> \(args' :-> result) ->
-        constrain v candidates'
+            candidates
+      v       <- genVar
+      args'   <- traverse checkPreProp args
+      options <- for candidates' $ \(candidateArgs :-> result) ->
+
       pure $ TyVar v :< PreApp name args'
 
   PreAt            {} -> error "TODO"
