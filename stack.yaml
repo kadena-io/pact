@@ -1,18 +1,27 @@
 # stack yaml for ghc builds
 
-resolver: lts-12.9
+resolver: lts-13.19
 
 packages:
   - '.'
 
+# GHC 8.6 has a more aggressive Pattern Match exhaustion checker. A number of
+# Pact's `Analysis` modules cause seeming infinite loops in the compiler during
+# this analysis, so here we limit the depth to 5000, then override `-Werror`
+# with `-Wwarn` to avoid failing the build.
+ghc-options:
+  pact: -fmax-pmcheck-iterations=5000 -Wwarn
+
 extra-deps:
-  - aeson-1.4.2.0
-  - algebraic-graphs-0.2
-  - crackNum-2.3
-  - FloatingHex-0.4
-  - compactable-0.1.2.2
-  - ed25519-donna-0.1.1
-  - hw-hspec-hedgehog-0.1.0.5
+  # Missing from Stackage
+  - ed25519-donna-0.1.1@sha256:344c0bb83603ed896012f441e54b380314dc4910320577cd18a9071e34f24fe9,2358
+  - prettyprinter-convert-ansi-wl-pprint-1.1@sha256:ae908ee44422c38a696858f04928d4b2448df656c09e6b5f5b1be05d99669fb0,3022
+
+  # Can't yet upgrade to more recent versions
+  - megaparsec-6.5.0
+  - neat-interpolation-0.3.2.2  # Due to megaparsec 7
+  - sbv-8.1
+
+  # Custom Pins
   - git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
-  - sbv-8.1
