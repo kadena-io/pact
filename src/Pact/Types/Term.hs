@@ -323,9 +323,12 @@ data FunApp = FunApp {
     , _faDefType :: !DefType
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
-    } deriving Show
+    } deriving (Eq,Show,Generic)
 
 instance HasInfo FunApp where getInfo = _faInfo
+
+instance ToJSON FunApp where toJSON = lensyToJSON 3
+instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 
 -- | Variable type for an evaluable 'Term'.
 data Ref' d =
@@ -338,6 +341,8 @@ data Ref' d =
 instance NFData d => NFData (Ref' d)
 
 type Ref = Ref' (Term Name)
+instance FromJSON Ref
+instance ToJSON Ref
 
 instance Pretty d => Pretty (Ref' d) where
   pretty (Direct tm) = pretty tm

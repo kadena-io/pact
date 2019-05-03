@@ -36,6 +36,7 @@ import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
+import Pact.Types.Pretty (prettyString)
 
 
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode)
@@ -68,7 +69,9 @@ initPactService CommandConfig {..} loggers = do
 applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState ->
             GasModel -> Word64 -> Int64 -> ExecutionMode -> Command a ->
             ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
-applyCmd _ _ _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) (Gas 0) s
+applyCmd _ _ _ _ _ _ _ ex cmd (ProcFail s) = do
+  let err = PactFailure $ PactError TxFailure (Info Nothing) [] (prettyString s)
+  return $ jsonResult ex (cmdToRequestKey cmd) err (Gas 0) [TxLog "" "" Null] Nothing
 applyCmd logger conf dbv cv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
@@ -86,8 +89,8 @@ applyCmd logger conf dbv cv gasModel bh bt exMode _ (ProcSucc cmd) = do
       return $ jsonResult exMode (cmdToRequestKey cmd) (Gas 0) $
                CommandError "Command execution failed" (Just $ show e)
 
-jsonResult :: ToJSON a => ExecutionMode -> RequestKey -> Gas -> a -> CommandResult
-jsonResult ex cmd gas a = CommandResult cmd (exToTx ex) (toJSON a) gas
+jsonResult :: ExecutionMode -> RequestKey -> PactResult -> Gas -> [TxLog Value] -> Maybe PactExec -> CommandResult
+jsonResult ex cmd gas a logs pe = CommandResult cmd (exToTx ex) a gas logs pe Nothing
 
 exToTx :: ExecutionMode -> Maybe TxId
 exToTx (Transactional t) = Just t

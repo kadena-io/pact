@@ -37,7 +37,8 @@ module Pact.Types.Command
   , UserSig(..),usSig
   , CommandError(..),ceMsg,ceDetail
   , CommandSuccess(..),csData
-  , CommandResult(..),crReqKey,crTxId,crResult,crGas
+  , PactResult(..),LogTxOutput(..)
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
   , ExecutionMode(..), emTxId
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
@@ -65,6 +66,7 @@ import Prelude
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Orphans ()
 import Pact.Types.RPC
+import Pact.Types.PactValue (PactValue(..))
 
 
 #if !defined(ghcjs_HOST_OS)
@@ -282,12 +284,36 @@ instance (FromJSON a) => FromJSON (CommandSuccess a) where
     parseJSON = withObject "CommandSuccess" $ \o ->
         CommandSuccess <$> o .: "data"
 
+
+data PactResult = PactSuccess PactValue | PactFailure PactError
+  deriving (Eq, Show)
+instance ToJSON PactResult where
+  toJSON (PactSuccess s) =
+    object [ "status" .= ("success" :: String)
+           , "data" .= s ]
+  toJSON (PactFailure f) =
+    object [ "status" .= ("failure" :: String)
+           , "data" .= f ]
+
+data LogTxOutput = FullLog [TxLog Value] | HashedLog Hash
+  deriving (Show, Eq)
+instance ToJSON LogTxOutput where
+  toJSON (FullLog logs) =
+    object [ "type" .= ("full" :: String)
+           , "logs" .= logs ]
+  toJSON (HashedLog hsh) =
+    object [ "type" .= ("hash" :: String)
+           , "logs" .= hsh ]
+
 data CommandResult = CommandResult
   { _crReqKey :: RequestKey
   , _crTxId :: Maybe TxId
-  , _crResult :: Value
+  , _crResult :: PactResult
   , _crGas :: Gas
-  } deriving (Eq,Show)
+  , _crLogs :: LogTxOutput
+  , _crContinuation :: Maybe PactExec
+  , _crMetaData :: Maybe Value               -- Platform-specific data
+  } deriving (Eq, Show)
 
 
 cmdToRequestKey :: Command a -> RequestKey

@@ -21,6 +21,8 @@ import Pact.Types.Command
 import Pact.Types.Hash
 import Pact.Types.Server
 import Pact.Types.Term
+import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.Exp (Literal(..))
 
 
 histFile :: FilePath
@@ -48,8 +50,14 @@ cmd = Command "" [] initialHash
 rq :: RequestKey
 rq = RequestKey pactInitialHash
 
+pactSuccess :: PactResult
+pactSuccess = (PactSuccess . PLiteral . LString) ""
+
+logs :: LogTxOutput
+logs = HashedLog pactInitialHash
+
 cr :: CommandResult
-cr = CommandResult rq Nothing Null (Gas 0)
+cr = CommandResult rq Nothing pactSuccess (Gas 0) logs Nothing Nothing
 
 results :: HashMap.HashMap RequestKey CommandResult
 results = HashMap.fromList [(rq, cr)]

@@ -3,6 +3,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 module Pact.Types.Pretty
   ( (<+>)
   , Annot(..)
@@ -54,7 +57,7 @@ module Pact.Types.Pretty
   ) where
 
 import           Bound.Var
-import           Data.Aeson           (Value(..))
+import           Data.Aeson           as A
 import qualified Data.ByteString.UTF8 as UTF8
 import           Data.Foldable        (toList)
 import qualified Data.HashMap.Strict  as HM
@@ -76,6 +79,7 @@ import           Data.Text.Prettyprint.Doc.Render.Terminal
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal as Term
 import           Data.Text.Prettyprint.Doc.Render.Text as RText
 import           Text.Trifecta.Delta
+import           GHC.Generics
 
 data RenderColor = RColor | RPlain
 
@@ -87,8 +91,16 @@ data Annot
   | Val
   | Example
   | BadExample
+  deriving (Eq, Generic)
+instance A.ToJSON Annot
+instance A.FromJSON Annot
 
 type Doc = PP.Doc Annot
+instance Eq Doc where
+  (==) = (==)
+  (/=) = (/=)
+instance A.ToJSON Doc where toJSON = toJSON
+instance A.FromJSON Doc where parseJSON = parseJSON
 
 -- | Pact's version of 'Pretty', with 'Annot' annotations.
 class Pretty a where

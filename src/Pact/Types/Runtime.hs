@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveGeneric #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -60,6 +61,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
+import GHC.Generics
 
 import Pact.Types.ChainMeta
 import Pact.Types.Gas
@@ -95,11 +97,13 @@ data StackFrame = StackFrame {
       _sfName :: !Text
     , _sfLoc :: !Info
     , _sfApp :: Maybe (FunApp,[Text])
-    }
+    } deriving (Eq,Generic)
 instance Show StackFrame where
     show (StackFrame n i app) = renderInfo i ++ ": " ++ case app of
       Nothing -> unpack n
       Just (_,as) -> "(" ++ unpack n ++ concatMap (\a -> " " ++ unpack (asString a)) as ++ ")"
+instance ToJSON StackFrame where toJSON = lensyToJSON 3
+instance FromJSON StackFrame where parseJSON = lensyParseJSON 3
 makeLenses ''StackFrame
 
 data PactErrorType
@@ -109,15 +113,23 @@ data PactErrorType
   | TxFailure
   | SyntaxError
   | GasError
-  deriving Show
+  deriving (Eq, Show, Generic)
+instance ToJSON PactErrorType
+instance FromJSON PactErrorType
+
 
 data PactError = PactError
   { peType :: PactErrorType
   , peInfo :: Info
   , peCallStack :: [StackFrame]
   , peDoc :: Doc }
+  deriving (Eq, Generic)
 
 instance Exception PactError
+
+instance ToJSON PactError where toJSON = lensyToJSON 2
+instance FromJSON PactError where parseJSON = lensyParseJSON 2
+
 
 instance Show PactError where
     show (PactError t i _ s) = show i ++ ": Failure: " ++ maybe "" (++ ": ") msg ++ show s
@@ -128,6 +140,7 @@ instance Show PactError where
               DbError -> Just "Database exception"
               SyntaxError -> Just "Syntax error"
               GasError -> Just "Gas Error"
+
 
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
@@ -160,7 +173,9 @@ instance Default RefStore where def = RefStore HM.empty
 data PactContinuation = PactContinuation
   { _pcDef :: Def Ref
   , _pcArgs :: [PactValue]
-  } deriving (Eq,Show)
+  } deriving (Eq,Show,Generic)
+instance ToJSON PactContinuation where toJSON = lensyToJSON 3
+instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
 
 -- | Result of evaluation of a 'defpact'.
 data PactExec = PactExec
@@ -176,8 +191,11 @@ data PactExec = PactExec
   , _pePactId :: PactId
     -- | Strict (in arguments) application of pact, for future step invocations.
   , _peContinuation :: PactContinuation
-  } deriving (Eq,Show)
+  } deriving (Eq,Show,Generic)
 makeLenses ''PactExec
+instance ToJSON PactExec where toJSON = lensyToJSON 3
+instance FromJSON PactExec where parseJSON = lensyParseJSON 3
+
 
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =

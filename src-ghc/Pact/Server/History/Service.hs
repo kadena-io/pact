@@ -33,6 +33,8 @@ import Pact.Types.Server
 import Pact.Types.Term
 import Pact.Server.History.Types
 import Pact.Server.History.Persistence as DB
+import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.Exp (Literal(..))
 
 initHistoryEnv
   :: HistoryChannel
@@ -240,7 +242,10 @@ _go :: HistoryService ()
 _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey pactInitialHash
-  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null (Gas 0))])
+      pactSuccess = (PactSuccess . PLiteral . LString) ""
+      logs = HashedLog pactInitialHash
+      cmd = CommandResult rq Nothing pactSuccess (Gas 0) logs Nothing Nothing
+  updateExistingKeys (HashMap.fromList [(rq, cmd)])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)
   v <- liftIO $ takeMVar mv
