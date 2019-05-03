@@ -8,6 +8,7 @@ module Pact.PersistPactDb.Regression
 
 import Control.Concurrent.MVar
 import Control.Exception
+import Control.Monad
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Control.Lens hiding ((.=))
@@ -49,8 +50,7 @@ runRegression :: DbEnv p -> IO (MVar (DbEnv p))
 runRegression p = do
   v <- newMVar p
   createSchema v
-  let t1 = 1
-  t2 <- begin v (Just t1)
+  (Just t1) <- begin v
   let user1 = "user1"
       usert = UserTables user1
       toPV :: ToTerm a => a -> PactValue
@@ -62,7 +62,7 @@ runRegression p = do
             ]
      ]
     (commit v)
-  t3 <- begin v t2
+  void $ begin v
   assertEquals' "user table info correct" "someModule" $ _getUserTableInfo pactdb user1 v
   let row = ObjectMap $ M.fromList [("gah",PLiteral (LDecimal 123.454345))]
   _writeRow pactdb Insert usert "key1" row v
@@ -98,9 +98,9 @@ runRegression p = do
             }
     ]
     (commit v)
-  _t4 <- begin v t3
+  void $ begin v
   tids <- _txids pactdb user1 t1 v
-  assertEquals "user txids" [2] tids
+  assertEquals "user txids" [1] tids
   assertEquals' "user txlogs"
     [TxLog "USER_user1" "key1" row,
      TxLog "USER_user1" "key1" row'] $
@@ -116,10 +116,8 @@ runRegression p = do
 toTerm' :: ToTerm a => a -> Term Name
 toTerm' = toTerm
 
-begin :: MVar (DbEnv p) -> Maybe TxId -> IO (Maybe TxId)
-begin v t = do
-  _beginTx pactdb t v
-  return (fmap succ t)
+begin :: MVar (DbEnv p) -> IO (Maybe TxId)
+begin v = _beginTx pactdb Transactional v
 
 commit :: MVar (DbEnv p) -> IO [TxLog Value]
 commit v = _commitTx pactdb v

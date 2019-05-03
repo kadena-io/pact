@@ -62,7 +62,7 @@ pactdb (MockDb (MockRead r) (MockKeys ks) (MockTxIds tids) (MockGetUserTableInfo
   ,
   _getUserTableInfo = uti
   ,
-  _beginTx = \_t -> rc ()
+  _beginTx = \_t -> rc Nothing
   ,
   _commitTx = c
   ,

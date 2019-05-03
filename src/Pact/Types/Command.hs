@@ -39,7 +39,6 @@ module Pact.Types.Command
   , CommandSuccess(..),csData
   , PactResult(..),LogTxOutput(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
-  , ExecutionMode(..), emTxId
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
@@ -320,10 +319,6 @@ cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
 
 
-data ExecutionMode =
-    Transactional { _emTxId :: TxId } |
-    Local
-    deriving (Eq,Show)
 
 
 type ApplyCmd = ExecutionMode -> Command ByteString -> IO CommandResult

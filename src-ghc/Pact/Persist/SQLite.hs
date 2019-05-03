@@ -26,6 +26,7 @@ import System.Directory
 import Control.Monad.State
 
 import Pact.Persist
+import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SQLite
 import Pact.Types.Util (AsString(..))
@@ -235,11 +236,11 @@ _test = do
   void $ closeSQLite e
   e' <- refresh e
   (`evalStateT` e') $ do
-    run $ beginTx p True
+    run $ beginTx p Transactional
     run $ createTable p dt
     run $ createTable p tt
     run $ commitTx p
-    run $ beginTx p True
+    run $ beginTx p Transactional
     run $ writeValue p dt Insert "stuff" (String "hello")
     run $ writeValue p dt Insert "tough" (String "goodbye")
     run $ writeValue p tt Write 1 (String "txy goodness")
@@ -251,7 +252,7 @@ _test = do
     run (queryKeys p dt (Just (KQKey KGTE "stuff"))) >>= liftIO . print
     run (query p tt (Just (KQKey KGT 0 `kAnd` KQKey KLT 2))) >>=
       (liftIO . (print :: [(TxKey,Value)] -> IO ()))
-    run $ beginTx p True
+    run $ beginTx p Transactional
     run $ writeValue p tt Update 2 (String "txalicious-2!")
     run (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))
     run $ rollbackTx p
