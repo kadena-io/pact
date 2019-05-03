@@ -74,6 +74,7 @@ import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+import Pact.Analyze.Typecheck
 
 parseTableName :: PreProp -> PropCheck (Prop TyTableName)
 parseTableName (PreGlobalVar var) = pure (fromString (T.unpack var))

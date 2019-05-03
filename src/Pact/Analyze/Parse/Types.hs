@@ -41,14 +41,14 @@ import           Pact.Analyze.Types
 -- @PreProp@ stands between @Exp@ and @Prop@.
 --
 -- The conversion from @Exp@ is light, handled in @expToPreProp@.
-data PreProp
+data PreProp a
   -- literals
   = PreIntegerLit Integer
   | PreStringLit  Text
   | PreDecimalLit Decimal
   | PreTimeLit    Time
   | PreBoolLit    Bool
-  | PreListLit    [PreProp]
+  | PreListLit    [a]
 
   -- identifiers
   | PreAbort
@@ -63,18 +63,18 @@ data PreProp
   | PreGlobalVar       Text
 
   -- quantifiers
-  | PreForall VarId Text QType PreProp
-  | PreExists VarId Text QType PreProp
+  | PreForall VarId Text QType a
+  | PreExists VarId Text QType a
 
   -- applications
-  | PreApp Text [PreProp]
+  | PreApp Text [a]
 
-  | PreAt PreProp PreProp
-  | PrePropRead PreProp PreProp PreProp
-  | PreLiteralObject (Map Text PreProp)
+  | PreAt a a
+  | PrePropRead a a a
+  | PreLiteralObject (Map Text a)
   deriving (Eq, Show)
 
-instance Pretty PreProp where
+instance Pretty a => Pretty (PreProp a) where
   pretty = \case
     PreIntegerLit i   -> pretty i
     PreStringLit t    -> dquotes $ pretty t
@@ -118,14 +118,16 @@ throwErrorIn :: (MonadError String m, Pretty a) => a -> Doc -> m b
 throwErrorIn exp msg = throwError $ renderCompactString' $
   "in " <> pretty exp <> ", " <> msg
 
-textToQuantifier
-  :: Text -> Maybe (VarId -> Text -> QType -> PreProp -> PreProp)
-textToQuantifier = \case
-  SUniversalQuantification   -> Just PreForall
-  SExistentialQuantification -> Just PreExists
-  _                          -> Nothing
+-- textToQuantifier
+--   :: Text -> Maybe (VarId -> Text -> QType -> PreProp a -> PreProp a)
+-- textToQuantifier = \case
+--   SUniversalQuantification   -> Just PreForall
+--   SExistentialQuantification -> Just PreExists
+--   _                          -> Nothing
 
 type TableEnv = TableMap (ColumnMap EType)
+
+newtype Fix f = Fix (f (Fix f))
 
 data PropCheckEnv = PropCheckEnv
   { _varTys            :: Map VarId QType
@@ -134,7 +136,7 @@ data PropCheckEnv = PropCheckEnv
   , _quantifiedColumns :: Set ColumnName
 
   -- User-defined properties
-  , _definedProps      :: HM.HashMap Text (DefinedProperty PreProp)
+  , _definedProps      :: HM.HashMap Text (DefinedProperty (Fix PreProp))
 
   -- Vars bound within a user-defined property
   , _localVars         :: HM.HashMap Text EProp

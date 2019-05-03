@@ -104,6 +104,7 @@ library
       Pact.Analyze.Patterns
       Pact.Analyze.PrenexNormalize
       Pact.Analyze.Translate
+      Pact.Analyze.Typecheck
       Pact.Analyze.Types
       Pact.Analyze.Types.Capability
       Pact.Analyze.Types.Eval
@@ -185,6 +186,8 @@ library
                      , servant
                      , servant-client
                      , servant-client-core
+
+                     , free
 
   if impl(ghcjs)
     build-depends:
