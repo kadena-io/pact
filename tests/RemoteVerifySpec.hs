@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Tests remote verification on the server side (i.e. no GHCJS involvement)
@@ -11,13 +11,13 @@ import Control.Lens
 import Control.Monad.State.Strict
 import Data.Either
 import qualified Data.Text as T
-import Test.Hspec
 import NeatInterpolation (text)
 import qualified Network.HTTP.Client as HTTP
 import Servant.Client
+import Test.Hspec
 
-import qualified Pact.Analyze.Remote.Types as Remote
 import Pact.Analyze.Remote.Server (runServantServer)
+import qualified Pact.Analyze.Remote.Types as Remote
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Server.Client
