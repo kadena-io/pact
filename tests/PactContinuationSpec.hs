@@ -232,7 +232,7 @@ testPactRollback mgr = before_ flushDb $ after_ flushDb $ do
       testRollbackErr mgr
 
   context "when trying to rollback a step without a rollback function" $
-    it "outputs that no rollback function exists for step and deletes pact from state" $
+    it "outputs a rollback failure and doesn't change the pact's state" $
       testNoRollbackFunc mgr
 
 
