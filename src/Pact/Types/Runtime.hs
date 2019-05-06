@@ -452,7 +452,9 @@ mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
        UserTables _ -> disallowed "readRow"
        KeySets -> read'
        Modules -> read'
-       Namespaces -> read')
+       Namespaces -> read'
+       Pacts -> read')
+
 
 mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
 mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->

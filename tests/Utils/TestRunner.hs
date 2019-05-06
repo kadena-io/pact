@@ -10,7 +10,6 @@ module Utils.TestRunner
   , flushDb
   , Crypto.SomeKeyPair
   , genKeys
-  , genKeysEth
   , formatPubKeyForCmd
   , makeCheck
   , checkResult
@@ -31,7 +30,6 @@ import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
 import Pact.Types.Util (toB16JSON)
-import qualified Data.ByteString.Base16   as B16
 
 import Control.Exception
 import Data.Aeson
@@ -148,14 +146,6 @@ flushDb = mapM_ deleteIfExists _logFiles
 
 genKeys :: IO SomeKeyPair
 genKeys = genKeyPair defaultScheme
-
--- Note: some randomly-generated keys were failing so using static one here
-genKeysEth :: IO SomeKeyPair
-genKeysEth = return k
-  where k = either error id $ importKeyPair (toScheme ETH) (Just $ pub) priv
-        pub = PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
-        priv = PrivBS $ getByteString "208065a247edbe5df4d86fbdc0171303f23a76961be9f6013850dd2bdc759bbb"
-        getByteString = fst . B16.decode
 
 formatPubKeyForCmd :: SomeKeyPair -> Value
 formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
