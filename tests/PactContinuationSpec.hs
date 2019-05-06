@@ -10,6 +10,7 @@ import Data.Aeson
 import qualified Network.HTTP.Client as HTTP
 import Data.Default (def)
 import Data.Decimal
+import Control.Monad.Reader
 
 import Pact.ApiReq
 import Pact.Types.API
@@ -21,12 +22,21 @@ import qualified Data.Text as T
 
 ----- UTILS ------
 
-shouldMatch :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Expectation
-shouldMatch results checks = mapM_ match checks
-  where match ApiResultCheck{..} = do
+shouldMatch' :: HasCallStack => ApiResultCheck -> HM.HashMap RequestKey ApiResult -> Expectation
+shouldMatch' ApiResultCheck{..} results = do
           let apiRes = HM.lookup _arcReqKey results
           checkResult _arcIsFailure _arcExpect apiRes
 
+succeedsWith :: HasCallStack => Command Text -> Maybe Value ->
+                ReaderT (HM.HashMap RequestKey ApiResult) IO ()
+succeedsWith cmd r = ask >>= liftIO . shouldMatch' (makeCheck cmd False r)
+
+failsWith :: HasCallStack => Command Text -> Maybe Value ->
+             ReaderT (HM.HashMap RequestKey ApiResult) IO ()
+failsWith cmd r = ask >>= liftIO . shouldMatch' (makeCheck cmd True r)
+
+runResults :: r -> ReaderT r m a -> m a
+runResults rs act = runReaderT act rs
 
 makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
 makeExecCmd keyPairs code =
@@ -46,8 +56,8 @@ getPactId cmd = toPactId hsh
 pactIdNotFoundMsg :: Command Text -> Maybe Value
 pactIdNotFoundMsg cmd = (Just . String) escaped
   where txtPact = asString (getPactId cmd)
-        escaped = "applyContinuation: pact ID not found: PactId "
-                  <> "\"" <> txtPact <> "\""
+        escaped = ": Failure: resumePact: pact completed: " <> txtPact
+
 
 
 ---- TESTS -----
@@ -71,11 +81,10 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
     nestedExecPactCmd <- makeExecCmdWith ("(nestedPact.tester)" ++ " (nestedPact.tester)")
     allResults <- runAll mgr [moduleCmd, nestedExecPactCmd]
 
-    let allChecks = [makeCheck moduleCmd False Nothing,
-                     makeCheck nestedExecPactCmd True
-                      (Just "(defpact tester ()   (step \"st...: Failure: Nested pact execution, aborting")]
-
-    allResults `shouldMatch` allChecks
+    runResults allResults $ do
+      moduleCmd `succeedsWith`  Nothing
+      nestedExecPactCmd `failsWith`
+        (Just "(nestedPact.tester): Failure: Multiple or nested pact exec found")
 
 
 -- CONTINUATIONS TESTS
@@ -116,7 +125,6 @@ testCorrectNextStep :: HTTP.Manager -> Expectation
 testCorrectNextStep mgr = do
   let moduleName = "testCorrectNextStep"
   adminKeys <- genKeys
-  
   let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd       <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
@@ -126,21 +134,20 @@ testCorrectNextStep mgr = do
   checkStateCmd   <- makeContCmdWith 1 "test4"
   allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
 
-  let moduleCheck       = makeCheck moduleCmd False Nothing
-      executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
-      contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"
-      checkStateCheck   = makeCheck checkStateCmd True
-                          (Just "Invalid continuation step value: Received 1 but expected 2")
-      allChecks         = [moduleCheck, executePactCheck, contNextStepCheck, checkStateCheck]
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    contNextStepCmd `succeedsWith` Just "step 1"
+    checkStateCmd `failsWith`
+      (Just ": Failure: resumePactExec: exec step mismatch with context: (1, 1)")
 
-  allResults `shouldMatch` allChecks
 
 
 testIncorrectNextStep :: HTTP.Manager -> Expectation
 testIncorrectNextStep mgr = do
   let moduleName = "testIncorrectNextStep"
   adminKeys <- genKeys
-  
+
   let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd         <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd    <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
@@ -150,21 +157,19 @@ testIncorrectNextStep mgr = do
   checkStateCmd     <- makeContCmdWith 1 "test4"
   allResults        <- runAll mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
 
-  let moduleCheck        = makeCheck moduleCmd False Nothing
-      executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
-      incorrectStepCheck = makeCheck incorrectStepCmd True
-                           (Just "Invalid continuation step value: Received 2 but expected 1")
-      checkStateCheck    = makeCheck checkStateCmd False $ Just "step 1"
-      allChecks          = [moduleCheck, executePactCheck, incorrectStepCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    incorrectStepCmd `failsWith`
+      (Just ": Failure: resumePactExec: exec step mismatch with context: (2, 0)")
+    checkStateCmd `succeedsWith` Just "step 1"
 
 
 testLastStep :: HTTP.Manager -> Expectation
 testLastStep mgr = do
   let moduleName = "testLastStep"
   adminKeys <- genKeys
-  
+
   let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd        <- makeExecCmdWith (T.unpack (threeStepPactCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
@@ -176,24 +181,21 @@ testLastStep mgr = do
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStep1Cmd,
                               contNextStep2Cmd, checkStateCmd]
 
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    contNextStep1Cmd `succeedsWith` Just "step 1"
+    contNextStep2Cmd `succeedsWith` Just "step 2"
+    checkStateCmd `failsWith`
+      pactIdNotFoundMsg executePactCmd
 
-  let moduleCheck        = makeCheck moduleCmd False Nothing
-      executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
-      contNextStep1Check = makeCheck contNextStep1Cmd False $ Just "step 1"
-      contNextStep2Check = makeCheck contNextStep2Cmd False $ Just "step 2"
-      checkStateCheck    = makeCheck checkStateCmd True $
-                           pactIdNotFoundMsg executePactCmd
-      allChecks          = [moduleCheck, executePactCheck, contNextStep1Check,
-                            contNextStep2Check, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
 
 
 testErrStep :: HTTP.Manager -> Expectation
 testErrStep mgr = do
   let moduleName = "testErrStep"
   adminKeys <- genKeys
-  
+
   let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd        <- makeExecCmdWith (T.unpack (errorStepPactCode moduleName))
   executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
@@ -203,14 +205,12 @@ testErrStep mgr = do
   checkStateCmd    <- makeContCmdWith 2 "test4"
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
 
-  let moduleCheck        = makeCheck moduleCmd False Nothing
-      executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
-      contErrStepCheck   = makeCheck contErrStepCmd True Nothing
-      checkStateCheck    = makeCheck checkStateCmd True
-                           (Just "Invalid continuation step value: Received 2 but expected 1")
-      allChecks          = [moduleCheck, executePactCheck, contErrStepCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    contErrStepCmd `failsWith`  Nothing
+    checkStateCmd `failsWith`
+      (Just ": Failure: resumePactExec: exec step mismatch with context: (2, 0)")
 
 
 
@@ -231,7 +231,7 @@ testPactRollback mgr = before_ flushDb $ after_ flushDb $ do
       testRollbackErr mgr
 
   context "when trying to rollback a step without a rollback function" $
-    it "outputs that no rollback function exists for step and deletes pact from state" $
+    it "outputs a rollback failure and doesn't change the pact's state" $
       testNoRollbackFunc mgr
 
 
@@ -252,16 +252,13 @@ testCorrectRollbackStep mgr = do
   allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                              rollbackStepCmd, checkStateCmd]
 
-  let moduleCheck       = makeCheck moduleCmd False Nothing
-      executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
-      contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"
-      rollbackStepCheck = makeCheck rollbackStepCmd False $ Just "rollback 1"
-      checkStateCheck   = makeCheck checkStateCmd True $
-                          pactIdNotFoundMsg executePactCmd
-      allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
-                           rollbackStepCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    contNextStepCmd `succeedsWith` Just "step 1"
+    rollbackStepCmd `succeedsWith` Just "rollback 1"
+    checkStateCmd `failsWith`
+      pactIdNotFoundMsg executePactCmd
 
 
 testIncorrectRollbackStep :: HTTP.Manager -> Expectation
@@ -281,16 +278,13 @@ testIncorrectRollbackStep mgr = do
   allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                              incorrectRbCmd, checkStateCmd]
 
-  let moduleCheck       = makeCheck moduleCmd False Nothing
-      executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
-      contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"
-      incorrectRbCheck  = makeCheck incorrectRbCmd True
-                          (Just "Invalid rollback step value: Received 2 but expected 1")
-      checkStateCheck   = makeCheck checkStateCmd False $ Just "step 2"
-      allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
-                           incorrectRbCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    contNextStepCmd `succeedsWith` Just "step 1"
+    incorrectRbCmd `failsWith`
+      (Just ": Failure: resumePactExec: rollback step mismatch with context: (2, 1)")
+    checkStateCmd `succeedsWith` Just "step 2"
 
 
 testRollbackErr :: HTTP.Manager -> Expectation
@@ -310,15 +304,12 @@ testRollbackErr mgr = do
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                               rollbackErrCmd, checkStateCmd]
 
-  let moduleCheck        = makeCheck moduleCmd False Nothing
-      executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
-      contNextStepCheck  = makeCheck contNextStepCmd False $ Just "step 1"
-      rollbackErrCheck   = makeCheck rollbackErrCmd True Nothing
-      checkStateCheck    = makeCheck checkStateCmd False $ Just "step 2"
-      allChecks          = [moduleCheck, executePactCheck, contNextStepCheck,
-                            rollbackErrCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    contNextStepCmd `succeedsWith` Just "step 1"
+    rollbackErrCmd `failsWith`  Nothing
+    checkStateCmd `succeedsWith` Just "step 2"
 
 
 testNoRollbackFunc :: HTTP.Manager -> Expectation
@@ -338,16 +329,12 @@ testNoRollbackFunc mgr = do
   allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
                               noRollbackCmd, checkStateCmd]
 
-  let moduleCheck        = makeCheck moduleCmd False Nothing
-      executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
-      contNextStepCheck  = makeCheck contNextStepCmd False $ Just "step 1"
-      noRollbackCheck    = makeCheck noRollbackCmd False $ Just "No rollback on step 1" -- not a failure
-      checkStateCheck    = makeCheck checkStateCmd True $
-                           pactIdNotFoundMsg executePactCmd
-      allChecks          = [moduleCheck, executePactCheck, contNextStepCheck,
-                            noRollbackCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    contNextStepCmd `succeedsWith` Just "step 1"
+    noRollbackCmd `failsWith` Just "(step \"step 1\")   : Failure: Rollback requested but none in step"
+    checkStateCmd `succeedsWith` Just "step 2"
 
 
 
@@ -371,7 +358,7 @@ testValidYield :: HTTP.Manager -> Expectation
 testValidYield mgr = do
   let moduleName = "testValidYield"
   adminKeys <- genKeys
-  
+
   let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd          <- makeExecCmdWith (T.unpack (pactWithYield moduleName))
   executePactCmd     <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")")
@@ -384,16 +371,13 @@ testValidYield mgr = do
   allResults         <- runAll mgr [moduleCmd, executePactCmd, resumeAndYieldCmd,
                                 resumeOnlyCmd, checkStateCmd]
 
-  let moduleCheck         = makeCheck moduleCmd False Nothing
-      executePactCheck    = makeCheck executePactCmd False $ Just "testing->Step0"
-      resumeAndYieldCheck = makeCheck resumeAndYieldCmd False $ Just "testing->Step0->Step1"
-      resumeOnlyCheck     = makeCheck resumeOnlyCmd False $ Just "testing->Step0->Step1->Step2"
-      checkStateCheck     = makeCheck checkStateCmd True $
-                            pactIdNotFoundMsg executePactCmd
-      allChecks           = [moduleCheck, executePactCheck, resumeAndYieldCheck,
-                             resumeOnlyCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "testing->Step0"
+    resumeAndYieldCmd `succeedsWith` Just "testing->Step0->Step1"
+    resumeOnlyCmd `succeedsWith` Just "testing->Step0->Step1->Step2"
+    checkStateCmd `failsWith`
+      pactIdNotFoundMsg executePactCmd
 
 
 testNoYield :: HTTP.Manager -> Expectation
@@ -412,16 +396,13 @@ testNoYield mgr = do
   allResults     <- runAll mgr [moduleCmd, executePactCmd, noYieldStepCmd,
                            resumeErrCmd, checkStateCmd]
 
-  let moduleCheck      = makeCheck moduleCmd False Nothing
-      executePactCheck = makeCheck executePactCmd False $ Just "testing->Step0"
-      noYieldStepCheck = makeCheck noYieldStepCmd False $ Just "step 1 has no yield"
-      resumeErrCheck   = makeCheck resumeErrCmd True Nothing
-      checkStateCheck  = makeCheck checkStateCmd True
-                         (Just "Invalid continuation step value: Received 1 but expected 2")
-      allChecks        = [moduleCheck, executePactCheck, noYieldStepCheck,
-                         resumeErrCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "testing->Step0"
+    noYieldStepCmd `succeedsWith` Just "step 1 has no yield"
+    resumeErrCmd `failsWith`  Nothing
+    checkStateCmd `failsWith`
+      (Just ": Failure: resumePactExec: exec step mismatch with context: (1, 1)")
 
 
 testResetYield :: HTTP.Manager -> Expectation
@@ -440,16 +421,13 @@ testResetYield mgr = do
   allResults       <- runAll mgr [moduleCmd, executePactCmd, yieldSameKeyCmd,
                               resumeStepCmd, checkStateCmd]
 
-  let moduleCheck       = makeCheck moduleCmd False Nothing
-      executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
-      yieldSameKeyCheck = makeCheck yieldSameKeyCmd False $ Just "step 1"
-      resumeStepCheck   = makeCheck resumeStepCmd False $ Just "step 1"
-      checkStateCheck   = makeCheck checkStateCmd True $
-                          pactIdNotFoundMsg executePactCmd
-      allChecks         = [moduleCheck, executePactCheck, yieldSameKeyCheck,
-                           resumeStepCheck, checkStateCheck]
-
-  allResults `shouldMatch` allChecks
+  runResults allResults $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` Just "step 0"
+    yieldSameKeyCmd `succeedsWith` Just "step 1"
+    resumeStepCmd `succeedsWith` Just "step 1"
+    checkStateCmd `failsWith`
+      pactIdNotFoundMsg executePactCmd
 
 
 
@@ -479,8 +457,9 @@ testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
       testValidEscrowFinish mgr
 
 
-twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> HTTP.Manager -> Expectation
-twoPartyEscrow testCmds testChecks mgr = do
+twoPartyEscrow :: [Command T.Text] -> HTTP.Manager ->
+                  ReaderT (HM.HashMap RequestKey ApiResult) IO () -> Expectation
+twoPartyEscrow testCmds mgr act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
 
   (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
@@ -494,18 +473,16 @@ twoPartyEscrow testCmds testChecks mgr = do
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
   allResults <- runAll mgr allCmds
 
-  let sysModuleCheck      = makeCheck sysModuleCmd False $ Just "system module loaded"
-      acctModuleCheck     = makeCheck acctModuleCmd False $ Just "TableCreated"
-      testModuleCheck     = makeCheck testModuleCmd False $ Just "test module loaded"
-      createAcctCheck     = makeCheck createAcctCmd False Nothing -- Alice should be funded with $100
-      resetTimeCheck      = makeCheck resetTimeCmd False Nothing
-      runEscrowCheck      = makeCheck runEscrowCmd False Nothing
-      balanceCheck        = makeCheck balanceCmd False $ decValue 98.00
-      allChecks           = sysModuleCheck : acctModuleCheck : testModuleCheck
-                            : createAcctCheck : resetTimeCheck : runEscrowCheck
-                            : balanceCheck : testChecks
+  runResults allResults $ do
+    sysModuleCmd `succeedsWith` Just "system module loaded"
+    acctModuleCmd `succeedsWith` Just "TableCreated"
+    testModuleCmd `succeedsWith` Just "test module loaded"
+    createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
+    resetTimeCmd `succeedsWith`  Nothing
+    runEscrowCmd `succeedsWith`  Nothing
+    balanceCmd `succeedsWith` decValue 98.00
+    act
 
-  allResults `shouldMatch` allChecks
 
 decValue :: Decimal -> Maybe Value
 decValue = Just . toJSON . PLiteral . LDecimal
@@ -521,11 +498,10 @@ testDebtorPreTimeoutCancel mgr = do
   let cancelMsg = T.concat ["(enforce-one         \"Cancel c...: Failure:",
                             " Tx Failed: Cancel can only be effected by",
                             " creditor, or debitor after timeout"]
-      tryCancelCheck        = makeCheck tryCancelCmd True $ Just $ String cancelMsg
-      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ decValue 98.00
-      allChecks             = [tryCancelCheck, checkStillEscrowCheck]
+  twoPartyEscrow allCmds mgr $ do
+    tryCancelCmd `failsWith` Just (String cancelMsg)
+    checkStillEscrowCmd `succeedsWith` decValue 98.00
 
-  twoPartyEscrow allCmds allChecks mgr
 
 testDebtorPostTimeoutCancel :: HTTP.Manager -> Expectation
 testDebtorPostTimeoutCancel mgr = do
@@ -536,12 +512,11 @@ testDebtorPostTimeoutCancel mgr = do
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "03-balance.yaml")
   let allCmds = [setTimeCmd, tryCancelCmd, checkStillEscrowCmd]
 
-  let setTimeCheck = makeCheck setTimeCmd False Nothing
-      tryCancelCheck = makeCheck tryCancelCmd False Nothing
-      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ decValue 100.00
-      allChecks = [setTimeCheck, tryCancelCheck, checkStillEscrowCheck]
+  twoPartyEscrow allCmds mgr $ do
+    setTimeCmd `succeedsWith`  Nothing
+    tryCancelCmd `succeedsWith`  Nothing
+    checkStillEscrowCmd `succeedsWith` decValue 100.00
 
-  twoPartyEscrow allCmds allChecks mgr
 
 testCreditorCancel :: HTTP.Manager -> Expectation
 testCreditorCancel mgr = do
@@ -552,12 +527,11 @@ testCreditorCancel mgr = do
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "03-balance.yaml")
   let allCmds = [resetTimeCmd, credCancelCmd, checkStillEscrowCmd]
 
-  let resetTimeCheck = makeCheck resetTimeCmd False Nothing
-      credCancelCheck = makeCheck credCancelCmd False Nothing
-      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ decValue 100.00
-      allChecks = [resetTimeCheck, credCancelCheck, checkStillEscrowCheck]
+  twoPartyEscrow allCmds mgr $ do
+    resetTimeCmd `succeedsWith`  Nothing
+    credCancelCmd `succeedsWith`  Nothing
+    checkStillEscrowCmd `succeedsWith` decValue 100.00
 
-  twoPartyEscrow allCmds allChecks mgr
 
 testFinishAlone :: HTTP.Manager -> Expectation
 testFinishAlone mgr = do
@@ -568,23 +542,22 @@ testFinishAlone mgr = do
   (_, tryDebAloneCmd)  <- mkApiReq (testPathDeb ++ "01-cont.yaml")
   let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
 
-  let tryCredAloneCheck = makeCheck tryCredAloneCmd True
+  twoPartyEscrow allCmds mgr $ do
+    tryCredAloneCmd `failsWith`
                           (Just "(enforce-guard g): Failure: Tx Failed: Keyset failure (keys-all)")
-      tryDebAloneCheck  = makeCheck tryDebAloneCmd True
+    tryDebAloneCmd `failsWith`
                           (Just "(enforce-guard g): Failure: Tx Failed: Keyset failure (keys-all)")
-      allChecks         = [tryCredAloneCheck, tryDebAloneCheck]
 
-  twoPartyEscrow allCmds allChecks mgr
 
 testPriceNegUp :: HTTP.Manager -> Expectation
 testPriceNegUp mgr = do
   let testPath = testDir ++ "cont-scripts/fail-both-price-up-"
 
   (_, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
-  let tryNegUpCheck = makeCheck tryNegUpCmd True
+  twoPartyEscrow [tryNegUpCmd] mgr $ do
+    tryNegUpCmd `failsWith`
                       (Just "(enforce (>= escrow-amount pri...: Failure: Tx Failed: Price cannot negotiate up")
 
-  twoPartyEscrow [tryNegUpCmd] [tryNegUpCheck] mgr
 
 testValidEscrowFinish :: HTTP.Manager -> Expectation
 testValidEscrowFinish mgr = do
@@ -595,10 +568,8 @@ testValidEscrowFinish mgr = do
   (_, debBalanceCmd)  <- mkApiReq (testPath ++ "03-deb-balance.yaml")
   let allCmds = [tryNegDownCmd, credBalanceCmd, debBalanceCmd]
 
-  let tryNegDownCheck  = makeCheck tryNegDownCmd False
+  twoPartyEscrow allCmds mgr $ do
+    tryNegDownCmd `succeedsWith`
                          (Just "Escrow completed with 1.75 paid and 0.25 refunded")
-      credBalanceCheck = makeCheck credBalanceCmd False $ decValue 1.75
-      debBalanceCheck  = makeCheck debBalanceCmd False $ decValue 98.25
-      allChecks        = [tryNegDownCheck, credBalanceCheck, debBalanceCheck]
-
-  twoPartyEscrow allCmds allChecks mgr
+    credBalanceCmd `succeedsWith` decValue 1.75
+    debBalanceCmd `succeedsWith` decValue 98.25

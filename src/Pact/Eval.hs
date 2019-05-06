@@ -9,10 +9,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- TODO This is to hide a warning involving `enforceKeySet`, which has a typeclass
--- constraint unused in the function itself, but is critical for preventing misuse
--- by a caller. There is probably a better way to enforce this restriction,
--- allowing us to remove this warning suppression.
+-- Suppress unused constraint on enforce-keyset.
+-- TODO unused constraint is a dodgy warning, probably should not do it.
 -- See: https://github.com/kadena-io/pact/pull/206/files#r215468087
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
@@ -33,7 +31,7 @@ module Pact.Eval
     ,enforceKeySet,enforceKeySetName
     ,checkUserType
     ,deref
-    ,runPure,runReadOnly,Purity
+    ,runSysOnly,runReadOnly,Purity
     ,liftTerm,apply
     ,preGas
     ,acquireCapability,acquireModuleAdmin,enforceModuleAdmin
@@ -41,7 +39,7 @@ module Pact.Eval
     ,revokeCapability,revokeAllCapabilities
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
-    ,evalContinuation
+    ,resumePact
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
     ) where
@@ -73,8 +71,8 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime
 
 
-evalBeginTx :: Info -> Eval e ()
-evalBeginTx i = view eeTxId >>= beginTx i
+evalBeginTx :: Info -> Eval e (Maybe TxId)
+evalBeginTx i = view eeMode >>= beginTx i
 {-# INLINE evalBeginTx #-}
 
 evalRollbackTx :: Info -> Eval e ()
@@ -84,22 +82,18 @@ evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
 evalCommitTx :: Info -> Eval e [TxLog Value]
 evalCommitTx i = do
   revokeAllCapabilities
-  tid <- view eeTxId
-  case tid of
-    Nothing -> evalRollbackTx i >> return []
-    Just {} -> commitTx i
+  -- backend now handles local exec
+  commitTx i
 {-# INLINE evalCommitTx #-}
 
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
-  runReadOnly mi $ enforceKeySet mi (Just mksn) ks
+  runSysOnly $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
--- Runs as "read only" as custom predicate might require module load.
-enforceKeySet :: PureReadOnly e => Info ->
-             Maybe KeySetName -> KeySet -> Eval e ()
+enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   let count = length _ksKeys
@@ -304,11 +298,6 @@ toPersistDirect' t = case toPersistDirect t of
   Left e -> evalError (getInfo t) $ "Attempting to serialize non pact-value in module def: " <> pretty e
 
 
-evalContinuation :: PactContinuation -> Eval e (Term Name)
-evalContinuation (PactContinuation d args) =
-  reduceApp (App (TDef d def) (map (liftTerm . fromPactValue) args) def)
-
-
 evalUse :: Use -> Eval e ()
 evalUse (Use mn h i) = do
   mm <- resolveModule i mn
@@ -428,7 +417,7 @@ evaluateDefs info defs = do
                            & traverse . _3 %~ (SomeDoc . prettyList))
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
       unifiedDefs = foldl dresolve HM.empty sortedDefs
-  traverse (runPure . evalConsts) unifiedDefs
+  traverse (runSysOnly . evalConsts) unifiedDefs
 
 mkSomeDoc :: (Pretty a, Pretty b) => Either a b -> SomeDoc
 mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
@@ -547,7 +536,7 @@ unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right r) = r
 unify m (Left t) = m HM.! t
 
-evalConsts :: PureNoDb e => Ref -> Eval e Ref
+evalConsts :: PureSysOnly e => Ref -> Eval e Ref
 evalConsts rr@(Ref r) = case r of
   TConst {..} -> case _tConstVal of
     CVRaw raw -> do
@@ -635,8 +624,9 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
       Defun ->
         reduceBody bod'
       Defpact -> do
-        continuation <- PactContinuation d <$> enforcePactValue' (fst af)
-        applyPact continuation bod'
+        continuation <- PactContinuation (QName _dModule (asString _dDefName) def)
+          <$> enforcePactValue' (fst af)
+        initPact ai continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
@@ -680,42 +670,129 @@ reduceDirect TNative {..} as ai =
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
--- | Apply a pactdef, which will execute a step based on env 'PactStep'
--- defaulting to the first step.
-applyPact :: PactContinuation -> Term Ref -> Eval e (Term Name)
-applyPact app (TList steps _ i) = do
-  -- only one pact allowed in a transaction
-  use evalPactExec >>= \bad -> unless (isNothing bad) $ evalError i "Nested pact execution, aborting"
-  -- get step from environment or create a new one
-  PactStep{..} <- view eePactStep >>= \ps -> case ps of
-    Nothing -> view eeTxId >>= \tid -> case tid of
-      Just _ -> view eeHash >>= \hsh -> return $ PactStep 0 False (toPactId hsh) Nothing
-      Nothing -> evalError i "applyPact: pacts not executable in local context"
-    Just v -> return v
+initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
+initPact i app bod = view eePactStep >>= \es -> case es of
+  Just v -> evalError i $ "initPact: internal error: step already in environment: " <> pretty v
+  Nothing -> view eeHash >>= \hsh ->
+    applyPact i app bod $ PactStep 0 False (toPactId hsh) Nothing
+
+
+-- | Apply or resume a pactdef step.
+applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
+applyPact i app (TList steps _ _) PactStep {..} = do
+
+  -- only one pact state allowed in a transaction
+  use evalPactExec >>= \bad -> unless (isNothing bad) $
+    evalError i "Multiple or nested pact exec found"
+
   -- retrieve indicated step from code
-  s <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
-  case s of
-    step@TStep {} -> do
-      stepEntity <- traverse reduce (_tStepEntity step)
-      let
-        initExec executing = evalPactExec .=
-          Just (PactExec (length steps) Nothing executing _psStep _psPactId app)
-        execStep = do
-          initExec True
-          case (_psRollback,_tStepRollback step) of
-            (False,_) -> reduce $ _tStepExec step
-            (True,Just rexp) -> reduce rexp
-            (True,Nothing) -> return $ tStr $ renderCompactText' $
-              "No rollback on step " <> pretty _psStep
-      case stepEntity of
-        Just (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
-          Just (EntityName en) | se == en -> execStep -- matched for "private" step exec
-                               | otherwise -> initExec False >> return (tStr "Skip step")
-          Nothing -> evalError (_tInfo step) "Private step executed against non-private environment"
-        Just t -> evalError (_tInfo t) "step entity must be String value"
-        Nothing -> execStep -- "public" step exec
+  st <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
+  step <- case st of
+    TStep step _i -> return step
     t -> evalError (_tInfo t) "expected step"
-applyPact _ t = evalError (_tInfo t) "applyPact: expected list of steps"
+
+  -- determine if step is skipped (for private execution)
+  (executing,private) <- traverse reduce (_sEntity step) >>= \stepEntity -> case stepEntity of
+    Nothing -> return (True,False)
+    Just (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
+      Just (EntityName en) -> return (se == en,True) -- execute if req entity matches context entity
+      Nothing -> evalError' step "applyPact: private step executed against non-private environment"
+    Just t -> evalError' t "applyPact: step entity must be String value"
+
+  let stepCount = length steps
+      isLastStep = _psStep == pred stepCount
+
+  -- init pact state
+  evalPactExec .=
+      Just (PactExec stepCount Nothing executing _psStep _psPactId app)
+
+  -- evaluate
+  result <- if not executing then return $ tStr "skip step" else
+    case (_psRollback,_sRollback step) of
+      (False,_) -> reduce $ _sExec step
+      (True,Just rexp) -> reduce rexp
+      (True,Nothing) -> evalError' step $ "Rollback requested but none in step"
+
+  resultState <- use evalPactExec >>= (`maybe` pure)
+    (evalError i "Internal error, pact exec state not found after execution")
+
+  -- update database, determine if done
+  let done =
+        (not _psRollback && isLastStep) -- done if normal exec of last step
+        || (not private && _psRollback) -- done if public rollback
+        || (private && _psRollback && _psStep == 0) -- done if private and rolled back to step 0
+
+  writeRow i Write Pacts _psPactId $ if done then Nothing else Just resultState
+
+  return result
+
+applyPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
+
+
+
+-- | Resume a pact, either as specified or as found in database.
+-- Expects a 'PactStep' to be populated in the environment.
+resumePact :: Info -> Maybe PactExec -> Eval e (Term Name)
+resumePact i pe = do
+
+  ps@PactStep{..} <- view eePactStep >>= (`maybe` pure)
+    (evalError i "resumePact: no step in environment")
+
+  context <- case pe of
+    Just p -> return p
+    Nothing -> do
+      contextM <- readRow i Pacts _psPactId >>= (`maybe` pure)
+        (evalError i $ "resumePact: no previous execution found for: " <> pretty _psPactId)
+
+      case contextM of
+        Nothing -> evalError i $ "resumePact: pact completed: " <> pretty _psPactId
+        Just c -> return c
+
+  resumePactExec i ps context
+
+
+-- | Resume a pact with supplied PactExec context.
+resumePactExec :: Info -> PactStep -> PactExec -> Eval e (Term Name)
+resumePactExec i req ctx = do
+
+  when (_psPactId req /= _pePactId ctx) $ evalError i $
+    "resumePactExec: request and context pact IDs do not match: " <>
+    pretty (_psPactId req,_pePactId ctx)
+
+  when (_psStep req < 0 || _psStep req >= _peStepCount ctx) $ evalError i $
+    "resumePactExec: invalid step in request: " <> pretty (_psStep req)
+
+  if _psRollback req
+    then when (_psStep req /= _peStep ctx) $ evalError i $
+         "resumePactExec: rollback step mismatch with context: " <> pretty (_psStep req,_peStep ctx)
+    else when (_psStep req /= succ (_peStep ctx)) $ evalError i $
+         "resumePactExec: exec step mismatch with context: " <> pretty (_psStep req,_peStep ctx)
+
+  target <- resolveRef i (_pcDef (_peContinuation ctx)) >>= (`maybe` pure)
+    (evalError i $ "resumePactExec: could not resolve continuation ref: " <>
+     pretty (_pcDef $ _peContinuation ctx))
+
+  def' <- case target of
+    (Ref (TDef d _)) -> do
+      when (_dDefType d /= Defpact) $
+         evalError' d $ "resumePactExec: defpact required"
+      return d
+    t -> evalError' t $ "resumePactExec: defpact ref required"
+
+  let args = map (liftTerm . fromPactValue) (_pcArgs (_peContinuation ctx))
+
+  g <- computeUserAppGas def' i
+  af <- prepareUserAppArgs def' args
+
+  -- if resume is in step, use that, otherwise get from exec state
+  let resume = case _psResume req of
+        r@Just {} -> r
+        Nothing -> fmap (fmap fromPactValue) $ _peYield ctx
+
+  -- run local environment with yield from pact exec
+  local (set eePactStep (Just $ set psResume resume req)) $
+    evalUserAppBody def' af i g $ \bod ->
+      applyPact i (_peContinuation ctx) bod req
 
 
 -- | Create special error form handled in 'reduceApp'
@@ -846,19 +923,19 @@ checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
   return $ TySchema TyObject (TyUser tu) partial
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " <> pretty t
 
-runPure :: Eval (EnvNoDb e) a -> Eval e a
-runPure action = ask >>= \env -> case _eePurity env of
-  PNoDb -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkNoDbEnv env >>= runPure' action
+runSysOnly :: Eval (EnvSysOnly e) a -> Eval e a
+runSysOnly action = ask >>= \env -> case _eePurity env of
+  PSysOnly -> unsafeCoerce action -- yuck. would love safer coercion here
+  _ -> mkSysOnlyEnv env >>= runWithEnv action
 
 runReadOnly :: HasInfo i => i -> Eval (EnvReadOnly e) a -> Eval e a
 runReadOnly i action = ask >>= \env -> case _eePurity env of
-  PNoDb -> evalError' i "internal error: attempting db read in pure context"
+  PSysOnly -> evalError' i "internal error: attempting db read in sys-only context"
   PReadOnly -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkReadOnlyEnv env >>= runPure' action
+  _ -> mkReadOnlyEnv env >>= runWithEnv action
 
-runPure' :: Eval f b -> EvalEnv f -> Eval e b
-runPure' action pureEnv = do
+runWithEnv :: Eval f b -> EvalEnv f -> Eval e b
+runWithEnv action pureEnv = do
   s <- get
   (o,_s) <- liftIO $ runEval' s pureEnv action
   either throwM return o

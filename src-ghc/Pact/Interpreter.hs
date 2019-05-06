@@ -20,9 +20,7 @@ module Pact.Interpreter
   , initMsgData
   , initStateModules
   , evalExec
-  , evalExecState
   , evalContinuation
-  , evalContinuationState
   , setupEvalEnv
   , initRefStore
   , mkSQLiteEnv
@@ -44,8 +42,7 @@ import System.Directory
 
 
 import Pact.Compile
-import qualified Pact.Eval as Eval (evalContinuation)
-import Pact.Eval hiding (evalContinuation)
+import Pact.Eval
 import Pact.Native (nativeDefs)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
@@ -71,20 +68,19 @@ initMsgData :: Hash -> MsgData
 initMsgData = MsgData def Null def
 
 data EvalResult = EvalResult
-  { _erInput :: !(Either PactContinuation [Term Name])
+  { _erInput :: !(Either (Maybe PactExec) [Term Name])
   , _erOutput :: ![PactValue]
   , _erLogs :: ![TxLog Value]
   , _erExec :: !(Maybe PactExec)
   , _erGas :: Gas
   , _erLoadedModules :: HashMap ModuleName (ModuleData Ref,Bool)
+  , _erTxId :: !(Maybe TxId)
   } deriving (Eq,Show)
 
 
-evalExec :: EvalEnv e -> ParsedCode -> IO EvalResult
-evalExec env pc = evalExecState def env pc
-
-evalExecState :: EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
-evalExecState initState evalEnv ParsedCode {..} = do
+-- | Execute pact statements.
+evalExec :: EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
+evalExec initState evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
   interpret initState evalEnv (Right terms)
 
@@ -92,11 +88,9 @@ evalExecState initState evalEnv ParsedCode {..} = do
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
 initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
-evalContinuation :: EvalEnv e -> PactContinuation -> IO EvalResult
-evalContinuation ee pact = evalContinuationState def ee pact
-
-evalContinuationState :: EvalState -> EvalEnv e -> PactContinuation -> IO EvalResult
-evalContinuationState initState ee pact = interpret initState ee (Left pact)
+-- | Resume a defpact execution, with optional PactExec.
+evalContinuation :: EvalState -> EvalEnv e -> Maybe PactExec -> IO EvalResult
+evalContinuation initState ee pact = interpret initState ee (Left pact)
 
 setupEvalEnv
   :: PactDbEnv e
@@ -114,7 +108,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
     _eeRefStore = refStore
   , _eeMsgSigs = mdSigs msgData
   , _eeMsgBody = mdData msgData
-  , _eeTxId = modeToTx mode
+  , _eeMode = mode
   , _eeEntity = ent
   , _eePactStep = mdStep msgData
   , _eePactDb = pdPactDb dbEnv
@@ -126,8 +120,6 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
   , _eeSPVSupport = spv
   , _eePublicData = pd
   }
-  where modeToTx (Transactional t) = Just t
-        modeToTx Local = Nothing
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
@@ -152,28 +144,25 @@ initSchema :: PactDbEnv (DbEnv p) -> IO ()
 initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 
-interpret :: EvalState -> EvalEnv e -> Either PactContinuation [Term Name] -> IO EvalResult
+interpret :: EvalState -> EvalEnv e -> Either (Maybe PactExec) [Term Name] -> IO EvalResult
 interpret initState evalEnv terms = do
-  let tx = _eeTxId evalEnv
-  ((rs,logs),state) <-
-    runEval initState evalEnv $ evalTerms tx terms
+  ((rs,logs,txid),state) <-
+    runEval initState evalEnv $ evalTerms terms
   let gas = _evalGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
-  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules
+  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
 
-evalTerms :: Maybe TxId -> Either PactContinuation [Term Name] -> Eval e ([Term Name],[TxLog Value])
-evalTerms tx terms = do
+evalTerms :: Either (Maybe PactExec) [Term Name] -> Eval e ([Term Name],[TxLog Value],Maybe TxId)
+evalTerms terms = do
   let safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
   handle (\(e :: SomeException) -> safeRollback >> throwM e) $ do
-        evalBeginTx def
+        txid <- evalBeginTx def
         rs <- case terms of
           Right ts -> mapM eval ts
-          Left pc -> (:[]) <$> Eval.evalContinuation pc
-        logs <- case tx of
-          Just _ -> evalCommitTx def
-          Nothing -> evalRollbackTx def >> return []
-        return (rs,logs)
+          Left pc -> (:[]) <$> resumePact def pc
+        logs <- evalCommitTx def
+        return (rs,logs,txid)
 {-# INLINE evalTerms #-}

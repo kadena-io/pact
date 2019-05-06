@@ -58,7 +58,7 @@ import Safe hiding (at)
 import Pact.Types.Native
 import Pact.Types.Pretty
 import qualified Pact.Types.Runtime as Term
-import Pact.Types.Runtime hiding (App,appInfo,Object)
+import Pact.Types.Runtime hiding (App,appInfo,Object,Step)
 import Pact.Types.Typecheck
 
 die :: MonadThrow m => Info -> String -> m a
@@ -943,18 +943,18 @@ toAST TTable {..} = do
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
-toAST TStep {..} = do
-  ent <- forM _tStepEntity $ \e -> do
+toAST (TStep Term.Step {..} _) = do
+  ent <- forM _sEntity $ \e -> do
     e' <- toAST e
     assocAstTy (_aNode e') $ TyPrim TyString
     return e'
-  si <- freshId _tInfo "step"
+  si <- freshId _sInfo "step"
   sn <- trackIdNode si
   tcYieldResume .= Nothing
-  ex <- toAST _tStepExec
+  ex <- toAST _sExec
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
-  Step sn ent ex <$> traverse toAST _tStepRollback <*> pure yr
+  Step sn ent ex <$> traverse toAST _sRollback <*> pure yr
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do

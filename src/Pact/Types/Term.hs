@@ -64,12 +64,13 @@ module Pact.Types.Term
    ObjectMap(..),objectMapToListWith,
    Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
+   Step(..),sEntity,sExec,sRollback,sInfo,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tVar,
+   tTableName,tTableType,tVar,tStep,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -198,9 +199,8 @@ newtype KeySetName = KeySetName Text
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
-newtype PactId = PactId Hash
-    deriving (Eq,Ord,Show,Pretty,AsString,FromJSON,ToJSON,Generic,NFData)
-instance ToTerm PactId where toTerm (PactId p) = (tLit . LString) (hashToText p)
+newtype PactId = PactId Text
+    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,ToTerm)
 
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
@@ -342,6 +342,10 @@ type Ref = Ref' (Term Name)
 instance Pretty d => Pretty (Ref' d) where
   pretty (Direct tm) = pretty tm
   pretty (Ref tm)    = pretty tm
+
+instance HasInfo n => HasInfo (Ref' n) where
+  getInfo (Direct d) = getInfo d
+  getInfo (Ref r) = getInfo r
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
@@ -779,6 +783,34 @@ instance (ToJSON n, FromJSON n) => FromJSON (Object n) where
   parseJSON = withObject "Object" $ \o ->
     Object <$> o .: "obj" <*> o .: "type" <*> o .:? "keyorder" <*> o .: "i"
 
+
+
+data Step n = Step
+  { _sEntity :: !(Maybe n)
+  , _sExec :: !n
+  , _sRollback :: !(Maybe n)
+  , _sInfo :: !Info
+  } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
+instance NFData n => NFData (Step n)
+instance ToJSON n => ToJSON (Step n) where toJSON = lensyToJSON 2
+instance FromJSON n => FromJSON (Step n) where parseJSON = lensyParseJSON 2
+instance HasInfo (Step n) where getInfo = _sInfo
+instance Pretty n => Pretty (Step n) where
+  pretty = \case
+    Step mEntity exec Nothing _i -> parensSep $
+      [ "step"
+      ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
+      [ pretty exec
+      ]
+    Step mEntity exec (Just rollback) _i -> parensSep $
+      [ "step-with-rollback"
+      ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
+      [ pretty exec
+      , pretty rollback
+      ]
+
+
+
 -- | Pact evaluable term.
 data Term n =
     TModule {
@@ -849,9 +881,7 @@ data Term n =
     , _tInfo :: Info
     } |
     TStep {
-      _tStepEntity :: !(Maybe (Term n))
-    , _tStepExec :: !(Term n)
-    , _tStepRollback :: !(Maybe (Term n))
+      _tStep :: Step (Term n)
     , _tInfo :: !Info
     } |
     TTable {
@@ -863,6 +893,7 @@ data Term n =
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Generic)
+
 
 deriving instance Show n => Show (Term n)
 deriving instance Eq n => Eq (Term n)
@@ -921,17 +952,7 @@ instance Pretty n => Pretty (Term n) where
     TLiteral l _ -> annotate Val $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
-    TStep mEntity exec Nothing _i -> parensSep $
-      [ "step"
-      ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
-      [ pretty exec
-      ]
-    TStep mEntity exec (Just rollback) _i -> parensSep $
-      [ "step-with-rollback"
-      ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
-      [ pretty exec
-      , pretty rollback
-      ]
+    TStep s _i -> pretty s
     TSchema{..} -> parensSep
       [ "defschema"
       , pretty _tSchemaName
@@ -963,7 +984,7 @@ instance Monad Term where
     TLiteral l i >>= _ = TLiteral l i
     TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
-    TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
+    TStep (Step ent e r si) i >>= f = TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
 
@@ -987,7 +1008,7 @@ termCodec = Codec enc dec
       TLiteral l i -> ob [literal .= l, inf i]
       TGuard k i -> ob [guard' .= k, inf i]
       TUse u _i -> toJSON u
-      TStep ent e r i -> ob [entity .= ent, exec .= e, rollback .= r, inf i]
+      TStep s _i -> toJSON s
       TSchema sn smod smeta sfs i ->
         ob [ schemaName .= sn, modName .= smod, meta .= smeta, fields .= sfs, inf i ]
       TTable tn tmod th tty tmeta i ->
@@ -1012,7 +1033,7 @@ termCodec = Codec enc dec
         <|> wo "Literal" (\o -> TLiteral <$> o .: literal <*> inf' o)
         <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
         <|> parseWithInfo TUse
-        <|> wo "Step" (\o -> TStep <$> o .: entity <*> o .: exec <*> o .: rollback <*> inf' o)
+        <|> parseWithInfo TStep
         <|> wo "Schema"
             (\o -> TSchema <$>  o .: schemaName <*> o .: modName <*> o .: meta <*> o .: fields <*> inf' o )
         <|> wo "Table"
@@ -1041,9 +1062,6 @@ termCodec = Codec enc dec
     pairs = "pairs"
     literal = "lit"
     guard' = "guard"
-    entity = "ent"
-    exec = "exec"
-    rollback = "rb"
     schemaName = "name"
     fields = "fields"
     tblName = "name"
@@ -1170,6 +1188,7 @@ makeLenses ''ModuleName
 makePrisms ''DefType
 makeLenses ''Object
 makeLenses ''BindPair
+makeLenses ''Step
 
 deriveEq1 ''Term
 deriveEq1 ''BindPair
@@ -1182,6 +1201,7 @@ deriveEq1 ''Module
 deriveEq1 ''Governance
 deriveEq1 ''ObjectMap
 deriveEq1 ''Object
+deriveEq1 ''Step
 
 deriveShow1 ''Term
 deriveShow1 ''BindPair
@@ -1194,6 +1214,7 @@ deriveShow1 ''Def
 deriveShow1 ''ModuleDef
 deriveShow1 ''Module
 deriveShow1 ''Governance
+deriveShow1 ''Step
 
 -- | Demonstrate Term/Bound JSON marshalling with nested bound and free vars.
 _roundtripJSON :: String
