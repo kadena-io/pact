@@ -181,9 +181,9 @@ makeLenses ''PactExec
 
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
-  -- | Only access to systables.
+  -- | Read-only access to systables.
   PNoDb |
-  -- | Read-only access to module tables.
+  -- | Read-only access to systables and module tables.
   PReadOnly |
   -- | All database access allowed (normal).
   PImpure
