@@ -45,11 +45,12 @@
   (defun enforce-msg-keyset (key:object{guardschema})
     (enforce-keyset (read-keyset (at 'key key))))
 
-  ; a user guard which reads from the db, which we want to disallow.
-  (defun db-user-guard ()
+  (defun create-bad-db-user-guard ()
+    @doc "Creates a user guard which tries to read from the DB, which is not allowed. This will fail when the guard is enforced."
+    ; this insert succeeds:
     (insert ints 'x {'i: 0})
-    (create-user-guard {'k: 'x} "read-zero-from-db"))
-  (defun read-zero-from-db (o:object{ints-key})
+    (create-user-guard {'k: 'x} "bad-user-guard-fun"))
+  (defun bad-user-guard-fun (o:object{ints-key})
     (let ((row (read ints (at 'k o))))
       (enforce (= 0 (at 'i row)) "int wasn't zero")))
 
@@ -159,7 +160,8 @@
 (expect-failure "keyset ref guard k2"
                 (enforce-guard (keyset-ref-guard "k2")))
 
-(expect-failure "reading db from within user guard" (enforce-guard (db-user-guard)))
+(let ((bad-db-user-guard (create-bad-db-user-guard)))
+  (expect-failure "reading db from within user guard" (enforce-guard bad-db-user-guard)))
 
 (env-hash (hash "pact-guards-a-id")) ;; equivalent of pact-id
 (test-pact-guards "a")
