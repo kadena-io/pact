@@ -181,9 +181,9 @@ makeLenses ''PactExec
 
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
-  -- | No database access at all.
+  -- | Only access to systables.
   PNoDb |
-  -- | Access to read of module, keyset systables.
+  -- | Read-only access to module tables.
   PReadOnly |
   -- | All database access allowed (normal).
   PImpure
@@ -422,8 +422,8 @@ newtype EnvReadOnly e = EnvReadOnly (EvalEnv e)
 instance PureReadOnly (EnvReadOnly e)
 instance PureNoDb (EnvReadOnly e)
 
-diePure :: Method e a
-diePure _ = throwM $ PactError EvalError def def "Illegal database access in pure context"
+diePure :: Text -> Method e a
+diePure opName _ = throwM $ PactError EvalError def def $ "Illegal access attempt (" <> pretty opName <> ")"
 
 -- | Construct a delegate pure eval environment.
 mkPureEnv :: (EvalEnv e -> f) -> Purity ->
@@ -442,15 +442,15 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     v
     PactDb {
       _readRow = readRowImpl
-    , _writeRow = \_ _ _ _ -> diePure
-    , _keys = const diePure
-    , _txids = \_ _ -> diePure
-    , _createUserTable = \_ _ -> diePure
-    , _getUserTableInfo = const diePure
-    , _beginTx = const diePure
-    , _commitTx = diePure
-    , _rollbackTx = diePure
-    , _getTxLog = \_ _ -> diePure
+    , _writeRow = \_ _ _ _ -> diePure "writeRow"
+    , _keys = const (diePure "keys")
+    , _txids = \_ _ -> (diePure "txids")
+    , _createUserTable = \_ _ -> diePure "createUserTable"
+    , _getUserTableInfo = const (diePure "getUserTableInfo")
+    , _beginTx = const (diePure "beginTx")
+    , _commitTx = diePure "commitTx"
+    , _rollbackTx = diePure  "rollbackTx"
+    , _getTxLog = \_ _ -> diePure "getTxLog"
     }
     purity
     _eeHash
@@ -459,9 +459,16 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eeSPVSupport
     _eePublicData
 
-
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))
-mkNoDbEnv = mkPureEnv EnvNoDb PNoDb (\_ _ -> diePure)
+mkNoDbEnv = mkPureEnv EnvNoDb PNoDb (\(dom :: Domain key v) key ->
+  let read' :: forall e'. MVar (EnvNoDb e') -> IO (Maybe v)
+      read' e = withMVar e $ \(EnvNoDb EvalEnv {..}) ->
+                  _readRow _eePactDb dom key _eePactDbVar
+  in case dom of
+       UserTables _ -> diePure "readRow"
+       KeySets -> read'
+       Modules -> read'
+       Namespaces -> read')
 
 mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
 mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->

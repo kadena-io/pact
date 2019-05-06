@@ -93,12 +93,11 @@ evalCommitTx i = do
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
-  runReadOnly mi $ enforceKeySet mi (Just mksn) ks
+  runPure $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
--- Runs as "read only" as custom predicate might require module load.
-enforceKeySet :: PureReadOnly e => Info ->
+enforceKeySet :: PureNoDb e => Info ->
              Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs

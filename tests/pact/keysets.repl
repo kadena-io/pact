@@ -21,7 +21,7 @@
   (defun test-impure-enforce ()
     (enforce (impure) "cannot impure enforce"))
 
-  (defun test-enforce-impure-keyset ()
+  (defun test-enforceks-in-enforce ()
     (enforce (enforce-keyset 'kall) "Fails with keyset"))
 
   (defun test-enforce-one ()
@@ -76,7 +76,7 @@
 
 (expect-failure "impure enforce should blow up" (test-impure-enforce))
 
-(expect-failure "keyset read in enforce is impure" (test-enforce-impure-keyset))
+(expect "permit enforce-keyset inside of enforce" true (test-enforceks-in-enforce))
 
 (expect "test enforce-one, keyset read in enforce-one ok" true (test-enforce-one))
 

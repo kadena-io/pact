@@ -12,6 +12,10 @@
   (defschema guards g:guard)
   (deftable guard-table:{guards})
 
+  (defschema int-row i:integer)
+  (deftable ints:{int-row})
+  (defschema ints-key k:string)
+
   (defschema yieldschema result:integer)
 
   (defschema guardschema key:string)
@@ -40,6 +44,14 @@
 
   (defun enforce-msg-keyset (key:object{guardschema})
     (enforce-keyset (read-keyset (at 'key key))))
+
+  ; a user guard which reads from the db, which we want to disallow.
+  (defun db-user-guard ()
+    (insert ints 'x {'i: 0})
+    (create-user-guard {'k: 'x} "read-zero-from-db"))
+  (defun read-zero-from-db (o:object{ints-key})
+    (let ((row (read ints (at 'k o))))
+      (enforce (= 0 (at 'i row)) "int wasn't zero")))
 
   (defpact test-pact-guards (id:string)
     (step (step1 id))
@@ -80,6 +92,7 @@
 )
 
 (create-table guard-table)
+(create-table ints)
 
 (commit-tx)
 
@@ -145,6 +158,8 @@
 (enforce-guard (keyset-ref-guard "k1"))
 (expect-failure "keyset ref guard k2"
                 (enforce-guard (keyset-ref-guard "k2")))
+
+(expect-failure "reading db from within user guard" (enforce-guard (db-user-guard)))
 
 (env-hash (hash "pact-guards-a-id")) ;; equivalent of pact-id
 (test-pact-guards "a")
