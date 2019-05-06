@@ -33,7 +33,7 @@ module Pact.Eval
     ,enforceKeySet,enforceKeySetName
     ,checkUserType
     ,deref
-    ,runPure,runReadOnly,Purity
+    ,runSysOnly,runReadOnly,Purity
     ,liftTerm,apply
     ,preGas
     ,acquireCapability,acquireModuleAdmin,enforceModuleAdmin
@@ -93,12 +93,11 @@ evalCommitTx i = do
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
-  runPure $ enforceKeySet mi (Just mksn) ks
+  runSysOnly $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
-enforceKeySet :: PureNoDb e => Info ->
-             Maybe KeySetName -> KeySet -> Eval e ()
+enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   let count = length _ksKeys
@@ -427,7 +426,7 @@ evaluateDefs info defs = do
                            & traverse . _3 %~ (SomeDoc . prettyList))
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
       unifiedDefs = foldl dresolve HM.empty sortedDefs
-  traverse (runPure . evalConsts) unifiedDefs
+  traverse (runSysOnly . evalConsts) unifiedDefs
 
 mkSomeDoc :: (Pretty a, Pretty b) => Either a b -> SomeDoc
 mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
@@ -546,7 +545,7 @@ unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right r) = r
 unify m (Left t) = m HM.! t
 
-evalConsts :: PureNoDb e => Ref -> Eval e Ref
+evalConsts :: PureSysOnly e => Ref -> Eval e Ref
 evalConsts rr@(Ref r) = case r of
   TConst {..} -> case _tConstVal of
     CVRaw raw -> do
@@ -845,14 +844,14 @@ checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
   return $ TySchema TyObject (TyUser tu) partial
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " <> pretty t
 
-runPure :: Eval (EnvNoDb e) a -> Eval e a
-runPure action = ask >>= \env -> case _eePurity env of
-  PNoDb -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkNoDbEnv env >>= runWithEnv action
+runSysOnly :: Eval (EnvSysOnly e) a -> Eval e a
+runSysOnly action = ask >>= \env -> case _eePurity env of
+  PSysOnly -> unsafeCoerce action -- yuck. would love safer coercion here
+  _ -> mkSysOnlyEnv env >>= runWithEnv action
 
 runReadOnly :: HasInfo i => i -> Eval (EnvReadOnly e) a -> Eval e a
 runReadOnly i action = ask >>= \env -> case _eePurity env of
-  PNoDb -> evalError' i "internal error: attempting db read in pure context"
+  PSysOnly -> evalError' i "internal error: attempting db read in sys-only context"
   PReadOnly -> unsafeCoerce action -- yuck. would love safer coercion here
   _ -> mkReadOnlyEnv env >>= runWithEnv action
 

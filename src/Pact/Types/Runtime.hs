@@ -24,7 +24,7 @@ module Pact.Types.Runtime
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
    toPactId,
-   Purity(..),PureNoDb,PureReadOnly,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
+   Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
@@ -182,7 +182,7 @@ makeLenses ''PactExec
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
   -- | Read-only access to systables.
-  PNoDb |
+  PSysOnly |
   -- | Read-only access to systables and module tables.
   PReadOnly |
   -- | All database access allowed (normal).
@@ -190,11 +190,11 @@ data Purity =
   deriving (Eq,Show,Ord,Bounded,Enum)
 instance Default Purity where def = PImpure
 
--- | Marker class for 'PNoDb' environments.
-class PureNoDb e
+-- | Marker class for 'PSysOnly' environments.
+class PureSysOnly e
 -- | Marker class for 'PReadOnly' environments.
 -- SysRead supports pure operations as well.
-class PureNoDb e => PureReadOnly e
+class PureSysOnly e => PureReadOnly e
 
 -- | Backend for SPV
 newtype SPVSupport = SPVSupport {
@@ -413,14 +413,14 @@ argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
 -- Purity stuff.
 --
 
-newtype EnvNoDb e = EnvNoDb (EvalEnv e)
+newtype EnvSysOnly e = EnvSysOnly (EvalEnv e)
 
-instance PureNoDb (EnvNoDb e)
+instance PureSysOnly (EnvSysOnly e)
 
 newtype EnvReadOnly e = EnvReadOnly (EvalEnv e)
 
 instance PureReadOnly (EnvReadOnly e)
-instance PureNoDb (EnvReadOnly e)
+instance PureSysOnly (EnvReadOnly e)
 
 disallowed :: Text -> Method e a
 disallowed opName _ = throwM $ PactError EvalError def def $ "Illegal database access attempt (" <> pretty opName <> ")"
@@ -459,10 +459,10 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eeSPVSupport
     _eePublicData
 
-mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))
-mkNoDbEnv = mkPureEnv EnvNoDb PNoDb (\(dom :: Domain key v) key ->
-  let read' :: forall e'. MVar (EnvNoDb e') -> IO (Maybe v)
-      read' e = withMVar e $ \(EnvNoDb EvalEnv {..}) ->
+mkSysOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysOnly e))
+mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
+  let read' :: forall e'. MVar (EnvSysOnly e') -> IO (Maybe v)
+      read' e = withMVar e $ \(EnvSysOnly EvalEnv {..}) ->
                   _readRow _eePactDb dom key _eePactDbVar
   in case dom of
        UserTables _ -> disallowed "readRow"
