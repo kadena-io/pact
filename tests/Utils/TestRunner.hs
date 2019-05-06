@@ -164,7 +164,7 @@ formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck c@Command{..} isFailure expect = ApiResultCheck (cmdToRequestKey c) isFailure expect
 
-checkResult :: Bool -> Maybe Value -> Maybe ApiResult -> Expectation
+checkResult :: HasCallStack => Bool -> Maybe Value -> Maybe ApiResult -> Expectation
 checkResult isFailure expect result =
   case result of
     Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
@@ -175,21 +175,21 @@ checkResult isFailure expect result =
         _ -> expectationFailure $ show cmdRes ++ " should be Object"
 
 
-fieldShouldBe :: (T.Text,HM.HashMap T.Text Value) -> Maybe Value -> Expectation
+fieldShouldBe :: HasCallStack => (T.Text,HM.HashMap T.Text Value) -> Maybe Value -> Expectation
 fieldShouldBe (k,m) b = do
   let a = HM.lookup k m
   unless (a == b) $
     expectationFailure $
     "Expected " ++ show b ++ ", found " ++ show a ++ " for field " ++ show k ++ " in " ++ show m
 
-checkIfSuccess :: Object -> Maybe Value -> Expectation
+checkIfSuccess :: HasCallStack => Object -> Maybe Value -> Expectation
 checkIfSuccess h Nothing =
   ("status",h) `fieldShouldBe` (Just . String . T.pack) "success"
 checkIfSuccess h (Just expect) = do
   ("status", h) `fieldShouldBe` (Just . String . T.pack) "success"
   ("data", h) `fieldShouldBe` Just (toJSON expect)
 
-checkIfFailure :: Object -> Maybe Value -> Expectation
+checkIfFailure :: HasCallStack => Object -> Maybe Value -> Expectation
 checkIfFailure h Nothing =
   ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
 checkIfFailure h (Just expect) = do

@@ -29,13 +29,20 @@
 (expect "step 1 executes" "stu->A->B" (continue-pact 1))
 
 ;; test 1 skips A
+(pact-state true)
+(tester "stu")
 (env-entity "A")
 (continue-pact 1)
 (expect "step 1 skips A" false (at "executed" (pact-state)))
 
 ;; test rollback
-(expect "step 1 rollback executes" "rollback-a" (continue-pact 0 true))
+(pact-state true)
+(tester "stu")
+(expect "step 0 rollback executes" "rollback-a" (continue-pact 0 true))
+
 ;; test no rollback for B
+(pact-state true)
+(tester "stu")
 (env-entity "B")
 (continue-pact 0 true)
 (expect "step 0 rollback skips B" false (at "executed" (pact-state)))

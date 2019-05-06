@@ -83,7 +83,7 @@ loadBenchModule db = do
            pactInitialHash
   let e = setupEvalEnv db entity Transactional md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  void $ evalExec e pc
+  void $ evalExec def e pc
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
   p <- either (throwIO . userError . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
   return (benchMod,p)
@@ -100,7 +100,7 @@ runPactExec benchMod dbEnv pc = do
   let e = setupEvalEnv dbEnv entity Transactional (initMsgData pactInitialHash)
           initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
       s = maybe def (initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
-  toJSON . _erOutput <$> evalExecState s e pc
+  toJSON . _erOutput <$> evalExec s e pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)

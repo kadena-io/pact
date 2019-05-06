@@ -26,7 +26,6 @@ module Pact.Types.Runtime
    toPactId,
    Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
-   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',
@@ -38,7 +37,6 @@ module Pact.Types.Runtime
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
    SPVSupport(..),noSPVSupport,
-   PactContinuation(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -65,7 +63,6 @@ import Pact.Types.ChainMeta
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
-import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Util
@@ -139,14 +136,22 @@ instance AsString KeyPredBuiltins where
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
 
--- | Environment setup for pact execution.
+-- | Environment setup for pact execution, from ContMsg request.
 data PactStep = PactStep {
+      -- | intended step to execute
       _psStep :: !Int
+      -- | rollback
     , _psRollback :: !Bool
+      -- | pact id
     , _psPactId :: !PactId
+      -- | resume value. Note that this is only set in Repl tests and in private use cases;
+      -- in all other cases resume value comes out of PactExec.
     , _psResume :: !(Maybe (ObjectMap (Term Name)))
 } deriving (Eq,Show)
 makeLenses ''PactStep
+
+instance Pretty PactStep where
+  pretty = viaShow
 
 
 
@@ -157,27 +162,6 @@ data RefStore = RefStore {
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty
 
-data PactContinuation = PactContinuation
-  { _pcDef :: Def Ref
-  , _pcArgs :: [PactValue]
-  } deriving (Eq,Show)
-
--- | Result of evaluation of a 'defpact'.
-data PactExec = PactExec
-  { -- | Count of steps in pact (discovered when code is executed)
-    _peStepCount :: Int
-    -- | Yield value if invoked
-  , _peYield :: !(Maybe (ObjectMap PactValue))
-    -- | Whether step was executed (in private cases, it can be skipped)
-  , _peExecuted :: Bool
-    -- | Step that was executed or skipped
-  , _peStep :: Int
-    -- | Pact id. On a new pact invocation, is copied from tx id.
-  , _pePactId :: PactId
-    -- | Strict (in arguments) application of pact, for future step invocations.
-  , _peContinuation :: PactContinuation
-  } deriving (Eq,Show)
-makeLenses ''PactExec
 
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
@@ -242,7 +226,7 @@ makeLenses ''EvalEnv
 
 
 toPactId :: Hash -> PactId
-toPactId = PactId
+toPactId = PactId . hashToText
 
 
 -- | Dynamic storage for loaded names and modules, and current namespace.
