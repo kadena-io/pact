@@ -848,16 +848,16 @@ checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " <> pret
 runPure :: Eval (EnvNoDb e) a -> Eval e a
 runPure action = ask >>= \env -> case _eePurity env of
   PNoDb -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkNoDbEnv env >>= runPure' action
+  _ -> mkNoDbEnv env >>= runWithEnv action
 
 runReadOnly :: HasInfo i => i -> Eval (EnvReadOnly e) a -> Eval e a
 runReadOnly i action = ask >>= \env -> case _eePurity env of
   PNoDb -> evalError' i "internal error: attempting db read in pure context"
   PReadOnly -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkReadOnlyEnv env >>= runPure' action
+  _ -> mkReadOnlyEnv env >>= runWithEnv action
 
-runPure' :: Eval f b -> EvalEnv f -> Eval e b
-runPure' action pureEnv = do
+runWithEnv :: Eval f b -> EvalEnv f -> Eval e b
+runWithEnv action pureEnv = do
   s <- get
   (o,_s) <- liftIO $ runEval' s pureEnv action
   either throwM return o
