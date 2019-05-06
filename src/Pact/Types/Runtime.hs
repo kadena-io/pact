@@ -422,8 +422,8 @@ newtype EnvReadOnly e = EnvReadOnly (EvalEnv e)
 instance PureReadOnly (EnvReadOnly e)
 instance PureNoDb (EnvReadOnly e)
 
-diePure :: Text -> Method e a
-diePure opName _ = throwM $ PactError EvalError def def $ "Illegal access attempt (" <> pretty opName <> ")"
+disallowed :: Text -> Method e a
+disallowed opName _ = throwM $ PactError EvalError def def $ "Illegal database access attempt (" <> pretty opName <> ")"
 
 -- | Construct a delegate pure eval environment.
 mkPureEnv :: (EvalEnv e -> f) -> Purity ->
@@ -442,15 +442,15 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     v
     PactDb {
       _readRow = readRowImpl
-    , _writeRow = \_ _ _ _ -> diePure "writeRow"
-    , _keys = const (diePure "keys")
-    , _txids = \_ _ -> (diePure "txids")
-    , _createUserTable = \_ _ -> diePure "createUserTable"
-    , _getUserTableInfo = const (diePure "getUserTableInfo")
-    , _beginTx = const (diePure "beginTx")
-    , _commitTx = diePure "commitTx"
-    , _rollbackTx = diePure  "rollbackTx"
-    , _getTxLog = \_ _ -> diePure "getTxLog"
+    , _writeRow = \_ _ _ _ -> disallowed "writeRow"
+    , _keys = const (disallowed "keys")
+    , _txids = \_ _ -> (disallowed "txids")
+    , _createUserTable = \_ _ -> disallowed "createUserTable"
+    , _getUserTableInfo = const (disallowed "getUserTableInfo")
+    , _beginTx = const (disallowed "beginTx")
+    , _commitTx = disallowed "commitTx"
+    , _rollbackTx = disallowed  "rollbackTx"
+    , _getTxLog = \_ _ -> disallowed "getTxLog"
     }
     purity
     _eeHash
@@ -465,7 +465,7 @@ mkNoDbEnv = mkPureEnv EnvNoDb PNoDb (\(dom :: Domain key v) key ->
       read' e = withMVar e $ \(EnvNoDb EvalEnv {..}) ->
                   _readRow _eePactDb dom key _eePactDbVar
   in case dom of
-       UserTables _ -> diePure "readRow"
+       UserTables _ -> disallowed "readRow"
        KeySets -> read'
        Modules -> read'
        Namespaces -> read')
