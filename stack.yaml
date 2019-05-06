@@ -13,15 +13,17 @@ ghc-options:
   pact: -fmax-pmcheck-iterations=5000 -Wwarn
 
 extra-deps:
-  # Missing from Stackage
+  # --- Missing from Stackage --- #
   - ed25519-donna-0.1.1@sha256:344c0bb83603ed896012f441e54b380314dc4910320577cd18a9071e34f24fe9,2358
   - prettyprinter-convert-ansi-wl-pprint-1.1@sha256:ae908ee44422c38a696858f04928d4b2448df656c09e6b5f5b1be05d99669fb0,3022
 
-  # Can't yet upgrade to more recent versions
+  # --- Forced Downgrades --- #
   - megaparsec-6.5.0
   - neat-interpolation-0.3.2.2  # Due to megaparsec 7
-  - sbv-8.1
 
-  # Custom Pins
+  # --- Forced Upgrades --- #
+  - sbv-8.2
+
+  # --- Custom Pins --- #
   - git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
