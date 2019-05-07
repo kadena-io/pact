@@ -658,7 +658,7 @@ listModules i _ = do
 yield :: RNativeFun e
 yield i as = case as of
   [u@(TObject t _)] -> go "" t u
-  [v@(TObject u _), (TLitString t)] -> go (ChainId t) u v
+  [t@(TObject u _), (TLitString v)] -> go (ChainId v) u t
   _ -> argsError i as
   where
     go tid t@(Object o _ _ _) u = do
