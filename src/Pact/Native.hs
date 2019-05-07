@@ -117,7 +117,7 @@ enforceDef = defNative "enforce" enforce
   where
 
     enforce :: NativeFun e
-    enforce i as = runPure $ gasUnreduced i as $ mapM reduce as >>= enforce' i
+    enforce i as = runSysOnly $ gasUnreduced i as $ mapM reduce as >>= enforce' i
 
     enforce' :: RNativeFun e
     enforce' i [TLiteral (LBool b') _,TLitString msg]

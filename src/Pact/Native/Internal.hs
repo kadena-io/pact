@@ -176,7 +176,7 @@ enforceGuardDef dn =
 
 enforceGuard :: FunApp -> Guard -> Eval e ()
 enforceGuard i g = case g of
-  GKeySet k -> runReadOnly i $ enforceKeySet (_faInfo i) Nothing k
+  GKeySet k -> runSysOnly $ enforceKeySet (_faInfo i) Nothing k
   GKeySetRef n -> enforceKeySetName (_faInfo i) n
   GPact PactGuard{..} -> do
     pid <- getPactId i
@@ -187,8 +187,8 @@ enforceGuard i g = case g of
     case m of
       MDModule Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
-  GUser UserGuard{..} -> do
-    void $ runReadOnly (_faInfo i) $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
+  GUser UserGuard{..} ->
+    void $ runSysOnly $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.

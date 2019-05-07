@@ -148,37 +148,24 @@ testPublicKeyImport = do
     mkKeyPairs [apiKP] `shouldThrow` isUserError
 
 
-
 testUserSig :: Spec
 testUserSig = do
-  it "successfully verifies ETH UserSig when using Command's mkCommand" $ do
-    signers <- toSigners [someETHPair]
-    kps     <- mkKeyPairs $ toApiKeyPairs [someETHPair]
-    cmd     <- mkCommandTest kps signers "(somePactFunction)"
-    let (hsh, sigs)  = (_cmdHash cmd, _cmdSigs cmd)
-        verifiedSigs = (map (\(sig, signer) -> verifyUserSig hsh sig signer)
-                            (zip sigs signers))
-    verifiedSigs `shouldBe` [True]
-
-
-
-  it "successfully verifies ETH UserSig when provided by user" $ do
+  it "successfully verifies user-provided ETH Signature" $ do
     let hsh = hash "(somePactFunction)"
+        userSig = UserSig
+                  "780c2a6d11baae240a2888c4cfa7243dabba26b6121e68d0ea3b3dff779024c0c847eff27c6499ea29e7aea5f5744b98e550f6e3f7514d08c6cc2230564a1339"
     [signer] <- toSigners [someETHPair]
-    [kp]     <- mkKeyPairs $ toApiKeyPairs [someETHPair]
-    sig      <- sign kp (toUntypedHash hsh)
-    let myUserSig = UserSig (toB16Text sig)
-    (verifyUserSig hsh myUserSig signer) `shouldBe` True
+    (verifyUserSig hsh userSig signer) `shouldBe` True
 
 
 
   it "fails UserSig validation when UserSig has unexpected Address" $ do
     let hsh = hash "(somePactFunction)"
-    [signer] <- toSigners [someETHPair]
-    [kp]     <- mkKeyPairs $ toApiKeyPairs [someETHPair]
+        (_,_,wrongAddr,_) = someETHPair
+    [signer] <- toSigners [someED25519Pair]
+    [kp]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     sig      <- sign kp (toUntypedHash hsh)
     let myUserSig   = UserSig (toB16Text sig)
-        wrongAddr   = Lens.view siPubKey signer
         wrongSigner = Lens.set siAddress wrongAddr signer
     (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` False
 
@@ -186,11 +173,11 @@ testUserSig = do
 
   it "fails UserSig validation when UserSig has unexpected Scheme" $ do
     let hsh = hash "(somePactFunction)"
-    [signer] <- toSigners [someETHPair]
-    [kp]     <- mkKeyPairs $ toApiKeyPairs [someETHPair]
+    [signer] <- toSigners [someED25519Pair]
+    [kp]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     sig      <- sign kp (toUntypedHash hsh)
     let myUserSig   = UserSig (toB16Text sig)
-        wrongScheme = ED25519
+        wrongScheme = ETH
         wrongSigner = Lens.set siScheme wrongScheme signer
     (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` False
 

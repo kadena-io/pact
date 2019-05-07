@@ -30,7 +30,10 @@ module Pact.Types.Persistence
    TxId(..),
    PersistDirect(..),toPersistDirect,fromPersistDirect,
    ModuleData(..),mdModule,mdRefMap,
-   PersistModuleData
+   PersistModuleData,
+   ExecutionMode(..),
+   PactContinuation(..),
+   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
    ) where
 
 import Control.Applicative ((<|>))
@@ -115,20 +118,22 @@ instance FromJSON (Ref' PersistDirect) where
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty,Generic,NFData)
 
-
 -- | Specify key and value types for database domains.
 data Domain k v where
   UserTables :: !TableName -> Domain RowKey (ObjectMap PactValue)
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName PersistModuleData
   Namespaces :: Domain NamespaceName Namespace
+  Pacts :: Domain PactId (Maybe PactExec)
+
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
 instance AsString (Domain k v) where
     asString (UserTables t) = asString t
-    asString KeySets    = "SYS:KeySets"
-    asString Modules    = "SYS:Modules"
+    asString KeySets = "SYS:KeySets"
+    asString Modules = "SYS:Modules"
     asString Namespaces = "SYS:Namespaces"
+    asString Pacts = "SYS:Pacts"
 
 -- | Transaction record.
 data TxLog v =
@@ -183,6 +188,10 @@ instance Pretty TxId where
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
 instance AsString TxId where asString = pack . show
 
+data ExecutionMode =
+    Transactional |
+    Local
+    deriving (Eq,Show)
 
 
 
@@ -205,12 +214,18 @@ data PactDb e = PactDb {
   , _createUserTable ::  TableName -> ModuleName -> Method e ()
     -- | Get module, keyset for user table.
   , _getUserTableInfo ::  TableName -> Method e ModuleName
-    -- | Initiate transaction. If TxId not provided, commit fails/rolls back.
-  , _beginTx :: Maybe TxId -> Method e ()
-    -- | Commit transaction, if in tx. If not in tx, rollback and throw error.
-    -- Return raw TxLogs, for use in checkpointing only (not for transmission to user).
+    -- | Initiate transactional state. Returns txid for 'Transactional' mode
+    -- or Nothing for 'Local' mode. If state already initiated, rollback and throw error.
+  , _beginTx :: ExecutionMode -> Method e (Maybe TxId)
+    -- | Conclude transactional state with commit.
+    -- In transactional mode, commits backend to TxId.
+    -- In Local mode, releases TxId for re-use.
+    -- Returns all TxLogs.
   , _commitTx ::  Method e [TxLog Value]
-    -- | Rollback database transaction.
+    -- | Conclude transactional state with rollback.
+    -- Safe to call at any time.
+    -- Rollback all backend changes.
+    -- Releases TxId for re-use.
   , _rollbackTx :: Method e ()
     -- | Get transaction log for table. TxLogs are expected to be user-visible format.
   , _getTxLog :: forall k v . (IsString k,FromJSON v) =>

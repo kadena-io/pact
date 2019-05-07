@@ -52,7 +52,7 @@ import Control.Monad.State
 import Data.Foldable
 import Data.Text (Text, unpack)
 
-import Pact.Types.Lang hiding (App,Object)
+import Pact.Types.Lang hiding (App,Object,Step)
 import Pact.Types.Pretty
 import Pact.Types.Native
 

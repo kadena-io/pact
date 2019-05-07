@@ -2,7 +2,7 @@
 module Pact.Repl.Types
   ( ReplMode(..)
   , Hdl(..)
-  , ReplState(..),rEnv,rEvalState,rMode,rOut,rFile,rTermOut
+  , ReplState(..),rEnv,rEvalState,rMode,rOut,rFile,rTermOut,rTxId
   , TestResult(..)
   , Repl
   , LibOp(..)
@@ -50,6 +50,7 @@ data ReplState = ReplState {
     , _rOut :: String
     , _rTermOut :: [Term Name]
     , _rFile :: Maybe FilePath
+    , _rTxId :: Maybe TxId
     }
 
 type Repl a = StateT ReplState IO a
