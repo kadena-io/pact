@@ -24,8 +24,7 @@
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
-  , CommandState(..), csPacts
-  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger, cePublicData, ceGasEnv
+  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger, cePublicData, ceGasEnv
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -47,8 +46,7 @@ import Control.Concurrent.Chan
 import Data.Maybe
 import Data.String
 import Data.ByteString (ByteString)
-import qualified Data.Map.Strict         as M
-import qualified Data.Set                as S
+import qualified Data.Set as S
 import Data.Text.Encoding
 import Data.Aeson
 import Data.HashSet (HashSet)
@@ -83,16 +81,10 @@ $(makeLenses ''CommandConfig)
 
 
 
-newtype CommandState = CommandState {
-     _csPacts :: M.Map PactId PactExec
-     } deriving Show
-$(makeLenses ''CommandState)
-
 data CommandEnv p = CommandEnv {
       _ceEntity :: Maybe EntityName
     , _ceMode :: ExecutionMode
     , _ceDbEnv :: PactDbEnv p
-    , _ceState :: MVar CommandState
     , _ceLogger :: Logger
     , _ceGasEnv :: GasEnv
     , _cePublicData :: PublicData

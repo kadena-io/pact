@@ -10,7 +10,6 @@ module Utils.TestRunner
   , flushDb
   , Crypto.SomeKeyPair
   , genKeys
-  , genKeysEth
   , formatPubKeyForCmd
   , makeCheck
   , checkResult
@@ -31,7 +30,6 @@ import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
 import Pact.Types.Util (toB16JSON)
-import qualified Data.ByteString.Base16   as B16
 
 import Control.Exception
 import Data.Aeson
@@ -149,14 +147,6 @@ flushDb = mapM_ deleteIfExists _logFiles
 genKeys :: IO SomeKeyPair
 genKeys = genKeyPair defaultScheme
 
--- Note: some randomly-generated keys were failing so using static one here
-genKeysEth :: IO SomeKeyPair
-genKeysEth = return k
-  where k = either error id $ importKeyPair (toScheme ETH) (Just $ pub) priv
-        pub = PubBS $ getByteString "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e"
-        priv = PrivBS $ getByteString "208065a247edbe5df4d86fbdc0171303f23a76961be9f6013850dd2bdc759bbb"
-        getByteString = fst . B16.decode
-
 formatPubKeyForCmd :: SomeKeyPair -> Value
 formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
 
@@ -164,7 +154,7 @@ formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck c@Command{..} isFailure expect = ApiResultCheck (cmdToRequestKey c) isFailure expect
 
-checkResult :: Bool -> Maybe Value -> Maybe ApiResult -> Expectation
+checkResult :: HasCallStack => Bool -> Maybe Value -> Maybe ApiResult -> Expectation
 checkResult isFailure expect result =
   case result of
     Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
@@ -175,21 +165,21 @@ checkResult isFailure expect result =
         _ -> expectationFailure $ show cmdRes ++ " should be Object"
 
 
-fieldShouldBe :: (T.Text,HM.HashMap T.Text Value) -> Maybe Value -> Expectation
+fieldShouldBe :: HasCallStack => (T.Text,HM.HashMap T.Text Value) -> Maybe Value -> Expectation
 fieldShouldBe (k,m) b = do
   let a = HM.lookup k m
   unless (a == b) $
     expectationFailure $
     "Expected " ++ show b ++ ", found " ++ show a ++ " for field " ++ show k ++ " in " ++ show m
 
-checkIfSuccess :: Object -> Maybe Value -> Expectation
+checkIfSuccess :: HasCallStack => Object -> Maybe Value -> Expectation
 checkIfSuccess h Nothing =
   ("status",h) `fieldShouldBe` (Just . String . T.pack) "success"
 checkIfSuccess h (Just expect) = do
   ("status", h) `fieldShouldBe` (Just . String . T.pack) "success"
   ("data", h) `fieldShouldBe` Just (toJSON expect)
 
-checkIfFailure :: Object -> Maybe Value -> Expectation
+checkIfFailure :: HasCallStack => Object -> Maybe Value -> Expectation
 checkIfFailure h Nothing =
   ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
 checkIfFailure h (Just expect) = do

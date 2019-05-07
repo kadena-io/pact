@@ -123,13 +123,20 @@ class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactDbValue v where
 
 instance PactDbValue v => PactDbValue (TxLog v) where
   prettyPactDbValue = pretty . fmap (SomeDoc . prettyPactDbValue)
-instance PactDbValue (ObjectMap PactValue)    where prettyPactDbValue = pretty
-instance PactDbValue a => PactDbValue [a]       where
+instance PactDbValue (ObjectMap PactValue) where
+  prettyPactDbValue = pretty
+instance PactDbValue a => PactDbValue [a] where
   prettyPactDbValue = prettyList . fmap (SomeDoc . prettyPactDbValue)
-instance PactDbValue PersistModuleData         where prettyPactDbValue = (pretty . _mdModule)
-instance PactDbValue KeySet                   where prettyPactDbValue = pretty
-instance PactDbValue Value                    where prettyPactDbValue = pretty
-instance PactDbValue Namespace                where prettyPactDbValue = pretty
+instance PactDbValue PersistModuleData where
+  prettyPactDbValue = (pretty . _mdModule)
+instance PactDbValue KeySet where
+  prettyPactDbValue = pretty
+instance PactDbValue Value where
+  prettyPactDbValue = pretty
+instance PactDbValue Namespace where
+  prettyPactDbValue = pretty
+instance PactDbValue (Maybe PactExec) where
+  prettyPactDbValue = pretty
 
 data Persister s = Persister {
   createTable :: forall k . PactDbKey k => Table k -> Persist s ()

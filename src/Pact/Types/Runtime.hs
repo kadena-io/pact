@@ -25,9 +25,8 @@ module Pact.Types.Runtime
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
    toPactId,
-   Purity(..),PureNoDb,PureReadOnly,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
+   Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
-   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',catchesPactError,
@@ -39,7 +38,6 @@ module Pact.Types.Runtime
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
    SPVSupport(..),noSPVSupport,
-   PactContinuation(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -67,7 +65,6 @@ import Pact.Types.ChainMeta
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
-import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Util
@@ -152,14 +149,22 @@ instance AsString KeyPredBuiltins where
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
 
--- | Environment setup for pact execution.
+-- | Environment setup for pact execution, from ContMsg request.
 data PactStep = PactStep {
+      -- | intended step to execute
       _psStep :: !Int
+      -- | rollback
     , _psRollback :: !Bool
+      -- | pact id
     , _psPactId :: !PactId
+      -- | resume value. Note that this is only set in Repl tests and in private use cases;
+      -- in all other cases resume value comes out of PactExec.
     , _psResume :: !(Maybe (ObjectMap (Term Name)))
 } deriving (Eq,Show)
 makeLenses ''PactStep
+
+instance Pretty PactStep where
+  pretty = viaShow
 
 
 
@@ -170,49 +175,22 @@ data RefStore = RefStore {
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty
 
-data PactContinuation = PactContinuation
-  { _pcDef :: Def Ref
-  , _pcArgs :: [PactValue]
-  } deriving (Eq,Show,Generic)
-instance ToJSON PactContinuation where toJSON = lensyToJSON 3
-instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
-
--- | Result of evaluation of a 'defpact'.
-data PactExec = PactExec
-  { -- | Count of steps in pact (discovered when code is executed)
-    _peStepCount :: Int
-    -- | Yield value if invoked
-  , _peYield :: !(Maybe (ObjectMap PactValue))
-    -- | Whether step was executed (in private cases, it can be skipped)
-  , _peExecuted :: Bool
-    -- | Step that was executed or skipped
-  , _peStep :: Int
-    -- | Pact id. On a new pact invocation, is copied from tx id.
-  , _pePactId :: PactId
-    -- | Strict (in arguments) application of pact, for future step invocations.
-  , _peContinuation :: PactContinuation
-  } deriving (Eq,Show,Generic)
-makeLenses ''PactExec
-instance ToJSON PactExec where toJSON = lensyToJSON 3
-instance FromJSON PactExec where parseJSON = lensyParseJSON 3
-
-
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
-  -- | No database access at all.
-  PNoDb |
-  -- | Access to read of module, keyset systables.
+  -- | Read-only access to systables.
+  PSysOnly |
+  -- | Read-only access to systables and module tables.
   PReadOnly |
   -- | All database access allowed (normal).
   PImpure
   deriving (Eq,Show,Ord,Bounded,Enum)
 instance Default Purity where def = PImpure
 
--- | Marker class for 'PNoDb' environments.
-class PureNoDb e
+-- | Marker class for 'PSysOnly' environments.
+class PureSysOnly e
 -- | Marker class for 'PReadOnly' environments.
 -- SysRead supports pure operations as well.
-class PureNoDb e => PureReadOnly e
+class PureSysOnly e => PureReadOnly e
 
 -- | Backend for SPV
 newtype SPVSupport = SPVSupport {
@@ -260,7 +238,7 @@ makeLenses ''EvalEnv
 
 
 toPactId :: Hash -> PactId
-toPactId = PactId
+toPactId = PactId . hashToText
 
 
 -- | Dynamic storage for loaded names and modules, and current namespace.
@@ -435,17 +413,17 @@ argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
 -- Purity stuff.
 --
 
-newtype EnvNoDb e = EnvNoDb (EvalEnv e)
+newtype EnvSysOnly e = EnvSysOnly (EvalEnv e)
 
-instance PureNoDb (EnvNoDb e)
+instance PureSysOnly (EnvSysOnly e)
 
 newtype EnvReadOnly e = EnvReadOnly (EvalEnv e)
 
 instance PureReadOnly (EnvReadOnly e)
-instance PureNoDb (EnvReadOnly e)
+instance PureSysOnly (EnvReadOnly e)
 
-diePure :: Method e a
-diePure _ = throwM $ PactError EvalError def def "Illegal database access in pure context"
+disallowed :: Text -> Method e a
+disallowed opName _ = throwM $ PactError EvalError def def $ "Illegal database access attempt (" <> pretty opName <> ")"
 
 -- | Construct a delegate pure eval environment.
 mkPureEnv :: (EvalEnv e -> f) -> Purity ->
@@ -464,15 +442,15 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     v
     PactDb {
       _readRow = readRowImpl
-    , _writeRow = \_ _ _ _ -> diePure
-    , _keys = const diePure
-    , _txids = \_ _ -> diePure
-    , _createUserTable = \_ _ -> diePure
-    , _getUserTableInfo = const diePure
-    , _beginTx = const diePure
-    , _commitTx = diePure
-    , _rollbackTx = diePure
-    , _getTxLog = \_ _ -> diePure
+    , _writeRow = \_ _ _ _ -> disallowed "writeRow"
+    , _keys = const (disallowed "keys")
+    , _txids = \_ _ -> (disallowed "txids")
+    , _createUserTable = \_ _ -> disallowed "createUserTable"
+    , _getUserTableInfo = const (disallowed "getUserTableInfo")
+    , _beginTx = const (disallowed "beginTx")
+    , _commitTx = disallowed "commitTx"
+    , _rollbackTx = disallowed  "rollbackTx"
+    , _getTxLog = \_ _ -> disallowed "getTxLog"
     }
     purity
     _eeHash
@@ -481,9 +459,18 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eeSPVSupport
     _eePublicData
 
+mkSysOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysOnly e))
+mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
+  let read' :: forall e'. MVar (EnvSysOnly e') -> IO (Maybe v)
+      read' e = withMVar e $ \(EnvSysOnly EvalEnv {..}) ->
+                  _readRow _eePactDb dom key _eePactDbVar
+  in case dom of
+       UserTables _ -> disallowed "readRow"
+       KeySets -> read'
+       Modules -> read'
+       Namespaces -> read'
+       Pacts -> read')
 
-mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))
-mkNoDbEnv = mkPureEnv EnvNoDb PNoDb (\_ _ -> diePure)
 
 mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
 mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->

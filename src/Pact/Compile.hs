@@ -411,7 +411,7 @@ defpact = do
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
   case last body of -- note: `last` is safe, since bodyForm uses `some`
-    TStep _ _ (Just _) _ -> syntaxError "rollbacks aren't allowed on the last \
+    TStep (Step _ _ (Just _) _) _ -> syntaxError "rollbacks aren't allowed on the last \
       \step (the last step can never roll back -- once it's executed the pact \
       \is complete)"
     _ -> pure ()
@@ -484,15 +484,18 @@ emptyDef = do
 
 step :: Compile (Term Name)
 step = do
-  cont <- try (TStep <$> (Just <$> valueLevel) <*> valueLevel) <|>
-          (TStep Nothing <$> valueLevel)
-  cont <$> pure Nothing <*> contextInfo
+  cont <- try (Step <$> (Just <$> valueLevel) <*> valueLevel) <|>
+          (Step Nothing <$> valueLevel)
+  i <- contextInfo
+  pure $ TStep (cont Nothing i) i
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
-  try (TStep <$> (Just <$> valueLevel) <*> valueLevel <*>
-         (Just <$> valueLevel) <*> contextInfo)
-  <|> (TStep Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> contextInfo)
+  i <- contextInfo
+  s <- try (Step <$> (Just <$> valueLevel) <*> valueLevel <*>
+            (Just <$> valueLevel) <*> pure i)
+       <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)
+  return $ TStep s i
 
 
 
