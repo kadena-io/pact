@@ -51,15 +51,15 @@ rq :: RequestKey
 rq = RequestKey pactInitialHash
 
 pactSuccess :: PactResult
-pactSuccess = (PactSuccess . PLiteral . LString) ""
+pactSuccess = (PactResult . Right . PLiteral . LString) ""
 
-logs :: LogTxOutput
-logs = HashedLog pactInitialHash
+logs :: Hash
+logs = pactInitialHash
 
-cr :: CommandResult
+cr :: CommandResult Hash
 cr = CommandResult rq Nothing pactSuccess (Gas 0) logs Nothing Nothing
 
-results :: HashMap.HashMap RequestKey CommandResult
+results :: HashMap.HashMap RequestKey (CommandResult Hash)
 results = HashMap.fromList [(rq, cr)]
 
 initHistory :: IO (HistoryEnv,HistoryState)

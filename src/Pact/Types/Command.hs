@@ -37,7 +37,7 @@ module Pact.Types.Command
   , UserSig(..),usSig
   , CommandError(..),ceMsg,ceDetail
   , CommandSuccess(..),csData
-  , PactResult(..),LogTxOutput(..)
+  , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
@@ -283,35 +283,24 @@ instance (FromJSON a) => FromJSON (CommandSuccess a) where
     parseJSON = withObject "CommandSuccess" $ \o ->
         CommandSuccess <$> o .: "data"
 
-
-data PactResult = PactSuccess PactValue | PactFailure PactError
+newtype PactResult = PactResult (Either PactError PactValue)
   deriving (Eq, Show)
 instance ToJSON PactResult where
-  toJSON (PactSuccess s) =
+  toJSON (PactResult (Right s)) =
     object [ "status" .= ("success" :: String)
            , "data" .= s ]
-  toJSON (PactFailure f) =
+  toJSON (PactResult (Left f)) =
     object [ "status" .= ("failure" :: String)
            , "data" .= f ]
 
-data LogTxOutput = FullLog [TxLog Value] | HashedLog Hash
-  deriving (Show, Eq)
-instance ToJSON LogTxOutput where
-  toJSON (FullLog logs) =
-    object [ "type" .= ("full" :: String)
-           , "logs" .= logs ]
-  toJSON (HashedLog hsh) =
-    object [ "type" .= ("hash" :: String)
-           , "logs" .= hsh ]
-
-data CommandResult = CommandResult
+data CommandResult l = CommandResult
   { _crReqKey :: RequestKey
   , _crTxId :: Maybe TxId
   , _crResult :: PactResult
   , _crGas :: Gas
-  , _crLogs :: LogTxOutput
+  , _crLogs :: Maybe l                  -- Level of logging (i.e. full TxLog vs hashed logs)
   , _crContinuation :: Maybe PactExec
-  , _crMetaData :: Maybe Value               -- Platform-specific data
+  , _crMetaData :: Maybe Value          -- Platform-specific data
   } deriving (Eq, Show)
 
 
@@ -321,12 +310,12 @@ cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
 
 
 
-type ApplyCmd = ExecutionMode -> Command ByteString -> IO CommandResult
-type ApplyPPCmd m a = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO CommandResult
+type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
+type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
 
-data CommandExecInterface m a = CommandExecInterface
-  { _ceiApplyCmd :: ApplyCmd
-  , _ceiApplyPPCmd :: ApplyPPCmd m a
+data CommandExecInterface m a l = CommandExecInterface
+  { _ceiApplyCmd :: ApplyCmd l
+  , _ceiApplyPPCmd :: ApplyPPCmd m a l
   }
 
 

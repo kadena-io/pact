@@ -30,7 +30,7 @@ module Pact.Types.Runtime
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
-   Eval(..),runEval,runEval',
+   Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
@@ -315,10 +315,14 @@ runEval s env act = runStateT (runReaderT (unEval act) env) s
 runEval' :: EvalState -> EvalEnv e -> Eval e a ->
            IO (Either PactError a,EvalState)
 runEval' s env act =
-  runStateT (catches (Right <$> runReaderT (unEval act) env)
-              [Handler (\(e :: PactError) -> return $ Left e)
-              ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . viaShow $ e)
-              ]) s
+  runStateT (catchesPactError $ runReaderT (unEval act) env) s
+
+catchesPactError :: (MonadCatch m) => m a -> m (Either PactError a)
+catchesPactError action =
+  catches (Right <$> action)
+  [ Handler (\(e :: PactError) -> return $ Left e)
+   ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . viaShow $ e)
+  ]
 
 
 -- | Bracket interpreter action pushing and popping frame on call stack.

@@ -105,14 +105,14 @@ sqlSelectAllCommands = "SELECT hash,command,userSigs FROM 'main'.'pactCommands' 
 
 --- SQL STATEMENT USAGE ---
 
-insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult)] -> IO ()
+insertCompletedCommand :: DbEnv -> [(Command ByteString, (CommandResult Hash))] -> IO ()
 insertCompletedCommand DbEnv{..} v = do
   let sortCmds (_,cr1) (_,cr2) = compare (_crTxId cr1) (_crTxId cr2)
   eitherToError "start insert transaction" <$> exec _conn "BEGIN TRANSACTION"
   mapM_ (insertRow _insertStatement) $ sortBy sortCmds v
   eitherToError "end insert transaction" <$> exec _conn "END TRANSACTION"
 
-insertRow :: Statement -> (Command ByteString, CommandResult) -> IO ()
+insertRow :: Statement -> (Command ByteString, (CommandResult Hash)) -> IO ()
 insertRow s (Command{..},CommandResult {..}) =
     execs s [toTextField (toUntypedHash _cmdHash)
             ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
@@ -135,7 +135,7 @@ queryForExisting e v = foldM f v v
         _ -> return $ HashSet.delete rk s
 
 
-selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey CommandResult)
+selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey (CommandResult Hash))
 selectCompletedCommands e v = foldM f HashMap.empty v
   where
     f m rk = do
@@ -190,7 +190,7 @@ userSigsFromField us = case A.eitherDecodeStrict' us of
 crFromField :: ByteString -> PactResult
 crFromField = undefined
 
-logsFromField :: ByteString -> LogTxOutput
+logsFromField :: ByteString -> Hash
 logsFromField = undefined
 
 contFromField :: ByteString -> Maybe PactExec

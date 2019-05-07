@@ -22,6 +22,7 @@ import Database.SQLite3.Direct
 
 import Pact.Types.Command
 import Pact.Types.Server
+import Pact.Types.Hash (Hash(..))
 
 data HistoryEnv = HistoryEnv
   { _historyChannel :: !HistoryChannel
@@ -42,7 +43,7 @@ data DbEnv = DbEnv
 
 data PersistenceSystem =
   InMemory
-    { inMemResults :: !(HashMap RequestKey (Command ByteString, Maybe CommandResult))} |
+    { inMemResults :: !(HashMap RequestKey (Command ByteString, Maybe (CommandResult Hash)))} |
   OnDisk
     { incompleteRequestKeys :: !(HashMap RequestKey (Command ByteString))
     , dbConn :: !DbEnv}
