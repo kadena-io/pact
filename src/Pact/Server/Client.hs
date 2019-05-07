@@ -13,7 +13,6 @@ module Pact.Server.Client
   , pactServerApiClient
   ) where
 
-import Data.Aeson
 import Data.Proxy
 import Servant.API
 import Servant.Client.Core

@@ -13,7 +13,6 @@ import Data.Decimal
 import Control.Monad.Reader
 
 import Pact.ApiReq
-import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -36,7 +35,7 @@ failsWith :: HasCallStack => Command Text -> Maybe Text ->
              ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
 failsWith cmd r = ask >>= liftIO . shouldMatch' (makeCheck cmd (toOpr r))
   where toOpr Nothing = Left Nothing
-        toOpr (Just e) = (Left . Just) $ PactError EvalError def def . viaShow $ r
+        toOpr (Just e) = (Left . Just) $ PactError EvalError def def . viaShow $ e
 
 runResults :: r -> ReaderT r m a -> m a
 runResults rs act = runReaderT act rs

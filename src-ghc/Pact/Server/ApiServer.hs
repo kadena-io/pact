@@ -29,7 +29,6 @@ import Control.Lens
 import Control.Concurrent
 import Control.Monad.Reader
 import Control.Monad.Trans.Except
-import Control.Arrow
 
 import Data.Aeson hiding (defaultOptions, Result(..))
 import Data.Aeson.Types (parseMaybe)
@@ -54,7 +53,6 @@ import Pact.Types.API
 import Pact.Types.Server
 import Pact.Types.Version
 import Pact.Types.Hash (Hash(..))
-import Pact.Types.Persistence (TxLog(..))
 
 #if !MIN_VERSION_servant(0,16,0)
 type ServerError = ServantErr

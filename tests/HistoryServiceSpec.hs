@@ -7,7 +7,6 @@ import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
-import Data.Aeson (Value(Null))
 import Data.ByteString (ByteString)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet

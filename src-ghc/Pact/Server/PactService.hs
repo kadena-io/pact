@@ -15,7 +15,6 @@ module Pact.Server.PactService where
 
 import Prelude
 
-import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Aeson as A

@@ -10,7 +10,6 @@ module Pact.Server.API
   , pactServerAPI
   ) where
 
-import Data.Aeson
 import Data.Proxy
 import Servant.API
 import qualified Pact.Analyze.Remote.Types as Analyze

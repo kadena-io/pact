@@ -18,7 +18,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
 import Control.Concurrent.MVar
 import System.Directory
-import Data.Aeson (Value(Null))
 
 import Data.ByteString (ByteString)
 import Data.HashSet (HashSet)

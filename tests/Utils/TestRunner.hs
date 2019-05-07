@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Utils.TestRunner
-  ( CommandResultCheck(..), OptionalPactResult(..)
+  ( CommandResultCheck(..), OptionalPactResult
   , testDir
   , runAll
   , flushDb
@@ -158,8 +158,10 @@ formatPubKeyForCmd :: SomeKeyPair -> Value
 formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
 
 
+
 makeCheck :: Command T.Text -> OptionalPactResult -> CommandResultCheck
 makeCheck c@Command{..} expect = CommandResultCheck (cmdToRequestKey c) expect
+
 
 checkResult :: HasCallStack => OptionalPactResult -> Maybe (CommandResult Hash) -> Expectation
 checkResult expect result =
@@ -167,31 +169,35 @@ checkResult expect result =
     Nothing -> expectationFailure $ show result ++ " should be Just CommandResult"
     Just CommandResult{..} -> _crResult `resultShouldBe` expect
 
-resultShouldBe :: HasCallStack =>
-                  PactResult ->
-                  OptionalPactResult ->
-                  Expectation
+
+resultShouldBe :: HasCallStack => PactResult -> OptionalPactResult -> Expectation
 resultShouldBe (PactResult actual) expect =
   case (actual, expect) of
     (Left (PactError aTyp _ _ aDoc),
      Left (Just (PactError eTyp _ _ eDoc)))   -> do
                                                  unless (aTyp == eTyp) $
-                                                   toExpectation aTyp eTyp "PactError->type"
+                                                   toExpectation aTyp eTyp "PactError->type" actual
                                                  unless (aDoc == eDoc) $
-                                                   toExpectation aDoc eDoc "PactError->doc"
-    (Right actualVal, Right (Just expectVal)) -> unless (actualVal == expectVal) $
-                                                   toExpectation actualVal expectVal "PactValue"
-    (Left actualErr, Left Nothing)            -> return ()
-    (Right actualVal, Right Nothing)          -> return ()
+                                                   toExpectation aDoc eDoc "PactError->doc" actual
+    (Right aVal, Right (Just eVal)) -> unless (aVal == eVal) $
+                                         toExpectation aVal eVal "PactValue" actual
+    (Left _, Left Nothing)          -> return ()
+    (Right _, Right Nothing)        -> return ()
     _ -> toExpectation
          (eitherToStatus actual)
-         (eitherToStatus expect) "status"
- 
-  where toExpectation a e sectionName = expectationFailure $
-          "Expected " ++ show e ++ ", found " ++ show a
-          ++ " for section " ++ show sectionName ++ " in " ++ show actual
-        eitherToStatus (Left _) = "failure"
-        eitherToStatus (Right _) = "success"
+         (eitherToStatus expect) "status" actual
+
+
+toExpectation :: (HasCallStack, Show a, Show e, Show c) => a -> e -> T.Text -> c -> Expectation
+toExpectation actual expect sectionName fullActual =
+  expectationFailure $ "Expected " ++ show expect ++ ", found " ++ show actual
+                       ++ " for section " ++ show sectionName ++ " in " ++ show fullActual
+
+
+eitherToStatus :: Either l r -> T.Text
+eitherToStatus (Left _) = "failure"
+eitherToStatus (Right _) = "success"
+
 
 
 -- SAMPLE PACT CODE
