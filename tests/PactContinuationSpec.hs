@@ -463,7 +463,7 @@ testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
       testValidEscrowFinish mgr
 
 
-twoPartyEscrow :: [Command T.Text] -> HTTP.Manager ->
+twoPartyEscrow :: [Command Text] -> HTTP.Manager ->
                   ReaderT (HM.HashMap RequestKey ApiResult) IO () -> Expectation
 twoPartyEscrow testCmds mgr act = do
   let setupPath = testDir ++ "cont-scripts/setup-"

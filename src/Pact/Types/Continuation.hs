@@ -48,8 +48,9 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 --
 data Yield = Yield
   { _yData :: !(Object Name)
-  -- | Yield data from the pact continuation
+    -- ^ Yield data from the pact continuation
   , _yTarget :: !ChainId
+    -- ^ target chain on which to run continuation
   , _yEndorsement :: !Hash
   } deriving (Eq, Show, Generic)
 

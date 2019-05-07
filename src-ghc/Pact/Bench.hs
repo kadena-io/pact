@@ -20,7 +20,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text (Text, unpack, pack)
 
-import System.CPUTime
 import System.Directory
 import Unsafe.Coerce
 
