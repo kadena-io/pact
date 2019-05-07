@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Utils.TestRunner
-  ( ApiResultCheck (..)
+  ( CommandResultCheck(..), OptionalPactResult(..)
   , testDir
   , runAll
   , flushDb
@@ -30,6 +30,9 @@ import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
 import Pact.Types.Util (toB16JSON)
+import Pact.Types.Hash (Hash)
+import Pact.Types.Runtime (PactError(..))
+import Pact.Types.PactValue (PactValue(..))
 
 import Control.Exception
 import Data.Aeson
@@ -63,13 +66,17 @@ _serverBaseUrl = parseBaseUrl _serverRootPath
 _logFiles :: [String]
 _logFiles = ["access.log","commands.sqlite","error.log","pact.sqlite"]
 
-data ApiResultCheck = ApiResultCheck
+data CommandResultCheck = CommandResultCheck
   { _arcReqKey :: RequestKey
-  , _arcIsFailure :: Bool
-  , _arcExpect :: Maybe Value
+  , _arcExpect :: OptionalPactResult
   } deriving (Show, Eq)
 
-runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+
+type OptionalPactResult = Either (Maybe PactError) (Maybe PactValue)
+
+
+
+runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
 runAll mgr cmds = Exception.bracket
               (startServer _testConfigFilePath)
                stopServer
@@ -108,7 +115,7 @@ stopServer (asyncServer, asyncCmd, asyncHist) = do
                     "Thread " ++ show (asyncThreadId asy) ++ " could not be cancelled."
           _ -> return ()
 
-run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
 run mgr cmds = do
   sendResp <- doSend mgr $ SubmitBatch cmds
   case sendResp of
@@ -151,41 +158,40 @@ formatPubKeyForCmd :: SomeKeyPair -> Value
 formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
 
 
-makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
-makeCheck c@Command{..} isFailure expect = ApiResultCheck (cmdToRequestKey c) isFailure expect
+makeCheck :: Command T.Text -> OptionalPactResult -> CommandResultCheck
+makeCheck c@Command{..} expect = CommandResultCheck (cmdToRequestKey c) expect
 
-checkResult :: HasCallStack => Bool -> Maybe Value -> Maybe ApiResult -> Expectation
-checkResult isFailure expect result =
+checkResult :: HasCallStack => OptionalPactResult -> Maybe (CommandResult Hash) -> Expectation
+checkResult expect result =
   case result of
-    Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
-    Just (ApiResult cmdRes _ _) ->
-      case cmdRes of
-        Object h -> if isFailure then checkIfFailure h expect
-                    else checkIfSuccess h expect
-        _ -> expectationFailure $ show cmdRes ++ " should be Object"
+    Nothing -> expectationFailure $ show result ++ " should be Just CommandResult"
+    Just CommandResult{..} -> _crResult `resultShouldBe` expect
 
-
-fieldShouldBe :: HasCallStack => (T.Text,HM.HashMap T.Text Value) -> Maybe Value -> Expectation
-fieldShouldBe (k,m) b = do
-  let a = HM.lookup k m
-  unless (a == b) $
-    expectationFailure $
-    "Expected " ++ show b ++ ", found " ++ show a ++ " for field " ++ show k ++ " in " ++ show m
-
-checkIfSuccess :: HasCallStack => Object -> Maybe Value -> Expectation
-checkIfSuccess h Nothing =
-  ("status",h) `fieldShouldBe` (Just . String . T.pack) "success"
-checkIfSuccess h (Just expect) = do
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "success"
-  ("data", h) `fieldShouldBe` Just (toJSON expect)
-
-checkIfFailure :: HasCallStack => Object -> Maybe Value -> Expectation
-checkIfFailure h Nothing =
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
-checkIfFailure h (Just expect) = do
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
-  ("detail", h) `fieldShouldBe` Just (toJSON expect)
-
+resultShouldBe :: HasCallStack =>
+                  PactResult ->
+                  OptionalPactResult ->
+                  Expectation
+resultShouldBe (PactResult actual) expect =
+  case (actual, expect) of
+    (Left (PactError aTyp _ _ aDoc),
+     Left (Just (PactError eTyp _ _ eDoc)))   -> do
+                                                 unless (aTyp == eTyp) $
+                                                   toExpectation aTyp eTyp "PactError->type"
+                                                 unless (aDoc == eDoc) $
+                                                   toExpectation aDoc eDoc "PactError->doc"
+    (Right actualVal, Right (Just expectVal)) -> unless (actualVal == expectVal) $
+                                                   toExpectation actualVal expectVal "PactValue"
+    (Left actualErr, Left Nothing)            -> return ()
+    (Right actualVal, Right Nothing)          -> return ()
+    _ -> toExpectation
+         (eitherToStatus actual)
+         (eitherToStatus expect) "status"
+ 
+  where toExpectation a e sectionName = expectationFailure $
+          "Expected " ++ show e ++ ", found " ++ show a
+          ++ " for section " ++ show sectionName ++ " in " ++ show actual
+        eitherToStatus (Left _) = "failure"
+        eitherToStatus (Right _) = "success"
 
 
 -- SAMPLE PACT CODE

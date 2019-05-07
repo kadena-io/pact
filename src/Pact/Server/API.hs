@@ -15,6 +15,7 @@ import Data.Proxy
 import Servant.API
 import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
+import Pact.Types.Hash (Hash)
 import Pact.Types.Command
 import Data.Text (Text)
 
@@ -24,9 +25,9 @@ type ApiV1API =
   :<|> "poll" :> ReqBody '[JSON] Poll :>
     Post '[JSON] PollResponses
   :<|> "listen" :> ReqBody '[JSON] ListenerRequest :>
-    Post '[JSON] ApiResult
+    Post '[JSON] (CommandResult Hash)
   :<|> "local" :> ReqBody '[JSON] (Command Text) :>
-    Post '[JSON] (CommandSuccess Value)
+    Post '[JSON] (CommandResult Hash)
   )
 
 type PactServerAPI =

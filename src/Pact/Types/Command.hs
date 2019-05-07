@@ -35,8 +35,6 @@ module Pact.Types.Command
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
-  , CommandError(..),ceMsg,ceDetail
-  , CommandSuccess(..),csData
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
@@ -260,29 +258,6 @@ instance FromJSON UserSig where
     UserSig <$> o .: "sig"
 
 
-
-data CommandError = CommandError {
-      _ceMsg :: String
-    , _ceDetail :: Maybe String
-}
-instance ToJSON CommandError where
-    toJSON (CommandError m d) =
-        object $ [ "status" .= ("failure" :: String)
-                 , "error" .= m ] ++
-        maybe [] ((:[]) . ("detail" .=)) d
-
-newtype CommandSuccess a = CommandSuccess { _csData :: a }
-  deriving (Eq, Show)
-
-instance (ToJSON a) => ToJSON (CommandSuccess a) where
-    toJSON (CommandSuccess a) =
-        object [ "status" .= ("success" :: String)
-               , "data" .= a ]
-
-instance (FromJSON a) => FromJSON (CommandSuccess a) where
-    parseJSON = withObject "CommandSuccess" $ \o ->
-        CommandSuccess <$> o .: "data"
-
 newtype PactResult = PactResult (Either PactError PactValue)
   deriving (Eq, Show)
 instance ToJSON PactResult where
@@ -302,7 +277,9 @@ data CommandResult l = CommandResult
   , _crContinuation :: Maybe PactExec
   , _crMetaData :: Maybe Value          -- Platform-specific data
   } deriving (Eq, Show)
-
+-- TODO json, nfdata, make strict
+instance ToJSON (CommandResult l) where toJSON = undefined
+instance FromJSON (CommandResult l) where parseJSON = undefined
 
 cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
@@ -338,8 +315,6 @@ makeLenses ''ExecutionMode
 makeLenses ''Command
 makeLenses ''ParsedCode
 makeLenses ''Payload
-makeLenses ''CommandError
-makeLenses ''CommandSuccess
 makeLenses ''CommandResult
 makePrisms ''ProcessedCommand
 makePrisms ''ExecutionMode

@@ -53,8 +53,8 @@ rq = RequestKey pactInitialHash
 pactSuccess :: PactResult
 pactSuccess = (PactResult . Right . PLiteral . LString) ""
 
-logs :: Hash
-logs = pactInitialHash
+logs :: Maybe Hash
+logs = Just pactInitialHash
 
 cr :: CommandResult Hash
 cr = CommandResult rq Nothing pactSuccess (Gas 0) logs Nothing Nothing

@@ -106,7 +106,7 @@ initFastLogger = do
 
 startCmdThread :: CommandConfig -> InboundPactChan -> HistoryChannel -> ReplayFromDisk -> (String -> IO ()) -> IO ()
 startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
-  CommandExecInterface {..} <- initPactService cmdConfig (initLoggers debugFn doLog def)
+  CommandExecInterface{..} <- initPactService cmdConfig (initLoggers debugFn doLog def)
   -- we wait for the history service to light up, possibly giving us backups from disk to replay
   replayFromDisk' <- liftIO $ takeMVar rp
   when (null replayFromDisk') $ liftIO $ debugFn "[disk replay]: No replay found"
@@ -123,7 +123,10 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
         liftIO $ debugFn $ "[cmd]: executing " ++ show (length cmds) ++ " command(s)"
         resps <- forM cmds $ \cmd -> do
           liftIO $ _ceiApplyCmd Transactional cmd
-        liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> resps
+        liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> (map fullToHashLogCr resps)
       LocalCmd cmd mv -> do
-        CommandResult {..} <- liftIO $ _ceiApplyCmd Local cmd
-        liftIO $ putMVar mv _crResult
+        cr@CommandResult{..} <- liftIO $ _ceiApplyCmd Local cmd
+        liftIO $ putMVar mv (toJSON . fullToHashLogCr $ cr)
+
+fullToHashLogCr :: CommandResult [TxLog Value] -> CommandResult Hash
+fullToHashLogCr full = undefined

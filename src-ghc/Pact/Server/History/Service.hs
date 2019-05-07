@@ -247,7 +247,7 @@ _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey pactInitialHash
       pactSuccess = (PactResult . Right . PLiteral . LString) ""
-      logs = pactInitialHash
+      logs = Just pactInitialHash
       cmd = CommandResult rq Nothing pactSuccess (Gas 0) logs Nothing Nothing
   updateExistingKeys (HashMap.fromList [(rq, cmd)])
   mv <- liftIO $ newEmptyMVar

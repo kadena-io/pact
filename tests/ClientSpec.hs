@@ -15,6 +15,8 @@ import qualified Control.Exception as Exception
 import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
+import Pact.Types.PactValue
+import Pact.Types.Exp (Literal(..))
 import Data.Text (Text)
 import Pact.Server.Client
 import Servant.Client
@@ -52,8 +54,8 @@ spec = describe "Servant API client tests" $ do
     res <- bracket $! do
       r <- runClientM (local pactServerApiClient cmd) clientEnv
       return r
-    let cmdData = (CommandSuccess . Number) 3
-    res `shouldBe` (Right cmdData)
+    let cmdPactResult = PactResult . Right . PLiteral . LInteger $ 3
+    (_crResult <$> res) `shouldBe` (Right cmdPactResult)
   it "correctly runs a simple command publicly and listens to the result" $ do
     cmd <- simpleServerCmd
     let rk = cmdToRequestKey cmd
@@ -63,5 +65,5 @@ spec = describe "Servant API client tests" $ do
       -- print (res,res')
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
-    let cmdData = (toJSON . CommandSuccess . Number) 3
-    (_arResult <$> res') `shouldBe` (Right cmdData)
+    let cmdPactResult = PactResult . Right . PLiteral . LInteger $ 3
+    (_crResult <$> res') `shouldBe` (Right cmdPactResult)

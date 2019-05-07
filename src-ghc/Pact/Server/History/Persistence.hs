@@ -154,7 +154,7 @@ selectCompletedCommands e v = foldM f HashMap.empty v
                            (if tid < 0 then Nothing else Just (fromIntegral tid))
                            (crFromField cr)
                            (Gas g)
-                           (logsFromField l)
+                           (Just $ logsFromField l)
                            (contFromField ct)
                            (metaFromField md)
             ) m
