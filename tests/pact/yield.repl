@@ -89,4 +89,4 @@
 (env-hash (hash "emily-pid"))
 (env-entity "A")
 (expect "step 0 executes" "emily->A" (tester2 "emily"))
-(env-entity "b")
+(env-entity "B")

@@ -657,11 +657,11 @@ listModules i _ = do
 
 yield :: RNativeFun e
 yield i as = case as of
-  [u@(TObject t _)] -> go "" t >> return u
-  [(TLitString t), v@(TObject u _)] -> go (ChainId t) u >> return v
+  [u@(TObject t _)] -> go "" t u
+  [v@(TObject u _), (TLitString t)] -> go (ChainId t) u v
   _ -> argsError i as
   where
-    go tid t@(Object o _ _ _) = do
+    go tid t@(Object o _ _ _) u = do
       eym <- use evalPactExec
       case eym of
         Nothing -> evalError' i "Yield not in defpact context"
@@ -676,6 +676,7 @@ yield i as = case as of
 
           let y = Yield t tid e
           (evalPactExec . _Just . peYield) .= Just y
+          return u
 
     endorse' (MDModule m) pid o tid = pure $ endorse (_mHash m) pid o tid
     endorse' (MDInterface ifn) _ _ _ = do
