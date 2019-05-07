@@ -118,12 +118,12 @@ throwErrorIn :: (MonadError String m, Pretty a) => a -> Doc -> m b
 throwErrorIn exp msg = throwError $ renderCompactString' $
   "in " <> pretty exp <> ", " <> msg
 
--- textToQuantifier
---   :: Text -> Maybe (VarId -> Text -> QType -> PreProp a -> PreProp a)
--- textToQuantifier = \case
---   SUniversalQuantification   -> Just PreForall
---   SExistentialQuantification -> Just PreExists
---   _                          -> Nothing
+textToQuantifier
+  :: Text -> Maybe (VarId -> Text -> QType -> Fix PreProp -> Fix PreProp)
+textToQuantifier = \case
+  SUniversalQuantification   -> Just $ \a b c d -> Fix $ PreForall a b c d
+  SExistentialQuantification -> Just $ \a b c d -> Fix $ PreExists a b c d
+  _                          -> Nothing
 
 type TableEnv = TableMap (ColumnMap EType)
 

@@ -8,7 +8,7 @@ import Control.Lens ((%=), (%~), (<<+=), (&), _1, _2, (<&>))
 import Control.Comonad.Cofree
 import Control.Monad.Except
 import Control.Monad.State
-import Data.Foldable (for_)
+import Data.Foldable (asum, for_)
 import Data.Traversable (for)
 import           Data.Text                    (Text, unpack)
 import           Data.Map.Strict (Map)
@@ -53,16 +53,22 @@ cvtTy = \case
   TyFun{} -> error "Function types not allowed in cvtTy"
   TyVar{} -> error "Variable not allowed in cvtTy"
 
-type Check a = StateT (Int, [[(Ty, Ty)]]) (Except String) a
+type Check a = StateT (Int, [Options]) (Except String) a
 
 genVar :: Check Int
 genVar = _1 <<+= 1
 
-constrain :: Int -> [Ty] -> Check ()
-constrain v tys =
-  -- v is equal to any of these types
-  let tys' = (TyVar v,) <$> tys
-  in _2 %= (tys':)
+-- locations:            (conjunction)
+--   options:            (disjunction)
+--     constraints:      (conjunction)
+
+newtype Options = Options ([[(Ty, Ty)]])
+
+constrain :: Options -> Check ()
+constrain options = _2 %= (options:)
+
+oneOption :: [(Ty, Ty)] -> Options
+oneOption = Options . (:[])
 
 checkPreProp :: Fix PreProp -> Check (Cofree PreProp Ty)
 checkPreProp (Fix prop) = case prop of
@@ -75,8 +81,7 @@ checkPreProp (Fix prop) = case prop of
   PreListLit xs -> do
     v   <- genVar
     xs' <- traverse checkPreProp xs
-    for_ xs' $ \(ty :< _) -> -- constrain v [ty]
-      _2 %= ([(TyVar v, ty)]:)
+    for_ xs' $ \(ty :< _) -> constrain $ oneOption [(TyVar v, ty)]
     pure $ TyVar v :< PreListLit xs'
 
   PreAbort   -> pure $ TyBool :< PreAbort
@@ -86,26 +91,35 @@ checkPreProp (Fix prop) = case prop of
     v <- genVar
     pure $ TyVar v :< PreResult
 
-  PreVar       {} -> error "TODO"
-  PreGlobalVar {} -> error "TODO"
+  PreVar       {} -> error "TODO (1)"
+  PreGlobalVar {} -> error "TODO (2)"
 
-  PreForall {} -> error "TODO"
-  PreExists {} -> error "TODO"
+  PreForall {} -> error "TODO (3)"
+  PreExists {} -> error "TODO (4)"
 
   PreApp name args -> case Map.lookup name funTypes of
     Nothing -> throwError $ "couldn't find function type: " ++ unpack name
     Just candidates -> do
-      let candidates' = filter (\(args' :-> _) -> length args' == length args)
+      let candidates' = filter
+            (\case
+              TyFun args' _ -> length args' == length args
+              _ -> error "TODO (5)")
             candidates
       v       <- genVar
       args'   <- traverse checkPreProp args
-      options <- for candidates' $ \(candidateArgs :-> result) ->
+      options <- for candidates' $ \case
+        TyFun candidateArgs result -> do
+          let argTys = zipWith (\(ty1 :< _) ty2 -> (ty1, ty2)) args' candidateArgs
+          pure $ (TyVar v, result) : argTys
+        _ -> error "TODO (6)"
+
+      constrain $ Options options
 
       pure $ TyVar v :< PreApp name args'
 
-  PreAt            {} -> error "TODO"
-  PrePropRead      {} -> error "TODO"
-  PreLiteralObject {} -> error "TODO"
+  PreAt            {} -> error "TODO (7)"
+  PrePropRead      {} -> error "TODO (8)"
+  PreLiteralObject {} -> error "TODO (9)"
 
 -- * traverse over every location, generating type variables & constraints
 --   (checkPreProp)
@@ -115,15 +129,24 @@ typecheck :: Fix PreProp -> Either String EProp
 typecheck tm = do
   (cofreeTm, (_i, constraints))
     <- runExcept $ runStateT (checkPreProp tm) (0, [])
-  elaborate (unify constraints) cofreeTm
+  tyAssignments <- unifyChoice constraints
+  elaborate tyAssignments cofreeTm
 
 pair :: [a] -> [b] -> Maybe [(a, b)]
 pair []     []     = Just []
 pair (a:as) (b:bs) = ((a, b):) <$> pair as bs
 pair _      _      = Nothing
 
-unify :: [[(Ty, Ty)]] -> Map Int Ty
-unify [] = Map.empty
+unifyChoice :: [Options] -> Either String (Map Int Ty)
+unifyChoice options = unifyChoice' options []
+
+unifyChoice' :: [Options] -> [(Ty, Ty)] -> Either String (Map Int Ty)
+unifyChoice' [] matches = unify matches
+unifyChoice' (Options options : moreOptions) matches = asum $ options <&>
+  \option -> unifyChoice' moreOptions (matches <> option)
+
+unify :: [(Ty, Ty)] -> Either String (Map Int Ty)
+unify [] = pure Map.empty
 unify ((a, b):cs)
   | a == b = unify cs
   | TyVar v <- a = unifyVariable v cs b
@@ -132,13 +155,16 @@ unify ((a, b):cs)
   , TyFun dom2 codom2 <- b
   , Just cs' <- pair dom1 dom2
   = unify $ (codom1, codom2) : cs' <> cs
-  | otherwise = error "a and b don't unify"
+  | otherwise = Left "a and b don't unify"
 
-unifyVariable :: Int -> [(Ty, Ty)] -> Ty -> Map Int Ty
+unifyVariable :: Int -> [(Ty, Ty)] -> Ty -> Either String (Map Int Ty)
 unifyVariable v cs b =
-  if occurs v b then error "failed occurs check"
-  else let subbed = Map.singleton v b
-       in unify (substitute subbed cs) <> subbed
+  if occurs v b then Left "failed occurs check"
+  else do
+    let vIsB = Map.singleton v b
+        cs' = substitute vIsB cs
+    unifier <- unify cs'
+    pure $ unifier <> vIsB
 
 substitute :: Map Int Ty -> [(Ty, Ty)] -> [(Ty, Ty)]
 substitute subs = fmap $ \(a, b) -> (replace subs a, replace subs b)
@@ -186,7 +212,7 @@ elaborate env (ty :< tm) = do
 
     PreVar vid name -> pure $ Some ty' $ CoreProp $ Var vid name
 
-    PreGlobalVar{} -> error "TODO"
+    PreGlobalVar{} -> error "TODO (10)"
 
     PreExists vid name ty'' p -> do
       Some SBool p' <- elaborate env p
@@ -195,9 +221,9 @@ elaborate env (ty :< tm) = do
       Some SBool p' <- elaborate env p
       pure $ Some SBool $ PropSpecific $ Forall vid name ty'' p'
 
-    PreAt{} -> error "TODO"
-    PrePropRead{} -> error "TODO"
-    PreLiteralObject{} -> error "TODO"
+    PreAt{}            -> error "TODO (11)"
+    PrePropRead{}      -> error "TODO (12)"
+    PreLiteralObject{} -> error "TODO (13)"
 
     PreApp s args -> case (s, args) of
       (SStringLength, [str]) -> do
@@ -214,16 +240,35 @@ elaborate env (ty :< tm) = do
         Some SDecimal x' <- elaborate env x
         Some SInteger y' <- elaborate env y
         pure $ Some SDecimal $ CoreProp $ Numerical $ RoundingLikeOp2 Round x' y'
-      _ -> Left "TODO"
+      (SAddition, [x, y]) -> do
+        case ty' of
+          SStr -> do
+            Some SStr x' <- elaborate env x
+            Some SStr y' <- elaborate env y
+            pure $ Some SStr $ PStrConcat x' y'
+          SInteger -> do
+            Some SInteger x' <- elaborate env x
+            Some SInteger y' <- elaborate env y
+            pure $ Some SInteger $ CoreProp $ Numerical $ IntArithOp Add x' y'
+          SDecimal -> do
+            Some tyX x' <- elaborate env x
+            Some tyY y' <- elaborate env y
+            case (tyX, tyY) of
+              (SDecimal, SDecimal) -> pure $ Some SDecimal $ CoreProp $ Numerical $ DecArithOp    Add x' y'
+              (SDecimal, SInteger) -> pure $ Some SDecimal $ CoreProp $ Numerical $ DecIntArithOp Add x' y'
+              (SInteger, SDecimal) -> pure $ Some SDecimal $ CoreProp $ Numerical $ IntDecArithOp Add x' y'
+              _                    -> Left "TODO (13.5)"
+          _ -> Left "TODO (13.75)"
+      _ -> Left "TODO (14)"
       -- etc
 
 buildList :: [EProp] -> EProp
 buildList [] = Some (SList SAny) $ CoreProp $ LiteralList SAny []
 buildList (Some ty1 prop : props) = case buildList props of
   Some (SList ty2) (CoreProp (LiteralList _ props')) -> case singEq ty1 ty2 of
-    Nothing   -> error "TODO"
+    Nothing   -> error "TODO (15)"
     Just Refl -> Some (SList ty1) $ CoreProp $ LiteralList ty1 $ prop : props'
-  _ -> error "TODO"
+  _ -> error "TODO (16)"
 
 pattern (:->) :: [Ty] -> Ty -> Ty
 pattern a :-> b = TyFun a b
@@ -251,5 +296,12 @@ funTypes = Map.fromList
   , (STemporalAddition,
     [ [TyTime, TyInteger] :-> TyTime
     , [TyTime, TyDecimal] :-> TyTime
+    ])
+  , (SAddition,
+    [ [TyInteger, TyInteger] :-> TyInteger
+    , [TyInteger, TyDecimal] :-> TyDecimal
+    , [TyDecimal, TyInteger] :-> TyDecimal
+    , [TyDecimal, TyDecimal] :-> TyDecimal
+    , [TyStr    , TyStr    ] :-> TyStr
     ])
   ]
