@@ -64,7 +64,7 @@ import           Pact.Analyze.Types
 
 import           Pact.Analyze.Typecheck       (typecheck)
 
--- The conversion from @Exp@ to @PreProp@
+-- The conversion from @Exp@ to @PrePropF@
 --
 --
 -- The biggest thing it handles is generating unique ids for variables and
@@ -76,7 +76,7 @@ import           Pact.Analyze.Typecheck       (typecheck)
 -- @ComparisonOp@, etc. We handle this in @checkPreProp@ as it doesn't cause
 -- any difficulty there and is less burdensome than creating a new data type
 -- for these operators.
-expToPreProp :: Exp Info -> PropParse (Fix PreProp)
+expToPreProp :: Exp Info -> PropParse PreProp
 expToPreProp = \case
   ELiteral' (LDecimal d) -> pure $ Fix $ PreDecimalLit $ fromPact decimalIso d
   ELiteral' (LInteger i) -> pure $ Fix $ PreIntegerLit i
@@ -237,7 +237,7 @@ expToProp tableEnv' genStart nameEnv idEnv consts propDefs ty body = do
         (coerceQType <$> idEnv) preTypedPropDefs consts
   _getEither $ evalStateT (runReaderT (checkPreProp ty preTypedBody) env) (CheckState 0 [])
 
-checkPreProp :: SingTy a -> Fix PreProp -> PropCheck (Prop a)
+checkPreProp :: SingTy a -> PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp = do
   Some ty' prop <- typecheck preProp
   case singEq ty ty' of
@@ -274,7 +274,7 @@ parseToPreProp
   -> Map Text VarId
   -> t (DefinedProperty (Exp Info))
   -> Exp Info
-  -> Either String (Fix PreProp, t (DefinedProperty (Fix PreProp)))
+  -> Either String (PreProp, t (DefinedProperty PreProp))
 parseToPreProp genStart nameEnv propDefs body =
   (`evalStateT` genStart) $ (`runReaderT` nameEnv) $ do
     body'     <- expToPreProp body

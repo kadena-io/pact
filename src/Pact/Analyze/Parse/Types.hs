@@ -38,10 +38,10 @@ import           Pact.Analyze.Feature       hiding (Doc, Type, Var, ks, obj,
                                              str, TyFun, TyVar, Constraint)
 import           Pact.Analyze.Types         hiding (Ty(..))
 
--- @PreProp@ stands between @Exp@ and @Prop@.
+-- @PrePropF@ stands between @Exp@ and @Prop@.
 --
 -- The conversion from @Exp@ is light, handled in @expToPreProp@.
-data PreProp a
+data PrePropF a
   -- literals
   = PreIntegerLit Integer
   | PreStringLit  Text
@@ -55,7 +55,7 @@ data PreProp a
   | PreSuccess
   | PreResult
 
-  -- In conversion from @Exp@ to @PreProp@ we maintain a distinction between
+  -- In conversion from @Exp@ to @PrePropF@ we maintain a distinction between
   -- bound and unbound variables. Bound (@PreVar@) variables are bound inside
   -- quantifiers. Unbound (@PreGlobalVar@) variables either refer to a property
   -- definition or a table.
@@ -74,7 +74,7 @@ data PreProp a
   | PreLiteralObject (Map Text a)
   deriving (Eq, Show)
 
-instance Pretty a => Pretty (PreProp a) where
+instance Pretty a => Pretty (PrePropF a) where
   pretty = \case
     PreIntegerLit i   -> pretty i
     PreStringLit t    -> dquotes $ pretty t
@@ -106,6 +106,9 @@ instance Pretty a => Pretty (PreProp a) where
     PreLiteralObject obj -> commaBraces $ Map.toList obj <&> \(k, v) ->
       pretty k <> " := " <> pretty v
 
+newtype Fix f = Fix (f (Fix f))
+
+type PreProp = Fix PrePropF
 
 throwErrorT :: MonadError String m => Text -> m a
 throwErrorT = throwError . T.unpack
@@ -119,15 +122,13 @@ throwErrorIn exp msg = throwError $ renderCompactString' $
   "in " <> pretty exp <> ", " <> msg
 
 textToQuantifier
-  :: Text -> Maybe (VarId -> Text -> QType -> Fix PreProp -> Fix PreProp)
+  :: Text -> Maybe (VarId -> Text -> QType -> PreProp -> PreProp)
 textToQuantifier = \case
   SUniversalQuantification   -> Just $ \a b c d -> Fix $ PreForall a b c d
   SExistentialQuantification -> Just $ \a b c d -> Fix $ PreExists a b c d
   _                          -> Nothing
 
 type TableEnv = TableMap (ColumnMap EType)
-
-newtype Fix f = Fix (f (Fix f))
 
 data PropCheckEnv = PropCheckEnv
   { _tableEnv          :: TableEnv
@@ -137,7 +138,7 @@ data PropCheckEnv = PropCheckEnv
   , _varTys            :: Map VarId QType
 
   -- | User-defined properties
-  , _definedProps      :: HM.HashMap Text (DefinedProperty (Fix PreProp))
+  , _definedProps      :: HM.HashMap Text (DefinedProperty PreProp)
 
   -- | Constants and vars bound within a user-defined property
   , _localVars         :: HM.HashMap Text EProp

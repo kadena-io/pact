@@ -25,7 +25,9 @@ import Pact.Analyze.Types.Types hiding (Ty(..), (:<))
 import Pact.Analyze.Types.Shared
 import Pact.Types.Pretty (pretty, renderCompactString')
 
-parseTableName :: Fix PreProp -> PropCheck (Prop TyTableName)
+type TypedProp = Cofree PrePropF Ty
+
+parseTableName :: PreProp -> PropCheck (Prop TyTableName)
 parseTableName (Fix (PreGlobalVar var)) = pure (fromString (unpack var))
 parseTableName (Fix (PreVar vid name)) = do
   varTy <- view (varTys . at vid)
@@ -36,7 +38,7 @@ parseTableName bad = throwError "invalid table name: TODO"
 -- parseTableName bad = throwError $ renderCompactString' $
 --   "invalid table name: " <> pretty bad
 
-parseColumnName :: Fix PreProp -> PropCheck (Prop TyColumnName)
+parseColumnName :: PreProp -> PropCheck (Prop TyColumnName)
 parseColumnName (Fix (PreStringLit str)) = pure (fromString (unpack str))
 parseColumnName (Fix (PreVar vid name)) = do
   varTy <- view (varTys . at vid)
@@ -48,7 +50,7 @@ parseColumnName bad = throwError "invalid column name: TODO"
 -- parseColumnName bad = throwError $ renderCompactString' $
 --   "invalid column name: " <> pretty bad
 
-parseBeforeAfter :: Fix PreProp -> PropCheck BeforeOrAfter
+parseBeforeAfter :: PreProp -> PropCheck BeforeOrAfter
 parseBeforeAfter (Fix (PreStringLit str))
   | str == "before" = pure Before
   | str == "after"  = pure After
@@ -68,7 +70,7 @@ constrain options = checkConstraints %= (options:)
 oneOption :: [Constraint] -> Options
 oneOption = Options . (:[])
 
-checkPreProp :: Fix PreProp -> PropCheck (Cofree PreProp Ty)
+checkPreProp :: PreProp -> PropCheck TypedProp
 checkPreProp (Fix prop) = case prop of
   PreIntegerLit i -> pure $ TyInteger :< PreIntegerLit i
   PreStringLit  s -> pure $ TyStr     :< PreStringLit  s
@@ -162,7 +164,7 @@ checkPreProp (Fix prop) = case prop of
 --   (checkPreProp)
 -- * solve constraints (unify)
 -- * elaborate
-typecheck :: Fix PreProp -> PropCheck EProp
+typecheck :: PreProp -> PropCheck EProp
 typecheck tm = do
   cofreeTm      <- checkPreProp tm
   constraints   <- use checkConstraints
@@ -226,7 +228,7 @@ replace env ty = Map.foldrWithKey go ty env where
     TyFun dom codom -> TyFun (dom & traverse %~ go v ty') (go v ty' codom)
     ty''            -> ty''
 
-elaborate :: Cofree PreProp Ty -> ReaderT (Map VarId Ty) (Either String) EProp
+elaborate :: TypedProp -> ReaderT (Map VarId Ty) (Either String) EProp
 elaborate (ty :< tm) = do
   env <- ask
   EType ty' <- case ty of
