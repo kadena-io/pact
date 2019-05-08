@@ -17,7 +17,7 @@ import qualified Data.Map.Strict as Map
 import           Data.String (fromString)
 import           Data.Type.Equality ((:~:)(Refl))
 
-import Pact.Analyze.Feature hiding (Type(..), Var(..), str)
+import Pact.Analyze.Feature hiding (Type(..), Var(..), str, Constraint)
 import Pact.Analyze.Parse.Types
 import Pact.Analyze.Types.Languages
 import Pact.Analyze.Types.Numerical
@@ -65,7 +65,7 @@ genVar = checkVarGen <<+= 1
 constrain :: Options -> PropCheck ()
 constrain options = checkConstraints %= (options:)
 
-oneOption :: [(Ty, Ty)] -> Options
+oneOption :: [Constraint] -> Options
 oneOption = Options . (:[])
 
 checkPreProp :: Fix PreProp -> PropCheck (Cofree PreProp Ty)
@@ -79,7 +79,7 @@ checkPreProp (Fix prop) = case prop of
   PreListLit xs -> do
     v   <- genVar
     xs' <- traverse checkPreProp xs
-    for_ xs' $ \(ty :< _) -> constrain $ oneOption [(TyVar v, ty)]
+    for_ xs' $ \(ty :< _) -> constrain $ oneOption [EqConstraint (TyVar v) ty]
     pure $ TyVar v :< PreListLit xs'
 
   PreAbort   -> pure $ TyBool :< PreAbort
@@ -107,11 +107,11 @@ checkPreProp (Fix prop) = case prop of
 
   PreForall vid varName qty body -> do
     body'@(bodyTy :< _) <- checkPreProp body
-    constrain $ oneOption [(bodyTy, TyBool)]
+    constrain $ oneOption [EqConstraint bodyTy TyBool]
     pure $ TyBool :< PreForall vid varName qty body'
   PreExists vid varName qty body -> do
     body'@(bodyTy :< _) <- checkPreProp body
-    constrain $ oneOption [(bodyTy, TyBool)]
+    constrain $ oneOption [EqConstraint bodyTy TyBool]
     pure $ TyBool :< PreForall vid varName qty body'
 
   PreApp name args -> case Map.lookup name funTypes of
@@ -126,15 +126,28 @@ checkPreProp (Fix prop) = case prop of
       args'   <- traverse checkPreProp args
       options <- for candidates' $ \case
         TyFun candidateArgs result -> do
-          let argTys = zipWith (\(ty1 :< _) ty2 -> (ty1, ty2)) args' candidateArgs
-          pure $ (TyVar v, result) : argTys
+          let argTys = zipWith (\(ty1 :< _) ty2 -> EqConstraint ty1 ty2)
+                args' candidateArgs
+          pure $ EqConstraint (TyVar v) result : argTys
         _ -> error "invariant violation: candidate is not a function"
 
       constrain $ Options options
 
       pure $ TyVar v :< PreApp name args'
 
-  PreAt            {} -> error "TODO (7)"
+  -- we handle two cases:
+  -- 1. ix is a concrete string (a *symbol*), container is an object.
+  -- 2. ix is an int, container is a list
+  PreAt ix container -> case ix of
+    Fix (PreStringLit name) -> do
+      objTy :< obj <- checkPreProp container
+      v            <- genVar
+      constrain $ oneOption [HasRowConstraint name (TyVar v) objTy]
+      pure $ TyVar v :< PreAt
+        (TyStr :< PreStringLit name)
+        (objTy :< obj)
+    _ -> error "case 2"
+
   PrePropRead      {} -> error "TODO (8)"
   PreLiteralObject obj -> do
     let fields = Map.toList obj
@@ -156,32 +169,32 @@ typecheck tm = do
   tyAssignments <- lift $ lift $ EitherFail $ unifyChoice constraints
   lift $ lift $ EitherFail $ runReaderT (elaborate cofreeTm) tyAssignments
 
-pair :: [a] -> [b] -> Maybe [(a, b)]
+pair :: [Ty] -> [Ty] -> Maybe [Constraint]
 pair []     []     = Just []
-pair (a:as) (b:bs) = ((a, b):) <$> pair as bs
+pair (a:as) (b:bs) = (EqConstraint a b:) <$> pair as bs
 pair _      _      = Nothing
 
 unifyChoice :: [Options] -> Either String (Map VarId Ty)
 unifyChoice options = unifyChoice' options []
 
-unifyChoice' :: [Options] -> [(Ty, Ty)] -> Either String (Map VarId Ty)
+unifyChoice' :: [Options] -> [Constraint] -> Either String (Map VarId Ty)
 unifyChoice' [] matches = unify matches
 unifyChoice' (Options options : moreOptions) matches = asum $ options <&>
   \option -> unifyChoice' moreOptions (matches <> option)
 
-unify :: [(Ty, Ty)] -> Either String (Map VarId Ty)
+unify :: [Constraint] -> Either String (Map VarId Ty)
 unify [] = pure Map.empty
-unify ((a, b):cs)
+unify (EqConstraint a b:cs)
   | a == b = unify cs
   | TyVar v <- a = unifyVariable v cs b
   | TyVar v <- b = unifyVariable v cs a
   | TyFun dom1 codom1 <- a
   , TyFun dom2 codom2 <- b
   , Just cs' <- pair dom1 dom2
-  = unify $ (codom1, codom2) : cs' <> cs
+  = unify $ EqConstraint codom1 codom2 : cs' <> cs
   | otherwise = Left "a and b don't unify"
 
-unifyVariable :: VarId -> [(Ty, Ty)] -> Ty -> Either String (Map VarId Ty)
+unifyVariable :: VarId -> [Constraint] -> Ty -> Either String (Map VarId Ty)
 unifyVariable v cs b =
   if occurs v b then Left "failed occurs check"
   else do
@@ -190,8 +203,9 @@ unifyVariable v cs b =
     unifier <- unify cs'
     pure $ unifier <> vIsB
 
-substitute :: Map VarId Ty -> [(Ty, Ty)] -> [(Ty, Ty)]
-substitute subs = fmap $ \(a, b) -> (replace subs a, replace subs b)
+substitute :: Map VarId Ty -> [Constraint] -> [Constraint]
+substitute subs = fmap $ \(EqConstraint a b)
+  -> EqConstraint (replace subs a) (replace subs b)
 
 occurs :: VarId -> Ty -> Bool
 occurs v = \case

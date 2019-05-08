@@ -35,7 +35,7 @@ import           Pact.Types.Typecheck       (UserType)
 import           Pact.Types.Pretty
 
 import           Pact.Analyze.Feature       hiding (Doc, Type, Var, ks, obj,
-                                             str, TyFun, TyVar)
+                                             str, TyFun, TyVar, Constraint)
 import           Pact.Analyze.Types         hiding (Ty(..))
 
 -- @PreProp@ stands between @Exp@ and @Prop@.
@@ -174,7 +174,14 @@ cvtTy = \case
   TyFun{} -> error "Function types not allowed in cvtTy"
   TyVar{} -> error "Variable not allowed in cvtTy"
 
-newtype Options = Options ([[(Ty, Ty)]])
+data Constraint
+  = EqConstraint !Ty !Ty
+  | HasRowConstraint
+    !Text -- ^ row name
+    !Ty   -- ^ row type
+    !Ty   -- ^ object type
+
+newtype Options = Options ([[Constraint]])
 
 data CheckState = CheckState
   { _checkVarGen      :: !VarId
