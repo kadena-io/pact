@@ -38,7 +38,7 @@ module Pact.Analyze.Parse.Prop
 
 import           Control.Applicative
 import           Control.Lens                 (at, view)
-import           Control.Monad.Except         (MonadError)
+import           Control.Monad.Except         (MonadError, lift)
 import           Control.Monad.Reader         (local, runReaderT)
 import           Control.Monad.State.Strict   (evalStateT)
 import qualified Data.HashMap.Strict          as HM
@@ -233,15 +233,15 @@ expToProp
 expToProp tableEnv' genStart nameEnv idEnv consts propDefs ty body = do
   (preTypedBody, preTypedPropDefs)
     <- parseToPreProp genStart nameEnv propDefs body
-  let _env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
-        preTypedPropDefs consts
-  checkPreProp ty preTypedBody -- XXX env
+  let env = PropCheckEnv tableEnv' Set.empty Set.empty
+        (coerceQType <$> idEnv) preTypedPropDefs consts
+  _getEither $ evalStateT (runReaderT (checkPreProp ty preTypedBody) env) (CheckState 0 [])
 
-checkPreProp :: SingTy a -> Fix PreProp -> Either String (Prop a)
+checkPreProp :: SingTy a -> Fix PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp = do
   Some ty' prop <- typecheck preProp
   case singEq ty ty' of
-    Nothing -> Left $
+    Nothing -> lift $ lift $ EitherFail $ Left $
       "checkPreProp: mismatched types: " ++ show ty ++ " / " ++ show ty'
     Just Refl -> pure  prop
 
@@ -264,9 +264,9 @@ inferProp
 inferProp tableEnv' genStart nameEnv idEnv consts propDefs body = do
   (preTypedBody, preTypedPropDefs)
     <- parseToPreProp genStart nameEnv propDefs body
-  let _env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
-        preTypedPropDefs consts
-  typecheck preTypedBody -- XXX need env
+  let env = PropCheckEnv tableEnv' Set.empty Set.empty
+        (coerceQType <$> idEnv) preTypedPropDefs consts
+  _getEither $ evalStateT (runReaderT (typecheck preTypedBody) env) (CheckState 0 [])
 
 parseToPreProp
   :: Traversable t

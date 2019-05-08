@@ -11,7 +11,7 @@
 module Pact.Analyze.Parse.Types where
 
 import           Control.Applicative        (Alternative)
-import           Control.Lens               (makeLenses, (<&>))
+import           Control.Lens               (makeLenses, (<&>), (&), _2, (%~))
 import           Control.Monad.Except       (MonadError (throwError))
 import           Control.Monad.Fail
 import           Control.Monad.Reader       (ReaderT)
@@ -35,8 +35,8 @@ import           Pact.Types.Typecheck       (UserType)
 import           Pact.Types.Pretty
 
 import           Pact.Analyze.Feature       hiding (Doc, Type, Var, ks, obj,
-                                             str)
-import           Pact.Analyze.Types
+                                             str, TyFun, TyVar)
+import           Pact.Analyze.Types         hiding (Ty(..))
 
 -- @PreProp@ stands between @Exp@ and @Prop@.
 --
@@ -130,17 +130,57 @@ type TableEnv = TableMap (ColumnMap EType)
 newtype Fix f = Fix (f (Fix f))
 
 data PropCheckEnv = PropCheckEnv
-  { _varTys            :: Map VarId QType
-  , _tableEnv          :: TableEnv
+  { _tableEnv          :: TableEnv
   , _quantifiedTables  :: Set TableName
   , _quantifiedColumns :: Set ColumnName
 
-  -- User-defined properties
+  , _varTys            :: Map VarId QType
+
+  -- | User-defined properties
   , _definedProps      :: HM.HashMap Text (DefinedProperty (Fix PreProp))
 
-  -- Vars bound within a user-defined property
+  -- | Constants and vars bound within a user-defined property
   , _localVars         :: HM.HashMap Text EProp
   }
+
+data Ty
+  = TyInteger
+  | TyBool
+  | TyStr
+  | TyTime
+  | TyDecimal
+  | TyGuard
+  | TyAny
+  | TyList !Ty
+  | TyObject ![(Text, Ty)] -- ^ Invariant: this list is always sorted
+  | TyFun ![Ty] !Ty
+  | TyVar !VarId
+  deriving Eq
+
+-- | Convert a 'Ty' to a singleton 'SingTy' via 'EType'
+cvtTy :: Ty -> EType
+cvtTy = \case
+  TyInteger -> EType SInteger
+  TyBool    -> EType SBool
+  TyStr     -> EType SStr
+  TyTime    -> EType STime
+  TyDecimal -> EType SDecimal
+  TyGuard   -> EType SGuard
+  TyAny     -> EType SAny
+  TyList ty -> case cvtTy ty of
+    EType sty -> EType $ SList sty
+  TyObject tys -> case mkESchema (tys & traverse . _2 %~ cvtTy) of
+    ESchema schema -> EType $ SObjectUnsafe schema
+  TyFun{} -> error "Function types not allowed in cvtTy"
+  TyVar{} -> error "Variable not allowed in cvtTy"
+
+newtype Options = Options ([[(Ty, Ty)]])
+
+data CheckState = CheckState
+  { _checkVarGen      :: !VarId
+  , _checkConstraints :: ![Options]
+  }
+makeLenses ''CheckState
 
 newtype EitherFail e a = EitherFail { _getEither :: Either e a }
     deriving (Show, Eq, Ord, Functor, Applicative, Alternative, Monad, MonadError e)
@@ -151,7 +191,7 @@ instance IsString str => MonadFail (EitherFail str) where
 type ParseEnv = Map Text VarId
 
 type PropParse      = ReaderT ParseEnv (StateT VarId (Either String))
-type PropCheck      = ReaderT PropCheckEnv (EitherFail String)
+type PropCheck      = ReaderT PropCheckEnv (StateT CheckState (EitherFail String))
 type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 
 makeLenses ''PropCheckEnv
