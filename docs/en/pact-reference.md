@@ -566,7 +566,14 @@ Keysets and Authorization {#confidential-keysets}
 ---
 
 Pact is inspired by Bitcoin scripts to incorporate public-key authorization directly into smart
-contract execution and administration.
+contract execution and administration. Pact seeks to take this further by making single- and multi-sig
+interactions ubiquitous and effortless with the concept of _keysets_, meaning that single-signature
+mode is never assumed: anywhere public-key signatures are used, single-sig and multi-sig can interoperate
+effortlessly. Finally, all crypto is handled by the Pact runtime to ensure programmers can't make
+mistakes "writing their own crypto".
+
+Also see [Guards and Capabilities](#caps) below for how Pact
+moves beyond just keyset-based authorization.
 
 ### Keyset definition
 
@@ -640,6 +647,313 @@ The following code indicates how this might be achieved:
 In the example, `create-account` reads a keyset definition from the message payload using [read-keyset](pact-functions.html#read-keyset)
 to store as "keyset" in the table. `read-balance` only allows that owner's keyset to read the balance,
 by first enforcing the keyset using [enforce-keyset](pact-functions.html#enforce-keyset).
+
+Guards and Capabilities {#caps}
+---
+
+Pact 3.0 introduces powerful new concepts to allow programmers to express and implement authorization schemes correctly and easily:
+_guards_, which generalize keysets, and _capabilities_, which generalize authorizations.
+
+### Guards
+A guard is essentially a predicate function over some environment that enables a pass-fail operation, `enforce-guard`,
+to be able to test a rich diversity of conditions.
+
+A keyset is the quintessential guard: it specifies a list of keys,
+and a predicate function to verify how many keys were used to sign the current transaction, which is enforced by
+calling `enforce-keyset`, causing the transaction to fail if the necessary keys are not found in the signing set.
+
+However, there are other predicates that are equally useful:
+
+- We might want to enforce that a _module_ is the only entity that can perform some function, ie that code that is
+able to update some database entry can only be called within a particular module.
+
+- We might want to ensure that a user has provided some secret, like a hash preimage, as seen in atomic swaps.
+
+- We might want to combine all of the above into a single, enforceable rule: "ensure user A signed the transaction AND
+provided a hash preimage AND is only executable in module `foo`".
+
+Finally, we want guards to _interoperate_ with each other, so that smart contract code doesn't have to worry about
+what kind of guard is used to mediate access to some resource or right. For instance, it is easy to think of entries
+in a ledger having diverse guards, where some tokens are guarded by keysets, while others are autonomously owned by
+modules, while others are locked in some kind of escrow transaction: what's important is that the guard always be enforced
+for the given account, not what type of guard it is.
+
+Guards addresses all of these needs. Keysets are now just one type of guard, to which we add module guards,
+pact guards, and completely customizable "user guards". You can store any type of guard in the database using the `guard`
+type. The `keyset` type is still supported, but developers should switch to `guard` to enjoy the enhanced flexibility.
+
+### Capabilities
+
+The guards concept is powerful, but incomplete. In a given workflow, the _act of enforcing_ a keyset or any guard is hard
+to encapsulate or reason about, and the result of enforcement -- that is, the granting of some right -- can only be expressed
+sequentially, by literally ensuring that the protected code "happens after" the enforcement. The granted right itself has no
+expression in the code beyond "we did stuff after enforcing some guard".
+
+With capabilities, Pact gains the ability to express such a granted right, or capability, directly in code, and use that
+capability to organize and govern code.
+
+Let's look at the classic ledger-oriented use case to illustrate. The normal workflow to allow debiting some account balance
+is to enforce a keyset stored in the account table:
+
+```lisp
+(defun debit (user amount)
+  (with-read accounts user { "keyset" := keyset, "balance" := balance }
+    (enforce-keyset keyset)
+    (update accounts user { "balance" := (- balance debit) }))
+)
+```
+
+Expressed as a capability, we could say that "the act of enforcing the user keyset allows you to update", and importantly,
+we can declare exactly what code is controlled by this capability:
+
+```lisp
+(defcap DEBIT (user)
+  "Capability to debit a user account balance, enforcing the keyset".
+  (with-read accounts user { "keyset" := keyset }
+    (enforce-keyset keyset)
+))
+
+(defun debit (user amount)
+  (with-capability (DEBIT user)
+    (update accounts user { "balance" := (- balance debit) }))
+)
+```
+
+What have we gained? We've given the act of checking the keyset a name, `DEBIT`, by defining the capability with
+[`defcap`](#defcap). We've also used [`with-capability`](#with-capability) to invoke the capability in a _scope_, within
+which we call `update`.
+
+Capabilities allow Pact to directly represent grants or rights, and offer some very useful features for controlling
+how code is executed. They come from the "capabilities" concept in computer science, which seeks to make ambient rights
+concrete or "reified", instead of just being enforced ad-hoc. Capabilities are often contrasted with "access control
+lists" in UNIX, where a list of users is maintained to allow access to, say, the contents of some directory. By explicitly
+handing some process a data object representing their right to access some resource, we have more control over that
+right, including the ability to revoke it in real time.
+
+In Pact, the concept gets narrowed to simply allow for a right to be granted over the body of some code, but it is still
+surprisingly useful for a number of goals.
+
+### Guards vs Capabilities
+Guards and capabilities can be confusing: given we have guards and things like keysets, what do we need the capability concept
+for?
+
+Guards allow us to define a _rule_ that must be satisfied for the transaction to proceed. As such, they really are just
+a way to declare a pass-fail condition or predicate. The Pact guard system is flexible enough to express any rule you can code.
+
+Capabilities allow us to declare how that rule is deployed. In doing so, they illustrate the critical rights that are
+extended to users of the smart contract, and "protect" code from being called incorrectly. Finally, they tightly scope what
+code is protected, and allow the ability for code to demand that some capability _is already enforced_.
+
+### Protecting code with `require-capability`
+
+The function [`require-capability`](#require-capability) can be used to "protect" a function from being called improperly:
+
+```lisp
+(defun debit (user amount)
+  (require-capability (DEBIT user)
+    (update accounts user ...)))
+```
+
+This effectively prevents the function from ever being called at top-level. **Capabilities can only be granted by the module
+code that declares them**, which is an important security property, as it ensures an attacker cannot elevate their privileges
+from outside.
+
+Written this way, the only way `debit` could be called is by some other module code, like `transfer`:
+
+```lisp
+(defun transfer (to from amount)
+  (with-capability (DEBIT from)
+    (debit from amount)
+    (credit to amount)))
+```
+
+Here, the `with-capability` call runs the code in `DEBIT`, which on success installs the "DEBIT [from]" capability
+into the Pact environment. When `debit` issues `require-capability (DEBIT user)`, the code will succeed. Meanwhile, if
+somebody directly called `debit` from outside, the code will fail.
+
+### Modeling capabilities
+
+The only problem with the above code is it pushed the awareness of DEBIT into the `transfer` function, whereas
+separation of concerns would better have it housed in `debit`. What's more, we'd like to ensure that `debit` is always called
+in a "transfer" capacity, that is, that the corresponding `credit` occurs. Thus, the better way to model this is with
+two capabilities, with TRANSFER being a "no-guard" capability that simply encloses `debit` and `credit` calls:
+
+```lisp
+(defcap TRANSFER
+  "Capability to govern credit and debit calls"
+  true)
+
+(defun transfer (to from amount)
+  (with-capability (TRANSFER)
+    (debit from amount)
+    (credit to amount)))
+
+(defun debit (user amount)
+  (require-capability (TRANSFER)
+    (with-capability (DEBIT from)
+      (update accounts user ...))))
+
+(defun credit (user amount)
+  (require-capability (TRANSFER)
+    (update accounts user ...)))
+```
+
+Thus, `TRANSFER` protects `debit` and `credit` from being used improperly, while `DEBIT` governs specifically the
+ability to debit.
+
+### Improving efficiency
+Once capabilities are granted they are installed into the pact environment for the scope of the call to `with-capability`;
+once that form is exited, the capability is uninstalled. This scoping alone is a security improvement, as it clearly delineates
+when the right is in effect (ie it doesn't "bleed" into the outer calling environment). However, it also can
+improve efficiency.
+
+For example, rotating the user keyset also requires checking the keyset first. We can rename the capability USER_KEYSET
+to indicate its more general utility, and use it for both debit and rotate:
+
+```lisp
+(defcap USER_KEYSET (user)
+  (with-read accounts user { "keyset" := keyset }
+    (enforce-keyset keyset)))
+
+(defun debit (user amount)
+  (require-capability (TRANSFER)
+    (with-capability (USER_KEYSET from) ...)))
+
+(defun rotate (user new-keyset)
+  (with-capability (USER_KEYSET user) ...))
+```
+So far so good. However, if we had a (admittedly contrived) `rotate-and-transfer` function, we'd be calling that
+code twice, which is inefficient. This can be solved by acquiring the capability at the outer level: capabilities
+that have already been acquired are not re-evaluated:
+
+```lisp
+(defun rotate-and-transfer (from to from-new-keyset amount)
+  (with-capability (USER_KEYSET from) ;; installs USER_KEYSET for 'from'
+    (transfer from to amount)         ;; 'debit' now won't reperform check
+    (rotate from from-new-keyset)))   ;; nor will 'rotate'
+```
+
+### Composing capabilities
+Finally, capabilities can be _composed_, in order to bring multiple capabilities into a single scope. Imagine
+that our use case required the USER_KEYSET capability but also that OPERATE_ADMIN had additionally signed
+the transaction. We can compose these into a new composite capability:
+
+```lisp
+(defcap OPERATE_AND_USER_KEYSET (user)
+  (compose-capability (OPERATE_ADMIN))
+  (compose-capability (USER_KEYSET user)))
+```
+
+Now, a call to `(with-capability (OPERATE_AND_USER_KEYSET user) ...)` will bring the two capabilities into
+scope, if not already there. Capabilities are never introduced twice, so if an outer code block had already
+granted OPERATE_ADMIN, just that capability would stay in scope (and not be evaluated twice) outside of the inner
+scope.
+
+### Guard types
+Guards come in four flavors:
+
+#### Keyset guards.
+These are the classic pact keysets. Using the `keyset` type is the one instance where you can restrict a
+guard subtype, otherwise the `guard` type obscures the implementation type to prevent developers from
+engaging in guard-specific control flow, which would be against best practices. Again, it is better to
+switch to `guard` unless there is a specific need to use keysets.
+
+```lisp
+(enforce-guard (read-keyset "keyset"))
+```
+
+#### Keyset reference guards
+Keysets can be installed into the environment with `define-keyset`, but if you wanted to store a referenced
+keyset you would need to use a `string` type. To make environment keysets interoperate with concrete keysets
+and other guards, we introduce the "keyset reference guard" which indicates that a defined keyset is used.
+
+```lisp
+(enforce-guard (keyset-ref-guard "foo"))
+
+(update accounts user { "guard": (keyset-ref-guard "foo") })
+```
+
+#### Module guards
+Module guards are a special guard that will only pass if called from within the specified module. This can
+be used for instance to make a module "own" some asset and autonomously manage it. Note that module guards
+can only be created within the specified module. Module guards are named, to allow for disambiguating more
+than one module guard if needed.
+
+```lisp
+(enforce-guard (create-module-guard "account-module-asset"))
+```
+
+#### Pact guards
+
+Pact guards are a special guard that will only pass if called in a particular `defpact` execution.
+Imagine an escrow transaction where the funds need to be moved into an escrow account: if modeled as a two-step
+pact, the funds would go into a special account named after the pact id with a pact guard, meaning that
+only code in a subsequent step of that particular pact execution can access the funds:
+
+```lisp
+(defpact escrow (from to amount)
+  (step (with-capability (ESCROW) (init-escrow from amount)))
+  (step (with-capability (ESCROW) (complete-escrow to amount))))
+
+(defun init-escrow (from amount)
+  (require-capability (ESCROW))
+  (create-account (pact-id) (create-pact-guard "escrow"))
+  (transfer from (pact-id) amount))
+
+(defun complete-escrow (to amount)
+  (require-capability (ESCROW))
+  (with-capability (USER_GUARD (pact-id)) ;; enforces guard on account (pact-id)
+    (transfer (pact-id) to amount)))
+```
+
+#### User guards
+
+User guards allow the user to design an arbitrary predicate function to enforce the guard, given some
+initial data. For instance, a user guard could be designed to require two separate keysets to be enforced:
+
+```lisp
+(defun both-sign (ks1 ks2)
+  (enforce-keyset ks1)
+  (enforce-keyset ks2))
+
+(defun install-both-guard ()
+  (write guard-table "both"
+    { "guard":
+      (create-user-guard
+        (both-sign (read-keyset "ks1")
+                   (read-keyset "ks2"))) }))
+
+(defun enforce-both-guard ()
+  (enforce-guard (at "guard" (read guard-table "both"))))
+```
+
+The special syntax of `create-user-guard` ensures that the arguments are evaluated at guard creation time.
+Thus in the example above, the two `read-keyset` calls will be performed and stored in the guard data.
+When `enforce-both-guard` is called, `both-sign` is only called then.
+
+User guards look a lot like capabilities but are different, namely in that they can be stored in the
+database and passed around like plain data. Capabilities are in-module rights that can only be enforced
+within the declaring module, and offer scoping and the other benefits mentioned above. User guards
+are for implementing custom predicate logic that can't be expressed by other built-in guard types.
+
+#### HTLC guard example
+
+The following example shows how a "hash timelock" guard can be made, to implement atomic swaps.
+
+```lisp
+
+(create-hashlock-guard (secret-hash timeout signer-ks)
+  (create-user-guard (enforce-hashlock secret-hash timeout signer-ks)))
+
+(defun enforce-hashlock (secret-hash timeout signer-ks)
+  (enforce-one [
+    (enforce (= (hash (read-msg "secret")) secret-hash))
+    (and
+      (enforce-keyset signer-ks)
+      (enforce (> (at "block-time" (chain-data)) timeout) "Timeout not passed"))
+      ]))
+```
+
 
 Computational Model {#computation}
 ---
