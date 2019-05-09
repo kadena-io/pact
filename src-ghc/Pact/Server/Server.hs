@@ -27,7 +27,7 @@ import Data.Aeson
 import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
 
-import qualified Data.HashMap.Strict as HashMap
+import qualified Data.HashMap.Strict   as HashMap
 
 import Data.Word
 import GHC.Generics
@@ -72,8 +72,8 @@ usage =
 serve :: FilePath -> IO ()
 serve configFile = do
   (runServer, asyncCmd, asyncHist) <- setupServer configFile
-  link asyncCmd   -- Must be individually killed with uninterruptibleCancel
-  link asyncHist  -- Must be individually killed with uninterruptibleCancel
+  link asyncCmd
+  link asyncHist
   runServer
 
 setupServer :: FilePath -> IO (IO (), Async (), Async ())
@@ -123,10 +123,7 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
         liftIO $ debugFn $ "[cmd]: executing " ++ show (length cmds) ++ " command(s)"
         resps <- forM cmds $ \cmd -> do
           liftIO $ _ceiApplyCmd Transactional cmd
-        liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> (map fullToHashLogCr resps)
+        liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> resps
       LocalCmd cmd mv -> do
         cr@CommandResult{..} <- liftIO $ _ceiApplyCmd Local cmd
-        liftIO $ putMVar mv (toJSON . fullToHashLogCr $ cr)
-
-fullToHashLogCr :: CommandResult [TxLog Value] -> CommandResult Hash
-fullToHashLogCr full = undefined
+        liftIO $ putMVar mv (toJSON cr)

@@ -24,7 +24,7 @@ module Utils.TestRunner
   , stopServer
   ) where
 
-import Pact.Server.Server (setupServer)
+import Pact.Server.Server (serve)
 import qualified Pact.Server.Client as C
 import Pact.Types.API
 import Pact.Types.Command
@@ -82,14 +82,11 @@ runAll mgr cmds = Exception.bracket
                stopServer
               (const (run mgr cmds))
 
-startServer :: FilePath -> IO (Async (), Async (), Async ())
+startServer :: FilePath -> IO (Async ())
 startServer configFile = do
-  (runServer, asyncCmd, asyncHist) <- setupServer configFile
-  asyncServer <- async runServer
-  link2 asyncServer asyncCmd
-  link2 asyncServer asyncHist
+  asyncServer <- async $ serve configFile
   waitUntilStarted 0
-  return (asyncServer, asyncCmd, asyncHist)
+  return asyncServer
 
 waitUntilStarted :: Int -> IO ()
 waitUntilStarted i | i > 10 = throwIO $ userError "waitUntilStarted: failing after 10 attempts"
@@ -104,12 +101,10 @@ waitUntilStarted i = do
       threadDelay 500
       waitUntilStarted (succ i)
 
-stopServer :: (Async (), Async (), Async ()) -> IO ()
-stopServer (asyncServer, asyncCmd, asyncHist) = do
-  uninterruptibleCancel asyncCmd
-  uninterruptibleCancel asyncHist
-  uninterruptibleCancel asyncServer
-  mapM_ checkFinished [asyncServer, asyncCmd, asyncHist]
+stopServer :: Async () -> IO ()
+stopServer asyncServer = do
+  cancel asyncServer
+  mapM_ checkFinished [asyncServer]
   where checkFinished asy = poll asy >>= \case
           Nothing -> Exception.evaluate $ error $
                     "Thread " ++ show (asyncThreadId asy) ++ " could not be cancelled."
