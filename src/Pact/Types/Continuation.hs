@@ -47,7 +47,7 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 -- 4. The hash of the defining module
 --
 data Yield = Yield
-  { _yData :: !(Object Name)
+  { _yData :: !(ObjectMap PactValue)
     -- ^ Yield data from the pact continuation
   , _yTarget :: !ChainId
     -- ^ target chain on which to run continuation
@@ -74,7 +74,7 @@ endorse
   -- ^ the hash of the containing module for a pact
   -> PactId
   -- ^ the executing pact id
-  -> Object Name  -- ^ yield data
+  -> ObjectMap PactValue  -- ^ yield data
   -> ChainId
   -- ^ target chain id
   -> Hash
@@ -93,7 +93,7 @@ data PactStep = PactStep {
     , _psPactId :: !PactId
       -- | resume value. Note that this is only set in Repl tests and in private use cases;
       -- in all other cases resume value comes out of PactExec.
-    , _psResume :: !(Maybe (ObjectMap (Term Name)))
+    , _psResume :: !(Maybe Yield)
 } deriving (Eq,Show)
 
 instance Pretty PactStep where
@@ -131,6 +131,7 @@ instance NFData PactExec
 instance ToJSON PactExec where toJSON = lensyToJSON 3
 instance FromJSON PactExec where parseJSON = lensyParseJSON 3
 instance Pretty PactExec where pretty = viaShow
+
 
 makeLenses ''PactExec
 makeLenses ''PactStep

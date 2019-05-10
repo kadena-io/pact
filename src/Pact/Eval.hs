@@ -788,7 +788,7 @@ resumePactExec i req ctx = do
   -- if resume is in step, use that, otherwise get from exec state
   let resume = case _psResume req of
         r@Just {} -> r
-        Nothing -> fmap (_oObject . _yData) $ _peYield ctx
+        Nothing -> _peYield ctx
 
   -- run local environment with yield from pact exec
   local (set eePactStep (Just $ set psResume resume req)) $

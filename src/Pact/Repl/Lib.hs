@@ -309,9 +309,11 @@ continuePact i as = case as of
                    (return . _pePactId)
                    pactExec
         Just pidTxt -> return $ PactId pidTxt
-      let pactStep = PactStep
-                     (fromIntegral step)
-                     rollback pactId userResume
+      let s = fromIntegral step
+          _r = fmap (fmap toPactValueLenient) userResume
+
+      let pactStep = PactStep s rollback pactId undefined
+
       viewLibState (view rlsPacts) >>= \pacts ->
         case M.lookup pactId pacts of
           Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
@@ -341,7 +343,7 @@ pactState i as = case as of
       case e of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
-          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . _oObject . _yData) _peYield)
+          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactValue . _yData) _peYield)
           ,("executed",toTerm _peExecuted)
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]

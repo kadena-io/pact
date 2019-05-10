@@ -661,20 +661,20 @@ yield i as = case as of
   [(TLitString t), v@(TObject u _)] -> go (ChainId t) u v
   _ -> argsError i as
   where
-    go tid t@(Object o _ _ _) u = do
+    go tid (Object o _ _ _) u = do
       eym <- use evalPactExec
       case eym of
         Nothing -> evalError' i "Yield not in defpact context"
         Just PactExec{..} -> do
-          void $ enforcePactValue' o
+          o' <- enforcePactValue' o
           -- get current calling module data
           md <- getCallingModule i
           let m = _mdModule md
           -- retrieve calling pact id from funapp
           pid <- getPactId i
-          e <- endorse' m pid t tid
+          e <- endorse' m pid o' tid
 
-          let y = Yield t tid e
+          let y = Yield o' tid e
           (evalPactExec . _Just . peYield) .= Just y
           return u
 
@@ -689,8 +689,10 @@ resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
   rm <- preview $ eePactStep . _Just . psResume . _Just
   case rm of
     Nothing -> evalError' i "Resume: no yielded value in context"
-    Just r ->
-      bindObjectLookup (toTObjectMap TyAny def r) >>= bindReduce ps bd bi
+    Just (Yield o _ _) -> do
+      let m = fmap fromPactValue o
+      l <- bindObjectLookup (toTObjectMap TyAny def m)
+      bindReduce ps bd bi l
 resume i as = argsError' i as
 
 where' :: NativeFun e
