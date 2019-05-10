@@ -441,9 +441,9 @@ langDefs =
 
     ,defRNative (specialForm YieldForm) yield
      (funType yieldv [("object",yieldv)] <>
-      funType yieldv [("object", yieldv),("target-chain",tTyString)])
+      funType yieldv [("target-chain",tTyString), ("object", yieldv)])
      [ LitExample "(yield { \"amount\": 100.0 })"
-     , LitExample "(yield { \"amount\": 100.0 } \"Testnet00/2\")"
+     , LitExample "(yield  \"Testnet00/2\" { \"amount\": 100.0 })"
      ]
      "Yield OBJECT for use with 'resume' in following pact step on chain TARGET-CHAIN. If no chain is specified, \
      \the following pact step must execute on the current chain. The object is similar to database row objects, \
@@ -658,7 +658,7 @@ listModules i _ = do
 yield :: RNativeFun e
 yield i as = case as of
   [u@(TObject t _)] -> go "" t u
-  [t@(TObject u _), (TLitString v)] -> go (ChainId v) u t
+  [(TLitString t), v@(TObject u _)] -> go (ChainId t) u v
   _ -> argsError i as
   where
     go tid t@(Object o _ _ _) u = do
@@ -679,10 +679,10 @@ yield i as = case as of
           return u
 
     endorse' (MDModule m) pid o tid = pure $ endorse (_mHash m) pid o tid
-    endorse' (MDInterface ifn) _ _ _ = do
-      let n = pretty . _interfaceName $ ifn
-      evalError' (_faInfo i) $
-        "Internal error: cannot endorse yield for interface: " <> n
+    endorse' (MDInterface n) _ _ _ =
+      evalError' (_faInfo i)
+        $ "Internal error: cannot endorse yield for interface: "
+        <> pretty (_interfaceName n)
 
 resume :: NativeFun e
 resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
