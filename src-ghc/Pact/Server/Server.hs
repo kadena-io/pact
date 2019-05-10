@@ -126,4 +126,4 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
         liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> resps
       LocalCmd cmd mv -> do
         cr@CommandResult{..} <- liftIO $ _ceiApplyCmd Local cmd
-        liftIO $ putMVar mv (toJSON cr)
+        liftIO $ putMVar mv cr

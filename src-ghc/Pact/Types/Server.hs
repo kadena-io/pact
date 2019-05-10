@@ -153,6 +153,6 @@ data History =
 data Inbound =
   TxCmds { iCmds :: [Command ByteString] } |
   LocalCmd { iCmd :: Command ByteString,
-             iLocalResult :: MVar Value
+             iLocalResult :: MVar (CommandResult [TxLog Value])
            }
   deriving (Eq)

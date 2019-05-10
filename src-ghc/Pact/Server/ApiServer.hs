@@ -136,12 +136,7 @@ localHandler commandText = do
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
-  case localFullCrParseMaybe r of
-    Just cr@CommandResult{} -> pure $ fullToHashLogCr cr
-    Nothing -> die' "command could not be run locally"
-
-localFullCrParseMaybe :: Value -> Maybe (CommandResult [TxLog Value])
-localFullCrParseMaybe r = parseMaybe parseJSON r
+  pure $ fullToHashLogCr r
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion
