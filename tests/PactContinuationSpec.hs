@@ -96,8 +96,8 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 -- CONTINUATIONS TESTS
 
 testPactContinuation :: HTTP.Manager -> Spec
-testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
-  it "sends (+ 1 2) command to locally running dev server" $ do
+testPactContinuation mgr = {--before_ flushDb $ after_ flushDb--} $ do
+  {--it "sends (+ 1 2) command to locally running dev server" $ do
     testSimpleServerCmd mgr
 
   context "when provided with correct next step" $
@@ -111,7 +111,7 @@ testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
   context "when last step of a pact executed" $
     it "deletes pact from the state" $
       testLastStep mgr
-
+   --}
   context "when error occurs when executing pact step" $
     it "throws error and does not update pact's state" $
       testErrStep mgr

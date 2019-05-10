@@ -25,5 +25,4 @@ echo ""; echo "Step 5"; echo ""
 pact -l -a examples/accounts/scripts/05-bob.yaml | curl -H "$JSON" -d @- http://localhost:8080/api/v1/local
 echo ""
 
-
 curl -H "$JSON" -d '{"requestKeys":["zaqnRQ0RYzxTccjtYoBvQsDo5K9mxr4TEF-HIYTi5Jo","r5L96DVwNKANAedHArQoJc9oxF3hf_EftopCsoaCuuY","CgjWWeA3MBmf3GIyop2CPU7ndhPuxnXFtcGm7-STMUo","gx60LXLVcNlSQ4XkJUgqwqdZZ-RyaPymVVpWMspAf-Y"]}' -X POST http://localhost:8080/api/v1/poll
