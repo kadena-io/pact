@@ -327,6 +327,7 @@ data FunApp = FunApp {
 
 instance HasInfo FunApp where getInfo = _faInfo
 
+instance NFData FunApp
 instance ToJSON FunApp where toJSON = lensyToJSON 3
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 
@@ -354,7 +355,7 @@ instance HasInfo n => HasInfo (Ref' n) where
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON,NFData)
 
 instance Pretty Gas where
   pretty (Gas i) = pretty i

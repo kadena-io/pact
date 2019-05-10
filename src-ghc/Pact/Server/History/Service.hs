@@ -18,7 +18,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
 import Control.Concurrent.MVar
 import System.Directory
-import Data.Aeson (Value(Null))
+import Data.Aeson (Value)
 
 import Data.ByteString (ByteString)
 import Data.HashSet (HashSet)
@@ -33,6 +33,9 @@ import Pact.Types.Server
 import Pact.Types.Term
 import Pact.Server.History.Types
 import Pact.Server.History.Persistence as DB
+import Pact.Types.Persistence (TxLog)
+import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.Exp (Literal(..))
 
 initHistoryEnv
   :: HistoryChannel
@@ -130,7 +133,7 @@ addNewKeys cmds = do
             debug $ "Some (" ++ show (HashMap.size asHM - HashMap.size newCmdsHM) ++ ") new command(s) had a previously seen hash/requestKey"
 
 
-updateExistingKeys :: HashMap RequestKey CommandResult -> HistoryService ()
+updateExistingKeys :: HashMap RequestKey (CommandResult [TxLog Value]) -> HistoryService ()
 updateExistingKeys updates = do
   alertListeners updates
   pers <- use persistence
@@ -145,15 +148,15 @@ updateExistingKeys updates = do
                             , dbConn = dbConn }
   debug $ "Updated " ++ show (HashMap.size updates) ++ " command(s)"
 
-updateInMemKey :: (RequestKey, CommandResult) -> HashMap RequestKey (Command ByteString, Maybe CommandResult) -> HashMap RequestKey (Command ByteString, Maybe CommandResult)
+updateInMemKey :: (RequestKey, CommandResult [TxLog Value]) -> HashMap RequestKey (Command ByteString, Maybe (CommandResult [TxLog Value])) -> HashMap RequestKey (Command ByteString, Maybe (CommandResult [TxLog Value]))
 updateInMemKey (k,v) m = HashMap.adjust (\(cmd, _) -> (cmd, Just v)) k m
 
-pairResultWithCmd :: HashMap RequestKey (Command ByteString) -> (RequestKey, CommandResult) -> (Command ByteString, CommandResult)
+pairResultWithCmd :: HashMap RequestKey (Command ByteString) -> (RequestKey, CommandResult [TxLog Value]) -> (Command ByteString, CommandResult [TxLog Value])
 pairResultWithCmd m (rk, cmdr) = case HashMap.lookup rk m of
   Nothing -> error $ "Fatal error: the results for a RequestKey came in, but we can't find the original command\n" ++ show rk ++ "\n#----#\n" ++ show m
   Just cmd -> (cmd, cmdr)
 
-alertListeners :: HashMap RequestKey CommandResult -> HistoryService ()
+alertListeners :: HashMap RequestKey (CommandResult [TxLog Value]) -> HistoryService ()
 alertListeners m = do
   listeners <- use registeredListeners
   triggered <- return $! HashMap.filterWithKey (\k _ -> HashMap.member k m) listeners
@@ -163,7 +166,7 @@ alertListeners m = do
     -- use registeredListeners >>= debug . ("Active Listeners: " ++) . show . HashMap.keysSet
     debug $ "Serviced " ++ show (sum res) ++ " listener(s)"
 
-alertListener :: HashMap RequestKey CommandResult -> (RequestKey, [MVar ListenerResult]) -> HistoryService Int
+alertListener :: HashMap RequestKey (CommandResult [TxLog Value]) -> (RequestKey, [MVar ListenerResult]) -> HistoryService Int
 alertListener res (k,mvs) = do
   commandRes <- return $! res HashMap.! k
   -- debug $ "Servicing Listener for: " ++ show k
@@ -190,7 +193,7 @@ queryForResults (srks, mRes) = do
         debug $ "Querying for " ++ show (HashSet.size srks) ++ " keys, found " ++ show (HashMap.size found)
 
 -- This is here to try to get GHC to check the fast part first
-checkForIndividualResultInMem :: HashSet RequestKey -> RequestKey -> (Command ByteString, Maybe CommandResult) -> Bool
+checkForIndividualResultInMem :: HashSet RequestKey -> RequestKey -> (Command ByteString, Maybe (CommandResult [TxLog Value])) -> Bool
 checkForIndividualResultInMem _ _ (_,Nothing) = False
 checkForIndividualResultInMem s k (_,Just _) = HashSet.member k s
 
@@ -240,7 +243,8 @@ _go :: HistoryService ()
 _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey pactInitialHash
-  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null (Gas 0))])
+      pe = PactResult . Right . PLiteral . LString $ ""
+  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing pe (Gas 0) Nothing Nothing Nothing)])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)
   v <- liftIO $ takeMVar mv

@@ -60,6 +60,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
 import GHC.Generics
+import Control.DeepSeq
 
 import Pact.Types.ChainMeta
 import Pact.Types.Gas
@@ -99,6 +100,7 @@ instance Show StackFrame where
     show (StackFrame n i app) = renderInfo i ++ ": " ++ case app of
       Nothing -> unpack n
       Just (_,as) -> "(" ++ unpack n ++ concatMap (\a -> " " ++ unpack (asString a)) as ++ ")"
+instance NFData StackFrame
 instance ToJSON StackFrame where toJSON = lensyToJSON 3
 instance FromJSON StackFrame where parseJSON = lensyParseJSON 3
 makeLenses ''StackFrame
@@ -111,6 +113,7 @@ data PactErrorType
   | SyntaxError
   | GasError
   deriving (Eq, Show, Generic)
+instance NFData PactErrorType
 instance ToJSON PactErrorType
 instance FromJSON PactErrorType
 
@@ -122,6 +125,7 @@ data PactError = PactError
   , peDoc :: Doc }
   deriving (Eq, Generic)
 
+instance NFData PactError
 instance Exception PactError
 
 instance ToJSON PactError where toJSON = lensyToJSON 2

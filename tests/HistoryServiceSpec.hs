@@ -12,6 +12,7 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import System.Directory
 import Test.Hspec
+import Data.Aeson (Value)
 
 import Pact.Server.History.Persistence as DB
 import Pact.Server.History.Service
@@ -22,6 +23,7 @@ import Pact.Types.Server
 import Pact.Types.Term
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Exp (Literal(..))
+import Pact.Types.Persistence (TxLog)
 
 
 histFile :: FilePath
@@ -52,13 +54,10 @@ rq = RequestKey pactInitialHash
 pactSuccess :: PactResult
 pactSuccess = (PactResult . Right . PLiteral . LString) ""
 
-logs :: Maybe Hash
-logs = Just pactInitialHash
+cr :: CommandResult [TxLog Value]
+cr = CommandResult rq Nothing pactSuccess (Gas 0) Nothing Nothing Nothing
 
-cr :: CommandResult Hash
-cr = CommandResult rq Nothing pactSuccess (Gas 0) logs Nothing Nothing
-
-results :: HashMap.HashMap RequestKey (CommandResult Hash)
+results :: HashMap.HashMap RequestKey (CommandResult [TxLog Value])
 results = HashMap.fromList [(rq, cr)]
 
 initHistory :: IO (HistoryEnv,HistoryState)

@@ -80,6 +80,7 @@ import qualified Data.Text.Prettyprint.Doc.Render.Terminal as Term
 import           Data.Text.Prettyprint.Doc.Render.Text as RText
 import           Text.Trifecta.Delta
 import           GHC.Generics
+import           Control.DeepSeq
 
 data RenderColor = RColor | RPlain
 
@@ -94,11 +95,13 @@ data Annot
   deriving (Eq, Generic)
 instance A.ToJSON Annot
 instance A.FromJSON Annot
+instance NFData Annot
 
 type Doc = PP.Doc Annot
 instance Eq Doc where
   (==) = (==)
   (/=) = (/=)
+instance NFData Doc
 instance A.ToJSON Doc where toJSON = toJSON
 instance A.FromJSON Doc where parseJSON = parseJSON
 

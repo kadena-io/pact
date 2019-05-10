@@ -130,11 +130,11 @@ newtype ExistenceResult = ExistenceResult
   } deriving (Show, Eq)
 
 newtype PossiblyIncompleteResults = PossiblyIncompleteResults
-  { possiblyIncompleteResults :: HashMap RequestKey (CommandResult Hash)
+  { possiblyIncompleteResults :: HashMap RequestKey (CommandResult [TxLog Value])
   } deriving (Show, Eq)
 
 data ListenerResult =
-  ListenerResult (CommandResult Hash) |
+  ListenerResult (CommandResult [TxLog Value]) |
   GCed String
   deriving (Show, Eq)
 
@@ -142,7 +142,7 @@ data History =
   AddNew
     { hNewKeys :: ![Command ByteString]} |
   Update
-    { hUpdateRks :: !(HashMap RequestKey (CommandResult Hash)) } |
+    { hUpdateRks :: !(HashMap RequestKey (CommandResult [TxLog Value])) } |
   QueryForResults
     { hQueryForResults :: !(HashSet RequestKey, MVar PossiblyIncompleteResults) } |
   RegisterListener

@@ -29,11 +29,13 @@ import Control.Lens
 import Control.Concurrent
 import Control.Monad.Reader
 import Control.Monad.Trans.Except
+import Control.Arrow (second)
 
 import Data.Aeson hiding (defaultOptions, Result(..))
 import Data.Aeson.Types (parseMaybe)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Data.ByteString.Lazy       as BSL
 import qualified Data.Text as T
 import Data.Proxy
 import Data.Text.Encoding
@@ -52,7 +54,8 @@ import Pact.Types.Command
 import Pact.Types.API
 import Pact.Types.Server
 import Pact.Types.Version
-import Pact.Types.Hash (Hash(..))
+import Pact.Types.Hash
+import Pact.Types.Persistence (TxLog)
 
 #if !MIN_VERSION_servant(0,16,0)
 type ServerError = ServantErr
@@ -124,7 +127,7 @@ listenHandler (ListenerRequest rk) = do
       die' msg
     ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      pure cr
+      pure $ fullToHashLogCr cr
 
 localHandler :: Command T.Text -> Api (CommandResult Hash)
 localHandler commandText = do
@@ -133,12 +136,12 @@ localHandler commandText = do
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
-  case localCrParseMaybe r of
-    Just cr@CommandResult{} -> pure cr
+  case localFullCrParseMaybe r of
+    Just cr@CommandResult{} -> pure $ fullToHashLogCr cr
     Nothing -> die' "command could not be run locally"
 
-localCrParseMaybe :: Value -> Maybe (CommandResult Hash)
-localCrParseMaybe r = parseMaybe parseJSON r
+localFullCrParseMaybe :: Value -> Maybe (CommandResult [TxLog Value])
+localFullCrParseMaybe r = parseMaybe parseJSON r
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion
@@ -150,8 +153,12 @@ checkHistoryForResult rks = do
   liftIO $ writeHistory hChan $ QueryForResults (rks,m)
   liftIO $ readMVar m
 
-pollResultToReponse :: HM.HashMap RequestKey (CommandResult Hash) -> PollResponses
-pollResultToReponse m = PollResponses m
+pollResultToReponse :: HM.HashMap RequestKey (CommandResult [TxLog Value]) -> PollResponses
+pollResultToReponse m = PollResponses $ HM.fromList $ map (second fullToHashLogCr) $ HM.toList m
+
+fullToHashLogCr :: CommandResult [TxLog Value] -> CommandResult Hash
+fullToHashLogCr full = set crLogs hashedLogs full
+  where hashedLogs = (pactHash . BSL.toStrict . encode) <$> _crLogs full
 
 log :: (MonadReader ApiEnv m, MonadIO m) => String -> m ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)

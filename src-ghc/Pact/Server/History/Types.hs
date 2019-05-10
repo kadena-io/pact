@@ -17,11 +17,13 @@ import Control.Concurrent.MVar
 
 import Data.ByteString (ByteString)
 import Data.HashMap.Strict (HashMap)
+import Data.Aeson (Value)
 
 import Database.SQLite3.Direct
 
 import Pact.Types.Command
 import Pact.Types.Server
+import Pact.Types.Persistence (TxLog)
 
 data HistoryEnv = HistoryEnv
   { _historyChannel :: !HistoryChannel
@@ -42,7 +44,7 @@ data DbEnv = DbEnv
 
 data PersistenceSystem =
   InMemory
-    { inMemResults :: !(HashMap RequestKey (Command ByteString, Maybe CommandResult))} |
+    { inMemResults :: !(HashMap RequestKey (Command ByteString, Maybe (CommandResult [TxLog Value])))} |
   OnDisk
     { incompleteRequestKeys :: !(HashMap RequestKey (Command ByteString))
     , dbConn :: !DbEnv}

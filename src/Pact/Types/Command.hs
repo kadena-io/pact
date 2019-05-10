@@ -65,7 +65,6 @@ import Pact.Types.Orphans ()
 import Pact.Types.RPC
 import Pact.Types.PactValue (PactValue(..))
 
-
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
 
@@ -259,7 +258,7 @@ instance FromJSON UserSig where
 
 
 newtype PactResult = PactResult (Either PactError PactValue)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 instance ToJSON PactResult where
   toJSON (PactResult (Right s)) =
     object [ "status" .= ("success" :: String)
@@ -267,19 +266,26 @@ instance ToJSON PactResult where
   toJSON (PactResult (Left f)) =
     object [ "status" .= ("failure" :: String)
            , "data" .= f ]
+instance FromJSON PactResult where
+  parseJSON (A.Object o) = PactResult <$>
+                           ((Left <$> o .: "data") <|>
+                            (Right <$> o .: "data"))
+  parseJSON p = fail $ "Invalid PactResult " ++ show p
+
 
 data CommandResult l = CommandResult
-  { _crReqKey :: RequestKey
-  , _crTxId :: Maybe TxId
-  , _crResult :: PactResult
-  , _crGas :: Gas
-  , _crLogs :: Maybe l                  -- Level of logging (i.e. full TxLog vs hashed logs)
-  , _crContinuation :: Maybe PactExec
-  , _crMetaData :: Maybe Value          -- Platform-specific data
-  } deriving (Eq, Show)
--- TODO json, nfdata, make strict
-instance ToJSON (CommandResult l) where toJSON = undefined
-instance FromJSON (CommandResult l) where parseJSON = undefined
+  { _crReqKey :: !RequestKey
+  , _crTxId :: !(Maybe TxId)
+  , _crResult :: !PactResult
+  , _crGas :: !Gas
+  , _crLogs :: !(Maybe l)                 -- Level of logging (i.e. full TxLog vs hashed logs)
+  , _crContinuation :: !(Maybe PactExec)
+  , _crMetaData :: !(Maybe Value)         -- Platform-specific data
+  } deriving (Eq, Show, Generic)
+
+instance (NFData l) => NFData (CommandResult l)
+instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3
+instance (FromJSON l) => FromJSON (CommandResult l) where parseJSON = lensyParseJSON 3
 
 cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
@@ -301,7 +307,7 @@ requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON)
+  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, NFData)
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk

@@ -10,7 +10,8 @@ import Data.Default (def)
 import Test.Hspec
 import Utils.TestRunner
 import qualified Network.HTTP.Client as HTTP
-import qualified Control.Exception as Exception
+import qualified Control.Exception   as Exception
+import qualified Data.HashMap.Strict as HM
 
 import Pact.ApiReq
 import Pact.Types.API
@@ -54,7 +55,7 @@ spec = describe "Servant API client tests" $ do
     res <- bracket $! do
       r <- runClientM (local pactServerApiClient cmd) clientEnv
       return r
-    let cmdPactResult = PactResult . Right . PLiteral . LInteger $ 3
+    let cmdPactResult = PactResult . Right . PLiteral . LDecimal $ 3
     (_crResult <$> res) `shouldBe` (Right cmdPactResult)
   it "correctly runs a simple command publicly and listens to the result" $ do
     cmd <- simpleServerCmd
@@ -65,5 +66,19 @@ spec = describe "Servant API client tests" $ do
       -- print (res,res')
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
-    let cmdPactResult = PactResult . Right . PLiteral . LInteger $ 3
+    let cmdPactResult = PactResult . Right . PLiteral . LDecimal $ 3
     (_crResult <$> res') `shouldBe` (Right cmdPactResult)
+  it "correctly runs a simple command publicly and polls for the result" $ do
+    cmd <- simpleServerCmd
+    let rk = cmdToRequestKey cmd
+    (res,res') <- bracket $! do
+      !res <- runClientM (send pactServerApiClient (SubmitBatch [cmd])) clientEnv
+      !res' <- runClientM (poll pactServerApiClient (Poll [rk])) clientEnv
+      --print (res,res')
+      return (res,res')
+    res `shouldBe` (Right (RequestKeys [rk]))
+    let cmdPactResult = PactResult . Right . PLiteral . LDecimal $ 3
+    case res' of
+      Left servantErr -> Exception.evaluate (error $ show servantErr)
+      Right (PollResponses commandResults) ->
+        (_crResult <$> (HM.lookup rk commandResults)) `shouldBe` Just cmdPactResult
