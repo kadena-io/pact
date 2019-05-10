@@ -490,13 +490,13 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 
 *object*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
 
-*object*&nbsp;`object:<{y}>` *target-chain*&nbsp;`string` *&rarr;*&nbsp;`object:<{y}>`
+*target-chain*&nbsp;`string` *object*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
 
 
 Yield OBJECT for use with 'resume' in following pact step on chain TARGET-CHAIN. If no chain is specified, the following pact step must execute on the current chain. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values.
 ```lisp
 (yield { "amount": 100.0 })
-(yield { "amount": 100.0 } "Testnet00/2")
+(yield  "Testnet00/2" { "amount": 100.0 })
 ```
 
 ## Database {#Database}
