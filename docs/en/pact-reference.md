@@ -1681,11 +1681,11 @@ in scope for BODY, one or more expressions.
 
 
 ```lisp
-(defun add3 (a b c) (+ a (+ b c)))
-
-(defun scale3 (a b c s)
-  "multiply sum of A B C times s"
-  (* s (add3 a b c)))
+(defcap USER_GUARD (user)
+  "Enforce user account guard
+  (with-read accounts user
+    { "guard": guard }
+    (enforce-guard guard)))
 ```
 
 ### defconst {#defconst}
