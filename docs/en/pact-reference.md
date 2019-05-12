@@ -624,10 +624,13 @@ and predicate. Once authorized, the keyset can be easily [redefined](#define-key
 
 When [creating](pact-functions.html#create-table) a table, a module name must also be specified. By this mechanism,
 tables are "guarded" or "encapsulated" by the module, such that direct access to the table
-via [data-access functions](pact-functions.html#database) is authorized only by the module's admin keyset. However,
-*within module functions*, table access is unconstrained. This gives contract authors great
+via [data-access functions](pact-functions.html#database) is authorized only by the module's governance.
+However, *within module functions*, table access is unconstrained. This gives contract authors great
 flexibility in designing data access, and is intended to enshrine the module as the main
-"user" data access API.
+"user data access API".
+
+See also [module guards](#module-guards) for how this concept can be leveraged to protect more than
+just tables.
 
 ### Row-level keysets {#rowlevelkeysets}
 
@@ -652,7 +655,7 @@ Guards and Capabilities {#caps}
 ---
 
 Pact 3.0 introduces powerful new concepts to allow programmers to express and implement authorization schemes correctly and easily:
-_guards_, which generalize keysets, and _capabilities_, which generalize authorizations.
+_guards_, which generalize keysets, and _capabilities_, which generalize authorizations or rights.
 
 ### Guards
 A guard is essentially a predicate function over some environment that enables a pass-fail operation, `enforce-guard`,
@@ -807,8 +810,9 @@ once that form is exited, the capability is uninstalled. This scoping alone is a
 when the right is in effect (ie it doesn't "bleed" into the outer calling environment). However, it also can
 improve efficiency.
 
-For example, rotating the user keyset also requires checking the keyset first. We can rename the capability USER_KEYSET
-to indicate its more general utility, and use it for both debit and rotate:
+To illustrate, let's specify an operation to rotate the user's keyset, which like debit requires enforcing
+the user keyset first. Since checking the user keyset is now a more general capability, we rename it USER_KEYSET,
+and use it for both debit and rotate:
 
 ```lisp
 (defcap USER_KEYSET (user)
@@ -823,8 +827,8 @@ to indicate its more general utility, and use it for both debit and rotate:
   (with-capability (USER_KEYSET user) ...))
 ```
 So far so good. However, if we had a (admittedly contrived) `rotate-and-transfer` function, we'd be calling that
-code twice, which is inefficient. This can be solved by acquiring the capability at the outer level: capabilities
-that have already been acquired are not re-evaluated:
+code twice, which is inefficient. This can be solved by acquiring the capability at the outer level, because
+**capabilities that have already been acquired and are in-scope are not re-evaluated:**
 
 ```lisp
 (defun rotate-and-transfer (from to from-new-keyset amount)
@@ -834,7 +838,7 @@ that have already been acquired are not re-evaluated:
 ```
 
 ### Composing capabilities
-Finally, capabilities can be _composed_, in order to bring multiple capabilities into a single scope. Imagine
+Capabilities can be _composed_, in order to bring multiple capabilities into a single scope. Imagine
 that our use case required the USER_KEYSET capability but also that OPERATE_ADMIN had additionally signed
 the transaction. We can compose these into a new composite capability:
 
@@ -849,8 +853,29 @@ scope, if not already there. Capabilities are never introduced twice, so if an o
 granted OPERATE_ADMIN, just that capability would stay in scope (and not be evaluated twice) outside of the inner
 scope.
 
+### `defcap` details
+
+`defcap` is used to define capabilities, and it looks like a normal function. However capabilities
+differ from normal functions in some important ways. A capability definition does double-duty by
+both _parameterizing_ a capability that will be stored as a unique token in the environment, as well
+as _implementing_ the enforcing code that protects the capability from being improperly granted.
+
+For example, a capability `(USER_KEYSET "alice")` results in a token (USER_KEYSET,"alice") being stored
+in the environment, as distinct from (USER_KEYSET,"bob") etc. This token is what is checked by
+`(require-capability (USER_KEYSET "alice"))`, so that even though it looks like the USER_KEYSET code
+is being called, it is actually just being "referenced" to test for the token.
+
+Likewise, `(with-capability (USER_KEYSET "alice") ...)` does not _necessarily_ call the code in the defcap:
+it accesses the unique token to see if it is already present in the environment. Only if it is not
+present does it actually execute the code in the `defcap` body.
+
+As a result, **`defcap`s cannot be executed directly**, as this would violate the semantics described here.
+This is an important security property as it ensures that the granting code can only be called in the
+appropriate way.
+
+
 ### Guard types
-Guards come in four flavors:
+Guards come in five flavors: keyset, keyset reference, pact, and user guards.
 
 #### Keyset guards.
 These are the classic pact keysets. Using the `keyset` type is the one instance where you can restrict a
@@ -863,9 +888,10 @@ switch to `guard` unless there is a specific need to use keysets.
 ```
 
 #### Keyset reference guards
-Keysets can be installed into the environment with `define-keyset`, but if you wanted to store a referenced
-keyset you would need to use a `string` type. To make environment keysets interoperate with concrete keysets
-and other guards, we introduce the "keyset reference guard" which indicates that a defined keyset is used.
+Keysets can be installed into the environment with `define-keyset`, but if you wanted to store a reference
+to a defined keyset, you would need to use a `string` type. To make environment keysets interoperate
+with concrete keysets and other guards, we introduce the "keyset reference guard" which indicates that a
+defined keyset is used instead of a concrete keyset.
 
 ```lisp
 (enforce-guard (keyset-ref-guard "foo"))
@@ -873,11 +899,20 @@ and other guards, we introduce the "keyset reference guard" which indicates that
 (update accounts user { "guard": (keyset-ref-guard "foo") })
 ```
 
-#### Module guards
-Module guards are a special guard that will only pass if called from within the specified module. This can
-be used for instance to make a module "own" some asset and autonomously manage it. Note that module guards
-can only be created within the specified module. Module guards are named, to allow for disambiguating more
-than one module guard if needed.
+#### Module guards {#module-guards}
+Module guards are a special guard that when enforced will fail unless:
+
+- the code calling the enforce was called from within the module, or
+
+- module governance is granted to the current transaction.
+
+This is for allowing a module or smart contract to autonomously "own" and manage some asset, and as
+such is semantically identical to how module table access is similarly guarded: only module code or
+a transaction having module admin can directly write to a module tables, or upgrade the module.
+See [Module Governance](#module-governance) for more information.
+
+`create-module-guard` takes a `string` argument to allow naming the guard, to indicate the purpose or
+role of the guard.
 
 ```lisp
 (enforce-guard (create-module-guard "account-module-asset"))
@@ -885,10 +920,13 @@ than one module guard if needed.
 
 #### Pact guards
 
-Pact guards are a special guard that will only pass if called in a particular `defpact` execution.
+Pact guards are a special guard that will only pass if called in the specific `defpact` execution in
+which the guard was created.
+
 Imagine an escrow transaction where the funds need to be moved into an escrow account: if modeled as a two-step
-pact, the funds would go into a special account named after the pact id with a pact guard, meaning that
-only code in a subsequent step of that particular pact execution can access the funds:
+pact, the funds can go into a special account named after the pact id, guarded by a pact guard.
+This means that only code in a subsequent step of that particular pact execution (ie having the same
+pact ID) can pass the guard.
 
 ```lisp
 (defpact escrow (from to amount)
@@ -905,6 +943,9 @@ only code in a subsequent step of that particular pact execution can access the 
   (with-capability (USER_GUARD (pact-id)) ;; enforces guard on account (pact-id)
     (transfer (pact-id) to amount)))
 ```
+
+Pact guards turn pact executions into autonomous processes that can own assets, and is a powerful
+technique for trustless asset management within a multi-step operation.
 
 #### User guards
 
@@ -927,9 +968,12 @@ initial data. For instance, a user guard could be designed to require two separa
   (enforce-guard (at "guard" (read guard-table "both"))))
 ```
 
-The special syntax of `create-user-guard` ensures that the arguments are evaluated at guard creation time.
-Thus in the example above, the two `read-keyset` calls will be performed and stored in the guard data.
-When `enforce-both-guard` is called, `both-sign` is only called then.
+The special syntax of `create-user-guard` looks like it calls the user function, but instead it
+delays execution of that function until the guard is enforced, storing the arguments.
+Thus in the example above, the two `read-keyset` calls will be performed, and the results stored
+in the guard data.
+However, `both-sign` is not called when the user guard is created, but when it is enforced with
+`enforce-guard`.
 
 User guards look a lot like capabilities but are different, namely in that they can be stored in the
 database and passed around like plain data. Capabilities are in-module rights that can only be enforced
@@ -952,6 +996,129 @@ The following example shows how a "hash timelock" guard can be made, to implemen
       (enforce-keyset signer-ks)
       (enforce (> (at "block-time" (chain-data)) timeout) "Timeout not passed"))
       ]))
+```
+
+Generalized Module Governance {#module-governance}
+---
+
+Before Pact 3.0, module upgrade and administration was governed by a defined keyset that is
+referenced in the module definition. With Pact 3.0, this `string` value can alternately be a
+unqualified bareword that references a `defcap` within the module body. This `defcap` is the
+_module governance capability_.
+
+With the introduction of the governance capability syntax, Pact modules now support
+_generalized module governance_, allowing for module authors to design any governance scheme
+they wish. Examples include tallying a stakeholder vote on an upgrade hash, or enforcing
+more than one keyset.
+
+### Keysets vs governance functions
+
+To illustrate, let's consider a module governed by a keyset:
+
+```lisp
+(module foo 'foo-keyset ...)
+```
+
+This indicates that if a user tried to upgrade the module, or directly write to the module
+tables, `'foo-keyset` would be enforced on the transaction signature set.
+
+This can be directly implemented in a governance capability as follows:
+
+```lisp
+(module foo GOVERNANCE
+  ...
+  (defcap GOVERNANCE ()
+    (enforce-keyset 'foo-keyset))
+  ...
+)
+```
+
+Note the capability can have whatever name desired; GOVERNANCE is a good idiomatic name however.
+
+### Governance capability details
+
+As a `defcap`, the governance function cannot be called directly by user code. It is only
+invoked in the following circumstances:
+
+- A module upgrade is being attempted
+- Module tables are being directly accessed outside the module code
+- A [module guard](#module-guards) for this module is being enforced.
+
+Like any other capability, the governance capability can only be invoked within the declaring
+module with `with-capability` etc. Given that module code already has elevated module admin,
+there is never any need to acquire this particular capability. Using `require-capability` is
+useful however to protect some admin-only capability:
+
+```lisp
+(defun deactivate-user (user)
+  "Deactivate USER. Requires module admin."
+  (require-capability (GOVERNANCE))
+  (update users user { "active": false }))
+```
+
+#### Capability scope
+
+Since module governance is acquired automatically for upgrades and external table writes,
+this means that the module governance capability **stays in scope for the rest of the
+calling transaction**. This is unlike "user" capabilities, which can only be acquired in
+a fixed scope specified by the body of `with-capability`.
+
+This may sound worrisome, but the rationale is that a governance capability once granted
+should not be based on some transient fact that can become false during a single transaction.
+This is important especially in module upgrades, _which can change the governance capability
+itself_: if the module admin was tested again this could cause the upgrade to fail, for instance
+when migrating data with direct table rights.
+
+#### Capability risks
+
+Also, this means that, when initially installing a module, _the governance function is not
+invoked_. This is different behavior than when a keyset is specified: the keyset must be defined
+and it is enforced, to ensure that the keyset actually exists.
+
+Module governance is therefore more "risky" as it can mean that the module cannot be upgraded
+if there is a bug in the governance capability. Clearly, care must be taken when implementing
+module capabilities, and using the Pact formal verification system is highly recommended here.
+
+### Example: stakeholder upgrade vote
+
+In the following code, a module can be upgraded based on a vote. An upgrade is designed as a Pact
+transaction, and its hash and code are distributed to stakeholders, who vote for the upgrade.
+Once the upgrade is sent in, the vote is tallied in the governance capability, and if a simple
+majority is found, the code is upgraded.
+
+```lisp
+(module govtest count-votes
+  "Demonstrate programmable governance showing votes \
+ \ for upgrade transaction hashes"
+  (defschema vote
+    vote-hash:string)
+
+  (deftable votes:{vote})
+
+  (defun vote-for-hash (user hsh)
+    "Register a vote for a particular transaction hash"
+    (write votes user { "vote-hash": hsh })
+  )
+
+  (defcap count-votes ()
+    "Governance capability to tally votes for the upgrade hash".
+    (let* ((h (tx-hash))
+           (tally (fold (do-count h)
+                        { "for": 0, "against": 0 }
+                        (keys votes)))
+          )
+      (enforce (> (at 'for tally) (at 'against tally))
+               (format "vote result: {}, {}" [h tally])))
+  )
+
+  (defun do-count (hsh tally u)
+    "Add to TALLY if U has voted for HSH"
+    (bind tally { "for" := f, "against" := a }
+      (with-read votes u { 'vote-hash := v }
+        (if (= v hsh)
+            { "for": (+ 1 f), "against": a }
+          { "for": f, "against": (+ 1 a) })))
+  )
 ```
 
 
@@ -992,10 +1159,11 @@ Pact's supported types are:
 - [Integers](#integers)
 - [Decimals](#decimals)
 - [Booleans](#booleans)
-- [Key sets](#confidential-keysets)
+- [Time values](#time)
+- [Keysets](#keysets) and [Guards](#guards)
 - [Lists](#lists)
 - [Objects](#objects)
-- [Function](#defun) and [pact](#defpact) definitions
+- [Function](#defun), [pact](#defpact), and [capability](#defcap) definitions
 - [Tables](#deftable)
 - [Schemas](#defschema)
 
@@ -1060,7 +1228,7 @@ if any pass, the whole expression passes. This is the sole example in Pact of "e
 in that a failed enforcement simply results in the next test being executed, short-circuiting
 on success.
 
-#### Use built-in keysets
+#### Use built-in keyset predicates
 The built-in keyset functions [keys-all](pact-functions.html#keys-all), [keys-any](pact-functions.html#keys-any), [keys-2](pact-functions.html#keys-2)
 are hardcoded in the interpreter to execute quickly. Custom keysets require runtime resolution
 which is slower.
@@ -1080,7 +1248,7 @@ Pact also has [compose](pact-functions.html#compose), which allows "chaining" ap
 
 ### Pure execution {#pure}
 In certain contexts Pact can guarantee that computation is "pure", which simply means
-that the database state will not be accessed or modified. Currently, `enforce`, `enforce-one`
+that the database state will not be modified. Currently, `enforce`, `enforce-one`
 and keyset predicate evaluation are all executed in a pure context. [defconst](#defconst)
 memoization is also pure.
 
@@ -1498,6 +1666,28 @@ Arguments are in scope for BODY, one or more expressions.
   (* s (add3 a b c)))
 ```
 
+### defcap {#defcap}
+
+```lisp
+(defcap NAME ARGLIST [DOC] BODY...)
+```
+
+Define NAME as a capability, specified using ARGLIST arguments, with optional DOC.
+A `defcap` models a capability token which will be stored in the environment to represent
+some ability or right. Code in BODY is only called within special capability-related
+functions `with-capability` and `compose-capability` when the token as parameterized
+by the arguments supplied is not found in the environment. When executed, arguments are
+in scope for BODY, one or more expressions.
+
+
+```lisp
+(defun add3 (a b c) (+ a (+ b c)))
+
+(defun scale3 (a b c s)
+  "multiply sum of A B C times s"
+  (* s (add3 a b c)))
+```
+
 ### defconst {#defconst}
 ```lisp
 (defconst NAME VALUE [DOC-OR-META])
@@ -1639,11 +1829,26 @@ hash of a loaded module on the chain.
 
 ### module {#module}
 ```
-(module NAME KEYSET [DOC-OR-META] DEFS...)
+(module NAME KEYSET-OR-GOVERNANCE [DOC-OR-META] BODY...)
 ```
 
-Define and install module NAME, guarded by keyset KEYSET, with optional DOC-OR-META.
-DEFS must be [defun](#defun) or [defpact](#defpact) expressions only.
+Define and install module NAME, with module admin governed by KEYSET-OR-GOVERNANCE, with optional DOC-OR-META.
+
+If KEYSET-OR-GOVERNANCE is a string, it references a keyset that has been installed with `define-keyset`
+that will be tested whenever module admin is required. If KEYSET-OR-GOVERNANCE is an unqualified atom, it
+references a `defcap` capability which will be acquired if module admin is requested.
+
+BODY is composed of definitions that will be scoped in the module. Valid productions in a module include:
+
+- [defun](#defun)
+- [defpact](#defpact)
+- [defcap](#defcap)
+- [deftable](#deftable)
+- [defschema](#defschema)
+- [defconst](#defconst)
+- [implements](#implements)
+- [use](#use)
+- [bless](#bless)
 
 ```lisp
 (module accounts 'accounts-admin
