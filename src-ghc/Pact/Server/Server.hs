@@ -72,8 +72,8 @@ usage =
 serve :: FilePath -> IO ()
 serve configFile = do
   (runServer, asyncCmd, asyncHist) <- setupServer configFile
-  link asyncCmd   -- Must be individually killed with uninterruptibleCancel
-  link asyncHist  -- Must be individually killed with uninterruptibleCancel
+  link asyncCmd
+  link asyncHist
   runServer
 
 setupServer :: FilePath -> IO (IO (), Async (), Async ())
