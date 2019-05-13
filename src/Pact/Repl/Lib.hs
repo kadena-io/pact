@@ -309,10 +309,13 @@ continuePact i as = case as of
                    (return . _pePactId)
                    pactExec
         Just pidTxt -> return $ PactId pidTxt
-      let s = fromIntegral step
-          _r = fmap (fmap toPactValueLenient) userResume
 
-      let pactStep = PactStep s rollback pactId undefined
+      let s = fromIntegral step
+
+      o' <- sequence $ fmap enforcePactValue' userResume
+      r <- traverse (toYield i pactId) o'
+
+      let pactStep = PactStep s rollback pactId r
 
       viewLibState (view rlsPacts) >>= \pacts ->
         case M.lookup pactId pacts of
@@ -320,6 +323,12 @@ continuePact i as = case as of
           Just PactExec{..} -> do
             evalPactExec .= Nothing
             local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
+
+    toYield j p o =
+      let
+        t = ChainId ""
+      in Yield o t <$> endorsementOf' j o p t
+
 
 setentity :: RNativeFun LibState
 setentity i as = case as of

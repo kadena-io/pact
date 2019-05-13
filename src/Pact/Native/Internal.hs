@@ -33,6 +33,8 @@ module Pact.Native.Internal
   ,findCallingModule
   ,getCallingModule
   ,getModule
+  ,endorsementOf
+  ,endorsementOf'
   ) where
 
 import Bound
@@ -50,6 +52,7 @@ import Unsafe.Coerce
 import Pact.Eval
 import Pact.Gas
 import Pact.Types.Native
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -201,3 +204,41 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
         MDModule m -> void $ acquireModuleAdmin i (_mName m) (_mGovernance m)
         MDInterface iface -> evalError i $
           "Internal error, interface found in call stack: " <> pretty iface
+
+-- | Construct a 'Yield' endorsement using 'Eval' env
+-- data for calling module and pact id.
+-- 
+endorsementOf
+    :: FunApp
+      -- ^ current module
+    -> ObjectMap PactValue
+      -- ^ resume or yield data in a 'PactStep'
+    -> ChainId
+      -- ^ the target chain id
+    -> Eval e Hash
+endorsementOf fa o tid = do
+  md <- getCallingModule fa
+  pid <- getPactId fa
+  case _mdModule md of
+    MDModule m -> pure $ endorse (_mHash m) pid o tid
+    MDInterface n -> evalError' fa
+      $ "Internal error: cannot endorse yield for interface: "
+      <> pretty (_interfaceName n)
+
+-- | Construct a 'Yield' endorsement with a user-supplied
+-- 'PactId', as opposed to introspecting on the env info
+-- to retrieve it.
+-- 
+endorsementOf'
+    :: FunApp
+    -> ObjectMap PactValue
+    -> PactId
+    -> ChainId
+    -> Eval e Hash
+endorsementOf' fa o pid tid = do
+  md <- getCallingModule fa
+  case _mdModule md of
+    MDModule m -> pure $ endorse (_mHash m) pid o tid
+    MDInterface n -> evalError' fa
+      $ "Internal error: cannot endorse yield for interface: "
+      <> pretty (_interfaceName n)

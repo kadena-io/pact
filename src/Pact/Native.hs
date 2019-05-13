@@ -667,22 +667,12 @@ yield i as = case as of
         Nothing -> evalError' i "Yield not in defpact context"
         Just PactExec{..} -> do
           o' <- enforcePactValue' o
-          -- get current calling module data
-          md <- getCallingModule i
-          let m = _mdModule md
-          -- retrieve calling pact id from funapp
-          pid <- getPactId i
-          e <- endorse' m pid o' tid
+          e <- endorsementOf i o' tid
 
           let y = Yield o' tid e
-          (evalPactExec . _Just . peYield) .= Just y
-          return u
 
-    endorse' (MDModule m) pid o tid = pure $ endorse (_mHash m) pid o tid
-    endorse' (MDInterface n) _ _ _ =
-      evalError' (_faInfo i)
-        $ "Internal error: cannot endorse yield for interface: "
-        <> pretty (_interfaceName n)
+          evalPactExec . _Just . peYield .= Just y
+          return u
 
 resume :: NativeFun e
 resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
