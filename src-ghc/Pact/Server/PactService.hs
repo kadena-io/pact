@@ -36,6 +36,8 @@ import Pact.Types.Server
 import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue (PactValue(..))
 
+import Control.Exception.Safe
+
 
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode [TxLog Value])
 initPactService CommandConfig {..} loggers = do
@@ -83,14 +85,16 @@ applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
 
   let pd = PublicData pubMeta bh bt
 
-  r <- catchesPactError $ runCommand (CommandEnv conf exMode dbv logger gasEnv pd) $ runPayload cmd
+  --r <- catchesPactError $ runCommand (CommandEnv conf exMode dbv logger gasEnv pd) $ runPayload cmd
+  r <- tryAny $ runCommand (CommandEnv conf exMode dbv logger gasEnv pd) $ runPayload cmd
   case r of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
       return cr
     Left e -> do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
-      return $ resultFailure (cmdToRequestKey cmd) e
+      return $ resultFailure (cmdToRequestKey cmd) $ PactError EvalError def def . viaShow $ e
+      --return $ resultFailure (cmdToRequestKey cmd) e
 
 
 resultFailure :: RequestKey -> PactError -> CommandResult [TxLog Value]

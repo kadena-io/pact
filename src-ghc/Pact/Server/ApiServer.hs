@@ -32,7 +32,6 @@ import Control.Monad.Trans.Except
 import Control.Arrow (second)
 
 import Data.Aeson hiding (defaultOptions, Result(..))
-import Data.Aeson.Types (parseMaybe)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.ByteString.Lazy       as BSL
@@ -131,11 +130,13 @@ listenHandler (ListenerRequest rk) = do
 
 localHandler :: Command T.Text -> Api (CommandResult Hash)
 localHandler commandText = do
+  log $ "[Linda] entered lh: " ++ show commandText
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
+  log $ "[Linda] about to return cr: " ++ show (fullToHashLogCr r)
   pure $ fullToHashLogCr r
 
 versionHandler :: Handler T.Text

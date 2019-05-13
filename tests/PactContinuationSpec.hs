@@ -96,7 +96,7 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 -- CONTINUATIONS TESTS
 
 testPactContinuation :: HTTP.Manager -> Spec
-testPactContinuation mgr = {--before_ flushDb $ after_ flushDb--} $ do
+testPactContinuation mgr = {--before_ flushDb $ after_ flushDb $--} do
   {--it "sends (+ 1 2) command to locally running dev server" $ do
     testSimpleServerCmd mgr
 

@@ -123,7 +123,9 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
         liftIO $ debugFn $ "[cmd]: executing " ++ show (length cmds) ++ " command(s)"
         resps <- forM cmds $ \cmd -> do
           liftIO $ _ceiApplyCmd Transactional cmd
+        --liftIO $ debugFn $ "[DB] PactService returned " ++ show (length resps) ++ " command result(s)"
         liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> resps
       LocalCmd cmd mv -> do
         cr@CommandResult{..} <- liftIO $ _ceiApplyCmd Local cmd
+        liftIO $ debugFn $ "[Linda] PactService returned " ++ show cr
         liftIO $ putMVar mv cr

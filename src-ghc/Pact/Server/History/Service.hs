@@ -37,6 +37,10 @@ import Pact.Types.Persistence (TxLog)
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Exp (Literal(..))
 
+{--import Data.Default
+import Pact.Types.Runtime hiding (Update)
+import Pact.Types.Pretty--}
+
 initHistoryEnv
   :: HistoryChannel
   -> InboundPactChan
@@ -243,6 +247,7 @@ _go :: HistoryService ()
 _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey pactInitialHash
+      --pe = PactResult . Left $ PactError EvalError def def . viaShow $ ""
       pe = PactResult . Right . PLiteral . LString $ ""
   updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing pe (Gas 0) Nothing Nothing Nothing)])
   mv <- liftIO $ newEmptyMVar
