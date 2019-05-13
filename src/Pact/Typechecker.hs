@@ -1090,17 +1090,17 @@ typecheck tl = return tl
 typecheckBody :: TopLevel Node -> Traversal' (TopLevel Node) [AST Node] -> TC (TopLevel Node)
 typecheckBody tl bodyLens = do
   let body = view bodyLens tl
-  debug "Substitute defuns"
+  debug "--------------------------------\n Substitute defuns:\n"
   appSub <- mapM (walkAST $ substAppDefun Nothing) body
-  debug "Substitute natives"
+  debug "--------------------------------\nSubstitute natives:\n"
   nativesProc <- mapM (walkAST processNatives) appSub
-  debug "Assoc Yield/Resume"
+  debug "--------------------------------\nAssoc Yield/Resume:\n"
   assocStepYieldReturns tl nativesProc
-  debug "Apply Schemas"
+  debug "--------------------------------\nApply Schemas:\n"
   schEnforced <- mapM (walkAST applySchemas) nativesProc
-  debug "Solve Overloads"
+  debug "--------------------------------\nSolve Overloads:\n"
   solveOverloads
-  debug "Resolve types"
+  debug "--------------------------------\nResolve types:\n"
   ast2Ty <- resolveAllTypes
   fails <- use tcFailures
   dbg <- use tcDebug
@@ -1115,7 +1115,7 @@ typecheckTopLevel :: Ref -> TC (TopLevel Node)
 typecheckTopLevel (Ref r) = do
   tl <- mkTop (fmap Left r)
   tl' <- typecheck tl
-  debug $ "===== Done: " ++ abbrevStr r
+  debug $ "\n===== Done: " ++ abbrevStr r
   return tl'
 typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrevStr d
 

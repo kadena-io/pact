@@ -55,7 +55,6 @@ import Data.Char (isHexDigit, digitToInt)
 import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
-import Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
@@ -63,8 +62,6 @@ import qualified Data.Text as T
 import Data.Text.Encoding
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
-import Prelude
-
 
 import Pact.Eval
 import Pact.Native.Capabilities
@@ -675,15 +672,16 @@ yield i as = case as of
           return u
 
 resume :: NativeFun e
-resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
-  rm <- preview $ eePactStep . _Just . psResume . _Just
-  case rm of
-    Nothing -> evalError' i "Resume: no yielded value in context"
-    Just (Yield o _ _) -> do
-      let m = fmap fromPactValue o
-      l <- bindObjectLookup (toTObjectMap TyAny def m)
-      bindReduce ps bd bi l
-resume i as = argsError' i as
+resume i as = case as of
+  [TBinding ps bd (BindSchema _) bi] -> gasUnreduced i as $ do
+    rm <- preview $ eePactStep . _Just . psResume . _Just
+    case rm of
+      Nothing -> evalError' i "Resume: no yielded value in context"
+      Just (Yield o _ _) -> do
+        let m = fmap fromPactValue o
+        l <- bindObjectLookup (toTObjectMap TyAny def m)
+        bindReduce ps bd bi l
+  _ -> argsError' i as
 
 where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
