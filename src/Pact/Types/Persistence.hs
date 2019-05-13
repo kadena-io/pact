@@ -31,9 +31,7 @@ module Pact.Types.Persistence
    PersistDirect(..),toPersistDirect,fromPersistDirect,
    ModuleData(..),mdModule,mdRefMap,
    PersistModuleData,
-   ExecutionMode(..),
-   PactContinuation(..),
-   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
+   ExecutionMode(..)
    ) where
 
 import Control.Applicative ((<|>))
