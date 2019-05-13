@@ -14,23 +14,6 @@
       (resume { "a-result" := ar }
         (+ ar "->B")))
     )
-
-  ;; test target chainid overloads in yield
-  (defpact tester2 (name)
-    (step-with-rollback
-     "A"
-     (let ((nameA (+ name "->A")))
-       (yield "new-tid"
-         { "a-result": nameA }
-         )
-       nameA)
-
-     "rollback-a")
-
-    (step "B"
-      (resume { "a-result" := a }
-        (+ a "->B")))
-    )
 )
 
 (commit-tx)
@@ -82,11 +65,3 @@
 	"someRandomStr->B"
 	(continue-pact 1 false (hash "stu-pact-id") {"a-result": "someRandomStr"}))
 (commit-tx)
-
-;; test yield overloads with target chain-id
-(begin-tx)
-(use yieldtest)
-(env-hash (hash "emily-pid"))
-(env-entity "A")
-(expect "step 0 executes" "emily->A" (tester2 "emily"))
-(env-entity "B")
