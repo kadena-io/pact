@@ -337,7 +337,7 @@ continuePact i as = case as of
     toYield j p o = do
       o' <- enforcePactValue' o
       let t = ChainId ""
-      e <- endorsementOf' j o' p t
+      e <- endorseM j o' t p
       pure . Just $ Yield o' t e
 
 

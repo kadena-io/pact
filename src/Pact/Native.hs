@@ -664,7 +664,7 @@ yield i as = case as of
         Nothing -> evalError' i "Yield not in defpact context"
         Just PactExec{..} -> do
           o' <- enforcePactValue' o
-          e <- endorsementOf i o' tid
+          e <- endorseM' i o' tid
 
           let y = Yield o' tid e
 

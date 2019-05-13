@@ -33,8 +33,8 @@ module Pact.Native.Internal
   ,findCallingModule
   ,getCallingModule
   ,getModule
-  ,endorsementOf
-  ,endorsementOf'
+  ,endorseM
+  ,endorseM'
   ) where
 
 import Bound
@@ -205,10 +205,28 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
         MDInterface iface -> evalError i $
           "Internal error, interface found in call stack: " <> pretty iface
 
+-- | Construct a 'Yield' endorsement with a user-supplied
+-- 'PactId', as opposed to introspecting on the env info
+-- to retrieve it.
+--
+endorseM
+    :: FunApp
+    -> ObjectMap PactValue
+    -> ChainId
+    -> PactId
+    -> Eval e Hash
+endorseM fa o tid pid = do
+  md <- getCallingModule fa
+  case _mdModule md of
+    MDModule m -> pure $ endorse (_mHash m) pid o tid
+    MDInterface n -> evalError' fa
+      $ "Internal error: cannot endorse yield for interface: "
+      <> pretty (_interfaceName n)
+
 -- | Construct a 'Yield' endorsement using 'Eval' env
 -- data for calling module and pact id.
--- 
-endorsementOf
+--
+endorseM'
     :: FunApp
       -- ^ current module
     -> ObjectMap PactValue
@@ -216,29 +234,5 @@ endorsementOf
     -> ChainId
       -- ^ the target chain id
     -> Eval e Hash
-endorsementOf fa o tid = do
-  md <- getCallingModule fa
-  pid <- getPactId fa
-  case _mdModule md of
-    MDModule m -> pure $ endorse (_mHash m) pid o tid
-    MDInterface n -> evalError' fa
-      $ "Internal error: cannot endorse yield for interface: "
-      <> pretty (_interfaceName n)
-
--- | Construct a 'Yield' endorsement with a user-supplied
--- 'PactId', as opposed to introspecting on the env info
--- to retrieve it.
--- 
-endorsementOf'
-    :: FunApp
-    -> ObjectMap PactValue
-    -> PactId
-    -> ChainId
-    -> Eval e Hash
-endorsementOf' fa o pid tid = do
-  md <- getCallingModule fa
-  case _mdModule md of
-    MDModule m -> pure $ endorse (_mHash m) pid o tid
-    MDInterface n -> evalError' fa
-      $ "Internal error: cannot endorse yield for interface: "
-      <> pretty (_interfaceName n)
+endorseM' fa o tid
+  = endorseM fa o tid =<< getPactId fa
