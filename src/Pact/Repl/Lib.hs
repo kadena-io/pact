@@ -302,21 +302,10 @@ continuePact i as = case as of
   where
     go :: Integer -> Bool -> Maybe Text -> Maybe (ObjectMap (Term Name)) -> Eval LibState (Term Name)
     go step rollback pid userResume = do
-      pactExec <- use evalPactExec
-      pactId <- case pid of
-        Nothing -> maybe
-                   (evalError' i "continue-pact: no pact exec in context")
-                   (return . _pePactId)
-                   pactExec
-        Just pidTxt -> return $ PactId pidTxt
+      pe <- use evalPactExec
+      (pactId, y) <- unwrapExec pid userResume pe
 
-      let s = fromIntegral step
-
-      o' <- sequence $ fmap enforcePactValue' userResume
-      r <- traverse (toYield i pactId) o'
-
-      let pactStep = PactStep s rollback pactId r
-
+      let pactStep = PactStep (fromIntegral step) rollback pactId y
       viewLibState (view rlsPacts) >>= \pacts ->
         case M.lookup pactId pacts of
           Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
@@ -324,10 +313,32 @@ continuePact i as = case as of
             evalPactExec .= Nothing
             local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
 
-    toYield j p o =
-      let
-        t = ChainId ""
-      in Yield o t <$> endorsementOf' j o p t
+    unwrapExec mp mo Nothing = do
+      pid <- case mp of
+        Nothing -> evalError' i
+          "continue-pact: No pact id supplied and no pact exec in context"
+        Just p -> pure $ PactId p
+      y <- case mo of
+        Nothing -> pure Nothing
+        Just o -> toYield i pid o
+
+      pure (pid, y)
+    unwrapExec mp mo (Just e) = do
+      let pid = maybe (_pePactId e) PactId mp
+      y <- case mo of
+        Nothing -> pure . _peYield $ e
+        Just o -> toYield i pid o
+      pure (pid, y)
+
+    -- This is only called in the case where no resume object
+    -- is supplied. The function converts the object map into
+    -- a map of pact values, and constructs the endorsement
+    -- for the yield with an empty chain id
+    toYield j p o = do
+      o' <- enforcePactValue' o
+      let t = ChainId ""
+      e <- endorsementOf' j o' p t
+      pure . Just $ Yield o' t e
 
 
 setentity :: RNativeFun LibState
