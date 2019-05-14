@@ -19,6 +19,7 @@ import Data.Text (Text)
 import Pact.Server.Client
 import Servant.Client
 
+
 _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
 _testLogDir = testDir ++ "test-log/"
 _testConfigFilePath = testDir ++ "test-config.yaml"
@@ -52,8 +53,9 @@ spec = describe "Servant API client tests" $ do
     res <- bracket $! do
       r <- runClientM (local pactServerApiClient cmd) clientEnv
       return r
-    let cmdData = (CommandSuccess . Number) 3
-    res `shouldBe` (Right cmdData)
+    -- Linda TODO
+    let cmdPactResult = (toJSON . CommandSuccess . Number) 3 --Right . PLiteral . LDecimal $ 3
+    (_crResult' <$> res) `shouldBe` (Right cmdPactResult)
   it "correctly runs a simple command publicly and listens to the result" $ do
     cmd <- simpleServerCmd
     let rk = cmdToRequestKey cmd

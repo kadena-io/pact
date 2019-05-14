@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveGeneric #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -58,6 +59,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
+import GHC.Generics
 
 import Pact.Types.ChainMeta
 import Pact.Types.Gas
@@ -92,7 +94,10 @@ data StackFrame = StackFrame {
       _sfName :: !Text
     , _sfLoc :: !Info
     , _sfApp :: Maybe (FunApp,[Text])
-    }
+    } deriving (Eq,Generic)
+instance ToJSON StackFrame where toJSON = lensyToJSON 3
+instance FromJSON StackFrame where parseJSON = lensyParseJSON 3
+
 instance Show StackFrame where
     show (StackFrame n i app) = renderInfo i ++ ": " ++ case app of
       Nothing -> unpack n
@@ -106,15 +111,20 @@ data PactErrorType
   | TxFailure
   | SyntaxError
   | GasError
-  deriving Show
+  deriving (Show,Eq,Generic)
+instance ToJSON PactErrorType
+instance FromJSON PactErrorType
 
 data PactError = PactError
   { peType :: PactErrorType
   , peInfo :: Info
   , peCallStack :: [StackFrame]
   , peDoc :: Doc }
+  deriving (Eq,Generic)
 
 instance Exception PactError
+instance ToJSON PactError where toJSON = lensyToJSON 2
+instance FromJSON PactError where parseJSON = lensyParseJSON 2
 
 instance Show PactError where
     show (PactError t i _ s) = show i ++ ": Failure: " ++ maybe "" (++ ": ") msg ++ show s

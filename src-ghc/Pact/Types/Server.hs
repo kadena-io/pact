@@ -48,7 +48,6 @@ import Data.String
 import Data.ByteString (ByteString)
 import qualified Data.Set as S
 import Data.Text.Encoding
-import Data.Aeson
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
 import Data.Int
@@ -153,6 +152,6 @@ data History =
 data Inbound =
   TxCmds { iCmds :: [Command ByteString] } |
   LocalCmd { iCmd :: Command ByteString,
-             iLocalResult :: MVar Value
+             iLocalResult :: MVar (CommandResponse Hash)
            }
   deriving (Eq)

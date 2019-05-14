@@ -323,8 +323,9 @@ data FunApp = FunApp {
     , _faDefType :: !DefType
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
-    } deriving Show
-
+    } deriving (Show,Eq,Generic)
+instance ToJSON FunApp where toJSON = lensyToJSON 3
+instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 instance HasInfo FunApp where getInfo = _faInfo
 
 -- | Variable type for an evaluable 'Term'.

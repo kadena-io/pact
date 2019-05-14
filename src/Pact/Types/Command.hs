@@ -37,6 +37,7 @@ module Pact.Types.Command
   , UserSig(..),usSig
   , CommandError(..),ceMsg,ceDetail
   , CommandSuccess(..),csData
+  , CommandResponse(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
@@ -258,7 +259,7 @@ instance FromJSON UserSig where
     UserSig <$> o .: "sig"
 
 
-
+-- Linda TODO
 data CommandError = CommandError {
       _ceMsg :: String
     , _ceDetail :: Maybe String
@@ -280,6 +281,22 @@ instance (ToJSON a) => ToJSON (CommandSuccess a) where
 instance (FromJSON a) => FromJSON (CommandSuccess a) where
     parseJSON = withObject "CommandSuccess" $ \o ->
         CommandSuccess <$> o .: "data"
+
+data CommandResponse l = CommandResponse
+  { _crReqKey' :: RequestKey
+  , _crTxId' :: Maybe TxId
+  , _crResult' :: Value --Either PactError PactValue
+  , _crGas' :: Gas
+  , _crLogs' :: Maybe l                  -- this would be [TxLog Value] in pact -s
+  , _crContinuation' :: Maybe PactExec
+  , _crMeta' :: Maybe Value
+  } deriving (Generic)
+instance (ToJSON l) => ToJSON (CommandResponse l) where toJSON = lensyToJSON 3
+instance (FromJSON l) => FromJSON (CommandResponse l) where parseJSON = lensyParseJSON 3
+
+
+
+
 
 data CommandResult = CommandResult
   { _crReqKey :: RequestKey

@@ -65,7 +65,10 @@ initPactService CommandConfig {..} loggers = do
 applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p ->
             GasModel -> Word64 -> Int64 -> ExecutionMode -> Command a ->
             ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
-applyCmd _ _ _ _ _ _ _ cmd (ProcFail s) = return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) s
+applyCmd _ _ _ _ _ _ _ cmd (ProcFail s) =
+  -- Linda TODO
+  return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $ s
+  --CommandError $ PactError TxFailure def def . viaShow $ s
 applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
@@ -80,8 +83,10 @@ applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
       return cr
     Left e -> do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
+      -- Linda TODO
       return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $
                CommandError "Command execution failed" (Just $ show e)
+               --CommandError $ PactError EvalError def def . viaShow $ e
 
 jsonResult :: ToJSON a => Maybe TxId -> RequestKey -> Gas -> a -> CommandResult
 jsonResult tx cmd gas a = CommandResult cmd tx (toJSON a) gas

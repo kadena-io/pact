@@ -10,13 +10,13 @@ module Pact.Server.API
   , pactServerAPI
   ) where
 
-import Data.Aeson
 import Data.Proxy
 import Servant.API
 import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
+import Pact.Types.Hash (Hash)
 
 type ApiV1API =
   (    "send" :> ReqBody '[JSON] SubmitBatch :>
@@ -26,7 +26,7 @@ type ApiV1API =
   :<|> "listen" :> ReqBody '[JSON] ListenerRequest :>
     Post '[JSON] ApiResult
   :<|> "local" :> ReqBody '[JSON] (Command Text) :>
-    Post '[JSON] (CommandSuccess Value)
+    Post '[JSON] (CommandResponse Hash)
   )
 
 type PactServerAPI =

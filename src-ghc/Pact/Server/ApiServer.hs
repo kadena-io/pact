@@ -32,7 +32,6 @@ import Control.Monad.Trans.Except
 import Control.Arrow
 
 import Data.Aeson hiding (defaultOptions, Result(..))
-import Data.Aeson.Types (parseMaybe)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
@@ -48,6 +47,7 @@ import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.Cors
 
 import Pact.Analyze.Remote.Server (verifyHandler)
+import Pact.Types.Hash (Hash)
 import Pact.Server.API
 import Pact.Types.Command
 import Pact.Types.API
@@ -126,16 +126,19 @@ listenHandler (ListenerRequest rk) = do
       log $ "Listener Serviced for: " ++ show rk
       pure $ crToAr cr
 
-localHandler :: Command T.Text -> Api (CommandSuccess Value)
+localHandler :: Command T.Text -> Api (CommandResponse Hash)
 localHandler commandText = do
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
-  case parseMaybe parseJSON r of
-    Just v@CommandSuccess{} -> pure v
-    Nothing -> die' "command could not be run locally"
+  pure r
+  -- Linda TODO
+  -- Might want to throw die 'command could not be run locally' if result is Left
+  {--case parseMaybe parseJSON r of
+    Just v@CommandResponse{} -> pure v
+    Nothing -> die' "command could not be run locally"--}
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion
