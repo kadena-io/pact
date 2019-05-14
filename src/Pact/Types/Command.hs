@@ -65,6 +65,7 @@ import Prelude
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Orphans ()
 import Pact.Types.RPC
+import Pact.Types.PactValue (PactValue(..))
 
 
 #if !defined(ghcjs_HOST_OS)
@@ -270,15 +271,15 @@ instance ToJSON CommandError where
                  , "error" .= m ] ++
         maybe [] ((:[]) . ("detail" .=)) d
 
-newtype CommandSuccess a = CommandSuccess { _csData :: a }
+newtype CommandSuccess = CommandSuccess { _csData :: PactValue }
   deriving (Eq, Show)
 
-instance (ToJSON a) => ToJSON (CommandSuccess a) where
+instance ToJSON CommandSuccess where
     toJSON (CommandSuccess a) =
         object [ "status" .= ("success" :: String)
                , "data" .= a ]
 
-instance (FromJSON a) => FromJSON (CommandSuccess a) where
+instance FromJSON CommandSuccess where
     parseJSON = withObject "CommandSuccess" $ \o ->
         CommandSuccess <$> o .: "data"
 

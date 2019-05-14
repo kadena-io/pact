@@ -18,6 +18,8 @@ import Pact.Types.Command
 import Data.Text (Text)
 import Pact.Server.Client
 import Servant.Client
+import Pact.Types.Runtime
+import Pact.Types.PactValue
 
 
 _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
@@ -54,7 +56,7 @@ spec = describe "Servant API client tests" $ do
       r <- runClientM (local pactServerApiClient cmd) clientEnv
       return r
     -- Linda TODO
-    let cmdPactResult = (toJSON . CommandSuccess . Number) 3 --Right . PLiteral . LDecimal $ 3
+    let cmdPactResult = (toJSON . CommandSuccess . PLiteral . LDecimal) 3 --Right . PLiteral . LDecimal $ 3
     (_crResult' <$> res) `shouldBe` (Right cmdPactResult)
   it "correctly runs a simple command publicly and listens to the result" $ do
     cmd <- simpleServerCmd
@@ -65,5 +67,5 @@ spec = describe "Servant API client tests" $ do
       -- print (res,res')
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
-    let cmdData = (toJSON . CommandSuccess . Number) 3
+    let cmdData = (toJSON . CommandSuccess . PLiteral . LDecimal) 3
     (_arResult <$> res') `shouldBe` (Right cmdData)

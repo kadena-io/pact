@@ -92,7 +92,7 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 testPactContinuation :: HTTP.Manager -> Spec
 testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
-    let cmdData = (toJSON . CommandSuccess . Number) 3
+    let cmdData = (toJSON . CommandSuccess . PLiteral . LDecimal) 3
         expRes = Just $ ApiResult cmdData ((Just . TxId) 0) Nothing
     testSimpleServerCmd mgr `shouldReturn` expRes
 
