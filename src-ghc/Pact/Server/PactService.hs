@@ -34,6 +34,7 @@ import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
+import Pact.Types.Pretty (viaShow)
 
 
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode)
@@ -67,8 +68,8 @@ applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p ->
             ProcessedCommand PublicMeta ParsedCode -> IO CommandResult
 applyCmd _ _ _ _ _ _ _ cmd (ProcFail s) =
   -- Linda TODO
-  return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $ s
-  --CommandError $ PactError TxFailure def def . viaShow $ s
+  return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $
+  CommandError $ PactError TxFailure def def . viaShow $ s
 applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
@@ -85,8 +86,7 @@ applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
       -- Linda TODO
       return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $
-               CommandError "Command execution failed" (Just $ show e)
-               --CommandError $ PactError EvalError def def . viaShow $ e
+               CommandError $ PactError EvalError def def . viaShow $ e
 
 jsonResult :: ToJSON a => Maybe TxId -> RequestKey -> Gas -> a -> CommandResult
 jsonResult tx cmd gas a = CommandResult cmd tx (toJSON a) gas

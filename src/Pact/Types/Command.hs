@@ -35,7 +35,7 @@ module Pact.Types.Command
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
-  , CommandError(..),ceMsg,ceDetail
+  , CommandError(..),ceData
   , CommandSuccess(..),csData
   , CommandResponse(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas
@@ -261,15 +261,11 @@ instance FromJSON UserSig where
 
 
 -- Linda TODO
-data CommandError = CommandError {
-      _ceMsg :: String
-    , _ceDetail :: Maybe String
-}
+newtype CommandError = CommandError { _ceData :: PactError }
 instance ToJSON CommandError where
-    toJSON (CommandError m d) =
+    toJSON (CommandError m) =
         object $ [ "status" .= ("failure" :: String)
-                 , "error" .= m ] ++
-        maybe [] ((:[]) . ("detail" .=)) d
+                 , "data" .= m ]
 
 newtype CommandSuccess = CommandSuccess { _csData :: PactValue }
   deriving (Eq, Show)

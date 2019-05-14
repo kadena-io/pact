@@ -123,8 +123,17 @@ data PactError = PactError
   deriving (Eq,Generic)
 
 instance Exception PactError
-instance ToJSON PactError where toJSON = lensyToJSON 2
-instance FromJSON PactError where parseJSON = lensyParseJSON 2
+-- Linda TODO
+instance ToJSON PactError where
+  toJSON (PactError t i s d) =
+    object [ "type" .= t, "info" .= i, "callStack" .= s, "doc" .= (show d)]
+instance FromJSON PactError where
+  parseJSON = withObject "PactError" $ \o -> do
+    typ <- o .: "type"
+    info <- o .: "info"
+    callStack <- o .: "callStack"
+    doc <- o .: "doc"
+    pure $ PactError typ info callStack (prettyString doc)
 
 instance Show PactError where
     show (PactError t i _ s) = show i ++ ": Failure: " ++ maybe "" (++ ": ") msg ++ show s

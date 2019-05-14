@@ -55,7 +55,7 @@ module Pact.Types.Pretty
   ) where
 
 import           Bound.Var
-import           Data.Aeson           (Value(..),ToJSON(..),FromJSON(..))
+import           Data.Aeson           (Value(..))
 import qualified Data.ByteString.UTF8 as UTF8
 import           Data.Foldable        (toList)
 import qualified Data.HashMap.Strict  as HM
@@ -91,10 +91,8 @@ data Annot
 
 type Doc = PP.Doc Annot
 instance Eq Doc where
-  d1 == d2 = d1 == d2
-  d1 /= d2 = d1 /= d2
-instance ToJSON Doc where toJSON = toJSON
-instance FromJSON Doc where parseJSON = parseJSON
+  d1 == d2 = show d1 == show d2
+  d1 /= d2 = show d1 /= show d2
 
 -- | Pact's version of 'Pretty', with 'Annot' annotations.
 class Pretty a where
