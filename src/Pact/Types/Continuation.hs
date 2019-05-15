@@ -12,13 +12,15 @@ module Pact.Types.Continuation
   , PactContinuation(..)
   , PactExec(..)
   , Yield(..)
+  , Endorsement(..)
     -- * combinators
   , endorse
     -- * optics
   , peStepCount, peYield, peExecuted, pePactId, peStep, peContinuation
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
-  , yData, yTarget, yEndorsement
+  , yData, yEndorsement
+  , eTarget, ePactId, eHash
   ) where
 
 import GHC.Generics (Generic)
@@ -37,6 +39,24 @@ import Pact.Types.Pretty
 import Pact.Types.Term
 import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 
+
+
+-- | Endorsement datatype contains all of the necessary
+-- data to 'endorse' a yield object, detailed below
+--
+data Endorsement = Endorsement
+  { _eTarget :: !ChainId
+    -- ^ the target chain id for the endorsement
+  , _ePactId :: PactId
+    -- ^ the pact id of the current continuation
+  , _eHash :: Hash
+    -- ^ a hash of current containing module
+  } deriving (Eq, Show, Generic)
+
+instance NFData Endorsement
+instance ToJSON Endorsement where toJSON = lensyToJSON 2
+instance FromJSON Endorsement where parseJSON = lensyParseJSON 2
+
 -- | The type of a set of yielded values of a pact step.
 -- Endorsement hashes ('_yEndorsement') are a combination of
 -- the following data:
@@ -49,9 +69,8 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 data Yield = Yield
   { _yData :: !(ObjectMap PactValue)
     -- ^ Yield data from the pact continuation
-  , _yTarget :: !ChainId
-    -- ^ target chain on which to run continuation
-  , _yEndorsement :: !Hash
+  , _yEndorsement :: !(Maybe Endorsement)
+    -- ^ The endorsement data, if it exists
   } deriving (Eq, Show, Generic)
 
 instance NFData Yield
@@ -137,3 +156,4 @@ makeLenses ''PactExec
 makeLenses ''PactStep
 makeLenses ''PactContinuation
 makeLenses ''Yield
+makeLenses ''Endorsement

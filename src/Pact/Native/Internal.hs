@@ -52,7 +52,6 @@ import Unsafe.Coerce
 import Pact.Eval
 import Pact.Gas
 import Pact.Types.Native
-import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -211,14 +210,14 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
 --
 endorseM
     :: FunApp
-    -> ObjectMap PactValue
     -> ChainId
     -> PactId
-    -> Eval e Hash
-endorseM fa o tid pid = do
+    -> Eval e (Maybe Endorsement)
+endorseM _ "" _ = pure Nothing
+endorseM fa tid pid = do
   md <- getCallingModule fa
   case _mdModule md of
-    MDModule m -> pure $ endorse (_mHash m) pid o tid
+    MDModule m -> pure . Just $ Endorsement tid pid (_mHash m)
     MDInterface n -> evalError' fa
       $ "Internal error: cannot endorse yield for interface: "
       <> pretty (_interfaceName n)
@@ -229,10 +228,8 @@ endorseM fa o tid pid = do
 endorseM'
     :: FunApp
       -- ^ current module
-    -> ObjectMap PactValue
-      -- ^ resume or yield data in a 'PactStep'
     -> ChainId
       -- ^ the target chain id
-    -> Eval e Hash
-endorseM' fa o tid
-  = endorseM fa o tid =<< getPactId fa
+    -> Eval e (Maybe Endorsement)
+endorseM' fa tid =
+  endorseM fa tid =<< getPactId fa

@@ -652,7 +652,7 @@ listModules i _ = do
 
 yield :: RNativeFun e
 yield i as = case as of
-  [u@(TObject t _)] -> go "" t u
+  [u@(TObject t _)] -> go (ChainId "") t u
   [u@(TObject t _), (TLitString cid)] -> go (ChainId cid) t u
   _ -> argsError i as
   where
@@ -662,10 +662,9 @@ yield i as = case as of
         Nothing -> evalError' i "Yield not in defpact context"
         Just PactExec{..} -> do
           o' <- enforcePactValue' o
-          e <- endorseM' i o' tid
+          e <- endorseM' i tid
 
-          let y = Yield o' tid e
-
+          let y = Yield o' e
           evalPactExec . _Just . peYield .= Just y
           return u
 
@@ -675,7 +674,7 @@ resume i as = case as of
     rm <- preview $ eePactStep . _Just . psResume . _Just
     case rm of
       Nothing -> evalError' i "Resume: no yielded value in context"
-      Just (Yield o _ _) -> do
+      Just (Yield o _) -> do
         let m = fmap fromPactValue o
         l <- bindObjectLookup (toTObjectMap TyAny def m)
         bindReduce ps bd bi l
