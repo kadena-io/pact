@@ -662,18 +662,18 @@ A guard is essentially a predicate function over some environment that enables a
 to be able to test a rich diversity of conditions.
 
 A keyset is the quintessential guard: it specifies a list of keys,
-and a predicate function to verify how many keys were used to sign the current transaction, which is enforced by
-calling `enforce-keyset`, causing the transaction to fail if the necessary keys are not found in the signing set.
+and a predicate function to verify how many keys were used to sign the current transaction. Enforcement
+happens via `enforce-keyset`, causing the transaction to fail if the necessary keys are not found in the signing set.
 
 However, there are other predicates that are equally useful:
 
-- We might want to enforce that a _module_ is the only entity that can perform some function, ie that code that is
-able to update some database entry can only be called within a particular module.
+- We might want to enforce that a _module_ is the only entity that can perform some function, for instance
+to debit some account.
 
 - We might want to ensure that a user has provided some secret, like a hash preimage, as seen in atomic swaps.
 
 - We might want to combine all of the above into a single, enforceable rule: "ensure user A signed the transaction AND
-provided a hash preimage AND is only executable in module `foo`".
+provided a hash preimage AND is only executable by module `foo`".
 
 Finally, we want guards to _interoperate_ with each other, so that smart contract code doesn't have to worry about
 what kind of guard is used to mediate access to some resource or right. For instance, it is easy to think of entries
@@ -681,7 +681,7 @@ in a ledger having diverse guards, where some tokens are guarded by keysets, whi
 modules, while others are locked in some kind of escrow transaction: what's important is that the guard always be enforced
 for the given account, not what type of guard it is.
 
-Guards addresses all of these needs. Keysets are now just one type of guard, to which we add module guards,
+Guards address all of these needs. Keysets are now just one type of guard, to which we add module guards,
 pact guards, and completely customizable "user guards". You can store any type of guard in the database using the `guard`
 type. The `keyset` type is still supported, but developers should switch to `guard` to enjoy the enhanced flexibility.
 
@@ -875,7 +875,7 @@ appropriate way.
 
 
 ### Guard types
-Guards come in five flavors: keyset, keyset reference, pact, and user guards.
+Guards come in five flavors: keyset, keyset reference, module, pact, and user guards.
 
 #### Keyset guards.
 These are the classic pact keysets. Using the `keyset` type is the one instance where you can restrict a
@@ -906,16 +906,21 @@ Module guards are a special guard that when enforced will fail unless:
 
 - module governance is granted to the current transaction.
 
-This is for allowing a module or smart contract to autonomously "own" and manage some asset, and as
-such is semantically identical to how module table access is similarly guarded: only module code or
-a transaction having module admin can directly write to a module tables, or upgrade the module.
-See [Module Governance](#module-governance) for more information.
+This is for allowing a module or smart contract to autonomously "own" and manage some asset. As
+such it is operationally identical to how module table access is guarded: only module code or
+a transaction having module admin can directly write to a module tables, or upgrade the module,
+so there is no need to use a module guard for these in-module operations.
+A module guard is used to "project" module admin outside of the module (e.g. to own coins
+in an external ledger), or "inject" module admin into an internal database representation (e.g.
+to own an internally-managed asset alongside other non-module owners).
+
+See [Module Governance](#module-governance) for more information about module admin management.
 
 `create-module-guard` takes a `string` argument to allow naming the guard, to indicate the purpose or
 role of the guard.
 
 ```lisp
-(enforce-guard (create-module-guard "account-module-asset"))
+(enforce-guard (create-module-guard "module-owned-asset"))
 ```
 
 #### Pact guards
@@ -1002,7 +1007,7 @@ Generalized Module Governance {#module-governance}
 ---
 
 Before Pact 3.0, module upgrade and administration was governed by a defined keyset that is
-referenced in the module definition. With Pact 3.0, this `string` value can alternately be a
+referenced in the module definition. With Pact 3.0, this `string` value can alternately be an
 unqualified bareword that references a `defcap` within the module body. This `defcap` is the
 _module governance capability_.
 
