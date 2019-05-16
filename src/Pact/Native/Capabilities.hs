@@ -91,10 +91,15 @@ evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
         AlreadyAcquired -> Nothing
 
 requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
-requireDefcap App{..} = case _appFun of
-  (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
-    Defcap -> return d
-    _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
+requireDefcap = requireDefType Defcap
+
+requireDefType :: DefType -> App (Term Ref) -> Eval e (Def Ref)
+requireDefType dt App{..} = case _appFun of
+  (TVar (Ref (TDef d@Def{..} _)) _)
+    | _dDefType == dt -> return d
+    | otherwise ->
+        evalError _appInfo $ "Can only apply " <> pretty dt <>
+        " here, found: " <> pretty _dDefType
   t -> evalError (_tInfo t) $ "Attempting to apply non-def: " <> pretty _appFun
 
 requireCapability :: NativeDef
@@ -192,24 +197,18 @@ keysetRefGuard =
 
 createUserGuard :: NativeDef
 createUserGuard =
-  defRNative "create-user-guard" createUserGuard'
-  (funType (tTyGuard (Just GTyUser)) [("data",tvA),("predfun",tTyString)])
-  []
-  "Defines a custom guard predicate, where DATA will be passed to PREDFUN at time \
-  \of enforcement. DATA must be an object. PREDFUN is a valid name in the declaring environment. \
-  \PREDFUN must refer to a pure function or enforcement will fail at runtime."
+  defNative "create-user-guard" createUserGuard'
+  (funType (tTyGuard (Just GTyUser)) [("closure",TyFun $ funType' tTyBool [])])
+  [LitExample "(create-user-guard (check-block-time timeout))"]
+  "Defines a custom guard predicate as CLOSURE, where arguments expressed in CLOSURE \
+  \are strictly evaluated at definition time, to be used calling the function referenced \
+  \in CLOSURE at enforcement time, ie when enfored using 'enforce-guard'."
   where
-    createUserGuard' :: RNativeFun e
-    createUserGuard' i [TObject udata _,TLitString predfun] =
-      case parseName (_faInfo i) predfun of
-        Right n -> do
-          rn <- resolveRef i n >>= \nm -> case nm of
-            Just (Direct {}) -> return n
-            Just (Ref (TDef Def{..} _)) ->
-              return $ QName _dModule (asString _dDefName) _dInfo
-            Just _ -> evalError' i $ "Invalid predfun, not a def: " <> pretty n
-            _ -> evalError' i $ "Could not resolve predfun: " <> pretty n
-          return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard udata rn)
-        Left s -> evalError' i $
-          "Invalid name " <> pretty predfun <> ": " <> prettyString s
-    createUserGuard' i as = argsError i as
+    createUserGuard' :: NativeFun e
+    createUserGuard' i [TApp a@App{..} _] =
+      gasUnreduced i [] $ requireDefType Defun a >>= \d@Def{..} -> do
+        (args,_) <- prepareUserAppArgs d _appArgs
+        vals <- traverse enforcePactValue args
+        let n = QName _dModule (asString _dDefName) _dInfo
+        return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard vals n)
+    createUserGuard' i as = argsError' i as

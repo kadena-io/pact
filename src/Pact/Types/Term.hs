@@ -235,7 +235,7 @@ instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
 data UserGuard = UserGuard
-  { _ugData :: !(Object Name)
+  { _ugData :: ![Term Name]
   , _ugPredFun :: !Name
   } deriving (Eq,Generic,Show)
 
