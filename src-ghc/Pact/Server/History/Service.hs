@@ -243,7 +243,7 @@ _go :: HistoryService ()
 _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey pactInitialHash
-      res = Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
+      res = PactResult $ Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
   updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing res (Gas 0))])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)

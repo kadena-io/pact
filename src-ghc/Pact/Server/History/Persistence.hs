@@ -35,7 +35,6 @@ import Pact.Types.Runtime
 import Pact.Types.SQLite
 
 import Pact.Server.History.Types
-import Pact.Types.PactValue (PactValue)
 
 hashToField :: Hash -> SType
 hashToField h = SText $ Utf8 $ BSL.toStrict $ A.encode h
@@ -45,7 +44,7 @@ hashFromField h = case A.eitherDecodeStrict' h of
   Left err -> error $ "hashFromField: unable to decode Hash from database! " ++ show err ++ " => " ++ show h
   Right v -> v
 
-crToField :: Either PactError PactValue -> SType
+crToField :: PactResult -> SType
 crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode r
 
 crFromField :: RequestKey -> Maybe TxId -> ByteString -> Gas -> CommandResult

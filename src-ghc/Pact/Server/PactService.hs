@@ -88,7 +88,7 @@ applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
                Left e
 
 jsonResult :: Maybe TxId -> RequestKey -> Gas -> Either PactError PactValue -> CommandResult
-jsonResult tx cmd gas a = CommandResult cmd tx a gas
+jsonResult tx cmd gas a = CommandResult cmd tx (PactResult a) gas
 
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p CommandResult

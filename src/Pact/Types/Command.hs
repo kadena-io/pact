@@ -38,6 +38,7 @@ module Pact.Types.Command
   , CommandError(..),ceData
   , CommandSuccess(..),csData
   , CommandResponse(..)
+  , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
@@ -299,14 +300,29 @@ instance (FromJSON l) => FromJSON (CommandResponse l) where parseJSON = lensyPar
 
 
 
-
+newtype PactResult = PactResult (Either PactError PactValue)
+  deriving (Eq, Show)
+instance ToJSON PactResult where
+  toJSON (PactResult (Right s)) =
+    object [ "status" .= ("success" :: String)
+           , "data" .= s ]
+  toJSON (PactResult (Left f)) =
+    object [ "status" .= ("failure" :: String)
+           , "data" .= f ]
+instance FromJSON PactResult where
+  parseJSON (A.Object o) = PactResult <$>
+                           ((Left <$> o .: "data") <|>
+                            (Right <$> o .: "data"))
+  parseJSON p = fail $ "Invalid PactResult " ++ show p
 
 data CommandResult = CommandResult
   { _crReqKey :: RequestKey
   , _crTxId :: Maybe TxId
-  , _crResult :: Either PactError PactValue
+  , _crResult :: PactResult
   , _crGas :: Gas
-  } deriving (Eq,Show)
+  } deriving (Eq,Show,Generic)
+instance ToJSON CommandResult where toJSON = lensyToJSON 3
+instance FromJSON CommandResult where parseJSON = lensyParseJSON 3
 
 
 cmdToRequestKey :: Command a -> RequestKey

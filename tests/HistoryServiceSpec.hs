@@ -55,7 +55,7 @@ res :: Either PactError PactValue
 res = Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
 
 cr :: CommandResult
-cr = CommandResult rq Nothing res (Gas 0)
+cr = CommandResult rq Nothing (PactResult res) (Gas 0)
 
 results :: HashMap.HashMap RequestKey CommandResult
 results = HashMap.fromList [(rq, cr)]
