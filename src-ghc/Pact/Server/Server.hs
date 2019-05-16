@@ -127,5 +127,7 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
       LocalCmd cmd mv -> do
         CommandResult {..} <- liftIO $ _ceiApplyCmd Local cmd
         -- Linda TODO
-        let resp = CommandResponse _crReqKey _crTxId _crResult _crGas Nothing Nothing Nothing
+        let toRes (Left pe) = toJSON (CommandError pe)
+            toRes (Right pv) = toJSON (CommandSuccess pv)
+            resp = CommandResponse _crReqKey _crTxId (toRes _crResult) _crGas Nothing Nothing Nothing
         liftIO $ putMVar mv resp

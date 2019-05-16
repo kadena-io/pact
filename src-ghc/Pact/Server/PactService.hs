@@ -17,7 +17,6 @@ import Prelude
 
 import Control.Monad.Except
 import Control.Monad.Reader
-import Data.Aeson as A
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word64)
@@ -34,6 +33,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
 import Pact.Types.Pretty (viaShow)
+import Pact.Types.PactValue (PactValue)
 
 
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode)
@@ -68,7 +68,7 @@ applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p ->
 applyCmd _ _ _ _ _ _ _ cmd (ProcFail s) =
   -- Linda TODO
   return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $
-  CommandError $ PactError TxFailure def def . viaShow $ s
+  Left $ PactError TxFailure def def . viaShow $ s
 applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
@@ -85,10 +85,10 @@ applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
       -- Linda TODO
       return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $
-               CommandError e
+               Left e
 
-jsonResult :: ToJSON a => Maybe TxId -> RequestKey -> Gas -> a -> CommandResult
-jsonResult tx cmd gas a = CommandResult cmd tx (toJSON a) gas
+jsonResult :: Maybe TxId -> RequestKey -> Gas -> Either PactError PactValue -> CommandResult
+jsonResult tx cmd gas a = CommandResult cmd tx a gas
 
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p CommandResult
@@ -106,7 +106,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
                 initRefStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec def evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
-  return $ jsonResult _erTxId rk _erGas $ CommandSuccess (last _erOutput)
+  return $ jsonResult _erTxId rk _erGas $ Right (last _erOutput)
 
 
 applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p CommandResult
@@ -119,4 +119,4 @@ applyContinuation rk hsh signers ContMsg{..} = do
                 (MsgData sigs _cmData pactStep (toUntypedHash hsh)) initRefStore
                 _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalContinuation def evalEnv Nothing
-  return $ jsonResult _erTxId rk _erGas $ CommandSuccess (last _erOutput)
+  return $ jsonResult _erTxId rk _erGas $ Right (last _erOutput)

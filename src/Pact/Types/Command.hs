@@ -304,7 +304,7 @@ instance (FromJSON l) => FromJSON (CommandResponse l) where parseJSON = lensyPar
 data CommandResult = CommandResult
   { _crReqKey :: RequestKey
   , _crTxId :: Maybe TxId
-  , _crResult :: Value
+  , _crResult :: Either PactError PactValue
   , _crGas :: Gas
   } deriving (Eq,Show)
 

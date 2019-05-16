@@ -154,7 +154,8 @@ pollResultToReponse :: HM.HashMap RequestKey CommandResult -> PollResponses
 pollResultToReponse m = PollResponses $ HM.fromList $ map (second crToAr) $ HM.toList m
 
 crToAr :: CommandResult -> ApiResult
-crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId Nothing
+crToAr (CommandResult _ txId (Left pe) _) = ApiResult (toJSON . CommandError $ pe) txId Nothing
+crToAr (CommandResult _ txId (Right pv) _) = ApiResult (toJSON . CommandSuccess $ pv) txId Nothing
 
 log :: (MonadReader ApiEnv m, MonadIO m) => String -> m ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)

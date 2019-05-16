@@ -18,7 +18,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
 import Control.Concurrent.MVar
 import System.Directory
-import Data.Aeson (Value(Null))
 
 import Data.ByteString (ByteString)
 import Data.HashSet (HashSet)
@@ -26,6 +25,7 @@ import qualified Data.HashSet as HashSet
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust)
+import Data.Default
 
 import Pact.Types.Command
 import Pact.Types.Hash
@@ -33,6 +33,9 @@ import Pact.Types.Server
 import Pact.Types.Term
 import Pact.Server.History.Types
 import Pact.Server.History.Persistence as DB
+import Pact.Types.Runtime (PactError(..),PactErrorType(..))
+import Pact.Types.Pretty (viaShow)
+
 
 initHistoryEnv
   :: HistoryChannel
@@ -240,7 +243,8 @@ _go :: HistoryService ()
 _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey pactInitialHash
-  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing Null (Gas 0))])
+      res = Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
+  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing res (Gas 0))])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)
   v <- liftIO $ takeMVar mv

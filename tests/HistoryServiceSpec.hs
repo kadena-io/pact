@@ -7,12 +7,12 @@ import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
-import Data.Aeson (Value(Null))
 import Data.ByteString (ByteString)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import System.Directory
 import Test.Hspec
+import Data.Default
 
 import Pact.Server.History.Persistence as DB
 import Pact.Server.History.Service
@@ -21,6 +21,9 @@ import Pact.Types.Command
 import Pact.Types.Hash
 import Pact.Types.Server
 import Pact.Types.Term
+import Pact.Types.Runtime (PactError(..),PactErrorType(..))
+import Pact.Types.PactValue (PactValue)
+import Pact.Types.Pretty (viaShow)
 
 
 histFile :: FilePath
@@ -48,8 +51,11 @@ cmd = Command "" [] initialHash
 rq :: RequestKey
 rq = RequestKey pactInitialHash
 
+res :: Either PactError PactValue
+res = Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
+
 cr :: CommandResult
-cr = CommandResult rq Nothing Null (Gas 0)
+cr = CommandResult rq Nothing res (Gas 0)
 
 results :: HashMap.HashMap RequestKey CommandResult
 results = HashMap.fromList [(rq, cr)]
