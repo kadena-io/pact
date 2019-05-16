@@ -262,10 +262,16 @@ instance FromJSON UserSig where
 
 -- Linda TODO
 newtype CommandError = CommandError { _ceData :: PactError }
+  deriving (Show)
 instance ToJSON CommandError where
     toJSON (CommandError m) =
         object $ [ "status" .= ("failure" :: String)
                  , "data" .= m ]
+
+instance FromJSON CommandError where
+    parseJSON = withObject "CommandError" $ \o ->
+        CommandError <$> o .: "data"
+
 
 newtype CommandSuccess = CommandSuccess { _csData :: PactValue }
   deriving (Eq, Show)

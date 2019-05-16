@@ -160,26 +160,38 @@ checkResult isFailure expect result =
         _ -> expectationFailure $ show cmdRes ++ " should be Object"
 
 
-fieldShouldBe :: HasCallStack => (T.Text,HM.HashMap T.Text Value) -> Maybe Value -> Expectation
-fieldShouldBe (k,m) b = do
+fieldShouldBe :: HasCallStack => ([T.Text],HM.HashMap T.Text Value) -> Maybe Value -> Expectation
+fieldShouldBe ([],m) b = expectationFailure $ "Expecting " ++ show b ++ ", But no key provided for " ++ show m
+fieldShouldBe ([k],m) b = do
   let a = HM.lookup k m
-  unless (a == b) $
-    expectationFailure $
-    "Expected " ++ show b ++ ", found " ++ show a ++ " for field " ++ show k ++ " in " ++ show m
+  unless (a == b) $ toExpectationFailure b a k m
+fieldShouldBe (k:r,m) b =
+  case HM.lookup k m of
+    Just v -> case v of
+      Object m' -> (r,m') `fieldShouldBe` b
+      o -> toExpectationFailure b o (k:r) m
+    nothing -> toExpectationFailure b nothing (k:r) m
+
+
+toExpectationFailure :: (Show e, Show a, Show f, Show r) => e -> a -> f -> r -> Expectation    
+toExpectationFailure expect actual field resp =
+          expectationFailure $ "Expected " ++ show expect ++ ", found " ++ show actual
+          ++ " for field " ++ show field ++ " in " ++ show resp
+
 
 checkIfSuccess :: HasCallStack => Object -> Maybe Value -> Expectation
 checkIfSuccess h Nothing =
-  ("status",h) `fieldShouldBe` (Just . String . T.pack) "success"
+  (["status"],h) `fieldShouldBe` (Just . String . T.pack) "success"
 checkIfSuccess h (Just expect) = do
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "success"
-  ("data", h) `fieldShouldBe` Just (toJSON expect)
+  (["status"], h) `fieldShouldBe` (Just . String . T.pack) "success"
+  (["data"], h) `fieldShouldBe` Just (toJSON expect)
 
 checkIfFailure :: HasCallStack => Object -> Maybe Value -> Expectation
 checkIfFailure h Nothing =
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
+  (["status"], h) `fieldShouldBe` (Just . String . T.pack) "failure"
 checkIfFailure h (Just expect) = do
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
-  ("detail", h) `fieldShouldBe` Just (toJSON expect)
+  (["status"], h) `fieldShouldBe` (Just . String . T.pack) "failure"
+  (["data","doc"],h) `fieldShouldBe` Just (toJSON expect)
 
 
 

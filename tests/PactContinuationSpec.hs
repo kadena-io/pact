@@ -56,8 +56,13 @@ getPactId cmd = toPactId hsh
 pactIdNotFoundMsg :: Command Text -> Maybe Value
 pactIdNotFoundMsg cmd = (Just . String) escaped
   where txtPact = asString (getPactId cmd)
-        escaped = ": Failure: resumePact: pact completed: " <> txtPact
+        escaped = "resumePact: pact completed: " <> txtPact
 
+stepMisMatchMsg :: Bool -> Int -> Int -> Maybe Value
+stepMisMatchMsg isRollback attemptStep currStep = (Just . String) msg
+  where typeOfStep = if isRollback then "rollback" else "exec"
+        msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
+              <> asString (show attemptStep) <> ", " <> asString (show currStep) <> ")"
 
 
 ---- TESTS -----
@@ -83,8 +88,7 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 
     runResults allResults $ do
       moduleCmd `succeedsWith`  Nothing
-      nestedExecPactCmd `failsWith`
-        (Just "(nestedPact.tester): Failure: Multiple or nested pact exec found")
+      nestedExecPactCmd `failsWith` (Just "Multiple or nested pact exec found")
 
 
 -- CONTINUATIONS TESTS
@@ -138,8 +142,7 @@ testCorrectNextStep mgr = do
     moduleCmd `succeedsWith`  Nothing
     executePactCmd `succeedsWith` Just "step 0"
     contNextStepCmd `succeedsWith` Just "step 1"
-    checkStateCmd `failsWith`
-      (Just ": Failure: resumePactExec: exec step mismatch with context: (1, 1)")
+    checkStateCmd `failsWith` stepMisMatchMsg False 1 1
 
 
 
@@ -160,8 +163,7 @@ testIncorrectNextStep mgr = do
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
     executePactCmd `succeedsWith` Just "step 0"
-    incorrectStepCmd `failsWith`
-      (Just ": Failure: resumePactExec: exec step mismatch with context: (2, 0)")
+    incorrectStepCmd `failsWith` stepMisMatchMsg False 2 0
     checkStateCmd `succeedsWith` Just "step 1"
 
 
@@ -209,8 +211,7 @@ testErrStep mgr = do
     moduleCmd `succeedsWith`  Nothing
     executePactCmd `succeedsWith` Just "step 0"
     contErrStepCmd `failsWith`  Nothing
-    checkStateCmd `failsWith`
-      (Just ": Failure: resumePactExec: exec step mismatch with context: (2, 0)")
+    checkStateCmd `failsWith` stepMisMatchMsg False 2 0
 
 
 
@@ -282,8 +283,7 @@ testIncorrectRollbackStep mgr = do
     moduleCmd `succeedsWith`  Nothing
     executePactCmd `succeedsWith` Just "step 0"
     contNextStepCmd `succeedsWith` Just "step 1"
-    incorrectRbCmd `failsWith`
-      (Just ": Failure: resumePactExec: rollback step mismatch with context: (2, 1)")
+    incorrectRbCmd `failsWith` stepMisMatchMsg True 2 1
     checkStateCmd `succeedsWith` Just "step 2"
 
 
@@ -333,7 +333,7 @@ testNoRollbackFunc mgr = do
     moduleCmd `succeedsWith`  Nothing
     executePactCmd `succeedsWith` Just "step 0"
     contNextStepCmd `succeedsWith` Just "step 1"
-    noRollbackCmd `failsWith` Just "(step \"step 1\")   : Failure: Rollback requested but none in step"
+    noRollbackCmd `failsWith` Just "Rollback requested but none in step"
     checkStateCmd `succeedsWith` Just "step 2"
 
 
@@ -401,8 +401,7 @@ testNoYield mgr = do
     executePactCmd `succeedsWith` Just "testing->Step0"
     noYieldStepCmd `succeedsWith` Just "step 1 has no yield"
     resumeErrCmd `failsWith`  Nothing
-    checkStateCmd `failsWith`
-      (Just ": Failure: resumePactExec: exec step mismatch with context: (1, 1)")
+    checkStateCmd `failsWith` stepMisMatchMsg False 1 1
 
 
 testResetYield :: HTTP.Manager -> Expectation
@@ -495,8 +494,7 @@ testDebtorPreTimeoutCancel mgr = do
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "02-balance.yaml")
   let allCmds = [tryCancelCmd, checkStillEscrowCmd]
 
-  let cancelMsg = T.concat ["(enforce-one         \"Cancel c...: Failure:",
-                            " Tx Failed: Cancel can only be effected by",
+  let cancelMsg = T.concat ["Cancel can only be effected by",
                             " creditor, or debitor after timeout"]
   twoPartyEscrow allCmds mgr $ do
     tryCancelCmd `failsWith` Just (String cancelMsg)
@@ -543,10 +541,8 @@ testFinishAlone mgr = do
   let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
 
   twoPartyEscrow allCmds mgr $ do
-    tryCredAloneCmd `failsWith`
-                          (Just "(enforce-guard g): Failure: Tx Failed: Keyset failure (keys-all)")
-    tryDebAloneCmd `failsWith`
-                          (Just "(enforce-guard g): Failure: Tx Failed: Keyset failure (keys-all)")
+    tryCredAloneCmd `failsWith` (Just "Keyset failure (keys-all)")
+    tryDebAloneCmd `failsWith` (Just "Keyset failure (keys-all)")
 
 
 testPriceNegUp :: HTTP.Manager -> Expectation
@@ -555,8 +551,7 @@ testPriceNegUp mgr = do
 
   (_, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
   twoPartyEscrow [tryNegUpCmd] mgr $ do
-    tryNegUpCmd `failsWith`
-                      (Just "(enforce (>= escrow-amount pri...: Failure: Tx Failed: Price cannot negotiate up")
+    tryNegUpCmd `failsWith` (Just "Price cannot negotiate up")
 
 
 testValidEscrowFinish :: HTTP.Manager -> Expectation

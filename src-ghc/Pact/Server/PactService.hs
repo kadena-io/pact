@@ -15,7 +15,6 @@ module Pact.Server.PactService where
 
 import Prelude
 
-import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Aeson as A
@@ -77,7 +76,7 @@ applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
 
   let pd = PublicData pubMeta bh bt
 
-  r <- tryAny $ runCommand (CommandEnv conf exMode dbv logger gasEnv pd) $ runPayload cmd
+  r <- catchesPactError $ runCommand (CommandEnv conf exMode dbv logger gasEnv pd) $ runPayload cmd
   case r of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
@@ -86,7 +85,7 @@ applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
       -- Linda TODO
       return $ jsonResult Nothing (cmdToRequestKey cmd) (Gas 0) $
-               CommandError $ PactError EvalError def def . viaShow $ e
+               CommandError e
 
 jsonResult :: ToJSON a => Maybe TxId -> RequestKey -> Gas -> a -> CommandResult
 jsonResult tx cmd gas a = CommandResult cmd tx (toJSON a) gas
