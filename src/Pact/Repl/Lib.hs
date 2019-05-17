@@ -313,32 +313,22 @@ continuePact i as = case as of
             evalPactExec .= Nothing
             local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
 
-    unwrapExec mp mo Nothing = do
-      pid <- case mp of
+    unwrapExec mpid mobj Nothing = do
+      pid <- case mpid of
         Nothing -> evalError' i
           "continue-pact: No pact id supplied and no pact exec in context"
-        Just p -> pure $ PactId p
-      y <- case mo of
-        Nothing -> pure Nothing
-        Just o -> toYield i pid o
+        Just pid -> pure $ PactId pid
 
-      pure (pid, y)
-    unwrapExec mp mo (Just e) = do
-      let pid = maybe (_pePactId e) PactId mp
-      y <- case mo of
-        Nothing -> pure . _peYield $ e
-        Just o -> toYield i pid o
+      y <- maybe (pure Nothing) toYield mobj
       pure (pid, y)
 
-    -- This is only called in the case where no resume object
-    -- is supplied. The function converts the object map into
-    -- a map of pact values, and constructs the endorsement
-    -- for the yield with an empty chain id
-    toYield j p o = do
-      o' <- enforcePactValue' o
-      let t = ChainId ""
-      e <- endorseM j t p
-      pure . Just $ Yield o' e
+    unwrapExec mpid mobj (Just e) = do
+      let pid = maybe (_pePactId e) PactId mpid
+      y <- maybe (pure $ _peYield e) toYield mobj
+      pure (pid, y)
+
+    toYield o =
+      Just . flip Yield Nothing <$> enforcePactValue' o
 
 
 setentity :: RNativeFun LibState

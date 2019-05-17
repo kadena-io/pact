@@ -436,7 +436,7 @@ langDefs =
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
 
-    ,defRNative (specialForm YieldForm) yield
+    ,defRNative (specialForm YieldSF) yield
      (funType yieldv [("object",yieldv)] <>
       funType yieldv [("object", yieldv), ("target-chain",tTyString)])
      [ LitExample "(yield { \"amount\": 100.0 })"

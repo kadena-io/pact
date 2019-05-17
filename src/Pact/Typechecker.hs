@@ -887,7 +887,7 @@ toAST (TApp Term.App{..} _) = do
             WithRead -> specialBind
             WithDefaultRead -> specialBind
             WithCapability -> specialBind
-            YieldForm -> do
+            YieldSF -> do
               app' <- mkApp fun' args'
               setOrAssocYR yrYield (_aNode app')
               return app'

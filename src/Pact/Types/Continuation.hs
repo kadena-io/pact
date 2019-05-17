@@ -93,7 +93,8 @@ endorse
   -- ^ the hash of the containing module for a pact
   -> PactId
   -- ^ the executing pact id
-  -> ObjectMap PactValue  -- ^ yield data
+  -> ObjectMap PactValue
+  -- ^ yield data
   -> ChainId
   -- ^ target chain id
   -> Hash
@@ -132,17 +133,17 @@ instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
 -- | Result of evaluation of a 'defpact'.
 --
 data PactExec = PactExec
-  { -- | Count of steps in pact (discovered when code is executed)
+  { -- ^ Count of steps in pact (discovered when code is executed)
     _peStepCount :: Int
-    -- | Yield value if invoked
+    -- ^ Yield value if invoked
   , _peYield :: !(Maybe Yield)
-    -- | Whether step was executed (in private cases, it can be skipped)
+    -- ^ Whether step was executed (in private cases, it can be skipped)
   , _peExecuted :: Bool
-    -- | Step that was executed or skipped
+    -- ^ Step that was executed or skipped
   , _peStep :: Int
-    -- | Pact id. On a new pact invocation, is copied from tx id.
+    -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _pePactId :: PactId
-    -- | Strict (in arguments) application of pact, for future step invocations.
+    -- ^ Strict (in arguments) application of pact, for future step invocations.
   , _peContinuation :: PactContinuation
   } deriving (Eq, Show, Generic)
 
