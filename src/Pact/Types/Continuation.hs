@@ -104,16 +104,16 @@ endorse (Hash mh) pid o tid =
 
 -- | Environment setup for pact execution, from ContMsg request.
 --
-data PactStep = PactStep {
-      -- | intended step to execute
-      _psStep :: !Int
-      -- | rollback
-    , _psRollback :: !Bool
-      -- | pact id
-    , _psPactId :: !PactId
-      -- | resume value. Note that this is only set in Repl tests and in private use cases;
-      -- in all other cases resume value comes out of PactExec.
-    , _psResume :: !(Maybe Yield)
+data PactStep = PactStep
+  { _psStep :: !Int
+    -- ^ intended step to execute
+  , _psRollback :: !Bool
+    -- ^ rollback
+  , _psPactId :: !PactId
+    -- ^ pact id
+  , _psResume :: !(Maybe Yield)
+    -- ^ resume value. Note that this is only set in Repl tests and in private use cases;
+    -- in all other cases resume value comes out of PactExec.
 } deriving (Eq,Show)
 
 instance Pretty PactStep where
@@ -133,18 +133,18 @@ instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
 -- | Result of evaluation of a 'defpact'.
 --
 data PactExec = PactExec
-  { -- ^ Count of steps in pact (discovered when code is executed)
-    _peStepCount :: Int
-    -- ^ Yield value if invoked
+  { _peStepCount :: Int
+    -- ^ Count of steps in pact (discovered when code is executed)
   , _peYield :: !(Maybe Yield)
-    -- ^ Whether step was executed (in private cases, it can be skipped)
+    -- ^ Yield value if invoked
   , _peExecuted :: Bool
-    -- ^ Step that was executed or skipped
+    -- ^ Whether step was executed (in private cases, it can be skipped)
   , _peStep :: Int
-    -- ^ Pact id. On a new pact invocation, is copied from tx id.
+    -- ^ Step that was executed or skipped
   , _pePactId :: PactId
-    -- ^ Strict (in arguments) application of pact, for future step invocations.
+    -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _peContinuation :: PactContinuation
+    -- ^ Strict (in arguments) application of pact, for future step invocations.
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec
