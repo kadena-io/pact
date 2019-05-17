@@ -61,7 +61,7 @@ spec = describe "Servant API client tests" $ do
     res <- bracket $! do
       r <- runClientM (local pactServerApiClient cmd) clientEnv
       return r
-    let cmdPactResult = (toJSON . CommandSuccess . PLiteral . LDecimal) 3
+    let cmdPactResult = (toJSON . PactResult . Right . PLiteral . LDecimal) 3
     (_crResult' <$> res) `shouldBe` (Right cmdPactResult)
 
   it "correctly runs a simple command with pact error locally" $ do
@@ -80,7 +80,7 @@ spec = describe "Servant API client tests" $ do
       -- print (res,res')
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
-    let cmdData = (toJSON . CommandSuccess . PLiteral . LDecimal) 3
+    let cmdData = (toJSON . PactResult . Right . PLiteral . LDecimal) 3
     (_arResult <$> res') `shouldBe` (Right cmdData)
 
   it "correctly runs a simple command with pact error publicly and listens to the result" $ do
@@ -99,5 +99,5 @@ failWith :: PactErrorType -> Either ServantError Value -> Bool
 failWith errType res = case res of
   Left _ -> False
   Right res' -> case parse parseJSON res' of
-    Success (CommandError (PactError t _ _ _)) -> t == errType
+    Success (PactResult (Left (PactError t _ _ _))) -> t == errType
     _ -> False

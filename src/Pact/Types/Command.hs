@@ -35,8 +35,6 @@ module Pact.Types.Command
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
-  , CommandError(..),ceData
-  , CommandSuccess(..),csData
   , CommandResponse(..)
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas
@@ -261,31 +259,6 @@ instance FromJSON UserSig where
     UserSig <$> o .: "sig"
 
 
--- Linda TODO
-newtype CommandError = CommandError { _ceData :: PactError }
-  deriving (Show)
-instance ToJSON CommandError where
-    toJSON (CommandError m) =
-        object $ [ "status" .= ("failure" :: String)
-                 , "data" .= m ]
-
-instance FromJSON CommandError where
-    parseJSON = withObject "CommandError" $ \o ->
-        CommandError <$> o .: "data"
-
-
-newtype CommandSuccess = CommandSuccess { _csData :: PactValue }
-  deriving (Eq, Show)
-
-instance ToJSON CommandSuccess where
-    toJSON (CommandSuccess a) =
-        object [ "status" .= ("success" :: String)
-               , "data" .= a ]
-
-instance FromJSON CommandSuccess where
-    parseJSON = withObject "CommandSuccess" $ \o ->
-        CommandSuccess <$> o .: "data"
-
 data CommandResponse l = CommandResponse
   { _crReqKey' :: RequestKey
   , _crTxId' :: Maybe TxId
@@ -359,8 +332,6 @@ makeLenses ''ExecutionMode
 makeLenses ''Command
 makeLenses ''ParsedCode
 makeLenses ''Payload
-makeLenses ''CommandError
-makeLenses ''CommandSuccess
 makeLenses ''CommandResult
 makePrisms ''ProcessedCommand
 makePrisms ''ExecutionMode
