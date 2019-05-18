@@ -29,9 +29,7 @@ import Control.Lens
 import Control.Concurrent
 import Control.Monad.Reader
 import Control.Monad.Trans.Except
-import Control.Arrow
 
-import Data.Aeson hiding (defaultOptions, Result(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
@@ -47,7 +45,6 @@ import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.Cors
 
 import Pact.Analyze.Remote.Server (verifyHandler)
-import Pact.Types.Hash (Hash)
 import Pact.Server.API
 import Pact.Types.Command
 import Pact.Types.API
@@ -111,7 +108,7 @@ pollHandler (Poll rks) = do
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   pure $ pollResultToReponse possiblyIncompleteResults
 
-listenHandler :: ListenerRequest -> Api ApiResult
+listenHandler :: ListenerRequest -> Api CommandResult
 listenHandler (ListenerRequest rk) = do
   hChan <- view aiHistoryChan
   m <- liftIO newEmptyMVar
@@ -124,9 +121,9 @@ listenHandler (ListenerRequest rk) = do
       die' msg
     ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      pure $ crToAr cr
+      pure cr
 
-localHandler :: Command T.Text -> Api (CommandResponse Hash)
+localHandler :: Command T.Text -> Api CommandResult
 localHandler commandText = do
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
@@ -134,11 +131,6 @@ localHandler commandText = do
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
   pure r
-  -- Linda TODO
-  -- Might want to throw die 'command could not be run locally' if result is Left
-  {--case parseMaybe parseJSON r of
-    Just v@CommandResponse{} -> pure v
-    Nothing -> die' "command could not be run locally"--}
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion
@@ -151,10 +143,7 @@ checkHistoryForResult rks = do
   liftIO $ readMVar m
 
 pollResultToReponse :: HM.HashMap RequestKey CommandResult -> PollResponses
-pollResultToReponse m = PollResponses $ HM.fromList $ map (second crToAr) $ HM.toList m
-
-crToAr :: CommandResult -> ApiResult
-crToAr (CommandResult _ txId res _) = ApiResult (toJSON res) txId Nothing
+pollResultToReponse m = PollResponses m
 
 log :: (MonadReader ApiEnv m, MonadIO m) => String -> m ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)

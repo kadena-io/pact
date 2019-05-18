@@ -152,6 +152,6 @@ data History =
 data Inbound =
   TxCmds { iCmds :: [Command ByteString] } |
   LocalCmd { iCmd :: Command ByteString,
-             iLocalResult :: MVar (CommandResponse Hash)
+             iLocalResult :: MVar CommandResult
            }
   deriving (Eq)

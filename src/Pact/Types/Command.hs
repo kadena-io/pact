@@ -35,7 +35,6 @@ module Pact.Types.Command
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
-  , CommandResponse(..)
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
@@ -257,20 +256,6 @@ instance ToJSON UserSig where
 instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do
     UserSig <$> o .: "sig"
-
-
-data CommandResponse l = CommandResponse
-  { _crReqKey' :: RequestKey
-  , _crTxId' :: Maybe TxId
-  , _crResult' :: Value --Either PactError PactValue
-  , _crGas' :: Gas
-  , _crLogs' :: Maybe l                  -- this would be [TxLog Value] in pact -s
-  , _crContinuation' :: Maybe PactExec
-  , _crMeta' :: Maybe Value
-  } deriving (Generic)
-instance (ToJSON l) => ToJSON (CommandResponse l) where toJSON = lensyToJSON 3
-instance (FromJSON l) => FromJSON (CommandResponse l) where parseJSON = lensyParseJSON 3
-
 
 
 newtype PactResult = PactResult (Either PactError PactValue)

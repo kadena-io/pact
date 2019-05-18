@@ -16,7 +16,6 @@ import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
-import Pact.Types.Hash (Hash)
 
 type ApiV1API =
   (    "send" :> ReqBody '[JSON] SubmitBatch :>
@@ -24,9 +23,9 @@ type ApiV1API =
   :<|> "poll" :> ReqBody '[JSON] Poll :>
     Post '[JSON] PollResponses
   :<|> "listen" :> ReqBody '[JSON] ListenerRequest :>
-    Post '[JSON] ApiResult
+    Post '[JSON] CommandResult
   :<|> "local" :> ReqBody '[JSON] (Command Text) :>
-    Post '[JSON] (CommandResponse Hash)
+    Post '[JSON] CommandResult
   )
 
 type PactServerAPI =

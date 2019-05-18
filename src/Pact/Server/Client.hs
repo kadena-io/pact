@@ -20,15 +20,14 @@ import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
-import Pact.Types.Hash (Hash)
 
 import Pact.Server.API
 
 data PactServerAPIClient m = PactServerAPIClient
   { send :: SubmitBatch -> m RequestKeys
   , poll :: Poll -> m PollResponses
-  , listen :: ListenerRequest -> m ApiResult
-  , local :: Command Text -> m (CommandResponse Hash)
+  , listen :: ListenerRequest -> m CommandResult
+  , local :: Command Text -> m CommandResult
   , verify :: Analyze.Request -> m Analyze.Response
   , version :: m Text
   }

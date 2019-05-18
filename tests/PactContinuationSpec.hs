@@ -13,7 +13,6 @@ import Data.Decimal
 import Control.Monad.Reader
 
 import Pact.ApiReq
-import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -22,18 +21,20 @@ import qualified Data.Text as T
 
 ----- UTILS ------
 
-shouldMatch' :: HasCallStack => ApiResultCheck -> HM.HashMap RequestKey ApiResult -> Expectation
-shouldMatch' ApiResultCheck{..} results = do
-          let apiRes = HM.lookup _arcReqKey results
-          checkResult _arcIsFailure _arcExpect apiRes
+shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey CommandResult -> Expectation
+shouldMatch' CommandResultCheck{..} results = do
+          let apiRes = HM.lookup _crcReqKey results
+          checkResult _crcExpect apiRes
 
-succeedsWith :: HasCallStack => Command Text -> Maybe Value ->
-                ReaderT (HM.HashMap RequestKey ApiResult) IO ()
-succeedsWith cmd r = ask >>= liftIO . shouldMatch' (makeCheck cmd False r)
+succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
+                ReaderT (HM.HashMap RequestKey CommandResult) IO ()
+succeedsWith cmd r = ask >>= liftIO . shouldMatch'
+                     (makeCheck cmd (ExpectResult . Right $ r))
 
-failsWith :: HasCallStack => Command Text -> Maybe Value ->
-             ReaderT (HM.HashMap RequestKey ApiResult) IO ()
-failsWith cmd r = ask >>= liftIO . shouldMatch' (makeCheck cmd True r)
+failsWith :: HasCallStack => Command Text -> Maybe String ->
+             ReaderT (HM.HashMap RequestKey CommandResult) IO ()
+failsWith cmd r = ask >>= liftIO . shouldMatch'
+                  (makeCheck cmd (ExpectResult . Left $ r))
 
 runResults :: r -> ReaderT r m a -> m a
 runResults rs act = runReaderT act rs
@@ -47,23 +48,24 @@ makeContCmd :: SomeKeyPair -> Bool -> Value -> Command Text -> Int -> String -> 
 makeContCmd keyPairs isRollback cmdData pactExecCmd step nonce =
   mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce)
 
+textVal :: Text -> Maybe PactValue
+textVal = Just . PLiteral . LString
 
 getPactId :: Command Text -> PactId
 getPactId cmd = toPactId hsh
   where hsh = (toUntypedHash . _cmdHash) cmd
 
 
-pactIdNotFoundMsg :: Command Text -> Maybe Value
-pactIdNotFoundMsg cmd = (Just . String) escaped
-  where txtPact = asString (getPactId cmd)
-        escaped = "resumePact: pact completed: " <> txtPact
+pactIdNotFoundMsg :: Command Text -> Maybe String
+pactIdNotFoundMsg cmd = Just msg
+  where txtPact = unpack (asString (getPactId cmd))
+        msg = "resumePact: pact completed: " <> txtPact
 
-stepMisMatchMsg :: Bool -> Int -> Int -> Maybe Value
-stepMisMatchMsg isRollback attemptStep currStep = (Just . String) msg
+stepMisMatchMsg :: Bool -> Int -> Int -> Maybe String
+stepMisMatchMsg isRollback attemptStep currStep = Just msg
   where typeOfStep = if isRollback then "rollback" else "exec"
         msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
-              <> asString (show attemptStep) <> ", " <> asString (show currStep) <> ")"
-
+              <> show attemptStep <> ", " <> show currStep <> ")"
 
 ---- TESTS -----
 
@@ -96,9 +98,10 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 testPactContinuation :: HTTP.Manager -> Spec
 testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
-    let cmdData = (toJSON . PactResult . Right . PLiteral . LDecimal) 3
-        expRes = Just $ ApiResult cmdData ((Just . TxId) 0) Nothing
-    testSimpleServerCmd mgr `shouldReturn` expRes
+    let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
+        --expRes = Just $ CommandResult _ ((Just . TxId) 0) cmdData (Gas 0)
+    cr <- testSimpleServerCmd mgr
+    (_crResult <$> cr)`shouldBe` Just cmdData
 
   context "when provided with correct next step" $
     it "executes the next step and updates pact's state" $
@@ -116,7 +119,7 @@ testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
     it "throws error and does not update pact's state" $
       testErrStep mgr
 
-testSimpleServerCmd :: HTTP.Manager -> IO (Maybe ApiResult)
+testSimpleServerCmd :: HTTP.Manager -> IO (Maybe CommandResult)
 testSimpleServerCmd mgr = do
   simpleKeys <- genKeys
   cmd <- mkExec  "(+ 1 2)" Null def
@@ -140,8 +143,8 @@ testCorrectNextStep mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
-    contNextStepCmd `succeedsWith` Just "step 1"
+    executePactCmd `succeedsWith` textVal "step 0"
+    contNextStepCmd `succeedsWith` textVal "step 1"
     checkStateCmd `failsWith` stepMisMatchMsg False 1 1
 
 
@@ -162,9 +165,9 @@ testIncorrectNextStep mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
+    executePactCmd `succeedsWith` textVal "step 0"
     incorrectStepCmd `failsWith` stepMisMatchMsg False 2 0
-    checkStateCmd `succeedsWith` Just "step 1"
+    checkStateCmd `succeedsWith` textVal "step 1"
 
 
 testLastStep :: HTTP.Manager -> Expectation
@@ -185,9 +188,9 @@ testLastStep mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
-    contNextStep1Cmd `succeedsWith` Just "step 1"
-    contNextStep2Cmd `succeedsWith` Just "step 2"
+    executePactCmd `succeedsWith` textVal "step 0"
+    contNextStep1Cmd `succeedsWith` textVal "step 1"
+    contNextStep2Cmd `succeedsWith` textVal "step 2"
     checkStateCmd `failsWith`
       pactIdNotFoundMsg executePactCmd
 
@@ -209,7 +212,7 @@ testErrStep mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
+    executePactCmd `succeedsWith` textVal "step 0"
     contErrStepCmd `failsWith`  Nothing
     checkStateCmd `failsWith` stepMisMatchMsg False 2 0
 
@@ -255,9 +258,9 @@ testCorrectRollbackStep mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
-    contNextStepCmd `succeedsWith` Just "step 1"
-    rollbackStepCmd `succeedsWith` Just "rollback 1"
+    executePactCmd `succeedsWith` textVal "step 0"
+    contNextStepCmd `succeedsWith` textVal "step 1"
+    rollbackStepCmd `succeedsWith` textVal "rollback 1"
     checkStateCmd `failsWith`
       pactIdNotFoundMsg executePactCmd
 
@@ -281,10 +284,10 @@ testIncorrectRollbackStep mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
-    contNextStepCmd `succeedsWith` Just "step 1"
+    executePactCmd `succeedsWith` textVal "step 0"
+    contNextStepCmd `succeedsWith` textVal "step 1"
     incorrectRbCmd `failsWith` stepMisMatchMsg True 2 1
-    checkStateCmd `succeedsWith` Just "step 2"
+    checkStateCmd `succeedsWith` textVal "step 2"
 
 
 testRollbackErr :: HTTP.Manager -> Expectation
@@ -306,10 +309,10 @@ testRollbackErr mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
-    contNextStepCmd `succeedsWith` Just "step 1"
+    executePactCmd `succeedsWith` textVal "step 0"
+    contNextStepCmd `succeedsWith` textVal "step 1"
     rollbackErrCmd `failsWith`  Nothing
-    checkStateCmd `succeedsWith` Just "step 2"
+    checkStateCmd `succeedsWith` textVal "step 2"
 
 
 testNoRollbackFunc :: HTTP.Manager -> Expectation
@@ -331,10 +334,10 @@ testNoRollbackFunc mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
-    contNextStepCmd `succeedsWith` Just "step 1"
+    executePactCmd `succeedsWith` textVal "step 0"
+    contNextStepCmd `succeedsWith` textVal "step 1"
     noRollbackCmd `failsWith` Just "Rollback requested but none in step"
-    checkStateCmd `succeedsWith` Just "step 2"
+    checkStateCmd `succeedsWith` textVal "step 2"
 
 
 
@@ -373,9 +376,9 @@ testValidYield mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "testing->Step0"
-    resumeAndYieldCmd `succeedsWith` Just "testing->Step0->Step1"
-    resumeOnlyCmd `succeedsWith` Just "testing->Step0->Step1->Step2"
+    executePactCmd `succeedsWith` textVal "testing->Step0"
+    resumeAndYieldCmd `succeedsWith` textVal "testing->Step0->Step1"
+    resumeOnlyCmd `succeedsWith` textVal "testing->Step0->Step1->Step2"
     checkStateCmd `failsWith`
       pactIdNotFoundMsg executePactCmd
 
@@ -398,8 +401,8 @@ testNoYield mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "testing->Step0"
-    noYieldStepCmd `succeedsWith` Just "step 1 has no yield"
+    executePactCmd `succeedsWith` textVal "testing->Step0"
+    noYieldStepCmd `succeedsWith` textVal "step 1 has no yield"
     resumeErrCmd `failsWith`  Nothing
     checkStateCmd `failsWith` stepMisMatchMsg False 1 1
 
@@ -422,9 +425,9 @@ testResetYield mgr = do
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` Just "step 0"
-    yieldSameKeyCmd `succeedsWith` Just "step 1"
-    resumeStepCmd `succeedsWith` Just "step 1"
+    executePactCmd `succeedsWith` textVal "step 0"
+    yieldSameKeyCmd `succeedsWith` textVal "step 1"
+    resumeStepCmd `succeedsWith` textVal "step 1"
     checkStateCmd `failsWith`
       pactIdNotFoundMsg executePactCmd
 
@@ -457,7 +460,7 @@ testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
 
 
 twoPartyEscrow :: [Command T.Text] -> HTTP.Manager ->
-                  ReaderT (HM.HashMap RequestKey ApiResult) IO () -> Expectation
+                  ReaderT (HM.HashMap RequestKey CommandResult) IO () -> Expectation
 twoPartyEscrow testCmds mgr act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
 
@@ -473,9 +476,9 @@ twoPartyEscrow testCmds mgr act = do
   allResults <- runAll mgr allCmds
 
   runResults allResults $ do
-    sysModuleCmd `succeedsWith` Just "system module loaded"
-    acctModuleCmd `succeedsWith` Just "TableCreated"
-    testModuleCmd `succeedsWith` Just "test module loaded"
+    sysModuleCmd `succeedsWith` textVal "system module loaded"
+    acctModuleCmd `succeedsWith` textVal "TableCreated"
+    testModuleCmd `succeedsWith` textVal "test module loaded"
     createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
     resetTimeCmd `succeedsWith`  Nothing
     runEscrowCmd `succeedsWith`  Nothing
@@ -483,8 +486,8 @@ twoPartyEscrow testCmds mgr act = do
     act
 
 
-decValue :: Decimal -> Maybe Value
-decValue = Just . toJSON . PLiteral . LDecimal
+decValue :: Decimal -> Maybe PactValue
+decValue = Just . PLiteral . LDecimal
 
 testDebtorPreTimeoutCancel :: HTTP.Manager -> Expectation
 testDebtorPreTimeoutCancel mgr = do
@@ -494,10 +497,10 @@ testDebtorPreTimeoutCancel mgr = do
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "02-balance.yaml")
   let allCmds = [tryCancelCmd, checkStillEscrowCmd]
 
-  let cancelMsg = T.concat ["Cancel can only be effected by",
-                            " creditor, or debitor after timeout"]
+  let cancelMsg = "Cancel can only be effected by" <>
+                  " creditor, or debitor after timeout"
   twoPartyEscrow allCmds mgr $ do
-    tryCancelCmd `failsWith` Just (String cancelMsg)
+    tryCancelCmd `failsWith` Just cancelMsg
     checkStillEscrowCmd `succeedsWith` decValue 98.00
 
 
@@ -565,6 +568,6 @@ testValidEscrowFinish mgr = do
 
   twoPartyEscrow allCmds mgr $ do
     tryNegDownCmd `succeedsWith`
-                         (Just "Escrow completed with 1.75 paid and 0.25 refunded")
+                         (textVal "Escrow completed with 1.75 paid and 0.25 refunded")
     credBalanceCmd `succeedsWith` decValue 1.75
     debBalanceCmd `succeedsWith` decValue 98.25

@@ -22,7 +22,6 @@ module Pact.Types.API
   , Poll(..)
   , PollResponses(..)
   , ListenerRequest(..)
-  , ApiResult(..), arMetaData, arResult, arTxId
   ) where
 
 import Data.Aeson hiding (Success)
@@ -64,17 +63,8 @@ instance ToJSON Poll where
 instance FromJSON Poll where
   parseJSON = lensyParseJSON 2
 
-data ApiResult = ApiResult {
-  _arResult :: !Value,
-  _arTxId :: !(Maybe TxId),
-  _arMetaData :: !(Maybe Value)
-  } deriving (Eq,Show,Generic)
-makeLenses ''ApiResult
-instance FromJSON ApiResult where parseJSON = lensyParseJSON 3
-instance ToJSON ApiResult where toJSON = lensyToJSON 3
-
 -- | What you get back from a Poll
-newtype PollResponses = PollResponses (HM.HashMap RequestKey ApiResult)
+newtype PollResponses = PollResponses (HM.HashMap RequestKey CommandResult)
   deriving (Eq, Show)
 instance ToJSON PollResponses where
   toJSON (PollResponses m) = object $ map (requestKeyToB16Text *** toJSON) $ HM.toList m
