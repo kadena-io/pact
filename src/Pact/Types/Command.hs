@@ -36,7 +36,7 @@ module Pact.Types.Command
   , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
   , PactResult(..)
-  , CommandResult(..),crReqKey,crTxId,crResult,crGas
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
@@ -273,14 +273,17 @@ instance FromJSON PactResult where
                             (Right <$> o .: "data"))
   parseJSON p = fail $ "Invalid PactResult " ++ show p
 
-data CommandResult = CommandResult
-  { _crReqKey :: RequestKey
-  , _crTxId :: Maybe TxId
-  , _crResult :: PactResult
-  , _crGas :: Gas
+data CommandResult l = CommandResult
+  { _crReqKey :: !RequestKey
+  , _crTxId :: !(Maybe TxId)
+  , _crResult :: !PactResult
+  , _crGas :: !Gas
+  , _crLogs :: !(Maybe l)                 -- Level of logging (i.e. full TxLog vs hashed logs)
+  , _crContinuation :: !(Maybe PactExec)
+  , _crMetaData :: !(Maybe Value)         -- Platform-specific data
   } deriving (Eq,Show,Generic)
-instance ToJSON CommandResult where toJSON = lensyToJSON 3
-instance FromJSON CommandResult where parseJSON = lensyParseJSON 3
+instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3
+instance (FromJSON l) => FromJSON (CommandResult l) where parseJSON = lensyParseJSON 3
 
 
 cmdToRequestKey :: Command a -> RequestKey
@@ -289,12 +292,12 @@ cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
 
 
 
-type ApplyCmd = ExecutionMode -> Command ByteString -> IO CommandResult
-type ApplyPPCmd m a = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO CommandResult
+type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
+type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
 
-data CommandExecInterface m a = CommandExecInterface
-  { _ceiApplyCmd :: ApplyCmd
-  , _ceiApplyPPCmd :: ApplyPPCmd m a
+data CommandExecInterface m a l = CommandExecInterface
+  { _ceiApplyCmd :: ApplyCmd l
+  , _ceiApplyPPCmd :: ApplyPPCmd m a l
   }
 
 

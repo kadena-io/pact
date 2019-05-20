@@ -33,6 +33,7 @@ import Pact.Types.Crypto as Crypto
 import Pact.Types.Util (toB16JSON)
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.Hash
 
 import Control.Exception
 import Data.Aeson
@@ -77,7 +78,7 @@ data CommandResultCheck = CommandResultCheck
   , _crcExpect :: ExpectResult
   } deriving (Show, Eq)
 
-runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey CommandResult)
+runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
 runAll mgr cmds = Exception.bracket
               (startServer _testConfigFilePath)
                stopServer
@@ -111,7 +112,7 @@ stopServer asyncServer = do
                     "Thread " ++ show (asyncThreadId asy) ++ " could not be cancelled."
           _ -> return ()
 
-run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey CommandResult)
+run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
 run mgr cmds = do
   sendResp <- doSend mgr $ SubmitBatch cmds
   case sendResp of
@@ -158,7 +159,7 @@ makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
 makeCheck c@Command{..} expect = CommandResultCheck (cmdToRequestKey c) expect
 
 
-checkResult :: HasCallStack => ExpectResult -> Maybe CommandResult -> Expectation
+checkResult :: HasCallStack => ExpectResult -> Maybe (CommandResult Hash) -> Expectation
 checkResult expect result =
   case result of
     Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"

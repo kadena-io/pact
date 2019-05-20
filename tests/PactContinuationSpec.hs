@@ -21,18 +21,18 @@ import qualified Data.Text as T
 
 ----- UTILS ------
 
-shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey CommandResult -> Expectation
+shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
 shouldMatch' CommandResultCheck{..} results = do
           let apiRes = HM.lookup _crcReqKey results
           checkResult _crcExpect apiRes
 
 succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
-                ReaderT (HM.HashMap RequestKey CommandResult) IO ()
+                ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
 succeedsWith cmd r = ask >>= liftIO . shouldMatch'
                      (makeCheck cmd (ExpectResult . Right $ r))
 
 failsWith :: HasCallStack => Command Text -> Maybe String ->
-             ReaderT (HM.HashMap RequestKey CommandResult) IO ()
+             ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
 failsWith cmd r = ask >>= liftIO . shouldMatch'
                   (makeCheck cmd (ExpectResult . Left $ r))
 
@@ -119,7 +119,7 @@ testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
     it "throws error and does not update pact's state" $
       testErrStep mgr
 
-testSimpleServerCmd :: HTTP.Manager -> IO (Maybe CommandResult)
+testSimpleServerCmd :: HTTP.Manager -> IO (Maybe (CommandResult Hash))
 testSimpleServerCmd mgr = do
   simpleKeys <- genKeys
   cmd <- mkExec  "(+ 1 2)" Null def
@@ -460,7 +460,7 @@ testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
 
 
 twoPartyEscrow :: [Command T.Text] -> HTTP.Manager ->
-                  ReaderT (HM.HashMap RequestKey CommandResult) IO () -> Expectation
+                  ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO () -> Expectation
 twoPartyEscrow testCmds mgr act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
 

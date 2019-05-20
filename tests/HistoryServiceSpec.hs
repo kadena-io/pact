@@ -13,6 +13,7 @@ import qualified Data.HashSet as HashSet
 import System.Directory
 import Test.Hspec
 import Data.Default
+import Data.Aeson (Value)
 
 import Pact.Server.History.Persistence as DB
 import Pact.Server.History.Service
@@ -24,6 +25,7 @@ import Pact.Types.Term
 import Pact.Types.Runtime (PactError(..),PactErrorType(..))
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.Pretty (viaShow)
+import Pact.Types.Persistence (TxLog)
 
 
 histFile :: FilePath
@@ -54,10 +56,10 @@ rq = RequestKey pactInitialHash
 res :: Either PactError PactValue
 res = Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
 
-cr :: CommandResult
-cr = CommandResult rq Nothing (PactResult res) (Gas 0)
+cr :: CommandResult [TxLog Value]
+cr = CommandResult rq Nothing (PactResult res) (Gas 0) Nothing Nothing Nothing
 
-results :: HashMap.HashMap RequestKey CommandResult
+results :: HashMap.HashMap RequestKey (CommandResult [TxLog Value])
 results = HashMap.fromList [(rq, cr)]
 
 initHistory :: IO (HistoryEnv,HistoryState)

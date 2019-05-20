@@ -25,6 +25,7 @@ module Pact.Server.ApiServer
 
 import Prelude hiding (log)
 
+import Control.Arrow (second)
 import Control.Lens
 import Control.Concurrent
 import Control.Monad.Reader
@@ -35,10 +36,12 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
 import Data.Proxy
 import Data.Text.Encoding
+import Data.Aeson
 
 import Data.HashSet (HashSet)
-import qualified Data.HashSet as HashSet
-import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet          as HashSet
+import qualified Data.HashMap.Strict   as HM
+import qualified Data.ByteString.Lazy  as BSL
 
 import Servant
 import Network.Wai.Handler.Warp (run)
@@ -50,6 +53,9 @@ import Pact.Types.Command
 import Pact.Types.API
 import Pact.Types.Server
 import Pact.Types.Version
+import Pact.Types.Hash
+import Pact.Types.Persistence (TxLog)
+
 
 #if !MIN_VERSION_servant(0,16,0)
 type ServerError = ServantErr
@@ -108,7 +114,7 @@ pollHandler (Poll rks) = do
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   pure $ pollResultToReponse possiblyIncompleteResults
 
-listenHandler :: ListenerRequest -> Api CommandResult
+listenHandler :: ListenerRequest -> Api (CommandResult Hash)
 listenHandler (ListenerRequest rk) = do
   hChan <- view aiHistoryChan
   m <- liftIO newEmptyMVar
@@ -121,16 +127,16 @@ listenHandler (ListenerRequest rk) = do
       die' msg
     ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      pure cr
+      pure $ fullToHashLogCr cr
 
-localHandler :: Command T.Text -> Api CommandResult
+localHandler :: Command T.Text -> Api (CommandResult Hash)
 localHandler commandText = do
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
-  pure r
+  pure $ fullToHashLogCr r
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion
@@ -142,8 +148,12 @@ checkHistoryForResult rks = do
   liftIO $ writeHistory hChan $ QueryForResults (rks,m)
   liftIO $ readMVar m
 
-pollResultToReponse :: HM.HashMap RequestKey CommandResult -> PollResponses
-pollResultToReponse m = PollResponses m
+pollResultToReponse :: HM.HashMap RequestKey (CommandResult [TxLog Value]) -> PollResponses
+pollResultToReponse m = PollResponses $ HM.fromList $ map (second fullToHashLogCr) $ HM.toList m
+
+fullToHashLogCr :: CommandResult [TxLog Value] -> CommandResult Hash
+fullToHashLogCr full = set crLogs hashedLogs full
+  where hashedLogs = (pactHash . BSL.toStrict . encode) <$> _crLogs full
 
 log :: (MonadReader ApiEnv m, MonadIO m) => String -> m ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)

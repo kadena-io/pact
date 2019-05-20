@@ -64,7 +64,7 @@ instance FromJSON Poll where
   parseJSON = lensyParseJSON 2
 
 -- | What you get back from a Poll
-newtype PollResponses = PollResponses (HM.HashMap RequestKey CommandResult)
+newtype PollResponses = PollResponses (HM.HashMap RequestKey (CommandResult Hash))
   deriving (Eq, Show)
 instance ToJSON PollResponses where
   toJSON (PollResponses m) = object $ map (requestKeyToB16Text *** toJSON) $ HM.toList m
