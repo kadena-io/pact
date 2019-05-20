@@ -52,6 +52,7 @@ import Unsafe.Coerce
 import Pact.Eval
 import Pact.Gas
 import Pact.Types.Native
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -217,7 +218,7 @@ endorseM _ "" _ = pure Nothing
 endorseM fa tid pid = do
   md <- getCallingModule fa
   case _mdModule md of
-    MDModule m -> pure . Just $ Endorsement tid pid (_mHash m)
+    MDModule m -> return . Just $ Endorsement tid pid (_mHash m)
     MDInterface n -> evalError' fa
       $ "Internal error: cannot endorse yield for interface: "
       <> pretty (_interfaceName n)

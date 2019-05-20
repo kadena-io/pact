@@ -15,6 +15,7 @@ module Pact.Types.Continuation
   , Endorsement(..)
     -- * combinators
   , endorse
+  , endorse'
     -- * optics
   , peStepCount, peYield, peExecuted, pePactId, peStep, peContinuation
   , psStep, psRollback, psPactId, psResume
@@ -101,6 +102,14 @@ endorse
 endorse (Hash mh) pid o tid =
   toUntypedHash . hash @('Blake2b_256) $!
     mh <> toStrict (encode pid <> encode o <> encode tid)
+
+-- | Given a 'Yield', if the endorsement value
+-- is 'Nothing', return Nothing. If it contains a value,
+-- return an optional hash of the endorsed values.
+--
+endorse' :: Yield -> Maybe Hash
+endorse' (Yield _ Nothing) = Nothing
+endorse' (Yield o e) = fmap (\(Endorsement tid pid h) -> endorse h pid o tid) e
 
 -- | Environment setup for pact execution, from ContMsg request.
 --

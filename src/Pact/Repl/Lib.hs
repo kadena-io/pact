@@ -318,17 +318,20 @@ continuePact i as = case as of
         Nothing -> evalError' i
           "continue-pact: No pact id supplied and no pact exec in context"
         Just pid -> pure $ PactId pid
-
       y <- maybe (pure Nothing) toYield mobj
       pure (pid, y)
+    unwrapExec mpid mobj (Just ex) = do
+      let pid = maybe (_pePactId ex) PactId mpid
+      y <- case mobj of
+        Nothing -> return $ _peYield ex
+        Just o -> toYield o
+      return (pid, y)
 
-    unwrapExec mpid mobj (Just e) = do
-      let pid = maybe (_pePactId e) PactId mpid
-      y <- maybe (pure $ _peYield e) toYield mobj
-      pure (pid, y)
+    enforceYield Nothing = return Nothing
+    enforceYield (Just y) =
 
-    toYield o =
-      Just . flip Yield Nothing <$> enforcePactValue' o
+    toYield o = fmap (\o' -> Just $ Yield o' Nothing) $
+      enforcePactValue' o
 
 
 setentity :: RNativeFun LibState
