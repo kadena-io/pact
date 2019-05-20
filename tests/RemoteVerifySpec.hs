@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,6 +10,8 @@ import Control.Concurrent
 import Control.Exception (finally)
 import Control.Lens
 import Control.Monad.State.Strict
+import Control.Monad.Trans.Except
+import Data.Bifunctor (first)
 import Data.Either
 import qualified Data.Text as T
 import NeatInterpolation (text)
@@ -88,8 +91,22 @@ testSingleModule = do
 
 testUnsortedModules :: Spec
 testUnsortedModules = do
-  eReplState0 <- runIO $ loadCode
-    [text|
+  replState0 <- runIO $ either (error . show) id <$> loadCode code
+
+  it "loads when topologically sorted locally" $ do
+    stateModuleData "mod2" replState0 >>= (`shouldSatisfy` isRight)
+
+  resp <- runIO . runExceptT $ do
+    ModuleData mod1 _refs <- ExceptT $ stateModuleData "mod1" replState0
+    ModuleData mod2 _refs <- ExceptT $ stateModuleData "mod2" replState0
+    ExceptT . fmap (first show) . serveAndRequest 3001 $
+      Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
+
+  it "verifies over the network" $
+    fmap (view Remote.responseLines) resp `shouldBe`
+    (Right ["Property proven valid",""])
+  where
+    code = [text|
       (env-keys ["admin"])
       (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
       (begin-tx)
@@ -110,17 +127,3 @@ testUnsortedModules = do
           2))
       (commit-tx)
     |]
-
-  it "loads when topologically sorted locally" $ do
-    Right replState0 <- pure eReplState0
-    stateModuleData "mod2" replState0 >>= (`shouldSatisfy` isRight)
-
-  Right replState0 <- pure eReplState0
-  Right (ModuleData mod1 _refs) <- runIO $ stateModuleData "mod1" replState0
-  Right (ModuleData mod2 _refs) <- runIO $ stateModuleData "mod2" replState0
-
-  resp <- runIO $ serveAndRequest 3001 $ Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
-
-  it "verifies over the network" $
-    fmap (view Remote.responseLines) resp `shouldBe`
-    (Right ["Property proven valid",""])

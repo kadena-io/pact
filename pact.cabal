@@ -258,32 +258,33 @@ test-suite hspec
   ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-depends:
                 base
-              , bound
               , Decimal
-              , deepseq
-              , exceptions
-              , hspec
               , HUnit
-              , pact
               , aeson
+              , base16-bytestring >=0.1.1.6 && < 0.2
+              , bound
+              , bytestring
               , containers
-              , directory
-              , filepath
-              , mmorph
               , data-default
+              , deepseq
+              , directory
+              , errors >= 2.3
+              , exceptions
+              , filepath
+              , hedgehog == 0.6.*
+              , hspec
+              , hw-hspec-hedgehog == 0.1.*
+              , intervals
               , lens
-              , unordered-containers
+              , mmorph
+              , mtl
+              , pact
               , prettyprinter
               , prettyprinter-ansi-terminal
               , prettyprinter-convert-ansi-wl-pprint
-              , bytestring
-              , base16-bytestring >=0.1.1.6 && < 0.2
-              , mtl
               , text
               , transformers
-              , hedgehog == 0.6.*
-              , hw-hspec-hedgehog == 0.1.*
-              , intervals
+              , unordered-containers
               , vector
   other-modules:
                 Blake2Spec
