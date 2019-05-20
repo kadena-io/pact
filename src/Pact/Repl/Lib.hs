@@ -327,9 +327,6 @@ continuePact i as = case as of
         Just o -> toYield o
       return (pid, y)
 
-    enforceYield Nothing = return Nothing
-    enforceYield (Just y) =
-
     toYield o = fmap (\o' -> Just $ Yield o' Nothing) $
       enforcePactValue' o
 

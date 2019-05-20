@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
+
 -- |
 -- Module      :  Pact.Native.Internal
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -13,7 +14,6 @@
 --
 -- Internal functions for built-ins.
 --
-
 module Pact.Native.Internal
   (success
   ,parseMsgKey,parseMsgKey'
@@ -52,7 +52,6 @@ import Unsafe.Coerce
 import Pact.Eval
 import Pact.Gas
 import Pact.Types.Native
-import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
