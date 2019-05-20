@@ -694,7 +694,7 @@ resume i as = case as of
 
       unless (endorse h' pid1 o cid == endorse h pid0 o tid)
         $ evalError' fa
-        $ "resume: yield endorsements do not match: "
+        $ "resume: yield endorsements do not match"
 
       return o
 
