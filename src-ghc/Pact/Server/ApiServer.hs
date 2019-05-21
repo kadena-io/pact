@@ -25,7 +25,6 @@ module Pact.Server.ApiServer
 
 import Prelude hiding (log)
 
-import Control.Arrow (second)
 import Control.Lens
 import Control.Concurrent
 import Control.Monad.Reader
@@ -149,7 +148,7 @@ checkHistoryForResult rks = do
   liftIO $ readMVar m
 
 pollResultToReponse :: HM.HashMap RequestKey (CommandResult [TxLog Value]) -> PollResponses
-pollResultToReponse m = PollResponses $ HM.fromList $ map (second fullToHashLogCr) $ HM.toList m
+pollResultToReponse m = PollResponses $ HM.map fullToHashLogCr m
 
 fullToHashLogCr :: CommandResult [TxLog Value] -> CommandResult Hash
 fullToHashLogCr full = set crLogs hashedLogs full

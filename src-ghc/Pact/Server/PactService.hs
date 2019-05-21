@@ -63,36 +63,44 @@ initPactService CommandConfig {..} loggers = do
       mkSQLiteEnv logger True sqlc loggers >>= mkCEI
 
 
-applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p ->
-            GasModel -> Word64 -> Int64 -> ExecutionMode -> Command a ->
-            ProcessedCommand PublicMeta ParsedCode -> IO (CommandResult [TxLog Value])
+applyCmd :: Logger ->
+            Maybe EntityName ->
+            PactDbEnv p ->
+            GasModel ->
+            Word64 ->
+            Int64 ->
+            ExecutionMode ->
+            Command a ->
+            ProcessedCommand PublicMeta ParsedCode ->
+            IO (CommandResult [TxLog Value])
 applyCmd _ _ _ _ _ _ _ cmd (ProcFail s) =
-  return $ resultFailure Nothing (cmdToRequestKey cmd) (Gas 0) $
-  PactError TxFailure def def . viaShow $ s
+  return $ resultFailure
+           Nothing
+           (cmdToRequestKey cmd)
+           (PactError TxFailure def def . viaShow $ s)
 applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
       gasEnv = GasEnv (fromIntegral $ _pmGasLimit pubMeta) (GasPrice gasPrice) gasModel
+      pd = PublicData pubMeta bh bt
 
-  let pd = PublicData pubMeta bh bt
-
-  r <- catchesPactError $ runCommand (CommandEnv conf exMode dbv logger gasEnv pd) $ runPayload cmd
-  case r of
+  res <- catchesPactError $ runCommand
+                            (CommandEnv conf exMode dbv logger gasEnv pd)
+                            (runPayload cmd)
+  case res of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
       return cr
-    Left e -> do
-      logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
-      -- Linda TODO
-      return $ resultFailure Nothing (cmdToRequestKey cmd) (Gas 0) e
+    Left pactErr -> do
+      logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show pactErr
+      return $ resultFailure Nothing (cmdToRequestKey cmd) pactErr
 
 
 resultFailure :: Maybe TxId ->
                  RequestKey ->
-                 Gas ->
                  PactError ->
                  CommandResult [TxLog Value]
-resultFailure tx cmd gas a = CommandResult cmd tx (PactResult . Left $ a) gas Nothing Nothing Nothing
+resultFailure tx cmd a = CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing
 
 resultSuccess :: Maybe TxId ->
                  RequestKey ->
