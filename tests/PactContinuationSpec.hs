@@ -45,7 +45,7 @@ makeExecCmd keyPairs code =
 
 makeContCmd :: SomeKeyPair -> Bool -> Value -> Command Text -> Int -> String -> IO (Command Text)
 makeContCmd keyPairs isRollback cmdData pactExecCmd step nonce =
-  mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce)
+  mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce) Nothing
 
 
 getPactId :: Command Text -> PactId

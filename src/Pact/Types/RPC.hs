@@ -32,6 +32,8 @@ import Prelude
 
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
+import Data.ByteString (ByteString)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 
 data PactRPC c =
     Exec (ExecMsg c) |
@@ -66,11 +68,18 @@ instance FromJSON c => FromJSON (ExecMsg c) where
 instance ToJSON c => ToJSON (ExecMsg c) where
     toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
 
+newtype ContProof = ContProof ByteString
+  deriving (Eq,Show,Generic)
+instance NFData ContProof
+instance ToJSON ContProof where toJSON (ContProof bs) = String (decodeUtf8 bs)
+instance FromJSON ContProof where parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
+
 data ContMsg = ContMsg
   { _cmPactId :: !PactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
   , _cmData :: !Value
+  , _cmProof :: !(Maybe ContProof)
   } deriving (Eq,Show,Generic)
 
 instance NFData ContMsg
@@ -78,8 +87,9 @@ instance FromJSON ContMsg where
     parseJSON =
         withObject "ContMsg" $ \o ->
             ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
+            <*> o .: "proof"
     {-# INLINE parseJSON #-}
 
 instance ToJSON ContMsg where
     toJSON ContMsg{..} = object
-      [ "pactId" .= _cmPactId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData]
+      [ "pactId" .= _cmPactId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData, "proof" .= _cmProof]
