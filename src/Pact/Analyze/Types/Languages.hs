@@ -38,7 +38,7 @@ module Pact.Analyze.Types.Languages
 
   , toPact
   , fromPact
-  , valueToProp
+  , eTermToProp
   , sortLiteralObject
   , mkLiteralList
   , mkLiteralObject
@@ -75,6 +75,7 @@ module Pact.Analyze.Types.Languages
 
 import           Control.Lens                  (Prism', review, preview, prism')
 import           Control.Monad                 ((>=>))
+import           Data.Bifunctor                (first)
 import           Data.Maybe                    (fromMaybe)
 import           Data.String                   (IsString (..))
 import           Data.Text                     (Text)
@@ -1656,11 +1657,154 @@ instance Num (Term 'TyDecimal) where
   signum = inject .   DecUnaryArithOp Signum
   negate = inject .   DecUnaryArithOp Negate
 
-valueToProp :: ETerm -> Either String EProp
-valueToProp = \case
-  Some ty (CoreTerm (Lit l))
-    -> Right $ Some ty (CoreProp (Lit l))
-  Some _ _ -> Left "can only convert (simple) values terms to props"
+eTermToProp :: ETerm -> Either String EProp
+eTermToProp (Some ty t) = first appendTerm $ Some ty <$> termToProp t
+  where
+    appendTerm err = err ++ ": " ++ withSing ty (show t)
+
+termToProp :: Term a -> Either String (Prop a)
+termToProp = \case
+  CoreTerm coreTerm -> CoreProp <$>
+    case coreTerm of
+      Lit l ->
+        pure $ Lit l
+      Sym v ->
+        pure $ Sym v
+      Var vid nm ->
+        pure $ Var vid nm
+      Identity ty t ->
+        Identity ty <$> termToProp t
+      Constantly ty t1 t2 ->
+        Constantly ty <$> termToProp t1 <*> termToProp t2
+      Compose tyA tyB tyC a (Open v1 nm1 b) (Open v2 nm2 c) -> do
+        a' <- termToProp a
+        b' <- termToProp b
+        c' <- termToProp c
+        pure $ Compose tyA tyB tyC a' (Open v1 nm1 b') (Open v2 nm2 c')
+      StrConcat t1 t2 ->
+        StrConcat <$> termToProp t1 <*> termToProp t2
+      StrLength t ->
+        StrLength <$> termToProp t
+      StrToInt t ->
+        StrToInt <$> termToProp t
+      StrToIntBase t1 t2 ->
+        StrToIntBase <$> termToProp t1 <*> termToProp t2
+      StrContains t1 t2 ->
+        StrContains <$> termToProp t1 <*> termToProp t2
+      Numerical n ->
+        Numerical <$> numTermToProp n
+      IntAddTime t1 t2 ->
+        IntAddTime <$> termToProp t1 <*> termToProp t2
+      DecAddTime t1 t2 ->
+        DecAddTime <$> termToProp t1 <*> termToProp t2
+      Comparison ty op t1 t2 ->
+        Comparison ty op <$> termToProp t1 <*> termToProp t2
+      GuardEqNeq op t1 t2 ->
+        GuardEqNeq op <$> termToProp t1 <*> termToProp t2
+      ObjectEqNeq s1 s2 op t1 t2 ->
+        ObjectEqNeq s1 s2 op <$> termToProp t1 <*> termToProp t2
+      ObjAt s t1 t2 ->
+        ObjAt s <$> termToProp t1 <*> termToProp t2
+      ObjContains s t1 t2 ->
+        ObjContains s <$> termToProp t1 <*> termToProp t2
+      ObjDrop s t1 t2 ->
+        ObjDrop s <$> termToProp t1 <*> termToProp t2
+      ObjTake s t1 t2 ->
+        ObjTake s <$> termToProp t1 <*> termToProp t2
+      ObjMerge s1 s2 t1 t2 ->
+        ObjMerge s1 s2 <$> termToProp t1 <*> termToProp t2
+      LiteralObject s o ->
+        LiteralObject s <$> objTermToProp o
+      Logical op ts ->
+        Logical op <$> traverse termToProp ts
+      ListEqNeq ty op t1 t2 ->
+        ListEqNeq ty op <$> termToProp t1 <*> termToProp t2
+      ListAt ty t1 t2 ->
+        ListAt ty <$> termToProp t1 <*> termToProp t2
+      ListContains ty t1 t2 ->
+        ListContains ty <$> termToProp t1 <*> termToProp t2
+      ListLength ty t ->
+        ListLength ty <$> termToProp t
+      ListReverse ty t ->
+        ListReverse ty <$> termToProp t
+      ListSort ty t ->
+        ListSort ty <$> termToProp t
+      ListConcat ty t1 t2 ->
+        ListConcat ty <$> termToProp t1 <*> termToProp t2
+      ListDrop ty t1 t2 ->
+        ListDrop ty <$> termToProp t1 <*> termToProp t2
+      ListTake ty t1 t2 ->
+        ListTake ty <$> termToProp t1 <*> termToProp t2
+      MakeList ty t1 t2 ->
+        MakeList ty <$> termToProp t1 <*> termToProp t2
+      LiteralList ty ts ->
+        LiteralList ty <$> traverse termToProp ts
+      ListMap tyA tyB (Open v1 nm1 fBody) as -> do
+        fBody' <- termToProp fBody
+        as' <- termToProp as
+        pure $ ListMap tyA tyB (Open v1 nm1 fBody') as'
+      ListFilter ty (Open v1 nm1 fBody) as -> do
+        fBody' <- termToProp fBody
+        as' <- termToProp as
+        pure $ ListFilter ty (Open v1 nm1 fBody') as'
+      ListFold tyA tyB (Open v1 nm1 (Open v2 nm2 accBody)) zero bs -> do
+        accBody' <- termToProp accBody
+        zero' <- termToProp zero
+        bs' <- termToProp bs
+        pure $ ListFold tyA tyB (Open v1 nm1 (Open v2 nm2 accBody')) zero' bs'
+      AndQ ty (Open v1 nm1 body1) (Open v2 nm2 body2) t -> do
+        body1' <- termToProp body1
+        body2' <- termToProp body2
+        t' <- termToProp t
+        pure $ AndQ ty (Open v1 nm1 body1') (Open v2 nm2 body2') t'
+      OrQ ty (Open v1 nm1 body1) (Open v2 nm2 body2) t -> do
+        body1' <- termToProp body1
+        body2' <- termToProp body2
+        t' <- termToProp t
+        pure $ OrQ ty (Open v1 nm1 body1') (Open v2 nm2 body2') t'
+      Where s ty t1 (Open v nm body) t2 -> do
+        t1' <- termToProp t1
+        body' <- termToProp body
+        t2' <- termToProp t2
+        pure $ Where s ty t1' (Open v nm body') t2'
+      Typeof ty t ->
+        Typeof ty <$> termToProp t
+
+  _ -> Left "could not translate non-core term to prop"
+
+objTermToProp :: Object Term m -> Either String (Object Prop m)
+objTermToProp (Object hl) = Object <$> go hl
+  where
+    go :: HList (Column Term) m -> Either String (HList (Column Prop) m)
+    go SNil = pure SNil
+    go (SCons ty t rest) = do
+      t' <- colTermToProp t
+      rest' <- go rest
+      pure $ SCons ty t' rest'
+
+colTermToProp :: Column Term ty -> Either String (Column Prop ty)
+colTermToProp (Column ty t) = Column ty <$> termToProp t
+
+numTermToProp :: Numerical Term a -> Either String (Numerical Prop a)
+numTermToProp = \case
+  DecArithOp op t1 t2 ->
+    DecArithOp op <$> termToProp t1 <*> termToProp t2
+  IntArithOp op t1 t2 ->
+    IntArithOp op <$> termToProp t1 <*> termToProp t2
+  DecUnaryArithOp op t ->
+    DecUnaryArithOp op <$> termToProp t
+  IntUnaryArithOp op t ->
+    IntUnaryArithOp op <$> termToProp t
+  DecIntArithOp op t1 t2 ->
+    DecIntArithOp op <$> termToProp t1 <*> termToProp t2
+  IntDecArithOp op t1 t2 ->
+    IntDecArithOp op <$> termToProp t1 <*> termToProp t2
+  ModOp t1 t2 ->
+    ModOp <$> termToProp t1 <*> termToProp t2
+  RoundingLikeOp1 op t ->
+    RoundingLikeOp1 op <$> termToProp t
+  RoundingLikeOp2 op t1 t2 ->
+    RoundingLikeOp2 op <$> termToProp t1 <*> termToProp t2
 
 -- Note [instances]:
 -- The following nine instances seem like they should be
