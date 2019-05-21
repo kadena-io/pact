@@ -27,7 +27,6 @@ import qualified Data.HashSet as HashSet
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe
-import Data.Aeson (Value)
 
 import Database.SQLite3.Direct
 
@@ -45,10 +44,10 @@ hashFromField h = case A.eitherDecodeStrict' h of
   Left err -> error $ "hashFromField: unable to decode Hash from database! " ++ show err ++ " => " ++ show h
   Right v -> v
 
-crToField :: CommandResult [TxLog Value] -> SType
+crToField :: CommandResult Hash -> SType
 crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode $ A.toJSON r
 
-crFromField :: ByteString -> CommandResult [TxLog Value]
+crFromField :: ByteString -> CommandResult Hash
 crFromField cr = case A.eitherDecodeStrict' cr of
       Left err -> error $ "crFromField: unable to decode CommandResult from database! " ++ show err ++ "\n" ++ show cr
       Right v' -> v'
@@ -109,7 +108,7 @@ sqlInsertHistoryRow =
     \, 'gas'\
     \) VALUES (?,?,?,?,?,?)"
 
-insertRow :: Statement -> (Command ByteString, CommandResult [TxLog Value]) -> IO ()
+insertRow :: Statement -> (Command ByteString, CommandResult Hash) -> IO ()
 insertRow s (Command{..},cr@CommandResult {..}) =
     execs s [hashToField (toUntypedHash _cmdHash)
             ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
@@ -118,7 +117,7 @@ insertRow s (Command{..},cr@CommandResult {..}) =
             ,userSigsToField _cmdSigs
             ,gasToField _crGas]
 
-insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult [TxLog Value])] -> IO ()
+insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult Hash)] -> IO ()
 insertCompletedCommand DbEnv{..} v = do
   let sortCmds (_,cr1) (_,cr2) = compare (_crTxId cr1) (_crTxId cr2)
   eitherToError "start insert transaction" <$> exec _conn "BEGIN TRANSACTION"
@@ -141,7 +140,7 @@ sqlSelectCompletedCommands :: Utf8
 sqlSelectCompletedCommands =
   "SELECT result,txid FROM 'main'.'pactCommands' WHERE hash=:hash LIMIT 1"
 
-selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey (CommandResult [TxLog Value]))
+selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey (CommandResult Hash))
 selectCompletedCommands e v = foldM f HashMap.empty v
   where
     f m rk = do

@@ -26,7 +26,6 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust)
 import Data.Default
-import Data.Aeson (Value)
 
 import Pact.Types.Command
 import Pact.Types.Hash
@@ -36,7 +35,6 @@ import Pact.Server.History.Types
 import Pact.Server.History.Persistence as DB
 import Pact.Types.Runtime (PactError(..),PactErrorType(..))
 import Pact.Types.Pretty (viaShow)
-import Pact.Types.Persistence (TxLog)
 
 
 initHistoryEnv
@@ -135,7 +133,7 @@ addNewKeys cmds = do
             debug $ "Some (" ++ show (HashMap.size asHM - HashMap.size newCmdsHM) ++ ") new command(s) had a previously seen hash/requestKey"
 
 
-updateExistingKeys :: HashMap RequestKey (CommandResult [TxLog Value])-> HistoryService ()
+updateExistingKeys :: HashMap RequestKey (CommandResult Hash)-> HistoryService ()
 updateExistingKeys updates = do
   alertListeners updates
   pers <- use persistence
@@ -150,19 +148,19 @@ updateExistingKeys updates = do
                             , dbConn = dbConn }
   debug $ "Updated " ++ show (HashMap.size updates) ++ " command(s)"
 
-updateInMemKey :: (RequestKey, CommandResult [TxLog Value]) ->
-                  HashMap RequestKey (Command ByteString, Maybe (CommandResult [TxLog Value])) ->
-                  HashMap RequestKey (Command ByteString, Maybe (CommandResult [TxLog Value]))
+updateInMemKey :: (RequestKey, CommandResult Hash) ->
+                  HashMap RequestKey (Command ByteString, Maybe (CommandResult Hash)) ->
+                  HashMap RequestKey (Command ByteString, Maybe (CommandResult Hash))
 updateInMemKey (k,v) m = HashMap.adjust (\(cmd, _) -> (cmd, Just v)) k m
 
 pairResultWithCmd :: HashMap RequestKey (Command ByteString) ->
-                     (RequestKey, (CommandResult [TxLog Value])) ->
-                     (Command ByteString, CommandResult [TxLog Value])
+                     (RequestKey, (CommandResult Hash)) ->
+                     (Command ByteString, CommandResult Hash)
 pairResultWithCmd m (rk, cmdr) = case HashMap.lookup rk m of
   Nothing -> error $ "Fatal error: the results for a RequestKey came in, but we can't find the original command\n" ++ show rk ++ "\n#----#\n" ++ show m
   Just cmd -> (cmd, cmdr)
 
-alertListeners :: HashMap RequestKey (CommandResult [TxLog Value]) -> HistoryService ()
+alertListeners :: HashMap RequestKey (CommandResult Hash) -> HistoryService ()
 alertListeners m = do
   listeners <- use registeredListeners
   triggered <- return $! HashMap.filterWithKey (\k _ -> HashMap.member k m) listeners
@@ -172,7 +170,7 @@ alertListeners m = do
     -- use registeredListeners >>= debug . ("Active Listeners: " ++) . show . HashMap.keysSet
     debug $ "Serviced " ++ show (sum res) ++ " listener(s)"
 
-alertListener :: HashMap RequestKey (CommandResult [TxLog Value]) -> (RequestKey, [MVar ListenerResult]) -> HistoryService Int
+alertListener :: HashMap RequestKey (CommandResult Hash) -> (RequestKey, [MVar ListenerResult]) -> HistoryService Int
 alertListener res (k,mvs) = do
   commandRes <- return $! res HashMap.! k
   -- debug $ "Servicing Listener for: " ++ show k
@@ -199,7 +197,7 @@ queryForResults (srks, mRes) = do
         debug $ "Querying for " ++ show (HashSet.size srks) ++ " keys, found " ++ show (HashMap.size found)
 
 -- This is here to try to get GHC to check the fast part first
-checkForIndividualResultInMem :: HashSet RequestKey -> RequestKey -> (Command ByteString, Maybe (CommandResult [TxLog Value])) -> Bool
+checkForIndividualResultInMem :: HashSet RequestKey -> RequestKey -> (Command ByteString, Maybe (CommandResult Hash)) -> Bool
 checkForIndividualResultInMem _ _ (_,Nothing) = False
 checkForIndividualResultInMem s k (_,Just _) = HashSet.member k s
 

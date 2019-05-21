@@ -51,7 +51,6 @@ import Data.Text.Encoding
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
 import Data.Int
-import Data.Aeson (Value)
 
 import Prelude
 
@@ -130,11 +129,11 @@ newtype ExistenceResult = ExistenceResult
   } deriving (Show, Eq)
 
 newtype PossiblyIncompleteResults = PossiblyIncompleteResults
-  { possiblyIncompleteResults :: HashMap RequestKey (CommandResult [TxLog Value])
+  { possiblyIncompleteResults :: HashMap RequestKey (CommandResult Hash)
   } deriving (Show, Eq)
 
 data ListenerResult =
-  ListenerResult (CommandResult [TxLog Value]) |
+  ListenerResult (CommandResult Hash) |
   GCed String
   deriving (Show, Eq)
 
@@ -142,7 +141,7 @@ data History =
   AddNew
     { hNewKeys :: ![Command ByteString]} |
   Update
-    { hUpdateRks :: !(HashMap RequestKey (CommandResult [TxLog Value])) } |
+    { hUpdateRks :: !(HashMap RequestKey (CommandResult Hash)) } |
   QueryForResults
     { hQueryForResults :: !(HashSet RequestKey, MVar PossiblyIncompleteResults) } |
   RegisterListener
@@ -153,6 +152,6 @@ data History =
 data Inbound =
   TxCmds { iCmds :: [Command ByteString] } |
   LocalCmd { iCmd :: Command ByteString,
-             iLocalResult :: MVar (CommandResult [TxLog Value])
+             iLocalResult :: MVar (CommandResult Hash)
            }
   deriving (Eq)

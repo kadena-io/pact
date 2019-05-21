@@ -35,12 +35,10 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
 import Data.Proxy
 import Data.Text.Encoding
-import Data.Aeson
 
 import Data.HashSet (HashSet)
 import qualified Data.HashSet          as HashSet
 import qualified Data.HashMap.Strict   as HM
-import qualified Data.ByteString.Lazy  as BSL
 
 import Servant
 import Network.Wai.Handler.Warp (run)
@@ -53,7 +51,6 @@ import Pact.Types.API
 import Pact.Types.Server
 import Pact.Types.Version
 import Pact.Types.Hash
-import Pact.Types.Persistence (TxLog)
 
 
 #if !MIN_VERSION_servant(0,16,0)
@@ -126,7 +123,7 @@ listenHandler (ListenerRequest rk) = do
       die' msg
     ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      pure $ fullToHashLogCr cr
+      pure cr
 
 localHandler :: Command T.Text -> Api (CommandResult Hash)
 localHandler commandText = do
@@ -135,7 +132,7 @@ localHandler commandText = do
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
-  pure $ fullToHashLogCr r
+  pure r
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion
@@ -147,12 +144,8 @@ checkHistoryForResult rks = do
   liftIO $ writeHistory hChan $ QueryForResults (rks,m)
   liftIO $ readMVar m
 
-pollResultToReponse :: HM.HashMap RequestKey (CommandResult [TxLog Value]) -> PollResponses
-pollResultToReponse m = PollResponses $ HM.map fullToHashLogCr m
-
-fullToHashLogCr :: CommandResult [TxLog Value] -> CommandResult Hash
-fullToHashLogCr full = set crLogs hashedLogs full
-  where hashedLogs = (pactHash . BSL.toStrict . encode) <$> _crLogs full
+pollResultToReponse :: HM.HashMap RequestKey (CommandResult Hash) -> PollResponses
+pollResultToReponse m = PollResponses m
 
 log :: (MonadReader ApiEnv m, MonadIO m) => String -> m ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)
