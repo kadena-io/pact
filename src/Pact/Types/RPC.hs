@@ -32,6 +32,7 @@ import Prelude
 
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
+import Pact.Types.PactValue
 
 data PactRPC c =
     Exec (ExecMsg c) |
@@ -53,7 +54,7 @@ instance ToJSON c => ToJSON (PactRPC c) where
 
 data ExecMsg c = ExecMsg
   { _pmCode :: c
-  , _pmData :: Value
+  , _pmData :: ObjectMap PactValue
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)
@@ -70,7 +71,9 @@ data ContMsg = ContMsg
   { _cmPactId :: !PactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmData :: !Value
+  , _cmData :: !(ObjectMap PactValue)  -- Compatible with Yield data type for overloading
+                                       --   in private continuations.
+  , _cmProof :: !(Maybe Text)          -- TODO: Proper proof data type 
   } deriving (Eq,Show,Generic)
 
 instance NFData ContMsg
@@ -78,8 +81,9 @@ instance FromJSON ContMsg where
     parseJSON =
         withObject "ContMsg" $ \o ->
             ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
+            <*> o .: "proof" 
     {-# INLINE parseJSON #-}
 
 instance ToJSON ContMsg where
     toJSON ContMsg{..} = object
-      [ "pactId" .= _cmPactId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData]
+      [ "pactId" .= _cmPactId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData, "proof" .= _cmProof]

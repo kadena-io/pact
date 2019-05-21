@@ -750,6 +750,10 @@ instance FromJSON v => FromJSON (ObjectMap v)
           ObjectMap . M.fromList <$>
             traverse (\(k,v) -> (FieldKey k,) <$> parseJSON v) (HM.toList o)
 
+instance Default (ObjectMap v) where
+  def = ObjectMap M.empty
+
+
 -- | Full Term object.
 data Object n = Object
   { _oObject :: !(ObjectMap (Term n))
