@@ -67,7 +67,7 @@ data ApiReq = ApiReq {
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
   _ylData :: Maybe Value,
-  _ylProof :: Maybe Hash,
+  _ylProof :: Maybe ContProof,
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
   _ylCodeFile :: Maybe FilePath,
@@ -156,7 +156,7 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
   ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce _ylProof
 
 mkCont :: PactId -> Int -> Bool -> Value -> PublicMeta -> [SomeKeyPair]
-  -> Maybe String -> Maybe Hash -> IO (Command Text)
+  -> Maybe String -> Maybe ContProof -> IO (Command Text)
 mkCont txid step rollback mdata pubMeta kps ridm proof = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   cmd <- mkCommand
