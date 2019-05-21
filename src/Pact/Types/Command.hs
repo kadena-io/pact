@@ -273,15 +273,22 @@ instance FromJSON PactResult where
                             (Right <$> o .: "data"))
   parseJSON p = fail $ "Invalid PactResult " ++ show p
 
-data CommandResult l = CommandResult
-  { _crReqKey :: !RequestKey              -- Request Key of command (the hash of the command payload)
-  , _crTxId :: !(Maybe TxId)              -- Transaction id of this CommandResult
-  , _crResult :: !PactResult              -- Result of evaluating the command, either a PactError or the output
-                                          --   of the last pact expression as a PactValue
-  , _crGas :: !Gas                        -- Gas consummed by command
-  , _crLogs :: !(Maybe l)                 -- Level of logging (i.e. full TxLog vs hashed logs)
-  , _crContinuation :: !(Maybe PactExec)  -- Output of a Continuation if one occurred in the command.
-  , _crMetaData :: !(Maybe Value)         -- Platform-specific data
+-- | API result of attempting to execute a pact command, parametrized over level of logging type
+data CommandResult l = CommandResult {
+  -- | Request Key of command (the hash of the command payload)
+    _crReqKey :: !RequestKey
+  -- | Transaction id of this CommandResult
+  , _crTxId :: !(Maybe TxId)
+  -- | Pact execution result, either a PactError or the last pact expression output as a PactValue
+  , _crResult :: !PactResult
+  -- | Gas consummed by command                                         
+  , _crGas :: !Gas
+  -- | Level of logging (i.e. full TxLog vs hashed logs)
+  , _crLogs :: !(Maybe l)
+  -- | Output of a Continuation if one occurred in the command.
+  , _crContinuation :: !(Maybe PactExec)
+  -- | Platform-specific data
+  , _crMetaData :: !(Maybe Value)
   } deriving (Eq,Show,Generic)
 instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3
 instance (FromJSON l) => FromJSON (CommandResult l) where parseJSON = lensyParseJSON 3
