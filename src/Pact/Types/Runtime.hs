@@ -66,7 +66,6 @@ import Pact.Types.Orphans ()
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Util
-import Pact.Types.PactValue (PactValue)
 
 
 data Capability
@@ -199,7 +198,7 @@ data EvalEnv e = EvalEnv {
       -- | Verified keys from message.
     , _eeMsgSigs :: !(S.Set PublicKey)
       -- | JSON body accompanying message.
-    , _eeMsgBody :: !(ObjectMap PactValue)
+    , _eeMsgBody :: !Value
       -- | Execution mode
     , _eeMode :: ExecutionMode
       -- | Entity governing private/encrypted 'pact' executions.

@@ -50,7 +50,6 @@ import Pact.Types.Command
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.API
-import Pact.Types.PactValue (PactValue)
 
 data ApiKeyPair = ApiKeyPair {
   _akpSecret  :: PrivateKeyBS,
@@ -67,8 +66,8 @@ data ApiReq = ApiReq {
   _ylPactTxHash :: Maybe Hash,
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
-  _ylResume :: Maybe Value,     -- TODO not used
-  _ylData :: Maybe (ObjectMap PactValue),
+  _ylData :: Maybe Value,
+  _ylProof :: Maybe Hash,
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
   _ylCodeFile :: Maybe FilePath,
@@ -88,7 +87,7 @@ apiReq fp local = do
     BSL.putStrLn $ encode $ SubmitBatch [exec]
   return ()
 
-mkApiReq :: FilePath -> IO ((ApiReq,String,(ObjectMap PactValue),PublicMeta),Command Text)
+mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReq fp = do
   ar@ApiReq {..} <- either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
@@ -101,7 +100,7 @@ mkApiReq fp = do
 
 
 
-mkApiReqExec :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,(ObjectMap PactValue),PublicMeta),Command Text)
+mkApiReqExec :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqExec ar@ApiReq{..} kps fp = do
   (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
@@ -113,13 +112,13 @@ mkApiReqExec ar@ApiReq{..} kps fp = do
       (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           eitherDecode
-      (Nothing,Nothing) -> return def
+      (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
     return (code,cdata)
   let pubMeta = fromMaybe def _ylPublicMeta
   ((ar,code,cdata,pubMeta),) <$> mkExec code cdata pubMeta kps _ylNonce
 
-mkExec :: String -> (ObjectMap PactValue) -> PublicMeta -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
+mkExec :: String -> Value -> PublicMeta -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
 mkExec code mdata pubMeta kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   cmd <- mkCommand
@@ -130,7 +129,7 @@ mkExec code mdata pubMeta kps ridm = do
   return $ decodeUtf8 <$> cmd
 
 
-mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,(ObjectMap PactValue),PublicMeta),Command Text)
+mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqCont ar@ApiReq{..} kps fp = do
   apiPactId <- case _ylPactTxHash of
     Just t  -> return t
@@ -150,21 +149,21 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
       (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           eitherDecode
-      (Nothing,Nothing) -> return def
+      (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
   let pubMeta = fromMaybe def _ylPublicMeta
       pactId = toPactId apiPactId
-  ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce
+  ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce _ylProof
 
-mkCont :: PactId -> Int -> Bool -> (ObjectMap PactValue) -> PublicMeta -> [SomeKeyPair]
-  -> Maybe String -> IO (Command Text)
-mkCont txid step rollback mdata pubMeta kps ridm = do
+mkCont :: PactId -> Int -> Bool -> Value -> PublicMeta -> [SomeKeyPair]
+  -> Maybe String -> Maybe Hash -> IO (Command Text)
+mkCont txid step rollback mdata pubMeta kps ridm proof = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   cmd <- mkCommand
          kps
          pubMeta
          (pack $ show rid)
-         (Continuation (ContMsg txid step rollback mdata Nothing) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
 

@@ -32,7 +32,6 @@ import Prelude
 
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
-import Pact.Types.PactValue
 
 data PactRPC c =
     Exec (ExecMsg c) |
@@ -54,7 +53,7 @@ instance ToJSON c => ToJSON (PactRPC c) where
 
 data ExecMsg c = ExecMsg
   { _pmCode :: c
-  , _pmData :: ObjectMap PactValue
+  , _pmData :: Value
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)
@@ -71,9 +70,8 @@ data ContMsg = ContMsg
   { _cmPactId :: !PactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmData :: !(ObjectMap PactValue)  -- Compatible with Yield data type for overloading
-                                       --   in private continuations.
-  , _cmProof :: !(Maybe Text)          -- TODO: Proper proof data type 
+  , _cmData :: !Value
+  , _cmProof :: !(Maybe Hash)
   } deriving (Eq,Show,Generic)
 
 instance NFData ContMsg

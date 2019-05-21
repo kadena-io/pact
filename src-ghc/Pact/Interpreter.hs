@@ -59,13 +59,13 @@ data PactDbEnv e = PactDbEnv {
 
 data MsgData = MsgData {
   mdSigs :: !(S.Set PublicKey),
-  mdData :: !(ObjectMap PactValue),
+  mdData :: !Value,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash
   }
 
 initMsgData :: Hash -> MsgData
-initMsgData = MsgData def def def
+initMsgData = MsgData def Null def
 
 data EvalResult = EvalResult
   { _erInput :: !(Either (Maybe PactExec) [Term Name])
