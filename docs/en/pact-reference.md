@@ -388,15 +388,24 @@ as a unit.
 admin authorization schemes for modules and tables. Definition creates the keysets
 in the runtime environment and stores their definition in the global keyset database.
 
+#### Namespace declaration {#namespacedefinition}
+
+[Namespace](#namespaces) declarations provide a unique prefix for keysets and modules defined
+within the namespace scope. All smart contract definitions must occur within a namespaced
+scope, which is initiated by defining a namespace using `define-namespace`, and entering the
+namespace scope by issuing the `namespace` command. The global namespace (the empty namespace)
+is reserved for Kadena code.
+
 #### Module declaration {#moduledeclaration}
 
-[Modules](#module) contain the API and data definitions for smart contracts. They are comprised of:
+[Modules](#module) contain an API implementation and data definitions for smart contracts.
+They are comprised of:
 
 - [functions](#defun)
 - [schema](#defschema) definitions
 - [table](#deftable) definitions
 - ["pact"](#defpact) special functions
-- [const](#defconst) values
+- [constant](#defconst) values
 
 When a module is declared, all references to native functions
 or definitions from other modules are resolved. Resolution failure results in transaction rollback.
@@ -413,6 +422,21 @@ to the loaded modules' hash, protecting downstream modules from inadvertent chan
 
 Module names must be globally unique.
 
+#### Interface Declaration {#interfacedeclaration}
+
+[Interfaces](#interface) contain an API specification and data definitions for smart contracts.
+They are comprised of:
+
+- [function](#defun) specifications (i.e. function signatures)
+- [constant](#defconst) values
+
+When an interface is declared, all constant definitons from other modules are resolved.
+
+Interfaces represent an abstract api that a [module](#module) may implement by issuing an
+`implements` statement within the module declaration. Unlike Modules, Interface versioning is not
+supported. However, modules may implement multiple interfaces.
+
+Interface names must be globally unique.
 
 #### Table Creation {#tablecreation}
 
@@ -599,6 +623,21 @@ Examples of valid keyset JSON productions:
 
 ```
 
+### Namespaces {#namespaces}
+
+Namespaces are [defined](pact-functions.html#define-namespace) by specifying a namespace name and [associating](pact-functions.html#read-keyset)
+a keyset with the namespace. Namespace scope is entered by [declaring](pact-functions.html#namespace) name. All definitions issued after the
+namespace scope is entered will be accessible by their fully qualified name, prefixed by the namespace.
+
+All definitions _must_ occur within a namespace, as the global namespace (the empty namespace) is reserved for Kadena code.
+
+Examples of valid namespace definition and scoping:
+
+```lisp
+pact> (define-namespace 'my-namespace (read-keyset 'my-keyset))
+pact> (namespace 'my-namespace)
+"Namespace set to my-namespace"
+```
 
 ### Keyset Predicates {#keyset-predicates}
 
