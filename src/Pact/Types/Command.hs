@@ -266,20 +266,21 @@ instance ToJSON PactResult where
            , "data" .= s ]
   toJSON (PactResult (Left f)) =
     object [ "status" .= ("failure" :: String)
-           , "data" .= f ]
+           , "error" .= f ]
 instance FromJSON PactResult where
   parseJSON (A.Object o) = PactResult <$>
-                           ((Left <$> o .: "data") <|>
+                           ((Left <$> o .: "error") <|>
                             (Right <$> o .: "data"))
   parseJSON p = fail $ "Invalid PactResult " ++ show p
 
 data CommandResult l = CommandResult
-  { _crReqKey :: !RequestKey
-  , _crTxId :: !(Maybe TxId)
-  , _crResult :: !PactResult
-  , _crGas :: !Gas
+  { _crReqKey :: !RequestKey              -- Request Key of command (the hash of the command payload)
+  , _crTxId :: !(Maybe TxId)              -- Transaction id of this CommandResult
+  , _crResult :: !PactResult              -- Result of evaluating the command, either a PactError or the output
+                                          --   of the last pact expression as a PactValue
+  , _crGas :: !Gas                        -- Gas consummed by command
   , _crLogs :: !(Maybe l)                 -- Level of logging (i.e. full TxLog vs hashed logs)
-  , _crContinuation :: !(Maybe PactExec)
+  , _crContinuation :: !(Maybe PactExec)  -- Output of a Continuation if one occurred in the command.
   , _crMetaData :: !(Maybe Value)         -- Platform-specific data
   } deriving (Eq,Show,Generic)
 instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3

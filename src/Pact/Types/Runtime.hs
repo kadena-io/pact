@@ -123,7 +123,6 @@ data PactError = PactError
   deriving (Eq,Generic)
 
 instance Exception PactError
--- Linda TODO
 instance ToJSON PactError where
   toJSON (PactError t i s d) =
     object [ "type" .= t, "info" .= i, "callStack" .= s, "doc" .= (show d)]
