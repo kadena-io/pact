@@ -819,6 +819,7 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Direct t)) ->
     case t of
       TLiteral {..} ->
+        -- Handle references to pre-evaluated constants:
         trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
       _ ->
         die i $ "Native in value context: " ++ show t
