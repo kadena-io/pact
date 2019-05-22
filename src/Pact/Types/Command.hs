@@ -35,9 +35,8 @@ module Pact.Types.Command
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
-  , CommandError(..),ceMsg,ceDetail
-  , CommandSuccess(..),csData
-  , CommandResult(..),crReqKey,crTxId,crResult,crGas
+  , PactResult(..)
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
@@ -64,6 +63,7 @@ import Prelude
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Orphans ()
 import Pact.Types.RPC
+import Pact.Types.PactValue (PactValue(..))
 
 
 #if !defined(ghcjs_HOST_OS)
@@ -258,35 +258,40 @@ instance FromJSON UserSig where
     UserSig <$> o .: "sig"
 
 
-
-data CommandError = CommandError {
-      _ceMsg :: String
-    , _ceDetail :: Maybe String
-}
-instance ToJSON CommandError where
-    toJSON (CommandError m d) =
-        object $ [ "status" .= ("failure" :: String)
-                 , "error" .= m ] ++
-        maybe [] ((:[]) . ("detail" .=)) d
-
-newtype CommandSuccess a = CommandSuccess { _csData :: a }
+newtype PactResult = PactResult (Either PactError PactValue)
   deriving (Eq, Show)
+instance ToJSON PactResult where
+  toJSON (PactResult (Right s)) =
+    object [ "status" .= ("success" :: String)
+           , "data" .= s ]
+  toJSON (PactResult (Left f)) =
+    object [ "status" .= ("failure" :: String)
+           , "error" .= f ]
+instance FromJSON PactResult where
+  parseJSON (A.Object o) = PactResult <$>
+                           ((Left <$> o .: "error") <|>
+                            (Right <$> o .: "data"))
+  parseJSON p = fail $ "Invalid PactResult " ++ show p
 
-instance (ToJSON a) => ToJSON (CommandSuccess a) where
-    toJSON (CommandSuccess a) =
-        object [ "status" .= ("success" :: String)
-               , "data" .= a ]
-
-instance (FromJSON a) => FromJSON (CommandSuccess a) where
-    parseJSON = withObject "CommandSuccess" $ \o ->
-        CommandSuccess <$> o .: "data"
-
-data CommandResult = CommandResult
-  { _crReqKey :: RequestKey
-  , _crTxId :: Maybe TxId
-  , _crResult :: Value
-  , _crGas :: Gas
-  } deriving (Eq,Show)
+-- | API result of attempting to execute a pact command, parametrized over level of logging type
+data CommandResult l = CommandResult {
+  -- | Request Key of command (the hash of the command payload)
+    _crReqKey :: !RequestKey
+  -- | Transaction id of this CommandResult
+  , _crTxId :: !(Maybe TxId)
+  -- | Pact execution result, either a PactError or the last pact expression output as a PactValue
+  , _crResult :: !PactResult
+  -- | Gas consummed by command                                         
+  , _crGas :: !Gas
+  -- | Level of logging (i.e. full TxLog vs hashed logs)
+  , _crLogs :: !(Maybe l)
+  -- | Output of a Continuation if one occurred in the command.
+  , _crContinuation :: !(Maybe PactExec)
+  -- | Platform-specific data
+  , _crMetaData :: !(Maybe Value)
+  } deriving (Eq,Show,Generic)
+instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3
+instance (FromJSON l) => FromJSON (CommandResult l) where parseJSON = lensyParseJSON 3
 
 
 cmdToRequestKey :: Command a -> RequestKey
@@ -295,12 +300,12 @@ cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
 
 
 
-type ApplyCmd = ExecutionMode -> Command ByteString -> IO CommandResult
-type ApplyPPCmd m a = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO CommandResult
+type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
+type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
 
-data CommandExecInterface m a = CommandExecInterface
-  { _ceiApplyCmd :: ApplyCmd
-  , _ceiApplyPPCmd :: ApplyPPCmd m a
+data CommandExecInterface m a l = CommandExecInterface
+  { _ceiApplyCmd :: ApplyCmd l
+  , _ceiApplyPPCmd :: ApplyPPCmd m a l
   }
 
 
@@ -323,8 +328,6 @@ makeLenses ''ExecutionMode
 makeLenses ''Command
 makeLenses ''ParsedCode
 makeLenses ''Payload
-makeLenses ''CommandError
-makeLenses ''CommandSuccess
 makeLenses ''CommandResult
 makePrisms ''ProcessedCommand
 makePrisms ''ExecutionMode

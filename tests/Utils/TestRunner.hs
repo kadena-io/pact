@@ -4,7 +4,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Utils.TestRunner
-  ( ApiResultCheck (..)
+  ( ExpectResult(..)
+  , CommandResultCheck(..)
   , testDir
   , runAll
   , flushDb
@@ -24,12 +25,15 @@ module Utils.TestRunner
   , stopServer
   ) where
 
-import Pact.Server.Server (setupServer)
+import Pact.Server.Server (serve)
 import qualified Pact.Server.Client as C
 import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
 import Pact.Types.Util (toB16JSON)
+import Pact.Types.Runtime (PactError(..))
+import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.Hash
 
 import Control.Exception
 import Data.Aeson
@@ -63,26 +67,28 @@ _serverBaseUrl = parseBaseUrl _serverRootPath
 _logFiles :: [String]
 _logFiles = ["access.log","commands.sqlite","error.log","pact.sqlite"]
 
-data ApiResultCheck = ApiResultCheck
-  { _arcReqKey :: RequestKey
-  , _arcIsFailure :: Bool
-  , _arcExpect :: Maybe Value
+
+newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe PactValue))
+  deriving (Eq, Show)
+newtype ActualResult = ActualResult (Either String PactValue)
+  deriving (Eq, Show)
+
+data CommandResultCheck = CommandResultCheck
+  { _crcReqKey :: RequestKey
+  , _crcExpect :: ExpectResult
   } deriving (Show, Eq)
 
-runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
 runAll mgr cmds = Exception.bracket
               (startServer _testConfigFilePath)
                stopServer
               (const (run mgr cmds))
 
-startServer :: FilePath -> IO (Async (), Async (), Async ())
+startServer :: FilePath -> IO (Async ())
 startServer configFile = do
-  (runServer, asyncCmd, asyncHist) <- setupServer configFile
-  asyncServer <- async runServer
-  link2 asyncServer asyncCmd
-  link2 asyncServer asyncHist
+  asyncServer <- async $ serve configFile
   waitUntilStarted 0
-  return (asyncServer, asyncCmd, asyncHist)
+  return asyncServer
 
 waitUntilStarted :: Int -> IO ()
 waitUntilStarted i | i > 10 = throwIO $ userError "waitUntilStarted: failing after 10 attempts"
@@ -97,18 +103,16 @@ waitUntilStarted i = do
       threadDelay 500
       waitUntilStarted (succ i)
 
-stopServer :: (Async (), Async (), Async ()) -> IO ()
-stopServer (asyncServer, asyncCmd, asyncHist) = do
-  uninterruptibleCancel asyncCmd
-  uninterruptibleCancel asyncHist
-  uninterruptibleCancel asyncServer
-  mapM_ checkFinished [asyncServer, asyncCmd, asyncHist]
+stopServer :: Async () -> IO ()
+stopServer asyncServer = do
+  cancel asyncServer
+  mapM_ checkFinished [asyncServer]
   where checkFinished asy = poll asy >>= \case
           Nothing -> Exception.evaluate $ error $
                     "Thread " ++ show (asyncThreadId asy) ++ " could not be cancelled."
           _ -> return ()
 
-run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
 run mgr cmds = do
   sendResp <- doSend mgr $ SubmitBatch cmds
   case sendResp of
@@ -151,41 +155,39 @@ formatPubKeyForCmd :: SomeKeyPair -> Value
 formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
 
 
-makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
-makeCheck c@Command{..} isFailure expect = ApiResultCheck (cmdToRequestKey c) isFailure expect
+makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
+makeCheck c@Command{..} expect = CommandResultCheck (cmdToRequestKey c) expect
 
-checkResult :: HasCallStack => Bool -> Maybe Value -> Maybe ApiResult -> Expectation
-checkResult isFailure expect result =
+
+checkResult :: HasCallStack => ExpectResult -> Maybe (CommandResult Hash) -> Expectation
+checkResult expect result =
   case result of
     Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
-    Just (ApiResult cmdRes _ _) ->
-      case cmdRes of
-        Object h -> if isFailure then checkIfFailure h expect
-                    else checkIfSuccess h expect
-        _ -> expectationFailure $ show cmdRes ++ " should be Object"
+    Just CommandResult{..} -> (toActualResult _crResult) `resultShouldBe` expect 
 
 
-fieldShouldBe :: HasCallStack => (T.Text,HM.HashMap T.Text Value) -> Maybe Value -> Expectation
-fieldShouldBe (k,m) b = do
-  let a = HM.lookup k m
-  unless (a == b) $
-    expectationFailure $
-    "Expected " ++ show b ++ ", found " ++ show a ++ " for field " ++ show k ++ " in " ++ show m
+toActualResult :: PactResult -> ActualResult
+toActualResult (PactResult (Left (PactError _ _ _ d))) = ActualResult . Left $ show d
+toActualResult (PactResult (Right pv)) = ActualResult . Right $ pv
 
-checkIfSuccess :: HasCallStack => Object -> Maybe Value -> Expectation
-checkIfSuccess h Nothing =
-  ("status",h) `fieldShouldBe` (Just . String . T.pack) "success"
-checkIfSuccess h (Just expect) = do
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "success"
-  ("data", h) `fieldShouldBe` Just (toJSON expect)
 
-checkIfFailure :: HasCallStack => Object -> Maybe Value -> Expectation
-checkIfFailure h Nothing =
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
-checkIfFailure h (Just expect) = do
-  ("status", h) `fieldShouldBe` (Just . String . T.pack) "failure"
-  ("detail", h) `fieldShouldBe` Just (toJSON expect)
+resultShouldBe :: ActualResult -> ExpectResult -> Expectation
+resultShouldBe (ActualResult actual) (ExpectResult expect) =
+  case (expect,actual) of
+    (Left (Just expErr),
+     Left err)             -> unless (expErr == err) (toExpectationFailure expErr err)
+    (Right (Just expVal),
+     Right val)            -> unless (expVal == val) (toExpectationFailure expVal val)
+    (Left Nothing,
+     Left _)               -> return ()
+    (Right Nothing,
+     Right _)              -> return ()
+    _                      -> toExpectationFailure expect actual
 
+
+toExpectationFailure :: (HasCallStack, Show e, Show a) => e -> a -> Expectation    
+toExpectationFailure expect actual =
+  expectationFailure $ "Expected " ++ show expect ++ ", found " ++ show actual
 
 
 -- SAMPLE PACT CODE
