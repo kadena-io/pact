@@ -816,7 +816,12 @@ toAST TSchema {..} = die _tInfo "User type in value position"
 
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
-  (Left Direct {}) -> die i "Native in value context"
+  (Left (Direct t)) ->
+    case t of
+      TLiteral {..} ->
+        trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
+      _ ->
+        die i $ "Native in value context: " ++ show t
   (Right t) -> return t
 
 toAST (TApp Term.App{..} _) = do
