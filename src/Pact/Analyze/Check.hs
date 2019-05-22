@@ -841,8 +841,8 @@ verifyModule modules moduleData = runExceptT $ do
     (HM.empty, HM.empty)
     typecheckableRefs
 
-  let valueToProp' :: ETerm -> Except VerificationFailure EProp
-      valueToProp' tm = case valueToProp tm of
+  let constToProp :: ETerm -> Except VerificationFailure EProp
+      constToProp tm = case constantToProp tm of
         Right prop -> pure prop
         Left msg   -> throwError $ FailedConstTranslation msg
 
@@ -850,7 +850,7 @@ verifyModule modules moduleData = runExceptT $ do
         = withExceptT translateToVerificationFailure . translateNodeNoGraph
 
   consts' <- hoist generalize $
-    traverse (valueToProp' <=< translateNodeNoGraph') consts
+    traverse (constToProp <=< translateNodeNoGraph') consts
 
   (funChecks :: HM.HashMap Text ((Ref, CheckableType), Either ParseFailure [Located Check]))
     <- hoist generalize $
