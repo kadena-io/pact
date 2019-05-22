@@ -842,7 +842,7 @@ verifyModule modules moduleData = runExceptT $ do
     typecheckableRefs
 
   let constToProp :: ETerm -> Except VerificationFailure EProp
-      constToProp tm = case eTermToProp tm of
+      constToProp tm = case constantToProp tm of
         Right prop -> pure prop
         Left msg   -> throwError $ FailedConstTranslation msg
 

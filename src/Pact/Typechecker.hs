@@ -932,7 +932,7 @@ toAST (TObject Term.Object {..} _) = do
   ty <- TySchema TyObject <$> traverse toUserType _oObjectType <*> pure FullSchema
   Object <$> (trackNode ty =<< freshId _oInfo "object")
     <*> mapM toAST _oObject
-toAST TConst {..} = toAST (_cvRaw _tConstVal) -- TODO typecheck here
+toAST TConst {..} = toAST (_cvEval _tConstVal) -- TODO typecheck here
 toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
