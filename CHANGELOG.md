@@ -1,56 +1,35 @@
 3.0.0
 ---
-* Move transaction id management and module persistence to PactDb backend
-* PactValue type for reliable Term output with user-friendly JSON
-* Better compile errors
-* Fixes Pact server persistence bug
-* Adds `with-default-read`
-* Adds SPV support with configurable backend
-* Removes support for non-string keys in objects
-* Uses cryptonite for Windows build
-* Rejects decimal literals with too many digits
-* Adds Table-based Gas model
-* Adds module governance function
-* Pretty printing introduced
-* Fix bug in object compiler
-* Multiple Cryptographic signature schemes: ED25519, ECDSA
+* Guards and capabilities, with full model-checking support
 * Scoped namespaces for modules and keysets
-* Pact guards and (composable) capabilities
-* Partial schemas allowed only when specified.
-* Improved transaction non-malleability:
-  * Adds signatories and chain version to payload
-  * Hash PactId that is unique across chains
-* "Pacts":
-  * "Pacts" state managed in backend
-  * `defpact` can run in local mode
-  * Disallow rollback on the last step of a pact
-  * Adds REPL functions `chain-data` and `env-chain-data`
-  * Replaces REPL's `env-step` and `env-pactid` with `continue-pact` and `pact-state`
-  * Bug fix of pact continuations invocation		z
-* API changes:
-  * CommandResult returned for `/send`, `/poll`, `/listen`, and `/local` endpoints
-  * CommandResult adds gas consumed, logs, and metadata fields
-  * CommandResult changes "result" field to return either PactError or PactValue
-  * Adds continuation proof field to ContMsg
-  * Adds public meta and continuation proof to `pact -a` tool
-  * Base64 Hashes instead of base16
-  * Replaces Snap with Servant in Pact Server
-  * Adds public metadata to Pact Command API
-* Typechecking:
-  * Adds parsing and typechecking for several missing properties
-  * Adds typechecking for `yield` and `resume`
-  * Typechecker reports when bindings are partial
-  * Fix bug in partial row typechecking
-  * Supports list typechecking
+* Adds module governance function
+* Migrate all runtime pact state to DB backend: modules, pacts, transaction ID management
+* Improved transaction non-malleability: signatories and chain version in payload
+* Adds SPV support with configurable backend
+* Multiple Cryptographic signature schemes: ED25519, ECDSA
+* Adds Table-based Gas model
+* Standardize on CommandResult in all API endpoints
+* CommandResult adds gas consumed, logs, and metadata fields
+* CommandResult's "result" field changed to output reliable, user-friendly Terms and errors.
+* Adds continuation proof field to ContMsg
+* Adds public metadata to Pact Command API
+* Format all hashes in Base64url
+* Adds typechecking for lists, `yield`, and `resume`
+* Typechecker and analysis support for partial schemas
+* Removes support for non-string keys in objects
+* Rejects decimal literals with too many digits
+* `defpact` can run in local mode
+* Disallow rollback on the last step of a pact
+* Replaces REPL's `env-step` and `env-pactid` with `continue-pact` and `pact-state`
+* Adds REPL functions `chain-data` and `env-chain-data`
+* Better compile errors
+* Pretty printing
+* Working Windows build
 * Analysis:
   * Adds analysis for non-literal constants
   * Adds pact analysis tools developer guide
-  * Brings back property query failure check
-  * Adds analysis for `pact-id`, `pacts`, `yield`, and `resume`
-  * Supports analysis of `with-capability`, `compose-capability`, and `require-capability`
-  * Analysis type translation aware of partial types reported by typechecker
-  * Show output from verification (and other commands)
-  * Adds simplified analysis for `create-pact-guard`
+  * Adds analysis for `pact-id`, `defpact`, `yield`, and `resume`
+  * Improves output from verification
   * Supports analysis of (bounded-size) lists and nested objects
   * Pins z3 to a specific version (4.8.3)
   * Uses timeout of 1 second for all z3 queries
