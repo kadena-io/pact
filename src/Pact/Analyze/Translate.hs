@@ -997,7 +997,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
         pure $ Some SBool $ inject $ ListEqNeq ta op' a' b'
 
-      (Some ta@SObject{} a', Some tb@SObject{} b') -> do
+      (Some ta@SObjectUnsafe{} a', Some tb@SObjectUnsafe{} b') -> do
         op' <- toOp eqNeqP fn ?? MalformedComparison fn args
         pure $ Some SBool $ inject $ ObjectEqNeq ta tb op' a' b'
 
@@ -1066,13 +1066,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
     aT          <- translateNode a
     bT          <- translateNode b
     case (aT, bT) of
-      (Some ty1@SObject{} o1, Some ty2@SObject{} o2) -> do
+      (Some ty1@SObjectUnsafe{} o1, Some ty2@SObjectUnsafe{} o2) -> do
         -- Feature 3: object merge
         pure $ Some retTy $ inject $ ObjMerge ty1 ty2 o1 o2
+
       (Some (SList tyA) a', Some (SList tyB) b') -> do
         Refl <- singEq tyA tyB ?? MalformedArithOp fn args
         -- Feature 4: list concatenation
         pure $ Some (SList tyA) $ inject $ ListConcat tyA a' b'
+
       (Some tyA a', Some tyB b') ->
         case (tyA, tyB) of
           -- Feature 1: string concatenation
@@ -1242,7 +1244,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     obj'     <- translateNode obj
     EType ty <- translateType node
     case obj' of
-      Some objTy@SObject{} obj'' -> do
+      Some objTy@SObjectUnsafe{} obj'' -> do
         Some SStr colName <- translateNode index
         pure $ Some ty $ CoreTerm $ ObjAt objTy colName obj''
       Some (SList listOfTy) list -> do

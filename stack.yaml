@@ -5,13 +5,6 @@ resolver: lts-13.22
 packages:
   - '.'
 
-# GHC 8.6 has a more aggressive Pattern Match exhaustion checker. A number of
-# Pact's `Analysis` modules cause seeming infinite loops in the compiler during
-# this analysis, so here we limit the depth to 5000, then override `-Werror`
-# with `-Wwarn` to avoid failing the build.
-ghc-options:
-  pact: -fmax-pmcheck-iterations=5000 -Wwarn
-
 extra-deps:
   # --- Missing from Stackage --- #
   - ed25519-donna-0.1.1@sha256:344c0bb83603ed896012f441e54b380314dc4910320577cd18a9071e34f24fe9,2358
