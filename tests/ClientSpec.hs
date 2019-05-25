@@ -80,7 +80,11 @@ spec = describe "Servant API client tests" $ do
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
     let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
-    (_crResult <$> res') `shouldBe` (Right cmdData)
+    case res' of
+      Left _ -> expectationFailure "client request failed"
+      Right r -> case r of
+        ListenTimeout _ -> expectationFailure "timeout"
+        ListenResponse lr -> _crResult lr `shouldBe` cmdData
 
   it "correctly runs a simple command with pact error publicly and listens to the result" $ do
     cmd <- simpleServerCmdWithPactErr
@@ -91,7 +95,11 @@ spec = describe "Servant API client tests" $ do
       -- print (res,res')
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
-    (_crResult <$> res') `shouldSatisfy` (failWith ArgsError)
+    case res' of
+      Left _ -> expectationFailure "client request failed"
+      Right r -> case r of
+        ListenTimeout _ -> expectationFailure "timeout"
+        ListenResponse lr -> (Right $ _crResult lr) `shouldSatisfy` (failWith ArgsError)
 
 
 failWith :: PactErrorType -> Either ServantError PactResult -> Bool

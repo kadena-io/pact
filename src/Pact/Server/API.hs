@@ -33,7 +33,7 @@ module Pact.Server.API
   , pactServerSwagger
   ) where
 
-import Data.Aeson (ToJSON(..),Value)
+import Data.Aeson
 import Data.Decimal (Decimal)
 import Data.Proxy
 import Data.Swagger hiding (Info,version)
@@ -82,9 +82,9 @@ pollClient = v1Poll apiV1Client
 
 type ApiListen = "listen"
   :> ReqBody '[JSON] ListenerRequest
-  :> Post '[JSON] (CommandResult Hash)
+  :> Post '[JSON] ListenResponse
 
-listenClient :: ListenerRequest -> ClientM (CommandResult Hash)
+listenClient :: ListenerRequest -> ClientM ListenResponse
 listenClient = v1Listen apiV1Client
 
 type ApiLocal = "local"
@@ -117,7 +117,7 @@ pactServerAPI = Proxy
 data ApiV1Client m = ApiV1Client
   { v1Send :: SubmitBatch -> m RequestKeys
   , v1Poll :: Poll -> m PollResponses
-  , v1Listen :: ListenerRequest -> m (CommandResult Hash)
+  , v1Listen :: ListenerRequest -> m ListenResponse
   , v1Local :: Command Text -> m (CommandResult Hash)
   }
 
@@ -155,6 +155,8 @@ instance ToSchema Poll
 instance ToSchema PollResponses
 
 instance ToSchema ListenerRequest
+
+instance ToSchema ListenResponse
 
 instance ToSchema Analyze.Request
 

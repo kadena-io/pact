@@ -108,7 +108,7 @@ pollHandler (Poll rks) = do
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   pure $ pollResultToReponse possiblyIncompleteResults
 
-listenHandler :: ListenerRequest -> Api (CommandResult Hash)
+listenHandler :: ListenerRequest -> Api ListenResponse
 listenHandler (ListenerRequest rk) = do
   hChan <- view aiHistoryChan
   m <- liftIO newEmptyMVar
@@ -121,7 +121,7 @@ listenHandler (ListenerRequest rk) = do
       die' msg
     ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      pure cr
+      pure (ListenResponse cr)
 
 localHandler :: Command T.Text -> Api (CommandResult Hash)
 localHandler commandText = do

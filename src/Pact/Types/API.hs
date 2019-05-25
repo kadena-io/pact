@@ -5,6 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 
 -- |
@@ -22,8 +23,10 @@ module Pact.Types.API
   , Poll(..)
   , PollResponses(..)
   , ListenerRequest(..)
+  , ListenResponse(..)
   ) where
 
+import Control.Applicative ((<|>))
 import Data.Aeson hiding (Success)
 import Control.Lens hiding ((.=))
 import GHC.Generics
@@ -80,3 +83,23 @@ instance ToJSON ListenerRequest where
   toJSON (ListenerRequest r) = object ["listen" .= r]
 instance FromJSON ListenerRequest where
   parseJSON = withObject "ListenerRequest" $ \o -> ListenerRequest <$> o .: "listen"
+
+data ListenResponse
+  = ListenTimeout Int
+  | ListenResponse (CommandResult Hash)
+  deriving (Eq,Show,Generic)
+instance ToJSON ListenResponse where
+  toJSON (ListenResponse r) = toJSON r
+  toJSON (ListenTimeout i) =
+    object [ "status" .= ("timeout" :: String),
+             "timeout-micros" .= i ]
+instance FromJSON ListenResponse where
+  parseJSON v =
+    (ListenResponse <$> parseJSON v) <|>
+    (ListenTimeout <$> parseTimeout v)
+    where
+      parseTimeout = withObject "ListenTimeout" $ \o -> do
+        (s :: Text) <- o .: "status"
+        case s of
+          "timeout" -> o .: "timeout-micros"
+          _ -> fail "Expected timeout status"
