@@ -20,7 +20,6 @@ pact-linux:
     - linux
   script:
     - nix-build
-    - ./collectArtifacts.sh
 
 # deploy-nix-cache:
 #   stage: deploy
