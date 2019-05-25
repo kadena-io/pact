@@ -20,10 +20,10 @@ pact-linux:
     - linux
   script:
     - nix-build
-    - ./collectArtifacts.sh linux
-  artifacts:
-    paths:
-    - public-linux/
+#    - ./collectArtifacts.sh linux
+#  artifacts:
+#    paths:
+#    - public-linux/
 
 # deploy-nix-cache:
 #   stage: deploy
@@ -37,7 +37,7 @@ pages:
   script:
     - mkdir public
     - mv public-macos public/
-    - mv public-linux public/
+#    - mv public-linux public/
   artifacts:
     paths:
     - public/
