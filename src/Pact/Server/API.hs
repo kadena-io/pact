@@ -31,9 +31,12 @@ module Pact.Server.API
   -- | swagger
   , apiV1Swagger
   , pactServerSwagger
+  , writeSwagger
   ) where
 
+import Control.Lens (set)
 import Data.Aeson
+import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal (Decimal)
 import Data.Proxy
 import Data.Swagger hiding (Info,version)
@@ -136,7 +139,8 @@ apiV1Swagger = toSwagger (Proxy :: Proxy ApiV1API)
 pactServerSwagger :: Swagger
 pactServerSwagger = toSwagger pactServerAPI
 
-
+writeSwagger :: FilePath -> Swagger -> IO ()
+writeSwagger fn = BSL8.writeFile fn . encode
 
 
 
@@ -225,7 +229,13 @@ instance ToSchema UserGuard where
 
 instance ToSchema PactValue
 
-instance ToSchema (ObjectMap PactValue)
+-- | Adapted from 'Map k v' as a naive instance will cause an infinite loop!!
+instance ToSchema (ObjectMap PactValue) where
+  declareNamedSchema _ = do
+    sref <- declareSchemaRef (Proxy :: Proxy PactValue)
+    return $ NamedSchema (Just "ObjectMap") $
+      (schemaOf $ swaggerType SwaggerObject .
+        set additionalProperties (Just $ AdditionalPropertiesSchema sref))
 
 instance ToSchema FieldKey
 
