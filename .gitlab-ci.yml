@@ -12,7 +12,7 @@ pact-macos:
     - ./collectArtifacts.sh macos
   artifacts:
     paths:
-    - public/
+    - public-macos/
 
 pact-linux:
   stage: build
@@ -21,6 +21,9 @@ pact-linux:
   script:
     - nix-build
     - ./collectArtifacts.sh linux
+  artifacts:
+    paths:
+    - public-linux/
 
 # deploy-nix-cache:
 #   stage: deploy
