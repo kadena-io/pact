@@ -35,6 +35,9 @@ in
 
             # tests for extra were failing due to an import clash (`isWindows`)
             extra = dontCheck super.extra;
+
+            base-compat-batteries = dontCheck super.base-compat-batteries;
+
             # tests try to use ghc-pkg and cabal (https://github.com/sol/doctest/issues/213)
             doctest = guardGhcjs (dontCheck (self.callHackage "doctest" "0.16.0" {}));
             # these want to use doctest, which doesn't work on ghcjs
