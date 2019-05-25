@@ -35,11 +35,12 @@ pact-linux:
 pages:
   stage: deploy
   script:
-  - echo 'Nothing to do...'
+    - mkdir public
+    - mv public-macos public/
+    - mv public-linux public/
   artifacts:
     paths:
-    - public-macos/
-    - public-linux/
+    - public/
 
 # pact-linux-static:
 #   stage: build
