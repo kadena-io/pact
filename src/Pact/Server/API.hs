@@ -34,7 +34,8 @@ module Pact.Server.API
   , writeSwagger
   ) where
 
-import Control.Lens (set)
+-- Swagger 2.2 compat
+-- import Control.Lens (set)
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal (Decimal)
@@ -230,12 +231,14 @@ instance ToSchema UserGuard where
 instance ToSchema PactValue
 
 -- | Adapted from 'Map k v' as a naive instance will cause an infinite loop!!
+-- 2.2 swagger2 compat means not using 'additionalProperties' for now
 instance ToSchema (ObjectMap PactValue) where
   declareNamedSchema _ = do
-    sref <- declareSchemaRef (Proxy :: Proxy PactValue)
+    -- Swagger 2.2 compat, not doing schema ref for pact value
+    -- sref <- declareSchemaRef (Proxy :: Proxy PactValue)
     return $ NamedSchema (Just "ObjectMap") $
-      (schemaOf $ swaggerType SwaggerObject .
-        set additionalProperties (Just $ AdditionalPropertiesSchema sref))
+      (schemaOf $ swaggerType SwaggerObject) -- .
+        -- set additionalProperties (Just $ AdditionalPropertiesSchema sref))
 
 instance ToSchema FieldKey
 

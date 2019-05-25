@@ -58,6 +58,8 @@ in
             servant = whenGhcjs dontCheck super.servant;
             servant-client = whenGhcjs dontCheck super.servant-client;
             servant-server = whenGhcjs dontCheck super.servant-server;
+            servant-swagger = whenGhcjs dontCheck super.servant-swagger;
+            swagger2 = whenGhcjs dontCheck super.swagger2;
             unix-time = whenGhcjs dontCheck super.unix-time;
             wai-app-static = whenGhcjs dontCheck super.wai-app-static;
             wai-extra = whenGhcjs dontCheck super.wai-extra;
@@ -111,14 +113,6 @@ in
               rev = "6ee9fcb026ebdb49b810802a981d166680d867c9";
               sha256 = "09fcf896bs6i71qhj5w6qbwllkv3gywnn5wfsdrcm0w1y6h8i88f";
             }) {});
-
-            # weeder = self.callHackage "weeder" "1.0.5" {};
-            weeder = self.callCabal2nix "weeder" (pkgs.fetchFromGitHub {
-              owner = "ndmitchell";
-              repo = "weeder";
-              rev = "56b46fe97782e86198f31c574ac73c8c966fee05";
-              sha256 = "005ks2xjkbypq318jd0s4896b9wa5qg3jf8a1qgd4imb4fkm3yh7";
-            }) {};
 
             # aeson 1.4.2
             aeson = (if self.ghc.isGhcjs or false
