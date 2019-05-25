@@ -20,6 +20,7 @@ pact-linux:
     - linux
   script:
     - nix-build
+    - ./collectArtifacts.sh
 
 # deploy-nix-cache:
 #   stage: deploy
@@ -36,9 +37,9 @@ pages:
     paths:
     - public/
 
-pact-linux-static:
-  stage: build
-  script:
-    - nix-build static.nix --argstr system x86_64-linux
-  tags:
-    - linux
+# pact-linux-static:
+#   stage: build
+#   script:
+#     - nix-build static.nix --argstr system x86_64-linux
+#   tags:
+#     - linux
