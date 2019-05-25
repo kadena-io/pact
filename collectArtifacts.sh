@@ -14,5 +14,5 @@ cp -LR result/ghc/pact/share/hpc/vanilla/html $pubdir/code-coverage
 mkdir -p $pubdir/docs
 cp -LR `find result-doc/share -name html`/* $pubdir/docs
 mkdir -p $pubdir/binaries
-cp -LR result/ghc/pact/bin/pact $pubdir/binaries/binary
+cp -LR result/ghc/pact/bin/pact $pubdir/binaries/$binary
 chmod -R u+w $pubdir
