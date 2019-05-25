@@ -57,28 +57,33 @@ testDualEvaluation' etm ty gState = do
       failure
 
     (Right pactVal, Right analyzeVal) -> do
-      Just etm' <- lift $ fromPactVal (EType ty) pactVal
-      case etm' of
-        Some ty' (CoreTerm (Lit pactSval)) -> do
-          Some ty'' (CoreTerm (Lit sval')) <- pure analyzeVal
+      mEtm <- lift $ fromPactVal (EType ty) pactVal
+      case mEtm of
+        Just (Some ty' (CoreTerm (Lit pactSval))) -> do
+          someVal <- pure analyzeVal
 
-          -- compare results
-          case singEq ty' ty'' of
-            Just Refl
-              -- we only test bounded lists up to length 10. discard if the
-              -- pact list is too long.
-              -- TODO: this should only be considered a temporary fix. Done
-              -- properly we need to check all intermediate values.
-              | SList{} <- ty'
-              , length pactSval > 10
-              -> discard
-              | otherwise -> withEq ty' $ withShow ty' $ sval' === pactSval
-            Nothing   ->
-              if singEqB ty' (SList SAny) || singEqB ty'' (SList SAny)
-              then discard -- TODO: check this case
-              else EType ty' === EType ty'' -- this'll fail
+          case someVal of
+            Some ty'' (CoreTerm (Lit sval')) ->
 
-        Some _ (CoreTerm (LiteralObject _ _obj)) -> do
+              -- compare results
+              case singEq ty' ty'' of
+                Just Refl
+                  -- we only test bounded lists up to length 10. discard if the
+                  -- pact list is too long.
+                  -- TODO: this should only be considered a temporary fix. Done
+                  -- properly we need to check all intermediate values.
+                  | SList{} <- ty'
+                  , length pactSval > 10
+                  -> discard
+                  | otherwise -> withEq ty' $ withShow ty' $ sval' === pactSval
+                Nothing   ->
+                  if singEqB ty' (SList SAny) || singEqB ty'' (SList SAny)
+                  then discard -- TODO: check this case
+                  else EType ty' === EType ty'' -- this'll fail
+
+            _ -> error $ "unexpected value (not literal): " ++ show someVal
+
+        Just (Some _ (CoreTerm (LiteralObject _ _obj))) -> do
           footnote "can't property test evaluation of objects"
           failure
 
@@ -96,8 +101,9 @@ prop_evaluation_time = property $ do
 
 prop_round_trip_type :: Property
 prop_round_trip_type = property $ do
-  ety@(EType ty) <- forAll genType
-  maybeTranslateType (reverseTranslateType ty) === Just ety
+  ety <- forAll genType
+  case ety of
+    EType ty -> maybeTranslateType (reverseTranslateType ty) === Just ety
 
 prop_round_trip_term :: Property
 prop_round_trip_term = property $ do
