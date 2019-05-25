@@ -26,7 +26,7 @@ module Utils.TestRunner
   ) where
 
 import Pact.Server.Server (serve)
-import qualified Pact.Server.Client as C
+import Pact.Server.API
 import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
@@ -96,7 +96,7 @@ waitUntilStarted i = do
   mgr <- HTTP.newManager HTTP.defaultManagerSettings
   baseUrl <- _serverBaseUrl
   let clientEnv = mkClientEnv mgr baseUrl
-  r <- runClientM (C.version C.pactServerApiClient) clientEnv
+  r <- runClientM versionClient clientEnv
   case r of
     Right _ -> pure ()
     Left _ -> do
@@ -134,12 +134,12 @@ run mgr cmds = do
 doSend :: Manager -> SubmitBatch -> IO (Either ServantError RequestKeys)
 doSend mgr req = do
   baseUrl <- _serverBaseUrl
-  runClientM (C.send C.pactServerApiClient req) (mkClientEnv mgr baseUrl)
+  runClientM (sendClient req) (mkClientEnv mgr baseUrl)
 
 doPoll :: Manager -> Poll -> IO (Either ServantError PollResponses)
 doPoll mgr req = do
   baseUrl <- _serverBaseUrl
-  runClientM (C.poll C.pactServerApiClient req) (mkClientEnv mgr baseUrl)
+  runClientM (pollClient req) (mkClientEnv mgr baseUrl)
 
 flushDb :: IO ()
 flushDb = mapM_ deleteIfExists _logFiles
@@ -163,7 +163,7 @@ checkResult :: HasCallStack => ExpectResult -> Maybe (CommandResult Hash) -> Exp
 checkResult expect result =
   case result of
     Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
-    Just CommandResult{..} -> (toActualResult _crResult) `resultShouldBe` expect 
+    Just CommandResult{..} -> (toActualResult _crResult) `resultShouldBe` expect
 
 
 toActualResult :: PactResult -> ActualResult
@@ -185,7 +185,7 @@ resultShouldBe (ActualResult actual) (ExpectResult expect) =
     _                      -> toExpectationFailure expect actual
 
 
-toExpectationFailure :: (HasCallStack, Show e, Show a) => e -> a -> Expectation    
+toExpectationFailure :: (HasCallStack, Show e, Show a) => e -> a -> Expectation
 toExpectationFailure expect actual =
   expectationFailure $ "Expected " ++ show expect ++ ", found " ++ show actual
 

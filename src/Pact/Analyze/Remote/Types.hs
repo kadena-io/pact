@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 -- | Types for remote verification of pact programs from GHCJS in the browser.
 module Pact.Analyze.Remote.Types where
@@ -7,12 +8,13 @@ module Pact.Analyze.Remote.Types where
 import           Control.Lens       (makeLenses)
 import qualified Data.Aeson         as A
 import           Data.Text          (Text)
+import           GHC.Generics
 
 import           Pact.Types.Term    (ModuleDef, ModuleName, Name)
 
 data Request
   = Request [ModuleDef Name] ModuleName -- ^ verify one of the modules, by name
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 
 instance A.FromJSON Request where
   parseJSON = A.withObject "Request" $ \o ->
@@ -29,7 +31,7 @@ newtype Response
   = Response
     { _responseLines :: [Text] -- ^ REPL output from the server, whether
                                -- verification has failed or succeeded.
-    } deriving (Eq, Show)
+    } deriving (Eq, Show, Generic)
 
 instance A.FromJSON Response where
   parseJSON = A.withObject "Response" $ \o ->

@@ -33,7 +33,6 @@ import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
-import Data.Proxy
 import Data.Text.Encoding
 
 import Data.HashSet (HashSet)
@@ -90,7 +89,6 @@ apiV1Server :: ApiEnv -> Server ApiV1API
 apiV1Server conf = hoistServer apiV1API nt
   (sendHandler :<|> pollHandler :<|> listenHandler :<|> localHandler)
   where
-    apiV1API = Proxy :: Proxy ApiV1API
     nt :: forall a. Api a -> Handler a
     nt s = Handler $ runReaderT s conf
 

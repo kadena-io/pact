@@ -21,7 +21,7 @@ module Pact.Types.Hash
   , TypedHash(..)
   , toUntypedHash, fromUntypedHash
   , HashAlgo(..)
-  , PactHash, pactHash, pactInitialHash
+  , PactHash, pactHash, pactInitialHash, pactHashLength
   ) where
 
 
@@ -70,6 +70,8 @@ instance NFData Hash
 
 instance ToJSON Hash where
   toJSON = String . hashToText
+
+instance ToJSONKey Hash
 
 instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
@@ -149,6 +151,9 @@ pactHash = toUntypedHash . (hash :: ByteString -> PactHash)
 
 pactInitialHash :: Hash
 pactInitialHash = toUntypedHash $ (initialHash :: PactHash)
+
+pactHashLength :: Int
+pactHashLength = hashLength Blake2b_256
 
 
 #if !defined(ghcjs_HOST_OS)

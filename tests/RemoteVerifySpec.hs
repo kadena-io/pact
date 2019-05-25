@@ -20,7 +20,7 @@ import qualified Pact.Analyze.Remote.Types as Remote
 import Pact.Analyze.Remote.Server (runServantServer)
 import Pact.Repl
 import Pact.Repl.Types
-import Pact.Server.Client
+import Pact.Server.API
 import Pact.Types.Runtime
 
 spec :: Spec
@@ -54,7 +54,7 @@ serveAndRequest port body = do
   let clientEnv = mkClientEnv mgr verifyBaseUrl
   tid <- serve port
   finally
-    (runClientM (verify pactServerApiClient body) clientEnv)
+    (runClientM (verifyClient body) clientEnv)
     (killThread tid)
 
 testSingleModule :: Spec

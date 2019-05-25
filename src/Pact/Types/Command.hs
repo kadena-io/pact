@@ -259,7 +259,7 @@ instance FromJSON UserSig where
 
 
 newtype PactResult = PactResult (Either PactError PactValue)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 instance ToJSON PactResult where
   toJSON (PactResult (Right s)) =
     object [ "status" .= ("success" :: String)
@@ -281,7 +281,7 @@ data CommandResult l = CommandResult {
   , _crTxId :: !(Maybe TxId)
   -- | Pact execution result, either a PactError or the last pact expression output as a PactValue
   , _crResult :: !PactResult
-  -- | Gas consummed by command                                         
+  -- | Gas consummed by command
   , _crGas :: !Gas
   -- | Level of logging (i.e. full TxLog vs hashed logs)
   , _crLogs :: !(Maybe l)
@@ -314,7 +314,7 @@ requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON)
+  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey)
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk

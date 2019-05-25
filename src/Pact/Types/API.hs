@@ -65,7 +65,7 @@ instance FromJSON Poll where
 
 -- | What you get back from a Poll
 newtype PollResponses = PollResponses (HM.HashMap RequestKey (CommandResult Hash))
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 instance ToJSON PollResponses where
   toJSON (PollResponses m) = object $ map (requestKeyToB16Text *** toJSON) $ HM.toList m
 instance FromJSON PollResponses where
