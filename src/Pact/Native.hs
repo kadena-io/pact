@@ -302,16 +302,13 @@ chainDataDef = defRNative "chain-data" chainData (funType obj [])
 
       let PublicMeta{..} = _pdPublicMeta
 
-      let (ParsedInteger gl) = _pmGasLimit
-          (ParsedDecimal gp) = _pmGasPrice
-
       pure $ toTObject TyAny def
         [ ("chain-id"    , toTerm _pmChainId    )
         , ("block-height", toTerm _pdBlockHeight)
         , ("block-time"  , toTerm _pdBlockTime  )
         , ("sender"      , toTerm _pmSender     )
-        , ("gas-limit"   , toTerm gl            )
-        , ("gas-price"   , toTerm gp            )
+        , ("gas-limit"   , toTerm _pmGasLimit   )
+        , ("gas-price"   , toTerm _pmGasPrice   )
         ]
     chainData i as = argsError i as
 

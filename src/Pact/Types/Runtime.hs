@@ -95,8 +95,7 @@ data StackFrame = StackFrame {
     , _sfLoc :: !Info
     , _sfApp :: Maybe (FunApp,[Text])
     } deriving (Eq,Generic)
-instance ToJSON StackFrame where toJSON = lensyToJSON 3
-instance FromJSON StackFrame where parseJSON = lensyParseJSON 3
+instance ToJSON StackFrame where toJSON = toJSON . show
 
 instance Show StackFrame where
     show (StackFrame n i app) = renderInfo i ++ ": " ++ case app of
@@ -125,14 +124,12 @@ data PactError = PactError
 instance Exception PactError
 instance ToJSON PactError where
   toJSON (PactError t i s d) =
-    object [ "type" .= t, "info" .= i, "callStack" .= s, "doc" .= (show d)]
+    object [ "type" .= t, "info" .= renderInfo i, "callStack" .= s, "message" .= (show d)]
 instance FromJSON PactError where
   parseJSON = withObject "PactError" $ \o -> do
-    info <- o .: "info"
     typ <- o .: "type"
-    callStack <- o .: "callStack"
-    doc <- o .: "doc"
-    pure $ PactError typ info callStack (prettyString doc)
+    doc <- o .: "message"
+    pure $ PactError typ def def (prettyString doc)
 
 instance Show PactError where
     show (PactError t i _ s) = show i ++ ": Failure: " ++ maybe "" (++ ": ") msg ++ show s

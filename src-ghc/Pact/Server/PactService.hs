@@ -26,7 +26,6 @@ import qualified Data.ByteString.Lazy  as BSL
 
 import Pact.Gas
 import Pact.Interpreter
-import Pact.Parse (ParsedDecimal(..))
 import Pact.Types.Command
 import Pact.Types.Gas
 import Pact.Types.Logger
@@ -81,8 +80,7 @@ applyCmd _ _ _ _ _ _ _ cmd (ProcFail s) =
            (PactError TxFailure def def . viaShow $ s)
 applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
-      (ParsedDecimal gasPrice) = _pmGasPrice pubMeta
-      gasEnv = GasEnv (fromIntegral $ _pmGasLimit pubMeta) (GasPrice gasPrice) gasModel
+      gasEnv = GasEnv (_pmGasLimit pubMeta) (_pmGasPrice pubMeta) gasModel
       pd = PublicData pubMeta bh bt
 
   res <- catchesPactError $ runCommand

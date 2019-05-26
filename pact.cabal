@@ -43,7 +43,6 @@ library
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
                      , Pact.Server.API
-                     , Pact.Server.Client
                      , Pact.Types.API
                      , Pact.Types.ChainMeta
                      , Pact.Types.Codec
@@ -64,6 +63,7 @@ library
                      , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
+                     , Pact.Types.Swagger
                      , Pact.Types.Term
                      , Pact.Types.Type
                      , Pact.Types.Util
@@ -185,6 +185,8 @@ library
                      , servant
                      , servant-client
                      , servant-client-core
+                     , servant-swagger
+                     , swagger2 >= 2.2
 
   if impl(ghcjs)
     build-depends:

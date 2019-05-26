@@ -195,7 +195,7 @@ instance ToJSON KeySet where
 
 
 newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData)
+    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic)
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
@@ -350,7 +350,7 @@ instance HasInfo n => HasInfo (Ref' n) where
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON,Generic)
 
 instance Pretty Gas where
   pretty (Gas i) = pretty i
@@ -724,7 +724,7 @@ instance NFData Example
 
 -- | Label type for objects.
 newtype FieldKey = FieldKey Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,ToJSONKey)
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 

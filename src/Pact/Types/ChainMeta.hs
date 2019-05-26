@@ -43,7 +43,7 @@ import Data.Word (Word64)
 
 -- internal pact modules
 
-import Pact.Parse
+import Pact.Types.Gas
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
 import Pact.Types.Term (ToTerm(..))
 
@@ -88,8 +88,8 @@ instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
 data PublicMeta = PublicMeta
   { _pmChainId :: ChainId
   , _pmSender :: Text
-  , _pmGasLimit :: ParsedInteger
-  , _pmGasPrice :: ParsedDecimal
+  , _pmGasLimit :: GasLimit
+  , _pmGasPrice :: GasPrice
   } deriving (Eq, Show, Generic)
 makeLenses ''PublicMeta
 

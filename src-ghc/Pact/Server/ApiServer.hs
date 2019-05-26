@@ -33,7 +33,6 @@ import Control.Monad.Trans.Except
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
-import Data.Proxy
 import Data.Text.Encoding
 
 import Data.HashSet (HashSet)
@@ -90,7 +89,6 @@ apiV1Server :: ApiEnv -> Server ApiV1API
 apiV1Server conf = hoistServer apiV1API nt
   (sendHandler :<|> pollHandler :<|> listenHandler :<|> localHandler)
   where
-    apiV1API = Proxy :: Proxy ApiV1API
     nt :: forall a. Api a -> Handler a
     nt s = Handler $ runReaderT s conf
 
@@ -110,7 +108,7 @@ pollHandler (Poll rks) = do
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   pure $ pollResultToReponse possiblyIncompleteResults
 
-listenHandler :: ListenerRequest -> Api (CommandResult Hash)
+listenHandler :: ListenerRequest -> Api ListenResponse
 listenHandler (ListenerRequest rk) = do
   hChan <- view aiHistoryChan
   m <- liftIO newEmptyMVar
@@ -123,7 +121,7 @@ listenHandler (ListenerRequest rk) = do
       die' msg
     ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      pure cr
+      pure (ListenResponse cr)
 
 localHandler :: Command T.Text -> Api (CommandResult Hash)
 localHandler commandText = do

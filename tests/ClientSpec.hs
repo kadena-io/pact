@@ -16,7 +16,7 @@ import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
-import Pact.Server.Client
+import Pact.Server.API
 import Servant.Client
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -58,7 +58,7 @@ spec = describe "Servant API client tests" $ do
   it "correctly runs a simple command locally" $ do
     cmd <- simpleServerCmd
     res <- bracket $! do
-      r <- runClientM (local pactServerApiClient cmd) clientEnv
+      r <- runClientM (localClient cmd) clientEnv
       return r
     let cmdPactResult = (PactResult . Right . PLiteral . LDecimal) 3
     (_crResult <$> res) `shouldBe` (Right cmdPactResult)
@@ -66,7 +66,7 @@ spec = describe "Servant API client tests" $ do
   it "correctly runs a simple command with pact error locally" $ do
     cmd <- simpleServerCmdWithPactErr
     res <- bracket $! do
-      r <- runClientM (local pactServerApiClient cmd) clientEnv
+      r <- runClientM (localClient cmd) clientEnv
       return r
     (_crResult <$> res) `shouldSatisfy` (failWith ArgsError)
 
@@ -74,24 +74,32 @@ spec = describe "Servant API client tests" $ do
     cmd <- simpleServerCmd
     let rk = cmdToRequestKey cmd
     (res,res') <- bracket $! do
-      !res <- runClientM (send pactServerApiClient (SubmitBatch [cmd])) clientEnv
-      !res' <- runClientM (listen pactServerApiClient (ListenerRequest rk)) clientEnv
+      !res <- runClientM (sendClient (SubmitBatch [cmd])) clientEnv
+      !res' <- runClientM (listenClient (ListenerRequest rk)) clientEnv
       -- print (res,res')
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
     let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
-    (_crResult <$> res') `shouldBe` (Right cmdData)
+    case res' of
+      Left _ -> expectationFailure "client request failed"
+      Right r -> case r of
+        ListenTimeout _ -> expectationFailure "timeout"
+        ListenResponse lr -> _crResult lr `shouldBe` cmdData
 
   it "correctly runs a simple command with pact error publicly and listens to the result" $ do
     cmd <- simpleServerCmdWithPactErr
     let rk = cmdToRequestKey cmd
     (res,res') <- bracket $! do
-      !res <- runClientM (send pactServerApiClient (SubmitBatch [cmd])) clientEnv
-      !res' <- runClientM (listen pactServerApiClient (ListenerRequest rk)) clientEnv
+      !res <- runClientM (sendClient (SubmitBatch [cmd])) clientEnv
+      !res' <- runClientM (listenClient (ListenerRequest rk)) clientEnv
       -- print (res,res')
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
-    (_crResult <$> res') `shouldSatisfy` (failWith ArgsError)
+    case res' of
+      Left _ -> expectationFailure "client request failed"
+      Right r -> case r of
+        ListenTimeout _ -> expectationFailure "timeout"
+        ListenResponse lr -> (Right $ _crResult lr) `shouldSatisfy` (failWith ArgsError)
 
 
 failWith :: PactErrorType -> Either ServantError PactResult -> Bool
