@@ -14,7 +14,6 @@ module Pact.Types.ChainMeta
   ( -- * types
     Address(..)
   , PrivateMeta(..)
-  , ChainId(..)
   , PublicMeta(..)
   , HasPlafMeta(..)
   , PublicData(..)
@@ -23,14 +22,13 @@ module Pact.Types.ChainMeta
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice
   , pdPublicMeta, pdBlockHeight, pdBlockTime
-  , chainId
   ) where
 
 
 import GHC.Generics
 
 import Control.DeepSeq (NFData)
-import Control.Lens (Wrapped, Lens', makeLenses, lens)
+import Control.Lens (makeLenses)
 
 import Data.Aeson
 import Data.Default (Default, def)
@@ -44,9 +42,9 @@ import Data.Word (Word64)
 
 -- internal pact modules
 
+import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
-import Pact.Types.Term (ToTerm(..))
 
 
 newtype EntityName = EntityName Text
@@ -77,17 +75,6 @@ instance ToJSON PrivateMeta where toJSON = lensyToJSON 3
 instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
 instance Serialize PrivateMeta
-
-
--- | Expresses unique platform-specific chain identifier.
-newtype ChainId = ChainId { _chainId :: Text }
-  deriving (Eq, Show, Generic, IsString, ToJSON, FromJSON, Serialize, NFData)
-instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
-
-instance Wrapped ChainId
-
-chainId :: Lens' ChainId Text
-chainId = lens _chainId (\_ t -> ChainId t)
 
 -- | Contains all necessary metadata for a Chainweb-style public chain.
 data PublicMeta = PublicMeta

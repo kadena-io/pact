@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# Language FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -19,7 +19,7 @@
 --
 -- Persistence and back-end DB types.
 --
-module Pact.Types.Persistence
+module Pact.Persist.Types
   (
    RowKey(..),
    Domain(..),
@@ -49,11 +49,10 @@ import Data.Word (Word64)
 import GHC.Generics (Generic)
 
 import Pact.Types.Continuation
-import Pact.Types.Exp
 import Pact.Types.PactValue
 import Pact.Types.Pretty
+import Pact.Types.Util (AsString(..), tShow)
 import Pact.Types.Term
-import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
 
 
 data PersistDirect =

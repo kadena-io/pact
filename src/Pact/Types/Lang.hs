@@ -8,7 +8,9 @@
 --
 
 module Pact.Types.Lang
- ( module Pact.Types.Exp
+ ( module Pact.Types.ChainId
+ , module Pact.Types.Continuation
+ , module Pact.Types.Exp
  , module Pact.Types.Hash
  , module Pact.Types.Info
  , module Pact.Types.Util
@@ -16,7 +18,8 @@ module Pact.Types.Lang
  , module Pact.Types.Type
  ) where
 
-
+import Pact.Types.ChainId
+import Pact.Types.Continuation
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info

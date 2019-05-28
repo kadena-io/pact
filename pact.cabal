@@ -44,6 +44,7 @@ library
                      , Pact.Repl.Types
                      , Pact.Server.API
                      , Pact.Types.API
+                     , Pact.Types.ChainId
                      , Pact.Types.ChainMeta
                      , Pact.Types.Codec
                      , Pact.Types.Command

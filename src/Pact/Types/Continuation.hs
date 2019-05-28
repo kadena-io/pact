@@ -6,6 +6,14 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+-- |
+-- Module      :  Pact.Types.Runtime
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, Emily Pillmore <emily@kadena.io>
+--
+-- Meta data and its types
+--
 module Pact.Types.Continuation
   ( -- * data
     PactStep(..)
@@ -33,7 +41,7 @@ import Data.Aeson (ToJSON(..), FromJSON(..), encode)
 import Data.ByteString.Lazy (toStrict)
 import Data.Semigroup ((<>))
 
-import Pact.Types.ChainMeta (ChainId)
+import Pact.Types.ChainId (ChainId)
 import Pact.Types.Hash
 import Pact.Types.PactValue
 import Pact.Types.Pretty
