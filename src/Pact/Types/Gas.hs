@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -18,20 +19,30 @@ module Pact.Types.Gas
 
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
+import Data.Aeson
 import Data.Decimal (Decimal)
 import Data.Text (Text, unpack)
 import Data.Word (Word64)
+import GHC.Generics
+import Data.Serialize
 
 import Pact.Types.Lang
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.PactValue
+import Pact.Parse
+
 
 -- | Price per 'Gas' unit.
 newtype GasPrice = GasPrice Decimal
-  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Enum,Show)
+  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Enum,Show,Serialize,Generic,ToTerm)
 instance Pretty GasPrice where
   pretty (GasPrice p) = viaShow p
+
+instance ToJSON GasPrice where
+  toJSON (GasPrice d) = toJSON (ParsedDecimal d)
+instance FromJSON GasPrice where
+  parseJSON v = parseJSON v >>= \(ParsedDecimal d) -> return (GasPrice d)
 
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
@@ -54,9 +65,14 @@ data GasArgs
   | GUserApp
 
 newtype GasLimit = GasLimit Word64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,Serialize,NFData,Generic,ToTerm)
 instance Pretty GasLimit where
   pretty (GasLimit g) = viaShow g
+
+instance ToJSON GasLimit where
+  toJSON (GasLimit d) = toJSON (ParsedInteger (fromIntegral d))
+instance FromJSON GasLimit where
+  parseJSON v = parseJSON v >>= \(ParsedInteger d) -> return (GasLimit (fromIntegral d))
 
 data GasModel = GasModel
   { gasModelName :: Text

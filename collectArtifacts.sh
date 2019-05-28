@@ -5,11 +5,14 @@
 if [ ! -d result ] ; then nix-build ; fi
 if [ ! -d result-doc ] ; then nix-build -A ghc.pact.doc ; fi
 
-rm -fr public
-mkdir -p public
-cp -LR result/ghc/pact/share/hpc/vanilla/html public/code-coverage
-mkdir -p public/docs
-cp -LR `find result-doc/share -name html`/* public/docs
-mkdir -p public/binaries
-cp -LR result/ghc/pact/bin/pact public/binaries/pact-macos
-chmod -R u+w public
+pubdir="public-$1"
+binary="pact-$1"
+
+rm -fr $pubdir
+mkdir -p $pubdir
+cp -LR result/ghc/pact/share/hpc/vanilla/html $pubdir/code-coverage
+mkdir -p $pubdir/docs
+cp -LR `find result-doc/share -name html`/* $pubdir/docs
+mkdir -p $pubdir/binaries
+cp -LR result/ghc/pact/bin/pact $pubdir/binaries/$binary
+chmod -R u+w $pubdir

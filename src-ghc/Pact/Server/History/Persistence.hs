@@ -44,13 +44,11 @@ hashFromField h = case A.eitherDecodeStrict' h of
   Left err -> error $ "hashFromField: unable to decode Hash from database! " ++ show err ++ " => " ++ show h
   Right v -> v
 
-crToField :: A.Value -> SType
-crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode r
+crToField :: CommandResult Hash -> SType
+crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode $ A.toJSON r
 
-crFromField :: RequestKey -> Maybe TxId -> ByteString -> Gas -> CommandResult
-crFromField rk tid cr gas = CommandResult rk tid v gas
-  where
-    v = case A.eitherDecodeStrict' cr of
+crFromField :: ByteString -> CommandResult Hash
+crFromField cr = case A.eitherDecodeStrict' cr of
       Left err -> error $ "crFromField: unable to decode CommandResult from database! " ++ show err ++ "\n" ++ show cr
       Right v' -> v'
 
@@ -110,16 +108,16 @@ sqlInsertHistoryRow =
     \, 'gas'\
     \) VALUES (?,?,?,?,?,?)"
 
-insertRow :: Statement -> (Command ByteString, CommandResult) -> IO ()
-insertRow s (Command{..},CommandResult {..}) =
+insertRow :: Statement -> (Command ByteString, CommandResult Hash) -> IO ()
+insertRow s (Command{..},cr@CommandResult {..}) =
     execs s [hashToField (toUntypedHash _cmdHash)
             ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
             ,SText $ Utf8 _cmdPayload
-            ,crToField _crResult
+            ,crToField cr
             ,userSigsToField _cmdSigs
             ,gasToField _crGas]
 
-insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult)] -> IO ()
+insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult Hash)] -> IO ()
 insertCompletedCommand DbEnv{..} v = do
   let sortCmds (_,cr1) (_,cr2) = compare (_crTxId cr1) (_crTxId cr2)
   eitherToError "start insert transaction" <$> exec _conn "BEGIN TRANSACTION"
@@ -142,7 +140,7 @@ sqlSelectCompletedCommands :: Utf8
 sqlSelectCompletedCommands =
   "SELECT result,txid FROM 'main'.'pactCommands' WHERE hash=:hash LIMIT 1"
 
-selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey CommandResult)
+selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey (CommandResult Hash))
 selectCompletedCommands e v = foldM f HashMap.empty v
   where
     f m rk = do
@@ -150,8 +148,8 @@ selectCompletedCommands e v = foldM f HashMap.empty v
       if null rs
       then return m
       else case head rs of
-          [SText (Utf8 cr),SInt tid, SInt g] ->
-            return $ HashMap.insert rk (crFromField rk (if tid < 0 then Nothing else Just (fromIntegral tid)) cr (Gas g)) m
+          [SText (Utf8 cr),SInt _, SInt _] ->
+            return $ HashMap.insert rk (crFromField cr) m
           r -> dbError $ "Invalid result from query: " ++ show r
 
 sqlSelectAllCommands :: Utf8

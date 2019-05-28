@@ -254,26 +254,29 @@ genCore BoundedBool = Gen.recursive Gen.choice [
        Gen.subtermM2 (genCore BoundedBool) (genCore BoundedBool) $ \x y ->
          mkBool $ Logical op [extract x, extract y]
   , do op <- Gen.element [Eq', Neq']
-       EType ty <- Gen.element
+       eTy <- Gen.element
          -- TODO?: keyset
          [EType SInteger, EType SDecimal, EType SBool, EType SStr, EType STime]
-       let aSize = case ty of
-             SInteger -> intSize
-             SDecimal -> decSize
-             SStr     -> strSize
-             SBool    -> BoundedBool
-             STime    -> BoundedTime
-             _        -> error "impossible"
-       Gen.subtermM2
-         (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $
-           \elst1 elst2 -> case (elst1, elst2) of
-             (Some (SList lty1) l1, Some (SList lty2) l2) ->
-               case singEq lty1 ty of
-                 Nothing   -> error "impossible"
-                 Just Refl -> case singEq lty2 ty of
-                   Nothing   -> error "impossible"
-                   Just Refl -> mkBool $ ListEqNeq ty op l1 l2
-             _ -> error (show (elst1, elst2))
+       case eTy of
+         EType ty -> do
+           let aSize = case ty of
+                 SInteger -> intSize
+                 SDecimal -> decSize
+                 SStr     -> strSize
+                 SBool    -> BoundedBool
+                 STime    -> BoundedTime
+                 _        -> error "impossible"
+           Gen.subtermM2
+             (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $
+               \elst1 elst2 -> case (elst1, elst2) of
+                 (Some (SList lty1) l1, Some (SList lty2) l2) ->
+                   case singEq lty1 ty of
+                     Nothing   -> error "impossible"
+                     Just Refl -> case singEq lty2 ty of
+                       Nothing   -> error "impossible"
+                       Just Refl -> mkBool $ ListEqNeq ty op l1 l2
+                 _ -> error (show (elst1, elst2))
+         _ -> error "impossible (we only generated `EType`s)"
   , Gen.subtermM (genCore BoundedBool) $ \x ->
       mkBool $ Logical NotOp [extract x]
   ]
@@ -449,9 +452,12 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
   , scale 4 $ do
        -- just generate literal format strings here so this tests something
        -- interesting
-       format        <- genFormat
-       Some STime t2 <- genTerm BoundedTime
-       pure $ Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
+       format   <- genFormat
+       someTime <- genTerm BoundedTime
+       case someTime of
+         Some STime t2 -> pure $
+           Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
+         _ -> error "impossible (we only generated `STime`s)"
   , let genHashableTerm = Gen.choice
           [ genTerm intSize
           , genTerm strSize
@@ -549,12 +555,15 @@ genTermSpecific' boundedTy = scale 8 $ Gen.choice
   --      Some ty tm <- genTerm boundedTy
   --      pure $ Some ty $ Sequence eTm tm
   [ do
-       Some SBool b <- genTerm BoundedBool
-       Some tyt1 t1 <- genTerm boundedTy
-       Some tyt2 t2 <- genTerm boundedTy
-       case singEq tyt1 tyt2 of
-         Just Refl -> pure $ Some tyt1 $ IfThenElse tyt1 b (Path 0, t1) (Path 0, t2)
-         Nothing   -> error "t1 and t2 must have the same type"
+       someBool <- genTerm BoundedBool
+       case someBool of
+         Some SBool b -> do
+           Some tyt1 t1 <- genTerm boundedTy
+           Some tyt2 t2 <- genTerm boundedTy
+           case singEq tyt1 tyt2 of
+             Just Refl -> pure $ Some tyt1 $ IfThenElse tyt1 b (Path 0, t1) (Path 0, t2)
+             Nothing   -> error "t1 and t2 must have the same type"
+         _ -> error "impossible (we only generated `SBool`s)"
   ]
 
 genType :: MonadGen m => m EType
@@ -589,11 +598,14 @@ safeGenAnyTerm = (do
 genFormatTime :: Gen (ETerm, GenState)
 genFormatTime = do
   format <- genFormat
-  (Some STime t2, gState) <- runReaderT
+  (someTm, gState) <- runReaderT
     (runStateT (genTerm BoundedTime) emptyGenState)
     genEnv
-  let etm = Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
-  pure (etm, gState)
+  case someTm of
+    Some STime tm -> do
+      let etm = Some SStr $ FormatTime (StrLit (showTimeFormat format)) tm
+      pure (etm, gState)
+    _ -> error "impossible (we only generated `STime`s)"
 
 genParseTime :: Gen (ETerm, GenState)
 genParseTime = do

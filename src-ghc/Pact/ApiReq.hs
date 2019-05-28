@@ -66,8 +66,8 @@ data ApiReq = ApiReq {
   _ylPactTxHash :: Maybe Hash,
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
-  _ylResume :: Maybe Value,
   _ylData :: Maybe Value,
+  _ylProof :: Maybe ContProof,
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
   _ylCodeFile :: Maybe FilePath,
@@ -153,17 +153,17 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
   let pubMeta = fromMaybe def _ylPublicMeta
       pactId = toPactId apiPactId
-  ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce
+  ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce _ylProof
 
 mkCont :: PactId -> Int -> Bool -> Value -> PublicMeta -> [SomeKeyPair]
-  -> Maybe String -> IO (Command Text)
-mkCont txid step rollback mdata pubMeta kps ridm = do
+  -> Maybe String -> Maybe ContProof -> IO (Command Text)
+mkCont txid step rollback mdata pubMeta kps ridm proof = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   cmd <- mkCommand
          kps
          pubMeta
          (pack $ show rid)
-         (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
 

@@ -5,6 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 
 -- |
@@ -22,9 +23,10 @@ module Pact.Types.API
   , Poll(..)
   , PollResponses(..)
   , ListenerRequest(..)
-  , ApiResult(..), arMetaData, arResult, arTxId
+  , ListenResponse(..)
   ) where
 
+import Control.Applicative ((<|>))
 import Data.Aeson hiding (Success)
 import Control.Lens hiding ((.=))
 import GHC.Generics
@@ -65,18 +67,9 @@ instance ToJSON Poll where
 instance FromJSON Poll where
   parseJSON = lensyParseJSON 2
 
-data ApiResult = ApiResult {
-  _arResult :: !Value,
-  _arTxId :: !(Maybe TxId),
-  _arMetaData :: !(Maybe Value)
-  } deriving (Eq,Show,Generic)
-makeLenses ''ApiResult
-instance FromJSON ApiResult where parseJSON = lensyParseJSON 3
-instance ToJSON ApiResult where toJSON = lensyToJSON 3
-
 -- | What you get back from a Poll
-newtype PollResponses = PollResponses (HM.HashMap RequestKey ApiResult)
-  deriving (Eq, Show)
+newtype PollResponses = PollResponses (HM.HashMap RequestKey (CommandResult Hash))
+  deriving (Eq, Show, Generic)
 instance ToJSON PollResponses where
   toJSON (PollResponses m) = object $ map (requestKeyToB16Text *** toJSON) $ HM.toList m
 instance FromJSON PollResponses where
@@ -91,3 +84,23 @@ instance ToJSON ListenerRequest where
   toJSON (ListenerRequest r) = object ["listen" .= r]
 instance FromJSON ListenerRequest where
   parseJSON = withObject "ListenerRequest" $ \o -> ListenerRequest <$> o .: "listen"
+
+data ListenResponse
+  = ListenTimeout Int
+  | ListenResponse (CommandResult Hash)
+  deriving (Eq,Show,Generic)
+instance ToJSON ListenResponse where
+  toJSON (ListenResponse r) = toJSON r
+  toJSON (ListenTimeout i) =
+    object [ "status" .= ("timeout" :: String),
+             "timeout-micros" .= i ]
+instance FromJSON ListenResponse where
+  parseJSON v =
+    (ListenResponse <$> parseJSON v) <|>
+    (ListenTimeout <$> parseTimeout v)
+    where
+      parseTimeout = withObject "ListenTimeout" $ \o -> do
+        (s :: Text) <- o .: "status"
+        case s of
+          "timeout" -> o .: "timeout-micros"
+          _ -> fail "Expected timeout status"

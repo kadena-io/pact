@@ -29,19 +29,15 @@ import Control.Lens
 import Control.Concurrent
 import Control.Monad.Reader
 import Control.Monad.Trans.Except
-import Control.Arrow
 
-import Data.Aeson hiding (defaultOptions, Result(..))
-import Data.Aeson.Types (parseMaybe)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
-import Data.Proxy
 import Data.Text.Encoding
 
 import Data.HashSet (HashSet)
-import qualified Data.HashSet as HashSet
-import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet          as HashSet
+import qualified Data.HashMap.Strict   as HM
 
 import Servant
 import Network.Wai.Handler.Warp (run)
@@ -53,6 +49,8 @@ import Pact.Types.Command
 import Pact.Types.API
 import Pact.Types.Server
 import Pact.Types.Version
+import Pact.Types.Hash
+
 
 #if !MIN_VERSION_servant(0,16,0)
 type ServerError = ServantErr
@@ -91,7 +89,6 @@ apiV1Server :: ApiEnv -> Server ApiV1API
 apiV1Server conf = hoistServer apiV1API nt
   (sendHandler :<|> pollHandler :<|> listenHandler :<|> localHandler)
   where
-    apiV1API = Proxy :: Proxy ApiV1API
     nt :: forall a. Api a -> Handler a
     nt s = Handler $ runReaderT s conf
 
@@ -111,7 +108,7 @@ pollHandler (Poll rks) = do
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   pure $ pollResultToReponse possiblyIncompleteResults
 
-listenHandler :: ListenerRequest -> Api ApiResult
+listenHandler :: ListenerRequest -> Api ListenResponse
 listenHandler (ListenerRequest rk) = do
   hChan <- view aiHistoryChan
   m <- liftIO newEmptyMVar
@@ -124,18 +121,16 @@ listenHandler (ListenerRequest rk) = do
       die' msg
     ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      pure $ crToAr cr
+      pure (ListenResponse cr)
 
-localHandler :: Command T.Text -> Api (CommandSuccess Value)
+localHandler :: Command T.Text -> Api (CommandResult Hash)
 localHandler commandText = do
   let (cmd :: Command ByteString) = fmap encodeUtf8 commandText
   mv <- liftIO newEmptyMVar
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
-  case parseMaybe parseJSON r of
-    Just v@CommandSuccess{} -> pure v
-    Nothing -> die' "command could not be run locally"
+  pure r
 
 versionHandler :: Handler T.Text
 versionHandler = pure pactVersion
@@ -147,11 +142,8 @@ checkHistoryForResult rks = do
   liftIO $ writeHistory hChan $ QueryForResults (rks,m)
   liftIO $ readMVar m
 
-pollResultToReponse :: HM.HashMap RequestKey CommandResult -> PollResponses
-pollResultToReponse m = PollResponses $ HM.fromList $ map (second crToAr) $ HM.toList m
-
-crToAr :: CommandResult -> ApiResult
-crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId Nothing
+pollResultToReponse :: HM.HashMap RequestKey (CommandResult Hash) -> PollResponses
+pollResultToReponse m = PollResponses m
 
 log :: (MonadReader ApiEnv m, MonadIO m) => String -> m ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)

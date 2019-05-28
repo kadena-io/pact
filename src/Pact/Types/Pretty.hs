@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+
 module Pact.Types.Pretty
   ( (<+>)
   , Annot(..)
@@ -89,6 +90,9 @@ data Annot
   | BadExample
 
 type Doc = PP.Doc Annot
+instance Eq Doc where
+  d1 == d2 = show d1 == show d2
+  d1 /= d2 = show d1 /= show d2
 
 -- | Pact's version of 'Pretty', with 'Annot' annotations.
 class Pretty a where
