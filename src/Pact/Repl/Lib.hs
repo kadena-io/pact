@@ -68,6 +68,7 @@ import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
+import Pact.Parse
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -490,7 +491,7 @@ envGas i as = argsError i as
 
 setGasPrice :: RNativeFun LibState
 setGasPrice _ [TLiteral (LDecimal d) _] = do
-  setenv (eeGasEnv . geGasPrice) (GasPrice d)
+  setenv (eeGasEnv . geGasPrice) (wrap (wrap d))
   return $ tStr $ "Set gas price to " <> tShow d
 setGasPrice i as = argsError i as
 
@@ -545,13 +546,13 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       _ -> argsError i as
 
     go i pd ((FieldKey k), (TLiteral (LInteger l) _)) = case Text.unpack k of
-      "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (GasLimit . fromIntegral $ l) pd
+      "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (wrap l) pd
       "block-height" -> pure $ set pdBlockHeight (fromIntegral l) pd
       "block-time"   -> pure $ set pdBlockTime (fromIntegral l) pd
       t              -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LDecimal l) _)) = case Text.unpack k of
-      "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (GasPrice l) pd
+      "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (wrap (wrap l)) pd
       t           -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of
