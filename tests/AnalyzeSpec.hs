@@ -781,16 +781,14 @@ spec = describe "analyze" $ do
   describe "create-user-guard" $ do
     let code =
           [text|
-            (defun fail:bool (o:object{account})
-              (enforce false ""))
+            (defun fail:bool (x:integer)
+              (enforce (> x 1) ""))
 
-            (defun test:bool ()
-              (enforce-guard (create-user-guard {} "fail")))
+            (defun test:bool (x:integer)
+              @model [(property (> x 1))]
+              (enforce-guard (create-user-guard (fail x))))
           |]
-    -- We leave user guards completely free for now, until we inline them into
-    -- a new construct during typechecking:
-    expectPass code $ Satisfiable Abort'
-    expectPass code $ Satisfiable Success'
+    expectVerified code
 
   describe "call-by-value semantics for inlining" $ do
     let code =

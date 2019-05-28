@@ -23,17 +23,17 @@ import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
-import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
+import           Control.Monad.State.Strict  (MonadState, get, modify', put,
+                                              runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Default                (def)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind,
+import           Data.SBV                    (EqSymbolic ((.==), (./=)),
                                               Mergeable (symbolicMerge), SBV,
-                                              SymArray (readArray), SymVal, ite,
-                                              literal, (.<), uninterpret,
+                                              SymVal, ite, literal, (.<),
                                               writeArray)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.Maybe              as SBV
@@ -88,13 +88,6 @@ instance Analyzer Analyze where
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint b = modify' $ latticeState.lasConstraints %~ (.&& b)
-
-genUninterpreted :: HasKind a => Analyze (S a)
-genUninterpreted = do
-  nextId <- use $ globalState.gasNextUninterpId
-  let val = uninterpretS $ "uninterp_" <> show nextId
-  globalState.gasNextUninterpId += 1
-  pure val
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s ->
@@ -426,6 +419,13 @@ extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
 isGranted :: Token -> Analyze (S Bool)
 isGranted t = view $ activeGrants.tokenGranted t
 
+withStateRollback :: MonadState s m => m a -> m a
+withStateRollback act = do
+  revertState <- get >>= pure . put
+  val <- act
+  revertState
+  pure val
+
 evalTerm :: forall a. SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
@@ -576,14 +576,16 @@ evalTerm = \case
     succeeds %= (.&& whetherInPact)
     view aeTrivialGuard
 
-  MkUserGuard _ty _obj _name ->
-    --
-    -- NOTE: for now we just leave this uninterpreted, until we are prepared to
-    -- close over and analyze user guard functions in the future. we do not
-    -- try to resolve two uses of the same name to the same user guard, because
-    -- the guard created is *also* a function of the supplied object.
-    --
-    genUninterpreted
+  MkUserGuard guard bodyET -> do
+    -- NOTE: a user guard can not access user tables, so we can run it ahead of
+    -- its use and store whether the guard permits the tx to succeed. If we
+    -- instead deferred the execution to the use (rather than closure) site,
+    -- then we would need to capture the environment here for later use.
+    postGuardSuccess <- withStateRollback $ evalETerm bodyET *> use succeeds
+
+    let sg = literalS guard
+    guardPass sg .= postGuardSuccess
+    pure sg
 
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT
@@ -598,8 +600,7 @@ evalTerm = \case
       Nothing ->
         pure ()
 
-    whetherPasses <- fmap sansProv $
-      readArray <$> view guardPasses <*> pure (_sSbv guard)
+    whetherPasses <- use $ guardPass guard
 
     tagGuard tid guard whetherPasses
     pure whetherPasses
@@ -804,11 +805,11 @@ withReset number action = do
       newState = oldState
         & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
         & latticeState . lasExtra . cvRowExists  %~ updateTableMap
+        & latticeState . lasGuardPasses          .~ newGuardPasses
       newEnv = oldEnv
         & aePactMetadata . pmEntity .~ uninterpretS "entity"
         & aeRegistry                .~ newRegistry
         & aeTxMetadata              .~ txMetadata
-        & aeGuardPasses             .~ newGuardPasses
 
   id .= newState
   local (analyzeEnv .~ newEnv) action

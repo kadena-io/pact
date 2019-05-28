@@ -113,7 +113,7 @@ runAnalysis' modName query tables caps args stepChoices tm rootPath tags info = 
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"
 
-  let state0 = mkInitialAnalyzeState tables caps
+  let state0 = mkInitialAnalyzeState (_sSbv $ view aeTrivialGuard aEnv) tables caps
 
       analysis = do
         tagSubpathStart rootPath sTrue

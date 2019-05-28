@@ -28,11 +28,11 @@ import           Pact.Analyze.Eval        (lasSucceeds, latticeState,
                                            runAnalyze)
 import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
-import           Pact.Analyze.Types.Eval  (aeRegistry, aeTxMetadata,
-                                           tmDecimals, tmIntegers, tmKeySets,
-                                           mkAnalyzeEnv, mkPactMetadata,
-                                           mkRegistry, mkInitialAnalyzeState,
-                                           registryMap)
+import           Pact.Analyze.Types.Eval  (aeRegistry, aeTrivialGuard,
+                                           aeTxMetadata, tmDecimals,
+                                           tmIntegers, tmKeySets, mkAnalyzeEnv,
+                                           mkPactMetadata, mkRegistry,
+                                           mkInitialAnalyzeState, registryMap)
 import           Pact.Analyze.Util        (dummyInfo)
 
 import           Pact.Eval                (reduce)
@@ -101,7 +101,6 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       caps        = []
       args        = Map.empty
       stepChoices = Map.empty
-      state0      = mkInitialAnalyzeState tables caps
 
       tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty
         Map.empty Map.empty Map.empty
@@ -116,7 +115,9 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
   Just aEnv <- pure $ mkAnalyzeEnv modName pactMd reg tables caps args
     stepChoices tags dummyInfo
 
-  let writeArray' k v env = writeArray env k v
+  let trivGuard = _sSbv $ view aeTrivialGuard aEnv
+      state0 = mkInitialAnalyzeState trivGuard tables caps
+      writeArray' k v env = writeArray env k v
 
       --
       -- TODO: need to hook this up to authorized-by (NameAuthorized) support

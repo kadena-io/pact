@@ -19,7 +19,8 @@ import           Control.Monad.State.Strict (MonadState, StateT (..))
 import           Data.Default               (def)
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (EqSymbolic ((.==)),
-                                             Mergeable (symbolicMerge), literal)
+                                             Mergeable (symbolicMerge),
+                                             SymArray(readArray), literal)
 import qualified Data.SBV.Internals         as SBVI
 import           Data.SBV.Tuple             (tuple)
 import           Data.String                (IsString (fromString))
@@ -105,6 +106,9 @@ getLitColName (PropSpecific Result)
   = throwErrorNoLoc "Function results can't be column names"
 getLitColName CoreProp{} = throwErrorNoLoc "Core values can't be column names"
 
+namedGuardPasses :: S RegistryName -> Query (S Bool)
+namedGuardPasses sRn = fmap sansProv $
+  readArray <$> view (qeAnalyzeState.guardPasses) <*> (_sSbv <$> resolveGuard sRn)
 
 evalProp :: SingI a => Prop a -> Query (S (Concrete a))
 evalProp (CoreProp tm)    = evalCore tm

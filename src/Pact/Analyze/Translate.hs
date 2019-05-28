@@ -171,6 +171,7 @@ data TranslateState
   = TranslateState
     { _tsNextTagId     :: TagId
     , _tsNextVarId     :: VarId
+    , _tsNextGuard     :: Guard
     , _tsGraph         :: Alga.Graph Vertex
       -- ^ The execution graph we've built so far. This is expanded upon as we
       -- translate an entire function.
@@ -835,6 +836,12 @@ translateCapabilityApp modName capName bindingsA appBodyA = do
       fmap (mapExistential $ Granting cap vids) $
         translateBody appBodyA
 
+genGuard :: TranslateM Guard
+genGuard = do
+  g <- use tsNextGuard
+  tsNextGuard %= succ
+  pure g
+
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
@@ -931,10 +938,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr strT <- translateNode strA
     pure $ Some SGuard $ MkPactGuard strT
 
-  AST_CreateUserGuard objA strA -> do
-    Some objTy@SObject{} objT <- translateNode objA
-    Some SStr strT <- translateNode strA
-    pure $ Some SGuard $ MkUserGuard objTy objT strT
+  AST_CreateUserGuard (AST_InlinedApp modName funName bindings appBodyA) -> do
+    guard <- genGuard
+    body <- withTranslatedBindings bindings $ \bindingTs -> do
+      withNewScope (FunctionScope modName funName) bindingTs $
+        translateBody appBodyA
+    pure $ Some SGuard $ MkUserGuard guard body
 
   AST_Enforce _ cond -> do
     Some SBool condTerm <- translateNode cond
@@ -1558,9 +1567,10 @@ runTranslation modName funName info caps pactArgs body checkType = do
           nextVertex = succ vertex0
           path0      = Path 0
           nextTagId  = succ $ _pathTag path0
+          nextGuard  = Guard 0
           graph0     = pure vertex0
-          state0     = TranslateState nextTagId nextVarId graph0 vertex0
-            nextVertex Map.empty mempty path0 Map.empty [] []
+          state0     = TranslateState nextTagId nextVarId nextGuard graph0
+            vertex0 nextVertex Map.empty mempty path0 Map.empty [] []
           translation = do
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
@@ -1602,9 +1612,10 @@ translateNodeNoGraph node =
       nextVertex     = succ vertex0
       path0          = Path 0
       nextTagId      = succ $ _pathTag path0
+      nextGuard      = Guard 0
       graph0         = pure vertex0
-      translateState = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty [] []
+      translateState = TranslateState nextTagId 0 nextGuard graph0 vertex0
+        nextVertex Map.empty mempty path0 Map.empty [] []
 
       translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
 

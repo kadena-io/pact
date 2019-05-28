@@ -731,7 +731,7 @@ instance SMTValue Any
 
 newtype Guard
   = Guard Integer
-  deriving (Eq, Ord, Data, Show, Read, Pretty)
+  deriving (Eq, Ord, Enum, Data, Show, Read, Pretty)
 
 instance SymVal Guard where
   mkSymVal = SBVI.genMkSymVar KUnbounded

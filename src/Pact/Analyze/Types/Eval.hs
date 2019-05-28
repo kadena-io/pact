@@ -158,7 +158,6 @@ data AnalyzeEnv
     , _aeTxMetadata   :: !TxMetadata
     , _aeScope        :: !(Map VarId AVal) -- used as a stack
     , _aeStepChoices  :: !(Map VarId (SBV Bool))
-    , _aeGuardPasses  :: !(SFunArray Guard Bool)
     , _invariants     :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds    :: !(TableMap (Map Text VarId))
     , _aeModelTags    :: !(ModelTags 'Symbolic)
@@ -197,7 +196,6 @@ mkAnalyzeEnv modName pactMetadata registry tables caps args stepChoices tags inf
       -- module name during symbolic execution
       --
       trivialGuard = uninterpret "trivial_guard"
-      guardPasses  = writeArray (mkFreeArray "guardPasses") trivialGuard sTrue
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -214,8 +212,8 @@ mkAnalyzeEnv modName pactMetadata registry tables caps args stepChoices tags inf
       activeGrants = emptyGrants
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args
-    stepChoices guardPasses invariants' columnIds' tags info
-    (sansProv trivialGuard) emptyGrants activeGrants tables
+    stepChoices invariants' columnIds' tags info (sansProv trivialGuard)
+    emptyGrants activeGrants tables
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -263,8 +261,9 @@ data LatticeAnalyzeState a
     --       invariant is being maintained
     --
     , _lasMaintainsInvariants :: TableMap (ZipList (Located (SBV Bool)))
-    , _lasTablesRead          :: SFunArray TableName Bool
-    , _lasTablesWritten       :: SFunArray TableName Bool
+    , _lasGuardPasses         :: !(SFunArray Guard Bool)
+    , _lasTablesRead          :: !(SFunArray TableName Bool)
+    , _lasTablesWritten       :: !(SFunArray TableName Bool)
     , _lasColumnsRead         :: TableMap (ColumnMap (SBV Bool))
     , _lasColumnsWritten      :: TableMap (ColumnMap (SBV Bool))
     , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
@@ -293,7 +292,6 @@ deriving instance Mergeable a => Mergeable (LatticeAnalyzeState a)
 data GlobalAnalyzeState
   = GlobalAnalyzeState
     { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
-    , _gasNextUninterpId   :: Integer
     , _gasRollbacks        :: ![ETerm]
     -- ^ the stack of rollbacks to perform on failure
     }
@@ -347,12 +345,13 @@ mkQueryEnv env state cv0 cv1 result =
   let state' = state & latticeState . lasExtra .~ BeforeAndAfter cv0 cv1
   in QueryEnv env state' result Map.empty Map.empty
 
-mkInitialAnalyzeState :: [Table] -> [Capability] -> EvalAnalyzeState
-mkInitialAnalyzeState tables caps = AnalyzeState
+mkInitialAnalyzeState :: SBV Guard -> [Table] -> [Capability] -> EvalAnalyzeState
+mkInitialAnalyzeState trivialGuard tables caps = AnalyzeState
     { _latticeState = LatticeAnalyzeState
         { _lasSucceeds            = SymbolicSuccess sTrue
         , _lasPurelyReachable     = sTrue
         , _lasMaintainsInvariants = mkMaintainsInvariants
+        , _lasGuardPasses         = writeArray (mkFreeArray "guardPasses") trivialGuard sTrue
         , _lasTablesRead          = mkSFunArray $ const sFalse
         , _lasTablesWritten       = mkSFunArray $ const sFalse
         , _lasColumnsRead         = mkTableColumnMap tables (const True) sFalse
@@ -376,7 +375,6 @@ mkInitialAnalyzeState tables caps = AnalyzeState
         }
     , _globalState = GlobalAnalyzeState
         { _gasGuardProvenances = mempty
-        , _gasNextUninterpId   = 0
         , _gasRollbacks        = []
         }
     }
@@ -461,9 +459,6 @@ class HasAnalyzeEnv a where
   registry :: Lens' a (SFunArray RegistryName Guard)
   registry = analyzeEnv.aeRegistry.registryMap
 
-  guardPasses :: Lens' a (SFunArray Guard Bool)
-  guardPasses = analyzeEnv.aeGuardPasses
-
   txKeySets :: Lens' a (SFunArray Str Guard)
   txKeySets = analyzeEnv.aeTxMetadata.tmKeySets
 
@@ -527,6 +522,12 @@ purelyReachable = latticeState.lasPurelyReachable.sbv2S
 
 maintainsInvariants :: Lens' (AnalyzeState a) (TableMap (ZipList (Located SBool)))
 maintainsInvariants = latticeState.lasMaintainsInvariants
+
+guardPasses :: Lens' (AnalyzeState a) (SFunArray Guard Bool)
+guardPasses = latticeState.lasGuardPasses
+
+guardPass :: S Guard -> Lens' (AnalyzeState a) (S Bool)
+guardPass sg = guardPasses.symArrayAt sg.sbv2S
 
 tableRead :: TableName -> Lens' (AnalyzeState a) (S Bool)
 tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
@@ -676,13 +677,6 @@ resolveGuard
   -> m (S Guard)
 resolveGuard sRn = fmap (withProv $ fromRegistry sRn) $
   readArray <$> view registry <*> pure (_sSbv sRn)
-
-namedGuardPasses
-  :: (MonadReader r m, HasAnalyzeEnv r)
-  => S RegistryName
-  -> m (S Bool)
-namedGuardPasses sRn = fmap sansProv $
-  readArray <$> view guardPasses <*> (_sSbv <$> resolveGuard sRn)
 
 -- | Reads a named keyset from tx metadata (not the keyset registry)
 readKeySet
