@@ -65,7 +65,7 @@ import Pact.Types.Swagger
 import Pact.Types.Term
 
 -- | Public Pact REST API.
-type ApiV1API = "api" :> "v1" :> ApiSend :<|> ApiPoll :<|> ApiListen :<|> ApiLocal
+type ApiV1API = "api" :> "v1" :> (ApiSend :<|> ApiPoll :<|> ApiListen :<|> ApiLocal)
 
 apiV1API :: Proxy ApiV1API
 apiV1API = Proxy
