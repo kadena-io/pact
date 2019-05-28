@@ -782,15 +782,16 @@ withReset number action = do
   oldState <- use id
   oldEnv   <- ask
 
+  trivialGuard <- view aeTrivialGuard
+
   let tables = oldEnv ^. aeTables
       txMetadata   = TxMetadata (mkFreeArray $ "txKeySets"  <> tShow number)
                                 (mkFreeArray $ "txDecimals" <> tShow number)
                                 (mkFreeArray $ "txIntegers" <> tShow number)
 
       newRegistry = Registry $ mkFreeArray $ "registry" <> tShow number
-      trivialGuard = uninterpret $ "trivial_guard" ++ show number
       newGuardPasses = writeArray (mkFreeArray $ "guardPasses" <> tShow number)
-        trivialGuard sTrue
+        (_sSbv trivialGuard) sTrue
 
       -- If `rowExists` is already set to true, then it won't change. If it's
       -- set to false, this will unset it.
