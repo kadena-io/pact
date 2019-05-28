@@ -55,7 +55,7 @@ module Pact.Types.Term
    Governance(..),
    ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
-   ConstVal(..),
+   ConstVal(..),constTerm,
    Use(..),
    App(..),appFun,appArgs,appInfo,
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
@@ -701,6 +701,10 @@ instance FromJSON n => FromJSON (ConstVal n) where
     (withObject "CVRaw"
      (\o -> CVRaw <$> o .: "raw") v)
 
+-- | A term from a 'ConstVal', preferring evaluated terms when available.
+constTerm :: ConstVal a -> a
+constTerm (CVRaw raw) = raw
+constTerm (CVEval _raw eval) = eval
 
 data Example
   = ExecExample !Text
