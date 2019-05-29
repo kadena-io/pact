@@ -778,17 +778,28 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable Success'
 
-  describe "create-user-guard" $ do
+  describe "create-user-guard passing" $ do
     let code =
           [text|
-            (defun fail:bool (x:integer)
+            (defun enforce-range:bool (x:integer)
               (enforce (> x 1) ""))
 
             (defun test:bool (x:integer)
               @model [(property (> x 1))]
-              (enforce-guard (create-user-guard (fail x))))
+              (enforce-guard (create-user-guard (enforce-range x))))
           |]
     expectVerified code
+
+  describe "create-user-guard failing" $ do
+    let code =
+          [text|
+            (defun enforce-impossible:bool ()
+              (enforce false ""))
+
+            (defun test:bool (x:integer)
+              (enforce-guard (create-user-guard (enforce-impossible))))
+          |]
+    expectPass code $ Valid Abort'
 
   describe "call-by-value semantics for inlining" $ do
     let code =
