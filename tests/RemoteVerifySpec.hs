@@ -23,7 +23,6 @@ import NeatInterpolation (text)
 import qualified Network.HTTP.Client as HTTP
 
 import Servant.Client
-import Test.Hspec
 
 import Pact.Analyze.Remote.Server (runServantServer)
 import qualified Pact.Analyze.Remote.Types as Remote

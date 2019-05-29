@@ -15,7 +15,7 @@ import Data.Aeson
 import qualified Network.HTTP.Client as HTTP
 import Data.Default (def)
 import Data.Decimal
-import Data.Text (Text, concat, unpack)
+import Data.Text (Text, unpack)
 
 import Utils.TestRunner
 
@@ -465,7 +465,7 @@ testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
       testValidEscrowFinish mgr
 
 
-twoPartyEscrow :: [Command T.Text] -> HTTP.Manager ->
+twoPartyEscrow :: [Command Text] -> HTTP.Manager ->
                   ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO () -> Expectation
 twoPartyEscrow testCmds mgr act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
