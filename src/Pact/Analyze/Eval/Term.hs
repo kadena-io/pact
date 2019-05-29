@@ -23,8 +23,7 @@ import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
-import           Control.Monad.State.Strict  (MonadState, get, modify', put,
-                                              runStateT)
+import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Default                (def)
@@ -419,13 +418,6 @@ extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
 isGranted :: Token -> Analyze (S Bool)
 isGranted t = view $ activeGrants.tokenGranted t
 
-withStateRollback :: MonadState s m => m a -> m a
-withStateRollback act = do
-  revertState <- get >>= pure . put
-  val <- act
-  revertState
-  pure val
-
 evalTerm :: forall a. SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
@@ -576,15 +568,22 @@ evalTerm = \case
     succeeds %= (.&& whetherInPact)
     view aeTrivialGuard
 
+  --
+  -- TODO: really, for stuff like this, we should be erroring out if we detect
+  --       that a program e.g. tries to write the DB in a guard
+  --
   MkUserGuard guard bodyET -> do
     -- NOTE: a user guard can not access user tables, so we can run it ahead of
     -- its use and store whether the guard permits the tx to succeed. If we
     -- instead deferred the execution to the use (rather than closure) site,
     -- then we would need to capture the environment here for later use.
-    postGuardSuccess <- withStateRollback $ evalETerm bodyET *> use succeeds
+    prevSucceeds <- use succeeds
+    void $ evalETerm bodyET
+    postGuardSucceeds <- use succeeds
+    succeeds .= prevSucceeds
 
     let sg = literalS guard
-    guardPasses sg .= postGuardSuccess
+    guardPasses sg .= postGuardSucceeds
     pure sg
 
   GuardPasses tid guardT -> do
