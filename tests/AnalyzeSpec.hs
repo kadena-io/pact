@@ -801,6 +801,17 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Abort'
 
+  describe "user guards can't fail unless enforced" $ do
+    let code =
+          [text|
+            (defun enforce-impossible:bool ()
+              (enforce false ""))
+
+            (defun test:guard ()
+              (create-user-guard (enforce-impossible)))
+          |]
+    expectPass code $ Valid Success'
+
   describe "call-by-value semantics for inlining" $ do
     let code =
           [text|
