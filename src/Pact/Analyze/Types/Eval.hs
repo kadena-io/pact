@@ -523,11 +523,8 @@ purelyReachable = latticeState.lasPurelyReachable.sbv2S
 maintainsInvariants :: Lens' (AnalyzeState a) (TableMap (ZipList (Located SBool)))
 maintainsInvariants = latticeState.lasMaintainsInvariants
 
-guardPasses :: Lens' (AnalyzeState a) (SFunArray Guard Bool)
-guardPasses = latticeState.lasGuardPasses
-
-guardPass :: S Guard -> Lens' (AnalyzeState a) (S Bool)
-guardPass sg = guardPasses.symArrayAt sg.sbv2S
+guardPasses :: S Guard -> Lens' (AnalyzeState a) (S Bool)
+guardPasses sg = latticeState.lasGuardPasses.symArrayAt sg.sbv2S
 
 tableRead :: TableName -> Lens' (AnalyzeState a) (S Bool)
 tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S

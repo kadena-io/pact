@@ -108,7 +108,8 @@ getLitColName CoreProp{} = throwErrorNoLoc "Core values can't be column names"
 
 namedGuardPasses :: S RegistryName -> Query (S Bool)
 namedGuardPasses sRn = fmap sansProv $
-  readArray <$> view (qeAnalyzeState.guardPasses) <*> (_sSbv <$> resolveGuard sRn)
+  readArray <$> view (qeAnalyzeState.latticeState.lasGuardPasses)
+            <*> (_sSbv <$> resolveGuard sRn)
 
 evalProp :: SingI a => Prop a -> Query (S (Concrete a))
 evalProp (CoreProp tm)    = evalCore tm

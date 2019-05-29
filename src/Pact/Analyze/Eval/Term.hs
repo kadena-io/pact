@@ -584,7 +584,7 @@ evalTerm = \case
     postGuardSuccess <- withStateRollback $ evalETerm bodyET *> use succeeds
 
     let sg = literalS guard
-    guardPass sg .= postGuardSuccess
+    guardPasses sg .= postGuardSuccess
     pure sg
 
   GuardPasses tid guardT -> do
@@ -600,7 +600,7 @@ evalTerm = \case
       Nothing ->
         pure ()
 
-    whetherPasses <- use $ guardPass guard
+    whetherPasses <- use $ guardPasses guard
 
     tagGuard tid guard whetherPasses
     pure whetherPasses
