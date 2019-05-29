@@ -16,6 +16,7 @@ module Pact.Types.ChainId
   ChainId(..)
   -- * optics
 , chainId
+, _ChainId
 ) where
 
 import GHC.Generics
@@ -44,3 +45,8 @@ instance Wrapped ChainId
 --
 chainId :: Lens' ChainId Text
 chainId = lens _chainId (\_ t -> ChainId t)
+
+-- | Convenience isomorphism 'ChainId' <-> 'Text'
+--
+_ChainId :: Iso' ChainId Text
+_ChainId = iso _chainId ChainId
