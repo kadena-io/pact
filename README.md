@@ -136,16 +136,15 @@ Use `stack install` to install on the command line and for Atom, ensuring that `
 
 ### Building with Nix
 
-The fastest way to build and run chainweb is to use the Nix package manager
+The fastest way to build and run pact is to use the Nix package manager
 which has binary caching capabilities that allow you to download pre-built
-binaries for everything needed by Chainweb. For detailed instructions see [our
+binaries for everything needed by pact. For detailed instructions see [our
 wiki](https://github.com/kadena-io/pact/wiki/Building-Kadena-Projects).
 
-
-When the build is finished, you can run chainweb with the following command:
+When the build is finished, you can run pact with the following command:
 
 ```bash
-./result/ghc/chainweb/bin/chainweb-node
+./result/ghc/pact/bin/pact
 ```
 
 #### Incremental Builds
