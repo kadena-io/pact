@@ -1,7 +1,14 @@
 (begin-tx)
+
 (define-keyset 'k (sig-keyset))
-(module yieldtest 'k
-  (defpact tester (name)
+
+(module yield-test 'k
+
+  "Define two tests: 'tester-1' executes a single-chain pact and ensures rollbacks \
+  \and step behavior works properly, and 'tester-2' ensures that cross-chain cont- \
+  \inuation works as intended."
+
+  (defpact tester-1 (name)
     (step-with-rollback
      "A"
      (let ((nameA (+ name "->A")))
@@ -14,54 +21,72 @@
       (resume { "a-result" := ar }
         (+ ar "->B")))
     )
+
+  (defpact tester-2 (name)
+    (step-with-rollback
+     "A"
+     (let ((nameA (+ name "->A")))
+       (yield { "a-result": nameA } "1")
+       nameA)
+
+    "rollback-2a")
+
+    (step "B"
+     (resume { "a-result" := ar }
+      (+ ar "->B")))
+    )
 )
 
 (commit-tx)
 
 (begin-tx)
-(use yieldtest)
+(use yield-test)
 
 (env-entity "B")
 (env-hash (hash "stu-pact-id"))
-(tester "stu")
+(tester-1 "stu")
 (expect "step 0 skips B" false (at "executed" (pact-state true)))
 
 (env-entity "A")
-(expect "step 0 executes" "stu->A" (tester "stu"))
+(expect "step 0 executes" "stu->A" (tester-1 "stu"))
 ;; set resume for step 1
 (env-entity "B")
 (expect "step 1 executes" "stu->A->B" (continue-pact 1))
 
 ;; test 1 skips A
 (pact-state true)
-(tester "stu")
+(tester-1 "stu")
 (env-entity "A")
 (continue-pact 1)
 (expect "step 1 skips A" false (at "executed" (pact-state)))
 
 ;; test rollback
 (pact-state true)
-(tester "stu")
+(tester-1 "stu")
 (expect "step 0 rollback executes" "rollback-a" (continue-pact 0 true))
 
 ;; test no rollback for B
 (pact-state true)
-(tester "stu")
+(tester-1 "stu")
 (env-entity "B")
 (continue-pact 0 true)
 (expect "step 0 rollback skips B" false (at "executed" (pact-state)))
+
 (commit-tx)
-
-
-;; test overwriting yield with continue-pact
 (begin-tx)
-(use yieldtest)
-(env-hash (hash "stu-pact-id"))
-(env-entity "A")
-(expect "step 0 executes" "stu->A" (tester "stu"))
 
+(use yield-test)
+
+(env-hash (hash "stu-pact-id"))
+
+;; execute 'tester-2' on chain 0
+(env-chain-data { "chain-id": "0" })
+(env-entity "A")
+(expect "step 0 executes" true (and (= (tester-2 "emily") "emily->A") (= (at 'chain-id (chain-data)) "0")))
+
+;; expect failure when yielding to the wrong chain id
+;; set resume for step 1, expect success in correct chain env
 (env-entity "B")
-(expect "step 1 executes with new yield value"
-	"someRandomStr->B"
-	(continue-pact 1 false (hash "stu-pact-id") {"a-result": "someRandomStr"}))
-(commit-tx)
+(expect-failure "step 1 fails to execute on chain 0" (continue-pact 1))
+(env-chain-data { "chain-id": "1" })
+(expect "step 1 execution succeeds on correct chain id" "emily->A->B" (continue-pact 1))
