@@ -71,3 +71,18 @@
 (env-entity "B")
 (continue-pact 0 true)
 (expect "step 0 rollback skips B" false (at "executed" (pact-state)))
+
+(commit-tx)
+
+;; test overwriting yield with continue-pact
+(begin-tx)
+
+(use yield-test)
+(env-hash (hash "stu-pact-id"))
+(env-entity "A")
+(expect "step 0 executes" "stu->A" (tester-1 "stu"))
+
+(env-entity "B")
+(expect "step 1 executes with new yield value"
+	"someRandomStr->B"
+	(continue-pact 1 false (hash "stu-pact-id") {"a-result": "someRandomStr"}))
