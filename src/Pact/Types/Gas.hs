@@ -12,9 +12,18 @@
 -- Gas (compute and space cost calculation) types.
 --
 module Pact.Types.Gas
-  ( Gas(..),GasPrice(..),
-    GasEnv(..),geGasLimit,geGasPrice,geGasModel,
-    ReadValue(..),GasModel(..),GasArgs(..),GasLimit(..)
+  ( -- * types
+    Gas(..)
+  , GasPrice(..)
+  , GasEnv(..)
+  , ReadValue(..)
+  , GasModel(..)
+  , GasArgs(..)
+  , GasLimit(..)
+    -- * optics
+  , geGasLimit
+  , geGasPrice
+  , geGasModel
   ) where
 
 import Control.DeepSeq (NFData)
@@ -26,10 +35,12 @@ import Data.Word (Word64)
 import GHC.Generics
 import Data.Serialize
 
-import Pact.Types.Lang
+import Pact.Types.Hash
+import Pact.Types.Info
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.PactValue
+import Pact.Types.Term
 import Pact.Parse
 
 
@@ -50,7 +61,6 @@ data ReadValue
   = ReadData (ObjectMap PactValue)
   | ReadKey RowKey
   | ReadTxId
-
 
 data GasArgs
   = GPostRead ReadValue
