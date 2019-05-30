@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Module      :  Pact.Types.Gas
@@ -18,11 +19,10 @@ module Pact.Types.Gas
   ) where
 
 import Control.DeepSeq (NFData)
-import Control.Lens (makeLenses)
+import Control.Lens (makeLenses,Wrapped)
 import Data.Aeson
-import Data.Decimal (Decimal)
+import Data.Aeson.Types (Parser)
 import qualified Data.Text as T
-import Data.Word (Word64)
 import GHC.Generics
 import Data.Serialize
 
@@ -33,16 +33,25 @@ import Pact.Types.PactValue
 import Pact.Parse
 
 
--- | Price per 'Gas' unit.
-newtype GasPrice = GasPrice Decimal
-  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Enum,Show,Serialize,Generic,ToTerm)
+parseGT0 :: (FromJSON a,Num a,Ord a) => Value -> Parser a
+parseGT0 v = parseJSON v >>= \a ->
+  if a >= 0 then return a else
+    fail "value must be greater than 0"
+{-# INLINABLE parseGT0 #-}
+
+-- | API Price value, basically a newtype over `Decimal`
+newtype GasPrice = GasPrice ParsedDecimal
+  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Serialize,Generic,ToTerm,ToJSON)
+instance Show GasPrice where
+  show (GasPrice (ParsedDecimal d)) = show d
+
 instance Pretty GasPrice where
   pretty (GasPrice p) = viaShow p
 
-instance ToJSON GasPrice where
-  toJSON (GasPrice d) = toJSON (ParsedDecimal d)
 instance FromJSON GasPrice where
-  parseJSON v = parseJSON v >>= \(ParsedDecimal d) -> return (GasPrice d)
+  parseJSON = fmap GasPrice . parseGT0
+
+instance Wrapped GasPrice
 
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
@@ -64,15 +73,19 @@ data GasArgs
   | GModuleMember (ModuleDef (Term Name))
   | GUserApp
 
-newtype GasLimit = GasLimit Word64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,Serialize,NFData,Generic,ToTerm)
+newtype GasLimit = GasLimit ParsedInteger
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON)
+
+instance Show GasLimit where
+  show (GasLimit (ParsedInteger i)) = show i
+
 instance Pretty GasLimit where
   pretty (GasLimit g) = viaShow g
 
-instance ToJSON GasLimit where
-  toJSON (GasLimit d) = toJSON (ParsedInteger (fromIntegral d))
 instance FromJSON GasLimit where
-  parseJSON v = parseJSON v >>= \(ParsedInteger d) -> return (GasLimit (fromIntegral d))
+  parseJSON = fmap GasLimit . parseGT0
+
+instance Wrapped GasLimit
 
 data GasModel = GasModel
   { gasModelName :: Text
