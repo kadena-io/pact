@@ -76,7 +76,6 @@ import Pact.Types.Hash
 import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
-import Pact.Types.Term (ModuleDef(..))
 import Pact.Types.Version
 
 -- | All production native modules.
@@ -673,27 +672,10 @@ resume i as = case as of
     case rm of
       Nothing -> evalError' i "Resume: no yielded value in context"
       Just y -> do
-        o <- fmap fromPactValue <$> enforceYield i y
+        o <- fmap fromPactValue . _yData <$> enforceYield i y
         l <- bindObjectLookup (toTObjectMap TyAny def o)
         bindReduce ps bd bi l
   _ -> argsError' i as
-  where
-    enforceYield _ (Yield o Nothing) = return o
-    enforceYield fa (Yield o (Just (Endorsement tid pid0 h))) = do
-      h' <- getCallingModule fa >>= \md -> case _mdModule md of
-        MDModule m -> return (_mHash m)
-        MDInterface i' -> evalError' fa $
-          "Internal error: cannot enforce yield endorsement for interfaces: "
-          <> pretty (_interfaceName i')
-
-      pid1 <- getPactId fa
-      cid <- view $ eePublicData . pdPublicMeta . pmChainId
-
-      unless (endorse h' pid1 o cid == endorse h pid0 o tid)
-        $ evalError' fa
-        $ "resume: yield endorsements do not match"
-
-      return o
 
 where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of

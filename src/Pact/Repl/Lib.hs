@@ -322,12 +322,12 @@ continuePact i as = case as of
     unwrapExec mpid mobj (Just ex) = do
       let pid = maybe (_pePactId ex) PactId mpid
       y <- case mobj of
-        Nothing -> return $ _peYield ex
+        Nothing -> traverse (enforceYield i) $ _peYield ex
         Just o -> toYield o
       return (pid, y)
 
-    toYield o = fmap (\o' -> Just $ Yield o' Nothing) $
-      enforcePactValue' o
+    toYield o = (\o' -> Just $ Yield o' Nothing) <$> enforcePactValue' o
+
 
 
 setentity :: RNativeFun LibState

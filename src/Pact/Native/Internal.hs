@@ -35,6 +35,7 @@ module Pact.Native.Internal
   ,getModule
   ,endorseM
   ,endorseM'
+  ,enforceYield
   ) where
 
 import Bound
@@ -48,12 +49,12 @@ import Data.Text (Text, pack)
 
 import Unsafe.Coerce
 
-
 import Pact.Eval
 import Pact.Gas
 import Pact.Types.Native
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -209,15 +210,16 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
 -- to retrieve it.
 --
 endorseM
-    :: FunApp
-    -> ChainId
-    -> PactId
-    -> Eval e (Maybe Endorsement)
-endorseM _ "" _ = pure Nothing
-endorseM fa tid pid = do
-  md <- getCallingModule fa
-  case _mdModule md of
-    MDModule m -> return . Just $ Endorsement tid pid (_mHash m)
+  :: FunApp
+  -> ChainId
+  -- ^ target chain id
+  -> PactId
+  -- ^ current pact id
+  -> Eval e (Maybe Endorsement)
+endorseM fa tid pid =
+  getCallingModule fa >>= \md -> case _mdModule md of
+    MDModule m ->
+      return . Just $ Endorsement tid pid (_mHash m)
     MDInterface n -> evalError' fa
       $ "Internal error: cannot endorse yield for interface: "
       <> pretty (_interfaceName n)
@@ -226,10 +228,30 @@ endorseM fa tid pid = do
 -- data for calling module and pact id.
 --
 endorseM'
-    :: FunApp
-      -- ^ current module
-    -> ChainId
-      -- ^ the target chain id
-    -> Eval e (Maybe Endorsement)
+  :: FunApp
+  -- ^ current module
+  -> ChainId
+  -- ^ the target chain id
+  -> Eval e (Maybe Endorsement)
 endorseM' fa tid =
   endorseM fa tid =<< getPactId fa
+
+-- | Enforce that 'Yield' endorsement matches env metadata
+-- and fail otherwise.
+--
+enforceYield :: FunApp -> Yield -> Eval e Yield
+enforceYield _ y@(Yield _ Nothing) = return y
+enforceYield fa y@(Yield o (Just (Endorsement tid pid0 h))) = do
+  h' <- getCallingModule fa >>= \md -> case _mdModule md of
+    MDModule m -> return (_mHash m)
+    MDInterface i' -> evalError' fa
+      $ "Internal error: cannot enforce yield endorsement for interfaces: "
+      <> pretty (_interfaceName i')
+
+  pid1 <- getPactId fa
+  cid <- view $ eePublicData . pdPublicMeta . pmChainId
+
+  unless (endorse h' pid1 o cid == endorse h pid0 o tid) $
+    evalError' fa "enforceYield: yield endorsements do not match"
+
+  return y
