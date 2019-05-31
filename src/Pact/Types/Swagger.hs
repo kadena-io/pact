@@ -1,7 +1,10 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Module      :  Pact.Types.Swagger
@@ -32,6 +35,7 @@ module Pact.Types.Swagger
   , debugSchema
   ) where
 
+import Data.Proxy
 import Data.Swagger
 import Data.Swagger.Declare
 import Data.Swagger.Internal
@@ -44,25 +48,27 @@ import Data.Text (Text)
 declareGenericEmpty ::
   forall a d f proxy. (Generic a, Rep a ~ D1 d f, Datatype d) =>
   proxy a -> Declare (Definitions Schema) NamedSchema
-declareGenericEmpty = declareGenericSchema mempty
+declareGenericEmpty _ = declareGenericSchema mempty (Proxy @a)
 
 -- | 'ToSchema' generic implementation with provided schema.
 declareGenericSchema ::
   forall a d f proxy. (Generic a, Rep a ~ D1 d f, Datatype d) =>
   Schema -> proxy a -> Declare (Definitions Schema) NamedSchema
-declareGenericSchema s proxy = pure $ genericNameSchema defaultSchemaOptions proxy s
+declareGenericSchema s _ = pure $ genericNameSchema defaultSchemaOptions (Proxy @a) s
 
 declareGenericString ::
   forall a d f proxy. (Generic a, Rep a ~ D1 d f, Datatype d) =>
   proxy a -> Declare (Definitions Schema) NamedSchema
-declareGenericString = declareGenericSchema (schemaOf $ swaggerType SwaggerString)
+declareGenericString _ = declareGenericSchema (schemaOf $ swaggerType SwaggerString) (Proxy @a)
 
-namedSchema :: Text -> Schema -> proxy a -> Declare (Definitions Schema) NamedSchema
+namedSchema ::
+    forall a proxy .
+    Text -> Schema -> proxy a -> Declare (Definitions Schema) NamedSchema
 namedSchema n s _ = return $ NamedSchema (Just n) s
 
 -- | like 'byteSchema' but with (non-standard) "base64url" in format.
 byteBase64url :: Schema
-byteBase64url = set type_ SwaggerString . set format (Just "base64url") $ mempty
+byteBase64url = swaggerType SwaggerString . set format (Just "base64url") $ mempty
 
 fixedLength :: Integral i => i -> Schema -> Schema
 fixedLength i =
@@ -70,7 +76,11 @@ fixedLength i =
   set minLength (Just $ fromIntegral i)
 
 swaggerType :: SwaggerType 'SwaggerKindSchema -> Schema -> Schema
+#if MIN_VERSION_swagger2(2,4,0)
+swaggerType = set type_ . Just
+#else
 swaggerType = set type_
+#endif
 
 schemaOf :: (Schema -> Schema) -> Schema
 schemaOf f = f mempty
@@ -79,5 +89,5 @@ withSchema :: Schema -> (Schema -> Schema) -> Schema
 withSchema s f = f s
 
 -- debugSchema
-debugSchema :: ToSchema a => proxy a -> NamedSchema
-debugSchema = undeclare . declareNamedSchema
+debugSchema :: forall a proxy. ToSchema a => proxy a -> NamedSchema
+debugSchema _ = undeclare $ declareNamedSchema (Proxy @a)
