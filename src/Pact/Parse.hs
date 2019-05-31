@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -6,6 +9,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 -- |
 -- Module      :  Pact.Compile
@@ -27,25 +31,27 @@ module Pact.Parse
 
 where
 
-import Text.Trifecta as TF
-import Text.Trifecta.Delta as TF
 import Control.Applicative
-import Data.List
+import Control.DeepSeq (NFData)
+import Control.Lens (Wrapped(..))
 import Control.Monad
-import Prelude
-import Data.Decimal
+import qualified Data.Aeson as A
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (digitToInt)
-import Data.Text (Text)
-import qualified Data.Aeson as A
-import GHC.Generics (Generic)
+import Data.Decimal
+import Data.List
 import Data.Serialize (Serialize)
-import Control.DeepSeq (NFData)
+import Data.Text (Text)
+import GHC.Generics (Generic)
+import Prelude
+import Text.Trifecta as TF
+import Text.Trifecta.Delta as TF
 
 import Pact.Types.Exp
 import Pact.Types.PactValue
 import Pact.Types.Parser
 import Pact.Types.Info
+import Pact.Types.Term (ToTerm)
 
 
 
@@ -118,13 +124,12 @@ exprs = some expr
 exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [Exp Parsed]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
-
-
 -- | JSON serialization for 'readDecimal' and public meta info;
 -- accepts both a String version (parsed as a Pact decimal) or
 -- a Number.
 newtype ParsedDecimal = ParsedDecimal Decimal
-  deriving (Eq,Show,Ord,Num,Real,Fractional,Generic,NFData,Serialize)
+  deriving (Eq,Show,Ord,Num,Real,RealFrac,Fractional,Generic,NFData,Serialize,ToTerm)
+
 instance A.FromJSON ParsedDecimal where
   parseJSON (A.String s) =
     ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
@@ -133,15 +138,18 @@ instance A.FromJSON ParsedDecimal where
                         _ -> fail $ "Failure parsing decimal string: " ++ show s
   parseJSON (A.Number n) = return $ ParsedDecimal (fromRational $ toRational n)
   parseJSON v = fail $ "Failure parsing decimal: " ++ show v
+
 instance A.ToJSON ParsedDecimal where
   toJSON (ParsedDecimal d) = A.Number $ fromRational $ toRational d
 
+instance Wrapped ParsedDecimal
 
 -- | JSON serialization for 'readInteger' and public meta info;
 -- accepts both a String version (parsed as a Pact integer),
 -- a Number, or a PactValue { "int": ... } integer
 newtype ParsedInteger = ParsedInteger Integer
-  deriving (Eq,Show,Ord,Num,Real,Enum,Integral,Generic,NFData,Serialize)
+  deriving (Eq,Show,Ord,Num,Real,Enum,Integral,Generic,NFData,Serialize,ToTerm)
+
 instance A.FromJSON ParsedInteger where
   parseJSON (A.String s) =
     ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
@@ -152,8 +160,11 @@ instance A.FromJSON ParsedInteger where
     PLiteral (LInteger li) -> return $ ParsedInteger li
     _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
+
 instance A.ToJSON ParsedInteger where
   toJSON (ParsedInteger i) = A.Number (fromIntegral i)
+
+instance Wrapped ParsedInteger
 
 
 

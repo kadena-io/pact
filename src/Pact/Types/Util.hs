@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -15,19 +16,28 @@
 -- Utility types and functions.
 --
 module Pact.Types.Util
-  ( ParseText(..)
+  ( -- | Text parsing
+    ParseText(..)
   , fromText, fromText'
+  -- | JSON helpers
   , lensyToJSON, lensyParseJSON
   , unsafeFromJSON, outputJSON
   , fromJSON'
+  -- | Base 16 helpers
   , parseB16JSON, parseB16Text, parseB16TextOnly
   , toB16JSON, toB16Text
+  -- | Base64Url helpers
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
   , parseB64UrlUnpaddedText, toB64UrlUnpaddedText
+  -- | AsString
   , AsString(..), asString'
-  , tShow, maybeDelim
+  -- | MVar-as-state utils
   , modifyMVar', modifyingMVar, useMVar
+  -- | Miscellany
+  , tShow, maybeDelim
   , failMaybe, maybeToEither
+  -- | Wrapping utilities
+  , rewrap, rewrapping, wrap, unwrap
   ) where
 
 import Data.Aeson
@@ -176,3 +186,21 @@ tShow = pack . show
 -- | Show with prepended delimter if not 'Nothing'
 maybeDelim :: Show a => String -> Maybe a -> String
 maybeDelim d t = maybe "" ((d ++) . show) t
+
+-- | Re-wrapping lens.
+rewrapping :: (Profunctor p, Functor f, Wrapped b, Wrapped a,
+               Unwrapped a ~ Unwrapped b) =>
+              p a (f a) -> p b (f b)
+rewrapping = _Wrapped' . _Unwrapped'
+
+-- | Rewrap utility between isomorphic wrappings.
+rewrap :: (Wrapped a, Wrapped b, Unwrapped b ~ Unwrapped a) => a -> b
+rewrap = view rewrapping
+
+-- | Utility to construct a 'Wrapped a'
+wrap :: Wrapped a => Unwrapped a -> a
+wrap = view _Unwrapped'
+
+-- | Utility to destruct a 'Wrapped a'
+unwrap :: Wrapped a => a -> Unwrapped a
+unwrap = view _Wrapped'
