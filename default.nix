@@ -29,6 +29,12 @@ in
     overrides = self: super: with pkgs.haskell.lib;
       let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
           whenGhcjs = f: p: if self.ghc.isGhcjs or false then (f p) else p;
+          callHackageDirect = {pkg, ver, sha256}@args:
+            let pkgver = "${pkg}-${ver}";
+            in self.callCabal2nix pkg (pkgs.fetchzip {
+                 url = "http://hackage.haskell.org/package/${pkgver}/${pkgver}.tar.gz";
+                 inherit sha256;
+               }) {};
        in {
             pact = doCoverage (addBuildDepend super.pact pkgs.z3);
             haskeline = guardGhcjs super.haskeline;
@@ -62,7 +68,6 @@ in
             servant-client = whenGhcjs dontCheck super.servant-client;
             servant-server = whenGhcjs dontCheck super.servant-server;
             servant-swagger = whenGhcjs dontCheck super.servant-swagger;
-            swagger2 = whenGhcjs dontCheck super.swagger2;
             unix-time = whenGhcjs dontCheck super.unix-time;
             wai-app-static = whenGhcjs dontCheck super.wai-app-static;
             wai-extra = whenGhcjs dontCheck super.wai-extra;
@@ -75,6 +80,12 @@ in
             }));
 
             algebraic-graphs = dontCheck super.algebraic-graphs;
+
+            swagger2 = whenGhcjs dontCheck (doJailbreak (callHackageDirect {
+              pkg = "swagger2";
+              ver = "2.3.1.1";
+              sha256 = "0rhxqdiymh462ya9h76qnv73v8hparwz8ibqqr1d06vg4zm7s86p";
+            }));
 
             # Prevent: "Setup: Encountered missing dependencies: doctest >=0.9"
             prettyprinter = dontCheck super.prettyprinter;
