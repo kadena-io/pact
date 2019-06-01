@@ -1,14 +1,14 @@
 # stack yaml for ghc builds
 
-resolver: lts-13.22
+resolver: lts-13.23
 
 packages:
   - '.'
 
 extra-deps:
   # --- Missing from Stackage --- #
-  - ed25519-donna-0.1.1@sha256:344c0bb83603ed896012f441e54b380314dc4910320577cd18a9071e34f24fe9,2358
-  - prettyprinter-convert-ansi-wl-pprint-1.1@sha256:ae908ee44422c38a696858f04928d4b2448df656c09e6b5f5b1be05d99669fb0,3022
+  - ed25519-donna-0.1.1
+  - prettyprinter-convert-ansi-wl-pprint-1.1
 
   # --- Forced Downgrades --- #
   - megaparsec-6.5.0
