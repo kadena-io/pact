@@ -14,9 +14,6 @@
 module Pact.Types.ChainId
 ( -- * types
   ChainId(..)
-  -- * optics
-, chainId
-, _ChainId
 ) where
 
 import GHC.Generics
@@ -40,13 +37,3 @@ newtype ChainId = ChainId { _chainId :: Text }
 instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
 
 instance Wrapped ChainId
-
--- | Chain Id getter and setter which is a strict get/set pair
---
-chainId :: Lens' ChainId Text
-chainId = lens _chainId (\_ t -> ChainId t)
-
--- | Convenience isomorphism 'ChainId' <-> 'Text'
---
-_ChainId :: Iso' ChainId Text
-_ChainId = iso _chainId ChainId

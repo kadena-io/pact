@@ -7,12 +7,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 -- |
--- Module      :  Pact.Types.Runtime
--- Copyright   :  (C) 2016 Stuart Popejoy
+-- Module      :  Pact.Types.Continuation
+-- Copyright   :  (C) 2019 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, Emily Pillmore <emily@kadena.io>
 --
--- Meta data and its types
+-- Pact Continuation and Endorsement data and helpers
 --
 module Pact.Types.Continuation
   ( -- * data
@@ -51,7 +51,7 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 
 
 -- | Endorsement datatype contains all of the necessary
--- data to 'endorse' a yield object, detailed below
+-- data to 'endorse' a yield object.
 --
 data Endorsement = Endorsement
   { _eTarget :: !ChainId
@@ -67,13 +67,6 @@ instance ToJSON Endorsement where toJSON = lensyToJSON 2
 instance FromJSON Endorsement where parseJSON = lensyParseJSON 2
 
 -- | The type of a set of yielded values of a pact step.
--- Endorsement hashes ('_yEndorsement') are a combination of
--- the following data:
---
--- 1. The hash of the data '_yData'
--- 2. The hash of the target chain '_yTarget'
--- 3. The executing pact id
--- 4. The hash of the defining module
 --
 data Yield = Yield
   { _yData :: !(ObjectMap PactValue)
@@ -88,14 +81,6 @@ instance FromJSON Yield where parseJSON = lensyParseJSON 2
 
 -- | Create a pact endorsement. Uses the 'PactHash' default
 -- Blake2b_256 algorithm.
---
--- Endorsement hashes are a combination of
--- the following data:
---
--- 1. The hash of the data '_yData'
--- 2. The hash of the target chain '_yTarget'
--- 3. The executing pact id
--- 4. The hash of the defining module
 --
 endorse
   :: Hash
