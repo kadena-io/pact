@@ -207,7 +207,9 @@ instance Pretty SchemaType where
   pretty TyBinding = "binding"
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData,Show)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
+
+instance Show TypeVarName where show (TypeVarName t) = show t
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
@@ -243,6 +245,9 @@ data SchemaPartial = FullSchema | PartialSchema !(Set Text) | AnySubschema
   deriving (Eq,Ord,Show,Generic)
 instance NFData SchemaPartial
 instance Default SchemaPartial where def = FullSchema
+instance Pretty SchemaPartial where
+  pretty (PartialSchema s) = "PartialSchema " <> pretty (Set.toList s)
+  pretty sp = viaShow sp
 
 instance ToJSON SchemaPartial where
   toJSON FullSchema = "full"
