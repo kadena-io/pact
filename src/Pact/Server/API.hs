@@ -35,7 +35,7 @@ module Pact.Server.API
   ) where
 
 -- Swagger 2.2 compat
--- import Control.Lens (set)
+import Control.Lens (set)
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal (Decimal)
@@ -243,10 +243,10 @@ instance ToSchema PactValue
 instance ToSchema (ObjectMap PactValue) where
   declareNamedSchema _ = do
     -- Swagger 2.2 compat, not doing schema ref for pact value
-    -- sref <- declareSchemaRef (Proxy :: Proxy PactValue)
+    sref <- declareSchemaRef (Proxy :: Proxy PactValue)
     return $ NamedSchema (Just "ObjectMap") $
-      (schemaOf $ swaggerType SwaggerObject) -- .
-        -- set additionalProperties (Just $ AdditionalPropertiesSchema sref))
+      (schemaOf $ swaggerType SwaggerObject .
+        set additionalProperties (Just $ AdditionalPropertiesSchema sref))
 
 instance ToSchema FieldKey
 
