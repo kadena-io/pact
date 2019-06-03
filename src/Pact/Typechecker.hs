@@ -851,13 +851,19 @@ toAST (TApp Term.App{..} _) = do
     FNative {} -> do
 
       let special = isSpecialForm (NativeDefName $ _fName fun)
-          argCount = length args
 
-      -- Select special form: aggressively specialize overload based on arg count
+      -- Overloaded special forms: eagerly specialize overload based on arg count
+
+      let argCount = length args
+          selectOverloadOnArgCount sf =
+            case NE.filter ((== argCount) . length . _ftArgs) (_fTypes fun) of
+              ft@[_] -> return $ set fTypes (NE.fromList ft) fun
+              _ -> die _appInfo $ show sf ++
+                   " arg count mismatch, expected: " ++ show (_fTypes fun)
+
       fun' <- case special of
-        Just Select -> case NE.filter ((== argCount) . length . _ftArgs) (_fTypes fun) of
-          ft@[_] -> return $ set fTypes (NE.fromList ft) fun
-          _ -> die _appInfo $ "select arg count mismatch, expected: " ++ show (_fTypes fun)
+        Just sf@Select -> selectOverloadOnArgCount sf
+        Just sf@YieldSF -> selectOverloadOnArgCount sf
         _ -> return fun
 
       -- detect partial app args: for funtype args, add phantom arg to partial app
