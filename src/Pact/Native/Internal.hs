@@ -240,18 +240,21 @@ endorseM' fa tid =
 -- and fail otherwise.
 --
 enforceYield :: FunApp -> Yield -> Eval e Yield
-enforceYield _ y@(Yield _ Nothing) = return y
-enforceYield fa y@(Yield o (Just (Endorsement tid pid0 h))) = do
-  h' <- getCallingModule fa >>= \md -> case _mdModule md of
-    MDModule m -> return (_mHash m)
-    MDInterface i' -> evalError' fa
-      $ "Internal error: cannot enforce yield endorsement for interfaces: "
-      <> pretty (_interfaceName i')
+enforceYield fa y = case _yEndorsement y of
+  Nothing -> return y
+  Just e -> do
+    h' <- getCallingModule fa >>= \md -> case _mdModule md of
+      MDModule m -> return (_mHash m)
+      MDInterface i' -> evalError' fa
+        $ "Internal error: cannot enforce yield endorsement for interfaces: "
+        <> pretty (_interfaceName i')
 
-  pid1 <- getPactId fa
-  cid <- view $ eePublicData . pdPublicMeta . pmChainId
+    pid1 <- getPactId fa
+    cid <- view $ eePublicData . pdPublicMeta . pmChainId
 
-  unless (endorse h' pid1 o cid == endorse h pid0 o tid) $
-    evalError' fa "enforceYield: yield endorsements do not match"
+    let e' = Endorsement cid pid1 h'
 
-  return y
+    unless (e == e') $
+      evalError' fa "enforceYield: yield endorsements do not match"
+
+    return y

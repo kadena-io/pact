@@ -2,13 +2,13 @@
 
 (define-keyset 'k (sig-keyset))
 
-(module yield-test 'k
+(module yieldtest 'k
 
   "Define two tests: 'tester-1' executes a single-chain pact and ensures rollbacks \
   \and step behavior works properly, and 'tester-2' ensures that cross-chain cont- \
   \inuation works as intended."
 
-  (defpact tester-1 (name)
+  (defpact tester (name)
     (step-with-rollback
      "A"
      (let ((nameA (+ name "->A")))
@@ -21,53 +21,39 @@
       (resume { "a-result" := ar }
         (+ ar "->B")))
     )
-
-  (defpact tester-2 (name)
-    (step-with-rollback
-     "A"
-     (let ((nameA (+ name "->A")))
-       (yield { "a-result": nameA } "1")
-       nameA)
-
-    "rollback-2a")
-
-    (step "B"
-     (resume { "a-result" := ar }
-      (+ ar "->B")))
-    )
 )
 
 (commit-tx)
 
 (begin-tx)
-(use yield-test)
+(use yieldtest)
 
 (env-entity "B")
 (env-hash (hash "stu-pact-id"))
-(tester-1 "stu")
+(tester "stu")
 (expect "step 0 skips B" false (at "executed" (pact-state true)))
 
 (env-entity "A")
-(expect "step 0 executes" "stu->A" (tester-1 "stu"))
+(expect "step 0 executes" "stu->A" (tester "stu"))
 ;; set resume for step 1
 (env-entity "B")
 (expect "step 1 executes" "stu->A->B" (continue-pact 1))
 
 ;; test 1 skips A
 (pact-state true)
-(tester-1 "stu")
+(tester "stu")
 (env-entity "A")
 (continue-pact 1)
 (expect "step 1 skips A" false (at "executed" (pact-state)))
 
 ;; test rollback
 (pact-state true)
-(tester-1 "stu")
+(tester "stu")
 (expect "step 0 rollback executes" "rollback-a" (continue-pact 0 true))
 
 ;; test no rollback for B
 (pact-state true)
-(tester-1 "stu")
+(tester "stu")
 (env-entity "B")
 (continue-pact 0 true)
 (expect "step 0 rollback skips B" false (at "executed" (pact-state)))
@@ -77,10 +63,10 @@
 ;; test overwriting yield with continue-pact
 (begin-tx)
 
-(use yield-test)
+(use yieldtest)
 (env-hash (hash "stu-pact-id"))
 (env-entity "A")
-(expect "step 0 executes" "stu->A" (tester-1 "stu"))
+(expect "step 0 executes" "stu->A" (tester "stu"))
 
 (env-entity "B")
 (expect "step 1 executes with new yield value"

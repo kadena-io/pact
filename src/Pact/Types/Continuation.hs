@@ -29,7 +29,7 @@ module Pact.Types.Continuation
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
   , yData, yEndorsement
-  , eTarget, ePactId, eHash
+  , eTarget, ePactId, eModuleHash
   ) where
 
 import GHC.Generics (Generic)
@@ -58,7 +58,7 @@ data Endorsement = Endorsement
     -- ^ the target chain id for the endorsement
   , _ePactId :: PactId
     -- ^ the pact id of the current continuation
-  , _eHash :: Hash
+  , _eModuleHash :: Hash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
 
