@@ -861,9 +861,8 @@ toAST (TApp Term.App{..} _) = do
               _ -> die _appInfo $ show sf ++
                    " arg count mismatch, expected: " ++ show (_fTypes fun)
 
-      fun' <- case special of
-        Just sf@Select -> selectOverloadOnArgCount sf
-        Just sf@YieldSF -> selectOverloadOnArgCount sf
+      fun' <- case (special,length (_fTypes fun) > 1) of
+        (Just sf,True) -> selectOverloadOnArgCount sf
         _ -> return fun
 
       -- detect partial app args: for funtype args, add phantom arg to partial app
