@@ -212,7 +212,7 @@ instance ToSchema ChainId
 
 instance ToSchema PactExec
 
-instance ToSchema Endorsement
+instance ToSchema Provenance
 
 instance ToSchema Yield
 

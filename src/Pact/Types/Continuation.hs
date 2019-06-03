@@ -20,16 +20,13 @@ module Pact.Types.Continuation
   , PactContinuation(..)
   , PactExec(..)
   , Yield(..)
-  , Endorsement(..)
-    -- * combinators
-  , endorse
-  , endorse'
+  , Provenance(..)
     -- * optics
   , peStepCount, peYield, peExecuted, pePactId, peStep, peContinuation
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
-  , yData, yEndorsement
-  , eTarget, ePactId, eModuleHash
+  , yData, yProvenance
+  , pTarget, pModuleHash
   ) where
 
 import GHC.Generics (Generic)
@@ -37,9 +34,7 @@ import GHC.Generics (Generic)
 import Control.DeepSeq (NFData)
 import Control.Lens
 
-import Data.Aeson (ToJSON(..), FromJSON(..), encode)
-import Data.ByteString.Lazy (toStrict)
-import Data.Semigroup ((<>))
+import Data.Aeson (ToJSON(..), FromJSON(..))
 
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Hash
@@ -50,59 +45,32 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 
 
 
--- | Endorsement datatype contains all of the necessary
+-- | Provenance datatype contains all of the necessary
 -- data to 'endorse' a yield object.
 --
-data Endorsement = Endorsement
-  { _eTarget :: !ChainId
+data Provenance = Provenance
+  { _pTarget :: !ChainId
     -- ^ the target chain id for the endorsement
-  , _ePactId :: PactId
-    -- ^ the pact id of the current continuation
-  , _eModuleHash :: Hash
+  , _pModuleHash :: Hash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
 
-instance NFData Endorsement
-instance ToJSON Endorsement where toJSON = lensyToJSON 2
-instance FromJSON Endorsement where parseJSON = lensyParseJSON 2
+instance NFData Provenance
+instance ToJSON Provenance where toJSON = lensyToJSON 2
+instance FromJSON Provenance where parseJSON = lensyParseJSON 2
 
 -- | The type of a set of yielded values of a pact step.
 --
 data Yield = Yield
   { _yData :: !(ObjectMap PactValue)
     -- ^ Yield data from the pact continuation
-  , _yEndorsement :: !(Maybe Endorsement)
-    -- ^ The endorsement data, if it exists
+  , _yProvenance :: !(Maybe Provenance)
+    -- ^ Provenance data
   } deriving (Eq, Show, Generic)
 
 instance NFData Yield
 instance ToJSON Yield where toJSON = lensyToJSON 2
 instance FromJSON Yield where parseJSON = lensyParseJSON 2
-
--- | Create a pact endorsement. Uses the 'PactHash' default
--- Blake2b_256 algorithm.
---
-endorse
-  :: Hash
-  -- ^ the hash of the containing module for a pact
-  -> PactId
-  -- ^ the executing pact id
-  -> ObjectMap PactValue
-  -- ^ yield data
-  -> ChainId
-  -- ^ target chain id
-  -> Hash
-endorse (Hash mh) pid o tid =
-  toUntypedHash . hash @('Blake2b_256) $!
-    mh <> toStrict (encode pid <> encode o <> encode tid)
-
--- | Given a 'Yield', if the endorsement value
--- is 'Nothing', return Nothing. If it contains a value,
--- return an optional hash of the endorsed values.
---
-endorse' :: Yield -> Maybe Hash
-endorse' (Yield _ Nothing) = Nothing
-endorse' (Yield o e) = fmap (\(Endorsement tid pid h) -> endorse h pid o tid) e
 
 -- | Environment setup for pact execution, from ContMsg request.
 --
@@ -159,4 +127,4 @@ makeLenses ''PactExec
 makeLenses ''PactStep
 makeLenses ''PactContinuation
 makeLenses ''Yield
-makeLenses ''Endorsement
+makeLenses ''Provenance

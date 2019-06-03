@@ -34,7 +34,6 @@ module Pact.Native.Internal
   ,getCallingModule
   ,getModule
   ,endorseM
-  ,endorseM'
   ,enforceYield
   ) where
 
@@ -213,48 +212,33 @@ endorseM
   :: FunApp
   -> ChainId
   -- ^ target chain id
-  -> PactId
-  -- ^ current pact id
-  -> Eval e (Maybe Endorsement)
-endorseM fa tid pid =
+  -> Eval e (Maybe Provenance)
+endorseM fa tid =
   getCallingModule fa >>= \md -> case _mdModule md of
     MDModule m ->
-      return . Just $ Endorsement tid pid (_mHash m)
+      return . Just $ Provenance tid (_mHash m)
     MDInterface n -> evalError' fa
       $ "Internal error: cannot endorse yield for interface: "
       <> pretty (_interfaceName n)
-
--- | Construct a 'Yield' endorsement using 'Eval' env
--- data for calling module and pact id.
---
-endorseM'
-  :: FunApp
-  -- ^ current module
-  -> ChainId
-  -- ^ the target chain id
-  -> Eval e (Maybe Endorsement)
-endorseM' fa tid =
-  endorseM fa tid =<< getPactId fa
 
 -- | Enforce that 'Yield' endorsement matches env metadata
 -- and fail otherwise.
 --
 enforceYield :: FunApp -> Yield -> Eval e Yield
-enforceYield fa y = case _yEndorsement y of
+enforceYield fa y = case _yProvenance y of
   Nothing -> return y
-  Just e -> do
+  Just p -> do
     h' <- getCallingModule fa >>= \md -> case _mdModule md of
       MDModule m -> return (_mHash m)
       MDInterface i' -> evalError' fa
         $ "Internal error: cannot enforce yield endorsement for interfaces: "
         <> pretty (_interfaceName i')
 
-    pid1 <- getPactId fa
     cid <- view $ eePublicData . pdPublicMeta . pmChainId
 
-    let e' = Endorsement cid pid1 h'
+    let p' = Provenance cid h'
 
-    unless (e == e') $
-      evalError' fa "enforceYield: yield endorsements do not match"
+    unless (p == p') $
+      evalError' fa "enforceYield: yield provenance does not match"
 
     return y
