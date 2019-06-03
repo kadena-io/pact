@@ -48,6 +48,7 @@ module Pact.Types.Pretty
   , renderPrettyString'
   , renderString'
   , sep
+  , showPretty
   , space
   , unAnnotate
   , viaShow
@@ -166,6 +167,9 @@ layoutReallyCompact doc = scan 0 [doc]
         PP.WithPageWidth f -> scan col (f PP.Unbounded : ds)
         PP.Nesting f       -> scan col (f 0 : ds)
         PP.Annotated _ x   -> scan col (x:ds)
+
+showPretty :: Pretty a => a -> String
+showPretty = renderCompactString
 
 renderCompactString :: Pretty a => a -> String
 renderCompactString = renderString' layoutReallyCompact RPlain . pretty

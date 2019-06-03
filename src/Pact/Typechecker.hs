@@ -141,7 +141,12 @@ data RoleTys = RoleTys
   }
 instance Show RoleTys where
   show (RoleTys a b c d) =
-    "RoleTys { candArgTy=" ++ show a ++ ", AST=" ++ show (_aNode b) ++ ", tyVar=" ++ show c ++ ", resolvedTy=" ++ show d ++ "}"
+    "RoleTys { candArgTy=" ++ show a ++ ", AST=" ++ show (_aNode b) ++
+    ", tyVar=" ++ show c ++ ", resolvedTy=" ++ show d ++ "}"
+instance Pretty RoleTys where
+  pretty (RoleTys a b c d) =
+    "RoleTys { candArgTy=" <> pretty a <> ", AST=" <> pretty (_aNode b) <>
+    ", tyVar=" <> pretty c <> ", resolvedTy=" <> pretty d <> "}"
 makeLenses ''RoleTys
 
 
@@ -186,10 +191,11 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
         Nothing -> return Nothing
         -- resolve typevar at role
         Just (roleAST,roleTyVar) -> use tcVarToTypes >>= \m -> case M.lookup roleTyVar m of
-          Nothing -> die' (_aId (_aNode roleAST)) $ "Bad var in overload solver: " ++ show roleTyVar
+          Nothing -> die' (_aId (_aNode roleAST)) $ "Bad var in overload solver: " ++ showPretty roleTyVar
           Just ty -> do
             roleResolvedTy <- resolveTy ty
-            debug $ "tryFunType: unify role: role=" ++ show rol ++ ", candTy=" ++ show candArgTy ++ ", roleTy=" ++ show roleResolvedTy
+            debug $ "tryFunType: unify role: role=" ++ showPretty rol ++ ", candTy=" ++ showPretty candArgTy ++
+              ", roleTy=" ++ showPretty roleResolvedTy
             case unifyTypes candArgTy roleResolvedTy of
               Nothing -> return Nothing
               Just _ -> return $ Just (rol,RoleTys candArgTy roleAST roleTyVar roleResolvedTy)
@@ -199,16 +205,16 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
   allRoles <- (:argRoles) <$> tryRole RetVar candRetTy
   case sequence allRoles of
     Nothing -> do
-      debug $ "tryFunType: failed: " ++ show cand ++ ": roles=" ++ show allRoles
+      debug $ "tryFunType: failed: " ++ showPretty cand ++ ": roles=" ++ showPretty allRoles
       return Nothing
     Just ars -> do
 
-      debug $ "tryFunType: roles: " ++ show (cand,allRoles)
+      debug $ "tryFunType: cand: " ++ showPretty cand ++ ", roles=" ++ showPretty allRoles
 
       let byRole = handleSpecialOverload _oSpecial $ M.fromList ars
           byFunType = M.fromListWith (++) $ map (\(RoleTys fty i tv ty) -> (fty,[(_aId (_aNode i),tv,ty)])) $ M.elems byRole
 
-      debug $ "tryFunType: trying " ++ show (cand,byFunType)
+      debug $ "tryFunType: trying " ++ showPretty cand ++ " with " ++ showPretty (M.toList byFunType)
 
       let solvedM = sequence $ (`map` M.toList byFunType) $ \(fty,tvTys) ->
             let tys = foldl1 unifyM $ (Just fty:) $ map (Just . view _3) tvTys
@@ -225,9 +231,9 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
         Just solved
           | allConcrete solved -> do
 
-              debug $ "Solved overload with " ++ show cand ++ ": " ++ show solved
+              debug $ "Solved overload with " ++ showPretty cand ++ ": " ++ showPretty solved
               forM_ solved $ \(fty,(uty,tvs)) -> forM_ tvs $ \tv -> do
-                debug $ "Adjusting type for solution: " ++ show (tv,fty,uty)
+                debug $ "Adjusting type for solution: " ++ showPretty (tv,fty,uty)
                 uncurry assocTy tv fty
                 uncurry assocTy tv uty
               return $ Just cand
@@ -273,7 +279,7 @@ applySchemas :: Visitor TC Node
 applySchemas Pre ast = case ast of
 
   (Object n (ObjectMap ps)) -> findSchema n $ \sch partial -> do
-    debug $ "applySchemas [object]: " ++ show (n,sch,partial)
+    debug $ "applySchemas [object]: " ++ showPretty (n,sch,partial)
     pmap <- forM ps $ \v -> do
       vt' <- lookupAndResolveTy (_aNode v)
       return (v,_aId (_aNode v),vt')
@@ -285,7 +291,7 @@ applySchemas Pre ast = case ast of
     return ast
 
   (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch partial -> do
-    debug $ "applySchemas [binding]: " ++ show (n,sch)
+    debug $ "applySchemas [binding]: " ++ showPretty (n,sch)
     pmapM <- forM bs $ \(Named _ node ni,bv) -> case bv of
       Prim _ (PrimLit (LString bn)) -> do
         vt' <- lookupAndResolveTy node
@@ -377,7 +383,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
     orgFunType@FunType {} :| [] -> do
 
       let mangledFunType = mangleFunType (_aId i) orgFunType
-      debug $ "Mangled funtype: " ++ show orgFunType ++ " -> " ++ show mangledFunType
+      debug $ "Mangled funtype: " ++ showPretty orgFunType ++ " -> " ++ showPretty mangledFunType
 
       -- zip funtype 'Arg's with AST args, and assoc each.
       args <- (\f -> zipWithM f (_ftArgs mangledFunType) argASTs) $ \(Arg _ argTy _) argAST -> case (argTy,argAST) of
@@ -510,7 +516,7 @@ substAppDefun _ _ t = return t
 -- otherwise make a new var based on the TcId.
 trackAST :: Node -> TC ()
 trackAST (Node i t) = do
-  debug $ "trackAST: " ++ show (i,t)
+  debug $ "trackAST: " ++ showPretty (i,t)
   maybe (return ()) (const (die' i $ "trackAST: ast already tracked: " ++ show (i,t)))
     =<< (M.lookup i <$> use tcAstToVar)
   let v = case t of
@@ -558,7 +564,7 @@ assocAstTy (Node ai _) ty = do
 assocTy :: TcId -> TypeVar UserType -> Type UserType -> TC ()
 assocTy ai av ty = do
   aty <- resolveTy =<< lookupTypes "assocTy" ai av
-  debug $ "assocTy: " ++ show (av,aty) ++ " <=> " ++ show ty
+  debug $ "assocTy: " ++ showPretty (av,aty) ++ " <=> " ++ showPretty ty
   unifyTypes' ai aty ty $ \r -> case r of
     Left _same -> do
       -- AST type is most specialized. If assoc ty is a var, update it to point
@@ -570,25 +576,26 @@ assocTy ai av ty = do
           case tvtysm of
             Nothing -> do
               -- RH is tyvar with no tracking; track as LH ty.
-              debug $ "assocTy: " ++ show aty ++ " => " ++ show tv
+              debug $ "assocTy: " ++ showPretty aty ++ " => " ++ showPretty tv
               tcVarToTypes %= M.insert tv aty
             Just tvtys ->
               -- RH is tyvar tracking type. Unify and update tracked type.
               unifyTypes' ai aty tvtys $ \r' ->
                 (tcVarToTypes . at tv . _Just) .= either id id r'
         TyList TyAny -> do
-          debug $ "assocTy: specified heterogenous list, " ++ show aty ++ " <= " ++ show ty
+          debug $ "assocTy: specified heterogenous list, " ++ showPretty aty ++ " <= " ++ showPretty ty
           tcVarToTypes . at av . _Just .= ty
-        _ -> debug $ "assocTy: noop: " ++ show (aty,ty)
+        _ -> debug $ "assocTy: noop: " ++ showPretty (aty,ty)
     Right u -> do
       -- Associated ty is most specialized, simply update record for AST type.
-      debug $ "assocTy: " ++ show (av,aty) ++ " <= " ++ show u
+      debug $ "assocTy: " ++ showPretty (av,aty) ++ " <= " ++ showPretty u
       tcVarToTypes . at av . _Just .= u
       assocParams ai u aty
       -- if old type was var, make entry and adjust it
       case aty of
         TyVar atyv | u /= aty -> do
-                       debug $ "assocTy: tracking/updating type variable " ++ show atyv ++ " <= " ++ show u
+                       debug $ "assocTy: tracking/updating type variable " ++
+                         showPretty atyv ++ " <= " ++ showPretty u
                        alterTypes atyv u (const u)
         _ -> return ()
 
@@ -622,7 +629,7 @@ assocNode ai bn = do
   (av,aty) <- lookupAst "assocAST" ai
   (bv,bty) <- lookupAst "assocAST" bi
   let doSub si sv sty fi fv fty = do
-        debug $ "assocAST: " ++ show (si,sv,sty) ++ " => " ++ show (fi,fv,fty)
+        debug $ "assocAST: " ++ showPretty (si,sv,sty) ++ " => " ++ showPretty (fi,fv,fty)
         -- reassign any references to old var to new
         tcAstToVar %= fmap (\v -> if v == fv then sv else v)
         -- cleanup old var
@@ -796,7 +803,7 @@ assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
     assocYRSchemas a b = do
       a' <- lookupSchemaTy a
       b' <- lookupSchemaTy b
-      debug $ "assocYRSchemas: " ++ show (a,a',b,b')
+      debug $ "assocYRSchemas: " ++ showPretty ((a,a'),(b,b'))
       assocParams (_aId a) a' b'
 
 assocStepYieldReturns _ _ = return ()
@@ -906,7 +913,9 @@ toAST (TApp Term.App{..} _) = do
             _ -> mkApp fun' args'
 
 toAST TBinding {..} = do
-  bi <- freshId _tInfo (pack $ show _tBindType)
+  bi <- freshId _tInfo $ case _tBindType of
+    BindLet -> "BindLet"
+    BindSchema _ -> "BindSchema"
   bn <- trackIdNode bi
   bs <- forM _tBindPairs $ \(BindPair (Arg n t ai) v) -> do
     aid <- freshId ai (pfx (pack $ show bi) n)
@@ -965,7 +974,7 @@ toAST (TStep Term.Step {..} _) = do
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do
   let ty :: Type UserType = TyPrim pty
-  Prim <$> (trackNode ty =<< freshId inf (pack $ show ty) ) <*> pure v
+  Prim <$> (trackNode ty =<< freshId inf (pack $ showPretty ty) ) <*> pure v
 
 trackNode :: Type UserType -> TcId -> TC Node
 trackNode ty i = trackAST node >> return node

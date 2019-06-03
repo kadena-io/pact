@@ -93,6 +93,8 @@ instance Pretty TcId where pretty = viaShow
 data VarRole = ArgVar Int | RetVar
   deriving (Eq,Show,Ord)
 
+instance Pretty VarRole where pretty = viaShow
+
 data OverloadSpecial = OAt | OSelect deriving (Eq,Show,Enum,Ord)
 
 -- | Combine an AST id with a role.
