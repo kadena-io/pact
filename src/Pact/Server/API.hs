@@ -233,6 +233,7 @@ instance ToSchema Name
 instance ToSchema ModuleName
 instance ToSchema NamespaceName
 instance ToSchema ModuleGuard
+instance ToSchema ModuleHash
 instance ToSchema UserGuard where
   declareNamedSchema = declareGenericString
 

@@ -37,7 +37,6 @@ import Data.Serialize
 
 import GHC.Generics
 
-import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Persistence
 import Pact.Types.Pretty
@@ -79,7 +78,7 @@ data GasArgs
   | GSortFieldLookup Int
   | GUnreduced [Term Ref]
   | GWrite WriteType (Term Name) (Term Name)
-  | GUse ModuleName (Maybe Hash)
+  | GUse ModuleName (Maybe ModuleHash)
   | GModuleDecl (Module (Term Name))
   | GInterfaceDecl Interface
   | GModuleMember (ModuleDef (Term Name))

@@ -8,11 +8,11 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 -- |
 -- Module      :  Pact.Types.Continuation
--- Copyright   :  (C) 2019 Stuart Popejoy
+-- Copyright   :  (C) 2016 Stuart Popejoy, Emily Pillmore
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, Emily Pillmore <emily@kadena.io>
 --
--- Pact Continuation and Endorsement data and helpers
+-- Pact Continuation data
 --
 module Pact.Types.Continuation
   ( -- * data
@@ -26,7 +26,7 @@ module Pact.Types.Continuation
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
   , yData, yProvenance
-  , pTarget, pModuleHash
+  , pTargetChainId, pModuleHash
   ) where
 
 import GHC.Generics (Generic)
@@ -37,21 +37,19 @@ import Control.Lens
 import Data.Aeson (ToJSON(..), FromJSON(..))
 
 import Pact.Types.ChainId (ChainId)
-import Pact.Types.Hash
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Term
 import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 
 
-
 -- | Provenance datatype contains all of the necessary
 -- data to 'endorse' a yield object.
 --
 data Provenance = Provenance
-  { _pTarget :: !ChainId
+  { _pTargetChainId :: !ChainId
     -- ^ the target chain id for the endorsement
-  , _pModuleHash :: Hash
+  , _pModuleHash :: ModuleHash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
 

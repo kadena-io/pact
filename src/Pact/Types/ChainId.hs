@@ -4,12 +4,12 @@
 {-# LANGUAGE DerivingStrategies #-}
 -- |
 -- Module      :  Pact.Types.Runtime
--- Copyright   :  (C) 2019 Stuart Popejoy
+-- Copyright   :  (C) 2019 Stuart Popejoy, Emily Pillmore
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>,
 --                Emily Pillmore <emily@kadena.io>
 --
--- ChainId data and its associated combinators
+-- ChainId data
 --
 module Pact.Types.ChainId
 ( -- * types
