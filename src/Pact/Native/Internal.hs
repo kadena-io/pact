@@ -33,7 +33,7 @@ module Pact.Native.Internal
   ,findCallingModule
   ,getCallingModule
   ,getModule
-  ,endorseM
+  ,provenanceOf
   ,enforceYield
   ) where
 
@@ -208,12 +208,12 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
 -- 'PactId', as opposed to introspecting on the env info
 -- to retrieve it.
 --
-endorseM
+provenanceOf
   :: FunApp
   -> ChainId
   -- ^ target chain id
   -> Eval e (Maybe Provenance)
-endorseM fa tid =
+provenanceOf fa tid =
   getCallingModule fa >>= \md -> case _mdModule md of
     MDModule m ->
       return . Just $ Provenance tid (_mHash m)
@@ -221,7 +221,7 @@ endorseM fa tid =
       $ "Internal error: cannot endorse yield for interface: "
       <> pretty (_interfaceName n)
 
--- | Enforce that 'Yield' endorsement matches env metadata
+-- | Enforce that 'Yield' provenance matches env data
 -- and fail otherwise.
 --
 enforceYield :: FunApp -> Yield -> Eval e Yield
