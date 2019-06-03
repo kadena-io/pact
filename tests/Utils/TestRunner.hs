@@ -35,21 +35,22 @@ import Pact.Types.Runtime (PactError(..))
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Hash
 
-import Control.Exception
-import Data.Aeson
-import Test.Hspec
-import qualified Data.Text as T
-import qualified Data.HashMap.Strict as HM
-import qualified Control.Exception as Exception
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
+import Control.Exception
 import Control.Monad
+import Data.Aeson
+import NeatInterpolation (text)
 import Network.HTTP.Client (Manager)
-import qualified Network.HTTP.Client as HTTP
 import Servant.Client
 import System.Directory
 import System.Timeout
-import NeatInterpolation (text)
+import Test.Hspec
+import qualified Control.Exception as Exception
+import qualified Data.HashMap.Strict as HM
+import qualified Data.List.NonEmpty as NEL
+import qualified Data.Text as T
+import qualified Network.HTTP.Client as HTTP
 
 testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath, _serverRootPath :: String
 testDir = "tests/"
@@ -114,7 +115,7 @@ stopServer asyncServer = do
 
 run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
 run mgr cmds = do
-  sendResp <- doSend mgr $ SubmitBatch cmds
+  sendResp <- doSend mgr . SubmitBatch $ NEL.fromList cmds
   case sendResp of
     Left servantErr -> Exception.evaluate (error $ show servantErr)
     Right RequestKeys{..} -> do
