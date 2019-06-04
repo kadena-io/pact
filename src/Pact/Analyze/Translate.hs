@@ -538,15 +538,15 @@ typeOfPartialBind objTy bindings = do
 
 typeOfPartialBind'
   :: SingTy ('TyObject schema) -> [String] -> Maybe EType
-typeOfPartialBind' ty@SObjectNil []
-  = Just $ EType ty
+typeOfPartialBind' SObjectNil []
+  = Just $ EType SObjectNil
 typeOfPartialBind' SObjectNil _
   = Nothing
 typeOfPartialBind' SObjectCons{} []
   = Just $ EType SObjectNil
 typeOfPartialBind' (SObjectCons k v schema') (name:names)
   | symbolVal k == name
-  = do EType (SObjectUnsafe subschema)
+  = do EType (SObject subschema)
          <- typeOfPartialBind' (SObjectUnsafe schema') names
        pure $ EType $ SObjectCons k v subschema
   | otherwise
