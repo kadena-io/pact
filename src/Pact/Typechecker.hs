@@ -296,7 +296,7 @@ applySchemas Pre ast = case ast of
       Prim _ (PrimLit (LString bn)) -> do
         vt' <- lookupAndResolveTy node
         return $ Just (FieldKey bn,(Var node,ni,vt'))
-      _ -> addFailure ni ("Found non-string key in schema binding: " ++ show bv) >> return Nothing
+      _ -> addFailure ni ("Found non-string key in schema binding: " ++ showPretty bv) >> return Nothing
     case sequence pmapM of
       Just pmap -> validateSchema sch partial (M.fromList pmap) >>= \pm ->
         forM_ pm $ \pkeys -> case partial of
@@ -334,12 +334,12 @@ applySchemas Pre ast = case ast of
       pks <- fmap (Set.fromList . concat) $ forM (M.toList pmap) $ \(FieldKey k,(v,ki,vty)) -> case M.lookup k smap of
         -- validate field exists ...
         Nothing -> do
-          addFailure ki $ "Invalid field in schema object: " ++ show k ++ ", expected " ++ show (M.keys smap)
+          addFailure ki $ "Invalid field in schema object: " ++ showPretty k ++ ", expected " ++ showPretty (M.keys smap)
           return []
         -- unify field value ty ...
         Just aty -> do
           case unifyTypes aty vty of
-            Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
+            Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ showPretty (k,aty,(vty,v))
             -- associate unified ty with value node.
             Just u -> assocAstTy (_aNode v) (either id id u)
           return [k]
@@ -359,7 +359,7 @@ applySchemas Pre ast = case ast of
     validateList n lty ls = forM_ ls $ \a -> do
         aty <- lookupAndResolveTy $ _aNode a
         case unifyTypes lty aty of
-          Nothing -> addFailure (_aId (_aNode a)) $ "Unable to unify list member type: " ++ show (lty,aty,a)
+          Nothing -> addFailure (_aId (_aNode a)) $ "Unable to unify list member type: " ++ showPretty (lty,aty,a)
           Just (Left uty) -> assocAstTy (_aNode a) uty
           Just (Right uty) -> assocAstTy n (TyList uty)
 
@@ -635,16 +635,16 @@ assocNode ai bn = do
         -- cleanup old var
         unless (sv == fv) $ tcVarToTypes %= M.delete fv
   case unifyTypes aty bty of
-    Nothing -> addFailure bi $ "assocAST: cannot unify: " ++ show (aty,bty)
+    Nothing -> addFailure bi $ "assocAST: cannot unify: " ++ showPretty (aty,bty)
     Just (Left _) -> doSub ai av aty bi bv bty
     Just (Right _) -> doSub bi bv bty ai av aty
 
 -- | Unify two types and note failure.
-unifyTypes' :: (Show n,Eq n) => TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
+unifyTypes' :: (Pretty n,Eq n) => TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
 unifyTypes' i a b act = case unifyTypes a b of
   Just r -> act r
   Nothing -> do
-    addFailure i $ "Cannot unify: " ++ show (a,b)
+    addFailure i $ "Cannot unify: " ++ showPretty (a,b)
     return ()
 
 -- | Unify two types, indicating which of the types was more specialized with the Either result.
@@ -1074,7 +1074,7 @@ resolveAllTypes = do
       addFailure i $ "Unable to resolve type" ++
         (case v of
            (TyVar (TypeVar _ [])) -> ""
-           (TyVar (TypeVar _ as)) -> " " ++ show as
+           (TyVar (TypeVar _ as)) -> " " ++ showPretty as
            _ -> " (" ++ show v ++ ")")
   return ast2Ty
 
