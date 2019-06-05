@@ -965,10 +965,12 @@ initial data. For instance, a user guard could be designed to require two separa
 (defun install-both-guard ()
   (write guard-table "both"
     { "guard":
-      (create-user-guard "both-sign"
+      (create-user-guard
         { 'ks1: (read-keyset "ks1")
         , 'ks2: (read-keyset "ks2")
-        })}))
+        }
+        "both-sign")
+    }))
 
 
 (defun enforce-both-guard ()
