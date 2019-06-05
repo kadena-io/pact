@@ -1,5 +1,6 @@
-var blake = require('blakejs');
-var nacl = require('tweetnacl');
+const blake = require('blakejs');
+const nacl = require('tweetnacl');
+const base64url = require('base64-url')
 
 var binToHex = function(s) {
   var constructor = s.constructor.name || null;
@@ -17,12 +18,16 @@ var hexToBin = function(h) {
 };
 
 var hashBin = function(s) {
-  return blake.blake2b(s);
+  return blake.blake2b(s, null, 32);
 };
 
 var hash = function(s) {
-  return binToHex(hashBin(s));
+  return base64url.escape(base64url.encode(hashBin(s)));
 };
+
+var base64UrlEncode = function(s) {
+  return base64url.escape(base64url.encode(s));
+}
 
 var genKeyPair = function() {
   var kp = nacl.sign.keyPair();
@@ -43,7 +48,7 @@ var sign = function(msg, keyPair) {
     throw new TypeError("Invalid KeyPair: expected to find keys of name 'secretKey' and 'publicKey': " + JSON.stringify(keyPair));
   }
   var hshBin = hashBin(msg);
-  var hsh = binToHex(hshBin);
+  var hsh = base64UrlEncode(hshBin);
   var sigBin = nacl.sign.detached(hshBin, toTweetNaclSecretKey(keyPair));
   return {"hash": hsh, "sig": binToHex(sigBin), "pubKey":keyPair.publicKey};
 };
@@ -54,6 +59,22 @@ var pullSigAndPubKey = function(s) {
   }
   return {"sig":s.sig, "pubKey":s.pubKey};
 };
+
+
+var pullSig = function(s) {
+  if (!s.hasOwnProperty("sig")) {
+    throw new TypeError("Expected to find keys of name 'sig' in " + JSON.stringify(s));
+  }
+  return {"sig":s.sig};
+};
+
+var pullPubKeyAndAddr = function(s) {
+  if (!s.hasOwnProperty("pubKey")) {
+    throw new TypeError("Expected to find keys of name 'pubKey' in " + JSON.stringify(s));
+  }
+  return {"pubKey":s.pubKey, "addr":s.pubKey, "scheme": "ED25519"};
+};
+
 
 var pullAndCheckHashs = function(sigs) {
   var hsh = sigs[0].hash;
@@ -91,9 +112,17 @@ var mkPublicSend = function(cmds) {
     }
 };
 
-var simpleExecCommand = function(keyPairs, nonce, pactCode, envData, addy) {
-  // Input: single or array of keyPairs, nonce, pactCode, optional address, envData object
-  // Output: a correctly formatted JSON exec msg for pact API
+var mkSigner = function(kp) {
+  return {
+    "pubKey": kp.publicKey,
+    "addr": kp.publicKey,
+    "scheme": "ED25519"
+  }
+}
+
+var simpleExecCommand = function(keyPairs, nonce, pactCode, envData, meta) {
+  // Input: eithe a single or array of keyPairs, a nonce, pactCode, and an envData object
+  // Output: a correctly formatted JSON exec msg for pact, send it to /api/public/send
   // Throws PactError on maleformed inputs
   if (typeof nonce !== 'string') {
     throw new TypeError('nonce must be a string: ' + JSON.stringify(nonce));
@@ -101,18 +130,24 @@ var simpleExecCommand = function(keyPairs, nonce, pactCode, envData, addy) {
   if (typeof pactCode !== 'string') {
     throw new TypeError('pactCode must be a string: ' + JSON.stringify(pactCode));
   }
-  var execRpc = { "exec": {
-      "code": pactCode,
-      "data": envData || {}
-  } };
-    var cmdj;
-    if (addy) {
-        cmdj = {"nonce": nonce, "payload": execRpc, "address": addy };
-    } else {
-        cmdj = {"nonce": nonce, "payload": execRpc };
-    }
-    var cmd = JSON.stringify(cmdj);
-
+  var kpArray = [];
+  if (Array.isArray(keyPairs)) {
+    kpArray = keyPairs;
+  } else {
+    kpArray = [keyPairs];
+  }
+  var signers = kpArray.map(mkSigner);
+  var cmdJSON = {"nonce": nonce,
+                            "payload": {
+                              "exec": {
+                                "code": pactCode,
+                                "data": envData || {}
+                              }
+                            },
+                            "signers": signers,
+                            "meta": meta
+                            };
+  var cmd = JSON.stringify(cmdJSON);
   var sigs = [];
   if (Array.isArray(keyPairs)) {
     sigs = keyPairs.map(function(kp) {return sign(cmd, kp);});
@@ -120,6 +155,13 @@ var simpleExecCommand = function(keyPairs, nonce, pactCode, envData, addy) {
     sigs = [sign(cmd, keyPairs)];
   }
   var hsh = pullAndCheckHashs(sigs);
+  return mkPublicSend({"hash": hsh, "sigs":sigs.map(pullSig), "cmd":cmd});
+};
+
+var unique = function(arr) {
+  var n = {},r=[];
+  for(var i = 0; i < arr.length; i++)
+  var hsh = eckHashs(sigs);
   return mkPublicSend({"hash": hsh, "sigs":sigs.map(pullSigAndPubKey), "cmd":cmd});
 };
 
@@ -165,6 +207,22 @@ var mkExp = function(pgmName) {
   return '(' + pgmName + ' ' + Array.prototype.slice.call(arguments, 1).map(JSON.stringify).join(' ') + ')';
 };
 
+var mkMeta = function (sender, chainId, gasPrice, gasLimit) {
+  if (typeof sender !== 'string' ) {
+    throw new TypeError('sender must be a string: ' + JSON.stringify(sender));
+  }
+  if (typeof chainId !== 'string') {
+    throw new TypeError('chainId must be a string: ' + JSON.stringify(chainId));
+  }
+  if (typeof gasPrice !== 'number' ) {
+    throw new TypeError('gasPrice must be a number: ' + JSON.stringify(gasPrice));
+  }
+  if (typeof gasLimit !== 'number' ) {
+    throw new TypeError('gasLimit must be a number: ' + JSON.stringify(gasLimit));
+  }
+  return {"gasLimit":gasLimit, "chainId":chainId, "gasPrice":gasPrice, "sender":sender}
+}
+
 module.exports = {
   crypto: {
     binToHex: binToHex,
@@ -179,7 +237,8 @@ module.exports = {
     mkPublicSend: mkPublicSend
   },
   lang: {
-    mkExp: mkExp
+    mkExp: mkExp,
+    mkMeta: mkMeta
   },
   simple: {
     exec: {
