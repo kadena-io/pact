@@ -179,7 +179,7 @@ describeCheckSuccess = \case
 describeParseFailure :: ParseFailure -> Text
 describeParseFailure (exp, info)
   = T.pack (renderInfo (getInfo exp))
-  <> ": could not parse " <> tShow exp <> ": " <> T.pack info
+  <> ": could not parse " <> renderCompactText exp <> ": " <> T.pack info
 
 describeSmtFailure :: SmtFailure -> Text
 describeSmtFailure = \case
