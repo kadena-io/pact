@@ -159,6 +159,7 @@ data VerificationFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
   | InvalidRefType
   | FailedConstTranslation String
+  | SchemalessTable !Info
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -445,8 +446,8 @@ verifyFunctionProperty modName funName funInfo tables caps pactArgs body
 
 moduleTables
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
-  -> (ModuleData Ref)                     -- ^ the module we're verifying
-  -> ExceptT ParseFailure IO [Table]
+  -> (ModuleData Ref)                       -- ^ the module we're verifying
+  -> ExceptT VerificationFailure IO [Table]
 moduleTables modules ModuleData{..} = do
   -- All tables defined in this module, and imported by it. We're going to look
   -- through these for their schemas, which we'll look through for invariants.
@@ -461,28 +462,32 @@ moduleTables modules ModuleData{..} = do
         _                               -> Nothing
 
   for tables $ \(tabName, tab) -> do
-    (TopTable _info _name (Pact.TyUser schema) _meta, _tcState)
+    (TopTable _info _name tableTy _meta, _tcState)
       <- lift $ runTC 0 False $ typecheckTopLevel (Ref tab)
+    case tableTy of
+      Pact.TyUser schema -> do
 
-    let TC.Schema{_utName,_utFields} = schema
-        schemaName = asString _utName
+        let TC.Schema{_utName,_utFields} = schema
+            schemaName = asString _utName
 
-    invariants <- case schemas ^? ix schemaName.tMeta.mModel of
-      -- no model = no invariants
-      Nothing    -> pure []
-      Just model -> case normalizeListLit model of
-        Nothing -> throwError
-          -- reconstruct an `Exp Info` for this list
-          ( Pact.EList $ Pact.ListExp model Pact.Brackets $
-              schemas ^?! ix schemaName.tInfo
-          , "malformed list (inconsistent use of comma separators?)"
-          )
-        Just model' -> liftEither $ do
-          exps <- collectExps "invariant" model'
-          runExpParserOver exps $
-            flip runReaderT (varIdArgs _utFields) . expToInvariant SBool
+        invariants <- case schemas ^? ix schemaName.tMeta.mModel of
+          -- no model = no invariants
+          Nothing    -> pure []
+          Just model -> case normalizeListLit model of
+            Nothing -> throwError $ ModuleParseFailure
+              -- reconstruct an `Exp Info` for this list
+              ( Pact.EList $ Pact.ListExp model Pact.Brackets $
+                  schemas ^?! ix schemaName.tInfo
+              , "malformed list (inconsistent use of comma separators?)"
+              )
+            Just model' -> withExceptT ModuleParseFailure $ liftEither $ do
+              exps <- collectExps "invariant" model'
+              runExpParserOver exps $
+                flip runReaderT (varIdArgs _utFields) . expToInvariant SBool
 
-    pure $ Table tabName schema invariants
+        pure $ Table tabName schema invariants
+      _ -> throwError $ SchemalessTable $
+        HM.fromList tables ^?! ix tabName.tInfo
 
 moduleCapabilities :: ModuleData Ref -> ExceptT VerificationFailure IO [Capability]
 moduleCapabilities md = do
@@ -782,7 +787,7 @@ verifyModule
   -> ModuleData Ref                        -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
 verifyModule modules moduleData = runExceptT $ do
-  tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
+  tables <- moduleTables modules moduleData
 
   let -- HM.unions is biased towards the start of the list. This module should
       -- shadow the others. Note that load / shadow order of imported modules
@@ -884,6 +889,10 @@ renderVerifiedModule = \case
     ["Invalid reference type given to typechecker."]
   Left (FailedConstTranslation msg) ->
     [T.pack msg]
+  Left (SchemalessTable info) ->
+    [T.pack (renderInfo info) <>
+      ": verification requires all tables to have schemas"
+    ]
   Right (ModuleChecks propResults invariantResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         invariantResults' = toListOf (traverse.traverse.each) invariantResults
@@ -907,7 +916,7 @@ verifyCheck moduleData funName check checkType = do
 
   caps <- moduleCapabilities moduleData
 
-  tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
+  tables <- moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps moduleName tables caps funRef funName
