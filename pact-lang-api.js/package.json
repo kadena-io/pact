@@ -1,7 +1,7 @@
 {
   "name": "pact-lang-api",
-  "version": "1.0.6",
-  "description": "hashing and signing functions needed to interact with Pact",
+  "version": "3.0.0",
+  "description": "hashing and signing functions needed to interact with Pact 3.0 and greater",
   "main": "pact-lang-api.js",
   "scripts": {
     "build": "browserify pact-lang-api.js -o pact-lang-api.min.js && browserify pact-lang-api-global.js -o pact-lang-api-global.min.js"
