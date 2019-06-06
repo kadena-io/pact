@@ -488,15 +488,12 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 
 ### yield {#yield}
 
-*object*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
-
-*object*&nbsp;`object:<{y}>` *target-chain*&nbsp;`string` *&rarr;*&nbsp;`object:<{y}>`
+*OBJECT*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
 
 
-Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN, target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch.
+Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values.
 ```lisp
 (yield { "amount": 100.0 })
-(yield { "amount": 100.0 } "some-chain-id")
 ```
 
 ## Database {#Database}
@@ -700,7 +697,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") 15)
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N days, for use with 'add-time'
+N days, for use with 'add-time' 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 "2016-07-23T12:00:00Z"
@@ -738,7 +735,7 @@ pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N hours, for use with 'add-time'
+N hours, for use with 'add-time' 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 "2016-07-22T13:00:00Z"
@@ -752,7 +749,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N minutes, for use with 'add-time'.
+N minutes, for use with 'add-time'. 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 "2016-07-22T12:01:00Z"
@@ -776,7 +773,7 @@ pact> (parse-time "%F" "2016-09-12")
 *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
+Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ). 
 ```lisp
 pact> (time "2016-07-22T11:26:35Z")
 "2016-07-22T11:26:35Z"
@@ -1616,3 +1613,4 @@ Typecheck MODULE, optionally enabling DEBUG output.
 
 
 Verify MODULE, checking that all properties hold.
+

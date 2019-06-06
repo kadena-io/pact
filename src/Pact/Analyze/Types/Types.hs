@@ -147,7 +147,7 @@ pattern SObjectCons
   :: ()
   => (SingI v, KnownSymbol k, Typeable v, obj ~ 'TyObject ('(k, v) ': tys))
   => SingSymbol k -> Sing v -> SingList tys -> Sing obj
-pattern SObjectCons k v vs <- SObjectUnsafe (SCons' k v vs)
+pattern SObjectCons k v vs = SObjectUnsafe (SCons' k v vs)
 
 -- This pragma doesn't work because of data instances
 -- https://ghc.haskell.org/trac/ghc/ticket/14059

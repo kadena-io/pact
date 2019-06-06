@@ -22,7 +22,7 @@
 * Disallow rollback on the last step of a pact
 * Replaces REPL's `env-step` and `env-pactid` with `continue-pact` and `pact-state`
 * Adds REPL functions `chain-data` and `env-chain-data`
-* Better compile errors
+* Better compile and typecheck errors
 * Pretty printing
 * Working Windows build
 * Analysis:
@@ -33,6 +33,7 @@
   * Supports analysis of (bounded-size) lists and nested objects
   * Pins z3 to a specific version (4.8.3)
   * Uses timeout of 1 second for all z3 queries
+* Swagger for API
 
 
 2.6.1
