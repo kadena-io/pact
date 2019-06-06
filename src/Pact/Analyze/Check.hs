@@ -466,7 +466,6 @@ moduleTables modules ModuleData{..} = do
       <- lift $ runTC 0 False $ typecheckTopLevel (Ref tab)
     case tableTy of
       Pact.TyUser schema -> do
-
         let TC.Schema{_utName,_utFields} = schema
             schemaName = asString _utName
 
@@ -486,6 +485,9 @@ moduleTables modules ModuleData{..} = do
                 flip runReaderT (varIdArgs _utFields) . expToInvariant SBool
 
         pure $ Table tabName schema invariants
+
+      -- If we don't have a user type, the type should be `TyAny` (`*`),
+      -- meaning the table has no schema. Refuse to verify the module.
       _ -> throwError $ SchemalessTable $
         HM.fromList tables ^?! ix tabName.tInfo
 
