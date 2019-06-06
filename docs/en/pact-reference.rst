@@ -45,17 +45,17 @@ field. The format of the JSON to be encoded is as follows.
 
 .. code:: javascript
 
-   {
-     "nonce": "[nonce value, needs to be unique for every call]",
-     "payload": {
-       "exec": {
-         "code": "[pact code to be executed]",
-         "data": {
-           /* arbitrary user data to accompany code */
-         }
-       }
-     }
-   }
+    {
+      "nonce": "[nonce value, needs to be unique for every call]",
+      "payload": {
+        "exec": {
+          "code": "[pact code to be executed]",
+          "data": {
+            /* arbitrary user data to accompany code */
+          }
+        }
+      }
+    }
 
 When assembling the message, this JSON should be “stringified” and
 provided for the ``cmd`` field. If you inspect the output of the
@@ -90,19 +90,19 @@ is as follows.
 
 .. code:: javascript
 
-   {
-     "nonce": "[nonce value, needs to be unique for every call]",
-     "payload": {
-       "cont": {
-         "txid": [transaction id where pact instantiated]
-         "rollback": [true or false],
-         "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
-         "data": {
-           /* arbitrary user data to accompany step code */
-         }
-       }
-     }
-   }
+    {
+      "nonce": "[nonce value, needs to be unique for every call]",
+      "payload": {
+        "cont": {
+          "txid": [transaction id where pact instantiated]
+          "rollback": [true or false],
+          "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
+          "data": {
+            /* arbitrary user data to accompany step code */
+          }
+        }
+      }
+    }
 
 Endpoints
 ---------
@@ -122,35 +122,40 @@ Request JSON:
 
 .. code:: javascript
 
-   {
-     "cmds": [
-     {
-       "hash": "[blake2 hash in base16 of 'cmd' string value]",
-       "sigs": [
-         {
-           "sig": "[crypto signature by secret key of 'hash' value]",
-           "pubKey": "[base16-format of public key of signing keypair]",
-           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-         }
-       ]
-       "cmd": "[stringified transaction JSON]"
-     }
-     // ... more commands
-     ]
-   }
+    {
+      "cmds": [
+      {
+        "hash": "[blake2 hash in base16 of 'cmd' string value]",
+        "sigs": [
+          {
+            "sig": "[crypto signature by secret key of 'hash' value]",
+            "pubKey": "[base16-format of public key of signing keypair]"
+
+            /* optional field, defaults to full public key */
+        "addr": "[base16-format of address derived from public key]"
+
+            /* optional field, defaults to ED25519, will support other curves as needed */
+            "scheme": "ED25519 or ETH"
+          }
+        ]
+        "cmd": "[stringified transaction JSON]"
+      }
+      // ... more commands
+      ]
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "requestKeys": [
-         "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
-       ]
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "requestKeys": [
+          "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+        ]
+      }
+    }
 
 /private
 ~~~~~~~~
@@ -164,34 +169,40 @@ Request JSON:
 
 .. code:: javascript
 
-   {
-     "cmds": [
-     {
-       "hash": "[blake2 hash in base16 of 'cmd' string value]",
-       "sigs": [
-         {
-           "sig": "[crypto signature by secret key of 'hash' value]",
-           "pubKey": "[base16-format of public key of signing keypair]",
-           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-         }
-       ]
-       "cmd": "[stringified transaction JSON]"
-     }
-     ]
-   }
+    {
+      "cmds": [
+      {
+        "hash": "[blake2 hash in base16 of 'cmd' string value]",
+        "sigs": [
+          {
+            "sig": "[crypto signature by secret key of 'hash' value]",
+            "pubKey": "[base16-format of public key of signing keypair]"
+
+            /* optional field, defaults to full public key */
+        "addr": "[base16-format of address derived from public key]"
+
+            /* optional field, defaults to ED25519, will support other curves as needed */
+            "scheme": "ED25519 or ETH"
+          }
+        ]
+        "cmd": "[stringified transaction JSON]"
+      }
+      // ... more commands
+      ]
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "requestKeys": [
-         "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
-       ]
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "requestKeys": [
+          "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+        ]
+      }
+    }
 
 /poll
 ~~~~~
@@ -202,28 +213,28 @@ Request JSON:
 
 ::
 
-   {
-     "requestKeys": [
-       "[hash from desired commands to poll]"
-     ]
-   }
+    {
+      "requestKeys": [
+        "[hash from desired commands to poll]"
+      ]
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "[command hash]": {
-         "result": {
-           "status": "success|failure",
-           "data": /* data from Pact execution represented as JSON */
-         },
-         "txId": /* integer transaction id, for use in querying history etc */
-       }
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "[command hash]": {
+          "result": {
+            "status": "success|failure",
+            "data": /* data from Pact execution represented as JSON */
+          },
+          "txId": /* integer transaction id, for use in querying history etc */
+        }
+      }
+    }
 
 /listen
 ~~~~~~~
@@ -235,24 +246,24 @@ Request JSON:
 
 ::
 
-   {
-     "listen": "[command hash]"
-   }
+    {
+      "listen": "[command hash]"
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "result": {
-         "status": "success|failure",
-         "data": /* data from Pact execution represented as JSON */
-       },
-       "txId": /* integer transaction id, for use in querying history etc */
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "result": {
+          "status": "success|failure",
+          "data": /* data from Pact execution represented as JSON */
+        },
+        "txId": /* integer transaction id, for use in querying history etc */
+      }
+    }
 
 /local
 ~~~~~~
@@ -265,31 +276,41 @@ data.
 
 Request JSON:
 
-::
+.. code:: javascript
 
-   {
-     "hash": "[blake2 hash in base16 of 'cmd' value]",
-     "sigs": [
-       {
-         "sig": "[crypto signature by secret key of 'hash' value]",
-         "pubKey": "[base16-format of public key of signing keypair]",
-         "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-       }
-     ]
-     "cmd": "[stringified transaction JSON]"
-   }
+    {
+      "cmds": [
+      {
+        "hash": "[blake2 hash in base16 of 'cmd' string value]",
+        "sigs": [
+          {
+            "sig": "[crypto signature by secret key of 'hash' value]",
+            "pubKey": "[base16-format of public key of signing keypair]"
+
+            /* optional field, defaults to full public key */
+        "addr": "[base16-format of address derived from public key]"
+
+            /* optional field, defaults to ED25519, will support other curves as needed */
+            "scheme": "ED25519 or ETH"
+          }
+        ]
+        "cmd": "[stringified transaction JSON]"
+      }
+      // ... more commands
+      ]
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "status": "success|failure",
-       "data": /* data from Pact execution represented as JSON */
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "status": "success|failure",
+        "data": /* data from Pact execution represented as JSON */
+      }
+    }
 
 API request formatter
 ---------------------
@@ -304,28 +325,28 @@ contents:
 
 ::
 
-   code: "(+ 1 2)"
-   data:
-     name: Stuart
-     language: Pact
-   keyPairs:
-     - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
-       secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+    code: "(+ 1 2)"
+    data:
+      name: Stuart
+      language: Pact
+    keyPairs:
+      - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+        secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
 
 can be fed into ``pact`` to obtain a valid API request:
 
 ::
 
-   $ pact -a tests/apireq.yaml -l
-   {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
+    $ pact -a tests/apireq.yaml -l
+    {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d","addr":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
 
 Here’s an example of piping into curl, hitting a pact server running on
 port 8080:
 
 ::
 
-   $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
-   {"status":"success","response":{"status":"success","data":3}}
+    $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
+    {"status":"success","response":{"status":"success","data":3}}
 
 .. _request-yaml:
 
@@ -341,35 +362,35 @@ The execution Request yaml takes the following keys:
 
 .. code:: yaml
 
-     code: Transaction code
-     codeFile: Transaction code file
-     data: JSON transaction data
-     dataFile: JSON transaction data file
-     keyPairs: list of key pairs for signing (use pact -g to generate): [
-       public: base 16 public key
-       secret: base 16 secret key
-       ]
-     nonce: optional request nonce, will use current time if not provided
-     from: entity name for addressing private messages
-     to: entity names for addressing private messages
+      code: Transaction code
+      codeFile: Transaction code file
+      data: JSON transaction data
+      dataFile: JSON transaction data file
+      keyPairs: list of key pairs for signing (use pact -g to generate): [
+        public: base 16 public key
+        secret: base 16 secret key
+        ]
+      nonce: optional request nonce, will use current time if not provided
+      from: entity name for addressing private messages
+      to: entity names for addressing private messages
 
 The continuation Request yaml takes the following keys:
 
 .. code:: yaml
 
-     type: "cont"
-     txId: Integer transaction id of pact
-     step: Integer next step of a pact
-     rollback: Boolean for rollingback a pact
-     data: JSON transaction data
-     dataFile: JSON transaction data file
-     keyPairs: list of key pairs for signing (use pact -g to generate): [
-       public: base 16 public key
-       secret: base 16 secret key
-       ]
-     nonce: optional request nonce, will use current time if not provided
-     from: entity name for addressing private messages
-     to: entity names for addressing private messages
+      type: "cont"
+      txId: Integer transaction id of pact
+      step: Integer next step of a pact
+      rollback: Boolean for rollingback a pact
+      data: JSON transaction data
+      dataFile: JSON transaction data file
+      keyPairs: list of key pairs for signing (use pact -g to generate): [
+        public: base 16 public key
+        secret: base 16 secret key
+        ]
+      nonce: optional request nonce, will use current time if not provided
+      from: entity name for addressing private messages
+      to: entity names for addressing private messages
 
 Concepts
 ========
@@ -544,19 +565,19 @@ then operates on the rowset as a list data structure using
 .. code:: lisp
 
 
-   ;; the following selects Programmers with salaries >= 90000 and sorts by age descending
+    ;; the following selects Programmers with salaries >= 90000 and sorts by age descending
 
-   (reverse (sort ['age]
-     (select 'employees ['first-name,'last-name,'age]
-       (and? (where 'title (= "Programmer"))
-             (where 'salary (< 90000))))))
+    (reverse (sort ['age]
+      (select 'employees ['first-name,'last-name,'age]
+        (and? (where 'title (= "Programmer"))
+              (where 'salary (< 90000))))))
 
-   ;; the same query could be performed on a list with 'filter':
+    ;; the same query could be performed on a list with 'filter':
 
-   (reverse (sort ['age]
-     (filter (and? (where 'title (= "Programmer"))
-                   (where 'salary (< 90000)))
-             employees)))
+    (reverse (sort ['age]
+      (filter (and? (where 'title (= "Programmer"))
+                    (where 'salary (< 90000)))
+              employees)))
 
 In a transactional setting, Pact database interactions are optimized for
 single-row reads and writes, meaning such queries can be slow and
@@ -660,6 +681,15 @@ Keysets and Authorization
 
 Pact is inspired by Bitcoin scripts to incorporate public-key
 authorization directly into smart contract execution and administration.
+Pact seeks to take this further by making single- and multi-sig
+interactions ubiquitous and effortless with the concept of *keysets*,
+meaning that single-signature mode is never assumed: anywhere public-key
+signatures are used, single-sig and multi-sig can interoperate
+effortlessly. Finally, all crypto is handled by the Pact runtime to
+ensure programmers can’t make mistakes “writing their own crypto”.
+
+Also see `Guards and Capabilities <#caps>`__ below for how Pact moves
+beyond just keyset-based authorization.
 
 Keyset definition
 ~~~~~~~~~~~~~~~~~
@@ -673,19 +703,19 @@ Examples of valid keyset JSON productions:
 
 .. code:: javascript
 
-   /* examples of valid keysets */
-   {
-     "fully-specified-with-native-pred":
-       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
+    /* examples of valid keysets */
+    {
+      "fully-specified-with-native-pred":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
 
-     "fully-specified-with-qual-custom":
-       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "my-module.custom-pred" },
+      "fully-specified-with-qual-custom":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "my-module.custom-pred" },
 
-     "keysonly":
-       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* defaults to "keys-all" pred */
+      "keysonly":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* defaults to "keys-all" pred */
 
-     "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
-   }
+      "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
+    }
 
 Keyset Predicates
 ~~~~~~~~~~~~~~~~~
@@ -728,10 +758,13 @@ When `creating <pact-functions.html#create-table>`__ a table, a module
 name must also be specified. By this mechanism, tables are “guarded” or
 “encapsulated” by the module, such that direct access to the table via
 `data-access functions <pact-functions.html#database>`__ is authorized
-only by the module’s admin keyset. However, *within module functions*,
+only by the module’s governance. However, *within module functions*,
 table access is unconstrained. This gives contract authors great
 flexibility in designing data access, and is intended to enshrine the
-module as the main “user” data access API.
+module as the main “user data access API”.
+
+See also `module guards <#module-guards>`__ for how this concept can be
+leveraged to protect more than just tables.
 
 .. _rowlevelkeysets:
 
@@ -744,19 +777,603 @@ be achieved:
 
 .. code:: lisp
 
-   (defun create-account (id)
-     (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
+    (defun create-account (id)
+      (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
 
-   (defun read-balance (id)
-     (with-read accounts id { "balance":= bal, "keyset":= ks }
-       (enforce-keyset ks)
-       (format "Your balance is {}" [bal])))
+    (defun read-balance (id)
+      (with-read accounts id { "balance":= bal, "keyset":= ks }
+        (enforce-keyset ks)
+        (format "Your balance is {}" [bal])))
 
 In the example, ``create-account`` reads a keyset definition from the
 message payload using `read-keyset <pact-functions.html#read-keyset>`__
 to store as “keyset” in the table. ``read-balance`` only allows that
 owner’s keyset to read the balance, by first enforcing the keyset using
 `enforce-keyset <pact-functions.html#enforce-keyset>`__.
+
+.. _caps:
+
+Guards and Capabilities
+-----------------------
+
+Pact 3.0 introduces powerful new concepts to allow programmers to
+express and implement authorization schemes correctly and easily:
+*guards*, which generalize keysets, and *capabilities*, which generalize
+authorizations or rights.
+
+Guards
+~~~~~~
+
+A guard is essentially a predicate function over some environment that
+enables a pass-fail operation, ``enforce-guard``, to be able to test a
+rich diversity of conditions.
+
+A keyset is the quintessential guard: it specifies a list of keys, and a
+predicate function to verify how many keys were used to sign the current
+transaction. Enforcement happens via ``enforce-keyset``, causing the
+transaction to fail if the necessary keys are not found in the signing
+set.
+
+However, there are other predicates that are equally useful:
+
+-  We might want to enforce that a *module* is the only entity that can
+   perform some function, for instance to debit some account.
+
+-  We might want to ensure that a user has provided some secret, like a
+   hash preimage, as seen in atomic swaps.
+
+-  We might want to combine all of the above into a single, enforceable
+   rule: “ensure user A signed the transaction AND provided a hash
+   preimage AND is only executable by module ``foo``”.
+
+Finally, we want guards to *interoperate* with each other, so that smart
+contract code doesn’t have to worry about what kind of guard is used to
+mediate access to some resource or right. For instance, it is easy to
+think of entries in a ledger having diverse guards, where some tokens
+are guarded by keysets, while others are autonomously owned by modules,
+while others are locked in some kind of escrow transaction: what’s
+important is that the guard always be enforced for the given account,
+not what type of guard it is.
+
+Guards address all of these needs. Keysets are now just one type of
+guard, to which we add module guards, pact guards, and completely
+customizable “user guards”. You can store any type of guard in the
+database using the ``guard`` type. The ``keyset`` type is still
+supported, but developers should switch to ``guard`` to enjoy the
+enhanced flexibility.
+
+Capabilities
+~~~~~~~~~~~~
+
+The guards concept is powerful, but incomplete. In a given workflow, the
+*act of enforcing* a keyset or any guard is hard to encapsulate or
+reason about, and the result of enforcement – that is, the granting of
+some right – can only be expressed sequentially, by literally ensuring
+that the protected code “happens after” the enforcement. The granted
+right itself has no expression in the code beyond “we did stuff after
+enforcing some guard”.
+
+With capabilities, Pact gains the ability to express such a granted
+right, or capability, directly in code, and use that capability to
+organize and govern code.
+
+Let’s look at the classic ledger-oriented use case to illustrate. The
+normal workflow to allow debiting some account balance is to enforce a
+keyset stored in the account table:
+
+.. code:: lisp
+
+    (defun debit (user amount)
+      (with-read accounts user { "keyset" := keyset, "balance" := balance }
+        (enforce-keyset keyset)
+        (update accounts user { "balance" := (- balance debit) }))
+    )
+
+Expressed as a capability, we could say that “the act of enforcing the
+user keyset allows you to update”, and importantly, we can declare
+exactly what code is controlled by this capability:
+
+.. code:: lisp
+
+    (defcap DEBIT (user)
+      "Capability to debit a user account balance, enforcing the keyset".
+      (with-read accounts user { "keyset" := keyset }
+        (enforce-keyset keyset)
+    ))
+
+    (defun debit (user amount)
+      (with-capability (DEBIT user)
+        (update accounts user { "balance" := (- balance debit) }))
+    )
+
+What have we gained? We’ve given the act of checking the keyset a name,
+``DEBIT``, by defining the capability with ```defcap`` <#defcap>`__.
+We’ve also used ```with-capability`` <#with-capability>`__ to invoke the
+capability in a *scope*, within which we call ``update``.
+
+Capabilities allow Pact to directly represent grants or rights, and
+offer some very useful features for controlling how code is executed.
+They come from the “capabilities” concept in computer science, which
+seeks to make ambient rights concrete or “reified”, instead of just
+being enforced ad-hoc. Capabilities are often contrasted with “access
+control lists” in UNIX, where a list of users is maintained to allow
+access to, say, the contents of some directory. By explicitly handing
+some process a data object representing their right to access some
+resource, we have more control over that right, including the ability to
+revoke it in real time.
+
+In Pact, the concept gets narrowed to simply allow for a right to be
+granted over the body of some code, but it is still surprisingly useful
+for a number of goals.
+
+Guards vs Capabilities
+~~~~~~~~~~~~~~~~~~~~~~
+
+Guards and capabilities can be confusing: given we have guards and
+things like keysets, what do we need the capability concept for?
+
+Guards allow us to define a *rule* that must be satisfied for the
+transaction to proceed. As such, they really are just a way to declare a
+pass-fail condition or predicate. The Pact guard system is flexible
+enough to express any rule you can code.
+
+Capabilities allow us to declare how that rule is deployed. In doing so,
+they illustrate the critical rights that are extended to users of the
+smart contract, and “protect” code from being called incorrectly.
+Finally, they tightly scope what code is protected, and allow the
+ability for code to demand that some capability *is already enforced*.
+
+Protecting code with ``require-capability``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The function ```require-capability`` <#require-capability>`__ can be
+used to “protect” a function from being called improperly:
+
+.. code:: lisp
+
+    (defun debit (user amount)
+      (require-capability (DEBIT user)
+        (update accounts user ...)))
+
+This effectively prevents the function from ever being called at
+top-level. **Capabilities can only be granted by the module code that
+declares them**, which is an important security property, as it ensures
+an attacker cannot elevate their privileges from outside.
+
+Written this way, the only way ``debit`` could be called is by some
+other module code, like ``transfer``:
+
+.. code:: lisp
+
+    (defun transfer (to from amount)
+      (with-capability (DEBIT from)
+        (debit from amount)
+        (credit to amount)))
+
+Here, the ``with-capability`` call runs the code in ``DEBIT``, which on
+success installs the “DEBIT [from]” capability into the Pact
+environment. When ``debit`` issues ``require-capability (DEBIT user)``,
+the code will succeed. Meanwhile, if somebody directly called ``debit``
+from outside, the code will fail.
+
+Modeling capabilities
+~~~~~~~~~~~~~~~~~~~~~
+
+The only problem with the above code is it pushed the awareness of DEBIT
+into the ``transfer`` function, whereas separation of concerns would
+better have it housed in ``debit``. What’s more, we’d like to ensure
+that ``debit`` is always called in a “transfer” capacity, that is, that
+the corresponding ``credit`` occurs. Thus, the better way to model this
+is with two capabilities, with TRANSFER being a “no-guard” capability
+that simply encloses ``debit`` and ``credit`` calls:
+
+.. code:: lisp
+
+    (defcap TRANSFER
+      "Capability to govern credit and debit calls"
+      true)
+
+    (defun transfer (to from amount)
+      (with-capability (TRANSFER)
+        (debit from amount)
+        (credit to amount)))
+
+    (defun debit (user amount)
+      (require-capability (TRANSFER)
+        (with-capability (DEBIT from)
+          (update accounts user ...))))
+
+    (defun credit (user amount)
+      (require-capability (TRANSFER)
+        (update accounts user ...)))
+
+Thus, ``TRANSFER`` protects ``debit`` and ``credit`` from being used
+improperly, while ``DEBIT`` governs specifically the ability to debit.
+
+Improving efficiency
+~~~~~~~~~~~~~~~~~~~~
+
+Once capabilities are granted they are installed into the pact
+environment for the scope of the call to ``with-capability``; once that
+form is exited, the capability is uninstalled. This scoping alone is a
+security improvement, as it clearly delineates when the right is in
+effect (ie it doesn’t “bleed” into the outer calling environment).
+However, it also can improve efficiency.
+
+To illustrate, let’s specify an operation to rotate the user’s keyset,
+which like debit requires enforcing the user keyset first. Since
+checking the user keyset is now a more general capability, we rename it
+USER_KEYSET, and use it for both debit and rotate:
+
+.. code:: lisp
+
+    (defcap USER_KEYSET (user)
+      (with-read accounts user { "keyset" := keyset }
+        (enforce-keyset keyset)))
+
+    (defun debit (user amount)
+      (require-capability (TRANSFER)
+        (with-capability (USER_KEYSET from) ...)))
+
+    (defun rotate (user new-keyset)
+      (with-capability (USER_KEYSET user) ...))
+
+So far so good. However, if we had a (admittedly contrived)
+``rotate-and-transfer`` function, we’d be calling that code twice, which
+is inefficient. This can be solved by acquiring the capability at the
+outer level, because **capabilities that have already been acquired and
+are in-scope are not re-evaluated:**
+
+.. code:: lisp
+
+    (defun rotate-and-transfer (from to from-new-keyset amount)
+      (with-capability (USER_KEYSET from) ;; installs USER_KEYSET for 'from'
+        (transfer from to amount)         ;; 'debit' now won't reperform check
+        (rotate from from-new-keyset)))   ;; nor will 'rotate'
+
+Composing capabilities
+~~~~~~~~~~~~~~~~~~~~~~
+
+Capabilities can be *composed*, in order to bring multiple capabilities
+into a single scope. Imagine that our use case required the USER_KEYSET
+capability but also that OPERATE_ADMIN had additionally signed the
+transaction. We can compose these into a new composite capability:
+
+.. code:: lisp
+
+    (defcap OPERATE_AND_USER_KEYSET (user)
+      (compose-capability (OPERATE_ADMIN))
+      (compose-capability (USER_KEYSET user)))
+
+Now, a call to ``(with-capability (OPERATE_AND_USER_KEYSET user) ...)``
+will bring the two capabilities into scope, if not already there.
+Capabilities are never introduced twice, so if an outer code block had
+already granted OPERATE_ADMIN, just that capability would stay in scope
+(and not be evaluated twice) outside of the inner scope.
+
+``defcap`` details
+~~~~~~~~~~~~~~~~~~
+
+``defcap`` is used to define capabilities, and it looks like a normal
+function. However capabilities differ from normal functions in some
+important ways. A capability definition does double-duty by both
+*parameterizing* a capability that will be stored as a unique token in
+the environment, as well as *implementing* the enforcing code that
+protects the capability from being improperly granted.
+
+For example, a capability ``(USER_KEYSET "alice")`` results in a token
+(USER_KEYSET,“alice”) being stored in the environment, as distinct from
+(USER_KEYSET,“bob”) etc. This token is what is checked by
+``(require-capability (USER_KEYSET "alice"))``, so that even though it
+looks like the USER_KEYSET code is being called, it is actually just
+being “referenced” to test for the token.
+
+Likewise, ``(with-capability (USER_KEYSET "alice") ...)`` does not
+*necessarily* call the code in the defcap: it accesses the unique token
+to see if it is already present in the environment. Only if it is not
+present does it actually execute the code in the ``defcap`` body.
+
+As a result, **``defcap``\ s cannot be executed directly**, as this
+would violate the semantics described here. This is an important
+security property as it ensures that the granting code can only be
+called in the appropriate way.
+
+Guard types
+~~~~~~~~~~~
+
+Guards come in five flavors: keyset, keyset reference, module, pact, and
+user guards.
+
+Keyset guards.
+^^^^^^^^^^^^^^
+
+These are the classic pact keysets. Using the ``keyset`` type is the one
+instance where you can restrict a guard subtype, otherwise the ``guard``
+type obscures the implementation type to prevent developers from
+engaging in guard-specific control flow, which would be against best
+practices. Again, it is better to switch to ``guard`` unless there is a
+specific need to use keysets.
+
+.. code:: lisp
+
+    (enforce-guard (read-keyset "keyset"))
+
+Keyset reference guards
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Keysets can be installed into the environment with ``define-keyset``,
+but if you wanted to store a reference to a defined keyset, you would
+need to use a ``string`` type. To make environment keysets interoperate
+with concrete keysets and other guards, we introduce the “keyset
+reference guard” which indicates that a defined keyset is used instead
+of a concrete keyset.
+
+.. code:: lisp
+
+    (enforce-guard (keyset-ref-guard "foo"))
+
+    (update accounts user { "guard": (keyset-ref-guard "foo") })
+
+Module guards
+^^^^^^^^^^^^^
+
+Module guards are a special guard that when enforced will fail unless:
+
+-  the code calling the enforce was called from within the module, or
+
+-  module governance is granted to the current transaction.
+
+This is for allowing a module or smart contract to autonomously “own”
+and manage some asset. As such it is operationally identical to how
+module table access is guarded: only module code or a transaction having
+module admin can directly write to a module tables, or upgrade the
+module, so there is no need to use a module guard for these in-module
+operations. A module guard is used to “project” module admin outside of
+the module (e.g. to own coins in an external ledger), or “inject” module
+admin into an internal database representation ( e.g. to own an
+internally-managed asset alongside other non-module owners).
+
+See `Module Governance <#module-governance>`__ for more information
+about module admin management.
+
+``create-module-guard`` takes a ``string`` argument to allow naming the
+guard, to indicate the purpose or role of the guard.
+
+.. code:: lisp
+
+    (enforce-guard (create-module-guard "module-owned-asset"))
+
+Pact guards
+^^^^^^^^^^^
+
+Pact guards are a special guard that will only pass if called in the
+specific ``defpact`` execution in which the guard was created.
+
+Imagine an escrow transaction where the funds need to be moved into an
+escrow account: if modeled as a two-step pact, the funds can go into a
+special account named after the pact id, guarded by a pact guard. This
+means that only code in a subsequent step of that particular pact
+execution (ie having the same pact ID) can pass the guard.
+
+.. code:: lisp
+
+    (defpact escrow (from to amount)
+      (step (with-capability (ESCROW) (init-escrow from amount)))
+      (step (with-capability (ESCROW) (complete-escrow to amount))))
+
+    (defun init-escrow (from amount)
+      (require-capability (ESCROW))
+      (create-account (pact-id) (create-pact-guard "escrow"))
+      (transfer from (pact-id) amount))
+
+    (defun complete-escrow (to amount)
+      (require-capability (ESCROW))
+      (with-capability (USER_GUARD (pact-id)) ;; enforces guard on account (pact-id)
+        (transfer (pact-id) to amount)))
+
+Pact guards turn pact executions into autonomous processes that can own
+assets, and is a powerful technique for trustless asset management
+within a multi-step operation.
+
+User guards
+^^^^^^^^^^^
+
+User guards allow the user to design an arbitrary predicate function to
+enforce the guard, given some initial data. For instance, a user guard
+could be designed to require two separate keysets to be enforced:
+
+.. code:: lisp
+
+    (defun both-sign (obj)
+      (enforce-keyset (at 'ks1 obj))
+      (enforce-keyset (at 'ks2 obj)))
+
+    (defun install-both-guard ()
+      (write guard-table "both"
+        { "guard":
+          (create-user-guard
+            { 'ks1: (read-keyset "ks1")
+            , 'ks2: (read-keyset "ks2")
+            }
+            "both-sign")
+        }))
+
+
+    (defun enforce-both-guard ()
+      (enforce-guard (at "guard" (read guard-table "both"))))
+
+NOTE: user-guard syntax is experimental and will most likely change in a
+near-term release to support direct application of arguments
+(closure-style).
+
+User guards can seem similar to capabilities but are different, namely
+in that they can be stored in the database and passed around like plain
+data. Capabilities are in-module rights that can only be enforced within
+the declaring module, and offer scoping and the other benefits mentioned
+above. User guards are for implementing custom predicate logic that
+can’t be expressed by other built-in guard types.
+
+HTLC guard example
+^^^^^^^^^^^^^^^^^^
+
+The following example shows how a “hash timelock” guard can be made, to
+implement atomic swaps.
+
+.. code:: lisp
+
+
+    (create-hashlock-guard (secret-hash timeout signer-ks)
+      (create-user-guard (enforce-hashlock secret-hash timeout signer-ks)))
+
+    (defun enforce-hashlock (secret-hash timeout signer-ks)
+      (enforce-one [
+        (enforce (= (hash (read-msg "secret")) secret-hash))
+        (and
+          (enforce-keyset signer-ks)
+          (enforce (> (at "block-time" (chain-data)) timeout) "Timeout not passed"))
+          ]))
+
+.. _module-governance:
+
+Generalized Module Governance
+-----------------------------
+
+Before Pact 3.0, module upgrade and administration was governed by a
+defined keyset that is referenced in the module definition. With Pact
+3.0, this ``string`` value can alternately be an unqualified bareword
+that references a ``defcap`` within the module body. This ``defcap`` is
+the *module governance capability*.
+
+With the introduction of the governance capability syntax, Pact modules
+now support *generalized module governance*, allowing for module authors
+to design any governance scheme they wish. Examples include tallying a
+stakeholder vote on an upgrade hash, or enforcing more than one keyset.
+
+Keysets vs governance functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To illustrate, let’s consider a module governed by a keyset:
+
+.. code:: lisp
+
+    (module foo 'foo-keyset ...)
+
+This indicates that if a user tried to upgrade the module, or directly
+write to the module tables, ``'foo-keyset`` would be enforced on the
+transaction signature set.
+
+This can be directly implemented in a governance capability as follows:
+
+.. code:: lisp
+
+    (module foo GOVERNANCE
+      ...
+      (defcap GOVERNANCE ()
+        (enforce-keyset 'foo-keyset))
+      ...
+    )
+
+Note the capability can have whatever name desired; GOVERNANCE is a good
+idiomatic name however.
+
+Governance capability details
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+As a ``defcap``, the governance function cannot be called directly by
+user code. It is only invoked in the following circumstances:
+
+-  A module upgrade is being attempted
+-  Module tables are being directly accessed outside the module code
+-  A `module guard <#module-guards>`__ for this module is being
+   enforced.
+
+Like any other capability, the governance capability can only be invoked
+within the declaring module with ``with-capability`` etc. Given that
+module code already has elevated module admin, there is never any need
+to acquire this particular capability. Using ``require-capability`` is
+useful however to protect some admin-only capability:
+
+.. code:: lisp
+
+    (defun deactivate-user (user)
+      "Deactivate USER. Requires module admin."
+      (require-capability (GOVERNANCE))
+      (update users user { "active": false }))
+
+Capability scope
+^^^^^^^^^^^^^^^^
+
+Since module governance is acquired automatically for upgrades and
+external table writes, this means that the module governance capability
+**stays in scope for the rest of the calling transaction**. This is
+unlike “user” capabilities, which can only be acquired in a fixed scope
+specified by the body of ``with-capability``.
+
+This may sound worrisome, but the rationale is that a governance
+capability once granted should not be based on some transient fact that
+can become false during a single transaction. This is important
+especially in module upgrades, *which can change the governance
+capability itself*: if the module admin was tested again this could
+cause the upgrade to fail, for instance when migrating data with direct
+table rights.
+
+Capability risks
+^^^^^^^^^^^^^^^^
+
+Also, this means that, when initially installing a module, *the
+governance function is not invoked*. This is different behavior than
+when a keyset is specified: the keyset must be defined and it is
+enforced, to ensure that the keyset actually exists.
+
+Module governance is therefore more “risky” as it can mean that the
+module cannot be upgraded if there is a bug in the governance
+capability. Clearly, care must be taken when implementing module
+capabilities, and using the Pact formal verification system is highly
+recommended here.
+
+Example: stakeholder upgrade vote
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In the following code, a module can be upgraded based on a vote. An
+upgrade is designed as a Pact transaction, and its hash and code are
+distributed to stakeholders, who vote for the upgrade. Once the upgrade
+is sent in, the vote is tallied in the governance capability, and if a
+simple majority is found, the code is upgraded.
+
+.. code:: lisp
+
+    (module govtest count-votes
+      "Demonstrate programmable governance showing votes \
+     \ for upgrade transaction hashes"
+      (defschema vote
+        vote-hash:string)
+
+      (deftable votes:{vote})
+
+      (defun vote-for-hash (user hsh)
+        "Register a vote for a particular transaction hash"
+        (write votes user { "vote-hash": hsh })
+      )
+
+      (defcap count-votes ()
+        "Governance capability to tally votes for the upgrade hash".
+        (let* ((h (tx-hash))
+               (tally (fold (do-count h)
+                            { "for": 0, "against": 0 }
+                            (keys votes)))
+              )
+          (enforce (> (at 'for tally) (at 'against tally))
+                   (format "vote result: {}, {}" [h tally])))
+      )
+
+      (defun do-count (hsh tally u)
+        "Add to TALLY if U has voted for HSH"
+        (bind tally { "for" := f, "against" := a }
+          (with-read votes u { 'vote-hash := v }
+            (if (= v hsh)
+                { "for": (+ 1 f), "against": a }
+              { "for": f, "against": (+ 1 a) })))
+      )
 
 .. _computation:
 
@@ -816,11 +1433,12 @@ Pact’s supported types are:
 -  `Integers <#integers>`__
 -  `Decimals <#decimals>`__
 -  `Booleans <#booleans>`__
--  `Key sets <#confidential-keysets>`__
+-  `Time values <#time>`__
+-  `Keysets <#keysets>`__ and `Guards <#guards>`__
 -  `Lists <#lists>`__
 -  `Objects <#objects>`__
--  `Function <#defun>`__ and `pact <#defpact>`__ definitions
--  `JSON values <#json>`__
+-  `Function <#defun>`__, `pact <#defpact>`__, and
+   `capability <#defcap>`__ definitions
 -  `Tables <#deftable>`__
 -  `Schemas <#defschema>`__
 
@@ -859,17 +1477,17 @@ A transaction can encode values directly into the transactional code:
 
 ::
 
-   (accounts.transfer "Acct1" "Acct2" 100.00)
+    (accounts.transfer "Acct1" "Acct2" 100.00)
 
 or it can read values from the message JSON payload:
 
 ::
 
-   (defun transfer-msg ()
-     (transfer (read-msg "from") (read-msg "to")
-               (read-decimal "amount")))
-   ...
-   (accounts.transfer-msg)
+    (defun transfer-msg ()
+      (transfer (read-msg "from") (read-msg "to")
+                (read-decimal "amount")))
+    ...
+    (accounts.transfer-msg)
 
 The latter will execute slightly faster, as there is less code to
 interpret at transaction time.
@@ -924,8 +1542,8 @@ pass, the whole expression passes. This is the sole example in Pact of
 “exception catching” in that a failed enforcement simply results in the
 next test being executed, short-circuiting on success.
 
-Use built-in keysets
-^^^^^^^^^^^^^^^^^^^^
+Use built-in keyset predicates
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The built-in keyset functions
 `keys-all <pact-functions.html#keys-all>`__,
@@ -948,8 +1566,8 @@ function.
 
 .. code:: lisp
 
-   (map (+ 2) [1 2 3])
-   (fold (+) "" ["Concatenate" " " "me"])
+    (map (+ 2) [1 2 3])
+    (fold (+) "" ["Concatenate" " " "me"])
 
 Pact also has `compose <pact-functions.html#compose>`__, which allows
 “chaining” applications in a functional style.
@@ -960,10 +1578,10 @@ Pure execution
 ~~~~~~~~~~~~~~
 
 In certain contexts Pact can guarantee that computation is “pure”, which
-simply means that the database state will not be accessed or modified.
-Currently, ``enforce``, ``enforce-one`` and keyset predicate evaluation
-are all executed in a pure context. `defconst <#defconst>`__ memoization
-is also pure.
+simply means that the database state will not be modified. Currently,
+``enforce``, ``enforce-one`` and keyset predicate evaluation are all
+executed in a pure context. `defconst <#defconst>`__ memoization is also
+pure.
 
 LISP
 ~~~~
@@ -998,15 +1616,14 @@ When reading values from a message via
 `read-msg <pact-functions.html#read-msg>`__, Pact coerces JSON types as
 follows:
 
--  String -> String
--  Number -> Integer (rounded)
--  Boolean -> Boolean
--  Object -> Object
--  Array -> List
--  Null -> JSON Value
+-  String -> ``string``
+-  Number -> ``decimal``
+-  Boolean -> ``bool``
+-  Object -> ``object``
+-  Array -> ``list``
 
-Decimal values are represented as Strings and read using
-`read-decimal <pact-functions.html#read-decimal>`__.
+Integer values are represented as objects and read using
+`read-integer <pact-functions.html#read-integer>`__.
 
 Confidentiality
 ---------------
@@ -1164,13 +1781,14 @@ Module Hashes
 
 Once loaded, a Pact module is associated with a hash computed from the
 module’s source code text. This module hash uniquely identifies the
-version of the module. Module hashes can be examined with
+version of the module. Hashes are base64url-encoded BLAKE2 256-bit
+hashes. Module hashes can be examined with
 `describe-module <pact-functions.html#describe-module>`__:
 
 ::
 
-   pact> (at "hash" (describe-module 'accounts))
-   "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+    pact> (at "hash" (describe-module 'accounts))
+    "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY"
 
 Pinning module versions with ``use``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1207,11 +1825,11 @@ declaration:
 
 .. code:: lisp
 
-   (module provider 'keyset
-     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
-     ...
-   )
+    (module provider 'keyset
+      (bless "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY")
+      (bless "bctSHEz4N5Y1XQaic6eOoBmjty88HMMGfAdQLPuIGMw")
+      ...
+    )
 
 Dependencies with these hashes will continue to function after the
 module is loaded. Unrecognized hashes will cause the transaction to
@@ -1245,18 +1863,18 @@ String literals are created with double-ticks:
 
 ::
 
-   pact> "a string"
-   "a string"
+    pact> "a string"
+    "a string"
 
 Strings also support multiline by putting a backslash before and after
 whitespace (not interactively).
 
 .. code:: lisp
 
-   (defun id (a)
-     "Identity function. \
-     \Argument is returned."
-     a)
+    (defun id (a)
+      "Identity function. \
+      \Argument is returned."
+      a)
 
 Symbols
 ~~~~~~~
@@ -1270,8 +1888,8 @@ whitespace nor multiline syntax.
 
 ::
 
-   pact> 'a-symbol
-   "a-symbol"
+    pact> 'a-symbol
+    "a-symbol"
 
 Integers
 ~~~~~~~~
@@ -1280,10 +1898,10 @@ Integer literals are unbounded, and can be positive or negative.
 
 ::
 
-   pact> 12345
-   12345
-   pact> -922337203685477580712387461234
-   -922337203685477580712387461234
+    pact> 12345
+    12345
+    pact> -922337203685477580712387461234
+    -922337203685477580712387461234
 
 Decimals
 ~~~~~~~~
@@ -1292,10 +1910,10 @@ Decimal literals have potentially unlimited precision.
 
 ::
 
-   pact> 100.25
-   100.25
-   pact> -356452.234518728287461023856582382983746
-   -356452.234518728287461023856582382983746
+    pact> 100.25
+    100.25
+    pact> -356452.234518728287461023856582382983746
+    -356452.234518728287461023856582382983746
 
 Booleans
 ~~~~~~~~
@@ -1304,8 +1922,8 @@ Booleans are represented by ``true`` and ``false`` literals.
 
 ::
 
-   pact> (and true false)
-   false
+    pact> (and true false)
+    false
 
 Lists
 ~~~~~
@@ -1315,14 +1933,14 @@ commas. Uniform literal lists are given a type in parsing.
 
 ::
 
-   pact> [1 2 3]
-   [1 2 3]
-   pact> [1,2,3]
-   [1 2 3]
-   pact> (typeof [1 2 3])
-   "[integer]"
-   pact> (typeof [1 2 true])
-   "list"
+    pact> [1 2 3]
+    [1 2 3]
+    pact> [1,2,3]
+    [1 2 3]
+    pact> (typeof [1 2 3])
+    "[integer]"
+    pact> (typeof [1 2 true])
+    "list"
 
 Objects
 ~~~~~~~
@@ -1333,8 +1951,8 @@ keys must be strings.
 
 ::
 
-   pact> { "foo": (+ 1 2), "bar": "baz" }
-   (TObject [("foo",3),("bar","baz")])
+    pact> { "foo": (+ 1 2), "bar": "baz" }
+    { "foo": (+ 1 2), "bar": "baz" }
 
 Bindings
 ~~~~~~~~
@@ -1349,9 +1967,9 @@ columns in a row, or values in an object.
 
 .. code:: lisp
 
-   (defun check-balance (id)
-     (with-read accounts id { "balance" := bal }
-       (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
+    (defun check-balance (id)
+      (with-read accounts id { "balance" := bal }
+        (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
 
 Type specifiers
 ---------------
@@ -1371,7 +1989,6 @@ Type literals
 -  ``list``, or ``[type]`` to specify the list type
 -  ``object``, which can be further typed with a schema
 -  ``table``, which can be further typed with a schema
--  ``value`` (JSON values)
 
 Schema type literals
 ~~~~~~~~~~~~~~~~~~~~
@@ -1381,8 +1998,8 @@ enclosed in curly braces.
 
 .. code:: lisp
 
-   table:{accounts}
-   object:{person}
+    table:{accounts}
+    object:{person}
 
 What can be typed
 ~~~~~~~~~~~~~~~~~
@@ -1392,14 +2009,14 @@ Function arguments and return types
 
 .. code:: lisp
 
-   (defun prefix:string (pfx:string str:string) (+ pfx str))
+    (defun prefix:string (pfx:string str:string) (+ pfx str))
 
 Let variables
 ^^^^^^^^^^^^^
 
 .. code:: lisp
 
-   (let ((a:integer 1) (b:integer 2)) (+ a b))
+    (let ((a:integer 1) (b:integer 2)) (+ a b))
 
 Tables and objects
 ^^^^^^^^^^^^^^^^^^
@@ -1408,16 +2025,16 @@ Tables and objects can only take a schema type literal.
 
 .. code:: lisp
 
-   (deftable accounts:{account})
+    (deftable accounts:{account})
 
-   (defun get-order:{order} (id) (read orders id))
+    (defun get-order:{order} (id) (read orders id))
 
 Consts
 ^^^^^^
 
 .. code:: lisp
 
-   (defconst PENNY:decimal 0.1)
+    (defconst PENNY:decimal 0.1)
 
 Special forms
 -------------
@@ -1430,9 +2047,9 @@ strings, in the following form:
 
 .. code:: lisp
 
-   (defun average (a b)
-     "take the average of a and b"
-     (/ (+ a b) 2))
+    (defun average (a b)
+      "take the average of a and b"
+      (/ (+ a b) 2))
 
 Alternately, users can specify metadata using a special ``@``-prefix
 syntax. Supported metadata fields are ``@doc`` to provide a
@@ -1441,10 +2058,10 @@ verify the correctness of the implementation:
 
 .. code:: lisp
 
-   (defun average (a b)
-     @doc   "take the average of a and b"
-     @model (property (= (+ a b) (* 2 result)))
-     (/ (+ a b) 2))
+    (defun average (a b)
+      @doc   "take the average of a and b"
+      @model (property (= (+ a b) (* 2 result)))
+      (/ (+ a b) 2))
 
 Indeed, a bare docstring like ``"foo"`` is actually just a short form
 for ``@doc "foo"``.
@@ -1457,7 +2074,7 @@ bless
 
 ::
 
-   (bless HASH)
+    (bless HASH)
 
 Within a module declaration, bless a previous version of that module as
 identified by HASH. See `Dependency
@@ -1466,52 +2083,75 @@ mechanism.
 
 .. code:: lisp
 
-   (module provider 'keyset
-     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
-     ...
-   )
+    (module provider 'keyset
+      (bless "ZHD9IZg-ro1wbx7dXi3Fr-CVmA-Pt71Ov9M1UNhzAkY")
+      (bless "bctSHEz4N5Y1XQaic6eOoBmjty88HMMGfAdQLPuIGMw")
+      ...
+    )
 
 defun
 ~~~~~
 
 .. code:: lisp
 
-   (defun NAME ARGLIST [DOC-OR-META] BODY...)
+    (defun NAME ARGLIST [DOC-OR-META] BODY...)
 
 Define NAME as a function, accepting ARGLIST arguments, with optional
 DOC-OR-META. Arguments are in scope for BODY, one or more expressions.
 
 .. code:: lisp
 
-   (defun add3 (a b c) (+ a (+ b c)))
+    (defun add3 (a b c) (+ a (+ b c)))
 
-   (defun scale3 (a b c s)
-     "multiply sum of A B C times s"
-     (* s (add3 a b c)))
+    (defun scale3 (a b c s)
+      "multiply sum of A B C times s"
+      (* s (add3 a b c)))
+
+defcap
+~~~~~~
+
+.. code:: lisp
+
+    (defcap NAME ARGLIST [DOC] BODY...)
+
+Define NAME as a capability, specified using ARGLIST arguments, with
+optional DOC. A ``defcap`` models a capability token which will be
+stored in the environment to represent some ability or right. Code in
+BODY is only called within special capability-related functions
+``with-capability`` and ``compose-capability`` when the token as
+parameterized by the arguments supplied is not found in the environment.
+When executed, arguments are in scope for BODY, one or more expressions.
+
+.. code:: lisp
+
+    (defcap USER_GUARD (user)
+      "Enforce user account guard
+      (with-read accounts user
+        { "guard": guard }
+        (enforce-guard guard)))
 
 defconst
 ~~~~~~~~
 
 .. code:: lisp
 
-   (defconst NAME VALUE [DOC-OR-META])
+    (defconst NAME VALUE [DOC-OR-META])
 
 Define NAME as VALUE, with option DOC-OR-META. Value is evaluated upon
 module load and “memoized”.
 
 .. code:: lisp
 
-   (defconst COLOR_RED="#FF0000" "Red in hex")
-   (defconst COLOR_GRN="#00FF00" "Green in hex")
-   (defconst PI 3.14159265 "Pi to 8 decimals")
+    (defconst COLOR_RED="#FF0000" "Red in hex")
+    (defconst COLOR_GRN="#00FF00" "Green in hex")
+    (defconst PI 3.14159265 "Pi to 8 decimals")
 
 defpact
 ~~~~~~~
 
 ::
 
-   (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
+    (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 
 Define NAME as a *pact*, a computation comprised of multiple steps that
 occur in distinct transactions. Identical to `defun <#defun>`__ except
@@ -1522,39 +2162,39 @@ result in a reverse-sequence “rollback cascade”.
 
 .. code:: lisp
 
-   (defpact payment (payer payer-entity payee
-                     payee-entity amount)
-     (step-with-rollback payer-entity
-       (debit payer amount)
-       (credit payer amount))
-     (step payee-entity
-       (credit payee amount)))
+    (defpact payment (payer payer-entity payee
+                      payee-entity amount)
+      (step-with-rollback payer-entity
+        (debit payer amount)
+        (credit payer amount))
+      (step payee-entity
+        (credit payee amount)))
 
 defschema
 ~~~~~~~~~
 
 ::
 
-   (defschema NAME [DOC-OR-META] FIELDS...)
+    (defschema NAME [DOC-OR-META] FIELDS...)
 
 Define NAME as a *schema*, which specifies a list of FIELDS. Each field
 is in the form ``FIELDNAME[:FIELDTYPE]``.
 
 .. code:: lisp
 
-   (defschema accounts
-     "Schema for accounts table".
-     balance:decimal
-     amount:decimal
-     ccy:string
-     data)
+    (defschema accounts
+      "Schema for accounts table".
+      balance:decimal
+      amount:decimal
+      ccy:string
+      data)
 
 deftable
 ~~~~~~~~
 
 ::
 
-   (deftable NAME[:SCHEMA] [DOC-OR-META])
+    (deftable NAME[:SCHEMA] [DOC-OR-META])
 
 Define NAME as a *table*, used in database functions. Note the table
 must still be created with
@@ -1565,7 +2205,7 @@ let
 
 ::
 
-   (let (BINDPAIR [BINDPAIR [...]]) BODY)
+    (let (BINDPAIR [BINDPAIR [...]]) BODY)
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables within
 BINDPAIRs cannot refer to previously-declared variables in the same let
@@ -1573,10 +2213,10 @@ binding; for this use `let\* <#letstar>`__.
 
 .. code:: lisp
 
-   (let ((x 2)
-         (y 5))
-     (* x y))
-   > 10
+    (let ((x 2)
+          (y 5))
+      (* x y))
+    > 10
 
 .. _letstar:
 
@@ -1585,7 +2225,7 @@ let\*
 
 ::
 
-   (let* (BINDPAIR [BINDPAIR [...]]) BODY)
+    (let* (BINDPAIR [BINDPAIR [...]]) BODY)
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables can
 reference previously declared BINDPAIRS in the same let. ``let*`` is
@@ -1594,18 +2234,18 @@ expanded at compile-time to nested ``let`` calls for each BINDPAIR; thus
 
 .. code:: lisp
 
-   (let* ((x 2)
-          (y (* x 10)))
-     (+ x y))
-   > 22
+    (let* ((x 2)
+           (y (* x 10)))
+      (+ x y))
+    > 22
 
 step
 ~~~~
 
 ::
 
-   (step EXPR)
-   (step ENTITY EXPR)
+    (step EXPR)
+    (step ENTITY EXPR)
 
 Define a step within a `defpact <#defpact>`__, such that any prior steps
 will be executed in prior transactions, and later steps in later
@@ -1618,8 +2258,8 @@ step-with-rollback
 
 ::
 
-   (step-with-rollback EXPR ROLLBACK-EXPR)
-   (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
+    (step-with-rollback EXPR ROLLBACK-EXPR)
+    (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
 
 Define a step within a `defpact <#defpact>`__ similarly to
 `step <#step>`__ but specifying ROLLBACK-EXPR. With ENTITY,
@@ -1634,8 +2274,8 @@ use
 
 ::
 
-   (use MODULE)
-   (use MODULE HASH)
+    (use MODULE)
+    (use MODULE HASH)
 
 Import an existing MODULE into a namespace. Can only be issued at the
 top-level, or within a module declaration. MODULE can be a string,
@@ -1646,38 +2286,56 @@ the hash of a loaded module on the chain.
 
 .. code:: lisp
 
-   (use accounts)
-   (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
-   "Write succeeded"
+    (use accounts)
+    (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+    "Write succeeded"
 
 module
 ~~~~~~
 
 ::
 
-   (module NAME KEYSET [DOC-OR-META] DEFS...)
+    (module NAME KEYSET-OR-GOVERNANCE [DOC-OR-META] BODY...)
 
-Define and install module NAME, guarded by keyset KEYSET, with optional
-DOC-OR-META. DEFS must be `defun <#defun>`__ or `defpact <#defpact>`__
-expressions only.
+Define and install module NAME, with module admin governed by
+KEYSET-OR-GOVERNANCE, with optional DOC-OR-META.
+
+If KEYSET-OR-GOVERNANCE is a string, it references a keyset that has
+been installed with ``define-keyset`` that will be tested whenever
+module admin is required. If KEYSET-OR-GOVERNANCE is an unqualified
+atom, it references a ``defcap`` capability which will be acquired if
+module admin is requested.
+
+BODY is composed of definitions that will be scoped in the module. Valid
+productions in a module include:
+
+-  `defun <#defun>`__
+-  `defpact <#defpact>`__
+-  `defcap <#defcap>`__
+-  `deftable <#deftable>`__
+-  `defschema <#defschema>`__
+-  `defconst <#defconst>`__
+-  `implements <#implements>`__
+-  `use <#use>`__
+-  `bless <#bless>`__
 
 .. code:: lisp
 
-   (module accounts 'accounts-admin
-     "Module for interacting with accounts"
+    (module accounts 'accounts-admin
+      "Module for interacting with accounts"
 
-     (defun create-account (id bal)
-      "Create account ID with initial balance BAL"
-      (insert accounts id { "balance": bal }))
+      (defun create-account (id bal)
+       "Create account ID with initial balance BAL"
+       (insert accounts id { "balance": bal }))
 
-     (defun transfer (from to amount)
-      "Transfer AMOUNT from FROM to TO"
-      (with-read accounts from { "balance": fbal }
-       (enforce (<= amount fbal) "Insufficient funds")
-        (with-read accounts to { "balance": tbal }
-         (update accounts from { "balance": (- fbal amount) })
-         (update accounts to { "balance": (+ tbal amount) }))))
-   )
+      (defun transfer (from to amount)
+       "Transfer AMOUNT from FROM to TO"
+       (with-read accounts from { "balance": fbal }
+        (enforce (<= amount fbal) "Insufficient funds")
+         (with-read accounts to { "balance": tbal }
+          (update accounts from { "balance": (- fbal amount) })
+          (update accounts to { "balance": (+ tbal amount) }))))
+    )
 
 .. _expression:
 
@@ -1727,17 +2385,17 @@ resolve to definitions found in other modules.
 
 ::
 
-   pact> accounts.transfer
-   "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
-   SRC to DEST\")"
-   pact> transfer
-   Eval failure:
-   transfer<EOF>: Cannot resolve transfer
-   pact> (use 'accounts)
-   "Using \"accounts\""
-   pact> transfer
-   "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
-   SRC to DEST\")"
+    pact> accounts.transfer
+    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
+    SRC to DEST\")"
+    pact> transfer
+    Eval failure:
+    transfer<EOF>: Cannot resolve transfer
+    pact> (use 'accounts)
+    "Using \"accounts\""
+    pact> transfer
+    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
+    SRC to DEST\")"
 
 References are preferred over ``use`` for transactions, as references
 resolve faster. However, when defining a module, ``use`` is preferred
@@ -1765,17 +2423,17 @@ follows:
 ``%Z`` - timezone name
 
 ``%c`` - The preferred calendar time representation for the current
-locale. As ‘dateTimeFmt’ ``locale`` (e.g. ``%a %b %e %H:%M:%S %Z %Y``)
+locale. As ‘dateTimeFmt’ ``locale`` (e.g. ``%a %b %e %H:%M:%S %Z %Y``)
 
 ``%R`` - same as ``%H:%M``
 
 ``%T`` - same as ``%H:%M:%S``
 
 ``%X`` - The preferred time of day representation for the current
-locale. As ‘timeFmt’ ``locale`` (e.g. ``%H:%M:%S``)
+locale. As ‘timeFmt’ ``locale`` (e.g. ``%H:%M:%S``)
 
 ``%r`` - The complete calendar time using the AM/PM format of the
-current locale. As ‘time12Fmt’ ``locale`` (e.g. ``%I:%M:%S %p``)
+current locale. As ‘time12Fmt’ ``locale`` (e.g. ``%I:%M:%S %p``)
 
 ``%P`` - day-half of day from (‘amPm’ ``locale``), converted to
 lowercase, ``"am"``, ``"pm"``
@@ -1814,7 +2472,7 @@ seconds before the Unix epoch is formatted as ``"-1.1"`` with ``%s%Q``.
 
 ``%F`` - same as ``%Y-%m-%d``
 
-``%x`` - as ‘dateFmt’ ``locale`` (e.g. ``%m\/%d\/%y``)
+``%x`` - as ‘dateFmt’ ``locale`` (e.g. ``%m\/%d\/%y``)
 
 ``%Y`` - year, no padding.
 
@@ -1885,24 +2543,24 @@ ISO8601
 
 ::
 
-   pact> (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
-   "2016-07-23T13:30:45+00:00"
+    pact> (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
+    "2016-07-23T13:30:45+00:00"
 
 RFC822
 ~~~~~~
 
 ::
 
-   pact> (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
-   "Sat, 23 Jul 2016 13:30:45 UTC"
+    pact> (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
+    "Sat, 23 Jul 2016 13:30:45 UTC"
 
 YYYY-MM-DD hh:mm:ss.000000
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
-   pact> (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
-   "2016-07-23 13:30:45.001002"
+    pact> (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
+    "2016-07-23 13:30:45.001002"
 
 Database Serialization Format
 =============================
@@ -1940,17 +2598,12 @@ even non-RDBMS backends like RocksDB etc, and also keeps SQL DDL very
 straightforward, with simple primary key structure. Indexing is not
 supported nor required.
 
-Pact Datatype Codec
--------------------
-
-For all supported Pact datatypes, they are encoded into JSON using a
-special codec that is different than the JSON format used in the
-front-end API, designed for serialization speed and correctness.
-
 Integer
 ~~~~~~~
 
-For non-large integers, values are directly encoded as JSON numbers.
+Integers are encoded as an JSON object with a single field “int”
+referring to a Number value for non-large integers, or a string for
+large values.
 
 What is considered a “large integer” in JSON/Javascript is subject to
 debate; we use the range ``[-2^53 .. 2^53]`` as specified
@@ -1960,31 +2613,26 @@ stringified integer value:
 
 .. code:: javascript
 
-   /* small integers are just a number */
-   1
-   /* large integers are objects */
-   { "_P_int": "123..." /* integer string representation */
-   }
+    /* small integers are just a number */
+    { "int": 1 }
+    /* large integers are string */
+    { "int": "1231289371891238912983712983712098908937"
+    }
 
 Decimal
 ~~~~~~~
 
-Decimals are encoded using *places* and *mantissa* following the
-`Haskell Decimal
-format <https://hackage.haskell.org/package/Decimal-0.5.1/docs/Data-Decimal.html#t:DecimalRaw>`__:
+Decimals are directly encoded to JSON scientific format, unless the
+mantissa is greater than a safe JS integer, in which case it is encoded
+as an JSON object with key “decimal” referring to the string
+representation.
 
 .. code:: javascript
 
-   { "_P_decp": 4     /* decimal places */
-   , "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
-   }
-
-Note that the mantissa value uses the integer format described above. As
-described in the Decimal docs, the value can be computed as follows:
-
-::
-
-   MANTISSA / (10 ^ PLACES)
+    /* decimal with safe mantissa */
+    10.234
+    /* decimal with unsafe mantissa */
+    { "decimal": "34985794739875934875348957394875349835.39587348953495875394534" }
 
 Boolean
 ~~~~~~~
@@ -1999,41 +2647,33 @@ Strings are stored as JSON strings.
 Time
 ~~~~
 
-Times are stored in a JSON object capturing a Modified Julian Day value
-and a day-local microsecond value.
+Times are stored in a JSON object with key “time” for second-resolution
+values, or “timep” for microsecond-resolution values, as a ISO8601 UTC
+string (modified for high-resolution).
 
 .. code:: javascript
 
-   { "_P_timed": 234 /* "modified julian day value */
-   , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
-   }
-
-Suggestions for converting MJDs can be found
-`here <https://stackoverflow.com/questions/11889553/convert-modified-julian-date-to-utc>`__.
-
-JSON Value/Blob
-~~~~~~~~~~~~~~~
-
-Raw JSON blobs are encoded unmodified in a container object.
-
-.. code:: javascript
-
-   { "_P_val": { "foo": "bar" } /* unmodified user JSON object */
-   }
+    /* second-resolution time */
+    { "time": "2016-12-23T08:23:13Z"
+    /* microsecond-resolution time */
+    { "timep": "2016-12-23T08:23:13.006032Z" }
 
 Keyset
 ~~~~~~
 
-Keysets store the key list and predicate name in a JSON object.
+Keysets use the built-in JSON representation.
 
 .. code:: javascript
 
-   { "_P_keys": ["key1","key2"] /* public key string representations */
-   , "_P_pred": "keys-all"      /* predicate function name */
-   }
+    { "keys": ["key1","key2"] /* public key string representations */
+    , "pred": "keys-all"      /* predicate function name */
+    }
 
 Module (User) Tables
 --------------------
+
+NOTE/WARNING: This does not apply to Chainweb table backends, and may be
+discontinued.
 
 For each module table specified in Pact code, two backend tables are
 created: the “data table” and the “transaction table”.
@@ -2068,9 +2708,9 @@ The update format is a JSON object:
 
 .. code:: javascript
 
-   { "table": "name"  /* user-visible table name (not backend table name) */
-   , "key": "123"     /* update string key */
-   , "value": { ... } /* The new JSON row value. Entire row is captured. */
+    { "table": "name"  /* user-visible table name (not backend table name) */
+    , "key": "123"     /* update string key */
+    , "value": { ... } /* The new JSON row value. Entire row is captured. */
 
 Note that the JSON row value uses the same encoding as found in the user
 data table.

@@ -1,5 +1,5 @@
 name:                pact
-version:             2.6.1
+version:             3.0
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -43,7 +43,6 @@ library
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
                      , Pact.Server.API
-                     , Pact.Server.Client
                      , Pact.Types.API
                      , Pact.Types.ChainMeta
                      , Pact.Types.Codec
@@ -64,6 +63,7 @@ library
                      , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
+                     , Pact.Types.Swagger
                      , Pact.Types.Term
                      , Pact.Types.Type
                      , Pact.Types.Util
@@ -138,18 +138,18 @@ library
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
-                     , algebraic-graphs >= 0.2 && < 0.3
+                     , algebraic-graphs >= 0.2 && < 0.4
                      , prettyprinter >= 1.2 && < 1.3
                      , prettyprinter-ansi-terminal >= 1.1 && < 1.2
                      , prettyprinter-convert-ansi-wl-pprint
                      , attoparsec >= 0.13.0.2 && < 0.14
-                     , base >=4.9.0.0 && < 4.12
+                     , base >=4.9.0.0 && < 4.13
                      , base16-bytestring >=0.1.1.6 && < 0.2
                      , base64-bytestring >= 1.0.0.1
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
                      , cereal >=0.5.4.0 && < 0.6
-                     , containers >= 0.5.7 && < 0.6
+                     , containers >= 0.5.7 && < 0.7
                      , data-default >= 0.7.1.1 && < 0.8
                      , deepseq >= 1.4.2.0 && < 1.5
                      , deriving-compat >= 0.5.1
@@ -157,8 +157,8 @@ library
                      , exceptions >= 0.8.3 && < 0.11
                      , filepath >= 1.4.1.0 && < 1.5
                      , hashable >= 1.2.4.0 && < 1.3
-                     , hspec >= 2.2.4 && < 2.6
-                     , lens >= 4.14 && < 4.17
+                     , hspec >= 2.2.4 && < 2.8
+                     , lens >= 4.14 && < 4.18
                      , lens-aeson >= 1.0.0.5 && < 1.1
                      , megaparsec >= 6
                      , mtl >= 2.2.1 && < 2.3
@@ -169,7 +169,7 @@ library
                      , safe >= 0.3.11 && < 0.4
                      , scientific >= 0.3.4.9 && < 0.4
                      , semigroups >= 0.18.2 && < 0.19
-                     , stm >= 2.4.4.1 && < 2.5
+                     , stm >= 2.4.4.1 && < 2.6
                      , text >= 1.2.2.1 && < 1.3
                      -- kadena ghcjs compat fork
                      , thyme == 0.3.6.0
@@ -179,12 +179,14 @@ library
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-algorithms >= 0.7
-                     , vector-space >= 0.10.4 && < 0.14
+                     , vector-space >= 0.10.4 && < 0.16
                      , mmorph >= 1.1 && < 1.2
                      , constraints
                      , servant
                      , servant-client
                      , servant-client-core
+                     , servant-swagger
+                     , swagger2 >= 2.3
 
   if impl(ghcjs)
     build-depends:
@@ -194,7 +196,7 @@ library
   if !impl(ghcjs)
     build-depends:
         async
-      , criterion >= 1.1.4 && < 1.5
+      , criterion >= 1.1.4 && < 1.6
       , cryptonite
       , direct-sqlite
       , fast-logger
@@ -203,7 +205,7 @@ library
       , safe-exceptions >= 0.1.5.0 && < 0.2
       , sbv >= 7.11
       , servant-server
-      , statistics >= 0.13.3 && < 0.15
+      , statistics >= 0.13.3 && < 0.16
       , wai-cors
       , warp
       , yaml
@@ -258,32 +260,33 @@ test-suite hspec
   ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-depends:
                 base
-              , bound
               , Decimal
-              , deepseq
-              , exceptions
-              , hspec
               , HUnit
-              , pact
               , aeson
+              , base16-bytestring >=0.1.1.6 && < 0.2
+              , bound
+              , bytestring
               , containers
-              , directory
-              , filepath
-              , mmorph
               , data-default
+              , deepseq
+              , directory
+              , errors >= 2.3
+              , exceptions
+              , filepath
+              , hedgehog == 0.6.*
+              , hspec
+              , hw-hspec-hedgehog == 0.1.*
+              , intervals
               , lens
-              , unordered-containers
+              , mmorph
+              , mtl
+              , pact
               , prettyprinter
               , prettyprinter-ansi-terminal
               , prettyprinter-convert-ansi-wl-pprint
-              , bytestring
-              , base16-bytestring >=0.1.1.6 && < 0.2
-              , mtl
               , text
               , transformers
-              , hedgehog == 0.6.*
-              , hw-hspec-hedgehog == 0.1.*
-              , intervals
+              , unordered-containers
               , vector
   other-modules:
                 Blake2Spec

@@ -14,11 +14,10 @@
 
 module Pact.Server.Server
   ( serve
-  , setupServer
   ) where
 
 import Control.Concurrent
-import Control.Concurrent.Async (async, link, Async(..))
+import Control.Concurrent.Async (async, link)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Exception
@@ -71,13 +70,6 @@ usage =
 
 serve :: FilePath -> IO ()
 serve configFile = do
-  (runServer, asyncCmd, asyncHist) <- setupServer configFile
-  link asyncCmd   -- Must be individually killed with uninterruptibleCancel
-  link asyncHist  -- Must be individually killed with uninterruptibleCancel
-  runServer
-
-setupServer :: FilePath -> IO (IO (), Async (), Async ())
-setupServer configFile = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
       putStrLn usage
@@ -93,10 +85,16 @@ setupServer configFile = do
           _gasRate
 
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
+
+  -- Must be individually killed with uninterruptibleCancel if parent thread not killed.
   asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
+  -- Must be individually killed with uninterruptibleCancel if parent thread not killed.
   asyncHist <- async (runHistoryService histConf Nothing)
   let runServer = runApiServer histC inC debugFn (fromIntegral _port) _logDir
-  return (runServer,asyncCmd, asyncHist)
+
+  link asyncCmd
+  link asyncHist
+  runServer
 
 initFastLogger :: IO (String -> IO ())
 initFastLogger = do
@@ -125,5 +123,5 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
           liftIO $ _ceiApplyCmd Transactional cmd
         liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> resps
       LocalCmd cmd mv -> do
-        CommandResult {..} <- liftIO $ _ceiApplyCmd Local cmd
-        liftIO $ putMVar mv _crResult
+        resp <- liftIO $ _ceiApplyCmd Local cmd
+        liftIO $ putMVar mv resp

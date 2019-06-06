@@ -55,7 +55,7 @@ module Pact.Types.Term
    Governance(..),
    ModuleName(..), mnName, mnNamespace,
    Name(..),parseName,
-   ConstVal(..),
+   ConstVal(..),constTerm,
    Use(..),
    App(..),appFun,appArgs,appInfo,
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
@@ -195,7 +195,7 @@ instance ToJSON KeySet where
 
 
 newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData)
+    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic)
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
@@ -323,8 +323,9 @@ data FunApp = FunApp {
     , _faDefType :: !DefType
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
-    } deriving Show
-
+    } deriving (Show,Eq,Generic)
+instance ToJSON FunApp where toJSON = lensyToJSON 3
+instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 instance HasInfo FunApp where getInfo = _faInfo
 
 -- | Variable type for an evaluable 'Term'.
@@ -349,7 +350,7 @@ instance HasInfo n => HasInfo (Ref' n) where
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON,Generic)
 
 instance Pretty Gas where
   pretty (Gas i) = pretty i
@@ -700,6 +701,10 @@ instance FromJSON n => FromJSON (ConstVal n) where
     (withObject "CVRaw"
      (\o -> CVRaw <$> o .: "raw") v)
 
+-- | A term from a 'ConstVal', preferring evaluated terms when available.
+constTerm :: ConstVal a -> a
+constTerm (CVRaw raw) = raw
+constTerm (CVEval _raw eval) = eval
 
 data Example
   = ExecExample !Text
@@ -723,7 +728,7 @@ instance NFData Example
 
 -- | Label type for objects.
 newtype FieldKey = FieldKey Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,ToJSONKey)
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
@@ -749,6 +754,10 @@ instance FromJSON v => FromJSON (ObjectMap v)
   where parseJSON = withObject "ObjectMap" $ \o ->
           ObjectMap . M.fromList <$>
             traverse (\(k,v) -> (FieldKey k,) <$> parseJSON v) (HM.toList o)
+
+instance Default (ObjectMap v) where
+  def = ObjectMap M.empty
+
 
 -- | Full Term object.
 data Object n = Object

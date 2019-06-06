@@ -1,3 +1,41 @@
+3.0.0
+---
+* Guards and capabilities, with full model-checking support
+* Scoped namespaces for modules and keysets
+* Adds module governance function
+* Migrate all runtime pact state to DB backend: modules, pacts, transaction ID management
+* Improved transaction non-malleability: signatories and chain version in payload
+* Adds SPV support with configurable backend
+* Multiple Cryptographic signature schemes: ED25519, ECDSA
+* Adds Table-based Gas model
+* Standardize on CommandResult in all API endpoints
+* CommandResult adds gas consumed, logs, and metadata fields
+* CommandResult's "result" field changed to output reliable, user-friendly Terms and errors.
+* Adds continuation proof field to ContMsg
+* Adds public metadata to Pact Command API
+* Format all hashes in Base64url
+* Adds typechecking for lists, `yield`, and `resume`
+* Typechecker and analysis support for partial schemas
+* Removes support for non-string keys in objects
+* Rejects decimal literals with too many digits
+* `defpact` can run in local mode
+* Disallow rollback on the last step of a pact
+* Replaces REPL's `env-step` and `env-pactid` with `continue-pact` and `pact-state`
+* Adds REPL functions `chain-data` and `env-chain-data`
+* Better compile and typecheck errors
+* Pretty printing
+* Working Windows build
+* Analysis:
+  * Adds analysis for non-literal constants
+  * Adds pact analysis tools developer guide
+  * Adds analysis for `pact-id`, `defpact`, `yield`, and `resume`
+  * Improves output from verification
+  * Supports analysis of (bounded-size) lists and nested objects
+  * Pins z3 to a specific version (4.8.3)
+  * Uses timeout of 1 second for all z3 queries
+* Swagger for API
+
+
 2.6.1
 ---
 * Korean readthedocs

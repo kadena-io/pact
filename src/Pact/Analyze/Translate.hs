@@ -35,6 +35,7 @@ import           Control.Monad.Reader       (MonadReader (local),
 import           Control.Monad.State.Strict (MonadState, StateT, evalStateT,
                                              modify', runStateT)
 import           Data.Foldable              (foldl', for_, foldlM)
+import           Data.List                  (sort)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe, isNothing)
@@ -88,7 +89,6 @@ data TranslateFailureNoLoc
   | NonStaticColumns (AST Node)
   | BadNegationType (AST Node)
   | BadTimeType (AST Node)
-  | NonConstKey (AST Node)
   | FailedVarLookup Text
   | NoKeys (AST Node)
   | NoReadMsg (AST Node)
@@ -99,6 +99,8 @@ data TranslateFailureNoLoc
   | UnhandledType Node (Pact.Type Pact.UserType)
   | SortLiteralObjError String (Existential (Core Term))
   | CapabilityNotFound CapName
+  | BadPartialBind EType [String]
+  | UnexpectedDefaultReadType EType EType
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -117,10 +119,9 @@ describeTranslateFailureNoLoc = \case
   UnexpectedPactNode ast -> "Unexpected node in translation of a pact: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   MonadFailure str -> "Translation failure: " <> T.pack str
-  NonStaticColumns col -> "When reading only certain columns we require all columns to be concrete in order to do analysis. We found " <> tShow col
+  NonStaticColumns col -> "We require all column (field) names to be concrete in order to do analysis. We found " <> tShow col
   BadNegationType node -> "Invalid: negation of a non-integer / decimal: " <> tShow node
   BadTimeType node -> "Invalid: days / hours / minutes applied to non-integer / decimal: " <> tShow node
-  NonConstKey k -> "Pact can currently only analyze constant keys in objects. Found " <> tShow k
   FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
   NoKeys _node  -> "`keys` is not yet supported"
   NoReadMsg _ -> "`read-msg` is not yet supported"
@@ -131,6 +132,8 @@ describeTranslateFailureNoLoc = \case
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   SortLiteralObjError msg tm -> T.pack $ msg ++ show tm
   CapabilityNotFound (CapName cn) -> "Found a reference to capability that does not exist: " <> T.pack cn
+  BadPartialBind (EType objTy) columnNames -> "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
+  UnexpectedDefaultReadType (EType expected) (EType received) -> "Bad type in a `with-default-read`: we expected " <> tShow expected <> " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
 
 data TranslateEnv
   = TranslateEnv
@@ -436,7 +439,8 @@ maybeTranslateType' restrictKeys = \case
   TySchema Pact.TyTable _ _ -> pure QTable
   TySchema _ ty' (PartialSchema keys)
     -> maybeTranslateType' (Just keys) ty'
-  TySchema _ ty' _          -> maybeTranslateType' Nothing ty'
+  TySchema _ ty' _
+    -> maybeTranslateType' Nothing ty'
 
   TyPrim Pact.TyBool        -> pure $ EType SBool
   TyPrim Pact.TyDecimal     -> pure $ EType SDecimal
@@ -517,6 +521,38 @@ joinPaths branches = do
     let rejoinEdge = (v, v')
     tsEdgeEvents.at rejoinEdge ?= [TraceSubpathStart path | isNewPath]
     addPathEdge path rejoinEdge
+
+-- | When we bind a subset of fields in a type, we need to determine the sub-
+-- schema type.
+typeOfPartialBind
+  :: SingTy ('TyObject schema) -> [(Named Node, AST Node)] -> TranslateM EType
+typeOfPartialBind objTy bindings = do
+  columnNames <- for bindings $ \case
+    (_, Pact.Prim _ (Pact.PrimLit (LString name))) -> pure $ T.unpack name
+    (_, binding) -> throwError' $ NonStaticColumns binding
+
+  -- The object keys are sorted so we must sort our binding names to match them
+  -- in the correct order
+  typeOfPartialBind' objTy (sort columnNames)
+    ?? BadPartialBind (EType objTy) columnNames
+
+typeOfPartialBind'
+  :: SingTy ('TyObject schema) -> [String] -> Maybe EType
+typeOfPartialBind' SObjectNil []
+  = Just $ EType SObjectNil
+typeOfPartialBind' SObjectNil _
+  = Nothing
+typeOfPartialBind' SObjectCons{} []
+  = Just $ EType SObjectNil
+typeOfPartialBind' (SObjectCons k v schema') (name:names)
+  | symbolVal k == name
+  = do EType (SObject subschema)
+         <- typeOfPartialBind' (SObjectUnsafe schema') names
+       pure $ EType $ SObjectCons k v subschema
+  | otherwise
+  = typeOfPartialBind' (SObjectUnsafe schema') (name:names)
+typeOfPartialBind' _ _
+  = vacuousMatch "pattern synonyms lead to an erroneous warning here"
 
 translateType
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -997,7 +1033,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
         pure $ Some SBool $ inject $ ListEqNeq ta op' a' b'
 
-      (Some ta@SObject{} a', Some tb@SObject{} b') -> do
+      (Some ta@SObjectUnsafe{} a', Some tb@SObjectUnsafe{} b') -> do
         op' <- toOp eqNeqP fn ?? MalformedComparison fn args
         pure $ Some SBool $ inject $ ObjectEqNeq ta tb op' a' b'
 
@@ -1066,13 +1102,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
     aT          <- translateNode a
     bT          <- translateNode b
     case (aT, bT) of
-      (Some ty1@SObject{} o1, Some ty2@SObject{} o2) -> do
+      (Some ty1@SObjectUnsafe{} o1, Some ty2@SObjectUnsafe{} o2) -> do
         -- Feature 3: object merge
         pure $ Some retTy $ inject $ ObjMerge ty1 ty2 o1 o2
+
       (Some (SList tyA) a', Some (SList tyB) b') -> do
         Refl <- singEq tyA tyB ?? MalformedArithOp fn args
         -- Feature 4: list concatenation
         pure $ Some (SList tyA) $ inject $ ListConcat tyA a' b'
+
       (Some tyA a', Some tyB b') ->
         case (tyA, tyB) of
           -- Feature 1: string concatenation
@@ -1144,28 +1182,38 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _node "pact-version" [] -> pure $ Some SStr PactVersion
 
   AST_WithRead node table key bindings schemaNode body -> do
-    EType objTy@(SObject schema) <- translateType schemaNode
-    Some SStr key'               <- translateNode key
-    tid                          <- tagRead node $ ESchema schema
-    let readT = Some objTy $ Read objTy Nothing tid (TableName (T.unpack table)) key'
-    withNodeContext node $ translateObjBinding bindings objTy body readT
+    EType objTy@SObject{}                <- translateType schemaNode
+    Some SStr key'                       <- translateNode key
+    EType partialReadTy@(SObject schema) <- typeOfPartialBind objTy bindings
+    tid                                  <- tagRead node $ ESchema schema
+
+    let readT = Some partialReadTy $
+          Read partialReadTy Nothing tid (TableName (T.unpack table)) key'
+    withNodeContext node $
+      translateObjBinding bindings partialReadTy body readT
 
   AST_WithDefaultRead node table key bindings schemaNode defaultNode body -> do
-    EType objTy@(SObject schema) <- translateType schemaNode
-    Some SStr key'               <- translateNode key
-    Some objTy' def              <- translateNode defaultNode
-    tid                          <- tagRead node $ ESchema schema
-    case singEq objTy objTy' of
-      Nothing   -> throwError' $ TypeError node
+    EType objTy@SObject{}                <- translateType schemaNode
+    Some SStr key'                       <- translateNode key
+    Some objTy'@SObject{} def            <- translateNode defaultNode
+    EType partialReadTy@(SObject schema) <- typeOfPartialBind objTy bindings
+    tid                                  <- tagRead node $ ESchema schema
+
+    -- Expect the bound type to equal the provided default object type
+    case singEq partialReadTy objTy' of
+      Nothing -> throwError' $
+        UnexpectedDefaultReadType (EType objTy') (EType partialReadTy)
       Just Refl -> do
-        let readT = Some objTy $
-              Read objTy (Just def) tid (TableName (T.unpack table)) key'
-        withNodeContext node $ translateObjBinding bindings objTy body readT
+        let readT = Some objTy' $
+              Read objTy' (Just def) tid (TableName (T.unpack table)) key'
+        withNodeContext node $ translateObjBinding bindings objTy' body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
-    EType objTy@SObject{} <- translateType schemaNode
-    objectT               <- translateNode objectA
-    withNodeContext node $ translateObjBinding bindings objTy body objectT
+    EType objTy@SObject{}         <- translateType schemaNode
+    EType partialReadTy@SObject{} <- typeOfPartialBind objTy bindings
+    objectT                       <- translateNode objectA
+    withNodeContext node $
+      translateObjBinding bindings partialReadTy body objectT
 
   AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
     let capName = CapName $ T.unpack funName
@@ -1242,7 +1290,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     obj'     <- translateNode obj
     EType ty <- translateType node
     case obj' of
-      Some objTy@SObject{} obj'' -> do
+      Some objTy@SObjectUnsafe{} obj'' -> do
         Some SStr colName <- translateNode index
         pure $ Some ty $ CoreTerm $ ObjAt objTy colName obj''
       Some (SList listOfTy) list -> do
@@ -1254,9 +1302,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     kvs' <- for (Map.toList kvs) $ \(Pact.FieldKey k, v) -> do
       v' <- translateNode v
       pure (k, v')
-    Some objTy litObj
+    Some objTy'@SObject{} litObj
       <- mkLiteralObject (fmap throwError' . SortLiteralObjError) kvs'
-    pure $ Some objTy $ CoreTerm litObj
+    pure $ Some objTy' $ CoreTerm litObj
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
 
@@ -1432,10 +1480,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   -- Translate into a resume-and-bind
   AST_Resume node bindings schemaNode body -> do
-    ety@(EType objTy@SObject{}) <- translateType schemaNode
+    EType objTy@SObject{} <- translateType schemaNode
+    ety@(EType partialReadTy@SObject{}) <- typeOfPartialBind objTy bindings
     tid <- tagResume ety
-    withNodeContext node $ translateObjBinding bindings objTy body $
-      Some objTy $ Resume tid
+    withNodeContext node $ translateObjBinding bindings partialReadTy body $
+      Some partialReadTy $ Resume tid
 
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 

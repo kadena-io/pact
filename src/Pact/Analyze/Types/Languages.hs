@@ -38,7 +38,7 @@ module Pact.Analyze.Types.Languages
 
   , toPact
   , fromPact
-  , valueToProp
+  , constantToProp
   , sortLiteralObject
   , mkLiteralList
   , mkLiteralObject
@@ -1656,11 +1656,12 @@ instance Num (Term 'TyDecimal) where
   signum = inject .   DecUnaryArithOp Signum
   negate = inject .   DecUnaryArithOp Negate
 
-valueToProp :: ETerm -> Either String EProp
-valueToProp = \case
+constantToProp :: ETerm -> Either String EProp
+constantToProp = \case
   Some ty (CoreTerm (Lit l))
     -> Right $ Some ty (CoreProp (Lit l))
-  Some _ _ -> Left "can only convert (simple) values terms to props"
+  Some ty t -> Left $
+    "encountered unexpected non-literal for constant: " ++ withSing ty (show t)
 
 -- Note [instances]:
 -- The following nine instances seem like they should be

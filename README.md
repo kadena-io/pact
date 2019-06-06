@@ -134,39 +134,18 @@ Issue `stack build` on the command line.
 
 Use `stack install` to install on the command line and for Atom, ensuring that `$HOME/.local/bin` is on your PATH.
 
-### Building with Nix / NixOS
+### Building with Nix
 
-1. Go to https://nixos.org/nix/, click "Get Nix", follow the instructions to install the Nix package manager.
-2. Edit `$NIX_CONF_DIR/nix.conf`.
-   - Linux default: `/etc/nix/nix.conf`
-3. Set the `substituters` and `trusted-public-keys` lines as follows:
+The fastest way to build and run pact is to use the Nix package manager
+which has binary caching capabilities that allow you to download pre-built
+binaries for everything needed by pact. For detailed instructions see [our
+wiki](https://github.com/kadena-io/pact/wiki/Building-Kadena-Projects).
 
+When the build is finished, you can run pact with the following command:
+
+```bash
+./result/ghc/pact/bin/pact
 ```
-substituters = https://pact.cachix.org https://nixcache.reflex-frp.org https://cache.nixos.org/
-
-trusted-public-keys = pact.cachix.org-1:cg1bsryGrHnQzqEp52NcHq4mBBL+R25XbR2Q/I/vQ8Y= ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
-```
-
-NOTE: In older versions of Nix, instead of `substituters` and
-`trusted-public-keys`, use `binary-caches` and `binary-cache-public-keys`
-respectively.
-
-4. If running Nix in multi-user mode (i.e. with a daemon), restart the Nix daemon.
-
-On Mac:
-
-```
-sudo launchctl stop org.nixos.nix-daemon
-sudo launchctl start org.nixos.nix-daemon
-```
-
-On Linux:
-
-```
-sudo systemctl restart nix-daemon.service
-```
-
-5. Run `nix-build` from the project root.
 
 #### Incremental Builds
 

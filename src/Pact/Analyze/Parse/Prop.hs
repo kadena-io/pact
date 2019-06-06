@@ -376,7 +376,7 @@ inferPreProp preProp = case preProp of
         cm  <- view $ tableEnv . at (TableName litTn)
         case cm of
           Just cm' -> case columnMapToSchema cm' of
-            EType objTy@SObject{} -> pure $
+            EType objTy@SObjectUnsafe{} -> pure $
               Some objTy $ PropSpecific $ PropRead objTy ba' tn' rk'
             _ -> throwErrorIn preProp "expected an object"
           Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn

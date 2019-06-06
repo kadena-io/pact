@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+
 module Pact.Types.Pretty
   ( (<+>)
   , Annot(..)
@@ -47,6 +48,7 @@ module Pact.Types.Pretty
   , renderPrettyString'
   , renderString'
   , sep
+  , showPretty
   , space
   , unAnnotate
   , viaShow
@@ -89,6 +91,9 @@ data Annot
   | BadExample
 
 type Doc = PP.Doc Annot
+instance Eq Doc where
+  d1 == d2 = show d1 == show d2
+  d1 /= d2 = show d1 /= show d2
 
 -- | Pact's version of 'Pretty', with 'Annot' annotations.
 class Pretty a where
@@ -162,6 +167,9 @@ layoutReallyCompact doc = scan 0 [doc]
         PP.WithPageWidth f -> scan col (f PP.Unbounded : ds)
         PP.Nesting f       -> scan col (f 0 : ds)
         PP.Annotated _ x   -> scan col (x:ds)
+
+showPretty :: Pretty a => a -> String
+showPretty = renderCompactString
 
 renderCompactString :: Pretty a => a -> String
 renderCompactString = renderString' layoutReallyCompact RPlain . pretty
