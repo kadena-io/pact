@@ -135,7 +135,7 @@ data Meta = Meta
   } deriving (Eq, Show, Generic)
 
 instance Pretty Meta where
-  pretty (Meta (Just doc) model) = pretty doc <> line <> prettyModel model
+  pretty (Meta (Just doc) model) = dquotes (pretty doc) <> line <> prettyModel model
   pretty (Meta Nothing    model) = prettyModel model
 
 instance NFData Meta
