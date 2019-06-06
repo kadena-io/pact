@@ -13,7 +13,9 @@
   "author": "Will Martino",
   "license": "BSD3",
   "dependencies": {
+    "base64-url": "^2.2.1",
     "blakejs": "^1.0.1",
+    "browserify": "^16.2.3",
     "tweetnacl": "^0.14.5"
   }
 }
