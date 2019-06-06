@@ -893,7 +893,7 @@ renderVerifiedModule = \case
     [T.pack msg]
   Left (SchemalessTable info) ->
     [T.pack (renderInfo info) <>
-      ": verification requires all tables to have schemas"
+      ":Warning: Verification requires all tables to have schemas"
     ]
   Right (ModuleChecks propResults invariantResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
