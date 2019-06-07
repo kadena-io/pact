@@ -168,15 +168,28 @@ enforceGuard i g = case g of
     unless (pid == _pgPactId) $
       evalError' i $ "Pact guard failed, intended: " <> pretty _pgPactId <> ", active: " <> pretty pid
   GModule mg@ModuleGuard{..} -> do
-    m <- _mdModule <$> getModule (_faInfo i) _mgModuleName
-    case m of
-      MDModule Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
+    md <- _mdModule <$> getModule (_faInfo i) _mgModuleName
+    case md of
+      MDModule m@Module{..} -> calledByModule m >>= \r ->
+        if r then
+          return ()
+        else
+          enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
 
 findCallingModule :: Eval e (Maybe ModuleName)
 findCallingModule = uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))
+
+calledByModule :: Module n -> Eval e Bool
+calledByModule Module{..} =
+  searchCallStackApps forModule >>= (return . maybe False (const True))
+  where
+    forModule :: FunApp -> Maybe ()
+    forModule FunApp{..} | _faModule == Just _mName = Just ()
+                         | otherwise = Nothing
+
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.

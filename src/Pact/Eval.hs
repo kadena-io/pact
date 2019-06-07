@@ -42,6 +42,7 @@ module Pact.Eval
     ,resumePact
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
+    ,searchCallStackApps
     ) where
 
 import Bound
@@ -121,6 +122,11 @@ enforceKeySet i ksn KeySet{..} = do
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
 
+-- | Search up through call stack apps to find the first `Just a`
+searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)
+searchCallStackApps f = uses evalCallStack $
+  preview (traverse . sfApp . _Just . _1 . to f . _Just)
+
 -- | Eval a function by name with supplied args, and guard against recursive execution.
 evalByName :: Name -> [Term Name] -> Info -> Eval e (Term Name)
 evalByName n as i = do
@@ -142,8 +148,7 @@ evalByName n as i = do
             | (DefName _faName) == dn && Just mn == _faModule = Just ()
             | otherwise = Nothing
 
-      found <- uses evalCallStack $
-               preview (traverse . sfApp . _Just . _1 . to (sameName _dDefName _dModule) . _Just)
+      found <- searchCallStackApps $ sameName _dDefName _dModule
 
       case found of
         Just () -> evalError i $ "evalByName: loop detected: " <> pretty n
