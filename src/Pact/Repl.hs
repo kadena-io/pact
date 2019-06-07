@@ -349,15 +349,18 @@ rSuccess = return $ Right $ toTerm True
 execScript :: Bool -> FilePath -> IO (Either () (Term Name))
 execScript dolog f = do
   (r,ReplState{..}) <- execScript' (Script dolog f) f
+  let outFailures = do
+        LibState{..} <- readMVar $ _eePactDbVar _rEnv
+        fmap sequence $ forM _rlsTests $ \TestResult{..} -> case trFailure of
+          Nothing -> return (Just ())
+          Just (i,e) -> do
+            hPutStrLn stderr $ renderInfo (_faInfo i) ++ ": " ++ unpack e
+            return Nothing
   case r of
-    Left _ -> return $ Left ()
+    Left _ -> outFailures >> return (Left ())
     Right t -> do
       LibState{..} <- readMVar $ _eePactDbVar _rEnv
-      fs <- fmap sequence $ forM _rlsTests $ \TestResult{..} -> case trFailure of
-        Nothing -> return (Just ())
-        Just (i,e) -> do
-          hPutStrLn stderr $ renderInfo (_faInfo i) ++ ": " ++ unpack e
-          return Nothing
+      fs <- outFailures
       maybe (return $ Left ()) (const (return (Right t))) fs
 
 
