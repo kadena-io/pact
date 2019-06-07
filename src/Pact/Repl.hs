@@ -359,7 +359,6 @@ execScript dolog f = do
   case r of
     Left _ -> outFailures >> return (Left ())
     Right t -> do
-      LibState{..} <- readMVar $ _eePactDbVar _rEnv
       fs <- outFailures
       maybe (return $ Left ()) (const (return (Right t))) fs
 
