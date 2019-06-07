@@ -7,6 +7,10 @@
 
 (env-keys ["admin"])
 
+(module other GOV
+  (defcap GOV () true)
+  (defun enforce-a-guard (g) (enforce-guard g)))
+
 (module caps 'kadmin
 
   (defschema guards g:guard)
@@ -89,6 +93,10 @@
 
   (defun loop (x:integer)
     (enforce-guard (create-user-guard x "loop")))
+
+  (defun test-module-guard-other ()
+    (other.enforce-a-guard (get-module-guard))
+    "success")
 
 )
 
@@ -203,3 +211,5 @@
 (expect-failure "shadowed cap fails" (caps-shadow.bad-shadow-granted "k1"))
 
 (expect-failure "loop in guard detected" (loop 1))
+
+(expect "" "success" (test-module-guard-other))
