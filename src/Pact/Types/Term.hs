@@ -295,7 +295,7 @@ data DefType
   = Defun
   | Defpact
   | Defcap
-  deriving (Eq,Show,Generic)
+  deriving (Eq,Show,Generic, Bounded, Enum)
 
 instance FromJSON DefType
 instance ToJSON DefType
