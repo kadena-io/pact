@@ -1,3 +1,10 @@
+3.0.1
+---
+* Check for module in stack when enforcing module guard
+* Output test failures on error
+* fix describe table output and meta pretty instance
+
+
 3.0.0
 ---
 * Guards and capabilities, with full model-checking support
