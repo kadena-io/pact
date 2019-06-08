@@ -1,5 +1,38 @@
 #!/bin/sh
 
+#
+#
+# release.sh: Pact release deploy script
+#
+# Downloads travis builds from s3
+# Prepares zips and tarballs for linux and osx
+# Updates homebrew-pact formula
+#
+# Instructions:
+# 1. See prerequisites below.
+#
+# 2. Execute with version, travis build, pact-homebrew:
+# Example: `./release.sh 3.0.1 3301 ../homebrew-pact`
+# Version arg $VERSION must also be a tag "v$VERSION" in pact repo.
+#
+# 3. Create git release for tag and upload artifacts to Git.
+#
+# 4. Commit/push changes to homebrew-pact.
+#
+# Prerequisites:
+# - aws client installed
+# - https://github.com/kadena-io/homebrew-pact checked out, master branch
+# - perl
+# - shasum
+# - md5
+# - git
+# - zip, gzip
+# - tar
+#
+# Works on osx, not tested on linux
+#
+#
+
 set -e
 
 version="$1"
@@ -8,7 +41,7 @@ if [ -z "$version" ]; then echo "Missing version"; exit 1; fi
 
 build="$2"
 
-if [ -z "$build" ]; then echo "Missing build"; exit 1; fi
+if [ -z "$build" ]; then echo "Missing travis build number"; exit 1; fi
 
 brewdir="$3"
 
@@ -51,7 +84,7 @@ aws s3 cp $lurl .
 
 md5 pact > pact.md5
 
-zip pact-$version-linux.zip pact pact.md5
+zip ../pact-$version-linux.zip pact pact.md5
 
 rm pact pact.md5
 
@@ -60,6 +93,7 @@ rm pact pact.md5
 echo "Downloading osx s3 artifact"
 
 cd $mdir
+rm -r $ldir
 
 if [ -z "$macbuild" ]; then
     aws s3 cp $murl .
@@ -68,24 +102,25 @@ else
 fi
 md5 pact > pact.md5
 
-zip pact-$version-osx.zip pact pact.md5
+zip ../pact-$version-osx.zip pact pact.md5
 
 brewtgz="pact-$version-osx.tar.gz"
 
-tar czvf $brewtgz pact
+tar czvf ../$brewtgz pact
 
 rm pact pact.md5
 
 echo "Updating $brewdir/$brewfile"
 
-sha=`shasum -a 256 $brewtgz | cut -d ' ' -f 1`
+sha=`shasum -a 256 ../$brewtgz | cut -d ' ' -f 1`
 url="https://github.com/kadena-io/pact/releases/download/v$version/$brewtgz"
 
 cd $brewdir
+rm -r $mdir
 
 perl -p -i -e "s|url .*|url \"$url\"|" $brewfile
 perl -p -i -e "s|sha256 .*|sha256 \"$sha\"|" $brewfile
 
-find $vdir
+find $vdir -type f
 
 echo "Builds ready in $vdir"
