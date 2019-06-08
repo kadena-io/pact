@@ -325,7 +325,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.0"
+"3.0.1"
 ```
 
 Top level only: this function will fail if used in module code.
