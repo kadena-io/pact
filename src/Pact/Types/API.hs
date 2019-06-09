@@ -77,7 +77,7 @@ instance FromJSON PollResponses where
       (\(k,v) -> (,) <$> parseJSON (String k) <*> parseJSON v))
 
 -- | ListenerRequest for results by RequestKey
-newtype ListenerRequest = ListenerRequest RequestKey
+newtype ListenerRequest = ListenerRequest { _lrListen :: RequestKey }
   deriving (Eq,Show,Generic)
 instance ToJSON ListenerRequest where
   toJSON (ListenerRequest r) = object ["listen" .= r]

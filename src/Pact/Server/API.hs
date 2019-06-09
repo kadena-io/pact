@@ -160,15 +160,18 @@ instance ToSchema (Command Text) where
 instance ToSchema (CommandResult Hash)
 
 instance ToSchema SubmitBatch where
-  declareNamedSchema = declareLensyNamedSchema 3
+  declareNamedSchema = lensyDeclareNamedSchema 3
 
-instance ToSchema RequestKeys
+instance ToSchema RequestKeys where
+  declareNamedSchema = lensyDeclareNamedSchema 3
 
-instance ToSchema Poll
+instance ToSchema Poll where
+  declareNamedSchema = lensyDeclareNamedSchema 2
 
 instance ToSchema PollResponses
 
-instance ToSchema ListenerRequest
+instance ToSchema ListenerRequest where
+  declareNamedSchema = lensyDeclareNamedSchema 3
 
 instance ToSchema ListenResponse
 
@@ -192,7 +195,7 @@ instance ToSchema PublicKey where
   declareNamedSchema = declareGenericString
 
 instance ToSchema UserSig where
-  declareNamedSchema = declareLensyNamedSchema 3
+  declareNamedSchema = lensyDeclareNamedSchema 3
 
 instance ToSchema TxId
 

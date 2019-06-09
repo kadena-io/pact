@@ -21,7 +21,7 @@ module Pact.Types.Swagger
   , declareGenericEmpty
   , declareGenericSchema
   , declareGenericString
-  , declareLensyNamedSchema
+  , lensyDeclareNamedSchema
   , namedSchema
     -- | Modifiers
   , fixedLength
@@ -63,7 +63,7 @@ declareGenericString ::
 declareGenericString = declareGenericSchema (schemaOf $ swaggerType SwaggerString)
 
 -- | 'ToSchema' instance for unprefixing single-constructor field names.
-declareLensyNamedSchema ::
+lensyDeclareNamedSchema ::
   (GenericHasSimpleShape a
     "genericDeclareNamedSchemaUnrestricted"
     (GenericShape (Rep a)),
@@ -71,7 +71,7 @@ declareLensyNamedSchema ::
   => Int
   -> proxy a
   -> Declare (Definitions Schema) NamedSchema
-declareLensyNamedSchema i = genericDeclareNamedSchema $ fromAesonOptions $ lensyOptions i
+lensyDeclareNamedSchema i = genericDeclareNamedSchema $ fromAesonOptions $ lensyOptions i
 
 
 namedSchema :: Text -> Schema -> proxy a -> Declare (Definitions Schema) NamedSchema
