@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -20,6 +21,7 @@ module Pact.Types.Swagger
   , declareGenericEmpty
   , declareGenericSchema
   , declareGenericString
+  , declareLensyNamedSchema
   , namedSchema
     -- | Modifiers
   , fixedLength
@@ -35,9 +37,12 @@ module Pact.Types.Swagger
 import Data.Swagger
 import Data.Swagger.Declare
 import Data.Swagger.Internal
+import Data.Swagger.Internal.TypeShape
+import Data.Swagger.Internal.Schema
 import GHC.Generics
 import Control.Lens (set)
 import Data.Text (Text)
+import Pact.Types.Util
 
 
 -- | 'ToSchema' generic implementation with empty schema.
@@ -56,6 +61,18 @@ declareGenericString ::
   forall a d f proxy. (Generic a, Rep a ~ D1 d f, Datatype d) =>
   proxy a -> Declare (Definitions Schema) NamedSchema
 declareGenericString = declareGenericSchema (schemaOf $ swaggerType SwaggerString)
+
+-- | 'ToSchema' instance for unprefixing single-constructor field names.
+declareLensyNamedSchema ::
+  (GenericHasSimpleShape a
+    "genericDeclareNamedSchemaUnrestricted"
+    (GenericShape (Rep a)),
+   Generic a, GToSchema (Rep a))
+  => Int
+  -> proxy a
+  -> Declare (Definitions Schema) NamedSchema
+declareLensyNamedSchema i = genericDeclareNamedSchema $ fromAesonOptions $ lensyOptions i
+
 
 namedSchema :: Text -> Schema -> proxy a -> Declare (Definitions Schema) NamedSchema
 namedSchema n s _ = return $ NamedSchema (Just n) s

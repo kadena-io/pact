@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DataKinds #-}
@@ -40,7 +41,7 @@ import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal (Decimal)
 import Data.Proxy
-import Data.Swagger hiding (Info,version)
+import Data.Swagger as Swagger hiding (Info,version)
 import Data.Text (Text)
 import Data.Thyme.Clock (UTCTime)
 import Data.Thyme.Time.Core (fromMicroseconds,fromGregorian,mkUTCTime)
@@ -63,6 +64,7 @@ import Pact.Types.Pretty (Doc)
 import Pact.Types.Runtime (PactError,PactErrorType,FieldKey,StackFrame)
 import Pact.Types.Swagger
 import Pact.Types.Term
+import Pact.Types.Util
 
 -- | Public Pact REST API.
 type ApiV1API = "api" :> "v1" :> (ApiSend :<|> ApiPoll :<|> ApiListen :<|> ApiLocal)
@@ -147,11 +149,18 @@ writeSwagger fn = BSL8.writeFile fn . encode
 
 -- ORPHANS for swagger
 
-instance ToSchema (Command Text)
+instance ToSchema (Command Text) where
+  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
+    { Swagger.fieldLabelModifier = go }
+    where go n = case n of
+            "_cmdPayload" -> "cmd"
+            _ -> lensyConstructorToNiceJson 4 n
+
 
 instance ToSchema (CommandResult Hash)
 
-instance ToSchema SubmitBatch
+instance ToSchema SubmitBatch where
+  declareNamedSchema = declareLensyNamedSchema 3
 
 instance ToSchema RequestKeys
 
@@ -182,7 +191,8 @@ instance ToSchema (TypedHash 'Blake2b_256) where
 instance ToSchema PublicKey where
   declareNamedSchema = declareGenericString
 
-instance ToSchema UserSig
+instance ToSchema UserSig where
+  declareNamedSchema = declareLensyNamedSchema 3
 
 instance ToSchema TxId
 
