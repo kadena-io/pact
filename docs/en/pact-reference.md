@@ -644,7 +644,7 @@ pact> (namespace 'my-namespace)
 
 #### Example: Accessing members of a namespace
 
-Members of a namespace my be access by their fully-qualified names:
+Members of a namespace may be accessed by their fully-qualified names:
 
 ```lisp
 (begin-tx)
