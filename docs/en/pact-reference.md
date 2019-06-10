@@ -642,7 +642,7 @@ All definitions _must_ occur within a namespace, as the global namespace (the em
 
 Examples of valid namespace definition and scoping:
 
-#### Defining a namespace
+#### Example: Defining a namespace
 
 Defining a namespace requires a keyset, and a namespace name of type string:
 
@@ -659,7 +659,7 @@ pact> (namespace 'my-namespace)
 "Namespace set to my-namespace"
 ```
 
-#### Accessing members of a namespace
+#### Example: Accessing members of a namespace
 
 Members of a namespace my be access by their fully-qualified names:
 
@@ -684,7 +684,7 @@ pact> (hello-number 3)
 "Hello, your number is 3!"
 ```
 
-#### Importing module code or implementing interfaces at a namespace
+#### Example: Importing module code or implementing interfaces at a namespace
 
 Modules my be imported at a namespace, and interfaces my be implemented in a similar way. This allows the user to work with members of a namespace in a much less verbose and cumbersome way.
 
@@ -736,6 +736,84 @@ pact> (hello-number 3)
 ```
 
 However, if one is simply appending code to an existing namespace, then the namespace prefix in the fully qualified name may be ommitted, as using a namespace works in a similar way to importing a module: all toplevel definitions within a namespace are brought into scope when `(namespace 'my-namespace)` is declared.
+
+### Interfaces {#interfaces}
+
+An interface, as defined in Pact, is a collection of models used for formal verification, constant definitions, and typed function signatures that require an implementation when a module is stated to 'implement' said interface. This allows for abstraction in a similar sense to Java's interfaces, Scala's traits, Haskell's typeclasses or OCaML's signatures. Multiple interfaces may be implemented in a given module, allowing for an expressive layering of behaviors.
+
+Interfaces are declared using the `interface` keyword, and providing a name for the interface. Since interfaces cannot be upgraded, and no implementations exist in an interface aside from constant data, there is no notion of governance that need be applied. An interface is then _implemented_ by using the `implements` declaration in the body of a module. Multiple interfaces may be implemented by a single module. If there are conflicting names among multiple interfaces, then the two interfaces are incompatible, and the user must either inline the code they want, or redefine the interfaces to the point that the conflict is resolved.
+
+Constants declared in an interface can be accessed directly by their fully qualified name. Because interface constants are directly accessed by their fully-qualified name, they do not have the same naming constraints as function signatures.
+
+Additionally, interfaces my make use of module declarations, admitting use of the `use` keyword, allowing interfaces to import members of other modules. This allows interface signatures to be defined in terms of table types defined in an imported module.
+
+#### Example: Declaring and implementing an interface
+
+```lisp
+(interface my-interface
+    (defun hello-number:string (number:integer)
+        "Return the string \"Hello, $number\!" when given a string"
+        )
+
+    (defconst SOME_CONSTANT 3)
+)
+
+(module my-module (read-keyset 'my-keyset)
+
+    (implements my-interface)
+
+    (defun hello-number:string (number:integer)
+        (format "Hello, {}!" [number]))
+
+    (defun square-three ()
+        (* my-interface.SOME_CONSTANT my-interface.SOME_CONSTANT))
+)
+```
+
+### Declaring models in an interface
+
+Formal verification is implemented at multiple levels within an interface in order to provide an extra level of security. Models may be declared either within the body of the interface or at the function level in the same way that one would declare them in a module, with the exception that not all models are applicable to an interface. Indeed, since there is no abstract notion of tables for interfaces, abstract table invariants cannot be declared. However, if an interface imports table schema and types from a module via the `use` keyword, then the interface can define body and function models that apply directly to the concrete table type. Otherwise, all properties are candidates for declaration in an interface.
+
+When models are declared in an interface, they are appeneded to the list of models present in the implementing module at the level in which they were declared: body-level models are appended to body-level models, and function-level models are appended to function-level models. This allows users to extend the constraints of an interface with models applicable to their specific business and implementation needs.
+
+Declaring models shares the same syntax as is one in modules:
+
+#### Example: declaring models, tables, and importing modules in an interface
+
+```lisp
+(begin-tx)
+(env-data { "admin-keyset": ["product-dept" "dev-dept"] })
+
+(module acct-module ACCT-GOVERNANCE
+  @doc "account schema module"
+
+  (defcap ACCT-GOVERNANCE ()
+    true)
+
+  (defschema account
+    balance:integer
+    ks:keyset
+    active:bool
+  )
+)
+(commit-tx)
+(begin-tx)
+
+(interface coin-sig
+
+  "Coin Contract Abstract Interface Example"
+
+  (use acct-module)
+
+  (defun transfer:string (from:string to:string amount:integer)
+    @doc   "Transfer money between accounts"
+    @model [(property (row-enforced accounts "ks" from))
+            (property (> amount 0))
+            (property (= 0 (column-delta accounts "balance")))
+            ]
+  )
+)
+```
 
 ### Keyset Predicates {#keyset-predicates}
 
