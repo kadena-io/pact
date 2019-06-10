@@ -748,7 +748,7 @@ Additionally, interfaces my make use of module declarations, admitting use of th
 ```lisp
 (interface my-interface
     (defun hello-number:string (number:integer)
-        "Return the string \"Hello, $number\!" when given a string"
+        "Return the string \"Hello, $number!\" when given a string"
         )
 
     (defconst SOME_CONSTANT 3)
