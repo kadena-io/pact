@@ -675,11 +675,6 @@ Modules may be imported at a namespace, and interfaces my be implemented in a si
 ```lisp
 (begin-tx)
 
-(env-data { "my-keyset" : ["foo"] })
-(env-keys ["foo"])
-
-(define-keyset 'my-keyset)
-
 (define-namespace 'my-namespace (read-keyset 'my-keyset))
 (define-namespace 'my-other-namespace (read-keyset 'my-keyset))
 
@@ -718,7 +713,28 @@ pact> (hello-number 3)
 
 ```
 
-However, if one is simply appending code to an existing namespace, then the namespace prefix in the fully qualified name may be ommitted, as using a namespace works in a similar way to importing a module: all toplevel definitions within a namespace are brought into scope when `(namespace 'my-namespace)` is declared.
+#### Example: appending code to a namespace
+
+If one is simply appending code to an existing namespace, then the namespace prefix in the fully qualified name may be ommitted, as using a namespace works in a similar way to importing a module: all toplevel definitions within a namespace are brought into scope when `(namespace 'my-namespace)` is declared. Continuing from the previous example:
+
+```lisp
+
+(begin-tx)
+
+(namespace 'my-other-namespace)
+(module my-other-module (read-keyset 'my-keyset)
+
+    (use my-module)
+
+    (defun more-hello:string ()
+        "More hello!")
+)
+(commit-tx)
+
+pact> (my-other-namespace.my-other-module.more-hello)
+"More hello!"
+
+```
 
 ### Interfaces {#interfaces}
 
