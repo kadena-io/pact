@@ -686,7 +686,7 @@ pact> (hello-number 3)
 
 #### Importing module code or implementing interfaces at a namespace
 
-Modules my be imported at a namespace, and interfaces my be implemented in a similar way:
+Modules my be imported at a namespace, and interfaces my be implemented in a similar way. This allows the user to work with members of a namespace in a much less verbose and cumbersome way.
 
 
 ```lisp
@@ -735,7 +735,7 @@ pact> (hello-number 3)
 
 ```
 
-
+However, if one is simply appending code to an existing namespace, then the namespace prefix in the fully qualified name may be ommitted, as using a namespace works in a similar way to importing a module: all toplevel definitions within a namespace are brought into scope when `(namespace 'my-namespace)` is declared.
 
 ### Keyset Predicates {#keyset-predicates}
 
