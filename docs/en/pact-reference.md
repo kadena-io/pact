@@ -777,6 +777,8 @@ Declaring models shares the same syntax with modules:
     ks:keyset
     active:bool
   )
+
+  (deftable accounts:{account})
 )
 (commit-tx)
 (begin-tx)
