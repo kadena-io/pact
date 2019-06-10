@@ -627,16 +627,53 @@ Examples of valid keyset JSON productions:
 
 Namespaces are [defined](pact-functions.html#define-namespace) by specifying a namespace name and [associating](pact-functions.html#read-keyset)
 a keyset with the namespace. Namespace scope is entered by [declaring](pact-functions.html#namespace) name. All definitions issued after the
-namespace scope is entered will be accessible by their fully qualified name, prefixed by the namespace.
+namespace scope is entered will be accessible by their fully qualified name, prefixed by the namespace. Code may be appended to the namespace
+by simply entering the re-entering the namespace and declaring new code definitions.
 
 All definitions _must_ occur within a namespace, as the global namespace (the empty namespace) is reserved for Kadena code.
 
 Examples of valid namespace definition and scoping:
 
+#### Defining a namespace
+
+Defining a namespace requires a keyset, and a namespace name of type string:
+
 ```lisp
-pact> (define-namespace 'my-namespace (read-keyset 'my-keyset))
+(begin-tx)
+(env-data { "my-keyset" : ["my-keys"] })
+(env-keys ["my-keys"])
+
+(define-keyset 'my-keyset)
+(define-namespace 'my-namespace (read-keyset 'my-keyset))
+(commit-tx)
+
 pact> (namespace 'my-namespace)
 "Namespace set to my-namespace"
+```
+
+#### Accessing members of a namespace
+
+Members of a namespace my be access by their fully-qualified names. Additionally, the same scheme may be used when importing or implementing whole modules and interfaces defined in a namespace in the same way.
+
+```lisp
+(begin-tx)
+
+(namespace 'my-namespace)
+
+(module my-module EXAMPLE_GUARD
+
+  (defcap EXAMPLE_GUARD ()
+    (enforce-keyset 'my-keyset))
+
+  (defun hello-number:string (x:integer)
+    (format "Hello, your number is {}!" [x]))
+)
+(commit-tx)
+
+pact> (use my-namespace.my-module)
+"Using my-namespace.my-module"
+pact> (hello-number 3)
+"Hello, your number is 3!"
 ```
 
 ### Keyset Predicates {#keyset-predicates}
