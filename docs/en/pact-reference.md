@@ -392,8 +392,8 @@ in the runtime environment and stores their definition in the global keyset data
 
 [Namespace](#namespaces) declarations provide a unique prefix for keysets and modules defined
 within the namespace scope. All smart contract definitions must occur within a namespaced
-scope, which is initiated by defining a namespace using `define-namespace`, and entering the
-namespace scope by issuing the `namespace` command. The global namespace (the empty namespace)
+scope, which is initiated by defining a namespace using [define-namespace](pact-functions.html#define-namespace), and entering the
+namespace scope by issuing the [namespace](pact-functions.html#namespace) command. The global namespace (the empty namespace)
 is reserved for Kadena code.
 
 #### Module declaration {#moduledeclaration}
@@ -430,7 +430,7 @@ They are comprised of:
 - [function](#defun) specifications (i.e. function signatures)
 - [constant](#defconst) values
 
-When an interface is declared, all constant definitons from other modules are resolved.
+When an interface is declared, all constant definitions from other modules are resolved.
 
 Interfaces represent an abstract api that a [module](#module) may implement by issuing an
 `implements` statement within the module declaration. Unlike Modules, Interface versioning is not
@@ -626,8 +626,7 @@ Examples of valid keyset JSON productions:
 ### Namespaces {#namespaces}
 
 Namespaces are [defined](pact-functions.html#define-namespace) by specifying a namespace name and [associating](pact-functions.html#read-keyset)
-a keyset with the namespace. Namespace scope is entered by [declaring](pact-functions.html#namespace) name. All definitions issued after the
-namespace scope is entered will be accessible by their fully qualified names. These names are of the form _namespace.module.definition_. This form can also be used to access code outside of the current namespace for the purpose of importing module code, or implementing modules:
+a keyset with the namespace. Namespace scope is entered by [declaring](pact-functions.html#namespace) the namespace environment. All definitions issued after the namespace scope is entered will be accessible by their fully qualified names. These names are of the form _namespace.module.definition_. This form can also be used to access code outside of the current namespace for the purpose of importing module code, or implementing modules:
 
 ```lisp
 (implements my-namespace.my-interface)
@@ -745,7 +744,7 @@ Interfaces are declared using the `interface` keyword, and providing a name for 
 
 Constants declared in an interface can be accessed directly by their fully qualified name. Because interface constants are directly accessed by their fully-qualified name, they do not have the same naming constraints as function signatures.
 
-Additionally, interfaces my make use of module declarations, admitting use of the `use` keyword, allowing interfaces to import members of other modules. This allows interface signatures to be defined in terms of table types defined in an imported module.
+Additionally, interfaces my make use of module declarations, admitting use of the [use](pact-functions.html#use) keyword, allowing interfaces to import members of other modules. This allows interface signatures to be defined in terms of table types defined in an imported module.
 
 #### Example: Declaring and implementing an interface
 
@@ -772,7 +771,7 @@ Additionally, interfaces my make use of module declarations, admitting use of th
 
 ### Declaring models in an interface
 
-[Formal verification](pact-properties.html) is implemented at multiple levels within an interface in order to provide an extra level of security. Models may be declared either within the body of the interface or at the function level in the same way that one would declare them in a module, with the exception that not all models are applicable to an interface. Indeed, since there is no abstract notion of tables for interfaces, abstract table invariants cannot be declared. However, if an interface imports table schema and types from a module via the `use` keyword, then the interface can define body and function models that apply directly to the concrete table type. Otherwise, all properties are candidates for declaration in an interface.
+[Formal verification](pact-properties.html) is implemented at multiple levels within an interface in order to provide an extra level of security. Models may be declared either within the body of the interface or at the function level in the same way that one would declare them in a module, with the exception that not all models are applicable to an interface. Indeed, since there is no abstract notion of tables for interfaces, abstract table invariants cannot be declared. However, if an interface imports table schema and types from a module via the [use](pact-functions.html#use) keyword, then the interface can define body and function models that apply directly to the concrete table type. Otherwise, all properties are candidates for declaration in an interface.
 
 When models are declared in an interface, they are appeneded to the list of models present in the implementing module at the level of declaration: body-level models are appended to body-level models, and function-level models are appended to function-level models. This allows users to extend the constraints of an interface with models applicable to specific business logic and implementation.
 
