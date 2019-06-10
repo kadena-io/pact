@@ -400,8 +400,9 @@ They are comprised of:
 - [functions](#defun)
 - [schema](#defschema) definitions
 - [table](#deftable) definitions
-- ["pact"](#defpact) special functions
+- [pact](#defpact) special functions
 - [constant](#defconst) values
+- [models](pact-properties.html)
 
 When a module is declared, all references to native functions or definitions from other modules are resolved. Resolution failure results in transaction rollback.
 
@@ -418,6 +419,7 @@ They are comprised of:
 
 - [function](#defun) specifications (i.e. function signatures)
 - [constant](#defconst) values
+- [models](pact-properties.html)
 
 When an interface is declared, all constant definitions from other modules are resolved.
 
