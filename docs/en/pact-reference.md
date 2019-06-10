@@ -765,7 +765,6 @@ Declaring models shares the same syntax with modules:
 
 ```lisp
 (begin-tx)
-(env-data { "admin-keyset": ["product-dept" "dev-dept"] })
 
 (module acct-module ACCT-GOVERNANCE
   @doc "account schema module"
