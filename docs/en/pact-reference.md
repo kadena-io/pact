@@ -960,7 +960,7 @@ code is protected, and allow the ability for code to demand that some capability
 
 ### Protecting code with `require-capability`
 
-The function [`require-capability`](#require-capability) can be used to "protect" a function from being called improperly:
+The function [require-capability](#require-capability) can be used to "protect" a function from being called improperly:
 
 ```lisp
 (defun debit (user amount)
