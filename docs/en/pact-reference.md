@@ -627,7 +627,15 @@ Examples of valid keyset JSON productions:
 
 Namespaces are [defined](pact-functions.html#define-namespace) by specifying a namespace name and [associating](pact-functions.html#read-keyset)
 a keyset with the namespace. Namespace scope is entered by [declaring](pact-functions.html#namespace) name. All definitions issued after the
-namespace scope is entered will be accessible by their fully qualified name, prefixed by the namespace. Code may be appended to the namespace
+namespace scope is entered will be accessible by their fully qualified names. These names are of the form _namespace.module.definition_. This form can also be used to access code outside of the current namespace for the purpose of importing module code, or implementing modules:
+
+```lisp
+(implements my-namespace.my-interface)
+;; or
+(use my-namespace.my-module)
+```
+
+Code may be appended to the namespace
 by simply entering the re-entering the namespace and declaring new code definitions.
 
 All definitions _must_ occur within a namespace, as the global namespace (the empty namespace) is reserved for Kadena code.
@@ -653,7 +661,7 @@ pact> (namespace 'my-namespace)
 
 #### Accessing members of a namespace
 
-Members of a namespace my be access by their fully-qualified names. Additionally, the same scheme may be used when importing or implementing whole modules and interfaces defined in a namespace in the same way.
+Members of a namespace my be access by their fully-qualified names:
 
 ```lisp
 (begin-tx)
