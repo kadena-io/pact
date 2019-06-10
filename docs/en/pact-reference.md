@@ -390,11 +390,7 @@ in the runtime environment and stores their definition in the global keyset data
 
 #### Namespace declaration {#namespacedefinition}
 
-[Namespace](#namespaces) declarations provide a unique prefix for keysets and modules defined
-within the namespace scope. All smart contract definitions must occur within a namespaced
-scope, which is initiated by defining a namespace using [define-namespace](pact-functions.html#define-namespace), and entering the
-namespace scope by issuing the [namespace](pact-functions.html#namespace) command. The global namespace (the empty namespace)
-is reserved for Kadena code.
+[Namespace](#namespaces) declarations provide a unique prefix for keysets and modules defined within the namespace scope. All smart contract definitions must occur within a namespaced scope, which is initiated by defining a namespace using [define-namespace](pact-functions.html#define-namespace), and entering the namespace scope by issuing the [namespace](pact-functions.html#namespace) command. The global (i.e. empty) namespace is reserved for Kadena code.
 
 #### Module declaration {#moduledeclaration}
 
@@ -407,18 +403,11 @@ They are comprised of:
 - ["pact"](#defpact) special functions
 - [constant](#defconst) values
 
-When a module is declared, all references to native functions
-or definitions from other modules are resolved. Resolution failure results in transaction rollback.
+When a module is declared, all references to native functions or definitions from other modules are resolved. Resolution failure results in transaction rollback.
 
-Modules can be re-defined as controlled by their admin keyset. Module versioning is not supported,
-except by including a version sigil in the module name (e.g., "accounts-v1"). However,
-*module hashes* are a powerful feature for ensuring code safety. When a module is imported with
-[use](#use), the module hash can be specified, to tie code to a particular release.
+Modules can be re-defined as controlled by their admin keyset. Module versioning is not supported, except by including a version sigil in the module name (e.g., "accounts-v1"). However, *module hashes* are a powerful feature for ensuring code safety. When a module is imported with [use](#use), the module hash can be specified, to tie code to a particular release.
 
-As of Pact 2.2, `use` statements can be issued within a module declaration. This combined with
-module hashes provides a high level of assurance, as updated module code will fail to import
-if a dependent module has subsequently changed on the chain; this will also propagate changes
-to the loaded modules' hash, protecting downstream modules from inadvertent changes on update.
+As of Pact 2.2, `use` statements can be issued within a module declaration. This combined with module hashes provides a high level of assurance, as updated module code will fail to import if a dependent module has subsequently changed on the chain; this will also propagate changes to the loaded modules' hash, protecting downstream modules from inadvertent changes on update.
 
 Module names must be globally unique.
 
@@ -432,9 +421,7 @@ They are comprised of:
 
 When an interface is declared, all constant definitions from other modules are resolved.
 
-Interfaces represent an abstract api that a [module](#module) may implement by issuing an
-`implements` statement within the module declaration. Unlike Modules, Interface versioning is not
-supported. However, modules may implement multiple interfaces.
+Interfaces represent an abstract api that a [module](#module) may implement by issuing an `implements` statement within the module declaration. Unlike Modules, Interface versioning is not supported. However, modules may implement multiple interfaces.
 
 Interface names must be globally unique.
 
