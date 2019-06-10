@@ -673,8 +673,8 @@ Members of a namespace my be access by their fully-qualified names:
   (defcap EXAMPLE_GUARD ()
     (enforce-keyset 'my-keyset))
 
-  (defun hello-number:string (x:integer)
-    (format "Hello, your number is {}!" [x]))
+  (defun hello-number:string (number:integer)
+    (format "Hello, your number is {}!" [number]))
 )
 (commit-tx)
 
@@ -683,6 +683,59 @@ pact> (use my-namespace.my-module)
 pact> (hello-number 3)
 "Hello, your number is 3!"
 ```
+
+#### Importing module code or implementing interfaces at a namespace
+
+Modules my be imported at a namespace, and interfaces my be implemented in a similar way:
+
+
+```lisp
+(begin-tx)
+
+(env-data { "my-keyset" : ["foo"] })
+(env-keys ["foo"])
+
+(define-keyset 'my-keyset)
+
+(define-namespace 'my-namespace (read-keyset 'my-keyset))
+(define-namespace 'my-other-namespace (read-keyset 'my-keyset))
+
+(commit-tx)
+
+(begin-tx)
+
+(namespace 'my-namespace)
+
+(interface my-interface
+
+  (defun hello-number:string (number:integer))
+)
+
+(commit-tx)
+(begin-tx)
+
+(namespace 'my-other-namespace)
+(module my-module EXAMPLE_GUARD
+
+  (implements my-namespace.my-interface)
+
+  (defcap EXAMPLE_GUARD ()
+    (enforce-keyset 'my-keyset))
+
+  (defun hello-number:string (number:integer)
+    (format "Hello, your number is {}!" [number]))
+)
+
+(commit-tx)
+
+pact> (use my-other-namespace.my-module)
+"Using my-other-namespace.my-module"
+pact> (hello-number 3)
+"Hello, your number is 3!"
+
+```
+
+
 
 ### Keyset Predicates {#keyset-predicates}
 
