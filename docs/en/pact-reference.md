@@ -727,12 +727,20 @@ If one is simply appending code to an existing namespace, then the namespace pre
     (use my-module)
 
     (defun more-hello:string ()
-        "More hello!")
+        (+ (hello-number 3) "And more hello!"))
 )
 (commit-tx)
 
 pact> (my-other-namespace.my-other-module.more-hello)
-"More hello!"
+"Hello, your number is 3! And more hello!"
+
+;; alternatively
+
+pact> (namespace 'my-other-namespace)
+"Namespace set to my-other-namespace"
+
+pact> (my-other-module.more-hello)
+"Hello, your number is 3! And more hello!"
 
 ```
 
