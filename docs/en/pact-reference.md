@@ -669,7 +669,7 @@ pact> (hello-number 3)
 
 #### Example: Importing module code or implementing interfaces at a namespace
 
-Modules my be imported at a namespace, and interfaces my be implemented in a similar way. This allows the user to work with members of a namespace in a much less verbose and cumbersome way.
+Modules may be imported at a namespace, and interfaces my be implemented in a similar way. This allows the user to work with members of a namespace in a much less verbose and cumbersome way.
 
 
 ```lisp
