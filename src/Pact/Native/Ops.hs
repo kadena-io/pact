@@ -155,7 +155,9 @@ lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
 eqDef :: NativeDef
 eqDef = defRNative "=" (eq id) eqTy
   ["(= [1 2 3] [1 2 3])", "(= 'foo \"foo\")", "(= { 'a: 2 } { 'a: 2})"]
-  "Compare alike terms for equality. Returns true if X equals Y."
+  "Compare alike terms for equality, returning TRUE if X is equal to Y. \
+  \Equality comparisons will fail immediately on type mismatch, or if types \
+  \are not value types."
 
 neqDef :: NativeDef
 neqDef = defRNative "!=" (eq not) eqTy
