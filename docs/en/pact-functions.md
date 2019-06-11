@@ -904,7 +904,7 @@ true
 *x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
-True if X equals Y.
+Compare alike terms for equality. Returns true if X equals Y.
 ```lisp
 pact> (= [1 2 3] [1 2 3])
 true
