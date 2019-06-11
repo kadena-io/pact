@@ -1169,14 +1169,13 @@ tStr = toTerm
 -- | Equality dictionary for term-level equality
 --
 canEq :: Term n -> Term n -> Bool
-canEq t u = case (t,u) of
-  ((TList _ _ _), (TList _ _ _)) -> True
-  ((TObject _ _),  (TObject _ _)) -> True
-  ((TLiteral _ _), (TLiteral _ _)) -> True
-  ((TTable _ _ _ _ _ _), (TTable _ _ _ _ _ _)) -> True
-  ((TSchema _ _ _ _ _), (TSchema _ _ _ _ _)) -> True
-  ((TGuard _ _), (TGuard _ _)) -> True
-  _ -> False
+canEq TList{} TList{} = True
+canEq TObject{} TObject{} = True
+canEq TLiteral{} TLiteral{} = True
+canEq TTable{} TTable{} = True
+canEq TSchema{} TSchema{} = True
+canEq TGuard{} TGuard{} = True
+canEq _ _ = False
 
 -- | Support pact `=` for value-level terms
 termEq :: Eq n => Term n -> Term n -> Bool
