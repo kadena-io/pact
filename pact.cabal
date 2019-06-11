@@ -1,5 +1,5 @@
 name:                pact
-version:             3.0
+version:             3.0.1
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,

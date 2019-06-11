@@ -42,27 +42,15 @@ Once Homebrew is installed, run the following command to install `pact`:
 brew install kadena-io/pact/pact
 ```
 
-However, see note [below](#z3) about z3 compatibility.
-
 Installing Pact with Binary Distributions
 ---
 Pact can also be installed by following the instructions below:
-- Install [z3](https://github.com/Z3Prover/z3/wiki). See note [below](#z3) about z3 compatibility.
-- Download the [prebuilt binaries](http://install.kadena.io/pact/downloads.html) for your distribution. Or see [Building](#Building) for instructions on how to build Pact from the source code.
+- Install [z3](https://github.com/Z3Prover/z3/wiki).
+- Download the [prebuilt binaries](https://github.com/kadena-io/pact/releases) for your distribution. Or see [Building](#Building) for instructions on how to build Pact from the source code.
 - Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
 - Put the binary somewhere in your PATH.
 
 For installing `pact` on Linux distributions in the Arch family, refer to [this package on the AUR](https://aur.archlinux.org/packages/pact/).
-
-z3 Compatibility
----
-
-Pact users generally can use the production versions of Z3. However, with the current version at time of writing, 4.8.4, use of the function `str-to-int` can cause problems, and for those building from source or hacking Pact Haskell code, a unit test will fail/hang indefinitely because of this.
-
-The fix is to use the older version 4.8.3:
-- For Mac homebrew users, 4.8.3 can be installed via `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/a7e7806193f7605c7fef6110655911012d3f1eb3/Formula/z3.rb`.
-- Z3 binaries are available [on github](https://github.com/Z3Prover/z3/releases/tag/z3-4.8.3) for manual installation (Pact uses the z3 in your `$PATH`).
-- Nix builds install the correct version.
 
 
 Verifying Install

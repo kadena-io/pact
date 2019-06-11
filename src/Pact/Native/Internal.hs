@@ -135,15 +135,27 @@ getModule i mn = lookupModule i mn >>= \r -> case r of
   Nothing -> evalError' i $ "Unable to resolve module " <> pretty mn
 
 -- | Look up the name of the most current module in the stack
+--
 findCallingModule :: Eval e (Maybe ModuleName)
 findCallingModule =
   preuse $ evalCallStack . traverse . sfApp . _Just . _1 . faModule . _Just
 
 -- | Retrieve current calling module data or fail if not found
+--
 getCallingModule :: HasInfo i => i -> Eval e (ModuleData Ref)
 getCallingModule i = maybe resolveErr (getModule i) =<< findCallingModule
   where
     resolveErr = evalError' i $ "Unable to resolve current calling module"
+
+-- | See if some entity was called by a module
+--
+calledByModule :: Module n -> Eval e Bool
+calledByModule Module{..} =
+  searchCallStackApps forModule >>= (return . maybe False (const True))
+  where
+    forModule :: FunApp -> Maybe ()
+    forModule FunApp{..} | _faModule == Just _mName = Just ()
+                         | otherwise = Nothing
 
 tTyInteger :: Type n; tTyInteger = TyPrim TyInteger
 tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal
@@ -185,9 +197,13 @@ enforceGuard i g = case g of
     unless (pid == _pgPactId) $
       evalError' i $ "Pact guard failed, intended: " <> pretty _pgPactId <> ", active: " <> pretty pid
   GModule mg@ModuleGuard{..} -> do
-    m <- _mdModule <$> getModule (_faInfo i) _mgModuleName
-    case m of
-      MDModule Module{..} -> enforceModuleAdmin (_faInfo i) _mGovernance
+    md <- _mdModule <$> getModule (_faInfo i) _mgModuleName
+    case md of
+      MDModule m@Module{..} -> calledByModule m >>= \r ->
+        if r then
+          return ()
+        else
+          enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)

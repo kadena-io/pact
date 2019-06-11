@@ -140,7 +140,7 @@ descTable :: RNativeFun e
 descTable _ [TTable {..}] = return $ toTObject TyAny def [
   ("name",tStr $ asString _tTableName),
   ("module", tStr $ asString _tModule),
-  ("type", toTerm $ pack $ show _tTableType)]
+  ("type", toTerm $ pack $ showPretty _tTableType)]
 descTable i as = argsError i as
 
 descKeySet :: RNativeFun e
