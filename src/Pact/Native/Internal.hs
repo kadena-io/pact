@@ -151,7 +151,7 @@ getCallingModule i = maybe resolveErr (getModule i) =<< findCallingModule
 --
 calledByModule :: Module n -> Eval e Bool
 calledByModule Module{..} =
-  searchCallStackApps forModule >>= (return . maybe False (const True))
+  maybe False (const True) <$> searchCallStackApps forModule
   where
     forModule :: FunApp -> Maybe ()
     forModule FunApp{..} | _faModule == Just _mName = Just ()
