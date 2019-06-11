@@ -75,7 +75,7 @@ module Pact.Types.Term
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
-   tLit,tStr,termEq,
+   tLit,tStr,termEq,canEq,
    Gas(..)
    ) where
 
@@ -1165,6 +1165,18 @@ tLit = (`TLiteral` def)
 -- | Convenience for OverloadedStrings annoyances
 tStr :: Text -> Term n
 tStr = toTerm
+
+-- | Equality dictionary for term-level equality
+--
+canEq :: Term n -> Term n -> Bool
+canEq t u = case (t,u) of
+  ((TList _ _ _), (TList _ _ _)) -> True
+  ((TObject _ _),  (TObject _ _)) -> True
+  ((TLiteral _ _), (TLiteral _ _)) -> True
+  ((TTable _ _ _ _ _ _), (TTable _ _ _ _ _ _)) -> True
+  ((TSchema _ _ _ _ _), (TSchema _ _ _ _ _)) -> True
+  ((TGuard _ _), (TGuard _ _)) -> True
+  _ -> False
 
 -- | Support pact `=` for value-level terms
 termEq :: Eq n => Term n -> Term n -> Bool
