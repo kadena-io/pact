@@ -92,7 +92,7 @@ matrix:
   #   addons: {apt: {packages: [libgmp-dev]}}
 
   # OSX Build El Cap
-  - env: BUILD=stack ARGS="" Z3VERSION="4.8.3"
+  - env: BUILD=stack ARGS="" Z3VERSION="4.8.5"
     os: osx
     addons:
       artifacts:
@@ -100,7 +100,7 @@ matrix:
           - .stack-work/dist/x86_64-osx/Cabal-2.4.0.1/build/pact/pact
 
   # Linux build
-  - env: BUILD=stack ARGS="-j1" Z3VERSION="4.8.3"
+  - env: BUILD=stack ARGS="-j1" Z3VERSION="4.8.5"
     addons:
       apt: {packages: [libgmp-dev]}
       artifacts:
