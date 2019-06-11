@@ -796,7 +796,7 @@ spec = describe "analyze" $ do
             (defun enforce-impossible:bool ()
               (enforce false ""))
 
-            (defun test:bool (x:integer)
+            (defun test:bool ()
               (enforce-guard (create-user-guard (enforce-impossible))))
           |]
     expectPass code $ Valid Abort'
