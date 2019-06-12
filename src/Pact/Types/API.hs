@@ -1,12 +1,11 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.API
@@ -27,18 +26,18 @@ module Pact.Types.API
   ) where
 
 import Control.Applicative ((<|>))
-import Data.Aeson hiding (Success)
-import Control.Lens hiding ((.=))
-import GHC.Generics
-import qualified Data.HashMap.Strict as HM
 import Control.Arrow
+import Control.Lens hiding ((.=))
 import Control.Monad
+import Data.Aeson hiding (Success)
+import qualified Data.HashMap.Strict as HM
+import Data.List.NonEmpty (NonEmpty)
+import GHC.Generics
 
 import Pact.Types.Command
-import Pact.Types.Util
 import Pact.Types.Runtime
 
-newtype RequestKeys = RequestKeys { _rkRequestKeys :: [RequestKey] }
+newtype RequestKeys = RequestKeys { _rkRequestKeys :: NonEmpty RequestKey }
   deriving (Show, Eq, Ord, Generic)
 makeLenses ''RequestKeys
 
@@ -49,7 +48,7 @@ instance FromJSON RequestKeys where
 
 
 -- | Submit new commands for execution
-newtype SubmitBatch = SubmitBatch { _sbCmds :: [Command Text] }
+newtype SubmitBatch = SubmitBatch { _sbCmds :: NonEmpty (Command Text) }
   deriving (Eq,Generic,Show)
 makeLenses ''SubmitBatch
 
@@ -59,8 +58,9 @@ instance FromJSON SubmitBatch where
    parseJSON = lensyParseJSON 3
 
 -- | Poll for results by RequestKey
-newtype Poll = Poll { _pRequestKeys :: [RequestKey] }
+newtype Poll = Poll { _pRequestKeys :: NonEmpty RequestKey }
   deriving (Eq,Show,Generic)
+
 instance ToJSON Poll where
   toJSON = lensyToJSON 2
 instance FromJSON Poll where
@@ -69,6 +69,7 @@ instance FromJSON Poll where
 -- | What you get back from a Poll
 newtype PollResponses = PollResponses (HM.HashMap RequestKey (CommandResult Hash))
   deriving (Eq, Show, Generic)
+
 instance ToJSON PollResponses where
   toJSON (PollResponses m) = object $ map (requestKeyToB16Text *** toJSON) $ HM.toList m
 instance FromJSON PollResponses where
@@ -79,6 +80,7 @@ instance FromJSON PollResponses where
 -- | ListenerRequest for results by RequestKey
 newtype ListenerRequest = ListenerRequest RequestKey
   deriving (Eq,Show,Generic)
+
 instance ToJSON ListenerRequest where
   toJSON (ListenerRequest r) = object ["listen" .= r]
 instance FromJSON ListenerRequest where

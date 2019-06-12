@@ -1,13 +1,13 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 -- |
 -- Module      :  Pact.ApiReq
@@ -27,35 +27,34 @@ module Pact.ApiReq
     ,mkKeyPairs
     ) where
 
-import Control.Monad.State.Strict
 import Control.Monad.Catch
+import Control.Monad.State.Strict
+import Data.Aeson
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import Data.Default (def)
 import Data.List
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe
+import Data.Text (Text, pack)
+import Data.Text.Encoding
+import Data.Thyme.Clock
+import qualified Data.Yaml as Y
+import GHC.Generics
 import Prelude
 import System.Directory
 import System.FilePath
 
-import Data.Aeson
-import GHC.Generics
-import qualified Data.Yaml as Y
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import Data.Text (Text,pack)
-import Data.Text.Encoding
-import Data.Thyme.Clock
-import Data.Default (def)
-
-import Pact.Types.Crypto
-import Pact.Types.Util
+import Pact.Types.API
 import Pact.Types.Command
+import Pact.Types.Crypto
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
-import Pact.Types.API
 
 data ApiKeyPair = ApiKeyPair {
-  _akpSecret  :: PrivateKeyBS,
-  _akpPublic  :: Maybe PublicKeyBS,
+  _akpSecret :: PrivateKeyBS,
+  _akpPublic :: Maybe PublicKeyBS,
   _akpAddress :: Maybe Text,
-  _akpScheme  :: Maybe PPKScheme
+  _akpScheme :: Maybe PPKScheme
   } deriving (Eq, Show, Generic)
 instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
@@ -84,7 +83,7 @@ apiReq fp local = do
   if local then
     BSL.putStrLn $ encode exec
     else
-    BSL.putStrLn $ encode $ SubmitBatch [exec]
+    BSL.putStrLn $ encode $ SubmitBatch $ exec :| []
   return ()
 
 mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
@@ -95,8 +94,8 @@ mkApiReq fp = do
   case _ylType of
     Just "exec" -> mkApiReqExec ar kps fp
     Just "cont" -> mkApiReqCont ar kps fp
-    Nothing     -> mkApiReqExec ar kps fp -- Default
-    _      -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
+    Nothing -> mkApiReqExec ar kps fp -- Default
+    _ -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
 
 
 
@@ -132,15 +131,15 @@ mkExec code mdata pubMeta kps ridm = do
 mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqCont ar@ApiReq{..} kps fp = do
   apiPactId <- case _ylPactTxHash of
-    Just t  -> return t
+    Just t -> return t
     Nothing -> dieAR "Expected a 'pactTxHash' entry"
 
   step <- case _ylStep of
-    Just s  -> return s
+    Just s -> return s
     Nothing -> dieAR "Expected a 'step' entry"
 
   rollback <- case _ylRollback of
-    Just r  -> return r
+    Just r -> return r
     Nothing -> dieAR "Expected a 'rollback' entry"
 
   cdata <- withCurrentDirectory (takeDirectory fp) $ do
@@ -172,11 +171,11 @@ mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPair]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
   where isValidKeyPair ApiKeyPair{..} =
           case _akpScheme of
-            Nothing  -> importKeyPair defaultScheme _akpPublic _akpSecret
+            Nothing -> importKeyPair defaultScheme _akpPublic _akpSecret
             Just ppk -> importKeyPair (toScheme ppk) _akpPublic _akpSecret
 
         mkPair akp = case _akpAddress akp of
-          Nothing    -> either dieAR return (isValidKeyPair akp)
+          Nothing -> either dieAR return (isValidKeyPair akp)
           Just addrT -> do
             addrBS <- either dieAR return (parseB16TextOnly addrT)
             kp     <- either dieAR return (isValidKeyPair akp)
