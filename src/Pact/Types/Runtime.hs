@@ -36,7 +36,6 @@ module Pact.Types.Runtime
    Capabilities(..),capGranted,capComposed,
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
-   SPVSupport(..),noSPVSupport,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -69,6 +68,7 @@ import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.Persistence
 import Pact.Types.Pretty
+import Pact.Types.SPV
 import Pact.Types.Util
 
 
@@ -176,17 +176,6 @@ class PureSysOnly e
 -- | Marker class for 'PReadOnly' environments.
 -- SysRead supports pure operations as well.
 class PureSysOnly e => PureReadOnly e
-
--- | Backend for SPV
-newtype SPVSupport = SPVSupport {
-  -- | Attempt to verify an SPV proof of a given type,
-  -- given a payload object. On success, returns the
-  -- specific data represented by the proof.
-  _spvSupport :: Text -> Object Name -> IO (Either Text (Object Name))
-}
-
-noSPVSupport :: SPVSupport
-noSPVSupport = SPVSupport $ \_ _ -> return $ Left $ "SPV verify not supported"
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {

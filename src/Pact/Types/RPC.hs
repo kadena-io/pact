@@ -68,12 +68,6 @@ instance FromJSON c => FromJSON (ExecMsg c) where
 instance ToJSON c => ToJSON (ExecMsg c) where
     toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
 
-newtype ContProof = ContProof ByteString
-  deriving (Eq,Show,Generic)
-instance NFData ContProof
-instance ToJSON ContProof where toJSON (ContProof bs) = String (decodeUtf8 bs)
-instance FromJSON ContProof where parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
-
 data ContMsg = ContMsg
   { _cmPactId :: !PactId
   , _cmStep :: !Int

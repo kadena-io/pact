@@ -25,6 +25,9 @@
 (commit-tx)
 
 (begin-tx)
+
+(typecheck 'yieldtest)
+
 (use yieldtest)
 
 (env-entity "B")
