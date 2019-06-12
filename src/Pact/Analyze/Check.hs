@@ -21,6 +21,7 @@ module Pact.Analyze.Check
   , describeVerificationFailure
   , falsifyingModel
   , showModel
+  , hasVerificationError
   , CheckFailure(..)
   , CheckFailureNoLoc(..)
   , CheckSuccess(..)
@@ -153,6 +154,14 @@ data ModuleChecks = ModuleChecks
   , invariantChecks :: HM.HashMap Text (TableMap [CheckResult])
   , moduleWarnings  :: VerificationWarnings
   } deriving (Eq, Show)
+
+-- | Does this 'ModuleChecks' have either a property or invariant failure?
+-- Warnings don't count.
+hasVerificationError :: ModuleChecks -> Bool
+hasVerificationError (ModuleChecks propChecks invChecks _)
+  = let errs = toListOf (traverse . traverse .            _Left) propChecks ++
+               toListOf (traverse . traverse . traverse . _Left) invChecks
+    in not (null errs)
 
 data VerificationFailure
   = ModuleParseFailure ParseFailure
@@ -788,8 +797,8 @@ liftEither = either throwError return
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
-  :: HM.HashMap ModuleName (ModuleData Ref)   -- ^ all loaded modules
-  -> ModuleData Ref                        -- ^ the module we're verifying
+  :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
+  -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
 verifyModule modules moduleData = runExceptT $ do
   tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData

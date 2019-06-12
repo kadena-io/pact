@@ -451,12 +451,19 @@ verify i as = case as of
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
+    setop $ TcErrors $ Text.unpack <$> renderedLines
+    return $ tStr $ mconcat renderedLines
 #else
     modResult <- liftIO $ Check.verifyModule modules md
     let renderedLines = Check.renderVerifiedModule modResult
+    case modResult of
+      Right modResult'
+        | not (Check.hasVerificationError modResult')
+        -> return $ tStr $ mconcat renderedLines
+      _ -> do
+        setop $ TcErrors $ Text.unpack <$> renderedLines
+        return $ tStr $ mconcat renderedLines
 #endif
-    setop $ TcErrors $ Text.unpack <$> renderedLines
-    return (tStr $ mconcat renderedLines)
 
   _ -> argsError i as
 
