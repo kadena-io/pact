@@ -142,10 +142,17 @@ findCallingModule =
 
 -- | Retrieve current calling module data or fail if not found
 --
-getCallingModule :: HasInfo i => i -> Eval e (ModuleData Ref)
-getCallingModule i = maybe resolveErr (getModule i) =<< findCallingModule
+getCallingModule :: HasInfo i => i -> Eval e (Module (Def Ref))
+getCallingModule i = maybe resolveErr ((=<<) isModule . getModule i) =<< findCallingModule
   where
-    resolveErr = evalError' i $ "Unable to resolve current calling module"
+    resolveErr = evalError' i $
+      "Unable to resolve current calling module"
+
+    isModule md = case _mdModule md of
+      MDModule m -> return m
+      MDInterface n -> evalError' i
+        $ "Internal error: getCallingModule: called from interface"
+        <> pretty (_interfaceName n)
 
 -- | See if some entity was called by a module
 --
@@ -230,12 +237,7 @@ provenanceOf
   -- ^ target chain id
   -> Eval e (Maybe Provenance)
 provenanceOf fa tid =
-  getCallingModule fa >>= \md -> case _mdModule md of
-    MDModule m ->
-      return . Just $ Provenance tid (_mHash m)
-    MDInterface n -> evalError' fa
-      $ "Internal error: cannot endorse yield for interface: "
-      <> pretty (_interfaceName n)
+  Just . Provenance tid . _mHash <$> getCallingModule fa
 
 -- | Enforce that 'Yield' provenance matches env data
 -- and fail otherwise.
@@ -244,15 +246,9 @@ enforceYield :: FunApp -> Yield -> Eval e Yield
 enforceYield fa y = case _yProvenance y of
   Nothing -> return y
   Just p -> do
-    h' <- getCallingModule fa >>= \md -> case _mdModule md of
-      MDModule m -> return (_mHash m)
-      MDInterface i' -> evalError' fa
-        $ "Internal error: cannot enforce yield endorsement for interfaces: "
-        <> pretty (_interfaceName i')
-
+    m <- getCallingModule fa
     cid <- view $ eePublicData . pdPublicMeta . pmChainId
-
-    let p' = Provenance cid h'
+    let p' = Provenance cid (_mHash m)
 
     unless (p == p') $
       evalError' fa "enforceYield: yield provenance does not match"
