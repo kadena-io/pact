@@ -146,6 +146,9 @@ _inferAccounts = inferModule False "examples/accounts/accounts.repl" "accounts"
 _inferCP :: IO ([TopLevel Node],[Failure])
 _inferCP = inferModule False "examples/cp/cp.repl" "cp"
 
+_inferYield :: IO ([TopLevel Node], [Failure])
+_inferYield = inferModule True "tests/pact/yield.repl" "yieldtest"
+
 -- | prettify output of 'inferFun' runs
 _pretty :: TCResult -> IO ()
 _pretty (f,tc) = putDoc (pretty tc <> hardline <> hardline <> pretty f <> hardline)
