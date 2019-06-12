@@ -69,8 +69,8 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
                                             Def (..), DefType (..), Info, dMeta,
-                                            mModel, renderInfo, renderParsed,
-                                            tDef, tInfo, tMeta, _tDef)
+                                            mModel, renderInfo, tDef, tInfo,
+                                            tMeta, _tDef)
 import           Pact.Types.Pretty         (renderCompactText)
 import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
                                             Ref' (Ref), Ref,
@@ -206,7 +206,7 @@ describeCheckFailure :: CheckFailure -> Text
 describeCheckFailure (CheckFailure info failure) =
   case failure of
     TypecheckFailure fails -> T.unlines $ map
-      (\(TC.Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ ":Warning: " ++ s))
+      (\(TC.Failure ti s) -> (prefix (_tiInfo ti) <> T.pack s))
       (Set.toList fails)
 
     _ ->
@@ -217,7 +217,8 @@ describeCheckFailure (CheckFailure info failure) =
             AnalyzeFailure' err   -> describeAnalyzeFailureNoLoc err
             SmtFailure err        -> describeSmtFailure err
             QueryFailure err      -> describeQueryFailure err
-      in T.pack (renderParsed (infoToParsed info)) <> ":Warning: " <> str
+      in prefix info <> str
+  where prefix info' = T.pack (renderInfo info') <> ":Warning: "
 
 describeCheckResult :: CheckResult -> Text
 describeCheckResult = either describeCheckFailure describeCheckSuccess
