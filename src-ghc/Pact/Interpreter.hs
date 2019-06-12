@@ -51,6 +51,7 @@ import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Types.PactValue
 import Pact.Types.Runtime
+import Pact.Types.SPV
 
 data PactDbEnv e = PactDbEnv {
   pdPactDb :: !(PactDb e),

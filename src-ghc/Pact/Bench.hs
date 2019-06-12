@@ -37,6 +37,7 @@ import Pact.Types.Logger
 import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
+import Pact.Types.SPV
 import Pact.Native.Internal
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)

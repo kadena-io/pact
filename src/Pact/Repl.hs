@@ -79,6 +79,7 @@ import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl.Lib
 import Pact.Types.Logger
+import Pact.Types.SPV
 import Pact.Repl.Types
 import Pact.Gas
 
@@ -110,7 +111,9 @@ initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
   return $ EvalEnv (RefStore nativeDefs) def Null Transactional
-    def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv) def
+    def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (spvs mv) def
+  where
+    spvs mv = set spvSupport (spv mv) noSPVSupport
 
 spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
 spv mv ty pay = readMVar mv >>= \LibState{..} -> case M.lookup (SPVMockKey (ty,pay)) _rlsMockSPV of

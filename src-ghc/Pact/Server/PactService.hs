@@ -35,6 +35,7 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
 import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue (PactValue)
+import Pact.Types.SPV
 
 
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode Hash)

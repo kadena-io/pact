@@ -13,7 +13,7 @@
 module Pact.Types.SPV
   ( -- * Types
     ContProof(..)
-  , SPVSupport
+  , SPVSupport(..)
     -- * Support
   , noSPVSupport
     -- * Optics

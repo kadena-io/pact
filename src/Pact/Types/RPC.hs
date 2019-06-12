@@ -19,21 +19,23 @@
 --
 
 module Pact.Types.RPC
-  where
+  ( -- * Types
+    PactRPC(..)
+  , ExecMsg(..)
+  , ContMsg(..)
+  ) where
 
 import Control.Applicative
 import Control.DeepSeq
 
 import Data.Aeson as A
 
-
 import GHC.Generics
-import Prelude
 
-import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
-import Data.ByteString (ByteString)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Pact.Types.Runtime
+import Pact.Types.SPV
+
 
 data PactRPC c =
     Exec (ExecMsg c) |
