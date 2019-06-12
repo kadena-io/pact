@@ -444,7 +444,8 @@ langDefs =
 
     ,defNative (specialForm Resume) resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "r") def)]) []
-     "Special form binds to a yielded object value from the prior step execution in a pact."
+     "Special form binds to a yielded object value from the prior step execution in a pact. \
+     \If yield step was executed on a foreign chain, enforce endorsement via SPV."
 
     ,pactVersionDef
 

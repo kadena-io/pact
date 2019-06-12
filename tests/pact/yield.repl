@@ -4,9 +4,8 @@
 
 (module yieldtest 'k
 
-  "Define two tests: 'tester-1' executes a single-chain pact and ensures rollbacks \
-  \and step behavior works properly, and 'tester-2' ensures that cross-chain cont- \
-  \inuation works as intended."
+  "Define one test: 'tester' executes a single-chain pact and ensures rollbacks \
+  \and step behavior works properly."
 
   (defpact tester (name)
     (step-with-rollback

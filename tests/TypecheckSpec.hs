@@ -27,6 +27,7 @@ spec :: Spec
 spec = do
   checkModule "tests/pact/caps.repl" "caps"
   checkModule "examples/cp/cp.repl" "cp"
+  checkModule "tests/pact/yield.repl" "yieldtest"
   checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
   checkFuns
 

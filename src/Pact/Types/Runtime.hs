@@ -221,7 +221,7 @@ data EvalEnv e = EvalEnv {
     }
 makeLenses ''EvalEnv
 
--- | 'PactId' <-> 'Hash' conversion
+-- | 'PactId' -> 'Hash' conversion
 toPactId :: Hash -> PactId
 toPactId = PactId . hashToText
 
