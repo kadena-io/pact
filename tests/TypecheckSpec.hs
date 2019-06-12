@@ -16,6 +16,7 @@ import Control.Monad
 import Data.Foldable
 import qualified Data.Text as T
 import qualified Data.Set as Set
+import qualified Pact.Analyze.Check as Check
 
 spec :: Spec
 spec = do
@@ -23,6 +24,8 @@ spec = do
   checkModule "examples/cp/cp.repl" "cp"
   checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
   checkFuns
+  verifyModule "examples/cp/cp.repl" "cp"
+  verifyModule "examples/verified-accounts/accounts.repl" "accounts"
 
 type TCResult = (TopLevel Node,TcState)
 type TCResultCheck a = TCResult -> ([a] -> [a] -> Expectation) -> Expectation
@@ -51,10 +54,35 @@ topLevelChecks :: Text -> TCResult -> Spec
 topLevelChecks n r = topLevelTypechecks n r >> topLevelNoFailures n r
 
 checkModule :: FilePath -> ModuleName -> Spec
-checkModule fp mn = describe (fp ++ ": " ++ show mn ++ " typechecks") $ do
+checkModule fp mn = describe (fp ++ ": " ++ moduleName mn ++ " typechecks") $ do
   (tls,fs) <- runIO $ inferModule False fp mn
-  it (show mn ++ ": module has no failures") $ map prettyFail fs `shouldBe` []
-  it (show mn ++ ": all toplevels typecheck") $ concatMap getUnresolvedTys tls `shouldBe` []
+  it (moduleName mn ++ ": module has no failures") $ map prettyFail fs `shouldBe` []
+  it (moduleName mn ++ ": all toplevels typecheck") $ concatMap getUnresolvedTys tls `shouldBe` []
+
+moduleName :: ModuleName -> String
+moduleName = unpack . asString
+
+-- | Check that this module has no verification failures
+verifyModule :: FilePath -> ModuleName -> Spec
+verifyModule fp mn = describe (fp ++ ": " ++ moduleName mn ++ " verifies") $ do
+  success <- runIO $ do
+    (resultTm, replState) <- execScript' Quiet fp
+    either (die def) (const (pure ())) resultTm
+    eModule <- replLookupModule replState mn
+    modul <- case eModule of
+      Left e      -> die def $ "Module not found: " ++ show (fp,mn,e)
+      Right modul -> pure modul
+    mModules <- replGetModules replState
+    checkResult <- case mModules of
+      Left err           -> die def (show err)
+      Right (modules, _) -> Check.verifyModule modules modul
+    pure $ case checkResult of
+      Right checkResult'
+        | not (Check.hasVerificationError checkResult')
+        -> pure ()
+      _ -> expectationFailure $ T.unpack $ mconcat $
+        Check.renderVerifiedModule checkResult
+  it (moduleName mn ++ ": module verifies") success
 
 prettyFail :: Failure -> String
 prettyFail (Failure TcId{..} msg) = renderInfo _tiInfo ++ ": " ++ msg
