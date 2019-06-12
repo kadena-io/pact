@@ -385,7 +385,7 @@ pact> (remove "bar" { "foo": 1, "bar": 2 })
 *binding*&nbsp;`binding:<{r}>` *&rarr;*&nbsp;`<a>`
 
 
-Special form binds to a yielded object value from the prior step execution in a pact.
+Special form binds to a yielded object value from the prior step execution in a pact. If yield step was executed on a foreign chain, enforce endorsement via SPV.
 
 
 ### reverse {#reverse}
@@ -907,7 +907,7 @@ true
 *x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
-True if X equals Y.
+Compare alike terms for equality, returning TRUE if X is equal to Y. Equality comparisons will fail immediately on type mismatch, or if types are not value types.
 ```lisp
 pact> (= [1 2 3] [1 2 3])
 true
