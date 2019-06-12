@@ -131,7 +131,7 @@ _inferIssue :: IO TCResult
 _inferIssue = inferFun True "examples/cp/cp.repl" "cp" "issue"
 
 -- _pretty =<< _inferTransfer
-_inferTransfer :: IO TCResult
+_inferTransfer :: IO TCResault
 _inferTransfer = inferFun True "examples/accounts/accounts.repl" "accounts" "transfer"
 
 _inferTestModule :: IO ([TopLevel Node],[Failure])
