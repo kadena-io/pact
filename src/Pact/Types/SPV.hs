@@ -11,11 +11,9 @@
 -- SPV Support data and types
 --
 module Pact.Types.SPV
-  ( -- Types
+  ( -- * Types
     ContProof(..)
   , SPVSupport
-  , SPV
-  , ContSPV
     -- * Support
   , noSPVSupport
     -- * Optics
@@ -36,9 +34,6 @@ import GHC.Generics hiding (to)
 import Pact.Types.Continuation (PactExec)
 import Pact.Types.Term (Object, Name)
 
-
-type SPV = Text -> Object Name -> IO (Either Text (Object Name))
-type ContSPV = ContProof -> IO (Either Text PactExec)
 
 newtype ContProof = ContProof { _contProof :: ByteString }
   deriving (Eq,Show,Generic)
