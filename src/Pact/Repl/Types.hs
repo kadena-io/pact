@@ -6,10 +6,9 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts,rlsMockCont
+  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts
   , Tx(..)
   , SPVMockKey(..)
-  , ContMockKey(..)
   , getAllModules
   ) where
 
@@ -29,7 +28,6 @@ import Pact.PersistPactDb (DbEnv)
 import Pact.Persist.Pure (PureDb)
 import Pact.Types.Runtime
 import Pact.Types.Pretty (Pretty, pretty, renderCompactText)
-import Pact.Types.SPV
 
 data ReplMode =
     Interactive |
@@ -82,12 +80,6 @@ instance Eq SPVMockKey where
 instance Ord SPVMockKey where
   a `compare` b = renderCompactText a `compare` renderCompactText b
 
-newtype ContMockKey = ContMockKey ContProof
-  deriving (Eq, Ord, Show)
-
-instance Pretty ContMockKey where
-  pretty (ContMockKey p) = pretty p
-
 data LibState = LibState
   { _rlsPure :: MVar (DbEnv PureDb)
   , _rlsOp :: LibOp
@@ -96,7 +88,6 @@ data LibState = LibState
   , _rlsVerifyUri :: Maybe String
   , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
   , _rlsPacts :: M.Map PactId PactExec
-  , _rlsMockCont :: M.Map ContMockKey PactExec
   }
 
 

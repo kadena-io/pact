@@ -1,7 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-
 
 -- |
 -- Module      :  Pact.Native.SPV
@@ -45,8 +42,8 @@ verifySPV =
   \format of the return object. Platforms such as Chainweb will \
   \document the specific payload types and return values."
   where
-    verifySPV' i [TLitString proofType, TObject{..}] = do
-      view eeSPVSupport >>= \(SPVSupport f _) -> liftIO (f proofType _tObject) >>= \r -> case r of
+    verifySPV' i [TLitString proofType, TObject o _] = do
+      view eeSPVSupport >>= \(SPVSupport f _) -> liftIO (f proofType o) >>= \r -> case r of
         Left err -> evalError' i $ "SPV verify failed: " <> pretty err
-        Right o -> return $ TObject o def
+        Right o' -> return $ TObject o' def
     verifySPV' i as = argsError i as

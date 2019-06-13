@@ -15,13 +15,13 @@
 -- Pact Continuation data
 --
 module Pact.Types.Continuation
-  ( -- * data
+  ( -- * Types
     PactStep(..)
   , PactContinuation(..)
   , PactExec(..)
   , Yield(..)
   , Provenance(..)
-    -- * optics
+    -- * Optics
   , peStepCount, peYield, peExecuted, pePactId, peStep, peContinuation
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs

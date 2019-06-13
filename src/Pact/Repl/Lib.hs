@@ -189,10 +189,6 @@ replDefs = ("Repl",
       (funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
       [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"]
       "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
-     ,defZRNative "mock-cont" mockCont
-      (funType tTyString [("proof",tTyString), ("output", tTyObject TyAny)])
-      [LitExample "(mock-cont \"a54f54de54c54d89e7f\" { 'amount: 10.0, 'account: \"Emily\", 'chain-id: \"1\" })"]
-      "Mock a successful call to 'cont-verify' with PROOF of returned OUTPUT."
      , envChainDataDef
      ])
      where
@@ -246,9 +242,6 @@ mockSPV _i [TLitString spvType, TObject payload _, TObject out _] = do
   setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
   return $ tStr $ "Added mock SPV for " <> spvType
 mockSPV i as = argsError i as
-
-mockCont :: RNativeFun LibState
-mockCont = undefined
 
 formatAddr :: RNativeFun LibState
 #if !defined(ghcjs_HOST_OS)
