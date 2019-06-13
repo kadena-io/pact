@@ -21,6 +21,7 @@ module Pact.Types.Swagger
   , declareGenericEmpty
   , declareGenericSchema
   , declareGenericString
+  , declareSumSchema
   , lensyDeclareNamedSchema
   , namedSchema
     -- | Modifiers
@@ -34,6 +35,7 @@ module Pact.Types.Swagger
   , debugSchema
   ) where
 
+import GHC.Exts (fromList)
 import Data.Swagger
 import Data.Swagger.Declare
 import Data.Swagger.Internal
@@ -72,6 +74,17 @@ lensyDeclareNamedSchema ::
   -> proxy a
   -> Declare (Definitions Schema) NamedSchema
 lensyDeclareNamedSchema i = genericDeclareNamedSchema $ fromAesonOptions $ lensyOptions i
+
+
+-- | Source: https://github.com/haskell-servant/servant-swagger/issues/80
+declareSumSchema ::
+  Text -> [(Text, Referenced Schema)] -> Declare (Definitions Schema) NamedSchema
+declareSumSchema n p = pure $ NamedSchema (Just n) $
+  schemaOf $ swaggerType SwaggerObject .
+      set properties (fromList p) .
+      set minProperties (Just 1) .
+      set maxProperties (Just 1)
+
 
 
 namedSchema :: Text -> Schema -> proxy a -> Declare (Definitions Schema) NamedSchema

@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE OverloadedLists #-}
 
 
 module Pact.Server.API
@@ -43,6 +44,7 @@ import Data.Decimal (Decimal)
 import Data.Proxy
 import Data.Swagger as Swagger hiding (Info,version)
 import Data.Text (Text)
+import Data.Text as T
 import Data.Thyme.Clock (UTCTime)
 import Data.Thyme.Time.Core (fromMicroseconds,fromGregorian,mkUTCTime)
 import GHC.Generics
@@ -61,7 +63,7 @@ import Pact.Types.Info (Info)
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.Persistence (PactContinuation,PactExec,TxId)
 import Pact.Types.Pretty (Doc)
-import Pact.Types.Runtime (PactError,PactErrorType,FieldKey,StackFrame)
+import Pact.Types.Runtime (PactError,PactErrorType,StackFrame)
 import Pact.Types.Swagger
 import Pact.Types.Term
 import Pact.Types.Util
@@ -147,7 +149,10 @@ writeSwagger fn = BSL8.writeFile fn . encode
 
 
 
--- ORPHANS for swagger
+-- | Swagger ORPHANS
+
+instance ToSchema SubmitBatch where
+  declareNamedSchema = lensyDeclareNamedSchema 3
 
 instance ToSchema (Command Text) where
   declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
@@ -156,92 +161,108 @@ instance ToSchema (Command Text) where
             "_cmdPayload" -> "cmd"
             _ -> lensyConstructorToNiceJson 4 n
 
-
-instance ToSchema (CommandResult Hash)
-
-instance ToSchema SubmitBatch where
+instance ToSchema UserSig where
   declareNamedSchema = lensyDeclareNamedSchema 3
-
-instance ToSchema RequestKeys where
-  declareNamedSchema = lensyDeclareNamedSchema 3
-
-instance ToSchema Poll where
-  declareNamedSchema = lensyDeclareNamedSchema 2
-
-instance ToSchema PollResponses
-
-instance ToSchema ListenerRequest where
-  declareNamedSchema = lensyDeclareNamedSchema 3
-
-instance ToSchema ListenResponse
-
-instance ToSchema Analyze.Request
-
-instance ToSchema Analyze.Response
 
 pactHashSchema :: Schema
 pactHashSchema = withSchema byteBase64url $ fixedLength pactHashLength
 
-instance ToSchema RequestKey where
-  declareNamedSchema = declareGenericSchema pactHashSchema
-
-instance ToSchema Hash where
-  declareNamedSchema = declareGenericSchema pactHashSchema
-
 instance ToSchema (TypedHash 'Blake2b_256) where
   declareNamedSchema = declareGenericSchema pactHashSchema
 
-instance ToSchema PublicKey where
-  declareNamedSchema = declareGenericString
 
-instance ToSchema UserSig where
+
+instance ToSchema RequestKeys where
+  declareNamedSchema = lensyDeclareNamedSchema 3
+
+instance ToSchema RequestKey where
+  declareNamedSchema = declareGenericSchema pactHashSchema
+
+
+
+instance ToSchema Poll where
+  declareNamedSchema = lensyDeclareNamedSchema 2
+
+
+-- Bug fix: Created data type PollResponse with field names to use
+-- in proxy type for PollResponses and thus prevent swagger2
+-- from creating a nested array of different types (which is invalid swagger code) by default
+data PollResponse = PollResponse
+  { _sprRequestKey :: RequestKey
+  , _sprResponse :: (CommandResult Hash)
+  } deriving Generic
+instance ToSchema PollResponse where
+  declareNamedSchema = lensyDeclareNamedSchema 4
+instance ToSchema PollResponses where
+  declareNamedSchema _ = declareNamedSchema (Proxy :: Proxy [PollResponse])
+
+
+instance ToSchema (CommandResult Hash) where
   declareNamedSchema = lensyDeclareNamedSchema 3
 
 instance ToSchema TxId
-
 instance ToSchema Gas
-
-instance ToSchema Doc where
+instance ToSchema Hash where
+  declareNamedSchema = declareGenericSchema pactHashSchema
+instance ToSchema PactExec where
+  declareNamedSchema = lensyDeclareNamedSchema 3
+instance ToSchema PactId
+instance ToSchema PactContinuation where
+   declareNamedSchema = lensyDeclareNamedSchema 3
+instance ToSchema Name where
   declareNamedSchema = declareGenericString
-
-instance ToSchema Info where
-  declareNamedSchema = declareGenericString
-
-
-instance ToSchema (ModuleDef t) where
-  declareNamedSchema = declareGenericSchema $
-    (schemaOf $ swaggerType SwaggerObject)
-
-instance ToSchema PactErrorType
-
-instance ToSchema PactError
-
-instance ToSchema StackFrame where
-  declareNamedSchema = declareGenericString
-
-instance ToSchema PactExec
-
-instance ToSchema PactContinuation
-
 instance ToSchema Value where
   declareNamedSchema = declareGenericSchema $
     (schemaOf $ swaggerType SwaggerObject)
 
-instance ToSchema PactResult
 
-instance ToSchema Guard
-instance ToSchema PactGuard
-instance ToSchema KeySet
-instance ToSchema KeySetName
-instance ToSchema PactId
-instance ToSchema Name
-instance ToSchema ModuleName
-instance ToSchema NamespaceName
-instance ToSchema ModuleGuard
-instance ToSchema UserGuard where
+-- TODO: Missing status field of PactResult
+instance ToSchema PactResult where
+    declareNamedSchema _ = do
+      pactErrRef <- declareSchemaRef (Proxy :: Proxy PactError)
+      pactValRef <- declareSchemaRef (Proxy :: Proxy PactValue)
+      declareSumSchema "PactResult" [ ("error", pactErrRef),
+                                           ("data" , pactValRef) ]
+
+instance ToSchema PactError where
+  declareNamedSchema = lensyDeclareNamedSchema 2
+instance ToSchema PactErrorType
+instance ToSchema Info where
+  declareNamedSchema = declareGenericString
+instance ToSchema StackFrame where
+  declareNamedSchema = declareGenericString
+instance ToSchema Doc where
   declareNamedSchema = declareGenericString
 
-instance ToSchema PactValue
+
+
+instance ToSchema PactValue where
+  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
+    { Swagger.constructorTagModifier = go }
+    where go n = (unpack . T.toLower . T.drop 1 . pack) n
+
+
+instance ToSchema Literal where
+  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
+    { Swagger.constructorTagModifier = go,
+      Swagger.unwrapUnaryRecords = True
+    }
+    where go n = (unpack . T.toLower . T.drop 1 . pack) n
+
+newtype DummyTime = DummyTime UTCTime
+  deriving (Generic)
+instance ToJSON DummyTime where
+  toJSON (DummyTime t) = encoder timeCodec t
+instance ToSchema UTCTime where
+  declareNamedSchema = namedSchema "UTCTime" $ sketchSchema $
+    DummyTime $ mkUTCTime
+                (fromGregorian 1970 01 01)
+                (fromMicroseconds 0)
+instance ToSchema Decimal where
+  declareNamedSchema _ = return $
+    NamedSchema (Just "Decimal")
+                (schemaOf $ swaggerType SwaggerNumber)
+
 
 -- | Adapted from 'Map k v' as a naive instance will cause an infinite loop!!
 -- 2.2 swagger2 compat means not using 'additionalProperties' for now
@@ -253,17 +274,48 @@ instance ToSchema (ObjectMap PactValue) where
       (schemaOf $ swaggerType SwaggerObject .
         set additionalProperties (Just $ AdditionalPropertiesSchema sref))
 
-instance ToSchema FieldKey
+instance ToSchema Guard where
+  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
+    { Swagger.constructorTagModifier = go }
+    where go n = (unpack . T.toLower . T.drop 1 . pack) n
 
-newtype DummyTime = DummyTime UTCTime deriving (Generic)
-instance ToJSON DummyTime where toJSON (DummyTime t) = encoder timeCodec t
+instance ToSchema PactGuard where
+  declareNamedSchema = lensyDeclareNamedSchema 3
+instance ToSchema KeySet where
+  declareNamedSchema = lensyDeclareNamedSchema 3
+instance ToSchema PublicKey where
+  declareNamedSchema = declareGenericString
+instance ToSchema KeySetName
+instance ToSchema ModuleGuard where
+  declareNamedSchema = lensyDeclareNamedSchema 3
+instance ToSchema ModuleName where
+   declareNamedSchema = lensyDeclareNamedSchema 3
+instance ToSchema NamespaceName
+instance ToSchema UserGuard where
+  declareNamedSchema = declareGenericString
 
-instance ToSchema UTCTime where
-  declareNamedSchema = namedSchema "UTCTime" $ sketchSchema
-    (DummyTime $ mkUTCTime (fromGregorian 1970 01 01) $ fromMicroseconds 0)
 
-instance ToSchema Literal
+instance ToSchema ListenerRequest where
+  declareNamedSchema = lensyDeclareNamedSchema 3
+instance ToSchema ListenResponse where
+  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
+    { Swagger.constructorTagModifier = go }
+    where go n = case n of
+            "ListenTimeout" -> "timeout-micros"
+            _ -> (unpack . T.toLower . T.drop 6 . pack) n
 
-instance ToSchema Decimal where
-  declareNamedSchema _ = return $ NamedSchema (Just "Decimal")
-    (schemaOf $ swaggerType SwaggerNumber)
+
+
+instance ToSchema Analyze.Request where
+  declareNamedSchema _ = do
+    modulesRef <- declareSchemaRef (Proxy :: Proxy [ModuleDef Name])
+    verifyRef <- declareSchemaRef (Proxy :: Proxy ModuleName)
+    return $ NamedSchema (Just "AnalyzeRequest") $
+      schemaOf $ swaggerType SwaggerObject .
+        set properties [("modules",modulesRef), ("verify",verifyRef)]
+instance ToSchema Analyze.Response where
+  declareNamedSchema = namedSchema "AnalyzeResponse" $ sketchSchema $
+    Analyze.Response ["Dummy Response"]
+instance ToSchema (ModuleDef t) where
+  declareNamedSchema = declareGenericSchema $
+    (schemaOf $ swaggerType SwaggerObject)
