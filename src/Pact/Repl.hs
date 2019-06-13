@@ -237,7 +237,7 @@ doOut ei mode a = case mode of
     lineOut = outStrLn HErr $ renderInfo ei ++ ":Trace: " ++
       case a of
         TLiteral (LString t) _ -> Text.unpack t
-        _ -> show $ pretty a
+        _ -> renderCompactString a
 
 renderErr :: PactError -> Repl String
 renderErr a
