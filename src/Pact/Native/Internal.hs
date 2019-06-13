@@ -91,8 +91,10 @@ bindReduce ps bd bi lkpFun = do
             t -> evalError bi $ "Invalid column identifier in binding: " <> pretty t
   let bd'' = instantiate (resolveArg bi (map _bpVal vs)) bd
   -- NB stack frame here just documents scope, but does not incur gas
-  call (StackFrame (pack $ "(bind: " ++ show (map (fmap abbrev) vs) ++ ")") bi Nothing) $!
-    ((0,) <$> reduceBody bd'')
+  let prettyBindings = list $ pretty . fmap abbrev <$> vs
+      textBindings   = renderCompactText' $ "(bind: " <> prettyBindings <> ")"
+      frame          = StackFrame textBindings bi Nothing
+  call frame $! (0,) <$> reduceBody bd''
 
 setTopLevelOnly :: NativeDef -> NativeDef
 setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
