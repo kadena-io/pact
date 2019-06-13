@@ -86,7 +86,7 @@ import Bound
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.DeepSeq
-import Control.Lens (makeLenses,makePrisms, (<&>))
+import Control.Lens (makeLenses,makePrisms)
 import Control.Monad
 import qualified Data.Aeson as A
 #if MIN_VERSION_aeson(1,4,3)
@@ -407,6 +407,9 @@ data BindPair n = BindPair
 
 toBindPairs :: BindPair n -> (Arg n,n)
 toBindPairs (BindPair a v) = (a,v)
+
+instance Pretty n => Pretty (BindPair n) where
+  pretty (BindPair arg body) = pretty arg <+> pretty body
 
 instance NFData n => NFData (BindPair n)
 
@@ -957,11 +960,11 @@ instance Pretty n => Pretty (Term n) where
     TVar n _ -> pretty n
     TBinding pairs body BindLet _i -> parensSep
       [ "let"
-      , parensSep $ pairs <&> \(BindPair arg body') -> pretty arg <+> pretty body'
+      , parensSep $ fmap pretty pairs
       , pretty $ unscope body
       ]
     TBinding pairs body (BindSchema _) _i -> parensSep
-      [ commaBraces $ pairs <&> \(BindPair arg body') -> pretty arg <+> pretty body'
+      [ commaBraces $ fmap pretty pairs
       , pretty $ unscope body
       ]
     TObject o _ -> pretty o
