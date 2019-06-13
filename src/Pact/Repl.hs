@@ -121,14 +121,14 @@ initPureEvalEnv verifyUri = do
 spv :: MVar LibState -> Text -> Object Name -> IO (Either Text (Object Name))
 spv mv ty pay = go <$> readMVar mv
   where
-    go st = case view (rlsMockSPV . at (SPVMockKey (ty, pay))) st of
+    go st = case M.lookup (SPVMockKey (ty, pay)) (_rlsMockSPV st) of
       Nothing -> Left "SPV verification failure"
       Just o -> Right o
 
 contspv :: MVar LibState -> ContProof -> IO (Either Text PactExec)
 contspv mv p = go <$> readMVar mv
   where
-    go st = case view (rlsMockCont . at (ContMockKey p)) st of
+    go st = case M.lookup (ContMockKey p) (_rlsMockCont st) of
       Nothing -> Left "Cont SPV verification failure"
       Just e -> Right e
 

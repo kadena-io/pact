@@ -8,7 +8,6 @@
   \and step behavior works properly."
 
   (defschema schema-a a-result:string)
-  (defschema schema-b b-result:string)
 
   (defpact tester (name)
     (step-with-rollback
@@ -17,17 +16,14 @@
          ((nameA (+ name "->A"))
           (r:object{schema-a} { "a-result": nameA }))
 
-       (yield { "a-result": nameA})
+       (yield r)
        nameA)
 
      "rollback-a")
 
     (step "B"
       (resume { "a-result" := ar }
-        (let*
-            ((r:object{schema-b} { "b-result": ar })
-             (rr:string (at "b-result" r)))
-          (+ rr "->B"))))
+          (+ ar "->B")))
     )
 )
 
@@ -80,4 +76,3 @@
 (expect "step 1 executes with new yield value"
 	"someRandomStr->B"
 	(continue-pact 1 false (hash "stu-pact-id") {"a-result": "someRandomStr"}))
-(typecheck yieldtest.tester)

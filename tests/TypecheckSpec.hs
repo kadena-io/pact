@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
-module TypecheckSpec (spec) where
+module TypecheckSpec (spec, _inferYield) where
 
 import Prelude hiding (take)
 
@@ -131,7 +131,7 @@ _inferIssue :: IO TCResult
 _inferIssue = inferFun True "examples/cp/cp.repl" "cp" "issue"
 
 -- _pretty =<< _inferTransfer
-_inferTransfer :: IO TCResault
+_inferTransfer :: IO TCResult
 _inferTransfer = inferFun True "examples/accounts/accounts.repl" "accounts" "transfer"
 
 _inferTestModule :: IO ([TopLevel Node],[Failure])
