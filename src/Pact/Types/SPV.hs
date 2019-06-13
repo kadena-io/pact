@@ -32,11 +32,12 @@ import Data.Text.Encoding
 import GHC.Generics hiding (to)
 
 import Pact.Types.Continuation (PactExec)
+import Pact.Types.Pretty (Pretty(..), prettyString)
 import Pact.Types.Term (Object, Name)
 
 
 newtype ContProof = ContProof { _contProof :: ByteString }
-  deriving (Eq,Show,Generic)
+  deriving (Eq, Ord, Show, Generic)
 
 instance Wrapped ContProof
 
@@ -45,6 +46,8 @@ instance ToJSON ContProof where
   toJSON (ContProof bs) = String (decodeUtf8 bs)
 instance FromJSON ContProof where
   parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
+instance Pretty ContProof where
+  pretty = prettyString . show
 
 -- | Backend for SPV support
 data SPVSupport = SPVSupport

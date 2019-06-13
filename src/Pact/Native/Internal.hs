@@ -44,7 +44,7 @@ import Data.Aeson hiding (Object)
 import qualified Data.Aeson.Lens as A
 import Data.Default
 import qualified Data.Vector as V
-import Data.Text (Text, pack)
+import Data.Text (Text)
 
 import Unsafe.Coerce
 

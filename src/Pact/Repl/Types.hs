@@ -6,26 +6,30 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts
+  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts,rlsMockCont
   , Tx(..)
   , SPVMockKey(..)
+  , ContMockKey(..)
   , getAllModules
   ) where
 
 import Control.Lens (makeLenses)
 import Control.Monad
-import Data.Default (Default(..))
-import Data.Monoid (Endo(..))
 import Control.Monad.State.Strict (StateT)
 import Control.Concurrent (MVar)
-import Pact.PersistPactDb (DbEnv)
-import Pact.Persist.Pure (PureDb)
-import Pact.Types.Runtime
+
+import Data.Default (Default(..))
+import Data.Monoid (Endo(..))
 import Data.Text (Text)
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
-import Pact.Types.Pretty (Pretty,pretty,renderCompactText)
+
 import Pact.Native.Internal
+import Pact.PersistPactDb (DbEnv)
+import Pact.Persist.Pure (PureDb)
+import Pact.Types.Runtime
+import Pact.Types.Pretty (Pretty, pretty, renderCompactText)
+import Pact.Types.SPV
 
 data ReplMode =
     Interactive |
@@ -67,23 +71,33 @@ instance Default LibOp where def = Noop
 
 data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 
-newtype SPVMockKey = SPVMockKey (Text,Object Name) deriving Show
+newtype SPVMockKey = SPVMockKey (Text, (Object Name))
+  deriving Show
+
 instance Pretty SPVMockKey where
   pretty (SPVMockKey (t,o)) = pretty t <> pretty o
+
 instance Eq SPVMockKey where
   a == b = renderCompactText a == renderCompactText b
 instance Ord SPVMockKey where
   a `compare` b = renderCompactText a `compare` renderCompactText b
 
-data LibState = LibState {
-      _rlsPure :: MVar (DbEnv PureDb)
-    , _rlsOp :: LibOp
-    , _rlsTxName :: Maybe Text
-    , _rlsTests :: [TestResult]
-    , _rlsVerifyUri :: Maybe String
-    , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
-    , _rlsPacts :: M.Map PactId PactExec
-}
+newtype ContMockKey = ContMockKey ContProof
+  deriving (Eq, Ord, Show)
+
+instance Pretty ContMockKey where
+  pretty (ContMockKey p) = pretty p
+
+data LibState = LibState
+  { _rlsPure :: MVar (DbEnv PureDb)
+  , _rlsOp :: LibOp
+  , _rlsTxName :: Maybe Text
+  , _rlsTests :: [TestResult]
+  , _rlsVerifyUri :: Maybe String
+  , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
+  , _rlsPacts :: M.Map PactId PactExec
+  , _rlsMockCont :: M.Map ContMockKey PactExec
+  }
 
 
 makeLenses ''LibState

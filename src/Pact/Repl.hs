@@ -113,12 +113,24 @@ initPureEvalEnv verifyUri = do
   return $ EvalEnv (RefStore nativeDefs) def Null Transactional
     def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (spvs mv) def
   where
-    spvs mv = set spvSupport (spv mv) noSPVSupport
+    spvs mv
+      = set spvSupport (spv mv)
+      $ set spvVerifyContinuation (contspv mv)
+      $ noSPVSupport
 
-spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
-spv mv ty pay = readMVar mv >>= \LibState{..} -> case M.lookup (SPVMockKey (ty,pay)) _rlsMockSPV of
-  Nothing -> return $ Left $ "SPV verification failure"
-  Just o -> return $ Right o
+spv :: MVar LibState -> Text -> Object Name -> IO (Either Text (Object Name))
+spv mv ty pay = go <$> readMVar mv
+  where
+    go st = case view (rlsMockSPV . at (SPVMockKey (ty, pay))) st of
+      Nothing -> Left "SPV verification failure"
+      Just o -> Right o
+
+contspv :: MVar LibState -> ContProof -> IO (Either Text PactExec)
+contspv mv p = go <$> readMVar mv
+  where
+    go st = case view (rlsMockCont . at (ContMockKey p)) st of
+      Nothing -> Left "Cont SPV verification failure"
+      Just e -> Right e
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a
