@@ -23,3 +23,4 @@ public
 .ghc.environment.*
 .dir-locals.el
 docs/ko/_build/
+result/

@@ -28,6 +28,7 @@ module Pact.Types.Crypto
   , PrivateKeyBS(..)
   , SignatureBS(..)
   , sign
+  , _valid
   , verify
   , formatPublicKey
   , formatPublicKeyBS
@@ -38,6 +39,7 @@ module Pact.Types.Crypto
   , importKeyPair
   , KeyPair(..)
   , Scheme(..)
+  , toPPKScheme
   ) where
 
 
