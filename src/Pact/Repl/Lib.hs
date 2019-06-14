@@ -186,12 +186,14 @@ replDefs = ("Repl",
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
      "blockchain environment."
      ,defZRNative "mock-spv" mockSPV
-      (funType tTyString [("proof", tTyString), ("output", tTyObject TyAny)] <>
+      (funType tTyString [("proof", tTyString), ("chain-id", tTyString)] <>
        funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
       [ LitExample "(mock-spv \"a54f54de54c54d89e7f\" { 'amount: 10.0, 'account: \"Emily\" })"
       , LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"
       ]
-      "Mock a successful call to 'spv-verify' for tx owith TYPE and PAYLOAD to return OUTPUT."
+      ("Mock a successful call to 'spv-verify'. If verifying a single tx, supply the verification type TYPE " <>
+      "and PAYLOAD to return OUTPUT. If verifying a defpact, supply a continuation proof PROOF and the chain-id " <>
+      "CHAIN-ID of the target resume.")
      , envChainDataDef
      ])
      where
@@ -245,7 +247,9 @@ mockSPV i as = case as of
   [TLitString spvType, TObject payload _, TObject out _] -> do
     setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
     return $ tStr $ "Added mock SPV for " <> spvType
-  [TLitString _p, TObject _r _] -> error "TODO"
+  [TLitString p, TLitString tid] -> do
+    setenv (eePublicData . pdPublicMeta . pmChainId) (ChainId tid)
+    return $ tStr $ "Proof of continuation verified: " <> p
   _ -> argsError i as
 
 formatAddr :: RNativeFun LibState
