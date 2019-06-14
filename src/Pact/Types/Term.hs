@@ -75,7 +75,7 @@ module Pact.Types.Term
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
-   tLit,tStr,termEq,
+   tLit,tStr,termEq,canEq,
    Gas(..)
    ) where
 
@@ -84,7 +84,7 @@ import Bound
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.DeepSeq
-import Control.Lens (makeLenses,makePrisms, (<&>))
+import Control.Lens (makeLenses,makePrisms)
 import Control.Monad
 import qualified Data.Aeson as A
 #if MIN_VERSION_aeson(1,4,3)
@@ -135,7 +135,7 @@ data Meta = Meta
   } deriving (Eq, Show, Generic)
 
 instance Pretty Meta where
-  pretty (Meta (Just doc) model) = pretty doc <> line <> prettyModel model
+  pretty (Meta (Just doc) model) = dquotes (pretty doc) <> line <> prettyModel model
   pretty (Meta Nothing    model) = prettyModel model
 
 instance NFData Meta
@@ -295,7 +295,7 @@ data DefType
   = Defun
   | Defpact
   | Defcap
-  deriving (Eq,Show,Generic)
+  deriving (Eq,Show,Generic, Bounded, Enum)
 
 instance FromJSON DefType
 instance ToJSON DefType
@@ -405,6 +405,9 @@ data BindPair n = BindPair
 
 toBindPairs :: BindPair n -> (Arg n,n)
 toBindPairs (BindPair a v) = (a,v)
+
+instance Pretty n => Pretty (BindPair n) where
+  pretty (BindPair arg body) = pretty arg <+> pretty body
 
 instance NFData n => NFData (BindPair n)
 
@@ -950,11 +953,11 @@ instance Pretty n => Pretty (Term n) where
     TVar n _ -> pretty n
     TBinding pairs body BindLet _i -> parensSep
       [ "let"
-      , parensSep $ pairs <&> \(BindPair arg body') -> pretty arg <+> pretty body'
+      , parensSep $ fmap pretty pairs
       , pretty $ unscope body
       ]
     TBinding pairs body (BindSchema _) _i -> parensSep
-      [ commaBraces $ pairs <&> \(BindPair arg body') -> pretty arg <+> pretty body'
+      [ commaBraces $ fmap pretty pairs
       , pretty $ unscope body
       ]
     TObject o _ -> pretty o
@@ -1165,6 +1168,17 @@ tLit = (`TLiteral` def)
 -- | Convenience for OverloadedStrings annoyances
 tStr :: Text -> Term n
 tStr = toTerm
+
+-- | Equality dictionary for term-level equality
+--
+canEq :: Term n -> Term n -> Bool
+canEq TList{} TList{} = True
+canEq TObject{} TObject{} = True
+canEq TLiteral{} TLiteral{} = True
+canEq TTable{} TTable{} = True
+canEq TSchema{} TSchema{} = True
+canEq TGuard{} TGuard{} = True
+canEq _ _ = False
 
 -- | Support pact `=` for value-level terms
 termEq :: Eq n => Term n -> Term n -> Bool

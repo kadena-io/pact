@@ -9,8 +9,8 @@ overlay = self: super: {
     src = self.fetchFromGitHub {
       owner = "Z3Prover";
       repo = "z3";
-      rev = "727929c9af003d71eab1f0d90cc8e01761943491";
-      sha256 = "02p8rhflimc852ysgf7nmaypz6ga3w4iss3z8d3qrby5a2d464p9";
+      rev = "e79542cc689d52ec4cb34ce4ae3fbe56e7a0bf70";
+      sha256 = "11sy98clv7ln0a5vqxzvh6wwqbswsjbik2084hav5kfws4xvklfa";
     };
   });
 };

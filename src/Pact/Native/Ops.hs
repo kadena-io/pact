@@ -155,7 +155,9 @@ lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
 eqDef :: NativeDef
 eqDef = defRNative "=" (eq id) eqTy
   ["(= [1 2 3] [1 2 3])", "(= 'foo \"foo\")", "(= { 'a: 2 } { 'a: 2})"]
-  "True if X equals Y."
+  "Compare alike terms for equality, returning TRUE if X is equal to Y. \
+  \Equality comparisons will fail immediately on type mismatch, or if types \
+  \are not value types."
 
 neqDef :: NativeDef
 neqDef = defRNative "!=" (eq not) eqTy
@@ -275,8 +277,13 @@ liftNot i as = argsError' i as
 
 
 eq :: (Bool -> Bool) -> RNativeFun e
-eq f _ [a,b] = return $ toTerm $ f (a `termEq` b)
-eq _ i as = argsError i as
+eq f i as = case as of
+  [a,b] -> if a `canEq` b
+    then return $ toTerm $ f (a `termEq` b)
+    else evalError' i
+         $ "cannot compare incompatible types: "
+         <> pretty (typeof' a) <> ", " <> pretty (typeof' b)
+  _ -> argsError i as
 {-# INLINE eq #-}
 
 unaryTy :: Type n -> Type n -> FunTypes n

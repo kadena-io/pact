@@ -958,29 +958,29 @@ User guards allow the user to design an arbitrary predicate function to enforce 
 initial data. For instance, a user guard could be designed to require two separate keysets to be enforced:
 
 ```lisp
-(defun both-sign (ks1 ks2)
-  (enforce-keyset ks1)
-  (enforce-keyset ks2))
+(defun both-sign (obj)
+  (enforce-keyset (at 'ks1 obj))
+  (enforce-keyset (at 'ks2 obj)))
 
 (defun install-both-guard ()
   (write guard-table "both"
     { "guard":
       (create-user-guard
-        (both-sign (read-keyset "ks1")
-                   (read-keyset "ks2"))) }))
+        { 'ks1: (read-keyset "ks1")
+        , 'ks2: (read-keyset "ks2")
+        }
+        "both-sign")
+    }))
+
 
 (defun enforce-both-guard ()
   (enforce-guard (at "guard" (read guard-table "both"))))
 ```
 
-The special syntax of `create-user-guard` looks like it calls the user function, but instead it
-delays execution of that function until the guard is enforced, storing the arguments.
-Thus in the example above, the two `read-keyset` calls will be performed, and the results stored
-in the guard data.
-However, `both-sign` is not called when the user guard is created, but when it is enforced with
-`enforce-guard`.
+NOTE: user-guard syntax is experimental and will most likely change in a near-term release
+to support direct application of arguments (closure-style).
 
-User guards look a lot like capabilities but are different, namely in that they can be stored in the
+User guards can seem similar to capabilities but are different, namely in that they can be stored in the
 database and passed around like plain data. Capabilities are in-module rights that can only be enforced
 within the declaring module, and offer scoping and the other benefits mentioned above. User guards
 are for implementing custom predicate logic that can't be expressed by other built-in guard types.
