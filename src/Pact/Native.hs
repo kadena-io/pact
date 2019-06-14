@@ -443,7 +443,7 @@ langDefs =
       funType tTyBool [("min-version",tTyString),("max-version",tTyString)])
     ["(enforce-pact-version \"2.3\")"]
     "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \
-    \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'.
+    \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'."
     ,defRNative "contains" contains
     (funType tTyBool [("value",a),("list",TyList a)] <>
      funType tTyBool [("key",a),("object",tTyObject (mkSchemaVar "o"))] <>
