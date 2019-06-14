@@ -186,14 +186,9 @@ replDefs = ("Repl",
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
      "blockchain environment."
      ,defZRNative "mock-spv" mockSPV
-      (funType tTyString [("proof", tTyString), ("chain-id", tTyString)] <>
-       funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
-      [ LitExample "(mock-spv \"a54f54de54c54d89e7f\" { 'amount: 10.0, 'account: \"Emily\" })"
-      , LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"
-      ]
-      ("Mock a successful call to 'spv-verify'. If verifying a single tx, supply the verification type TYPE " <>
-      "and PAYLOAD to return OUTPUT. If verifying a defpact, supply a continuation proof PROOF and the chain-id " <>
-      "CHAIN-ID of the target resume.")
+       (funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
+      [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"]
+       "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
      , envChainDataDef
      ])
      where
@@ -247,9 +242,6 @@ mockSPV i as = case as of
   [TLitString spvType, TObject payload _, TObject out _] -> do
     setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
     return $ tStr $ "Added mock SPV for " <> spvType
-  [TLitString p, TLitString tid] -> do
-    setenv (eePublicData . pdPublicMeta . pmChainId) (ChainId tid)
-    return $ tStr $ "Proof of continuation verified: " <> p
   _ -> argsError i as
 
 formatAddr :: RNativeFun LibState
@@ -332,7 +324,16 @@ continuePact i as = case as of
       let pid = maybe (_pePactId ex) PactId mpid
       y <- case mobj of
         Nothing -> return $ _peYield ex
-        Just o -> toYield o
+        Just o -> do
+          case _peYield ex of
+            Nothing -> toYield o
+            Just y -> case _yProvenance y of
+              Nothing -> toYield o
+              Just (Provenance tid _) -> do
+                cid <- view $ eePublicData . pdPublicMeta . pmChainId
+                unless (cid == tid) $
+                  evalError' i "resume overloads must occur on correct chain"
+                toYield o
       return (pid, y)
 
     toYield = fmap (Just . flip Yield Nothing) . enforcePactValue'

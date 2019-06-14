@@ -1546,7 +1546,7 @@ Load and evaluate FILE, resetting repl state beforehand if optional RESET is tru
 
 Mock a successful call to 'spv-verify'. If verifying a single tx, supply the verification type TYPE and PAYLOAD to return OUTPUT. If verifying a defpact, supply a continuation proof PROOF and the chain-id CHAIN-ID of the target resume.
 ```lisp
-(mock-spv "a54f54de54c54d89e7f" { 'amount: 10.0, 'account: "Emily" })
+(mock-spv "a54f54de54c54d89e7f" "18")
 (mock-spv "TXOUT" { 'proof: "a54f54de54c54d89e7f" } { 'amount: 10.0, 'account: "Dave", 'chainId: "1" })
 ```
 
