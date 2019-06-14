@@ -336,8 +336,6 @@ continuePact i as = case as of
 
     toYield = fmap (Just . flip Yield Nothing) . enforcePactValue'
 
-
-
 setentity :: RNativeFun LibState
 setentity i as = case as of
   [TLitString s] -> do
