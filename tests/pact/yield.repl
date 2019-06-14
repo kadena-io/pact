@@ -102,7 +102,9 @@
 (env-entity "A")
 (expect "step 0 executes" "emily->A" (cc-yield "emily"))
 
-(env-chain-data { "chain-id": "18" })
+(expect-failure "resume fails on wrong chain id" (continue-pact 1 true))
+
+;; overwrite yield by supplying new object
 (env-entity "B")
 (expect "step 1 executes with new yield value"
 	"someRandomStr->B"
