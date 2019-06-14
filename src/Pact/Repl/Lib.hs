@@ -324,16 +324,14 @@ continuePact i as = case as of
       let pid = maybe (_pePactId ex) PactId mpid
       y <- case mobj of
         Nothing -> return $ _peYield ex
-        Just o -> do
-          case _peYield ex of
-            Nothing -> toYield o
-            Just y -> case _yProvenance y of
-              Nothing -> toYield o
-              Just (Provenance tid _) -> do
-                cid <- view $ eePublicData . pdPublicMeta . pmChainId
-                unless (cid == tid) $
-                  evalError' i "resume overloads must occur on correct chain"
-                toYield o
+        Just o -> case _peYield ex of
+          Nothing -> toYield o
+          Just (Yield _ Nothing) -> toYield o
+          Just (Yield _ (Just (Provenance tid _))) -> do
+            cid <- view $ eePublicData . pdPublicMeta . pmChainId
+            unless (cid == tid) $
+              evalError' i "resume overloads must occur on correct chain"
+            toYield o
       return (pid, y)
 
     toYield = fmap (Just . flip Yield Nothing) . enforcePactValue'
