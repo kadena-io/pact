@@ -44,7 +44,6 @@ import Data.Decimal (Decimal)
 import Data.Proxy
 import Data.Swagger as Swagger hiding (Info,version)
 import Data.Text (Text)
-import Data.Text as T
 import Data.Thyme.Clock (UTCTime)
 import Data.Thyme.Time.Core (fromMicroseconds,fromGregorian,mkUTCTime)
 import GHC.Generics
@@ -148,6 +147,9 @@ writeSwagger :: FilePath -> Swagger -> IO ()
 writeSwagger fn = BSL8.writeFile fn . encode
 
 
+------------------------------------------------------------------
+------------------------------------------------------------------
+
 
 -- | Swagger ORPHANS
 
@@ -155,11 +157,11 @@ instance ToSchema SubmitBatch where
   declareNamedSchema = lensyDeclareNamedSchema 3
 
 instance ToSchema (Command Text) where
-  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
-    { Swagger.fieldLabelModifier = go }
-    where go n = case n of
-            "_cmdPayload" -> "cmd"
-            _ -> lensyConstructorToNiceJson 4 n
+  declareNamedSchema = genericDeclareNamedSchema $
+    optionsOf $ optFieldLabel $
+                replaceOrModify
+                ("_cmdPayload","cmd")
+                (lensyConstructorToNiceJson 4)
 
 instance ToSchema UserSig where
   declareNamedSchema = lensyDeclareNamedSchema 3
@@ -237,17 +239,14 @@ instance ToSchema Doc where
 
 
 instance ToSchema PactValue where
-  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
-    { Swagger.constructorTagModifier = go }
-    where go n = (unpack . T.toLower . T.drop 1 . pack) n
+  declareNamedSchema = genericDeclareNamedSchema $
+    optionsOf $ optConstructor $ toNiceString 1
 
 
 instance ToSchema Literal where
-  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
-    { Swagger.constructorTagModifier = go,
-      Swagger.unwrapUnaryRecords = True
-    }
-    where go n = (unpack . T.toLower . T.drop 1 . pack) n
+  declareNamedSchema = genericDeclareNamedSchema $
+    (optionsOf $ optConstructor $ toNiceString 1)
+     { Swagger.unwrapUnaryRecords = True }
 
 newtype DummyTime = DummyTime UTCTime
   deriving (Generic)
@@ -275,9 +274,8 @@ instance ToSchema (ObjectMap PactValue) where
         set additionalProperties (Just $ AdditionalPropertiesSchema sref))
 
 instance ToSchema Guard where
-  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
-    { Swagger.constructorTagModifier = go }
-    where go n = (unpack . T.toLower . T.drop 1 . pack) n
+  declareNamedSchema = genericDeclareNamedSchema $
+    optionsOf $ optConstructor $ toNiceString 1
 
 instance ToSchema PactGuard where
   declareNamedSchema = lensyDeclareNamedSchema 3
@@ -298,11 +296,11 @@ instance ToSchema UserGuard where
 instance ToSchema ListenerRequest where
   declareNamedSchema = lensyDeclareNamedSchema 3
 instance ToSchema ListenResponse where
-  declareNamedSchema = genericDeclareNamedSchema $ defaultSchemaOptions
-    { Swagger.constructorTagModifier = go }
-    where go n = case n of
-            "ListenTimeout" -> "timeout-micros"
-            _ -> (unpack . T.toLower . T.drop 6 . pack) n
+  declareNamedSchema = genericDeclareNamedSchema $
+    optionsOf $ optConstructor $
+                replaceOrModify
+                ("ListenTimeout","timeout-micros")
+                (toNiceString 6)
 
 
 
