@@ -390,7 +390,7 @@ in the runtime environment and stores their definition in the global keyset data
 
 #### Namespace declaration {#namespacedefinition}
 
-[Namespace](#namespaces) declarations provide a unique prefix for keysets and modules defined within the namespace scope. All smart contract definitions must occur within a namespaced scope, which is initiated by defining a namespace using [define-namespace](pact-functions.html#define-namespace), and entering the namespace scope by issuing the [namespace](pact-functions.html#namespace) command. The global (i.e. empty) namespace is reserved for Kadena code.
+[Namespace](#namespaces) declarations provide a unique prefix for modules defined within the namespace scope. All smart contract definitions must occur within a namespaced scope, which is initiated by defining a namespace using [define-namespace](#define-namespace), and entering the namespace scope by issuing the [namespace](#namespace) command. The global (i.e. empty) namespace is reserved for Kadena code.
 
 #### Module declaration {#moduledeclaration}
 
