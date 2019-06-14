@@ -5,7 +5,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
-
 -- |
 -- Module      :  Pact.Native.Internal
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -57,7 +56,6 @@ import Pact.Types.Runtime
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
-
 
 colsToList
   :: Eval m [(Info,FieldKey)] -> Term n -> Eval m [(Info,FieldKey)]
@@ -241,10 +239,14 @@ provenanceOf
 provenanceOf fa tid =
   Just . Provenance tid . _mHash <$> getCallingModule fa
 
--- | Enforce that 'Yield' provenance matches env data
+-- | Enforce that 'Yield' object and provenance data matches env data
 -- and fail otherwise.
 --
-enforceYield :: FunApp -> Yield -> Eval e Yield
+enforceYield
+  :: FunApp
+  -> Yield
+    -- ^ yield data to enforce
+  -> Eval e Yield
 enforceYield fa y = case _yProvenance y of
   Nothing -> return y
   Just p -> do
@@ -254,5 +256,5 @@ enforceYield fa y = case _yProvenance y of
 
     unless (p == p') $
       evalError' fa "enforceYield: yield provenance does not match"
-
+      
     return y

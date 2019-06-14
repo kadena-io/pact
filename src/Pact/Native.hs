@@ -397,19 +397,15 @@ langDefs =
     ,lengthDef
     ,takeDef
     ,dropDef
-
     ,defRNative "remove" remove (funType (tTyObject (mkSchemaVar "o")) [("key",tTyString),("object",tTyObject (mkSchemaVar "o"))])
      ["(remove \"bar\" { \"foo\": 1, \"bar\": 2 })"]
      "Remove entry for KEY from OBJECT."
-
     ,atDef
     ,enforceDef
     ,enforceOneDef
     ,formatDef
-
     ,defRNative "pact-id" pactId (funType tTyString []) []
      "Return ID if called during current pact execution, failing if not."
-
     ,readDecimalDef
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
      [LitExample "(read-integer \"age\")"]
@@ -419,11 +415,8 @@ langDefs =
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
      \List -> list, Object -> object."
-
-
     ,defRNative "tx-hash" txHash (funType tTyString []) ["(tx-hash)"]
      "Obtain hash of current transaction as a string."
-
     ,defNative (specialForm Bind) bind
      (funType a [("src",tTyObject row),("binding",TySchema TyBinding row def)])
      ["(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)"]
@@ -432,7 +425,6 @@ langDefs =
      ["(typeof \"hello\")"] "Returns type of X as string."
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
-
     ,defRNative (specialForm YieldSF) yield
      (funType yieldv [("object",yieldv)] <>
       funType yieldv [("object", yieldv), ("target-chain",tTyString)])
@@ -441,21 +433,17 @@ langDefs =
      ]
      "Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN, \
      \target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch."
-
     ,defNative (specialForm Resume) resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "r") def)]) []
      "Special form binds to a yielded object value from the prior step execution in a pact. \
      \If yield step was executed on a foreign chain, enforce endorsement via SPV."
-
     ,pactVersionDef
-
     ,setTopLevelOnly $ defRNative "enforce-pact-version" enforceVersion
      (funType tTyBool [("min-version",tTyString)] <>
       funType tTyBool [("min-version",tTyString),("max-version",tTyString)])
     ["(enforce-pact-version \"2.3\")"]
     "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \
-    \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'."
-
+    \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'.
     ,defRNative "contains" contains
     (funType tTyBool [("value",a),("list",TyList a)] <>
      funType tTyBool [("key",a),("object",tTyObject (mkSchemaVar "o"))] <>
@@ -465,7 +453,6 @@ langDefs =
     , "(contains \"foo\" \"foobar\")"
     ]
     "Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry."
-
     ,defNative "constantly" constantly
      (funType a [("value",a),("ignore1",b)] <>
       funType a [("value",a),("ignore1",b),("ignore2",c)] <>

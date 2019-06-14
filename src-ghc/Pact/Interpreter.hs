@@ -97,7 +97,7 @@ evalContinuation initState ee cm = case (_cmProof cm) of
   Nothing ->
     interpret initState (setStep Nothing) (Left Nothing)
   Just p -> do
-    etpe <- (_spvVerifyContinuation . _eeSPVSupport $ ee) $ p
+    etpe <- (_spvVerifyContinuation . _eeSPVSupport $ ee) p
     pe <- throwEither . over _Left (userError . show) $ etpe
     interpret initState (setStep (_peYield pe)) (Left $ Just pe)
   where
