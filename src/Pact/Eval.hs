@@ -658,8 +658,6 @@ evalUserAppBody Def{..} (as',ft') ai g run =
       fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
   in appCall fa ai as' $ fmap (g,) $ run bod'
 
-
-
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
   let fa = FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)

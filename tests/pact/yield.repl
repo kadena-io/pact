@@ -26,7 +26,7 @@
           (+ ar "->B")))
     )
 
-  (defpact cc-yield (name)
+  (defpact endorsement-test (name)
     (step-with-rollback
      "A"
      (let*
@@ -98,14 +98,38 @@
 (begin-tx)
 
 (use yieldtest)
+
+;; set chain id to something sane
+(env-chain-data { "chain-id": "0" })
 (env-hash (hash "emily-pact-id"))
+
+;; expect successful output which primes the yiel
 (env-entity "A")
-(expect "step 0 executes" "emily->A" (cc-yield "emily"))
+(expect "step 0 executes" "emily->A" (endorsement-test "emily"))
 
-(expect-failure "resume fails on wrong chain id" (continue-pact 1 true))
+;; Expect failure since we are on chain "0", endorsement is set for "1"
+;;(expect-failure "resume fails on wrong chain id" (continue-pact 1))
 
-;; overwrite yield by supplying new object
+;; mock spv (switches chain id to designated chain id)
+(mock-spv "cont-proof" "1")
 (env-entity "B")
+(expect "resume succeeds on correct chain id" "emily->A->B" (continue-pact 1))
+(commit-tx)
+
+(begin-tx)
+
+(use yieldtest)
+
+;; set chain id to something sane
+(env-chain-data { "chain-id": "0" })
+(env-hash (hash "emily-pact-id"))
+
+;; expect successful output which primes the yiel
+(env-entity "A")
+(expect "step 0 executes" "emily->A" (endorsement-test "emily"))
+
+(env-entity "B")
+;; overwrite yield by supplying new object
 (expect "step 1 executes with new yield value"
 	"someRandomStr->B"
 	(continue-pact 1 false (hash "emily-pact-id") {"a-result": "someRandomStr"}))

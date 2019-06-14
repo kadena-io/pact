@@ -331,11 +331,11 @@ continuePact i as = case as of
     unwrapExec mpid mobj (Just ex) = do
       let pid = maybe (_pePactId ex) PactId mpid
       y <- case mobj of
-        Nothing -> traverse (enforceYield i) $ _peYield ex
+        Nothing -> return $ _peYield ex
         Just o -> toYield o
       return (pid, y)
 
-    toYield o = (\o' -> Just $ Yield o' Nothing) <$> enforcePactValue' o
+    toYield = fmap (Just . flip Yield Nothing) . enforcePactValue'
 
 
 
