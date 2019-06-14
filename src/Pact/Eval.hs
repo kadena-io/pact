@@ -795,6 +795,8 @@ resumePactExec i req ctx = do
         r@Just {} -> r
         Nothing -> _peYield ctx
 
+  liftIO $ print def'
+
   -- run local environment with yield from pact exec
   local (set eePactStep (Just $ set psResume resume req)) $
     evalUserAppBody def' af i g $ \bod ->

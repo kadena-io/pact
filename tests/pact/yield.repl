@@ -25,6 +25,23 @@
       (resume { "a-result" := ar }
           (+ ar "->B")))
     )
+
+  (defpact cc-yield (name)
+    (step-with-rollback
+     "A"
+     (let*
+         ((nameA (+ name "->A"))
+          (r:object{schema-a} { "a-result": nameA }))
+
+       (yield r "1")
+       nameA)
+
+     "rollback-a")
+
+    (step "B"
+      (resume { "a-result" := ar }
+          (+ ar "->B")))
+    )
 )
 
 (commit-tx)
@@ -76,3 +93,17 @@
 (expect "step 1 executes with new yield value"
 	"someRandomStr->B"
 	(continue-pact 1 false (hash "stu-pact-id") {"a-result": "someRandomStr"}))
+
+(commit-tx)
+(begin-tx)
+
+(use yieldtest)
+(env-hash (hash "emily-pact-id"))
+(env-entity "A")
+(expect "step 0 executes" "emily->A" (cc-yield "emily"))
+
+(env-chain-data { "chain-id": "18" })
+(env-entity "B")
+(expect "step 1 executes with new yield value"
+	"someRandomStr->B"
+	(continue-pact 1 false (hash "emily-pact-id") {"a-result": "someRandomStr"}))

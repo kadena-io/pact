@@ -186,8 +186,8 @@ replDefs = ("Repl",
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
      "blockchain environment."
      ,defZRNative "mock-spv" mockSPV
-      (funType tTyString [("proof", tTyString), ("output", tTyObject TyAny)]) <>
-       funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)]
+      (funType tTyString [("proof", tTyString), ("output", tTyObject TyAny)] <>
+       funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
       [ LitExample "(mock-spv \"a54f54de54c54d89e7f\" { 'amount: 10.0, 'account: \"Emily\" })"
       , LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"
       ]
@@ -245,7 +245,7 @@ mockSPV i as = case as of
   [TLitString spvType, TObject payload _, TObject out _] -> do
     setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
     return $ tStr $ "Added mock SPV for " <> spvType
-  [TLitString p, TObject r _] -> error "TODO"
+  [TLitString _p, TObject _r _] -> error "TODO"
   _ -> argsError i as
 
 formatAddr :: RNativeFun LibState
@@ -321,9 +321,9 @@ continuePact i as = case as of
       pid <- case mpid of
         Nothing -> evalError' i
           "continue-pact: No pact id supplied and no pact exec in context"
-        Just pid -> pure $ PactId pid
-      y <- maybe (pure Nothing) toYield mobj
-      pure (pid, y)
+        Just pid -> return $ PactId pid
+      y <- maybe (return Nothing) toYield mobj
+      return (pid, y)
     unwrapExec mpid mobj (Just ex) = do
       let pid = maybe (_pePactId ex) PactId mpid
       y <- case mobj of
