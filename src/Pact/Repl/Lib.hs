@@ -318,23 +318,18 @@ continuePact i as = case as of
         Nothing -> evalError' i
           "continue-pact: No pact id supplied and no pact exec in context"
         Just pid -> return $ PactId pid
-      y <- maybe (return Nothing) toYield mobj
+      y <- maybe (return Nothing) (toYield Nothing) mobj
       return (pid, y)
     unwrapExec mpid mobj (Just ex) = do
       let pid = maybe (_pePactId ex) PactId mpid
       y <- case mobj of
         Nothing -> return $ _peYield ex
         Just o -> case _peYield ex of
-          Nothing -> toYield o
-          Just (Yield _ Nothing) -> toYield o
-          Just (Yield _ (Just (Provenance tid _))) -> do
-            cid <- view $ eePublicData . pdPublicMeta . pmChainId
-            unless (cid == tid) $
-              evalError' i "resume overloads must occur on correct chain"
-            toYield o
+          Just (Yield _ p) -> toYield p o
+          Nothing -> toYield Nothing o
       return (pid, y)
 
-    toYield = fmap (Just . flip Yield Nothing) . enforcePactValue'
+    toYield p = fmap (Just . flip Yield p) . enforcePactValue'
 
 setentity :: RNativeFun LibState
 setentity i as = case as of

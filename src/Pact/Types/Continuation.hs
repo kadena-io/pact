@@ -8,7 +8,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 -- |
 -- Module      :  Pact.Types.Continuation
--- Copyright   :  (C) 2016 Stuart Popejoy, Emily Pillmore
+-- Copyright   :  (C) 2019 Stuart Popejoy, Emily Pillmore
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, Emily Pillmore <emily@kadena.io>
 --

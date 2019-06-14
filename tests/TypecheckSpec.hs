@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
-module TypecheckSpec (spec, _inferYield) where
+module TypecheckSpec (spec) where
 
 import Prelude hiding (take)
 
@@ -145,9 +145,6 @@ _inferAccounts = inferModule False "examples/accounts/accounts.repl" "accounts"
 
 _inferCP :: IO ([TopLevel Node],[Failure])
 _inferCP = inferModule False "examples/cp/cp.repl" "cp"
-
-_inferYield :: IO ([TopLevel Node], [Failure])
-_inferYield = inferModule True "tests/pact/yield.repl" "yieldtest"
 
 -- | prettify output of 'inferFun' runs
 _pretty :: TCResult -> IO ()

@@ -124,7 +124,7 @@
 (env-chain-data { "chain-id": "0" })
 (env-hash (hash "emily-pact-id"))
 
-;; expect successful output which primes the yiel
+;; expect successful output which primes the yield
 (env-entity "A")
 (expect "step 0 executes" "emily->A" (endorsement-test "emily"))
 
@@ -134,7 +134,7 @@
 (expect-failure "step 1 fails to execute on wrong chain with new yield value"
 	(continue-pact 1 false (hash "emily-pact-id") {"a-result": "someRandomStr"}))
 
+;; overwrite yield works when correct chain-id is set
 (env-chain-data { "chain-id" : "1" })
-;; previous executes on correct target chain
-(expect "step 1 fails to executes with new yield value" "someRandomStr->B"
+(expect "step 1 executes on correct chain with new yield value" "someRandomStr->B"
 	(continue-pact 1 false (hash "emily-pact-id") {"a-result": "someRandomStr"}))

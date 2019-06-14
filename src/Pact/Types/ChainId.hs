@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DerivingStrategies #-}
 -- |
--- Module      :  Pact.Types.Runtime
+-- Module      :  Pact.Types.ChainId
 -- Copyright   :  (C) 2019 Stuart Popejoy, Emily Pillmore
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>,

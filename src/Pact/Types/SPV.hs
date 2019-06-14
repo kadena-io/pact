@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- |
--- Module      :  Pact.Types.Runtime
+-- Module      :  Pact.Types.SPV
 -- Copyright   :  (C) 2019 Stuart Popejoy, Emily Pillmore
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>,
