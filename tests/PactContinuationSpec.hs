@@ -32,58 +32,9 @@ import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Util (toB16JSON)
+import Pact.Types.SPV
 
 
-shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
-shouldMatch' CommandResultCheck{..} results = do
-          let apiRes = HM.lookup _crcReqKey results
-          checkResult _crcExpect apiRes
-
-succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
-                ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-succeedsWith cmd r = ask >>= liftIO . shouldMatch'
-                     (makeCheck cmd (ExpectResult . Right $ r))
-
-failsWith :: HasCallStack => Command Text -> Maybe String ->
-             ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-failsWith cmd r = ask >>= liftIO . shouldMatch'
-                  (makeCheck cmd (ExpectResult . Left $ r))
-
-runResults :: r -> ReaderT r m a -> m a
-runResults rs act = runReaderT act rs
-
-makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
-makeExecCmd keyPairs code =
-  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
-
-
-formatPubKeyForCmd :: SomeKeyPair -> Value
-formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
-
-
-
-makeContCmd :: SomeKeyPair -> Bool -> Value -> Command Text -> Int -> String -> IO (Command Text)
-makeContCmd keyPairs isRollback cmdData pactExecCmd step nonce =
-  mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce) Nothing
-
-textVal :: Text -> Maybe PactValue
-textVal = Just . PLiteral . LString
-
-getPactId :: Command Text -> PactId
-getPactId cmd = toPactId hsh
-  where hsh = (toUntypedHash . _cmdHash) cmd
-
-
-pactIdNotFoundMsg :: Command Text -> Maybe String
-pactIdNotFoundMsg cmd = Just msg
-  where txtPact = unpack (asString (getPactId cmd))
-        msg = "resumePact: pact completed: " <> txtPact
-
-stepMisMatchMsg :: Bool -> Int -> Int -> Maybe String
-stepMisMatchMsg isRollback attemptStep currStep = Just msg
-  where typeOfStep = if isRollback then "rollback" else "exec"
-        msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
-              <> show attemptStep <> ", " <> show currStep <> ")"
 
 ---- TESTS -----
 
@@ -422,6 +373,8 @@ testPactYield mgr = before_ flushDb $ after_ flushDb $ do
   it "resets yielded values after each step" $
     testResetYield mgr
 
+  it "testCrossChainYield" $ testCrossChainYield mgr
+
 
 testValidYield :: HTTP.Manager -> Expectation
 testValidYield mgr = do
@@ -555,6 +508,84 @@ pactWithSameNameYield moduleName = T.concat [begCode, T.pack moduleName, endCode
                 (resume { "result" := res }
                      res)))))
             |]
+
+
+testCrossChainYield :: HTTP.Manager -> Expectation
+testCrossChainYield mgr = do
+  adminKeys <- genKeys
+
+  -- STEP 0: runs on server for "chain0results"
+  -- note we're not changing server ID, just starting with
+  -- a fresh server to prove that a new pact coming through
+  -- SPV can start from step 1.
+
+  let makeExecCmdWith = makeExecCmd adminKeys
+  moduleCmd        <- makeExecCmdWith (unpack pactCrossChainYield)
+  executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
+
+  chain0Results <- runAll mgr [moduleCmd,executePactCmd]
+
+  runResults chain0Results $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` textVal "emily->A"
+
+  let rk = cmdToRequestKey executePactCmd
+
+  case HM.lookup rk chain0Results of
+    Nothing -> expectationFailure $
+      "Could not find result " ++ show rk ++ ": " ++ show chain0Results
+    Just cr -> case _crContinuation cr of
+      Nothing -> expectationFailure $
+        "No continuation in result: " ++ show rk
+      Just pe -> do
+
+        -- STEP 1: found the pact exec from step 0; return this
+        -- from the SPV operation. Run a fresh server, reload
+        -- the module, and run the step.
+
+        let proof = (ContProof "hi there")
+            makeContCmdWith = makeContCmd' (Just proof) adminKeys False Null executePactCmd
+            spv = noSPVSupport {
+              _spvVerifyContinuation = \cp ->
+                  if cp == proof then
+                    return $ Right $ pe
+                  else
+                    return $ Left $ "Invalid proof"
+              }
+
+        chain1Cont <- makeContCmdWith 1 "chain1Cont"
+
+        -- flush db to ensure runAll' runs with fresh state
+
+        flushDb
+
+        chain1Results <- runAll' mgr [moduleCmd,chain1Cont] spv
+
+        runResults chain1Results $ do
+          moduleCmd `succeedsWith`  Nothing
+          chain1Cont `succeedsWith` textVal "emily->A->B"
+
+
+pactCrossChainYield :: T.Text
+pactCrossChainYield =
+  [text|
+    (module cross-chain-tester GOV
+      (defcap GOV () true)
+      (defschema schema-a a-result:string)
+      (defpact cross-chain (name)
+        (step
+          (let*
+            ((nameA (+ name "->A"))
+             (r:object{schema-a} { "a-result": nameA }))
+
+            (yield r "") ;; "" is chain id in these tests
+            nameA))
+
+        (step
+          (resume { "a-result" := ar }
+                  (+ ar "->B")))
+        ))
+  |]
 
 
 
@@ -699,10 +730,84 @@ testValidEscrowFinish mgr = do
 
 
 
+
+
+
 --- UTILS ---
 
 testConfigFilePath :: FilePath
 testConfigFilePath = testDir ++ "test-config.yaml"
+
+
+shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
+shouldMatch' CommandResultCheck{..} results = do
+          let apiRes = HM.lookup _crcReqKey results
+          checkResult _crcExpect apiRes
+
+succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
+                ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+succeedsWith cmd r = ask >>= liftIO . shouldMatch'
+                     (makeCheck cmd (ExpectResult . Right $ r))
+
+failsWith :: HasCallStack => Command Text -> Maybe String ->
+             ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+failsWith cmd r = ask >>= liftIO . shouldMatch'
+                  (makeCheck cmd (ExpectResult . Left $ r))
+
+runResults :: r -> ReaderT r m a -> m a
+runResults rs act = runReaderT act rs
+
+makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
+makeExecCmd keyPairs code =
+  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
+
+
+formatPubKeyForCmd :: SomeKeyPair -> Value
+formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
+
+
+
+makeContCmd
+  :: SomeKeyPair  -- signing pair
+  -> Bool         -- isRollback
+  -> Value        -- data
+  -> Command Text -- cmd to get pact Id from
+  -> Int          -- step
+  -> String       -- nonce
+  -> IO (Command Text)
+makeContCmd = makeContCmd' Nothing
+
+
+makeContCmd'
+  :: Maybe ContProof
+  -> SomeKeyPair  -- signing pair
+  -> Bool         -- isRollback
+  -> Value        -- data
+  -> Command Text -- cmd to get pact Id from
+  -> Int          -- step
+  -> String       -- nonce
+  -> IO (Command Text)
+makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
+  mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce) contProofM
+
+textVal :: Text -> Maybe PactValue
+textVal = Just . PLiteral . LString
+
+getPactId :: Command Text -> PactId
+getPactId cmd = toPactId hsh
+  where hsh = (toUntypedHash . _cmdHash) cmd
+
+
+pactIdNotFoundMsg :: Command Text -> Maybe String
+pactIdNotFoundMsg cmd = Just msg
+  where txtPact = unpack (asString (getPactId cmd))
+        msg = "resumePact: pact completed: " <> txtPact
+
+stepMisMatchMsg :: Bool -> Int -> Int -> Maybe String
+stepMisMatchMsg isRollback attemptStep currStep = Just msg
+  where typeOfStep = if isRollback then "rollback" else "exec"
+        msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
+              <> show attemptStep <> ", " <> show currStep <> ")"
 
 newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe PactValue))
   deriving (Eq, Show)
@@ -719,10 +824,18 @@ makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
 makeCheck c@Command{..} expect = CommandResultCheck (cmdToRequestKey c) expect
 
 runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll mgr cmds = Exception.bracket
-              (startServer testConfigFilePath)
+runAll mgr cmds = runAll' mgr cmds noSPVSupport
+
+runAll'
+  :: Manager
+  -> [Command T.Text]
+  -> SPVSupport
+  -> IO (HM.HashMap RequestKey (CommandResult Hash))
+runAll' mgr cmds spv = Exception.bracket
+              (startServer' testConfigFilePath spv)
                stopServer
               (const (run mgr cmds))
+
 
 
 run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
@@ -785,5 +898,3 @@ resultShouldBe (ActualResult actual) (ExpectResult expect) =
 toExpectationFailure :: (HasCallStack, Show e, Show a) => e -> a -> Expectation
 toExpectationFailure expect actual =
   expectationFailure $ "Expected " ++ show expect ++ ", found " ++ show actual
-
---- PACT CODE

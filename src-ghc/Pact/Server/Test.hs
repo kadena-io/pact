@@ -3,6 +3,7 @@ module Pact.Server.Test
   (
   -- * Test server management
     startServer
+  , startServer'
   , stopServer
   , flushDb
   -- * Crypto util
@@ -23,6 +24,8 @@ import Servant.Client
 import System.Directory
 import qualified Control.Exception as Exception
 import qualified Network.HTTP.Client as HTTP
+
+import Pact.Types.SPV
 
 
 genKeys :: IO SomeKeyPair
@@ -55,8 +58,11 @@ serverBaseUrl = parseBaseUrl serverRootPath
 
 
 startServer :: FilePath -> IO (Async ())
-startServer configFile = do
-  asyncServer <- async $ serve configFile
+startServer configFile = startServer' configFile noSPVSupport
+
+startServer' :: FilePath -> SPVSupport -> IO (Async ())
+startServer' configFile spv = do
+  asyncServer <- async $ serve configFile spv
   waitUntilStarted 0
   return asyncServer
 

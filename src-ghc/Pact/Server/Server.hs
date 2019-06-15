@@ -38,6 +38,7 @@ import Pact.Types.Runtime hiding (Update)
 import Pact.Types.SQLite
 import Pact.Types.Server
 import Pact.Types.Logger
+import Pact.Types.SPV
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
 import Pact.Server.PactService
@@ -68,8 +69,8 @@ usage =
   \gasRate    - Gas price per action, defaults to 0 \n\
   \\n"
 
-serve :: FilePath -> IO ()
-serve configFile = do
+serve :: FilePath -> SPVSupport -> IO ()
+serve configFile spv = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
       putStrLn usage
@@ -87,7 +88,7 @@ serve configFile = do
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
 
   -- Must be individually killed with uninterruptibleCancel if parent thread not killed.
-  asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
+  asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn spv)
   -- Must be individually killed with uninterruptibleCancel if parent thread not killed.
   asyncHist <- async (runHistoryService histConf Nothing)
   let runServer = runApiServer histC inC debugFn (fromIntegral _port) _logDir
@@ -102,9 +103,16 @@ initFastLogger = do
   (tfl,_) <- newTimedFastLogger tc (LogStdout 1000)
   return $ \m -> tfl $ \t -> toLogStr t <> " " <> toLogStr (B8.pack m) <> "\n"
 
-startCmdThread :: CommandConfig -> InboundPactChan -> HistoryChannel -> ReplayFromDisk -> (String -> IO ()) -> IO ()
-startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
-  CommandExecInterface {..} <- initPactService cmdConfig (initLoggers debugFn doLog def)
+startCmdThread
+  :: CommandConfig
+  -> InboundPactChan
+  -> HistoryChannel
+  -> ReplayFromDisk
+  -> (String -> IO ())
+  -> SPVSupport
+  -> IO ()
+startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn spv = do
+  CommandExecInterface {..} <- initPactService cmdConfig (initLoggers debugFn doLog def) spv
   -- we wait for the history service to light up, possibly giving us backups from disk to replay
   replayFromDisk' <- liftIO $ takeMVar rp
   when (null replayFromDisk') $ liftIO $ debugFn "[disk replay]: No replay found"
