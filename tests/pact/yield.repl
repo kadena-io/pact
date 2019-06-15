@@ -25,14 +25,12 @@
       (resume { "a-result" := ar }
           (+ ar "->B")))
     )
-)
 
-(module cross-chain-test 'k
 
-  "Define one test: 'endorsement-test' executes a single cross-chain pact and \
-  \ensures step behavior and yield enforcement works properly."
+  (defpact cross-chain (name)
+    "Define one test: 'endorsement-test' executes a single cross-chain pact and \
+    \ensures step behavior and yield enforcement works properly."
 
-  (defpact tester (name)
     (step
      (let*
          ((nameA (+ name "->A"))
@@ -100,14 +98,14 @@
 (commit-tx)
 (begin-tx)
 
-(use cross-chain-test)
+(use yieldtest)
 
 ;; set chain id to something sane
 (env-chain-data { "chain-id": "0" })
 (env-hash (hash "emily-pact-id"))
 
 ;; expect successful output which primes the yiel
-(expect "step 0 executes" "emily->A" (tester "emily"))
+(expect "step 0 executes" "emily->A" (cross-chain "emily"))
 
 ;; Expect failure since we are on chain "0", endorsement is set for "1"
 ;;(expect-failure "resume fails on wrong chain id" (continue-pact 1))
@@ -122,7 +120,7 @@
 (env-hash (hash "emily-pact-id"))
 
 ;; expect successful output which primes the yield
-(expect "step 0 executes" "emily->A" (tester "emily"))
+(expect "step 0 executes" "emily->A" (cross-chain "emily"))
 
 ;; overwrite yield by supplying new object fails on wrong chain
 (expect-failure "step 1 fails to execute on wrong chain with new yield value"
