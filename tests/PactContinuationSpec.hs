@@ -1,31 +1,38 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module PactContinuationSpec (spec) where
 
-
+import qualified Control.Exception as Exception
+import Control.Monad.Reader
+import Data.Aeson
+import Data.Decimal
+import Data.Default (def)
+import qualified Data.HashMap.Strict as HM
+import qualified Data.List.NonEmpty as NEL
+import Data.Text (Text, unpack)
+import qualified Data.Text as T
+import NeatInterpolation (text)
+import Network.HTTP.Client (Manager)
+import qualified Network.HTTP.Client as HTTP
 import Prelude hiding (concat)
+import Servant.Client
+import System.Timeout
 
 import Test.Hspec
 
-import Control.Monad.Reader
-
-import qualified Data.HashMap.Strict as HM
-import Data.Aeson
-import qualified Network.HTTP.Client as HTTP
-import Data.Default (def)
-import Data.Decimal
-import Data.Text (Text, unpack)
-
-import Utils.TestRunner
-
 import Pact.ApiReq
+import Pact.Server.API
+import Pact.Server.Test
+import Pact.Types.API
 import Pact.Types.Command
+import Pact.Types.Crypto as Crypto
+import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
-import Pact.Types.PactValue
+import Pact.Types.Runtime (PactError(..))
+import Pact.Types.Util (toB16JSON)
 
-
------ UTILS ------
 
 shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
 shouldMatch' CommandResultCheck{..} results = do
@@ -48,6 +55,11 @@ runResults rs act = runReaderT act rs
 makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
 makeExecCmd keyPairs code =
   mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
+
+
+formatPubKeyForCmd :: SomeKeyPair -> Value
+formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
+
 
 
 makeContCmd :: SomeKeyPair -> Bool -> Value -> Command Text -> Int -> String -> IO (Command Text)
@@ -154,6 +166,19 @@ testCorrectNextStep mgr = do
     checkStateCmd `failsWith` stepMisMatchMsg False 1 1
 
 
+threeStepPactCode :: String -> T.Text
+threeStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+     where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+            (module|]
+           endCode = [text| 'k
+              (defpact tester ()
+                (step "step 0")
+                (step "step 1")
+                (step "step 2")))
+              |]
+
+
+
 
 testIncorrectNextStep :: HTTP.Manager -> Expectation
 testIncorrectNextStep mgr = do
@@ -223,6 +248,16 @@ testErrStep mgr = do
     checkStateCmd `failsWith` stepMisMatchMsg False 2 0
 
 
+errorStepPactCode :: String -> T.Text
+errorStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+     where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                          (module|]
+           endCode = [text| 'k
+              (defpact tester ()
+                (step "step 0")
+                (step (+ "will throw error in step 1"))
+                (step "step 2")))
+              |]
 
 -- ROLLBACK TESTS
 
@@ -269,6 +304,19 @@ testCorrectRollbackStep mgr = do
     rollbackStepCmd `succeedsWith` textVal "rollback 1"
     checkStateCmd `failsWith`
       pactIdNotFoundMsg executePactCmd
+
+
+
+pactWithRollbackCode :: String -> T.Text
+pactWithRollbackCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step-with-rollback "step 0" "rollback 0")
+              (step-with-rollback "step 1" "rollback 1")
+              (step               "step 2")))
+            |]
 
 
 testIncorrectRollbackStep :: HTTP.Manager -> Expectation
@@ -319,6 +367,18 @@ testRollbackErr mgr = do
     contNextStepCmd `succeedsWith` textVal "step 1"
     rollbackErrCmd `failsWith`  Nothing
     checkStateCmd `succeedsWith` textVal "step 2"
+
+
+pactWithRollbackErrCode :: String -> T.Text
+pactWithRollbackErrCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step-with-rollback "step 0" "rollback 0")
+              (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
+              (step               "step 2")))
+            |]
 
 
 testNoRollbackFunc :: HTTP.Manager -> Expectation
@@ -389,6 +449,27 @@ testValidYield mgr = do
       pactIdNotFoundMsg executePactCmd
 
 
+pactWithYield :: String -> T.Text
+pactWithYield moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester (name)
+              (step
+                (let ((result0 (+ name "->Step0")))
+                  (yield { "step0-result": result0})
+                  result0))
+              (step
+                (resume {"step0-result" := res0 }
+                  (let ((result1 (+ res0 "->Step1")))
+                    (yield {"step1-result": result1})
+                    result1)))
+              (step
+                (resume { "step1-result" := res1 }
+                      (+ res1 "->Step2")))))
+            |]
+
+
 testNoYield :: HTTP.Manager -> Expectation
 testNoYield mgr = do
   let moduleName = "testNoYield"
@@ -411,6 +492,23 @@ testNoYield mgr = do
     noYieldStepCmd `succeedsWith` textVal "step 1 has no yield"
     resumeErrCmd `failsWith`  Nothing
     checkStateCmd `failsWith` stepMisMatchMsg False 1 1
+
+
+pactWithYieldErr :: String -> T.Text
+pactWithYieldErr moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester (name)
+              (step
+                (let ((result0 (+ name "->Step0")))
+                  (yield { "step0-result": result0 })
+                result0))
+              (step "step 1 has no yield")
+              (step
+                (resume { "step0-result" := res0 }
+                      (+ res0 "->Step2")))))
+            |]
 
 
 testResetYield :: HTTP.Manager -> Expectation
@@ -436,6 +534,27 @@ testResetYield mgr = do
     resumeStepCmd `succeedsWith` textVal "step 1"
     checkStateCmd `failsWith`
       pactIdNotFoundMsg executePactCmd
+
+
+
+pactWithSameNameYield :: String -> T.Text
+pactWithSameNameYield moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step
+                (let ((result0 "step 0"))
+                  (yield { "result": result0 })
+                result0))
+              (step
+                (let ((result1 "step 1"))
+                  (yield { "result": result1 })
+                result1))
+              (step
+                (resume { "result" := res }
+                     res)))))
+            |]
 
 
 
@@ -577,3 +696,94 @@ testValidEscrowFinish mgr = do
                          (textVal "Escrow completed with 1.75 paid and 0.25 refunded")
     credBalanceCmd `succeedsWith` decValue 1.75
     debBalanceCmd `succeedsWith` decValue 98.25
+
+
+
+--- UTILS ---
+
+testConfigFilePath :: FilePath
+testConfigFilePath = testDir ++ "test-config.yaml"
+
+newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe PactValue))
+  deriving (Eq, Show)
+newtype ActualResult = ActualResult (Either String PactValue)
+  deriving (Eq, Show)
+
+data CommandResultCheck = CommandResultCheck
+  { _crcReqKey :: RequestKey
+  , _crcExpect :: ExpectResult
+  } deriving (Show, Eq)
+
+
+makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
+makeCheck c@Command{..} expect = CommandResultCheck (cmdToRequestKey c) expect
+
+runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
+runAll mgr cmds = Exception.bracket
+              (startServer testConfigFilePath)
+               stopServer
+              (const (run mgr cmds))
+
+
+run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
+run mgr cmds = do
+  sendResp <- doSend mgr . SubmitBatch $ NEL.fromList cmds
+  case sendResp of
+    Left servantErr -> Exception.evaluate (error $ show servantErr)
+    Right RequestKeys{..} -> do
+      results <- timeout 3000000 (helper _rkRequestKeys)
+      case results of
+        Nothing -> Exception.evaluate (error "Received empty poll. Timeout in retrying.")
+        Just res -> return res
+
+  where helper reqKeys = do
+          pollResp <- doPoll mgr $ Poll reqKeys
+          case pollResp of
+            Left servantErr -> Exception.evaluate (error $ show servantErr)
+            Right (PollResponses apiResults) ->
+              if null apiResults then helper reqKeys
+              else return apiResults
+
+
+
+doSend :: Manager -> SubmitBatch -> IO (Either ServantError RequestKeys)
+doSend mgr req = do
+  baseUrl <- serverBaseUrl
+  runClientM (sendClient req) (mkClientEnv mgr baseUrl)
+
+doPoll :: Manager -> Poll -> IO (Either ServantError PollResponses)
+doPoll mgr req = do
+  baseUrl <- serverBaseUrl
+  runClientM (pollClient req) (mkClientEnv mgr baseUrl)
+
+checkResult :: HasCallStack => ExpectResult -> Maybe (CommandResult Hash) -> Expectation
+checkResult expect result =
+  case result of
+    Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
+    Just CommandResult{..} -> (toActualResult _crResult) `resultShouldBe` expect
+
+toActualResult :: PactResult -> ActualResult
+toActualResult (PactResult (Left (PactError _ _ _ d))) = ActualResult . Left $ show d
+toActualResult (PactResult (Right pv)) = ActualResult . Right $ pv
+
+
+resultShouldBe :: ActualResult -> ExpectResult -> Expectation
+resultShouldBe (ActualResult actual) (ExpectResult expect) =
+  case (expect,actual) of
+    (Left (Just expErr),
+     Left err)             -> unless (expErr == err) (toExpectationFailure expErr err)
+    (Right (Just expVal),
+     Right val)            -> unless (expVal == val) (toExpectationFailure expVal val)
+    (Left Nothing,
+     Left _)               -> return ()
+    (Right Nothing,
+     Right _)              -> return ()
+    _                      -> toExpectationFailure expect actual
+
+
+
+toExpectationFailure :: (HasCallStack, Show e, Show a) => e -> a -> Expectation
+toExpectationFailure expect actual =
+  expectationFailure $ "Expected " ++ show expect ++ ", found " ++ show actual
+
+--- PACT CODE
