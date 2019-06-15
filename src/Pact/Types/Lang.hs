@@ -8,20 +8,21 @@
 --
 
 module Pact.Types.Lang
- ( module Pact.Types.Util
- , module Pact.Types.Info
- , module Pact.Types.Type
+ ( module Pact.Types.ChainId
+ , module Pact.Types.Continuation
  , module Pact.Types.Exp
- , module Pact.Types.Term
  , module Pact.Types.Hash
- , Text,unpack,pack
-   ) where
+ , module Pact.Types.Info
+ , module Pact.Types.Util
+ , module Pact.Types.Term
+ , module Pact.Types.Type
+ ) where
 
-
-import Pact.Types.Util
-import Pact.Types.Info
-import Pact.Types.Type
+import Pact.Types.ChainId
+import Pact.Types.Continuation
 import Pact.Types.Exp
-import Pact.Types.Term
-import Data.Text
 import Pact.Types.Hash
+import Pact.Types.Info
+import Pact.Types.Util
+import Pact.Types.Term
+import Pact.Types.Type

@@ -8,7 +8,9 @@ import Control.Concurrent
 import Control.DeepSeq
 import Control.Exception
 import Control.Monad
+
 import Criterion.Main
+
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
@@ -16,6 +18,8 @@ import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import Data.Text (Text, unpack, pack)
+
 import System.Directory
 import Unsafe.Coerce
 
@@ -33,6 +37,7 @@ import Pact.Types.Logger
 import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
+import Pact.Types.SPV
 import Pact.Native.Internal
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)

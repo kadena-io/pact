@@ -13,7 +13,6 @@
 --
 -- Internal functions for built-ins.
 --
-
 module Pact.Native.Internal
   (success
   ,parseMsgKey,parseMsgKey'
@@ -23,7 +22,6 @@ module Pact.Native.Internal
   ,setTopLevelOnly
   ,foldDefs
   ,funType,funType'
-  ,getModule
   ,module Pact.Types.Native
   ,tTyInteger,tTyDecimal,tTyTime,tTyBool
   ,tTyString,tTyKeySet,tTyObject,tTyObjectAny,tTyGuard
@@ -32,6 +30,10 @@ module Pact.Native.Internal
   ,(<>)
   ,getPactId,enforceGuardDef,guardForModuleCall
   ,findCallingModule
+  ,getCallingModule
+  ,getModule
+  ,provenanceOf
+  ,enforceYield
   ) where
 
 import Bound
@@ -41,6 +43,8 @@ import Data.Aeson hiding (Object)
 import qualified Data.Aeson.Lens as A
 import Data.Default
 import qualified Data.Vector as V
+import Data.Text (Text)
+
 import Unsafe.Coerce
 
 import Pact.Eval
@@ -49,9 +53,9 @@ import Pact.Types.Native
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
+
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
-
 
 colsToList
   :: Eval m [(Info,FieldKey)] -> Term n -> Eval m [(Info,FieldKey)]
@@ -130,6 +134,36 @@ getModule i mn = lookupModule i mn >>= \r -> case r of
   Just m -> return m
   Nothing -> evalError' i $ "Unable to resolve module " <> pretty mn
 
+-- | Look up the name of the most current module in the stack
+--
+findCallingModule :: Eval e (Maybe ModuleName)
+findCallingModule =
+  preuse $ evalCallStack . traverse . sfApp . _Just . _1 . faModule . _Just
+
+-- | Retrieve current calling module data or fail if not found
+--
+getCallingModule :: HasInfo i => i -> Eval e (Module (Def Ref))
+getCallingModule i = maybe resolveErr ((=<<) isModule . getModule i) =<< findCallingModule
+  where
+    resolveErr = evalError' i $
+      "Unable to resolve current calling module"
+
+    isModule md = case _mdModule md of
+      MDModule m -> return m
+      MDInterface n -> evalError' i
+        $ "Internal error: getCallingModule: called from interface"
+        <> pretty (_interfaceName n)
+
+-- | See if some entity was called by a module
+--
+calledByModule :: Module n -> Eval e Bool
+calledByModule Module{..} =
+  maybe False (const True) <$> searchCallStackApps forModule
+  where
+    forModule :: FunApp -> Maybe ()
+    forModule FunApp{..} | _faModule == Just _mName = Just ()
+                         | otherwise = Nothing
+
 tTyInteger :: Type n; tTyInteger = TyPrim TyInteger
 tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal
 tTyTime :: Type n; tTyTime = TyPrim TyTime
@@ -181,18 +215,6 @@ enforceGuard i g = case g of
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
 
-findCallingModule :: Eval e (Maybe ModuleName)
-findCallingModule = uses evalCallStack (firstOf (traverse . sfApp . _Just . _1 . faModule . _Just))
-
-calledByModule :: Module n -> Eval e Bool
-calledByModule Module{..} =
-  searchCallStackApps forModule >>= (return . maybe False (const True))
-  where
-    forModule :: FunApp -> Maybe ()
-    forModule FunApp{..} | _faModule == Just _mName = Just ()
-                         | otherwise = Nothing
-
-
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.
 guardForModuleCall :: Info -> ModuleName -> Eval e () -> Eval e ()
@@ -204,3 +226,35 @@ guardForModuleCall i modName onFound = findCallingModule >>= \r -> case r of
         MDModule m -> void $ acquireModuleAdmin i (_mName m) (_mGovernance m)
         MDInterface iface -> evalError i $
           "Internal error, interface found in call stack: " <> pretty iface
+
+-- | Construct a 'Yield' endorsement with a user-supplied
+-- 'PactId', as opposed to introspecting on the env info
+-- to retrieve it.
+--
+provenanceOf
+  :: FunApp
+  -> ChainId
+  -- ^ target chain id
+  -> Eval e (Maybe Provenance)
+provenanceOf fa tid =
+  Just . Provenance tid . _mHash <$> getCallingModule fa
+
+-- | Enforce that 'Yield' object and provenance data matches env data
+-- and fail otherwise.
+--
+enforceYield
+  :: FunApp
+  -> Yield
+    -- ^ yield data to enforce
+  -> Eval e Yield
+enforceYield fa y = case _yProvenance y of
+  Nothing -> return y
+  Just p -> do
+    m <- getCallingModule fa
+    cid <- view $ eePublicData . pdPublicMeta . pmChainId
+    let p' = Provenance cid (_mHash m)
+
+    unless (p == p') $
+      evalError' fa "enforceYield: yield provenance does not match"
+      
+    return y

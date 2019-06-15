@@ -29,9 +29,11 @@ import Control.Applicative ((<|>))
 import Control.Arrow
 import Control.Lens hiding ((.=))
 import Control.Monad
+import Data.Text (Text)
 import Data.Aeson hiding (Success)
 import qualified Data.HashMap.Strict as HM
 import Data.List.NonEmpty (NonEmpty)
+
 import GHC.Generics
 
 import Pact.Types.Command

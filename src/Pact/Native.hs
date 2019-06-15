@@ -48,7 +48,6 @@ import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Reader (asks)
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import Data.ByteString.Lazy (toStrict)
@@ -56,15 +55,13 @@ import Data.Char (isHexDigit, digitToInt)
 import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
-import Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
-import Prelude
-
 
 import Pact.Eval
 import Pact.Native.Capabilities
@@ -400,19 +397,15 @@ langDefs =
     ,lengthDef
     ,takeDef
     ,dropDef
-
     ,defRNative "remove" remove (funType (tTyObject (mkSchemaVar "o")) [("key",tTyString),("object",tTyObject (mkSchemaVar "o"))])
      ["(remove \"bar\" { \"foo\": 1, \"bar\": 2 })"]
      "Remove entry for KEY from OBJECT."
-
     ,atDef
     ,enforceDef
     ,enforceOneDef
     ,formatDef
-
     ,defRNative "pact-id" pactId (funType tTyString []) []
      "Return ID if called during current pact execution, failing if not."
-
     ,readDecimalDef
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
      [LitExample "(read-integer \"age\")"]
@@ -422,11 +415,8 @@ langDefs =
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
      \List -> list, Object -> object."
-
-
     ,defRNative "tx-hash" txHash (funType tTyString []) ["(tx-hash)"]
      "Obtain hash of current transaction as a string."
-
     ,defNative (specialForm Bind) bind
      (funType a [("src",tTyObject row),("binding",TySchema TyBinding row def)])
      ["(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)"]
@@ -435,23 +425,25 @@ langDefs =
      ["(typeof \"hello\")"] "Returns type of X as string."
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
-    ,defRNative (specialForm Yield) yield (funType yieldv [("OBJECT",yieldv)])
-     [LitExample "(yield { \"amount\": 100.0 })"]
-     "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
-     \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values."
+    ,defRNative (specialForm YieldSF) yield
+     (funType yieldv [("object",yieldv)] <>
+      funType yieldv [("object", yieldv), ("target-chain",tTyString)])
+     [ LitExample "(yield { \"amount\": 100.0 })"
+     , LitExample "(yield { \"amount\": 100.0 } \"some-chain-id\")"
+     ]
+     "Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN, \
+     \target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch."
     ,defNative (specialForm Resume) resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "r") def)]) []
-     "Special form binds to a yielded object value from the prior step execution in a pact."
-
+     "Special form binds to a yielded object value from the prior step execution in a pact. \
+     \If yield step was executed on a foreign chain, enforce endorsement via SPV."
     ,pactVersionDef
-
     ,setTopLevelOnly $ defRNative "enforce-pact-version" enforceVersion
      (funType tTyBool [("min-version",tTyString)] <>
       funType tTyBool [("min-version",tTyString),("max-version",tTyString)])
     ["(enforce-pact-version \"2.3\")"]
     "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \
     \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'."
-
     ,defRNative "contains" contains
     (funType tTyBool [("value",a),("list",TyList a)] <>
      funType tTyBool [("key",a),("object",tTyObject (mkSchemaVar "o"))] <>
@@ -461,7 +453,6 @@ langDefs =
     , "(contains \"foo\" \"foobar\")"
     ]
     "Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry."
-
     ,defNative "constantly" constantly
      (funType a [("value",a),("ignore1",b)] <>
       funType a [("value",a),("ignore1",b),("ignore2",c)] <>
@@ -645,23 +636,34 @@ listModules i _ = do
   return $ toTermList tTyString $ map asString mods
 
 yield :: RNativeFun e
-yield i [t@(TObject (Object o _ _ _) _)] = do
-  eym <- use evalPactExec
-  case eym of
-    Nothing -> evalError' i "Yield not in defpact context"
-    Just {} -> do
-      o' <- enforcePactValue' o
-      (evalPactExec . _Just . peYield) .= Just o'
-      return t
-yield i as = argsError i as
+yield i as = case as of
+  [u@(TObject t _)] -> go t Nothing u
+  [u@(TObject t _), (TLitString cid)] -> go t (Just $ ChainId cid) u
+  _ -> argsError i as
+  where
+    go (Object o _ _ _) tid u = do
+      eym <- use evalPactExec
+      case eym of
+        Nothing -> evalError' i "Yield not in defpact context"
+        Just PactExec{..} -> do
+          o' <- enforcePactValue' o
+          y <- case tid of
+            Nothing -> return $ Yield o' Nothing
+            Just t -> fmap (Yield o') $ provenanceOf i t
+          evalPactExec . _Just . peYield .= Just y
+          return u
 
 resume :: NativeFun e
-resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
-  rm <- asks $ firstOf $ eePactStep . _Just . psResume . _Just
-  case rm of
-    Nothing -> evalError' i "Resume: no yielded value in context"
-    Just rval -> bindObjectLookup (toTObjectMap TyAny def rval) >>= bindReduce ps bd bi
-resume i as = argsError' i as
+resume i as = case as of
+  [TBinding ps bd (BindSchema _) bi] -> gasUnreduced i as $ do
+    rm <- preview $ eePactStep . _Just . psResume . _Just
+    case rm of
+      Nothing -> evalError' i "Resume: no yielded value in context"
+      Just y -> do
+        o <- fmap fromPactValue . _yData <$> enforceYield i y
+        l <- bindObjectLookup (toTObjectMap TyAny def o)
+        bindReduce ps bd bi l
+  _ -> argsError' i as
 
 where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of

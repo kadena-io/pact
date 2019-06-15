@@ -50,6 +50,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Control.Monad.State
 import Data.Foldable
+import Data.Text (Text, unpack)
 
 import Pact.Types.Lang hiding (App,Object,Step)
 import Pact.Types.Pretty

@@ -1,7 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-
 
 -- |
 -- Module      :  Pact.Native.SPV
@@ -18,10 +15,13 @@ module Pact.Native.SPV
 
 import Control.Monad.IO.Class (liftIO)
 import Control.Lens (view)
-import Pact.Native.Internal
-import Pact.Types.Runtime
-import Pact.Types.Pretty
+
 import Data.Default
+
+import Pact.Native.Internal
+import Pact.Types.SPV
+import Pact.Types.Pretty
+import Pact.Types.Runtime
 
 
 spvDefs :: NativeModule
@@ -42,8 +42,8 @@ verifySPV =
   \format of the return object. Platforms such as Chainweb will \
   \document the specific payload types and return values."
   where
-    verifySPV' i [TLitString proofType, TObject{..}] = do
-      view eeSPVSupport >>= \(SPVSupport f) -> liftIO (f proofType _tObject) >>= \r -> case r of
+    verifySPV' i [TLitString proofType, TObject o _] = do
+      view eeSPVSupport >>= \(SPVSupport f _) -> liftIO (f proofType o) >>= \r -> case r of
         Left err -> evalError' i $ "SPV verify failed: " <> pretty err
-        Right o -> return $ TObject o def
+        Right o' -> return $ TObject o' def
     verifySPV' i as = argsError i as

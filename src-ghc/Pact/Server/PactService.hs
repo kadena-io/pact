@@ -35,6 +35,7 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
 import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue (PactValue)
+import Pact.Types.SPV
 
 
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode Hash)
@@ -134,13 +135,12 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
 
 
 applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p (CommandResult Hash)
-applyContinuation rk hsh signers ContMsg{..} = do
+applyContinuation rk hsh signers cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result
   let sigs = userSigsToPactKeySet signers
-      pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId Nothing
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs _cmData pactStep (toUntypedHash hsh)) initRefStore
+                (MsgData sigs (_cmData cm) Nothing (toUntypedHash hsh)) initRefStore
                 _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
-  EvalResult{..} <- liftIO $ evalContinuation def evalEnv Nothing
+  EvalResult{..} <- liftIO $ evalContinuation def evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs

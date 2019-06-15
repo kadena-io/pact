@@ -44,9 +44,11 @@ library
                      , Pact.Repl.Types
                      , Pact.Server.API
                      , Pact.Types.API
+                     , Pact.Types.ChainId
                      , Pact.Types.ChainMeta
                      , Pact.Types.Codec
                      , Pact.Types.Command
+                     , Pact.Types.Continuation
                      , Pact.Types.Scheme
                      , Pact.Types.Exp
                      , Pact.Types.ExpParser
@@ -63,6 +65,7 @@ library
                      , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
+                     , Pact.Types.SPV
                      , Pact.Types.Swagger
                      , Pact.Types.Term
                      , Pact.Types.Type

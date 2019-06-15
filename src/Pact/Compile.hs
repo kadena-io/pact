@@ -61,14 +61,14 @@ import Pact.Types.Util
 
 data ModuleState = ModuleState
   { _msName :: ModuleName
-  , _msHash :: Hash
-  , _msBlessed :: [Hash]
+  , _msHash :: ModuleHash
+  , _msBlessed :: [ModuleHash]
   , _msImplements :: [ModuleName]
   , _msImports :: [Use]
   }
 makeLenses ''ModuleState
 
-initModuleState :: ModuleName -> Hash -> ModuleState
+initModuleState :: ModuleName -> ModuleHash -> ModuleState
 initModuleState n h = ModuleState n h def def def
 
 data CompileState = CompileState
@@ -435,7 +435,7 @@ moduleForm = do
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       modName = ModuleName modName' Nothing
-      modHash = pactHash $ encodeUtf8 $ _unCode code
+      modHash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
     (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
@@ -459,7 +459,7 @@ interface = do
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       iname = ModuleName iname' Nothing
-      ihash = pactHash $ encodeUtf8 (_unCode code)
+      ihash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
             bodyForm $ specialForm $ \r -> case r of
               RDefun -> return emptyDef
@@ -544,9 +544,9 @@ useForm = do
   return $ TUse u i
 
 
-hash' :: Compile Hash
+hash' :: Compile ModuleHash
 hash' = str >>= \s -> case fromText' s of
-  Right h -> return h
+  Right h -> return (ModuleHash h)
   Left e -> syntaxError $ "bad hash: " ++ e
 
 typedAtom :: Compile (AtomExp Info,Type (Term Name))
@@ -627,7 +627,7 @@ _compile = _compileWith topLevel
 -- | run a string as though you were in a module (test deftable, etc)
 _compileStrInModule :: String -> IO [Term Name]
 _compileStrInModule = fmap concat . _compileStr' moduleLevel
-  (set (psUser . csModule) (Just (initModuleState "mymodule" (pactHash mempty))))
+  (set (psUser . csModule) (Just (initModuleState "mymodule" (ModuleHash $ pactHash mempty))))
 
 _compileStr :: String -> IO [Term Name]
 _compileStr = _compileStr' topLevel id

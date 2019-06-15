@@ -32,6 +32,7 @@ import Data.Default
 import qualified Data.Map as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
+import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
 import qualified Data.Vector as V
@@ -185,9 +186,9 @@ replDefs = ("Repl",
      "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
      "blockchain environment."
      ,defZRNative "mock-spv" mockSPV
-      (funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
-      [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: 1 })"]
-      "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
+       (funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
+      [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"]
+       "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
      , envChainDataDef
      ])
      where
@@ -237,10 +238,11 @@ setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 mockSPV :: RNativeFun LibState
-mockSPV _i [TLitString spvType, TObject payload _, TObject out _] = do
-  setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
-  return $ tStr $ "Added mock SPV for " <> spvType
-mockSPV i as = argsError i as
+mockSPV i as = case as of
+  [TLitString spvType, TObject payload _, TObject out _] -> do
+    setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
+    return $ tStr $ "Added mock SPV for " <> spvType
+  _ -> argsError i as
 
 formatAddr :: RNativeFun LibState
 #if !defined(ghcjs_HOST_OS)
@@ -300,16 +302,10 @@ continuePact i as = case as of
   where
     go :: Integer -> Bool -> Maybe Text -> Maybe (ObjectMap (Term Name)) -> Eval LibState (Term Name)
     go step rollback pid userResume = do
-      pactExec <- use evalPactExec
-      pactId <- case pid of
-        Nothing -> maybe
-                   (evalError' i "continue-pact: no pact exec in context")
-                   (return . _pePactId)
-                   pactExec
-        Just pidTxt -> return $ PactId pidTxt
-      let pactStep = PactStep
-                     (fromIntegral step)
-                     rollback pactId userResume
+      pe <- use evalPactExec
+      (pactId, y) <- unwrapExec pid userResume pe
+
+      let pactStep = PactStep (fromIntegral step) rollback pactId y
       viewLibState (view rlsPacts) >>= \pacts ->
         case M.lookup pactId pacts of
           Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
@@ -317,6 +313,23 @@ continuePact i as = case as of
             evalPactExec .= Nothing
             local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
 
+    unwrapExec mpid mobj Nothing = do
+      pid <- case mpid of
+        Nothing -> evalError' i
+          "continue-pact: No pact id supplied and no pact exec in context"
+        Just pid -> return $ PactId pid
+      y <- maybe (return Nothing) (toYield Nothing) mobj
+      return (pid, y)
+    unwrapExec mpid mobj (Just ex) = do
+      let pid = maybe (_pePactId ex) PactId mpid
+      y <- case mobj of
+        Nothing -> return $ _peYield ex
+        Just o -> case _peYield ex of
+          Just (Yield _ p) -> toYield p o
+          Nothing -> toYield Nothing o
+      return (pid, y)
+
+    toYield p = fmap (Just . flip Yield p) . enforcePactValue'
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
@@ -340,7 +353,7 @@ pactState i as = case as of
       case e of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
-          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactValue) _peYield)
+          [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactValue . _yData) _peYield)
           ,("executed",toTerm _peExecuted)
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]

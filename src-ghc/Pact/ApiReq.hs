@@ -49,6 +49,7 @@ import Pact.Types.Command
 import Pact.Types.Crypto
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.SPV
 
 data ApiKeyPair = ApiKeyPair {
   _akpSecret :: PrivateKeyBS,
