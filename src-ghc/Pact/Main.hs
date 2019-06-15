@@ -47,6 +47,7 @@ import Pact.ReplTools
 import Pact.Repl.Types
 import Pact.Types.Version
 import Pact.Types.Crypto
+import Pact.Types.SPV
 import Pact.ApiReq
 
 
@@ -95,7 +96,7 @@ main = do
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
-    OServer conf -> serve conf
+    OServer conf -> serve conf noSPVSupport
     OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
     OBuiltins -> echoBuiltins
     OLoad findScript dolog fp

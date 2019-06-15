@@ -27,12 +27,16 @@ import Data.String (IsString)
 import Data.Text
 
 import Pact.Types.Term (ToTerm(..))
+import Pact.Types.Pretty
 
 -- | Expresses unique platform-specific chain identifier.
 --
 newtype ChainId = ChainId { _chainId :: Text }
-  deriving (Eq, Show, Generic, IsString, ToJSON, FromJSON, Serialize)
+  deriving (Eq, Generic, IsString, ToJSON, FromJSON, Serialize)
   deriving newtype (NFData)
+
+instance Show ChainId where show (ChainId c) = show c
+instance Pretty ChainId where pretty = viaShow
 
 instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
 

@@ -255,6 +255,6 @@ enforceYield fa y = case _yProvenance y of
     let p' = Provenance cid (_mHash m)
 
     unless (p == p') $
-      evalError' fa "enforceYield: yield provenance does not match"
-      
+      evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p
+
     return y

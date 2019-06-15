@@ -6,6 +6,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 -- |
 -- Module      :  Pact.Types.Continuation
 -- Copyright   :  (C) 2019 Stuart Popejoy, Emily Pillmore
@@ -52,6 +54,9 @@ data Provenance = Provenance
   , _pModuleHash :: ModuleHash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
+
+instance Pretty Provenance where
+  pretty (Provenance c h) = "(chain = \"" <> pretty c <> "\" hash=\"" <> pretty h <> "\")"
 
 instance NFData Provenance
 instance ToJSON Provenance where toJSON = lensyToJSON 2

@@ -1,77 +1,40 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module PactContinuationSpec (spec) where
 
-
+import qualified Control.Exception as Exception
+import Control.Monad.Reader
+import Data.Aeson
+import Data.Decimal
+import Data.Default (def)
+import qualified Data.HashMap.Strict as HM
+import qualified Data.List.NonEmpty as NEL
+import Data.Text (Text, unpack)
+import qualified Data.Text as T
+import NeatInterpolation (text)
+import Network.HTTP.Client (Manager)
+import qualified Network.HTTP.Client as HTTP
 import Prelude hiding (concat)
+import Servant.Client
+import System.Timeout
 
 import Test.Hspec
 
-import Control.Monad.Reader
-
-import qualified Data.HashMap.Strict as HM
-import Data.Aeson
-import qualified Network.HTTP.Client as HTTP
-import Data.Default (def)
-import Data.Decimal
-import Data.Text (Text, unpack)
-
-import Utils.TestRunner
-
 import Pact.ApiReq
+import Pact.Server.API
+import Pact.Server.Test
+import Pact.Types.API
 import Pact.Types.Command
+import Pact.Types.Crypto as Crypto
+import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
-import Pact.Types.PactValue
+import Pact.Types.Runtime (PactError(..))
+import Pact.Types.Util (toB16JSON)
+import Pact.Types.SPV
 
 
------ UTILS ------
-
-shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
-shouldMatch' CommandResultCheck{..} results = do
-          let apiRes = HM.lookup _crcReqKey results
-          checkResult _crcExpect apiRes
-
-succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
-                ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-succeedsWith cmd r = ask >>= liftIO . shouldMatch'
-                     (makeCheck cmd (ExpectResult . Right $ r))
-
-failsWith :: HasCallStack => Command Text -> Maybe String ->
-             ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-failsWith cmd r = ask >>= liftIO . shouldMatch'
-                  (makeCheck cmd (ExpectResult . Left $ r))
-
-runResults :: r -> ReaderT r m a -> m a
-runResults rs act = runReaderT act rs
-
-makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
-makeExecCmd keyPairs code =
-  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
-
-
-makeContCmd :: SomeKeyPair -> Bool -> Value -> Command Text -> Int -> String -> IO (Command Text)
-makeContCmd keyPairs isRollback cmdData pactExecCmd step nonce =
-  mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce) Nothing
-
-textVal :: Text -> Maybe PactValue
-textVal = Just . PLiteral . LString
-
-getPactId :: Command Text -> PactId
-getPactId cmd = toPactId hsh
-  where hsh = (toUntypedHash . _cmdHash) cmd
-
-
-pactIdNotFoundMsg :: Command Text -> Maybe String
-pactIdNotFoundMsg cmd = Just msg
-  where txtPact = unpack (asString (getPactId cmd))
-        msg = "resumePact: pact completed: " <> txtPact
-
-stepMisMatchMsg :: Bool -> Int -> Int -> Maybe String
-stepMisMatchMsg isRollback attemptStep currStep = Just msg
-  where typeOfStep = if isRollback then "rollback" else "exec"
-        msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
-              <> show attemptStep <> ", " <> show currStep <> ")"
 
 ---- TESTS -----
 
@@ -154,6 +117,19 @@ testCorrectNextStep mgr = do
     checkStateCmd `failsWith` stepMisMatchMsg False 1 1
 
 
+threeStepPactCode :: String -> T.Text
+threeStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+     where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+            (module|]
+           endCode = [text| 'k
+              (defpact tester ()
+                (step "step 0")
+                (step "step 1")
+                (step "step 2")))
+              |]
+
+
+
 
 testIncorrectNextStep :: HTTP.Manager -> Expectation
 testIncorrectNextStep mgr = do
@@ -223,6 +199,16 @@ testErrStep mgr = do
     checkStateCmd `failsWith` stepMisMatchMsg False 2 0
 
 
+errorStepPactCode :: String -> T.Text
+errorStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+     where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                          (module|]
+           endCode = [text| 'k
+              (defpact tester ()
+                (step "step 0")
+                (step (+ "will throw error in step 1"))
+                (step "step 2")))
+              |]
 
 -- ROLLBACK TESTS
 
@@ -269,6 +255,19 @@ testCorrectRollbackStep mgr = do
     rollbackStepCmd `succeedsWith` textVal "rollback 1"
     checkStateCmd `failsWith`
       pactIdNotFoundMsg executePactCmd
+
+
+
+pactWithRollbackCode :: String -> T.Text
+pactWithRollbackCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step-with-rollback "step 0" "rollback 0")
+              (step-with-rollback "step 1" "rollback 1")
+              (step               "step 2")))
+            |]
 
 
 testIncorrectRollbackStep :: HTTP.Manager -> Expectation
@@ -321,6 +320,18 @@ testRollbackErr mgr = do
     checkStateCmd `succeedsWith` textVal "step 2"
 
 
+pactWithRollbackErrCode :: String -> T.Text
+pactWithRollbackErrCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step-with-rollback "step 0" "rollback 0")
+              (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
+              (step               "step 2")))
+            |]
+
+
 testNoRollbackFunc :: HTTP.Manager -> Expectation
 testNoRollbackFunc mgr = do
   let moduleName = "testNoRollbackFunc"
@@ -362,6 +373,8 @@ testPactYield mgr = before_ flushDb $ after_ flushDb $ do
   it "resets yielded values after each step" $
     testResetYield mgr
 
+  it "testCrossChainYield" $ testCrossChainYield mgr
+
 
 testValidYield :: HTTP.Manager -> Expectation
 testValidYield mgr = do
@@ -389,6 +402,27 @@ testValidYield mgr = do
       pactIdNotFoundMsg executePactCmd
 
 
+pactWithYield :: String -> T.Text
+pactWithYield moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester (name)
+              (step
+                (let ((result0 (+ name "->Step0")))
+                  (yield { "step0-result": result0})
+                  result0))
+              (step
+                (resume {"step0-result" := res0 }
+                  (let ((result1 (+ res0 "->Step1")))
+                    (yield {"step1-result": result1})
+                    result1)))
+              (step
+                (resume { "step1-result" := res1 }
+                      (+ res1 "->Step2")))))
+            |]
+
+
 testNoYield :: HTTP.Manager -> Expectation
 testNoYield mgr = do
   let moduleName = "testNoYield"
@@ -411,6 +445,23 @@ testNoYield mgr = do
     noYieldStepCmd `succeedsWith` textVal "step 1 has no yield"
     resumeErrCmd `failsWith`  Nothing
     checkStateCmd `failsWith` stepMisMatchMsg False 1 1
+
+
+pactWithYieldErr :: String -> T.Text
+pactWithYieldErr moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester (name)
+              (step
+                (let ((result0 (+ name "->Step0")))
+                  (yield { "step0-result": result0 })
+                result0))
+              (step "step 1 has no yield")
+              (step
+                (resume { "step0-result" := res0 }
+                      (+ res0 "->Step2")))))
+            |]
 
 
 testResetYield :: HTTP.Manager -> Expectation
@@ -436,6 +487,105 @@ testResetYield mgr = do
     resumeStepCmd `succeedsWith` textVal "step 1"
     checkStateCmd `failsWith`
       pactIdNotFoundMsg executePactCmd
+
+
+
+pactWithSameNameYield :: String -> T.Text
+pactWithSameNameYield moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step
+                (let ((result0 "step 0"))
+                  (yield { "result": result0 })
+                result0))
+              (step
+                (let ((result1 "step 1"))
+                  (yield { "result": result1 })
+                result1))
+              (step
+                (resume { "result" := res }
+                     res)))))
+            |]
+
+
+testCrossChainYield :: HTTP.Manager -> Expectation
+testCrossChainYield mgr = do
+  adminKeys <- genKeys
+
+  -- STEP 0: runs on server for "chain0results"
+  -- note we're not changing server ID, just starting with
+  -- a fresh server to prove that a new pact coming through
+  -- SPV can start from step 1.
+
+  let makeExecCmdWith = makeExecCmd adminKeys
+  moduleCmd        <- makeExecCmdWith (unpack pactCrossChainYield)
+  executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
+
+  chain0Results <- runAll mgr [moduleCmd,executePactCmd]
+
+  runResults chain0Results $ do
+    moduleCmd `succeedsWith`  Nothing
+    executePactCmd `succeedsWith` textVal "emily->A"
+
+  let rk = cmdToRequestKey executePactCmd
+
+  case HM.lookup rk chain0Results of
+    Nothing -> expectationFailure $
+      "Could not find result " ++ show rk ++ ": " ++ show chain0Results
+    Just cr -> case _crContinuation cr of
+      Nothing -> expectationFailure $
+        "No continuation in result: " ++ show rk
+      Just pe -> do
+
+        -- STEP 1: found the pact exec from step 0; return this
+        -- from the SPV operation. Run a fresh server, reload
+        -- the module, and run the step.
+
+        let proof = (ContProof "hi there")
+            makeContCmdWith = makeContCmd' (Just proof) adminKeys False Null executePactCmd
+            spv = noSPVSupport {
+              _spvVerifyContinuation = \cp ->
+                  if cp == proof then
+                    return $ Right $ pe
+                  else
+                    return $ Left $ "Invalid proof"
+              }
+
+        chain1Cont <- makeContCmdWith 1 "chain1Cont"
+
+        -- flush db to ensure runAll' runs with fresh state
+
+        flushDb
+
+        chain1Results <- runAll' mgr [moduleCmd,chain1Cont] spv
+
+        runResults chain1Results $ do
+          moduleCmd `succeedsWith`  Nothing
+          chain1Cont `succeedsWith` textVal "emily->A->B"
+
+
+pactCrossChainYield :: T.Text
+pactCrossChainYield =
+  [text|
+    (module cross-chain-tester GOV
+      (defcap GOV () true)
+      (defschema schema-a a-result:string)
+      (defpact cross-chain (name)
+        (step
+          (let*
+            ((nameA (+ name "->A"))
+             (r:object{schema-a} { "a-result": nameA }))
+
+            (yield r "") ;; "" is chain id in these tests
+            nameA))
+
+        (step
+          (resume { "a-result" := ar }
+                  (+ ar "->B")))
+        ))
+  |]
 
 
 
@@ -577,3 +727,174 @@ testValidEscrowFinish mgr = do
                          (textVal "Escrow completed with 1.75 paid and 0.25 refunded")
     credBalanceCmd `succeedsWith` decValue 1.75
     debBalanceCmd `succeedsWith` decValue 98.25
+
+
+
+
+
+
+--- UTILS ---
+
+testConfigFilePath :: FilePath
+testConfigFilePath = testDir ++ "test-config.yaml"
+
+
+shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
+shouldMatch' CommandResultCheck{..} results = do
+          let apiRes = HM.lookup _crcReqKey results
+          checkResult _crcExpect apiRes
+
+succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
+                ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+succeedsWith cmd r = ask >>= liftIO . shouldMatch'
+                     (makeCheck cmd (ExpectResult . Right $ r))
+
+failsWith :: HasCallStack => Command Text -> Maybe String ->
+             ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+failsWith cmd r = ask >>= liftIO . shouldMatch'
+                  (makeCheck cmd (ExpectResult . Left $ r))
+
+runResults :: r -> ReaderT r m a -> m a
+runResults rs act = runReaderT act rs
+
+makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
+makeExecCmd keyPairs code =
+  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
+
+
+formatPubKeyForCmd :: SomeKeyPair -> Value
+formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
+
+
+
+makeContCmd
+  :: SomeKeyPair  -- signing pair
+  -> Bool         -- isRollback
+  -> Value        -- data
+  -> Command Text -- cmd to get pact Id from
+  -> Int          -- step
+  -> String       -- nonce
+  -> IO (Command Text)
+makeContCmd = makeContCmd' Nothing
+
+
+makeContCmd'
+  :: Maybe ContProof
+  -> SomeKeyPair  -- signing pair
+  -> Bool         -- isRollback
+  -> Value        -- data
+  -> Command Text -- cmd to get pact Id from
+  -> Int          -- step
+  -> String       -- nonce
+  -> IO (Command Text)
+makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
+  mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce) contProofM
+
+textVal :: Text -> Maybe PactValue
+textVal = Just . PLiteral . LString
+
+getPactId :: Command Text -> PactId
+getPactId cmd = toPactId hsh
+  where hsh = (toUntypedHash . _cmdHash) cmd
+
+
+pactIdNotFoundMsg :: Command Text -> Maybe String
+pactIdNotFoundMsg cmd = Just msg
+  where txtPact = unpack (asString (getPactId cmd))
+        msg = "resumePact: pact completed: " <> txtPact
+
+stepMisMatchMsg :: Bool -> Int -> Int -> Maybe String
+stepMisMatchMsg isRollback attemptStep currStep = Just msg
+  where typeOfStep = if isRollback then "rollback" else "exec"
+        msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
+              <> show attemptStep <> ", " <> show currStep <> ")"
+
+newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe PactValue))
+  deriving (Eq, Show)
+newtype ActualResult = ActualResult (Either String PactValue)
+  deriving (Eq, Show)
+
+data CommandResultCheck = CommandResultCheck
+  { _crcReqKey :: RequestKey
+  , _crcExpect :: ExpectResult
+  } deriving (Show, Eq)
+
+
+makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
+makeCheck c@Command{..} expect = CommandResultCheck (cmdToRequestKey c) expect
+
+runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
+runAll mgr cmds = runAll' mgr cmds noSPVSupport
+
+runAll'
+  :: Manager
+  -> [Command T.Text]
+  -> SPVSupport
+  -> IO (HM.HashMap RequestKey (CommandResult Hash))
+runAll' mgr cmds spv = Exception.bracket
+              (startServer' testConfigFilePath spv)
+               stopServer
+              (const (run mgr cmds))
+
+
+
+run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
+run mgr cmds = do
+  sendResp <- doSend mgr . SubmitBatch $ NEL.fromList cmds
+  case sendResp of
+    Left servantErr -> Exception.evaluate (error $ show servantErr)
+    Right RequestKeys{..} -> do
+      results <- timeout 3000000 (helper _rkRequestKeys)
+      case results of
+        Nothing -> Exception.evaluate (error "Received empty poll. Timeout in retrying.")
+        Just res -> return res
+
+  where helper reqKeys = do
+          pollResp <- doPoll mgr $ Poll reqKeys
+          case pollResp of
+            Left servantErr -> Exception.evaluate (error $ show servantErr)
+            Right (PollResponses apiResults) ->
+              if null apiResults then helper reqKeys
+              else return apiResults
+
+
+
+doSend :: Manager -> SubmitBatch -> IO (Either ServantError RequestKeys)
+doSend mgr req = do
+  baseUrl <- serverBaseUrl
+  runClientM (sendClient req) (mkClientEnv mgr baseUrl)
+
+doPoll :: Manager -> Poll -> IO (Either ServantError PollResponses)
+doPoll mgr req = do
+  baseUrl <- serverBaseUrl
+  runClientM (pollClient req) (mkClientEnv mgr baseUrl)
+
+checkResult :: HasCallStack => ExpectResult -> Maybe (CommandResult Hash) -> Expectation
+checkResult expect result =
+  case result of
+    Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
+    Just CommandResult{..} -> (toActualResult _crResult) `resultShouldBe` expect
+
+toActualResult :: PactResult -> ActualResult
+toActualResult (PactResult (Left (PactError _ _ _ d))) = ActualResult . Left $ show d
+toActualResult (PactResult (Right pv)) = ActualResult . Right $ pv
+
+
+resultShouldBe :: ActualResult -> ExpectResult -> Expectation
+resultShouldBe (ActualResult actual) (ExpectResult expect) =
+  case (expect,actual) of
+    (Left (Just expErr),
+     Left err)             -> unless (expErr == err) (toExpectationFailure expErr err)
+    (Right (Just expVal),
+     Right val)            -> unless (expVal == val) (toExpectationFailure expVal val)
+    (Left Nothing,
+     Left _)               -> return ()
+    (Right Nothing,
+     Right _)              -> return ()
+    _                      -> toExpectationFailure expect actual
+
+
+
+toExpectationFailure :: (HasCallStack, Show e, Show a) => e -> a -> Expectation
+toExpectationFailure expect actual =
+  expectationFailure $ "Expected " ++ show expect ++ ", found " ++ show actual
