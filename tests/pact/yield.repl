@@ -108,13 +108,14 @@
 (expect "step 0 executes" "emily->A" (cross-chain "emily"))
 
 ;; Expect failure since we are on chain "0", endorsement is set for "1"
-;;(expect-failure "resume fails on wrong chain id" (continue-pact 1))
+(expect-failure "resume fails on wrong chain id" (continue-pact 1))
 
 ;; mock spv (switches chain id to designated chain id)
 (env-chain-data { "chain-id" : "1" })
 (expect "resume succeeds on correct chain id" "emily->A->B" (continue-pact 1))
 
 (pact-state true)
+
 ;; set chain id to something sane
 (env-chain-data { "chain-id": "0" })
 (env-hash (hash "emily-pact-id"))
