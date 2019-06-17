@@ -35,10 +35,15 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
 import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue (PactValue)
+import Pact.Types.SPV
 
 
-initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface PublicMeta ParsedCode Hash)
-initPactService CommandConfig {..} loggers = do
+initPactService
+  :: CommandConfig
+  -> Loggers
+  -> SPVSupport
+  -> IO (CommandExecInterface PublicMeta ParsedCode Hash)
+initPactService CommandConfig {..} loggers spv = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
       gasRate = fromMaybe 0 _ccGasRate
@@ -52,8 +57,9 @@ initPactService CommandConfig {..} loggers = do
         return CommandExecInterface
           { _ceiApplyCmd = \eMode cmd ->
               applyCmd logger _ccEntity p gasModel
-                blockHeight blockTime eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = applyCmd logger _ccEntity p gasModel blockHeight blockTime }
+                blockHeight blockTime spv eMode cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = applyCmd logger _ccEntity p gasModel
+                             blockHeight blockTime spv }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -69,22 +75,23 @@ applyCmd :: Logger ->
             GasModel ->
             Word64 ->
             Int64 ->
+            SPVSupport ->
             ExecutionMode ->
             Command a ->
             ProcessedCommand PublicMeta ParsedCode ->
             IO (CommandResult Hash)
-applyCmd _ _ _ _ _ _ _ cmd (ProcFail s) =
+applyCmd _ _ _ _ _ _ _ _ cmd (ProcFail s) =
   return $ resultFailure
            Nothing
            (cmdToRequestKey cmd)
            (PactError TxFailure def def . viaShow $ s)
-applyCmd logger conf dbv gasModel bh bt exMode _ (ProcSucc cmd) = do
+applyCmd logger conf dbv gasModel bh bt spv exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       gasEnv = GasEnv (_pmGasLimit pubMeta) (_pmGasPrice pubMeta) gasModel
       pd = PublicData pubMeta bh bt
 
   res <- catchesPactError $ runCommand
-                            (CommandEnv conf exMode dbv logger gasEnv pd)
+                            (CommandEnv conf exMode dbv logger gasEnv pd spv)
                             (runPayload cmd)
   case res of
     Right cr -> do
@@ -127,20 +134,19 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   let sigs = userSigsToPactKeySet signers
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing (toUntypedHash hsh))
-                initRefStore _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
+                initRefStore _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData
   EvalResult{..} <- liftIO $ evalExec def evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs
 
 
 applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p (CommandResult Hash)
-applyContinuation rk hsh signers ContMsg{..} = do
+applyContinuation rk hsh signers cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result
   let sigs = userSigsToPactKeySet signers
-      pactStep = Just $ PactStep _cmStep _cmRollback _cmPactId Nothing
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs _cmData pactStep (toUntypedHash hsh)) initRefStore
-                _ceGasEnv permissiveNamespacePolicy noSPVSupport _cePublicData
-  EvalResult{..} <- liftIO $ evalContinuation def evalEnv Nothing
+                (MsgData sigs (_cmData cm) Nothing (toUntypedHash hsh)) initRefStore
+                _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData
+  EvalResult{..} <- liftIO $ evalContinuation def evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs

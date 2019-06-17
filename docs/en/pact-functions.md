@@ -385,7 +385,7 @@ pact> (remove "bar" { "foo": 1, "bar": 2 })
 *binding*&nbsp;`binding:<{r}>` *&rarr;*&nbsp;`<a>`
 
 
-Special form binds to a yielded object value from the prior step execution in a pact.
+Special form binds to a yielded object value from the prior step execution in a pact. If yield step was executed on a foreign chain, enforce endorsement via SPV.
 
 
 ### reverse {#reverse}
@@ -488,12 +488,15 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 
 ### yield {#yield}
 
-*OBJECT*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
+*object*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
+
+*object*&nbsp;`object:<{y}>` *target-chain*&nbsp;`string` *&rarr;*&nbsp;`object:<{y}>`
 
 
-Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values.
+Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN, target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch.
 ```lisp
 (yield { "amount": 100.0 })
+(yield { "amount": 100.0 } "some-chain-id")
 ```
 
 ## Database {#Database}
@@ -904,7 +907,7 @@ true
 *x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
-True if X equals Y.
+Compare alike terms for equality, returning TRUE if X is equal to Y. Equality comparisons will fail immediately on type mismatch, or if types are not value types.
 ```lisp
 pact> (= [1 2 3] [1 2 3])
 true
@@ -1541,7 +1544,7 @@ Load and evaluate FILE, resetting repl state beforehand if optional RESET is tru
 
 Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT.
 ```lisp
-(mock-spv "TXOUT" { 'proof: "a54f54de54c54d89e7f" } { 'amount: 10.0, 'account: "Dave", 'chainId: 1 })
+(mock-spv "TXOUT" { 'proof: "a54f54de54c54d89e7f" } { 'amount: 10.0, 'account: "Dave", 'chainId: "1" })
 ```
 
 

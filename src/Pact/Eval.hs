@@ -63,6 +63,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Vector as V
+import Data.Text (Text, pack)
 import Safe
 import Unsafe.Coerce
 
@@ -657,8 +658,6 @@ evalUserAppBody Def{..} (as',ft') ai g run =
       fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
   in appCall fa ai as' $ fmap (g,) $ run bod'
 
-
-
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
   let fa = FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)
@@ -792,7 +791,7 @@ resumePactExec i req ctx = do
   -- if resume is in step, use that, otherwise get from exec state
   let resume = case _psResume req of
         r@Just {} -> r
-        Nothing -> fmap (fmap fromPactValue) $ _peYield ctx
+        Nothing -> _peYield ctx
 
   -- run local environment with yield from pact exec
   local (set eePactStep (Just $ set psResume resume req)) $

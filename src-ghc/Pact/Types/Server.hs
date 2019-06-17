@@ -24,7 +24,7 @@
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
-  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger, cePublicData, ceGasEnv
+  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger, cePublicData, ceGasEnv, ceSPVSupport
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -60,6 +60,7 @@ import Pact.Types.SQLite
 import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Interpreter
+import Pact.Types.SPV
 
 
 userSigToPactPubKey :: Signer -> Pact.PublicKey
@@ -87,6 +88,7 @@ data CommandEnv p = CommandEnv {
     , _ceLogger :: Logger
     , _ceGasEnv :: GasEnv
     , _cePublicData :: PublicData
+    , _ceSPVSupport :: SPVSupport
     }
 $(makeLenses ''CommandEnv)
 

@@ -44,9 +44,11 @@ library
                      , Pact.Repl.Types
                      , Pact.Server.API
                      , Pact.Types.API
+                     , Pact.Types.ChainId
                      , Pact.Types.ChainMeta
                      , Pact.Types.Codec
                      , Pact.Types.Command
+                     , Pact.Types.Continuation
                      , Pact.Types.Scheme
                      , Pact.Types.Exp
                      , Pact.Types.ExpParser
@@ -63,6 +65,7 @@ library
                      , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
+                     , Pact.Types.SPV
                      , Pact.Types.Swagger
                      , Pact.Types.Term
                      , Pact.Types.Type
@@ -80,61 +83,62 @@ library
   if !impl(ghcjs)
     hs-source-dirs: src-ghc
     exposed-modules:
-      Pact.Analyze
-      Pact.Analyze.Alloc
-      Pact.Analyze.Eval
-      Pact.Analyze.Eval.Invariant
-      Pact.Analyze.Eval.Numerical
-      Pact.Analyze.Eval.Prop
-      Pact.Analyze.Eval.Core
-      Pact.Analyze.Eval.Term
-      Pact.Analyze.Check
-      Pact.Analyze.Errors
-      Pact.Analyze.Feature
-      Pact.Analyze.LegacySFunArray
-      Pact.Analyze.Model
-      Pact.Analyze.Model.Dot
-      Pact.Analyze.Model.Graph
-      Pact.Analyze.Model.Tags
-      Pact.Analyze.Model.Text
-      Pact.Analyze.Parse
-      Pact.Analyze.Parse.Invariant
-      Pact.Analyze.Parse.Prop
-      Pact.Analyze.Parse.Types
-      Pact.Analyze.Patterns
-      Pact.Analyze.PrenexNormalize
-      Pact.Analyze.Translate
-      Pact.Analyze.Types
-      Pact.Analyze.Types.Capability
-      Pact.Analyze.Types.Eval
-      Pact.Analyze.Types.Languages
-      Pact.Analyze.Types.Model
-      Pact.Analyze.Types.Numerical
-      Pact.Analyze.Types.ObjUtil
-      Pact.Analyze.Types.Shared
-      Pact.Analyze.Types.Types
-      Pact.Analyze.Util
-      Pact.Analyze.Remote.Server
-      Pact.ApiReq
-      Pact.Bench
-      Pact.Docgen
-      Pact.Interpreter
-      Pact.Main
-      Pact.MockDb
-      Pact.Persist.MockPersist
-      Pact.Persist.SQLite
-      Pact.PersistPactDb.Regression
-      Pact.ReplTools
-      Pact.Server.ApiServer
-      Pact.Server.History.Persistence
-      Pact.Server.History.Service
-      Pact.Server.History.Types
-      Pact.Server.PactService
-      Pact.Server.Server
-      Pact.Types.Crypto
-      Pact.Types.ECDSA
-      Pact.Types.Server
-      Pact.Types.SQLite
+                    Pact.Analyze
+                    Pact.Analyze.Alloc
+                    Pact.Analyze.Eval
+                    Pact.Analyze.Eval.Invariant
+                    Pact.Analyze.Eval.Numerical
+                    Pact.Analyze.Eval.Prop
+                    Pact.Analyze.Eval.Core
+                    Pact.Analyze.Eval.Term
+                    Pact.Analyze.Check
+                    Pact.Analyze.Errors
+                    Pact.Analyze.Feature
+                    Pact.Analyze.LegacySFunArray
+                    Pact.Analyze.Model
+                    Pact.Analyze.Model.Dot
+                    Pact.Analyze.Model.Graph
+                    Pact.Analyze.Model.Tags
+                    Pact.Analyze.Model.Text
+                    Pact.Analyze.Parse
+                    Pact.Analyze.Parse.Invariant
+                    Pact.Analyze.Parse.Prop
+                    Pact.Analyze.Parse.Types
+                    Pact.Analyze.Patterns
+                    Pact.Analyze.PrenexNormalize
+                    Pact.Analyze.Translate
+                    Pact.Analyze.Types
+                    Pact.Analyze.Types.Capability
+                    Pact.Analyze.Types.Eval
+                    Pact.Analyze.Types.Languages
+                    Pact.Analyze.Types.Model
+                    Pact.Analyze.Types.Numerical
+                    Pact.Analyze.Types.ObjUtil
+                    Pact.Analyze.Types.Shared
+                    Pact.Analyze.Types.Types
+                    Pact.Analyze.Util
+                    Pact.Analyze.Remote.Server
+                    Pact.ApiReq
+                    Pact.Bench
+                    Pact.Docgen
+                    Pact.Interpreter
+                    Pact.Main
+                    Pact.MockDb
+                    Pact.Persist.MockPersist
+                    Pact.Persist.SQLite
+                    Pact.PersistPactDb.Regression
+                    Pact.ReplTools
+                    Pact.Server.ApiServer
+                    Pact.Server.History.Persistence
+                    Pact.Server.History.Service
+                    Pact.Server.History.Types
+                    Pact.Server.PactService
+                    Pact.Server.Server
+                    Pact.Server.Test
+                    Pact.Types.Crypto
+                    Pact.Types.ECDSA
+                    Pact.Types.Server
+                    Pact.Types.SQLite
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
@@ -169,6 +173,7 @@ library
                      , safe >= 0.3.11 && < 0.4
                      , scientific >= 0.3.4.9 && < 0.4
                      , semigroups >= 0.18.2 && < 0.19
+                     , semigroupoids >= 5.0
                      , stm >= 2.4.4.1 && < 2.6
                      , text >= 1.2.2.1 && < 1.3
                      -- kadena ghcjs compat fork
@@ -190,25 +195,27 @@ library
 
   if impl(ghcjs)
     build-depends:
-      ghcjs-base,
-      ghcjs-prim
+                  ghcjs-base,
+                  ghcjs-prim
 
   if !impl(ghcjs)
     build-depends:
-        async
-      , criterion >= 1.1.4 && < 1.6
-      , cryptonite
-      , direct-sqlite
-      , fast-logger
-      , haskeline >= 0.7.3 && < 0.8
-      , memory
-      , safe-exceptions >= 0.1.5.0 && < 0.2
-      , sbv >= 7.11
-      , servant-server
-      , statistics >= 0.13.3 && < 0.16
-      , wai-cors
-      , warp
-      , yaml
+                  async
+                , criterion >= 1.1.4 && < 1.6
+                , cryptonite
+                , direct-sqlite
+                , fast-logger
+                , haskeline >= 0.7.3 && < 0.8
+                , http-client
+                , memory
+                , neat-interpolation
+                , safe-exceptions >= 0.1.5.0 && < 0.2
+                , sbv >= 7.11
+                , servant-server
+                , statistics >= 0.13.3 && < 0.16
+                , wai-cors
+                , warp
+                , yaml
 
   if !impl(ghcjs) && !os(windows)
     build-depends: unix
@@ -243,7 +250,7 @@ executable bench
   main-is:             Bench.hs
   build-depends:       base
                      , pact
-  hs-source-dirs:      executables
+  hs-source-dirs:      executables pact-lang-api.js
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
@@ -294,28 +301,27 @@ test-suite hspec
                 TypesSpec
   if !impl(ghcjs)
     build-depends:
-        neat-interpolation
-      , sbv
-      , async
-      , cryptonite
-      , http-client
-      , servant-client
+                  neat-interpolation
+                , sbv
+                , async
+                , cryptonite
+                , http-client
+                , servant-client
     other-modules:
-        DocgenSpec
-      , PactTestsSpec
-      , ParserSpec
-      , PersistSpec
-      , RemoteVerifySpec
-      , SignatureSpec
-      , TypecheckSpec
-      , PactContinuationSpec
-      , Utils.TestRunner
-      , AnalyzePropertiesSpec
-      , AnalyzeSpec
-      , Analyze.Eval
-      , Analyze.Gen
-      , Analyze.TimeGen
-      , Analyze.Translate
-      , ClientSpec
-      , SchemeSpec
-      , HistoryServiceSpec
+                  DocgenSpec
+                , PactTestsSpec
+                , ParserSpec
+                , PersistSpec
+                , RemoteVerifySpec
+                , SignatureSpec
+                , TypecheckSpec
+                , PactContinuationSpec
+                , AnalyzePropertiesSpec
+                , AnalyzeSpec
+                , Analyze.Eval
+                , Analyze.Gen
+                , Analyze.TimeGen
+                , Analyze.Translate
+                , ClientSpec
+                , SchemeSpec
+                , HistoryServiceSpec

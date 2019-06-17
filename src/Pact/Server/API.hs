@@ -54,13 +54,15 @@ import Servant.Swagger
 
 import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
+import Pact.Types.ChainId
 import Pact.Types.Codec (timeCodec, encoder)
 import Pact.Types.Command
+import Pact.Types.Continuation
 import Pact.Types.Exp (Literal)
 import Pact.Types.Hash
 import Pact.Types.Info (Info)
 import Pact.Types.PactValue (PactValue)
-import Pact.Types.Persistence (PactContinuation,PactExec,TxId)
+import Pact.Types.Persistence (TxId)
 import Pact.Types.Pretty (Doc)
 import Pact.Types.Runtime (PactError,PactErrorType,StackFrame)
 import Pact.Types.Swagger
@@ -238,7 +240,14 @@ instance ToSchema StackFrame where
 instance ToSchema Doc where
   declareNamedSchema = declareGenericString
 
-
+instance ToSchema ChainId where
+  declareNamedSchema = declareGenericString
+instance ToSchema ModuleHash where
+  declareNamedSchema = declareGenericSchema pactHashSchema
+instance ToSchema Provenance where
+   declareNamedSchema = lensyDeclareNamedSchema 2
+instance ToSchema Yield where
+   declareNamedSchema = lensyDeclareNamedSchema 2
 
 instance ToSchema PactValue where
   declareNamedSchema = genericDeclareNamedSchema $

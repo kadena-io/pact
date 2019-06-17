@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -25,31 +24,34 @@ module Pact.Server.ApiServer
 
 import Prelude hiding (log)
 
-import Control.Lens
 import Control.Concurrent
+import Control.Lens hiding ((<|))
 import Control.Monad.Reader
 import Control.Monad.Trans.Except
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
+import Data.List.NonEmpty (NonEmpty(..), (<|))
+import qualified Data.List.NonEmpty as NEL
+import Data.Semigroup.Foldable (fold1)
 import qualified Data.Text as T
 import Data.Text.Encoding
 
+import qualified Data.HashMap.Strict as HM
 import Data.HashSet (HashSet)
-import qualified Data.HashSet          as HashSet
-import qualified Data.HashMap.Strict   as HM
+import qualified Data.HashSet as HashSet
 
-import Servant
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.Cors
+import Servant
 
 import Pact.Analyze.Remote.Server (verifyHandler)
 import Pact.Server.API
-import Pact.Types.Command
 import Pact.Types.API
+import Pact.Types.Command
+import Pact.Types.Hash
 import Pact.Types.Server
 import Pact.Types.Version
-import Pact.Types.Hash
 
 
 #if !MIN_VERSION_servant(0,16,0)
@@ -94,17 +96,14 @@ apiV1Server conf = hoistServer apiV1API nt
 
 sendHandler :: SubmitBatch -> Api RequestKeys
 sendHandler (SubmitBatch cmds) = do
-  when (null cmds) $ die' "Empty Batch"
-  crs <- forM cmds $ \c -> do
-    cr@(_,Command{..}) <- buildCmdRpc c
-    return cr
-  rks <- mapM queueCmds $ group 8000 crs
-  pure $ RequestKeys $ concat rks
+  crs <- traverse buildCmdRpc cmds
+  rks <- traverse queueCmds $ group 8000 crs
+  pure . RequestKeys $ fold1 rks
 
 pollHandler :: Poll -> Api PollResponses
 pollHandler (Poll rks) = do
   log $ "Polling for " ++ show rks
-  PossiblyIncompleteResults{..} <- checkHistoryForResult (HashSet.fromList rks)
+  PossiblyIncompleteResults{..} <- checkHistoryForResult (HashSet.fromList $ NEL.toList rks)
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   pure $ pollResultToReponse possiblyIncompleteResults
 
@@ -156,14 +155,21 @@ buildCmdRpc c@Command {..} = do
   log $ "Processing command with hash: " ++ show _cmdHash
   return (cmdToRequestKey c,fmap encodeUtf8 c)
 
-group :: Int -> [a] -> [[a]]
-group _ [] = []
+-- | Reorganize a `NonEmpty` into sub-batches.
+group :: Int -> NonEmpty a -> NonEmpty (NonEmpty a)
 group n l
-  | n > 0 = take n l : group n (drop n l)
-  | otherwise = error "Negative n"
+  | n < 1 = error "Non-positive n"
+  | otherwise = case rest of
+      Nothing -> items :| []
+      Just rs -> items <| group n rs
+  where
+    (items, rest) = bimap NEL.fromList NEL.nonEmpty $ NEL.splitAt n l
 
-queueCmds :: (MonadReader ApiEnv m, MonadIO m) => [(RequestKey,Command ByteString)] -> m [RequestKey]
+queueCmds :: (MonadReader ApiEnv m, MonadIO m) =>
+  NonEmpty (RequestKey, Command ByteString) -> m (NonEmpty RequestKey)
 queueCmds rpcs = do
   hc <- view aiHistoryChan
-  liftIO $ writeHistory hc $ AddNew (map snd rpcs)
-  return $ fst <$> rpcs
+  liftIO . writeHistory hc . AddNew $ NEL.toList cmds
+  return rks
+  where
+    (rks, cmds) = NEL.unzip rpcs
