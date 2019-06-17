@@ -21,7 +21,6 @@ module Pact.Types.Swagger
   , declareGenericEmpty
   , declareGenericSchema
   , declareGenericString
-  , declareSumSchema
   , lensyDeclareNamedSchema
   , namedSchema
     -- | Modifiers
@@ -82,17 +81,6 @@ lensyDeclareNamedSchema ::
   -> Declare (Definitions Schema) NamedSchema
 lensyDeclareNamedSchema i proxy =
   genericDeclareNamedSchema (fromAesonOptions $ lensyOptions i) proxy
-
-
--- | Source: https://github.com/haskell-servant/servant-swagger/issues/80
-declareSumSchema ::
-  Text -> [(Text, Referenced Schema)] -> Declare (Definitions Schema) NamedSchema
-declareSumSchema n p = pure $ NamedSchema (Just n) $
-  schemaOf $ swaggerType SwaggerObject .
-             swaggerProperties p .
-             set minProperties (Just 1) .
-             set maxProperties (Just 1)
-
 
 
 namedSchema :: Text -> Schema -> Declare (Definitions Schema) NamedSchema

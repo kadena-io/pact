@@ -222,13 +222,22 @@ instance ToSchema Value where
     (schemaOf $ swaggerType SwaggerObject)
 
 
--- TODO: Missing status field of PactResult
+-- Source: https://github.com/haskell-servant/servant-swagger/issues/80
+data PactResultStatus = Success | Failure
+  deriving (Generic)
+instance ToSchema PactResultStatus
 instance ToSchema PactResult where
     declareNamedSchema _ = do
       pactErrRef <- declareSchemaRef (Proxy :: Proxy PactError)
       pactValRef <- declareSchemaRef (Proxy :: Proxy PactValue)
-      declareSumSchema "PactResult" [ ("error", pactErrRef),
-                                           ("data" , pactValRef) ]
+      statusRef <- declareSchemaRef (Proxy :: Proxy PactResultStatus)
+      let p = [ ("status",statusRef), ("error", pactErrRef),("data" , pactValRef) ]
+      namedSchema "PactResult"
+        (schemaOf $ swaggerType SwaggerObject .
+                    swaggerProperties p .
+                    set minProperties (Just 2) .
+                    set maxProperties (Just 2)
+        )
 
 instance ToSchema PactError where
   declareNamedSchema = lensyDeclareNamedSchema 2
@@ -274,7 +283,7 @@ instance ToSchema Decimal where
                 (schemaOf $ swaggerType SwaggerNumber)
 
 
--- | Adapted from 'Map k v' as a naive instance will cause an infinite loop!!
+-- Adapted from 'Map k v' as a naive instance will cause an infinite loop!!
 -- 2.2 swagger2 compat means not using 'additionalProperties' for now
 instance ToSchema (ObjectMap PactValue) where
   declareNamedSchema _ = do
