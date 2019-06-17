@@ -157,11 +157,13 @@ instance ToSchema SubmitBatch where
   declareNamedSchema = lensyDeclareNamedSchema 3
 
 instance ToSchema (Command Text) where
-  declareNamedSchema = genericDeclareNamedSchema $
-    optionsOf $ optFieldLabel $
-                replaceOrModify
-                ("_cmdPayload","cmd")
-                (lensyConstructorToNiceJson 4)
+  declareNamedSchema = (swaggerDescription "stringified transaction JSON") .
+    (genericDeclareNamedSchema $
+      optionsOf $ optFieldLabel $
+                  replaceOrModify
+                  ("_cmdPayload","cmd")
+                  (lensyConstructorToNiceJson 4)
+    )
 
 instance ToSchema UserSig where
   declareNamedSchema = lensyDeclareNamedSchema 3
@@ -253,7 +255,7 @@ newtype DummyTime = DummyTime UTCTime
 instance ToJSON DummyTime where
   toJSON (DummyTime t) = encoder timeCodec t
 instance ToSchema UTCTime where
-  declareNamedSchema = namedSchema "UTCTime" $ sketchSchema $
+  declareNamedSchema _ = namedSchema "UTCTime" $ sketchSchema $
     DummyTime $ mkUTCTime
                 (fromGregorian 1970 01 01)
                 (fromMicroseconds 0)
@@ -269,9 +271,11 @@ instance ToSchema (ObjectMap PactValue) where
   declareNamedSchema _ = do
     -- Swagger 2.2 compat, not doing schema ref for pact value
     sref <- declareSchemaRef (Proxy :: Proxy PactValue)
-    return $ NamedSchema (Just "ObjectMap") $
-      (schemaOf $ swaggerType SwaggerObject .
-        set additionalProperties (Just $ AdditionalPropertiesSchema sref))
+    namedSchema "ObjectMap"
+      (schemaOf $
+        swaggerType SwaggerObject .
+        set additionalProperties (Just $ AdditionalPropertiesSchema sref)
+      )
 
 instance ToSchema Guard where
   declareNamedSchema = genericDeclareNamedSchema $
@@ -308,11 +312,13 @@ instance ToSchema Analyze.Request where
   declareNamedSchema _ = do
     modulesRef <- declareSchemaRef (Proxy :: Proxy [ModuleDef Name])
     verifyRef <- declareSchemaRef (Proxy :: Proxy ModuleName)
-    return $ NamedSchema (Just "AnalyzeRequest") $
-      schemaOf $ swaggerType SwaggerObject .
-        set properties [("modules",modulesRef), ("verify",verifyRef)]
+    let reqSchema = schemaOf $
+                    swaggerType SwaggerObject .
+                    swaggerProperties [("modules",modulesRef), ("verify",verifyRef)]
+    namedSchema "AnalyzeRequest" reqSchema
+
 instance ToSchema Analyze.Response where
-  declareNamedSchema = namedSchema "AnalyzeResponse" $ sketchSchema $
+  declareNamedSchema _ = namedSchema "AnalyzeResponse" $ sketchSchema $
     Analyze.Response ["Dummy Response"]
 instance ToSchema (ModuleDef t) where
   declareNamedSchema = declareGenericSchema $
