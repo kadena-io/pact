@@ -38,7 +38,7 @@ module Pact.Server.API
 
 -- Swagger 2.2 compat
 import Control.Lens (set)
-import Data.Aeson
+import Data.Aeson hiding (Object)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal (Decimal)
 import Data.Proxy
@@ -240,7 +240,11 @@ instance ToSchema PactResult where
         )
 
 instance ToSchema PactError where
-  declareNamedSchema = lensyDeclareNamedSchema 2
+  declareNamedSchema = genericDeclareNamedSchema $
+    optionsOf $ optFieldLabel $
+                replaceOrModify
+                ("peDoc", "message")
+                (lensyConstructorToNiceJson 2)
 instance ToSchema PactErrorType
 instance ToSchema Info where
   declareNamedSchema = declareGenericString
@@ -311,8 +315,11 @@ instance ToSchema ModuleGuard where
 instance ToSchema ModuleName where
    declareNamedSchema = lensyDeclareNamedSchema 3
 instance ToSchema NamespaceName
+instance ToSchema (Object Name) where
+  declareNamedSchema = declareGenericSchema $
+    (schemaOf $ swaggerType SwaggerObject)
 instance ToSchema UserGuard where
-  declareNamedSchema = declareGenericString
+  declareNamedSchema = lensyDeclareNamedSchema 3
 
 
 instance ToSchema ListenerRequest where
