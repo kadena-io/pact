@@ -493,7 +493,7 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 *object*&nbsp;`object:<{y}>` *target-chain*&nbsp;`string` *&rarr;*&nbsp;`object:<{y}>`
 
 
-Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN, target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch.
+Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN, target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch. If TARGET-CHAIN is the same chain, then SPV endorsement-based dispatch will not be used.
 ```lisp
 (yield { "amount": 100.0 })
 (yield { "amount": 100.0 } "some-chain-id")

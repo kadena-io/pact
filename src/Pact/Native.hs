@@ -432,7 +432,8 @@ langDefs =
      , LitExample "(yield { \"amount\": 100.0 } \"some-chain-id\")"
      ]
      "Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN, \
-     \target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch."
+     \target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch. \
+     \If TARGET-CHAIN is the same chain, then SPV endorsement-based dispatch will not be used."
     ,defNative (specialForm Resume) resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "r") def)]) []
      "Special form binds to a yielded object value from the prior step execution in a pact. \
@@ -641,15 +642,19 @@ yield i as = case as of
   [u@(TObject t _), (TLitString cid)] -> go t (Just $ ChainId cid) u
   _ -> argsError i as
   where
-    go (Object o _ _ _) tid u = do
+    go (Object o _ _ _) tidm u = do
       eym <- use evalPactExec
       case eym of
         Nothing -> evalError' i "Yield not in defpact context"
         Just PactExec{..} -> do
           o' <- enforcePactValue' o
-          y <- case tid of
+          y <- case tidm of
             Nothing -> return $ Yield o' Nothing
-            Just t -> fmap (Yield o') $ provenanceOf i t
+            Just tid -> do
+              cid <- view (eePublicData . pdPublicMeta . pmChainId)
+              if cid == tid
+              then return $ Yield o' Nothing
+              else fmap (Yield o') $ provenanceOf i tid
           evalPactExec . _Just . peYield .= Just y
           return u
 
