@@ -469,7 +469,7 @@ verify i as = case as of
     let renderedLines = Check.renderVerifiedModule modResult
 #endif
     setop $ TcErrors $ Text.unpack <$> renderedLines
-    return (tStr $ mconcat renderedLines)
+    return $ tStr $ "Verification of " <> modName <> " failed"
 
   _ -> argsError i as
 
