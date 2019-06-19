@@ -102,20 +102,24 @@ applyCmd logger conf dbv gasModel bh bt spv exMode _ (ProcSucc cmd) = do
       return $ resultFailure Nothing (cmdToRequestKey cmd) pactErr
 
 
-resultFailure :: Maybe TxId ->
-                 RequestKey ->
-                 PactError ->
-                 CommandResult Hash
-resultFailure tx cmd a = CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing
+resultFailure
+  :: Maybe TxId
+  -> RequestKey
+  -> PactError
+  -> CommandResult Hash
+resultFailure tx cmd a =
+  CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing Nothing
 
-resultSuccess :: Maybe TxId ->
-                 RequestKey ->
-                 Gas ->
-                 PactValue ->
-                 Maybe PactExec ->
-                 [TxLog Value] ->
-                 CommandResult Hash
-resultSuccess tx cmd gas a pe l = CommandResult cmd tx (PactResult . Right $ a) gas (Just hshLog) pe Nothing
+resultSuccess
+  :: Maybe TxId
+  -> RequestKey
+  -> Gas
+  -> PactValue
+  -> Maybe PactExec
+  -> [TxLog Value]
+  -> CommandResult Hash
+resultSuccess tx cmd gas a pe l =
+  CommandResult cmd tx (PactResult . Right $ a) gas (Just hshLog) pe Nothing Nothing
   where hshLog = fullToHashLogCr l
 
 fullToHashLogCr :: [TxLog Value] -> Hash

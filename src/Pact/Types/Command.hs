@@ -36,7 +36,7 @@ module Pact.Types.Command
   , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
   , PactResult(..)
-  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData,crBlockHeight
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
@@ -48,23 +48,24 @@ import Control.Applicative
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.DeepSeq
+
+import Data.Aeson as A
 import Data.ByteString (ByteString)
+import Data.Hashable (Hashable)
+import Data.Maybe  (fromMaybe)
 import Data.Serialize as SZ
 import Data.String
-import Data.Hashable (Hashable)
-import Data.Aeson as A
 import Data.Text (Text)
-import Data.Maybe  (fromMaybe)
-
+import Data.Word
 
 import GHC.Generics
+
 import Prelude
 
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Orphans ()
 import Pact.Types.RPC
 import Pact.Types.PactValue (PactValue(..))
-
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
@@ -289,15 +290,15 @@ data CommandResult l = CommandResult {
   , _crContinuation :: !(Maybe PactExec)
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
+  -- | Block height of the resulting tx
+  , _crBlockHeight :: !(Maybe Word64)
   } deriving (Eq,Show,Generic)
 instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3
 instance (FromJSON l) => FromJSON (CommandResult l) where parseJSON = lensyParseJSON 3
 
 
 cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
-
-
+cmdToRequestKey = RequestKey . toUntypedHash . _cmdHash
 
 
 type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
@@ -313,7 +314,7 @@ requestKeyToB16Text :: RequestKey -> Text
 requestKeyToB16Text (RequestKey h) = hashToText h
 
 
-newtype RequestKey = RequestKey { unRequestKey :: Hash}
+newtype RequestKey = RequestKey { unRequestKey :: Hash }
   deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey)
 
 instance Show RequestKey where
