@@ -182,6 +182,23 @@ expectFalsified' model code = do
   res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
+data TestEnv = TestEnv
+  { testCode  :: Text
+  , testCheck :: Check
+  , testName  :: String
+  , testPred  :: (Maybe TestFailure -> IO ())
+  }
+
+testEnv :: TestEnv
+testEnv = TestEnv (error "no tested code") (Valid Success') "unnamed" $ \case
+  Nothing -> pure ()
+  Just err -> HUnit.assertFailure $ "Verification failure: " ++ show err
+
+expectTest :: TestEnv -> Spec
+expectTest (TestEnv code check name p) = do
+  res <- runIO $ runCheck CheckDefun code check
+  it name $ p res
+
 expectPass :: Text -> Check -> Spec
 expectPass code check = do
   res <- runIO $ runCheck CheckDefun (wrap code "") check
@@ -1323,6 +1340,18 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Success' .=> Inj (RowExists "tokens" "stu" After)
 
+  let expectFailsTypechecking code =
+        expectTest $ testEnv
+          { testCode = wrap code ""
+          , testName = "fails typechecking"
+          , testCheck = Satisfiable Success'
+          , testPred = \case
+            Just (TestCheckFailure (CheckFailure _ TypecheckFailure{}))
+              -> pure ()
+            Nothing -> HUnit.assertFailure "Unexpectedly passed"
+            _       -> HUnit.assertFailure "Wrong verification failure"
+          }
+
   describe "table-written.insert.partial" $ do
     let code =
           [text|
@@ -1332,7 +1361,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (insert tokens "stu" {}))
           |]
-    expectFail code $ Satisfiable (Inj Success)
+    expectFailsTypechecking code
 
   describe "table-written.update" $ do
     let code =
@@ -1377,7 +1406,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (write tokens "stu" {}))
           |]
-    expectFail code $ Satisfiable (Inj Success)
+    expectFailsTypechecking code
 
   describe "table-written.conditional" $ do
     let code =
