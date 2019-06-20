@@ -786,8 +786,8 @@ liftEither = either throwError return
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
-  :: HM.HashMap ModuleName (ModuleData Ref)   -- ^ all loaded modules
-  -> ModuleData Ref                        -- ^ the module we're verifying
+  :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
+  -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
 verifyModule modules moduleData = runExceptT $ do
   tables <- moduleTables modules moduleData
