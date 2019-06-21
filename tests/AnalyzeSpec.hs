@@ -3268,9 +3268,11 @@ spec = describe "analyze" $ do
           [ (property (= (column-delta accounts 'balance) 0))
           ]
         (step-with-rollback payer-entity
+          @model [ (property (= (column-delta accounts 'balance) (- amount))) ]
           (debit payer amount)
           (credit payer amount))
         (step payee-entity
+          @model [ (property (= (column-delta accounts 'balance) amount)) ]
           (credit payee amount)))
 
       (defun debit (acct amount)
@@ -3303,9 +3305,11 @@ spec = describe "analyze" $ do
                 (= (column-delta accounts 'balance) 0)))
           ]
         (step-with-rollback payer-entity
+          @model [ (property (= (column-delta accounts 'balance) (- amount))) ]
           (update-bal payer (- payer-bal amount) "step 1")
           (update-bal payer payer-bal "rollback 1"))
         (step payee-entity
+          @model [ (property (= (column-delta accounts 'balance) amount)) ]
           (update-bal payee (+ payee-bal amount) "step 2")))
 
       (defun update-bal (acct balance msg:string)

@@ -964,7 +964,7 @@ toAST TTable {..} = do
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
-toAST (TStep Term.Step {..} _) = do
+toAST (TStep Term.Step {..} _ _) = do
   ent <- forM _sEntity $ \e -> do
     e' <- toAST e
     assocAstTy (_aNode e') $ TyPrim TyString

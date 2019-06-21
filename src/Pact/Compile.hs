@@ -355,6 +355,12 @@ data ModelAllowed
 
 data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
 
+modelOnly :: Compile Meta
+modelOnly = do
+  symbol "@model"
+  (ListExp props _ _i, _) <- list' Brackets
+  pure $ Meta Nothing props
+
 meta :: ModelAllowed -> Compile Meta
 meta modelAllowed =
   -- hiding labels/errors here because otherwise they hang around for all module errors
@@ -411,7 +417,7 @@ defpact = do
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
   case last body of -- note: `last` is safe, since bodyForm uses `some`
-    TStep (Step _ _ (Just _) _) _ -> syntaxError "rollbacks aren't allowed on the last \
+    TStep (Step _ _ (Just _) _) _ _ -> syntaxError "rollbacks aren't allowed on the last \
       \step (the last step can never roll back -- once it's executed the pact \
       \is complete)"
     _ -> pure ()
@@ -484,18 +490,21 @@ emptyDef = do
 
 step :: Compile (Term Name)
 step = do
+  m <- modelOnly
   cont <- try (Step <$> (Just <$> valueLevel) <*> valueLevel) <|>
           (Step Nothing <$> valueLevel)
   i <- contextInfo
-  pure $ TStep (cont Nothing i) i
+  pure $ TStep (cont Nothing i) m i
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
   i <- contextInfo
+  -- m <- meta ModelOnly
+  let m = Meta Nothing []
   s <- try (Step <$> (Just <$> valueLevel) <*> valueLevel <*>
             (Just <$> valueLevel) <*> pure i)
        <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)
-  return $ TStep s i
+  return $ TStep s m i
 
 
 
