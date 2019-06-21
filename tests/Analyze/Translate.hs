@@ -11,7 +11,6 @@ import           Control.Monad.Reader      (ReaderT (runReaderT))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT),
                                             exceptToMaybeT)
-import qualified Data.Map                  as Map
 import qualified Data.Vector               as V
 
 import           Pact.Analyze.Translate    (translateNodeNoGraph)
@@ -268,7 +267,6 @@ toAnalyze ty tm = do
         (Meta Nothing [])
         dummyInfo
       ref = Pact.Ref cnst
-      noTables = Map.empty
   maybeConst <- lift $ Pact.runTC 0 False $ typecheckTopLevel ref
   (_cTy, ast) <- case maybeConst of
     (Pact.TopConst _info _name constTy constAst _meta, _tcState)
@@ -277,7 +275,7 @@ toAnalyze ty tm = do
 
   hoist generalize $
     exceptToMaybeT $
-      translateNodeNoGraph noTables ast
+      translateNodeNoGraph ast
 
 -- This is limited to simple types for now
 reverseTranslateType :: SingTy a -> Pact.Type b

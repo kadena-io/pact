@@ -307,7 +307,7 @@ verifyFunctionInvariants' modName funName funInfo tables caps pactArgs body
   checkType = runExceptT $ do
     (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation modName funName
-        funInfo caps pactArgs body checkType tables
+        funInfo caps pactArgs body checkType
 
     let invsMap = TableMap $ Map.fromList $
           tables <&> \Table { _tableName, _tableInvariants } ->
@@ -385,7 +385,6 @@ verifyFunctionProperty modName funName funInfo tables caps pactArgs body
     (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation modName funName funInfo caps pactArgs body checkType
-          tables
 
     -- Set up the model and our query
     let setupSmtProblem = do
@@ -840,20 +839,13 @@ verifyModule modules moduleData = runExceptT $ do
     (HM.empty, HM.empty)
     typecheckableRefs
 
-  tables' <- case tableTypes tables of
-    Right tables' -> pure tables'
-    Left badTy    -> throwError $
-      TypeTranslationFailure "couldn't translate argument type" $
-        Pact.TyUser badTy
-
   let constToProp :: ETerm -> Except VerificationFailure EProp
       constToProp tm = case constantToProp tm of
         Right prop -> pure prop
         Left msg   -> throwError $ FailedConstTranslation msg
 
       translateNodeNoGraph'
-        = withExceptT translateToVerificationFailure
-        . translateNodeNoGraph tables'
+        = withExceptT translateToVerificationFailure . translateNodeNoGraph
 
   consts' <- hoist generalize $
     traverse (constToProp <=< translateNodeNoGraph') consts

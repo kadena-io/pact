@@ -1336,13 +1336,9 @@ data Term (a :: Ty) where
     -> TagId -> TableName -> Term 'TyStr
     -> Term ('TyObject m)
   Write
-    -- For updates it's possible to write a partial row, ie objSchema is a
-    -- subschema of rowSchema. This is not allowed for inserts or writes (in
-    -- which case both of these schemas will be the same).
-    :: SingTy ('TyObject objSchema)
-    -> SingTy ('TyObject rowSchema)
+    :: SingTy ('TyObject m)
     -> WriteType -> TagId -> TableName
-    -> Term 'TyStr -> Term ('TyObject objSchema) -> Term 'TyStr
+    -> Term 'TyStr -> Term ('TyObject m) -> Term 'TyStr
 
   PactVersion     :: Term 'TyStr
 
@@ -1458,7 +1454,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showChar ' '
     . showsPrec 11 e
 
-  Write a b c d e f g -> withSing a $
+  Write a b c d e f -> withSing a $
       showString "Write "
     . showsPrec 11 a
     . showChar ' '
@@ -1471,8 +1467,6 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 e
     . showChar ' '
     . showsPrec 11 f
-    . showChar ' '
-    . showsPrec 11 g
 
   PactVersion -> showString "PactVersion"
   Format a b ->
@@ -1568,7 +1562,7 @@ prettyTerm ty = \case
   HasGrant _ _ _        -> error "HasGrant should only appear inside of an Enforce"
   Read _ Nothing    _ tab x -> parensSep ["read", pretty tab, pretty x]
   Read _ (Just def) _ tab x -> parensSep ["with-default-read", singPrettyTm ty def, pretty tab, pretty x]
-  Write objTy _ _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm objTy y]
+  Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
   PactVersion           -> parensSep ["pact-version"]
   Format x y            -> parensSep ["format", pretty x, prettyList y]
   FormatTime x y        -> parensSep ["format", pretty x, pretty y]
@@ -1620,11 +1614,10 @@ eqTerm ty (Read _ (Just a1) b1 c1 d1) (Read _ (Just a2) b2 c2 d2)
   = singEqTm ty a1 a2 && b1 == b2 && c1 == c2 && d1 == d2
 eqTerm _ty Read{} Read{}
   = False
-eqTerm _ty (Write objTy1 rowTy1 a1 b1 c1 d1 e1) (Write objTy2 rowTy2 a2 b2 c2 d2 e2)
-  = case singEq objTy1 objTy2 of
+eqTerm _ty (Write ty1 a1 b1 c1 d1 e1) (Write ty2 a2 b2 c2 d2 e2)
+  = case singEq ty1 ty2 of
       Nothing   -> False
-      Just Refl -> singEqB rowTy1 rowTy2 && a1 == a2 && b1 == b2 && c1 == c2 &&
-        d1 == d2 && singEqTm objTy1 e1 e2
+      Just Refl -> a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2 && singEqTm ty1 e1 e2
 eqTerm _ty PactVersion PactVersion = True
 eqTerm _ty (Format a1 b1) (Format a2 b2) = a1 == a2 && b1 == b2
 eqTerm _ty (FormatTime a1 b1) (FormatTime a2 b2) = a1 == a2 && b1 == b2

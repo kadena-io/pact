@@ -479,7 +479,7 @@ evalTerm = \case
       Just defObj -> withSymVal objTy $
         iteS readSucceeds readObject (eval defObj)
 
-  Write objTy@(SObjectUnsafe schema) _rowTy writeType tid tn rowKey objT -> do
+  Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     obj <- withSing objTy $ evalTerm objT
     sRk <- symRowKey <$> evalTerm rowKey
 

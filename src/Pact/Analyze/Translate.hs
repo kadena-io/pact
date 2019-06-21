@@ -27,14 +27,13 @@ import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, toListOf, use, view, zoom,
                                              (%=), (%~), (+~), (.=), (.~),
                                              (<>~), (?=), (^.), (<&>), _1, (^..))
-import           Control.Monad              (join, replicateM, when, (>=>))
+import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, evalStateT,
                                              modify', runStateT)
-import qualified Data.Default
 import           Data.Foldable              (foldl', for_, foldlM)
 import           Data.List                  (sort)
 import qualified Data.Map                   as Map
@@ -55,7 +54,7 @@ import           System.Locale              (defaultTimeLocale)
 import           Pact.Types.Lang            (Info, Literal (..), Type
   (TyFun, TyPrim, TySchema, TyUser, TyVar), SchemaPartial(PartialSchema))
 import qualified Pact.Types.Lang            as Pact
-import           Pact.Types.Persistence     (WriteType(Update))
+import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
@@ -64,7 +63,7 @@ import           Pact.Types.Util            (tShow)
 import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var, col,
                                              list, obj, str, time)
 import           Pact.Analyze.Patterns
-import           Pact.Analyze.Types         hiding (tableType)
+import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
 -- * Translation types
@@ -102,8 +101,6 @@ data TranslateFailureNoLoc
   | CapabilityNotFound CapName
   | BadPartialBind EType [String]
   | UnexpectedDefaultReadType EType EType
-  | TableNotFound !Text
-  | InvalidPartialWrite
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -137,8 +134,6 @@ describeTranslateFailureNoLoc = \case
   CapabilityNotFound (CapName cn) -> "Found a reference to capability that does not exist: " <> T.pack cn
   BadPartialBind (EType objTy) columnNames -> "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
   UnexpectedDefaultReadType (EType expected) (EType received) -> "Bad type in a `with-default-read`: we expected " <> tShow expected <> " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
-  TableNotFound name -> "Table not found: " <> name
-  InvalidPartialWrite -> "Partial row write found (insert and write require all columns to be present)"
 
 data TranslateEnv
   = TranslateEnv
@@ -147,7 +142,6 @@ data TranslateEnv
     , _teNodeVars       :: Map Node (Munged, VarId)
     , _teRecoverability :: Recoverability
     , _teScopesEntered  :: Natural
-    , _teTableTypes     :: Map Text EType
 
     -- How to generate the next tag and vertex ids. Usually this is via @genId@
     -- (see @mkTranslateEnv@) but in testing these return a constant @0@.
@@ -155,9 +149,9 @@ data TranslateEnv
     , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
     }
 
-mkTranslateEnv :: Info -> [Capability] -> [Arg] -> Map Text EType -> TranslateEnv
-mkTranslateEnv info caps args tables
-  = TranslateEnv info caps' nodeVars mempty 0 tables (genId id) (genId id)
+mkTranslateEnv :: Info -> [Capability] -> [Arg] -> TranslateEnv
+mkTranslateEnv info caps args
+  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id)
   where
     -- NOTE: like in Check's moduleFunChecks, this assumes that toplevel
     -- function arguments are the only variables for which we do not use munged
@@ -471,13 +465,6 @@ maybeTranslateType' restrictKeys = \case
   -- TODO: handle these:
   --
   TyFun _             -> empty
-
-tableTypes :: [Table] -> Either (Pact.UserType) (Map Text EType)
-tableTypes tables = fmap Map.fromList $
-  for tables $ \(Table name ty _) -> fmap (name,) $
-    case maybeTranslateUserType' ty of
-      Nothing  -> Left ty
-      Just ty' -> Right ty'
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -1157,18 +1144,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SInteger $ CoreTerm $ StrLength a'
 
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
-    mSchemaTy                        <- view $ teTableTypes . at tn
-    EType schemaTy@SObject{}         <- mSchemaTy ?? TableNotFound tn
     Some SStr row'                   <- translateNode row
     Some objTy@(SObject schema) obj' <- translateNode obj
     tid                              <- tagWrite writeType node $ ESchema schema
-
-    -- Inserts and updates require a whole row (update does not)
-    when (writeType /= Update  && not (singEqB schemaTy objTy)) $
-      throwError' InvalidPartialWrite
-
     pure $ Some SStr $
-      Write objTy schemaTy writeType tid (TableName (T.unpack tn)) row' obj'
+      Write objTy writeType tid (TableName (T.unpack tn)) row' obj'
 
   AST_If _ cond tBranch fBranch -> do
     Some SBool cond' <- translateNode cond
@@ -1552,12 +1532,10 @@ runTranslation
   -> [Named Node]
   -> [AST Node]
   -> CheckableType
-  -> [Table]
   -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph)
-runTranslation modName funName info caps pactArgs body checkType tables = do
+runTranslation modName funName info caps pactArgs body checkType = do
     (args, translationVid)     <- runArgsTranslation
-    tabTypes                   <- tables'
-    (tm, (stepChoices, graph)) <- runBodyTranslation tabTypes args translationVid
+    (tm, (stepChoices, graph)) <- runBodyTranslation args translationVid
     pure (args, stepChoices, tm, graph)
 
   where
@@ -1566,25 +1544,16 @@ runTranslation modName funName info caps pactArgs body checkType tables = do
       (runReaderT (traverse translateArg pactArgs) info)
       (VarId 1)
 
-    noLocation = Data.Default.def
-
-    tables' :: Except TranslateFailure (Map Text EType)
-    tables' = case tableTypes tables of
-      Left ty -> throwError $ TranslateFailure noLocation $
-        NotConvertibleToSchema $ Pact.TyUser ty
-      Right m -> pure m
-
     argToBinding :: Arg -> Located Binding
     argToBinding (Arg unmunged vid node ety) =
       Located (node ^. aId . Pact.tiInfo) $
         Binding vid unmunged (node ^. aId.tiName.to Munged) ety
 
     runBodyTranslation
-      :: Map Text EType
-      -> [Arg]
+      :: [Arg]
       -> VarId
       -> Except TranslateFailure (ETerm, ([VarId], ExecutionGraph))
-    runBodyTranslation tables'' args nextVarId =
+    runBodyTranslation args nextVarId =
       let vertex0    = 0
           nextVertex = succ vertex0
           path0      = Path 0
@@ -1614,7 +1583,7 @@ runTranslation modName funName info caps pactArgs body checkType tables = do
             , mkExecutionGraph vertex0 path0 translateState
             )
       in fmap (fmap handleState) $ flip runStateT state0 $
-           runReaderT (unTranslateM translation) (mkTranslateEnv info caps args tables'')
+           runReaderT (unTranslateM translation) (mkTranslateEnv info caps args)
 
 -- | Translate a node ignoring the execution graph. This is useful in cases
 -- where we don't show an execution trace. Those two places (currently) are:
@@ -1627,8 +1596,8 @@ runTranslation modName funName info caps pactArgs body checkType tables = do
 --       not permitting here? e.g. in the pact repl, it seems that at least
 --       `read-keyset` works.
 --
-translateNodeNoGraph :: Map Text EType -> AST Node -> Except TranslateFailure ETerm
-translateNodeNoGraph tables node =
+translateNodeNoGraph :: AST Node -> Except TranslateFailure ETerm
+translateNodeNoGraph node =
   let vertex0        = 0
       nextVertex     = succ vertex0
       path0          = Path 0
@@ -1637,7 +1606,7 @@ translateNodeNoGraph tables node =
       translateState = TranslateState nextTagId 0 graph0 vertex0 nextVertex
         Map.empty mempty path0 Map.empty [] []
 
-      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 tables (pure 0) (pure 0)
+      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $
