@@ -159,7 +159,8 @@ instance ToSchema SubmitBatch where
   declareNamedSchema = lensyDeclareNamedSchema 3
 
 instance ToSchema (Command Text) where
-  declareNamedSchema = (swaggerDescription "stringified transaction JSON") .
+  declareNamedSchema =
+    (swaggerDescription "transaction command with stringified JSON payload (cmd)") .
     (genericDeclareNamedSchema $
       optionsOf $ optFieldLabel $
                   replaceOrModify
@@ -168,13 +169,16 @@ instance ToSchema (Command Text) where
     )
 
 instance ToSchema UserSig where
-  declareNamedSchema = lensyDeclareNamedSchema 3
+  declareNamedSchema =
+    (swaggerDescription "crypto signature by secret key of command payload") .
+    (lensyDeclareNamedSchema 3)
 
 pactHashSchema :: Schema
 pactHashSchema = withSchema byteBase64url $ fixedLength pactHashLength
 
 instance ToSchema (TypedHash 'Blake2b_256) where
-  declareNamedSchema = declareGenericSchema pactHashSchema
+  declareNamedSchema = (swaggerDescription "blake2 hash in base64 of command payload") .
+    (declareGenericSchema pactHashSchema)
 
 
 
@@ -182,7 +186,8 @@ instance ToSchema RequestKeys where
   declareNamedSchema = lensyDeclareNamedSchema 3
 
 instance ToSchema RequestKey where
-  declareNamedSchema = declareGenericSchema pactHashSchema
+  declareNamedSchema = (swaggerDescription "command's request key (i.e. the hash of command payload)") .
+    (declareGenericSchema pactHashSchema)
 
 
 
@@ -200,26 +205,35 @@ data PollResponse = PollResponse
 instance ToSchema PollResponse where
   declareNamedSchema = lensyDeclareNamedSchema 4
 instance ToSchema PollResponses where
-  declareNamedSchema _ = declareNamedSchema (Proxy :: Proxy [PollResponse])
+  declareNamedSchema _ = swaggerDescription "request key to command result map" $
+    declareNamedSchema (Proxy :: Proxy [PollResponse])
 
 
 instance ToSchema (CommandResult Hash) where
-  declareNamedSchema = lensyDeclareNamedSchema 3
+  declareNamedSchema = (swaggerDescription "result of attempting to execute a pact command") .
+    (lensyDeclareNamedSchema 3)
 
-instance ToSchema TxId
-instance ToSchema Gas
+instance ToSchema TxId where
+  declareNamedSchema = (swaggerDescription "command's transaction id") .
+    (genericDeclareNamedSchema defaultSchemaOptions)
+instance ToSchema Gas where
+  declareNamedSchema = (swaggerDescription "gas consummed by command") .
+    (genericDeclareNamedSchema defaultSchemaOptions)
 instance ToSchema Hash where
-  declareNamedSchema = declareGenericSchema pactHashSchema
+  declareNamedSchema = (swaggerDescription "the hash of the pact execution's logs") .
+    (declareGenericSchema pactHashSchema)
 instance ToSchema PactExec where
-  declareNamedSchema = lensyDeclareNamedSchema 3
+  declareNamedSchema = (swaggerDescription "output of a Continuation if one occurred in the command.") .
+    (lensyDeclareNamedSchema 3)
 instance ToSchema PactId
 instance ToSchema PactContinuation where
    declareNamedSchema = lensyDeclareNamedSchema 3
 instance ToSchema Name where
   declareNamedSchema = declareGenericString
 instance ToSchema Value where
-  declareNamedSchema = declareGenericSchema $
-    (schemaOf $ swaggerType SwaggerObject)
+  declareNamedSchema = (swaggerDescription "Platform-specific data") .
+    (declareGenericSchema $
+      (schemaOf $ swaggerType SwaggerObject))
 
 
 -- Source: https://github.com/haskell-servant/servant-swagger/issues/80
@@ -232,12 +246,13 @@ instance ToSchema PactResult where
       pactValRef <- declareSchemaRef (Proxy :: Proxy PactValue)
       statusRef <- declareSchemaRef (Proxy :: Proxy PactResultStatus)
       let p = [ ("status",statusRef), ("error", pactErrRef),("data" , pactValRef) ]
-      namedSchema "PactResult"
-        (schemaOf $ swaggerType SwaggerObject .
-                    swaggerProperties p .
-                    set minProperties (Just 2) .
-                    set maxProperties (Just 2)
-        )
+          ns = namedSchema "PactResult"
+               (schemaOf $ swaggerType SwaggerObject .
+                           swaggerProperties p .
+                           set minProperties (Just 2) .
+                           set maxProperties (Just 2)
+               )
+      swaggerDescription "either a pact error or the last pact expression output as a pact value" ns
 
 instance ToSchema PactError where
   declareNamedSchema = genericDeclareNamedSchema $
@@ -263,14 +278,15 @@ instance ToSchema Yield where
    declareNamedSchema = lensyDeclareNamedSchema 2
 
 instance ToSchema PactValue where
-  declareNamedSchema = genericDeclareNamedSchema $
-    optionsOf $ optConstructor $ toNiceString 1
+  declareNamedSchema = (swaggerDescription "data from Pact execution represented as JSON") .
+    (genericDeclareNamedSchema $
+      optionsOf $ optConstructor $ toNiceString 1)
 
 
 instance ToSchema Literal where
   declareNamedSchema = genericDeclareNamedSchema $
     (optionsOf $ optConstructor $ toNiceString 1)
-     { Swagger.unwrapUnaryRecords = True }
+      { Swagger.unwrapUnaryRecords = True }
 
 newtype DummyTime = DummyTime UTCTime
   deriving (Generic)
