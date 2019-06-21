@@ -8,7 +8,6 @@
 /cabal.sandbox.config
 dist
 dist-newstyle
-docs/_build
 docs/en/_build
 docs/jp/_build
 docs/kr/_build
@@ -23,3 +22,4 @@ public
 .ghc.environment.*
 .dir-locals.el
 docs/ko/_build/
+docs/ja/_build/
