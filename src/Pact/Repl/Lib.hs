@@ -354,7 +354,7 @@ pactState i as = case as of
         Nothing -> evalError' i "pact-state: no pact exec in context"
         Just PactExec{..} -> return $ toTObject TyAny def $
           [("yield",maybe (toTerm False) (toTObjectMap TyAny def . fmap fromPactValue . _yData) _peYield)
-          ,("executed",toTerm _peExecuted)
+          ,("executed",toTerm (_peExecuted /= Just False))
           ,("step",toTerm _peStep)
           ,("pactId",toTerm _pePactId)]
 
