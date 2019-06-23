@@ -30,6 +30,11 @@ To start writing
 smart contracts, the best way to go is to use the [Atom editor](https://atom.io) and install
 `language-pact` using the [package manager](http://flight-manual.atom.io/using-atom/sections/atom-packages/).
 
+Quick Start: Vim
+---
+
+The [vim-pact](https://github.com/wsdjeg/vim-pact) provides pact supportting for [vim editor](https://vim.org), 
+
 Installing Pact with Homebrew (OSX only)
 ---
 You'll then need to install the Pact interpreter/REPL. On Mac, the easiest way to install `pact` is with Homebrew.
