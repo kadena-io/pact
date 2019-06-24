@@ -20,7 +20,6 @@ module Pact.Types.Runtime
  ( PactError(..),PactErrorType(..),
    evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
-   PactStep(..),psStep,psRollback,psPactId,psResume,
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
@@ -37,7 +36,6 @@ module Pact.Types.Runtime
    Capabilities(..),capGranted,capComposed,
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
-   SPVSupport(..),noSPVSupport,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -59,14 +57,18 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
+import Data.Text (Text, unpack)
+
 import GHC.Generics
 
 import Pact.Types.ChainMeta
+import Pact.Types.Continuation
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.Persistence
 import Pact.Types.Pretty
+import Pact.Types.SPV
 import Pact.Types.Util
 
 
@@ -151,32 +153,12 @@ instance AsString KeyPredBuiltins where
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
 
--- | Environment setup for pact execution, from ContMsg request.
-data PactStep = PactStep {
-      -- | intended step to execute
-      _psStep :: !Int
-      -- | rollback
-    , _psRollback :: !Bool
-      -- | pact id
-    , _psPactId :: !PactId
-      -- | resume value. Note that this is only set in Repl tests and in private use cases;
-      -- in all other cases resume value comes out of PactExec.
-    , _psResume :: !(Maybe (ObjectMap (Term Name)))
-} deriving (Eq,Show)
-makeLenses ''PactStep
-
-instance Pretty PactStep where
-  pretty = viaShow
-
-
-
 -- | Storage for natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty
-
 
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
@@ -194,17 +176,6 @@ class PureSysOnly e
 -- | Marker class for 'PReadOnly' environments.
 -- SysRead supports pure operations as well.
 class PureSysOnly e => PureReadOnly e
-
--- | Backend for SPV
-newtype SPVSupport = SPVSupport {
-  -- | Attempt to verify an SPV proof of a given type,
-  -- given a payload object. On success, returns the
-  -- specific data represented by the proof.
-  _spvSupport :: Text -> Object Name -> IO (Either Text (Object Name))
-}
-
-noSPVSupport :: SPVSupport
-noSPVSupport = SPVSupport $ \_ _ -> return $ Left $ "SPV verify not supported"
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
@@ -239,10 +210,9 @@ data EvalEnv e = EvalEnv {
     }
 makeLenses ''EvalEnv
 
-
+-- | 'PactId' -> 'Hash' conversion
 toPactId :: Hash -> PactId
 toPactId = PactId . hashToText
-
 
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {

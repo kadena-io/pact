@@ -25,7 +25,7 @@ import           Control.Monad.Catch
 import           Data.Foldable                (for_)
 import           Data.Function
 import           Data.List
-import           Data.Text                    (replace)
+import           Data.Text                    (unpack, pack, replace)
 import qualified Data.Text                    as T
 import           System.IO
 
@@ -113,7 +113,7 @@ renderProperties h = do
   hPutStrLn h ""
 
   ifor_ Analyze.classFeatures $ \cls features -> do
-    let title = T.unpack $ Analyze.classTitle cls
+    let title = unpack $ Analyze.classTitle cls
     hPutStrLn h $ "## " <> escapeText title <> " operators {#" <> escapeAnchor title <> "}"
     hPutStrLn h ""
 

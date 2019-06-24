@@ -8,19 +8,19 @@
 
 module Pact.ReplTools where
 
-import Control.Applicative
+import Prelude hiding (print,putStrLn)
+
 import Control.Lens
 import Control.Monad.State.Strict
+
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Prelude hiding (print,putStrLn)
+import Data.Text (Text, unpack)
+
 import Text.Trifecta as TF hiding (line)
 import qualified Text.Trifecta.Delta as TF
 import System.IO
 import System.Console.Haskeline
-  (runInputT, withInterrupt, InputT, getInputLine, handleInterrupt,
-   CompletionFunc, completeQuotedWord, completeWord, listFiles,
-   filenameWordBreakChars, Settings(Settings), simpleCompletion)
 
 import Pact.Parse
 import Pact.Types.Runtime

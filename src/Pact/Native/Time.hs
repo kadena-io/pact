@@ -26,6 +26,7 @@ import Data.Thyme
 import Data.Decimal
 import System.Locale
 import Data.AffineSpace
+import Data.Text (Text, pack, unpack)
 
 import Pact.Types.Pretty
 import Pact.Types.Runtime

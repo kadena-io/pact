@@ -42,6 +42,7 @@ module Pact.Eval
     ,resumePact
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
+    ,searchCallStackApps
     ) where
 
 import Bound
@@ -62,6 +63,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Vector as V
+import Data.Text (Text, pack)
 import Safe
 import Unsafe.Coerce
 
@@ -121,6 +123,11 @@ enforceKeySet i ksn KeySet{..} = do
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
 
+-- | Search up through call stack apps to find the first `Just a`
+searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)
+searchCallStackApps f = uses evalCallStack $
+  preview (traverse . sfApp . _Just . _1 . to f . _Just)
+
 -- | Eval a function by name with supplied args, and guard against recursive execution.
 evalByName :: Name -> [Term Name] -> Info -> Eval e (Term Name)
 evalByName n as i = do
@@ -142,8 +149,7 @@ evalByName n as i = do
             | (DefName _faName) == dn && Just mn == _faModule = Just ()
             | otherwise = Nothing
 
-      found <- uses evalCallStack $
-               preview (traverse . sfApp . _Just . _1 . to (sameName _dDefName _dModule) . _Just)
+      found <- searchCallStackApps $ sameName _dDefName _dModule
 
       case found of
         Just () -> evalError i $ "evalByName: loop detected: " <> pretty n
@@ -652,8 +658,6 @@ evalUserAppBody Def{..} (as',ft') ai g run =
       fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
   in appCall fa ai as' $ fmap (g,) $ run bod'
 
-
-
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
   let fa = FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)
@@ -787,7 +791,7 @@ resumePactExec i req ctx = do
   -- if resume is in step, use that, otherwise get from exec state
   let resume = case _psResume req of
         r@Just {} -> r
-        Nothing -> fmap (fmap fromPactValue) $ _peYield ctx
+        Nothing -> _peYield ctx
 
   -- run local environment with yield from pact exec
   local (set eePactStep (Just $ set psResume resume req)) $

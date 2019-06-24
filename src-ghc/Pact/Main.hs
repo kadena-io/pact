@@ -14,36 +14,40 @@
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
 
-module Pact.Main
-    (
-     main
-    ) where
+module Pact.Main ( main ) where
+
+import Prelude hiding (print,putStrLn)
+
+import System.IO
+import System.Exit hiding (die)
+import System.Directory
+import System.FilePath
+#ifndef mingw32_HOST_OS
+import System.Posix.Terminal (queryTerminal)
+import System.Posix.IO (stdInput)
+#endif
+
+import qualified Options.Applicative as O
 
 import Control.Applicative
 import Control.Lens
 import Control.Monad.State.Strict
+
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Prelude hiding (print,putStrLn)
+import Data.Text (unpack)
+
 import Text.Trifecta as TF hiding (err)
-import System.IO
-import System.Exit hiding (die)
-import qualified Options.Applicative as O
-import System.Directory
-import System.FilePath
 
 import Pact.Repl
 import Pact.Parse
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Server.Server
-#ifndef mingw32_HOST_OS
-import System.Posix.Terminal (queryTerminal)
-import System.Posix.IO (stdInput)
-#endif
 import Pact.ReplTools
 import Pact.Repl.Types
 import Pact.Types.Version
 import Pact.Types.Crypto
+import Pact.Types.SPV
 import Pact.ApiReq
 
 
@@ -92,7 +96,7 @@ main = do
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
-    OServer conf -> serve conf
+    OServer conf -> serve conf noSPVSupport
     OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
     OBuiltins -> echoBuiltins
     OLoad findScript dolog fp
