@@ -394,8 +394,7 @@ in the runtime environment and stores their definition in the global keyset data
 
 #### Module declaration {#moduledeclaration}
 
-[Modules](#module) contain an API implementation and data definitions for smart contracts.
-They are comprised of:
+[Modules](#module) contain the API and data definitions for smart contracts. They are comprised of:
 
 - [functions](#defun)
 - [schema](#defschema) definitions
@@ -632,13 +631,8 @@ Examples of valid namespace definition and scoping:
 Defining a namespace requires a keyset, and a namespace name of type string:
 
 ```lisp
-(begin-tx)
-(env-data { "my-keyset" : ["my-keys"] })
-(env-keys ["my-keys"])
-
 (define-keyset 'my-keyset)
 (define-namespace 'my-namespace (read-keyset 'my-keyset))
-(commit-tx)
 
 pact> (namespace 'my-namespace)
 "Namespace set to my-namespace"
@@ -649,20 +643,10 @@ pact> (namespace 'my-namespace)
 Members of a namespace may be accessed by their fully-qualified names:
 
 ```lisp
-(begin-tx)
+pact> (my-namespace.my-module.hello-number 3)
+"Hello, your number is 3!"
 
-(namespace 'my-namespace)
-
-(module my-module EXAMPLE_GUARD
-
-  (defcap EXAMPLE_GUARD ()
-    (enforce-keyset 'my-keyset))
-
-  (defun hello-number:string (number:integer)
-    (format "Hello, your number is {}!" [number]))
-)
-(commit-tx)
-
+;; alternatively
 pact> (use my-namespace.my-module)
 "Using my-namespace.my-module"
 pact> (hello-number 3)
@@ -675,29 +659,9 @@ Modules may be imported at a namespace, and interfaces my be implemented in a si
 
 
 ```lisp
-(begin-tx)
-
-(define-namespace 'my-namespace (read-keyset 'my-keyset))
-(define-namespace 'my-other-namespace (read-keyset 'my-keyset))
-
-(commit-tx)
-
-(begin-tx)
-
-(namespace 'my-namespace)
-
-(interface my-interface
-
-  (defun hello-number:string (number:integer))
-)
-
-(commit-tx)
-(begin-tx)
-
-(namespace 'my-other-namespace)
+; in my-namespace
 (module my-module EXAMPLE_GUARD
-
-  (implements my-namespace.my-interface)
+  (implements my-other-namespace.my-interface)
 
   (defcap EXAMPLE_GUARD ()
     (enforce-keyset 'my-keyset))
@@ -706,13 +670,6 @@ Modules may be imported at a namespace, and interfaces my be implemented in a si
     (format "Hello, your number is {}!" [number]))
 )
 
-(commit-tx)
-
-pact> (use my-other-namespace.my-module)
-"Using my-other-namespace.my-module"
-pact> (hello-number 3)
-"Hello, your number is 3!"
-
 ```
 
 #### Example: appending code to a namespace
@@ -720,24 +677,10 @@ pact> (hello-number 3)
 If one is simply appending code to an existing namespace, then the namespace prefix in the fully qualified name may be ommitted, as using a namespace works in a similar way to importing a module: all toplevel definitions within a namespace are brought into scope when `(namespace 'my-namespace)` is declared. Continuing from the previous example:
 
 ```lisp
-
-(begin-tx)
-
-(namespace 'my-other-namespace)
-(module my-other-module (read-keyset 'my-keyset)
-
-    (use my-module)
-
-    (defun more-hello:string ()
-        (+ (hello-number 3) " And more hello!"))
-)
-(commit-tx)
-
 pact> (my-other-namespace.my-other-module.more-hello)
 "Hello, your number is 3! And more hello!"
 
-;; alternatively
-
+; alternatively
 pact> (namespace 'my-other-namespace)
 "Namespace set to my-other-namespace"
 
@@ -763,12 +706,10 @@ Additionally, interfaces my make use of module declarations, admitting use of th
     (defun hello-number:string (number:integer)
         "Return the string \"Hello, $number!\" when given a string"
         )
-
     (defconst SOME_CONSTANT 3)
 )
 
 (module my-module (read-keyset 'my-keyset)
-
     (implements my-interface)
 
     (defun hello-number:string (number:integer)
@@ -790,25 +731,6 @@ Declaring models shares the same syntax with modules:
 #### Example: declaring models, tables, and importing modules in an interface
 
 ```lisp
-(begin-tx)
-
-(module acct-module ACCT-GOVERNANCE
-  @doc "account schema module"
-
-  (defcap ACCT-GOVERNANCE ()
-    true)
-
-  (defschema account
-    balance:integer
-    ks:keyset
-    active:bool
-  )
-
-  (deftable accounts:{account})
-)
-(commit-tx)
-(begin-tx)
-
 (interface coin-sig
 
   "Coin Contract Abstract Interface Example"
