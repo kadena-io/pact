@@ -611,7 +611,59 @@ Examples of valid keyset JSON productions:
 
 ```
 
+### Keyset Predicates {#keyset-predicates}
+
+A keyset predicate references a function by its (optionally qualified) name, and will compare the public keys in the keyset
+to the key or keys used to sign the blockchain message. The function accepts two arguments,
+"count" and "matched", where "count" is the number of keys in the keyset and "matched" is how many
+keys on the message signature matched a keyset key.
+
+Support for multiple signatures is the responsibility of the blockchain layer, and is a powerful
+feature for Bitcoin-style "multisig" contracts (i.e. requiring at least two signatures to release funds).
+
+Pact comes with built-in keyset predicates: [keys-all](pact-functions.html#keys-all), [keys-any](pact-functions.html#keys-any), [keys-2](pact-functions.html#keys-2).
+Module authors are free to define additional predicates.
+
+If a keyset predicate is not specified, [keys-all](pact-functions.html#keys-all) is used by default.
+
+### Key rotation {#keyrotation}
+
+Keysets can be rotated, but only by messages authorized against the current keyset definition
+and predicate. Once authorized, the keyset can be easily [redefined](#define-keyset).
+
+### Module Table Guards {#tableguards}
+
+When [creating](pact-functions.html#create-table) a table, a module name must also be specified. By this mechanism,
+tables are "guarded" or "encapsulated" by the module, such that direct access to the table
+via [data-access functions](pact-functions.html#database) is authorized only by the module's governance.
+However, *within module functions*, table access is unconstrained. This gives contract authors great
+flexibility in designing data access, and is intended to enshrine the module as the main
+"user data access API".
+
+See also [module guards](#module-guards) for how this concept can be leveraged to protect more than
+just tables.
+
+### Row-level keysets {#rowlevelkeysets}
+
+Keysets can be stored as a column value in a row, allowing for *row-level* authorization.
+The following code indicates how this might be achieved:
+
+```lisp
+(defun create-account (id)
+  (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
+
+(defun read-balance (id)
+  (with-read accounts id { "balance":= bal, "keyset":= ks }
+    (enforce-keyset ks)
+    (format "Your balance is {}" [bal])))
+```
+
+In the example, `create-account` reads a keyset definition from the message payload using [read-keyset](pact-functions.html#read-keyset)
+to store as "keyset" in the table. `read-balance` only allows that owner's keyset to read the balance,
+by first enforcing the keyset using [enforce-keyset](pact-functions.html#enforce-keyset).
+
 ### Namespaces {#namespaces}
+---
 
 Namespaces are [defined](pact-functions.html#define-namespace) by specifying a namespace name and [associating](pact-functions.html#read-keyset)
 a keyset with the namespace. Namespace scope is entered by [declaring](pact-functions.html#namespace) the namespace environment. All definitions issued after the namespace scope is entered will be accessible by their fully qualified names. These names are of the form _namespace.module.definition_. This form can also be used to access code outside of the current namespace for the purpose of importing module code, or implementing modules:
@@ -688,115 +740,6 @@ pact> (my-other-module.more-hello)
 "Hello, your number is 3! And more hello!"
 
 ```
-
-### Interfaces {#interfaces}
-
-An interface, as defined in Pact, is a collection of models used for formal verification, constant definitions, and typed function signatures that require an implementation when a module is stated to 'implement' said interface. This allows for abstraction in a similar sense to Java's interfaces, Scala's traits, Haskell's typeclasses or OCaML's signatures. Multiple interfaces may be implemented in a given module, allowing for an expressive layering of behaviors.
-
-Interfaces are declared using the `interface` keyword, and providing a name for the interface. Since interfaces cannot be upgraded, and no implementations exist in an interface aside from constant data, there is no notion of governance that need be applied. An interface is then _implemented_ by using the `implements` declaration in the body of a module. Multiple interfaces may be implemented by a single module. If there are conflicting names among multiple interfaces, then the two interfaces are incompatible, and the user must either inline the code they want, or redefine the interfaces to the point that the conflict is resolved.
-
-Constants declared in an interface can be accessed directly by their fully qualified name. Because interface constants are directly accessed by their fully-qualified name, they do not have the same naming constraints as function signatures.
-
-Additionally, interfaces my make use of module declarations, admitting use of the [use](pact-functions.html#use) keyword, allowing interfaces to import members of other modules. This allows interface signatures to be defined in terms of table types defined in an imported module.
-
-#### Example: Declaring and implementing an interface
-
-```lisp
-(interface my-interface
-    (defun hello-number:string (number:integer)
-        "Return the string \"Hello, $number!\" when given a string"
-        )
-    (defconst SOME_CONSTANT 3)
-)
-
-(module my-module (read-keyset 'my-keyset)
-    (implements my-interface)
-
-    (defun hello-number:string (number:integer)
-        (format "Hello, {}!" [number]))
-
-    (defun square-three ()
-        (* my-interface.SOME_CONSTANT my-interface.SOME_CONSTANT))
-)
-```
-
-### Declaring models in an interface
-
-[Formal verification](pact-properties.html) is implemented at multiple levels within an interface in order to provide an extra level of security. Models may be declared either within the body of the interface or at the function level in the same way that one would declare them in a module, with the exception that not all models are applicable to an interface. Indeed, since there is no abstract notion of tables for interfaces, abstract table invariants cannot be declared. However, if an interface imports table schema and types from a module via the [use](pact-functions.html#use) keyword, then the interface can define body and function models that apply directly to the concrete table type. Otherwise, all properties are candidates for declaration in an interface.
-
-When models are declared in an interface, they are appeneded to the list of models present in the implementing module at the level of declaration: body-level models are appended to body-level models, and function-level models are appended to function-level models. This allows users to extend the constraints of an interface with models applicable to specific business logic and implementation.
-
-Declaring models shares the same syntax with modules:
-
-#### Example: declaring models, tables, and importing modules in an interface
-
-```lisp
-(interface coin-sig
-
-  "Coin Contract Abstract Interface Example"
-
-  (use acct-module)
-
-  (defun transfer:string (from:string to:string amount:integer)
-    @doc   "Transfer money between accounts"
-    @model [(property (row-enforced accounts "ks" from))
-            (property (> amount 0))
-            (property (= 0 (column-delta accounts "balance")))
-            ]
-  )
-)
-```
-
-### Keyset Predicates {#keyset-predicates}
-
-A keyset predicate references a function by its (optionally qualified) name, and will compare the public keys in the keyset
-to the key or keys used to sign the blockchain message. The function accepts two arguments,
-"count" and "matched", where "count" is the number of keys in the keyset and "matched" is how many
-keys on the message signature matched a keyset key.
-
-Support for multiple signatures is the responsibility of the blockchain layer, and is a powerful
-feature for Bitcoin-style "multisig" contracts (i.e. requiring at least two signatures to release funds).
-
-Pact comes with built-in keyset predicates: [keys-all](pact-functions.html#keys-all), [keys-any](pact-functions.html#keys-any), [keys-2](pact-functions.html#keys-2).
-Module authors are free to define additional predicates.
-
-If a keyset predicate is not specified, [keys-all](pact-functions.html#keys-all) is used by default.
-
-### Key rotation {#keyrotation}
-
-Keysets can be rotated, but only by messages authorized against the current keyset definition
-and predicate. Once authorized, the keyset can be easily [redefined](#define-keyset).
-
-### Module Table Guards {#tableguards}
-
-When [creating](pact-functions.html#create-table) a table, a module name must also be specified. By this mechanism,
-tables are "guarded" or "encapsulated" by the module, such that direct access to the table
-via [data-access functions](pact-functions.html#database) is authorized only by the module's governance.
-However, *within module functions*, table access is unconstrained. This gives contract authors great
-flexibility in designing data access, and is intended to enshrine the module as the main
-"user data access API".
-
-See also [module guards](#module-guards) for how this concept can be leveraged to protect more than
-just tables.
-
-### Row-level keysets {#rowlevelkeysets}
-
-Keysets can be stored as a column value in a row, allowing for *row-level* authorization.
-The following code indicates how this might be achieved:
-
-```lisp
-(defun create-account (id)
-  (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
-
-(defun read-balance (id)
-  (with-read accounts id { "balance":= bal, "keyset":= ks }
-    (enforce-keyset ks)
-    (format "Your balance is {}" [bal])))
-```
-
-In the example, `create-account` reads a keyset definition from the message payload using [read-keyset](pact-functions.html#read-keyset)
-to store as "keyset" in the table. `read-balance` only allows that owner's keyset to read the balance,
-by first enforcing the keyset using [enforce-keyset](pact-functions.html#enforce-keyset).
 
 Guards and Capabilities {#caps}
 ---
@@ -1272,6 +1215,66 @@ majority is found, the code is upgraded.
           { "for": f, "against": (+ 1 a) })))
   )
 ```
+
+### Interfaces {#interfaces}
+---
+
+An interface, as defined in Pact, is a collection of models used for formal verification, constant definitions, and typed function signatures that require an implementation when a module is stated to 'implement' said interface. This allows for abstraction in a similar sense to Java's interfaces, Scala's traits, Haskell's typeclasses or OCaML's signatures. Multiple interfaces may be implemented in a given module, allowing for an expressive layering of behaviors.
+
+Interfaces are declared using the `interface` keyword, and providing a name for the interface. Since interfaces cannot be upgraded, and no implementations exist in an interface aside from constant data, there is no notion of governance that need be applied. An interface is then _implemented_ by using the `implements` declaration in the body of a module. Multiple interfaces may be implemented by a single module. If there are conflicting names among multiple interfaces, then the two interfaces are incompatible, and the user must either inline the code they want, or redefine the interfaces to the point that the conflict is resolved.
+
+Constants declared in an interface can be accessed directly by their fully qualified name. Because interface constants are directly accessed by their fully-qualified name, they do not have the same naming constraints as function signatures.
+
+Additionally, interfaces my make use of module declarations, admitting use of the [use](pact-functions.html#use) keyword, allowing interfaces to import members of other modules. This allows interface signatures to be defined in terms of table types defined in an imported module.
+
+#### Example: Declaring and implementing an interface
+
+```lisp
+(interface my-interface
+    (defun hello-number:string (number:integer)
+        "Return the string \"Hello, $number!\" when given a string"
+        )
+    (defconst SOME_CONSTANT 3)
+)
+
+(module my-module (read-keyset 'my-keyset)
+    (implements my-interface)
+
+    (defun hello-number:string (number:integer)
+        (format "Hello, {}!" [number]))
+
+    (defun square-three ()
+        (* my-interface.SOME_CONSTANT my-interface.SOME_CONSTANT))
+)
+```
+
+### Declaring models in an interface
+
+[Formal verification](pact-properties.html) is implemented at multiple levels within an interface in order to provide an extra level of security. Models may be declared either within the body of the interface or at the function level in the same way that one would declare them in a module, with the exception that not all models are applicable to an interface. Indeed, since there is no abstract notion of tables for interfaces, abstract table invariants cannot be declared. However, if an interface imports table schema and types from a module via the [use](pact-functions.html#use) keyword, then the interface can define body and function models that apply directly to the concrete table type. Otherwise, all properties are candidates for declaration in an interface.
+
+When models are declared in an interface, they are appeneded to the list of models present in the implementing module at the level of declaration: body-level models are appended to body-level models, and function-level models are appended to function-level models. This allows users to extend the constraints of an interface with models applicable to specific business logic and implementation.
+
+Declaring models shares the same syntax with modules:
+
+#### Example: declaring models, tables, and importing modules in an interface
+
+```lisp
+(interface coin-sig
+
+  "Coin Contract Abstract Interface Example"
+
+  (use acct-module)
+
+  (defun transfer:string (from:string to:string amount:integer)
+    @doc   "Transfer money between accounts"
+    @model [(property (row-enforced accounts "ks" from))
+            (property (> amount 0))
+            (property (= 0 (column-delta accounts "balance")))
+            ]
+  )
+)
+```
+
 
 
 Computational Model {#computation}
