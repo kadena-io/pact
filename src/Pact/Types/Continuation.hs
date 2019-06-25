@@ -110,8 +110,8 @@ data PactExec = PactExec
     -- ^ Count of steps in pact (discovered when code is executed)
   , _peYield :: !(Maybe Yield)
     -- ^ Yield value if invoked
-  , _peExecuted :: Bool
-    -- ^ Whether step was executed (in private cases, it can be skipped)
+  , _peExecuted :: Maybe Bool
+    -- ^ Only populated for private pacts, indicates if step was executed or skipped.
   , _peStep :: Int
     -- ^ Step that was executed or skipped
   , _pePactId :: PactId
