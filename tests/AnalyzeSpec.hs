@@ -26,6 +26,7 @@ import           Data.SBV                     (isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
+import           GHC.Stack                    (HasCallStack, withFrozenCallStack)
 import           NeatInterpolation            (text)
 import           Prelude                      hiding (read)
 import           Test.Hspec                   (Spec, describe,
@@ -159,36 +160,36 @@ runCheck checkType code check = do
         Right (Left cf) -> Just $ TestCheckFailure cf
         Right (Right _) -> Nothing
 
-handlePositiveTestResult :: Maybe TestFailure -> IO ()
-handlePositiveTestResult = \case
+handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> IO ()
+handlePositiveTestResult = withFrozenCallStack $ \case
   Nothing -> pure ()
   Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
     -> pendingWith msg
   Just tf -> HUnit.assertFailure =<< renderTestFailure tf
 
-expectVerified :: Text -> Spec
-expectVerified = expectVerified' ""
+expectVerified :: HasCallStack => Text -> Spec
+expectVerified = withFrozenCallStack $ expectVerified' ""
 
-expectVerified' :: Text -> Text -> Spec
-expectVerified' model code = do
+expectVerified' :: HasCallStack => Text -> Text -> Spec
+expectVerified' model code = withFrozenCallStack $ do
   res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ handlePositiveTestResult res
 
-expectFalsified :: Text -> Spec
-expectFalsified = expectFalsified' ""
+expectFalsified :: HasCallStack => Text -> Spec
+expectFalsified = withFrozenCallStack $ expectFalsified' ""
 
-expectFalsified' :: Text -> Text -> Spec
-expectFalsified' model code = do
+expectFalsified' :: HasCallStack => Text -> Text -> Spec
+expectFalsified' model code = withFrozenCallStack $ do
   res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
-expectPass :: Text -> Check -> Spec
-expectPass code check = do
+expectPass :: HasCallStack => Text -> Check -> Spec
+expectPass code check = withFrozenCallStack $ do
   res <- runIO $ runCheck CheckDefun (wrap code "") check
   it (show check) $ handlePositiveTestResult res
 
-expectFail :: Text -> Check -> Spec
-expectFail code check = do
+expectFail :: HasCallStack => Text -> Check -> Spec
+expectFail code check = withFrozenCallStack $ do
   res <- runIO $ runCheck CheckDefun (wrap code "") check
   it (show check) $ res `shouldSatisfy` isJust
 
