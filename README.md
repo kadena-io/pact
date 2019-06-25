@@ -33,7 +33,7 @@ smart contracts, the best way to go is to use the [Atom editor](https://atom.io)
 Quick Start: Vim
 ---
 
-If you are [vim](https://vim.org) user, the [vim-pact](https://github.com/wsdjeg/vim-pact) plugin provides support for pact. 
+If you are a [vim](https://vim.org) user, the [vim-pact](https://github.com/wsdjeg/vim-pact) plugin provides support for pact. 
 
 Installing Pact with Homebrew (OSX only)
 ---
