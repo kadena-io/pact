@@ -35,6 +35,7 @@ library
                      , Pact.Native.Time
                      , Pact.Native.Ops
                      , Pact.Native.Keysets
+                     , Pact.Native.Decrypt
                      , Pact.Parse
                      , Pact.PersistPactDb
                      , Pact.Persist

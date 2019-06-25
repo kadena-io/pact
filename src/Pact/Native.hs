@@ -66,6 +66,7 @@ import qualified Data.Vector.Algorithms.Intro as V
 import Pact.Eval
 import Pact.Native.Capabilities
 import Pact.Native.Db
+import Pact.Native.Decrypt
 import Pact.Native.Internal
 import Pact.Native.Keysets
 import Pact.Native.Ops
@@ -87,7 +88,8 @@ natives = [
   opDefs,
   keyDefs,
   capDefs,
-  spvDefs]
+  spvDefs,
+  decryptDefs]
 
 
 -- | Production native modules as a dispatch map.
