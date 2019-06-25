@@ -490,7 +490,7 @@ emptyDef = do
 
 step :: Compile (Term Name)
 step = do
-  m <- modelOnly
+  m <- option (Meta Nothing []) modelOnly
   cont <- try (Step <$> (Just <$> valueLevel) <*> valueLevel) <|>
           (Step Nothing <$> valueLevel)
   i <- contextInfo
@@ -499,8 +499,7 @@ step = do
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
   i <- contextInfo
-  -- m <- meta ModelOnly
-  let m = Meta Nothing []
+  m <- option (Meta Nothing []) modelOnly
   s <- try (Step <$> (Just <$> valueLevel) <*> valueLevel <*>
             (Just <$> valueLevel) <*> pure i)
        <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)
