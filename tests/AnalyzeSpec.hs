@@ -2691,8 +2691,10 @@ spec = describe "analyze" $ do
           | otherwise
           = False
 
-        expectTrace :: CheckableType -> Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
-        expectTrace checkType code prop tests = do
+        expectTrace
+          :: HasCallStack
+          => CheckableType -> Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
+        expectTrace checkType code prop tests = withFrozenCallStack $ do
           res <- runIO $ runCheck checkType (wrap code "") $ Valid prop
           it "produces the correct trace" $
             case res of
