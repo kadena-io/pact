@@ -24,8 +24,11 @@ The Command Object {#the-command-object}
 Pact represents blockchain transactions (or commands) as a JSON object with the
 following attributes:
 
-#### `cmd`
-**string (encoded, escaped JSON)**, _required_
+#### Attributes
+
+##### `"cmd"`
+_type:_ **string (encoded, escaped JSON)** `required`
+
 The component of a transaction that is signed to ensure non-malleability.
 Initially, this component is a JSON object containing the transaction payload,
 signatories, and platform-specific metadata. When assembling the transaction,
@@ -34,25 +37,27 @@ If you inspect the output of the
 [request formatter in the pact tool](#api-request-formatter),
 you will see that the `"cmd"` field, along with any code supplied, are a
 String of encoded, escaped JSON. See
-[`cmd` field and Payloads](#cmd-field-and-payloads) for more information.
+[cmd field and Payloads](#cmd-field-and-payloads) for more information.
 
-#### `hash`
-**string (base64url)**, _required_
+##### `"hash"`
+_type:_ **string (base64url)** `required`
+
 Blake2 hash of the `cmd` field "stringified" value. Serves as a command's
 request key since each transaction must be unique.
 
-#### `sigs`
-**[ object ]**, _required_
+##### `"sigs"`
+_type:_ **[ object ]** `required`
+
 List of JSON objects containing a cryptographic signature. This signature
 is generated using a cryptographic private key to authenticate
 the current transaction (i.e. the contents of the `cmd` field). The `ith`
 signature must correspond to the `ith` signer in `cmd`'s list of
-[signers](#cmd-signers). This signature object has the following attribute(s):
+[signers](#cmd-signers).This signature object has the following attribute(s):
 
 ```yaml
-# Signature object attribute(s)
-sig:                                # Cryptographic signature of current
-string (base16), required           # transaction.
+name: "sig"                     # Cryptographic signature of current
+type: string (base16)           # transaction.
+required: true    
 ```
 
 #### Example Command
@@ -94,60 +99,46 @@ with the value used to make the hash, the JSON must be *encoded* into the payloa
 The `cmd` field holds transaction information as encoded strings. The format of
 the JSON to be encoded is as follows:
 
-#### `nonce`
-**string**, _required_
+#### Attributes
+
+##### `"nonce"`
+_type:_ **string** `required`
+
 Transaction nonce values. Needs to be unique for every call.
 
-#### `meta`
-**object**, _required_
+##### `"meta"`
+_type:_ **object** `required`
+
 Platform-specific metadata.
 
-#### `signers` {#cmd-signers}
-**[ object ]**, _required_
+##### `"signers"` {#cmd-signers}
+_type:_ **[ object ]** `required`
+
 List of JSON object with information on the signers authenticating the
 current payload. This signer object has the following attributes:
 
 ```yaml
-# Signer object attributes
-scheme:                       # Signer's cryptographic signature scheme.
-enum (string), optional       # "ED25519" or "ETH" (Ethereum's ECDSA scheme).
-                              # Defaults to "ED25519".
-
-pubKey:                       # Public key of signing keypair.
-string (base16), required     # Must be valid public key for specified `scheme`.
-
-addr:                         # Address derived from public key.
-string (base16), optional     # Must be valid address for specified `scheme`.
-                              # Defaults to ED25519's address representation,
+name: "scheme"                # Signer's cryptographic signature scheme.
+type: enum (string)           # "ED25519" or "ETH" (Ethereum's ECDSA scheme).
+required: false               # Defaults to "ED25519".
+```
+```yaml
+name: "pubKey"                # Public key of signing keypair.
+type: string (base16)         # Must be valid public key for specified `scheme`.
+required: true
+```
+```yaml
+name: "addr"                  # Address derived from public key.
+type: string (base16)         # Must be valid address for specified `scheme`.
+required: false               # Defaults to ED25519's address representation,
                               # which is the full public key.
 ```
 
-#### `payload`
-**object**, _required_
+##### `"payload"`
+_type:_ **object** `required`
+
 The `cmd` field supports two types of JSON payloads:
-the [`exec` payload](#exec-payload) and the [`cont` payload](#cont-payload).
-
-
-
-### The `exec` Payload {#exec-payload}
-
-The `exec` payload holds executable code and data. The [send](#send) and
-[local](#local) endpoints support this payload type in the
-`cmd` field. The format of the JSON to be encoded is as follows:
-
-#### `exec`
-**object**, _required_
-JSON object representing the exec payload.
-
-```yaml
-exec.code:            # Pact code to be executed.
-string, required
-
-exec.data:            # Arbitrary user data to accompany code.
-object, optional      # Must be `null` or any valid JSON.
-                      # This data will be injected into the scope of the
-                      # pact execution.
-```
+the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
 
 #### Example `cmd`
 ```JSON
@@ -169,7 +160,30 @@ object, optional      # Must be `null` or any valid JSON.
 }"
 ```
 
-#### Example `exec` Payload
+#### The `exec` Payload {#exec-payload}
+
+The `exec` payload holds executable code and data. The [send](#send) and
+[local](#local) endpoints support this payload type in the
+`cmd` field. The format of the JSON to be encoded is as follows:
+
+##### `"exec"`
+_type:_ **object** `required`
+
+JSON object representing the exec payload. It has the following child attributes:
+
+```yaml
+name: "code"           # Pact code to be executed.
+type: string
+required: true
+```
+```yaml
+name: "data"          # Arbitrary user data to accompany code.
+type: object          # Must be `null` or any valid JSON.
+required: false       # This data will be injected into the scope of the
+                      # pact execution.
+```
+
+##### Example `exec` Payload
 ```JSON
 // encoded `exec` payload
 "{
@@ -182,41 +196,48 @@ object, optional      # Must be `null` or any valid JSON.
 }"
 ```
 
-### `cont` Payload {#cont-payload}
+#### The `cont` Payload {#cont-payload}
 The `cont` payload allows for continuing or rolling back [pacts](#pacts).
 The [send](#send) and [local](#local) endpoints support this payload type in
 the `cmd` field. The format of the JSON to be encoded is as follows:
 
-#### `cont`
-**object**, _required_
-JSON object representing the continuation (cont) payload.
+##### `"cont"`
+_type:_ **object** `required`
+
+JSON object representing the continuation (cont) payload. It has the following
+child attributes:
 
 ```yaml
-cont.pactId:                    # The id of the pact to be continued or
-string (base64url), required    # rolled back. This id is equivalent to the
-                                # request key (payload hash) of the command
+name: "pactId"                  # The id of the pact to be continued or
+type: string (base64url)        # rolled back. This id is equivalent to the
+required: true                  # request key (payload hash) of the command
                                 # that instantiated the pact since only one
                                 # pact instantiation is allowed per transaction.
-
-cont.rollback:                  # 'true' to rollback a pact, `false` otherwise.
-boolean, required
-
-cont.step:                      # Step to be continued or rolled back.
-integer, required               # Must be integer between 0 and
-                                # (total # of steps - 1).
+```
+```yaml
+name: "rollback"                # 'true' to rollback a pact, `false` otherwise.
+type: boolean, required
+required: true
+```
+```yaml
+name: "step"                    # Step to be continued or rolled back.
+type: integer                   # Must be integer between 0 and
+required: true                  # (total # of steps - 1).
                                 # If rolling back, must be the step number of
                                 # the step that just executed.
                                 # Otherwise, must correspond to one more than
                                 # the step that just executed.
-
-cont.data:                      # Arbitrary user data to accompany code.
-object, optional                # Must be `null` or any valid JSON.
-                                # This data will be injected into the scope of
+```
+```yaml
+name: "data"                    # Arbitrary user data to accompany code.
+type: object                    # Must be `null` or any valid JSON.
+required: false                 # This data will be injected into the scope of
                                 # the pact execution.
-
-cont.proof:                     # Must be `null` or Bytestring.
-string (base64url), optional    # to the fact that the previous step has been
-                                # confirmed and is recorded in the ledger.
+```
+```yaml
+name: "proof"                   # Must be `null` or Bytestring.
+type: string (base64url)        # to the fact that the previous step has been
+required: false                 # confirmed and is recorded in the ledger.
                                 # The blockchain automatically verifies this
                                 # proof when it is supplied.
                                 # If doing cross-chain continuations, then
@@ -225,7 +246,7 @@ string (base64url), optional    # to the fact that the previous step has been
                                 # each `yield/resume` pair.
 ```
 
-#### Example `cont` Payload
+##### Example `cont` Payload
 
 ```json
 // encoded `cont` payload
@@ -470,7 +491,7 @@ When an error occurs during a pact execution, the following JSON object is
 returned in Command Result's `result` field:
 
 #### `callStack`
-**[ string ]**, _required_
+**array (string)**, _required_
 List of stack traces (i.e. active stack frames) during the pact execution error.
 
 #### `info`
@@ -513,7 +534,6 @@ POST /api/v1/send
 Asynchronous submission of one or more public (unencrypted) commands to the blockchain.
 See [cmd field](#cmd-field-and-payloads) format regarding the stringified JSON data.
 
----
 ### Request Schema
 
 #### `cmds`
@@ -522,7 +542,6 @@ See [cmd field](#cmd-field-and-payloads) format regarding the stringified JSON d
 List of [Command](#the-command-object) objects to be submitted to the blockchain.
 Expects each command to have stringified JSON payload.
 
----
 ### Example Request
 
 ```JSON
