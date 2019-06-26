@@ -636,89 +636,95 @@ moduleModelDecl ModuleData{..} = do
   let (propList, checkList) = partitionEithers lst
   pure $ ModelDecl (HM.fromList propList) checkList
 
--- TODO: only operate on one function at a time
--- | Get the set of checks for each function.
-moduleFunChecks
+-- | Get the set of checks for a function.
+moduleFunCheck
   :: [Table]
+  -- ^ All tables defined in this module and imported by it
   -> [ModuleProperty]
-  -> HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType)
+  -- ^ The set of properties that apply to all functions in the module
   -> HM.HashMap Text EProp
+  -- ^ Constants defined in this module
   -> HM.HashMap Text (DefinedProperty (Exp Info))
+  -- ^ Properties defined in this module
+  -> Pact.Term (Ref' (Pact.Term Pact.Name))
+  -- ^ The term under analysis
+  -> Pact.FunType TC.UserType
   -> Except VerificationFailure
-       (HM.HashMap Text ((Ref, CheckableType), Either ParseFailure [Located Check]))
-moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \case
-  -- TODO How better to handle the type mismatch?
-  (Pact.Direct _, _, _) -> throwError InvalidRefType
-  (ref@(Ref defn), Pact.FunType argTys resultTy, checkType) -> do
+       ((Ref, CheckableType), Either ParseFailure [Located Check])
+moduleFunCheck tables modCheckExps consts propDefs defn
+  (Pact.FunType argTys resultTy) = do
 
-    let -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
-        --       not there yet:
-        vids = VarId <$> [1..]
+  let -- We use VID 0 for the result, the one for each argument variable.
+      -- Finally, we start the VID generator in the translation environment at
+      -- the next VID.
+      --
+      -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
+      --       not there yet.
+      envVidStart = VarId (length argTys)
+      vids        = [1..(envVidStart - 1)]
 
-    -- TODO(joel): this relies on generating the same unique ids as
-    -- @checkFunction@. We need to more carefully enforce this is true!
-    argTys' <- for argTys $ \(Pact.Arg name ty _info) ->
-      case maybeTranslateType ty of
-        Just ety -> pure (Unmunged name, ety)
-        Nothing  -> throwError $
-          TypeTranslationFailure "couldn't translate argument type" ty
-
-    resultBinding <- case maybeTranslateType resultTy of
-      Just ety -> pure $ Binding 0 (Unmunged "result") (Munged "result") ety
+  -- TODO(joel): this relies on generating the same unique ids as
+  -- @checkFunction@. We need to more carefully enforce this is true!
+  argTys' <- for argTys $ \(Pact.Arg name ty _info) ->
+    case maybeTranslateType ty of
+      Just ety -> pure (Unmunged name, ety)
       Nothing  -> throwError $
-        TypeTranslationFailure "couldn't translate result type" resultTy
+        TypeTranslationFailure "couldn't translate argument type" ty
 
-    -- NOTE: At the moment, we leave all variables except for the toplevel args
-    -- under analysis as the original munged/SSA'd variable names. And result,
-    -- which we introduce. We also rely on this assumption in Translate's
-    -- mkTranslateEnv.
+  resultBinding <- case maybeTranslateType resultTy of
+    Just ety -> pure $ Binding 0 (Unmunged "result") (Munged "result") ety
+    Nothing  -> throwError $
+      TypeTranslationFailure "couldn't translate result type" resultTy
 
-    let env :: [Binding]
-        env = resultBinding :
-          ((\(vid, (Unmunged nm, ty)) -> Binding vid (Unmunged nm) (Munged nm) ty) <$>
-            zip vids argTys')
+  -- NOTE: At the moment, we leave all variables except for the toplevel args
+  -- under analysis as the original munged/SSA'd variable names. And result,
+  -- which we introduce. We also rely on this assumption in Translate's
+  -- mkTranslateEnv.
 
-        --
-        -- TODO: should the map sent to parsing should be Un/Munged, instead of Text?
-        --
-        nameVids :: Map Text VarId
-        nameVids = Map.fromList $ fmap (\(Binding vid (Unmunged nm) _ _) -> (nm, vid)) env
+  let env :: [Binding]
+      env = resultBinding :
+        ((\(vid, (Unmunged nm, ty)) -> Binding vid (Unmunged nm) (Munged nm) ty) <$>
+          zip vids argTys')
 
-        vidTys :: Map VarId EType
-        vidTys = Map.fromList $ fmap (\(Binding vid _ _ ty) -> (vid, ty)) env
+      --
+      -- TODO: should the map sent to parsing should be Un/Munged, instead of Text?
+      --
+      nameVids :: Map Text VarId
+      nameVids = Map.fromList $ fmap (\(Binding vid (Unmunged nm) _ _) -> (nm, vid)) env
 
-        vidStart = VarId (length env)
+      vidTys :: Map VarId EType
+      vidTys = Map.fromList $ fmap (\(Binding vid _ _ ty) -> (vid, ty)) env
 
-        tableEnv = TableMap $ Map.fromList $
-          tables <&> \Table { _tableName, _tableType } ->
-            let fields = _utFields _tableType
-                colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-                  \(Pact.Arg argName ty _) ->
-                    (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
-            in (TableName (T.unpack _tableName), colMap)
+      tableEnv = TableMap $ Map.fromList $
+        tables <&> \Table { _tableName, _tableType } ->
+          let fields = _utFields _tableType
+              colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+                \(Pact.Arg argName ty _) ->
+                  (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
+          in (TableName (T.unpack _tableName), colMap)
 
-    -- TODO: this was very hard code to debug as the unsafe lenses just result
-    -- in properties not showing up, instead of a compile error when I changed 'TDef'
-    -- to a safe constructor. Please consider
-    -- moving this code to use pattern matches to ensure the proper constructor
-    -- is found; and/or change 'funTypes' to hold 'Def' objects
-    checks <- case defn ^? tDef . dMeta . mModel of
-      Nothing -> pure []
-      Just model -> case normalizeListLit model of
-        Nothing -> throwError $ ModuleParseFailure
-          -- reconstruct an `Exp Info` for this list
-          ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
-          , "malformed list (inconsistent use of comma separators?)"
-          )
-        Just model' -> withExcept ModuleParseFailure $ liftEither $ do
-          exps <- collectExps "property" model'
-          let funName = _dDefName (_tDef defn)
-              applicableModuleChecks = map _moduleProperty $
-                filter (applicableCheck funName) modCheckExps
-          runExpParserOver (applicableModuleChecks <> exps) $
-            expToCheck tableEnv vidStart nameVids vidTys consts propDefs
+  -- TODO: this was very hard code to debug as the unsafe lenses just result
+  -- in properties not showing up, instead of a compile error when I changed 'TDef'
+  -- to a safe constructor. Please consider
+  -- moving this code to use pattern matches to ensure the proper constructor
+  -- is found; and/or change 'funTypes' to hold 'Def' objects
+  checks <- case defn ^? tDef . dMeta . mModel of
+    Nothing -> pure []
+    Just model -> case normalizeListLit model of
+      Nothing -> throwError $ ModuleParseFailure
+        -- reconstruct an `Exp Info` for this list
+        ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
+        , "malformed list (inconsistent use of comma separators?)"
+        )
+      Just model' -> withExcept ModuleParseFailure $ liftEither $ do
+        exps <- collectExps "property" model'
+        let funName = _dDefName (_tDef defn)
+            applicableModuleChecks = map _moduleProperty $
+              filter (applicableCheck funName) modCheckExps
+        runExpParserOver (applicableModuleChecks <> exps) $
+          expToCheck tableEnv envVidStart nameVids vidTys consts propDefs
 
-    pure ((ref, checkType), Right checks)
+  pure ((Ref defn, CheckDefun), Right checks)
 
 -- | Remove the "invariant" or "property" application from every exp
 collectExps :: Text -> [Exp Info] -> Either ParseFailure [Exp Info]
@@ -844,12 +850,12 @@ verifyModule modules moduleData = runExceptT $ do
     (HM.empty, HM.empty)
     defpactRefs
 
-  (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType)) <- ifoldrM
+  (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
     (\name ref accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
         (TopFun (FDefun _info _mod _name Defun funType _args _body) _meta, _tcState)
-          -> accum & at name ?~ (ref, funType, CheckDefun)
+          -> accum & at name ?~ (ref, funType)
         _ -> accum -- TODO error
     )
     HM.empty
@@ -878,8 +884,10 @@ verifyModule modules moduleData = runExceptT $ do
     traverse (constToProp <=< translateNodeNoGraph') consts
 
   (funChecks :: HM.HashMap Text ((Ref, CheckableType), Either ParseFailure [Located Check]))
-    <- hoist generalize $
-      moduleFunChecks tables checkExps funTypes consts' propDefs
+    <- hoist generalize $ for funTypes $ \case
+      (Pact.Direct _, _) -> throwError InvalidRefType
+      (Pact.Ref defn, userTy)
+        -> moduleFunCheck tables checkExps consts' propDefs defn userTy
 
 --   TODO
 --   (stepChecks :: HM.HashMap (Text, Int) (Ref, Either ParseFailure [Located Check]))
