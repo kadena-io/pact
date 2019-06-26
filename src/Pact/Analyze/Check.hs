@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
@@ -34,12 +35,14 @@ module Pact.Analyze.Check
   , verifyFunctionInvariants'
   ) where
 
+
 import           Control.Exception         as E
 import           Control.Lens              (at, each, filtered, ifoldrM, ifor,
                                             itraversed, ix, toListOf, traversed,
                                             view, (%~), (&), (<&>), (?~), (^.),
                                             (^..), (^?), (^?!), (^@..), (.~),
-                                            _1, _2, _Left)
+                                            _1, _2, _Left,
+                                            ifoldl)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -606,15 +609,18 @@ parseModuleModelDecl exps = traverse parseDecl exps where
     _ -> Left (exp, "expected a set of property / defproperty")
 
 -- | Get the set ('HM.HashMap') of refs to functions in this module.
-moduleTypecheckableRefs :: ModuleData Ref -> HM.HashMap Text (Ref, CheckableType)
-moduleTypecheckableRefs ModuleData{..} = flip HM.mapMaybe _mdRefMap $ \ref ->
-  case ref of
-    Ref (TDef def _) -> case _dDefType def of
-      Defun   -> Just (ref, CheckDefun)
-      Defpact -> Just (ref, CheckDefpact)
-      Defcap  -> Nothing
-    Ref TConst{} -> Just (ref, CheckDefconst)
-    _            -> Nothing
+moduleTypecheckableRefs :: ModuleData Ref -> TypecheckableRefs
+moduleTypecheckableRefs ModuleData{..} = foldl f noRefs (HM.toList _mdRefMap)
+  where
+    f accum (name, ref) = case ref of
+      Ref (TDef (Def{_dDefType, _dDefBody}) _) -> case _dDefType of
+        Defun   -> accum & defuns . at name ?~ ref
+        Defpact -> accum & defpacts . at name ?~ ref
+        Defcap  -> accum
+      Ref TConst{} -> accum & defconsts . at name ?~ ref
+      _            -> accum
+
+    noRefs = TypecheckableRefs HM.empty HM.empty HM.empty
 
 
 -- | Module-level propery definitions and declarations
@@ -623,13 +629,15 @@ data ModelDecl = ModelDecl
   , _moduleProperties    :: ![ModuleProperty]
   }
 
--- Get the model defined in this module
+-- | Get the model defined in this module
 moduleModelDecl :: ModuleData Ref -> Either ParseFailure ModelDecl
 moduleModelDecl ModuleData{..} = do
   lst <- parseModuleModelDecl $ Pact._mModel $ moduleDefMeta _mdModule
   let (propList, checkList) = partitionEithers lst
   pure $ ModelDecl (HM.fromList propList) checkList
 
+-- TODO: only operate on one function at a time
+-- | Get the set of checks for each function.
 moduleFunChecks
   :: [Table]
   -> [ModuleProperty]
@@ -817,27 +825,46 @@ verifyModule modules moduleData = runExceptT $ do
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
 
-      typecheckableRefs :: HM.HashMap Text (Ref, CheckableType)
-      typecheckableRefs = moduleTypecheckableRefs moduleData
+      defunRefs, defpactRefs, defconstRefs :: HM.HashMap Text Ref
+      TypecheckableRefs defunRefs defpactRefs defconstRefs
+        = moduleTypecheckableRefs moduleData
 
-  -- For each ref, if it typechecks as a function (it'll be either a function
-  -- or a constant), keep its signature.
-  --
-  ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType),
-    consts   :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
-    (\name (ref, cType) accum -> do
-      maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
-      pure $ case maybeFun of
-        (TopFun (FDefun _info _mod _name _defType funType _args _body) _meta, _tcState)
-          -> case cType of
-            CheckDefconst -> error "invariant violation: this cannot be a constant"
-            _             -> accum & _1 . at name ?~ (ref, funType, cType)
-        (TopConst _info _qualifiedName _type val _doc, _tcState)
-          -> accum & _2 . at name ?~ val
+  ( pacts :: HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType),
+    steps :: HM.HashMap (Text, Int) (AST TC.Node)
+    ) <- ifoldrM
+    (\name ref accum@(pactAccum, stepAccum) -> do
+      maybeDef <- lift $ runTC 0 False $ typecheckTopLevel ref
+      pure $ case maybeDef of
+        (TopFun (FDefun _info _mod _name Defpact funType _args steps) _meta, _tcState)
+          -> accum
+            & _1 . at name ?~ (ref, funType, CheckDefpact)
+            & _2 .~ ifoldl (\i accum' step -> accum' & at (name, i) ?~ step) stepAccum steps
         _ -> accum
     )
     (HM.empty, HM.empty)
-    typecheckableRefs
+    defpactRefs
+
+  (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType, CheckableType)) <- ifoldrM
+    (\name ref accum -> do
+      maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
+      pure $ case maybeFun of
+        (TopFun (FDefun _info _mod _name Defun funType _args _body) _meta, _tcState)
+          -> accum & at name ?~ (ref, funType, CheckDefun)
+        _ -> accum -- TODO error
+    )
+    HM.empty
+    defunRefs
+
+  (consts :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
+    (\name ref accum -> do
+      maybeConst <- lift $ runTC 0 False $ typecheckTopLevel ref
+      pure $ case maybeConst of
+        (TopConst _info _qualifiedName _type val _doc, _tcState)
+          -> accum & at name ?~ val
+        _ -> accum -- TODO error
+    )
+    HM.empty
+    defconstRefs
 
   let constToProp :: ETerm -> Except VerificationFailure EProp
       constToProp tm = case constantToProp tm of
@@ -854,6 +881,10 @@ verifyModule modules moduleData = runExceptT $ do
     <- hoist generalize $
       moduleFunChecks tables checkExps funTypes consts' propDefs
 
+--   TODO
+--   (stepChecks :: HM.HashMap (Text, Int) (Ref, Either ParseFailure [Located Check]))
+--     <- hoist generalize $
+
   caps <- moduleCapabilities moduleData
 
   let modName :: ModuleName
@@ -867,6 +898,8 @@ verifyModule modules moduleData = runExceptT $ do
   funChecks' <- case traverse sequence funChecks of
     Left errs        -> throwError $ ModuleParseFailure errs
     Right funChecks' -> pure funChecks'
+
+  let typecheckableRefs = error "TODO"
 
   -- actually check the checks
   funChecks'' <- lift $ ifor funChecks' $ \name ((ref, checkType), checks) ->

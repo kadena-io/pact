@@ -1573,6 +1573,9 @@ runTranslation modName funName info caps pactArgs body checkType = do
               CheckDefpact ->
                 withNewScope (PactScope modName funName) bindingTs $
                   Some SStr . Pact <$> translatePact body
+              CheckPactStep ->
+                withNewScope (FunctionScope modName funName) bindingTs $
+                  translateBody body
               CheckDefconst
                 -> error "invariant violation: this cannot be a constant"
             _ <- extendPath -- form final edge for any remaining events
