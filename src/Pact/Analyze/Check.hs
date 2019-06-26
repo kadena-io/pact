@@ -650,7 +650,7 @@ moduleFunCheck
   -- ^ The term under analysis
   -> Pact.FunType TC.UserType
   -> Except VerificationFailure
-       ((Ref, CheckableType), Either ParseFailure [Located Check])
+       (Ref, Either ParseFailure [Located Check])
 moduleFunCheck tables modCheckExps consts propDefs defn
   (Pact.FunType argTys resultTy) = do
 
@@ -724,7 +724,7 @@ moduleFunCheck tables modCheckExps consts propDefs defn
         runExpParserOver (applicableModuleChecks <> exps) $
           expToCheck tableEnv envVidStart nameVids vidTys consts propDefs
 
-  pure ((Ref defn, CheckDefun), Right checks)
+  pure (Ref defn, Right checks)
 
 -- | Remove the "invariant" or "property" application from every exp
 collectExps :: Text -> [Exp Info] -> Either ParseFailure [Exp Info]
@@ -883,7 +883,7 @@ verifyModule modules moduleData = runExceptT $ do
   consts' <- hoist generalize $
     traverse (constToProp <=< translateNodeNoGraph') consts
 
-  (funChecks :: HM.HashMap Text ((Ref, CheckableType), Either ParseFailure [Located Check]))
+  (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
     <- hoist generalize $ for funTypes $ \case
       (Pact.Direct _, _) -> throwError InvalidRefType
       (Pact.Ref defn, userTy)
@@ -899,19 +899,21 @@ verifyModule modules moduleData = runExceptT $ do
       modName = moduleDefName $ _mdModule moduleData
 
       verifyFunProps
-        :: Ref -> Text -> [Located Check] -> CheckableType -> IO [CheckResult]
-      verifyFunProps = verifyFunctionProps modName tables caps
+        :: Ref -> Text -> [Located Check] -> IO [CheckResult]
+      verifyFunProps ref funName checks
+        = verifyFunctionProps modName tables caps ref funName checks CheckDefun
 
   -- check for parse failures in any of the checks
   funChecks' <- case traverse sequence funChecks of
     Left errs        -> throwError $ ModuleParseFailure errs
     Right funChecks' -> pure funChecks'
 
-  let typecheckableRefs = error "TODO"
+  let typecheckableRefs :: HM.HashMap Text (Ref, CheckableType)
+      typecheckableRefs = HM.unions [fmap ((,CheckDefun) . fst) funChecks'] -- , consts', pacts]
 
   -- actually check the checks
-  funChecks'' <- lift $ ifor funChecks' $ \name ((ref, checkType), checks) ->
-    verifyFunProps ref name checks checkType
+  funChecks'' <- lift $ ifor funChecks' $ \name (ref, checks) ->
+    verifyFunProps ref name checks
   invariantChecks <- ifor typecheckableRefs $ \name (ref, checkType) ->
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants modName tables caps ref name checkType
