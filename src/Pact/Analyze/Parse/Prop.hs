@@ -559,6 +559,8 @@ inferPreProp preProp = case preProp of
     _   <- expectColumnType tn' cn' SGuard
     Some SBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp SStr rk
 
+  -- XXX what?
+  -- XXX negation
   PreApp (toOp arithOpP -> Just _) args -> asum
     [ Some SInteger <$> checkPreProp SInteger preProp
     , Some SDecimal <$> checkPreProp SDecimal preProp
@@ -751,7 +753,7 @@ expectTableExists (PVar vid name) = do
 expectTableExists tn = throwError $
   "table name must be concrete at this point: " ++ showTm tn
 
--- Convert an @Exp@ to a @Check@ in an environment where the variables have
+-- | Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.
 expToCheck
   :: TableEnv
@@ -787,6 +789,7 @@ expToProp
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
   -> SingTy a
+  -- ^ The expected type of the prop
   -> Exp Info
   -- ^ Exp to convert
   -> Either String (Prop a)

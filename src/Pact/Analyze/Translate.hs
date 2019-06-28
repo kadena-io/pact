@@ -1574,6 +1574,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
                 withNewScope (PactScope modName funName) bindingTs $
                   Some SStr . Pact <$> translatePact body
               CheckPactStep ->
+                -- TODO: should this be a different type of scope?
                 withNewScope (FunctionScope modName funName) bindingTs $
                   translateBody body
               CheckDefconst
