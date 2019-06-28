@@ -638,60 +638,12 @@ moduleModelDecl ModuleData{..} = do
   let (propList, checkList) = partitionEithers lst
   pure $ ModelDecl (HM.fromList propList) checkList
 
-stepCheck
-  :: [Table]
-  -- ^ All tables defined in this module and imported by it
-  -> HM.HashMap Text EProp
-  -- ^ Constants defined in this module
-  -> HM.HashMap Text (DefinedProperty (Exp Info))
-  -- ^ Properties defined in this module
-  -> AST Node
-  -- ^ The step under analysis
-  -- XXX think about whether this is the right result type
-  -> Except VerificationFailure (Either ParseFailure [Located Check])
-stepCheck tables consts propDefs = \case
-  TC.Step {_aModel} -> do
-    -- XXX actually we should bind names from defpact
-    let nameVids = Map.empty
-        vidTys = Map.empty
-        envVidStart = 0
-        -- TODO: think about including this
-        -- applicableModuleChecks = map _moduleProperty $
-        --   filter (applicableCheck funName) modCheckExps
-    checks <- withExcept ModuleParseFailure $ liftEither $ do
-      exps <- collectExps "property" _aModel
-      runExpParserOver exps $
-        expToCheck (mkTableEnv tables) envVidStart nameVids vidTys consts propDefs
-    pure $ Right checks
-  _ -> error "invariant violation: anything but a step is unexpected in stepCheck"
-
-mkTableEnv :: [Table] -> TableMap (ColumnMap EType)
-mkTableEnv tables = TableMap $ Map.fromList $
-  tables <&> \Table { _tableName, _tableType } ->
-    let fields = _utFields _tableType
-        colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-          \(Pact.Arg argName ty _) ->
-            (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
-    in (TableName (T.unpack _tableName), colMap)
-
--- | Get the set of checks for a function.
-moduleFunCheck
-  :: [Table]
-  -- ^ All tables defined in this module and imported by it
-  -> [ModuleProperty]
-  -- ^ The set of properties that apply to all functions in the module
-  -> HM.HashMap Text EProp
-  -- ^ Constants defined in this module
-  -> HM.HashMap Text (DefinedProperty (Exp Info))
-  -- ^ Properties defined in this module
-  -> Pact.Term (Ref' (Pact.Term Pact.Name))
-  -- ^ The term under analysis
-  -> Pact.FunType TC.UserType
-  -- ^ The type of the term under analysis
-  -> Except VerificationFailure (Either ParseFailure [Located Check])
-moduleFunCheck tables modCheckExps consts propDefs defn
-  (Pact.FunType argTys resultTy) = do
-
+-- | Make an environment (binding result and args) from a function type.
+-- TODO: should Env be a type?
+mkEnv
+  :: Pact.FunType TC.UserType
+  -> Except VerificationFailure (VarId, Map Text VarId, Map VarId EType)
+mkEnv (Pact.FunType argTys resultTy) = do
   let -- We use VID 0 for the result, the one for each argument variable.
       -- Finally, we start the VID generator in the translation environment at
       -- the next VID.
@@ -732,6 +684,60 @@ moduleFunCheck tables modCheckExps consts propDefs defn
 
       vidTys :: Map VarId EType
       vidTys = Map.fromList $ fmap (\(Binding vid _ _ ty) -> (vid, ty)) env
+
+  pure (envVidStart, nameVids, vidTys)
+
+-- | Get the set of checks for a step.
+stepCheck
+  :: [Table]
+  -- ^ All tables defined in this module and imported by it
+  -> HM.HashMap Text EProp
+  -- ^ Constants defined in this module
+  -> HM.HashMap Text (DefinedProperty (Exp Info))
+  -- ^ Properties defined in this module
+  -> Pact.FunType TC.UserType
+  -- ^ The type of the pact this step is part of (we extract argument types
+  -- from this)
+  -> AST Node
+  -- ^ The step under analysis
+  -- XXX think about whether this is the right result type
+  -> Except VerificationFailure (Either ParseFailure [Located Check])
+stepCheck tables consts propDefs funTy = \case
+  TC.Step {_aModel} -> do
+    (envVidStart, nameVids, vidTys) <- mkEnv funTy
+    checks <- withExcept ModuleParseFailure $ liftEither $ do
+      exps <- collectExps "property" _aModel
+      runExpParserOver exps $
+        expToCheck (mkTableEnv tables) envVidStart nameVids vidTys consts propDefs
+    pure $ Right checks
+  _ -> error "invariant violation: anything but a step is unexpected in stepCheck"
+
+mkTableEnv :: [Table] -> TableMap (ColumnMap EType)
+mkTableEnv tables = TableMap $ Map.fromList $
+  tables <&> \Table { _tableName, _tableType } ->
+    let fields = _utFields _tableType
+        colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+          \(Pact.Arg argName ty _) ->
+            (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
+    in (TableName (T.unpack _tableName), colMap)
+
+-- | Get the set of checks for a function.
+moduleFunCheck
+  :: [Table]
+  -- ^ All tables defined in this module and imported by it
+  -> [ModuleProperty]
+  -- ^ The set of properties that apply to all functions in the module
+  -> HM.HashMap Text EProp
+  -- ^ Constants defined in this module
+  -> HM.HashMap Text (DefinedProperty (Exp Info))
+  -- ^ Properties defined in this module
+  -> Pact.Term (Ref' (Pact.Term Pact.Name))
+  -- ^ The term under analysis
+  -> Pact.FunType TC.UserType
+  -- ^ The type of the term under analysis
+  -> Except VerificationFailure (Either ParseFailure [Located Check])
+moduleFunCheck tables modCheckExps consts propDefs defn funTy = do
+  (envVidStart, nameVids, vidTys) <- mkEnv funTy
 
   -- TODO: this was very hard code to debug as the unsafe lenses just result
   -- in properties not showing up, instead of a compile error when I changed 'TDef'
@@ -860,7 +866,7 @@ verifyModule modules moduleData = runExceptT $ do
 
   -- XXX never actually checking properties of pacts
   ( pacts :: HM.HashMap Text (TopLevel Node, Pact.FunType TC.UserType),
-    steps :: HM.HashMap (Text, Int) (AST Node)
+    steps :: HM.HashMap (Text, Int) (AST Node, Pact.FunType TC.UserType)
     ) <- ifoldrM
     (\name ref accum -> do
       maybeDef <- lift $ runTC 0 False $ typecheckTopLevel ref
@@ -869,7 +875,7 @@ verifyModule modules moduleData = runExceptT $ do
           -> accum
             & _1 . at name ?~ (toplevel, funType)
             & _2 %~ (\stepAccum -> ifoldl
-              (\i stepAccum' step -> stepAccum' & at (name, i) ?~ step)
+              (\i stepAccum' step -> stepAccum' & at (name, i) ?~ (step, funType))
               stepAccum
               steps
               )
@@ -918,8 +924,8 @@ verifyModule modules moduleData = runExceptT $ do
         moduleFunCheck tables checkExps (fmap snd consts') propDefs defn userTy
 
   (stepChecks :: HM.HashMap (Text, Int) (AST Node, Either ParseFailure [Located Check]))
-    <- hoist generalize $ for steps $ \step ->
-      (step,) <$> stepCheck tables (fmap snd consts') propDefs step
+    <- hoist generalize $ for steps $ \(step, pactType) ->
+      (step,) <$> stepCheck tables (fmap snd consts') propDefs pactType step
 
   caps <- moduleCapabilities moduleData
 
