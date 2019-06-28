@@ -561,7 +561,7 @@ inferPreProp preProp = case preProp of
 
   -- XXX what?
   -- XXX negation
-  PreApp (toOp arithOpP -> Just _) args -> asum
+  PreApp opName@(toOp arithOpP -> Just _) args -> asum
     [ Some SInteger <$> checkPreProp SInteger preProp
     , Some SDecimal <$> checkPreProp SDecimal preProp
     , Some SStr     <$> checkPreProp SStr     preProp -- (string concat)
@@ -582,8 +582,10 @@ inferPreProp preProp = case preProp of
                 throwErrorIn preProp "can only concat lists of the same type"
               Just Refl -> pure $
                 Some aTy $ CoreProp $ ObjMerge aTy bTy aProp bProp
-          _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
-      _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
+          _ -> throwErrorIn preProp $
+            "can't infer the types of the arguments to " <> pretty opName
+      _ -> throwErrorIn preProp $
+        "can't infer the types of the arguments to " <> pretty opName
 
   PreApp s [lst] | s == SReverse -> do
     Some (SList ty) lst' <- inferPreProp lst
