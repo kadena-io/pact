@@ -559,14 +559,16 @@ inferPreProp preProp = case preProp of
     _   <- expectColumnType tn' cn' SGuard
     Some SBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp SStr rk
 
-  -- XXX what?
-  -- XXX negation
-  PreApp opName@(toOp arithOpP -> Just _) args -> asum
+  -- For unary / binary arithmetic operations, we switch polarity to checking.
+  -- Same for string concatenation. For list concatenation, we infer both
+  -- lists, then check that they have the same type. For object merges, we
+  -- infer the object types and then merge them (TODO).
+  PreApp opName@(toOp arithOpP -> Just op) args -> asum
     [ Some SInteger <$> checkPreProp SInteger preProp
     , Some SDecimal <$> checkPreProp SDecimal preProp
     , Some SStr     <$> checkPreProp SStr     preProp -- (string concat)
-    ] <|> case args of
-      [a, b] -> do
+    ] <|> case (op, args) of
+      (Add, [a, b]) -> do
         a' <- inferPreProp a
         b' <- inferPreProp b
         case (a', b') of
@@ -576,12 +578,9 @@ inferPreProp preProp = case preProp of
                 throwErrorIn preProp "can only concat lists of the same type"
               Just Refl -> pure $
                 Some aTy $ CoreProp $ ListConcat aTy' aProp bProp
-          (Some aTy@SObject{} aProp, Some bTy bProp) ->
-            case singEq aTy bTy of
-              Nothing ->
-                throwErrorIn preProp "can only concat lists of the same type"
-              Just Refl -> pure $
-                Some aTy $ CoreProp $ ObjMerge aTy bTy aProp bProp
+          -- TODO(joel)
+          -- (Some aTy@SObject{} aProp, Some bTy@SObject{} bProp) -> pure
+          --   Some aTy $ CoreProp $ ObjMerge aTy bTy aProp bProp
           _ -> throwErrorIn preProp $
             "can't infer the types of the arguments to " <> pretty opName
       _ -> throwErrorIn preProp $
