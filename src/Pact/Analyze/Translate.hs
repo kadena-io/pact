@@ -1574,7 +1574,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
                 withNewScope (PactScope modName funName) bindingTs $
                   Some SStr . Pact <$> translatePact body
               CheckPactStep ->
-                -- TODO: should this be a different type of scope?
+                -- TODO: this should be a different type of scope
                 withNewScope (FunctionScope modName funName) bindingTs $
                   translateBody body
               CheckDefconst
@@ -1610,7 +1610,8 @@ translateNodeNoGraph node =
       translateState = TranslateState nextTagId 0 graph0 vertex0 nextVertex
         Map.empty mempty path0 Map.empty [] []
 
-      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
+      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0
+        (pure 0) (pure 0)
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $

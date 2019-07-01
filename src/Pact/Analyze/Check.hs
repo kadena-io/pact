@@ -866,16 +866,17 @@ verifyModule modules moduleData = runExceptT $ do
 
   -- XXX never actually checking properties of pacts
   ( pacts :: HM.HashMap Text (TopLevel Node, Pact.FunType TC.UserType),
-    steps :: HM.HashMap (Text, Int) (AST Node, Pact.FunType TC.UserType)
+    steps :: HM.HashMap (Text, Int) ((AST Node, [Named Node], Info), Pact.FunType TC.UserType)
     ) <- ifoldrM
     (\name ref accum -> do
       maybeDef <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeDef of
-        (toplevel@(TopFun (FDefun _ _ _ Defpact funType _ steps) _meta), _)
+        (toplevel@(TopFun (FDefun info _ _ Defpact funType args steps) _meta), _)
           -> accum
             & _1 . at name ?~ (toplevel, funType)
             & _2 %~ (\stepAccum -> ifoldl
-              (\i stepAccum' step -> stepAccum' & at (name, i) ?~ (step, funType))
+              (\i stepAccum' step ->
+                stepAccum' & at (name, i) ?~ ((step, args, info), funType))
               stepAccum
               steps
               )
@@ -923,9 +924,13 @@ verifyModule modules moduleData = runExceptT $ do
       (Pact.Ref defn, toplevel, userTy) -> (toplevel,) <$>
         moduleFunCheck tables checkExps (fmap snd consts') propDefs defn userTy
 
-  (stepChecks :: HM.HashMap (Text, Int) (AST Node, Either ParseFailure [Located Check]))
-    <- hoist generalize $ for steps $ \(step, pactType) ->
-      (step,) <$> stepCheck tables (fmap snd consts') propDefs pactType step
+  (stepChecks :: HM.HashMap (Text, Int)
+    ((AST Node, [Named Node], Info), Either ParseFailure [Located Check]))
+    <- hoist generalize $ for steps $ \((step, args, info), pactType) -> case step of
+      -- TODO: duplicated casing here with stepCheck
+      TC.Step _ _ exec _ _ _ ->
+        ((exec,args,info),) <$> stepCheck tables (fmap snd consts') propDefs pactType step
+      _ -> error "invariant violation: anything but a step is unexpected in stepChecks"
 
   caps <- moduleCapabilities moduleData
 
@@ -933,9 +938,9 @@ verifyModule modules moduleData = runExceptT $ do
       modName = moduleDefName $ _mdModule moduleData
 
       verifyFunProps
-        :: Text -> [Located Check] -> Fun Node -> IO [CheckResult]
-      verifyFunProps funName checks
-        = verifyFunctionProps modName tables caps funName checks CheckDefun
+        :: CheckableType -> Text -> [Located Check] -> Fun Node -> IO [CheckResult]
+      verifyFunProps checkTy funName checks
+        = verifyFunctionProps modName tables caps funName checks checkTy
 
   -- check for parse failures in any of the checks
   funChecks' <- case traverse sequence funChecks of
@@ -956,14 +961,11 @@ verifyModule modules moduleData = runExceptT $ do
 
   -- actually check the checks
   funChecks'' <- lift $ ifor funChecks' $ \name (toplevel, checks) -> case toplevel of
-    TopFun fun _ -> verifyFunProps name checks fun
+    TopFun fun _ -> verifyFunProps CheckDefun name checks fun
     _ -> error "TODO"
-  stepChecks'' <- lift $ ifor stepChecks' $ \(name, _stepNum) (node, checks) ->
-    let info = D.def -- TODO: where can we get this from?
-        args = []
-        body = [node] -- TODO: should this be the node from within the step?
-    in verifyFunProps name checks $
-         FDefun info undefined undefined undefined undefined args body
+  stepChecks'' <- lift $ ifor stepChecks' $ \(name, _stepNum) ((node, args, info), checks) -> verifyFunProps CheckPactStep name checks $
+     -- Only _fInfo, _fArgs, and _fBody are used:
+     FDefun info undefined undefined undefined undefined args [node]
   invariantChecks <- ifor invariantCheckable $ \name (toplevel, checkType) ->
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants modName tables caps toplevel name checkType
