@@ -3272,12 +3272,12 @@ spec = describe "analyze" $ do
     describe "working payment (step checking)" $
       expectVerified [text|
         (defpact payment (payer payer-entity payee
-                          payee-entity amount)
+                          payee-entity amount:integer)
           @model
             [ (property (= (column-delta accounts 'balance) 0))
             ]
           (step-with-rollback
-            @model [ (property (= (column-delta accounts 'balance) (- 0 amount))) ]
+            @model [ (property (= (column-delta accounts 'balance) (- amount))) ]
             payer-entity
             (debit payer amount)
             (credit payer amount))
