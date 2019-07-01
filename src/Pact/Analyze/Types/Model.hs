@@ -78,7 +78,6 @@ data ScopeType
   | RollbackScope
   | FunctionScope Pact.ModuleName Text
   | PactScope Pact.ModuleName Text
-  -- | PactStepScope
   | CapabilityScope Pact.ModuleName CapName
   deriving (Eq, Show)
 

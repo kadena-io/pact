@@ -295,6 +295,7 @@ withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
 withNestedRecoverability r = local $ teRecoverability <>~ r
 
 -- | Enter a pact step or rollback
+-- TODO: why does this even take a scope type?
 withNewStep :: ScopeType -> TranslateM a -> TranslateM a
 withNewStep scopeType act = local (teScopesEntered +~ 1) $ do
   tid <- genTagId
@@ -1574,8 +1575,8 @@ runTranslation modName funName info caps pactArgs body checkType = do
                 withNewScope (PactScope modName funName) bindingTs $
                   Some SStr . Pact <$> translatePact body
               CheckPactStep ->
-                -- TODO: this should be a different type of scope
-                withNewScope (FunctionScope modName funName) bindingTs $
+                -- TODO: use withNewStep?
+                withNewScope StepScope bindingTs $
                   translateBody body
               CheckDefconst
                 -> error "invariant violation: this cannot be a constant"
