@@ -50,7 +50,6 @@ import           Control.Monad.Except      (Except, ExceptT (ExceptT),
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
-import qualified Data.Default              as D
 import           Data.Either               (partitionEithers)
 import qualified Data.HashMap.Strict       as HM
 import           Data.List                 (isPrefixOf)
