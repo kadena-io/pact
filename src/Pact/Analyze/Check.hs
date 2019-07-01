@@ -35,14 +35,12 @@ module Pact.Analyze.Check
   , verifyFunctionInvariants'
   ) where
 
-
 import           Control.Exception         as E
 import           Control.Lens              (at, each, filtered, ifoldl, ifoldrM, ifor,
                                             itraversed, ix, toListOf, traversed, traverseOf,
                                             view, (%~), (&), (<&>), (?~), (^.),
                                             (^..), (^?), (^?!), (^@..), (.~),
                                             _1, _2, _Left)
-
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
