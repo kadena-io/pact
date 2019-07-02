@@ -695,19 +695,16 @@ stepCheck
   -> Pact.FunType TC.UserType
   -- ^ The type of the pact this step is part of (we extract argument types
   -- from this)
-  -> AST Node
-  -- ^ The step under analysis
-  -- XXX think about whether this is the right result type
+  -> [Exp Info]
+  -- ^ The model
   -> Except VerificationFailure (Either ParseFailure [Located Check])
-stepCheck tables consts propDefs funTy = \case
-  TC.Step {_aModel} -> do
-    (envVidStart, nameVids, vidTys) <- mkEnv funTy
-    checks <- withExcept ModuleParseFailure $ liftEither $ do
-      exps <- collectExps "property" _aModel
-      runExpParserOver exps $
-        expToCheck (mkTableEnv tables) envVidStart nameVids vidTys consts propDefs
-    pure $ Right checks
-  _ -> error "invariant violation: anything but a step is unexpected in stepCheck"
+stepCheck tables consts propDefs funTy model = do
+  (envVidStart, nameVids, vidTys) <- mkEnv funTy
+  checks <- withExcept ModuleParseFailure $ liftEither $ do
+    exps <- collectExps "property" model
+    runExpParserOver exps $
+      expToCheck (mkTableEnv tables) envVidStart nameVids vidTys consts propDefs
+  pure $ Right checks
 
 mkTableEnv :: [Table] -> TableMap (ColumnMap EType)
 mkTableEnv tables = TableMap $ Map.fromList $
@@ -924,9 +921,8 @@ verifyModule modules moduleData = runExceptT $ do
   (stepChecks :: HM.HashMap (Text, Int)
     ((AST Node, [Named Node], Info), Either ParseFailure [Located Check]))
     <- hoist generalize $ for steps $ \((step, args, info), pactType) -> case step of
-      -- TODO: duplicated casing here with stepCheck
-      TC.Step _ _ exec _ _ _ ->
-        ((exec,args,info),) <$> stepCheck tables (fmap snd consts') propDefs pactType step
+      TC.Step _ _ exec _ _ model -> ((exec,args,info),) <$>
+        stepCheck tables (fmap snd consts') propDefs pactType model
       _ -> error "invariant violation: anything but a step is unexpected in stepChecks"
 
   caps <- moduleCapabilities moduleData
