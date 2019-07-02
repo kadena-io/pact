@@ -295,7 +295,6 @@ withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
 withNestedRecoverability r = local $ teRecoverability <>~ r
 
 -- | Enter a pact step or rollback
--- TODO: why does this even take a scope type?
 withNewStep :: ScopeType -> TranslateM a -> TranslateM a
 withNewStep scopeType act = local (teScopesEntered +~ 1) $ do
   tid <- genTagId
