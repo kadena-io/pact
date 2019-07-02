@@ -637,12 +637,12 @@ moduleModelDecl ModuleData{..} = do
 
 -- | Then environment for a function or step at the beginning of execution
 data FunctionEnvironment = FunctionEnvironment
-  { vidStart :: VarId
+  { _vidStart :: VarId
   -- ^ The first 'VarId' the function can issue.
-  , nameVids :: Map Text VarId
+  , _nameVids :: Map Text VarId
   -- ^ A 'VarId' for each argument to the function. For steps these are the
   -- variables bound by the enclosing @defpact@.
-  , vidTys   :: Map VarId EType
+  , _vidTys   :: Map VarId EType
   -- ^ The type of each variable in scope.
   }
 
@@ -831,6 +831,141 @@ verifyFunctionInvariants modName tables caps topLevel funName checkType =
 liftEither :: MonadError e m => Either e a -> m a
 liftEither = either throwError return
 
+getConsts
+  :: HM.HashMap Text Ref
+  -> ExceptT VerificationFailure IO (HM.HashMap Text EProp)
+getConsts defconstRefs = do
+
+  (consts :: HM.HashMap Text (AST Node)) <- ifoldrM
+    (\name ref accum -> do
+      maybeConst <- lift $ runTC 0 False $ typecheckTopLevel ref
+      pure $ case maybeConst of
+        (TopConst _info _qualifiedName _type val _doc, _tcState)
+          -> accum & at name ?~ val
+        _ -> error "invariant failure: anything but a const is unexpected here"
+    )
+    HM.empty
+    defconstRefs
+
+  let constToProp :: ETerm -> Except VerificationFailure EProp
+      constToProp tm = case constantToProp tm of
+        Right prop -> pure prop
+        Left msg   -> throwError $ FailedConstTranslation msg
+
+      translateNodeNoGraph'
+        = withExceptT translateToVerificationFailure . translateNodeNoGraph
+
+  hoist generalize $
+    traverseOf each (constToProp <=< translateNodeNoGraph') consts
+
+getStepChecks
+  :: [Table]
+  -> HM.HashMap Text EProp
+  -> HM.HashMap Text (DefinedProperty (Exp Info))
+  -> (CheckableType -> Text -> [Located Check] -> Fun Node -> IO [CheckResult])
+  -> HM.HashMap Text Ref
+  -> ExceptT VerificationFailure IO (HM.HashMap (Text, Int) [CheckResult])
+getStepChecks tables consts propDefs verifyFunProps defpactRefs = do
+
+  (steps :: HM.HashMap (Text, Int)
+    ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
+    <- ifoldrM
+    (\name ref accum -> do
+      maybeDef <- lift $ runTC 0 False $ typecheckTopLevel ref
+      pure $ case maybeDef of
+        (TopFun (FDefun info _ _ Defpact funType args steps) _meta, _)
+          -> ifoldl
+            (\i stepAccum step ->
+              stepAccum & at (name, i) ?~ ((step, args, info), funType))
+            accum
+            steps
+        _ -> error
+          "invariant failure: anything but a function is unexpected here"
+    )
+    HM.empty
+    defpactRefs
+
+  (stepChecks :: HM.HashMap (Text, Int)
+    ((AST Node, [Named Node], Info), Either ParseFailure [Located Check]))
+    <- hoist generalize $ for steps $ \((step, args, info), pactType) ->
+      case step of
+        TC.Step _ _ exec _ _ model -> ((exec,args,info),) <$>
+          stepCheck tables consts propDefs pactType model
+        _ -> error
+          "invariant violation: anything but a step is unexpected in stepChecks"
+
+  stepChecks' <- case traverse sequence stepChecks of
+    Left errs         -> throwError $ ModuleParseFailure errs
+    Right stepChecks' -> pure stepChecks'
+
+  lift $ ifor stepChecks' $
+    \(name, _stepNum) ((node, args, info), checks) ->
+     verifyFunProps CheckPactStep name checks $
+       -- Only _fInfo, _fArgs, and _fBody are used:
+       FDefun info undefined undefined undefined undefined args [node]
+
+getFunChecks
+  :: [Table]
+  -> HM.HashMap Text EProp
+  -> HM.HashMap Text (DefinedProperty (Exp Info))
+  -> ModuleData Ref
+  -> (CheckableType -> Text -> [Located Check] -> Fun Node -> IO [CheckResult])
+  -> HM.HashMap Text Ref
+  -> ExceptT VerificationFailure IO
+    ( HM.HashMap Text [CheckResult]
+    , HM.HashMap Text (TableMap [CheckResult])
+    )
+getFunChecks tables consts propDefs moduleData verifyFunProps refs = do
+
+  caps <- moduleCapabilities moduleData
+
+  let modName :: ModuleName
+      modName = moduleDefName $ _mdModule moduleData
+
+  ModelDecl _ checkExps <-
+    withExceptT ModuleParseFailure $ liftEither $
+      moduleModelDecl moduleData
+
+  (funTypes :: HM.HashMap Text (Ref, TopLevel Node, Pact.FunType TC.UserType))
+    <- ifoldrM
+      (\name ref accum -> do
+        maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
+        pure $ case maybeFun of
+          (topfun@(TopFun (FDefun _ _ _ _ funType _ _) _), _)
+            -> accum & at name ?~ (ref, topfun, funType)
+          _ -> error
+            "invariant failure: anything but a function is unexpected here"
+      )
+      HM.empty
+      refs
+
+  (funChecks
+    :: HM.HashMap Text (TopLevel Node, Either ParseFailure [Located Check]))
+    <- hoist generalize $ for funTypes $ \case
+      (Pact.Direct _, _, _) -> throwError InvalidRefType
+      (Pact.Ref defn, toplevel, userTy) -> (toplevel,) <$>
+        moduleFunCheck tables checkExps consts propDefs defn userTy
+
+  -- check for parse failures in any of the checks
+  funChecks' <- case traverse sequence funChecks of
+    Left errs        -> throwError $ ModuleParseFailure errs
+    Right funChecks' -> pure funChecks'
+
+  let invariantCheckable :: HM.HashMap Text (TopLevel Node, CheckableType)
+      invariantCheckable = fmap ((,CheckDefun) . fst) funChecks'
+
+  invariantChecks <- ifor invariantCheckable $ \name (toplevel, checkType) ->
+    withExceptT ModuleCheckFailure $ ExceptT $
+      verifyFunctionInvariants modName tables caps toplevel name checkType
+
+  funChecks'' <- lift $ ifor funChecks' $ \name (toplevel, checks)
+    -> case toplevel of
+      TopFun fun _ -> verifyFunProps CheckDefun name checks fun
+      _            -> error
+        "invariant violation: anything but a TopFun is unexpected in funChecks"
+
+  pure (funChecks'', invariantChecks)
+
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
@@ -849,10 +984,6 @@ verifyModule modules moduleData = runExceptT $ do
     withExceptT ModuleParseFailure $ liftEither $
       traverse moduleModelDecl allModules
 
-  ModelDecl _ checkExps <-
-    withExceptT ModuleParseFailure $ liftEither $
-      moduleModelDecl moduleData
-
   let allModulePropDefs = fmap _moduleDefProperties allModuleModelDecls
 
       -- how many times have these names been defined across all in-scope
@@ -870,109 +1001,24 @@ verifyModule modules moduleData = runExceptT $ do
       TypecheckableRefs defunRefs defpactRefs defconstRefs
         = moduleTypecheckableRefs moduleData
 
-  (steps :: HM.HashMap (Text, Int) ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
-    <- ifoldrM
-    (\name ref accum -> do
-      maybeDef <- lift $ runTC 0 False $ typecheckTopLevel ref
-      pure $ case maybeDef of
-        (TopFun (FDefun info _ _ Defpact funType args steps) _meta, _)
-          -> ifoldl
-            (\i stepAccum step ->
-              stepAccum & at (name, i) ?~ ((step, args, info), funType))
-            accum
-            steps
-        _ -> error "invariant failure: anything but a function is unexpected here"
-    )
-    HM.empty
-    defpactRefs
+  consts <- getConsts defconstRefs
+  caps   <- moduleCapabilities moduleData
 
-  (funTypes :: HM.HashMap Text (Ref, TopLevel Node, Pact.FunType TC.UserType)) <- ifoldrM
-    (\name ref accum -> do
-      maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
-      pure $ case maybeFun of
-        (topFun@(TopFun (FDefun _info _mod _name _ funType _args _body) _meta), _tcState)
-          -> accum & at name ?~ (ref, topFun, funType)
-        _ -> error "invariant failure: anything but a function is unexpected here"
-    )
-    HM.empty
-    (defunRefs <> defpactRefs)
-
-  (consts :: HM.HashMap Text (TopLevel Node, AST Node)) <- ifoldrM
-    (\name ref accum -> do
-      maybeConst <- lift $ runTC 0 False $ typecheckTopLevel ref
-      pure $ case maybeConst of
-        (toplevel@(TopConst _info _qualifiedName _type val _doc), _tcState)
-          -> accum & at name ?~ (toplevel, val)
-        _ -> error "invariant failure: anything but a const is unexpected here"
-    )
-    HM.empty
-    defconstRefs
-
-  let constToProp :: ETerm -> Except VerificationFailure EProp
-      constToProp tm = case constantToProp tm of
-        Right prop -> pure prop
-        Left msg   -> throwError $ FailedConstTranslation msg
-
-      translateNodeNoGraph'
-        = withExceptT translateToVerificationFailure . translateNodeNoGraph
-
-  (consts' :: HM.HashMap Text (TopLevel Node, EProp)) <- hoist generalize $
-    traverseOf (each . _2) (constToProp <=< translateNodeNoGraph') consts
-
-  (funChecks :: HM.HashMap Text (TopLevel Node, Either ParseFailure [Located Check]))
-    <- hoist generalize $ for funTypes $ \case
-      (Pact.Direct _, _, _) -> throwError InvalidRefType
-      (Pact.Ref defn, toplevel, userTy) -> (toplevel,) <$>
-        moduleFunCheck tables checkExps (fmap snd consts') propDefs defn userTy
-
-  (stepChecks :: HM.HashMap (Text, Int)
-    ((AST Node, [Named Node], Info), Either ParseFailure [Located Check]))
-    <- hoist generalize $ for steps $ \((step, args, info), pactType) -> case step of
-      TC.Step _ _ exec _ _ model -> ((exec,args,info),) <$>
-        stepCheck tables (fmap snd consts') propDefs pactType model
-      _ -> error "invariant violation: anything but a step is unexpected in stepChecks"
-
-  caps <- moduleCapabilities moduleData
-
-  let modName :: ModuleName
-      modName = moduleDefName $ _mdModule moduleData
-
-      verifyFunProps
-        :: CheckableType -> Text -> [Located Check] -> Fun Node -> IO [CheckResult]
+  let verifyFunProps
+        :: CheckableType -> Text -> [Located Check] -> Fun Node
+        -> IO [CheckResult]
       verifyFunProps checkTy funName checks
-        = verifyFunctionProps modName tables caps funName checks checkTy
+        = verifyFunctionProps (moduleDefName (_mdModule moduleData)) tables
+          caps funName checks checkTy
 
-  -- check for parse failures in any of the checks
-  funChecks' <- case traverse sequence funChecks of
-    Left errs        -> throwError $ ModuleParseFailure errs
-    Right funChecks' -> pure funChecks'
-
-  stepChecks' <- case traverse sequence stepChecks of
-    Left errs         -> throwError $ ModuleParseFailure errs
-    Right stepChecks' -> pure stepChecks'
-
-  let invariantCheckable :: HM.HashMap Text (TopLevel Node, CheckableType)
-      invariantCheckable = HM.unions
-        [ fmap ((,CheckDefun)    . fst) funChecks'
-        , fmap ((,CheckDefconst) . fst) consts' -- XXX won't be checked in verifyFunctionInvariants
-        ]
-
-  -- actually check the checks
-  funChecks'' <- lift $ ifor funChecks' $ \name (toplevel, checks) -> case toplevel of
-    TopFun fun _ -> verifyFunProps CheckDefun name checks fun
-    _            -> error "invariant violation: anything but a TopFun is unexpected in funChecks"
-  stepChecks'' <- lift $ ifor stepChecks' $
-    \(name, _stepNum) ((node, args, info), checks) ->
-     verifyFunProps CheckPactStep name checks $
-       -- Only _fInfo, _fArgs, and _fBody are used:
-       FDefun info undefined undefined undefined undefined args [node]
-  invariantChecks <- ifor invariantCheckable $ \name (toplevel, checkType) ->
-    withExceptT ModuleCheckFailure $ ExceptT $
-      verifyFunctionInvariants modName tables caps toplevel name checkType
+  (funChecks, invariantChecks)
+    <- getFunChecks tables consts propDefs moduleData verifyFunProps
+      (defunRefs <> defpactRefs)
+  stepChecks <- getStepChecks tables consts propDefs verifyFunProps defpactRefs
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
-  pure $ ModuleChecks funChecks'' stepChecks'' invariantChecks warnings
+  pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
 
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
 renderVerifiedModule = \case
