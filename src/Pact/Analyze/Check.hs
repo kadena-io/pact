@@ -607,7 +607,8 @@ parseModuleModelDecl exps = traverse parseDecl exps where
       _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")
 
--- | Get the set ('HM.HashMap') of refs to functions in this module.
+-- | Get the set ('HM.HashMap') of refs to functions, pacts, and constants in
+-- this module.
 moduleTypecheckableRefs :: ModuleData Ref -> TypecheckableRefs
 moduleTypecheckableRefs ModuleData{..} = foldl f noRefs (HM.toList _mdRefMap)
   where
@@ -647,7 +648,6 @@ data FunctionEnvironment = FunctionEnvironment
   }
 
 -- | Make an environment (binding result and args) from a function type.
--- TODO: should Env be a type?
 makeFunctionEnvironment
   :: Pact.FunType TC.UserType -> Except VerificationFailure FunctionEnvironment
 makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
@@ -658,7 +658,8 @@ makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
       -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet.
       envVidStart = VarId (length argTys)
-      vids        = [1..] -- [1..(envVidStart - 1)]
+      -- TODO(joel): why is this not right? [1..(envVidStart - 1)]
+      vids        = [1..]
 
   -- TODO(joel): this relies on generating the same unique ids as
   -- @checkFunction@. We need to more carefully enforce this is true!
@@ -694,6 +695,15 @@ makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
 
   pure $ FunctionEnvironment envVidStart nameVids vidTys
 
+mkTableEnv :: [Table] -> TableMap (ColumnMap EType)
+mkTableEnv tables = TableMap $ Map.fromList $
+  tables <&> \Table { _tableName, _tableType } ->
+    let fields = _utFields _tableType
+        colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+          \(Pact.Arg argName ty _) ->
+            (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
+    in (TableName (T.unpack _tableName), colMap)
+
 -- | Get the set of checks for a step.
 stepCheck
   :: [Table]
@@ -716,15 +726,6 @@ stepCheck tables consts propDefs funTy model = do
     runExpParserOver exps $
       expToCheck (mkTableEnv tables) envVidStart nameVids vidTys consts propDefs
   pure $ Right checks
-
-mkTableEnv :: [Table] -> TableMap (ColumnMap EType)
-mkTableEnv tables = TableMap $ Map.fromList $
-  tables <&> \Table { _tableName, _tableType } ->
-    let fields = _utFields _tableType
-        colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-          \(Pact.Arg argName ty _) ->
-            (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
-    in (TableName (T.unpack _tableName), colMap)
 
 -- | Get the set of checks for a function.
 moduleFunCheck
