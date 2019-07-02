@@ -40,7 +40,7 @@ import           Control.Lens              (at, each, filtered, ifoldl, ifoldrM,
                                             itraversed, ix, toListOf, traversed, traverseOf,
                                             view, (%~), (&), (<&>), (?~), (^.),
                                             (^..), (^?), (^?!), (^@..), (.~),
-                                            _1, _2, _Left)
+                                            _2, _Left)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -870,37 +870,32 @@ verifyModule modules moduleData = runExceptT $ do
       TypecheckableRefs defunRefs defpactRefs defconstRefs
         = moduleTypecheckableRefs moduleData
 
-  -- XXX never actually checking properties of pacts
-  ( pacts :: HM.HashMap Text (TopLevel Node, Pact.FunType TC.UserType),
-    steps :: HM.HashMap (Text, Int) ((AST Node, [Named Node], Info), Pact.FunType TC.UserType)
-    ) <- ifoldrM
+  (steps :: HM.HashMap (Text, Int) ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
+    <- ifoldrM
     (\name ref accum -> do
       maybeDef <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeDef of
-        (toplevel@(TopFun (FDefun info _ _ Defpact funType args steps) _meta), _)
-          -> accum
-            & _1 . at name ?~ (toplevel, funType)
-            & _2 %~ (\stepAccum -> ifoldl
-              (\i stepAccum' step ->
-                stepAccum' & at (name, i) ?~ ((step, args, info), funType))
-              stepAccum
-              steps
-              )
+        (TopFun (FDefun info _ _ Defpact funType args steps) _meta, _)
+          -> ifoldl
+            (\i stepAccum step ->
+              stepAccum & at (name, i) ?~ ((step, args, info), funType))
+            accum
+            steps
         _ -> error "invariant failure: anything but a function is unexpected here"
     )
-    (HM.empty, HM.empty)
+    HM.empty
     defpactRefs
 
   (funTypes :: HM.HashMap Text (Ref, TopLevel Node, Pact.FunType TC.UserType)) <- ifoldrM
     (\name ref accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
-        (topFun@(TopFun (FDefun _info _mod _name Defun funType _args _body) _meta), _tcState)
+        (topFun@(TopFun (FDefun _info _mod _name _ funType _args _body) _meta), _tcState)
           -> accum & at name ?~ (ref, topFun, funType)
         _ -> error "invariant failure: anything but a function is unexpected here"
     )
     HM.empty
-    defunRefs
+    (defunRefs <> defpactRefs)
 
   (consts :: HM.HashMap Text (TopLevel Node, AST Node)) <- ifoldrM
     (\name ref accum -> do
@@ -960,17 +955,17 @@ verifyModule modules moduleData = runExceptT $ do
       invariantCheckable = HM.unions
         [ fmap ((,CheckDefun)    . fst) funChecks'
         , fmap ((,CheckDefconst) . fst) consts' -- XXX won't be checked in verifyFunctionInvariants
-        -- TODO: better to just check each step of a pact?
-        , fmap ((,CheckDefpact)  . fst) pacts
         ]
 
   -- actually check the checks
   funChecks'' <- lift $ ifor funChecks' $ \name (toplevel, checks) -> case toplevel of
     TopFun fun _ -> verifyFunProps CheckDefun name checks fun
-    _ -> error "TODO"
-  stepChecks'' <- lift $ ifor stepChecks' $ \(name, _stepNum) ((node, args, info), checks) -> verifyFunProps CheckPactStep name checks $
-     -- Only _fInfo, _fArgs, and _fBody are used:
-     FDefun info undefined undefined undefined undefined args [node]
+    _            -> error "invariant violation: anything but a TopFun is unexpected in funChecks"
+  stepChecks'' <- lift $ ifor stepChecks' $
+    \(name, _stepNum) ((node, args, info), checks) ->
+     verifyFunProps CheckPactStep name checks $
+       -- Only _fInfo, _fArgs, and _fBody are used:
+       FDefun info undefined undefined undefined undefined args [node]
   invariantChecks <- ifor invariantCheckable $ \name (toplevel, checkType) ->
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants modName tables caps toplevel name checkType
