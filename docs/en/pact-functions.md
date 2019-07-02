@@ -1328,6 +1328,29 @@ Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of th
 (verify-spv "TXOUT" (read-msg "proof"))
 ```
 
+## Decryption {#Decryption}
+
+### decrypt-cc20p1305 {#decrypt-cc20p1305}
+
+*ciphertext*&nbsp;`string` *nonce*&nbsp;`string` *aad*&nbsp;`string` *public-key*&nbsp;`string` *secret-key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Decrypt a Curve25519/ChaCha20/Poly1305 CIPHERTEXT using NONCE, AAD, PUBLIC-KEY and SECRET-KEY. CIPHERTEXT is an unpadded base64url value with the 16-byte authentication tag output of the encryption. PUBLIC-KEY and SECRET-KEY are base-16 strings of length 32. NONCE is an unpadded base64URL value of a 24-byte bytestring. AAD is additional authentication data of an unpadded base-16 string of any length. Result is unpadded base64URL.
+```lisp
+(decrypt-cc20p1305 ciphertext nonce aad pubkey privkey)
+```
+
+
+### validate-keypair {#validate-keypair}
+
+*public*&nbsp;`string` *secret*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values are base-16 strings of length 32.
+```lisp
+(validate-keypair pubkey privkey)
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.

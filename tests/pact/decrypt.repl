@@ -1,0 +1,21 @@
+(expect
+   "good keypair validates" true
+   (validate-keypair
+    "a236ee764da1bde16f3452df78ed0d46d94c0763042330a8341511cfe537da6d"
+    "92702bbc9026d489f0ecefe266d694b9ad321965f3345758d1f937fba8817184"))
+
+(expect-failure
+   "bad keypair fails"
+   (validate-keypair
+    "a236ee764da1bde16f3452df78ed0d46d94c0763042330a8341511cfe537da62"
+    "92702bbc9026d489f0ecefe266d694b9ad321965f3345758d1f937fba8817184"))
+
+(expect
+   "decryption test succeeds with base64url of 'message'"
+   "bWVzc2FnZQ"
+   (decrypt-cc20p1305
+    "xvhAzzyGWuWdlA2XW7irq2sEAC6JiHk"
+    "Ka96AovW2JFVrgOK"
+    "616164"
+    "a236ee764da1bde16f3452df78ed0d46d94c0763042330a8341511cfe537da6d"
+    "92702bbc9026d489f0ecefe266d694b9ad321965f3345758d1f937fba8817184"))
