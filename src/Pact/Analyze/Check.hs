@@ -635,12 +635,22 @@ moduleModelDecl ModuleData{..} = do
   let (propList, checkList) = partitionEithers lst
   pure $ ModelDecl (HM.fromList propList) checkList
 
+-- | Then environment for a function or step at the beginning of execution
+data FunctionEnvironment = FunctionEnvironment
+  { vidStart :: VarId
+  -- ^ The first 'VarId' the function can issue.
+  , nameVids :: Map Text VarId
+  -- ^ A 'VarId' for each argument to the function. For steps these are the
+  -- variables bound by the enclosing @defpact@.
+  , vidTys   :: Map VarId EType
+  -- ^ The type of each variable in scope.
+  }
+
 -- | Make an environment (binding result and args) from a function type.
 -- TODO: should Env be a type?
-mkEnv
-  :: Pact.FunType TC.UserType
-  -> Except VerificationFailure (VarId, Map Text VarId, Map VarId EType)
-mkEnv (Pact.FunType argTys resultTy) = do
+makeFunctionEnvironment
+  :: Pact.FunType TC.UserType -> Except VerificationFailure FunctionEnvironment
+makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
   let -- We use VID 0 for the result, the one for each argument variable.
       -- Finally, we start the VID generator in the translation environment at
       -- the next VID.
@@ -682,7 +692,7 @@ mkEnv (Pact.FunType argTys resultTy) = do
       vidTys :: Map VarId EType
       vidTys = Map.fromList $ fmap (\(Binding vid _ _ ty) -> (vid, ty)) env
 
-  pure (envVidStart, nameVids, vidTys)
+  pure $ FunctionEnvironment envVidStart nameVids vidTys
 
 -- | Get the set of checks for a step.
 stepCheck
@@ -699,7 +709,8 @@ stepCheck
   -- ^ The model
   -> Except VerificationFailure (Either ParseFailure [Located Check])
 stepCheck tables consts propDefs funTy model = do
-  (envVidStart, nameVids, vidTys) <- mkEnv funTy
+  FunctionEnvironment envVidStart nameVids vidTys
+    <- makeFunctionEnvironment funTy
   checks <- withExcept ModuleParseFailure $ liftEither $ do
     exps <- collectExps "property" model
     runExpParserOver exps $
@@ -731,7 +742,8 @@ moduleFunCheck
   -- ^ The type of the term under analysis
   -> Except VerificationFailure (Either ParseFailure [Located Check])
 moduleFunCheck tables modCheckExps consts propDefs defn funTy = do
-  (envVidStart, nameVids, vidTys) <- mkEnv funTy
+  FunctionEnvironment envVidStart nameVids vidTys
+    <- makeFunctionEnvironment funTy
 
   -- TODO: this was very hard code to debug as the unsafe lenses just result
   -- in properties not showing up, instead of a compile error when I changed 'TDef'
