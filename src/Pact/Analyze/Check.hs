@@ -318,6 +318,8 @@ inNewAssertionStack act = do
 analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
 
+-- | Check that all invariants hold for a function (this is actually used for
+-- defun, defpact, and step)
 verifyFunctionInvariants
   :: ModuleName
   -> [Table]
@@ -394,17 +396,19 @@ verifyFunctionInvariants modName tables caps (FunData funInfo pactArgs body)
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = SBV.runSMTWith config
 
+-- | Check that a specific property holds for a function (this is actually used
+-- for defun, defpact, and step)
 verifyFunctionProperty
-  :: ModuleName
-  -> [Table]
-  -> [Capability]
+  :: CheckEnv
   -> FunData
   -> Text
   -> CheckableType
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty modName tables caps (FunData funInfo pactArgs body)
-  funName checkType (Located propInfo check) = runExceptT $ do
+verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps)
+  (FunData funInfo pactArgs body) funName checkType
+  (Located propInfo check) = runExceptT $ do
+    let modName = moduleDefName (_mdModule moduleData)
     (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation modName funName funInfo caps pactArgs body checkType
@@ -469,18 +473,7 @@ verifyFunctionProperty modName tables caps (FunData funInfo pactArgs body)
       . SBVI.runSymbolic (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup
         (goal == Satisfaction) config)
 
-verifyFunctionProps
-  :: CheckEnv
-  -> Text
-  -> [Located Check]
-  -> CheckableType
-  -> FunData
-  -> IO [CheckResult]
-verifyFunctionProps (CheckEnv tables _consts _propDefs moduleData caps)
-  funName props checkType (FunData info args body) = for props $
-    verifyFunctionProperty (moduleDefName (_mdModule moduleData)) tables caps
-      (FunData info args body) funName checkType
-
+-- | Get the set of tables in the specified modules.
 moduleTables
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> (ModuleData Ref)                       -- ^ the module we're verifying
@@ -529,6 +522,8 @@ moduleTables modules ModuleData{..} = do
       _ -> throwError $ SchemalessTable $
         HM.fromList tables ^?! ix tabName.tInfo
 
+-- | Get the set of capabilities in this module. This is done by typechecking
+-- every capability ref and converting to a 'Capability'.
 moduleCapabilities
   :: ModuleData Ref -> ExceptT VerificationFailure IO [Capability]
 moduleCapabilities md = do
@@ -829,6 +824,8 @@ runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
   Left err   -> Left (meta, err)
   Right good -> Right (Located (getInfo meta) good)
 
+-- | Typecheck a 'Ref'. This is used to extract an @'AST' 'Node'@, which is
+-- translated to either a term or property.
 typecheck :: Ref -> IO (Either CheckFailure (TopLevel Node))
 typecheck ref = do
   (toplevel, tcState) <- runTC 0 False $ typecheckTopLevel ref
@@ -842,6 +839,7 @@ typecheck ref = do
 liftEither :: MonadError e m => Either e a -> m a
 liftEither = either throwError return
 
+-- | Extract constants by typechecking and translating to properties.
 getConsts
   :: HM.HashMap Text Ref
   -> ExceptT VerificationFailure IO (HM.HashMap Text EProp)
@@ -869,6 +867,9 @@ getConsts defconstRefs = do
   hoist generalize $
     traverseOf each (constToProp <=< translateNodeNoGraph') consts
 
+-- | Get the set of property check results for steps. Note that we just check
+-- properties of individual steps here. Invariants are checked in at the
+-- defpact level.
 getStepChecks
   :: CheckEnv
   -> HM.HashMap Text Ref
@@ -907,10 +908,12 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _) defpactRefs = do
     Right stepChecks' -> pure stepChecks'
 
   lift $ ifor stepChecks' $
-    \(name, _stepNum) ((node, args, info), checks) ->
-     verifyFunctionProps env name checks CheckPactStep $
-       FunData info args [node]
+    \(name, _stepNum) ((node, args, info), checks) -> for checks $
+     verifyFunctionProperty env (FunData info args [node]) name CheckPactStep
 
+
+-- | Get the set of property and invariant check results for functions (defun
+-- and defpact)
 getFunChecks
   :: CheckEnv
   -> HM.HashMap Text Ref
@@ -965,8 +968,8 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
   funChecks'' <- lift $ ifor funChecks' $ \name (toplevel, checks)
     -> case toplevel of
-      TopFun fun _ ->
-        verifyFunctionProps env name checks CheckDefun $ mkFunInfo fun
+      TopFun fun _ -> for checks $
+        verifyFunctionProperty env (mkFunInfo fun) name CheckDefun
       _            -> error
         "invariant violation: anything but a TopFun is unexpected in funChecks"
 
@@ -1012,6 +1015,8 @@ verifyModule modules moduleData = runExceptT $ do
 
   let checkEnv = CheckEnv tables consts propDefs moduleData caps
 
+  -- Note that invariants are only checked at the defpact level, not in
+  -- individual steps.
   (funChecks, invariantChecks)
     <- getFunChecks checkEnv $ defunRefs <> defpactRefs
   stepChecks <- getStepChecks checkEnv defpactRefs
@@ -1068,8 +1073,8 @@ verifyCheck moduleData funName check checkType = do
     Just funRef -> do
       (toplevel, _) <- lift $ runTC 0 False $ typecheckTopLevel funRef
       case toplevel of
-        TopFun fun _ -> ExceptT $
-          Right . head <$> verifyFunctionProps checkEnv funName
-            [Located info check] checkType (mkFunInfo fun)
+        TopFun fun _ -> ExceptT $ fmap Right $
+          verifyFunctionProperty checkEnv (mkFunInfo fun) funName checkType $
+            Located info check
         _ -> error "TODO"
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
