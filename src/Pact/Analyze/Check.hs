@@ -396,17 +396,15 @@ verifyFunctionInvariants modName tables caps (FunData funInfo pactArgs body)
 
 verifyFunctionProperty
   :: ModuleName
-  -> Text
-  -> Info
   -> [Table]
   -> [Capability]
-  -> [Named Node]
-  -> [AST Node]
+  -> FunData
+  -> Text
   -> CheckableType
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty modName funName funInfo tables caps pactArgs body
-  checkType (Located propInfo check) = runExceptT $ do
+verifyFunctionProperty modName tables caps (FunData funInfo pactArgs body)
+  funName checkType (Located propInfo check) = runExceptT $ do
     (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation modName funName funInfo caps pactArgs body checkType
@@ -480,8 +478,8 @@ verifyFunctionProps
   -> IO [CheckResult]
 verifyFunctionProps (CheckEnv tables _consts _propDefs moduleData caps)
   funName props checkType (FunData info args body) = for props $
-    verifyFunctionProperty (moduleDefName (_mdModule moduleData)) funName info
-      tables caps args body checkType
+    verifyFunctionProperty (moduleDefName (_mdModule moduleData)) tables caps
+      (FunData info args body) funName checkType
 
 moduleTables
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
