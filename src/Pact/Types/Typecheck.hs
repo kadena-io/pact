@@ -304,37 +304,37 @@ instance (Pretty n) => Pretty (AstBindType n) where
 
 -- | Inlined AST.
 data AST n =
-  App {
+  ASTApp {
   _aNode :: n,
   _aAppFun :: Fun n,
   _aAppArgs :: [AST n]
   } |
-  Binding {
+  ASTBinding {
   _aNode :: n,
   _aBindings :: [(Named n,AST n)],
   _aBody :: [AST n],
   _aBindType :: AstBindType n
   } |
-  List {
+  ASTList {
   _aNode :: n,
   _aList :: [AST n]
   } |
-  Object {
+  ASTObject {
   _aNode :: n,
   _aObject :: ObjectMap (AST n)
   } |
-  Prim {
+  ASTPrim {
   _aNode :: n,
   _aPrimValue :: PrimValue
   } |
-  Var {
+  ASTVar {
   _aNode :: n
   } |
-  Table {
+  ASTTable {
   _aNode :: n,
   _aTableName :: TableName
   } |
-  Step {
+  ASTStep {
   _aNode :: n,
   _aEntity :: Maybe (AST n),
   _aExec :: AST n,
@@ -346,17 +346,17 @@ data AST n =
 
 instance Pretty t => Pretty (AST t) where
   pretty a = case a of
-     Prim {..} -> sep [ pn, equals, pretty _aPrimValue ]
-     Var {..} -> pn
-     Object {..} -> sep
+     ASTPrim {..} -> sep [ pn, equals, pretty _aPrimValue ]
+     ASTVar {..} -> pn
+     ASTObject {..} -> sep
        [ pn
        , pretty _aObject
        ]
-     List {..} -> sep
+     ASTList {..} -> sep
        [ pn
        , bracketsSep [ indent 2 $ vsep $ map pretty _aList ]
        ]
-     Binding {..} -> sep
+     ASTBinding {..} -> sep
        [ pn
        , parensSep
          [ pretty _aBindType
@@ -366,13 +366,13 @@ instance Pretty t => Pretty (AST t) where
          , indent 2 $ vsep $ map pretty _aBody
          ]
        ]
-     App {..} -> sep
+     ASTApp {..} -> sep
        [ pn
        , indent 2 $ parensSep [ indent 2 $ vsep $ map pretty _aAppArgs ]
        , indent 2 $ pretty _aAppFun
        ]
-     Table {..} -> pn
-     Step {..} ->
+     ASTTable {..} -> pn
+     ASTStep {..} ->
        let rb x = case _aRollback of
                   Nothing -> x
                   Just r -> sep [ x, "Rollback:", indent 2 (pretty r) ]

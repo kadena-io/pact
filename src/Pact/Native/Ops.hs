@@ -57,16 +57,12 @@ addDef = defRNative "+" plus plusTy
 
     plus :: RNativeFun e
     plus _ [TLitString a,TLitString b] = return (tStr $ a <> b)
-    plus _ [TList a aty _,TList b bty _] = return $ TList
-      (a <> b)
-      (if aty == bty then aty else TyAny)
-      def
-    plus _ [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
-      return $ (`TObject` def) $ Object
-           (ObjectMap $ M.union as bs)
-           (if aty == bty then aty else TyAny)
-           def
-           def
+    plus _ [TList (PList a aty _),TList (PList b bty _)] = return
+      $ TList
+      $ PList (a <> b) (if aty == bty then aty else TyAny) def
+    plus _ [TObject (Object (ObjectMap as) aty _ _),TObject (Object (ObjectMap bs) bty _ _)] = return
+      $ TObject
+      $ Object (ObjectMap $ M.union as bs) (if aty == bty then aty else TyAny) def def
     plus i as = binop' (+) (+) i as
     {-# INLINE plus #-}
 
@@ -248,7 +244,7 @@ logicLam :: Type v -> Type v
 logicLam argTy = TyFun $ funType' tTyBool [("x",argTy)]
 
 delegateError :: Doc -> Term Ref -> Term Name -> Eval m a
-delegateError desc app r = evalError (_tInfo app) $ desc <> ": Non-boolean result from delegate: " <> pretty r
+delegateError desc app r = evalError (getInfo app) $ desc <> ": Non-boolean result from delegate: " <> pretty r
 
 liftLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Text -> Bool -> NativeDef
 liftLogic n bop desc shortCircuit =
@@ -257,23 +253,23 @@ liftLogic n bop desc shortCircuit =
     ("Apply logical '" <> desc <> "' to the results of applying VALUE to A and B, with short-circuit.")
   where
     r = mkTyVar "r" []
-    fun i as@[a@TApp{},b@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> do
-      ar <- apply (_tApp a) [v]
+    fun i as@[t@(TApp a), u@(TApp b),v'] = gasUnreduced i as $ reduce v' >>= \v -> do
+      ar <- apply a [v]
       case ar of
         TLitBool ab
           | ab == shortCircuit -> return $ toTerm shortCircuit
           | otherwise -> do
-              br <- apply (_tApp b) [v]
+              br <- apply b [v]
               case br of
                 TLitBool bb -> return $ toTerm $ bop ab bb
-                _ -> delegateError (pretty n) b br
-        _ -> delegateError (pretty n) a ar
+                _ -> delegateError (pretty n) u br
+        _ -> delegateError (pretty n) t ar
     fun i as = argsError' i as
 
 liftNot :: NativeFun e
-liftNot i as@[app@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> apply (_tApp app) [v] >>= \r -> case r of
+liftNot i as@[t@(TApp a),v'] = gasUnreduced i as $ reduce v' >>= \v -> apply a [v] >>= \r -> case r of
   TLitBool b -> return $ toTerm $ not b
-  _ -> delegateError "not?" app r
+  _ -> delegateError "not?" t r
 liftNot i as = argsError' i as
 
 

@@ -58,9 +58,9 @@ import Safe hiding (at)
 
 import Pact.Types.Native
 import Pact.Types.Pretty
-import qualified Pact.Types.Runtime as Term
 import Pact.Types.Runtime hiding (App,appInfo,Object,Step)
 import Pact.Types.Typecheck
+import Pact.Types.Term
 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
@@ -87,27 +87,27 @@ freshId i n = TcId i n <$> state (_tcSupply &&& over tcSupply succ)
 
 -- | Walk the AST, performing function both before and after descent into child elements.
 walkAST :: Monad m => Visitor m n -> AST n -> m (AST n)
-walkAST f t@Prim {} = f Pre t >>= f Post
-walkAST f t@Var {} = f Pre t >>= f Post
-walkAST f t@Table {} = f Pre t >>= f Post
-walkAST f t@Object {} = do
+walkAST f t@ASTPrim {} = f Pre t >>= f Post
+walkAST f t@ASTVar {} = f Pre t >>= f Post
+walkAST f t@ASTTable {} = f Pre t >>= f Post
+walkAST f t@ASTObject {} = do
   a <- f Pre t
-  t' <- Object (_aNode a) <$>
+  t' <- ASTObject (_aNode a) <$>
          mapM (walkAST f) (_aObject a)
   f Post t'
-walkAST f t@List {} = do
+walkAST f t@ASTList {} = do
   a <- f Pre t
-  t' <- List (_aNode a) <$> mapM (walkAST f) (_aList a)
+  t' <- ASTList (_aNode a) <$> mapM (walkAST f) (_aList a)
   f Post t'
-walkAST f t@Binding {} = do
+walkAST f t@ASTBinding {} = do
   a <- f Pre t
-  t' <- Binding (_aNode a) <$>
+  t' <- ASTBinding (_aNode a) <$>
         forM (_aBindings a) (\(k,v) -> (k,) <$> walkAST f v) <*>
         mapM (walkAST f) (_aBody a) <*> pure (_aBindType a)
   f Post t'
-walkAST f t@App {} = do
+walkAST f t@ASTApp {} = do
   a <- f Pre t
-  t' <- App (_aNode a) <$>
+  t' <- ASTApp (_aNode a) <$>
         (case _aAppFun a of
            fun@FNative {..} -> case _fSpecial of
              Nothing -> return fun
@@ -121,9 +121,9 @@ walkAST f t@App {} = do
         ) <*>
         mapM (walkAST f) (_aAppArgs a)
   f Post t'
-walkAST f t@Step {} = do
+walkAST f t@ASTStep {} = do
   a <- f Pre t
-  t' <- Step (_aNode a)
+  t' <- ASTStep (_aNode a)
     <$> traverse (walkAST f) (_aEntity a)
     <*> walkAST f (_aExec a)
     <*> traverse (walkAST f) (_aRollback a)
@@ -250,7 +250,7 @@ handleSpecialOverload :: Maybe OverloadSpecial ->
 handleSpecialOverload (Just OAt) m =
   case (M.lookup (ArgVar 0) m,M.lookup (ArgVar 1) m,M.lookup RetVar m) of
     (Just keyArg,Just srcArg,Just ret) -> case (roleTy keyArg,view rtAST keyArg,roleTy srcArg) of
-      (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u) _) -> case findSchemaField k u of
+      (TyPrim TyString, ASTPrim _ (PrimLit (LString k)),TySchema TyObject (TyUser u) _) -> case findSchemaField k u of
         Nothing -> m
         Just t -> unifyRet (roleTy ret) t
       (TyPrim TyInteger,_,TyList t) -> unifyRet (roleTy ret) t
@@ -270,7 +270,7 @@ findSchemaField fname Schema {..} =
 
 
 asPrimString :: AST Node -> TC Text
-asPrimString (Prim _ (PrimLit (LString s))) = return s
+asPrimString (ASTPrim _ (PrimLit (LString s))) = return s
 asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " ++ show t
 
 -- | Visitor to inspect Objects and Bindings to validate schemas,
@@ -279,7 +279,7 @@ asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " +
 applySchemas :: Visitor TC Node
 applySchemas Pre ast = case ast of
 
-  (Object n (ObjectMap ps)) -> findSchema n $ \sch partial -> do
+  (ASTObject n (ObjectMap ps)) -> findSchema n $ \sch partial -> do
     debug $ "applySchemas [object]: " ++ showPretty (n,sch,partial)
     pmap <- forM ps $ \v -> do
       vt' <- lookupAndResolveTy (_aNode v)
@@ -291,12 +291,12 @@ applySchemas Pre ast = case ast of
         assocAstTy n $ TySchema TyObject (TyUser sch) (PartialSchema pkeys)
     return ast
 
-  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch partial -> do
+  (ASTBinding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch partial -> do
     debug $ "applySchemas [binding]: " ++ showPretty (n,sch)
     pmapM <- forM bs $ \(Named _ node ni,bv) -> case bv of
-      Prim _ (PrimLit (LString bn)) -> do
+      ASTPrim _ (PrimLit (LString bn)) -> do
         vt' <- lookupAndResolveTy node
-        return $ Just (FieldKey bn,(Var node,ni,vt'))
+        return $ Just (FieldKey bn,(ASTVar node,ni,vt'))
       _ -> addFailure ni ("Found non-string key in schema binding: " ++ showPretty bv) >> return Nothing
     case sequence pmapM of
       Just pmap -> validateSchema sch partial (M.fromList pmap) >>= \pm ->
@@ -308,7 +308,7 @@ applySchemas Pre ast = case ast of
       Nothing -> return () -- error already tracked above
     return ast
 
-  (List n ls) -> lookupAndResolveTy n >>= \ltym -> case ltym of
+  (ASTList n ls) -> lookupAndResolveTy n >>= \ltym -> case ltym of
     (TyList TyAny) -> do
       debug $ "Skipping TC on specified heterogenous list for node: " ++ show n
       return ast
@@ -378,7 +378,7 @@ applySchemas Post a = return a
 --  2. for bindings, associate binding AST with fun return ty,
 --     associate inner binding schema type with funty last arg ty
 processNatives :: Visitor TC Node
-processNatives Pre a@(App i FNative {..} argASTs) = do
+processNatives Pre a@(ASTApp i FNative {..} argASTs) = do
   case _fTypes of
     -- single funtype
     orgFunType@FunType {} :| [] -> do
@@ -388,7 +388,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
 
       -- zip funtype 'Arg's with AST args, and assoc each.
       args <- (\f -> zipWithM f (_ftArgs mangledFunType) argASTs) $ \(Arg _ argTy _) argAST -> case (argTy,argAST) of
-        (TyFun lambdaType,partialAST@App{}) -> do
+        (TyFun lambdaType,partialAST@ASTApp{}) -> do
           debug $ "associating partial AST app with lambda return type: " ++ show lambdaType
           assocAstTy (_aNode argAST) $ _ftReturn lambdaType
           debug "associating partial AST args with lambda arg types"
@@ -413,12 +413,12 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
         Just spec -> case (spec,args) of
           -- bindings
           ((_,SBinding b),_) -> case b of
-            (Binding bn _ _ (AstBindSchema sn)) -> do
+            (ASTBinding bn _ _ (AstBindSchema sn)) -> do
               -- assoc binding with app return
               assocAstTy bn $ _ftReturn mangledFunType
               -- assoc schema with last ft arg
               assocAstTy sn (_aType (last (toList $ _ftArgs mangledFunType)))
-            (List _ln ll) -> do -- TODO, for with-capability
+            (ASTList _ln ll) -> do -- TODO, for with-capability
               -- assoc app return with last of body
               assocAstTy (_aNode $ last ll) $ _ftReturn mangledFunType
             sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
@@ -445,7 +445,7 @@ processNatives _ a = return a
 
 
 assocTyWithAppArg :: Type UserType -> AST Node -> Int -> TC ()
-assocTyWithAppArg tl t@(App _ _ as) offset = debug ("assocTyWithAppArg: " ++ show (tl,offset,t)) >> case as `atMay` (length as - offset - 1 ) of
+assocTyWithAppArg tl t@(ASTApp _ _ as) offset = debug ("assocTyWithAppArg: " ++ show (tl,offset,t)) >> case as `atMay` (length as - offset - 1 ) of
   Just a -> assocAstTy (_aNode a) tl
   Nothing -> return ()
 assocTyWithAppArg _ _ _ = return ()
@@ -466,9 +466,9 @@ inlineAppArgs appNode defunType defunArgs defunBody args = do
 
   assocAstTy appNode retTy
 
-  let appInfo  = _tiInfo $ _aId appNode
+  let ai  = _tiInfo $ _aId appNode
       bindType = AstBindInlinedCallArgs :: AstBindType Node
-  letId <- freshId appInfo (pack $ show bindType)
+  letId <- freshId ai (pack $ show bindType)
   letNode <- trackIdNode letId
   assocAstTy letNode retTy
 
@@ -485,7 +485,7 @@ inlineAppArgs appNode defunType defunArgs defunBody args = do
       letBindings = zip letBinders args
 
       vars :: [AST Node]
-      vars = Var . _nnNamed <$> letBinders
+      vars = ASTVar . _nnNamed <$> letBinders
 
       subs :: [(TcId, AST Node)]
       subs = zip (_aId . _nnNamed <$> defunArgs) vars
@@ -494,23 +494,23 @@ inlineAppArgs appNode defunType defunArgs defunBody args = do
       substitute sub = walkAST (substAppDefun (Just sub))
 
   body' <- forM defunBody $ \bodyExpr -> foldM (flip substitute) bodyExpr subs
-  return [Binding letNode letBindings body' bindType]
+  return [ASTBinding letNode letBindings body' bindType]
 
 -- | Visitor to process Apps of user defuns.
 -- We want to a) replace AST nodes with the app arg ASTs,
 -- b) associate the AST nodes to check and track their related types
 substAppDefun :: Maybe (TcId, AST Node) -> Visitor TC Node
-substAppDefun (Just (defArg,appAst)) Pre t@Var {..}
+substAppDefun (Just (defArg,appAst)) Pre t@ASTVar {..}
   | defArg == _aId _aNode = assocAST defArg appAst >> return appAst
   | otherwise = return t
-substAppDefun Nothing Post (App appNode fun args) = do -- Post, to allow AST subs first
+substAppDefun Nothing Post (ASTApp appNode fun args) = do -- Post, to allow AST subs first
     fun' <- case fun of
       FNative {} ->
         return fun -- noop
       FDefun {_fType,_fArgs,_fBody} -> do
         body' <- inlineAppArgs appNode _fType _fArgs _fBody args
         return $ set fBody body' fun
-    return (App appNode fun' args)
+    return (ASTApp appNode fun' args)
 substAppDefun _ _ t = return t
 
 -- | Track AST as a TypeVar pointing to a Types. If the provided node type is already a var use that,
@@ -720,7 +720,7 @@ scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> T
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
-    (TList ts _ _) | not (V.null ts) -> mapM toAST (V.toList ts) -- verifies non-empty body.
+    (TList (PList ts _ _)) | not (V.null ts) -> mapM toAST (V.toList ts) -- verifies non-empty body.
     _ -> die i "Malformed def body"
 
 pfx :: Text -> Text -> Text
@@ -752,25 +752,25 @@ mangleFunType f = over ftReturn (mangleType f) .
 
 -- | Build Defuns and natives from Terms.
 toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
-toFun (TVar (Left (Direct TNative {..})) _) = do
-  ft' <- traverse (traverse toUserType') (fmap (fmap (fmap Right)) _tFunTypes)
-  return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
-toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
-toFun (TVar Right {} i) = die i "Value in fun position"
-toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
-  let mn = _dModule _tDef
-      fn = asString $ _dDefName _tDef
-  args <- forM (_ftArgs (_dFunType _tDef)) $ \(Arg n t ai) -> do
+toFun (TVar (PVar (Left (Direct (TNative Native{..} ))) _)) = do
+  ft' <- traverse (traverse toUserType') (fmap (fmap (fmap Right)) _nfFunTypes)
+  return $ FNative _nfInfo (asString _nfName) ft' Nothing -- we deal with special form in App
+toFun (TVar (PVar (Left (Ref r)) _)) = toFun (fmap Left r)
+toFun (TVar (PVar Right{} i)) = die i "Value in fun position"
+toFun (TDef d) = do -- TODO currently creating new vars every time, is this ideal?
+  let mn = _dModule d
+      fn = asString $ _dDefName d
+  args <- forM (_ftArgs (_dFunType d)) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
     Named n <$> trackNode t' an <*> pure an
-  tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) (_dDefBody _tDef)
-  funType <- traverse toUserType (_dFunType _tDef)
-  funId <- freshId _tInfo fn
+  tcs <- scopeToBody (getInfo d) (map (ASTVar . _nnNamed) args) (_dDefBody d)
+  funType <- traverse toUserType (_dFunType d)
+  funId <- freshId (getInfo d) fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
-  return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs
-toFun t = die (_tInfo t) "Non-var in fun position"
+  return $ FDefun (getInfo d) mn fn (_dDefType d) funType args tcs
+toFun t = die (getInfo t) "Non-var in fun position"
 
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
@@ -779,7 +779,7 @@ assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
   where
     lastStep = pred $ length steps
     toStepYRs = forM steps $ \step -> case step of
-      Step{..} -> return (_aNode,_aYieldResume)
+      ASTStep{..} -> return (_aNode,_aYieldResume)
       _ -> die'' step "Non-step in defpact"
     yrMay l yr = preview (_Just . l . _Just) yr
     go :: (Maybe (YieldResume Node),Int) -> (Node, Maybe (YieldResume Node)) -> TC (Maybe (YieldResume Node),Int)
@@ -818,28 +818,28 @@ notEmpty _ _ as = return as
 
 -- | Build ASTs from terms.
 toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
-toAST TNative {..} = die _tInfo "Native in value position"
-toAST TDef {..} = die _tInfo "Def in value position"
-toAST TSchema {..} = die _tInfo "User type in value position"
+toAST t@TNative{} = die (getInfo t) "Native in value position"
+toAST t@TDef{} = die (getInfo t) "Def in value position"
+toAST t@TSchema{} = die (getInfo t) "User type in value position"
 
-toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
+toAST (TVar (PVar v i)) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
   (Left (Direct t)) ->
     case t of
-      TLiteral {..} ->
+      TLiteral l i' ->
         -- Handle references to pre-evaluated constants:
-        trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
+        trackPrim i' (litToPrim l) (PrimLit l)
       _ ->
         die i $ "Native in value context: " ++ show t
   (Right t) -> return t
 
-toAST (TApp Term.App{..} _) = do
+toAST (TApp App{..}) = do
 
   fun <- toFun _appFun
   i <- freshId _appInfo $ _fName fun
   n <- trackIdNode i
   args <- mapM toAST _appArgs
-  let mkApp fun' args' = return $ App n fun' args'
+  let mkApp fun' args' = return $ ASTApp n fun' args'
 
   case fun of
 
@@ -870,13 +870,13 @@ toAST (TApp Term.App{..} _) = do
         let funType = NE.head (_fTypes fun')
         (\f -> zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST ->
           case (argTy,argAST) of
-            (TyFun lambdaTy,App{}) ->
+            (TyFun lambdaTy,ASTApp{}) ->
               (\f -> foldM f argAST (_ftArgs lambdaTy)) $ \argAST' (Arg lamArgName _ _) -> do
                 freshArg <- trackIdNode =<<
                   freshId (_tiInfo (_aId (_aNode argAST')))
                   (_fName (_aAppFun argAST) <> "_" <> lamArgName <> "_p")
                 debug $ "Adding fresh arg to partial application: " ++ show freshArg
-                return $ over aAppArgs (++ [Var freshArg]) argAST'
+                return $ over aAppArgs (++ [ASTVar freshArg]) argAST'
             (TyFun t,_) -> die'' argAST $ "App required for funtype argument: " ++ show t
             _ -> return argAST
 
@@ -912,59 +912,59 @@ toAST (TApp Term.App{..} _) = do
             Resume -> do
               app' <- specialBind
               case head args' of -- 'specialBind' ensures non-empty args
-                (Binding _ _ _ (AstBindSchema sty)) ->
+                (ASTBinding _ _ _ (AstBindSchema sty)) ->
                   setOrAssocYR yrResume sty
                 a -> die'' a "Expected binding"
               return app'
             _ -> mkApp fun' args'
 
-toAST TBinding {..} = do
-  bi <- freshId _tInfo $ case _tBindType of
+toAST (TBinding Binding{..})  = do
+  bi <- freshId _bdInfo $ case _bdType of
     BindLet -> "BindLet"
     BindSchema _ -> "BindSchema"
   bn <- trackIdNode bi
-  bs <- forM _tBindPairs $ \(BindPair (Arg n t ai) v) -> do
+  bs <- forM _bdPairs $ \(BindPair (Arg n t ai) v) -> do
     aid <- freshId ai (pfx (pack $ show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
     an <- trackNode t' aid
     v' <- toAST v
-    case _tBindType of
+    case _bdType of
       BindLet -> do
         assocAST aid v'
         return (Named n an aid,v')
       BindSchema _ -> do
         _fieldName <- asPrimString v'
         return (Named n an aid,v')
-  bb <- scopeToBody _tInfo (map (Var . _nnNamed . fst) bs) _tBindBody
+  bb <- scopeToBody _bdInfo (map (ASTVar . _nnNamed . fst) bs) _bdBody
   assocAST bi (last bb)
-  bt <- case _tBindType of
+  bt <- case _bdType of
     BindLet -> return AstBindLet
     BindSchema sty -> do
       sty' <- mangleType bi <$> traverse toUserType sty
-      sn <- trackNode sty' =<< freshId _tInfo (pack $ show bi ++ "schema")
+      sn <- trackNode sty' =<< freshId _bdInfo (pack $ show bi ++ "schema")
       return $ AstBindSchema sn
-  return $ Binding bn bs bb bt
+  return $ ASTBinding bn bs bb bt
 
-toAST TList {..} = do
-  ty <- TyList <$> traverse toUserType _tListType
-  List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST (V.toList _tList)
-toAST (TObject Term.Object {..} _) = do
+toAST (TList pl) = do
+  ty <- TyList <$> traverse toUserType (_plListType pl)
+  ASTList <$> (trackNode ty =<< freshId (_plInfo pl) "list") <*> mapM toAST (V.toList $ _plList pl)
+toAST (TObject Object {..}) = do
   debug $ "TObject: " ++ show _oObjectType
   ty <- TySchema TyObject <$> traverse toUserType _oObjectType <*> pure FullSchema
-  Object <$> (trackNode ty =<< freshId _oInfo "object")
+  ASTObject <$> (trackNode ty =<< freshId _oInfo "object")
     <*> mapM toAST _oObject
-toAST TConst {..} = toAST $ constTerm _tConstVal -- TODO(stuart): typecheck here
-toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
-toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
-toAST TTable {..} = do
-  debug $ "TTable: " ++ show _tTableType
-  ty <- TySchema TyTable <$> traverse toUserType _tTableType <*> pure FullSchema
-  Table
-    <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
-    <*> pure _tTableName
-toAST TModule {..} = die _tInfo "Modules not supported"
-toAST TUse {..} = die _tInfo "Use not supported"
-toAST (TStep Term.Step {..} _) = do
+toAST (TConst PConst{..})  = toAST $ constTerm _pcConstVal -- TODO(stuart): typecheck here
+toAST (TGuard g i) = trackPrim i (TyGuard $ Just $ guardTypeOf g) (PrimGuard g)
+toAST (TLiteral l i) = trackPrim i (litToPrim l) (PrimLit l)
+toAST (TTable PTable{..}) = do
+  debug $ "TTable: " ++ show _ptTableType
+  ty <- TySchema TyTable <$> traverse toUserType _ptTableType <*> pure FullSchema
+  ASTTable
+    <$> (trackNode ty =<< freshId _ptInfo (asString _ptModule <> "." <> asString _ptTableName))
+    <*> pure _ptTableName
+toAST t@TModule{} = die (getInfo t) "Modules not supported"
+toAST t@TUse{} = die (getInfo t) "Use not supported"
+toAST (TStep Step {..}) = do
   ent <- forM _sEntity $ \e -> do
     e' <- toAST e
     assocAstTy (_aNode e') $ TyPrim TyString
@@ -975,12 +975,12 @@ toAST (TStep Term.Step {..} _) = do
   ex <- toAST _sExec
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
-  Step sn ent ex <$> traverse toAST _sRollback <*> pure yr
+  ASTStep sn ent ex <$> traverse toAST _sRollback <*> pure yr
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do
   let ty :: Type UserType = TyPrim pty
-  Prim <$> (trackNode ty =<< freshId inf (pack $ showPretty ty) ) <*> pure v
+  ASTPrim <$> (trackNode ty =<< freshId inf (pack $ showPretty ty) ) <*> pure v
 
 trackNode :: Type UserType -> TcId -> TC Node
 trackNode ty i = trackAST node >> return node
@@ -989,15 +989,17 @@ trackNode ty i = trackAST node >> return node
 -- | Main type transform, expecting that vars can only refer to a user type.
 toUserType :: forall n . Show n => Term (Either Ref n) -> TC UserType
 toUserType t = case t of
-  (TVar (Left r) _) -> derefUT r
-  _ -> die (_tInfo t) $ "toUserType: expected user type: " ++ show t
+  TVar (PVar (Left r) _) -> derefUT r
+  _ -> die (getInfo t) $ "toUserType: expected user type: " ++ show t
   where
     derefUT (Ref r) = toUserType' (fmap Left r :: Term (Either Ref n))
-    derefUT Direct {} = die (_tInfo t) $ "toUserType: unexpected direct ref: " ++ show t
+    derefUT Direct {} = die (getInfo t) $ "toUserType: unexpected direct ref: " ++ show t
 
 toUserType' :: Show n => Term (Either Ref n) -> TC UserType
-toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
-toUserType' t = die (_tInfo t) $ "toUserType: expected user type: " ++ show t
+toUserType' (TSchema PSchema{..}) = Schema _psName _psModule
+  <$> mapM (traverse toUserType) _psFields
+  <*> pure _psInfo
+toUserType' t = die (getInfo t) $ "toUserType: expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
 bindArgs i args b =
@@ -1013,22 +1015,22 @@ instance Pretty AbbrevNode where
 
 -- | Convert a top-level Term to a TopLevel.
 mkTop :: Term (Either Ref (AST Node)) -> TC (TopLevel Node)
-mkTop t@TDef {..} = do
+mkTop t@(TDef d) = do
   debug $ "===== Fun: " ++ abbrevStr (AbbrevNode <$> t)
-  TopFun <$> toFun t <*> pure (_dMeta _tDef)
-mkTop t@TConst {..} = do
+  TopFun <$> toFun t <*> pure (_dMeta d)
+mkTop t@(TConst c) = do
   debug $ "===== Const: " ++ abbrevStr (AbbrevNode <$> t)
-  TopConst _tInfo (asString _tModule <> "." <> _aName _tConstArg) <$>
-    traverse toUserType (_aType _tConstArg) <*>
-    toAST (constTerm _tConstVal) <*> pure (_mDocs _tMeta)
-mkTop t@TTable {..} = do
+  TopConst (getInfo c) (asString (_pcModule c) <> "." <> _aName (_pcConstArg c)) <$>
+    traverse toUserType (_aType $ _pcConstArg c) <*>
+    toAST (constTerm $ _pcConstVal c) <*> pure (_mDocs $ _pcMeta c)
+mkTop t@(TTable pt) = do
   debug $ "===== Table: " ++ abbrevStr (AbbrevNode <$> t)
-  TopTable _tInfo (asString _tModule <> "." <> asString _tTableName) <$>
-    traverse toUserType _tTableType <*> pure _tMeta
-mkTop t@TSchema {..} = do
+  TopTable (getInfo pt) (asString (_ptModule pt) <> "." <> asString (_ptTableName pt)) <$>
+    traverse toUserType (_ptTableType pt) <*> pure (_ptMeta pt)
+mkTop t@(TSchema ps) = do
   debug $ "===== Schema: " ++ abbrevStr (AbbrevNode <$> t)
-  TopUserType _tInfo <$> toUserType' t <*> pure (_mDocs _tMeta)
-mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrevStr (AbbrevNode <$> t)
+  TopUserType (_psInfo ps) <$> toUserType' t <*> pure (_mDocs $ _psMeta ps)
+mkTop t = die (getInfo t) $ "Invalid top-level term: " ++ abbrevStr (AbbrevNode <$> t)
 
 
 -- | Recursively compute the "leaf type" where
@@ -1137,7 +1139,7 @@ typecheckTopLevel (Ref r) = do
   tl' <- typecheck tl
   debug $ "\n===== Done: " ++ abbrevStr r
   return tl'
-typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrevStr d
+typecheckTopLevel (Direct d) = die (getInfo d) $ "Unexpected direct ref: " ++ abbrevStr d
 
 -- | Typecheck all productions in a module.
 typecheckModule :: Bool -> ModuleData Ref -> IO ([TopLevel Node],[Failure])

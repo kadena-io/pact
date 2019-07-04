@@ -68,8 +68,7 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
                                             Def (..), DefType (..), Info, dMeta,
-                                            mModel, renderInfo, renderParsed,
-                                            tDef, tInfo, tMeta, _tDef)
+                                            mModel, renderInfo, renderParsed)
 import           Pact.Types.Pretty         (renderCompactText)
 import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
                                             Ref' (Ref), Ref,
@@ -79,7 +78,8 @@ import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Term           (DefName (..), DefType (Defcap),
                                             dDefType, moduleDefMeta,
-                                            moduleDefName, _Ref)
+                                            moduleDefName, _Ref, _TSchema, psMeta, psInfo,
+                                           _TTable, ptInfo, _TDef)
 import           Pact.Types.Type           (_ftArgs)
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
@@ -469,14 +469,14 @@ moduleTables modules ModuleData{..} = do
         let TC.Schema{_utName,_utFields} = schema
             schemaName = asString _utName
 
-        invariants <- case schemas ^? ix schemaName.tMeta.mModel of
+        invariants <- case schemas ^? ix schemaName._TSchema.psMeta.mModel of
           -- no model = no invariants
           Nothing    -> pure []
           Just model -> case normalizeListLit model of
             Nothing -> throwError $ ModuleParseFailure
               -- reconstruct an `Exp Info` for this list
               ( Pact.EList $ Pact.ListExp model Pact.Brackets $
-                  schemas ^?! ix schemaName.tInfo
+                  schemas ^?! ix schemaName._TSchema.psInfo
               , "malformed list (inconsistent use of comma separators?)"
               )
             Just model' -> withExceptT ModuleParseFailure $ liftEither $ do
@@ -489,7 +489,7 @@ moduleTables modules ModuleData{..} = do
       -- If we don't have a user type, the type should be `TyAny` (`*`),
       -- meaning the table has no schema. Refuse to verify the module.
       _ -> throwError $ SchemalessTable $
-        HM.fromList tables ^?! ix tabName.tInfo
+        HM.fromList tables ^?! ix tabName._TTable.ptInfo
 
 moduleCapabilities :: ModuleData Ref -> ExceptT VerificationFailure IO [Capability]
 moduleCapabilities md = do
@@ -500,7 +500,7 @@ moduleCapabilities md = do
   where
     defcapRefs :: [Ref]
     defcapRefs = toListOf
-      (mdRefMap.traverse.filtered (\ref -> ref ^? _Ref.tDef.dDefType == Just Defcap))
+      (mdRefMap.traverse.filtered (\ref -> ref ^? _Ref._TDef.dDefType == Just Defcap))
       md
 
     mkCap :: TopLevel Node -> Except VerificationFailure Capability
@@ -609,7 +609,7 @@ parseModuleModelDecl exps = traverse parseDecl exps where
 moduleTypecheckableRefs :: ModuleData Ref -> HM.HashMap Text (Ref, CheckableType)
 moduleTypecheckableRefs ModuleData{..} = flip HM.mapMaybe _mdRefMap $ \ref ->
   case ref of
-    Ref (TDef def _) -> case _dDefType def of
+    Ref (TDef def) -> case _dDefType def of
       Defun   -> Just (ref, CheckDefun)
       Defpact -> Just (ref, CheckDefpact)
       Defcap  -> Nothing
@@ -641,7 +641,7 @@ moduleFunChecks
 moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \case
   -- TODO How better to handle the type mismatch?
   (Pact.Direct _, _, _) -> throwError InvalidRefType
-  (ref@(Ref defn), Pact.FunType argTys resultTy, checkType) -> do
+  (ref@(Ref (TDef defn)), Pact.FunType argTys resultTy, checkType) -> do
 
     let -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
         --       not there yet:
@@ -694,23 +694,25 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
     -- to a safe constructor. Please consider
     -- moving this code to use pattern matches to ensure the proper constructor
     -- is found; and/or change 'funTypes' to hold 'Def' objects
-    checks <- case defn ^? tDef . dMeta . mModel of
+    checks <- case defn ^? dMeta . mModel of
       Nothing -> pure []
       Just model -> case normalizeListLit model of
         Nothing -> throwError $ ModuleParseFailure
           -- reconstruct an `Exp Info` for this list
-          ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
+          ( Pact.EList (Pact.ListExp model Pact.Brackets (_dInfo defn))
           , "malformed list (inconsistent use of comma separators?)"
           )
         Just model' -> withExcept ModuleParseFailure $ liftEither $ do
           exps <- collectExps "property" model'
-          let funName = _dDefName (_tDef defn)
+          let funName = _dDefName defn
               applicableModuleChecks = map _moduleProperty $
                 filter (applicableCheck funName) modCheckExps
           runExpParserOver (applicableModuleChecks <> exps) $
             expToCheck tableEnv vidStart nameVids vidTys consts propDefs
-
+    
     pure ((ref, checkType), Right checks)
+    
+  
 
 -- | Remove the "invariant" or "property" application from every exp
 collectExps :: Text -> [Exp Info] -> Either ParseFailure [Exp Info]

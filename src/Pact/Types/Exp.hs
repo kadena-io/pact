@@ -159,7 +159,7 @@ data LiteralExp i = LiteralExp
   { _litLiteral :: !Literal
   , _litInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-instance HasInfo (LiteralExp Info) where
+instance GetInfo (LiteralExp Info) where
   getInfo = _litInfo
 instance NFData i => NFData (LiteralExp i)
 instance ToJSON i => ToJSON (LiteralExp i) where
@@ -176,7 +176,7 @@ data AtomExp i = AtomExp
   , _atomQualifiers :: ![Text]
   , _atomInfo :: i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-instance HasInfo (AtomExp Info) where
+instance GetInfo (AtomExp Info) where
   getInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
 instance ToJSON i => ToJSON (AtomExp i) where
@@ -195,7 +195,7 @@ data ListExp i = ListExp
   , _listDelimiter :: !ListDelimiter
   , _listInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-instance HasInfo (ListExp Info) where
+instance GetInfo (ListExp Info) where
   getInfo = _listInfo
 instance NFData i => NFData (ListExp i)
 instance ToJSON i => ToJSON (ListExp i) where
@@ -214,7 +214,7 @@ data SeparatorExp i = SeparatorExp
   { _sepSeparator :: !Separator
   , _sepInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-instance HasInfo (SeparatorExp Info) where
+instance GetInfo (SeparatorExp Info) where
   getInfo = _sepInfo
 instance NFData i => NFData (SeparatorExp i)
 instance ToJSON i => ToJSON (SeparatorExp i) where
@@ -242,7 +242,7 @@ instance Pretty (Exp i) where
     ESeparator s -> pretty s
 
 instance NFData i => NFData (Exp i)
-instance HasInfo (Exp Info) where
+instance GetInfo (Exp Info) where
   getInfo e = case e of
     ELiteral i -> getInfo i
     EAtom a -> getInfo a

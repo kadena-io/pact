@@ -528,7 +528,7 @@ typeOfPartialBind
   :: SingTy ('TyObject schema) -> [(Named Node, AST Node)] -> TranslateM EType
 typeOfPartialBind objTy bindings = do
   columnNames <- for bindings $ \case
-    (_, Pact.Prim _ (Pact.PrimLit (LString name))) -> pure $ T.unpack name
+    (_, Pact.ASTPrim _ (Pact.PrimLit (LString name))) -> pure $ T.unpack name
     (_, binding) -> throwError' $ NonStaticColumns binding
 
   -- The object keys are sorted so we must sort our binding names to match them

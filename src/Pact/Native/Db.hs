@@ -137,10 +137,10 @@ dbDefs =
     ])
 
 descTable :: RNativeFun e
-descTable _ [TTable {..}] = return $ toTObject TyAny def [
-  ("name",tStr $ asString _tTableName),
-  ("module", tStr $ asString _tModule),
-  ("type", toTerm $ pack $ showPretty _tTableType)]
+descTable _ [TTable PTable{..}] = return $ toTObject TyAny def [
+  ("name",tStr $ asString _ptTableName),
+  ("module", tStr $ asString _ptModule),
+  ("type", toTerm $ pack $ showPretty _ptTableType)]
 descTable i as = argsError i as
 
 descKeySet :: RNativeFun e
@@ -180,12 +180,12 @@ userTable = UserTables . userTable'
 
 -- | unsafe function to create TableName from TTable.
 userTable' :: Show n => Term n -> TableName
-userTable' TTable {..} = TableName $ asString _tModule <> "_" <> asString _tTableName
+userTable' (TTable t) = TableName $ asString (_ptModule t) <> "_" <> asString (_ptTableName t)
 userTable' t = error $ "creating user table from non-TTable: " ++ show t
 
 
 read' :: GasRNativeFun e
-read' g0 i as@(table@TTable {}:TLitString key:rest) = do
+read' g0 i as@(table@(TTable t):TLitString key:rest) = do
   cols <- case rest of
     [] -> return []
     [l] -> colsToList (argsError i as) l
@@ -197,8 +197,8 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
     Just cs -> do
       g <- gasPostRead i g0 cs
       fmap (g,) $ case cols of
-        [] -> return $ columnsToObject (_tTableType table) cs
-        _ -> columnsToObject' (_tTableType table) cols cs
+        [] -> return $ columnsToObject (_ptTableType t) cs
+        _ -> columnsToObject' (_ptTableType t) cols cs
 
 read' _ i as = argsError i as
 
@@ -215,7 +215,7 @@ gasPostReads i g0 postProcess action = do
   (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
 columnsToObject :: Type (Term Name) -> ObjectMap PactValue -> Term Name
-columnsToObject ty m = TObject (Object (fmap fromPactValue m) ty def def) def
+columnsToObject ty m = TObject $ Object (fmap fromPactValue m) ty def def
 
 columnsToObject' :: Type (Term Name) -> [(Info,FieldKey)] ->
                     ObjectMap PactValue -> Eval m (Term Name)
@@ -224,7 +224,7 @@ columnsToObject' ty cols (ObjectMap m) = do
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
                   Just v -> return (col, fromPactValue v)
-  return $ TObject (Object (ObjectMap (M.fromList ps)) ty def def) def
+  return $ TObject $ Object (ObjectMap (M.fromList ps)) ty def def
 
 
 
@@ -237,13 +237,13 @@ select i as = argsError' i as
 
 select' :: FunApp -> [Term Ref] -> Maybe [(Info,FieldKey)] ->
            Term Ref -> Term Name -> Eval e (Gas,Term Name)
-select' i _ cols' app@TApp{} tbl@TTable{} = do
-    g0 <- computeGas (Right i) $ GSelect cols' app tbl
+select' i _ cols' tapp@(TApp app) tbl@(TTable t) = do
+    g0 <- computeGas (Right i) $ GSelect cols' tapp tbl
     guardTable i tbl
     let fi = _faInfo i
-        tblTy = _tTableType tbl
+        tblTy = _ptTableType t
     ks <- keys fi (userTable tbl)
-    fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $
+    fmap (second (\b -> TList $ PList (V.fromList (reverse b)) tblTy def)) $
       (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
 
       mrow <- readRow fi (userTable tbl) k
@@ -253,23 +253,23 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
         Just row -> do
           g <- gasPostRead i gPrev row
           let obj = columnsToObject tblTy row
-          result <- apply (_tApp app) [obj]
+          result <- apply app [obj]
           fmap (g,) $ case result of
             (TLiteral (LBool include) _)
               | include -> case cols' of
                   Nothing -> return (obj:rs)
                   Just cols -> (:rs) <$> columnsToObject' tblTy cols row
               | otherwise -> return rs
-            t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: "
-                 <> pretty t
+            u -> evalError (getInfo u) $ "select: filter returned non-boolean value: "
+                 <> pretty u
 select' i as _ _ _ = argsError' i as
 
 
 withDefaultRead :: NativeFun e
-withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
+withDefaultRead fi as@[table',key',defaultRow',b@(TBinding (Binding ps bd (BindSchema _) _))] = do
   (!g0,!tkd) <- preGas fi [table',key',defaultRow']
   case tkd of
-    [table@TTable {..}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
+    [table@TTable{}, TLitString key, TObject (Object defaultRow _ _ _)] -> do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
@@ -279,10 +279,10 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
 withDefaultRead fi as = argsError' fi as
 
 withRead :: NativeFun e
-withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
+withRead fi as@[table',key',b@(TBinding (Binding ps bd (BindSchema _) _))] = do
   (!g0,!tk) <- preGas fi [table',key']
   case tk of
-    [table@TTable {..},TLitString key] -> do
+    [table@TTable{},TLitString key] -> do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
@@ -291,30 +291,33 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
-bindToRow :: [BindPair (Term Ref)] ->
-             Scope Int Term Ref -> Term Ref -> ObjectMap PactValue -> Eval e (Term Name)
+bindToRow
+  :: [BindPair (Term Ref)]
+  -> Scope Int Term Ref
+  -> Term Ref
+  -> ObjectMap PactValue -> Eval e (Term Name)
 bindToRow ps bd b (ObjectMap row) =
-  bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
+  bindReduce ps bd (getInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
 
 keys' :: GasRNativeFun e
-keys' g i [table@TTable {..}] =
+keys' g i [table@TTable{}] =
   gasPostReads i g
-    ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
+    ((\b -> TList $ PList (V.fromList b) tTyString def) . map toTerm) $ do
       guardTable i table
       keys (_faInfo i) (userTable table)
 keys' _ i as = argsError i as
 
 
 txids' :: GasRNativeFun e
-txids' g i [table@TTable {..},TLitInteger key] =
+txids' g i [table@TTable{},TLitInteger key] =
   gasPostReads i g
-    ((\b -> TList (V.fromList b) tTyInteger def) . map toTerm) $ do
+    ((\b -> TList $ PList (V.fromList b) tTyInteger def) . map toTerm) $ do
       guardTable i table
       txids (_faInfo i) (userTable' table) (fromIntegral key)
 txids' _ i as = argsError i as
 
 txlog :: GasRNativeFun e
-txlog g i [table@TTable {..},TLitInteger tid] =
+txlog g i [table@TTable{},TLitInteger tid] =
   gasPostReads i g (toTList TyAny def . map txlogToObj) $ do
       guardTable i table
       getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
@@ -328,10 +331,9 @@ txlogToObj TxLog{..} = toTObject TyAny def
   ]
 
 keylog :: GasRNativeFun e
-keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
+keylog g i [table@(TTable tt),TLitString key,TLitInteger utid] = do
   let postProc = toTList TyAny def . map toTxidObj
-        where toTxidObj (t,r) =
-                toTObject TyAny def [("txid", toTerm t),("value",columnsToObject _tTableType (_txValue r))]
+      toTxidObj (t,r) = toTObject TyAny def [("txid", toTerm t),("value",columnsToObject (_ptTableType tt) (_txValue r))]
   gasPostReads i g postProc $ do
     guardTable i table
     tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
@@ -344,10 +346,10 @@ write :: WriteType -> SchemaPartial -> NativeFun e
 write wt partial i as = do
   ts <- mapM reduce as
   case ts of
-    [table@TTable {..},TLitString key,obj@(TObject (Object ps _ _ _) _)] -> do
+    [table@(TTable t),TLitString key,obj@(TObject (Object ps _ _ _))] -> do
       cost <- computeGas (Right i) (GWrite wt table obj)
       guardTable i table
-      case _tTableType of
+      case _ptTableType t of
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
@@ -358,15 +360,15 @@ write wt partial i as = do
 
 
 createTable' :: RNativeFun e
-createTable' i [t@TTable {..}] = do
+createTable' i [t@(TTable tt)] = do
   guardTable i t
   let (UserTables tn) = userTable t
-  success "TableCreated" $ createUserTable (_faInfo i) tn _tModule
+  success "TableCreated" $ createUserTable (_faInfo i) tn (_ptModule tt)
 createTable' i as = argsError i as
 
 guardTable :: Pretty n => FunApp -> Term n -> Eval e ()
-guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModule $
-  enforceBlessedHashes i _tModule _tHash
+guardTable i (TTable t) = guardForModuleCall (_faInfo i) (_ptModule t) $
+  enforceBlessedHashes i (_ptModule t) (_ptHash t)
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> ModuleHash -> Eval e ()

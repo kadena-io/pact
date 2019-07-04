@@ -59,9 +59,9 @@ success = fmap . const . toTerm
 
 colsToList
   :: Eval m [(Info,FieldKey)] -> Term n -> Eval m [(Info,FieldKey)]
-colsToList _ (TList cs _ _) = forM (V.toList cs) $ \c -> case c of
-    TLitString col -> return (_tInfo c,FieldKey col)
-    _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
+colsToList _ (TList (PList cs _ i)) = forM (V.toList cs) $ \c -> case c of
+    TLitString col -> return (i,FieldKey col)
+    _ -> evalError i "read: only Strings/Symbols allowed for col keys"
 colsToList argFail _ = argFail
 
 
@@ -101,12 +101,12 @@ bindReduce ps bd bi lkpFun = do
   call frame $! (0,) <$> reduceBody bd''
 
 setTopLevelOnly :: NativeDef -> NativeDef
-setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
+setTopLevelOnly = set (_2 . _TNative . nfTopLevelOnly) True
 
 -- | Specify a 'NativeFun'
 defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defNative n fun ftype examples docs =
-  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def)
+  (n, TNative $ Native n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def)
 
 -- | Specify a 'GasRNativeFun'
 defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
@@ -129,7 +129,7 @@ funType' :: Type n -> [(Text,Type n)] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
 -- | Lookup a module and fail if not found.
-getModule :: HasInfo i => i -> ModuleName -> Eval e (ModuleData Ref)
+getModule :: GetInfo i => i -> ModuleName -> Eval e (ModuleData Ref)
 getModule i mn = lookupModule i mn >>= \r -> case r of
   Just m -> return m
   Nothing -> evalError' i $ "Unable to resolve module " <> pretty mn
@@ -142,7 +142,7 @@ findCallingModule =
 
 -- | Retrieve current calling module data or fail if not found
 --
-getCallingModule :: HasInfo i => i -> Eval e (Module (Def Ref))
+getCallingModule :: GetInfo i => i -> Eval e (Module (Def Ref))
 getCallingModule i = maybe resolveErr ((=<<) isModule . getModule i) =<< findCallingModule
   where
     resolveErr = evalError' i $
@@ -213,7 +213,7 @@ enforceGuard i g = case g of
           enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
-    void $ runSysOnly $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
+    void $ runSysOnly $ evalByName _ugPredFun [TObject _ugData] (_faInfo i)
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.

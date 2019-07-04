@@ -157,7 +157,7 @@ instance A.FromJSON ParsedInteger where
                         _ -> fail $ "Failure parsing integer string: " ++ show s
   parseJSON (A.Number n) = return $ ParsedInteger (round n)
   parseJSON v@A.Object{} = A.parseJSON v >>= \i -> case i of
-    PLiteral (LInteger li) -> return $ ParsedInteger li
+    PactLiteral (LInteger li) -> return $ ParsedInteger li
     _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
 

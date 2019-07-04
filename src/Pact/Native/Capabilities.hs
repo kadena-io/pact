@@ -57,13 +57,13 @@ withCapability =
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
   \but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap."
   where
-    withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
+    withCapability' i [TApp c,body@TList{}] = gasUnreduced i [] $ do
       -- ensure not within defcap
       defcapInStack >>= \p -> when p $ evalError' i "with-capability not allowed within defcap execution"
       -- erase composed
       evalCapabilities . capComposed .= []
       -- evaluate in-module cap
-      grantedCap <- evalCap True (_tApp c)
+      grantedCap <- evalCap True c
       -- grab composed caps and clear composed state
       composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
                                      set (evalCapabilities . capComposed) [] s)
@@ -92,10 +92,10 @@ evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
 
 requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
 requireDefcap App{..} = case _appFun of
-  (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
+  TVar (PVar (Ref (TDef d@Def{..})) _) -> case _dDefType of
     Defcap -> return d
     _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
-  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " <> pretty _appFun
+  t -> evalError' t $ "Attempting to apply non-def: " <> pretty _appFun
 
 requireCapability :: NativeDef
 requireCapability =
@@ -105,7 +105,7 @@ requireCapability =
   "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment."
   where
     requireCapability' :: NativeFun e
-    requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
+    requireCapability' i [TApp a@App{..}] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
       (args,_) <- prepareUserAppArgs d _appArgs
       let cap = UserCapability _dModule _dDefName args
       granted <- capabilityGranted cap
@@ -127,7 +127,7 @@ composeCapability =
   \in the scope of OUTER-BODY."
   where
     composeCapability' :: NativeFun e
-    composeCapability' i [TApp app _] = gasUnreduced i [] $ do
+    composeCapability' i [TApp app] = gasUnreduced i [] $ do
       -- enforce in defcap
       defcapInStack >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
       -- should be granted in-module
@@ -200,12 +200,12 @@ createUserGuard =
   \PREDFUN must refer to a pure function or enforcement will fail at runtime."
   where
     createUserGuard' :: RNativeFun e
-    createUserGuard' i [TObject udata _,TLitString predfun] =
+    createUserGuard' i [TObject udata,TLitString predfun] =
       case parseName (_faInfo i) predfun of
         Right n -> do
           rn <- resolveRef i n >>= \nm -> case nm of
             Just (Direct {}) -> return n
-            Just (Ref (TDef Def{..} _)) ->
+            Just (Ref (TDef Def{..})) ->
               return $ QName _dModule (asString _dDefName) _dInfo
             Just _ -> evalError' i $ "Invalid predfun, not a def: " <> pretty n
             _ -> evalError' i $ "Could not resolve predfun: " <> pretty n

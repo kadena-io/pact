@@ -20,10 +20,12 @@ module Pact.Types.Info
    Info(..),
    renderInfo,
    renderParsed,
-   HasInfo(..)
+   HasInfo(..),
+   GetInfo(..)
    ) where
 
 
+import Control.Lens hiding ((.=))
 import Text.Trifecta.Delta
 import Data.List
 import Prelude
@@ -101,10 +103,15 @@ renderParsed (Parsed d _) = case d of
   (Tab _ c _ ) -> "<interactive>:0:" ++ show c
 
 
-class HasInfo a where
+class GetInfo a where
   getInfo :: a -> Info
 
-instance HasInfo Info where getInfo = id
+class HasInfo a where
+  linfo :: Lens' a Info
+
+instance GetInfo Info where getInfo = id
+
+instance HasInfo Info where linfo = id
 
 instance ToJSON Info where
   toJSON (Info Nothing) = Null

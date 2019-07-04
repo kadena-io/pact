@@ -77,7 +77,7 @@ instance Pretty PersistDirect where
   pretty (PDNative n) = pretty $ "<native>" <> asString n
 
 toPersistDirect :: Term Name -> Either Text PersistDirect
-toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
+toPersistDirect (TNative (Native n _ _ _ _ _ _)) = pure $ PDNative n
 toPersistDirect t = case toPactValue t of
   Right v -> pure $ PDValue v
   Left e -> Left e

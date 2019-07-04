@@ -16,8 +16,6 @@ module Pact.Native.SPV
 import Control.Monad.IO.Class (liftIO)
 import Control.Lens (view)
 
-import Data.Default
-
 import Pact.Native.Internal
 import Pact.Types.SPV
 import Pact.Types.Pretty
@@ -42,8 +40,8 @@ verifySPV =
   \format of the return object. Platforms such as Chainweb will \
   \document the specific payload types and return values."
   where
-    verifySPV' i [TLitString proofType, TObject o _] = do
+    verifySPV' i [TLitString proofType, TObject o] = do
       view eeSPVSupport >>= \(SPVSupport f _) -> liftIO (f proofType o) >>= \r -> case r of
         Left err -> evalError' i $ "SPV verify failed: " <> pretty err
-        Right o' -> return $ TObject o' def
+        Right o' -> return $ TObject o'
     verifySPV' i as = argsError i as

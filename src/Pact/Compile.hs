@@ -257,7 +257,7 @@ app = do
   v <- varAtom
   args <- many (valueLevel <|> bindingForm)
   i <- contextInfo
-  return $ TApp (App v args i) i
+  return $ TApp (App v args i)
 
 -- | Bindings (`{ "column" := binding }`) do not syntactically scope the
 -- following body form as a sexp, instead letting the body contents
@@ -272,8 +272,12 @@ bindingForm = do
         return $ BindPair a col
   (bindings,bi) <- withList' Braces $
     (,) <$> pair `sepBy1` sep Comma <*> contextInfo
-  TBinding bindings <$> abstractBody valueLevel (map _bpArg bindings) <*>
-    pure (BindSchema TyAny) <*> pure bi
+  TBinding
+    <$> ( Binding bindings
+          <$> abstractBody valueLevel (map _bpArg bindings)
+          <*> pure (BindSchema TyAny)
+          <*> pure bi
+        )
 
 varAtom :: Compile (Term Name)
 varAtom = do
@@ -289,7 +293,7 @@ varAtom = do
       return $ QName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
     _ -> expected "bareword or qualified atom"
   commit
-  return $ TVar n _atomInfo
+  return $ TVar (PVar n _atomInfo)
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
@@ -297,7 +301,7 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
     _ : CommaExp : _ -> valueLevel `sepBy` sep Comma
     _                -> many valueLevel
   lty <- freshTyVar
-  return $ TList (V.fromList ls) lty _listInfo
+  return $ TList (PList (V.fromList ls) lty _listInfo)
 
 objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
@@ -306,7 +310,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         val <- sep Colon *> valueLevel
         return (key,val)
   ps <- (pair `sepBy` sep Comma) <* eof
-  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny (Just (map fst ps)) _listInfo) _listInfo
+  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny (Just (map fst ps)) _listInfo)
 
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
@@ -317,11 +321,11 @@ literal = lit >>= \LiteralExp{..} ->
 withCapability :: Compile (Term Name)
 withCapability = do
   wcInf <- getInfo <$> current
-  let wcVar = TVar (Name (asString RWithCapability) wcInf) wcInf
+  let wcVar = TVar (PVar (Name (asString RWithCapability) wcInf) wcInf)
   capApp <- sexp app
   body@(top:_) <- some valueLevel
   i <- contextInfo
-  return $ TApp (App wcVar [capApp,TList (V.fromList body) TyAny (_tInfo top)] i) i
+  return $ TApp (App wcVar [capApp,TList $ PList (V.fromList body) TyAny (getInfo top) ] i)
 
 deftable :: Compile (Term Name)
 deftable = do
@@ -331,8 +335,8 @@ deftable = do
                      TyUser {} -> return t
                      _ -> expected "user type")
   m <- meta ModelNotAllowed
-  TTable (TableName _atomAtom) _msName _msHash
-    (fromMaybe TyAny ty) m <$> contextInfo
+  TTable <$> (PTable (TableName _atomAtom) _msName _msHash
+    (fromMaybe TyAny ty) m <$> contextInfo)
 
 
 bless :: Compile ()
@@ -347,7 +351,7 @@ defconst = do
   a <- arg
   v <- valueLevel
   m <- meta ModelNotAllowed
-  TConst a modName (CVRaw v) m <$> contextInfo
+  TConst <$> (PConst a modName (CVRaw v) m <$> contextInfo)
 
 data ModelAllowed
   = ModelAllowed
@@ -385,7 +389,7 @@ defschema = do
   tn <- _atomAtom <$> userAtom
   m <- meta ModelAllowed
   fields <- many arg
-  TSchema (TypeName tn) modName m fields <$> contextInfo
+  TSchema <$> (PSchema (TypeName tn) modName m fields <$> contextInfo)
 
 defunOrCap :: DefType -> Compile (Term Name)
 defunOrCap dt = do
@@ -395,9 +399,9 @@ defunOrCap dt = do
   m <- meta ModelAllowed
   b <- abstractBody valueLevel args
   i <- contextInfo
-  return $ (`TDef` i) $
-    Def (DefName defname) modName dt (FunType args returnTy)
-      b m i
+  return
+    $ TDef
+    $ Def (DefName defname) modName dt (FunType args returnTy) b m i
 
 
 defpact :: Compile (Term Name)
@@ -411,21 +415,22 @@ defpact = do
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
   case last body of -- note: `last` is safe, since bodyForm uses `some`
-    TStep (Step _ _ (Just _) _) _ -> syntaxError "rollbacks aren't allowed on the last \
+    TStep (Step _ _ (Just _) _) -> syntaxError "rollbacks aren't allowed on the last \
       \step (the last step can never roll back -- once it's executed the pact \
       \is complete)"
     _ -> pure ()
   i <- contextInfo
-  return $ TDef (Def (DefName defname) modName Defpact (FunType args returnTy)
-                  (abstractBody' args (TList (V.fromList body) TyAny bi)) m i) i
+  return
+    $ TDef
+    $ Def (DefName defname) modName Defpact (FunType args returnTy)
+    (abstractBody' args (TList $ PList (V.fromList body) TyAny bi)) m i
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
-  gov <- Governance <$>
-    (((Left . KeySetName) <$> str) <|>
-     (userAtom >>= \AtomExp{..} ->
-         return $ Right $ TVar (Name _atomAtom _atomInfo) _atomInfo))
+  gov <- Governance
+    <$> (((Left . KeySetName) <$> str)
+         <|> (fmap (\AtomExp{..} -> Right $ TVar $ PVar (Name _atomAtom _atomInfo) _atomInfo) userAtom))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
@@ -438,8 +443,8 @@ moduleForm = do
       modHash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
-    (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
-    (abstract (const Nothing) (TList (V.fromList (concat bd)) TyAny bi)) i
+    (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports i)
+    (abstract (const Nothing) (TList $ PList (V.fromList (concat bd)) TyAny bi))
 
 implements :: Compile ()
 implements = do
@@ -467,8 +472,8 @@ interface = do
               RUse -> return useForm
               t -> syntaxError $ "Invalid interface declaration: " ++ show (asString t)
   return $ TModule
-    (MDInterface $ Interface iname code m _msImports)
-    (abstract (const Nothing) bd) info
+    (MDInterface $ Interface iname code m _msImports info)
+    (abstract (const Nothing) bd)
 
 emptyDef :: Compile (Term Name)
 emptyDef = do
@@ -477,9 +482,10 @@ emptyDef = do
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
   info <- contextInfo
-  return $ (`TDef` info) $
-    Def (DefName defName) modName Defun
-    (FunType args returnTy) (abstract (const Nothing) (TList V.empty TyAny info)) m info
+  return
+    $ TDef
+    $ Def (DefName defName) modName Defun (FunType args returnTy)
+    (abstract (const Nothing) (TList $ PList V.empty TyAny info)) m info
 
 
 step :: Compile (Term Name)
@@ -487,7 +493,7 @@ step = do
   cont <- try (Step <$> (Just <$> valueLevel) <*> valueLevel) <|>
           (Step Nothing <$> valueLevel)
   i <- contextInfo
-  pure $ TStep (cont Nothing i) i
+  pure $ TStep (cont Nothing i)
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
@@ -495,7 +501,7 @@ stepWithRollback = do
   s <- try (Step <$> (Just <$> valueLevel) <*> valueLevel <*>
             (Just <$> valueLevel) <*> pure i)
        <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)
-  return $ TStep s i
+  return $ TStep s
 
 
 
@@ -515,8 +521,11 @@ abstractBody' args = abstract (`elemIndex` bNames)
 letForm :: Compile (Term Name)
 letForm = do
   bindings <- letBindings
-  TBinding bindings <$> abstractBody valueLevel (map _bpArg bindings) <*>
-    pure BindLet <*> contextInfo
+  TBinding <$>
+    (Binding bindings
+     <$> abstractBody valueLevel (map _bpArg bindings)
+     <*> pure BindLet
+     <*> contextInfo)
 
 -- | let* is a macro to nest lets for referencing previous
 -- bindings.
@@ -529,8 +538,8 @@ letsForm = do
           [] -> bodyForm valueLevel
           _ -> do
             rest' <- nest rest
-            pure $ TList (V.singleton rest') TyAny def
-        TBinding [binding] scope BindLet <$> contextInfo
+            pure $ TList $ PList (V.singleton rest') TyAny def
+        TBinding <$> (Binding [binding] scope BindLet <$> contextInfo)
       nest [] =  syntaxError "letsForm: invalid state (bug)"
   nest bindings
 
@@ -541,7 +550,7 @@ useForm = do
   u  <- Use mn <$> optional hash' <*> pure i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
-  return $ TUse u i
+  return $ TUse u
 
 
 hash' :: Compile ModuleHash
@@ -595,7 +604,7 @@ parseUserSchemaType = withList Braces $ \ListExp{..} -> do
 bodyForm :: Compile (Term Name) -> Compile (Term Name)
 bodyForm term = do
   (bs,i) <- bodyForm' term
-  return $ TList (V.fromList bs) TyAny i
+  return $ TList $ PList (V.fromList bs) TyAny i
 
 bodyForm' :: Compile a -> Compile ([a],Info)
 bodyForm' term = (,) <$> go <*> contextInfo

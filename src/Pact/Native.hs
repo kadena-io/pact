@@ -131,7 +131,7 @@ enforceOneDef =
   where
 
     enforceOne :: NativeFun e
-    enforceOne i as@[msg,TList conds _ _] = runReadOnly (_faInfo i) $
+    enforceOne i as@[msg,TList (PList conds _ _)] = runReadOnly (_faInfo i) $
       gasUnreduced i as $ do
         msg' <- reduce msg >>= \m -> case m of
           TLitString s -> return s
@@ -163,7 +163,7 @@ formatDef =
   where
 
     format :: RNativeFun e
-    format i [TLitString s,TList es _ _] = do
+    format i [TLitString s,TList (PList es _ _)] = do
       let parts = T.splitOn "{}" s
           plen = length parts
           rep (TLitString t) = t
@@ -494,13 +494,13 @@ b = mkTyVar "b" []
 c = mkTyVar "c" []
 
 map' :: NativeFun e
-map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply (_tApp app) . pure)
+map' i as@[TApp app,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
+           TList (PList ls _ _) -> (\b' -> TList $ PList b' TyAny def) <$> forM ls (apply app . pure)
            t -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
 map' i as = argsError' i as
 
 list :: RNativeFun e
-list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set type here
+list i as = return $ TList $ PList (V.fromList as) TyAny (_faInfo i) -- TODO, could set type here
 
 makeList :: RNativeFun e
 makeList i [TLitInteger len,value] = case typeof value of
@@ -509,21 +509,21 @@ makeList i [TLitInteger len,value] = case typeof value of
 makeList i as = argsError i as
 
 reverse' :: RNativeFun e
-reverse' _ [l@TList{}] = return $ over tList V.reverse l
+reverse' _ [l@TList{}] = return $ over (_TList . plList) V.reverse l
 reverse' i as = argsError i as
 
 fold' :: NativeFun e
-fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> reduce initv >>= \initv' ->
-                         foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
+fold' i as@[TApp app,initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
+           TList (PList ls _ _) -> reduce initv >>= \initv' ->
+                         foldM (\r a' -> apply app [r,a']) initv' ls
            t -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
 fold' i as = argsError' i as
 
 
 filter' :: NativeFun e
-filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls lt _ -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
-                           t <- apply (_tApp app) [a']
+filter' i as@[TApp app,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
+           TList (PList ls lt _) -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
+                           t <- apply app [a']
                            case t of
                              (TLiteral (LBool bo) _) -> return bo
                              _ -> return False -- hmm, too permissive here, select is stricter
@@ -531,30 +531,30 @@ filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' o
 filter' i as = argsError' i as
 
 length' :: RNativeFun e
-length' _ [TList ls _ _] = return $ toTerm (length ls)
+length' _ [TList (PList ls _ _)] = return $ toTerm (length ls)
 length' _ [TLitString s] = return $ toTerm (T.length s)
-length' _ [TObject (Object ps _ _ _) _] = return $ toTerm (length ps)
+length' _ [TObject (Object ps _ _ _)] = return $ toTerm (length ps)
 length' i as = argsError i as
 
 take' :: RNativeFun e
-take' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.take c' l) t def
+take' _ [TLitInteger c',TList (PList l t _)] = return $ TList $ PList (tordV V.take c' l) t def
 take' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tordL take c' (unpack l)
-take' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList >>= \l ->
-  return $ toTObjectMap oTy def $ ObjectMap $ M.restrictKeys o l
+take' _ [TList l,TObject (Object (ObjectMap o) oTy _ _)] = asKeyList (_plList l) >>= \l' ->
+  return $ toTObjectMap oTy def $ ObjectMap $ M.restrictKeys o l'
 
 take' i as = argsError i as
 
 drop' :: RNativeFun e
-drop' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.drop c' l) t def
+drop' _ [TLitInteger c',TList (PList l t _)] = return $ TList $ PList (tordV V.drop c' l) t def
 drop' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tordL drop c' (unpack l)
-drop' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList >>= \l ->
-  return $ toTObjectMap oTy def $ ObjectMap $ M.withoutKeys o l
+drop' _ [TList l,TObject (Object (ObjectMap o) oTy _ _)] = asKeyList (_plList l) >>= \l' ->
+  return $ toTObjectMap oTy def $ ObjectMap $ M.withoutKeys o l'
 drop' i as = argsError i as
 
 asKeyList :: V.Vector (Term Name) -> Eval e (S.Set FieldKey)
 asKeyList l = fmap (S.fromList . V.toList) . V.forM l $ \t -> case t of
   TLitString k -> return $ FieldKey k
-  _ -> evalError (_tInfo t) "String required"
+  _ -> evalError (getInfo t) "String required"
 
 -- | "take or drop" handling negative "take/drop from reverse"
 tord :: (l -> l) -> (Int -> l -> l) -> Integer -> l -> l
@@ -569,30 +569,30 @@ tordL :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
 tordL = tord reverse
 
 at' :: RNativeFun e
-at' _ [li@(TLitInteger idx),TList ls _ _] =
+at' _ [li@(TLitInteger idx),TList (PList ls _ _)] =
     case ls V.!? fromIntegral idx of
       Just t -> return t
-      Nothing -> evalError (_tInfo li) $ "at: bad index " <>
+      Nothing -> evalError (getInfo li) $ "at: bad index " <>
         pretty idx <> ", length " <> pretty (length ls)
-at' _ [idx,TObject (Object ls _ _ _) _] = lookupObj idx ls
+at' _ [idx,TObject (Object ls _ _ _)] = lookupObj idx ls
 at' i as = argsError i as
 
 lookupObj :: Term n -> ObjectMap (Term n) -> Eval m (Term n)
 lookupObj t@(TLitString idx) (ObjectMap ls) = case M.lookup (FieldKey idx) ls of
   Just v -> return v
-  Nothing -> evalError (_tInfo t) $ "key not found in object: " <> pretty idx
-lookupObj t _ = evalError (_tInfo t) $ "object lookup only supported with strings"
+  Nothing -> evalError (getInfo t) $ "key not found in object: " <> pretty idx
+lookupObj t _ = evalError (getInfo t) $ "object lookup only supported with strings"
 
 remove :: RNativeFun e
-remove _ [TLitString key,TObject (Object (ObjectMap ps) t _ _) _] =
+remove _ [TLitString key,TObject (Object (ObjectMap ps) t _ _)] =
   return $ toTObjectMap t def $ ObjectMap $ M.delete (FieldKey key) ps
 remove i as = argsError i as
 
 compose :: NativeFun e
-compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
+compose i as@[TApp app, TApp bapp,v] = gasUnreduced i as $ do
   v' <- reduce v
-  a' <- apply (_tApp appA) [v']
-  apply (_tApp appB) [a']
+  a' <- apply app [v']
+  apply bapp [a']
 compose i as = argsError' i as
 
 
@@ -616,14 +616,14 @@ pactId i [] = toTerm <$> getPactId i
 pactId i as = argsError i as
 
 bind :: NativeFun e
-bind i as@[src,TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $
+bind i as@[src,TBinding (Binding ps bd (BindSchema _) bi)] = gasUnreduced i as $
   reduce src >>= bindObjectLookup >>= bindReduce ps bd bi
 bind i as = argsError' i as
 
 bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
-bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
+bindObjectLookup (TObject (Object (ObjectMap o) _ _ _)) =
   return $ \s -> M.lookup (FieldKey s) o
-bindObjectLookup t = evalError (_tInfo t) $
+bindObjectLookup t = evalError (getInfo t) $
   "bind: expected object: " <> pretty t
 
 typeof'' :: RNativeFun e
@@ -637,8 +637,8 @@ listModules i _ = do
 
 yield :: RNativeFun e
 yield i as = case as of
-  [u@(TObject t _)] -> go t Nothing u
-  [u@(TObject t _), (TLitString cid)] -> go t (Just $ ChainId cid) u
+  [u@(TObject t)] -> go t Nothing u
+  [u@(TObject t), (TLitString cid)] -> go t (Just $ ChainId cid) u
   _ -> argsError i as
   where
     go (Object o _ _ _) tid u = do
@@ -655,7 +655,7 @@ yield i as = case as of
 
 resume :: NativeFun e
 resume i as = case as of
-  [TBinding ps bd (BindSchema _) bi] -> gasUnreduced i as $ do
+  [TBinding (Binding ps bd (BindSchema _) bi)] -> gasUnreduced i as $ do
     rm <- preview $ eePactStep . _Just . psResume . _Just
     case rm of
       Nothing -> evalError' i "Resume: no yielded value in context"
@@ -666,21 +666,21 @@ resume i as = case as of
   _ -> argsError' i as
 
 where' :: NativeFun e
-where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
-  (k,r@TObject {}) -> lookupObj k (_oObject $ _tObject r) >>= \v -> apply (_tApp app) [v]
+where' i as@[k',TApp app,r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
+  (k, TObject o) -> lookupObj k (_oObject $ o) >>= \v -> apply app [v]
   _ -> argsError' i as
 where' i as = argsError' i as
 
 
 sort' :: RNativeFun e
-sort' _ [l@(TList v _ _)] | V.null v = pure l
-sort' _ [TList{..}] = liftIO $ do
-  m <- V.thaw _tList
+sort' _ [l@(TList (PList v _ _))] | V.null v = pure l
+sort' _ [TList PList{..}] = liftIO $ do
+  m <- V.thaw _plList
   (`V.sortBy` m) $ \x y -> case (x,y) of
     (TLiteral xl _,TLiteral yl _) -> xl `compare` yl
     _ -> EQ
-  toTListV _tListType def <$> V.freeze m
-sort' _ [TList fields _ fi,l@(TList vs lty _)]
+  toTListV _plListType def <$> V.freeze m
+sort' _ [TList (PList fields _ fi),l@(TList (PList vs lty _))]
   | V.null fields = evalError fi "Empty fields list"
   | V.null vs = return l
   | otherwise = do
@@ -688,7 +688,7 @@ sort' _ [TList fields _ fi,l@(TList vs lty _)]
       liftIO $ do
         m <- V.thaw vs
         (`V.sortBy` m) $ \x y -> case (x,y) of
-          (TObject (Object (ObjectMap xo) _ _ _) _,TObject (Object (ObjectMap yo) _ _ _) _) ->
+          (TObject (Object (ObjectMap xo) _ _ _),TObject (Object (ObjectMap yo) _ _ _)) ->
             let go field EQ = case (M.lookup field xo, M.lookup field yo) of
                   (Just (TLiteral lx _), Just (TLiteral ly _)) -> lx `compare` ly
                   _ -> EQ
@@ -724,8 +724,8 @@ enforceVersion i as = case as of
           return (mv' `succCmp` pv')
 
 contains :: RNativeFun e
-contains _i [val,TList {..}] = return $ toTerm $ searchTermList val _tList
-contains _i [TLitString k,TObject (Object (ObjectMap o) _ _ _) _] =
+contains _i [val,TList l] = return $ toTerm $ searchTermList val $ _plList l
+contains _i [TLitString k,TObject (Object (ObjectMap o) _ _ _)] =
   return $ toTerm $ M.member (FieldKey k) o
 contains _i [TLitString s,TLitString t] = return $ toTerm $ T.isInfixOf s t
 contains i as = argsError i as

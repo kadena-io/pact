@@ -1,0 +1,12 @@
+(begin-tx)
+
+(load "foo.pact")
+(verify 'foo)
+
+(use foo)
+
+(f 'me 'blah 'qux)
+(g 'me 'ree 'reeee)
+(h 'me)
+
+(commit-tx)
