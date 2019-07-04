@@ -709,10 +709,11 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
                 filter (applicableCheck funName) modCheckExps
           runExpParserOver (applicableModuleChecks <> exps) $
             expToCheck tableEnv vidStart nameVids vidTys consts propDefs
-    
+
     pure ((ref, checkType), Right checks)
-    
-  
+
+  _ -> throwError InvalidRefType
+
 
 -- | Remove the "invariant" or "property" application from every exp
 collectExps :: Text -> [Exp Info] -> Either ParseFailure [Exp Info]

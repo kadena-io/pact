@@ -1376,28 +1376,31 @@ deriveShow1 ''Binding
 deriveShow1 ''Native
 
 -- | Demonstrate Term/Bound JSON marshalling with nested bound and free vars.
--- _roundtripJSON :: String
--- _roundtripJSON | r == (Success tmod) = show r
---                | otherwise = error ("Mismatch: " ++ show r ++ ", " ++ show tmod)
---   where
---     r = fromJSON v
---     v = toJSON tmod
---     tmod = TModule
---            (MDModule (Module "foo" (Governance (Right (tStr "hi")))
---                       def "" (ModuleHash pactInitialHash) HS.empty [] []))
---            (abstract (const (Just ()))
---             (toTList TyAny def
---              [tlet1]))
---            def
---     tlet1 = TBinding []
---            (abstract (\b -> if b == na then Just 0 else Nothing)
---             (toTList TyAny def
---              [(TVar na def),tlet2])) -- bound var + let
---            BindLet def
---     tlet2 = TBinding []
---            (abstract (\b -> if b == nb then Just 0 else Nothing)
---             (toTList TyAny def
---              [(TVar na def),(TVar nb def)])) -- free var + bound var
---            BindLet def
---     na = Name "a" def
---     nb = Name "b" def
+_roundtripJSON :: String
+_roundtripJSON | r == (Success tmod) = show r
+               | otherwise = error ("Mismatch: " ++ show r ++ ", " ++ show tmod)
+  where
+    r = fromJSON v
+    v = toJSON tmod
+
+    tmod = TModule
+           (MDModule (Module "foo" (Governance (Right (tStr "hi")))
+                      def "" (ModuleHash pactInitialHash) HS.empty [] [] def))
+           (abstract (const (Just ()))
+            (toTList TyAny def
+             [tlet1]))
+
+    tlet1 = TBinding $ Binding []
+           (abstract (\b -> if b == na then Just 0 else Nothing)
+            (toTList TyAny def
+             [(TVar $ PVar na def),tlet2])) -- bound var + let
+           BindLet def
+
+    tlet2 = TBinding $ Binding []
+           (abstract (\b -> if b == nb then Just 0 else Nothing)
+            (toTList TyAny def
+             [(TVar $ PVar na def),(TVar $ PVar nb def)])) -- free var + bound var
+           BindLet def
+
+    na = Name "a" def
+    nb = Name "b" def

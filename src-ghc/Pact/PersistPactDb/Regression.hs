@@ -64,7 +64,7 @@ runRegression p = do
     (commit v)
   void $ begin v
   assertEquals' "user table info correct" "someModule" $ _getUserTableInfo pactdb user1 v
-  let row = ObjectMap $ M.fromList [("gah",PLiteral (LDecimal 123.454345))]
+  let row = ObjectMap $ M.fromList [("gah",VLiteral (LDecimal 123.454345))]
   _writeRow pactdb Insert usert "key1" row v
   assertEquals' "user insert" (Just row) (_readRow pactdb usert "key1" v)
   let row' = ObjectMap $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]

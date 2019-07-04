@@ -655,7 +655,7 @@ evalTerm = \case
       -- Everything else is hashed by first converting it to JSON:
       Some SInteger tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
-        Just int -> pure $ sHash $ toStrict $ Aeson.encode $ Pact.PactLiteral $ Pact.LInteger int
+        Just int -> pure $ sHash $ toStrict $ Aeson.encode $ Pact.VLiteral $ Pact.LInteger int
       Some SBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool

@@ -111,7 +111,7 @@ benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
 
 acctRow :: ObjectMap PactValue
-acctRow = ObjectMap $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
+acctRow = ObjectMap $ M.fromList [("balance",VLiteral (LDecimal 100.0))]
 
 benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)
 benchRead _ KeySets _ = rc (Just benchKeySet)

@@ -67,7 +67,7 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 testPactContinuation :: HTTP.Manager -> Spec
 testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
-    let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
+    let cmdData = (PactResult . Right . VLiteral. LDecimal) 3
         --expRes = Just $ CommandResult _ ((Just . TxId) 0) cmdData (Gas 0)
     cr <- testSimpleServerCmd mgr
     (_crResult <$> cr)`shouldBe` Just cmdData
@@ -643,7 +643,7 @@ twoPartyEscrow testCmds mgr act = do
 
 
 decValue :: Decimal -> Maybe PactValue
-decValue = Just . PLiteral . LDecimal
+decValue = Just . VLiteral. LDecimal
 
 testDebtorPreTimeoutCancel :: HTTP.Manager -> Expectation
 testDebtorPreTimeoutCancel mgr = do
@@ -791,7 +791,7 @@ makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
   mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce) contProofM
 
 textVal :: Text -> Maybe PactValue
-textVal = Just . PLiteral . LString
+textVal = Just . VLiteral . LString
 
 getPactId :: Command Text -> PactId
 getPactId cmd = toPactId hsh

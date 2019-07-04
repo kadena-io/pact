@@ -62,7 +62,7 @@ aggregateFunctionModels :: ModuleData Ref -> [Exp Info]
 aggregateFunctionModels ModuleData{..} =
   foldMap (extractExp . snd) $ HM.toList _mdRefMap
   where
-    extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=m} _) _)) = m
+    extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=m} _))) = m
     extractExp _ = []
 
 -- Because models will necessarily have conflicting Info values

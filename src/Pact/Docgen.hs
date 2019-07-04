@@ -58,24 +58,24 @@ renderFunctions h = do
   renderSection (snd replDefs)
 
 renderTerm :: Pretty n => Handle -> Term n -> IO ()
-renderTerm h TNative {..} = do
+renderTerm h (TNative Native{..}) = do
   hPutStrLn h ""
-  hPutStrLn h $ "### " ++ escapeText (unpack $ asString _tNativeName)
-             ++ " {#" ++ escapeAnchor (unpack $ asString _tNativeName) ++ "}"
+  hPutStrLn h $ "### " ++ escapeText (unpack $ asString _nfName)
+             ++ " {#" ++ escapeAnchor (unpack $ asString _nfName) ++ "}"
   hPutStrLn h ""
-  forM_ _tFunTypes $ \FunType {..} -> do
+  forM_ _nfFunTypes $ \FunType {..} -> do
     hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ unpack n ++
       "*&nbsp;`" ++ renderCompactString t ++ "`") _ftArgs) ++
       " *&rarr;*&nbsp;`" ++ renderCompactString _ftReturn ++ "`"
     hPutStrLn h ""
   hPutStrLn h ""
-  let noexs = hPutStrLn stderr $ "No examples for " ++ renderCompactString _tNativeName
+  let noexs = hPutStrLn stderr $ "No examples for " ++ renderCompactString _nfName
 
   -- render docs and examples
-  hPutStrLn h $ unpack _tNativeDocs
-  if null _tNativeExamples then noexs else renderExamples h _tNativeName _tNativeExamples
+  hPutStrLn h $ unpack _nfDocs
+  if null _nfExamples then noexs else renderExamples h _nfName _nfExamples
 
-  when _tNativeTopLevelOnly $ do
+  when _nfTopLevelOnly $ do
     hPutStrLn h ""
     hPutStrLn h "Top level only: this function will fail if used in module code."
   hPutStrLn h ""

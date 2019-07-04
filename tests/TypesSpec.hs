@@ -7,8 +7,9 @@ import Test.Hspec
 import Data.Aeson
 import Data.Map.Strict (fromList)
 
-import Pact.Types.Runtime
-import Pact.Types.PactValue
+import Pact.Types.PactValue as PV
+import Pact.Types.Exp
+import Pact.Types.Term
 import Data.Default (def)
 
 spec :: Spec
@@ -22,16 +23,16 @@ rt p = it ("roundtrips " ++ show p) $ decode (encode p) `shouldBe` Just p
 
 testJSONPersist :: Spec
 testJSONPersist = do
-  rt (PLiteral (LInteger 123))
-  rt (PLiteral (LDecimal 123.34857))
-  rt (PLiteral (LBool False))
-  rt (PLiteral (LString "hello"))
-  rt (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
-  rt (PGuard (GKeySet (KeySet [PublicKey "askjh",PublicKey "dfgh"] (Name "predfun" def))))
+  rt (VLiteral (LInteger 123))
+  rt (VLiteral (LDecimal 123.34857))
+  rt (VLiteral (LBool False))
+  rt (VLiteral (LString "hello"))
+  rt (VLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
+  rt (VGuard (GKeySet (KeySet [PublicKey "askjh",PublicKey "dfgh"] (Name "predfun" def))))
 
 testJSONColumns :: Spec
 testJSONColumns =
-  rt (ObjectMap (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
+  rt (ObjectMap (fromList [("A",VLiteral (LInteger 123)),("B", VLiteral (LBool False))]))
 
 {- major TODO for module code!
 testJSONModules :: Spec

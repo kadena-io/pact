@@ -239,7 +239,7 @@ setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 mockSPV :: RNativeFun LibState
 mockSPV i as = case as of
-  [TLitString spvType, TObject payload _, TObject out _] -> do
+  [TLitString spvType, TObject payload, TObject out] -> do
     setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
     return $ tStr $ "Added mock SPV for " <> spvType
   _ -> argsError i as
@@ -269,7 +269,7 @@ formatAddr i _ = evalError' i "Address formatting not supported in GHCJS"
 
 
 setsigs :: RNativeFun LibState
-setsigs i [TList ts _ _] = do
+setsigs i [TList (PList ts _ _)] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i (V.toList ts)
@@ -283,7 +283,7 @@ setmsg i as = case as of
     case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
       Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
       Right v -> go v
-  [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))
+  [TObject (Object om _ _ _)] -> go (toJSON (fmap toPactValueLenient om))
   [a] -> go (toJSON a)
   _ -> argsError i as
   where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
@@ -296,7 +296,7 @@ continuePact i as = case as of
     go step rollback Nothing Nothing
   [TLitInteger step,TLitBool rollback,TLitString pid] ->
     go step rollback (Just pid) Nothing
-  [TLitInteger step,TLitBool rollback,TLitString pid,TObject (Object o _ _ _) _] ->
+  [TLitInteger step,TLitBool rollback,TLitString pid,TObject (Object o _ _ _)] ->
     go step rollback (Just pid) (Just o)
   _ -> argsError i as
   where
@@ -532,8 +532,8 @@ setGasModel _ as = do
 -- | This is the only place we can do an external call to a capability,
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
-testCapability _ [ c@TApp{} ] = do
-  cap <- evalCap False $ _tApp c
+testCapability _ [TApp c] = do
+  cap <- evalCap False $ c
   return . tStr $ case cap of
     Nothing -> "Capability granted"
     Just cap' -> "Capability granted: " <> tShow cap'
@@ -549,10 +549,10 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
   where
     envChainData :: RNativeFun LibState
     envChainData i as = case as of
-      [TObject (Object (ObjectMap ks) _ _ _) _] -> do
+      [TObject (Object (ObjectMap ks) _ _ _)] -> do
         pd <- view eePublicData
 
-        ud <- foldM (go (_faInfo i)) pd (M.toList ks)
+        ud <- foldM (go i) pd (M.toList ks)
         setenv eePublicData ud
         return $ tStr "Updated public metadata"
       _ -> argsError i as
@@ -561,14 +561,14 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (wrap (wrap l)) pd
       "block-height" -> pure $ set pdBlockHeight (fromIntegral l) pd
       "block-time"   -> pure $ set pdBlockTime (fromIntegral l) pd
-      t              -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
+      t              -> evalError' i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LDecimal l) _)) = case Text.unpack k of
       "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (wrap (wrap l)) pd
-      t           -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
+      t           -> evalError' i $ "envChainData: bad public metadata key: " <> prettyString t
 
     go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of
       "chain-id" -> pure $ set (pdPublicMeta . pmChainId) (ChainId l) pd
       "sender"   -> pure $ set (pdPublicMeta . pmSender) l pd
-      t          -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
-    go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as
+      t          -> evalError' i $ "envChainData: bad public metadata key: " <> prettyString t
+    go i _ as = evalError' i $ "envChainData: bad public metadata values: " <> pretty as

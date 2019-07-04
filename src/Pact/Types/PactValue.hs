@@ -40,52 +40,52 @@ import Pact.Types.Type (Type(TyAny))
 
 
 data PactValue
-  = PactLiteral Literal
-  | PactList (Vector PactValue)
-  | PactObject (ObjectMap PactValue)
-  | PactGuard Guard
+  = VLiteral Literal
+  | VList (Vector PactValue)
+  | VObject (ObjectMap PactValue)
+  | VGuard Guard
   deriving (Eq,Show,Generic)
 
 instance NFData PactValue
 
 instance ToJSON PactValue where
-  toJSON (PactLiteral l) = toJSON l
-  toJSON (PactObject o) = toJSON o
-  toJSON (PactList v) = toJSON v
-  toJSON (PactGuard x) = toJSON x
+  toJSON (VLiteral l) = toJSON l
+  toJSON (VObject o) = toJSON o
+  toJSON (VList v) = toJSON v
+  toJSON (VGuard x) = toJSON x
 
 
 instance FromJSON PactValue where
-  parseJSON v = (PactLiteral <$> parseJSON v)
-    <|> (PactList <$> parseJSON v)
-    <|> (PactGuard <$> parseJSON v)
-    <|> (PactObject <$> parseJSON v)
+  parseJSON v = (VLiteral <$> parseJSON v)
+    <|> (VList <$> parseJSON v)
+    <|> (VGuard <$> parseJSON v)
+    <|> (VObject <$> parseJSON v)
 
 instance Pretty PactValue where
-  pretty (PactLiteral l) = pretty l
-  pretty (PactObject l) = pretty l
-  pretty (PactList l) = pretty (V.toList l)
-  pretty (PactGuard l) = pretty l
+  pretty (VLiteral l) = pretty l
+  pretty (VObject l) = pretty l
+  pretty (VList l) = pretty (V.toList l)
+  pretty (VGuard l) = pretty l
 
 -- | Strict conversion.
 toPactValue :: Term Name -> Either Text PactValue
-toPactValue (TLiteral l _) = pure $ PactLiteral l
-toPactValue (TObject (Object o _ _ _)) = PactObject <$> traverse toPactValue o
-toPactValue (TList (PList l _ _)) = PactList <$> V.mapM toPactValue l
-toPactValue (TGuard g _) = pure (PactGuard g)
+toPactValue (TLiteral l _) = pure $ VLiteral l
+toPactValue (TObject (Object o _ _ _)) = VObject <$> traverse toPactValue o
+toPactValue (TList (PList l _ _)) = VList <$> V.mapM toPactValue l
+toPactValue (TGuard g _) = pure (VGuard g)
 toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
 
 fromPactValue :: PactValue -> Term Name
-fromPactValue (PactLiteral l) = TLiteral l def
-fromPactValue (PactObject o) = TObject $ Object (fmap fromPactValue o) TyAny def def
-fromPactValue (PactList l) = TList $ PList (fmap fromPactValue l) TyAny def
-fromPactValue (PactGuard x) = TGuard x def
+fromPactValue (VLiteral l) = TLiteral l def
+fromPactValue (VObject o) = TObject $ Object (fmap fromPactValue o) TyAny def def
+fromPactValue (VList l) = TList $ PList (fmap fromPactValue l) TyAny def
+fromPactValue (VGuard x) = TGuard x def
 
 -- | Lenient conversion, implying that conversion back won't necc. succeed.
 -- Integers are coerced to Decimal for simple representation.
 -- Non-value types are turned into their String representation.
 toPactValueLenient :: Term Name -> PactValue
 toPactValueLenient t = case toPactValue t of
-  Right (PactLiteral (LInteger l)) -> PactLiteral (LDecimal (fromIntegral l))
+  Right (VLiteral (LInteger l)) -> VLiteral (LDecimal (fromIntegral l))
   Right v -> v
-  Left _ -> PactLiteral $ LString $ renderCompactText t
+  Left _ -> VLiteral $ LString $ renderCompactText t

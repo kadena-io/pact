@@ -189,7 +189,7 @@ handleCompile src exp a =
           Left <$> renderErr er
 
 compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
-compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
+compileEval src exp = handleCompile src exp $ \e -> pureEval (getInfo e) (eval e)
 
 
 pureEval :: Info -> Eval LibState (Term Name) -> Repl (Either String (Term Name))
