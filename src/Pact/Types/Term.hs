@@ -22,15 +22,15 @@
 
 -- |
 -- Module      :  Pact.Types.Term
--- Copyright   :  (C) 2016 Stuart Popejoy
+-- Copyright   :  (C) 2019 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
--- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>,
+--                Emily Pillmore <emily@kadena.io>
 --
 -- Term and related types.
 --
-
 module Pact.Types.Term
- ( Namespace(..), nsName, nsGuard,
+ ( Namespace(..),
    NamespaceName(..),
    Meta(..),mDocs,mModel,
    PublicKey(..),
@@ -44,18 +44,18 @@ module Pact.Types.Term
    DefType(..),_Defun,_Defpact,_Defcap,
    defTypeRep,
    NativeDefName(..),DefName(..),
-   FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
+   FunApp(..),faModule,faDefType,
    Ref'(..),_Direct,_Ref,Ref,
    NativeDFun(..),
    BindType(..),
-   BindPair(..),bpArg,bpVal,toBindPairs,
+   BindPair(..),toBindPairs,
    TableName(..),
-   Module(..),mInfo,mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
-   Interface(..),interfaceInfo,interfaceCode, interfaceMeta, interfaceName, interfaceImports,
-   ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
+   Module(..),mName,mMeta,
+   Interface(..),interfaceName,
+   ModuleDef(..),moduleDefName,moduleDefCode,moduleDefMeta,
    Governance(..),
    ModuleName(..), mnName, mnNamespace,
-   ModuleHash(..), mhHash,
+   ModuleHash(..),
    Name(..),parseName,
    ConstVal(..),constTerm,
    Use(..),
@@ -64,30 +64,29 @@ module Pact.Types.Term
    Example(..),
    derefDef,
    ObjectMap(..),objectMapToListWith,
-   Object(..),oObject,oObjectType,oInfo,oKeyOrder,
+   Object(..),
    FieldKey(..),
-   Step(..),sEntity,sExec,sRollback,sInfo,
+   Step(..),
    Term(..), _TModule, _TList, _TDef, _TNative, _TConst, _TApp, _TVar, _TBinding,
    _TObject, _TSchema, _TLiteral, _TGuard, _TUse, _TStep, _TTable,
-   ToTerm(..),
-   toTermList,toTObject,toTObjectMap,toTList,toTListV,
+   ToTerm(..), toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
    Gas(..),
-   PList(..), plList, plListType, plInfo,
-   Native(..), nfName, nfFun, nfFunTypes, nfExamples, nfDocs, nfTopLevelOnly, nfInfo,
-   PConst(..), pcConstArg, pcModule, pcConstVal, pcMeta, pcInfo,
-   PVar(..), pvValue, pvInfo,
-   Binding(..), bdPairs, bdBody, bdType, bdInfo,
-   PSchema(..), psName, psModule, psMeta, psFields, psInfo,
-   PTable(..), ptTableName, ptModule, ptHash, ptTableType, ptMeta, ptInfo
+   PList(..), plList,
+   Native(..), nfTopLevelOnly,
+   PConst(..),pcModule,
+   PVar(..), pvValue,
+   Binding(..),
+   PSchema(..), psModule, psInfo, psMeta,
+   PTable(..), ptModule, ptInfo
    ) where
 
 import Bound
 import Control.Applicative
 import Control.DeepSeq
-import Control.Lens (makeLenses,makePrisms)
+import Control.Lens (Lens', lens, makeLenses, makePrisms)
 import Control.Monad
 import qualified Data.Aeson as A
 #if MIN_VERSION_aeson(1,4,3)
@@ -330,6 +329,12 @@ data FunApp = FunApp {
 instance ToJSON FunApp where toJSON = lensyToJSON 3
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 instance GetInfo FunApp where getInfo = _faInfo
+
+faModule :: Lens' FunApp (Maybe ModuleName)
+faModule = lens _faModule (\t b -> t { _faModule = b })
+
+faDefType :: Lens' FunApp DefType
+faDefType = lens _faDefType (\t b -> t { _faDefType = b })
 
 -- | Variable type for an evaluable 'Term'.
 data Ref' d =
@@ -602,6 +607,12 @@ instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 instance GetInfo (Module g) where
   getInfo = _mInfo
 
+mName :: Lens' (Module n) ModuleName
+mName = lens _mName (\t b -> t { _mName = b })
+
+mMeta :: Lens' (Module n) Meta
+mMeta = lens _mMeta (\t b -> t { _mMeta = b })
+
 data Interface = Interface
   { _interfaceName :: !ModuleName
   , _interfaceCode :: !Code
@@ -619,6 +630,9 @@ instance NFData Interface
 
 instance GetInfo Interface where
   getInfo = _interfaceInfo
+
+interfaceName :: Lens' Interface ModuleName
+interfaceName = lens _interfaceName (\t b -> t { _interfaceName = b })
 
 data ModuleDef g
   = MDModule !(Module g)
@@ -858,6 +872,9 @@ instance NFData n => NFData (PList n)
 instance Pretty n => Pretty (PList n) where
   pretty l = bracketsSep $ pretty <$> V.toList (_plList l)
 
+plList :: Lens' (PList n) (Vector (Term n))
+plList = lens _plList (\t b -> t { _plList = b })
+
 data Native n = Native
   { _nfName :: !NativeDefName
   , _nfFun :: !NativeDFun
@@ -909,6 +926,9 @@ instance Pretty n => Pretty (Native n) where
               <> line
               <> align (vsep (pretty <$> exs))
 
+nfTopLevelOnly :: Lens' (Native n) Bool
+nfTopLevelOnly = lens _nfTopLevelOnly (\t b -> t { _nfTopLevelOnly = b })
+
 data PConst n = PConst
   { _pcConstArg :: !(Arg (Term n))
   , _pcModule :: !ModuleName
@@ -943,6 +963,9 @@ instance Pretty n => Pretty (PConst n) where
     <> " "
     <> pretty _pcMeta
 
+pcModule :: Lens' (PConst n) ModuleName
+pcModule = lens _pcModule (\t b -> t { _pcModule = b })
+
 data PVar n = PVar
   { _pvValue :: !n
   , _pvInfo :: !Info
@@ -962,6 +985,9 @@ instance (FromJSON n, ToJSON n) => FromJSON (PVar n) where
 
 instance Pretty n => Pretty (PVar n) where
   pretty (PVar n _) = pretty n
+
+pvValue :: Lens' (PVar n) n
+pvValue = lens _pvValue (\t b -> t { _pvValue = b })
 
 data Binding n = Binding
   { _bdPairs :: ![BindPair (Term n)]
@@ -1035,6 +1061,15 @@ instance Pretty n => Pretty (PSchema n) where
       , prettyList _psFields
       ]
 
+psModule :: Lens' (PSchema n) ModuleName
+psModule = lens _psModule (\t b -> t { _psModule = b })
+
+psMeta :: Lens' (PSchema n) Meta
+psMeta = lens _psMeta (\t b -> t { _psMeta = b })
+
+psInfo :: Lens' (PSchema n) Info
+psInfo = lens _psInfo (\t b -> t { _psInfo = b })
+
 data PTable n = PTable
   { _ptTableName :: !TableName
   , _ptModule :: ModuleName
@@ -1043,6 +1078,12 @@ data PTable n = PTable
   , _ptMeta :: !Meta
   , _ptInfo :: !Info
   } deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
+
+ptModule :: Lens' (PTable n) ModuleName
+ptModule = lens _ptModule (\t b -> t { _ptModule = b })
+
+ptInfo :: Lens' (PTable n) Info
+ptInfo = lens _ptInfo (\t b -> t { _ptInfo = b })
 
 instance GetInfo (PTable n) where getInfo = _ptInfo
 instance NFData n => NFData (PTable n)
@@ -1312,28 +1353,12 @@ termEq _ _ = False
 
 makePrisms ''Term
 makePrisms ''Ref'
-makePrisms ''ModuleDef
 makePrisms ''DefType
 
-makeLenses ''Namespace
-makeLenses ''FunApp
 makeLenses ''Meta
-makeLenses ''Module
-makeLenses ''Interface
 makeLenses ''App
 makeLenses ''Def
 makeLenses ''ModuleName
-makeLenses ''Object
-makeLenses ''BindPair
-makeLenses ''Step
-makeLenses ''ModuleHash
-makeLenses ''PList
-makeLenses ''PSchema
-makeLenses ''PTable
-makeLenses ''PVar
-makeLenses ''PConst
-makeLenses ''Native
-makeLenses ''Binding
 
 deriveEq1 ''Term
 deriveEq1 ''BindPair
