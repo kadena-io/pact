@@ -932,13 +932,20 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
     withExceptT ModuleParseFailure $ liftEither $
       moduleModelDecl moduleData
 
-  (funTypes :: HM.HashMap Text (Ref, TopLevel Node, Pact.FunType TC.UserType))
+  (funTypes :: HM.HashMap Text
+    (Ref, TopLevel Node, Pact.FunType TC.UserType, CheckableType))
     <- ifoldrM
       (\name ref accum -> do
         maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
         pure $ case maybeFun of
           (topfun@(TopFun (FDefun _ _ _ defType funType _ _) _), _)
-            -> accum & at name ?~ (ref, topfun, funType)
+            -> let checkType = case defType of
+                     Defpact -> CheckDefpact
+                     Defun   -> CheckDefun
+                     _       -> error
+                       "invariant violation: only defpact / defun are allowed"
+
+               in accum & at name ?~ (ref, topfun, funType, checkType)
           _ -> error
             "invariant failure: anything but a function is unexpected here"
       )
@@ -946,11 +953,12 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
       refs
 
   (funChecks
-    :: HM.HashMap Text (TopLevel Node, Either ParseFailure [Located Check]))
+    :: HM.HashMap Text
+      ((TopLevel Node, CheckableType), Either ParseFailure [Located Check]))
     <- hoist generalize $ for funTypes $ \case
-      (Pact.Direct _, _, _) -> throwError InvalidRefType
-      (Pact.Ref defn, toplevel, userTy) -> (toplevel,) <$>
-        moduleFunCheck tables checkExps consts propDefs defn userTy
+      (Pact.Direct _, _, _, _) -> throwError InvalidRefType
+      (Pact.Ref defn, toplevel, userTy, checkType) -> ((toplevel,checkType),)
+        <$> moduleFunCheck tables checkExps consts propDefs defn userTy
 
   -- check for parse failures in any of the checks
   funChecks' <- case traverse sequence funChecks of
@@ -958,7 +966,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
     Right funChecks' -> pure funChecks'
 
   let invariantCheckable :: HM.HashMap Text (TopLevel Node, CheckableType)
-      invariantCheckable = fmap ((,CheckDefun) . fst) funChecks'
+      invariantCheckable = fst <$> funChecks'
 
   invariantChecks <- ifor invariantCheckable $ \name (toplevel, checkType) ->
     case toplevel of
@@ -966,10 +974,10 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
         verifyFunctionInvariants modName tables caps (mkFunInfo fun) name
           checkType
 
-  funChecks'' <- lift $ ifor funChecks' $ \name (toplevel, checks)
+  funChecks'' <- lift $ ifor funChecks' $ \name ((toplevel, checkType), checks)
     -> case toplevel of
       TopFun fun _ -> for checks $
-        verifyFunctionProperty env (mkFunInfo fun) name CheckDefun
+        verifyFunctionProperty env (mkFunInfo fun) name checkType
       _            -> error
         "invariant violation: anything but a TopFun is unexpected in funChecks"
 
@@ -978,8 +986,8 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
-  :: HM.HashMap ModuleName (ModuleData Ref)   -- ^ all loaded modules
-  -> ModuleData Ref                        -- ^ the module we're verifying
+  :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
+  -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
 verifyModule modules moduleData = runExceptT $ do
   tables <- moduleTables modules moduleData
