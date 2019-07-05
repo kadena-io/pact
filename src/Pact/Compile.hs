@@ -293,7 +293,7 @@ varAtom = do
       return $ QName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
     _ -> expected "bareword or qualified atom"
   commit
-  return $ TVar (PVar n _atomInfo)
+  return $ TVar n _atomInfo
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
@@ -321,7 +321,7 @@ literal = lit >>= \LiteralExp{..} ->
 withCapability :: Compile (Term Name)
 withCapability = do
   wcInf <- getInfo <$> current
-  let wcVar = TVar (PVar (Name (asString RWithCapability) wcInf) wcInf)
+  let wcVar = TVar (Name (asString RWithCapability) wcInf) wcInf
   capApp <- sexp app
   body@(top:_) <- some valueLevel
   i <- contextInfo
@@ -430,7 +430,7 @@ moduleForm = do
   modName' <- _atomAtom <$> userAtom
   gov <- Governance
     <$> (((Left . KeySetName) <$> str)
-         <|> (fmap (\AtomExp{..} -> Right $ TVar $ PVar (Name _atomAtom _atomInfo) _atomInfo) userAtom))
+         <|> (fmap (\AtomExp{..} -> Right $ TVar (Name _atomAtom _atomInfo) _atomInfo) userAtom))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"

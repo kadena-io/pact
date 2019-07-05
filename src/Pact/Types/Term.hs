@@ -77,7 +77,6 @@ module Pact.Types.Term
    PList(..), plList,
    Native(..), nfTopLevelOnly,
    PConst(..),pcModule,
-   PVar(..), pvValue,
    Binding(..),
    PSchema(..), psModule, psInfo, psMeta,
    PTable(..), ptModule, ptInfo
@@ -966,29 +965,6 @@ instance Pretty n => Pretty (PConst n) where
 pcModule :: Lens' (PConst n) ModuleName
 pcModule = lens _pcModule (\t b -> t { _pcModule = b })
 
-data PVar n = PVar
-  { _pvValue :: !n
-  , _pvInfo :: !Info
-  } deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
-
-instance GetInfo (PVar n) where getInfo = _pvInfo
-instance NFData n => NFData (PVar n)
-instance (FromJSON n, ToJSON n) => ToJSON (PVar n) where
-  toJSON PVar{..} = object
-    [ "var" .= _pvValue
-    , "i" .= _pvInfo
-    ]
-instance (FromJSON n, ToJSON n) => FromJSON (PVar n) where
-  parseJSON = withObject "PVar" $ \o -> PVar
-    <$> o .: "var"
-    <*> o .: "i"
-
-instance Pretty n => Pretty (PVar n) where
-  pretty (PVar n _) = pretty n
-
-pvValue :: Lens' (PVar n) n
-pvValue = lens _pvValue (\t b -> t { _pvValue = b })
-
 data Binding n = Binding
   { _bdPairs :: ![BindPair (Term n)]
   , _bdBody :: !(Scope Int Term n)
@@ -1113,7 +1089,7 @@ data Term n
   | TNative (Native n)
   | TConst (PConst n)
   | TApp !(App (Term n))
-  | TVar !(PVar n)
+  | TVar !n !Info
   | TBinding !(Binding n)
   | TObject !(Object n)
   | TSchema !(PSchema n)
@@ -1144,7 +1120,7 @@ instance GetInfo (Term n) where
     TStep s -> getInfo s
     TTable tt -> getInfo tt
     TUse u -> getInfo u
-    TVar v -> getInfo v
+    TVar _ i -> i
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
@@ -1154,7 +1130,7 @@ instance Pretty n => Pretty (Term n) where
     TNative n -> pretty n
     TConst c -> pretty c
     TApp a -> pretty a
-    TVar n -> pretty n
+    TVar n _ -> pretty n
     TBinding b -> pretty b
     TObject o -> pretty o
     TLiteral l _ -> annotate Val $ pretty l
@@ -1173,14 +1149,14 @@ instance Applicative Term where
     (<*>) = ap
 
 instance Monad Term where
-    return a = TVar (PVar a def)
+    return a = TVar a def
     TModule m b >>= f = TModule (fmap (>>= f) m) (b >>>= f)
     TList (PList l ts i) >>= f = TList $ PList (V.map (>>= f) l) (fmap (>>= f) ts) i
     TDef d >>= f = TDef $ d { _dFunType = (fmap (>>= f) $ _dFunType d), _dDefBody = ((_dDefBody d) >>>= f) }
     TNative n >>= f = TNative $ n { _nfFunTypes = (fmap (fmap (>>= f)) $ _nfFunTypes n) }
     TConst (PConst d m c t i) >>= f = TConst $ PConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp a >>= f = TApp (fmap (>>= f) a)
-    TVar (PVar n _) >>= f = f n
+    TVar n _ >>= f = f n
     TBinding (Binding bs b c i) >>= f =
       TBinding $ Binding (map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject (Object bs t kf oi) >>= f = TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi)
@@ -1204,7 +1180,7 @@ termCodec = Codec enc dec
       TNative n -> toJSON n
       TConst pc -> toJSON pc
       TApp a -> toJSON a
-      TVar v -> toJSON v
+      TVar v i -> object [ "var" .= v, "i" .= i ]
       TBinding b -> toJSON b
       TObject o -> toJSON o
       TLiteral l i -> object [ "lit" .= l, "i" .= i ]
@@ -1214,18 +1190,21 @@ termCodec = Codec enc dec
       TSchema s -> toJSON s
       TTable tt -> toJSON tt
     dec v =
-      let k f = f <$> parseJSON v
-      in withObject "TModule" (\o -> TModule <$> o .: "module" <*> o .: "body") v
+      let
+        k f = f <$> parseJSON v
+        wo s p = withObject s p v
+      in
+        wo "TModule" (\o -> TModule <$> o .: "module" <*> o .: "body")
       <|> k TList
       <|> k TDef
       -- <|> k TNative
       <|> k TConst
       <|> k TApp
-      <|> k TVar
+      <|> wo "TVar" (\o -> TVar <$> o .: "var" <*> o .: "i")
       <|> k TBinding
       <|> k TObject
-      <|> withObject "TLiteral" (\o -> TLiteral <$> o .: "lit" <*> o .: "i") v
-      <|> withObject "TGuard" (\o -> TGuard <$> o .: "guard" <*> o .: "i") v
+      <|> wo "TLiteral" (\o -> TLiteral <$> o .: "lit" <*> o .: "i")
+      <|> wo "TGuard" (\o -> TGuard <$> o .: "guard" <*> o .: "i")
       <|> k TUse
       <|> k TStep
       <|> k TSchema
@@ -1373,7 +1352,6 @@ deriveEq1 ''ObjectMap
 deriveEq1 ''Object
 deriveEq1 ''Step
 deriveEq1 ''PList
-deriveEq1 ''PVar
 deriveEq1 ''PConst
 deriveEq1 ''PSchema
 deriveEq1 ''PTable
@@ -1393,7 +1371,6 @@ deriveShow1 ''Module
 deriveShow1 ''Governance
 deriveShow1 ''Step
 deriveShow1 ''PList
-deriveShow1 ''PVar
 deriveShow1 ''PConst
 deriveShow1 ''PSchema
 deriveShow1 ''PTable
@@ -1418,13 +1395,13 @@ _roundtripJSON | r == (Success tmod) = show r
     tlet1 = TBinding $ Binding []
            (abstract (\b -> if b == na then Just 0 else Nothing)
             (toTList TyAny def
-             [(TVar $ PVar na def),tlet2])) -- bound var + let
+             [(TVar na def),tlet2])) -- bound var + let
            BindLet def
 
     tlet2 = TBinding $ Binding []
            (abstract (\b -> if b == nb then Just 0 else Nothing)
             (toTList TyAny def
-             [(TVar $ PVar na def),(TVar $ PVar nb def)])) -- free var + bound var
+             [(TVar na def),(TVar nb def)])) -- free var + bound var
            BindLet def
 
     na = Name "a" def

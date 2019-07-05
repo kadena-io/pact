@@ -63,7 +63,7 @@ import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                PrimType (..), SchemaVar, TList,
-                                               TableName, TyObject, Type, TyList, PVar)
+                                               TableName, TyObject, Type, TyList)
 import           Pact.Types.Pretty
 import           Pact.Types.Util              (tShow)
 

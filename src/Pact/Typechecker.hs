@@ -752,11 +752,11 @@ mangleFunType f = over ftReturn (mangleType f) .
 
 -- | Build Defuns and natives from Terms.
 toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
-toFun (TVar (PVar (Left (Direct (TNative Native{..} ))) _)) = do
+toFun (TVar (Left (Direct (TNative Native{..} ))) _) = do
   ft' <- traverse (traverse toUserType') (fmap (fmap (fmap Right)) _nfFunTypes)
   return $ FNative _nfInfo (asString _nfName) ft' Nothing -- we deal with special form in App
-toFun (TVar (PVar (Left (Ref r)) _)) = toFun (fmap Left r)
-toFun (TVar (PVar Right{} i)) = die i "Value in fun position"
+toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
+toFun (TVar Right{} i) = die i "Value in fun position"
 toFun (TDef d) = do -- TODO currently creating new vars every time, is this ideal?
   let mn = _dModule d
       fn = asString $ _dDefName d
@@ -822,7 +822,7 @@ toAST t@TNative{} = die (getInfo t) "Native in value position"
 toAST t@TDef{} = die (getInfo t) "Def in value position"
 toAST t@TSchema{} = die (getInfo t) "User type in value position"
 
-toAST (TVar (PVar v i)) = case v of -- value position only, TApp has its own resolver
+toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
   (Left (Direct t)) ->
     case t of
@@ -989,7 +989,7 @@ trackNode ty i = trackAST node >> return node
 -- | Main type transform, expecting that vars can only refer to a user type.
 toUserType :: forall n . Show n => Term (Either Ref n) -> TC UserType
 toUserType t = case t of
-  TVar (PVar (Left r) _) -> derefUT r
+  TVar (Left r) _ -> derefUT r
   _ -> die (getInfo t) $ "toUserType: expected user type: " ++ show t
   where
     derefUT (Ref r) = toUserType' (fmap Left r :: Term (Either Ref n))

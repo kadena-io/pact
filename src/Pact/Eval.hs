@@ -121,7 +121,7 @@ enforceKeySet i ksn KeySet{..} = do
 
 -- | Hoist Name back to ref
 liftTerm :: Term Name -> Term Ref
-liftTerm a = TVar $ PVar (Direct a) def
+liftTerm a = TVar (Direct a) def
 
 -- | Search up through call stack apps to find the first `Just a`
 searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)
@@ -134,11 +134,11 @@ evalByName n as i = do
 
   -- Build and resolve TApp
 
-  app <- enscope $ TApp (App (TVar $ PVar n def) as i)
+  app <- enscope $ TApp (App (TVar n def) as i)
 
   -- lens into user function if any to test for loop
 
-  case preview (_TApp . appFun . _TVar . pvValue . _Ref . _TDef) app of
+  case preview (_TApp . appFun . _TVar . _1 . _Ref . _TDef) app of
     Nothing -> return ()
     Just Def{..} -> do
 
@@ -372,7 +372,7 @@ loadModule m@Module {} bod1 mi g0 = do
 resolveGovernance :: HM.HashMap Text Ref
                   -> Module (Term Name) -> Eval e (ModuleDef (Def Ref))
 resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
-    TVar (PVar (Name n _) _) -> case HM.lookup n solvedDefs of
+    TVar (Name n _) _ -> case HM.lookup n solvedDefs of
       Just r -> case r of
         (Ref (TDef govDef)) -> case _dDefType govDef of
           Defcap -> return govDef
@@ -568,7 +568,7 @@ unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static te
 -- | Main function for reduction/evaluation.
 reduce :: Term Ref ->  Eval e (Term Name)
 reduce (TApp a) = reduceApp a
-reduce (TVar (PVar t _)) = deref t
+reduce (TVar t _) = deref t
 reduce t@TLiteral{} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
 reduce (TList (PList l t i)) = TList <$> (PList <$> mapM reduce l <*> traverse reduce t <*> pure i)
@@ -600,7 +600,7 @@ reduce (TTable PTable{..}) = TTable
        <*> pure _ptInfo)
 
 mkDirect :: Term Name -> Term Ref
-mkDirect t = TVar $ PVar (Direct t) def
+mkDirect t = TVar (Direct t) def
 
 reduceBody :: Term Ref -> Eval e (Term Name)
 reduceBody (TList (PList bs _ _)) =
@@ -633,8 +633,8 @@ enforcePactValue' :: Traversable f => f (Term Name) -> Eval e (f PactValue)
 enforcePactValue' = traverse enforcePactValue
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
-reduceApp (App (TVar (PVar (Direct t) _)) as ai) = reduceDirect t as ai
-reduceApp (App (TVar (PVar (Ref r) _)) as ai) = reduceApp (App r as ai)
+reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
+reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d) as ai) = do
   g <- computeUserAppGas d ai
   af <- prepareUserAppArgs d as

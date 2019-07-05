@@ -92,7 +92,7 @@ evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
 
 requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
 requireDefcap App{..} = case _appFun of
-  TVar (PVar (Ref (TDef d@Def{..})) _) -> case _dDefType of
+  TVar (Ref (TDef d@Def{..})) _ -> case _dDefType of
     Defcap -> return d
     _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
   t -> evalError' t $ "Attempting to apply non-def: " <> pretty _appFun
