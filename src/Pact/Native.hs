@@ -509,7 +509,7 @@ makeList i [TLitInteger len,value] = case typeof value of
 makeList i as = argsError i as
 
 reverse' :: RNativeFun e
-reverse' _ [l@TList{}] = return $ over (_TList . plList) V.reverse l
+reverse' _ [(TList l)] = return $ TList $ over plList V.reverse l
 reverse' i as = argsError i as
 
 fold' :: NativeFun e
