@@ -35,7 +35,7 @@ ofBasicOp s = if isBasicOp then Just s else Nothing
 
 -- helper patterns
 pattern NativeFunc :: forall a. Text -> Fun a
-pattern NativeFunc f <- FNative _ f _ _
+pattern NativeFunc f <- FNative f _ _
 
 -- compileNode's Patterns
 
@@ -238,7 +238,7 @@ pattern ShortTableName :: Text -> AST Node
 pattern ShortTableName tn <- ASTTable _node (Lang.TableName tn)
 
 pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
-pattern NativeFuncSpecial f bdy <- FNative _ f _ (Just (_,SBinding bdy))
+pattern NativeFuncSpecial f bdy <- FNative f _ (Just (_,SBinding bdy))
 
 pattern AST_Read :: Node -> Text -> AST Node -> AST Node
 pattern AST_Read node tn key <- ASTApp node (NativeFunc "read") [ShortTableName tn, key]

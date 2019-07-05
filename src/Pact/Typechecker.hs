@@ -421,7 +421,7 @@ processNatives Pre a@(ASTApp i FNative {..} argASTs) = do
             (ASTList _ln ll) -> do -- TODO, for with-capability
               -- assoc app return with last of body
               assocAstTy (_aNode $ last ll) $ _ftReturn mangledFunType
-            sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
+            sb -> die' (_aId i) $ "Invalid special form, expected binding: " ++ show sb
           -- TODO the following is dodgy, schema may not be resolved.
           ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty _)]) -> asPrimString field >>= \fld -> case uty of
             TyUser u -> case findSchemaField fld u of
@@ -754,7 +754,7 @@ mangleFunType f = over ftReturn (mangleType f) .
 toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
 toFun (TVar (Left (Direct (TNative Native{..} ))) _) = do
   ft' <- traverse (traverse toUserType') (fmap (fmap (fmap Right)) _nfFunTypes)
-  return $ FNative _nfInfo (asString _nfName) ft' Nothing -- we deal with special form in App
+  return $ FNative (asString _nfName) ft' Nothing -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right{} i) = die i "Value in fun position"
 toFun (TDef d) = do -- TODO currently creating new vars every time, is this ideal?

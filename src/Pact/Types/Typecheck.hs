@@ -229,7 +229,6 @@ data Special t =
 -- | A native or user function.
 data Fun t =
   FNative {
-    _fInfo :: Info,
     _fName :: Text,
     _fTypes :: FunTypes UserType,
     _fSpecial :: Maybe (SpecialForm,Special t)

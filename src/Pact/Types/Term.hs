@@ -407,8 +407,8 @@ instance NFData n => NFData (BindType n)
 
 data BindPair n = BindPair
   { _bpArg :: Arg n
-  , _bpVal :: n }
-  deriving (Eq,Show,Functor,Traversable,Foldable,Generic)
+  , _bpVal :: n
+  } deriving (Eq,Show,Functor,Traversable,Foldable,Generic)
 
 toBindPairs :: BindPair n -> (Arg n,n)
 toBindPairs (BindPair a v) = (a,v)
@@ -881,10 +881,10 @@ data Native n = Native
   , _nfExamples :: ![Example]
   , _nfDocs :: Text
   , _nfTopLevelOnly :: Bool
-  , _nfInfo :: !Info
+--  , _nfInfo :: !Info
   } deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
 
-instance GetInfo (Native n) where getInfo = _nfInfo
+-- instance GetInfo (Native n) where getInfo = _nfInfo
 instance NFData n => NFData (Native n)
 instance (FromJSON n, ToJSON n) => ToJSON (Native n) where
   toJSON Native{..} = object
@@ -894,7 +894,7 @@ instance (FromJSON n, ToJSON n) => ToJSON (Native n) where
     , "examples" .= Null -- TODO examples
     , "docs" .= _nfDocs
     , "tl" .= _nfTopLevelOnly
-    , "i" .= _nfInfo
+    --, "i" .= _nfInfo
     ]
 -- instance (FromJSON n, ToJSON n) => FromJSON (Native n) where
 --   parseJSON = withObject "Native" $ \o -> Native
@@ -1114,13 +1114,13 @@ instance GetInfo (Term n) where
     TList l -> getInfo l
     TLiteral _ i -> i
     TModule m _ -> getInfo m
-    TNative n -> getInfo n
     TObject o -> getInfo o
     TSchema s -> getInfo s
     TStep s -> getInfo s
     TTable tt -> getInfo tt
     TUse u -> getInfo u
     TVar _ i -> i
+    _ -> def
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case

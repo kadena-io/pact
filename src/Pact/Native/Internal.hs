@@ -106,7 +106,7 @@ setTopLevelOnly = set (_2 . _TNative . nfTopLevelOnly) True
 -- | Specify a 'NativeFun'
 defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defNative n fun ftype examples docs =
-  (n, TNative $ Native n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def)
+  (n, TNative $ Native n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False)
 
 -- | Specify a 'GasRNativeFun'
 defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef

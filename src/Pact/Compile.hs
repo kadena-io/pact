@@ -82,8 +82,8 @@ type Compile a = ExpParse CompileState a
 initParseState :: Exp Info -> ParseState CompileState
 initParseState e = ParseState e $ CompileState 0 Nothing
 
-data Reserved =
-    RBless
+data Reserved
+  = RBless
   | RDefconst
   | RDefpact
   | RDefschema
