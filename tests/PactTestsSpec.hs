@@ -4,16 +4,19 @@ module PactTestsSpec (spec) where
 
 import Test.Hspec
 
+import Control.Monad
+import Control.Concurrent
+
 import Data.Text (unpack)
 
 import Pact.Repl
 import Pact.Repl.Types
+import Pact.Types.Info
 import Pact.Types.Runtime
+import Pact.Types.Term
 
 import System.Directory
 import System.FilePath
-import Control.Monad
-import Control.Concurrent
 
 spec :: Spec
 spec = do

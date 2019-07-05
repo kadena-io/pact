@@ -29,7 +29,8 @@ import qualified Pact.Analyze.Remote.Types as Remote
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Server.API
-import Pact.Types.Runtime
+import Pact.Types.Persistence
+import Pact.Types.Term
 
 spec :: Spec
 spec = do

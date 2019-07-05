@@ -16,7 +16,7 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Exp
 import Pact.Types.Info (Info(..))
-import Pact.Types.Runtime
+import Pact.Types.Persistence
 import Pact.Types.Term
     (Def(..), Interface(..), Meta(..), Module(..), ModuleDef(..),
     ModuleName(..), Ref, Ref'(..), Term(..))

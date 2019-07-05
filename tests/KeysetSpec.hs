@@ -3,9 +3,10 @@ module KeysetSpec (spec) where
 
 import Test.Hspec
 
-import Pact.Types.Runtime
 import Data.Aeson
 import Data.Default (def)
+
+import Pact.Types.Term
 
 spec :: Spec
 spec = describe "fromJSON" testFromJSON

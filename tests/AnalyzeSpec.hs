@@ -37,8 +37,11 @@ import qualified Test.HUnit                   as HUnit
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
 import           Pact.Repl.Types              (ReplMode (StringEval))
-import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref)
+import           Pact.Types.Exp               (Exp)
+import           Pact.Types.Info              (Info)
+import           Pact.Types.Persistence       (ModuleData)
 import           Pact.Types.Pretty            (Pretty, renderCompactString)
+import           Pact.Types.Term              (Ref)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Check

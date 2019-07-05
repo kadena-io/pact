@@ -18,10 +18,13 @@ import qualified Data.Set as Set
 import Pact.Typechecker hiding (debug)
 import Pact.Repl
 import Pact.Repl.Types
-import Pact.Types.Runtime
-import Pact.Types.Typecheck
-
+import Pact.Types.Info
+import Pact.Types.Persistence
 import Pact.Types.Pretty
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Typecheck
+import Pact.Types.Util
 
 spec :: Spec
 spec = do

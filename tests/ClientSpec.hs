@@ -5,21 +5,26 @@
 
 module ClientSpec (spec) where
 
+import qualified Control.Exception as Exception
+
 import Data.Aeson
 import Data.Default (def)
+import Data.Text (Text)
+
 import Test.Hspec
+
 import qualified Network.HTTP.Client as HTTP
-import qualified Control.Exception as Exception
 
 import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
-import Data.Text (Text)
+import Pact.Types.Exp
 import Pact.Server.API
 import Pact.Server.Test
-import Servant.Client
 import Pact.Types.Runtime
 import Pact.Types.PactValue
+
+import Servant.Client
 
 
 _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
