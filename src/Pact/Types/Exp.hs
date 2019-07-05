@@ -38,7 +38,7 @@ module Pact.Types.Exp
 
 
 import Control.Applicative
-import Control.Lens (makePrisms)
+import Control.Lens (Lens', Prism', lens, prism', makePrisms)
 import Data.List
 import Control.Monad
 import Prelude
@@ -159,8 +159,12 @@ data LiteralExp i = LiteralExp
   { _litLiteral :: !Literal
   , _litInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-instance GetInfo (LiteralExp Info) where
-  getInfo = _litInfo
+
+litInfo :: Lens' (LiteralExp Info) Info
+litInfo = lens _litInfo (\t b -> t { _litInfo = b })
+
+instance HasInfo (LiteralExp Info) where
+  hasInfo = litInfo
 instance NFData i => NFData (LiteralExp i)
 instance ToJSON i => ToJSON (LiteralExp i) where
   toJSON (LiteralExp l i) = object [ "lit" .= l, expInfoField .= i ]
@@ -176,8 +180,13 @@ data AtomExp i = AtomExp
   , _atomQualifiers :: ![Text]
   , _atomInfo :: i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-instance GetInfo (AtomExp Info) where
-  getInfo = _atomInfo
+
+atomInfo :: Lens' (AtomExp Info) Info
+atomInfo = lens _atomInfo (\t b -> t { _atomInfo = b })
+
+instance HasInfo (AtomExp Info) where
+  hasInfo = atomInfo
+
 instance NFData i => NFData (AtomExp i)
 instance ToJSON i => ToJSON (AtomExp i) where
   toJSON (AtomExp l q i) =
@@ -195,8 +204,13 @@ data ListExp i = ListExp
   , _listDelimiter :: !ListDelimiter
   , _listInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-instance GetInfo (ListExp Info) where
-  getInfo = _listInfo
+
+listInfo :: Lens' (ListExp Info) Info
+listInfo = lens _listInfo (\t b -> t { _listInfo = b })
+
+instance HasInfo (ListExp Info) where
+  hasInfo = listInfo
+
 instance NFData i => NFData (ListExp i)
 instance ToJSON i => ToJSON (ListExp i) where
   toJSON (ListExp l d i) =
@@ -214,8 +228,13 @@ data SeparatorExp i = SeparatorExp
   { _sepSeparator :: !Separator
   , _sepInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-instance GetInfo (SeparatorExp Info) where
-  getInfo = _sepInfo
+
+sepInfo :: Lens' (SeparatorExp Info) Info
+sepInfo = lens _sepInfo (\t b -> t { _sepInfo = b })
+
+instance HasInfo (SeparatorExp Info) where
+  hasInfo = sepInfo
+
 instance NFData i => NFData (SeparatorExp i)
 instance ToJSON i => ToJSON (SeparatorExp i) where
   toJSON (SeparatorExp s i) = object [ "sep" .= s, expInfoField .= i ]
@@ -227,12 +246,33 @@ instance Pretty (SeparatorExp i) where
   pretty (SeparatorExp sep' _) = pretty sep'
 
 -- | Pact syntax expressions
-data Exp i =
-  ELiteral (LiteralExp i) |
-  EAtom (AtomExp i) |
-  EList (ListExp i) |
-  ESeparator (SeparatorExp i)
+data Exp i
+  = ELiteral (LiteralExp i)
+  | EAtom (AtomExp i)
+  | EList (ListExp i)
+  | ESeparator (SeparatorExp i)
   deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
+
+_ELiteral :: Prism' (Exp i) (LiteralExp i)
+_ELiteral = prism' ELiteral $ \e -> case e of
+  ELiteral l -> Just l
+  _ -> Nothing
+
+_EAtom :: Prism' (Exp i) (AtomExp i)
+_EAtom = prism' EAtom $ \e -> case e of
+  EAtom a -> Just a
+  _ -> Nothing
+
+_EList :: Prism' (Exp i) (ListExp i)
+_EList = prism' EList $ \e -> case e of
+  EList l -> Just l
+  _ -> Nothing
+
+_ESeparator :: Prism' (Exp i) (SeparatorExp i)
+_ESeparator = prism' ESeparator $ \e -> case e of
+  ESeparator s -> Just s
+  _ -> Nothing
+
 
 instance Pretty (Exp i) where
   pretty = \case
@@ -242,12 +282,12 @@ instance Pretty (Exp i) where
     ESeparator s -> pretty s
 
 instance NFData i => NFData (Exp i)
-instance GetInfo (Exp Info) where
-  getInfo e = case e of
-    ELiteral i -> getInfo i
-    EAtom a -> getInfo a
-    EList l -> getInfo l
-    ESeparator s -> getInfo s
+instance HasInfo (Exp Info) where
+  hasInfo f e = case e of
+    ELiteral l -> ELiteral <$> hasInfo f l
+    EAtom a -> EAtom <$> hasInfo f a
+    EList l -> EList <$> hasInfo f l
+    ESeparator s -> ESeparator <$> hasInfo f s
 
 instance ToJSON i => ToJSON (Exp i) where
   toJSON (ELiteral a) = toJSON a
@@ -262,8 +302,6 @@ instance FromJSON i => FromJSON (Exp i) where
     (EList <$> parseJSON v) <|>
     (ESeparator <$> parseJSON v)
 
-
-makePrisms ''Exp
 
 pattern CommaExp :: Exp t
 pattern CommaExp <- ESeparator (SeparatorExp Comma _i)

@@ -54,13 +54,13 @@ module Pact.Types.Term
    Interface(..),interfaceName,
    ModuleDef(..),moduleDefName,moduleDefCode,moduleDefMeta,
    Governance(..),
-   ModuleName(..), mnName, mnNamespace,
+   ModuleName(..),mnNamespace,
    ModuleHash(..),
    Name(..),parseName,
    ConstVal(..),constTerm,
    Use(..),
    App(..),appFun,appArgs,appInfo,
-   Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
+   Def(..),dInfo,dModule,dMeta,dDefType,
    Example(..),
    derefDef,
    ObjectMap(..),objectMapToListWith,
@@ -85,7 +85,7 @@ module Pact.Types.Term
 import Bound
 import Control.Applicative
 import Control.DeepSeq
-import Control.Lens (Lens', lens, makeLenses, makePrisms)
+import Control.Lens (Lens', lens, makePrisms)
 import Control.Monad
 import qualified Data.Aeson as A
 #if MIN_VERSION_aeson(1,4,3)
@@ -134,6 +134,12 @@ data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
   , _mModel :: ![Exp Info]   -- ^ models
   } deriving (Eq, Show, Generic)
+
+mDocs :: Lens' Meta (Maybe Text)
+mDocs = lens _mDocs (\t b -> t { _mDocs = b})
+
+mModel :: Lens' Meta [Exp Info]
+mModel = lens _mModel (\t b -> t { _mModel = b })
 
 instance Pretty Meta where
   pretty (Meta (Just doc) model) = dquotes (pretty doc) <> line <> prettyModel model
@@ -327,13 +333,16 @@ data FunApp = FunApp {
     } deriving (Show,Eq,Generic)
 instance ToJSON FunApp where toJSON = lensyToJSON 3
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
-instance GetInfo FunApp where getInfo = _faInfo
+instance HasInfo FunApp where hasInfo = faInfo
 
 faModule :: Lens' FunApp (Maybe ModuleName)
 faModule = lens _faModule (\t b -> t { _faModule = b })
 
 faDefType :: Lens' FunApp DefType
 faDefType = lens _faDefType (\t b -> t { _faDefType = b })
+
+faInfo :: Lens' FunApp Info
+faInfo = lens _faInfo (\t b -> t { _faInfo = b })
 
 -- | Variable type for an evaluable 'Term'.
 data Ref' d =
@@ -351,9 +360,9 @@ instance Pretty d => Pretty (Ref' d) where
   pretty (Direct tm) = pretty tm
   pretty (Ref tm)    = pretty tm
 
-instance GetInfo n => GetInfo (Ref' n) where
-  getInfo (Direct d) = getInfo d
-  getInfo (Ref r) = getInfo r
+instance HasInfo n => HasInfo (Ref' n) where
+  hasInfo f (Direct d) = Direct <$> hasInfo f d
+  hasInfo f (Ref r) = Ref <$> hasInfo f r
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
@@ -430,6 +439,9 @@ data ModuleName = ModuleName
   , _mnNamespace :: Maybe NamespaceName
   } deriving (Eq, Ord, Generic, Show)
 
+mnNamespace :: Lens' ModuleName (Maybe NamespaceName)
+mnNamespace = lens _mnNamespace (\t b -> t { _mnNamespace = b })
+
 instance Hashable ModuleName where
   hashWithSalt s (ModuleName n Nothing)   =
     s `hashWithSalt` (0::Int) `hashWithSalt` n
@@ -466,9 +478,9 @@ data Name
   | Name { _nName :: Text, _nInfo :: Info }
   deriving (Generic, Show)
 
-instance GetInfo Name where
-  getInfo (QName _ _ i) = i
-  getInfo (Name _ i) = i
+instance HasInfo Name where
+  hasInfo f (QName mn n i) = QName mn n <$> f i
+  hasInfo f (Name n i) = Name n <$> f i
 
 instance Pretty Name where
   pretty = \case
@@ -523,7 +535,9 @@ data Use = Use
   , _uInfo :: !Info
   } deriving (Eq, Show, Generic)
 
-instance GetInfo Use where getInfo = _uInfo
+uInfo :: Lens' Use Info
+uInfo = lens _uInfo (\t b -> t { _uInfo = b })
+instance HasInfo Use where hasInfo = uInfo
 
 instance Pretty Use where
   pretty Use{..} =
@@ -548,7 +562,16 @@ data App t = App
   , _appInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
 
-instance GetInfo (App t) where getInfo = _appInfo
+appFun :: Lens' (App t) t
+appFun = lens _appFun (\t b -> t { _appFun = b })
+
+appArgs :: Lens' (App t) [t]
+appArgs = lens _appArgs (\t b -> t { _appArgs = b })
+
+appInfo :: Lens' (App t) Info
+appInfo = lens _appInfo (\t b -> t { _appInfo = b })
+
+instance HasInfo (App t) where hasInfo = appInfo
 
 instance ToJSON t => ToJSON (App t) where toJSON = lensyToJSON 4
 instance FromJSON t => FromJSON (App t) where parseJSON = lensyParseJSON 4
@@ -603,14 +626,17 @@ instance Pretty g => Pretty (Module g) where
 instance ToJSON g => ToJSON (Module g) where toJSON = lensyToJSON 2
 instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 
-instance GetInfo (Module g) where
-  getInfo = _mInfo
+instance HasInfo (Module g) where
+  hasInfo = mInfo
 
 mName :: Lens' (Module n) ModuleName
 mName = lens _mName (\t b -> t { _mName = b })
 
 mMeta :: Lens' (Module n) Meta
 mMeta = lens _mMeta (\t b -> t { _mMeta = b })
+
+mInfo :: Lens' (Module n) Info
+mInfo = lens _mInfo (\t b -> t { _mInfo = b })
 
 data Interface = Interface
   { _interfaceName :: !ModuleName
@@ -627,11 +653,14 @@ instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
 instance NFData Interface
 
-instance GetInfo Interface where
-  getInfo = _interfaceInfo
+instance HasInfo Interface where
+  hasInfo = interfaceInfo
 
 interfaceName :: Lens' Interface ModuleName
 interfaceName = lens _interfaceName (\t b -> t { _interfaceName = b })
+
+interfaceInfo :: Lens' Interface Info
+interfaceInfo = lens _interfaceInfo (\t b -> t { _interfaceInfo = b })
 
 data ModuleDef g
   = MDModule !(Module g)
@@ -652,9 +681,9 @@ instance ToJSON g => ToJSON (ModuleDef g) where
 instance FromJSON g => FromJSON (ModuleDef g) where
   parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
 
-instance GetInfo (ModuleDef g) where
-  getInfo (MDModule m) = _mInfo m
-  getInfo (MDInterface i) = _interfaceInfo i
+instance HasInfo (ModuleDef g) where
+  hasInfo f (MDModule m) = MDModule <$> hasInfo f m
+  hasInfo f (MDInterface i) = MDInterface <$> hasInfo f i
 
 moduleDefName :: ModuleDef g -> ModuleName
 moduleDefName (MDModule m) = _mName m
@@ -682,7 +711,19 @@ deriving instance Show n => Show (Def n)
 deriving instance Eq n => Eq (Def n)
 instance NFData n => NFData (Def n)
 
-instance GetInfo (Def n) where getInfo = _dInfo
+dInfo :: Lens' (Def n) Info
+dInfo = lens _dInfo (\t b -> t { _dInfo = b })
+
+dModule :: Lens' (Def n) ModuleName
+dModule = lens _dModule (\t b -> t { _dModule = b})
+
+dMeta :: Lens' (Def n) Meta
+dMeta = lens _dMeta (\t b -> t { _dMeta = b })
+
+dDefType :: Lens' (Def n) DefType
+dDefType = lens _dDefType (\t b -> t { _dDefType = b })
+
+instance HasInfo (Def n) where hasInfo = dInfo
 
 instance Pretty n => Pretty (Def n) where
   pretty Def{..} = parensSep $
@@ -800,7 +841,11 @@ data Object n = Object
   , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
 
-instance GetInfo (Object n) where getInfo = _oInfo
+oInfo :: Lens' (Object n) Info
+oInfo = lens _oInfo (\t b -> t { _oInfo = b })
+
+instance HasInfo (Object n) where hasInfo = oInfo
+
 instance Pretty n => Pretty (Object n) where
   pretty (Object bs _ Nothing _) = pretty bs
   pretty (Object (ObjectMap om) _ (Just ko) _) =
@@ -829,10 +874,14 @@ data Step n = Step
   , _sRollback :: !(Maybe n)
   , _sInfo :: !Info
   } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
+
+sInfo :: Lens' (Step n) Info
+sInfo = lens _sInfo (\t b -> t { _sInfo = b })
+
 instance NFData n => NFData (Step n)
 instance ToJSON n => ToJSON (Step n) where toJSON = lensyToJSON 2
 instance FromJSON n => FromJSON (Step n) where parseJSON = lensyParseJSON 2
-instance GetInfo (Step n) where getInfo = _sInfo
+instance HasInfo (Step n) where hasInfo = sInfo
 instance Pretty n => Pretty (Step n) where
   pretty = \case
     Step mEntity exec Nothing _i -> parensSep $
@@ -853,8 +902,14 @@ data PList n = PList
   , _plInfo :: !Info
   } deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
 
+plList :: Lens' (PList n) (Vector (Term n))
+plList = lens _plList (\t b -> t { _plList = b })
 
-instance GetInfo (PList n) where getInfo = _plInfo
+plInfo :: Lens' (PList n) Info
+plInfo = lens _plInfo (\t b -> t { _plInfo = b })
+
+instance HasInfo (PList n) where hasInfo = plInfo
+
 instance (FromJSON n, ToJSON n) => ToJSON (PList n) where
   toJSON PList{..} = object
     [ "list" .= _plList
@@ -871,9 +926,6 @@ instance NFData n => NFData (PList n)
 instance Pretty n => Pretty (PList n) where
   pretty l = bracketsSep $ pretty <$> V.toList (_plList l)
 
-plList :: Lens' (PList n) (Vector (Term n))
-plList = lens _plList (\t b -> t { _plList = b })
-
 data Native n = Native
   { _nfName :: !NativeDefName
   , _nfFun :: !NativeDFun
@@ -884,7 +936,7 @@ data Native n = Native
 --  , _nfInfo :: !Info
   } deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
 
--- instance GetInfo (Native n) where getInfo = _nfInfo
+-- instance HasInfo (Native n) where getInfo = _nfInfo
 instance NFData n => NFData (Native n)
 instance (FromJSON n, ToJSON n) => ToJSON (Native n) where
   toJSON Native{..} = object
@@ -936,7 +988,13 @@ data PConst n = PConst
   , _pcInfo :: !Info
   } deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
 
-instance GetInfo (PConst n) where getInfo = _pcInfo
+pcInfo :: Lens' (PConst n) Info
+pcInfo = lens _pcInfo (\t b -> t { _pcInfo = b })
+
+pcModule :: Lens' (PConst n) ModuleName
+pcModule = lens _pcModule (\t b -> t { _pcModule = b })
+
+instance HasInfo (PConst n) where hasInfo = pcInfo
 instance NFData n => NFData (PConst n)
 instance (FromJSON n, ToJSON n) => ToJSON (PConst n) where
   toJSON PConst{..} = object
@@ -962,8 +1020,7 @@ instance Pretty n => Pretty (PConst n) where
     <> " "
     <> pretty _pcMeta
 
-pcModule :: Lens' (PConst n) ModuleName
-pcModule = lens _pcModule (\t b -> t { _pcModule = b })
+
 
 data Binding n = Binding
   { _bdPairs :: ![BindPair (Term n)]
@@ -972,9 +1029,13 @@ data Binding n = Binding
   , _bdInfo :: !Info
   } deriving (Functor, Foldable, Traversable, Generic)
 
+bdInfo :: Lens' (Binding n) Info
+bdInfo = lens _bdInfo (\t b -> t { _bdInfo = b })
+
 deriving instance Eq n => Eq (Binding n)
 deriving instance Show n => Show (Binding n)
-instance GetInfo (Binding n) where getInfo = _bdInfo
+instance HasInfo (Binding n) where hasInfo = bdInfo
+
 instance NFData n => NFData (Binding n)
 -- (\o -> TBinding <$> o .: pairs <*> o .: body <*> o .: type' <*> inf' o)
 instance (FromJSON n, ToJSON n) => ToJSON (Binding n) where
@@ -1011,7 +1072,16 @@ data PSchema n = PSchema
   , _psInfo :: !Info
   } deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
 
-instance GetInfo (PSchema n) where getInfo = _psInfo
+psModule :: Lens' (PSchema n) ModuleName
+psModule = lens _psModule (\t b -> t { _psModule = b })
+
+psMeta :: Lens' (PSchema n) Meta
+psMeta = lens _psMeta (\t b -> t { _psMeta = b })
+
+psInfo :: Lens' (PSchema n) Info
+psInfo = lens _psInfo (\t b -> t { _psInfo = b })
+
+instance HasInfo (PSchema n) where hasInfo = psInfo
 instance NFData n => NFData (PSchema n)
 instance (FromJSON n, ToJSON n) => ToJSON (PSchema n) where
   toJSON (PSchema n m meta f i) = object
@@ -1037,15 +1107,6 @@ instance Pretty n => Pretty (PSchema n) where
       , prettyList _psFields
       ]
 
-psModule :: Lens' (PSchema n) ModuleName
-psModule = lens _psModule (\t b -> t { _psModule = b })
-
-psMeta :: Lens' (PSchema n) Meta
-psMeta = lens _psMeta (\t b -> t { _psMeta = b })
-
-psInfo :: Lens' (PSchema n) Info
-psInfo = lens _psInfo (\t b -> t { _psInfo = b })
-
 data PTable n = PTable
   { _ptTableName :: !TableName
   , _ptModule :: ModuleName
@@ -1061,7 +1122,7 @@ ptModule = lens _ptModule (\t b -> t { _ptModule = b })
 ptInfo :: Lens' (PTable n) Info
 ptInfo = lens _ptInfo (\t b -> t { _ptInfo = b })
 
-instance GetInfo (PTable n) where getInfo = _ptInfo
+instance HasInfo (PTable n) where hasInfo = ptInfo
 instance NFData n => NFData (PTable n)
 instance (FromJSON n, ToJSON n) => ToJSON (PTable n) where
   toJSON PTable{..} = object
@@ -1104,23 +1165,23 @@ deriving instance Show n => Show (Term n)
 deriving instance Eq n => Eq (Term n)
 instance NFData n => NFData (Term n)
 
-instance GetInfo (Term n) where
-  getInfo t = case t of
-    TApp a -> getInfo a
-    TBinding b -> getInfo b
-    TConst c -> getInfo c
-    TDef d -> getInfo d
-    TGuard _ i -> i
-    TList l -> getInfo l
-    TLiteral _ i -> i
-    TModule m _ -> getInfo m
-    TObject o -> getInfo o
-    TSchema s -> getInfo s
-    TStep s -> getInfo s
-    TTable tt -> getInfo tt
-    TUse u -> getInfo u
-    TVar _ i -> i
-    _ -> def
+instance HasInfo (Term n) where
+  hasInfo f t = case t of
+    TApp a -> TApp <$> hasInfo f a
+    TBinding b -> TBinding <$> hasInfo f b
+    TConst c -> TConst <$> hasInfo f c
+    TDef d -> TDef <$> hasInfo f d
+    TGuard g i -> TGuard g <$> hasInfo f i
+    TList l -> TList <$> hasInfo f l
+    TLiteral l i -> TLiteral l <$> hasInfo f i
+    TModule m b -> flip TModule b <$> hasInfo f m
+    TObject o -> TObject <$> hasInfo f o
+    TSchema s -> TSchema <$> hasInfo f s
+    TStep s -> TStep <$> hasInfo f s
+    TTable tt -> TTable <$> hasInfo f tt
+    TUse u -> TUse <$> hasInfo f u
+    TVar v i -> TVar v <$> hasInfo f i
+    k -> const k <$> f def
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
@@ -1333,11 +1394,6 @@ termEq _ _ = False
 makePrisms ''Term
 makePrisms ''Ref'
 makePrisms ''DefType
-
-makeLenses ''Meta
-makeLenses ''App
-makeLenses ''Def
-makeLenses ''ModuleName
 
 deriveEq1 ''Term
 deriveEq1 ''BindPair

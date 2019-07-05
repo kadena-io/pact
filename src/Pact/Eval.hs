@@ -234,7 +234,7 @@ evalNamespace info setter m = do
         Just {} -> mn
 
 -- | Lookup module in state or database with exact match on 'ModuleName'.
-lookupModule :: GetInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
+lookupModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
 lookupModule i mn = do
   loaded <- preuse $ evalRefs . rsLoadedModules . ix mn
   case loaded of
@@ -505,12 +505,12 @@ solveConstraint info refName (Ref t) evalMap = do
         _ -> evalError info $ "found overlapping const refs - please resolve: " <> pretty t
 
 -- | Lookup module in state or db, resolving against current namespace if unqualified.
-resolveModule :: GetInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
+resolveModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
 resolveModule = moduleResolver lookupModule
 
 -- | Perform some lookup involving a 'ModuleName' which if unqualified
 -- will re-perform the lookup with the current namespace, if any
-moduleResolver :: GetInfo i => (i -> ModuleName -> Eval e (Maybe a)) ->
+moduleResolver :: HasInfo i => (i -> ModuleName -> Eval e (Maybe a)) ->
                   i -> ModuleName -> Eval e (Maybe a)
 moduleResolver lkp i mn = do
   md <- lkp i mn
@@ -526,7 +526,7 @@ moduleResolver lkp i mn = do
             Nothing -> pure Nothing
 
 
-resolveRef :: GetInfo i => i -> Name -> Eval e (Maybe Ref)
+resolveRef :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
 resolveRef i (QName q n _) = moduleResolver (lookupQn n) i q
   where
     lookupQn n' i' q' = do
@@ -946,7 +946,7 @@ runSysOnly action = ask >>= \env -> case _eePurity env of
   PSysOnly -> unsafeCoerce action -- yuck. would love safer coercion here
   _ -> mkSysOnlyEnv env >>= runWithEnv action
 
-runReadOnly :: GetInfo i => i -> Eval (EnvReadOnly e) a -> Eval e a
+runReadOnly :: HasInfo i => i -> Eval (EnvReadOnly e) a -> Eval e a
 runReadOnly i action = ask >>= \env -> case _eePurity env of
   PSysOnly -> evalError' i "internal error: attempting db read in sys-only context"
   PReadOnly -> unsafeCoerce action -- yuck. would love safer coercion here

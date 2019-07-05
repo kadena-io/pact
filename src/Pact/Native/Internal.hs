@@ -129,7 +129,7 @@ funType' :: Type n -> [(Text,Type n)] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
 -- | Lookup a module and fail if not found.
-getModule :: GetInfo i => i -> ModuleName -> Eval e (ModuleData Ref)
+getModule :: HasInfo i => i -> ModuleName -> Eval e (ModuleData Ref)
 getModule i mn = lookupModule i mn >>= \r -> case r of
   Just m -> return m
   Nothing -> evalError' i $ "Unable to resolve module " <> pretty mn
@@ -142,7 +142,7 @@ findCallingModule =
 
 -- | Retrieve current calling module data or fail if not found
 --
-getCallingModule :: GetInfo i => i -> Eval e (Module (Def Ref))
+getCallingModule :: HasInfo i => i -> Eval e (Module (Def Ref))
 getCallingModule i = maybe resolveErr ((=<<) isModule . getModule i) =<< findCallingModule
   where
     resolveErr = evalError' i $

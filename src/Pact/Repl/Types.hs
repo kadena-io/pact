@@ -94,7 +94,7 @@ data LibState = LibState
 makeLenses ''LibState
 makeLenses ''ReplState
 
-getAllModules :: GetInfo i => i -> Eval e (HM.HashMap ModuleName (ModuleData Ref))
+getAllModules :: HasInfo i => i -> Eval e (HM.HashMap ModuleName (ModuleData Ref))
 getAllModules i = do
   mks <- keys (getInfo i) Modules
   fmap HM.fromList $ forM mks $ \mk -> do

@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
+{-# LANGUAGE RankNTypes #-}
 -- |
 -- Module      :  Pact.Types.Info
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -20,8 +20,7 @@ module Pact.Types.Info
    Info(..),
    renderInfo,
    renderParsed,
-   HasInfo(..),
-   GetInfo(..)
+   HasInfo(..)
    ) where
 
 
@@ -103,15 +102,14 @@ renderParsed (Parsed d _) = case d of
   (Tab _ c _ ) -> "<interactive>:0:" ++ show c
 
 
-class GetInfo a where
-  getInfo :: a -> Info
-
 class HasInfo a where
-  linfo :: Lens' a Info
+  hasInfo :: Lens' a Info
 
-instance GetInfo Info where getInfo = id
+  getInfo :: a -> Info
+  getInfo = view hasInfo
 
-instance HasInfo Info where linfo = id
+instance HasInfo Info where
+  hasInfo = id
 
 instance ToJSON Info where
   toJSON (Info Nothing) = Null

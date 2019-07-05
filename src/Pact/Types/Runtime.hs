@@ -361,7 +361,7 @@ throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) 
 evalError :: Info -> Doc -> Eval e a
 evalError i = throwErr EvalError i
 
-evalError' :: GetInfo i => i -> Doc -> Eval e a
+evalError' :: HasInfo i => i -> Doc -> Eval e a
 evalError' = evalError . getInfo
 
 failTx :: Info -> Doc -> Eval e a
