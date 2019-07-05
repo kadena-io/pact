@@ -50,12 +50,13 @@ import           Data.Type.Equality          ((:~:)(Refl))
 import           GHC.TypeLits
 import           System.Locale
 
+import qualified Pact.Types.Exp              as Pact
 import qualified Pact.Types.Hash             as Pact
 import qualified Pact.Types.PactValue        as Pact
 import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Pretty           (renderCompactString', pretty)
-import           Pact.Types.Runtime          (tShow)
-import qualified Pact.Types.Runtime          as Pact
+import           Pact.Types.Util             (tShow)
+import qualified Pact.Types.Util             as Pact
 import           Pact.Types.Version          (pactVersion)
 
 import           Pact.Analyze.Errors

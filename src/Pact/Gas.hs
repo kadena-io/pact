@@ -5,11 +5,18 @@
 module Pact.Gas where
 
 import Data.Text
-import Pact.Types.Runtime
+
 import Control.Lens
 import Control.Arrow
+
 import Data.Word
+
+import Pact.Types.Gas
+import Pact.Types.Info
 import Pact.Types.Pretty
+import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Util
 
 -- | Compute gas for some application or evaluation.
 computeGas :: Either (Info,Text) FunApp -> GasArgs -> Eval e Gas

@@ -35,12 +35,7 @@ module Pact.Types.Runtime
    Capability(..),CapAcquireResult(..),
    Capabilities(..),capGranted,capComposed,
    NamespacePolicy(..), nsPolicy,
-   permissiveNamespacePolicy,
-   module Pact.Types.Lang,
-   module Pact.Types.Util,
-   module Pact.Types.Persistence,
-   module Pact.Types.Gas,
-   module Pact.Types.ChainMeta
+   permissiveNamespacePolicy
    ) where
 
 
@@ -69,7 +64,6 @@ import Pact.Types.Orphans ()
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
-import Pact.Types.Util
 
 
 data Capability

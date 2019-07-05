@@ -39,16 +39,18 @@ import Data.Text (unpack)
 
 import Text.Trifecta as TF hiding (err)
 
-import Pact.Repl
+import Pact.ApiReq
 import Pact.Parse
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Repl
 import Pact.Server.Server
 import Pact.ReplTools
 import Pact.Repl.Types
-import Pact.Types.Version
 import Pact.Types.Crypto
+import Pact.Types.Runtime
 import Pact.Types.SPV
-import Pact.ApiReq
+import Pact.Types.Term
+import Pact.Types.Util
+import Pact.Types.Version
 
 
 data Option =

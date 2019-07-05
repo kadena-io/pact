@@ -14,18 +14,22 @@ import qualified Data.HashMap.Strict as HM
 import Control.Lens hiding ((.=))
 import Control.DeepSeq
 
+import Data.Aeson
+import Data.Default (def)
+
+import Pact.Native (nativeDefs)
 import Pact.PersistPactDb
 import Pact.Persist
-import Pact.Types.Runtime
 import Pact.Persist.Pure (initPureDb,persister,PureDb)
-import Data.Aeson
-import Pact.Types.Logger
-import Data.Default (def)
-import Pact.Types.PactValue
 import Pact.Repl
 import Pact.Repl.Types
-import Pact.Native (nativeDefs)
-
+import Pact.Types.Exp
+import Pact.Types.Logger
+import Pact.Types.PactValue
+import Pact.Types.Persistence
+import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Util
 
 loadModule :: IO (ModuleName, ModuleData Ref, PersistModuleData)
 loadModule = do

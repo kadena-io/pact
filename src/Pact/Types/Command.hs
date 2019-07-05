@@ -56,15 +56,21 @@ import Data.Aeson as A
 import Data.Text (Text)
 import Data.Maybe  (fromMaybe)
 
-
 import GHC.Generics
 import Prelude
 
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Continuation
+import Pact.Types.Exp
+import Pact.Types.Gas
+import Pact.Types.Hash
+import Pact.Types.Info
 import Pact.Types.Orphans ()
-import Pact.Types.RPC
 import Pact.Types.PactValue (PactValue(..))
-
+import Pact.Types.Persistence
+import Pact.Types.RPC
+import Pact.Types.Runtime
+import Pact.Types.Scheme
+import Pact.Types.Util
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL

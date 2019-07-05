@@ -25,9 +25,14 @@ import Data.Hashable
 import Data.Text (Text)
 import Data.Typeable
 
+import Pact.Types.Continuation
 import Pact.Types.PactValue
+import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Types.Util
+import Pact.Types.Term
+
 
 type Persist s a = s -> IO (s,a)
 

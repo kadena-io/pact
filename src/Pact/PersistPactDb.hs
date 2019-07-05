@@ -45,11 +45,14 @@ import GHC.Generics
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
-import Pact.Types.PactValue
-import Pact.Types.Pretty
-import Pact.Types.Runtime
-import Pact.Persist as P
+import Pact.Persist
 import Pact.Types.Logger
+import Pact.Types.PactValue
+import Pact.Types.Persistence
+import Pact.Types.Pretty
+import Pact.Types.Term
+import Pact.Types.Util
+
 
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv
@@ -179,7 +182,7 @@ doBegin m = do
       rollback
     Nothing -> return ()
   resetTemp
-  doPersist $ \p -> P.beginTx p m
+  doPersist $ \p -> beginTx p m
   mode .= Just m
   case m of
     Transactional -> Just <$> use txId
@@ -197,7 +200,7 @@ doCommit = use mode >>= \mm -> case mm of
         -- write txlog
         forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
         -- commit
-        doPersist P.commitTx
+        doPersist commitTx
         resetTemp
       else rollback
       return (concatMap snd txrs)
@@ -206,7 +209,7 @@ doCommit = use mode >>= \mm -> case mm of
 
 rollback :: MVState p ()
 rollback = do
-  (r :: Either SomeException ()) <- try (doPersist P.rollbackTx)
+  (r :: Either SomeException ()) <- try (doPersist rollbackTx)
   case r of
     Left e -> logError $ "rollback: " ++ show e
     Right _ -> return ()
@@ -304,16 +307,16 @@ createUserTable' s tn mn = runMVState s $ do
 createTable' :: TableId -> MVState p ()
 createTable' tn = do
   log "DDL" $ "createTable: " ++ show tn
-  doPersist $ \p -> P.createTable p (DataTable tn)
-  doPersist $ \p -> P.createTable p (TxTable tn)
+  doPersist $ \p -> createTable p (DataTable tn)
+  doPersist $ \p -> createTable p (TxTable tn)
 
 
 createSchema :: MVar (DbEnv p) -> IO ()
 createSchema e = runMVState e $ do
-  doPersist (\p -> P.beginTx p Transactional)
+  doPersist (\p -> beginTx p Transactional)
   createTable' userTableInfo
   createTable' keysetsTable
   createTable' modulesTable
   createTable' namespacesTable
   createTable' pactsTable
-  doPersist P.commitTx
+  doPersist commitTx

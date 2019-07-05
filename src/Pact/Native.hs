@@ -72,10 +72,19 @@ import Pact.Native.Ops
 import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
+import Pact.Types.ChainId
+import Pact.Types.ChainMeta
+import Pact.Types.Continuation
+import Pact.Types.Exp
 import Pact.Types.Hash
+import Pact.Types.Info
 import Pact.Types.PactValue
+import Pact.Types.Persistence
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 import Pact.Types.Version
 
 -- | All production native modules.

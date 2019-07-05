@@ -33,9 +33,16 @@ import Data.Text (pack)
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.Types.Exp
+import Pact.Types.Gas
+import Pact.Types.Info
+import Pact.Types.PactValue
+import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Pact.Types.PactValue
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 
 
 class Readable a where

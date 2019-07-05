@@ -15,14 +15,19 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
+import Control.Lens
 import Control.Monad
+import Control.Monad.State (state)
+
+import Data.Maybe (isJust)
+
 import Pact.Eval
 import Pact.Native.Internal
-import Pact.Types.Runtime
-import Control.Lens
-import Control.Monad.State (state)
 import Pact.Types.Pretty
-import Data.Maybe (isJust)
+import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 
 
 capDefs :: NativeModule

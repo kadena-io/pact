@@ -37,7 +37,8 @@ import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics
 
 import Pact.Types.Command
-import Pact.Types.Runtime
+import Pact.Types.Hash
+import Pact.Types.Util
 
 newtype RequestKeys = RequestKeys { _rkRequestKeys :: NonEmpty RequestKey }
   deriving (Show, Eq, Ord, Generic)

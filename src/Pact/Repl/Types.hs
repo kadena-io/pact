@@ -26,8 +26,12 @@ import qualified Data.HashMap.Strict as HM
 import Pact.Native.Internal
 import Pact.PersistPactDb (DbEnv)
 import Pact.Persist.Pure (PureDb)
+import Pact.Types.Continuation
+import Pact.Types.Info
+import Pact.Types.Persistence
+import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Pact.Types.Pretty (Pretty, pretty, renderCompactText)
+import Pact.Types.Term
 
 data ReplMode =
     Interactive |

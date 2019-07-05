@@ -45,11 +45,14 @@ import System.Directory
 import System.FilePath
 
 import Pact.Types.API
+import Pact.Types.ChainMeta
 import Pact.Types.Command
 import Pact.Types.Crypto
+import Pact.Types.Hash
 import Pact.Types.RPC
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.Util
 
 data ApiKeyPair = ApiKeyPair {
   _akpSecret :: PrivateKeyBS,

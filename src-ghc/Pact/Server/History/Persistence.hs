@@ -20,7 +20,6 @@ import qualified Data.Aeson as A
 import Data.Text.Encoding (encodeUtf8)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
-
 import Data.List (sortBy)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
@@ -30,11 +29,12 @@ import Data.Maybe
 
 import Database.SQLite3.Direct
 
+import Pact.Server.History.Types
 import Pact.Types.Command
-import Pact.Types.Runtime
+import Pact.Types.Gas
+import Pact.Types.Hash
 import Pact.Types.SQLite
 
-import Pact.Server.History.Types
 
 hashToField :: Hash -> SType
 hashToField h = SText $ Utf8 $ BSL.toStrict $ A.encode h

@@ -33,11 +33,13 @@
 module Pact.Typechecker where
 
 import Bound.Scope
+
 import Control.Arrow hiding ((<+>))
 import Control.Lens hiding (List,Fold)
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.State
+
 import Data.Bitraversable (bimapM)
 import Data.Default
 import Data.Foldable
@@ -53,14 +55,19 @@ import qualified Data.Set as Set
 import Data.String
 import qualified Data.Vector as V
 import Data.Text (Text, unpack, pack)
+
 import Safe hiding (at)
 
-
+import Pact.Types.Exp
+import Pact.Types.Info
+import Pact.Types.Type
 import Pact.Types.Native
+import Pact.Types.Persistence
 import Pact.Types.Pretty
-import Pact.Types.Runtime hiding (App,appInfo,Object,Step)
 import Pact.Types.Typecheck
 import Pact.Types.Term
+import Pact.Types.Util
+
 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s

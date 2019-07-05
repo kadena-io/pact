@@ -23,24 +23,25 @@ import Data.Text (Text, unpack, pack)
 import System.Directory
 import Unsafe.Coerce
 
+import Pact.Native.Internal
+import Pact.Persist.SQLite
+import Pact.PersistPactDb hiding (db)
 import Pact.Compile
-import Pact.Gas
 import Pact.Interpreter
 import Pact.MockDb
 import Pact.Parse
 import Pact.Persist
 import Pact.Persist.MockPersist
+import Pact.Types.ChainMeta
 import Pact.Types.Command
 import Pact.Types.Crypto
 import Pact.Types.Lang
 import Pact.Types.Logger
 import Pact.Types.PactValue
+import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
-import Pact.Native.Internal
-import Pact.Persist.SQLite
-import Pact.PersistPactDb hiding (db)
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""

@@ -72,16 +72,23 @@ import Text.Trifecta as TF hiding (line,err,try,newline)
 import Text.Trifecta.Delta
 
 import Pact.Compile
-import Pact.Parse
 import Pact.Eval
+import Pact.Gas
+import Pact.Native
+import Pact.Parse
+import Pact.Repl.Lib
+import Pact.Repl.Types
+import Pact.Types.Continuation
+import Pact.Types.Exp
+import Pact.Types.Hash
+import Pact.Types.Info
+import Pact.Types.Logger
+import Pact.Types.Persistence
 import Pact.Types.Pretty hiding (line)
 import Pact.Types.Runtime
-import Pact.Native
-import Pact.Repl.Lib
-import Pact.Types.Logger
 import Pact.Types.SPV
-import Pact.Repl.Types
-import Pact.Gas
+import Pact.Types.Term
+import Pact.Types.Util
 
 -- | for use in GHCI
 repl :: IO (Either () (Term Name))

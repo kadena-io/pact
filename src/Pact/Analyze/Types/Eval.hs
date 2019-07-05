@@ -42,9 +42,9 @@ import           Data.Type.Equality           ((:~:)(Refl))
 import           GHC.Generics                 hiding (S)
 import           GHC.Stack                    (HasCallStack)
 
-import           Pact.Types.Lang              (Info)
-import           Pact.Types.Runtime           (Type (TyPrim))
-import qualified Pact.Types.Runtime           as Pact
+import           Pact.Types.Info
+import qualified Pact.Types.Term              as Pact
+import qualified Pact.Types.Type              as Pact
 import qualified Pact.Types.Typecheck         as Pact
 
 import           Pact.Analyze.Errors
@@ -385,10 +385,10 @@ mkInitialAnalyzeState tables caps = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
-    intCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyInteger) (mkSFunArray (const 0))
-    decCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
-    intColumnDeltas = mkTableColumnMap tables (== TyPrim Pact.TyInteger) 0
-    decColumnDeltas = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (fromInteger 0)
+    intCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) (mkSFunArray (const 0))
+    decCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
+    intColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) 0
+    decColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (fromInteger 0)
     cellsEnforced   = mkTableColumnMap tables isGuardTy (mkSFunArray (const sFalse))
     cellsWritten    = mkTableColumnMap tables (const True) (mkSFunArray (const sFalse))
 

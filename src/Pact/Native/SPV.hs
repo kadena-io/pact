@@ -20,6 +20,8 @@ import Pact.Native.Internal
 import Pact.Types.SPV
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Type
 
 
 spvDefs :: NativeModule

@@ -37,6 +37,7 @@ import           Pact.Analyze.Remote.Types (Request(..), Response(..),
 import           Pact.Repl                 (initReplState, evalRepl', replGetModules)
 import           Pact.Repl.Types
 import           Pact.Types.Info           (Code(_unCode))
+import           Pact.Types.Persistence
 import           Pact.Types.Runtime
 import           Pact.Types.Term           (ModuleDef(..), moduleDefName, moduleDefCode,
                                             ModuleName(..), Name(..),

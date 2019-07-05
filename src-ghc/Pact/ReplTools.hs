@@ -23,10 +23,12 @@ import System.IO
 import System.Console.Haskeline
 
 import Pact.Parse
-import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl
 import Pact.Repl.Types
+import Pact.Types.Persistence
+import Pact.Types.Runtime
+import Pact.Types.Term
 
 ------------------------------------------------------------------------------
 -- Moved from Pact.Repl

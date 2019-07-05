@@ -48,12 +48,18 @@ import Pact.Native (nativeDefs)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
+import Pact.Types.ChainMeta
 import Pact.Types.Command
+import Pact.Types.Continuation
+import Pact.Types.Gas
+import Pact.Types.Hash
 import Pact.Types.Logger
 import Pact.Types.PactValue
+import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.Term
 
 data PactDbEnv e = PactDbEnv {
   pdPactDb :: !(PactDb e),

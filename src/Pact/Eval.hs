@@ -68,9 +68,18 @@ import Safe
 import Unsafe.Coerce
 
 import Pact.Gas
+import Pact.Types.ChainMeta
+import Pact.Types.Continuation
+import Pact.Types.Exp
+import Pact.Types.Gas
+import Pact.Types.Info
 import Pact.Types.PactValue
+import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)

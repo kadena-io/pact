@@ -37,37 +37,36 @@ module Pact.Types.Server
   , Inbound(..)
   ) where
 
-import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception.Safe
 import Control.Lens
 import Control.Monad.Reader
 import Control.Concurrent.Chan
-import Data.Maybe
-import Data.String
+
 import Data.ByteString (ByteString)
 import qualified Data.Set as S
 import Data.Text.Encoding
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
-import Data.Int
 
-import Prelude
-
-import Pact.Types.Runtime as Pact
-import Pact.Types.Orphans ()
-import Pact.Types.SQLite
-import Pact.Types.Command
-import Pact.Types.Logger
 import Pact.Interpreter
+import Pact.Types.ChainMeta
+import Pact.Types.Command
+import Pact.Types.Gas
+import Pact.Types.Hash
+import Pact.Types.Logger
+import Pact.Types.Persistence
+import Pact.Types.SQLite
 import Pact.Types.SPV
+import Pact.Types.Term
 
 
-userSigToPactPubKey :: Signer -> Pact.PublicKey
-userSigToPactPubKey Signer{..} = Pact.PublicKey $ encodeUtf8 _siAddress
+
+userSigToPactPubKey :: Signer -> PublicKey
+userSigToPactPubKey Signer{..} = PublicKey $ encodeUtf8 _siAddress
 
 
-userSigsToPactKeySet :: [Signer] -> S.Set Pact.PublicKey
+userSigsToPactKeySet :: [Signer] -> S.Set PublicKey
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 
 

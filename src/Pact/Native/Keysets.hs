@@ -17,7 +17,11 @@ import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.Types.Exp
+import Pact.Types.Persistence
 import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Util
 
 readKeysetDef :: NativeDef
 readKeysetDef =

@@ -29,11 +29,15 @@ import Data.Default
 import qualified Data.Map.Strict as M
 import Data.Text (Text)
 
-import Pact.Native.Internal
-import Pact.Types.Runtime
-import Pact.Types.Pretty
-
 import Pact.Eval
+import Pact.Native.Internal
+import Pact.Types.Exp
+import Pact.Types.Info
+import Pact.Types.Pretty
+import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 
 
 modDef :: NativeDef

@@ -33,15 +33,17 @@ import GHC.Generics
 import System.Log.FastLogger
 import Data.Default
 
-import Pact.Types.Command
-import Pact.Types.Runtime hiding (Update)
-import Pact.Types.SQLite
-import Pact.Types.Server
-import Pact.Types.Logger
-import Pact.Types.SPV
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
 import Pact.Server.PactService
+import Pact.Types.ChainMeta
+import Pact.Types.Command
+import Pact.Types.Logger
+import Pact.Types.Persistence hiding (Update)
+import Pact.Types.SQLite
+import Pact.Types.Server
+import Pact.Types.SPV
+import Pact.Types.Util
 
 data Config = Config {
   _port :: Word16,

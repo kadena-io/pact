@@ -69,18 +69,19 @@ import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
                                             Def (..), DefType (..), Info, dMeta,
                                             mModel, renderInfo, renderParsed)
+import           Pact.Types.Exp            (Exp)
+import qualified Pact.Types.Exp            as Pact
+import           Pact.Types.Info           (HasInfo(getInfo))
 import           Pact.Types.Pretty         (renderCompactText)
-import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
-                                            Ref' (Ref), Ref,
-                                            Term (TConst, TDef, TSchema, TTable),
-                                            asString, getInfo, mdModule,
-                                            mdRefMap, tShow)
-import qualified Pact.Types.Runtime        as Pact
+import           Pact.Types.Persistence    (ModuleData(..), mdModule, mdRefMap)
 import           Pact.Types.Term           (DefName (..), DefType (Defcap),
                                             dDefType, moduleDefMeta,
                                             moduleDefName, _Ref, _TSchema, psMeta, psInfo,
-                                           _TTable, ptInfo, _TDef)
+                                           _TTable, ptInfo, _TDef, ModuleName, Ref' (Ref), Ref,
+                                           Term (TConst, TDef, TSchema, TTable))
+import qualified Pact.Types.Term           as Pact
 import           Pact.Types.Type           (_ftArgs)
+import qualified Pact.Types.Type           as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
@@ -88,7 +89,7 @@ import           Pact.Types.Typecheck      (AST,
                                             UserType (_utFields, _utName),
                                             runTC, tcFailures, toplevelInfo)
 import qualified Pact.Types.Typecheck      as TC
-
+import           Pact.Types.Util           (asString, tShow)
 import           Pact.Analyze.Alloc        (runAlloc)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval         hiding (invariants)

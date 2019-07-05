@@ -2,11 +2,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Pact.MockDb where
 
-import Pact.Types.Runtime
+
 import Data.Aeson
 import Data.String
 import Data.Default
+
 import Pact.Interpreter
+import Pact.Types.Persistence
+import Pact.Types.Util
+import Pact.Types.Term
 
 rc :: a -> Method e a
 rc = const . return

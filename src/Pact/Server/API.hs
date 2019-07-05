@@ -62,7 +62,7 @@ import Pact.Types.Info (Info)
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.Persistence (TxId)
 import Pact.Types.Pretty (Doc)
-import Pact.Types.Runtime (PactError,PactErrorType,FieldKey,StackFrame)
+import Pact.Types.Runtime (PactError,PactErrorType,StackFrame)
 import Pact.Types.Swagger
 import Pact.Types.Term
 

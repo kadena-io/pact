@@ -2,11 +2,15 @@
 
 module Pact.Types.Native where
 
-import Pact.Types.Util
-import Pact.Types.Runtime
-import Pact.Compile (Reserved(RWithCapability))
-import qualified Data.Map.Strict as M
 import Control.Arrow
+
+import qualified Data.Map.Strict as M
+
+import Pact.Compile (Reserved(RWithCapability))
+import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Util
+
 
 data SpecialForm =
   WithRead |

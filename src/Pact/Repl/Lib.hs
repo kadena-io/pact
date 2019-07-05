@@ -54,22 +54,31 @@ import qualified Pact.Types.Crypto as Crypto
 import Pact.Types.Util (fromText')
 #endif
 
-import Pact.Typechecker
-import qualified Pact.Types.Typecheck as TC
+import Pact.Eval
+import Pact.Gas.Table
+import Pact.Native.Capabilities (evalCap)
 -- intentionally hidden unused functions to prevent lib functions from consuming gas
 import Pact.Native.Internal hiding (defRNative,defGasRNative,defNative)
 import qualified Pact.Native.Internal as Native
-import Pact.Types.Runtime
-import Pact.Eval
 import Pact.Persist.Pure
 import Pact.PersistPactDb
-import Pact.Types.Logger
-import Pact.Types.Pretty
 import Pact.Repl.Types
-import Pact.Native.Capabilities (evalCap)
-import Pact.Gas.Table
+import Pact.Types.ChainId
+import Pact.Types.ChainMeta
+import Pact.Types.Continuation
+import Pact.Types.Exp
+import Pact.Types.Gas
+import Pact.Types.Info
+import Pact.Types.Logger
+import Pact.Types.Persistence
+import Pact.Types.Pretty
 import Pact.Types.PactValue
-
+import Pact.Types.Runtime
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Typechecker
+import qualified Pact.Types.Typecheck as TC
+import Pact.Types.Util
 
 initLibState :: Loggers -> Maybe String -> IO LibState
 initLibState loggers verifyUri = do

@@ -49,10 +49,17 @@ import Unsafe.Coerce
 
 import Pact.Eval
 import Pact.Gas
+import Pact.Types.ChainId
+import Pact.Types.ChainMeta
+import Pact.Types.Continuation
+import Pact.Types.Info
 import Pact.Types.Native
+import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
