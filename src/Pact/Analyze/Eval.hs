@@ -32,7 +32,7 @@ import           Data.SBV                    (SBV, Symbolic)
 import qualified Data.SBV                    as SBV
 import           Data.String                 (fromString)
 
-import           Pact.Types.Lang             (Info, ModuleName)
+import           Pact.Lang                   (Info, ModuleName)
 
 import           Pact.Analyze.Alloc          (runAlloc)
 import           Pact.Analyze.Errors

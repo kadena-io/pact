@@ -25,12 +25,12 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
 
-import           Pact.Types.Lang            (AtomExp (..),
+import           Pact.Types.Exp             (AtomExp (..),
                                              Exp (EAtom, ELiteral, ESeparator),
                                              ListDelimiter (..), ListExp (..),
                                              Literal (LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))
-import qualified Pact.Types.Lang            as Pact
+import qualified Pact.Lang                  as Pact
 import           Pact.Types.Typecheck       (UserType)
 import           Pact.Types.Pretty
 

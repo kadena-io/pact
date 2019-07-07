@@ -69,9 +69,9 @@ import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
 
+import qualified Pact.Lang                    as Pact
 import           Pact.Types.Pretty            hiding (list)
 import qualified Pact.Types.Pretty            as Pretty
-import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString)
 
 import           Pact.Analyze.LegacySFunArray (SFunArray)

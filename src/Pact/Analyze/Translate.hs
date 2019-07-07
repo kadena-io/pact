@@ -51,15 +51,12 @@ import           GHC.Natural                (Natural)
 import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
-import           Pact.Types.Lang            (Info, Literal (..), Type
-  (TyFun, TyPrim, TySchema, TyUser, TyVar), SchemaPartial(PartialSchema))
-import qualified Pact.Types.Lang            as Pact
-import           Pact.Types.Persistence     (WriteType)
+import           Pact.Lang                  (Info, Literal (..), Type (TyFun, TyPrim, TySchema, TyUser, TyVar),
+                                             SchemaPartial(PartialSchema), WriteType, tShow)
+import qualified Pact.Lang                  as Pact
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
-import           Pact.Types.Util            (tShow)
-
 import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var, col,
                                              list, obj, str, time)
 import           Pact.Analyze.Patterns

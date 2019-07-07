@@ -14,7 +14,7 @@ import qualified Data.SBV             as SBV
 import qualified Data.Default         as Default
 import qualified Data.Foldable        as Foldable
 import           GHC.Stack            (HasCallStack)
-import           Pact.Types.Lang      (Info (_iInfo), Parsed)
+import           Pact.Types.Info      (Info (_iInfo), Parsed)
 import           Pact.Types.Typecheck (AST (_aNode), Node (_aId), _tiInfo)
 
 -- | Function composition that consumes two args instead of one

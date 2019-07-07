@@ -27,6 +27,7 @@ library
                      , Pact.Eval
                      , Pact.Gas
                      , Pact.Gas.Table
+                     , Pact.Lang
                      , Pact.Native
                      , Pact.Native.Capabilities
                      , Pact.Native.Db
@@ -55,7 +56,6 @@ library
                      , Pact.Types.Gas
                      , Pact.Types.Hash
                      , Pact.Types.Info
-                     , Pact.Types.Lang
                      , Pact.Types.Logger
                      , Pact.Types.Native
                      , Pact.Types.PactValue

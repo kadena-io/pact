@@ -11,7 +11,7 @@ import           Control.Lens         ((^?))
 import           Data.Maybe           (isJust)
 import           Data.Text            (Text)
 
-import qualified Pact.Types.Lang      as Lang
+import qualified Pact.Lang            as Lang
 import           Pact.Types.Exp       (Literal (LString))
 import           Pact.Types.Typecheck (AST(..), AstBindType (..), Fun (FDefun, FNative),
                                        Named, Node, PrimValue (PrimLit),

@@ -59,11 +59,14 @@ import GHC.Generics
 import Pact.Types.ChainMeta
 import Pact.Types.Continuation
 import Pact.Types.Gas
-import Pact.Types.Lang
-import Pact.Types.Orphans ()
+import Pact.Types.Hash
+import Pact.Types.Info
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 
 
 data Capability

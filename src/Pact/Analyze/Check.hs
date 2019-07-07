@@ -66,11 +66,11 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
+import           Pact.Lang                 (pattern ColonExp, pattern CommaExp,
                                             Def (..), DefType (..), Info, dMeta,
                                             mModel, renderInfo, renderParsed)
+import qualified Pact.Lang                 as Pact
 import           Pact.Types.Exp            (Exp)
-import qualified Pact.Types.Exp            as Pact
 import           Pact.Types.Info           (HasInfo(getInfo))
 import           Pact.Types.Pretty         (renderCompactText)
 import           Pact.Types.Persistence    (ModuleData(..), mdModule, mdRefMap)
@@ -79,9 +79,7 @@ import           Pact.Types.Term           (DefName (..), DefType (Defcap),
                                             moduleDefName, _Ref, _TSchema, psMeta, psInfo,
                                            _TTable, ptInfo, _TDef, ModuleName, Ref' (Ref), Ref,
                                            Term (TConst, TDef, TSchema, TTable))
-import qualified Pact.Types.Term           as Pact
 import           Pact.Types.Type           (_ftArgs)
-import qualified Pact.Types.Type           as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),

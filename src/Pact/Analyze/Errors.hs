@@ -9,8 +9,9 @@ import           Data.String            (IsString (fromString))
 import           Data.Text              (Text)
 import qualified Data.Text              as T
 
-import           Pact.Types.Lang        (Info, tShow)
+import           Pact.Types.Info       (Info)
 import qualified Pact.Types.Persistence as Pact
+import           Pact.Types.Util       (tShow)
 
 import           Pact.Analyze.Types
 

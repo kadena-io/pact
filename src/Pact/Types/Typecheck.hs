@@ -52,9 +52,13 @@ import Control.Monad.State
 import Data.Foldable
 import Data.Text (Text, unpack)
 
-import Pact.Types.Lang hiding (App,Object,Step)
+import Pact.Types.Exp
+import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.Native
+import Pact.Types.Term
+import Pact.Types.Type
+import Pact.Types.Util
 
 
 data CheckerException = CheckerException Info String deriving (Eq,Ord)

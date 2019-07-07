@@ -17,9 +17,9 @@ import           Data.Text                 (Text)
 import           GHC.Natural               (Natural)
 import           Prelude                   hiding (Float)
 
+import qualified Pact.Lang                 as Pact
 import           Pact.Types.Persistence    (WriteType)
 import qualified Pact.Types.Typecheck      as TC
-import qualified Pact.Types.Lang           as Pact
 
 import           Pact.Analyze.Types.Shared
 

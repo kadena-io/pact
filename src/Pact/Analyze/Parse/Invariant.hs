@@ -13,10 +13,9 @@ import           Data.Foldable            (asum, find)
 import qualified Data.Text                as T
 import           Prelude                  hiding (exp)
 
-import           Pact.Types.Lang          hiding (KeySet, KeySetName, SchemaVar,
+import           Pact.Lang                hiding (KeySet, KeySetName, SchemaVar,
                                            TableName, Type)
-import qualified Pact.Types.Lang          as Pact
-import           Pact.Types.Pretty
+import qualified Pact.Lang                as Pact
 
 import           Pact.Analyze.Feature     hiding (Type, Var, ks, obj, str)
 import           Pact.Analyze.Parse.Types

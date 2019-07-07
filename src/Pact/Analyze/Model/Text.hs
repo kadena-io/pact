@@ -25,9 +25,7 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
 
-import qualified Pact.Types.Info            as Pact
-import qualified Pact.Types.Lang            as Pact
-import qualified Pact.Types.Persistence     as Pact
+import qualified Pact.Lang                  as Pact
 import           Pact.Types.Pretty          hiding (indent)
 
 import           Pact.Analyze.Model.Graph   (linearize)
