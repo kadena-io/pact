@@ -172,9 +172,9 @@ data CheckEnv = CheckEnv
 -- also use it for checking pact steps which are a different check type and
 -- borrow the name of their enclosing pact.
 data FunData = FunData
-  !Info         -- ^ Location info (for error messages)
-  ![Named Node] -- ^ Arguments
-  ![AST Node]   -- ^ Body
+  !Info         -- Location info (for error messages)
+  ![Named Node] -- Arguments
+  ![AST Node]   -- Body
 
 mkFunInfo :: Fun Node -> FunData
 mkFunInfo = \case
