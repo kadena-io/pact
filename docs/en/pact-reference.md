@@ -19,14 +19,16 @@ blockchain applications with just the `pact` tool.
 To start up the server issue `pact -s config.yaml`, with a suitable config.
 The `pact-lang-api` JS library is [available via npm](https://www.npmjs.com/package/pact-lang-api) for web development.
 
-The Command Object {#the-command-object}
-----
+### Commands
+
+#### The command object {#the-command-object}
+
 Pact represents blockchain transactions (or commands) as a JSON object with the
 following attributes:
 
-#### Attributes
+##### Attributes
 
-##### `"cmd"`
+###### `"cmd"`
 _type:_ **string (encoded, escaped JSON)** `required`
 
 The component of a transaction that is signed to ensure non-malleability.
@@ -37,15 +39,15 @@ If you inspect the output of the
 [request formatter in the pact tool](#api-request-formatter),
 you will see that the `"cmd"` field, along with any code supplied, are a
 String of encoded, escaped JSON. See
-[cmd field and Payloads](#cmd-field-and-payloads) for more information.
+[cmd field](#cmd-field) for more information.
 
-##### `"hash"`
+###### `"hash"`
 _type:_ **string (base64url)** `required`
 
 Blake2 hash of the `cmd` field "stringified" value. Serves as a command's
 request key since each transaction must be unique.
 
-##### `"sigs"`
+###### `"sigs"`
 _type:_ **[ object ]** `required`
 
 List of JSON objects containing a cryptographic signature. This signature
@@ -60,7 +62,7 @@ type: string (base16)           # transaction.
 required: true    
 ```
 
-#### Example Command
+##### Example command
 ```JSON
 // Command with exec payload and Chainweb metadata
 {
@@ -89,8 +91,7 @@ required: true
 ```
 
 
-`cmd` field and Payloads {#cmd-field-and-payloads}
-----
+#### The `cmd` field {#cmd-field}
 
 Transactions sent into the blockchain must be hashed in order to ensure the received command is correct; this is also
 the value that is signed with the required private keys. To ensure the JSON for the transaction matches byte-for-byte
@@ -99,19 +100,19 @@ with the value used to make the hash, the JSON must be *encoded* into the payloa
 The `cmd` field holds transaction information as encoded strings. The format of
 the JSON to be encoded is as follows:
 
-#### Attributes
+##### Attributes
 
-##### `"nonce"`
+###### `"nonce"`
 _type:_ **string** `required`
 
 Transaction nonce values. Needs to be unique for every call.
 
-##### `"meta"`
+###### `"meta"`
 _type:_ **object** `required`
 
 Platform-specific metadata.
 
-##### `"signers"` {#cmd-signers}
+###### `"signers"` {#cmd-signers}
 _type:_ **[ object ]** `required`
 
 List of JSON object with information on the signers authenticating the
@@ -134,13 +135,13 @@ required: false               # Defaults to ED25519's address representation,
                               # which is the full public key.
 ```
 
-##### `"payload"`
-_type:_ **object** `required`
+###### `"payload"`
+_type:_ [exec](#exec-payload) **or** [cont](#cont-payload) payload `required`
 
 The `cmd` field supports two types of JSON payloads:
 the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
 
-#### Example `cmd`
+##### Example `cmd`
 ```JSON
 // encoded with `exec` payload
 "{
@@ -160,13 +161,15 @@ the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
 }"
 ```
 
-#### The `exec` Payload {#exec-payload}
+#### The `exec` payload {#exec-payload}
 
 The `exec` payload holds executable code and data. The [send](#send) and
 [local](#local) endpoints support this payload type in the
 `cmd` field. The format of the JSON to be encoded is as follows:
 
-##### `"exec"`
+##### Attributes
+
+###### `"exec"`
 _type:_ **object** `required`
 
 JSON object representing the exec payload. It has the following child attributes:
@@ -183,7 +186,7 @@ required: false       # This data will be injected into the scope of the
                       # pact execution.
 ```
 
-##### Example `exec` Payload
+##### Example `exec` payload
 ```JSON
 // encoded `exec` payload
 "{
@@ -196,12 +199,14 @@ required: false       # This data will be injected into the scope of the
 }"
 ```
 
-#### The `cont` Payload {#cont-payload}
+#### The `cont` payload {#cont-payload}
 The `cont` payload allows for continuing or rolling back [pacts](#pacts).
 The [send](#send) and [local](#local) endpoints support this payload type in
 the `cmd` field. The format of the JSON to be encoded is as follows:
 
-##### `"cont"`
+##### Attributes
+
+###### `"cont"`
 _type:_ **object** `required`
 
 JSON object representing the continuation (cont) payload. It has the following
@@ -246,7 +251,7 @@ required: false                 # confirmed and is recorded in the ledger.
                                 # each `yield/resume` pair.
 ```
 
-##### Example `cont` Payload
+##### Example `cont` payload
 
 ```json
 // encoded `cont` payload
@@ -266,105 +271,105 @@ required: false                 # confirmed and is recorded in the ledger.
 
 ```
 
-Endpoints
----
 
-All endpoints are served from `api/v1`. Thus a `send` call would be sent
-to <http://localhost:8080/api/v1/send>, if running on `localhost:8080`.
-Each endpoint section specifies the request body schema they expect and the
-schema of their response. If they receive an invalid request body, an HTTP
-`400 Bad Request Error` will be returned. All endpoints also consume and
-produce `application/json;charset=utf-8`.
+### Command Results
 
-One way to interact with the endpoints is to use Pact's
-[API Request formatter](#api-request-formatter) and `curl`.
+#### The command result object {#the-command-result-object}
+The result of attempting to execute a Pact command is a JSON object.
 
-```shell
-#!/bin/sh
+##### Attributes
 
-set -e
+###### `"reqKey"`
+_type:_ **string (base64url)** `required`
 
-JSON="Content-Type: application/json"
-
-echo ""; echo "Step 1"; echo ""
-pact -a examples/accounts/scripts/01-system.yaml | curl -H "$JSON" -d @- http://localhost:8080/api/v1/send
-sleep 1; echo ""
-curl -H "$JSON" -d '{"requestKeys":["zaqnRQ0RYzxTccjtYoBvQsDo5K9mxr4TEF-HIYTi5Jo"]}' -X POST http://localhost:8080/api/v1/poll
-```
-
-## The Command Result Object {#the-command-result-object}
-The result of attempting to execute a Pact command is a JSON object with the following attributes:
-
-#### `reqKey`
-**string (base64url)**, _required_
 Request key of the command.
 
-#### `txId`
-**string (base64url)**, _optional_
+###### `"result"`
+_type:_ [Pact Error](#pact-errors) **or** [Pact Value](#pact-values) `required`
+
+The result of a pact execution. It will either be a [pact error](#pact-errors)
+or the last [pact value](#pact-values) outputted by a successful execution.
+
+###### `"txId"`
+_type:_ **string (base64url)** `optional`
+
 Transaction  id of processed command. Used in querying history.
 
-#### `gas`
-**integer (int64)**, _required_
+###### `"gas"`
+_type:_ **integer (int64)** `required`
+
 Gas consumed by the command.
 
-#### `logs`
-**string (base64url)**, _optional_
+###### `"logs"`
+_type:_ **string (base64url)** `optional`
+
 Hash of the command's pact execution logs.
 
-#### `metaData`
-**object**, _optional_
+###### `"metaData"`
+_type:_ **object** `optional`
+
 JSON object representing platform-specific meta data.
 
-#### `continuation`
-**object**, _optional_
+###### `"continuation"`
+_type:_ **object** `optional`
+
 Output of a [continuation](#cont-payload) (i.e. "pacts") if one occurred in
 the command. This continuation object has the following child attributes:
 
 ```yaml
-continuation.executed:          # Whether the step was executed (in private
-boolean, required               # cases, steps can be skipped).
-
-continuation.pactId:            # The id of the pact to be continued or
-string (base64url), required    # rolled back. Equivalent to the
-                                # request key (payload hash) of the command
-                                # that instantiated the pact.
-
-continuation.step:              # Step that was just executed or skipped.
-integer, required
-
-continuation.stepCount:         # Total number of steps in the pact.
-integer, required
-
-continuation.continuation:      # Strict (in arguments) application of the pact,
-object, required                # for future invocation.
-                                # `args`: Array of pact values matching
-                                #         continuation's `defpact` arguments
-                                #         when it was first invoked.
-                                # `def`: Name of continuation ("pact").
-
-continuation.yield:             # Yield value if it was invoked by the step that
-object, optional                # just executed.
-                                # `data`: data yielded from one step to another
-                                #         represented as a map of pact values.
-                                #         Can only be resumed (accessed) by
-                                #         the following step.
-                                #
-                                # `provenance`: (optional) Contains necessary
-                                #               data to "endorse" a yield
-                                #               yield object. Represented as
-                                #               JSON object containing the
-                                #               target chain id for the
-                                #               endorsement ("targetChainId")
-                                #               and the hash of current
-                                #               containing module ("moduleHash").
+name: "executed"            # Whether the step was executed (in private
+type: boolean               # cases, steps can be skipped).
+required: true
+```
+```yaml
+name: "pactId"              # The id of the pact to be continued or
+type: string (base64url)    # rolled back. Equivalent to the
+required: true              # request key (payload hash) of the command
+                            # that instantiated the pact.
+```
+```yaml
+name: "step"                # Step that was just executed or skipped.
+type: integer
+required: true
+```
+```yaml
+name: "stepCount"           # Total number of steps in the pact.
+type: integer
+required: true
+```
+```yaml
+name: "continuation"        # Strict (in arguments) application of the pact,
+type: object                # for future invocation.
+required: true
+children:
+  name: "args"              # `args`: `defpact` arguments when it was
+    type: [PactValue]       #         first invoked.
+    required: true      
+  name: "def"               # `def`: Name of continuation ("pact").
+    type: string
+    required: true
+```
+```yaml
+name: "yield"               # Yield value if it was invoked by the step that
+type: object                # just executed.
+required: false
+children:
+  name: "data"                        # `data`: data yielded from one step to another
+    type: map (string->PactValue)     #         Can only be resumed (accessed) by
+    required: true                    #         the following step.
+  name: "provenance"                  # `provenance`: Contains necessary
+    type: object                      #               data to "endorse" a yield
+    required: false                   #               object.
+    children:
+      name: "targetChainId"           #  'targetChainId' for the endorsement
+        type: string
+        required: true
+      name: "moduleHash"              # 'moduleHash' hash of current containing module
+        type: string (base64url)
+        required: true
 ```
 
-#### `result`
-**[Pact Error](#pact-errors) or [Pact Value](#pact-values)**, _required_
-The result of a pact execution. It will either be a pact error or the last
-pact value outputted by a successful execution.
-
-### Examples of Command Result
+##### Example command result
 ```JSON
 // successful command result
 {
@@ -401,111 +406,139 @@ pact value outputted by a successful execution.
 }
 ```
 
-## Pact Values {#pact-values}
+#### Pact values returned {#pact-values}
 A successful pact execution will return a value that is valid JSON. A pact
 value can be one of the following: a literal string, integer, decimal, boolean,
 or time; a list of other pact values; an object mapping textual keys to pact
 values; or [guards](#guard-types), which can be pact (continuation) guards,
 module guards, user guards, keysets, or references to a keysets. Below is the JSON representation of these values:
 
-#### literal string
-**string**
+##### Types
 
-#### literal integer
-**object**
+###### `string`
+_type:_ **string**
+
+###### `integer`
+_type:_ **object**
 ```yaml
-int:
-integer, required
+name: "int"
+type: integer
+required: true
 ```
 
-#### literal decimal
-**number**
+###### `decimal`
+_type:_ **number**
 
-#### literal boolean
-**boolean**
+###### `boolean`
+_type:_ **boolean**
 
-#### literal time
-**object**
+###### `time`
+_type:_ **object**
+
 Literal time value using the UTC time format. The time pact object has the
 following attribute(s):
 ```yaml
-time:               # UTC timestamp.
-string, required    # Example: "1970-01-01T00:00:00Z"
+name: "time"        # UTC timestamp.
+type: string        # Example: "1970-01-01T00:00:00Z"
+required: true
 ```
 
-#### list of pact values
-**[ [PactValue](#pact-values) ]**
+###### `list`
+_type:_ **[ [PactValue](#pact-values) ]**
 
-#### object map of pact value
-**object**
+###### `object map`
+_type:_ **map (string->**[PactValue](#pact-values)**)**
+
 JSON object mapping string keys to [pact values](#pact-values).
 
-#### pact guards
-**object**
+###### `pact guard`
+_type:_ **object**
 ```yaml
-pactId:                           # id of the specific `defpact` execution in
-string (base64url), required      # which the guard was created. Thus, the
-                                  # guard will only pass if being accessed by
-                                  # code in subsequent steps of that particular
-                                  # pact execution (i.e. having the same
-                                  # pact id).
-
-name:                             # Name of the guard
-string, required
+name: "pactId"                # id of the specific `defpact` execution in
+type: string (base64url)      # which the guard was created. Thus, the
+required: true                # guard will only pass if being accessed by
+                              # code in subsequent steps of that particular
+                              # pact execution (i.e. having the same
+                              # pact id).
+```
+```yaml
+name: "name"                  # Name of the guard
+type: string
+required: true
 ```
 
-#### module guards
-**object**
+###### `module guard`
+_type:_ **object**
 ```yaml
-moduleName:           # Name and namespace of module being guarded
-  object, required    # name: string
-                      # namespace: (optional) string
-
-name:                 # Name of the guard
-string, required
+name: "moduleName"          # Name and namespace of module being guarded
+type: object
+required: true
+children:
+  name: "name"
+    type: string
+    required: true
+  name: "namespace"
+    type: string
+    required: false
+```
+```yaml
+name: "name"               # Name of the guard
+type: string
+required: true
 ```
 
-#### user guards
-**object**
+###### `user guard`
+_type:_ **object**
 ```yaml
-data:                 # Internal pact representation of a the function
-object, required      # governing the user guard.
-
-predFun:              # Name of function governing the user guard.
-string, required
+name: "data"            # Internal pact representation of a the function
+type: object            # governing the user guard.
+required: true
+```
+```yaml
+name: "predFun"        # Name of function governing the user guard.
+type: string
+required: true
 ```
 
-#### keysets
-**[KeySet](#keysets-and-authorization)**
+###### `keysets`
+_type:_ **[KeySet](#keysets-and-authorization)**
 
 
-#### keyset references
-**object**
+###### `keyset references`
+_type:_ **object**
 ```YAML
-keyNamef:             # Name of keyset being referenced.
-string, required
+name: "keyNamef"             # Name of keyset being referenced.
+type: string
+required: true
 ```
 
-## Pact Errors {#pact-errors}
+#### Pact errors {#pact-errors}
 When an error occurs during a pact execution, the following JSON object is
 returned in Command Result's `result` field:
 
-#### `callStack`
-**array (string)**, _required_
+##### Attributes
+
+###### `"callStack"`
+_type:_ **array (string)** `required`
+
 List of stack traces (i.e. active stack frames) during the pact execution error.
 
-#### `info`
-**string**, _required_
+###### `"info"`
+_type:_ **string** `required`
+
 The parsed pact code that produced the error.
 
-#### `message`
-**string**, _required_
+###### `"message"`
+_type:_ **string** `required`
+
 The error message that was produced.
 
-#### `type`
-**enum (string)**, _required_
+###### `"type"`
+_type:_ **enum (string)** `required`
+
 The type of pact error that was produced. The error type must be one of the
 following:
+
 - "EvalError"
 - "ArgsError"
 - "DbError"
@@ -513,7 +546,7 @@ following:
 - "SyntaxError"
 - "GasError"
 
-### Example Pact Error
+##### Example pact error
 ```JSON
 {
   "callStack":["<interactive>:0:0: (+ 1 2 3)"],
@@ -523,26 +556,49 @@ following:
 }
 ```
 
----
----
-## /send
+### Endpoints
+
+All endpoints are served from `api/v1`. Thus a `send` call would be sent
+to <http://localhost:8080/api/v1/send>, if running on `localhost:8080`.
+Each endpoint section specifies the request body schema they expect and the
+schema of their response. If they receive an invalid request body, an HTTP
+`400 Bad Request Error` will be returned. All endpoints also consume and
+produce `application/json;charset=utf-8`.
+
+One way to interact with the endpoints is to use Pact's
+[API Request formatter](#api-request-formatter) and `curl`.
+
+```shell
+#!/bin/sh
+
+set -e
+
+JSON="Content-Type: application/json"
+
+echo ""; echo "Step 1"; echo ""
+pact -a examples/accounts/scripts/01-system.yaml | curl -H "$JSON" -d @- http://localhost:8080/api/v1/send
+sleep 1; echo ""
+curl -H "$JSON" -d '{"requestKeys":["zaqnRQ0RYzxTccjtYoBvQsDo5K9mxr4TEF-HIYTi5Jo"]}' -X POST http://localhost:8080/api/v1/poll
+```
+
+#### /send
 
 ```shell
 POST /api/v1/send
 ```
 
 Asynchronous submission of one or more public (unencrypted) commands to the blockchain.
-See [cmd field](#cmd-field-and-payloads) format regarding the stringified JSON data.
+See [cmd field](#cmd-field) format regarding the stringified JSON data.
 
-### Request Schema
+##### Request schema
 
-#### `cmds`
-**[ [Command](#the-command-object) ]**, _required_
+###### `"cmds"`
+_type:_ **[ [Command](#the-command-object) ]** `required`
 
 List of [Command](#the-command-object) objects to be submitted to the blockchain.
 Expects each command to have stringified JSON payload.
 
-### Example Request
+##### Example request
 
 ```JSON
 { "cmds": [
@@ -565,14 +621,15 @@ Expects each command to have stringified JSON payload.
 }
 ```
 
----
-### Responses
-Returns the list of the submitted command's request keys. It will return a
-JSON object with a `requestKeys` field, which contains a list of request keys
-(base64 strings). Use with `/poll` or `/listen` to get the transaction results.
+##### Response schema
 
----
-### Example Responses
+###### `"requestKeys"`
+_type:_ **[ string (base64url) ]** `required`
+
+Returns the list of the submitted command's request keys. Use with `/poll`
+or `/listen` to get the transaction results.
+
+##### Example response
 
 ```JSON
 {
@@ -581,10 +638,7 @@ JSON object with a `requestKeys` field, which contains a list of request keys
 }
 ```
 
----
----
-
-## /poll
+#### /poll
 
 ```shell
 POST /api/v1/poll
@@ -592,17 +646,14 @@ POST /api/v1/poll
 
 Poll for multiple command results.
 
----
-### Request Schema
+##### Request schema
 
-#### `requestKeys`
-**[ string (base64url) ]**, _required_
+###### `"requestKeys"`
+_type:_ **[ string (base64url) ]** `required`
 
 List of desired commands' request key.
 
-
----
-### Example Request
+##### Example request
 
 ```JSON
 {
@@ -611,15 +662,14 @@ List of desired commands' request key.
 }
 ```
 
----
-### Responses
-Returns a JSON object, whose key is a command's request key and value is
-its corresponding [Comamnd Result](#the-command-result-object) object. If one of the
-polled commands has not been processed yet, then it will be absent from
+##### Response schema
+Returns a JSON object, whose keys are commands' request key and values are
+their corresponding [Command Result](#the-command-result-object) objects.
+If one of the
+polled commands have not been processed yet, then it will be absent from
 the returned JSON object.
 
----
-### Example Responses
+##### Example response
 
 ```JSON
 {
@@ -655,10 +705,7 @@ the returned JSON object.
 }
 ```
 
----
----
-
-## /listen
+#### /listen
 
 ```shell
 POST /api/v1/listen
@@ -667,16 +714,14 @@ POST /api/v1/listen
 Blocking call to listen for a single command result, or
 retrieve an already-executed command.
 
----
-### Request Schema
+##### Request schema
 
-#### `listen`
-**string (base64url)**, _required_
+###### `"listen"`
+_type:_ **string (base64url)** `required`
 
 A command’s request key.
 
----
-### Example Request
+##### Example request
 
 ```JSON
 {
@@ -684,15 +729,12 @@ A command’s request key.
 }
 ```
 
----
-### Responses
+##### Response schema
 Returns a [Command Result](#the-command-result-object) object if the listen was
 successful. Otherwise, a timeout response is returned with fields `status`
-(always with value "timeout") and `timeout-micros` (TODO what does this refer
-to?).
+(always the string "timeout") and `timeout-micros`.
 
----
-### Example Responses
+##### Example response
 
 ```JSON
 // timeout response
@@ -716,9 +758,8 @@ to?).
   "txId":null
 }
 ```
----
----
-## /local
+
+#### /local
 
 ```shell
 POST /api/v1/local
@@ -726,16 +767,14 @@ POST /api/v1/local
 
 Blocking/sync call to send a command for non-transactional execution. In a
 blockchain environment this would be a node-local “dirty read”. Any database
-writes or changes to the environment are rolled back. See [cmd field](#cmd-field-and-payloads)
+writes or changes to the environment are rolled back. See [cmd field](#cmd-field)
 format regarding the stringified JSON data.
 
----
-### Request Schema
+##### Request schema
 
 Expects a [Command](#the-command-object) object with stringified JSON payload.
 
----
-### Example Request
+##### Example request
 
 ```JSON
 {
@@ -748,12 +787,10 @@ Expects a [Command](#the-command-object) object with stringified JSON payload.
 }
 ```
 
----
-### Responses
+##### Response schema
 Returns a [Comamnd Result](#the-command-result-object) object.
 
----
-### Example Responses
+##### Example response
 
 ```JSON
 // successful command result
@@ -770,8 +807,6 @@ Returns a [Comamnd Result](#the-command-result-object) object.
   "txId":null
 }
 ```
----
----
 
 API request formatter
 ---
