@@ -688,13 +688,12 @@ makeFunctionEnvironment
 makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
   let -- We use VID 0 for the result, the one for each argument variable.
       -- Finally, we start the VID generator in the translation environment at
-      -- the next VID.
+      -- the next VID. envVidStart is the first VID that will be issued.
       --
       -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet.
       envVidStart = VarId (length argTys + 1)
-      -- TODO(joel): why is this not right? [1..(envVidStart - 1)]
-      vids        = [1..]
+      vids        = [1..(envVidStart - 1)]
 
   -- TODO(joel): this relies on generating the same unique ids as
   -- @checkFunction@. We need to more carefully enforce this is true!
