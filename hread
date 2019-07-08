@@ -1,2 +1,0 @@
-stack ghc -O2 -- foo.hs +RTS -thread 
-<<ghc: 3911624 bytes, 4 GCs, 294168/477232 avg/max bytes residency (2 samples), 2M in use, 0.000 INIT (0.003 elapsed), 0.002 MUT (0.003 elapsed), 0.010 GC (0.013 elapsed) :ghc>>
