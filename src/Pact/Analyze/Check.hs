@@ -847,11 +847,13 @@ getConsts defconstRefs = do
 
   (consts :: HM.HashMap Text (AST Node)) <- ifoldrM
     (\name ref accum -> do
-      maybeConst <- lift $ runTC 0 False $ typecheckTopLevel ref
-      pure $ case maybeConst of
-        (TopConst _info _qualifiedName _type val _doc, _tcState)
-          -> accum & at name ?~ val
-        _ -> error "invariant failure: anything but a const is unexpected here"
+      maybeConst <- lift $ typecheck ref
+      case maybeConst of
+        Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
+        Right (TopConst _info _qualifiedName _type val _doc)
+          -> pure $ accum & at name ?~ val
+        Right _
+          -> error "invariant failure: anything but a const is unexpected here"
     )
     HM.empty
     defconstRefs
@@ -880,15 +882,16 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _) defpactRefs = do
     ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
     <- ifoldrM
     (\name ref accum -> do
-      maybeDef <- lift $ runTC 0 False $ typecheckTopLevel ref
-      pure $ case maybeDef of
-        (TopFun (FDefun info _ _ Defpact funType args steps) _meta, _)
-          -> ifoldl
+      maybeDef <- lift $ typecheck ref
+      case maybeDef of
+        Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
+        Right (TopFun (FDefun info _ _ Defpact funType args steps) _meta)
+          -> pure $ ifoldl
             (\i stepAccum step ->
               stepAccum & at (name, i) ?~ ((step, args, info), funType))
             accum
             steps
-        _ -> error
+        Right _ -> error
           "invariant failure: anything but a function is unexpected here"
     )
     HM.empty
@@ -936,17 +939,18 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
     (Ref, TopLevel Node, Pact.FunType TC.UserType, CheckableType))
     <- ifoldrM
       (\name ref accum -> do
-        maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
-        pure $ case maybeFun of
-          (topfun@(TopFun (FDefun _ _ _ defType funType _ _) _), _)
+        maybeFun <- lift $ typecheck ref
+        case maybeFun of
+          Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
+          Right topfun@(TopFun (FDefun _ _ _ defType funType _ _) _)
             -> let checkType = case defType of
                      Defpact -> CheckDefpact
                      Defun   -> CheckDefun
                      _       -> error
                        "invariant violation: only defpact / defun are allowed"
 
-               in accum & at name ?~ (ref, topfun, funType, checkType)
-          _ -> error
+               in pure $ accum & at name ?~ (ref, topfun, funType, checkType)
+          Right _ -> error
             "invariant failure: anything but a function is unexpected here"
       )
       HM.empty
@@ -1079,10 +1083,11 @@ verifyCheck moduleData funName check checkType = do
 
   case moduleFun moduleData funName of
     Just funRef -> do
-      (toplevel, _) <- lift $ runTC 0 False $ typecheckTopLevel funRef
+      toplevel <- lift $ typecheck funRef
       case toplevel of
-        TopFun fun _ -> ExceptT $ fmap Right $
+        Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
+        Right (TopFun fun _) -> ExceptT $ fmap Right $
           verifyFunctionProperty checkEnv (mkFunInfo fun) funName checkType $
             Located info check
-        _ -> error "TODO"
+        Right _ -> error "TODO"
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
