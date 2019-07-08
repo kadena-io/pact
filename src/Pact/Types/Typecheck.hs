@@ -377,7 +377,6 @@ instance Pretty t => Pretty (AST t) where
        let rb x = case _aRollback of
                   Nothing -> x
                   Just r -> sep [ x, "Rollback:", indent 2 (pretty r) ]
-       -- TODO: show model
        in rb $ sep
             [ pn
             , indent 2 $ "Entity" <> colon <+> pretty _aEntity

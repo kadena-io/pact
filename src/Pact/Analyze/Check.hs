@@ -177,7 +177,9 @@ data FunData = FunData
   ![AST Node]   -- ^ Body
 
 mkFunInfo :: Fun Node -> FunData
-mkFunInfo FDefun{_fInfo, _fArgs, _fBody} = FunData _fInfo _fArgs _fBody
+mkFunInfo = \case
+  FDefun{_fInfo, _fArgs, _fBody} -> FunData _fInfo _fArgs _fBody
+  _ -> error "invariant violation: mkFunInfo called on non-function"
 
 data VerificationFailure
   = ModuleParseFailure ParseFailure
@@ -976,6 +978,8 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
       TopFun fun _ -> withExceptT ModuleCheckFailure $ ExceptT $
         verifyFunctionInvariants modName tables caps (mkFunInfo fun) name
           checkType
+      _ -> error "invariant violation: anything but a TopFun is unexpected in \
+        \invariantCheckable"
 
   funChecks'' <- lift $ ifor funChecks' $ \name ((toplevel, checkType), checks)
     -> case toplevel of
@@ -1088,5 +1092,6 @@ verifyCheck moduleData funName check checkType = do
         Right (TopFun fun _) -> ExceptT $ fmap Right $
           verifyFunctionProperty checkEnv (mkFunInfo fun) funName checkType $
             Located info check
-        Right _ -> error "TODO"
+        Right _
+          -> error "invariant violation: verifyCheck called on non-function"
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
