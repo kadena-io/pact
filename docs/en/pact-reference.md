@@ -317,9 +317,9 @@ Output of a [continuation](#cont-payload) (i.e. "pacts") if one occurred in
 the command. This continuation object has the following child attributes:
 
 ```yaml
-name: "executed"            # Whether the step was executed (in private
-type: boolean               # cases, steps can be skipped).
-required: true
+name: "executed"            # Only required for private pacts to indicate
+type: boolean               # if step was executed or skipped.
+required: false
 ```
 ```yaml
 name: "pactId"              # The id of the pact to be continued or

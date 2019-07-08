@@ -405,9 +405,9 @@ child attributes:
 
 .. code:: yaml
 
-   name: "executed"            # Whether the step was executed (in private
-   type: boolean               # cases, steps can be skipped).
-   required: true
+   name: "executed"            # Only required for private pacts to indicate
+   type: boolean               # if step was executed or skipped.
+   required: false
 
 .. code:: yaml
 
