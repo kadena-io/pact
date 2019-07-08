@@ -692,7 +692,7 @@ makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
       --
       -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet.
-      envVidStart = VarId (length argTys)
+      envVidStart = VarId (length argTys + 1)
       -- TODO(joel): why is this not right? [1..(envVidStart - 1)]
       vids        = [1..]
 
