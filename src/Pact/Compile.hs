@@ -178,7 +178,7 @@ qualifiedModuleName = do
     []  -> return $ ModuleName _atomAtom Nothing
     [n] -> do
       checkReserved n
-      return $ ModuleName _atomAtom (Just . NamespaceName $ n)
+      return $ ModuleName _atomAtom (Just $ NamespaceName n)
     _   -> expected "qualified module name reference"
 
 freshTyVar :: Compile (Type (Term Name))
@@ -423,9 +423,8 @@ moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
   gov <- Governance <$>
-    (((Left . KeySetName) <$> str) <|>
-     (userAtom >>= \AtomExp{..} ->
-         return $ Right $ TVar (Name _atomAtom _atomInfo) _atomInfo))
+    ((fmap Left $ KeySetName <$> str <*> pure Nothing)
+     <|> ((\AtomExp{..} -> Right $ TVar (Name _atomAtom _atomInfo) _atomInfo) <$> userAtom))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"

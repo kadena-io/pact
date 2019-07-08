@@ -171,10 +171,10 @@ instance Pretty PublicKey where
   pretty (PublicKey s) = prettyString (BS.toString s)
 
 -- | KeySet pairs keys with a predicate function name.
-data KeySet = KeySet {
-      _ksKeys :: ![PublicKey]
-    , _ksPredFun :: !Name
-    } deriving (Eq,Generic,Show,Ord)
+data KeySet = KeySet
+  { _ksKeys :: ![PublicKey]
+  , _ksPredFun :: !Name
+  } deriving (Eq,Ord,Generic,Show)
 
 instance NFData KeySet
 
@@ -184,22 +184,61 @@ instance Pretty KeySet where
     , "pred: " <> pretty f
     ]
 
--- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
--- | the latter cases defaulting to "keys-all"
+-- Allow 3 different valid JSON forms for 'KeySet':
+--
+-- 1. `{ "keys": [...], "pred": "...", "namespace": "..." }`
+-- 2. `{ "keys": [...], "namespace" : "..." }`
+-- 3. `[...]`
+--
+-- The latter 2 cases have "pred" default to "keys-all", namespaces
+-- are optional
+--
 instance FromJSON KeySet where
-    parseJSON v = withObject "KeySet" (\o ->
-                    KeySet <$> o .: "keys" <*>
-                    (fromMaybe defPred <$> o .:? "pred")) v <|>
-                  (KeySet <$> parseJSON v <*> pure defPred)
-      where defPred = Name "keys-all" def
+    parseJSON v =
+      let
+        wo f = withObject "KeySet" f v
+        -- `{ "keys": [...], "pred": "..." }`
+        pk o = KeySet
+          <$> o .: "keys"
+          <*> (fromMaybe (Name "keys-all" def) <$> o .:? "pred")
+
+        -- `{ "keys": [...] }`
+        k o = KeySet
+          <$> o .: "keys"
+          <*> pure (Name "keys-all" def)
+
+      in wo pk <|> wo k <|> ((\v' -> KeySet v' (Name "keys-all" def)) <$> parseJSON v)
+
+
+
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 
 
-newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic)
+data KeySetName = KeySetName
+  { _ksName :: Text
+  , _ksNamespaceName :: Maybe NamespaceName
+  } deriving (Eq,Show,Generic)
 
-instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
+instance Ord KeySetName where KeySetName t _ <= KeySetName u _ = t <= u
+instance NFData KeySetName
+instance Pretty KeySetName where
+  pretty (KeySetName s Nothing) = "'" <> pretty s
+  pretty (KeySetName s (Just ns)) = "'" <> pretty ns <> "." <> pretty s
+instance ToJSON KeySetName where toJSON = lensyToJSON 3
+instance FromJSON KeySetName where parseJSON = lensyParseJSON 3
+
+instance IsString KeySetName where
+  fromString = coalesce . T.splitOn "." . pack
+    where
+      coalesce l = case l of
+        [ns,n] -> KeySetName n (Just $ NamespaceName ns)
+        [n] -> KeySetName n Nothing
+        _ -> KeySetName (pack $ show l) (Just $ NamespaceName "Err: malformed name")
+
+instance AsString KeySetName where
+  asString (KeySetName n Nothing) = n
+  asString (KeySetName n (Just ns)) = asString ns <> "." <> n
 
 newtype PactId = PactId Text
     deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,ToTerm)
@@ -274,20 +313,26 @@ guardCodec :: Codec Guard
 guardCodec = Codec enc dec
   where
     enc (GKeySet k) = toJSON k
-    enc (GKeySetRef n) = object [ keyNamef .= n ]
+    enc (GKeySetRef n) = object [ "keysetref" .= n ]
     enc (GPact g) = toJSON g
     enc (GModule g) = toJSON g
     enc (GUser g) = toJSON g
     {-# INLINE enc #-}
     dec v =
-      (GKeySet <$> parseJSON v) <|>
-      (withObject "KeySetRef" $ \o ->
-          GKeySetRef . KeySetName <$> o .: keyNamef) v <|>
-      (GPact <$> parseJSON v) <|>
-      (GModule <$> parseJSON v) <|>
-      (GUser <$> parseJSON v)
+      let wo n f = withObject n f v
+          k f = f <$> parseJSON v
+      in
+        k GKeySet
+      <|> wo "KeySetRef" go
+      <|> k GPact
+      <|> k GModule
+      <|> k GUser
+
     {-# INLINE dec #-}
-    keyNamef = "keysetref"
+
+    go o = fmap GKeySetRef $ KeySetName
+           <$> o .: "keysetref"
+           <*> o .:? "namespace"
 
 
 instance ToJSON Guard where toJSON = encoder guardCodec

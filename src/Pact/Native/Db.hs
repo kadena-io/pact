@@ -145,7 +145,8 @@ descTable i as = argsError i as
 
 descKeySet :: RNativeFun e
 descKeySet i [TLitString t] = do
-  r <- readRow (_faInfo i) KeySets (KeySetName t)
+  ns <- preuse (evalRefs . rsNamespace . _Just . nsName)
+  r <- readRow (_faInfo i) KeySets (KeySetName t ns)
   case r of
     Just v -> return $ toTerm v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t

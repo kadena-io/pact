@@ -63,12 +63,13 @@ readKeySet' i key = parseMsgKey i "read-keyset" key
 
 defineKeyset :: RNativeFun e
 defineKeyset fi as = case as of
-  [TLitString name,TGuard (GKeySet ks) _] -> go name ks
   [TLitString name] -> readKeySet' fi name >>= go name
+  [TLitString name,TGuard (GKeySet ks) _] -> go name ks
   _ -> argsError fi as
   where
     go name ks = do
-      let ksn = KeySetName name
+      ns <- preuse (evalRefs . rsNamespace . _Just . nsName)
+      let ksn = KeySetName name ns
           i = _faInfo fi
       old <- readRow i KeySets ksn
       case old of

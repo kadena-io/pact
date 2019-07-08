@@ -1,0 +1,2 @@
+stack build --ghc-options -O2 +RTS -threaded 
+<<ghc: 1113708240 bytes, 1008 GCs, 23487207/82286088 avg/max bytes residency (8 samples), 188M in use, 0.001 INIT (0.003 elapsed), 0.300 MUT (0.902 elapsed), 0.297 GC (0.348 elapsed) :ghc>>

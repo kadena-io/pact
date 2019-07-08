@@ -185,8 +185,9 @@ keysetRefGuard =
   \store references alongside other guards in the database, etc."
   where
     keysetRefGuard' :: RNativeFun e
-    keysetRefGuard' i [TLitString ks] =
-      return $ (`TGuard` (_faInfo i)) $ GKeySetRef (KeySetName ks)
+    keysetRefGuard' i [TLitString ks] = do
+      ns <- preuse (evalRefs . rsNamespace . _Just . nsName)
+      return $ (`TGuard` (_faInfo i)) $ GKeySetRef (KeySetName ks ns)
     keysetRefGuard' i as = argsError i as
 
 

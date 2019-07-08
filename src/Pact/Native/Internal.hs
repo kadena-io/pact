@@ -192,7 +192,15 @@ enforceGuardDef dn =
     enforceGuard' :: RNativeFun e
     enforceGuard' i as = case as of
       [TGuard g _] -> enforceGuard i g >> return (toTerm True)
-      [TLitString k] -> enforceGuard i (GKeySetRef (KeySetName k)) >> return (toTerm True)
+      [TLitString k] -> do
+        n <- use (evalRefs . rsNamespace) >>= \m -> case m of
+          Nothing -> return Nothing
+          Just ns -> do
+            np <- view eeNamespacePolicy
+            unless (_nsPolicy np $ Just ns) $
+              evalError' i "Namespace is not permitted"
+            return $ Just $ _nsName ns
+        enforceGuard i (GKeySetRef (KeySetName k n)) >> return (toTerm True)
       _ -> argsError i as
 
 enforceGuard :: FunApp -> Guard -> Eval e ()
