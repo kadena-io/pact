@@ -901,6 +901,7 @@ data Term n =
     } |
     TStep {
       _tStep :: Step (Term n)
+    , _tMeta :: !Meta
     , _tInfo :: !Info
     } |
     TTable {
@@ -971,7 +972,7 @@ instance Pretty n => Pretty (Term n) where
     TLiteral l _ -> annotate Val $ pretty l
     TGuard k _ -> pretty k
     TUse u _ -> pretty u
-    TStep s _i -> pretty s
+    TStep s _meta _i -> pretty s
     TSchema{..} -> parensSep
       [ "defschema"
       , pretty _tSchemaName
@@ -1003,7 +1004,7 @@ instance Monad Term where
     TLiteral l i >>= _ = TLiteral l i
     TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
-    TStep (Step ent e r si) i >>= f = TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) i
+    TStep (Step ent e r si) meta i >>= f = TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) meta i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
 
@@ -1027,7 +1028,7 @@ termCodec = Codec enc dec
       TLiteral l i -> ob [literal .= l, inf i]
       TGuard k i -> ob [guard' .= k, inf i]
       TUse u _i -> toJSON u
-      TStep s _i -> toJSON s
+      TStep s tmeta i -> ob [body .= s, meta .= tmeta, inf i]
       TSchema sn smod smeta sfs i ->
         ob [ schemaName .= sn, modName .= smod, meta .= smeta, fields .= sfs, inf i ]
       TTable tn tmod th tty tmeta i ->
@@ -1052,7 +1053,9 @@ termCodec = Codec enc dec
         <|> wo "Literal" (\o -> TLiteral <$> o .: literal <*> inf' o)
         <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
         <|> parseWithInfo TUse
-        <|> parseWithInfo TStep
+        <|> wo "Step"
+            (\o -> TStep <$> o .: body <*> o .: meta <*> inf' o)
+       --  parseWithInfo TStep
         <|> wo "Schema"
             (\o -> TSchema <$>  o .: schemaName <*> o .: modName <*> o .: meta <*> o .: fields <*> inf' o )
         <|> wo "Table"
