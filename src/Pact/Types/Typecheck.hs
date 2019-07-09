@@ -38,7 +38,7 @@ module Pact.Types.Typecheck
     Named (..),
     AstBindType (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
-    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,
+    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,
     Visit(..),Visitor,
     YieldResume(..),yrYield,yrResume
   ) where
@@ -339,7 +339,8 @@ data AST n =
   _aEntity :: Maybe (AST n),
   _aExec :: AST n,
   _aRollback :: Maybe (AST n),
-  _aYieldResume :: Maybe (YieldResume n)
+  _aYieldResume :: Maybe (YieldResume n),
+  _aModel :: ![Exp Info]
   }
 
   deriving (Eq,Functor,Foldable,Traversable,Show)

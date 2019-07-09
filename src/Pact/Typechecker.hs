@@ -128,6 +128,7 @@ walkAST f t@Step {} = do
     <*> walkAST f (_aExec a)
     <*> traverse (walkAST f) (_aRollback a)
     <*> pure (_aYieldResume a)
+    <*> pure (_aModel a)
   f Post t'
 
 isConcreteTy :: Type n -> Bool
@@ -964,7 +965,7 @@ toAST TTable {..} = do
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
-toAST (TStep Term.Step {..} _) = do
+toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   ent <- forM _sEntity $ \e -> do
     e' <- toAST e
     assocAstTy (_aNode e') $ TyPrim TyString
@@ -975,7 +976,7 @@ toAST (TStep Term.Step {..} _) = do
   ex <- toAST _sExec
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
-  Step sn ent ex <$> traverse toAST _sRollback <*> pure yr
+  Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do

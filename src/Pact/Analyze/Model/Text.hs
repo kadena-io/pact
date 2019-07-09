@@ -236,7 +236,7 @@ showEvent ksProvs tags event = do
           ObjectScope ->
             "destructuring object" : displayVids showVar
           StepScope ->
-            [ "entering step" ]
+            "entering step" : displayVids showVar
           RollbackScope ->
             [ "entering rollback" ]
           FunctionScope modName funName ->

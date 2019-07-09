@@ -21,6 +21,10 @@ module Pact.Analyze.Types
   , Quantifier(..)
   , Table(..)
   , CheckableType(..)
+  , TypecheckableRefs(..)
+  , defuns
+  , defpacts
+  , defconsts
 
   , checkGoal
   , genId
@@ -36,9 +40,11 @@ module Pact.Analyze.Types
 import           Control.Lens                 (Lens', makeLenses, use, (+=))
 import           Control.Monad.State.Strict   (MonadState)
 import           Data.Text                    (Text)
+import qualified Data.HashMap.Strict          as HM
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Typecheck         as TC
+import           Pact.Types.Runtime           (Ref)
 
 import           Pact.Analyze.Types.Capability
 import           Pact.Analyze.Types.Languages
@@ -100,5 +106,14 @@ data CheckableType
   = CheckDefun
   | CheckDefpact
   | CheckDefconst
+  | CheckPactStep
 
 makeLenses ''Table
+
+data TypecheckableRefs = TypecheckableRefs
+  { _defuns    :: HM.HashMap Text Ref
+  , _defpacts  :: HM.HashMap Text Ref
+  , _defconsts :: HM.HashMap Text Ref
+  }
+
+makeLenses ''TypecheckableRefs
