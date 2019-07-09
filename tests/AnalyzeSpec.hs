@@ -191,7 +191,7 @@ expectTest (TestEnv code check name p) = do
   it name $ p res
 
 handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> IO ()
-handlePositiveTestResult = withFrozenCallStack $ \case
+handlePositiveTestResult = \case
   Nothing -> pure ()
   Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
     -> pendingWith msg
@@ -215,7 +215,10 @@ expectFalsified' model code = withFrozenCallStack $ do
 
 expectPass :: HasCallStack => Text -> Check -> Spec
 expectPass code check = withFrozenCallStack $ expectTest
-  testEnv { testCode = wrap code "", testCheck = check }
+  testEnv { testCode = wrap code ""
+          , testCheck = check
+          , testPred = handlePositiveTestResult
+          }
 
 expectFail :: HasCallStack => Text -> Check -> Spec
 expectFail code check = withFrozenCallStack $ expectTest
