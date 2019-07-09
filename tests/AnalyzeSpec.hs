@@ -885,6 +885,18 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "capability returning false succeeds because it doesn't throw" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              false)
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                true))
+          |]
+    expectPass code $ Valid Success'
+
   describe "requesting token that was never granted" $ do
     let code =
           [text|
