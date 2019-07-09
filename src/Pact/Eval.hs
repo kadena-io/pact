@@ -696,23 +696,22 @@ applyPact i app (TList steps _ _) PactStep {..} = do
     t -> evalError (_tInfo t) "expected step"
 
   -- determine if step is skipped (for private execution)
-  (executing,private) <- traverse reduce (_sEntity step) >>= \stepEntity -> case stepEntity of
-    Nothing -> return (True,False)
-    Just (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
-      Just (EntityName en) -> return (se == en,True) -- execute if req entity matches context entity
+  executePrivate <- traverse reduce (_sEntity step) >>= traverse (\stepEntity -> case stepEntity of
+    (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
+      Just (EntityName en) -> return $ (se == en) -- execute if req entity matches context entity
       Nothing -> evalError' step "applyPact: private step executed against non-private environment"
-    Just t -> evalError' t "applyPact: step entity must be String value"
+    t -> evalError' t "applyPact: step entity must be String value")
 
   let stepCount = length steps
-      isLastStep = _psStep == pred stepCount
 
   -- init pact state
   evalPactExec .=
-      Just (PactExec stepCount Nothing executing _psStep _psPactId app)
+      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app)
 
   -- evaluate
-  result <- if not executing then return $ tStr "skip step" else
-    case (_psRollback,_sRollback step) of
+  result <- case executePrivate of
+    Just False -> return $ tStr "skip step"
+    _ -> case (_psRollback,_sRollback step) of
       (False,_) -> reduce $ _sExec step
       (True,Just rexp) -> reduce rexp
       (True,Nothing) -> evalError' step $ "Rollback requested but none in step"
@@ -721,7 +720,9 @@ applyPact i app (TList steps _ _) PactStep {..} = do
     (evalError i "Internal error, pact exec state not found after execution")
 
   -- update database, determine if done
-  let done =
+  let isLastStep = _psStep == pred stepCount
+      private = isJust executePrivate
+      done =
         (not _psRollback && isLastStep) -- done if normal exec of last step
         || (not private && _psRollback) -- done if public rollback
         || (private && _psRollback && _psStep == 0) -- done if private and rolled back to step 0
