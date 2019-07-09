@@ -159,6 +159,31 @@ runCheck checkType code check = do
         Right (Left cf) -> Just $ TestCheckFailure cf
         Right (Right _) -> Nothing
 
+-- | 'TestEnv' represents the environment a test runs in. Used with
+-- 'expectTest'.
+data TestEnv = TestEnv
+  { testCode  :: Text
+  , testCheck :: Check
+  , testName  :: String
+  , testPred  :: Maybe TestFailure -> IO ()
+  }
+
+-- | A default 'TestEnv', which checks for success. Note that this default
+-- environment lacks 'testCode'.
+testEnv :: TestEnv
+testEnv = TestEnv (error "no tested code") (Valid Success') "unnamed" $ \case
+  Nothing
+    -> pure ()
+  Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
+    -> pendingWith msg
+  Just err
+    -> HUnit.assertFailure $ "Verification failure: " ++ show err
+
+expectTest :: TestEnv -> Spec
+expectTest (TestEnv code check name p) = do
+  res <- runIO $ runCheck CheckDefun code check
+  it name $ p res
+
 handlePositiveTestResult :: Maybe TestFailure -> IO ()
 handlePositiveTestResult = \case
   Nothing -> pure ()
@@ -183,14 +208,15 @@ expectFalsified' model code = do
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
 expectPass :: Text -> Check -> Spec
-expectPass code check = do
-  res <- runIO $ runCheck CheckDefun (wrap code "") check
-  it (show check) $ handlePositiveTestResult res
+expectPass code check = expectTest
+  testEnv { testCode = wrap code "", testCheck = check }
 
 expectFail :: Text -> Check -> Spec
-expectFail code check = do
-  res <- runIO $ runCheck CheckDefun (wrap code "") check
-  it (show check) $ res `shouldSatisfy` isJust
+expectFail code check = expectTest testEnv
+  { testCode  = wrap code ""
+  , testCheck = check
+  , testPred  = (`shouldSatisfy` isJust)
+  }
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
 intConserves (TableName tn) (ColumnName cn)
@@ -1323,6 +1349,18 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Success' .=> Inj (RowExists "tokens" "stu" After)
 
+  let expectFailsTypechecking code =
+        expectTest $ testEnv
+          { testCode = wrap code ""
+          , testName = "fails typechecking"
+          , testCheck = Satisfiable Success'
+          , testPred = \case
+            Just (TestCheckFailure (CheckFailure _ TypecheckFailure{}))
+              -> pure ()
+            Nothing -> HUnit.assertFailure "Unexpectedly passed"
+            _       -> HUnit.assertFailure "Wrong verification failure"
+          }
+
   describe "table-written.insert.partial" $ do
     let code =
           [text|
@@ -1332,7 +1370,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (insert tokens "stu" {}))
           |]
-    expectFail code $ Satisfiable (Inj Success)
+    expectFailsTypechecking code
 
   describe "table-written.update" $ do
     let code =
@@ -1377,7 +1415,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (write tokens "stu" {}))
           |]
-    expectFail code $ Satisfiable (Inj Success)
+    expectFailsTypechecking code
 
   describe "table-written.conditional" $ do
     let code =
