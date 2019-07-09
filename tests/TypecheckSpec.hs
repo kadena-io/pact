@@ -22,10 +22,7 @@ import Pact.Types.Runtime
 import Pact.Types.Typecheck
 
 import Pact.Types.Pretty
-import Control.Monad
-import Data.Foldable
 import qualified Data.Text as T
-import qualified Data.Set as Set
 import qualified Pact.Analyze.Check as Check
 
 spec :: Spec
