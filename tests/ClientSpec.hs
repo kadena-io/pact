@@ -8,7 +8,6 @@ module ClientSpec (spec) where
 import Data.Aeson
 import Data.Default (def)
 import Test.Hspec
-import Utils.TestRunner
 import qualified Network.HTTP.Client as HTTP
 import qualified Control.Exception as Exception
 
@@ -17,6 +16,7 @@ import Pact.Types.API
 import Pact.Types.Command
 import Data.Text (Text)
 import Pact.Server.API
+import Pact.Server.Test
 import Servant.Client
 import Pact.Types.Runtime
 import Pact.Types.PactValue

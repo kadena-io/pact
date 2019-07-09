@@ -15,7 +15,7 @@ data SpecialForm =
   Select |
   Where |
   WithCapability |
-  Yield |
+  YieldSF |
   Resume
   deriving (Eq,Enum,Ord,Bounded)
 
@@ -26,7 +26,7 @@ instance AsString SpecialForm where
   asString Select = "select"
   asString Where = "where"
   asString WithCapability = asString RWithCapability
-  asString Yield = "yield"
+  asString YieldSF = "yield"
   asString Resume = "resume"
 
 instance Show SpecialForm where show = show . asString

@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      :  Pact.Types.Runtime
--- Copyright   :  (C) 2016 Stuart Popejoy
+-- Copyright   :  (C) 2019 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
@@ -14,7 +14,6 @@ module Pact.Types.ChainMeta
   ( -- * types
     Address(..)
   , PrivateMeta(..)
-  , ChainId(..)
   , PublicMeta(..)
   , HasPlafMeta(..)
   , PublicData(..)
@@ -43,9 +42,9 @@ import Data.Word (Word64)
 
 -- internal pact modules
 
+import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
-import Pact.Types.Term (ToTerm(..))
 
 
 newtype EntityName = EntityName Text
@@ -76,13 +75,6 @@ instance ToJSON PrivateMeta where toJSON = lensyToJSON 3
 instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
 instance Serialize PrivateMeta
-
-
--- | Expresses unique platform-specific chain identifier.
-newtype ChainId = ChainId Text
-  deriving (Eq, Show, Generic, IsString, ToJSON, FromJSON, Serialize, NFData)
-instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
-
 
 -- | Contains all necessary metadata for a Chainweb-style public chain.
 data PublicMeta = PublicMeta

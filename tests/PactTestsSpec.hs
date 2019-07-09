@@ -4,9 +4,12 @@ module PactTestsSpec (spec) where
 
 import Test.Hspec
 
+import Data.Text (unpack)
+
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Runtime
+
 import System.Directory
 import System.FilePath
 import Control.Monad

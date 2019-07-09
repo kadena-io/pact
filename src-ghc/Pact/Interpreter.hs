@@ -34,6 +34,7 @@ import Control.Concurrent
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Lens
+
 import Data.Aeson
 import Data.Default
 import Data.HashMap.Strict (HashMap)
@@ -50,7 +51,9 @@ import Pact.PersistPactDb
 import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Types.PactValue
+import Pact.Types.RPC
 import Pact.Types.Runtime
+import Pact.Types.SPV
 
 data PactDbEnv e = PactDbEnv {
   pdPactDb :: !(PactDb e),
@@ -89,8 +92,16 @@ initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
 initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 -- | Resume a defpact execution, with optional PactExec.
-evalContinuation :: EvalState -> EvalEnv e -> Maybe PactExec -> IO EvalResult
-evalContinuation initState ee pact = interpret initState ee (Left pact)
+evalContinuation :: EvalState -> EvalEnv e -> ContMsg -> IO EvalResult
+evalContinuation initState ee cm = case (_cmProof cm) of
+  Nothing ->
+    interpret initState (setStep Nothing) (Left Nothing)
+  Just p -> do
+    etpe <- (_spvVerifyContinuation . _eeSPVSupport $ ee) p
+    pe <- throwEither . over _Left (userError . show) $ etpe
+    interpret initState (setStep (_peYield pe)) (Left $ Just pe)
+  where
+    setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
 
 setupEvalEnv
   :: PactDbEnv e
@@ -162,7 +173,7 @@ evalTerms terms = do
         txid <- evalBeginTx def
         rs <- case terms of
           Right ts -> mapM eval ts
-          Left pc -> (:[]) <$> resumePact def pc
+          Left pe -> (:[]) <$> resumePact def pe
         logs <- evalCommitTx def
         return (rs,logs,txid)
 {-# INLINE evalTerms #-}

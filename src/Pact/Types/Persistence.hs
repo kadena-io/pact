@@ -31,9 +31,7 @@ module Pact.Types.Persistence
    PersistDirect(..),toPersistDirect,fromPersistDirect,
    ModuleData(..),mdModule,mdRefMap,
    PersistModuleData,
-   ExecutionMode(..),
-   PactContinuation(..),
-   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,peContinuation,
+   ExecutionMode(..)
    ) where
 
 import Control.Applicative ((<|>))
@@ -45,14 +43,17 @@ import Data.Default (Default)
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
+import Data.Text (Text, pack)
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
-import Pact.Types.Lang
+import Pact.Types.Continuation
+import Pact.Types.Exp
 import Pact.Types.PactValue
 import Pact.Types.Pretty
-import Pact.Types.Util (AsString(..))
+import Pact.Types.Term
+import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
 
 
 data PersistDirect =
@@ -113,42 +114,9 @@ instance FromJSON (Ref' PersistDirect) where
     withObject "Direct" (\o -> Direct <$> o .: "direct") v
 
 
-data PactContinuation = PactContinuation
-  { _pcDef :: Name
-  , _pcArgs :: [PactValue]
-  } deriving (Eq,Show,Generic)
-
-instance NFData PactContinuation
-instance ToJSON PactContinuation where toJSON = lensyToJSON 3
-instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
-
-
--- | Result of evaluation of a 'defpact'.
-data PactExec = PactExec
-  { -- | Count of steps in pact (discovered when code is executed)
-    _peStepCount :: Int
-    -- | Yield value if invoked
-  , _peYield :: !(Maybe (ObjectMap PactValue))
-    -- | Whether step was executed (in private cases, it can be skipped)
-  , _peExecuted :: Bool
-    -- | Step that was executed or skipped
-  , _peStep :: Int
-    -- | Pact id. Should be unique for a given invocation for entire network.
-  , _pePactId :: PactId
-    -- | Strict (in arguments) application of pact, for future step invocations.
-  , _peContinuation :: PactContinuation
-  } deriving (Eq,Show,Generic)
-makeLenses ''PactExec
-instance NFData PactExec
-instance ToJSON PactExec where toJSON = lensyToJSON 3
-instance FromJSON PactExec where parseJSON = lensyParseJSON 3
-instance Pretty PactExec where pretty = viaShow
-
-
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty,Generic,NFData)
-
 
 -- | Specify key and value types for database domains.
 data Domain k v where

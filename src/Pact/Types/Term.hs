@@ -18,6 +18,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 -- |
 -- Module      :  Pact.Types.Term
@@ -54,6 +55,7 @@ module Pact.Types.Term
    ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
    Governance(..),
    ModuleName(..), mnName, mnNamespace,
+   ModuleHash(..), mhHash,
    Name(..),parseName,
    ConstVal(..),constTerm,
    Use(..),
@@ -84,7 +86,7 @@ import Bound
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.DeepSeq
-import Control.Lens (makeLenses,makePrisms, (<&>))
+import Control.Lens (makeLenses,makePrisms)
 import Control.Monad
 import qualified Data.Aeson as A
 #if MIN_VERSION_aeson(1,4,3)
@@ -406,6 +408,9 @@ data BindPair n = BindPair
 toBindPairs :: BindPair n -> (Arg n,n)
 toBindPairs (BindPair a v) = (a,v)
 
+instance Pretty n => Pretty (BindPair n) where
+  pretty (BindPair arg body) = pretty arg <+> pretty body
+
 instance NFData n => NFData (BindPair n)
 
 instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
@@ -509,7 +514,7 @@ instance Ord Name where
 
 data Use = Use
   { _uModuleName :: !ModuleName
-  , _uModuleHash :: !(Maybe Hash)
+  , _uModuleHash :: !(Maybe ModuleHash)
   , _uInfo :: !Info
   } deriving (Eq, Show, Generic)
 
@@ -566,14 +571,19 @@ instance FromJSON g => FromJSON (Governance g) where
     Governance <$> (Left <$> o .: "keyset" <|>
                     Right <$> o .: "capability")
 
+-- | Newtype wrapper differentiating 'Hash'es from module hashes
+--
+newtype ModuleHash = ModuleHash { _mhHash :: Hash }
+  deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText)
+  deriving newtype (NFData)
 
 data Module g = Module
   { _mName :: !ModuleName
   , _mGovernance :: !(Governance g)
   , _mMeta :: !Meta
   , _mCode :: !Code
-  , _mHash :: !Hash
-  , _mBlessed :: !(HS.HashSet Hash)
+  , _mHash :: !ModuleHash
+  , _mBlessed :: !(HS.HashSet ModuleHash)
   , _mInterfaces :: [ModuleName]
   , _mImports :: [Use]
   } deriving (Eq,Functor,Foldable,Traversable,Show,Generic)
@@ -896,7 +906,7 @@ data Term n =
     TTable {
       _tTableName :: !TableName
     , _tModule :: ModuleName
-    , _tHash :: !Hash
+    , _tHash :: !ModuleHash
     , _tTableType :: !(Type (Term n))
     , _tMeta :: !Meta
     , _tInfo :: !Info
@@ -950,11 +960,11 @@ instance Pretty n => Pretty (Term n) where
     TVar n _ -> pretty n
     TBinding pairs body BindLet _i -> parensSep
       [ "let"
-      , parensSep $ pairs <&> \(BindPair arg body') -> pretty arg <+> pretty body'
+      , parensSep $ fmap pretty pairs
       , pretty $ unscope body
       ]
     TBinding pairs body (BindSchema _) _i -> parensSep
-      [ commaBraces $ pairs <&> \(BindPair arg body') -> pretty arg <+> pretty body'
+      [ commaBraces $ fmap pretty pairs
       , pretty $ unscope body
       ]
     TObject o _ -> pretty o
@@ -1209,6 +1219,7 @@ makePrisms ''DefType
 makeLenses ''Object
 makeLenses ''BindPair
 makeLenses ''Step
+makeLenses ''ModuleHash
 
 deriveEq1 ''Term
 deriveEq1 ''BindPair
@@ -1245,7 +1256,7 @@ _roundtripJSON | r == (Success tmod) = show r
     v = toJSON tmod
     tmod = TModule
            (MDModule (Module "foo" (Governance (Right (tStr "hi")))
-                      def "" pactInitialHash HS.empty [] []))
+                      def "" (ModuleHash pactInitialHash) HS.empty [] []))
            (abstract (const (Just ()))
             (toTList TyAny def
              [tlet1]))

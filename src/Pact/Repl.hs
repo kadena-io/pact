@@ -44,10 +44,17 @@ module Pact.Repl
   , replLookupModule
   ) where
 
-import Control.Applicative
+import Prelude hiding (exp)
+
+import GHC.Word (Word8)
+import System.IO
+import System.FilePath
+
+import Control.Concurrent
 import Control.Lens hiding (op)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
+
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
@@ -57,16 +64,12 @@ import Data.Default
 import Data.List
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import Prelude hiding (exp)
-import Text.Trifecta as TF hiding (line,err,try,newline)
-import qualified Data.Text as Text
-import Data.Text.Encoding (encodeUtf8)
-import GHC.Word (Word8)
-import System.IO
-import Text.Trifecta.Delta
-import Control.Concurrent
 import Data.Monoid (appEndo)
-import System.FilePath
+import Data.Text (Text, pack, unpack)
+import Data.Text.Encoding (encodeUtf8)
+
+import Text.Trifecta as TF hiding (line,err,try,newline)
+import Text.Trifecta.Delta
 
 import Pact.Compile
 import Pact.Parse
@@ -76,6 +79,7 @@ import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl.Lib
 import Pact.Types.Logger
+import Pact.Types.SPV
 import Pact.Repl.Types
 import Pact.Gas
 
@@ -107,18 +111,22 @@ initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
   return $ EvalEnv (RefStore nativeDefs) def Null Transactional
-    def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (SPVSupport $ spv mv) def
+    def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (spvs mv) def
+  where
+    spvs mv = set spvSupport (spv mv) noSPVSupport
 
-spv :: MVar (LibState) -> Text -> Object Name -> IO (Either Text (Object Name))
-spv mv ty pay = readMVar mv >>= \LibState{..} -> case M.lookup (SPVMockKey (ty,pay)) _rlsMockSPV of
-  Nothing -> return $ Left $ "SPV verification failure"
-  Just o -> return $ Right o
+spv :: MVar LibState -> Text -> Object Name -> IO (Either Text (Object Name))
+spv mv ty pay = go <$> readMVar mv
+  where
+    go st = case M.lookup (SPVMockKey (ty, pay)) (_rlsMockSPV st) of
+      Nothing -> Left "SPV verification failure"
+      Just o -> Right o
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a
 
 toUTF8Bytes :: String -> [Word8]
-toUTF8Bytes = BS.unpack . encodeUtf8 . Text.pack
+toUTF8Bytes = BS.unpack . encodeUtf8 . pack
 
 utf8BytesLength :: String -> Int
 utf8BytesLength = length . toUTF8Bytes
@@ -236,8 +244,8 @@ doOut ei mode a = case mode of
     plainOut = outStrLn HOut $ show $ pretty a
     lineOut = outStrLn HErr $ renderInfo ei ++ ":Trace: " ++
       case a of
-        TLiteral (LString t) _ -> Text.unpack t
-        _ -> show $ pretty a
+        TLiteral (LString t) _ -> unpack t
+        _ -> renderCompactString a
 
 renderErr :: PactError -> Repl String
 renderErr a
