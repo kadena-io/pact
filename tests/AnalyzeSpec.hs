@@ -1363,6 +1363,8 @@ spec = describe "analyze" $ do
           , testPred = \case
             Just (TestCheckFailure (CheckFailure _ TypecheckFailure{}))
               -> pure ()
+            Just (VerificationFailure (ModuleCheckFailure (CheckFailure _ TypecheckFailure{})))
+              -> pure ()
             Nothing
               -> HUnit.assertFailure "Unexpectedly passed"
             Just otherFailure
