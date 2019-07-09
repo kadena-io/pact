@@ -61,14 +61,14 @@ import Pact.Types.Util
 
 data ModuleState = ModuleState
   { _msName :: ModuleName
-  , _msHash :: Hash
-  , _msBlessed :: [Hash]
+  , _msHash :: ModuleHash
+  , _msBlessed :: [ModuleHash]
   , _msImplements :: [ModuleName]
   , _msImports :: [Use]
   }
 makeLenses ''ModuleState
 
-initModuleState :: ModuleName -> Hash -> ModuleState
+initModuleState :: ModuleName -> ModuleHash -> ModuleState
 initModuleState n h = ModuleState n h def def def
 
 data CompileState = CompileState
@@ -355,6 +355,12 @@ data ModelAllowed
 
 data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
 
+modelOnly :: Compile Meta
+modelOnly = do
+  symbol "@model"
+  (ListExp props _ _i, _) <- list' Brackets
+  pure $ Meta Nothing props
+
 meta :: ModelAllowed -> Compile Meta
 meta modelAllowed =
   -- hiding labels/errors here because otherwise they hang around for all module errors
@@ -411,7 +417,7 @@ defpact = do
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
   case last body of -- note: `last` is safe, since bodyForm uses `some`
-    TStep (Step _ _ (Just _) _) _ -> syntaxError "rollbacks aren't allowed on the last \
+    TStep (Step _ _ (Just _) _) _ _ -> syntaxError "rollbacks aren't allowed on the last \
       \step (the last step can never roll back -- once it's executed the pact \
       \is complete)"
     _ -> pure ()
@@ -435,7 +441,7 @@ moduleForm = do
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       modName = ModuleName modName' Nothing
-      modHash = pactHash $ encodeUtf8 $ _unCode code
+      modHash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
     (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
@@ -459,7 +465,7 @@ interface = do
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       iname = ModuleName iname' Nothing
-      ihash = pactHash $ encodeUtf8 (_unCode code)
+      ihash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
             bodyForm $ specialForm $ \r -> case r of
               RDefun -> return emptyDef
@@ -484,18 +490,20 @@ emptyDef = do
 
 step :: Compile (Term Name)
 step = do
+  m <- option (Meta Nothing []) modelOnly
   cont <- try (Step <$> (Just <$> valueLevel) <*> valueLevel) <|>
           (Step Nothing <$> valueLevel)
   i <- contextInfo
-  pure $ TStep (cont Nothing i) i
+  pure $ TStep (cont Nothing i) m i
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
   i <- contextInfo
+  m <- option (Meta Nothing []) modelOnly
   s <- try (Step <$> (Just <$> valueLevel) <*> valueLevel <*>
             (Just <$> valueLevel) <*> pure i)
        <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)
-  return $ TStep s i
+  return $ TStep s m i
 
 
 
@@ -544,9 +552,9 @@ useForm = do
   return $ TUse u i
 
 
-hash' :: Compile Hash
+hash' :: Compile ModuleHash
 hash' = str >>= \s -> case fromText' s of
-  Right h -> return h
+  Right h -> return (ModuleHash h)
   Left e -> syntaxError $ "bad hash: " ++ e
 
 typedAtom :: Compile (AtomExp Info,Type (Term Name))
@@ -627,7 +635,7 @@ _compile = _compileWith topLevel
 -- | run a string as though you were in a module (test deftable, etc)
 _compileStrInModule :: String -> IO [Term Name]
 _compileStrInModule = fmap concat . _compileStr' moduleLevel
-  (set (psUser . csModule) (Just (initModuleState "mymodule" (pactHash mempty))))
+  (set (psUser . csModule) (Just (initModuleState "mymodule" (ModuleHash $ pactHash mempty))))
 
 _compileStr :: String -> IO [Term Name]
 _compileStr = _compileStr' topLevel id

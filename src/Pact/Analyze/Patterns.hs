@@ -277,4 +277,4 @@ pattern AST_List :: forall a. a -> [AST a] -> AST a
 pattern AST_List node elems <- List node elems
 
 pattern AST_Step :: a -> Maybe (AST a) -> AST a -> Maybe (AST a) -> Maybe (YieldResume a) -> AST a
-pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback yr
+pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback yr _model

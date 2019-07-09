@@ -17,7 +17,7 @@ import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
 import           Data.Either                  (isLeft, isRight)
-import           Data.Foldable                (find, for_)
+import           Data.Foldable                (asum, find, for_)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
@@ -26,6 +26,7 @@ import           Data.SBV                     (isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
+import           GHC.Stack                    (HasCallStack, withFrozenCallStack)
 import           NeatInterpolation            (text)
 import           Prelude                      hiding (read)
 import           Test.Hspec                   (Spec, describe,
@@ -114,7 +115,8 @@ renderTestFailure = \case
     pure $ T.unpack (describeCheckFailure cf) ++ svgInfo
   NoTestModule -> pure "example is missing a module named 'test'"
   ReplError err -> pure $ "ReplError: " ++ err
-  VerificationFailure vf -> pure $ T.unpack $ describeVerificationFailure vf
+  VerificationFailure vf ->
+    pure $ T.unpack $ T.unlines $ renderVerifiedModule $ Left vf
 
 --
 -- TODO: use ExceptT
@@ -138,13 +140,18 @@ runVerification code = do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
-        Right (ModuleChecks propResults invariantResults _) -> pure $
-          case findOf (traverse . traverse) isLeft propResults of
-            Just (Left failure) -> Just $ TestCheckFailure failure
-            _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
+        Right (ModuleChecks propResults stepResults invariantResults _) ->
+          pure $ asum
+            [ case findOf (traverse . traverse) isLeft propResults of
+                Just (Left failure) -> Just $ TestCheckFailure failure
+                _ -> Nothing
+            , case findOf (traverse . traverse) isLeft stepResults of
+                Just (Left failure) -> Just $ TestCheckFailure failure
+                _ -> Nothing
+            , case findOf (traverse . traverse . traverse) isLeft invariantResults of
               Just (Left failure) -> Just $ TestCheckFailure failure
-              Just (Right _)      -> error "impossible: result of isLeft"
-              Nothing             -> Nothing
+              _ -> Nothing
+            ]
 
 runCheck :: CheckableType -> Text -> Check -> IO (Maybe TestFailure)
 runCheck checkType code check = do
@@ -158,38 +165,64 @@ runCheck checkType code check = do
         Right (Left cf) -> Just $ TestCheckFailure cf
         Right (Right _) -> Nothing
 
-handlePositiveTestResult :: Maybe TestFailure -> IO ()
-handlePositiveTestResult = \case
+-- | 'TestEnv' represents the environment a test runs in. Used with
+-- 'expectTest'.
+data TestEnv = TestEnv
+  { testCode  :: Text
+  , testCheck :: Check
+  , testName  :: String
+  , testPred  :: Maybe TestFailure -> IO ()
+  }
+
+-- | A default 'TestEnv', which checks for success. Note that this default
+-- environment lacks 'testCode'.
+testEnv :: TestEnv
+testEnv = TestEnv (error "no tested code") (Valid Success') "unnamed" $ \case
+  Nothing
+    -> pure ()
+  Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
+    -> pendingWith msg
+  Just err
+    -> HUnit.assertFailure $ "Verification failure: " ++ show err
+
+expectTest :: TestEnv -> Spec
+expectTest (TestEnv code check name p) = do
+  res <- runIO $ runCheck CheckDefun code check
+  it name $ p res
+
+handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> IO ()
+handlePositiveTestResult = withFrozenCallStack $ \case
   Nothing -> pure ()
   Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
     -> pendingWith msg
   Just tf -> HUnit.assertFailure =<< renderTestFailure tf
 
-expectVerified :: Text -> Spec
-expectVerified = expectVerified' ""
+expectVerified :: HasCallStack => Text -> Spec
+expectVerified = withFrozenCallStack $ expectVerified' ""
 
-expectVerified' :: Text -> Text -> Spec
-expectVerified' model code = do
+expectVerified' :: HasCallStack => Text -> Text -> Spec
+expectVerified' model code = withFrozenCallStack $ do
   res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ handlePositiveTestResult res
 
-expectFalsified :: Text -> Spec
-expectFalsified = expectFalsified' ""
+expectFalsified :: HasCallStack => Text -> Spec
+expectFalsified = withFrozenCallStack $ expectFalsified' ""
 
-expectFalsified' :: Text -> Text -> Spec
-expectFalsified' model code = do
+expectFalsified' :: HasCallStack => Text -> Text -> Spec
+expectFalsified' model code = withFrozenCallStack $ do
   res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
-expectPass :: Text -> Check -> Spec
-expectPass code check = do
-  res <- runIO $ runCheck CheckDefun (wrap code "") check
-  it (show check) $ handlePositiveTestResult res
+expectPass :: HasCallStack => Text -> Check -> Spec
+expectPass code check = withFrozenCallStack $ expectTest
+  testEnv { testCode = wrap code "", testCheck = check }
 
-expectFail :: Text -> Check -> Spec
-expectFail code check = do
-  res <- runIO $ runCheck CheckDefun (wrap code "") check
-  it (show check) $ res `shouldSatisfy` isJust
+expectFail :: HasCallStack => Text -> Check -> Spec
+expectFail code check = withFrozenCallStack $ expectTest
+  testEnv { testCode  = wrap code ""
+          , testCheck = check
+          , testPred  = (`shouldSatisfy` isJust)
+          }
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
 intConserves (TableName tn) (ColumnName cn)
@@ -1342,6 +1375,23 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Success' .=> Inj (RowExists "tokens" "stu" After)
 
+  let expectFailsTypechecking code =
+        expectTest $ testEnv
+          { testCode = wrap code ""
+          , testName = "fails typechecking"
+          , testCheck = Satisfiable Success'
+          , testPred = \case
+            Just (TestCheckFailure (CheckFailure _ TypecheckFailure{}))
+              -> pure ()
+            Just (VerificationFailure (ModuleCheckFailure (CheckFailure _ TypecheckFailure{})))
+              -> pure ()
+            Nothing
+              -> HUnit.assertFailure "Unexpectedly passed"
+            Just otherFailure
+              -> HUnit.assertFailure $ "Wrong verification failure: " <>
+                show otherFailure
+          }
+
   describe "table-written.insert.partial" $ do
     let code =
           [text|
@@ -1351,7 +1401,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (insert tokens "stu" {}))
           |]
-    expectFail code $ Satisfiable (Inj Success)
+    expectFailsTypechecking code
 
   describe "table-written.update" $ do
     let code =
@@ -1396,7 +1446,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (write tokens "stu" {}))
           |]
-    expectFail code $ Satisfiable (Inj Success)
+    expectFailsTypechecking code
 
   describe "table-written.conditional" $ do
     let code =
@@ -1542,7 +1592,7 @@ spec = describe "analyze" $ do
         case results of
           Left failure -> it "unexpectedly failed verification" $
             expectationFailure $ show failure
-          Right (ModuleChecks propResults invariantResults _) -> do
+          Right (ModuleChecks propResults _stepResults invariantResults _) -> do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
 
@@ -2709,8 +2759,10 @@ spec = describe "analyze" $ do
           | otherwise
           = False
 
-        expectTrace :: CheckableType -> Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
-        expectTrace checkType code prop tests = do
+        expectTrace
+          :: HasCallStack
+          => CheckableType -> Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
+        expectTrace checkType code prop tests = withFrozenCallStack $ do
           res <- runIO $ runCheck checkType (wrap code "") $ Valid prop
           it "produces the correct trace" $
             case res of
@@ -3280,144 +3332,153 @@ spec = describe "analyze" $ do
         |]
 
   describe "checking pacts" $ do
-    expectVerified [text|
-      (defpact payment (payer payer-entity payee
-                        payee-entity amount)
-        @model
-          [ (property (= (column-delta accounts 'balance) 0))
-          ]
-        (step-with-rollback payer-entity
-          (debit payer amount)
-          (credit payer amount))
-        (step payee-entity
-          (credit payee amount)))
+    describe "working payment (step checking)" $
+      expectVerified [text|
+        (defpact payment (payer payer-entity payee
+                          payee-entity amount:integer)
+          @model
+            [ (property (= (column-delta accounts 'balance) 0))
+            ]
+          (step-with-rollback
+            @model [ (property (= (column-delta accounts 'balance) (- amount))) ]
+            payer-entity
+            (debit payer amount)
+            (credit payer amount))
+          (step
+            @model [ (property (= (column-delta accounts 'balance) amount)) ]
+            payee-entity
+            (credit payee amount)))
 
-      (defun debit (acct amount)
-        (let ((bal (at 'balance (read accounts acct))))
-          (enforce (> amount 0)    "Non-positive amount")
-          (enforce (>= bal amount) "Insufficient Funds")
-          (update accounts acct { "balance": (- bal amount) })))
+        (defun debit (acct amount)
+          (let ((bal (at 'balance (read accounts acct))))
+            (enforce (> amount 0)    "Non-positive amount")
+            (enforce (>= bal amount) "Insufficient Funds")
+            (update accounts acct { "balance": (- bal amount) })))
 
-      (defun credit (acct amount)
-        (let ((bal (at 'balance (read accounts acct))))
-          (enforce (> amount 0)    "Non-positive amount")
-          (update accounts acct { "balance": (+ bal amount) })))
-      |]
+        (defun credit (acct amount)
+          (let ((bal (at 'balance (read accounts acct))))
+            (enforce (> amount 0)    "Non-positive amount")
+            (update accounts acct { "balance": (+ bal amount) })))
+        |]
 
-    -- TODO: check trace
-    expectFalsified [text|
-      (defpact payment (payer:string payer-entity:string payee:string
-                        payee-entity:string amount:integer
-                        payer-bal:integer payee-bal:integer)
-        @model
-          [ (property
-              (when
-                ; assumptions
-                (and (>= payer-bal amount)
-                (and (= payer-bal (at 'balance (read accounts payer 'before)))
-                (and (= payee-bal (at 'balance (read accounts payee 'before)))
-                     (!= payer payee))))
+    describe "failing payment (step checking)" $
+      -- TODO: check trace
+      expectFalsified [text|
+        (defpact payment (payer:string payer-entity:string payee:string
+                          payee-entity:string amount:integer
+                          payer-bal:integer payee-bal:integer)
+          @model
+            [ (property
+                (when
+                  ; assumptions
+                  (and (>= payer-bal amount)
+                  (and (= payer-bal (at 'balance (read accounts payer 'before)))
+                  (and (= payee-bal (at 'balance (read accounts payee 'before)))
+                       (!= payer payee))))
 
-                ; conclusion
-                (= (column-delta accounts 'balance) 0)))
-          ]
-        (step-with-rollback payer-entity
-          (update-bal payer (- payer-bal amount) "step 1")
-          (update-bal payer payer-bal "rollback 1"))
-        (step payee-entity
-          (update-bal payee (+ payee-bal amount) "step 2")))
+                  ; conclusion
+                  (= (column-delta accounts 'balance) 0)))
+            ]
+          (step-with-rollback payer-entity
+            @model [ (property (= (column-delta accounts 'balance) (- amount))) ]
+            (update-bal payer (- payer-bal amount) "step 1")
+            (update-bal payer payer-bal "rollback 1"))
+          (step payee-entity
+            @model [ (property (= (column-delta accounts 'balance) amount)) ]
+            (update-bal payee (+ payee-bal amount) "step 2")))
 
-      (defun update-bal (acct balance msg:string)
-        (enforce (>= balance 0)    "Non-positive balance")
-        (update accounts acct { "balance": balance }))
-      |]
+        (defun update-bal (acct balance msg:string)
+          (enforce (>= balance 0)    "Non-positive balance")
+          (update accounts acct { "balance": balance }))
+        |]
 
-    -- single step pact:
-    expectVerified [text|
-          (defpact payment ()
-            @model
-              [ (property (= (column-delta accounts 'balance) 0))
-              ]
-            (step (doit 0)))
+    describe "single-step pact" $ do
+      expectVerified [text|
+            (defpact payment ()
+              @model
+                [ (property (= (column-delta accounts 'balance) 0))
+                ]
+              (step (doit 0)))
 
-          (defun doit (amt:integer)
-            (let ((acct "joel"))
-              (with-read accounts acct { "balance" := bal }
-                (update accounts acct { "balance": (+ bal amt) }))))
-          |]
+            (defun doit (amt:integer)
+              (let ((acct "joel"))
+                (with-read accounts acct { "balance" := bal }
+                  (update accounts acct { "balance": (+ bal amt) }))))
+            |]
 
-    -- many step pact:
-    expectVerified [text|
-      (defpact payment ()
-        @model
-          [ (property (= (column-delta accounts 'balance) 0))
-          ]
-        (step (doit 0))
-        (step (doit 0))
-        (step (doit 0))
-        (step (doit 0))
-        (step (doit 0))
-        (step (doit 0)))
+      expectVerified [text|
+        (defpact payment ()
+          @model [ (property (= (column-delta accounts 'balance) 0)) ]
+          (step "foo"))
+        |]
 
-      (defun doit (amt:integer)
-        (let ((acct "joel"))
-          (with-read accounts acct { "balance" := bal }
-            (update accounts acct { "balance": (+ bal amt) }))))
-      |]
+    describe "many-step pact" $
+      expectVerified [text|
+        (defpact payment ()
+          @model
+            [ (property (= (column-delta accounts 'balance) 0))
+            ]
+          (step (doit 0))
+          (step (doit 0))
+          (step (doit 0))
+          (step (doit 0))
+          (step (doit 0))
+          (step (doit 0)))
 
-    -- nontrivial many step pact:
-    expectVerified [text|
-      (defpact payment ()
-        @model
-          [ (property (= (column-delta accounts 'balance) 0))
-          ]
-        (step-with-rollback
-          (doit (- 1))
-          (doit 1))
-        (step-with-rollback
-          (doit (- 2))
-          (doit 2))
-        (step (doit 0))
-        (step-with-rollback
-          (doit (- 3))
-          (doit 3))
-        (step (doit 0))
-        (step-with-rollback
-          (doit (- 4))
-          (doit 4))
-        (step (doit 0))
-        (step-with-rollback
-          (doit (- 5))
-          (doit 5))
-        (step (doit 15)))
+        (defun doit (amt:integer)
+          (let ((acct "joel"))
+            (with-read accounts acct { "balance" := bal }
+              (update accounts acct { "balance": (+ bal amt) }))))
+        |]
 
-      (defun doit (amt:integer)
-        (let ((acct "joel"))
-          (with-read accounts acct { "balance" := bal }
-            (update accounts acct { "balance": (+ bal amt) }))))
-      |]
+    describe "nontrivial many step pact" $
+      expectVerified [text|
+        (defpact payment ()
+          @model
+            [ (property (= (column-delta accounts 'balance) 0))
+            ]
+          (step-with-rollback
+            (doit (- 1))
+            (doit 1))
+          (step-with-rollback
+            (doit (- 2))
+            (doit 2))
+          (step (doit 0))
+          (step-with-rollback
+            (doit (- 3))
+            (doit 3))
+          (step (doit 0))
+          (step-with-rollback
+            (doit (- 4))
+            (doit 4))
+          (step (doit 0))
+          (step-with-rollback
+            (doit (- 5))
+            (doit 5))
+          (step (doit 15)))
 
-    expectVerified [text|
-      (defpact payment ()
-        @model [ (property (= (column-delta accounts 'balance) 0)) ]
-        (step "foo"))
-      |]
+        (defun doit (amt:integer)
+          (let ((acct "joel"))
+            (with-read accounts acct { "balance" := bal }
+              (update accounts acct { "balance": (+ bal amt) }))))
+        |]
 
-    expectVerified [text|
-      (defschema schema-pact-id pact-id:string)
+    describe "yield / resume" $
+      expectVerified [text|
+        (defschema schema-pact-id pact-id:string)
 
-      (defpact payment (acct amount)
-        @model [ (property (= (column-delta accounts 'balance) 0)) ]
-        (step
-          (let ((pid:object{schema-pact-id} { 'pact-id: (pact-id) }))
-            (yield pid)))
-        (step
-          (resume { 'pact-id:= yielded-id }
-            (if (= yielded-id (pact-id))
-              "noop"
-              (with-default-read accounts acct { 'balance: 0 } { 'balance := bal }
-                (write accounts acct { 'balance: (+ bal amount) }))))))
-      |]
+        (defpact payment (acct amount)
+          @model [ (property (= (column-delta accounts 'balance) 0)) ]
+          (step
+            (let ((pid:object{schema-pact-id} { 'pact-id: (pact-id) }))
+              (yield pid)))
+          (step
+            (resume { 'pact-id:= yielded-id }
+              (if (= yielded-id (pact-id))
+                "noop"
+                (with-default-read accounts acct { 'balance: 0 } { 'balance := bal }
+                  (write accounts acct { 'balance: (+ bal amount) }))))))
+        |]
 
   describe "with-default-read" $ do
     expectVerified [text|

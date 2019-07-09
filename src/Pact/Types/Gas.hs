@@ -13,23 +13,35 @@
 -- Gas (compute and space cost calculation) types.
 --
 module Pact.Types.Gas
-  ( Gas(..),GasPrice(..),
-    GasEnv(..),geGasLimit,geGasPrice,geGasModel,
-    ReadValue(..),GasModel(..),GasArgs(..),GasLimit(..)
+  ( -- * types
+    Gas(..)
+  , GasPrice(..)
+  , GasEnv(..)
+  , ReadValue(..)
+  , GasModel(..)
+  , GasArgs(..)
+  , GasLimit(..)
+    -- * optics
+  , geGasLimit
+  , geGasPrice
+  , geGasModel
   ) where
 
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses,Wrapped)
+
 import Data.Aeson
+import Data.Text (Text, unpack)
 import Data.Aeson.Types (Parser)
-import qualified Data.Text as T
-import GHC.Generics
 import Data.Serialize
 
-import Pact.Types.Lang
+import GHC.Generics
+
+import Pact.Types.Info
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.PactValue
+import Pact.Types.Term
 import Pact.Parse
 
 
@@ -60,14 +72,13 @@ data ReadValue
   | ReadKey RowKey
   | ReadTxId
 
-
 data GasArgs
   = GPostRead ReadValue
   | GSelect (Maybe [(Info,FieldKey)]) (Term Ref) (Term Name)
   | GSortFieldLookup Int
   | GUnreduced [Term Ref]
   | GWrite WriteType (Term Name) (Term Name)
-  | GUse ModuleName (Maybe Hash)
+  | GUse ModuleName (Maybe ModuleHash)
   | GModuleDecl (Module (Term Name))
   | GInterfaceDecl Interface
   | GModuleMember (ModuleDef (Term Name))
@@ -94,7 +105,7 @@ data GasModel = GasModel
   }
 
 instance Show GasModel where
-  show m = "[GasModel: " <> T.unpack (gasModelName m) <> "]"
+  show m = "[GasModel: " <> unpack (gasModelName m) <> "]"
 
 instance Pretty GasModel where
   pretty m = viaShow m

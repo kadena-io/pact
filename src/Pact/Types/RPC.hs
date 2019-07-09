@@ -19,21 +19,23 @@
 --
 
 module Pact.Types.RPC
-  where
+  ( -- * Types
+    PactRPC(..)
+  , ExecMsg(..)
+  , ContMsg(..)
+  ) where
 
 import Control.Applicative
 import Control.DeepSeq
 
 import Data.Aeson as A
 
-
 import GHC.Generics
-import Prelude
 
-import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
-import Data.ByteString (ByteString)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Pact.Types.Runtime
+import Pact.Types.SPV
+
 
 data PactRPC c =
     Exec (ExecMsg c) |
@@ -67,12 +69,6 @@ instance FromJSON c => FromJSON (ExecMsg c) where
 
 instance ToJSON c => ToJSON (ExecMsg c) where
     toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
-
-newtype ContProof = ContProof ByteString
-  deriving (Eq,Show,Generic)
-instance NFData ContProof
-instance ToJSON ContProof where toJSON (ContProof bs) = String (decodeUtf8 bs)
-instance FromJSON ContProof where parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
 
 data ContMsg = ContMsg
   { _cmPactId :: !PactId

@@ -295,16 +295,24 @@ withAstContext ast = local (envInfo .~ astToInfo ast)
 withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
 withNestedRecoverability r = local $ teRecoverability <>~ r
 
--- | Enter a pact step or rollback
-withNewStep :: ScopeType -> TranslateM a -> TranslateM a
-withNewStep scopeType act = local (teScopesEntered +~ 1) $ do
+-- | Enter a pact step or rollback.
+--
+-- This differs from 'withNewScope' by not tracing a return value from the
+-- action (since steps don't return anything). When we're translating a step in
+-- isolation, for a single step analysis, we bind variables that come from the
+-- enclosing @defpact@, otherwise (when doing a whole-pact analysis), the
+-- pact-level variables will already be in scope. The 'ScopeType' should be
+-- 'StepScope' or 'RollbackScope'.
+withNewStep :: ScopeType -> [Located Binding] -> TranslateM a -> TranslateM a
+withNewStep scopeType bindings act = local (teScopesEntered +~ 1) $ do
   tid <- genTagId
   depth <- view teScopesEntered
-  emit $ TracePushScope depth scopeType [] -- no bindings
+  emit $ TracePushScope depth scopeType bindings
   res <- act
   emit $ TracePopScope depth scopeType tid $ EType SStr
   pure res
 
+-- | Enter a new scope, binding variables.
 withNewScope
   :: ScopeType
   -> [Located Binding]
@@ -683,7 +691,7 @@ translatePact nodes = do
       case mRollback of
         Nothing
           -> pure (rightV, cancel : cancels, Nothing : rollbacks)
-        Just rollbackA -> withNewStep RollbackScope $ do
+        Just rollbackA -> withNewStep RollbackScope [] $ do
           rollback <- (,)
             <$> startNewSubpath
             <*> translateNode rollbackA
@@ -722,7 +730,7 @@ translatePact nodes = do
 translateStep
   :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
 translateStep firstStep = \case
-  AST_Step _node entity exec rollback _yr -> withNewStep StepScope $ do
+  AST_Step _node entity exec rollback _yr -> withNewStep StepScope [] $ do
     p <- if firstStep then use tsCurrentPath else startNewSubpath
     mEntity <- for entity $ \tm -> do
       Some SStr entity' <- translateNode tm
@@ -1583,6 +1591,9 @@ runTranslation modName funName info caps pactArgs body checkType = do
               CheckDefpact ->
                 withNewScope (PactScope modName funName) bindingTs $
                   Some SStr . Pact <$> translatePact body
+              CheckPactStep ->
+                withNewStep StepScope bindingTs $
+                  translateBody body
               CheckDefconst
                 -> error "invariant violation: this cannot be a constant"
             _ <- extendPath -- form final edge for any remaining events
@@ -1617,7 +1628,8 @@ translateNodeNoGraph node =
       translateState = TranslateState nextTagId 0 nextGuard graph0 vertex0
         nextVertex Map.empty mempty path0 Map.empty [] []
 
-      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
+      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0
+        (pure 0) (pure 0)
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $

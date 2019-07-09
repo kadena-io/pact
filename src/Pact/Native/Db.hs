@@ -29,6 +29,7 @@ import Data.Default
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 import qualified Data.Vector as V
+import Data.Text (pack)
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -368,7 +369,7 @@ guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModule $
   enforceBlessedHashes i _tModule _tHash
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
 
-enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
+enforceBlessedHashes :: FunApp -> ModuleName -> ModuleHash -> Eval e ()
 enforceBlessedHashes i mn h = getModule i mn >>= \m -> case (_mdModule m) of
         MDModule Module{..}
           | h == _mHash -> return () -- current version ok

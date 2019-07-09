@@ -2,25 +2,32 @@
 {-# LANGUAGE OverloadedStrings #-}
 module TypecheckSpec (spec) where
 
+import Prelude hiding (take)
+
 import Test.Hspec
+
+import Control.Lens
+import Control.Monad
+
+import Data.Default
+import qualified Data.HashMap.Strict as HM
+import Data.Foldable
+import Data.Text (Text, take, unpack)
+import qualified Data.Set as Set
+
 import Pact.Typechecker hiding (debug)
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Runtime
 import Pact.Types.Typecheck
-import Data.Default
-import Control.Lens
-import qualified Data.HashMap.Strict as HM
+
 import Pact.Types.Pretty
-import Control.Monad
-import Data.Foldable
-import qualified Data.Text as T
-import qualified Data.Set as Set
 
 spec :: Spec
 spec = do
   checkModule "tests/pact/caps.repl" "caps"
   checkModule "examples/cp/cp.repl" "cp"
+  checkModule "tests/pact/yield.repl" "yieldtest"
   checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
   checkFuns
 
@@ -73,11 +80,11 @@ checkFuns = describe "pact typecheck" $ do
   forM_ (HM.toList m) $ \(fn,ref) -> do
     let doTc = runIO $ runTC 0 False (typecheckTopLevel ref)
         n = asString mn <> "." <> fn
-    when (T.take 3 fn == "tc-") $
+    when (take 3 fn == "tc-") $
       doTc >>= \r -> do
       topLevelChecks n r
       customFunChecks n r
-    when (T.take 6 fn == "fails-") $
+    when (take 6 fn == "fails-") $
       doTc >>= \r -> do
         topLevelTypechecks n r
         topLevelFails n r

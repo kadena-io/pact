@@ -52,13 +52,15 @@ import Servant.Swagger
 
 import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
+import Pact.Types.ChainId
 import Pact.Types.Codec (timeCodec, encoder)
 import Pact.Types.Command
+import Pact.Types.Continuation
 import Pact.Types.Exp (Literal)
 import Pact.Types.Hash
 import Pact.Types.Info (Info)
 import Pact.Types.PactValue (PactValue)
-import Pact.Types.Persistence (PactContinuation,PactExec,TxId)
+import Pact.Types.Persistence (TxId)
 import Pact.Types.Pretty (Doc)
 import Pact.Types.Runtime (PactError,PactErrorType,FieldKey,StackFrame)
 import Pact.Types.Swagger
@@ -206,7 +208,13 @@ instance ToSchema PactError
 instance ToSchema StackFrame where
   declareNamedSchema = declareGenericString
 
+instance ToSchema ChainId
+
 instance ToSchema PactExec
+
+instance ToSchema Provenance
+
+instance ToSchema Yield
 
 instance ToSchema PactContinuation
 
@@ -225,6 +233,7 @@ instance ToSchema Name
 instance ToSchema ModuleName
 instance ToSchema NamespaceName
 instance ToSchema ModuleGuard
+instance ToSchema ModuleHash
 instance ToSchema UserGuard where
   declareNamedSchema = declareGenericString
 

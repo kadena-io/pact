@@ -254,39 +254,6 @@ applyInvariants tn aValFields addInvariants = do
 evalETerm :: ETerm -> Analyze AVal
 evalETerm tm = snd <$> evalExistential tm
 
--- TODO: pending #360
--- validateWrite
---   :: Pact.WriteType
---   -> SingTy ('TyObject schema)
---   -> Object Term schema
---   -> Analyze ()
--- validateWrite _writeType (SObjectUnsafe schema) (Object om)
---   = validateWrite' schema om where
-
---   validateWrite'
---     :: SingList schema -> HList (Column Term) schema -> Analyze ()
---   validateWrite' SNil' SNil = pure ()
---   validateWrite' _     _    = error "TODO"
-
--- validateWrite writeType objTy@(SObject schema) obj@(Object om) = do
-
---   -- For now we lump our three cases together:
---   --   1. write field not in schema
---   --   2. object and schema types don't match
---   --   3. unexpected partial write
---   let invalid = throwErrorNoLoc $ InvalidDbWrite writeType objTy obj
-
---   iforM_ om $ \field (ety, _av) ->
---     case field `Map.lookup` schema of
---       Nothing -> invalid
---       Just ety'
---         | ety /= ety' -> invalid
---         | otherwise   -> pure ()
-
---   let requiresFullWrite = writeType `elem` [Pact.Insert, Pact.Write]
-
---   when (requiresFullWrite && Map.size om /= Map.size schema) invalid
-
 readFields
   :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
   -> Analyze (S (ConcreteObj ty), Map Text AVal)
@@ -506,8 +473,6 @@ evalTerm = \case
 
   Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     obj <- withSing objTy $ evalTerm objT
-    -- TODO: pending issue #360
-    -- validateWrite writeType objTy obj
     sRk <- symRowKey <$> evalTerm rowKey
 
     thisRowExists <- use $ rowExists id tn sRk
