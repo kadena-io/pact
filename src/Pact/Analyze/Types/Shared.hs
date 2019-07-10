@@ -329,6 +329,7 @@ data Provenance
   | FromRegistry (S RegistryName)
   | FromInput    Unmunged
   | FromMetadata (S Str)
+  | FromGovernanceCap
   --
   -- TODO: in the future, probably have FromYield?
   --
@@ -445,6 +446,9 @@ fromRegistry = FromRegistry
 
 fromMetadata :: S Str -> Provenance
 fromMetadata = FromMetadata
+
+fromGovCap :: Provenance
+fromGovCap = FromGovernanceCap
 
 symRowKey :: S Str -> S RowKey
 symRowKey = coerceS

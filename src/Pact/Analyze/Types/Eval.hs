@@ -142,7 +142,7 @@ mkRegistry :: Registry
 mkRegistry = Registry $ mkFreeArray "registry"
 
 resolveGuardFromReg :: Registry -> S RegistryName -> S Guard
-resolveGuardFromReg reg sRn = (withProv $ fromRegistry sRn) $
+resolveGuardFromReg reg sRn = withProv (fromRegistry sRn) $
   readArray (_registryMap reg) (_sSbv sRn)
 
 data TxMetadata
@@ -226,7 +226,7 @@ mkAnalyzeEnv modName pactMetadata gov registry tables caps args stepChoices tags
                          -- difficult in the presence of capabilities that
                          -- perform database access.
                          --
-                         uninterpretS "cap_gov_guard"
+                         withProv fromGovCap $ uninterpret "cap_gov_guard"
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args
     stepChoices invariants' columnIds' tags info (sansProv trivialGuard)
