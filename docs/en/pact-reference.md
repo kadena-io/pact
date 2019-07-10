@@ -141,24 +141,31 @@ _type:_ [exec](#exec-payload) **or** [cont](#cont-payload) payload `required`
 The `cmd` field supports two types of JSON payloads:
 the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
 
-##### Example `cmd`
-```JSON
-// encoded with `exec` payload
-"{
-  \"payload\":{\"exec\":{\"data\":null,\"code\":\"(+ 1 2)\"}},
-  \"signers\":[{
-    \"addr\":\"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca\",
-    \"scheme\":\"ED25519\",
-    \"pubKey\":\"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca\"
-    }],
-  \"meta\":{
-    \"gasLimit\":1000,
-    \"chainId\":\"0\",
-    \"gasPrice\":1.0e-2,
-    \"sender\":\"sender00\"
-    },
-  \"nonce\":\"\\\"2019-06-20 20:56:39.509435 UTC\\\"\"
-}"
+##### Example `cmd` field
+```json
+{
+  "cmd":{
+      "payload":{
+        "exec":{
+          "data": null,
+          "code": "(+ 1 2)"
+        }
+      },
+      "signers":[{
+        "addr":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca",
+        "scheme":"ED25519",
+        "pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca"
+        }],
+      "meta":{
+        "gasLimit":1000,
+        "chainId":"0",
+        "gasPrice":1.0e-2,
+        "sender":"sender00"
+        },
+      "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\""
+    }
+}
+
 ```
 
 #### The `exec` payload {#exec-payload}
@@ -175,7 +182,7 @@ _type:_ **object** `required`
 JSON object representing the exec payload. It has the following child attributes:
 
 ```yaml
-name: "code"           # Pact code to be executed.
+name: "code"          # Pact code to be executed.
 type: string
 required: true
 ```
@@ -188,15 +195,14 @@ required: false       # This data will be injected into the scope of the
 
 ##### Example `exec` payload
 ```JSON
-// encoded `exec` payload
-"{
-  \"payload\":{
-	  \"exec\":{
-		  \"data\":null,
-		  \"code\":\"(+ 1 2)\"
-	  }
-	},
-}"
+{
+  "payload":{
+    "exec":{
+      "data":null,
+      "code":"(+ 1 2)"
+    }
+  }
+}
 ```
 
 #### The `cont` payload {#cont-payload}
@@ -213,62 +219,60 @@ JSON object representing the continuation (cont) payload. It has the following
 child attributes:
 
 ```yaml
-name: "pactId"                  # The id of the pact to be continued or
-type: string (base64url)        # rolled back. This id is equivalent to the
-required: true                  # request key (payload hash) of the command
-                                # that instantiated the pact since only one
-                                # pact instantiation is allowed per transaction.
+name: "pactId"                # The id of the pact to be continued or
+type: string (base64url)      # rolled back. This id is equivalent to the
+required: true                # request key (payload hash) of the command
+                              # that instantiated the pact since only one
+                              # pact instantiation is allowed per transaction.
 ```
 ```yaml
-name: "rollback"                # 'true' to rollback a pact, `false` otherwise.
+name: "rollback"              # 'true' to rollback a pact, `false` otherwise.
 type: boolean, required
 required: true
 ```
 ```yaml
-name: "step"                    # Step to be continued or rolled back.
-type: integer                   # Must be integer between 0 and
-required: true                  # (total # of steps - 1).
-                                # If rolling back, must be the step number of
-                                # the step that just executed.
-                                # Otherwise, must correspond to one more than
-                                # the step that just executed.
+name: "step"                  # Step to be continued or rolled back.
+type: integer                 # Must be integer between 0 and
+required: true                # (total # of steps - 1).
+                              # If rolling back, must be the step number of
+                              # the step that just executed.
+                              # Otherwise, must correspond to one more than
+                              # the step that just executed.
 ```
 ```yaml
-name: "data"                    # Arbitrary user data to accompany code.
-type: object                    # Must be `null` or any valid JSON.
-required: false                 # This data will be injected into the scope of
-                                # the pact execution.
+name: "data"                  # Arbitrary user data to accompany code.
+type: object                  # Must be `null` or any valid JSON.
+required: false               # This data will be injected into the scope of
+                              # the pact execution.
 ```
 ```yaml
-name: "proof"                   # Must be `null` or Bytestring.
-type: string (base64url)        # to the fact that the previous step has been
-required: false                 # confirmed and is recorded in the ledger.
-                                # The blockchain automatically verifies this
-                                # proof when it is supplied.
-                                # If doing cross-chain continuations, then
-                                # it MUST be present (not `null`) for each step
-                                # in order to validate `yield/resume` data for
-                                # each `yield/resume` pair.
+name: "proof"                 # Must be `null` or Bytestring.
+type: string (base64url)      # to the fact that the previous step has been
+required: false               # confirmed and is recorded in the ledger.
+                              # The blockchain automatically verifies this
+                              # proof when it is supplied.
+                              # If doing cross-chain continuations, then
+                              # it MUST be present (not `null`) for each step
+                              # in order to validate `yield/resume` data for
+                              # each `yield/resume` pair.
 ```
 
 ##### Example `cont` payload
 
 ```json
-// encoded `cont` payload
-"{
-  \"payload\":{
-    \"cont\":{
-      \"proof\":\"eyJzdWJqZWN0Ijp7ImlucHV0IjoiQUJSN0ltZGhjeUk2TUN3aWNtVnpkV3gwSWpwN0luTjBZWFIxY3lJNkluTjFZMk5sYzNNaUxDSmtZWFJoSWpwN0ltTnlaV0YwWlMxaFkyTnZkVzUwSWpvaWMyVnVaR1Z5TURFaUxDSnhkV0Z1ZEdsMGVTSTZNU3dpWTNKbFlYUmxMV0ZqWTI5MWJuUXRaM1ZoY21RaU9uc2ljSEpsWkNJNkltdGxlWE10WVd4c0lpd2lhMlY1Y3lJNld5STJZbVV5WmpRNE5XRTNZV1kzTldabFpHSTBZamRtTVRVellUa3dNMlkzWlRZd01EQmpZVFJoWVRVd01URTNPV001TVdFeU5EVXdZamMzTjJKa01tRTNJbDE5Zlgwc0luSmxjVXRsZVNJNklqSlhYMEZuVFhKcVQxaEtjMWw2TW1rNGRVcDFNemd6WjFKa1IzQlZjbFpxTmxocVMxOVpObnBLYkVFaUxDSnNiMmR6SWpvaVRtUTFRWE13ZVVNM2VISkpSR3BDY1dsSGVreEdSelZKVXpKUmVqWkRhSEJpUkdsYVJXNWpXRWhZUVNJc0ltMWxkR0ZFWVhSaElqcHVkV3hzTENKamIyNTBhVzUxWVhScGIyNGlPbnNpWlhobFkzVjBaV1FpT25SeWRXVXNJbkJoWTNSSlpDSTZJakpYWDBGblRYSnFUMWhLYzFsNk1tazRkVXAxTXpneloxSmtSM0JWY2xacU5saHFTMTlaTm5wS2JFRWlMQ0p6ZEdWd0lqb3dMQ0o1YVdWc1pDSTZleUprWVhSaElqcDdJbU55WldGMFpTMWhZMk52ZFc1MElqb2ljMlZ1WkdWeU1ERWlMQ0p4ZFdGdWRHbDBlU0k2TVN3aVkzSmxZWFJsTFdGalkyOTFiblF0WjNWaGNtUWlPbnNpY0hKbFpDSTZJbXRsZVhNdFlXeHNJaXdpYTJWNWN5STZXeUkyWW1VeVpqUTROV0UzWVdZM05XWmxaR0kwWWpkbU1UVXpZVGt3TTJZM1pUWXdNREJqWVRSaFlUVXdNVEUzT1dNNU1XRXlORFV3WWpjM04ySmtNbUUzSWwxOWZTd2ljSEp2ZG1WdVlXNWpaU0k2ZXlKMFlYSm5aWFJEYUdGcGJrbGtJam9pTVNJc0ltMXZaSFZzWlVoaGMyZ2lPaUpIYzBsWFl6QnNjbXd5VFZkdFJuVk5lVlZOTlRaWlIwdHFSMXB2U1dwWWExZElkemt3VERJeWIwdHZJbjE5TENKamIyNTBhVzUxWVhScGIyNGlPbnNpWVhKbmN5STZXeUp6Wlc1a1pYSXdNQ0lzSWpFaUxDSnpaVzVrWlhJd01TSXNleUp3Y21Wa0lqb2lhMlY1Y3kxaGJHd2lMQ0pyWlhseklqcGJJalppWlRKbU5EZzFZVGRoWmpjMVptVmtZalJpTjJZeE5UTmhPVEF6WmpkbE5qQXdNR05oTkdGaE5UQXhNVGM1WXpreFlUSTBOVEJpTnpjM1ltUXlZVGNpWFgwc01WMHNJbVJsWmlJNkltTnZhVzR1WTNKdmMzTXRZMmhoYVc0dGRISmhibk5tWlhJaWZTd2ljM1JsY0VOdmRXNTBJam95ZlN3aWRIaEpaQ0k2Tm4wIn0sImFsZ29yaXRobSI6IlNIQTUxMnRfMjU2Iiwib2JqZWN0IjoiQUFBQUVnQUFBQUFBQUFBQkFLa3QwbFZpWGZKYkY1M191bldaV2d6NUdwZ2ZPTElFNjROQUY2d0h0T0xmQUllRG1sVVZkWEk5U3ItOHU3Z1I3VVNpTFhSZ2huWTFPY1FKcU5wMFdqZUlBZWhPUk94V0FyQmJ1emV2dktNR1BlMHVGVV9QTzJ6MzdULS1jS2F0NnV3ekFUeWFrLTRwZ2F6OEloRWNja3NBbVV0VEFxeWRjUF9YYU5PUU9RcnlwTWlWQUp2eHo0OE5GdS1iS2IteUpyazF0dmsyekdoVDQxdHViTmFKU3RGclFEdGVBZlJERElRNWdDM2phMnpUYUFYUUlCWlJEb3pxTFNCWTIxY1NoRnItemlLbEFlT1JMd3BocnUyWTFkOVk4am1rUjl1ZWNXTF9yOWppY21MRGp2eFN6N053QUVweVZ6NERIbEF3d1J1ODdFcjlaZ0NuTGRKOW91YzIwZGlQZnVyekdLWVBBVDRSTlppQVVKTlhkVzFCTjZwQ2tRQm92U3JNQkhlRzIyY0FmeHRKU1hNY0FSZGxHUVZfSlZQdk51b3hZaGN0N1M0MHFEajg4Y2RWMkQzQ1VWYjBxSXFxQVctZ0pQQV8yMUFVQ2pGSm15bzkxZW1BeTJmWlFPTHFtVWFmUDFSMzZ4Y3RBQlBBcDduYWtqRmdxaVpOdTJwWURFMmVXMHVaRkprazl6QlBIcHktQUNzUUFUSlUzXzA5T2lyRWRBY1BOOWtlY1p0RDBIYzd4eV9DSHQ3bGhqUmFPRXBjQUZKSnpWWlRvSC1MYWJZdkhHN0pLOUlhUmQ3cmZLZklHal8zSWt1WW9RallBUzhGbWtMbERPd3RTS1Bfc2cxYWlUOXVZbm5xUFFSVkRYa083TFBodlRLV0FLMDQ0aVBjQk5ZNnVnUnVQenp4NldKdWN5LUZRa3c4RFM5UFB1NUw1TEhiQVNUWHZGNU1uakFLbUZZOEZtSl9FTjNRekVIT0pieHJsNjI2c08tc0tzU3BBUDl3OFVfbzVZcmVKeXBmcXhRVVd4ME1hV25MSmhpUU42RU4zaDZjT1FMZSIsImNoYWluIjoxfQ==\",
-      \"data\":{
-        \"final-price\":12.0
+{
+  "payload":{
+    "cont":{
+      "proof":"eyJzdWJqZWN0Ijp7ImlucHV0IjoiQUJSN0ltZGhjeUk2TUN3aWNtVnpkV3gwSWpwN0luTjBZWFIxY3lJNkluTjFZMk5sYzNNaUxDSmtZWFJoSWpwN0ltTnlaV0YwWlMxaFkyTnZkVzUwSWpvaWMyVnVaR1Z5TURFaUxDSnhkV0Z1ZEdsMGVTSTZNU3dpWTNKbFlYUmxMV0ZqWTI5MWJuUXRaM1ZoY21RaU9uc2ljSEpsWkNJNkltdGxlWE10WVd4c0lpd2lhMlY1Y3lJNld5STJZbVV5WmpRNE5XRTNZV1kzTldabFpHSTBZamRtTVRVellUa3dNMlkzWlRZd01EQmpZVFJoWVRVd01URTNPV001TVdFeU5EVXdZamMzTjJKa01tRTNJbDE5Zlgwc0luSmxjVXRsZVNJNklqSlhYMEZuVFhKcVQxaEtjMWw2TW1rNGRVcDFNemd6WjFKa1IzQlZjbFpxTmxocVMxOVpObnBLYkVFaUxDSnNiMmR6SWpvaVRtUTFRWE13ZVVNM2VISkpSR3BDY1dsSGVreEdSelZKVXpKUmVqWkRhSEJpUkdsYVJXNWpXRWhZUVNJc0ltMWxkR0ZFWVhSaElqcHVkV3hzTENKamIyNTBhVzUxWVhScGIyNGlPbnNpWlhobFkzVjBaV1FpT25SeWRXVXNJbkJoWTNSSlpDSTZJakpYWDBGblRYSnFUMWhLYzFsNk1tazRkVXAxTXpneloxSmtSM0JWY2xacU5saHFTMTlaTm5wS2JFRWlMQ0p6ZEdWd0lqb3dMQ0o1YVdWc1pDSTZleUprWVhSaElqcDdJbU55WldGMFpTMWhZMk52ZFc1MElqb2ljMlZ1WkdWeU1ERWlMQ0p4ZFdGdWRHbDBlU0k2TVN3aVkzSmxZWFJsTFdGalkyOTFiblF0WjNWaGNtUWlPbnNpY0hKbFpDSTZJbXRsZVhNdFlXeHNJaXdpYTJWNWN5STZXeUkyWW1VeVpqUTROV0UzWVdZM05XWmxaR0kwWWpkbU1UVXpZVGt3TTJZM1pUWXdNREJqWVRSaFlUVXdNVEUzT1dNNU1XRXlORFV3WWpjM04ySmtNbUUzSWwxOWZTd2ljSEp2ZG1WdVlXNWpaU0k2ZXlKMFlYSm5aWFJEYUdGcGJrbGtJam9pTVNJc0ltMXZaSFZzWlVoaGMyZ2lPaUpIYzBsWFl6QnNjbXd5VFZkdFJuVk5lVlZOTlRaWlIwdHFSMXB2U1dwWWExZElkemt3VERJeWIwdHZJbjE5TENKamIyNTBhVzUxWVhScGIyNGlPbnNpWVhKbmN5STZXeUp6Wlc1a1pYSXdNQ0lzSWpFaUxDSnpaVzVrWlhJd01TSXNleUp3Y21Wa0lqb2lhMlY1Y3kxaGJHd2lMQ0pyWlhseklqcGJJalppWlRKbU5EZzFZVGRoWmpjMVptVmtZalJpTjJZeE5UTmhPVEF6WmpkbE5qQXdNR05oTkdGaE5UQXhNVGM1WXpreFlUSTBOVEJpTnpjM1ltUXlZVGNpWFgwc01WMHNJbVJsWmlJNkltTnZhVzR1WTNKdmMzTXRZMmhoYVc0dGRISmhibk5tWlhJaWZTd2ljM1JsY0VOdmRXNTBJam95ZlN3aWRIaEpaQ0k2Tm4wIn0sImFsZ29yaXRobSI6IlNIQTUxMnRfMjU2Iiwib2JqZWN0IjoiQUFBQUVnQUFBQUFBQUFBQkFLa3QwbFZpWGZKYkY1M191bldaV2d6NUdwZ2ZPTElFNjROQUY2d0h0T0xmQUllRG1sVVZkWEk5U3ItOHU3Z1I3VVNpTFhSZ2huWTFPY1FKcU5wMFdqZUlBZWhPUk94V0FyQmJ1emV2dktNR1BlMHVGVV9QTzJ6MzdULS1jS2F0NnV3ekFUeWFrLTRwZ2F6OEloRWNja3NBbVV0VEFxeWRjUF9YYU5PUU9RcnlwTWlWQUp2eHo0OE5GdS1iS2IteUpyazF0dmsyekdoVDQxdHViTmFKU3RGclFEdGVBZlJERElRNWdDM2phMnpUYUFYUUlCWlJEb3pxTFNCWTIxY1NoRnItemlLbEFlT1JMd3BocnUyWTFkOVk4am1rUjl1ZWNXTF9yOWppY21MRGp2eFN6N053QUVweVZ6NERIbEF3d1J1ODdFcjlaZ0NuTGRKOW91YzIwZGlQZnVyekdLWVBBVDRSTlppQVVKTlhkVzFCTjZwQ2tRQm92U3JNQkhlRzIyY0FmeHRKU1hNY0FSZGxHUVZfSlZQdk51b3hZaGN0N1M0MHFEajg4Y2RWMkQzQ1VWYjBxSXFxQVctZ0pQQV8yMUFVQ2pGSm15bzkxZW1BeTJmWlFPTHFtVWFmUDFSMzZ4Y3RBQlBBcDduYWtqRmdxaVpOdTJwWURFMmVXMHVaRkprazl6QlBIcHktQUNzUUFUSlUzXzA5T2lyRWRBY1BOOWtlY1p0RDBIYzd4eV9DSHQ3bGhqUmFPRXBjQUZKSnpWWlRvSC1MYWJZdkhHN0pLOUlhUmQ3cmZLZklHal8zSWt1WW9RallBUzhGbWtMbERPd3RTS1Bfc2cxYWlUOXVZbm5xUFFSVkRYa083TFBodlRLV0FLMDQ0aVBjQk5ZNnVnUnVQenp4NldKdWN5LUZRa3c4RFM5UFB1NUw1TEhiQVNUWHZGNU1uakFLbUZZOEZtSl9FTjNRekVIT0pieHJsNjI2c08tc0tzU3BBUDl3OFVfbzVZcmVKeXBmcXhRVVd4ME1hV25MSmhpUU42RU4zaDZjT1FMZSIsImNoYWluIjoxfQ==",
+      "data":{
+        "final-price":12.0
       },
-      \"pactId\":\"bNWr_FjKZ2sxzo7NNLTtWA64oysWw6Xqe_PZ_qSeEU0\",
-      \"rollback\":false,
-      \"step\":1
+      "pactId":"bNWr_FjKZ2sxzo7NNLTtWA64oysWw6Xqe_PZ_qSeEU0",
+      "rollback":false,
+      "step":1
     }
   }
-}"
-
+}
 ```
 
 
@@ -470,7 +474,7 @@ required: true
 ###### `module guard`
 _type:_ **object**
 ```yaml
-name: "moduleName"          # Name and namespace of module being guarded
+name: "moduleName"      # Name and namespace of module being guarded
 type: object
 required: true
 children:
@@ -482,7 +486,7 @@ children:
     required: false
 ```
 ```yaml
-name: "name"               # Name of the guard
+name: "name"            # Name of the guard
 type: string
 required: true
 ```
@@ -490,12 +494,12 @@ required: true
 ###### `user guard`
 _type:_ **object**
 ```yaml
-name: "data"            # Internal pact representation of a the function
-type: object            # governing the user guard.
+name: "data"      # Internal pact representation of a the function
+type: object      # governing the user guard.
 required: true
 ```
 ```yaml
-name: "predFun"        # Name of function governing the user guard.
+name: "predFun"   # Name of function governing the user guard.
 type: string
 required: true
 ```
@@ -507,7 +511,7 @@ _type:_ **[KeySet](#keysets-and-authorization)**
 ###### `keyset references`
 _type:_ **object**
 ```YAML
-name: "keyNamef"             # Name of keyset being referenced.
+name: "keyNamef"    # Name of keyset being referenced.
 type: string
 required: true
 ```
