@@ -999,16 +999,14 @@ data PropSpecific (a :: Ty) where
 
   -- TX success/failure
 
-  --
-  -- TODO: remove either Success Or Abort.
-  --
-
   -- | Whether a transaction aborts (does not succeed)
-  Abort   :: PropSpecific 'TyBool
+  Abort     :: PropSpecific 'TyBool
   -- | Whether a transaction succeeds (does not abort)
-  Success :: PropSpecific 'TyBool
+  Success   :: PropSpecific 'TyBool
+  -- | Whether the governance predicate passes
+  GovPasses :: PropSpecific 'TyBool
   -- | The return value of the function under examination
-  Result  :: PropSpecific a
+  Result    :: PropSpecific a
 
   -- Abstraction
 
@@ -1081,6 +1079,7 @@ instance Pretty (PropSpecific a) where
   pretty = \case
     Abort                   -> pretty STransactionAborts
     Success                 -> pretty STransactionSucceeds
+    GovPasses               -> pretty SGovernancePasses
     Result                  -> pretty SFunctionResult
     Forall _ var ty x       -> parensSep
       [pretty SUniversalQuantification, parens (pretty var <> ":" <> pretty ty), prettyTm x]

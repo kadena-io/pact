@@ -1091,6 +1091,35 @@ spec = describe "analyze" $ do
     expectCapGovPass code $ Satisfiable Success'
     expectCapGovPass code $ Satisfiable Abort'
 
+  describe "property language can describe whether cap-based governance \
+    \passes" $ do
+      res <- runIO $ runVerification $
+        [text|
+          (begin-tx)
+          (module test GOV
+              (defcap GOV ()
+                true)
+
+              (defun test:bool ()
+                @model [(property governance-passes)]
+                (enforce-guard (create-module-guard "governance")))
+            )
+          (commit-tx)
+        |]
+
+      it "passes in-code checks" $
+        handlePositiveTestResult res
+
+  describe "property language can describe whether ks-based governance passes \
+    \without mentioning the keyset" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                @model [(property governance-passes)]
+                (enforce-guard (create-module-guard "governance")))
+            |]
+      expectVerified code
+
   describe "keyset-based governance is connected to authorized-by" $ do
     let code =
           [text|

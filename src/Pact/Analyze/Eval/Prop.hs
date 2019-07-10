@@ -122,8 +122,11 @@ beforeAfterLens = \case
 
 evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
-evalPropSpecific Abort   = sNot <$> evalPropSpecific Success
-evalPropSpecific Result  = aval (pure ... mkS) =<< view qeAnalyzeResult
+evalPropSpecific Abort = sNot <$> evalPropSpecific Success
+evalPropSpecific GovPasses = do
+  guard <- view moduleGuard
+  view $ qeAnalyzeState.guardPasses guard
+evalPropSpecific Result = aval (pure ... mkS) =<< view qeAnalyzeResult
 evalPropSpecific (Forall vid name (EType (ty :: Types.SingTy ty)) p) = do
   var <- singForAll ("forall_" ++ T.unpack name) ty
   local (scope.at vid ?~ mkAVal var) $ evalProp p
