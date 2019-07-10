@@ -63,7 +63,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Vector as V
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import Safe
 import Unsafe.Coerce
 
@@ -570,8 +570,11 @@ reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
-reduce t@TDef {} = return $ toTerm $ pack $ show t
-reduce t@TNative {} = return $ toTerm $ pack $ show t
+reduce t@TDef {} = evalError (_tInfo t) $
+  "Unexpected evaluation of a definition (" <> pretty (_dDefName (_tDef t)) <>
+  ")"
+reduce t@TNative {} = evalError (_tInfo t) $
+  "Unexpected evaluation of a native (" <> pretty (_tNativeName t) <> ")"
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
   CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
