@@ -1324,10 +1324,11 @@ data Term (a :: Ty) where
   PactId          :: Term 'TyStr
 
   -- Guards
-  MkKsRefGuard :: Term 'TyStr                  -> Term 'TyGuard
-  MkPactGuard  :: Term 'TyStr                  -> Term 'TyGuard
-  MkUserGuard  :: Guard       -> ETerm         -> Term 'TyGuard
-  GuardPasses  :: TagId       -> Term 'TyGuard -> Term 'TyBool
+  MkKsRefGuard  :: Term 'TyStr                  -> Term 'TyGuard
+  MkPactGuard   :: Term 'TyStr                  -> Term 'TyGuard
+  MkUserGuard   :: Guard       -> ETerm         -> Term 'TyGuard
+  MkModuleGuard :: Term 'TyStr                  -> Term 'TyGuard
+  GuardPasses   :: TagId       -> Term 'TyGuard -> Term 'TyBool
 
   -- Table access
   Read
@@ -1434,6 +1435,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
+  MkModuleGuard a ->
+      showString "MkModuleGuard "
+    . showsPrec 11 a
   GuardPasses a b ->
       showString "GuardPasses "
     . showsPrec 11 a
@@ -1574,6 +1578,7 @@ prettyTerm ty = \case
   MkKsRefGuard name     -> parensSep ["keyset-ref-guard", pretty name]
   MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard g t       -> parensSep ["create-user-guard", pretty g, pretty t]
+  MkModuleGuard name    -> parensSep ["create-module-guard", pretty name]
   Pact steps            -> vsep (pretty <$> steps)
   Yield _tid tm         -> parensSep [ "yield", singPrettyTm ty tm ]
   Resume _tid           -> "resume"

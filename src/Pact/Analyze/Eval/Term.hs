@@ -551,6 +551,9 @@ evalTerm = \case
     guardPasses sg .= postGuardSucceeds
     pure sg
 
+  MkModuleGuard _nameT ->
+    view moduleGuard
+
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT
 

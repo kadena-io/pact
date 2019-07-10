@@ -141,6 +141,10 @@ newtype Registry
 mkRegistry :: Registry
 mkRegistry = Registry $ mkFreeArray "registry"
 
+resolveGuardFromReg :: Registry -> S RegistryName -> S Guard
+resolveGuardFromReg reg sRn = (withProv $ fromRegistry sRn) $
+  readArray (_registryMap reg) (_sSbv sRn)
+
 data TxMetadata
   = TxMetadata
     { _tmKeySets  :: !(SFunArray Str Guard)
@@ -163,6 +167,7 @@ data AnalyzeEnv
     , _aeModelTags    :: !(ModelTags 'Symbolic)
     , _aeInfo         :: !Info
     , _aeTrivialGuard :: !(S Guard)
+    , _aeModuleGuard  :: !(S Guard)
     , _aeEmptyGrants  :: !TokenGrants
     -- ^ the default, blank slate of grants, where no token is granted.
     , _aeActiveGrants :: !TokenGrants
@@ -173,6 +178,7 @@ data AnalyzeEnv
 mkAnalyzeEnv
   :: Pact.ModuleName
   -> PactMetadata
+  -> Governance
   -> Registry
   -> [Table]
   -> [Capability]
@@ -181,7 +187,7 @@ mkAnalyzeEnv
   -> ModelTags 'Symbolic
   -> Info
   -> Maybe AnalyzeEnv
-mkAnalyzeEnv modName pactMetadata registry tables caps args stepChoices tags info = do
+mkAnalyzeEnv modName pactMetadata gov registry tables caps args stepChoices tags info = do
   let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
                                 (mkFreeArray "txDecimals")
                                 (mkFreeArray "txIntegers")
@@ -210,10 +216,21 @@ mkAnalyzeEnv modName pactMetadata registry tables caps args stepChoices tags inf
   let columnIds'   = TableMap (Map.fromList columnIds)
       emptyGrants  = mkTokenGrants caps
       activeGrants = emptyGrants
+      modGuard     = case gov of
+                       KsGovernance registryName ->
+                         resolveGuardFromReg registry $ literalS registryName
+                       CapGovernance _capName ->
+                         --
+                         -- NOTE: for now we do not try to interpret
+                         -- capability-based governance because it is quite
+                         -- difficult in the presence of capabilities that
+                         -- perform database access.
+                         --
+                         uninterpretS "cap_gov_guard"
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args
     stepChoices invariants' columnIds' tags info (sansProv trivialGuard)
-    emptyGrants activeGrants tables
+    modGuard emptyGrants activeGrants tables
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -456,8 +473,8 @@ class HasAnalyzeEnv a where
   scope :: Lens' a (Map VarId AVal)
   scope = analyzeEnv.aeScope
 
-  registry :: Lens' a (SFunArray RegistryName Guard)
-  registry = analyzeEnv.aeRegistry.registryMap
+  registry :: Lens' a Registry
+  registry = analyzeEnv.aeRegistry
 
   txKeySets :: Lens' a (SFunArray Str Guard)
   txKeySets = analyzeEnv.aeTxMetadata.tmKeySets
@@ -479,6 +496,9 @@ class HasAnalyzeEnv a where
 
   activeGrants :: Lens' a TokenGrants
   activeGrants = analyzeEnv.aeActiveGrants
+
+  moduleGuard :: Lens' a (S Guard)
+  moduleGuard = analyzeEnv.aeModuleGuard
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
@@ -672,8 +692,9 @@ resolveGuard
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S RegistryName
   -> m (S Guard)
-resolveGuard sRn = fmap (withProv $ fromRegistry sRn) $
-  readArray <$> view registry <*> pure (_sSbv sRn)
+resolveGuard sRn = do
+  reg <- view registry
+  pure $ resolveGuardFromReg reg sRn
 
 -- | Reads a named keyset from tx metadata (not the keyset registry)
 readKeySet

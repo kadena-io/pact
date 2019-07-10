@@ -953,6 +953,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
         translateBody appBodyA
     pure $ Some SGuard $ MkUserGuard guard body
 
+  AST_CreateModuleGuard strA -> do
+    Some SStr strT <- translateNode strA
+    pure $ Some SGuard $ MkModuleGuard strT
+
   AST_Enforce _ cond -> do
     Some SBool condTerm <- translateNode cond
     tid <- tagAssert $ cond ^. aNode

@@ -110,9 +110,14 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
 
       modName = Pact.ModuleName "test" Nothing
       pactMd  = mkPactMetadata
+      --
+      -- NOTE: we assume that we are not concerned with trying to generate
+      -- capability-based governance scenarios at the moment.
+      --
+      gov     = KsGovernance $ RegistryName "some-keyset-name"
       reg     = mkRegistry
 
-  Just aEnv <- pure $ mkAnalyzeEnv modName pactMd reg tables caps args
+  Just aEnv <- pure $ mkAnalyzeEnv modName pactMd gov reg tables caps args
     stepChoices tags dummyInfo
 
   let trivGuard = _sSbv $ view aeTrivialGuard aEnv

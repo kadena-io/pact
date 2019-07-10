@@ -1242,3 +1242,8 @@ type instance Index (TableMap a) = TableName
 type instance IxValue (TableMap a) = a
 instance Ixed (TableMap a) where ix k = tableMap.ix k
 instance At (TableMap a) where at k = tableMap.at k
+
+data Governance
+  = KsGovernance RegistryName
+  | CapGovernance CapName
+  deriving (Eq, Ord, Show)

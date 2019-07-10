@@ -1063,6 +1063,44 @@ spec = describe "analyze" $ do
 
     expectPass code $ Valid Abort'
 
+  let expectCapGovPass :: Text -> Check -> Spec
+      expectCapGovPass code check = withFrozenCallStack $ expectTest $ testEnv
+        { testCode =
+            [text|
+              (begin-tx)
+              (module test GOV
+                $code
+                )
+              (commit-tx)
+            |]
+        , testCheck = check
+        , testPred = handlePositiveTestResult
+        , testName = "passed check"
+        }
+
+  describe "capability-based governance is not analyzed and can always pass or fail" $ do
+    let code =
+          [text|
+            (defcap GOV ()
+              true)
+
+            (defun test:bool ()
+              (enforce-guard (create-module-guard "governance")))
+          |]
+
+    expectCapGovPass code $ Satisfiable Success'
+    expectCapGovPass code $ Satisfiable Abort'
+
+  describe "keyset-based governance is connected to authorized-by" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              @model [(property (authorized-by 'ks))]
+              (enforce-guard (create-module-guard "governance")))
+          |]
+
+    expectVerified code
+
   describe "enforce-one.1" $ do
     let code =
           [text|

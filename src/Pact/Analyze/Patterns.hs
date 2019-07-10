@@ -88,6 +88,10 @@ pattern AST_CreateUserGuard :: AST Node -> AST Node
 pattern AST_CreateUserGuard app <-
   App _node (NativeFunc "create-user-guard") [app]
 
+pattern AST_CreateModuleGuard :: AST Node -> AST Node
+pattern AST_CreateModuleGuard name <-
+  App _node (NativeFunc "create-module-guard") [name]
+
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
   App node (NativeFunc "enforce") (cond:_rest)
