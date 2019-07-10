@@ -460,16 +460,24 @@ verify i as = case as of
     md <- getModule i (ModuleName modName Nothing)
     -- reading all modules from db here, but should be fine in repl
     modules <- getAllModules i
+    let failureMessage = tStr $ "Verification of " <> modName <> " failed"
 #if defined(ghcjs_HOST_OS)
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
+    setop $ TcErrors $ Text.unpack <$> renderedLines
+    return failureMessage
 #else
     modResult <- liftIO $ Check.verifyModule modules md
     let renderedLines = Check.renderVerifiedModule modResult
+    case modResult of
+      Right modResult'
+        | not (Check.hasVerificationError modResult')
+        -> return $ tStr $ mconcat renderedLines
+      _ -> do
+        setop $ TcErrors $ Text.unpack <$> renderedLines
+        return failureMessage
 #endif
-    setop $ TcErrors $ Text.unpack <$> renderedLines
-    return $ tStr $ "Verification of " <> modName <> " failed"
 
   _ -> argsError i as
 
