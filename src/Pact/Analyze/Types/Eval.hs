@@ -12,6 +12,7 @@
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -98,9 +99,9 @@ infix 1 ???
 
 data PactMetadata
   = PactMetadata
-    { _pmInPact  :: !(S Bool)
-    , _pmPactId  :: !(S Str)
-    , _pmEntity  :: !(S Str)
+    { _pmInPact  :: S Bool
+    , _pmPactId  :: S Str
+    , _pmEntity  :: S Str
     }
   deriving Show
 
@@ -147,32 +148,32 @@ resolveGuardFromReg reg sRn = withProv (fromRegistry sRn) $
 
 data TxMetadata
   = TxMetadata
-    { _tmKeySets  :: !(SFunArray Str Guard)
-    , _tmDecimals :: !(SFunArray Str Decimal)
-    , _tmIntegers :: !(SFunArray Str Integer)
+    { _tmKeySets  :: SFunArray Str Guard
+    , _tmDecimals :: SFunArray Str Decimal
+    , _tmIntegers :: SFunArray Str Integer
     -- TODO: strings
     }
   deriving Show
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeModuleName   :: !Pact.ModuleName
-    , _aePactMetadata :: !PactMetadata
-    , _aeRegistry     :: !Registry
-    , _aeTxMetadata   :: !TxMetadata
-    , _aeScope        :: !(Map VarId AVal) -- used as a stack
-    , _aeStepChoices  :: !(Map VarId (SBV Bool))
-    , _invariants     :: !(TableMap [Located (Invariant 'TyBool)])
-    , _aeColumnIds    :: !(TableMap (Map Text VarId))
-    , _aeModelTags    :: !(ModelTags 'Symbolic)
-    , _aeInfo         :: !Info
-    , _aeTrivialGuard :: !(S Guard)
-    , _aeModuleGuard  :: !(S Guard)
-    , _aeEmptyGrants  :: !TokenGrants
+    { _aeModuleName   :: Pact.ModuleName
+    , _aePactMetadata :: PactMetadata
+    , _aeRegistry     :: Registry
+    , _aeTxMetadata   :: TxMetadata
+    , _aeScope        :: Map VarId AVal -- used as a stack
+    , _aeStepChoices  :: Map VarId (SBV Bool)
+    , _invariants     :: TableMap [Located (Invariant 'TyBool)]
+    , _aeColumnIds    :: TableMap (Map Text VarId)
+    , _aeModelTags    :: ModelTags 'Symbolic
+    , _aeInfo         :: Info
+    , _aeTrivialGuard :: S Guard
+    , _aeModuleGuard  :: S Guard
+    , _aeEmptyGrants  :: TokenGrants
     -- ^ the default, blank slate of grants, where no token is granted.
-    , _aeActiveGrants :: !TokenGrants
+    , _aeActiveGrants :: TokenGrants
     -- ^ the current set of tokens that are granted, manipulated as a stack
-    , _aeTables       :: ![Table]
+    , _aeTables       :: [Table]
     } deriving Show
 
 mkAnalyzeEnv
@@ -297,8 +298,8 @@ data LatticeAnalyzeState a
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
     , _lasPendingGrants       :: TokenGrants
-    , _lasYieldedInPrevious   :: !(Maybe ExistentialVal)
-    , _lasYieldedInCurrent    :: !(Maybe ExistentialVal)
+    , _lasYieldedInPrevious   :: Maybe ExistentialVal
+    , _lasYieldedInCurrent    :: Maybe ExistentialVal
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -309,7 +310,7 @@ deriving instance Mergeable a => Mergeable (LatticeAnalyzeState a)
 data GlobalAnalyzeState
   = GlobalAnalyzeState
     { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
-    , _gasRollbacks        :: ![ETerm]
+    , _gasRollbacks        :: [ETerm]
     -- ^ the stack of rollbacks to perform on failure
     }
   deriving (Show)

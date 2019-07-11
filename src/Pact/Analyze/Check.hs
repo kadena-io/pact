@@ -7,6 +7,7 @@
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeApplications      #-}
 
@@ -144,8 +145,8 @@ data CheckFailureNoLoc
   deriving (Eq, Show)
 
 data CheckFailure = CheckFailure
-  { _checkFailureParsed :: !Info
-  , _checkFailure       :: !CheckFailureNoLoc
+  { _checkFailureParsed :: Info
+  , _checkFailure       :: CheckFailureNoLoc
   } deriving (Eq, Show)
 
 type CheckResult = Either CheckFailure CheckSuccess
@@ -167,12 +168,12 @@ hasVerificationError (ModuleChecks propChecks stepChecks invChecks _)
     in not (null errs)
 
 data CheckEnv = CheckEnv
-  { _tables     :: ![Table]
-  , _consts     :: !(HM.HashMap Text EProp)
-  , _propDefs   :: !(HM.HashMap Text (DefinedProperty (Exp Info)))
-  , _moduleData :: !(ModuleData Ref)
-  , _caps       :: ![Capability]
-  , _moduleGov  :: !Governance
+  { _tables     :: [Table]
+  , _consts     :: HM.HashMap Text EProp
+  , _propDefs   :: HM.HashMap Text (DefinedProperty (Exp Info))
+  , _moduleData :: ModuleData Ref
+  , _caps       :: [Capability]
+  , _moduleGov  :: Governance
   }
 
 -- | Essential data used to check a function (where function could actually be
@@ -183,9 +184,9 @@ data CheckEnv = CheckEnv
 -- also use it for checking pact steps which are a different check type and
 -- borrow the name of their enclosing pact.
 data FunData = FunData
-  !Info         -- Location info (for error messages)
-  ![Named Node] -- Arguments
-  ![AST Node]   -- Body
+  Info         -- Location info (for error messages)
+  [Named Node] -- Arguments
+  [AST Node]   -- Body
 
 mkFunInfo :: Fun Node -> FunData
 mkFunInfo = \case
@@ -198,7 +199,7 @@ data VerificationFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
   | InvalidRefType -- TODO: make this error more informative
   | FailedConstTranslation String
-  | SchemalessTable !Info
+  | SchemalessTable Info
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -576,12 +577,12 @@ moduleCapabilities md = do
 
 data PropertyScope
   = Everywhere
-  | Excluding !(Set Text)
-  | Including !(Set Text)
+  | Excluding (Set Text)
+  | Including (Set Text)
 
 data ModuleProperty = ModuleProperty
-  { _moduleProperty      :: !(Exp Info)
-  , _modulePropertyScope :: !PropertyScope
+  { _moduleProperty      :: Exp Info
+  , _modulePropertyScope :: PropertyScope
   }
 
 -- Does this (module-scoped) property apply to this function?
@@ -676,8 +677,8 @@ moduleTypecheckableRefs ModuleData{..} = foldl f noRefs (HM.toList _mdRefMap)
 
 -- | Module-level propery definitions and declarations
 data ModelDecl = ModelDecl
-  { _moduleDefProperties :: !(HM.HashMap Text (DefinedProperty (Exp Info)))
-  , _moduleProperties    :: ![ModuleProperty]
+  { _moduleDefProperties :: HM.HashMap Text (DefinedProperty (Exp Info))
+  , _moduleProperties    :: [ModuleProperty]
   }
 
 -- | Get the model defined in this module

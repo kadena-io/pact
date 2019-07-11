@@ -10,12 +10,12 @@
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StrictData                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ViewPatterns               #-}
-
-{-# LANGUAGE TupleSections              #-}
 
 -- | Translation from typechecked 'AST' to 'Term', while accumulating an
 -- execution graph to be used during symbolic analysis and model reporting.
@@ -69,8 +69,8 @@ import           Pact.Analyze.Util
 -- * Translation types
 
 data TranslateFailure = TranslateFailure
-  { _translateFailureInfo :: !Info
-  , _translateFailure     :: !TranslateFailureNoLoc
+  { _translateFailureInfo :: Info
+  , _translateFailure     :: TranslateFailureNoLoc
   } deriving Show
 
 data TranslateFailureNoLoc
@@ -245,7 +245,7 @@ data TranslateState
 
       -- Vars representing nondeterministic choice between two branches. These
       -- are used for continuing on or rolling back in evaluation of pacts.
-    , _tsStepChoices   :: ![VarId]
+    , _tsStepChoices   :: [VarId]
     }
 
 makeLenses ''TranslateFailure
