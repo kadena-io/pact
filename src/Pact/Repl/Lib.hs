@@ -66,6 +66,7 @@ import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Types.Pretty
 import Pact.Repl.Types
+import Pact.Native (chainDataSchemaDef)
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
@@ -551,10 +552,15 @@ testCapability i as = argsError' i as
 -- environment items only.
 envChainDataDef :: NativeDef
 envChainDataDef = defZRNative "env-chain-data" envChainData
-    (funType tTyString [("new-data", tTyObject TyAny)])
+    (funType tTyString [("new-data", objectType)])
     ["(env-chain-data { \"chain-id\": \"TestNet00/2\", \"block-height\": 20 })"]
-    "Update existing entries 'chain-data' with NEW-DATA, replacing those items only."
+    "Update existing entries of 'chain-data' with NEW-DATA, replacing those items only."
   where
+    objectType = TySchema
+      TyObject
+      (TyUser $ snd chainDataSchemaDef)
+      AnySubschema
+
     envChainData :: RNativeFun LibState
     envChainData i as = case as of
       [TObject (Object (ObjectMap ks) _ _ _) _] -> do

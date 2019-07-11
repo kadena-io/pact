@@ -41,6 +41,7 @@ module Pact.Native
     , takeDef
     , dropDef
     , atDef
+    , chainDataSchemaDef
     ) where
 
 import Control.Arrow hiding (app)
@@ -287,19 +288,53 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
         Nothing  -> evalError info $
           "namespace: '" <> pretty name <> "' not defined"
 
+chainDataSchemaDef :: NativeDef
+chainDataSchemaDef =
+  ( NativeDefName name
+  , TSchema
+      (TypeName name)
+      --
+      -- TODO: don't know what's appropriate here:
+      --
+      (ModuleName "pact" (Just "pact"))
+      (Meta (Just "The schema for objects returned from 'chain-data'") [])
+      [ Arg "chain-id"     (TyPrim TyString)  (Info Nothing)
+      , Arg "block-height" (TyPrim TyInteger) (Info Nothing)
+      --
+      -- TODO: users probably expect TyTime here but chain-data currently returns an integer:
+      --
+      , Arg "block-time"   (TyPrim TyInteger) (Info Nothing)
+      , Arg "sender"       (TyPrim TyString)  (Info Nothing)
+      , Arg "gas-limit"    (TyPrim TyInteger) (Info Nothing)
+      , Arg "gas-price"    (TyPrim TyDecimal) (Info Nothing)
+      ]
+      (Info Nothing)
+  )
+
+  where
+    --
+    -- TODO: need to come up with a name we like
+    --
+    name = "chain-schema"
+
 chainDataDef :: NativeDef
-chainDataDef = defRNative "chain-data" chainData (funType obj [])
+chainDataDef = defRNative "chain-data" chainData (funType objectType [])
     ["(chain-data)"]
     "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
     \'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
   where
+    objectType = TySchema
+      TyObject
+      (TyUser $ snd chainDataSchemaDef)
+      FullSchema
+
     chainData :: RNativeFun e
     chainData _ [] = do
       PublicData{..} <- view eePublicData
 
       let PublicMeta{..} = _pdPublicMeta
 
-      pure $ toTObject TyAny def
+      pure $ toTObject objectType def
         [ ("chain-id"    , toTerm _pmChainId    )
         , ("block-height", toTerm _pdBlockHeight)
         , ("block-time"  , toTerm _pdBlockTime  )
@@ -465,6 +500,7 @@ langDefs =
     ,hashDef
     ,defineNamespaceDef
     ,namespaceDef
+    ,chainDataSchemaDef
     ,chainDataDef
     ])
     where

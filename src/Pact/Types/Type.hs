@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -285,6 +286,10 @@ instance NFData v => NFData (Type v)
 instance (Pretty o) => Pretty (Type o) where
   pretty ty = case ty of
     TyVar n        -> pretty n
+    --
+    -- TODO: this produces a defschema form, whereas we would like to display
+    -- key-value pairs:
+    --
     TyUser v       -> pretty v
     TyFun f        -> pretty f
     TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
