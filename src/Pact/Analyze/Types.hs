@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 
 -- | Toplevel module for types related to symbolic analysis of Pact programs.
@@ -74,9 +75,9 @@ genVarId :: (MonadState s m, HasVarId s) => m VarId
 genVarId = genId varId
 
 data Check
-  = PropertyHolds !(Prop 'TyBool) -- valid, assuming success
-  | Satisfiable   !(Prop 'TyBool) -- sat,   not assuming success
-  | Valid         !(Prop 'TyBool) -- valid, not assuming success
+  = PropertyHolds (Prop 'TyBool) -- valid, assuming success
+  | Satisfiable   (Prop 'TyBool) -- sat,   not assuming success
+  | Valid         (Prop 'TyBool) -- valid, not assuming success
 
 instance Show Check where
   showsPrec p c = showParen (p > 10) $ case c of
