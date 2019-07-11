@@ -1004,10 +1004,8 @@ moduleGovernance moduleData = case _mdModule moduleData of
     case _gGovernance _mGovernance of
       Left (Pact.KeySetName rn) ->
         pure $ KsGovernance $ RegistryName rn
-      Right (Def {_dDefName}) ->
-        case _dDefName of
-          Pact.DefName dn ->
-            pure $ CapGovernance $ CapName $ T.unpack dn
+      Right (Def {_dDefName=Pact.DefName dn}) ->
+        pure $ CapGovernance $ CapName $ T.unpack dn
   Pact.MDInterface _ ->
     throwError InvalidRefType
 

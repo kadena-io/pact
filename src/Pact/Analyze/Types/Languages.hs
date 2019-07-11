@@ -1000,6 +1000,10 @@ data PropSpecific (a :: Ty) where
 
   -- TX success/failure
 
+  --
+  -- TODO: remove either Success or Abort.
+  --
+
   -- | Whether a transaction aborts (does not succeed)
   Abort     :: PropSpecific 'TyBool
   -- | Whether a transaction succeeds (does not abort)

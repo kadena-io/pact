@@ -279,9 +279,9 @@ data LatticeAnalyzeState a
     --       invariant is being maintained
     --
     , _lasMaintainsInvariants :: TableMap (ZipList (Located (SBV Bool)))
-    , _lasGuardPasses         :: !(SFunArray Guard Bool)
-    , _lasTablesRead          :: !(SFunArray TableName Bool)
-    , _lasTablesWritten       :: !(SFunArray TableName Bool)
+    , _lasGuardPasses         :: SFunArray Guard Bool
+    , _lasTablesRead          :: SFunArray TableName Bool
+    , _lasTablesWritten       :: SFunArray TableName Bool
     , _lasColumnsRead         :: TableMap (ColumnMap (SBV Bool))
     , _lasColumnsWritten      :: TableMap (ColumnMap (SBV Bool))
     , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))

@@ -111,8 +111,8 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
       modName = Pact.ModuleName "test" Nothing
       pactMd  = mkPactMetadata
       --
-      -- NOTE: we assume that we are not concerned with trying to generate
-      -- capability-based governance scenarios at the moment.
+      -- NOTE: we have to provide analysis _something_ for governance, so for
+      -- now we just give a random keyset name.
       --
       gov     = KsGovernance $ RegistryName "some-keyset-name"
       reg     = mkRegistry

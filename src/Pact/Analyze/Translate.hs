@@ -948,7 +948,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_CreateUserGuard (AST_InlinedApp modName funName bindings appBodyA) -> do
     guard <- genGuard
-    body <- withTranslatedBindings bindings $ \bindingTs -> do
+    body <- withTranslatedBindings bindings $ \bindingTs ->
       withNewScope (FunctionScope modName funName) bindingTs $
         translateBody appBodyA
     pure $ Some SGuard $ MkUserGuard guard body
