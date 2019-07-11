@@ -76,6 +76,7 @@ module Pact.Types.Term
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
+   prettyTypeTerm,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
    Gas(..)
@@ -948,7 +949,7 @@ instance Pretty n => Pretty (Term n) where
       <> line <> fillSep (pretty <$> T.words _tNativeDocs)
       <> line
       <> line <> annotate Header "Type:"
-      <> line <> align (vsep (pretty <$> toList _tFunTypes))
+      <> line <> align (vsep (prettyFunType <$> toList _tFunTypes))
       <> examples
       ) where examples = case _tNativeExamples of
                 [] -> mempty
@@ -981,9 +982,17 @@ instance Pretty n => Pretty (Term n) where
       ]
     TTable{..} -> parensSep
       [ "deftable"
-      , pretty _tTableName <> ":" <> pretty _tTableType
+      , pretty _tTableName <> ":" <> pretty (fmap prettyTypeTerm _tTableType)
       , pretty _tMeta
       ]
+
+    where
+      prettyFunType (FunType as r) = pretty (FunType (map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))
+
+prettyTypeTerm :: Term n -> SpecialPretty (Term n)
+prettyTypeTerm TSchema{..} = SPSpecial ("{" <> asString _tSchemaName <> "}")
+prettyTypeTerm t = SPNormal t
+
 
 instance Applicative Term where
     pure = return

@@ -994,11 +994,12 @@ toUserType t = case t of
   _ -> die (_tInfo t) $ "toUserType: expected user type: " ++ show t
   where
     derefUT (Ref r) = toUserType' (fmap Left r :: Term (Either Ref n))
-    derefUT Direct {} = die (_tInfo t) $ "toUserType: unexpected direct ref: " ++ show t
+    derefUT (Direct d) = toUserType' (fmap Right d)
+    -- derefUT Direct {} = die (_tInfo t) $ "toUserType: unexpected direct ref: " ++ show t
 
 toUserType' :: Show n => Term (Either Ref n) -> TC UserType
 toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
-toUserType' t = die (_tInfo t) $ "toUserType: expected user type: " ++ show t
+toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
 bindArgs i args b =
