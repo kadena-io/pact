@@ -19,6 +19,7 @@ module Pact.Native.Internal
   ,bindReduce
   ,enforceGuard
   ,defNative,defGasRNative,defRNative
+  ,defSchema
   ,setTopLevelOnly
   ,foldDefs
   ,funType,funType'
@@ -117,6 +118,15 @@ defGasRNative name fun = defNative name (reduced fun)
 defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = preGas fi as >>= \(g,as') -> (g,) <$> f fi as'
+
+
+defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
+defSchema n doc fields =
+  (n,
+   TSchema (TypeName $ asString n) (ModuleName "" Nothing) (Meta (Just doc) [])
+   (map (\(fr,ty) -> Arg (asString fr) ty def) fields)
+   def)
+
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []

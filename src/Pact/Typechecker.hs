@@ -991,14 +991,14 @@ trackNode ty i = trackAST node >> return node
 toUserType :: forall n . Show n => Term (Either Ref n) -> TC UserType
 toUserType t = case t of
   (TVar (Left r) _) -> derefUT r
-  _ -> die (_tInfo t) $ "toUserType: expected user type: " ++ show t
+  _ -> die (_tInfo t) $ "toUserType: expected var of user type ref: " ++ show t
   where
     derefUT (Ref r) = toUserType' (fmap Left r :: Term (Either Ref n))
-    derefUT Direct {} = die (_tInfo t) $ "toUserType: unexpected direct ref: " ++ show t
+    derefUT (Direct d) = toUserType' (fmap Right d)
 
 toUserType' :: Show n => Term (Either Ref n) -> TC UserType
 toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
-toUserType' t = die (_tInfo t) $ "toUserType: expected user type: " ++ show t
+toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
 bindArgs i args b =
