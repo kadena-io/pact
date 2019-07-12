@@ -528,9 +528,11 @@ moduleTables modules ModuleData{..} = do
               )
             Just model' -> withExceptT ModuleParseFailure $ liftEither $ do
               exps <- collectInvariants model'
+              let getInvariant meta = runReaderT
+                    (expToInvariant SBool meta)
+                    (varIdArgs _utFields)
               for exps $ \meta ->
-                case flip runReaderT (varIdArgs _utFields) $
-                  expToInvariant SBool meta of
+                case getInvariant meta of
                   Left err   -> Left (meta, err)
                   Right good -> Right (Located (getInfo meta) good)
 
@@ -794,13 +796,13 @@ stepCheck
 stepCheck tables consts propDefs funTy model = do
   FunctionEnvironment envVidStart nameVids vidTys
     <- makeFunctionEnvironment funTy
+  let getCheck = expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
+        consts propDefs
   checks <- withExcept ModuleParseFailure $ liftEither $ do
     exps <- collectProperties model
-    for exps $ \(propTy, meta) ->
-      case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys consts
-        propDefs propTy meta of
-        Left err   -> Left (meta, err)
-        Right good -> Right (Located (getInfo meta) good)
+    for exps $ \(propTy, meta) -> case getCheck propTy meta of
+      Left err   -> Left (meta, err)
+      Right good -> Right (Located (getInfo meta) good)
 
   pure $ Right checks
 
