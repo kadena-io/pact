@@ -27,6 +27,7 @@ module Pact.Analyze.Check
   , CheckFailureNoLoc(..)
   , CheckSuccess(..)
   , CheckResult
+  , ScopeError(..)
   , ModuleChecks(..)
   , SmtFailure(..)
   , ParseFailure
@@ -37,16 +38,20 @@ module Pact.Analyze.Check
   , verifyFunctionInvariants
   ) where
 
+import Debug.Trace
+
 import           Control.Exception         as E
 import           Control.Lens              (at, each, filtered, ifoldl, ifoldrM,
                                             ifor, itraversed, ix, toListOf,
                                             traverseOf, traversed, view, (%~),
                                             (&), (.~), (<&>), (?~), (^.), (^..),
-                                            (^?), (^?!), (^@..), _2, _Left)
+                                            (^?), (^?!), (^@..), _2, _Just,
+                                            _Left)
 import           Control.Monad             (void, (<=<))
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
-                                            throwError, withExcept, withExceptT)
+                                            throwError, withExcept, withExceptT,
+                                            runExcept)
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
@@ -151,21 +156,27 @@ data CheckFailure = CheckFailure
 
 type CheckResult = Either CheckFailure CheckSuccess
 
+data ScopeError = ScopeError ParseFailure
+  deriving (Eq, Show)
+
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
   , stepChecks      :: HM.HashMap (Text, Int) [CheckResult]
   , invariantChecks :: HM.HashMap Text (TableMap [CheckResult])
+  , scopeChecks     :: HM.HashMap Text (Maybe ScopeError)
   , moduleWarnings  :: VerificationWarnings
   } deriving (Eq, Show)
 
 -- | Does this 'ModuleChecks' have either a property or invariant failure?
 -- Warnings don't count.
 hasVerificationError :: ModuleChecks -> Bool
-hasVerificationError (ModuleChecks propChecks stepChecks invChecks _)
-  = let errs = toListOf (traverse . traverse .            _Left) propChecks ++
-               toListOf (traverse . traverse .            _Left) stepChecks ++
-               toListOf (traverse . traverse . traverse . _Left) invChecks
-    in not (null errs)
+hasVerificationError (ModuleChecks propChecks stepChecks invChecks scopeChecks _)
+  = let checkErrs =
+          toListOf (traverse . traverse .            _Left) propChecks ++
+          toListOf (traverse . traverse .            _Left) stepChecks ++
+          toListOf (traverse . traverse . traverse . _Left) invChecks
+        scopeErrs = toListOf (traverse . _Just) scopeChecks
+    in not (null checkErrs) && not (null scopeErrs)
 
 data CheckEnv = CheckEnv
   { _tables     :: [Table]
@@ -586,6 +597,7 @@ data PropertyScope
   -- ^ This property applies to all but the named functions (and pacts)
   | Including (Set Text)
   -- ^ This property applies to only the named functions (and pacts)
+  deriving Show
 
 data ModuleCheck = ModuleCheck
   { _moduleCheckType   :: Prop 'TyBool -> Check
@@ -596,6 +608,11 @@ data ModuleCheck = ModuleCheck
   , _moduleCheckScope  :: PropertyScope
   -- ^ Where does this property apply?
   }
+
+data ModuleProperty = ModuleProperty
+  { _moduleProperty      :: Exp Info
+  , _modulePropertyScope :: PropertyScope
+  } deriving Show
 
 -- Does this (module-scoped) property apply to this function?
 applicableCheck :: DefName -> ModuleCheck -> Bool
@@ -972,6 +989,7 @@ getFunChecks
 getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
   caps <- moduleCapabilities moduleData
+  traceM $ "caps: " ++ show caps
 
   let modName :: ModuleName
       modName = moduleDefName $ _mdModule moduleData
@@ -979,12 +997,15 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
   ModelDecl _ checkExps <-
     withExceptT ModuleParseFailure $ liftEither $
       moduleModelDecl moduleData
+  -- traceM $ "checkExps: " ++ show checkExps
 
   (funTypes :: HM.HashMap Text
     (Ref, TopLevel Node, Pact.FunType TC.UserType, CheckableType))
     <- ifoldrM
       (\name ref accum -> do
+        traceM "typechecking ref"
         maybeFun <- lift $ typecheck ref
+        traceM "typechecked ref"
         case maybeFun of
           Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
           Right topfun@(TopFun (FDefun _ _ _ defType funType _ _) _)
@@ -1032,7 +1053,16 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
       _            -> error
         "invariant violation: anything but a TopFun is unexpected in funChecks"
 
+  traceM $ "funChecks'': " ++ show funChecks''
+  traceM $ "invariantChecks'': " ++ show invariantChecks
+
   pure (funChecks'', invariantChecks)
+
+scopeCheckInterface
+  :: HM.HashMap Text Ref
+  -> IO (Either VerificationFailure ModuleChecks)
+scopeCheckInterface _refs = return $ Right $
+  ModuleChecks HM.empty HM.empty HM.empty HM.empty (VerificationWarnings [])
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -1040,6 +1070,7 @@ verifyModule
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
+verifyModule _ (ModuleData Pact.MDInterface{} refs) = scopeCheckInterface refs
 verifyModule modules moduleData = runExceptT $ do
   tables <- moduleTables modules moduleData
 
@@ -1069,20 +1100,61 @@ verifyModule modules moduleData = runExceptT $ do
       TypecheckableRefs defunRefs defpactRefs defconstRefs
         = moduleTypecheckableRefs moduleData
 
+  traceM $ "defuns: " ++ show defunRefs
+  traceM $ "defpacts: " ++ show defpactRefs
+  traceM $ "defconsts: " ++ show defconstRefs
+
   consts <- getConsts defconstRefs
   caps   <- moduleCapabilities moduleData
+  traceM $ "consts: " ++ show consts
+  traceM $ "caps: " ++ show caps
 
   let checkEnv = CheckEnv tables consts propDefs moduleData caps
 
+  traceM "getting fun checks"
   -- Note that invariants are only checked at the defpact level, not in
   -- individual steps.
   (funChecks, invariantChecks)
     <- getFunChecks checkEnv $ defunRefs <> defpactRefs
+  traceM "got fun checks"
   stepChecks <- getStepChecks checkEnv defpactRefs
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
+  let scopeChecks = defunRefs <&> \case
+        Pact.Direct _ -> error "TODO"
+        Pact.Ref defn ->
+          case defn ^? tDef . dMeta . mModel of
+            Nothing -> pure Nothing
+            Just model -> case normalizeListLit model of
+              Nothing -> throwError $ Just $ ScopeError
+                -- reconstruct an `Exp Info` for this list
+                ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
+                , "malformed list (inconsistent use of comma separators?)"
+                )
+              Just model' -> withExcept (Just . ScopeError) $ liftEither $ do
+                exps <- collectProperties model'
+                let funTy = error "TODO"
+                FunctionEnvironment envVidStart nameVids vidTys
+                  <- case runExcept (makeFunctionEnvironment funTy) of
+                    Left (ModuleParseFailure pf) -> Left pf
+                    Left _ -> error "TODO"
+                    Right it -> Right it
 
-  pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
+                -- run this, ignoring the result, to check for errors
+                _ <- for exps $ \(propTy, meta) ->
+                  case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
+                    consts propDefs propTy meta of
+                    Left err   -> Left (meta, err)
+                    Right good -> Right (Located (getInfo meta) good)
+
+                pure Nothing
+
+  let scopeChecks' :: HM.HashMap Text (Maybe ScopeError)
+      scopeChecks' = scopeChecks <&> \it -> case runExcept it of
+        Left err -> err
+        Right _  -> Nothing
+
+  pure $ ModuleChecks funChecks stepChecks invariantChecks scopeChecks' warnings
 
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
 renderVerifiedModule = \case
@@ -1100,7 +1172,7 @@ renderVerifiedModule = \case
     [T.pack (renderInfo info) <>
       ":Warning: Verification requires all tables to have schemas"
     ]
-  Right (ModuleChecks propResults stepResults invariantResults warnings) ->
+  Right (ModuleChecks propResults stepResults invariantResults _ warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         stepResults'      = toListOf (traverse.each)          stepResults
         invariantResults' = toListOf (traverse.traverse.each) invariantResults

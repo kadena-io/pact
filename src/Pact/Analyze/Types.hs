@@ -121,6 +121,6 @@ data TypecheckableRefs = TypecheckableRefs
   { _defuns    :: HM.HashMap Text Ref
   , _defpacts  :: HM.HashMap Text Ref
   , _defconsts :: HM.HashMap Text Ref
-  }
+  } deriving Show
 
 makeLenses ''TypecheckableRefs
