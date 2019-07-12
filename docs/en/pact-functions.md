@@ -1403,10 +1403,10 @@ Continue previously-initiated pact identified STEP, optionally specifying ROLLBA
 
 ### env-chain-data {#env-chain-data}
 
-*new-data*&nbsp;`object:*` *&rarr;*&nbsp;`string`
+*new-data*&nbsp;`object:~{public-chain-data}` *&rarr;*&nbsp;`string`
 
 
-Update existing entries 'chain-data' with NEW-DATA, replacing those items only.
+Update existing entries of 'chain-data' with NEW-DATA, replacing those items only.
 ```lisp
 pact> (env-chain-data { "chain-id": "TestNet00/2", "block-height": 20 })
 "Updated public metadata"
