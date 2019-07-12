@@ -3482,3 +3482,32 @@ spec = describe "analyze" $ do
         (with-default-read accounts acct { 'balance: 0 } { 'balance := balance }
           balance))
       |]
+
+  describe "succeeds-when / fails-when" $ do
+    expectVerified [text|
+      (defun test:bool (x:integer)
+        @model [
+          ; this succeeds exactly when x > 0, and fails exactly when x <= 0
+          (succeeds-when (> x 0))
+          (fails-when    (<= x 0))
+
+          ; however, it's valid to assert something weaker
+          (succeeds-when (> x 1000))
+          (fails-when    (< x -1000))
+          ]
+        (enforce (> x 0)))
+      |]
+
+    -- succeeds-when / fails-when also work at the module level
+    expectVerified'
+      [text|
+        (succeeds-when (> x 0))
+        (fails-when    (<= x 0))
+
+        (succeeds-when (> x 0)  { 'only:   [test] })
+        (fails-when    (<= x 0) { 'only:   [test] })
+
+        (succeeds-when (> x 1000) { 'except: [] })
+        (fails-when    (<= x 0)   { 'except: [] })
+      |]
+      "(defun test:bool (x:integer) (enforce (> x 0)))"

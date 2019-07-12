@@ -76,17 +76,23 @@ genVarId = genId varId
 
 data Check
   = PropertyHolds (Prop 'TyBool) -- valid, assuming success
+  | SucceedsWhen  (Prop 'TyBool) -- property implies transaction success (validation)
+  | FailsWhen     (Prop 'TyBool) -- property implies transaction failure (validation)
   | Satisfiable   (Prop 'TyBool) -- sat,   not assuming success
   | Valid         (Prop 'TyBool) -- valid, not assuming success
 
 instance Show Check where
   showsPrec p c = showParen (p > 10) $ case c of
     PropertyHolds prop -> showString "PropertyHolds " . showsTm 11 prop
+    SucceedsWhen prop  -> showString "SucceedsWhen "  . showsTm 11 prop
+    FailsWhen prop     -> showString "FailsWhen "     . showsTm 11 prop
     Satisfiable prop   -> showString "Satisfiable "   . showsTm 11 prop
     Valid prop         -> showString "Valid "         . showsTm 11 prop
 
 checkGoal :: Check -> Goal
 checkGoal (PropertyHolds _) = Validation
+checkGoal (SucceedsWhen _)  = Validation
+checkGoal (FailsWhen _)     = Validation
 checkGoal (Satisfiable _)   = Satisfaction
 checkGoal (Valid _)         = Validation
 

@@ -527,9 +527,14 @@ moduleTables modules ModuleData{..} = do
               , "malformed list (inconsistent use of comma separators?)"
               )
             Just model' -> withExceptT ModuleParseFailure $ liftEither $ do
-              exps <- collectExps "invariant" model'
-              runExpParserOver exps $
-                flip runReaderT (varIdArgs _utFields) . expToInvariant SBool
+              exps <- collectInvariants model'
+              let getInvariant meta = runReaderT
+                    (expToInvariant SBool meta)
+                    (varIdArgs _utFields)
+              for exps $ \meta ->
+                case getInvariant meta of
+                  Left err   -> Left (meta, err)
+                  Right good -> Right (Located (getInfo meta) good)
 
         pure $ Table tabName schema invariants
 
@@ -576,17 +581,25 @@ moduleCapabilities md = do
 
 data PropertyScope
   = Everywhere
+  -- ^ This property applies to the whole module
   | Excluding (Set Text)
+  -- ^ This property applies to all but the named functions (and pacts)
   | Including (Set Text)
+  -- ^ This property applies to only the named functions (and pacts)
 
-data ModuleProperty = ModuleProperty
-  { _moduleProperty      :: Exp Info
-  , _modulePropertyScope :: PropertyScope
+data ModuleCheck = ModuleCheck
+  { _moduleCheckType   :: Prop 'TyBool -> Check
+  -- ^ The style of check to use ('PropertyHolds', 'SucceedsWhen', or
+  -- 'FailsWhen')
+  , _checkPropertyBody :: Exp Info
+  -- ^ The body of the property to check
+  , _moduleCheckScope  :: PropertyScope
+  -- ^ Where does this property apply?
   }
 
 -- Does this (module-scoped) property apply to this function?
-applicableCheck :: DefName -> ModuleProperty -> Bool
-applicableCheck (DefName funName) (ModuleProperty _ propScope) =
+applicableCheck :: DefName -> ModuleCheck -> Bool
+applicableCheck (DefName funName) (ModuleCheck _ _ propScope) =
   case propScope of
     Everywhere      -> True
     Excluding names -> funName `Set.notMember` names
@@ -622,7 +635,7 @@ normalizeListLit lits = case lits of
 parseModuleModelDecl
   :: [Exp Info]
   -> Either ParseFailure
-       [Either (Text, DefinedProperty (Exp Info)) ModuleProperty]
+       [Either (Text, DefinedProperty (Exp Info)) ModuleCheck]
 parseModuleModelDecl exps = traverse parseDecl exps where
 
   parseDecl exp@(ParenList (EAtom' "defproperty" : rest)) = case rest of
@@ -633,8 +646,8 @@ parseModuleModelDecl exps = traverse parseDecl exps where
       pure $ Left (propname, DefinedProperty [] body)
     _ -> Left (exp, "Invalid property definition")
   parseDecl exp = do
-    (body, propScope) <- parsePropertyExp exp
-    pure $ Right $ ModuleProperty body propScope
+    (propTy, body, propScope) <- parsePropertyExp exp
+    pure $ Right $ ModuleCheck propTy body propScope
 
   parseNames :: Exp Info -> Either ParseFailure (Set Text)
   parseNames exp@(SquareList names) = case normalizeListLit names of
@@ -646,16 +659,26 @@ parseModuleModelDecl exps = traverse parseDecl exps where
   parseName (EAtom' name) = Right name
   parseName exp           = Left (exp, "expected a bare word name")
 
-  parsePropertyExp :: Exp Info -> Either ParseFailure (Exp Info, PropertyScope)
+  getPropTy = \case
+    "property"      -> Just PropertyHolds
+    "succeeds-when" -> Just SucceedsWhen
+    "fails-when"    -> Just FailsWhen
+    _               -> Nothing
+
+  parsePropertyExp
+    :: Exp Info
+    -> Either ParseFailure (Prop 'TyBool -> Check, Exp Info, PropertyScope)
   parsePropertyExp exp = case exp of
-    ParenList (EAtom' "property" : rest) -> case rest of
-      [ exp' ]
-        -> pure (exp', Everywhere)
-      [ exp', BraceList [ EStrLiteral' "except", ColonExp, names ] ]
-        -> (exp',) . Excluding <$> parseNames names
-      [ exp', BraceList [ EStrLiteral' "only",   ColonExp, names ] ]
-        -> (exp',) . Including <$> parseNames names
-      _ -> Left (exp, "malformed property definition")
+    ParenList (EAtom' propTyName : rest)
+      | Just propTy <- getPropTy propTyName
+      -> case rest of
+        [ exp' ]
+          -> pure (propTy, exp', Everywhere)
+        [ exp', BraceList [ EStrLiteral' "except", ColonExp, names ] ]
+          -> (propTy, exp',) . Excluding <$> parseNames names
+        [ exp', BraceList [ EStrLiteral' "only",   ColonExp, names ] ]
+          -> (propTy, exp',) . Including <$> parseNames names
+        _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")
 
 -- | Get the set ('HM.HashMap') of refs to functions, pacts, and constants in
@@ -677,7 +700,7 @@ moduleTypecheckableRefs ModuleData{..} = foldl f noRefs (HM.toList _mdRefMap)
 -- | Module-level propery definitions and declarations
 data ModelDecl = ModelDecl
   { _moduleDefProperties :: HM.HashMap Text (DefinedProperty (Exp Info))
-  , _moduleProperties    :: [ModuleProperty]
+  , _moduleProperties    :: [ModuleCheck]
   }
 
 -- | Get the model defined in this module
@@ -773,17 +796,21 @@ stepCheck
 stepCheck tables consts propDefs funTy model = do
   FunctionEnvironment envVidStart nameVids vidTys
     <- makeFunctionEnvironment funTy
+  let getCheck = expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
+        consts propDefs
   checks <- withExcept ModuleParseFailure $ liftEither $ do
-    exps <- collectExps "property" model
-    runExpParserOver exps $
-      expToCheck (mkTableEnv tables) envVidStart nameVids vidTys consts propDefs
+    exps <- collectProperties model
+    for exps $ \(propTy, meta) -> case getCheck propTy meta of
+      Left err   -> Left (meta, err)
+      Right good -> Right (Located (getInfo meta) good)
+
   pure $ Right checks
 
 -- | Get the set of checks for a function.
 moduleFunCheck
   :: [Table]
   -- ^ All tables defined in this module and imported by it
-  -> [ModuleProperty]
+  -> [ModuleCheck]
   -- ^ The set of properties that apply to all functions in the module
   -> HM.HashMap Text EProp
   -- ^ Constants defined in this module
@@ -812,32 +839,35 @@ moduleFunCheck tables modCheckExps consts propDefs defn funTy = do
         , "malformed list (inconsistent use of comma separators?)"
         )
       Just model' -> withExcept ModuleParseFailure $ liftEither $ do
-        exps <- collectExps "property" model'
+        exps <- collectProperties model'
         let funName = _dDefName (_tDef defn)
-            applicableModuleChecks = map _moduleProperty $
+            applicableModuleChecks =
               filter (applicableCheck funName) modCheckExps
-        runExpParserOver (applicableModuleChecks <> exps) $
-          expToCheck (mkTableEnv tables) envVidStart nameVids vidTys consts
-            propDefs
+                <&> \(ModuleCheck ty prop _scope) -> (ty, prop)
+
+        for (applicableModuleChecks <> exps) $ \(propTy, meta) ->
+          case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
+            consts propDefs propTy meta of
+            Left err   -> Left (meta, err)
+            Right good -> Right (Located (getInfo meta) good)
 
   pure $ Right checks
 
--- | Remove the "invariant" or "property" application from every exp
-collectExps :: Text -> [Exp Info] -> Either ParseFailure [Exp Info]
-collectExps name multiExp = for multiExp $ \case
-  ParenList [EAtom' name', v] | name' == name -> Right v
-  exp -> Left (exp, "expected an application of " ++ T.unpack name)
+-- | Remove the "property", "succeeds-when", or "fails-when" application from
+-- every exp.
+collectProperties
+  :: [Exp Info] -> Either ParseFailure [(Prop 'TyBool -> Check, Exp Info)]
+collectProperties multiExp = for multiExp $ \case
+  ParenList [EAtom' "property",      v] -> Right (PropertyHolds, v)
+  ParenList [EAtom' "succeeds-when", v] -> Right (SucceedsWhen,  v)
+  ParenList [EAtom' "fails-when",    v] -> Right (FailsWhen,     v)
+  exp -> Left (exp, "expected an application of \"property\", \"succeeds-when\", or \"fails-when\"")
 
--- | This runs a parser over a collection of 'Exp's, collecting the failures
--- or successes.
-runExpParserOver
-  :: forall t.
-     [Exp Info]
-  -> (Exp Info -> Either String t)
-  -> Either ParseFailure [Located t]
-runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
-  Left err   -> Left (meta, err)
-  Right good -> Right (Located (getInfo meta) good)
+-- | Remove the "invariant" application from every exp
+collectInvariants :: [Exp Info] -> Either ParseFailure [Exp Info]
+collectInvariants multiExp = for multiExp $ \case
+  ParenList [EAtom' "invariant", v] -> Right v
+  exp -> Left (exp, "expected an application of \"invariant\"")
 
 -- | Typecheck a 'Ref'. This is used to extract an @'AST' 'Node'@, which is
 -- translated to either a term or property.
