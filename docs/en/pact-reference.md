@@ -374,7 +374,7 @@ blockchain. These are:
 ### Contract Definition {#definitionmode}
 
 In this mode, a large amount of code is sent into the blockchain to
-establish the smart contract, as comprised of code (modules), tables
+establish the smart contract, as comprised of modules (code), tables
 (data), and keysets (authorization). This can also include "transactional"
 (database-modifying) code, for instance to initialize data.
 
@@ -388,6 +388,12 @@ as a unit.
 admin authorization schemes for modules and tables. Definition creates the keysets
 in the runtime environment and stores their definition in the global keyset database.
 
+#### Namespace declaration {#namespacedefinition}
+
+[Namespace](#namespaces) declarations provide a unique prefix for modules and interfaces defined within the namespace scope. Namespaces are handled differently in public and private blockchain contexts: in private they are freely definable, and the _root namespace_ (ie, not using a namespace at all) is available for user code. In public blockchains, users are not allowed to use the root namespace (which is reserved for built-in contracts like the coin contract) and must define code within a namespace, which may or may not be definable (ie, users might be restricted to "user" namespaces). 
+
+Namespaces are defined using [define-namespace](#define-namespace). Namespaces are "entered" by issuing the [namespace](#namespace) command. 
+
 #### Module declaration {#moduledeclaration}
 
 [Modules](#module) contain the API and data definitions for smart contracts. They are comprised of:
@@ -395,24 +401,30 @@ in the runtime environment and stores their definition in the global keyset data
 - [functions](#defun)
 - [schema](#defschema) definitions
 - [table](#deftable) definitions
-- ["pact"](#defpact) special functions
-- [const](#defconst) values
+- [pact](#defpact) special functions
+- [constant](#defconst) values
+- [models](pact-properties.html)
 
-When a module is declared, all references to native functions
-or definitions from other modules are resolved. Resolution failure results in transaction rollback.
+When a module is declared, all references to native functions, interfaces, or definitions from other modules are resolved. Resolution failure results in transaction rollback.
 
-Modules can be re-defined as controlled by their admin keyset. Module versioning is not supported,
-except by including a version sigil in the module name (e.g., "accounts-v1"). However,
-*module hashes* are a powerful feature for ensuring code safety. When a module is imported with
-[use](#use), the module hash can be specified, to tie code to a particular release.
+Modules can be re-defined as controlled by their governance capabilities. Often, such a function is simply a reference to an administrative keyset. Module versioning is not supported, except by including a version sigil in the module name (e.g., "accounts-v1"). However, *module hashes* are a powerful feature for ensuring code safety. When a module is imported with [use](#use), the module hash can be specified, to tie code to a particular release.
 
-As of Pact 2.2, `use` statements can be issued within a module declaration. This combined with
-module hashes provides a high level of assurance, as updated module code will fail to import
-if a dependent module has subsequently changed on the chain; this will also propagate changes
-to the loaded modules' hash, protecting downstream modules from inadvertent changes on update.
+As of Pact 2.2, `use` statements can be issued within a module declaration. This combined with module hashes provides a high level of assurance, as updated module code will fail to import if a dependent module has subsequently changed on the chain; this will also propagate changes to the loaded modules' hash, protecting downstream modules from inadvertent changes on update.
 
-Module names must be globally unique.
+Module names must be unique within a namespace.
 
+#### Interface Declaration {#interfacedeclaration}
+
+[Interfaces](#interface) contain an API specification and data definitions for smart contracts.
+They are comprised of:
+
+- [function](#defun) specifications (i.e. function signatures)
+- [constant](#defconst) values
+- [models](pact-properties.html)
+
+Interfaces represent an abstract api that a [module](#module) may implement by issuing an `implements` statement within the module declaration. Interfaces may import definitions from other modules by issuing a [use](#use) declaration, which may be used to construct new constant definitions, or make use of types defined in the imported module. Unlike Modules, Interface versioning is not supported. However, modules may implement multiple interfaces.
+
+Interface names must be unique within a namespace.
 
 #### Table Creation {#tablecreation}
 
@@ -599,7 +611,6 @@ Examples of valid keyset JSON productions:
 
 ```
 
-
 ### Keyset Predicates {#keyset-predicates}
 
 A keyset predicate references a function by its (optionally qualified) name, and will compare the public keys in the keyset
@@ -650,6 +661,89 @@ The following code indicates how this might be achieved:
 In the example, `create-account` reads a keyset definition from the message payload using [read-keyset](pact-functions.html#read-keyset)
 to store as "keyset" in the table. `read-balance` only allows that owner's keyset to read the balance,
 by first enforcing the keyset using [enforce-keyset](pact-functions.html#enforce-keyset).
+
+### Namespaces {#namespaces}
+---
+
+Namespaces are [defined](pact-functions.html#define-namespace) by specifying a namespace name and [associating](pact-functions.html#read-keyset)
+a keyset with the namespace. Namespace scope is entered by declaring the namespace environment. All definitions issued after the namespace scope is entered will be accessible by their fully qualified names. These names are of the form _namespace.module.definition_. This form can also be used to access code outside of the current namespace for the purpose of importing module code, or implementing modules:
+
+```lisp
+(implements my-namespace.my-interface)
+;; or
+(use my-namespace.my-module)
+```
+
+Code may be appended to the namespace by simply entering the re-entering the namespace and declaring new code definitions. All definitions _must_ occur within a namespace, as the global namespace (the empty namespace) is reserved for Kadena code.
+
+Examples of valid namespace definition and scoping:
+
+#### Example: Defining a namespace
+
+Defining a namespace requires a keyset, and a namespace name of type string:
+
+```lisp
+(define-keyset 'my-keyset)
+(define-namespace 'my-namespace (read-keyset 'my-keyset))
+
+pact> (namespace 'my-namespace)
+"Namespace set to my-namespace"
+```
+
+#### Example: Accessing members of a namespace
+
+Members of a namespace may be accessed by their fully-qualified names:
+
+```lisp
+pact> (my-namespace.my-module.hello-number 3)
+"Hello, your number is 3!"
+
+;; alternatively
+pact> (use my-namespace.my-module)
+"Using my-namespace.my-module"
+pact> (hello-number 3)
+"Hello, your number is 3!"
+
+```
+
+#### Example: Importing module code or implementing interfaces at a namespace
+
+Modules may be imported at a namespace, and interfaces my be implemented in a similar way. This allows the user to work with members of a namespace in a much less verbose and cumbersome way.
+
+
+```lisp
+; in my-namespace
+(module my-module EXAMPLE_GUARD
+  (implements my-other-namespace.my-interface)
+
+  (defcap EXAMPLE_GUARD ()
+    (enforce-keyset 'my-keyset))
+
+  (defun hello-number:string (number:integer)
+    (format "Hello, your number is {}!" [number]))
+)
+
+```
+
+#### Example: appending code to a namespace
+
+If one is simply appending code to an existing namespace, then the namespace prefix in the fully qualified name may be ommitted, as using a namespace works in a similar way to importing a module: all toplevel definitions within a namespace are brought into scope when `(namespace 'my-namespace)` is declared. Continuing from the previous example:
+
+```lisp
+pact> (my-other-namespace.my-other-module.more-hello 3)
+"Hello, your number is 3! And more hello!"
+
+; alternatively
+pact> (namespace 'my-other-namespace)
+"Namespace set to my-other-namespace"
+
+pact> (use my-other-module)
+"Using my-other-module"
+
+pact> (more-hello 3)
+"Hello, your number is 3! And more hello!"
+
+```
 
 Guards and Capabilities {#caps}
 ---
@@ -749,7 +843,7 @@ code is protected, and allow the ability for code to demand that some capability
 
 ### Protecting code with `require-capability`
 
-The function [`require-capability`](#require-capability) can be used to "protect" a function from being called improperly:
+The function [require-capability](#require-capability) can be used to "protect" a function from being called improperly:
 
 ```lisp
 (defun debit (user amount)
@@ -1125,6 +1219,67 @@ majority is found, the code is upgraded.
           { "for": f, "against": (+ 1 a) })))
   )
 ```
+
+### Interfaces {#interfaces}
+---
+
+An interface, as defined in Pact, is a collection of models used for formal verification, constant definitions, and typed function signatures. When a module issues an [implements](#implements), then that module is said to 'implement' said interface, and must provide an implementation . This allows for abstraction in a similar sense to Java's interfaces, Scala's traits, Haskell's typeclasses or OCaML's signatures. Multiple interfaces may be implemented in a given module, allowing for an expressive layering of behaviors.
+
+Interfaces are declared using the `interface` keyword, and providing a name for the interface. Since interfaces cannot be upgraded, and no function implementations exist in an interface aside from constant data, there is no notion of governance that need be applied. Multiple interfaces may be implemented by a single module. If there are conflicting function names among multiple interfaces, then the two interfaces are incompatible, and the user must either inline the code they want, or redefine the interfaces to the point that the conflict is resolved.
+
+Constants declared in an interface can be accessed directly by their fully qualified name `namespace.interface.const`, and so, they do not have the same naming constraints as function signatures.
+
+Additionally, interfaces my make use of module declarations, admitting use of the [use](pact-functions.html#use) keyword, allowing interfaces to import members of other modules. This allows interface signatures to be defined in terms of table types defined in an imported module.
+
+#### Example: Declaring and implementing an interface
+
+```lisp
+(interface my-interface
+    (defun hello-number:string (number:integer)
+      @doc "Return the string \"Hello, $number!\" when given a string"
+      	)
+        
+    (defconst SOME_CONSTANT 3)
+)
+
+(module my-module (read-keyset 'my-keyset)
+    (implements my-interface)
+
+    (defun hello-number:string (number:integer)
+        (format "Hello, {}!" [number]))
+
+    (defun square-three ()
+        (* my-interface.SOME_CONSTANT my-interface.SOME_CONSTANT))
+)
+```
+
+### Declaring models in an interface
+
+[Formal verification](pact-properties.html) is implemented at multiple levels within an interface in order to provide an extra level of security. Models may be declared either within the body of the interface or at the function level in the same way that one would declare them in a module, with the exception that not all models are applicable to an interface. Indeed, since there is no abstract notion of tables for interfaces, abstract table invariants cannot be declared. However, if an interface imports table schema and types from a module via the [use](pact-functions.html#use) keyword, then the interface can define body and function models that apply directly to the concrete table type. Otherwise, all properties are candidates for declaration in an interface.
+
+When models are declared in an interface, they are appeneded to the list of models present in the implementing module at the level of declaration: body-level models are appended to body-level models, and function-level models are appended to function-level models. This allows users to extend the constraints of an interface with models applicable to specific business logic and implementation.
+
+Declaring models shares the same syntax with modules:
+
+#### Example: declaring models, tables, and importing modules in an interface
+
+```lisp
+(interface coin-sig
+
+  "Coin Contract Abstract Interface Example"
+
+  (use acct-module)
+
+  (defun transfer:string (from:string to:string amount:integer)
+    @doc   "Transfer money between accounts"
+    @model [(property (row-enforced accounts "ks" from))
+            (property (> amount 0))
+            (property (= 0 (column-delta accounts "balance")))
+            ]
+  )
+)
+```
+
 
 
 Computational Model {#computation}
