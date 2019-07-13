@@ -395,6 +395,17 @@ Read KEY from top level of message data body, or data body itself if not provide
 ```
 
 
+### read-string {#read-string}
+
+*key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Parse KEY string or number value from top level of message data body as string.
+```lisp
+(read-string "sender")
+```
+
+
 ### remove {#remove}
 
 *key*&nbsp;`string` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`

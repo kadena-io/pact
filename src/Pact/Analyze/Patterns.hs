@@ -108,6 +108,10 @@ pattern AST_ReadInteger :: forall a. AST a -> AST a
 pattern AST_ReadInteger name <-
   App _node (NativeFunc "read-integer") [name]
 
+pattern AST_ReadString :: forall a. AST a -> AST a
+pattern AST_ReadString name <-
+  App _node (NativeFunc "read-string") [name]
+
 pattern AST_ReadMsg :: forall a. AST a -> AST a
 pattern AST_ReadMsg name <-
   App _node (NativeFunc "read-msg") [name]

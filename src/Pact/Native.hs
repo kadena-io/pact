@@ -29,6 +29,8 @@ module Pact.Native
     , hashDef
     , ifDef
     , readDecimalDef
+    , readIntegerDef
+    , readStringDef
     , baseStrToInt
     , mapDef
     , foldDef
@@ -271,13 +273,39 @@ readDecimalDef = defRNative "read-decimal" readDecimal
   (funType tTyDecimal [("key",tTyString)])
   [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
   "Parse KEY string or number value from top level of message data body as decimal."
-  where
 
+  where
     readDecimal :: RNativeFun e
     readDecimal i [TLitString key] = do
       (ParsedDecimal a') <- parseMsgKey i "read-decimal" key
       return $ toTerm a'
     readDecimal i as = argsError i as
+
+readIntegerDef :: NativeDef
+readIntegerDef = defRNative "read-integer" readInteger
+  (funType tTyInteger [("key",tTyString)])
+  [LitExample "(read-integer \"age\")"]
+  "Parse KEY string or number value from top level of message data body as integer."
+
+  where
+    readInteger :: RNativeFun e
+    readInteger i [TLitString key] = do
+      (ParsedInteger a') <- parseMsgKey i "read-integer" key
+      return $ toTerm a'
+    readInteger i as = argsError i as
+
+readStringDef :: NativeDef
+readStringDef = defRNative "read-string" readString
+  (funType tTyString [("key",tTyString)])
+  [LitExample "(read-string \"sender\")"]
+  "Parse KEY string or number value from top level of message data body as string."
+
+  where
+    readString :: RNativeFun e
+    readString i [TLitString key] = do
+      txt <- parseMsgKey i "read-string" key
+      return $ tStr txt
+    readString i as = argsError i as
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
@@ -486,9 +514,8 @@ langDefs =
     ,defRNative "pact-id" pactId (funType tTyString []) []
      "Return ID if called during current pact execution, failing if not."
     ,readDecimalDef
-    ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
-     [LitExample "(read-integer \"age\")"]
-     "Parse KEY string or number value from top level of message data body as integer."
+    ,readIntegerDef
+    ,readStringDef
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
      [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
      "Read KEY from top level of message data body, or data body itself if not provided. \
@@ -684,12 +711,6 @@ readMsg i [TLitString key] = fromPactValue <$> parseMsgKey i "read-msg" key
 readMsg i [] = fromPactValue <$> parseMsgKey' i "read-msg" Nothing
 readMsg i as = argsError i as
 
-
-readInteger :: RNativeFun e
-readInteger i [TLitString key] = do
-  (ParsedInteger a') <- parseMsgKey i "read-integer" key
-  return $ toTerm a'
-readInteger i as = argsError i as
 
 
 pactId :: RNativeFun e

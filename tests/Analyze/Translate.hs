@@ -22,6 +22,7 @@ import           Pact.Native               (dropDef, enforceDef, enforceOneDef,
                                             formatDef, hashDef, ifDef,
                                             lengthDef, makeListDef,
                                             pactVersionDef, readDecimalDef,
+                                            readIntegerDef, readStringDef,
                                             reverseDef, sortDef, strToIntDef,
                                             takeDef
   -- TODO: mapDef foldDef filterDef whereDef composeDef atDef
@@ -89,9 +90,6 @@ toPactTm = \case
 
     StrToIntBase b s ->
       mkApp strToIntDef [Some SInteger b, Some SStr s]
-
-    -- TODO:
-    -- ReadInteger
 
     Comparison ty' op x y ->
       mkApp (comparisonOpToDef op) [Some ty' x, Some ty' y]
@@ -165,6 +163,10 @@ toPactTm = \case
   Some SGuard (ReadKeySet x) -> mkApp readKeysetDef [Some SStr x]
 
   Some SDecimal (ReadDecimal x) -> mkApp readDecimalDef [Some SStr x]
+
+  Some SInteger (ReadInteger x) -> mkApp readIntegerDef [Some SStr x]
+
+  Some SStr (ReadString x) -> mkApp readStringDef [Some SStr x]
 
   Some STime (ParseTime Nothing x) ->
     mkApp timeDef [Some SStr x]

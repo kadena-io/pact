@@ -516,6 +516,7 @@ evalTerm = \case
   ReadKeySet  nameT -> readKeySet  =<< evalTerm nameT
   ReadDecimal nameT -> readDecimal =<< evalTerm nameT
   ReadInteger nameT -> readInteger =<< evalTerm nameT
+  ReadString  nameT -> readString  =<< evalTerm nameT
 
   PactId -> do
     whetherInPact <- view inPact
@@ -756,6 +757,7 @@ withReset number action = do
       txMetadata   = TxMetadata (mkFreeArray $ "txKeySets"  <> tShow number)
                                 (mkFreeArray $ "txDecimals" <> tShow number)
                                 (mkFreeArray $ "txIntegers" <> tShow number)
+                                (mkFreeArray $ "txStrings"  <> tShow number)
 
       newRegistry = Registry $ mkFreeArray $ "registry" <> tShow number
       newGuardPasses = writeArray (mkFreeArray $ "guardPasses" <> tShow number)
