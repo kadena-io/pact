@@ -390,7 +390,9 @@ in the runtime environment and stores their definition in the global keyset data
 
 #### Namespace declaration {#namespacedefinition}
 
-[Namespace](#namespaces) declarations provide a unique prefix for code defined within the namespace scope. All smart contract definitions must occur within a namespaced scope, which is initiated by defining a namespace using [define-namespace](#define-namespace), and entering the namespace scope by issuing the [namespace](#namespace) command. The global (i.e. empty) namespace is reserved for Kadena code.
+[Namespace](#namespaces) declarations provide a unique prefix for modules and interfaces defined within the namespace scope. Namespaces are handled differently in public and private blockchain contexts: in private they are freely definable, and the _root namespace_ (ie, not using a namespace at all) is available for user code. In public blockchains, users are not allowed to use the root namespace (which is reserved for built-in contracts like the coin contract) and must define code within a namespace, which may or may not be definable (ie, users might be restricted to "user" namespaces). 
+
+Namespaces are defined using [define-namespace](#define-namespace). Namespaces are "entered" by issuing the [namespace](#namespace) command. 
 
 #### Module declaration {#moduledeclaration}
 
