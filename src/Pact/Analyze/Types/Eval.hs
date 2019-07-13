@@ -105,6 +105,10 @@ data PactMetadata
     }
   deriving Show
 
+-- | An existentially wrapped symbolic value that might not always be set.
+-- Consider a value that might only be set on one side of a conditional. We
+-- can't "just use" 'EVal' for this case because we need 'a' to be of kind
+-- 'Ty', and 'Ty' doesn't have a notion of Maybe-ness.
 data EPossibleVal where
   PossibleVal :: SingTy a -> S (Maybe (Concrete a)) -> EPossibleVal
 
@@ -120,6 +124,18 @@ instance Show EPossibleVal where
   showsPrec p (PossibleVal ty s)
     = showParen (p > 10)
     $ showString "PossibleVal "
+    . showsPrec 11 ty
+    . showChar ' '
+    . showsPrec 11 s
+
+-- | An existentially-wrapped symbolic value.
+data EVal where
+  SomeVal :: SingTy a -> S (Concrete a) -> EVal
+
+instance Show EVal where
+  showsPrec p (SomeVal ty s)
+    = showParen (p > 10)
+    $ showString "SomeVal "
     . showsPrec 11 ty
     . showChar ' '
     . showsPrec 11 s
