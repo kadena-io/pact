@@ -717,12 +717,12 @@ evalTerm = \case
     tagYield tid $ mkAVal sVal
     let ty = sing :: SingTy a
     withSymVal ty $
-      latticeState . lasYieldedInCurrent ?= SomeVal ty (S prov (SBV.sJust val))
+      latticeState . lasYieldedInCurrent ?= PossibleVal ty (S prov (SBV.sJust val))
     pure sVal
 
   Resume tid -> use (latticeState . lasYieldedInPrevious) >>= \case
     Nothing -> throwErrorNoLoc "No previously yielded value for resume"
-    Just (SomeVal ty (S prov mVal)) -> case singEq ty (sing :: SingTy a) of
+    Just (PossibleVal ty (S prov mVal)) -> case singEq ty (sing :: SingTy a) of
       Nothing   -> throwErrorNoLoc "Resume of unexpected type"
       Just Refl -> withSymVal ty $ do
         markFailure $ SBV.isNothing mVal

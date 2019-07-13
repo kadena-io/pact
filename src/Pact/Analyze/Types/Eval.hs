@@ -105,21 +105,21 @@ data PactMetadata
     }
   deriving Show
 
-data ExistentialVal where
-  SomeVal :: SingTy a -> S (Maybe (Concrete a)) -> ExistentialVal
+data EPossibleVal where
+  PossibleVal :: SingTy a -> S (Maybe (Concrete a)) -> EPossibleVal
 
-instance Mergeable ExistentialVal where
-  symbolicMerge force test (SomeVal lTy lVal) (SomeVal rTy rVal)
+instance Mergeable EPossibleVal where
+  symbolicMerge force test (PossibleVal lTy lVal) (PossibleVal rTy rVal)
     = case singEq lTy rTy of
       Nothing   -> error $ "failed symbolic merge with different types: " ++
         show lTy ++ " vs " ++ show rTy
-      Just Refl -> SomeVal lTy $ withSymVal lTy $
+      Just Refl -> PossibleVal lTy $ withSymVal lTy $
         symbolicMerge force test lVal rVal
 
-instance Show ExistentialVal where
-  showsPrec p (SomeVal ty s)
+instance Show EPossibleVal where
+  showsPrec p (PossibleVal ty s)
     = showParen (p > 10)
-    $ showString "SomeVal "
+    $ showString "PossibleVal "
     . showsPrec 11 ty
     . showChar ' '
     . showsPrec 11 s
@@ -299,8 +299,8 @@ data LatticeAnalyzeState a
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
     , _lasPendingGrants       :: TokenGrants
-    , _lasYieldedInPrevious   :: Maybe ExistentialVal
-    , _lasYieldedInCurrent    :: Maybe ExistentialVal
+    , _lasYieldedInPrevious   :: Maybe EPossibleVal
+    , _lasYieldedInCurrent    :: Maybe EPossibleVal
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
