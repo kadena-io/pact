@@ -329,6 +329,7 @@ data GlobalAnalyzeState
     { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
     , _gasRollbacks        :: [ETerm]
     -- ^ the stack of rollbacks to perform on failure
+    , _gasCachedChainData  :: Maybe EVal
     }
   deriving (Show)
 
@@ -411,6 +412,7 @@ mkInitialAnalyzeState trivialGuard tables caps = AnalyzeState
     , _globalState = GlobalAnalyzeState
         { _gasGuardProvenances = mempty
         , _gasRollbacks        = []
+        , _gasCachedChainData  = Nothing
         }
     }
 

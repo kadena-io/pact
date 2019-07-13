@@ -18,7 +18,7 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               (.~), (<&>), (?~), (?=), (^.),
                                               (^?), _1, _2, _head, _Just,
                                               ifoldlM)
-import           Control.Monad               (void)
+import           Control.Monad               (void, when)
 import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
@@ -26,11 +26,13 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
+import           Data.Constraint             (Dict (Dict), withDict)
 import           Data.Default                (def)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==), (./=)),
+                                              OrdSymbolic ((.>=)), HasKind,
                                               Mergeable (symbolicMerge), SBV,
                                               SymVal, ite, literal, (.<),
                                               writeArray)
@@ -280,6 +282,32 @@ readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
     AVal _ _ -> error
       "impossible: unexpected type of cell provenance in readFields"
 
+mkChainData :: SingTy ('TyObject ty) -> Analyze (S (ConcreteObj ty))
+mkChainData (SObjectUnsafe SNil') = pure $ sansProv $ literal ()
+mkChainData (SObjectUnsafe (SCons' sym (fieldType :: SingTy v) subSchema)) = do
+  let fieldName = symbolVal sym
+      subObjTy = SObjectUnsafe subSchema
+      sbv = withHasKind fieldType $ uninterpret $ "chain_data_" <>
+        (map (\c -> if c == '-' then '_' else c) fieldName)
+
+      mNumDict :: Maybe (Dict (Num (Concrete v)))
+      mNumDict = case fieldType of
+        SInteger -> Just Dict
+        SDecimal -> Just Dict
+        _        -> Nothing
+
+  withSymVal fieldType $ do
+    when (any (fieldName ==) ["block-height", "gas-limit", "gas-price"]) $ do
+      case mNumDict of
+        Just numDict ->
+          let zero = withDict numDict $ literal 0
+           in withOrd fieldType $ addConstraint $ sansProv $ sbv .>= zero
+        Nothing ->
+          error $ "impossible: " ++ fieldName ++ " must be a number"
+
+    S _ obj' <- mkChainData subObjTy
+    withSymVal subObjTy $ pure $ sansProv $ tuple (sbv, obj')
+
 readField
   :: TableName -> ColumnName -> S RowKey -> S Bool -> SingTy ty -> Analyze AVal
 readField tn cn sRk sDirty ty
@@ -522,6 +550,18 @@ evalTerm = \case
     whetherInPact <- view inPact
     succeeds %= (.&& whetherInPact)
     view currentPactId
+
+  ChainData objTy -> do
+    mCached <- use $ globalState.gasCachedChainData
+    case mCached of
+      Just (SomeVal objTy' cd) ->
+        case singEq objTy objTy' of
+          Just Refl -> pure cd
+          Nothing -> error "impossible: type mismatch for chain-data cache"
+      Nothing -> do
+        cd <- mkChainData objTy
+        globalState.gasCachedChainData .= Just (SomeVal objTy cd)
+        pure cd
 
   --
   -- If in the future Pact is able to store guards other than keysets in the
