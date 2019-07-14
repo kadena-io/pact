@@ -224,7 +224,7 @@ instance ToSchema Value where
 
 instance ToSchema PactResult
 
-instance ToSchema Guard
+instance ToSchema (Guard PactValue)
 instance ToSchema PactGuard
 instance ToSchema KeySet
 instance ToSchema KeySetName
@@ -234,7 +234,7 @@ instance ToSchema ModuleName
 instance ToSchema NamespaceName
 instance ToSchema ModuleGuard
 instance ToSchema ModuleHash
-instance ToSchema UserGuard where
+instance ToSchema (UserGuard PactValue) where
   declareNamedSchema = declareGenericString
 
 instance ToSchema PactValue

@@ -814,11 +814,11 @@ spec = describe "analyze" $ do
   describe "create-user-guard" $ do
     let code =
           [text|
-            (defun fail:bool (o:object{account})
-              (enforce false ""))
+            (defun fail:bool (msg:string)
+              (enforce false msg))
 
             (defun test:bool ()
-              (enforce-guard (create-user-guard {} "fail")))
+              (enforce-guard (create-user-guard (fail "hi"))))
           |]
     -- We leave user guards completely free for now, until we inline them into
     -- a new construct during typechecking:
