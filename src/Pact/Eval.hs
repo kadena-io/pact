@@ -351,9 +351,11 @@ loadModule m@Module {} bod1 mi g0 = do
               case dnm of
                 Nothing -> return (g, rs)
                 Just dn -> do
+                  when (isJust $ HM.lookup dn rs) $
+                    evalError (_tInfo t) $ "definition name conflict: " <> pretty dn
                   g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember (MDModule m))
-                  return (g + g',(dn,t):rs)
-        second HM.fromList <$> foldM doDef (g0,[]) bd
+                  return (g + g', HM.insert dn t rs)
+        foldM doDef (g0,mempty) bd
       t -> evalError (_tInfo t) "Malformed module"
   mapM_ evalUse $ _mImports m
   evaluatedDefs <- evaluateDefs mi (fmap (mangleDefs $ _mName m) mdefs)
@@ -390,9 +392,11 @@ loadInterface i@Interface{..} body info gas0 = do
             case dnm of
               Nothing -> return (g, rs)
               Just dn -> do
+                when (isJust $ HM.lookup dn rs) $
+                  evalError (_tInfo t) $ "definition name conflict: " <> pretty dn
                 g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember (MDInterface i))
-                return (g + g',(dn,t):rs)
-      second HM.fromList <$> foldM doDef (gas0,[]) bd
+                return (g + g',HM.insert dn t rs)
+      foldM doDef (gas0,mempty) bd
     t -> evalError (_tInfo t) "Malformed interface"
   mapM_ evalUse _interfaceImports
   evaluatedDefs <- evaluateDefs info (fmap (mangleDefs _interfaceName) idefs)
@@ -489,7 +493,10 @@ solveConstraint info refName (Ref t) evalMap = do
             <> pretty rty <> line <> pretty rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: "
             <> prettyList args <> line <> prettyList args'
-          forM_ (args `zip` args') $ \((Arg _ ty _), (Arg _ ty' _)) -> do
+          forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
+            -- FV requires exact argument names as opposed to positional info
+            when (n /= n') $ evalError info $ "argument names must match interface definition: "
+              <> pretty n <> " does not match " <> pretty n'
             when (ty /= ty') $ evalError info $ "mismatching types: "
               <> pretty ty <> " and " <> pretty ty'
           -- the model concatenation step: we reinsert the ref back into the map with new models
