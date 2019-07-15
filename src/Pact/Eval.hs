@@ -310,7 +310,7 @@ evalUse (Use mn h i) = do
   case mm of
     Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
     Just md -> do
-      case view mdModule md of
+      case _mdModule md of
         MDModule Module{..} ->
           case h of
             Nothing -> return ()
@@ -318,12 +318,8 @@ evalUse (Use mn h i) = do
                     | otherwise -> evalError i $ "Module " <>
                         pretty mn <> " does not match specified hash: " <>
                         pretty mh <> ", " <> pretty _mHash
-        MDInterface Interface{..} ->
-          case h of
-            Nothing -> return ()
-            Just _ -> evalError i $
-              "Interfaces should not have associated hashes: " <>
-              pretty _interfaceName
+        MDInterface i' -> evalError i $
+          "interfaces cannot be imported: " <> pretty (_interfaceName i')
 
       installModule False md
 
@@ -493,13 +489,11 @@ solveConstraint info refName (Ref t) evalMap = do
             <> pretty rty <> line <> pretty rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: "
             <> prettyList args <> line <> prettyList args'
-          forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
-            when (n /= n') $ evalError info $ "mismatching argument names: "
-              <> pretty n <> " and " <> pretty n'
+          forM_ (args `zip` args') $ \((Arg _ ty _), (Arg _ ty' _)) -> do
             when (ty /= ty') $ evalError info $ "mismatching types: "
               <> pretty ty <> " and " <> pretty ty'
           -- the model concatenation step: we reinsert the ref back into the map with new models
-          pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
+          pure $ HM.insert refName (Ref $ tDef . dMeta <>~ m $ s) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " <> pretty t
 
 -- | Lookup module in state or db, resolving against current namespace if unqualified.
