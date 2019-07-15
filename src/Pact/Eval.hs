@@ -500,7 +500,7 @@ solveConstraint info refName (Ref t) evalMap = do
             when (ty /= ty') $ evalError info $ "mismatching types: "
               <> pretty ty <> " and " <> pretty ty'
           -- the model concatenation step: we reinsert the ref back into the map with new models
-          pure $ HM.insert refName (Ref $ tDef . dMeta <>~ m $ s) em
+          pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " <> pretty t
 
 -- | Lookup module in state or db, resolving against current namespace if unqualified.
