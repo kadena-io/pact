@@ -158,15 +158,14 @@ writeSwagger fn = BSL8.writeFile fn . encode
 instance ToSchema SubmitBatch where
   declareNamedSchema = lensyDeclareNamedSchema 3
 
-instance ToSchema (Command Text) where
+instance (ToSchema a) => ToSchema (Command a) where
   declareNamedSchema =
     (swaggerDescription "transaction command with stringified JSON payload (cmd)") .
     (genericDeclareNamedSchema $
-      optionsOf $ optFieldLabel $
-                  replaceOrModify
-                  ("_cmdPayload","cmd")
-                  (lensyConstructorToNiceJson 4)
-    )
+      optionsOf $ optionFieldLabel transform)
+    where transform n = case n of
+            "_cmdPayload" -> "cmd"
+            _ -> lensyConstructorToNiceJson 4 n
 
 instance ToSchema UserSig where
   declareNamedSchema =
@@ -209,7 +208,7 @@ instance ToSchema PollResponses where
     declareNamedSchema (Proxy :: Proxy [PollResponse])
 
 
-instance ToSchema (CommandResult Hash) where
+instance (ToSchema a) => ToSchema (CommandResult a) where
   declareNamedSchema = (swaggerDescription "result of attempting to execute a pact command") .
     (lensyDeclareNamedSchema 3)
 
@@ -256,10 +255,10 @@ instance ToSchema PactResult where
 
 instance ToSchema PactError where
   declareNamedSchema = genericDeclareNamedSchema $
-    optionsOf $ optFieldLabel $
-                replaceOrModify
-                ("peDoc", "message")
-                (lensyConstructorToNiceJson 2)
+    optionsOf $ optionFieldLabel transform
+    where transform n = case n of
+            "peDoc" -> "message"
+            _ -> lensyConstructorToNiceJson 2 n
 instance ToSchema PactErrorType
 instance ToSchema Info where
   declareNamedSchema = declareGenericString
@@ -280,12 +279,12 @@ instance ToSchema Yield where
 instance ToSchema PactValue where
   declareNamedSchema = (swaggerDescription "data from Pact execution represented as JSON") .
     (genericDeclareNamedSchema $
-      optionsOf $ optConstructor $ toNiceString 1)
+      optionsOf $ optionConstructor $ toNiceString 1)
 
 
 instance ToSchema Literal where
   declareNamedSchema = genericDeclareNamedSchema $
-    (optionsOf $ optConstructor $ toNiceString 1)
+    (optionsOf $ optionConstructor $ toNiceString 1)
       { Swagger.unwrapUnaryRecords = True }
 
 newtype DummyTime = DummyTime UTCTime
@@ -317,7 +316,7 @@ instance ToSchema (ObjectMap PactValue) where
 
 instance ToSchema Guard where
   declareNamedSchema = genericDeclareNamedSchema $
-    optionsOf $ optConstructor $ toNiceString 1
+    optionsOf $ optionConstructor $ toNiceString 1
 
 instance ToSchema PactGuard where
   declareNamedSchema = lensyDeclareNamedSchema 3
@@ -331,7 +330,7 @@ instance ToSchema ModuleGuard where
 instance ToSchema ModuleName where
    declareNamedSchema = lensyDeclareNamedSchema 3
 instance ToSchema NamespaceName
-instance ToSchema (Object Name) where
+instance ToSchema (Object a) where
   declareNamedSchema = declareGenericSchema $
     (schemaOf $ swaggerType SwaggerObject)
 instance ToSchema UserGuard where
@@ -342,11 +341,10 @@ instance ToSchema ListenerRequest where
   declareNamedSchema = lensyDeclareNamedSchema 3
 instance ToSchema ListenResponse where
   declareNamedSchema = genericDeclareNamedSchema $
-    optionsOf $ optConstructor $
-                replaceOrModify
-                ("ListenTimeout","timeout-micros")
-                (toNiceString 6)
-
+    optionsOf $ optionConstructor transform
+    where transform n = case n of
+            "ListenTimeout" -> "timeout-micros"
+            _ -> toNiceString 6 n
 
 
 instance ToSchema Analyze.Request where

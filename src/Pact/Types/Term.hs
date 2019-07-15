@@ -202,7 +202,7 @@ newtype KeySetName = KeySetName Text
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
 newtype PactId = PactId Text
-  deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,ToTerm)
+    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,ToTerm)
 
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
@@ -474,7 +474,6 @@ instance AsString Name where asString = renderCompactText
 
 instance ToJSON Name where
   toJSON = toJSON . renderCompactString
-
 
 instance FromJSON Name where
   parseJSON = withText "Name" $ \t -> case parseName def t of

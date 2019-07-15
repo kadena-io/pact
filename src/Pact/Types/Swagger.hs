@@ -25,10 +25,9 @@ module Pact.Types.Swagger
   , namedSchema
     -- | Modifiers
   , fixedLength
-  , replaceOrModify
   , toNiceString
-  , optConstructor
-  , optFieldLabel
+  , optionConstructor
+  , optionFieldLabel
   , optionsOf
   , swaggerProperties
   , swaggerDescription
@@ -96,20 +95,15 @@ fixedLength i =
   set maxLength (Just $ fromIntegral i) .
   set minLength (Just $ fromIntegral i)
 
-replaceOrModify :: (Eq a) => (a, a) -> (a -> a) -> a -> a
-replaceOrModify (target, replacement) modifier curr
-  | (target == curr)  = replacement
-  | otherwise         = modifier curr
-
 toNiceString :: Int -> String -> String
 toNiceString i = unpack . T.toLower . T.drop i . pack
 
 
-optConstructor :: (String -> String) -> SchemaOptions -> SchemaOptions
-optConstructor f o = o { constructorTagModifier = f }
+optionConstructor :: (String -> String) -> SchemaOptions -> SchemaOptions
+optionConstructor f o = o { constructorTagModifier = f }
 
-optFieldLabel :: (String -> String) -> SchemaOptions -> SchemaOptions
-optFieldLabel f o = o { fieldLabelModifier = f }
+optionFieldLabel :: (String -> String) -> SchemaOptions -> SchemaOptions
+optionFieldLabel f o = o { fieldLabelModifier = f }
 
 optionsOf :: (SchemaOptions -> SchemaOptions) -> SchemaOptions
 optionsOf f = f defaultSchemaOptions
