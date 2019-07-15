@@ -62,19 +62,19 @@ the transaction has the proper signatures to satisfy the keyset named
 
 .. code:: lisp
 
-    (defun read-account (id)
-      @doc   "Read data for account ID"
-      @model [(property (authorized-by 'admins))]
+   (defun read-account (id)
+     @doc   "Read data for account ID"
+     @model [(property (authorized-by 'admins))]
 
-      (enforce-admin)
-      (read 'accounts id ['balance 'ccy 'amount]))
+     (enforce-admin)
+     (read 'accounts id ['balance 'ccy 'amount]))
 
 There’s a set of square brackets around our property because Pact allows
 multiple properties to be defined simultaneously:
 
 .. code:: lisp
 
-    [p1 p2 p3 ...]
+   [p1 p2 p3 ...]
 
 Next, we see an example of schema invariants. For any table with the
 following schema, if our property checker succeeds, we know that all
@@ -83,12 +83,12 @@ balances are greater than zero:
 
 .. code:: lisp
 
-    (defschema tokens
-      @doc   "token schema"
-      @model [(invariant (> balance 0))]
+   (defschema tokens
+     @doc   "token schema"
+     @model [(invariant (> balance 0))]
 
-      username:string
-      balance:integer)
+     username:string
+     balance:integer)
 
 How does it work?
 -----------------
@@ -123,7 +123,7 @@ module, property checking is run by invoking ``verify``:
 
 .. code:: lisp
 
-    (verify 'module-name)
+   (verify 'module-name)
 
 This will typecheck the code and, if that succeeds, check all invariants
 and properties.
@@ -139,11 +139,11 @@ names, and return values can be referred to by the name ``result``:
 
 .. code:: lisp
 
-    (defun negate:integer (x:integer)
-      @doc   "negate a number"
-      @model [(property (= result (* -1 x)))]
+   (defun negate:integer (x:integer)
+     @doc   "negate a number"
+     @model [(property (= result (* -1 x)))]
 
-      (* x -1))
+     (* x -1))
 
 Here you can also see that the standard arithmetic operators on integers
 and decimals work as they do in normal Pact code.
@@ -153,13 +153,13 @@ operators:
 
 .. code:: lisp
 
-    (defun abs:integer (x:integer)
-      @doc   "absolute value"
-      @model [(property (>= result 0))]
+   (defun abs:integer (x:integer)
+     @doc   "absolute value"
+     @model [(property (>= result 0))]
 
-      (if (< x 0)
-        (negate x)
-        x))
+     (if (< x 0)
+       (negate x)
+       x))
 
 Boolean operators
 ~~~~~~~~~~~~~~~~~
@@ -171,16 +171,16 @@ in the form of ``when``, where ``(when x y)`` is equivalent to
 
 .. code:: lisp
 
-    (defun negate:integer (x:integer)
-      @doc   "negate a number"
-      @model
-        [(property (when (< x 0) (> result 0)))
-         (property (when (> x 0) (< result 0)))
-         (property (and
-           (when (< x 0) (> result 0))
-           (when (> x 0) (< result 0))))]
+   (defun negate:integer (x:integer)
+     @doc   "negate a number"
+     @model
+       [(property (when (< x 0) (> result 0)))
+        (property (when (> x 0) (< result 0)))
+        (property (and
+          (when (< x 0) (> result 0))
+          (when (> x 0) (< result 0))))]
 
-      (* x -1))
+     (* x -1))
 
 Transaction abort and success
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -191,12 +191,12 @@ tested. This means that properties like the following:
 
 .. code:: lisp
 
-    (defun ensured-positive:integer (val:integer)
-      @doc   "halts when passed a non-positive number"
-      @model [(property (!= result 0))]
+   (defun ensured-positive:integer (val:integer)
+     @doc   "halts when passed a non-positive number"
+     @model [(property (!= result 0))]
 
-      (enforce (> val 0) "val is not positive")
-      val)
+     (enforce (> val 0) "val is not positive")
+     val)
 
 will pass due to the use of ``enforce``.
 
@@ -204,6 +204,31 @@ At run-time on the blockchain, if an ``enforce`` call fails, the
 containing transaction is aborted. Because ``properties`` are only
 concerned with transactions that succeed, the necessary conditions to
 pass each ``enforce`` call are assumed.
+
+However, in some cases it’s useful to assert when the function must
+succeed or abort. To write this kind of assertion, instead of
+``property``, you can use ``succeeds-when`` or ``fails-when``, for
+example:
+
+.. code:: lisp
+
+   (defun ensured-positive:bool (val:integer)
+     @model [
+       ; this succeeds exactly when val > 0, and fails exactly when val <= 0
+       (succeeds-when (> val 0))
+       (fails-when    (<= val 0))
+
+       ; however, it's valid to assert something weaker
+       (succeeds-when (> val 1000))
+       (fails-when    (< val -1000))
+       ]
+     (enforce (> val 0)))
+
+With this model, we’re guaranteed that no transaction will ever run on
+the blockchain with a non-positive ``val``.
+
+We’ve now seen all three valid forms of model assertions – ``property``,
+``succeeds-when``, and ``fails-when``.
 
 More comprehensive properties API documentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -258,17 +283,17 @@ possible code path enforces the keyset:
 
 .. code:: lisp
 
-    (defun admins-only (action:string)
-      @doc   "Only admins or super-admins can call this function successfully.
-      @model
-        [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
-         (property (when (== "create" action) (authorized-by 'super-admins)))]
+   (defun admins-only (action:string)
+     @doc   "Only admins or super-admins can call this function successfully.
+     @model
+       [(property (or (authorized-by 'admins) (authorized-by 'super-admins)))
+        (property (when (== "create" action) (authorized-by 'super-admins)))]
 
-      (if (= action "create")
-        (create)
-        (if (= action "update")
-          (update)
-          (incorrect-action action))))
+     (if (= action "create")
+       (create)
+       (if (= action "update")
+         (update)
+         (incorrect-action action))))
 
 For the common pattern of row-level keyset enforcement, wherein a table
 might contain a row for each user, and each user’s row contains a keyset
@@ -281,7 +306,7 @@ by the variable ``name``, and enforce it using ``enforce-keyset``:
 
 .. code:: lisp
 
-    (row-enforced accounts 'ks name)
+   (row-enforced accounts 'ks name)
 
 For some examples of ``row-enforced`` in action, see “A simple balance
 transfer example” and the section on “universal and existential
@@ -316,7 +341,7 @@ conservation” property using ``column-delta``:
 
 .. code:: lisp
 
-    (= (column-delta accounts 'balance) 0.0)
+   (= (column-delta accounts 'balance) 0.0)
 
 This property asserts that the “column delta” is zero, where
 ``column-delta`` returns a numeric value of the sum of all changes to
@@ -330,16 +355,16 @@ increases during a transaction:
 
 .. code:: lisp
 
-    (>= 0 (column-delta accounts 'balance))
+   (>= 0 (column-delta accounts 'balance))
 
 or that it increases by a set amount during a transaction:
 
 .. code:: lisp
 
-    (= 1 (column-delta accounts 'balance))
+   (= 1 (column-delta accounts 'balance))
 
 ``column-delta`` is defined in terms of the increase of the column from
-before to after the transaction (i.e. ``after - before``) – not an
+before to after the transaction (i.e. ``after - before``) – not an
 absolute value of change. So here ``1`` means an increase of ``1`` to
 the column’s total sum.
 
@@ -357,10 +382,10 @@ In such a situation we could use universal quantification to talk about
 
 .. code:: lisp
 
-    (property
-      (forall (key:string)
-       (when (row-written accounts key)
-         (row-enforced accounts 'ks key))))
+   (property
+     (forall (key:string)
+      (when (row-written accounts key)
+        (row-enforced accounts 'ks key))))
 
 This property says that for any possible row written by the function,
 the keyset in column ``ks`` must be enforced for that row.
@@ -371,9 +396,9 @@ transaction, we could use existential quantification like so:
 
 .. code:: lisp
 
-    (property
-      (exists (key:string)
-        (row-read accounts key)))
+   (property
+     (exists (key:string)
+       (row-read accounts key)))
 
 For both universal and existential quantification, note that a type
 annotation is required.
@@ -385,25 +410,25 @@ With ``defproperty``, properties can be defined at the module level:
 
 .. code:: lisp
 
-    (module accounts 'admin-keyset
-      @model
-        [(defproperty conserves-mass
-           (= (column-delta accounts 'balance) 0.0))
-         (defproperty auth-required
-           (authorized-by 'accounts-admin-keyset))]
+   (module accounts 'admin-keyset
+     @model
+       [(defproperty conserves-mass
+          (= (column-delta accounts 'balance) 0.0))
+        (defproperty auth-required
+          (authorized-by 'accounts-admin-keyset))]
 
-      ; ...
-      )
+     ; ...
+     )
 
 and then used at the function level by referring to the property’s name:
 
 .. code:: lisp
 
-    (defun read-account (id)
-      @model [(property auth-required)]
+   (defun read-account (id)
+     @model [(property auth-required)]
 
-      ; ...
-      )
+     ; ...
+     )
 
 A simple balance transfer example
 ---------------------------------
@@ -413,13 +438,13 @@ amount of a balance across two accounts for the given table:
 
 .. code:: lisp
 
-    (defschema account
-      @doc "user accounts with balances"
+   (defschema account
+     @doc "user accounts with balances"
 
-      balance:integer
-      ks:keyset)
+     balance:integer
+     ks:keyset)
 
-    (deftable accounts:{account})
+   (deftable accounts:{account})
 
 The following code to transfer a balance between two accounts may look
 correct at first study, but it turns out that there are number of bugs
@@ -428,28 +453,28 @@ an invariant to the table.
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc   "Transfer money between accounts"
-      @model [(property (row-enforced accounts 'ks from))]
+   (defun transfer (from:string to:string amount:integer)
+     @doc   "Transfer money between accounts"
+     @model [(property (row-enforced accounts 'ks from))]
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to   { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to   { "balance": (+ to-bal amount) }))))
 
 Let’s start by adding an invariant that balances can never drop below
 zero:
 
 .. code:: lisp
 
-    (defschema account
-      @doc   "user accounts with balances"
-      @model [(invariant (>= balance 0))]
+   (defschema account
+     @doc   "user accounts with balances"
+     @model [(invariant (>= balance 0))]
 
-      balance:integer
-      ks:keyset)
+     balance:integer
+     ks:keyset)
 
 Now, when we use ``verify`` to check all properties in this module,
 Pact’s property checker points out that it’s able to falsify the
@@ -460,17 +485,17 @@ amount! Let’s fix that by enforcing ``(> amount 0)``, and try again:
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc   "Transfer money between accounts"
-      @model [(property (row-enforced accounts 'ks from))]
+   (defun transfer (from:string to:string amount:integer)
+     @doc   "Transfer money between accounts"
+     @model [(property (row-enforced accounts 'ks from))]
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (enforce (> amount 0)         "Non-positive amount")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to   { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (enforce (> amount 0)         "Non-positive amount")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to   { "balance": (+ to-bal amount) }))))
 
 The property checker validates the code at this point, but let’s add
 another property ``conserves-mass`` to ensure that it’s not possible for
@@ -479,26 +504,26 @@ within ``@model`` at the module level:
 
 .. code:: lisp
 
-    (defproperty conserves-mass
-      (= (column-delta accounts 'balance) 0.0))
+   (defproperty conserves-mass
+     (= (column-delta accounts 'balance) 0.0))
 
 And then we can use it within ``@model`` at the function level:
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc   "Transfer money between accounts"
-      @model
-        [(property (row-enforced accounts 'ks from))
-         (property conserves-mass)]
+   (defun transfer (from:string to:string amount:integer)
+     @doc   "Transfer money between accounts"
+     @model
+       [(property (row-enforced accounts 'ks from))
+        (property conserves-mass)]
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (enforce (> amount 0)         "Non-positive amount")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to   { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (enforce (> amount 0)         "Non-positive amount")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to   { "balance": (+ to-bal amount) }))))
 
 When we run ``verify`` this time, the property checker finds a bug again
 – it’s able to falsify the property when ``from`` and ``to`` are set to
@@ -511,8 +536,8 @@ also set to what we’ll call ``previous-balance``:
 
 .. code:: lisp
 
-    (update accounts "alice" { "balance": (- previous-balance amount) })
-    (update accounts "alice" { "balance": (+ previous-balance amount) })
+   (update accounts "alice" { "balance": (- previous-balance amount) })
+   (update accounts "alice" { "balance": (+ previous-balance amount) })
 
 In this scenario, we can see that the second ``update`` call will
 completely overwrite the first one, with the value
@@ -524,20 +549,20 @@ prevent this unintended behavior:
 
 .. code:: lisp
 
-    (defun transfer (from:string to:string amount:integer)
-      @doc   "Transfer money between accounts"
-      @model
-        [(property (row-enforced accounts 'ks from))
-         (property conserves-mass)]
+   (defun transfer (from:string to:string amount:integer)
+     @doc   "Transfer money between accounts"
+     @model
+       [(property (row-enforced accounts 'ks from))
+        (property conserves-mass)]
 
-      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
-        (with-read accounts to { 'balance := to-bal }
-          (enforce-keyset from-ks)
-          (enforce (>= from-bal amount) "Insufficient Funds")
-          (enforce (> amount 0)         "Non-positive amount")
-          (enforce (!= from to)         "Sender is the recipient")
-          (update accounts from { "balance": (- from-bal amount) })
-          (update accounts to   { "balance": (+ to-bal amount) }))))
+     (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+       (with-read accounts to { 'balance := to-bal }
+         (enforce-keyset from-ks)
+         (enforce (>= from-bal amount) "Insufficient Funds")
+         (enforce (> amount 0)         "Non-positive amount")
+         (enforce (!= from to)         "Sender is the recipient")
+         (update accounts from { "balance": (- from-bal amount) })
+         (update accounts to   { "balance": (+ to-bal amount) }))))
 
 And now we see that finally the property checker verifies that all of
 the following are true:
