@@ -27,8 +27,7 @@ import Data.Text.Encoding
 
 import Pact.Native.Internal
 import Pact.Types.Pretty
-import Pact.Types.Runtime
-
+import Pact.Types.Runtime hiding (PublicKey)
 #if !defined(ghcjs_HOST_OS)
 import Crypto.PubKey.Curve25519
 import Crypto.Error
@@ -157,7 +156,7 @@ liftCrypto i msg (CryptoFailed e) = evalError' i $ prettyString $ msg ++ ": " ++
 
 importPublic
   :: (HasInfo i, BA.ByteArrayAccess bs) =>
-     i -> bs -> Eval e Crypto.PubKey.Curve25519.PublicKey
+     i -> bs -> Eval e PublicKey
 importPublic i = liftCrypto i "Invalid public key" . publicKey
 
 importSecret
@@ -195,6 +194,9 @@ _ciphertext = either error id $ decodeBase64UrlUnpadded "xvhAzzyGWuWdlA2XW7irq2s
 _aad :: ByteString
 _aad = either error id $ parseB16TextOnly "616164" -- "aad"
 
+_i :: Info
+_i = def
+
 _jankyRunEval :: Eval e b -> IO b
 _jankyRunEval = fmap fst . runEval undefined undefined
 
@@ -212,5 +214,44 @@ _testValidate pk sk = _jankyRunEval $ doValidate (def :: Info) pk sk
 
 _testValidate' :: IO Bool
 _testValidate' = _testValidate _pk _sk
+
+{- from https://tools.ietf.org/html/rfc7748#section-6.1 -}
+
+_importSK :: Text -> IO SecretKey
+_importSK b = _jankyRunEval (importSecret _i =<< doBase16 _i b)
+_importPK :: Text -> IO Crypto.PubKey.Curve25519.PublicKey
+_importPK b = _jankyRunEval (importPublic _i =<< doBase16 _i b)
+_importDh :: Text -> IO DhSecret
+_importDh b = _jankyRunEval ((liftCrypto _i "Dh" . dhSecret) =<< doBase16 _i b)
+--Alice's private key, a:
+_aliceSK :: IO SecretKey
+_aliceSK = _importSK "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"
+--Alice's public key, X25519(a, 9):
+_alicePK :: IO PublicKey
+_alicePK = _importPK "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
+--Bob's private key, b:
+_bobSK :: IO SecretKey
+_bobSK = _importSK "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"
+--Bob's public key, X25519(b, 9):
+_bobPK :: IO Crypto.PubKey.Curve25519.PublicKey
+_bobPK = _importPK "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
+--Their shared secret, K:
+_K :: IO DhSecret
+_K = _importDh "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
+
+_checkRFC7748_6_1
+  :: IO ((PublicKey, SecretKey), (PublicKey, SecretKey), DhSecret)
+_checkRFC7748_6_1 = do
+  ask <- _aliceSK
+  apk <- _alicePK
+  bsk <- _bobSK
+  bpk <- _bobPK
+  k <- _K
+  -- test valid keypairs
+  unless (apk == toPublic ask) $ error $ "bad alice keypair: " ++ show (apk, ask)
+  unless (bpk == toPublic bsk) $ error $ "bad bob keypair: " ++ show (bpk, bsk)
+  unless (dh apk bsk == k) $ error $ "bad dh result for apk/bsk"
+  unless (dh bpk ask == k) $ error $ "bad dh result for bpk/ask"
+  return ((apk,ask),(bpk,bsk),k)
 
 #endif
