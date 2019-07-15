@@ -390,9 +390,9 @@ in the runtime environment and stores their definition in the global keyset data
 
 #### Namespace declaration {#namespacedefinition}
 
-[Namespace](#namespaces) declarations provide a unique prefix for modules and interfaces defined within the namespace scope. Namespaces are handled differently in public and private blockchain contexts: in private they are freely definable, and the _root namespace_ (ie, not using a namespace at all) is available for user code. In public blockchains, users are not allowed to use the root namespace (which is reserved for built-in contracts like the coin contract) and must define code within a namespace, which may or may not be definable (ie, users might be restricted to "user" namespaces). 
+[Namespace](#namespaces) declarations provide a unique prefix for modules and interfaces defined within the namespace scope. Namespaces are handled differently in public and private blockchain contexts: in private they are freely definable, and the _root namespace_ (ie, not using a namespace at all) is available for user code. In public blockchains, users are not allowed to use the root namespace (which is reserved for built-in contracts like the coin contract) and must define code within a namespace, which may or may not be definable (ie, users might be restricted to "user" namespaces).
 
-Namespaces are defined using [define-namespace](#define-namespace). Namespaces are "entered" by issuing the [namespace](#namespace) command. 
+Namespaces are defined using [define-namespace](#define-namespace). Namespaces are "entered" by issuing the [namespace](#namespace) command.
 
 #### Module declaration {#moduledeclaration}
 
@@ -1238,7 +1238,7 @@ Additionally, interfaces my make use of module declarations, admitting use of th
     (defun hello-number:string (number:integer)
       @doc "Return the string \"Hello, $number!\" when given a string"
       	)
-        
+
     (defconst SOME_CONSTANT 3)
 )
 
@@ -2327,4 +2327,3 @@ The update format is a JSON object:
 ```
 
 Note that the JSON row value uses the same encoding as found in the user data table.
-
