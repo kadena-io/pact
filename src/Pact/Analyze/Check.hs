@@ -163,20 +163,18 @@ data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
   , stepChecks      :: HM.HashMap (Text, Int) [CheckResult]
   , invariantChecks :: HM.HashMap Text (TableMap [CheckResult])
-  , scopeChecks     :: HM.HashMap Text (Maybe ScopeError)
   , moduleWarnings  :: VerificationWarnings
   } deriving (Eq, Show)
 
 -- | Does this 'ModuleChecks' have either a property or invariant failure?
 -- Warnings don't count.
 hasVerificationError :: ModuleChecks -> Bool
-hasVerificationError (ModuleChecks propChecks stepChecks invChecks scopeChecks _)
+hasVerificationError (ModuleChecks propChecks stepChecks invChecks _)
   = let checkErrs =
           toListOf (traverse . traverse .            _Left) propChecks ++
           toListOf (traverse . traverse .            _Left) stepChecks ++
           toListOf (traverse . traverse . traverse . _Left) invChecks
-        scopeErrs = toListOf (traverse . _Just) scopeChecks
-    in not (null checkErrs) && not (null scopeErrs)
+    in not (null checkErrs)
 
 data CheckEnv = CheckEnv
   { _tables     :: [Table]
@@ -210,6 +208,7 @@ data VerificationFailure
   | InvalidRefType -- TODO: make this error more informative
   | FailedConstTranslation String
   | SchemalessTable Info
+  | ScopeErrors [ScopeError]
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -1060,9 +1059,42 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
 scopeCheckInterface
   :: HM.HashMap Text Ref
-  -> IO (Either VerificationFailure ModuleChecks)
-scopeCheckInterface _refs = return $ Right $
-  ModuleChecks HM.empty HM.empty HM.empty HM.empty (VerificationWarnings [])
+  -> IO (HM.HashMap Text (Maybe ScopeError))
+scopeCheckInterface _refs = return HM.empty
+
+--   let scopeChecks = defunRefs <&> \case
+--         Pact.Direct _ -> error "TODO"
+--         Pact.Ref defn ->
+--           case defn ^? tDef . dMeta . mModel of
+--             Nothing -> pure Nothing
+--             Just model -> case normalizeListLit model of
+--               Nothing -> throwError $ Just $ ScopeError
+--                 -- reconstruct an `Exp Info` for this list
+--                 ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
+--                 , "malformed list (inconsistent use of comma separators?)"
+--                 )
+--               Just model' -> withExcept (Just . ScopeError) $ liftEither $ do
+--                 exps <- collectProperties model'
+--                 let funTy = error "TODO"
+--                 FunctionEnvironment envVidStart nameVids vidTys
+--                   <- case runExcept (makeFunctionEnvironment funTy) of
+--                     Left (ModuleParseFailure pf) -> Left pf
+--                     Left _ -> error "TODO"
+--                     Right it -> Right it
+
+--                 -- run this, ignoring the result, to check for errors
+--                 _ <- for exps $ \(propTy, meta) ->
+--                   case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
+--                     consts propDefs propTy meta of
+--                     Left err   -> Left (meta, err)
+--                     Right good -> Right (Located (getInfo meta) good)
+
+--                 pure Nothing
+
+--   let scopeChecks' :: HM.HashMap Text (Maybe ScopeError)
+--       scopeChecks' = scopeChecks <&> \it -> case runExcept it of
+--         Left err -> err
+--         Right _  -> Nothing
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -1070,7 +1102,13 @@ verifyModule
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
-verifyModule _ (ModuleData Pact.MDInterface{} refs) = scopeCheckInterface refs
+verifyModule _ (ModuleData Pact.MDInterface{} refs) = do
+  scopeErrors <- scopeCheckInterface refs
+  let scopeErrors' = toListOf (traverse . _Just) scopeErrors
+  pure $ if length scopeErrors' > 0
+    then Left $ ScopeErrors scopeErrors'
+    else Right $
+      ModuleChecks HM.empty HM.empty HM.empty $ VerificationWarnings []
 verifyModule modules moduleData = runExceptT $ do
   tables <- moduleTables modules moduleData
 
@@ -1120,41 +1158,8 @@ verifyModule modules moduleData = runExceptT $ do
   stepChecks <- getStepChecks checkEnv defpactRefs
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
-  let scopeChecks = defunRefs <&> \case
-        Pact.Direct _ -> error "TODO"
-        Pact.Ref defn ->
-          case defn ^? tDef . dMeta . mModel of
-            Nothing -> pure Nothing
-            Just model -> case normalizeListLit model of
-              Nothing -> throwError $ Just $ ScopeError
-                -- reconstruct an `Exp Info` for this list
-                ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
-                , "malformed list (inconsistent use of comma separators?)"
-                )
-              Just model' -> withExcept (Just . ScopeError) $ liftEither $ do
-                exps <- collectProperties model'
-                let funTy = error "TODO"
-                FunctionEnvironment envVidStart nameVids vidTys
-                  <- case runExcept (makeFunctionEnvironment funTy) of
-                    Left (ModuleParseFailure pf) -> Left pf
-                    Left _ -> error "TODO"
-                    Right it -> Right it
 
-                -- run this, ignoring the result, to check for errors
-                _ <- for exps $ \(propTy, meta) ->
-                  case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
-                    consts propDefs propTy meta of
-                    Left err   -> Left (meta, err)
-                    Right good -> Right (Located (getInfo meta) good)
-
-                pure Nothing
-
-  let scopeChecks' :: HM.HashMap Text (Maybe ScopeError)
-      scopeChecks' = scopeChecks <&> \it -> case runExcept it of
-        Left err -> err
-        Right _  -> Nothing
-
-  pure $ ModuleChecks funChecks stepChecks invariantChecks scopeChecks' warnings
+  pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
 
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
 renderVerifiedModule = \case
@@ -1172,7 +1177,7 @@ renderVerifiedModule = \case
     [T.pack (renderInfo info) <>
       ":Warning: Verification requires all tables to have schemas"
     ]
-  Right (ModuleChecks propResults stepResults invariantResults _ warnings) ->
+  Right (ModuleChecks propResults stepResults invariantResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         stepResults'      = toListOf (traverse.each)          stepResults
         invariantResults' = toListOf (traverse.traverse.each) invariantResults

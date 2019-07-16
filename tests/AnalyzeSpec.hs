@@ -142,7 +142,7 @@ runVerification code = do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
-        Right (ModuleChecks propResults stepResults invariantResults scopeErrs _) ->
+        Right (ModuleChecks propResults stepResults invariantResults _) ->
           pure $ asum
             [ case findOf (traverse . traverse) isLeft propResults of
                 Just (Left failure) -> Just $ TestCheckFailure failure
@@ -152,9 +152,6 @@ runVerification code = do
                 _ -> Nothing
             , case findOf (traverse . traverse . traverse) isLeft invariantResults of
               Just (Left failure) -> Just $ TestCheckFailure failure
-              _ -> Nothing
-            , case findOf traverse isJust scopeErrs of
-              Just (Just scopeErr) -> Just $ ScopeError' scopeErr
               _ -> Nothing
             ]
 
@@ -1577,7 +1574,7 @@ spec = describe "analyze" $ do
         case results of
           Left failure -> it "unexpectedly failed verification" $
             expectationFailure $ show failure
-          Right (ModuleChecks propResults _stepResults invariantResults _ _) -> do
+          Right (ModuleChecks propResults _stepResults invariantResults _) -> do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
 
