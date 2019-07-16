@@ -340,7 +340,7 @@ loadModule m@Module {} bod1 mi g0 = do
   (g1,mdefs) <-
     case instantiate' bod1 of
       (TList bd _ _bi) -> do
-        let doDef (g,rs) t = do
+        let doDef (g,ds) t = do
               dnm <- case t of
                 TDef {..} -> return $ Just $ asString (_dDefName _tDef)
                 TConst {..} -> return $ Just $ _aName _tConstArg
@@ -349,12 +349,15 @@ loadModule m@Module {} bod1 mi g0 = do
                 TUse (Use {..}) _ -> return Nothing
                 _ -> evalError (_tInfo t) "Invalid module member"
               case dnm of
-                Nothing -> return (g, rs)
+                Nothing -> return (g, ds)
                 Just dn -> do
-                  when (isJust $ HM.lookup dn rs) $
+                  rs <- view $ eeRefStore . rsNatives
+                  when (isJust $ HM.lookup (Name dn def) rs) $
+                    evalError (_tInfo t) $ "definitions cannot overlap with native names: " <> pretty dn
+                  when (isJust $ HM.lookup dn ds) $
                     evalError (_tInfo t) $ "definition name conflict: " <> pretty dn
                   g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember (MDModule m))
-                  return (g + g', HM.insert dn t rs)
+                  return (g + g', HM.insert dn t ds)
         foldM doDef (g0,mempty) bd
       t -> evalError (_tInfo t) "Malformed module"
   mapM_ evalUse $ _mImports m
