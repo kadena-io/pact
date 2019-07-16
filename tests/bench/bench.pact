@@ -6,7 +6,7 @@
 
   (deftable bench-accounts)
 
- (defun keys-all (count matched) (= count matched))
+ (defun keys-all-1 (count matched) (= count matched))
 
  (defun create-account (address)
    ; write instead of insert here to make mocking easier
