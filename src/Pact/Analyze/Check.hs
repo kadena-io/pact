@@ -1128,7 +1128,8 @@ verifyModule
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
-verifyModule modules moduleData@(ModuleData Pact.MDInterface{} refs) = runExceptT $ do
+-- verifyModule modules moduleData@(ModuleData Pact.MDInterface{} refs) = runExceptT $ do
+verifyModule modules moduleData@(ModuleData modDef refs) = runExceptT $ do
   tables <- moduleTables modules refs
 
   let -- HM.unions is biased towards the start of the list. This module should
@@ -1151,64 +1152,44 @@ verifyModule modules moduleData@(ModuleData Pact.MDInterface{} refs) = runExcept
         $ foldl (\acc k -> acc & at k %~ (Just . maybe 0 succ)) HM.empty
         $ concatMap HM.keys allModulePropDefs
 
-      propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
-      propDefs = HM.unions allModulePropDefs
-
-      success = ModuleChecks HM.empty HM.empty HM.empty $
-        VerificationWarnings allModulePropNameDuplicates
-
-  case scopeCheckInterface tables propDefs refs of
-    Left Nothing      -> pure success
-    Left (Just x)     -> throwError $ ScopeErrors [x]
-    Right scopeErrors ->
-      let scopeErrors' = toListOf (traverse . _Just) scopeErrors
-      in if length scopeErrors' > 0
-         then throwError $ ScopeErrors scopeErrors'
-         else pure success
-
-verifyModule modules moduleData = runExceptT $ do
-  tables <- moduleTables modules $ _mdRefMap moduleData
-
-  let -- HM.unions is biased towards the start of the list. This module should
-      -- shadow the others. Note that load / shadow order of imported modules
-      -- is undefined and in particular not the same as their import order.
-      allModules = moduleData : HM.elems modules
-
-  allModuleModelDecls <-
-    withExceptT ModuleParseFailure $ liftEither $
-      traverse moduleModelDecl allModules
-
-  let allModulePropDefs = fmap _moduleDefProperties allModuleModelDecls
-
-      -- how many times have these names been defined across all in-scope
-      -- modules
-      allModulePropNameDuplicates =
-          HM.keys
-        $ HM.filter (> (1 :: Int))
-        $ foldl (\acc k -> acc & at k %~ (Just . maybe 0 succ)) HM.empty
-        $ concatMap HM.keys allModulePropDefs
+      warnings = VerificationWarnings allModulePropNameDuplicates
 
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
 
-      defunRefs, defpactRefs, defconstRefs :: HM.HashMap Text Ref
-      TypecheckableRefs defunRefs defpactRefs defconstRefs
-        = moduleTypecheckableRefs moduleData
+  case modDef of
+    -- If we're passed an interface there is no implementation to check so we
+    -- just check that every property variable referenced is in scope
+    Pact.MDInterface{} ->
+      let success = ModuleChecks HM.empty HM.empty HM.empty warnings
 
-  consts <- getConsts defconstRefs
-  caps   <- moduleCapabilities moduleData
+      in case scopeCheckInterface tables propDefs refs of
+        Left Nothing      -> pure success
+        Left (Just x)     -> throwError $ ScopeErrors [x]
+        Right scopeErrors ->
+          let scopeErrors' = toListOf (traverse . _Just) scopeErrors
+          in if length scopeErrors' > 0
+             then throwError $ ScopeErrors scopeErrors'
+             else pure success
 
-  let checkEnv = CheckEnv tables consts propDefs moduleData caps
+    -- If we're passed a module we actually check properties
+    Pact.MDModule{} -> do
+      let defunRefs, defpactRefs, defconstRefs :: HM.HashMap Text Ref
+          TypecheckableRefs defunRefs defpactRefs defconstRefs
+            = moduleTypecheckableRefs moduleData
 
-  -- Note that invariants are only checked at the defpact level, not in
-  -- individual steps.
-  (funChecks, invariantChecks)
-    <- getFunChecks checkEnv $ defunRefs <> defpactRefs
-  stepChecks <- getStepChecks checkEnv defpactRefs
+      consts <- getConsts defconstRefs
+      caps   <- moduleCapabilities moduleData
 
-  let warnings = VerificationWarnings allModulePropNameDuplicates
+      let checkEnv = CheckEnv tables consts propDefs moduleData caps
 
-  pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
+      -- Note that invariants are only checked at the defpact level, not in
+      -- individual steps.
+      (funChecks, invariantChecks)
+        <- getFunChecks checkEnv $ defunRefs <> defpactRefs
+      stepChecks <- getStepChecks checkEnv defpactRefs
+
+      pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
 
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
 renderVerifiedModule = \case
