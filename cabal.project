@@ -1,8 +1,6 @@
 packages:
     pact.cabal
 
-allow-newer: pact:all
-
 source-repository-package
     type: git
     location: git@github.com:kadena-io/thyme.git
@@ -10,3 +8,4 @@ source-repository-package
 
 constraints:
     megaparsec <7.0
+  , swagger2 < 2.4
