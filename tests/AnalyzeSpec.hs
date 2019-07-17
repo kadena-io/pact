@@ -21,7 +21,7 @@ import           Data.Foldable                (asum, find, for_)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Maybe                   (fromJust, isJust)
+import           Data.Maybe                   (fromJust, isJust, isNothing)
 import           Data.SBV                     (isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
@@ -38,7 +38,7 @@ import qualified Test.HUnit                   as HUnit
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
 import           Pact.Repl.Types              (ReplMode (StringEval))
-import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref)
+import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref, ModuleName)
 import           Pact.Types.Pretty            (Pretty, renderCompactString)
 import           Pact.Types.Util              (tShow)
 
@@ -124,14 +124,17 @@ renderTestFailure = \case
 -- TODO: use ExceptT
 --
 
-compile :: Text -> IO (Either TestFailure (ModuleData Ref))
-compile code = do
+compile' :: ModuleName -> Text -> IO (Either TestFailure (ModuleData Ref))
+compile' modName code = do
   replState0 <- initReplState StringEval Nothing
   (_, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
-  moduleM <- replLookupModule replState "test"
+  moduleM <- replLookupModule replState modName
   pure $ case moduleM of
     Left err -> Left $ ReplError (show err)
     Right m -> Right m
+
+compile :: Text -> IO (Either TestFailure (ModuleData Ref))
+compile = compile' "test"
 
 runVerification :: Text -> IO (Maybe TestFailure)
 runVerification code = do
@@ -166,6 +169,17 @@ runCheck checkType code check = do
         Left failure    -> Just $ VerificationFailure failure
         Right (Left cf) -> Just $ TestCheckFailure cf
         Right (Right _) -> Nothing
+
+checkInterface :: Text -> IO (Maybe TestFailure)
+checkInterface code = do
+  eModuleData <- compile' "coin-sig" code
+  case eModuleData of
+    Left tf -> pure $ Just tf
+    Right moduleData -> do
+      result <- verifyModule HM.empty moduleData
+      pure $ case result of
+        Left failure -> Just $ VerificationFailure failure
+        Right _      -> Nothing
 
 -- | 'TestEnv' represents the environment a test runs in. Used with
 -- 'expectTest'.
@@ -3517,20 +3531,24 @@ spec = describe "analyze" $ do
 -}
 
   describe "scope-checking interfaces" $ do
-    expectTest testEnv
-          { testCode = [text|
-(interface coin-sig
+    res <- runIO $ checkInterface [text|
+      (interface coin-sig
+        (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+          @model [ (property (> amount 0.0))
+                   (property (not (= sender reciever)))
+                 ]
+          )
+      )
+      |]
+    it "flags reciever != receiver" $ isJust res
 
-  "'coin-sig' ..."
-
-  (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
-    @model [ (property (> amount 0.0))
-             (property (not (= sender reciever)))
-           ]
-    )
-)
-          |]
-          , testCheck = Satisfiable Success'
-          , testPred = (`shouldSatisfy` isJust)
-          , testName = "coin-sig"
-          }
+    res' <- runIO $ checkInterface [text|
+      (interface coin-sig
+        (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+          @model [ (property (> amount 0.0))
+                   (property (not (= sender receiver)))
+                 ]
+          )
+      )
+      |]
+    it "checks when spelled correctly" $ isNothing res'

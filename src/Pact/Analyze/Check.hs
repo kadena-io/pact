@@ -38,9 +38,7 @@ module Pact.Analyze.Check
   , verifyFunctionInvariants
   ) where
 
-import Control.Arrow (left)
-import Debug.Trace
-
+import           Control.Arrow             (left)
 import           Control.Exception         as E
 import           Control.Lens              (at, each, filtered, ifoldl, ifoldrM,
                                             ifor, itraversed, ix, toListOf,
@@ -80,7 +78,7 @@ import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
                                             Def (..), DefType (..), Info, dMeta,
                                             mModel, renderInfo, tDef, tInfo,
-                                            tMeta, _tDef)
+                                            tMeta, _tDef, ftArgs, dFunType, _aName)
 import           Pact.Types.Pretty         (renderCompactText)
 import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
                                             Ref, Ref' (Ref),
@@ -166,6 +164,13 @@ data ScopeError
   | ScopeInvalidRefType
   deriving (Eq, Show)
 
+describeScopeError :: ScopeError -> Text
+describeScopeError = \case
+  ScopeParseFailure pf        -> describeParseFailure pf
+  ScopeVerificationFailure vf -> describeVerificationFailure vf
+  NotInScope name             -> "Variable not in scope: " <> name
+  ScopeInvalidRefType         -> "Invalid reference type given to scope checker."
+
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
   , stepChecks      :: HM.HashMap (Text, Int) [CheckResult]
@@ -217,6 +222,23 @@ data VerificationFailure
   | SchemalessTable Info
   | ScopeErrors [ScopeError]
   deriving (Eq, Show)
+
+-- TODO: remove duplication with renderVerifiedModule
+describeVerificationFailure :: VerificationFailure -> Text
+describeVerificationFailure = \case
+  ModuleParseFailure failure      -> describeParseFailure failure
+  ModuleCheckFailure checkFailure -> describeCheckFailure checkFailure
+  TypeTranslationFailure msg ty   -> msg <> ": " <> tShow ty
+  InvalidRefType
+    -> "Invalid reference type given to typechecker."
+  FailedConstTranslation msg
+    -> T.pack msg
+  SchemalessTable info
+    -> T.pack (renderInfo info) <>
+      "Verification requires all tables to have schemas"
+  ScopeErrors errs ->
+    "Scope checking errors" <>
+    T.intercalate ", " (fmap describeScopeError errs)
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
@@ -995,7 +1017,6 @@ getFunChecks
 getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
   caps <- moduleCapabilities moduleData
-  traceM $ "caps: " ++ show caps
 
   let modName :: ModuleName
       modName = moduleDefName $ _mdModule moduleData
@@ -1003,15 +1024,12 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
   ModelDecl _ checkExps <-
     withExceptT ModuleParseFailure $ liftEither $
       moduleModelDecl moduleData
-  -- traceM $ "checkExps: " ++ show checkExps
 
   (funTypes :: HM.HashMap Text
     (Ref, TopLevel Node, Pact.FunType TC.UserType, CheckableType))
     <- ifoldrM
       (\name ref accum -> do
-        traceM "typechecking ref"
         maybeFun <- lift $ typecheck ref
-        traceM "typechecked ref"
         case maybeFun of
           Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
           Right topfun@(TopFun (FDefun _ _ _ defType funType _ _) _)
@@ -1059,9 +1077,6 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
       _            -> error
         "invariant violation: anything but a TopFun is unexpected in funChecks"
 
-  traceM $ "funChecks'': " ++ show funChecks''
-  traceM $ "invariantChecks'': " ++ show invariantChecks
-
   pure (funChecks'', invariantChecks)
 
 scopeCheckInterface
@@ -1083,12 +1098,14 @@ scopeCheckInterface tables propDefs refs = runExcept $ for refs $ \case
         Just model' -> withExcept Just $ liftEither $ do
           exps <- left ScopeParseFailure $ collectProperties model'
 
+          let args = fmap _aName $ defn ^. tDef . dFunType . ftArgs
+
           let defNames = Set.fromList (HM.keys refs)
 
           -- run this, ignoring the result, to check for errors
           _ <- for exps $ \(_propTy, meta) -> do
-            let genStart = 0
-                nameEnv  = Map.empty
+            let nameEnv  = Map.fromList $ ("result", 0) : zip args [1..]
+                genStart = fromIntegral $ length nameEnv
             preTypedBody <- left (ScopeParseFailure . (meta,)) $
               evalStateT (runReaderT (expToPreProp meta) nameEnv) genStart
 
@@ -1121,7 +1138,7 @@ verifyModule modules moduleData@(ModuleData Pact.MDInterface{} refs) = runExcept
 
   allModuleModelDecls <- for allModules $ \modul ->
     case moduleModelDecl modul of
-      Left err -> throwError $ ModuleParseFailure err
+      Left err        -> throwError $ ModuleParseFailure err
       Right modelDecl -> pure modelDecl
 
   let allModulePropDefs = fmap _moduleDefProperties allModuleModelDecls
@@ -1137,11 +1154,17 @@ verifyModule modules moduleData@(ModuleData Pact.MDInterface{} refs) = runExcept
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
 
+      success = ModuleChecks HM.empty HM.empty HM.empty $
+        VerificationWarnings allModulePropNameDuplicates
+
   case scopeCheckInterface tables propDefs refs of
-    Left Nothing      -> pure $ ModuleChecks HM.empty HM.empty HM.empty $
-      VerificationWarnings []
+    Left Nothing      -> pure success
     Left (Just x)     -> throwError $ ScopeErrors [x]
-    Right scopeErrors -> throwError $ ScopeErrors $ toListOf (traverse . _Just) scopeErrors
+    Right scopeErrors ->
+      let scopeErrors' = toListOf (traverse . _Just) scopeErrors
+      in if length scopeErrors' > 0
+         then throwError $ ScopeErrors scopeErrors'
+         else pure success
 
 verifyModule modules moduleData = runExceptT $ do
   tables <- moduleTables modules $ _mdRefMap moduleData
@@ -1172,23 +1195,15 @@ verifyModule modules moduleData = runExceptT $ do
       TypecheckableRefs defunRefs defpactRefs defconstRefs
         = moduleTypecheckableRefs moduleData
 
-  traceM $ "defuns: " ++ show defunRefs
-  traceM $ "defpacts: " ++ show defpactRefs
-  traceM $ "defconsts: " ++ show defconstRefs
-
   consts <- getConsts defconstRefs
   caps   <- moduleCapabilities moduleData
-  traceM $ "consts: " ++ show consts
-  traceM $ "caps: " ++ show caps
 
   let checkEnv = CheckEnv tables consts propDefs moduleData caps
 
-  traceM "getting fun checks"
   -- Note that invariants are only checked at the defpact level, not in
   -- individual steps.
   (funChecks, invariantChecks)
     <- getFunChecks checkEnv $ defunRefs <> defpactRefs
-  traceM "got fun checks"
   stepChecks <- getStepChecks checkEnv defpactRefs
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
@@ -1211,6 +1226,8 @@ renderVerifiedModule = \case
     [T.pack (renderInfo info) <>
       ":Warning: Verification requires all tables to have schemas"
     ]
+  Left (ScopeErrors errs) ->
+    ":Warning: Scope checking errors" : fmap describeScopeError errs
   Right (ModuleChecks propResults stepResults invariantResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         stepResults'      = toListOf (traverse.each)          stepResults
