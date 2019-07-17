@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- |
@@ -223,18 +224,19 @@ _importPK :: Text -> IO Crypto.PubKey.Curve25519.PublicKey
 _importPK b = _jankyRunEval (importPublic _i =<< doBase16 _i b)
 _importDh :: Text -> IO DhSecret
 _importDh b = _jankyRunEval ((liftCrypto _i "Dh" . dhSecret) =<< doBase16 _i b)
+
 --Alice's private key, a:
-_aliceSK :: IO SecretKey
-_aliceSK = _importSK "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"
+_aliceSK :: IO (ByteString,SecretKey)
+_aliceSK = _wBsArg _importSK "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"
 --Alice's public key, X25519(a, 9):
-_alicePK :: IO PublicKey
-_alicePK = _importPK "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
+_alicePK :: IO (ByteString,PublicKey)
+_alicePK = _wBsArg _importPK "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
 --Bob's private key, b:
-_bobSK :: IO SecretKey
-_bobSK = _importSK "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"
+_bobSK :: IO (ByteString,SecretKey)
+_bobSK = _wBsArg _importSK "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"
 --Bob's public key, X25519(b, 9):
-_bobPK :: IO Crypto.PubKey.Curve25519.PublicKey
-_bobPK = _importPK "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
+_bobPK :: IO (ByteString,PublicKey)
+_bobPK = _wBsArg _importPK "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
 --Their shared secret, K:
 _K :: IO DhSecret
 _K = _importDh "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
@@ -242,10 +244,10 @@ _K = _importDh "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742
 _checkRFC7748_6_1
   :: IO ((PublicKey, SecretKey), (PublicKey, SecretKey), DhSecret)
 _checkRFC7748_6_1 = do
-  ask <- _aliceSK
-  apk <- _alicePK
-  bsk <- _bobSK
-  bpk <- _bobPK
+  ask <- snd <$> _aliceSK
+  apk <- snd <$> _alicePK
+  bsk <- snd <$> _bobSK
+  bpk <- snd <$> _bobPK
   k <- _K
   -- test valid keypairs
   unless (apk == toPublic ask) $ error $ "bad alice keypair: " ++ show (apk, ask)
@@ -253,5 +255,36 @@ _checkRFC7748_6_1 = do
   unless (dh apk bsk == k) $ error $ "bad dh result for apk/bsk"
   unless (dh bpk ask == k) $ error $ "bad dh result for bpk/ask"
   return ((apk,ask),(bpk,bsk),k)
+
+_wBsArg :: (Text -> IO a) -> Text -> IO (ByteString, a)
+_wBsArg f a = (,) <$> _jankyRunEval (doBase16 _i a) <*> f a
+
+_encryptAB :: IO Text
+_encryptAB = do
+  a <- fst <$> _alicePK
+  b <- fst <$> _bobSK
+  toB64UrlUnpaddedText <$> _jankyRunEval (doEncrypt _i _plaintext _nonce _aad a b)
+
+_encryptBA :: IO Text
+_encryptBA = do
+  a <- fst <$> _aliceSK
+  b <- fst <$> _bobPK
+  toB64UrlUnpaddedText <$> _jankyRunEval (doEncrypt _i _plaintext _nonce _aad b a)
+
+_decryptAB :: Text -> IO Text
+_decryptAB ct = do
+  a <- fst <$> _alicePK
+  b <- fst <$> _bobSK
+  ct' <- _jankyRunEval $ doBase64Url _i ct
+  toB64UrlUnpaddedText <$> _jankyRunEval (doDecrypt _i ct' _nonce _aad a b)
+
+_decryptBA :: Text -> IO Text
+_decryptBA ct = do
+  a <- fst <$> _aliceSK
+  b <- fst <$> _bobPK
+  ct' <- _jankyRunEval $ doBase64Url _i ct
+  toB64UrlUnpaddedText <$> _jankyRunEval (doDecrypt _i ct' _nonce _aad b a)
+
+
 
 #endif
