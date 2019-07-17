@@ -247,6 +247,7 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
+  {-
   describe "decimal arithmetic" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
@@ -3513,3 +3514,23 @@ spec = describe "analyze" $ do
         (fails-when    (<= x 0)   { 'except: [] })
       |]
       "(defun test:bool (x:integer) (enforce (> x 0)))"
+-}
+
+  describe "scope-checking interfaces" $ do
+    expectTest testEnv
+          { testCode = [text|
+(interface coin-sig
+
+  "'coin-sig' ..."
+
+  (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+    @model [ (property (> amount 0.0))
+             (property (not (= sender reciever)))
+           ]
+    )
+)
+          |]
+          , testCheck = Satisfiable Success'
+          , testPred = (`shouldSatisfy` isJust)
+          , testName = "coin-sig"
+          }

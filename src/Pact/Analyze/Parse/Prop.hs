@@ -17,6 +17,7 @@ module Pact.Analyze.Parse.Prop
   ( PreProp(..)
   , TableEnv
   , expToCheck
+  , expToPreProp
   , expToProp
   , inferProp
   , parseBindings
@@ -827,6 +828,7 @@ inferProp tableEnv' genStart nameEnv idEnv consts propDefs body = do
         preTypedPropDefs consts
   _getEither $ runReaderT (inferPreProp preTypedBody) env
 
+-- | Parse both a property body and defined properties from `Exp` to `PreProp`.
 parseToPreProp
   :: Traversable t
   => VarId
