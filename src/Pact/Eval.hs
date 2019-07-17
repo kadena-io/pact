@@ -342,24 +342,24 @@ loadModule m@Module {} bod1 mi g0 = do
       (TList bd _ _bi) -> do
         let doDef (g,ds) t = do
               dnm <- case t of
-                TDef {..} -> return $ Just $ asString (_dDefName _tDef)
-                TConst {..} -> return $ Just $ _aName _tConstArg
-                TSchema {..} -> return $ Just $ asString _tSchemaName
-                TTable {..} -> return $ Just $ asString _tTableName
-                TUse (Use {..}) _ -> return Nothing
-                _ -> evalError (_tInfo t) "Invalid module member"
+                TDef d _ -> return $ Just $ asString (_dDefName d)
+                TConst a _ _ _ _ -> return $ Just $ _aName a
+                TSchema n _ _ _ _ -> return $ Just $ asString n
+                tt@TTable{} -> return $ Just $ asString (_tTableName tt)
+                TUse _ _ -> return Nothing
+                _ -> evalError' t "Invalid module member"
               case dnm of
                 Nothing -> return (g, ds)
                 Just dn -> do
                   rs <- view $ eeRefStore . rsNatives
                   when (isJust $ HM.lookup (Name dn def) rs) $
-                    evalError (_tInfo t) $ "definitions cannot overlap with native names: " <> pretty dn
+                    evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
                   when (isJust $ HM.lookup dn ds) $
-                    evalError (_tInfo t) $ "definition name conflict: " <> pretty dn
+                    evalError' t $ "definition name conflict: " <> pretty dn
                   g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember (MDModule m))
                   return (g + g', HM.insert dn t ds)
         foldM doDef (g0,mempty) bd
-      t -> evalError (_tInfo t) "Malformed module"
+      t -> evalError' t "Malformed module"
   mapM_ evalUse $ _mImports m
   evaluatedDefs <- evaluateDefs mi (fmap (mangleDefs $ _mName m) mdefs)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
@@ -385,20 +385,23 @@ loadInterface :: Interface -> Scope n Term Name -> Info -> Gas
 loadInterface i@Interface{..} body info gas0 = do
   (gas1,idefs) <- case instantiate' body of
     (TList bd _ _bi) -> do
-      let doDef (g,rs) t = do
+      let doDef (g,ds) t = do
             dnm <- case t of
-              TDef {..} -> return $ Just $ asString (_dDefName _tDef)
-              TConst {..} -> return $ Just $ _aName _tConstArg
-              TSchema {..} -> return $ Just $ asString _tSchemaName
-              TUse (Use {..}) _ -> return Nothing
-              _ -> evalError (_tInfo t) "Invalid interface member"
+              TDef d _ -> return $ Just $ asString (_dDefName d)
+              TConst a _ _ _ _ -> return $ Just $ _aName a
+              TSchema n _ _ _ _ -> return $ Just $ asString n
+              TUse _ _ -> return Nothing
+              _ -> evalError' t "Invalid interface member"
             case dnm of
-              Nothing -> return (g, rs)
+              Nothing -> return (g, ds)
               Just dn -> do
-                when (isJust $ HM.lookup dn rs) $
-                  evalError (_tInfo t) $ "definition name conflict: " <> pretty dn
+                rs <- view $ eeRefStore . rsNatives
+                when (isJust $ HM.lookup (Name dn def) rs) $
+                  evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
+                when (isJust $ HM.lookup dn ds) $
+                  evalError' t $ "definition name conflict: " <> pretty dn
                 g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember (MDInterface i))
-                return (g + g',HM.insert dn t rs)
+                return (g + g',HM.insert dn t ds)
       foldM doDef (gas0,mempty) bd
     t -> evalError (_tInfo t) "Malformed interface"
   mapM_ evalUse _interfaceImports
