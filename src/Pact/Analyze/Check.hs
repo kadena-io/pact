@@ -1051,9 +1051,6 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
   pure (funChecks'', invariantChecks)
 
-foldFor :: (Foldable t, Monoid m) => t a -> (a -> m) -> m
-foldFor = flip foldMap
-
 -- | Check that every property variable is in scope.
 scopeCheckInterface
   :: Set Text
