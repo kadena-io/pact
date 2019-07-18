@@ -38,73 +38,73 @@ module Pact.Analyze.Check
   , verifyFunctionInvariants
   ) where
 
-import           Control.Arrow             (left)
-import           Control.Exception         as E
-import           Control.Lens              (at, each, filtered, ifoldl, ifoldrM,
-                                            ifor, itraversed, ix, toListOf,
-                                            traverseOf, traversed, view, (%~),
-                                            (&), (.~), (<&>), (?~), (^.), (^..),
-                                            (^?), (^?!), (^@..), _2, _Just,
-                                            _Left)
-import           Control.Monad             (void, when, (<=<))
-import           Control.Monad.Except      (Except, ExceptT (ExceptT),
-                                            MonadError, catchError, runExceptT,
-                                            throwError, withExcept, withExceptT,
-                                            runExcept)
-import           Control.Monad.Morph       (generalize, hoist)
-import           Control.Monad.Reader      (runReaderT)
+import           Control.Arrow              (left)
+import           Control.Exception          as E
+import           Control.Lens               (at, each, filtered, ifoldl,
+                                             ifoldrM, ifor, itraversed, ix,
+                                             toListOf, traverseOf, traversed,
+                                             view, (%~), (&), (.~), (<&>), (?~),
+                                             (^.), (^..), (^?), (^?!), (^@..),
+                                             _2, _Just, _Left)
+import           Control.Monad              (void, when, (<=<))
+import           Control.Monad.Except       (Except, ExceptT (ExceptT),
+                                             MonadError, catchError, runExcept,
+                                             runExceptT, throwError, withExcept,
+                                             withExceptT)
+import           Control.Monad.Morph        (generalize, hoist)
+import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.State.Strict (evalStateT)
-import           Control.Monad.Trans.Class (MonadTrans (lift))
-import           Data.Either               (partitionEithers)
-import           Data.Foldable             (for_)
-import qualified Data.HashMap.Strict       as HM
-import           Data.List                 (isPrefixOf)
-import qualified Data.List                 as List
-import           Data.Map.Strict           (Map)
-import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (mapMaybe)
-import           Data.SBV                  (Symbolic)
-import qualified Data.SBV                  as SBV
-import qualified Data.SBV.Control          as SBV
-import qualified Data.SBV.Internals        as SBVI
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
-import           Data.Text                 (Text)
-import qualified Data.Text                 as T
-import           Data.Traversable          (for)
-import           Prelude                   hiding (exp)
+import           Control.Monad.Trans.Class  (MonadTrans (lift))
+import           Data.Either                (partitionEithers)
+import           Data.Foldable              (for_)
+import qualified Data.HashMap.Strict        as HM
+import           Data.List                  (isPrefixOf)
+import qualified Data.List                  as List
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.Maybe                 (mapMaybe)
+import           Data.SBV                   (Symbolic)
+import qualified Data.SBV                   as SBV
+import qualified Data.SBV.Control           as SBV
+import qualified Data.SBV.Internals         as SBVI
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Traversable           (for)
+import           Prelude                    hiding (exp)
 
-import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
-                                            Def (..), DefType (..), Info, dMeta,
-                                            mModel, renderInfo, tDef, tInfo,
-                                            tMeta, _tDef, ftArgs, dFunType, _aName)
-import           Pact.Types.Pretty         (renderCompactText)
-import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
-                                            Ref, Ref' (Ref),
-                                            Term (TConst, TDef, TSchema, TTable),
-                                            asString, getInfo, mdModule,
-                                            mdRefMap, tShow)
-import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Term           (DefName (..), DefType (Defcap),
-                                            dDefType, moduleDefMeta,
-                                            moduleDefName, _Ref)
-import           Pact.Types.Type           (_ftArgs)
-import           Pact.Types.Typecheck      (AST,
-                                            Fun (FDefun, _fArgs, _fBody, _fInfo),
-                                            Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopConst, TopFun, TopTable),
-                                            UserType (_utFields, _utName),
-                                            runTC, tcFailures, toplevelInfo)
-import qualified Pact.Types.Typecheck      as TC
+import           Pact.Typechecker           (typecheckTopLevel)
+import           Pact.Types.Lang            (pattern ColonExp, pattern CommaExp,
+                                             Def (..), DefType (..), Info,
+                                             dFunType, dMeta, ftArgs, mModel,
+                                             renderInfo, tDef, tInfo, tMeta,
+                                             _aName, _tDef)
+import           Pact.Types.Pretty          (renderCompactText)
+import           Pact.Types.Runtime         (Exp, ModuleData (..), ModuleName,
+                                             Ref, Ref' (Ref),
+                                             Term (TConst, TDef, TSchema, TTable),
+                                             asString, getInfo, mdModule,
+                                             mdRefMap, tShow)
+import qualified Pact.Types.Runtime         as Pact
+import           Pact.Types.Term            (DefName (..), DefType (Defcap),
+                                             dDefType, moduleDefMeta,
+                                             moduleDefName, _Ref)
+import           Pact.Types.Type            (_ftArgs)
+import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
+                                             Named, Node, TcId (_tiInfo),
+                                             TopLevel (TopConst, TopFun, TopTable),
+                                             UserType (_utFields, _utName),
+                                             runTC, tcFailures, toplevelInfo)
+import qualified Pact.Types.Typecheck       as TC
 
-import           Pact.Analyze.Alloc        (runAlloc)
+import           Pact.Analyze.Alloc         (runAlloc)
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval         hiding (invariants)
-import           Pact.Analyze.Model        (allocArgs, allocModelTags,
-                                            allocStepChoices, saturateModel,
-                                            showModel)
-import           Pact.Analyze.Parse        hiding (tableEnv)
+import           Pact.Analyze.Eval          hiding (invariants)
+import           Pact.Analyze.Model         (allocArgs, allocModelTags,
+                                             allocStepChoices, saturateModel,
+                                             showModel)
+import           Pact.Analyze.Parse         hiding (tableEnv)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
