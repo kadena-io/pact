@@ -516,7 +516,7 @@ instance Ord Name where
 data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe ModuleHash)
-  , _uHiddenImports :: [Name]
+  , _uHiddenImports :: [Text]
   , _uInfo :: !Info
   } deriving (Eq, Show, Generic)
 

@@ -554,8 +554,7 @@ useForm = do
   h <- optional hash'
   l <- optional $ withList' Brackets (str `sepBy` sep Comma)
 
-  let ns = maybe [] (fmap (\n -> Name n i)) l
-  let u = Use mn h ns i
+  let u = Use mn h (fromMaybe [] l) i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
   return $ TUse u i
