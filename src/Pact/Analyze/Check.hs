@@ -182,11 +182,10 @@ data ModuleChecks = ModuleChecks
 -- Warnings don't count.
 hasVerificationError :: ModuleChecks -> Bool
 hasVerificationError (ModuleChecks propChecks stepChecks invChecks _)
-  = let checkErrs =
-          toListOf (traverse . traverse .            _Left) propChecks ++
-          toListOf (traverse . traverse .            _Left) stepChecks ++
-          toListOf (traverse . traverse . traverse . _Left) invChecks
-    in not (null checkErrs)
+  = let errs = toListOf (traverse . traverse .            _Left) propChecks ++
+               toListOf (traverse . traverse .            _Left) stepChecks ++
+               toListOf (traverse . traverse . traverse . _Left) invChecks
+    in not (null errs)
 
 data CheckEnv = CheckEnv
   { _tables     :: [Table]
