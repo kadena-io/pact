@@ -636,11 +636,6 @@ data ModuleCheck = ModuleCheck
   -- ^ Where does this property apply?
   }
 
-data ModuleProperty = ModuleProperty
-  { _moduleProperty      :: Exp Info
-  , _modulePropertyScope :: PropertyScope
-  } deriving Show
-
 -- Does this (module-scoped) property apply to this function?
 applicableCheck :: DefName -> ModuleCheck -> Bool
 applicableCheck (DefName funName) (ModuleCheck _ _ propScope) =
