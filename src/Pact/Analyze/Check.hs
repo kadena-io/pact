@@ -157,17 +157,15 @@ type CheckResult = Either CheckFailure CheckSuccess
 
 data ScopeError
   = ScopeParseFailure ParseFailure
-  | ScopeVerificationFailure VerificationFailure
   | NotInScope Text
   | ScopeInvalidRefType
   deriving (Eq, Show)
 
 describeScopeError :: ScopeError -> Text
 describeScopeError = \case
-  ScopeParseFailure pf        -> describeParseFailure pf
-  ScopeVerificationFailure vf -> describeVerificationFailure vf
-  NotInScope name             -> "Variable not in scope: " <> name
-  ScopeInvalidRefType         -> "Invalid reference type given to scope checker."
+  ScopeParseFailure pf -> describeParseFailure pf
+  NotInScope name      -> "Variable not in scope: " <> name
+  ScopeInvalidRefType  -> "Invalid reference type given to scope checker."
 
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
@@ -219,23 +217,6 @@ data VerificationFailure
   | SchemalessTable Info
   | ScopeErrors [ScopeError]
   deriving (Eq, Show)
-
--- TODO: remove duplication with renderVerifiedModule
-describeVerificationFailure :: VerificationFailure -> Text
-describeVerificationFailure = \case
-  ModuleParseFailure failure      -> describeParseFailure failure
-  ModuleCheckFailure checkFailure -> describeCheckFailure checkFailure
-  TypeTranslationFailure msg ty   -> msg <> ": " <> tShow ty
-  InvalidRefType
-    -> "Invalid reference type given to typechecker."
-  FailedConstTranslation msg
-    -> T.pack msg
-  SchemalessTable info
-    -> T.pack (renderInfo info) <>
-      "Verification requires all tables to have schemas"
-  ScopeErrors errs ->
-    "Scope checking errors" <>
-    T.intercalate ", " (fmap describeScopeError errs)
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
