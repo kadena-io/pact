@@ -261,7 +261,6 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
-  {-
   describe "decimal arithmetic" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
@@ -3528,7 +3527,6 @@ spec = describe "analyze" $ do
         (fails-when    (<= x 0)   { 'except: [] })
       |]
       "(defun test:bool (x:integer) (enforce (> x 0)))"
--}
 
   describe "scope-checking interfaces" $ do
     res <- runIO $ checkInterface [text|
