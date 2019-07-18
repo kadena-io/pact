@@ -19,8 +19,6 @@
 
 module Pact.Repl.Lib where
 
-import Debug.Trace
-
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
@@ -460,9 +458,7 @@ tc i as = case as of
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
-    traceM $ "getting Module " ++ show modName
     md <- getModule i (ModuleName modName Nothing)
-    traceShowM md
     -- reading all modules from db here, but should be fine in repl
     modules <- getAllModules i
     let failureMessage = tStr $ "Verification of " <> modName <> " failed"
