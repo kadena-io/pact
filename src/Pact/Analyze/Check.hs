@@ -735,6 +735,7 @@ moduleTypecheckableRefs refMap = foldl f noRefs (HM.toList refMap)
 
     noRefs = TypecheckableRefs HM.empty HM.empty HM.empty
 
+
 -- | Module-level propery definitions and declarations
 data ModelDecl = ModelDecl
   { _moduleDefProperties :: HM.HashMap Text (DefinedProperty (Exp Info))
