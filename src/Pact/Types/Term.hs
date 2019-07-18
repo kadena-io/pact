@@ -516,7 +516,7 @@ instance Ord Name where
 data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe ModuleHash)
-  , _uHiddenImports :: [Text]
+  , _uHiddenImports :: !(Maybe (Vector Text))
   , _uInfo :: !Info
   } deriving (Eq, Show, Generic)
 
@@ -617,7 +617,6 @@ instance ToJSON Interface where toJSON = lensyToJSON 10
 instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
 instance NFData Interface
-
 
 data ModuleDef g
   = MDModule !(Module g)

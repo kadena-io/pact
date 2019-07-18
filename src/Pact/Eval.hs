@@ -305,7 +305,7 @@ toPersistDirect' t = case toPersistDirect t of
 
 
 evalUse :: Use -> Eval e ()
-evalUse (Use mn h _ i) = do
+evalUse (Use mn h is i) = do
   mm <- resolveModule i mn
   case mm of
     Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
@@ -325,6 +325,7 @@ evalUse (Use mn h _ i) = do
               $ "Interfaces should not have associated hashes: "
               <> pretty (_interfaceName i')
 
+      evalRefs . rsImports %= mappend is
       installModule False md
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
@@ -338,10 +339,14 @@ mangleDefs mn term = modifyMn term
       _         -> id
 
 -- | Make table of module definitions for storage in namespace/RefStore.
-loadModule :: Module (Term Name) -> Scope n Term Name -> Info -> Gas
-           -> Eval e (Gas,ModuleData Ref)
+loadModule
+  :: Module (Term Name)
+  -> Scope n Term Name
+  -> Info
+  -> Gas
+  -> Eval e (Gas,ModuleData Ref)
 loadModule m@Module {} bod1 mi g0 = do
-  (g1,mdefs) <- withGas g0 (GModuleMember $ MDModule m) bod1 $ \t -> case t of
+  (g1,mdefs) <- withNames g0 (GModuleMember $ MDModule m) bod1 $ \t -> case t of
     TDef d _ -> return $ Just $ asString (_dDefName d)
     TConst a _ _ _ _ -> return $ Just $ _aName a
     TSchema n _ _ _ _ -> return $ Just $ asString n
@@ -356,24 +361,14 @@ loadModule m@Module {} bod1 mi g0 = do
   installModule True md
   return (g1,md)
 
-resolveGovernance
-  :: HM.HashMap Text Ref
-  -> Module (Term Name)
-  -> Eval e (ModuleDef (Def Ref))
-resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
-    TVar (Name n _) _ -> case HM.lookup n solvedDefs of
-      Just r -> case r of
-        (Ref (TDef govDef _)) -> case _dDefType govDef of
-          Defcap -> return govDef
-          _ -> evalError (_tInfo g) "Invalid module governance, must be defcap"
-        _ -> evalError (_tInfo g) "Invalid module governance, should be def ref"
-      Nothing -> evalError (_tInfo g) "Unknown module governance reference"
-    _ -> evalError (_tInfo g) "Invalid module governance, should be var"
-
-loadInterface :: Interface -> Scope n Term Name -> Info -> Gas
-              -> Eval e (Gas,ModuleData Ref)
+loadInterface
+  :: Interface
+  -> Scope n Term Name
+  -> Info
+  -> Gas
+  -> Eval e (Gas,ModuleData Ref)
 loadInterface i@Interface{..} body info gas0 = do
-  (gas1,idefs) <- withGas gas0 (GModuleMember $ MDInterface i) body $ \t -> case t of
+  (gas1,idefs) <- withNames gas0 (GModuleMember $ MDInterface i) body $ \t -> case t of
     TDef d _ -> return $ Just $ asString (_dDefName d)
     TConst a _ _ _ _ -> return $ Just $ _aName a
     TSchema n _ _ _ _ -> return $ Just $ asString n
@@ -388,7 +383,7 @@ loadInterface i@Interface{..} body info gas0 = do
 -- | Retrieve map of definition names to their corresponding terms
 -- and compute their gas value
 --
-withGas
+withNames
   :: Gas
     -- ^ initial gas value
   -> GasArgs
@@ -398,7 +393,7 @@ withGas
   -> (Term Name -> Eval e (Maybe Text))
     -- ^ function extracting definition names
   -> Eval e (Gas, HM.HashMap Text (Term Name))
-withGas g0 args body k = case instantiate' body of
+withNames g0 args body k = case instantiate' body of
     TList bd _ _ -> foldM go (g0, mempty) bd
     t -> evalError' t $ "malformed declaration"
   where
@@ -408,12 +403,32 @@ withGas g0 args body k = case instantiate' body of
         Nothing -> return (g, ds)
         Just dn -> do
           rs <- view $ eeRefStore . rsNatives
+          is <- use $ evalRefs . rsImports
+          when (V.elem dn is) $
+            evalError' t $ "definition is not in the list of explicit imports" <> pretty dn
+          -- disallow native overlap
           when (isJust $ HM.lookup (Name dn def) rs) $
             evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
+          -- disallow conflicting members
           when (isJust $ HM.lookup dn ds) $
             evalError' t $ "definition name conflict: " <> pretty dn
+
           g' <- computeGas (Left (_tInfo t,dn)) args
           return (g + g',HM.insert dn t ds)
+
+resolveGovernance
+  :: HM.HashMap Text Ref
+  -> Module (Term Name)
+  -> Eval e (ModuleDef (Def Ref))
+resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
+    TVar (Name n _) _ -> case HM.lookup n solvedDefs of
+      Just r -> case r of
+        Ref (TDef govDef _) -> case _dDefType govDef of
+          Defcap -> return govDef
+          _ -> evalError (_tInfo g) "Invalid module governance, must be defcap"
+        _ -> evalError (_tInfo g) "Invalid module governance, should be def ref"
+      Nothing -> evalError (_tInfo g) "Unknown module governance reference"
+    _ -> evalError (_tInfo g) "Invalid module governance, should be var"
 
 
 -- | Definitions are transformed such that all free variables are resolved either to
@@ -426,15 +441,19 @@ withGas g0 args body k = case instantiate' body of
 evaluateDefs :: Info -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
 evaluateDefs info defs = do
   cs <- traverseGraph defs
-  sortedDefs <- forM cs $ \c ->
-      case c of
-        AcyclicSCC v -> return v
-        CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
-          "Recursion detected: " <>
-            prettyList (vs & traverse . _1 %~ fmap mkSomeDoc
-                           & traverse . _3 %~ (SomeDoc . prettyList))
+  sortedDefs <- forM cs $ \c -> case c of
+    AcyclicSCC v -> return v
+    CyclicSCC vs -> do
+      let i = if null vs then info else _tInfo $ view _1 $ head vs
+          pl = vs
+            & traverse . _1 %~ fmap mkSomeDoc
+            & traverse . _3 %~ (SomeDoc . prettyList)
+
+      evalError i $ "Recursion detected: " <> prettyList pl
+
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
       unifiedDefs = foldl dresolve HM.empty sortedDefs
+
   traverse (runSysOnly . evalConsts) unifiedDefs
 
 mkSomeDoc :: (Pretty a, Pretty b) => Either a b -> SomeDoc
@@ -836,7 +855,7 @@ installModule updated md = do
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'
 
-enscope ::  Term Name ->  Eval e (Term Ref)
+enscope ::  Term Name -> Eval e (Term Ref)
 enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothing) $ t)
 
 instantiate' :: Scope n Term a -> Term a
