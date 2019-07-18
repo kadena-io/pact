@@ -19,6 +19,7 @@
 
 module Pact.Repl.Lib where
 
+
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
