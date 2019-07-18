@@ -216,7 +216,7 @@ data VerificationFailure
   | FailedConstTranslation String
   | SchemalessTable Info
   | ScopeErrors [ScopeError]
-  deriving (Eq, Show)
+  deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
