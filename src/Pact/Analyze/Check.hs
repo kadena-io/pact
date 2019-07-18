@@ -722,9 +722,8 @@ parseModuleModelDecl exps = traverse parseDecl exps where
 
 -- | Get the set ('HM.HashMap') of refs to functions, pacts, and constants in
 -- this module.
-moduleTypecheckableRefs :: ModuleData Ref -> TypecheckableRefs
--- TODO: just take ref map?
-moduleTypecheckableRefs ModuleData{..} = foldl f noRefs (HM.toList _mdRefMap)
+moduleTypecheckableRefs :: HM.HashMap Text Ref -> TypecheckableRefs
+moduleTypecheckableRefs refMap = foldl f noRefs (HM.toList refMap)
   where
     f accum (name, ref) = case ref of
       Ref (TDef (Def{_dDefType, _dDefBody}) _) -> case _dDefType of
@@ -1171,7 +1170,7 @@ verifyModule modules moduleData@(ModuleData modDef refs) = runExceptT $ do
     Pact.MDModule{} -> do
       let defunRefs, defpactRefs, defconstRefs :: HM.HashMap Text Ref
           TypecheckableRefs defunRefs defpactRefs defconstRefs
-            = moduleTypecheckableRefs moduleData
+            = moduleTypecheckableRefs refs
 
       consts <- getConsts defconstRefs
       caps   <- moduleCapabilities moduleData
