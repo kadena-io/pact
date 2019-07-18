@@ -26,13 +26,17 @@ module Pact.Compile
   , Reserved(..)
   ) where
 
+import Prelude hiding (exp)
+
 import Bound
+
 import Control.Applicative hiding (some,many)
 import Control.Arrow ((&&&),first)
 import Control.Exception hiding (try)
 import Control.Lens hiding (prism)
 import Control.Monad
 import Control.Monad.State
+
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -43,7 +47,7 @@ import Data.String
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Vector as V
-import Prelude hiding (exp)
+
 import Text.Megaparsec as MP
 import qualified Text.Trifecta as TF hiding (expected)
 
@@ -290,6 +294,7 @@ varAtom = do
     _ -> expected "bareword or qualified atom"
   commit
   return $ TVar n _atomInfo
+
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
@@ -545,8 +550,12 @@ letsForm = do
 useForm :: Compile (Term Name)
 useForm = do
   mn <- qualifiedModuleName
-  i  <- contextInfo
-  u  <- Use mn <$> optional hash' <*> pure i
+  i <- contextInfo
+  h <- optional hash'
+  l <- optional $ withList' Brackets (str `sepBy` sep Comma)
+
+  let ns = maybe [] (fmap (\n -> Name n i)) l
+  let u = Use mn h ns i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
   return $ TUse u i

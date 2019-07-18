@@ -305,7 +305,7 @@ toPersistDirect' t = case toPersistDirect t of
 
 
 evalUse :: Use -> Eval e ()
-evalUse (Use mn h i) = do
+evalUse (Use mn h l i) = do
   mm <- resolveModule i mn
   case mm of
     Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
@@ -318,10 +318,14 @@ evalUse (Use mn h i) = do
                     | otherwise -> evalError i $ "Module " <>
                         pretty mn <> " does not match specified hash: " <>
                         pretty mh <> ", " <> pretty _mHash
-        MDInterface i' -> evalError i $
-          "interfaces cannot be imported: " <> pretty (_interfaceName i')
+        MDInterface i' ->
+          case h of
+            Nothing -> return ()
+            Just _ -> evalError i
+              $ "Interfaces should not have associated hashes: "
+              <> pretty (_interfaceName i')
 
-      installModule False md
+      installModule False md l
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
 mangleDefs mn term = modifyMn term
@@ -365,7 +369,7 @@ loadModule m@Module {} bod1 mi g0 = do
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
-  installModule True md
+  installModule True md []
   return (g1,md)
 
 resolveGovernance :: HM.HashMap Text Ref
@@ -407,7 +411,7 @@ loadInterface i@Interface{..} body info gas0 = do
   mapM_ evalUse _interfaceImports
   evaluatedDefs <- evaluateDefs info (fmap (mangleDefs _interfaceName) idefs)
   let md = ModuleData (MDInterface i) evaluatedDefs
-  installModule True md
+  installModule True md []
   return (gas1,md)
 
 -- | Definitions are transformed such that all free variables are resolved either to
@@ -818,11 +822,23 @@ resolveFreeVars i b = traverse r b where
              Just d -> return d
 
 -- | Install module into local namespace. If updated/new, update loaded modules.
-installModule :: Bool -> ModuleData Ref ->  Eval e ()
-installModule updated md@ModuleData{..} = do
-  (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
+installModule
+  :: Bool
+    -- ^ mark updated module refs
+  -> ModuleData Ref
+    -- ^ module references
+  -> [Name]
+    -- ^ list of hidden names (via 'Use')
+  -> Eval e ()
+installModule updated md hidden = do
+  (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' go mempty $ _mdRefMap md)
   when updated $
-    (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName _mdModule) (md,updated)
+    (evalRefs . rsLoadedModules) %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
+  where
+    go m k v =
+      let n = Name k def
+      in if elem n hidden then m else HM.insert n v m
+
 
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'
