@@ -38,25 +38,23 @@ module Pact.Analyze.Check
   , verifyFunctionInvariants
   ) where
 
-import           Control.Arrow              (left)
 import           Control.Exception          as E
 import           Control.Lens               (at, each, filtered, ifoldl,
                                              ifoldrM, ifor, itraversed, ix,
                                              toListOf, traverseOf, traversed,
                                              view, (%~), (&), (.~), (<&>), (?~),
                                              (^.), (^..), (^?), (^?!), (^@..),
-                                             _2, _Just, _Left)
-import           Control.Monad              (void, when, (<=<))
+                                             _2, _Left)
+import           Control.Monad              (void, (<=<))
 import           Control.Monad.Except       (Except, ExceptT (ExceptT),
-                                             MonadError, catchError, runExcept,
-                                             runExceptT, throwError, withExcept,
+                                             MonadError, catchError, runExceptT,
+                                             throwError, withExcept,
                                              withExceptT)
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.State.Strict (evalStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Data.Either                (partitionEithers)
-import           Data.Foldable              (for_)
 import qualified Data.HashMap.Strict        as HM
 import           Data.List                  (isPrefixOf)
 import qualified Data.List                  as List
@@ -1072,39 +1070,41 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
   pure (funChecks'', invariantChecks)
 
+foldFor :: (Foldable t, Monoid m) => t a -> (a -> m) -> m
+foldFor = flip foldMap
+
 -- | Check that every property variable is in scope.
 scopeCheckInterface
   :: Set Text
   -- ^ A set of table, definition and property names in scope
-  -> HM.HashMap Text Ref -- ^ The set of refs to check
-  -> Either (Maybe ScopeError) (HM.HashMap Text (Maybe ScopeError))
-scopeCheckInterface globalNames refs = runExcept $ for refs $ \case
-  Pact.Direct _ -> throwError $ Just ScopeInvalidRefType
-  Pact.Ref defn ->
-    case defn ^? tDef . dMeta . mModel of
-      Nothing -> pure Nothing
-      Just model -> case normalizeListLit model of
-        Nothing -> throwError $ Just $ ScopeParseFailure
+  -> HM.HashMap Text Ref
+  -- ^ The set of refs to check
+  -> [ScopeError]
+scopeCheckInterface globalNames refs = foldFor refs $ \case
+  Pact.Direct _ -> [ScopeInvalidRefType]
+  Pact.Ref defn -> case defn ^? tDef . dMeta . mModel of
+    Nothing -> []
+    Just model -> case normalizeListLit model of
+      Nothing ->
+        [ ScopeParseFailure
           -- reconstruct an `Exp Info` for this list
           ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
           , "malformed list (inconsistent use of comma separators?)"
           )
-        Just model' -> withExcept Just $ liftEither $ do
-          exps <- left ScopeParseFailure $ collectProperties model'
-
-          -- run this, ignoring the result, to check for errors
-          _ <- for exps $ \(_propTy, meta) -> do
-            let args     = fmap _aName $ defn ^. tDef . dFunType . ftArgs
-                nameEnv  = Map.fromList $ ("result", 0) : zip args [1..]
-                genStart = fromIntegral $ length nameEnv
-            preTypedBody <- left (ScopeParseFailure . (meta,)) $
-              evalStateT (runReaderT (expToPreProp meta) nameEnv) genStart
-
-            for_ (prePropGlobals preTypedBody) $ \globalName ->
-              when (not (globalName `Set.notMember` globalNames)) $
-                throwError $ NotInScope globalName
-
-          pure Nothing
+        ]
+      Just model' -> case collectProperties model' of
+        Left err   -> [ScopeParseFailure err]
+        Right exps -> foldFor exps $ \(_propTy, meta) -> do
+          let args     = fmap _aName $ defn ^. tDef . dFunType . ftArgs
+              nameEnv  = Map.fromList $ ("result", 0) : zip args [1..]
+              genStart = fromIntegral $ length nameEnv
+          case evalStateT (runReaderT (expToPreProp meta) nameEnv) genStart of
+            Left err           -> [ScopeParseFailure (meta, err)]
+            Right preTypedBody -> foldFor (prePropGlobals preTypedBody) $
+              \globalName ->
+                if globalName `Set.notMember` globalNames
+                then [NotInScope globalName]
+                else []
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -1146,21 +1146,16 @@ verifyModule modules moduleData@(ModuleData modDef refs) = runExceptT $ do
     -- just check that every property variable referenced is in scope
     Pact.MDInterface{} ->
       let success = ModuleChecks HM.empty HM.empty HM.empty warnings
-
           globalNames = Set.unions $ fmap Set.fromList
             [ fmap _tableName tables
             , HM.keys propDefs
             , HM.keys refs
             ]
+          scopeErrors = scopeCheckInterface globalNames refs
 
-      in case scopeCheckInterface globalNames refs of
-        Left Nothing      -> pure success
-        Left (Just x)     -> throwError $ ScopeErrors [x]
-        Right scopeErrors ->
-          let scopeErrors' = toListOf (traverse . _Just) scopeErrors
-          in if length scopeErrors' > 0
-             then throwError $ ScopeErrors scopeErrors'
-             else pure success
+      in if length scopeErrors > 0
+         then throwError $ ScopeErrors scopeErrors
+         else pure success
 
     -- If we're passed a module we actually check properties
     Pact.MDModule{} -> do
