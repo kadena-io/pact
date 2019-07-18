@@ -1078,6 +1078,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
   pure (funChecks'', invariantChecks)
 
+-- | Check that every property variable is in scope.
 scopeCheckInterface
   :: [Table]
   -> HM.HashMap Text (DefinedProperty (Exp Info))
