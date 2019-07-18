@@ -1074,11 +1074,11 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
 -- | Check that every property variable is in scope.
 scopeCheckInterface
-  :: [Table]
-  -> HM.HashMap Text (DefinedProperty (Exp Info))
-  -> HM.HashMap Text Ref
+  :: Set Text
+  -- ^ A set of table, definition and property names in scope
+  -> HM.HashMap Text Ref -- ^ The set of refs to check
   -> Either (Maybe ScopeError) (HM.HashMap Text (Maybe ScopeError))
-scopeCheckInterface tables propDefs refs = runExcept $ for refs $ \case
+scopeCheckInterface globalNames refs = runExcept $ for refs $ \case
   Pact.Direct _ -> throwError $ Just ScopeInvalidRefType
   Pact.Ref defn ->
     case defn ^? tDef . dMeta . mModel of
@@ -1092,26 +1092,16 @@ scopeCheckInterface tables propDefs refs = runExcept $ for refs $ \case
         Just model' -> withExcept Just $ liftEither $ do
           exps <- left ScopeParseFailure $ collectProperties model'
 
-          let args = fmap _aName $ defn ^. tDef . dFunType . ftArgs
-
-          let defNames = Set.fromList (HM.keys refs)
-
           -- run this, ignoring the result, to check for errors
           _ <- for exps $ \(_propTy, meta) -> do
-            let nameEnv  = Map.fromList $ ("result", 0) : zip args [1..]
+            let args     = fmap _aName $ defn ^. tDef . dFunType . ftArgs
+                nameEnv  = Map.fromList $ ("result", 0) : zip args [1..]
                 genStart = fromIntegral $ length nameEnv
             preTypedBody <- left (ScopeParseFailure . (meta,)) $
               evalStateT (runReaderT (expToPreProp meta) nameEnv) genStart
 
-            let globalIsInScope :: Text -> Bool
-                globalIsInScope name = or
-                  [ name `elem` fmap _tableName tables
-                  , name `HM.member` propDefs
-                  , name `Set.member` defNames
-                  ]
-
             for_ (prePropGlobals preTypedBody) $ \globalName ->
-              when (not (globalIsInScope globalName)) $
+              when (not (globalName `Set.notMember` globalNames)) $
                 throwError $ NotInScope globalName
 
           pure Nothing
@@ -1157,7 +1147,13 @@ verifyModule modules moduleData@(ModuleData modDef refs) = runExceptT $ do
     Pact.MDInterface{} ->
       let success = ModuleChecks HM.empty HM.empty HM.empty warnings
 
-      in case scopeCheckInterface tables propDefs refs of
+          globalNames = Set.unions $ fmap Set.fromList
+            [ fmap _tableName tables
+            , HM.keys propDefs
+            , HM.keys refs
+            ]
+
+      in case scopeCheckInterface globalNames refs of
         Left Nothing      -> pure success
         Left (Just x)     -> throwError $ ScopeErrors [x]
         Right scopeErrors ->
