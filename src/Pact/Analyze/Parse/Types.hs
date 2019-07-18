@@ -75,6 +75,7 @@ data PreProp
   | PreLiteralObject (Map Text PreProp)
   deriving (Eq, Show)
 
+-- | Find the set of global variables in a @PreProp@.
 prePropGlobals :: PreProp -> Set Text
 prePropGlobals = \case
   PreListLit props     -> Set.unions $ prePropGlobals <$> props
