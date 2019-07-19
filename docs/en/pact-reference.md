@@ -921,9 +921,9 @@ in the runtime environment and stores their definition in the global keyset data
 
 #### Namespace declaration {#namespacedefinition}
 
-[Namespace](#namespaces) declarations provide a unique prefix for modules and interfaces defined within the namespace scope. Namespaces are handled differently in public and private blockchain contexts: in private they are freely definable, and the _root namespace_ (ie, not using a namespace at all) is available for user code. In public blockchains, users are not allowed to use the root namespace (which is reserved for built-in contracts like the coin contract) and must define code within a namespace, which may or may not be definable (ie, users might be restricted to "user" namespaces). 
+[Namespace](#namespaces) declarations provide a unique prefix for modules and interfaces defined within the namespace scope. Namespaces are handled differently in public and private blockchain contexts: in private they are freely definable, and the _root namespace_ (ie, not using a namespace at all) is available for user code. In public blockchains, users are not allowed to use the root namespace (which is reserved for built-in contracts like the coin contract) and must define code within a namespace, which may or may not be definable (ie, users might be restricted to "user" namespaces).
 
-Namespaces are defined using [define-namespace](#define-namespace). Namespaces are "entered" by issuing the [namespace](#namespace) command. 
+Namespaces are defined using [define-namespace](#define-namespace). Namespaces are "entered" by issuing the [namespace](#namespace) command.
 
 #### Module declaration {#moduledeclaration}
 
@@ -1193,7 +1193,7 @@ In the example, `create-account` reads a keyset definition from the message payl
 to store as "keyset" in the table. `read-balance` only allows that owner's keyset to read the balance,
 by first enforcing the keyset using [enforce-keyset](pact-functions.html#enforce-keyset).
 
-### Namespaces {#namespaces}
+Namespaces {#namespaces}
 ---
 
 Namespaces are [defined](pact-functions.html#define-namespace) by specifying a namespace name and [associating](pact-functions.html#read-keyset)
@@ -1748,7 +1748,7 @@ majority is found, the code is upgraded.
   )
 ```
 
-### Interfaces {#interfaces}
+Interfaces {#interfaces}
 ---
 
 An interface, as defined in Pact, is a collection of models used for formal verification, constant definitions, and typed function signatures. When a module issues an [implements](#implements), then that module is said to 'implement' said interface, and must provide an implementation . This allows for abstraction in a similar sense to Java's interfaces, Scala's traits, Haskell's typeclasses or OCaML's signatures. Multiple interfaces may be implemented in a given module, allowing for an expressive layering of behaviors.
@@ -1766,7 +1766,7 @@ Additionally, interfaces my make use of module declarations, admitting use of th
     (defun hello-number:string (number:integer)
       @doc "Return the string \"Hello, $number!\" when given a string"
       	)
-        
+
     (defconst SOME_CONSTANT 3)
 )
 
