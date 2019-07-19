@@ -2,17 +2,17 @@ stages:
   - build
   # - deploy
 
-# pact-macos:
-#   stage: build
-#   tags:
-#     - macos
-#   script:
-#     - nix-build
-#     - nix-build -A ghc.pact.doc
-#     # - ./collectArtifacts.sh macos
-#   # artifacts:
-#   #   paths:
-#   #   - public-macos/
+pact-macos:
+  stage: build
+  tags:
+    - macos
+  script:
+    - nix-build
+    - nix-build -A ghc.pact.doc
+    # - ./collectArtifacts.sh macos
+  # artifacts:
+  #   paths:
+  #   - public-macos/
 
 pact-linux:
   stage: build
