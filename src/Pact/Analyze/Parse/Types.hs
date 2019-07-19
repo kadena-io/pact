@@ -20,6 +20,7 @@ import qualified Data.HashMap.Strict        as HM
 import           Data.Map                   (Map)
 import qualified Data.Map                   as Map
 import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
 import           Data.String                (fromString, IsString)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
@@ -74,6 +75,19 @@ data PreProp
   | PrePropRead PreProp PreProp PreProp
   | PreLiteralObject (Map Text PreProp)
   deriving (Eq, Show)
+
+-- | Find the set of global variables in a @PreProp@.
+prePropGlobals :: PreProp -> Set Text
+prePropGlobals = \case
+  PreListLit props     -> Set.unions $ prePropGlobals <$> props
+  PreGlobalVar name    -> Set.singleton name
+  PreForall _ _ _ prop -> prePropGlobals prop
+  PreExists _ _ _ prop -> prePropGlobals prop
+  PreApp _ props       -> Set.unions $ prePropGlobals <$> props
+  PreAt p1 p2          -> prePropGlobals p1 `Set.union` prePropGlobals p2
+  PrePropRead p1 p2 p3 -> Set.unions $ prePropGlobals <$> [p1, p2, p3]
+  PreLiteralObject obj -> Set.unions $ prePropGlobals <$> Map.elems obj
+  _                    -> Set.empty
 
 instance Pretty PreProp where
   pretty = \case
