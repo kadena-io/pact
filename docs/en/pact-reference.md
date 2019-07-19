@@ -1583,18 +1583,15 @@ User guards allow the user to design an arbitrary predicate function to enforce 
 initial data. For instance, a user guard could be designed to require two separate keysets to be enforced:
 
 ```lisp
-(defun both-sign (obj)
-  (enforce-keyset (at 'ks1 obj))
-  (enforce-keyset (at 'ks2 obj)))
+(defun both-sign (ks1 ks2)
+  (enforce-keyset ks1)
+  (enforce-keyset ks2))
 
 (defun install-both-guard ()
   (write guard-table "both"
     { "guard":
       (create-user-guard
-        { 'ks1: (read-keyset "ks1")
-        , 'ks2: (read-keyset "ks2")
-        }
-        "both-sign")
+        (both-sign (read-keyset "ks1) (read-keyset "ks2")))
     }))
 
 

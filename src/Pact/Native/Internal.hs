@@ -205,7 +205,7 @@ enforceGuardDef dn =
       [TLitString k] -> enforceGuard i (GKeySetRef (KeySetName k)) >> return (toTerm True)
       _ -> argsError i as
 
-enforceGuard :: FunApp -> Guard -> Eval e ()
+enforceGuard :: FunApp -> Guard (Term Name) -> Eval e ()
 enforceGuard i g = case g of
   GKeySet k -> runSysOnly $ enforceKeySet (_faInfo i) Nothing k
   GKeySetRef n -> enforceKeySetName (_faInfo i) n
@@ -223,7 +223,7 @@ enforceGuard i g = case g of
           enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
-    void $ runSysOnly $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
+    void $ runSysOnly $ evalByName _ugFun _ugArgs (_faInfo i)
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.

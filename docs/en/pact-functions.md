@@ -1280,10 +1280,10 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 
 ### create-user-guard {#create-user-guard}
 
-*data*&nbsp;`<a>` *predfun*&nbsp;`string` *&rarr;*&nbsp;`guard`
+*closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
 
 
-Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. DATA must be an object. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
+Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
 
 
 ### enforce-guard {#enforce-guard}

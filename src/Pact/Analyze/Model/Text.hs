@@ -149,6 +149,8 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
     guardDescription = case mProv of
       Nothing ->
         "unknown " <> guard <> " " <> showS sg
+      Just FromGovernanceCap ->
+        "governance capability"
       Just (FromRow _) ->
         error "impossible: FromRow provenance on guard"
       Just (FromCell (OriginatingCell tn cn sRk _)) -> renderCompactText' $

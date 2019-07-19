@@ -37,6 +37,7 @@ singFloat ty p = case p of
   PropSpecific Result             -> ([], p)
   PropSpecific Abort              -> ([], p)
   PropSpecific Success            -> ([], p)
+  PropSpecific GovPasses          -> ([], p)
   PropSpecific TableWrite{}       -> ([], p)
   PropSpecific TableRead{}        -> ([], p)
   PropSpecific ColumnWritten{}    -> ([], p)

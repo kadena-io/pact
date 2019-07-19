@@ -314,7 +314,7 @@ instance ToSchema (ObjectMap PactValue) where
         set additionalProperties (Just $ AdditionalPropertiesSchema sref)
       )
 
-instance ToSchema Guard where
+instance ToSchema (Guard PactValue) where
   declareNamedSchema = genericDeclareNamedSchema $
     optionsOf $ optionConstructor $ toNiceString 1
 
@@ -333,7 +333,7 @@ instance ToSchema NamespaceName
 instance ToSchema (Object a) where
   declareNamedSchema = declareGenericSchema $
     (schemaOf $ swaggerType SwaggerObject)
-instance ToSchema UserGuard where
+instance ToSchema (UserGuard PactValue) where
   declareNamedSchema = lensyDeclareNamedSchema 3
 
 

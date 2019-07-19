@@ -82,7 +82,7 @@ import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Term           (DefName (..), DefType (Defcap),
                                             dDefType, moduleDefMeta,
-                                            moduleDefName, _Ref)
+                                            moduleDefName, _Ref, _gGovernance)
 import           Pact.Types.Type           (_ftArgs)
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
@@ -173,6 +173,7 @@ data CheckEnv = CheckEnv
   , _propDefs   :: HM.HashMap Text (DefinedProperty (Exp Info))
   , _moduleData :: ModuleData Ref
   , _caps       :: [Capability]
+  , _moduleGov  :: Governance
   }
 
 -- | Essential data used to check a function (where function could actually be
@@ -337,15 +338,15 @@ analysisArgs = fmap (view (located._2._2))
 -- | Check that all invariants hold for a function (this is actually used for
 -- defun, defpact, and step)
 verifyFunctionInvariants
-  :: ModuleName
-  -> [Table]
-  -> [Capability]
+  :: CheckEnv
   -> FunData
   -> Text
   -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants modName tables caps (FunData funInfo pactArgs body)
-  funName checkType = runExceptT $ do
+verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov)
+  (FunData funInfo pactArgs body) funName checkType = runExceptT $ do
+    let modName = moduleDefName $ _mdModule moduleData
+
     (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation modName funName
         funInfo caps pactArgs body checkType
@@ -369,8 +370,8 @@ verifyFunctionInvariants modName tables caps (FunData funInfo pactArgs body)
           (Located funInfo tm) graph
         let rootPath = _egRootPath graph
         resultsTable <- withExceptT analyzeToCheckFailure $
-          runInvariantAnalysis modName tables caps (analysisArgs modelArgs')
-            stepChoices' tm rootPath tags funInfo
+          runInvariantAnalysis modName gov tables caps
+            (analysisArgs modelArgs') stepChoices' tm rootPath tags funInfo
 
         -- Iterate through each invariant in a single query so we can reuse our
         -- assertion stack.
@@ -421,7 +422,7 @@ verifyFunctionProperty
   -> CheckableType
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps)
+verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
   (FunData funInfo pactArgs body) funName checkType
   (Located propInfo check) = runExceptT $ do
     let modName = moduleDefName (_mdModule moduleData)
@@ -439,7 +440,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps)
           let rootPath = _egRootPath graph
           ar@(AnalysisResult _querySucceeds _prop ksProvs)
             <- withExceptT analyzeToCheckFailure $
-              runPropertyAnalysis modName check tables caps
+              runPropertyAnalysis modName gov check tables caps
                 (analysisArgs modelArgs') stepChoices' tm rootPath tags funInfo
 
           let model = Model modelArgs' tags ksProvs graph
@@ -921,7 +922,7 @@ getStepChecks
   :: CheckEnv
   -> HM.HashMap Text Ref
   -> ExceptT VerificationFailure IO (HM.HashMap (Text, Int) [CheckResult])
-getStepChecks env@(CheckEnv tables consts propDefs _ _) defpactRefs = do
+getStepChecks env@(CheckEnv tables consts propDefs _ _ _) defpactRefs = do
 
   (steps :: HM.HashMap (Text, Int)
     ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
@@ -969,13 +970,7 @@ getFunChecks
     ( HM.HashMap Text [CheckResult]
     , HM.HashMap Text (TableMap [CheckResult])
     )
-getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
-
-  caps <- moduleCapabilities moduleData
-
-  let modName :: ModuleName
-      modName = moduleDefName $ _mdModule moduleData
-
+getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
   ModelDecl _ checkExps <-
     withExceptT ModuleParseFailure $ liftEither $
       moduleModelDecl moduleData
@@ -1020,8 +1015,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
   invariantChecks <- ifor invariantCheckable $ \name (toplevel, checkType) ->
     case toplevel of
       TopFun fun _ -> withExceptT ModuleCheckFailure $ ExceptT $
-        verifyFunctionInvariants modName tables caps (mkFunInfo fun) name
-          checkType
+        verifyFunctionInvariants env (mkFunInfo fun) name checkType
       _ -> error "invariant violation: anything but a TopFun is unexpected in \
         \invariantCheckable"
 
@@ -1033,6 +1027,17 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
         "invariant violation: anything but a TopFun is unexpected in funChecks"
 
   pure (funChecks'', invariantChecks)
+
+moduleGovernance :: ModuleData Ref -> ExceptT VerificationFailure IO Governance
+moduleGovernance moduleData = case _mdModule moduleData of
+  Pact.MDModule (Pact.Module {_mGovernance}) ->
+    case _gGovernance _mGovernance of
+      Left (Pact.KeySetName rn) ->
+        pure $ KsGovernance $ RegistryName rn
+      Right (Def {_dDefName=Pact.DefName dn}) ->
+        pure $ CapGovernance $ CapName $ T.unpack dn
+  Pact.MDInterface _ ->
+    throwError InvalidRefType
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -1071,8 +1076,9 @@ verifyModule modules moduleData = runExceptT $ do
 
   consts <- getConsts defconstRefs
   caps   <- moduleCapabilities moduleData
+  gov    <- moduleGovernance moduleData
 
-  let checkEnv = CheckEnv tables consts propDefs moduleData caps
+  let checkEnv = CheckEnv tables consts propDefs moduleData caps gov
 
   -- Note that invariants are only checked at the defpact level, not in
   -- individual steps.
@@ -1125,8 +1131,9 @@ verifyCheck moduleData funName check checkType = do
 
   caps   <- moduleCapabilities moduleData
   tables <- moduleTables modules moduleData
+  gov    <- moduleGovernance moduleData
 
-  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps
+  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov
 
   case moduleFun moduleData funName of
     Just funRef -> do

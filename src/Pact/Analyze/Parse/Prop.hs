@@ -164,6 +164,7 @@ expToPreProp = \case
 
   EAtom' STransactionAborts   -> pure PreAbort
   EAtom' STransactionSucceeds -> pure PreSuccess
+  EAtom' SGovernancePasses    -> pure PreGovPasses
   EAtom' SFunctionResult      -> pure PreResult
   EAtom' var                  -> do
     mVid <- view (at var)
@@ -305,6 +306,7 @@ inferPreProp preProp = case preProp of
   PreBoolLit a    -> pure (Some SBool (Lit' a))
   PreAbort        -> pure (Some SBool (PropSpecific Abort))
   PreSuccess      -> pure (Some SBool (PropSpecific Success))
+  PreGovPasses    -> pure (Some SBool (PropSpecific GovPasses))
 
   PreListLit as   -> do
     as' <- traverse inferPreProp as
