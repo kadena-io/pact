@@ -43,7 +43,7 @@ data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
   | PObject (ObjectMap PactValue)
-  | PGuard Guard
+  | PGuard (Guard PactValue)
   deriving (Eq,Show,Generic)
 
 instance NFData PactValue
@@ -73,14 +73,14 @@ toPactValue :: Term Name -> Either Text PactValue
 toPactValue (TLiteral l _) = pure $ PLiteral l
 toPactValue (TObject (Object o _ _ _) _) = PObject <$> traverse toPactValue o
 toPactValue (TList l _ _) = PList <$> V.mapM toPactValue l
-toPactValue (TGuard x _) = pure (PGuard x)
+toPactValue (TGuard x _) = PGuard <$> traverse toPactValue x
 toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
 
 fromPactValue :: PactValue -> Term Name
 fromPactValue (PLiteral l) = TLiteral l def
 fromPactValue (PObject o) = TObject (Object (fmap fromPactValue o) TyAny def def) def
 fromPactValue (PList l) = TList (fmap fromPactValue l) TyAny def
-fromPactValue (PGuard x) = TGuard x def
+fromPactValue (PGuard x) = TGuard (fmap fromPactValue x) def
 
 -- | Lenient conversion, implying that conversion back won't necc. succeed.
 -- Integers are coerced to Decimal for simple representation.

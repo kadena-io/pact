@@ -207,7 +207,7 @@ expectTest (TestEnv code check name p) = do
   it name $ p res
 
 handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> IO ()
-handlePositiveTestResult = withFrozenCallStack $ \case
+handlePositiveTestResult = \case
   Nothing -> pure ()
   Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
     -> pendingWith msg
@@ -231,7 +231,10 @@ expectFalsified' model code = withFrozenCallStack $ do
 
 expectPass :: HasCallStack => Text -> Check -> Spec
 expectPass code check = withFrozenCallStack $ expectTest
-  testEnv { testCode = wrap code "", testCheck = check }
+  testEnv { testCode = wrap code ""
+          , testCheck = check
+          , testPred = handlePositiveTestResult
+          }
 
 expectFail :: HasCallStack => Text -> Check -> Spec
 expectFail code check = withFrozenCallStack $ expectTest
@@ -827,19 +830,39 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable Success'
 
-  describe "create-user-guard" $ do
+  describe "create-user-guard passing" $ do
     let code =
           [text|
-            (defun fail:bool (o:object{account})
+            (defun enforce-range:bool (x:integer)
+              (enforce (> x 1) ""))
+
+            (defun test:bool (x:integer)
+              @model [(property (> x 1))]
+              (enforce-guard (create-user-guard (enforce-range x))))
+          |]
+    expectVerified code
+
+  describe "create-user-guard failing" $ do
+    let code =
+          [text|
+            (defun enforce-impossible:bool ()
               (enforce false ""))
 
             (defun test:bool ()
-              (enforce-guard (create-user-guard {} "fail")))
+              (enforce-guard (create-user-guard (enforce-impossible))))
           |]
-    -- We leave user guards completely free for now, until we inline them into
-    -- a new construct during typechecking:
-    expectPass code $ Satisfiable Abort'
-    expectPass code $ Satisfiable Success'
+    expectPass code $ Valid Abort'
+
+  describe "user guards can't fail unless enforced" $ do
+    let code =
+          [text|
+            (defun enforce-impossible:bool ()
+              (enforce false ""))
+
+            (defun test:guard ()
+              (create-user-guard (enforce-impossible)))
+          |]
+    expectPass code $ Valid Success'
 
   describe "call-by-value semantics for inlining" $ do
     let code =
@@ -874,6 +897,18 @@ spec = describe "analyze" $ do
           [text|
             (defcap CAP (i:integer)
               true)
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                true))
+          |]
+    expectPass code $ Valid Success'
+
+  describe "capability returning false succeeds because it doesn't throw" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              false)
 
             (defun test:bool ()
               (with-capability (CAP 1)
@@ -1043,6 +1078,73 @@ spec = describe "analyze" $ do
           |]
 
     expectPass code $ Valid Abort'
+
+  let expectCapGovPass :: Text -> Check -> Spec
+      expectCapGovPass code check = withFrozenCallStack $ expectTest $ testEnv
+        { testCode =
+            [text|
+              (begin-tx)
+              (module test GOV
+                $code
+                )
+              (commit-tx)
+            |]
+        , testCheck = check
+        , testPred = handlePositiveTestResult
+        , testName = "passed check"
+        }
+
+  describe "capability-based governance is not analyzed and can always pass or fail" $ do
+    let code =
+          [text|
+            (defcap GOV ()
+              true)
+
+            (defun test:bool ()
+              (enforce-guard (create-module-guard "governance")))
+          |]
+
+    expectCapGovPass code $ Satisfiable Success'
+    expectCapGovPass code $ Satisfiable Abort'
+
+  describe "property language can describe whether cap-based governance \
+    \passes" $ do
+      res <- runIO $ runVerification $
+        [text|
+          (begin-tx)
+          (module test GOV
+              (defcap GOV ()
+                true)
+
+              (defun test:bool ()
+                @model [(property governance-passes)]
+                (enforce-guard (create-module-guard "governance")))
+            )
+          (commit-tx)
+        |]
+
+      it "passes in-code checks" $
+        handlePositiveTestResult res
+
+  describe "property language can describe whether ks-based governance passes \
+    \without mentioning the keyset" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                @model [(property governance-passes)]
+                (enforce-guard (create-module-guard "governance")))
+            |]
+      expectVerified code
+
+  describe "keyset-based governance is connected to authorized-by" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              @model [(property (authorized-by 'ks))]
+              (enforce-guard (create-module-guard "governance")))
+          |]
+
+    expectVerified code
 
   describe "enforce-one.1" $ do
     let code =

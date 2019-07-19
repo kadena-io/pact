@@ -54,6 +54,7 @@ data PreProp
   -- identifiers
   | PreAbort
   | PreSuccess
+  | PreGovPasses
   | PreResult
 
   -- In conversion from @Exp@ to @PreProp@ we maintain a distinction between
@@ -99,6 +100,7 @@ instance Pretty PreProp where
     PreListLit lst    -> commaBrackets $ fmap pretty lst
     PreAbort          -> pretty STransactionAborts
     PreSuccess        -> pretty STransactionSucceeds
+    PreGovPasses      -> pretty SGovernancePasses
     PreResult         -> pretty SFunctionResult
     PreVar _id name   -> pretty name
     PreGlobalVar name -> pretty name

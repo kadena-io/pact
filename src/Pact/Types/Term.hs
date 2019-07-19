@@ -237,33 +237,33 @@ instance Pretty ModuleGuard where
 instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
-data UserGuard = UserGuard
-  { _ugData :: !(Object Name)
-  , _ugPredFun :: !Name
-  } deriving (Eq,Generic,Show)
+data UserGuard a = UserGuard
+  { _ugFun :: !Name
+  , _ugArgs :: ![a]
+  } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
-instance NFData UserGuard
+instance NFData a => NFData (UserGuard a)
 
-instance Pretty UserGuard where
+instance Pretty a => Pretty (UserGuard a) where
   pretty UserGuard{..} = "UserGuard" <+> commaBraces
-    [ "data: " <> pretty _ugData
-    , "pred: " <> pretty _ugPredFun
+    [ "fun: " <> pretty _ugFun
+    , "args: " <> pretty _ugArgs
     ]
 
-instance ToJSON UserGuard where toJSON = lensyToJSON 3
-instance FromJSON UserGuard where parseJSON = lensyParseJSON 3
+instance ToJSON a => ToJSON (UserGuard a) where toJSON = lensyToJSON 3
+instance FromJSON a => FromJSON (UserGuard a) where parseJSON = lensyParseJSON 3
 
-data Guard
+data Guard a
   = GPact !PactGuard
   | GKeySet !KeySet
   | GKeySetRef !KeySetName
   | GModule !ModuleGuard
-  | GUser !UserGuard
-  deriving (Eq,Show,Generic)
+  | GUser !(UserGuard a)
+  deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
-instance NFData Guard
+instance NFData a => NFData (Guard a)
 
-instance Pretty Guard where
+instance Pretty a => Pretty (Guard a) where
   pretty (GPact g)      = pretty g
   pretty (GKeySet g)    = pretty g
   pretty (GKeySetRef g) = pretty g
@@ -271,7 +271,7 @@ instance Pretty Guard where
   pretty (GModule g)    = pretty g
 
 
-guardCodec :: Codec Guard
+guardCodec :: (ToJSON a, FromJSON a) => Codec (Guard a)
 guardCodec = Codec enc dec
   where
     enc (GKeySet k) = toJSON k
@@ -291,8 +291,8 @@ guardCodec = Codec enc dec
     keyNamef = "keysetref"
 
 
-instance ToJSON Guard where toJSON = encoder guardCodec
-instance FromJSON Guard where parseJSON = decoder guardCodec
+instance (FromJSON a,ToJSON a) => ToJSON (Guard a) where toJSON = encoder guardCodec
+instance (FromJSON a,ToJSON a) => FromJSON (Guard a) where parseJSON = decoder guardCodec
 
 data DefType
   = Defun
@@ -682,7 +682,7 @@ newtype NamespaceName = NamespaceName Text
 
 data Namespace = Namespace
   { _nsName   :: NamespaceName
-  , _nsGuard  :: Guard
+  , _nsGuard  :: (Guard (Term Name))
   } deriving (Eq, Show, Generic)
 
 instance Pretty Namespace where
@@ -893,7 +893,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TGuard {
-      _tGuard :: !Guard
+      _tGuard :: !(Guard (Term n))
     , _tInfo :: !Info
     } |
     TUse {
@@ -1011,7 +1011,7 @@ instance Monad Term where
       TBinding (map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject (Object bs t kf oi) i >>= f = TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i
-    TGuard k i >>= _ = TGuard k i
+    TGuard g i >>= f = TGuard (fmap (>>= f) g) i
     TUse u i >>= _ = TUse u i
     TStep (Step ent e r si) meta i >>= f = TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) meta i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
@@ -1114,7 +1114,6 @@ instance ToTerm Int where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Decimal where toTerm = tLit . LDecimal
 instance ToTerm Text where toTerm = tLit . LString
 instance ToTerm KeySet where toTerm k = TGuard (GKeySet k) def
-instance ToTerm Guard where toTerm = (`TGuard` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm UTCTime where toTerm = tLit . LTime
 instance ToTerm Word32 where toTerm = tLit . LInteger . fromIntegral
@@ -1137,7 +1136,7 @@ toTListV ty i vs = TList vs ty i
 toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
 toTermList ty l = TList (V.map toTerm (V.fromList (toList l))) ty def
 
-guardTypeOf :: Guard -> GuardType
+guardTypeOf :: Guard a -> GuardType
 guardTypeOf g = case g of
   GKeySet{} -> GTyKeySet
   GKeySetRef{} -> GTyKeySetName
@@ -1233,6 +1232,8 @@ makeLenses ''BindPair
 makeLenses ''Step
 makeLenses ''ModuleHash
 
+deriveEq1 ''Guard
+deriveEq1 ''UserGuard
 deriveEq1 ''Term
 deriveEq1 ''BindPair
 deriveEq1 ''App
@@ -1246,6 +1247,8 @@ deriveEq1 ''ObjectMap
 deriveEq1 ''Object
 deriveEq1 ''Step
 
+deriveShow1 ''Guard
+deriveShow1 ''UserGuard
 deriveShow1 ''Term
 deriveShow1 ''BindPair
 deriveShow1 ''App

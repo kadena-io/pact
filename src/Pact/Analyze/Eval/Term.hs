@@ -30,10 +30,9 @@ import           Data.Default                (def)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (EqSymbolic ((.==), (./=)), HasKind,
+import           Data.SBV                    (EqSymbolic ((.==), (./=)),
                                               Mergeable (symbolicMerge), SBV,
-                                              SymArray (readArray), SymVal, ite,
-                                              literal, (.<), uninterpret,
+                                              SymVal, ite, literal, (.<),
                                               writeArray)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.Maybe              as SBV
@@ -88,13 +87,6 @@ instance Analyzer Analyze where
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint b = modify' $ latticeState.lasConstraints %~ (.&& b)
-
-genUninterpreted :: HasKind a => Analyze (S a)
-genUninterpreted = do
-  nextId <- use $ globalState.gasNextUninterpId
-  let val = uninterpretS $ "uninterp_" <> show nextId
-  globalState.gasNextUninterpId += 1
-  pure val
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s ->
@@ -541,14 +533,26 @@ evalTerm = \case
     succeeds %= (.&& whetherInPact)
     view aeTrivialGuard
 
-  MkUserGuard _ty _obj _name ->
-    --
-    -- NOTE: for now we just leave this uninterpreted, until we are prepared to
-    -- close over and analyze user guard functions in the future. we do not
-    -- try to resolve two uses of the same name to the same user guard, because
-    -- the guard created is *also* a function of the supplied object.
-    --
-    genUninterpreted
+  --
+  -- TODO: really, for stuff like this, we should be erroring out if we detect
+  --       that a program e.g. tries to write the DB in a guard
+  --
+  MkUserGuard guard bodyET -> do
+    -- NOTE: a user guard can not access user tables, so we can run it ahead of
+    -- its use and store whether the guard permits the tx to succeed. If we
+    -- instead deferred the execution to the use (rather than closure) site,
+    -- then we would need to capture the environment here for later use.
+    prevSucceeds <- use succeeds
+    void $ evalETerm bodyET
+    postGuardSucceeds <- use succeeds
+    succeeds .= prevSucceeds
+
+    let sg = literalS guard
+    guardPasses sg .= postGuardSucceeds
+    pure sg
+
+  MkModuleGuard _nameT ->
+    view moduleGuard
 
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT
@@ -563,8 +567,7 @@ evalTerm = \case
       Nothing ->
         pure ()
 
-    whetherPasses <- fmap sansProv $
-      readArray <$> view guardPasses <*> pure (_sSbv guard)
+    whetherPasses <- use $ guardPasses guard
 
     tagGuard tid guard whetherPasses
     pure whetherPasses
@@ -747,15 +750,16 @@ withReset number action = do
   oldState <- use id
   oldEnv   <- ask
 
+  trivialGuard <- view aeTrivialGuard
+
   let tables = oldEnv ^. aeTables
       txMetadata   = TxMetadata (mkFreeArray $ "txKeySets"  <> tShow number)
                                 (mkFreeArray $ "txDecimals" <> tShow number)
                                 (mkFreeArray $ "txIntegers" <> tShow number)
 
       newRegistry = Registry $ mkFreeArray $ "registry" <> tShow number
-      trivialGuard = uninterpret $ "trivial_guard" ++ show number
       newGuardPasses = writeArray (mkFreeArray $ "guardPasses" <> tShow number)
-        trivialGuard sTrue
+        (_sSbv trivialGuard) sTrue
 
       -- If `rowExists` is already set to true, then it won't change. If it's
       -- set to false, this will unset it.
@@ -768,11 +772,11 @@ withReset number action = do
       newState = oldState
         & latticeState . lasExtra . cvTableCells .~ mkSymbolicCells tables
         & latticeState . lasExtra . cvRowExists  %~ updateTableMap
+        & latticeState . lasGuardPasses          .~ newGuardPasses
       newEnv = oldEnv
         & aePactMetadata . pmEntity .~ uninterpretS "entity"
         & aeRegistry                .~ newRegistry
         & aeTxMetadata              .~ txMetadata
-        & aeGuardPasses             .~ newGuardPasses
 
   id .= newState
   local (analyzeEnv .~ newEnv) action

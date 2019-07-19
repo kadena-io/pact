@@ -878,7 +878,7 @@ toAST (TApp Term.App{..} _) = do
                   (_fName (_aAppFun argAST) <> "_" <> lamArgName <> "_p")
                 debug $ "Adding fresh arg to partial application: " ++ show freshArg
                 return $ over aAppArgs (++ [Var freshArg]) argAST'
-            (TyFun t,_) -> die'' argAST $ "App required for funtype argument: " ++ show t
+            (TyFun t,a) -> die'' argAST $ "App required for funtype argument: " ++ show t ++ ", found: " ++ show a
             _ -> return argAST
 
       -- other special forms: bindings, yield/resume
@@ -955,7 +955,9 @@ toAST (TObject Term.Object {..} _) = do
   Object <$> (trackNode ty =<< freshId _oInfo "object")
     <*> mapM toAST _oObject
 toAST TConst {..} = toAST $ constTerm _tConstVal -- TODO(stuart): typecheck here
-toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
+toAST TGuard {..} = do
+  g <- traverse toAST _tGuard
+  trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard g)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
@@ -978,7 +980,7 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
 
-trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
+trackPrim :: Info -> PrimType -> PrimValue (AST Node) -> TC (AST Node)
 trackPrim inf pty v = do
   let ty :: Type UserType = TyPrim pty
   Prim <$> (trackNode ty =<< freshId inf (pack $ showPretty ty) ) <*> pure v

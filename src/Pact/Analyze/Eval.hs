@@ -93,6 +93,7 @@ analyzeInvariants = assumingSuccess =<< invariantsHold''
 runAnalysis'
   :: Functor f
   => ModuleName
+  -> Governance
   -> Query (f (S Bool))
   -> [Table]
   -> [Capability]
@@ -103,7 +104,7 @@ runAnalysis'
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' modName query tables caps args stepChoices tm rootPath tags info = do
+runAnalysis' modName gov query tables caps args stepChoices tm rootPath tags info = do
   let --
       --
       -- TODO: pass this in (from a previous analysis) when we analyze >1
@@ -116,12 +117,12 @@ runAnalysis' modName query tables caps args stepChoices tm rootPath tags info = 
       --
       pactMetadata = mkPactMetadata
 
-  aEnv <- case mkAnalyzeEnv modName pactMetadata reg tables caps args stepChoices tags info of
+  aEnv <- case mkAnalyzeEnv modName pactMetadata gov reg tables caps args stepChoices tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"
 
-  let state0 = mkInitialAnalyzeState tables caps
+  let state0 = mkInitialAnalyzeState (_sSbv $ view aeTrivialGuard aEnv) tables caps
 
       analysis = do
         tagSubpathStart rootPath sTrue
@@ -146,6 +147,7 @@ runAnalysis' modName query tables caps args stepChoices tm rootPath tags info = 
 
 runPropertyAnalysis
   :: ModuleName
+  -> Governance
   -> Check
   -> [Table]
   -> [Capability]
@@ -156,14 +158,15 @@ runPropertyAnalysis
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis modName check tables caps args stepChoices tm rootPath tags
-  info
+runPropertyAnalysis modName gov check tables caps args stepChoices tm rootPath
+  tags info
   = runIdentity <$>
-    runAnalysis' modName (Identity <$> analyzeCheck check) tables caps args
+    runAnalysis' modName gov (Identity <$> analyzeCheck check) tables caps args
       stepChoices tm rootPath tags info
 
 runInvariantAnalysis
   :: ModuleName
+  -> Governance
   -> [Table]
   -> [Capability]
   -> Map VarId AVal
@@ -173,7 +176,8 @@ runInvariantAnalysis
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis modName tables caps args stepChoices tm rootPath tags info
+runInvariantAnalysis modName gov tables caps args stepChoices tm rootPath tags
+  info
   = unInvariantsF <$>
-    runAnalysis' modName analyzeInvariants tables caps args stepChoices tm
+    runAnalysis' modName gov analyzeInvariants tables caps args stepChoices tm
       rootPath tags info
