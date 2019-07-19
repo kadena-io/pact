@@ -190,6 +190,31 @@ transaction is aborted. Because `properties` are only concerned with
 transactions that succeed, the necessary conditions to pass each `enforce` call
 are assumed.
 
+However, in some cases it's useful to assert when the function must succeed or
+abort. To write this kind of assertion, instead of `property`, you can use
+`succeeds-when` or `fails-when`, for example:
+
+
+```lisp
+(defun ensured-positive:bool (val:integer)
+  @model [
+    ; this succeeds exactly when val > 0, and fails exactly when val <= 0
+    (succeeds-when (> val 0))
+    (fails-when    (<= val 0))
+
+    ; however, it's valid to assert something weaker
+    (succeeds-when (> val 1000))
+    (fails-when    (< val -1000))
+    ]
+  (enforce (> val 0)))
+```
+
+With this model, we're guaranteed that no transaction will ever run on the
+blockchain with a non-positive `val`.
+
+We've now seen all three valid forms of model assertions -- `property`,
+`succeeds-when`, and `fails-when`.
+
 ### More comprehensive properties API documentation
 
 For the full listing of functionality available in properties, see the API

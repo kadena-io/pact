@@ -11,6 +11,7 @@ module Pact.Types.Pretty
   , Pretty(..)
   , RenderColor(..)
   , SomeDoc(..)
+  , SpecialPretty(..)
   , abbrev
   , abbrevStr
   , align
@@ -242,3 +243,13 @@ newtype SomeDoc = SomeDoc Doc
 
 instance Pretty SomeDoc where
   pretty (SomeDoc doc) = doc
+
+
+-- | Type to allow for special-casing rendering of a type
+data SpecialPretty n
+  = SPSpecial Text
+  | SPNormal n
+
+instance Pretty n => Pretty (SpecialPretty n) where
+  pretty (SPSpecial t) = pretty t
+  pretty (SPNormal n) = pretty n

@@ -1,18 +1,18 @@
 stages:
   - build
-  - deploy
+  # - deploy
 
-pact-macos:
-  stage: build
-  tags:
-    - macos
-  script:
-    - nix-build
-    - nix-build -A ghc.pact.doc
-    - ./collectArtifacts.sh macos
-  artifacts:
-    paths:
-    - public-macos/
+# pact-macos:
+#   stage: build
+#   tags:
+#     - macos
+#   script:
+#     - nix-build
+#     - nix-build -A ghc.pact.doc
+#     # - ./collectArtifacts.sh macos
+#   # artifacts:
+#   #   paths:
+#   #   - public-macos/
 
 pact-linux:
   stage: build
@@ -32,15 +32,15 @@ pact-linux:
 #     - if [ ! "$CACHIX_SIGNING_KEY" = "" ]; then nix-instantiate | cachix push pact fi
 #     - if [ ! "$CACHIX_SIGNING_KEY" = "" ]; then nix-instantiate shell.nix | cachix push pact fi
 
-pages:
-  stage: deploy
-  script:
-    - mkdir public
-    - mv public-macos public/
-#    - mv public-linux public/
-  artifacts:
-    paths:
-    - public/
+# pages:
+#   stage: deploy
+#   script:
+#     - mkdir public
+#     - mv public-macos public/
+# #    - mv public-linux public/
+#   artifacts:
+#     paths:
+#     - public/
 
 # pact-linux-static:
 #   stage: build

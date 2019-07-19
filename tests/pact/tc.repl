@@ -163,7 +163,13 @@
                   (yield y)))
             (resume {'a:= z} (yield {'b: z}))))
     (step (resume {'b:= q} q))
-  )
+    )
+
+  (defun tc-chain-data ()
+    (+ (at "block-height" (chain-data)) 1))
+
+  (defun tc-chain-data-2:object{public-chain-data} ()
+    (chain-data))
 
 )
 
@@ -183,6 +189,10 @@
 (expect-failure "bad update" (fails-update "Mary" "@mary123"))
 (expect "int list OK" [2 3 4] (addToAll 1 [1 2 3]))
 (expect-failure "bad int list" (addToAll 1 [1 2 3 "hi"]))
+
+(expect "native user type exercise works"
+        (tc-chain-data)
+        (+ (at "block-height" (tc-chain-data-2)) 1))
 
 (typecheck 'tctest)
 

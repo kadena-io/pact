@@ -48,6 +48,14 @@ import           Pact.Analyze.Util
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case
     PropertyHolds p -> assumingSuccess =<< evalProp p
+    SucceedsWhen p  -> do
+      success <- view (qeAnalyzeState.succeeds)
+      p'      <- evalProp p
+      pure $ p' .=> success
+    FailsWhen p  -> do
+      success <- view (qeAnalyzeState.succeeds)
+      p'      <- evalProp p
+      pure $ p' .=> sNot success
     Valid p         -> evalProp p
     Satisfiable p   -> evalProp p
 

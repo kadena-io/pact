@@ -19,6 +19,7 @@ module Pact.Native.Internal
   ,bindReduce
   ,enforceGuard
   ,defNative,defGasRNative,defRNative
+  ,defSchema
   ,setTopLevelOnly
   ,foldDefs
   ,funType,funType'
@@ -118,6 +119,15 @@ defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example]
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = preGas fi as >>= \(g,as') -> (g,) <$> f fi as'
 
+
+defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
+defSchema n doc fields =
+  (n,
+   TSchema (TypeName $ asString n) (ModuleName "" Nothing) (Meta (Just doc) [])
+   (map (\(fr,ty) -> Arg (asString fr) ty def) fields)
+   def)
+
+
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
 
@@ -195,7 +205,7 @@ enforceGuardDef dn =
       [TLitString k] -> enforceGuard i (GKeySetRef (KeySetName k)) >> return (toTerm True)
       _ -> argsError i as
 
-enforceGuard :: FunApp -> Guard -> Eval e ()
+enforceGuard :: FunApp -> Guard (Term Name) -> Eval e ()
 enforceGuard i g = case g of
   GKeySet k -> runSysOnly $ enforceKeySet (_faInfo i) Nothing k
   GKeySetRef n -> enforceKeySetName (_faInfo i) n
@@ -213,7 +223,7 @@ enforceGuard i g = case g of
           enforceModuleAdmin (_faInfo i) _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
-    void $ runSysOnly $ evalByName _ugPredFun [TObject _ugData def] (_faInfo i)
+    void $ runSysOnly $ evalByName _ugFun _ugArgs (_faInfo i)
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.

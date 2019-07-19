@@ -771,11 +771,14 @@ expToCheck
   -- ^ Environment mapping names to constants
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
+  -> (Prop 'TyBool -> Check)
+  -- ^ The style of check to use ('PropertyHolds', 'SucceedsWhen', or
+  -- 'FailsWhen')
   -> Exp Info
   -- ^ Exp to convert
   -> Either String Check
-expToCheck tableEnv' genStart nameEnv idEnv consts propDefs body =
-  PropertyHolds . prenexConvert
+expToCheck tableEnv' genStart nameEnv idEnv consts propDefs checkCtor body =
+  checkCtor . prenexConvert
     <$> expToProp tableEnv' genStart nameEnv idEnv consts propDefs SBool body
 
 expToProp

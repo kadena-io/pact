@@ -78,6 +78,7 @@ instance Pretty PersistDirect where
 
 toPersistDirect :: Term Name -> Either Text PersistDirect
 toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
+toPersistDirect (TSchema n (ModuleName "" Nothing) _ _ _) = pure $ PDNative (NativeDefName (asString n))
 toPersistDirect t = case toPactValue t of
   Right v -> pure $ PDValue v
   Left e -> Left e
