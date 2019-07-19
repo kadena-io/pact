@@ -2014,6 +2014,18 @@ spec = describe "analyze" $ do
                     1581138830084.1918464
                     1581138830084)
                   1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864))
+
+                (enforce (= 2 (& 2 3)) "bitwise 2 and 3" )
+                (enforce (= 1 (& 5 -7)) "bitwise 5 and -7")
+                (enforce (= 3 (| 2 3)) "bitwise 2 or 3")
+                (enforce (= -3 (| 5 -7)) "bitwise 5 or -7")
+                (enforce (= 6 (xor 2 4)) "bitwise 2 xor 4")
+                (enforce (= -4 (xor 5 -7)) "bitwise 5 xor -7")
+                (enforce (= -16 (~ 15)) "complement 15")
+                (enforce (= 65280 (shift 255 8)) "shift 255 8")
+                (enforce (= -65280 (shift -255 8)) "shift -255 8")
+                (enforce (= 127 (shift 255 -1)) "shift 255 -1")
+                (enforce (= -128 (shift -255 -1)) "shift -255 -1")
               ))
           |]
     in expectPass code $ Valid $ sNot Abort'

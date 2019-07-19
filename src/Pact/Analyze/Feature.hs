@@ -36,6 +36,7 @@ import qualified Pact.Types.Pretty      as Pretty
 
 data FeatureClass
   = CNumerical
+  | CBitwise
   | CLogical
   | CObject
   | CList
@@ -51,6 +52,7 @@ data FeatureClass
 
 classTitle :: FeatureClass -> Text
 classTitle CNumerical      = "Numerical"
+classTitle CBitwise      = "Bitwise"
 classTitle CLogical        = "Logical"
 classTitle CObject         = "Object"
 classTitle CString         = "String"
@@ -80,6 +82,12 @@ data Feature
   | FCeilingRound
   | FFloorRound
   | FModulus
+  -- Bitwise operators
+  | FBitwiseAnd
+  | FBitwiseOr
+  | FXor
+  | FShift
+  | FComplement
   -- Logical operators
   | FGreaterThan
   | FLessThan
@@ -496,6 +504,86 @@ doc FModulus = Doc
         [ ("x", TyCon int)
         , ("y", TyCon int)
         ]
+        (TyCon int)
+  ]
+
+-- Bitwise operators
+
+doc FBitwiseAnd = Doc
+  "&"
+  CBitwise
+  InvAndProp
+  "Bitwise and"
+  [ Usage
+      "(& x y)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon int)
+        , ("y", TyCon int)
+        ]
+        (TyCon int)
+  ]
+
+doc FBitwiseOr = Doc
+  "|"
+  CBitwise
+  InvAndProp
+  "Bitwise or"
+  [ Usage
+      "(| x y)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon int)
+        , ("y", TyCon int)
+        ]
+        (TyCon int)
+  ]
+
+doc FXor = Doc
+  "xor"
+  CBitwise
+  InvAndProp
+  "Bitwise exclusive-or"
+  [ Usage
+      "(xor x y)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon int)
+        , ("y", TyCon int)
+        ]
+        (TyCon int)
+  ]
+
+doc FShift = Doc
+  "shift"
+  CBitwise
+  InvAndProp
+  "Shift X Y bits left if Y is positive, or right by -Y bits otherwise."
+  [ Usage
+      "(shift x y)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon int)
+        , ("y", TyCon int)
+        ]
+        (TyCon int)
+  ]
+
+doc FComplement = Doc
+  "~"
+  CBitwise
+  InvAndProp
+  "Reverse all bits in x"
+  [ Usage
+      "(~ x)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon int) ]
         (TyCon int)
   ]
 
@@ -1551,6 +1639,11 @@ PAT(SBankersRound, FBankersRound)
 PAT(SCeilingRound, FCeilingRound)
 PAT(SFloorRound, FFloorRound)
 PAT(SModulus, FModulus)
+PAT(SBitwiseAnd, FBitwiseAnd)
+PAT(SBitwiseOr, FBitwiseOr)
+PAT(SXor, FXor)
+PAT(SShift, FShift)
+PAT(SComplement, FComplement)
 PAT(SGreaterThan, FGreaterThan)
 PAT(SLessThan, FLessThan)
 PAT(SGreaterThanOrEqual, FGreaterThanOrEqual)

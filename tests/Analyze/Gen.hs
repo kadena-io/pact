@@ -196,6 +196,13 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
     op <- genRoundingLikeOp
     mkInt $ Numerical $ RoundingLikeOp1 op (extract x)
   , Gen.subtermM (genCore strSize) $ mkInt . StrLength . extract
+  , do op <- Gen.element [BitwiseAnd, BitwiseOr, Xor]
+       Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt size)) $
+         \x y -> mkInt $ Numerical $ BitwiseOp op [extract x, extract y]
+  , Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 1e2))) $
+      \x y -> mkInt $ Numerical $ BitwiseOp Shift [extract x, extract y]
+  , Gen.subtermM (genCore (BoundedInt size)) $
+    mkInt . Numerical . BitwiseOp Complement . (:[]) . extract
   ]
 genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
     Some SDecimal . Lit' <$> genDecimal size

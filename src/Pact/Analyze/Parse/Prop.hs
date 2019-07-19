@@ -468,6 +468,10 @@ inferPreProp preProp = case preProp of
           -- For all other (simple) types, any comparison operator is valid
           _ -> pure $ Some SBool $ CoreProp $ Comparison aTy op a' b'
 
+  PreApp (toOp bitwiseOpP -> Just op) args ->
+    Some SInteger . PNumerical . BitwiseOp op <$>
+      traverse (checkPreProp SInteger) args
+
   PreApp op'@(toOp logicalOpP -> Just op) args ->
     Some SBool <$> case (op, args) of
       (NotOp, [a  ])  -> PNot <$> checkPreProp SBool a
