@@ -787,7 +787,7 @@ strToInt i as =
       then
         if T.length txt <= 128
         then case baseStrToInt base' txt of
-          Left _ -> argsError i as
+          Left t -> evalError' i $ pretty t
           Right n -> return (toTerm n)
         else evalError' i $ "Invalid input: unsupported string length: " <> pretty txt
       else evalError' i $ "Invalid input: supplied string is not hex: " <> pretty txt
@@ -806,10 +806,10 @@ txHash i as = argsError i as
 baseStrToInt :: Integer -> Text -> Either Text Integer
 baseStrToInt base t =
   if base <= 1 || base > 16
-  then Left $ "baseStrToInt - unsupported base: " `T.append` asString base
+  then Left $ "unsupported base: " `T.append` asString base
   else
     if T.null t
-    then Left $ "baseStrToInt - empty text: " `T.append` asString t
+    then Left $ "empty text: " `T.append` asString t
     else foldM go 0 $ T.unpack t
   where
     go :: Integer -> Char -> Either Text Integer
@@ -817,6 +817,6 @@ baseStrToInt base t =
       let val = fromIntegral . digitToInt $ c'
       in if val < base
          then pure $ base * acc + val
-         else Left $ "baseStrToInt - character '" <> T.singleton c' <>
+         else Left $ "character '" <> T.singleton c' <>
                 "' is out of range for base " <> tShow base <> ": " <> t
-{-# INLINE baseStrToInt #-}
+{-# INLINABLE baseStrToInt #-}
