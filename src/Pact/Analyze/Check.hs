@@ -1060,7 +1060,7 @@ scopeCheckInterface
   -> HM.HashMap Text Ref
   -- ^ The set of refs to check
   -> [ScopeError]
-scopeCheckInterface globalNames refs = foldFor refs $ \case
+scopeCheckInterface globalNames refs = refs <&&> \case
   Pact.Direct _ -> [ScopeInvalidRefType]
   Pact.Ref defn -> case defn ^? tDef . dMeta . mModel of
     Nothing -> []
@@ -1074,17 +1074,21 @@ scopeCheckInterface globalNames refs = foldFor refs $ \case
         ]
       Just model' -> case collectProperties model' of
         Left err   -> [ScopeParseFailure err]
-        Right exps -> foldFor exps $ \(_propTy, meta) -> do
+        Right exps -> exps <&&> \(_propTy, meta) -> do
           let args     = fmap _aName $ defn ^. tDef . dFunType . ftArgs
               nameEnv  = Map.fromList $ ("result", 0) : zip args [1..]
               genStart = fromIntegral $ length nameEnv
           case evalStateT (runReaderT (expToPreProp meta) nameEnv) genStart of
             Left err           -> [ScopeParseFailure (meta, err)]
-            Right preTypedBody -> foldFor (prePropGlobals preTypedBody) $
+            Right preTypedBody -> prePropGlobals preTypedBody <&&>
               \globalName ->
                 if globalName `Set.notMember` globalNames
                 then [NotInScope globalName]
                 else []
+  where
+
+    (<&&>) :: Foldable t => t a -> (a -> [ScopeError]) -> [ScopeError]
+    (<&&>) = flip foldMap
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.

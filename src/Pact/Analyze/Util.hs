@@ -26,9 +26,6 @@ for2
   => s (t a) -> (a -> f b) -> f (s (t b))
 for2 = flip (traverse . traverse)
 
-foldFor :: (Foldable t, Monoid m) => t a -> (a -> m) -> m
-foldFor = flip foldMap
-
 astToParsed :: AST Node -> Parsed
 astToParsed = nodeToParsed . _aNode
 
