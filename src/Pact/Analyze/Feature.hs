@@ -52,7 +52,7 @@ data FeatureClass
 
 classTitle :: FeatureClass -> Text
 classTitle CNumerical      = "Numerical"
-classTitle CBitwise      = "Bitwise"
+classTitle CBitwise        = "Bitwise"
 classTitle CLogical        = "Logical"
 classTitle CObject         = "Object"
 classTitle CString         = "String"
@@ -561,7 +561,7 @@ doc FShift = Doc
   "shift"
   CBitwise
   InvAndProp
-  "Shift X Y bits left if Y is positive, or right by -Y bits otherwise."
+  "Shift `x` `y` bits left if `y` is positive, or right by `-y` bits otherwise."
   [ Usage
       "(shift x y)"
       Map.empty
@@ -577,7 +577,7 @@ doc FComplement = Doc
   "~"
   CBitwise
   InvAndProp
-  "Reverse all bits in x"
+  "Reverse all bits in `x`"
   [ Usage
       "(~ x)"
       Map.empty

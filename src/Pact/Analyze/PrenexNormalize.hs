@@ -79,7 +79,7 @@ singFloat ty p = case p of
   PropSpecific (RowReadCount tn pRk)
     -> PropSpecific . RowReadCount tn    <$> float pRk
   CoreProp (Numerical (BitwiseOp op args))
-    -> PNumerical . BitwiseOp op   <$> traverse (singFloat ty) args
+    -> PNumerical . BitwiseOp op         <$> traverse (singFloat ty) args
 
   -- decimal
   CoreProp (Numerical (DecArithOp op a b))
