@@ -198,23 +198,23 @@ evalBitwiseOp
   -> [TermOf m 'TyInteger]
   -> m (S Integer)
 evalBitwiseOp BitwiseAnd [xT, yT] = do
-  S _ x <- eval @_ @'TyInteger xT
-  S _ y <- eval @_ @'TyInteger yT
+  S _ x <- eval xT
+  S _ y <- eval yT
   pure $ sansProv $ x .&. y
 evalBitwiseOp BitwiseOr [xT, yT] = do
-  S _ x <- eval @_ @'TyInteger xT
-  S _ y <- eval @_ @'TyInteger yT
+  S _ x <- eval xT
+  S _ y <- eval yT
   pure $ sansProv $ x .|. y
 evalBitwiseOp Xor [xT, yT] = do
-  S _ x <- eval @_ @'TyInteger xT
-  S _ y <- eval @_ @'TyInteger yT
+  S _ x <- eval xT
+  S _ y <- eval yT
   pure $ sansProv $ x `xor` y
 evalBitwiseOp Complement [xT] = do
-  S _ x <- eval @_ @'TyInteger xT
+  S _ x <- eval xT
   pure $ sansProv $ complement x
 evalBitwiseOp Shift [xT, yT] = do
-  S _ x <- eval @_ @'TyInteger xT
-  S _ y <- eval @_ @'TyInteger yT
+  S _ x <- eval xT
+  S _ y <- eval yT
   case unliteral y of
     Just y'  -> pure $ sansProv $ shift x $ fromIntegral y'
     Nothing  -> throwErrorNoLoc $ UnhandledTerm
