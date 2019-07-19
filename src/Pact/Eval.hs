@@ -305,12 +305,13 @@ toPersistDirect' t = case toPersistDirect t of
 
 
 evalUse :: Use -> Eval e ()
-evalUse (Use mn h is i) = do
+evalUse u@(Use mn h mimps i) = do
   mm <- resolveModule i mn
   case mm of
     Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
-    Just md -> do
-      case _mdModule md of
+    Just md@(ModuleData m rs) -> do
+      validateImports u rs
+      case m of
         MDModule Module{..} ->
           case h of
             Nothing -> return ()
@@ -325,8 +326,17 @@ evalUse (Use mn h is i) = do
               $ "Interfaces should not have associated hashes: "
               <> pretty (_interfaceName i')
 
-      evalRefs . rsImports %= mappend is
-      installModule False md
+      installModule False mimps md
+
+validateImports :: Use -> HM.HashMap Text Ref -> Eval e ()
+validateImports (Use _ _ mis i) rs = case mis of
+  Nothing -> return ()
+  Just is -> foldM go () is
+  where
+  go () imp =
+      unless (isJust $ HM.lookup imp rs)
+        $ evalError i
+        $ "imported name not found: " <> pretty imp
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
 mangleDefs mn term = modifyMn term
@@ -346,7 +356,8 @@ loadModule
   -> Gas
   -> Eval e (Gas,ModuleData Ref)
 loadModule m@Module {} bod1 mi g0 = do
-  (g1,mdefs) <- withNames g0 (GModuleMember $ MDModule m) bod1 $ \t -> case t of
+  mapM_ evalUse $ _mImports m
+  (g1,mdefs) <- collectNames g0 (GModuleMember $ MDModule m) bod1 $ \t -> case t of
     TDef d _ -> return $ Just $ asString (_dDefName d)
     TConst a _ _ _ _ -> return $ Just $ _aName a
     TSchema n _ _ _ _ -> return $ Just $ asString n
@@ -358,7 +369,7 @@ loadModule m@Module {} bod1 mi g0 = do
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
-  installModule True md
+  installModule True Nothing md
   return (g1,md)
 
 loadInterface
@@ -368,22 +379,22 @@ loadInterface
   -> Gas
   -> Eval e (Gas,ModuleData Ref)
 loadInterface i@Interface{..} body info gas0 = do
-  (gas1,idefs) <- withNames gas0 (GModuleMember $ MDInterface i) body $ \t -> case t of
+  mapM_ evalUse _interfaceImports
+  (gas1,idefs) <- collectNames gas0 (GModuleMember $ MDInterface i) body $ \t -> case t of
     TDef d _ -> return $ Just $ asString (_dDefName d)
     TConst a _ _ _ _ -> return $ Just $ _aName a
     TSchema n _ _ _ _ -> return $ Just $ asString n
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid interface member"
-  mapM_ evalUse _interfaceImports
-  evaluatedDefs <- evaluateDefs info (fmap (mangleDefs _interfaceName) idefs)
+  evaluatedDefs <- evaluateDefs info $ mangleDefs _interfaceName <$> idefs
   let md = ModuleData (MDInterface i) evaluatedDefs
-  installModule True md
+  installModule True Nothing md
   return (gas1,md)
 
 -- | Retrieve map of definition names to their corresponding terms
 -- and compute their gas value
 --
-withNames
+collectNames
   :: Gas
     -- ^ initial gas value
   -> GasArgs
@@ -393,22 +404,24 @@ withNames
   -> (Term Name -> Eval e (Maybe Text))
     -- ^ function extracting definition names
   -> Eval e (Gas, HM.HashMap Text (Term Name))
-withNames g0 args body k = case instantiate' body of
-    TList bd _ _ -> foldM go (g0, mempty) bd
+collectNames g0 args body k = case instantiate' body of
+    TList bd _ _ -> do
+      rs <- use $ evalRefs . rsLoaded
+      ns <- view $ eeRefStore . rsNatives
+      foldM (go rs ns) (g0, mempty) bd
     t -> evalError' t $ "malformed declaration"
   where
-    go (g,ds) t = do
+    go rs ns (g,ds) t = do
       dnm <- k t
       case dnm of
         Nothing -> return (g, ds)
         Just dn -> do
-          rs <- view $ eeRefStore . rsNatives
-          is <- use $ evalRefs . rsImports
-          when (V.elem dn is) $
-            evalError' t $ "definition is not in the list of explicit imports" <> pretty dn
           -- disallow native overlap
-          when (isJust $ HM.lookup (Name dn def) rs) $
+          when (isJust $ HM.lookup (Name dn def) ns) $
             evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
+          -- disallow conflicting import overlap
+          when (isJust $ HM.lookup (Name dn def) rs) $
+            evalError' t $ "definitions cannot overlap with previously loaded names: " <> pretty dn
           -- disallow conflicting members
           when (isJust $ HM.lookup dn ds) $
             evalError' t $ "definition name conflict: " <> pretty dn
@@ -842,15 +855,25 @@ resolveFreeVars i b = traverse r b where
              Nothing -> evalError i $ "Cannot resolve " <> pretty fv
              Just d -> return d
 
--- | Install module into local namespace. If updated/new, update loaded modules.
-installModule :: Bool -> ModuleData Ref -> Eval e ()
-installModule updated md = do
-  evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' go mempty $ _mdRefMap md)
-  when updated $
-    evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
+-- | Install module into local namespace. If supplied a vector of qualified imports,
+-- only load those references. If updated/new, update loaded modules.
+--
+installModule :: Bool -> Maybe (V.Vector Text) -> ModuleData Ref -> Eval e ()
+installModule updated mimports md = case mimports of
+  Nothing -> go allDefs
+  Just imps -> go $ filteredDefs imps
   where
-    go m k v = HM.insert (Name k def) v m
+    go f = do
+      evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty $ _mdRefMap md)
+      when updated $
+        evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
 
+    filteredDefs imps m k v =
+      if V.elem k imps
+      then HM.insert (Name k def) v m
+      else m
+
+    allDefs m k v = HM.insert (Name k def) v m
 
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'

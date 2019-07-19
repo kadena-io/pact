@@ -516,7 +516,7 @@ instance Ord Name where
 data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe ModuleHash)
-  , _uHiddenImports :: !(Maybe (Vector Text))
+  , _uImports :: !(Maybe (Vector Text))
   , _uInfo :: !Info
   } deriving (Eq, Show, Generic)
 
@@ -531,7 +531,7 @@ instance ToJSON Use where
   toJSON Use{..} = object $
     [ "module" .= _uModuleName
     , "hash" .= _uModuleHash
-    , "hidden" .= _uHiddenImports
+    , "hidden" .= _uImports
     ,  "i" .= _uInfo
     ]
 

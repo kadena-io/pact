@@ -26,7 +26,7 @@ module Pact.Types.Runtime
    toPactId,
    Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
-   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsImports,
+   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
@@ -58,7 +58,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
 import Data.Text (Text, unpack)
-import Data.Vector (Vector)
 
 import GHC.Generics
 
@@ -223,11 +222,10 @@ data RefState = RefState {
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe Namespace
-      -- | explicit imports
-    , _rsImports :: !(Maybe (Vector Text))
+
     } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty Nothing mempty
+instance Default RefState where def = RefState HM.empty HM.empty Nothing
 
 data Capabilities = Capabilities
   { _capGranted :: [Capability]

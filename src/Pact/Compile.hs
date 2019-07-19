@@ -552,14 +552,13 @@ useForm = do
   mn <- qualifiedModuleName
   i <- contextInfo
   h <- optional hash'
-  l <- optional $ withList' Brackets (str `sepBy` sep Comma)
+  l <- optional $ withList' Brackets (some userAtom <* eof)
 
-  let v = fmap V.fromList l
-  let u = Use mn h v i
+  let v = fmap (V.fromList . fmap _atomAtom) l
+      u = Use mn h v i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
-  return $ TUse u i
-
+  return $ TUse u (_uInfo u)
 
 hash' :: Compile ModuleHash
 hash' = str >>= \s -> case fromText' s of
