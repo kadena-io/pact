@@ -508,8 +508,10 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps)
 
 -- | Get the set of tables in the specified modules.
 moduleTables
-  :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
-  -> HM.HashMap Text Ref                    -- ^ the module we're verifying
+  :: HM.HashMap ModuleName (ModuleData Ref)
+  -- ^ all loaded modules
+  -> HM.HashMap Text Ref
+  -- ^ the refs of the module we're verifying
   -> ExceptT VerificationFailure IO [Table]
 moduleTables modules refMap = do
   -- All tables defined in this module, and imported by it. We're going to look
