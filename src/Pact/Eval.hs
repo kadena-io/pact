@@ -305,13 +305,12 @@ toPersistDirect' t = case toPersistDirect t of
 
 
 evalUse :: Use -> Eval e ()
-evalUse u@(Use mn h mimps i) = do
+evalUse (Use mn h mis i) = do
   mm <- resolveModule i mn
   case mm of
     Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
-    Just md@(ModuleData m rs) -> do
-      validateImports u rs
-      case m of
+    Just md -> do
+      case _mdModule md of
         MDModule Module{..} ->
           case h of
             Nothing -> return ()
@@ -326,10 +325,11 @@ evalUse u@(Use mn h mimps i) = do
               $ "Interfaces should not have associated hashes: "
               <> pretty (_interfaceName i')
 
-      installModule False mimps md
+      validateImports i mis (_mdRefMap md)
+      installModule False mis md
 
-validateImports :: Use -> HM.HashMap Text Ref -> Eval e ()
-validateImports (Use _ _ mis i) rs = case mis of
+validateImports :: Info -> Maybe (V.Vector Text) -> HM.HashMap Text Ref -> Eval e ()
+validateImports i mis rs = case mis of
   Nothing -> return ()
   Just is -> foldM go () is
   where
@@ -364,7 +364,6 @@ loadModule m@Module {} bod1 mi g0 = do
     tt@TTable{} -> return $ Just $ asString (_tTableName tt)
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid module member"
-  mapM_ evalUse $ _mImports m
   evaluatedDefs <- evaluateDefs mi (fmap (mangleDefs $ _mName m) mdefs)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
@@ -859,17 +858,17 @@ resolveFreeVars i b = traverse r b where
 -- only load those references. If updated/new, update loaded modules.
 --
 installModule :: Bool -> Maybe (V.Vector Text) -> ModuleData Ref -> Eval e ()
-installModule updated mimports md = case mimports of
+installModule updated mis md = case mis of
   Nothing -> go allDefs
-  Just imps -> go $ filteredDefs imps
+  Just is -> go $ filteredDefs is
   where
     go f = do
       evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty $ _mdRefMap md)
       when updated $
         evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
 
-    filteredDefs imps m k v =
-      if V.elem k imps
+    filteredDefs is m k v =
+      if V.elem k is
       then HM.insert (Name k def) v m
       else m
 
