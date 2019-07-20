@@ -222,7 +222,6 @@ data RefState = RefState {
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe Namespace
-
     } deriving (Eq,Show)
 makeLenses ''RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing

@@ -4,7 +4,6 @@
 )
 
 (module g G
-  (use f [f])
   (defcap G () true)
-  (defun f () true)
+  (defun f () (F))
 )

@@ -355,7 +355,7 @@ loadModule
   -> Info
   -> Gas
   -> Eval e (Gas,ModuleData Ref)
-loadModule m@Module {} bod1 mi g0 = do
+loadModule m bod1 mi g0 = do
   mapM_ evalUse $ _mImports m
   (g1,mdefs) <- collectNames g0 (GModuleMember $ MDModule m) bod1 $ \t -> case t of
     TDef d _ -> return $ Just $ asString (_dDefName d)
@@ -377,15 +377,15 @@ loadInterface
   -> Info
   -> Gas
   -> Eval e (Gas,ModuleData Ref)
-loadInterface i@Interface{..} body info gas0 = do
-  mapM_ evalUse _interfaceImports
+loadInterface i body info gas0 = do
+  mapM_ evalUse $ _interfaceImports i
   (gas1,idefs) <- collectNames gas0 (GModuleMember $ MDInterface i) body $ \t -> case t of
     TDef d _ -> return $ Just $ asString (_dDefName d)
     TConst a _ _ _ _ -> return $ Just $ _aName a
     TSchema n _ _ _ _ -> return $ Just $ asString n
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid interface member"
-  evaluatedDefs <- evaluateDefs info $ mangleDefs _interfaceName <$> idefs
+  evaluatedDefs <- evaluateDefs info $ mangleDefs (_interfaceName i) <$> idefs
   let md = ModuleData (MDInterface i) evaluatedDefs
   installModule True Nothing md
   return (gas1,md)
@@ -410,21 +410,22 @@ collectNames g0 args body k = case instantiate' body of
       foldM (go rs ns) (g0, mempty) bd
     t -> evalError' t $ "malformed declaration"
   where
-    go rs ns (g,ds) t = k t >>= \dnm -> case dnm of
+    go _rs ns (g,ds) t = k t >>= \dnm -> case dnm of
       Nothing -> return (g, ds)
       Just dn -> do
         -- disallow native overlap
         when (isJust $ HM.lookup (Name dn def) ns) $
           evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
         -- disallow conflicting import overlap
-        when (isJust $ HM.lookup (Name dn def) rs) $
-          evalError' t $ "definitions cannot overlap with imported names: " <> pretty dn
+        -- when (isJust $ HM.lookup (Name dn def) rs) $ do
+        --   evalError' t $ "definitions cannot overlap with imported names: " <> pretty dn
         -- disallow conflicting members
         when (isJust $ HM.lookup dn ds) $
           evalError' t $ "definition name conflict: " <> pretty dn
 
         g' <- computeGas (Left (_tInfo t,dn)) args
         return (g + g',HM.insert dn t ds)
+
 
 resolveGovernance
   :: HM.HashMap Text Ref
@@ -860,7 +861,8 @@ installModule updated mis md = case mis of
   Just is -> go $ filteredDefs is
   where
     go f = do
-      evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty $ _mdRefMap md)
+      let k = (HM.foldlWithKey' f mempty $ _mdRefMap md)
+      evalRefs . rsLoaded %= HM.union k
       when updated $
         evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
 
