@@ -364,7 +364,7 @@ loadModule m@Module {} bod1 mi g0 = do
     tt@TTable{} -> return $ Just $ asString (_tTableName tt)
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid module member"
-  evaluatedDefs <- evaluateDefs mi (fmap (mangleDefs $ _mName m) mdefs)
+  evaluatedDefs <- evaluateDefs mi $ mangleDefs (_mName m) <$> mdefs
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
@@ -410,23 +410,21 @@ collectNames g0 args body k = case instantiate' body of
       foldM (go rs ns) (g0, mempty) bd
     t -> evalError' t $ "malformed declaration"
   where
-    go rs ns (g,ds) t = do
-      dnm <- k t
-      case dnm of
-        Nothing -> return (g, ds)
-        Just dn -> do
-          -- disallow native overlap
-          when (isJust $ HM.lookup (Name dn def) ns) $
-            evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
-          -- disallow conflicting import overlap
-          when (isJust $ HM.lookup (Name dn def) rs) $
-            evalError' t $ "definitions cannot overlap with previously loaded names: " <> pretty dn
-          -- disallow conflicting members
-          when (isJust $ HM.lookup dn ds) $
-            evalError' t $ "definition name conflict: " <> pretty dn
+    go rs ns (g,ds) t = k t >>= \dnm -> case dnm of
+      Nothing -> return (g, ds)
+      Just dn -> do
+        -- disallow native overlap
+        when (isJust $ HM.lookup (Name dn def) ns) $
+          evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
+        -- disallow conflicting import overlap
+        when (isJust $ HM.lookup (Name dn def) rs) $
+          evalError' t $ "definitions cannot overlap with imported names: " <> pretty dn
+        -- disallow conflicting members
+        when (isJust $ HM.lookup dn ds) $
+          evalError' t $ "definition name conflict: " <> pretty dn
 
-          g' <- computeGas (Left (_tInfo t,dn)) args
-          return (g + g',HM.insert dn t ds)
+        g' <- computeGas (Left (_tInfo t,dn)) args
+        return (g + g',HM.insert dn t ds)
 
 resolveGovernance
   :: HM.HashMap Text Ref
@@ -463,26 +461,25 @@ evaluateDefs info defs = do
 
       evalError i $ "Recursion detected: " <> prettyList pl
 
-  let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
-      unifiedDefs = foldl dresolve HM.empty sortedDefs
+  let dresolve (d,dn,_) ds = HM.insert dn (Ref $ unify ds <$> d) ds
+      unifiedDefs = foldr dresolve HM.empty sortedDefs
 
   traverse (runSysOnly . evalConsts) unifiedDefs
+  where
+    mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 
-mkSomeDoc :: (Pretty a, Pretty b) => Either a b -> SomeDoc
-mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
+    traverseGraph ds = fmap stronglyConnCompR $ forM (HM.toList ds) $ \(dn,d) -> do
+      d' <- forM d $ \(f :: Name) -> do
+        dm <- resolveRef f f
+        case (dm, f) of
+          (Just t, _) -> return (Right t)
+          (Nothing, Name fn _) ->
+            case HM.lookup fn ds of
+              Just _ -> return (Left fn)
+              Nothing -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
+          (Nothing, _) -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
 
-traverseGraph :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
-traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) $ \(dn,d) -> do
-  d' <- forM d $ \(f :: Name) -> do
-    dm <- resolveRef f f
-    case (dm, f) of
-      (Just t, _) -> return (Right t)
-      (Nothing, Name fn _) ->
-        case HM.lookup fn defs of
-          Just _ -> return (Left fn)
-          Nothing -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
-      (Nothing, _) -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
-  return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
+      return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
 
 -- | Evaluate interface constraints in module.
 evaluateConstraints
@@ -559,7 +556,7 @@ moduleResolver lkp i mn = do
   case md of
     Just _ -> return md
     Nothing -> do
-      case (_mnNamespace mn) of
+      case _mnNamespace mn of
         Just {} -> pure Nothing -- explicit namespace not found
         Nothing -> do
           mNs <- use $ evalRefs . rsNamespace
