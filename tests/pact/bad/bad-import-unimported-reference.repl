@@ -1,9 +1,16 @@
+(begin-tx)
+
 (module f F
   (defcap F () true)
   (defun f () true)
+  (defun g () true)
 )
 
+(commit-tx)
+(begin-tx)
+
 (module g G
+  (use f [g])
   (defcap G () true)
-  (defun f () (F))
+  (defun g () (f))
 )

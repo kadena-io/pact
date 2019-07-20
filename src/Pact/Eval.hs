@@ -329,14 +329,15 @@ evalUse (Use mn h mis i) = do
       installModule False mis md
 
 validateImports :: Info -> Maybe (V.Vector Text) -> HM.HashMap Text Ref -> Eval e ()
-validateImports i mis rs = case mis of
-  Nothing -> return ()
-  Just is -> foldM go () is
+validateImports i mis rs = maybe (return ()) (traverse_ go) mis
   where
-  go () imp =
-      unless (isJust $ HM.lookup imp rs)
-        $ evalError i
-        $ "imported name not found: " <> pretty imp
+    go imp = case HM.lookup imp rs of
+      Nothing -> evalError i $ "imported name not found: " <> pretty imp
+      Just (Ref (TDef d _)) -> case _dDefType d of
+        Defun -> return ()
+        Defpact -> return ()
+        _ -> evalError i $ "cannot import capabilities: " <> pretty imp
+      Just _ -> return ()
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
 mangleDefs mn term = modifyMn term
@@ -405,20 +406,16 @@ collectNames
   -> Eval e (Gas, HM.HashMap Text (Term Name))
 collectNames g0 args body k = case instantiate' body of
     TList bd _ _ -> do
-      rs <- use $ evalRefs . rsLoaded
       ns <- view $ eeRefStore . rsNatives
-      foldM (go rs ns) (g0, mempty) bd
+      foldM (go ns) (g0, mempty) bd
     t -> evalError' t $ "malformed declaration"
   where
-    go _rs ns (g,ds) t = k t >>= \dnm -> case dnm of
+    go ns (g,ds) t = k t >>= \dnm -> case dnm of
       Nothing -> return (g, ds)
       Just dn -> do
         -- disallow native overlap
         when (isJust $ HM.lookup (Name dn def) ns) $
           evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
-        -- disallow conflicting import overlap
-        -- when (isJust $ HM.lookup (Name dn def) rs) $ do
-        --   evalError' t $ "definitions cannot overlap with imported names: " <> pretty dn
         -- disallow conflicting members
         when (isJust $ HM.lookup dn ds) $
           evalError' t $ "definition name conflict: " <> pretty dn
