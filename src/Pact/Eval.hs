@@ -459,8 +459,9 @@ evaluateDefs info defs = do
 
       evalError i $ "Recursion detected: " <> prettyList pl
 
-  let dresolve (d,dn,_) ds = HM.insert dn (Ref $ unify ds <$> d) ds
-      unifiedDefs = foldr dresolve HM.empty sortedDefs
+  -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
+  let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
+      unifiedDefs = foldl' dresolve HM.empty sortedDefs
 
   traverse (runSysOnly . evalConsts) unifiedDefs
   where
