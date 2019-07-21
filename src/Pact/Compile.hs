@@ -295,7 +295,6 @@ varAtom = do
   commit
   return $ TVar n _atomInfo
 
-
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
   ls <- case _listList of
@@ -558,7 +557,7 @@ useForm = do
       u = Use mn h v i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
-  return $ TUse u (_uInfo u)
+  return $ TUse u i
 
 hash' :: Compile ModuleHash
 hash' = str >>= \s -> case fromText' s of

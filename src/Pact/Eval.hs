@@ -334,9 +334,8 @@ validateImports i mis rs = maybe (return ()) (traverse_ go) mis
     go imp = case HM.lookup imp rs of
       Nothing -> evalError i $ "imported name not found: " <> pretty imp
       Just (Ref (TDef d _)) -> case _dDefType d of
-        Defun -> return ()
-        Defpact -> return ()
-        _ -> evalError i $ "cannot import capabilities: " <> pretty imp
+        Defcap -> evalError i $ "cannot import capabilities: " <> pretty imp
+        _ -> return ()
       Just _ -> return ()
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
@@ -854,13 +853,10 @@ resolveFreeVars i b = traverse r b where
 -- only load those references. If updated/new, update loaded modules.
 --
 installModule :: Bool -> Maybe (V.Vector Text) -> ModuleData Ref -> Eval e ()
-installModule updated mis md = case mis of
-  Nothing -> go allDefs
-  Just is -> go $ filteredDefs is
+installModule updated mis md = maybe (go allDefs) (go . filteredDefs) mis
   where
     go f = do
-      let k = (HM.foldlWithKey' f mempty $ _mdRefMap md)
-      evalRefs . rsLoaded %= HM.union k
+      evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty $ _mdRefMap md)
       when updated $
         evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
 
