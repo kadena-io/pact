@@ -531,7 +531,7 @@ instance ToJSON Use where
   toJSON Use{..} = object $
     [ "module" .= _uModuleName
     , "hash" .= _uModuleHash
-    , "hidden" .= _uImports
+    , "imports" .= _uImports
     ,  "i" .= _uInfo
     ]
 
@@ -539,7 +539,7 @@ instance FromJSON Use where
   parseJSON = withObject "Use" $ \o ->
     Use <$> o .: "module"
         <*> o .:? "hash"
-        <*> o .: "hidden"
+        <*> o .:? "imports"
         <*> o .: "i"
 
 instance NFData Use
