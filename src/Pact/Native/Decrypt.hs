@@ -108,9 +108,8 @@ doDecrypt i _ _ _ _ _ = evalError' i "'decrypt' unsupported in javascript-backed
 #else
 
 doDecrypt i ciphertext nonce aad public secret = do
-  let authPfx = BS.take 16 ciphertext
-  auth <- liftCrypto i "auth prefix" $ authTag authPfx
-  let ct = BS.drop 16 ciphertext
+  let (ct,authSfx) = BS.splitAt (BS.length ciphertext - 16) ciphertext
+  auth <- liftCrypto i "auth prefix" $ authTag authSfx
   n <- liftCrypto i "nonce" $ nonce12 nonce
   pk <- importPublic i public
   sk <- importSecret i secret
@@ -178,7 +177,7 @@ doEncrypt i plaintext nonce aad public secret = do
   let afterAAD = finalizeAAD (appendAAD aad ini)
       (out,afterEncrypt) = encrypt plaintext afterAAD
       outtag = finalize afterEncrypt
-  return $ authToBS outtag <> out
+  return $ out <> authToBS outtag
 
 ------ TESTING ------
 
@@ -187,11 +186,9 @@ _pk = either error id $ parseB16TextOnly "a236ee764da1bde16f3452df78ed0d46d94c07
 _sk :: ByteString
 _sk = either error id $ parseB16TextOnly "92702bbc9026d489f0ecefe266d694b9ad321965f3345758d1f937fba8817184"
 _nonce :: ByteString
-_nonce = either error id $ decodeBase64UrlUnpadded "Ka96AovW2JFVrgOK"
+_nonce = either error id $ parseB16TextOnly "000000000102030405060708"
 _plaintext :: ByteString
 _plaintext = either error id $ decodeBase64UrlUnpadded "bWVzc2FnZQ" -- base64url of "message"
-_ciphertext :: ByteString
-_ciphertext = either error id $ decodeBase64UrlUnpadded "xvhAzzyGWuWdlA2XW7irq2sEAC6JiHk" -- encrypt of "message"
 _aad :: ByteString
 _aad = either error id $ parseB16TextOnly "616164" -- "aad"
 
