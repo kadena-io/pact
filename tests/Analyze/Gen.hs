@@ -182,7 +182,7 @@ genCore :: (HasCallStack, MonadGen m) => BoundedType -> m ETerm
 genCore (BoundedInt size) = Gen.recursive Gen.choice [
     Some SInteger . Lit' <$> genInteger size
   ] $ scale 4 <$> [
-    Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 1e3))) $
+    Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 1000))) $
       \x y -> mkInt $ Numerical $ ModOp (extract x) (extract y)
   , do op <- genArithOp
        let (size1, size2) = arithSize op size
@@ -199,7 +199,7 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
   , do op <- Gen.element [BitwiseAnd, BitwiseOr, Xor]
        Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt size)) $
          \x y -> mkInt $ Numerical $ BitwiseOp op [extract x, extract y]
-  , Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 1e2))) $
+  , Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 10))) $
       \x y -> mkInt $ Numerical $ BitwiseOp Shift [extract x, extract y]
   , Gen.subtermM (genCore (BoundedInt size)) $
     mkInt . Numerical . BitwiseOp Complement . (:[]) . extract
