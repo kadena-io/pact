@@ -65,7 +65,7 @@ validateKeypairDef =
 
 doValidate :: HasInfo i => i -> ByteString -> ByteString -> Eval e Bool
 #if defined(ghcjs_HOST_OS)
-doValidate i _ _ = evalError' i "'validate-keyset' unsupported in javascript-backed Pact"
+doValidate i _ _ = evalError' i "'validate-keypair' unsupported in javascript-backed Pact"
 #else
 
 doValidate i public secret = do
@@ -129,7 +129,7 @@ doDecrypt ::
   -- ^ Curve25519 secretKey DH input
   -> Eval e ByteString
 #if defined(ghcjs_HOST_OS)
-doDecrypt i _ _ _ _ _ = evalError' i "'decrypt' unsupported in javascript-backed Pact"
+doDecrypt i _ _ _ _ _ _ = evalError' i "'decrypt' unsupported in javascript-backed Pact"
 #else
 
 doDecrypt i ciphertext nonce aad auth public secret = do
