@@ -128,6 +128,7 @@ walkAST f t@Step {} = do
     <*> walkAST f (_aExec a)
     <*> traverse (walkAST f) (_aRollback a)
     <*> pure (_aYieldResume a)
+    <*> pure (_aModel a)
   f Post t'
 
 isConcreteTy :: Type n -> Bool
@@ -877,7 +878,7 @@ toAST (TApp Term.App{..} _) = do
                   (_fName (_aAppFun argAST) <> "_" <> lamArgName <> "_p")
                 debug $ "Adding fresh arg to partial application: " ++ show freshArg
                 return $ over aAppArgs (++ [Var freshArg]) argAST'
-            (TyFun t,_) -> die'' argAST $ "App required for funtype argument: " ++ show t
+            (TyFun t,a) -> die'' argAST $ "App required for funtype argument: " ++ show t ++ ", found: " ++ show a
             _ -> return argAST
 
       -- other special forms: bindings, yield/resume
@@ -954,7 +955,9 @@ toAST (TObject Term.Object {..} _) = do
   Object <$> (trackNode ty =<< freshId _oInfo "object")
     <*> mapM toAST _oObject
 toAST TConst {..} = toAST $ constTerm _tConstVal -- TODO(stuart): typecheck here
-toAST TGuard {..} = trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard _tGuard)
+toAST TGuard {..} = do
+  g <- traverse toAST _tGuard
+  trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard g)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
@@ -964,7 +967,7 @@ toAST TTable {..} = do
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
-toAST (TStep Term.Step {..} _) = do
+toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   ent <- forM _sEntity $ \e -> do
     e' <- toAST e
     assocAstTy (_aNode e') $ TyPrim TyString
@@ -975,9 +978,9 @@ toAST (TStep Term.Step {..} _) = do
   ex <- toAST _sExec
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
-  Step sn ent ex <$> traverse toAST _sRollback <*> pure yr
+  Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
 
-trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
+trackPrim :: Info -> PrimType -> PrimValue (AST Node) -> TC (AST Node)
 trackPrim inf pty v = do
   let ty :: Type UserType = TyPrim pty
   Prim <$> (trackNode ty =<< freshId inf (pack $ showPretty ty) ) <*> pure v
@@ -990,14 +993,14 @@ trackNode ty i = trackAST node >> return node
 toUserType :: forall n . Show n => Term (Either Ref n) -> TC UserType
 toUserType t = case t of
   (TVar (Left r) _) -> derefUT r
-  _ -> die (_tInfo t) $ "toUserType: expected user type: " ++ show t
+  _ -> die (_tInfo t) $ "toUserType: expected var of user type ref: " ++ show t
   where
     derefUT (Ref r) = toUserType' (fmap Left r :: Term (Either Ref n))
-    derefUT Direct {} = die (_tInfo t) $ "toUserType: unexpected direct ref: " ++ show t
+    derefUT (Direct d) = toUserType' (fmap Right d)
 
 toUserType' :: Show n => Term (Either Ref n) -> TC UserType
 toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
-toUserType' t = die (_tInfo t) $ "toUserType: expected user type: " ++ show t
+toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
 bindArgs i args b =

@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 
 -- | Toplevel module for types related to symbolic analysis of Pact programs.
@@ -21,6 +22,10 @@ module Pact.Analyze.Types
   , Quantifier(..)
   , Table(..)
   , CheckableType(..)
+  , TypecheckableRefs(..)
+  , defuns
+  , defpacts
+  , defconsts
 
   , checkGoal
   , genId
@@ -36,9 +41,11 @@ module Pact.Analyze.Types
 import           Control.Lens                 (Lens', makeLenses, use, (+=))
 import           Control.Monad.State.Strict   (MonadState)
 import           Data.Text                    (Text)
+import qualified Data.HashMap.Strict          as HM
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Typecheck         as TC
+import           Pact.Types.Runtime           (Ref)
 
 import           Pact.Analyze.Types.Capability
 import           Pact.Analyze.Types.Languages
@@ -68,18 +75,24 @@ genVarId :: (MonadState s m, HasVarId s) => m VarId
 genVarId = genId varId
 
 data Check
-  = PropertyHolds !(Prop 'TyBool) -- valid, assuming success
-  | Satisfiable   !(Prop 'TyBool) -- sat,   not assuming success
-  | Valid         !(Prop 'TyBool) -- valid, not assuming success
+  = PropertyHolds (Prop 'TyBool) -- valid, assuming success
+  | SucceedsWhen  (Prop 'TyBool) -- property implies transaction success (validation)
+  | FailsWhen     (Prop 'TyBool) -- property implies transaction failure (validation)
+  | Satisfiable   (Prop 'TyBool) -- sat,   not assuming success
+  | Valid         (Prop 'TyBool) -- valid, not assuming success
 
 instance Show Check where
   showsPrec p c = showParen (p > 10) $ case c of
     PropertyHolds prop -> showString "PropertyHolds " . showsTm 11 prop
+    SucceedsWhen prop  -> showString "SucceedsWhen "  . showsTm 11 prop
+    FailsWhen prop     -> showString "FailsWhen "     . showsTm 11 prop
     Satisfiable prop   -> showString "Satisfiable "   . showsTm 11 prop
     Valid prop         -> showString "Valid "         . showsTm 11 prop
 
 checkGoal :: Check -> Goal
 checkGoal (PropertyHolds _) = Validation
+checkGoal (SucceedsWhen _)  = Validation
+checkGoal (FailsWhen _)     = Validation
 checkGoal (Satisfiable _)   = Satisfaction
 checkGoal (Valid _)         = Validation
 
@@ -100,5 +113,14 @@ data CheckableType
   = CheckDefun
   | CheckDefpact
   | CheckDefconst
+  | CheckPactStep
 
 makeLenses ''Table
+
+data TypecheckableRefs = TypecheckableRefs
+  { _defuns    :: HM.HashMap Text Ref
+  , _defpacts  :: HM.HashMap Text Ref
+  , _defconsts :: HM.HashMap Text Ref
+  } deriving Show
+
+makeLenses ''TypecheckableRefs

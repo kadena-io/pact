@@ -10,12 +10,12 @@
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StrictData                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ViewPatterns               #-}
-
-{-# LANGUAGE TupleSections              #-}
 
 -- | Translation from typechecked 'AST' to 'Term', while accumulating an
 -- execution graph to be used during symbolic analysis and model reporting.
@@ -69,8 +69,8 @@ import           Pact.Analyze.Util
 -- * Translation types
 
 data TranslateFailure = TranslateFailure
-  { _translateFailureInfo :: !Info
-  , _translateFailure     :: !TranslateFailureNoLoc
+  { _translateFailureInfo :: Info
+  , _translateFailure     :: TranslateFailureNoLoc
   } deriving Show
 
 data TranslateFailureNoLoc
@@ -171,6 +171,7 @@ data TranslateState
   = TranslateState
     { _tsNextTagId     :: TagId
     , _tsNextVarId     :: VarId
+    , _tsNextGuard     :: Guard
     , _tsGraph         :: Alga.Graph Vertex
       -- ^ The execution graph we've built so far. This is expanded upon as we
       -- translate an entire function.
@@ -244,7 +245,7 @@ data TranslateState
 
       -- Vars representing nondeterministic choice between two branches. These
       -- are used for continuing on or rolling back in evaluation of pacts.
-    , _tsStepChoices   :: ![VarId]
+    , _tsStepChoices   :: [VarId]
     }
 
 makeLenses ''TranslateFailure
@@ -294,16 +295,24 @@ withAstContext ast = local (envInfo .~ astToInfo ast)
 withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
 withNestedRecoverability r = local $ teRecoverability <>~ r
 
--- | Enter a pact step or rollback
-withNewStep :: ScopeType -> TranslateM a -> TranslateM a
-withNewStep scopeType act = local (teScopesEntered +~ 1) $ do
+-- | Enter a pact step or rollback.
+--
+-- This differs from 'withNewScope' by not tracing a return value from the
+-- action (since steps don't return anything). When we're translating a step in
+-- isolation, for a single step analysis, we bind variables that come from the
+-- enclosing @defpact@, otherwise (when doing a whole-pact analysis), the
+-- pact-level variables will already be in scope. The 'ScopeType' should be
+-- 'StepScope' or 'RollbackScope'.
+withNewStep :: ScopeType -> [Located Binding] -> TranslateM a -> TranslateM a
+withNewStep scopeType bindings act = local (teScopesEntered +~ 1) $ do
   tid <- genTagId
   depth <- view teScopesEntered
-  emit $ TracePushScope depth scopeType [] -- no bindings
+  emit $ TracePushScope depth scopeType bindings
   res <- act
   emit $ TracePopScope depth scopeType tid $ EType SStr
   pure res
 
+-- | Enter a new scope, binding variables.
 withNewScope
   :: ScopeType
   -> [Located Binding]
@@ -682,7 +691,7 @@ translatePact nodes = do
       case mRollback of
         Nothing
           -> pure (rightV, cancel : cancels, Nothing : rollbacks)
-        Just rollbackA -> withNewStep RollbackScope $ do
+        Just rollbackA -> withNewStep RollbackScope [] $ do
           rollback <- (,)
             <$> startNewSubpath
             <*> translateNode rollbackA
@@ -721,7 +730,7 @@ translatePact nodes = do
 translateStep
   :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
 translateStep firstStep = \case
-  AST_Step _node entity exec rollback _yr -> withNewStep StepScope $ do
+  AST_Step _node entity exec rollback _yr -> withNewStep StepScope [] $ do
     p <- if firstStep then use tsCurrentPath else startNewSubpath
     mEntity <- for entity $ \tm -> do
       Some SStr entity' <- translateNode tm
@@ -835,6 +844,12 @@ translateCapabilityApp modName capName bindingsA appBodyA = do
       fmap (mapExistential $ Granting cap vids) $
         translateBody appBodyA
 
+genGuard :: TranslateM Guard
+genGuard = do
+  g <- use tsNextGuard
+  tsNextGuard %= succ
+  pure g
+
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
@@ -931,10 +946,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr strT <- translateNode strA
     pure $ Some SGuard $ MkPactGuard strT
 
-  AST_CreateUserGuard objA strA -> do
-    Some objTy@SObject{} objT <- translateNode objA
+  AST_CreateUserGuard (AST_InlinedApp modName funName bindings appBodyA) -> do
+    guard <- genGuard
+    body <- withTranslatedBindings bindings $ \bindingTs ->
+      withNewScope (FunctionScope modName funName) bindingTs $
+        translateBody appBodyA
+    pure $ Some SGuard $ MkUserGuard guard body
+
+  AST_CreateModuleGuard strA -> do
     Some SStr strT <- translateNode strA
-    pure $ Some SGuard $ MkUserGuard objTy objT strT
+    pure $ Some SGuard $ MkModuleGuard strT
 
   AST_Enforce _ cond -> do
     Some SBool condTerm <- translateNode cond
@@ -1558,9 +1579,10 @@ runTranslation modName funName info caps pactArgs body checkType = do
           nextVertex = succ vertex0
           path0      = Path 0
           nextTagId  = succ $ _pathTag path0
+          nextGuard  = Guard 0
           graph0     = pure vertex0
-          state0     = TranslateState nextTagId nextVarId graph0 vertex0
-            nextVertex Map.empty mempty path0 Map.empty [] []
+          state0     = TranslateState nextTagId nextVarId nextGuard graph0
+            vertex0 nextVertex Map.empty mempty path0 Map.empty [] []
           translation = do
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
@@ -1573,6 +1595,9 @@ runTranslation modName funName info caps pactArgs body checkType = do
               CheckDefpact ->
                 withNewScope (PactScope modName funName) bindingTs $
                   Some SStr . Pact <$> translatePact body
+              CheckPactStep ->
+                withNewStep StepScope bindingTs $
+                  translateBody body
               CheckDefconst
                 -> error "invariant violation: this cannot be a constant"
             _ <- extendPath -- form final edge for any remaining events
@@ -1602,11 +1627,13 @@ translateNodeNoGraph node =
       nextVertex     = succ vertex0
       path0          = Path 0
       nextTagId      = succ $ _pathTag path0
+      nextGuard      = Guard 0
       graph0         = pure vertex0
-      translateState = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty [] []
+      translateState = TranslateState nextTagId 0 nextGuard graph0 vertex0
+        nextVertex Map.empty mempty path0 Map.empty [] []
 
-      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0 (pure 0) (pure 0)
+      translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0
+        (pure 0) (pure 0)
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $

@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData        #-}
 
 -- | Errors that can occur during symbolic analysis.
 module Pact.Analyze.Errors where
@@ -74,6 +75,6 @@ instance IsString AnalyzeFailureNoLoc where
   fromString = FailureMessage . T.pack
 
 data AnalyzeFailure = AnalyzeFailure
-  { _analyzeFailureParsed :: !Info
-  , _analyzeFailure       :: !AnalyzeFailureNoLoc
+  { _analyzeFailureParsed :: Info
+  , _analyzeFailure       :: AnalyzeFailureNoLoc
   }

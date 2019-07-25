@@ -123,6 +123,7 @@ data Feature
   -- Transactional operators
   | FTransactionAborts
   | FTransactionSucceeds
+  | FGovernancePasses
   | FFunctionResult
   -- Database operators
   | FTableWritten
@@ -1146,6 +1147,16 @@ doc FTransactionSucceeds = Doc
       Map.empty
       (Sym (TyCon bool))
   ]
+doc FGovernancePasses = Doc
+  "governance-passes"
+  CTransactional
+  PropOnly
+  "Whether the governance predicate passes. For keyset-based governance, this is the same as something like `(authorized-by 'governance-ks-name)`. Pact's property checking system currently does not analyze the body of a capability when it is used for governance due to challenges around capabilities making DB modifications -- the system currently assumes that a capability-based governance predicate is equally capable of succeeding or failing. This feature allows describing the scenarios where the predicate passes or fails."
+  [ Usage
+      "governance-passes"
+      Map.empty
+      (Sym (TyCon bool))
+  ]
 doc FFunctionResult = Doc
   "result"
   CTransactional
@@ -1586,6 +1597,7 @@ PAT(SExistentialQuantification, FExistentialQuantification)
 PAT(SColumnOf, FColumnOf)
 PAT(STransactionAborts, FTransactionAborts)
 PAT(STransactionSucceeds, FTransactionSucceeds)
+PAT(SGovernancePasses, FGovernancePasses)
 PAT(SFunctionResult, FFunctionResult)
 PAT(STableWritten, FTableWritten)
 PAT(STableRead, FTableRead)

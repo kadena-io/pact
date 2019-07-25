@@ -17,6 +17,7 @@ module Pact.Analyze.Parse.Prop
   ( PreProp(..)
   , TableEnv
   , expToCheck
+  , expToPreProp
   , expToProp
   , inferProp
   , parseBindings
@@ -164,6 +165,7 @@ expToPreProp = \case
 
   EAtom' STransactionAborts   -> pure PreAbort
   EAtom' STransactionSucceeds -> pure PreSuccess
+  EAtom' SGovernancePasses    -> pure PreGovPasses
   EAtom' SFunctionResult      -> pure PreResult
   EAtom' var                  -> do
     mVid <- view (at var)
@@ -305,6 +307,7 @@ inferPreProp preProp = case preProp of
   PreBoolLit a    -> pure (Some SBool (Lit' a))
   PreAbort        -> pure (Some SBool (PropSpecific Abort))
   PreSuccess      -> pure (Some SBool (PropSpecific Success))
+  PreGovPasses    -> pure (Some SBool (PropSpecific GovPasses))
 
   PreListLit as   -> do
     as' <- traverse inferPreProp as
@@ -559,12 +562,16 @@ inferPreProp preProp = case preProp of
     _   <- expectColumnType tn' cn' SGuard
     Some SBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp SStr rk
 
-  PreApp (toOp arithOpP -> Just _) args -> asum
+  -- For unary / binary arithmetic operations, we switch polarity to checking.
+  -- Same for string concatenation. For list concatenation, we infer both
+  -- lists, then check that they have the same type. For object merges, we
+  -- infer the object types and then merge them (TODO).
+  PreApp opName@(toOp arithOpP -> Just op) args -> asum
     [ Some SInteger <$> checkPreProp SInteger preProp
     , Some SDecimal <$> checkPreProp SDecimal preProp
     , Some SStr     <$> checkPreProp SStr     preProp -- (string concat)
-    ] <|> case args of
-      [a, b] -> do
+    ] <|> case (op, args) of
+      (Add, [a, b]) -> do
         a' <- inferPreProp a
         b' <- inferPreProp b
         case (a', b') of
@@ -574,14 +581,13 @@ inferPreProp preProp = case preProp of
                 throwErrorIn preProp "can only concat lists of the same type"
               Just Refl -> pure $
                 Some aTy $ CoreProp $ ListConcat aTy' aProp bProp
-          (Some aTy@SObject{} aProp, Some bTy bProp) ->
-            case singEq aTy bTy of
-              Nothing ->
-                throwErrorIn preProp "can only concat lists of the same type"
-              Just Refl -> pure $
-                Some aTy $ CoreProp $ ObjMerge aTy bTy aProp bProp
-          _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
-      _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
+          -- TODO(joel)
+          -- (Some aTy@SObject{} aProp, Some bTy@SObject{} bProp) -> pure
+          --   Some aTy $ CoreProp $ ObjMerge aTy bTy aProp bProp
+          _ -> throwErrorIn preProp $
+            "can't infer the types of the arguments to " <> pretty opName
+      _ -> throwErrorIn preProp $
+        "can't infer the types of the arguments to " <> pretty opName
 
   PreApp s [lst] | s == SReverse -> do
     Some (SList ty) lst' <- inferPreProp lst
@@ -751,7 +757,7 @@ expectTableExists (PVar vid name) = do
 expectTableExists tn = throwError $
   "table name must be concrete at this point: " ++ showTm tn
 
--- Convert an @Exp@ to a @Check@ in an environment where the variables have
+-- | Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.
 expToCheck
   :: TableEnv
@@ -766,11 +772,14 @@ expToCheck
   -- ^ Environment mapping names to constants
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
+  -> (Prop 'TyBool -> Check)
+  -- ^ The style of check to use ('PropertyHolds', 'SucceedsWhen', or
+  -- 'FailsWhen')
   -> Exp Info
   -- ^ Exp to convert
   -> Either String Check
-expToCheck tableEnv' genStart nameEnv idEnv consts propDefs body =
-  PropertyHolds . prenexConvert
+expToCheck tableEnv' genStart nameEnv idEnv consts propDefs checkCtor body =
+  checkCtor . prenexConvert
     <$> expToProp tableEnv' genStart nameEnv idEnv consts propDefs SBool body
 
 expToProp
@@ -787,6 +796,7 @@ expToProp
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
   -> SingTy a
+  -- ^ The expected type of the prop
   -> Exp Info
   -- ^ Exp to convert
   -> Either String (Prop a)
@@ -820,6 +830,7 @@ inferProp tableEnv' genStart nameEnv idEnv consts propDefs body = do
         preTypedPropDefs consts
   _getEither $ runReaderT (inferPreProp preTypedBody) env
 
+-- | Parse both a property body and defined properties from `Exp` to `PreProp`.
 parseToPreProp
   :: Traversable t
   => VarId

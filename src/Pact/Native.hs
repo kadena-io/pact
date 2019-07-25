@@ -42,6 +42,8 @@ module Pact.Native
     , takeDef
     , dropDef
     , atDef
+    , chainDataSchema
+    , cdChainId, cdBlockHeight, cdBlockTime, cdSender, cdGasLimit, cdGasPrice
     ) where
 
 import Control.Arrow hiding (app)
@@ -63,6 +65,7 @@ import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import Data.Text.Encoding
+import Data.Thyme.Time.Core (fromMicroseconds,posixSecondsToUTCTime)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import Numeric
@@ -314,25 +317,52 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
         Nothing  -> evalError info $
           "namespace: '" <> pretty name <> "' not defined"
 
+cdChainId :: FieldKey
+cdChainId = "chain-id"
+cdBlockHeight :: FieldKey
+cdBlockHeight = "block-height"
+cdBlockTime :: FieldKey
+cdBlockTime = "block-time"
+cdSender :: FieldKey
+cdSender = "sender"
+cdGasLimit :: FieldKey
+cdGasLimit = "gas-limit"
+cdGasPrice :: FieldKey
+cdGasPrice = "gas-price"
+
+chainDataSchema :: NativeDef
+chainDataSchema = defSchema "public-chain-data"
+  "Schema type for data returned from 'chain-data'."
+    [ (cdChainId, tTyString)
+    , (cdBlockHeight, tTyInteger)
+    , (cdBlockTime, tTyTime)
+    , (cdSender, tTyString)
+    , (cdGasLimit, tTyInteger)
+    , (cdGasPrice, tTyDecimal)
+    ]
+
 chainDataDef :: NativeDef
-chainDataDef = defRNative "chain-data" chainData (funType obj [])
+chainDataDef = defRNative "chain-data" chainData
+    (funType (tTyObject pcTy) [])
     ["(chain-data)"]
     "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
     \'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
   where
+    pcTy = TyUser (snd chainDataSchema)
     chainData :: RNativeFun e
     chainData _ [] = do
       PublicData{..} <- view eePublicData
 
       let PublicMeta{..} = _pdPublicMeta
+          toTime = toTerm . posixSecondsToUTCTime . fromMicroseconds
 
       pure $ toTObject TyAny def
-        [ ("chain-id"    , toTerm _pmChainId    )
-        , ("block-height", toTerm _pdBlockHeight)
-        , ("block-time"  , toTerm _pdBlockTime  )
-        , ("sender"      , toTerm _pmSender     )
-        , ("gas-limit"   , toTerm _pmGasLimit   )
-        , ("gas-price"   , toTerm _pmGasPrice   )
+        [ (cdChainId, toTerm _pmChainId)
+        , (cdBlockHeight, toTerm _pdBlockHeight)
+        , (cdBlockTime, toTime _pdBlockTime)
+        , (cdSender, toTerm _pmSender)
+        , (cdGasLimit, toTerm _pmGasLimit)
+        , (cdGasPrice, toTerm _pmGasPrice)
         ]
     chainData i as = argsError i as
 
@@ -494,6 +524,7 @@ langDefs =
     ,defineNamespaceDef
     ,namespaceDef
     ,chainDataDef
+    ,chainDataSchema
     ])
     where
           d = mkTyVar "d" []
@@ -803,6 +834,7 @@ integerToBS v = BS.pack $ reverse $ go v
     go i | i <= 0xff = [fromIntegral i]
          | otherwise = (fromIntegral (i .&. 0xff)):go (shift i (-8))
 
+
 txHash :: RNativeFun e
 txHash _ [] = (tStr . asString) <$> view eeHash
 txHash i as = argsError i as
@@ -817,10 +849,10 @@ txHash i as = argsError i as
 baseStrToInt :: Integer -> Text -> Either Text Integer
 baseStrToInt base t =
   if base <= 1 || base > 16
-  then Left $ "baseStrToInt - unsupported base: " `T.append` asString base
+  then Left $ "unsupported base: " `T.append` asString base
   else
     if T.null t
-    then Left $ "baseStrToInt - empty text: " `T.append` asString t
+    then Left $ "empty text: " `T.append` asString t
     else foldM go 0 $ T.unpack t
   where
     go :: Integer -> Char -> Either Text Integer
@@ -828,6 +860,6 @@ baseStrToInt base t =
       let val = fromIntegral . digitToInt $ c'
       in if val < base
          then pure $ base * acc + val
-         else Left $ "baseStrToInt - character '" <> T.singleton c' <>
+         else Left $ "character '" <> T.singleton c' <>
                 "' is out of range for base " <> tShow base <> ": " <> t
-{-# INLINE baseStrToInt #-}
+{-# INLINABLE baseStrToInt #-}

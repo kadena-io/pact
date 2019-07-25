@@ -20,7 +20,7 @@ module Pact.Types.Util
     ParseText(..)
   , fromText, fromText'
   -- | JSON helpers
-  , lensyToJSON, lensyParseJSON
+  , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
   -- | Base 16 helpers

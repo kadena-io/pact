@@ -59,14 +59,11 @@ renderFunctions h = do
 
 renderTerm :: Pretty n => Handle -> Term n -> IO ()
 renderTerm h TNative {..} = do
-  hPutStrLn h ""
-  hPutStrLn h $ "### " ++ escapeText (unpack $ asString _tNativeName)
-             ++ " {#" ++ escapeAnchor (unpack $ asString _tNativeName) ++ "}"
-  hPutStrLn h ""
+  termHeader h _tNativeName
   forM_ _tFunTypes $ \FunType {..} -> do
     hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ unpack n ++
-      "*&nbsp;`" ++ renderCompactString t ++ "`") _ftArgs) ++
-      " *&rarr;*&nbsp;`" ++ renderCompactString _ftReturn ++ "`"
+      "*&nbsp;`" ++ renderCompactString t ++ "`") (map (prettyTypeTerm <$>) _ftArgs)) ++
+      " *&rarr;*&nbsp;`" ++ renderCompactString (prettyTypeTerm <$> _ftReturn) ++ "`"
     hPutStrLn h ""
   hPutStrLn h ""
   let noexs = hPutStrLn stderr $ "No examples for " ++ renderCompactString _tNativeName
@@ -79,7 +76,27 @@ renderTerm h TNative {..} = do
     hPutStrLn h ""
     hPutStrLn h "Top level only: this function will fail if used in module code."
   hPutStrLn h ""
+renderTerm h TSchema {..} = do
+  termHeader h _tSchemaName
+  case _mDocs _tMeta of
+    Nothing -> hPutStrLn stderr $ "No docs for schema " ++ renderCompactString _tSchemaName
+    Just d -> do
+      hPutStrLn h $ unpack d
+      hPutStrLn h ""
+  hPutStrLn h "Fields:"
+  forM_ (map (prettyTypeTerm <$>) _tFields) $ \(Arg n t _) ->
+    hPutStrLn h $ "&nbsp;&nbsp;`" ++ unpack n ++ ":" ++ renderCompactString t ++ "`"
+  hPutStrLn h ""
+
 renderTerm _ _ = return ()
+
+termHeader :: AsString a => Handle -> a -> IO ()
+termHeader h n = do
+  hPutStrLn h ""
+  hPutStrLn h $ "### " ++ escapeText (unpack $ asString n)
+             ++ " {#" ++ escapeAnchor (unpack $ asString n) ++ "}"
+  hPutStrLn h ""
+
 
 data ExampleType = Exec | ExecErr | Lit
 

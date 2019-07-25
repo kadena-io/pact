@@ -35,6 +35,7 @@ import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
+import Data.Thyme.Time.Core
 import qualified Data.Vector as V
 
 #if defined(ghcjs_HOST_OS)
@@ -56,6 +57,7 @@ import Pact.Types.Util (fromText')
 
 import Pact.Typechecker
 import qualified Pact.Types.Typecheck as TC
+import Pact.Native
 -- intentionally hidden unused functions to prevent lib functions from consuming gas
 import Pact.Native.Internal hiding (defRNative,defGasRNative,defNative)
 import qualified Pact.Native.Internal as Native
@@ -460,16 +462,24 @@ verify i as = case as of
     md <- getModule i (ModuleName modName Nothing)
     -- reading all modules from db here, but should be fine in repl
     modules <- getAllModules i
+    let failureMessage = tStr $ "Verification of " <> modName <> " failed"
 #if defined(ghcjs_HOST_OS)
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
+    setop $ TcErrors $ Text.unpack <$> renderedLines
+    return failureMessage
 #else
     modResult <- liftIO $ Check.verifyModule modules md
     let renderedLines = Check.renderVerifiedModule modResult
+    case modResult of
+      Right modResult'
+        | not (Check.hasVerificationError modResult')
+        -> return $ tStr $ mconcat renderedLines
+      _ -> do
+        setop $ TcErrors $ Text.unpack <$> renderedLines
+        return failureMessage
 #endif
-    setop $ TcErrors $ Text.unpack <$> renderedLines
-    return $ tStr $ "Verification of " <> modName <> " failed"
 
   _ -> argsError i as
 
@@ -543,10 +553,15 @@ testCapability i as = argsError' i as
 -- environment items only.
 envChainDataDef :: NativeDef
 envChainDataDef = defZRNative "env-chain-data" envChainData
-    (funType tTyString [("new-data", tTyObject TyAny)])
+    (funType tTyString [("new-data", objectType)])
     ["(env-chain-data { \"chain-id\": \"TestNet00/2\", \"block-height\": 20 })"]
-    "Update existing entries 'chain-data' with NEW-DATA, replacing those items only."
+    "Update existing entries of 'chain-data' with NEW-DATA, replacing those items only."
   where
+    objectType = TySchema
+      TyObject
+      (TyUser $ snd chainDataSchema)
+      AnySubschema
+
     envChainData :: RNativeFun LibState
     envChainData i as = case as of
       [TObject (Object (ObjectMap ks) _ _ _) _] -> do
@@ -557,18 +572,18 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
         return $ tStr "Updated public metadata"
       _ -> argsError i as
 
-    go i pd ((FieldKey k), (TLiteral (LInteger l) _)) = case Text.unpack k of
-      "gas-limit"    -> pure $ set (pdPublicMeta . pmGasLimit) (wrap (wrap l)) pd
-      "block-height" -> pure $ set pdBlockHeight (fromIntegral l) pd
-      "block-time"   -> pure $ set pdBlockTime (fromIntegral l) pd
-      t              -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
+    go _i pd (k, (TLiteral (LInteger l) _))
+      | k == cdGasLimit = pure $ set (pdPublicMeta . pmGasLimit) (wrap (wrap l)) pd
+      | k == cdBlockHeight = pure $ set pdBlockHeight (fromIntegral l) pd
 
-    go i pd ((FieldKey k), (TLiteral (LDecimal l) _)) = case Text.unpack k of
-      "gas-price" -> pure $ set (pdPublicMeta . pmGasPrice) (wrap (wrap l)) pd
-      t           -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
+    go _i pd (k, (TLiteral (LDecimal l) _))
+      | k == cdGasPrice = pure $ set (pdPublicMeta . pmGasPrice) (wrap (wrap l)) pd
 
-    go i pd ((FieldKey k), (TLiteral (LString l) _)) = case Text.unpack k of
-      "chain-id" -> pure $ set (pdPublicMeta . pmChainId) (ChainId l) pd
-      "sender"   -> pure $ set (pdPublicMeta . pmSender) l pd
-      t          -> evalError i $ "envChainData: bad public metadata key: " <> prettyString t
+    go _i pd (k, (TLiteral (LTime l) _))
+      | k == cdBlockTime = pure $ set pdBlockTime (toMicroseconds $ utcTimeToPOSIXSeconds l) pd
+
+    go _i pd (k, (TLiteral (LString l) _))
+      | k == cdChainId = pure $ set (pdPublicMeta . pmChainId) (ChainId l) pd
+      | k == cdSender = pure $ set (pdPublicMeta . pmSender) l pd
+
     go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as

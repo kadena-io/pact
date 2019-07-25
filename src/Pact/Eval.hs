@@ -692,7 +692,7 @@ applyPact i app (TList steps _ _) PactStep {..} = do
   -- retrieve indicated step from code
   st <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
   step <- case st of
-    TStep step _i -> return step
+    TStep step _meta _i -> return step
     t -> evalError (_tInfo t) "expected step"
 
   -- determine if step is skipped (for private execution)

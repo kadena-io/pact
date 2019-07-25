@@ -14,6 +14,7 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE StrictData                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
@@ -329,6 +330,7 @@ data Provenance
   | FromRegistry (S RegistryName)
   | FromInput    Unmunged
   | FromMetadata (S Str)
+  | FromGovernanceCap
   --
   -- TODO: in the future, probably have FromYield?
   --
@@ -446,6 +448,9 @@ fromRegistry = FromRegistry
 fromMetadata :: S Str -> Provenance
 fromMetadata = FromMetadata
 
+fromGovCap :: Provenance
+fromGovCap = FromGovernanceCap
+
 symRowKey :: S Str -> S RowKey
 symRowKey = coerceS
 
@@ -453,7 +458,7 @@ symRowKey = coerceS
 type TVal = (EType, AVal)
 
 data Column tm a where
-  Column :: IsTerm tm => !(SingTy a) -> !(tm a) -> Column tm a
+  Column :: IsTerm tm => SingTy a -> tm a -> Column tm a
 
 instance (Eq (SingTy a), Eq (tm a)) => Eq (Column tm a) where
   Column _ a == Column _ b = a == b
@@ -461,7 +466,7 @@ instance (Ord (SingTy a), Ord (tm a)) => Ord (Column tm a) where
   Column _ a `compare` Column _ b = a `compare` b
 
 data Object (tm :: Ty -> *) (m :: [(Symbol, Ty)])
-  = Object !(HList (Column tm) m)
+  = Object (HList (Column tm) m)
 
 pattern ObjectNil :: () => schema ~ '[] => Object tm schema
 pattern ObjectNil = Object SNil
@@ -731,7 +736,7 @@ instance SMTValue Any
 
 newtype Guard
   = Guard Integer
-  deriving (Eq, Ord, Data, Show, Read, Pretty)
+  deriving (Eq, Ord, Enum, Data, Show, Read, Pretty)
 
 instance SymVal Guard where
   mkSymVal = SBVI.genMkSymVar KUnbounded
@@ -1242,3 +1247,8 @@ type instance Index (TableMap a) = TableName
 type instance IxValue (TableMap a) = a
 instance Ixed (TableMap a) where ix k = tableMap.ix k
 instance At (TableMap a) where at k = tableMap.at k
+
+data Governance
+  = KsGovernance RegistryName
+  | CapGovernance CapName
+  deriving (Eq, Ord, Show)

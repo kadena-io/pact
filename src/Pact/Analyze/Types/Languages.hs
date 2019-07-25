@@ -1,20 +1,21 @@
-{-# LANGUAGE UndecidableInstances  #-} -- Pretty (Core tm a)
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE Rank2Types            #-}
-{-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE ViewPatterns          #-}
-{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-} -- Pretty (Core tm a)
+{-# LANGUAGE ViewPatterns          #-}
 
 -- | Type definitions for each of the languages we analyze, including the three
 -- main languages of programs ('Term'), invariants ('Invariant'), and
@@ -1000,15 +1001,17 @@ data PropSpecific (a :: Ty) where
   -- TX success/failure
 
   --
-  -- TODO: remove either Success Or Abort.
+  -- TODO: remove either Success or Abort.
   --
 
   -- | Whether a transaction aborts (does not succeed)
-  Abort   :: PropSpecific 'TyBool
+  Abort     :: PropSpecific 'TyBool
   -- | Whether a transaction succeeds (does not abort)
-  Success :: PropSpecific 'TyBool
+  Success   :: PropSpecific 'TyBool
+  -- | Whether the governance predicate passes
+  GovPasses :: PropSpecific 'TyBool
   -- | The return value of the function under examination
-  Result  :: PropSpecific a
+  Result    :: PropSpecific a
 
   -- Abstraction
 
@@ -1081,6 +1084,7 @@ instance Pretty (PropSpecific a) where
   pretty = \case
     Abort                   -> pretty STransactionAborts
     Success                 -> pretty STransactionSucceeds
+    GovPasses               -> pretty SGovernancePasses
     Result                  -> pretty SFunctionResult
     Forall _ var ty x       -> parensSep
       [pretty SUniversalQuantification, parens (pretty var <> ":" <> pretty ty), prettyTm x]
@@ -1324,10 +1328,11 @@ data Term (a :: Ty) where
   PactId          :: Term 'TyStr
 
   -- Guards
-  MkKsRefGuard :: Term 'TyStr                                               -> Term 'TyGuard
-  MkPactGuard  :: Term 'TyStr                                               -> Term 'TyGuard
-  MkUserGuard  :: SingTy ('TyObject m) -> Term ('TyObject m) -> Term 'TyStr -> Term 'TyGuard
-  GuardPasses  :: TagId                -> Term 'TyGuard                     -> Term 'TyBool
+  MkKsRefGuard  :: Term 'TyStr                  -> Term 'TyGuard
+  MkPactGuard   :: Term 'TyStr                  -> Term 'TyGuard
+  MkUserGuard   :: Guard       -> ETerm         -> Term 'TyGuard
+  MkModuleGuard :: Term 'TyStr                  -> Term 'TyGuard
+  GuardPasses   :: TagId       -> Term 'TyGuard -> Term 'TyBool
 
   -- Table access
   Read
@@ -1429,13 +1434,14 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   MkPactGuard a ->
       showString "MkPactGuard "
     . showsPrec 11 a
-  MkUserGuard a b c -> withSing a $
+  MkUserGuard a b ->
       showString "MkUserGuard "
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
-    . showChar ' '
-    . showsPrec 11 c
+  MkModuleGuard a ->
+      showString "MkModuleGuard "
+    . showsPrec 11 a
   GuardPasses a b ->
       showString "GuardPasses "
     . showsPrec 11 a
@@ -1575,7 +1581,8 @@ prettyTerm ty = \case
   PactId                -> parensSep ["pact-id"]
   MkKsRefGuard name     -> parensSep ["keyset-ref-guard", pretty name]
   MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
-  MkUserGuard ty' o n   -> parensSep ["create-user-guard", singPrettyTm ty' o, pretty n]
+  MkUserGuard g t       -> parensSep ["create-user-guard", pretty g, pretty t]
+  MkModuleGuard name    -> parensSep ["create-module-guard", pretty name]
   Pact steps            -> vsep (pretty <$> steps)
   Yield _tid tm         -> parensSep [ "yield", singPrettyTm ty tm ]
   Resume _tid           -> "resume"

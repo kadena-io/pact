@@ -84,9 +84,13 @@ pattern AST_CreatePactGuard :: forall a. AST a -> AST a
 pattern AST_CreatePactGuard name <-
   App _node (NativeFunc "create-pact-guard") [name]
 
-pattern AST_CreateUserGuard :: forall a. AST a -> AST a -> AST a
-pattern AST_CreateUserGuard obj funName <-
-  App _node (NativeFunc "create-user-guard") [obj, funName]
+pattern AST_CreateUserGuard :: AST Node -> AST Node
+pattern AST_CreateUserGuard app <-
+  App _node (NativeFunc "create-user-guard") [app]
+
+pattern AST_CreateModuleGuard :: AST Node -> AST Node
+pattern AST_CreateModuleGuard name <-
+  App _node (NativeFunc "create-module-guard") [name]
 
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
@@ -277,4 +281,4 @@ pattern AST_List :: forall a. a -> [AST a] -> AST a
 pattern AST_List node elems <- List node elems
 
 pattern AST_Step :: a -> Maybe (AST a) -> AST a -> Maybe (AST a) -> Maybe (YieldResume a) -> AST a
-pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback yr
+pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback yr _model

@@ -38,7 +38,7 @@ module Pact.Types.Typecheck
     Named (..),
     AstBindType (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
-    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,
+    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,
     Visit(..),Visitor,
     YieldResume(..),yrYield,yrResume
   ) where
@@ -171,13 +171,13 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
 
 
 -- | Storage for literal values.
-data PrimValue =
+data PrimValue g =
   PrimLit Literal |
-  PrimGuard Guard
-  deriving (Eq,Show)
-instance Pretty PrimValue where
+  PrimGuard (Guard g)
+  deriving (Eq,Show,Functor,Foldable,Traversable)
+instance (Pretty n) => Pretty (PrimValue n) where
   pretty (PrimLit   l) = viaShow l
-  pretty (PrimGuard k) = viaShow k
+  pretty (PrimGuard k) = pretty k
 
 
 -- | A top-level module production.
@@ -325,7 +325,7 @@ data AST n =
   } |
   Prim {
   _aNode :: n,
-  _aPrimValue :: PrimValue
+  _aPrimValue :: PrimValue (AST n)
   } |
   Var {
   _aNode :: n
@@ -339,7 +339,8 @@ data AST n =
   _aEntity :: Maybe (AST n),
   _aExec :: AST n,
   _aRollback :: Maybe (AST n),
-  _aYieldResume :: Maybe (YieldResume n)
+  _aYieldResume :: Maybe (YieldResume n),
+  _aModel :: ![Exp Info]
   }
 
   deriving (Eq,Functor,Foldable,Traversable,Show)

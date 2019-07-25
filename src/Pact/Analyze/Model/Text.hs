@@ -149,6 +149,8 @@ showGE recov mProv (_located -> GuardEnforcement sg sbool) =
     guardDescription = case mProv of
       Nothing ->
         "unknown " <> guard <> " " <> showS sg
+      Just FromGovernanceCap ->
+        "governance capability"
       Just (FromRow _) ->
         error "impossible: FromRow provenance on guard"
       Just (FromCell (OriginatingCell tn cn sRk _)) -> renderCompactText' $
@@ -236,7 +238,7 @@ showEvent ksProvs tags event = do
           ObjectScope ->
             "destructuring object" : displayVids showVar
           StepScope ->
-            [ "entering step" ]
+            "entering step" : displayVids showVar
           RollbackScope ->
             [ "entering rollback" ]
           FunctionScope modName funName ->

@@ -31,13 +31,13 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 
 ### chain-data {#chain-data}
 
- *&rarr;*&nbsp;`object:<{o}>`
+ *&rarr;*&nbsp;`object:{public-chain-data}`
 
 
 Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"block-height": 0,"block-time": 0,"chain-id": "","gas-limit": 0,"gas-price": 0,"sender": ""}
+{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"sender": ""}
 ```
 
 
@@ -343,6 +343,19 @@ pact> (pact-version)
 ```
 
 Top level only: this function will fail if used in module code.
+
+
+### public-chain-data {#public-chain-data}
+
+Schema type for data returned from 'chain-data'.
+
+Fields:
+&nbsp;&nbsp;`chain-id:string`
+&nbsp;&nbsp;`block-height:integer`
+&nbsp;&nbsp;`block-time:time`
+&nbsp;&nbsp;`sender:string`
+&nbsp;&nbsp;`gas-limit:integer`
+&nbsp;&nbsp;`gas-price:decimal`
 
 
 ### read-decimal {#read-decimal}
@@ -1283,10 +1296,10 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 
 ### create-user-guard {#create-user-guard}
 
-*data*&nbsp;`<a>` *predfun*&nbsp;`string` *&rarr;*&nbsp;`guard`
+*closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
 
 
-Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. DATA must be an object. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
+Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
 
 
 ### enforce-guard {#enforce-guard}
@@ -1429,10 +1442,10 @@ Continue previously-initiated pact identified STEP, optionally specifying ROLLBA
 
 ### env-chain-data {#env-chain-data}
 
-*new-data*&nbsp;`object:*` *&rarr;*&nbsp;`string`
+*new-data*&nbsp;`object:~{public-chain-data}` *&rarr;*&nbsp;`string`
 
 
-Update existing entries 'chain-data' with NEW-DATA, replacing those items only.
+Update existing entries of 'chain-data' with NEW-DATA, replacing those items only.
 ```lisp
 pact> (env-chain-data { "chain-id": "TestNet00/2", "block-height": 20 })
 "Updated public metadata"
