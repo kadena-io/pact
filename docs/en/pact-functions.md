@@ -234,6 +234,20 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 ```
 
 
+### int-to-str {#int-to-str}
+
+*base*&nbsp;`integer` *val*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Represent integer VAL as a string in BASE. BASE can be 2-16, or 64 for unpadded base64URL. Only positive values are allowed for base64URL conversion.
+```lisp
+pact> (int-to-str 16 65535)
+"ffff"
+pact> (int-to-str 64 43981)
+"q80"
+```
+
+
 ### length {#length}
 
 *x*&nbsp;`<a[[<l>],string,object:<{o}>]>` *&rarr;*&nbsp;`integer`
@@ -423,12 +437,14 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 *base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
-Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for the base.
+Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL can be up to 512 chars in length. BASE must be between 2 and 16, or 64 to perform unpadded base64url conversion. Each digit must be in the correct range for the base.
 ```lisp
 pact> (str-to-int 16 "abcdef123456")
 188900967593046
 pact> (str-to-int "123456")
 123456
+pact> (str-to-int 64 "q80")
+43981
 ```
 
 
