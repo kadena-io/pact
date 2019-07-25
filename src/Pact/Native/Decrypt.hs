@@ -19,7 +19,6 @@ module Pact.Native.Decrypt
   ) where
 
 import Control.Monad
-import qualified Data.ByteArray as BA
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Default (def)
@@ -30,6 +29,7 @@ import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime hiding (PublicKey)
 #if !defined(ghcjs_HOST_OS)
+import qualified Data.ByteArray as BA
 import Crypto.PubKey.Curve25519
 import Crypto.Error
 import Crypto.Cipher.ChaChaPoly1305
