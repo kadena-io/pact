@@ -40,7 +40,7 @@ import Crypto.MAC.Poly1305 (Auth(..),authTag)
 
 
 decryptDefs :: NativeModule
-decryptDefs = ("Decryption",
+decryptDefs = ("Commitments",
   [ validateKeypairDef
   , decryptDef
   ])
@@ -81,45 +81,69 @@ decryptDef :: NativeDef
 decryptDef =
   defRNative "decrypt-cc20p1305"
   decrypt'
-  (funType tTyString [("ciphertext",tTyString),("nonce",tTyString),("aad",tTyString),
-                      ("public-key",tTyString),("secret-key",tTyString)])
-  [LitExample "(decrypt-cc20p1305 ciphertext nonce aad pubkey privkey)"]
-  ("Decrypt a Curve25519/ChaCha20/Poly1305 CIPHERTEXT using NONCE, AAD, PUBLIC-KEY and SECRET-KEY. " <>
-   "CIPHERTEXT is an unpadded base64url value with the 16-byte authentication tag output of the encryption. " <>
-   "PUBLIC-KEY and SECRET-KEY are base-16 strings of length 32. " <>
-   "NONCE is an unpadded base64URL value of a 24-byte bytestring. " <>
-   "AAD is additional authentication data of an unpadded base-16 string of any length. " <>
-   "Result is unpadded base64URL.")
+  (funType tTyString
+   [("ciphertext",tTyString)
+   ,("nonce",tTyString)
+   ,("aad",tTyString)
+   ,("mac",tTyString)
+   ,("public-key",tTyString)
+   ,("secret-key",tTyString)
+   ])
+  [LitExample "(decrypt-cc20p1305 ciphertext nonce aad mac pubkey privkey)"]
+  ("Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated " <>
+   "Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. " <>
+    "CIPHERTEXT is an unpadded base64url string. " <>
+    "NONCE is a 12-byte base16 string. " <>
+    "AAD is base16 additional authentication data of any length. " <>
+    "MAC is the \"detached\" base16 tag value for validating POLY1305 authentication. " <>
+    "PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key." <>
+    "Result is unpadded base64URL.")
   where
     decrypt' :: RNativeFun e
-    decrypt' i [c@(TLitString c'),n@(TLitString n'),a@(TLitString a'),p@(TLitString p'),s@(TLitString s')] = do
+    decrypt' i [c@(TLitString c'),n@(TLitString n'),a@(TLitString a'),
+                m@(TLitString m'),p@(TLitString p'),s@(TLitString s')] = do
       ciphertext <- doBase64Url c c'
       aad <- doBase16 a a'
-      nonce <- ofLength n "nonce" 12 =<< doBase64Url n n'
+      nonce <- ofLength n "nonce" 12 =<< doBase16 n n'
+      mac <- doBase16 m m'
       public <- doPublic p p'
       secret <- doSecret s s'
-      (toTerm . toB64UrlUnpaddedText) <$> doDecrypt i ciphertext nonce aad public secret
+      (toTerm . toB64UrlUnpaddedText) <$> doDecrypt i ciphertext nonce aad mac public secret
     decrypt' i as = argsError i as
 
 
-doDecrypt :: HasInfo i => i -> ByteString -> ByteString -> ByteString -> ByteString -> ByteString -> Eval e ByteString
+-- | Implementation of CHACHA20-POLY1305 decryption.
+doDecrypt ::
+  HasInfo i => i
+  -> ByteString
+  -- ^ Ciphertext
+  -> ByteString
+  -- ^ nonce
+  -> ByteString
+  -- ^ aad
+  -> ByteString
+  -- ^ mac
+  -> ByteString
+  -- ^ Curve25519 pubKey DH input
+  -> ByteString
+  -- ^ Curve25519 secretKey DH input
+  -> Eval e ByteString
 #if defined(ghcjs_HOST_OS)
 doDecrypt i _ _ _ _ _ = evalError' i "'decrypt' unsupported in javascript-backed Pact"
 #else
 
-doDecrypt i ciphertext nonce aad public secret = do
-  let (ct,authSfx) = BS.splitAt (BS.length ciphertext - 16) ciphertext
-  auth <- liftCrypto i "auth prefix" $ authTag authSfx
+doDecrypt i ciphertext nonce aad auth public secret = do
+  at <- liftCrypto i "auth prefix" $ authTag auth
   n <- liftCrypto i "nonce" $ nonce12 nonce
   pk <- importPublic i public
   sk <- importSecret i secret
   let k = dh pk sk
   ini <- liftCrypto i "initialize failed" $ initialize k n
   let afterAAD = finalizeAAD (appendAAD aad ini)
-      (out,afterDecrypt) = decrypt ct afterAAD
+      (out,afterDecrypt) = decrypt ciphertext afterAAD
       outtag = finalize afterDecrypt
-  unless (outtag == auth) $
-    evalError' i $ "AEAD Authentication failed: " <> pretty (show $ authToBS outtag)
+  unless (outtag == at) $
+    evalError' i $ "AEAD Authentication failed: " <> pretty (toB16Text $ authToBS outtag)
   return out
 
 #endif
@@ -167,7 +191,7 @@ authToBS :: Auth -> ByteString
 authToBS (Auth b) = BS.pack $ BA.unpack b
 
 -- | Exposed for testing
-doEncrypt :: Info -> ByteString -> ByteString -> ByteString -> ByteString -> ByteString -> Eval e ByteString
+doEncrypt :: Info -> ByteString -> ByteString -> ByteString -> ByteString -> ByteString -> Eval e (ByteString,ByteString)
 doEncrypt i plaintext nonce aad public secret = do
   n <- liftCrypto i "nonce" $ nonce12 nonce
   pk <- importPublic i public
@@ -177,7 +201,7 @@ doEncrypt i plaintext nonce aad public secret = do
   let afterAAD = finalizeAAD (appendAAD aad ini)
       (out,afterEncrypt) = encrypt plaintext afterAAD
       outtag = finalize afterEncrypt
-  return $ out <> authToBS outtag
+  return $ (out,authToBS outtag)
 
 ------ TESTING ------
 
@@ -197,15 +221,6 @@ _i = def
 
 _jankyRunEval :: Eval e b -> IO b
 _jankyRunEval = fmap fst . runEval undefined undefined
-
-_testEncrypt :: ByteString -> IO ByteString
-_testEncrypt pt = _jankyRunEval $ doEncrypt def pt _nonce _aad _pk _sk
-
-_testDecrypt :: ByteString -> IO ByteString
-_testDecrypt ct = _jankyRunEval $ doDecrypt (def :: Info) ct _nonce _aad _pk _sk
-
-_testRoundtrip :: ByteString -> IO ByteString
-_testRoundtrip pt = _testEncrypt pt >>= _testDecrypt
 
 _testValidate :: ByteString -> ByteString -> IO Bool
 _testValidate pk sk = _jankyRunEval $ doValidate (def :: Info) pk sk
@@ -256,32 +271,25 @@ _checkRFC7748_6_1 = do
 _wBsArg :: (Text -> IO a) -> Text -> IO (ByteString, a)
 _wBsArg f a = (,) <$> _jankyRunEval (doBase16 _i a) <*> f a
 
-_encryptAB :: IO Text
-_encryptAB = do
-  a <- fst <$> _alicePK
-  b <- fst <$> _bobSK
-  toB64UrlUnpaddedText <$> _jankyRunEval (doEncrypt _i _plaintext _nonce _aad a b)
+_encrypt :: IO (ByteString,PublicKey) -> IO (ByteString,SecretKey) -> IO (ByteString,ByteString)
+_encrypt p s = do
+  p' <- p
+  s' <- s
+  _jankyRunEval $ doEncrypt _i _plaintext _nonce _aad (fst p') (fst s')
 
-_encryptBA :: IO Text
-_encryptBA = do
-  a <- fst <$> _aliceSK
-  b <- fst <$> _bobPK
-  toB64UrlUnpaddedText <$> _jankyRunEval (doEncrypt _i _plaintext _nonce _aad b a)
+_decrypt :: IO (ByteString,PublicKey) -> IO (ByteString,SecretKey) ->
+              (ByteString,ByteString) -> IO Text
+_decrypt p s (ct,tag) = do
+  p' <- p
+  s' <- s
+  toB64UrlUnpaddedText <$> _jankyRunEval (doDecrypt _i ct _nonce _aad tag (fst p') (fst s'))
 
-_decryptAB :: Text -> IO Text
-_decryptAB ct = do
-  a <- fst <$> _alicePK
-  b <- fst <$> _bobSK
-  ct' <- _jankyRunEval $ doBase64Url _i ct
-  toB64UrlUnpaddedText <$> _jankyRunEval (doDecrypt _i ct' _nonce _aad a b)
-
-_decryptBA :: Text -> IO Text
-_decryptBA ct = do
-  a <- fst <$> _aliceSK
-  b <- fst <$> _bobPK
-  ct' <- _jankyRunEval $ doBase64Url _i ct
-  toB64UrlUnpaddedText <$> _jankyRunEval (doDecrypt _i ct' _nonce _aad b a)
-
-
-
+-- _roundtrip _alicePK _bobSK --> ("message","message")
+-- _roundtrip _bobPK aliceSK --> ("message","message")
+_roundtrip
+  :: IO (ByteString, PublicKey)
+     -> IO (ByteString, SecretKey) -> IO (ByteString, ByteString)
+_roundtrip p s = do
+  r <- _encrypt p s >>= _decrypt p s >>= _jankyRunEval . doBase64Url _i
+  return (_plaintext,r)
 #endif

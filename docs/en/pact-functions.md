@@ -1328,16 +1328,16 @@ Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of th
 (verify-spv "TXOUT" (read-msg "proof"))
 ```
 
-## Decryption {#Decryption}
+## Commitments {#Commitments}
 
 ### decrypt-cc20p1305 {#decrypt-cc20p1305}
 
-*ciphertext*&nbsp;`string` *nonce*&nbsp;`string` *aad*&nbsp;`string` *public-key*&nbsp;`string` *secret-key*&nbsp;`string` *&rarr;*&nbsp;`string`
+*ciphertext*&nbsp;`string` *nonce*&nbsp;`string` *aad*&nbsp;`string` *mac*&nbsp;`string` *public-key*&nbsp;`string` *secret-key*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Decrypt a Curve25519/ChaCha20/Poly1305 CIPHERTEXT using NONCE, AAD, PUBLIC-KEY and SECRET-KEY. CIPHERTEXT is an unpadded base64url value with the 16-byte authentication tag output of the encryption. PUBLIC-KEY and SECRET-KEY are base-16 strings of length 32. NONCE is an unpadded base64URL value of a 24-byte bytestring. AAD is additional authentication data of an unpadded base-16 string of any length. Result is unpadded base64URL.
+Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string. NONCE is a 12-byte base16 string. AAD is base16 additional authentication data of any length. MAC is the "detached" base16 tag value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key.Result is unpadded base64URL.
 ```lisp
-(decrypt-cc20p1305 ciphertext nonce aad pubkey privkey)
+(decrypt-cc20p1305 ciphertext nonce aad mac pubkey privkey)
 ```
 
 
