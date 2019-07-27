@@ -9,6 +9,9 @@ let rpSrc = builtins.fetchTarball {
 };
 overlay = self: super: {
   z3 = super.z3.overrideAttrs (drv: {
+    name = "z3-4.8.5";
+    version = "4.8.5";
+    patches = [];
     src = self.fetchFromGitHub {
       owner = "Z3Prover";
       repo = "z3";
