@@ -1,3 +1,19 @@
+3.0.2
+---
+* Add SPV endorsement functionality to `defpact`s
+* Bug fix: '=' now compares only like terms
+* Upgrade z3 version support to 4.8.5
+* User guards can now be created as closures of boolean-valued functions
+* Improved swagger documentaiton
+* Improved error messages
+* Formal Verification traces now render on same line
+* Analysis now supports pact step signatures, and governance analysis
+* Added new decryption and keypair validation primitives for CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD)
+* Added bitwise integer native functions `&`, `~`, `shift`, `xor`, and `|`
+* Added analysis for `chain-data` pact native
+* Scope checking for interfaces
+* Documentation for namespaces and interfaces
+
 3.0.1
 ---
 * Check for module in stack when enforcing module guard
