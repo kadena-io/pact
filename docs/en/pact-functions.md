@@ -234,6 +234,20 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 ```
 
 
+### int-to-str {#int-to-str}
+
+*base*&nbsp;`integer` *val*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Represent integer VAL as a string in BASE. BASE can be 2-16, or 64 for unpadded base64URL. Only positive values are allowed for base64URL conversion.
+```lisp
+pact> (int-to-str 16 65535)
+"ffff"
+pact> (int-to-str 64 43981)
+"q80"
+```
+
+
 ### length {#length}
 
 *x*&nbsp;`<a[[<l>],string,object:<{o}>]>` *&rarr;*&nbsp;`integer`
@@ -436,12 +450,14 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 *base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
-Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for the base.
+Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL can be up to 512 chars in length. BASE must be between 2 and 16, or 64 to perform unpadded base64url conversion. Each digit must be in the correct range for the base.
 ```lisp
 pact> (str-to-int 16 "abcdef123456")
 188900967593046
 pact> (str-to-int "123456")
 123456
+pact> (str-to-int 64 "q80")
+43981
 ```
 
 
@@ -1411,6 +1427,29 @@ Specifies and requests grant of CAPABILITY which is an application of a 'defcap'
 Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of the PAYLOAD object depends on TYPE, as does the format of the return object. Platforms such as Chainweb will document the specific payload types and return values.
 ```lisp
 (verify-spv "TXOUT" (read-msg "proof"))
+```
+
+## Commitments {#Commitments}
+
+### decrypt-cc20p1305 {#decrypt-cc20p1305}
+
+*ciphertext*&nbsp;`string` *nonce*&nbsp;`string` *aad*&nbsp;`string` *mac*&nbsp;`string` *public-key*&nbsp;`string` *secret-key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string. NONCE is a 12-byte base16 string. AAD is base16 additional authentication data of any length. MAC is the "detached" base16 tag value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key.Result is unpadded base64URL.
+```lisp
+(decrypt-cc20p1305 ciphertext nonce aad mac pubkey privkey)
+```
+
+
+### validate-keypair {#validate-keypair}
+
+*public*&nbsp;`string` *secret*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values are base-16 strings of length 32.
+```lisp
+(validate-keypair pubkey privkey)
 ```
 
 ## REPL-only functions {#repl-lib}

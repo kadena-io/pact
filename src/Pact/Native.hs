@@ -25,6 +25,7 @@ module Pact.Native
     , pactVersionDef
     , formatDef
     , strToIntDef
+    , intToStrDef
     , hashDef
     , ifDef
     , readDecimalDef
@@ -52,8 +53,10 @@ import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
+import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
-import Data.Char (isHexDigit, digitToInt)
+import Data.Char (digitToInt,intToDigit)
+import Data.Bits
 import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
@@ -65,10 +68,12 @@ import Data.Text.Encoding
 import Data.Thyme.Time.Core (fromMicroseconds,posixSecondsToUTCTime)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
+import Numeric
 
 import Pact.Eval
 import Pact.Native.Capabilities
 import Pact.Native.Db
+import Pact.Native.Decrypt
 import Pact.Native.Internal
 import Pact.Native.Keysets
 import Pact.Native.Ops
@@ -90,7 +95,8 @@ natives = [
   opDefs,
   keyDefs,
   capDefs,
-  spvDefs]
+  spvDefs,
+  decryptDefs]
 
 
 -- | Production native modules as a dispatch map.
@@ -186,10 +192,31 @@ strToIntDef :: NativeDef
 strToIntDef = defRNative "str-to-int" strToInt
   (funType tTyInteger [("str-val", tTyString)] <>
    funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
-  ["(str-to-int 16 \"abcdef123456\")", "(str-to-int \"123456\")"]
-  "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
-  \chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for \
-  \the base."
+  ["(str-to-int 16 \"abcdef123456\")"
+  ,"(str-to-int \"123456\")"
+  ,"(str-to-int 64 \"q80\")"
+  ]
+  "Compute the integer value of STR-VAL in base 10, or in BASE if specified. \
+  \STR-VAL can be up to 512 chars in length. \
+  \BASE must be between 2 and 16, or 64 to perform unpadded base64url conversion. \
+  \Each digit must be in the correct range for the base."
+
+intToStrDef :: NativeDef
+intToStrDef = defRNative "int-to-str" intToStr
+  (funType tTyString [("base",tTyInteger),("val",tTyInteger)])
+  ["(int-to-str 16 65535)","(int-to-str 64 43981)"]
+  "Represent integer VAL as a string in BASE. BASE can be 2-16, or 64 for unpadded base64URL. \
+  \Only positive values are allowed for base64URL conversion."
+  where
+    intToStr _ [b'@(TLitInteger base),v'@(TLitInteger v)]
+      | base >= 2 && base <= 16 =
+          return $ toTerm $ T.pack $
+          showIntAtBase base intToDigit v ""
+      | base == 64 && v >= 0 = doBase64 v
+      | base == 64 = evalError' v' "Only positive values allowed for base64URL conversion."
+      | otherwise = evalError' b' "Invalid base, must be 2-16 or 64"
+    intToStr i as = argsError i as
+    doBase64 v = return $ toTerm $ toB64UrlUnpaddedText $ integerToBS v
 
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
@@ -492,6 +519,7 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
     ,strToIntDef
+    ,intToStrDef
     ,hashDef
     ,defineNamespaceDef
     ,namespaceDef
@@ -778,19 +806,34 @@ identity i as = argsError i as
 strToInt :: RNativeFun e
 strToInt i as =
   case as of
-    [TLitString s] -> go 10 s
-    [TLitInteger base, TLitString s] -> go base s
+    [s'@(TLitString s)] -> checkLen s' s >> doBase s' 10 s
+    [b'@(TLitInteger base), s'@(TLitString s)] -> checkLen s' s >> go b' s' base s
     _ -> argsError i as
   where
-    go base' txt =
-      if T.all isHexDigit txt
-      then
-        if T.length txt <= 128
-        then case baseStrToInt base' txt of
-          Left t -> evalError' i $ pretty t
-          Right n -> return (toTerm n)
-        else evalError' i $ "Invalid input: unsupported string length: " <> pretty txt
-      else evalError' i $ "Invalid input: supplied string is not hex: " <> pretty txt
+    checkLen si txt = unless (T.length txt <= 512) $
+      evalError' si $ "Invalid input, only up to 512 length supported"
+    go bi si base txt
+      | base == 64 = doBase64 si txt
+      | base >= 2 && base <= 16 = doBase si base txt
+      | otherwise = evalError' bi $ "Base value must be >= 2 and <= 16, or 64"
+    doBase si base txt = case baseStrToInt base txt of
+      Left e -> evalError' si (pretty e)
+      Right n -> return (toTerm n)
+    doBase64 si txt = case parseB64UrlUnpaddedText' txt of
+      Left e -> evalError' si (pretty e)
+      Right bs -> return $ toTerm $ bsToInteger bs
+
+bsToInteger :: BS.ByteString -> Integer
+bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
+  where
+    go (i,p) w = (i .|. (shift (fromIntegral w) p),p - 8)
+
+integerToBS :: Integer -> BS.ByteString
+integerToBS v = BS.pack $ reverse $ go v
+  where
+    go i | i <= 0xff = [fromIntegral i]
+         | otherwise = (fromIntegral (i .&. 0xff)):go (shift i (-8))
+
 
 txHash :: RNativeFun e
 txHash _ [] = (tStr . asString) <$> view eeHash
