@@ -333,9 +333,15 @@ validateImports i mis rs = maybe (return ()) (traverse_ go) mis
   where
     go imp = case HM.lookup imp rs of
       Nothing -> evalError i $ "imported name not found: " <> pretty imp
-      Just (Ref (TDef d _)) -> case _dDefType d of
-        Defcap -> evalError i $ "cannot import capabilities: " <> pretty imp
-        _ -> return ()
+      Just (Ref r) -> case r of
+        TDef d _ -> case _dDefType d of
+          Defcap -> evalError i $ "cannot import capabilities: " <> pretty imp
+          _ -> return ()
+        TConst{} -> return ()
+        TSchema{} -> return ()
+        _ -> evalError i
+          $ "invalid import - only function, schema, and constant symbols allowed: "
+          <> pretty imp
       Just _ -> return ()
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
