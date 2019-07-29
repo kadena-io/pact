@@ -809,6 +809,20 @@ true
 ```
 
 
+### & {#&}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Compute bitwise X and Y.
+```lisp
+pact> (& 2 3)
+2
+pact> (& 5 -7)
+1
+```
+
+
 ### * {#star}
 
 *x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
@@ -1161,6 +1175,24 @@ pact> (round 100.15234 2)
 ```
 
 
+### shift {#shift}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Shift X Y bits left if Y is positive, or right by -Y bits otherwise. Right shifts perform sign extension on signed number types; i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise.
+```lisp
+pact> (shift 255 8)
+65280
+pact> (shift 255 -1)
+127
+pact> (shift -255 8)
+-65280
+pact> (shift -255 -1)
+-128
+```
+
+
 ### sqrt {#sqrt}
 
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
@@ -1170,6 +1202,46 @@ Square root of X.
 ```lisp
 pact> (sqrt 25)
 5
+```
+
+
+### xor {#xor}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Compute bitwise X xor Y.
+```lisp
+pact> (xor 127 64)
+63
+pact> (xor 5 -7)
+-4
+```
+
+
+### | {#|}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Compute bitwise X or Y.
+```lisp
+pact> (| 2 3)
+3
+pact> (| 5 -7)
+-3
+```
+
+
+### ~ {#~}
+
+*x*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Reverse all bits in X.
+```lisp
+pact> (~ 15)
+-16
 ```
 
 ## Keysets {#Keysets}
