@@ -192,24 +192,19 @@ keysetRefGuard =
 
 createUserGuard :: NativeDef
 createUserGuard =
-  defRNative "create-user-guard" createUserGuard'
-  (funType (tTyGuard (Just GTyUser)) [("data",tvA),("predfun",tTyString)])
+  defNative "create-user-guard" createUserGuard'
+  (funType (tTyGuard (Just GTyUser)) [("closure",TyFun $ funType' tTyBool [])])
   []
-  "Defines a custom guard predicate, where DATA will be passed to PREDFUN at time \
-  \of enforcement. DATA must be an object. PREDFUN is a valid name in the declaring environment. \
-  \PREDFUN must refer to a pure function or enforcement will fail at runtime."
+  "Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, \
+  \to be supplied to indicated function at enforcement time."
   where
-    createUserGuard' :: RNativeFun e
-    createUserGuard' i [TObject udata _,TLitString predfun] =
-      case parseName (_faInfo i) predfun of
-        Right n -> do
-          rn <- resolveRef i n >>= \nm -> case nm of
-            Just (Direct {}) -> return n
-            Just (Ref (TDef Def{..} _)) ->
-              return $ QName _dModule (asString _dDefName) _dInfo
-            Just _ -> evalError' i $ "Invalid predfun, not a def: " <> pretty n
-            _ -> evalError' i $ "Could not resolve predfun: " <> pretty n
-          return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard udata rn)
-        Left s -> evalError' i $
-          "Invalid name " <> pretty predfun <> ": " <> prettyString s
-    createUserGuard' i as = argsError i as
+    createUserGuard' :: NativeFun e
+    createUserGuard' i [TApp App {..} _] = gasUnreduced i [] $ do
+      args <- mapM reduce _appArgs
+      fun <- case _appFun of
+        (TVar (Ref (TDef Def{..} _)) _) -> case _dDefType of
+          Defun -> return (QName _dModule (asString _dDefName) _dInfo)
+          _ -> evalError _appInfo $ "User guard closure must be defun, found: " <> pretty _dDefType
+        t -> evalError (_tInfo t) $ "User guard closure function must be def: " <> pretty _appFun
+      return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard fun args)
+    createUserGuard' i as = argsError' i as

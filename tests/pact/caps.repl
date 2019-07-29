@@ -22,8 +22,6 @@
 
   (defschema yieldschema result:integer)
 
-  (defschema guardschema key:string)
-
   (defcap GRANTED () true)
 
   (defcap KALL-CAP () (enforce-keyset 'kall))
@@ -44,18 +42,19 @@
     (create-module-guard "test"))
 
   (defun msg-keyset-user-guard (key:string)
-    (create-user-guard {'key: key} "enforce-msg-keyset"))
+    (create-user-guard (enforce-msg-keyset key)))
 
-  (defun enforce-msg-keyset (key:object{guardschema})
-    (enforce-keyset (read-keyset (at 'key key))))
+  (defun enforce-msg-keyset (key:string)
+    (enforce-keyset (read-keyset key)))
 
   (defun create-bad-db-user-guard ()
     @doc "Creates a user guard which tries to read from the DB, which is not allowed. This will fail when the guard is enforced."
     ; this insert succeeds:
     (insert ints 'x {'i: 0})
-    (create-user-guard {'k: 'x} "bad-user-guard-fun"))
-  (defun bad-user-guard-fun (o:object{ints-key})
-    (let ((row (read ints (at 'k o))))
+    (create-user-guard (bad-user-guard-fun 'x)))
+
+  (defun bad-user-guard-fun (x:string)
+    (let ((row (read ints x)))
       (enforce (= 0 (at 'i row)) "int wasn't zero")))
 
   (defpact test-pact-guards (id:string)
@@ -90,9 +89,6 @@
 
   (defun bad-with-cap ()
     (with-capability (BAD_WITH_CAP) true))
-
-  (defun loop (x:integer)
-    (enforce-guard (create-user-guard x "loop")))
 
   (defun test-module-guard-other ()
     (other.enforce-a-guard (get-module-guard))
@@ -209,7 +205,5 @@
 (expect-failure "nested with-capability fails" (bad-with-cap))
 
 (expect-failure "shadowed cap fails" (caps-shadow.bad-shadow-granted "k1"))
-
-(expect-failure "loop in guard detected" (loop 1))
 
 (expect "" "success" (test-module-guard-other))

@@ -1547,8 +1547,8 @@ to store as “keyset” in the table. ``read-balance`` only allows that
 owner’s keyset to read the balance, by first enforcing the keyset using
 `enforce-keyset <pact-functions.html#enforce-keyset>`__.
 
-### Namespaces
---------------
+Namespaces
+----------
 
 Namespaces are `defined <pact-functions.html#define-namespace>`__ by
 specifying a namespace name and
@@ -2232,8 +2232,8 @@ simple majority is found, the code is upgraded.
              { "for": f, "against": (+ 1 a) })))
      )
 
-### Interfaces
---------------
+Interfaces
+----------
 
 An interface, as defined in Pact, is a collection of models used for
 formal verification, constant definitions, and typed function
@@ -2273,7 +2273,7 @@ Example: Declaring and implementing an interface
        (defun hello-number:string (number:integer)
          @doc "Return the string \"Hello, $number!\" when given a string"
            )
-           
+
        (defconst SOME_CONSTANT 3)
    )
 

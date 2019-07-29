@@ -27,6 +27,7 @@ module Pact.Analyze.Check
   , CheckFailureNoLoc(..)
   , CheckSuccess(..)
   , CheckResult
+  , ScopeError(..)
   , ModuleChecks(..)
   , SmtFailure(..)
   , ParseFailure
@@ -37,68 +38,71 @@ module Pact.Analyze.Check
   , verifyFunctionInvariants
   ) where
 
-import           Control.Exception         as E
-import           Control.Lens              (at, each, filtered, ifoldl, ifoldrM,
-                                            ifor, itraversed, ix, toListOf,
-                                            traverseOf, traversed, view, (%~),
-                                            (&), (.~), (<&>), (?~), (^.), (^..),
-                                            (^?), (^?!), (^@..), _2, _Left)
-import           Control.Monad             (void, (<=<))
-import           Control.Monad.Except      (Except, ExceptT (ExceptT),
-                                            MonadError, catchError, runExceptT,
-                                            throwError, withExcept, withExceptT)
-import           Control.Monad.Morph       (generalize, hoist)
-import           Control.Monad.Reader      (runReaderT)
-import           Control.Monad.Trans.Class (MonadTrans (lift))
-import           Data.Either               (partitionEithers)
-import qualified Data.HashMap.Strict       as HM
-import           Data.List                 (isPrefixOf)
-import qualified Data.List                 as List
-import           Data.Map.Strict           (Map)
-import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (mapMaybe)
-import           Data.SBV                  (Symbolic)
-import qualified Data.SBV                  as SBV
-import qualified Data.SBV.Control          as SBV
-import qualified Data.SBV.Internals        as SBVI
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
-import           Data.Text                 (Text)
-import qualified Data.Text                 as T
-import           Data.Traversable          (for)
-import           Prelude                   hiding (exp)
+import           Control.Exception          as E
+import           Control.Lens               (at, each, filtered, ifoldl,
+                                             ifoldrM, ifor, itraversed, ix,
+                                             toListOf, traverseOf, traversed,
+                                             view, (%~), (&), (.~), (<&>), (?~),
+                                             (^.), (^..), (^?), (^?!), (^@..),
+                                             _2, _Left)
+import           Control.Monad              (void, (<=<))
+import           Control.Monad.Except       (Except, ExceptT (ExceptT),
+                                             MonadError, catchError, runExceptT,
+                                             throwError, withExcept,
+                                             withExceptT)
+import           Control.Monad.Morph        (generalize, hoist)
+import           Control.Monad.Reader       (runReaderT)
+import           Control.Monad.State.Strict (evalStateT)
+import           Control.Monad.Trans.Class  (MonadTrans (lift))
+import           Data.Either                (partitionEithers)
+import qualified Data.HashMap.Strict        as HM
+import           Data.List                  (isPrefixOf)
+import qualified Data.List                  as List
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.Maybe                 (mapMaybe)
+import           Data.SBV                   (Symbolic)
+import qualified Data.SBV                   as SBV
+import qualified Data.SBV.Control           as SBV
+import qualified Data.SBV.Internals         as SBVI
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Traversable           (for)
+import           Prelude                    hiding (exp)
 
-import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
-                                            Def (..), DefType (..), Info, dMeta,
-                                            mModel, renderInfo, tDef, tInfo,
-                                            tMeta, _tDef)
-import           Pact.Types.Pretty         (renderCompactText)
-import           Pact.Types.Runtime        (Exp, ModuleData (..), ModuleName,
-                                            Ref, Ref' (Ref),
-                                            Term (TConst, TDef, TSchema, TTable),
-                                            asString, getInfo, mdModule,
-                                            mdRefMap, tShow)
-import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Term           (DefName (..), DefType (Defcap),
-                                            dDefType, moduleDefMeta,
-                                            moduleDefName, _Ref)
-import           Pact.Types.Type           (_ftArgs)
-import           Pact.Types.Typecheck      (AST,
-                                            Fun (FDefun, _fArgs, _fBody, _fInfo),
-                                            Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopConst, TopFun, TopTable),
-                                            UserType (_utFields, _utName),
-                                            runTC, tcFailures, toplevelInfo)
-import qualified Pact.Types.Typecheck      as TC
+import           Pact.Typechecker           (typecheckTopLevel)
+import           Pact.Types.Lang            (pattern ColonExp, pattern CommaExp,
+                                             Def (..), DefType (..), Info,
+                                             dFunType, dMeta, mModel,
+                                             renderInfo, tDef, tInfo, tMeta,
+                                             _aName, _tDef)
+import           Pact.Types.Pretty          (renderCompactText)
+import           Pact.Types.Runtime         (Exp, ModuleData (..), ModuleName,
+                                             Ref, Ref' (Ref),
+                                             Term (TConst, TDef, TSchema, TTable),
+                                             asString, getInfo, mdModule,
+                                             mdRefMap, tShow)
+import qualified Pact.Types.Runtime         as Pact
+import           Pact.Types.Term            (DefName (..), DefType (Defcap),
+                                             dDefType, moduleDefMeta,
+                                             moduleDefName, _Ref, _gGovernance)
+import           Pact.Types.Type            (ftArgs, _ftArgs)
+import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
+                                             Named, Node, TcId (_tiInfo),
+                                             TopLevel (TopConst, TopFun, TopTable),
+                                             UserType (_utFields, _utName),
+                                             runTC, tcFailures, toplevelInfo)
+import qualified Pact.Types.Typecheck       as TC
 
-import           Pact.Analyze.Alloc        (runAlloc)
+import           Pact.Analyze.Alloc         (runAlloc)
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval         hiding (invariants)
-import           Pact.Analyze.Model        (allocArgs, allocModelTags,
-                                            allocStepChoices, saturateModel,
-                                            showModel)
-import           Pact.Analyze.Parse        hiding (tableEnv)
+import           Pact.Analyze.Eval          hiding (invariants)
+import           Pact.Analyze.Model         (allocArgs, allocModelTags,
+                                             allocStepChoices, saturateModel,
+                                             showModel)
+import           Pact.Analyze.Parse         hiding (tableEnv)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -151,6 +155,18 @@ data CheckFailure = CheckFailure
 
 type CheckResult = Either CheckFailure CheckSuccess
 
+data ScopeError
+  = ScopeParseFailure ParseFailure
+  | NotInScope Text
+  | ScopeInvalidRefType
+  deriving (Eq, Show)
+
+describeScopeError :: ScopeError -> Text
+describeScopeError = \case
+  ScopeParseFailure pf -> describeParseFailure pf
+  NotInScope name      -> "Variable not in scope: " <> name
+  ScopeInvalidRefType  -> "Invalid reference type given to scope checker."
+
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
   , stepChecks      :: HM.HashMap (Text, Int) [CheckResult]
@@ -173,6 +189,7 @@ data CheckEnv = CheckEnv
   , _propDefs   :: HM.HashMap Text (DefinedProperty (Exp Info))
   , _moduleData :: ModuleData Ref
   , _caps       :: [Capability]
+  , _moduleGov  :: Governance
   }
 
 -- | Essential data used to check a function (where function could actually be
@@ -199,6 +216,7 @@ data VerificationFailure
   | InvalidRefType -- TODO: make this error more informative
   | FailedConstTranslation String
   | SchemalessTable Info
+  | ScopeErrors [ScopeError]
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -337,15 +355,15 @@ analysisArgs = fmap (view (located._2._2))
 -- | Check that all invariants hold for a function (this is actually used for
 -- defun, defpact, and step)
 verifyFunctionInvariants
-  :: ModuleName
-  -> [Table]
-  -> [Capability]
+  :: CheckEnv
   -> FunData
   -> Text
   -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants modName tables caps (FunData funInfo pactArgs body)
-  funName checkType = runExceptT $ do
+verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov)
+  (FunData funInfo pactArgs body) funName checkType = runExceptT $ do
+    let modName = moduleDefName $ _mdModule moduleData
+
     (args, stepChoices, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation modName funName
         funInfo caps pactArgs body checkType
@@ -369,8 +387,8 @@ verifyFunctionInvariants modName tables caps (FunData funInfo pactArgs body)
           (Located funInfo tm) graph
         let rootPath = _egRootPath graph
         resultsTable <- withExceptT analyzeToCheckFailure $
-          runInvariantAnalysis modName tables caps (analysisArgs modelArgs')
-            stepChoices' tm rootPath tags funInfo
+          runInvariantAnalysis modName gov tables caps
+            (analysisArgs modelArgs') stepChoices' tm rootPath tags funInfo
 
         -- Iterate through each invariant in a single query so we can reuse our
         -- assertion stack.
@@ -421,7 +439,7 @@ verifyFunctionProperty
   -> CheckableType
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps)
+verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
   (FunData funInfo pactArgs body) funName checkType
   (Located propInfo check) = runExceptT $ do
     let modName = moduleDefName (_mdModule moduleData)
@@ -439,7 +457,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps)
           let rootPath = _egRootPath graph
           ar@(AnalysisResult _querySucceeds _prop ksProvs)
             <- withExceptT analyzeToCheckFailure $
-              runPropertyAnalysis modName check tables caps
+              runPropertyAnalysis modName gov check tables caps
                 (analysisArgs modelArgs') stepChoices' tm rootPath tags funInfo
 
           let model = Model modelArgs' tags ksProvs graph
@@ -491,10 +509,12 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps)
 
 -- | Get the set of tables in the specified modules.
 moduleTables
-  :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
-  -> (ModuleData Ref)                       -- ^ the module we're verifying
+  :: HM.HashMap ModuleName (ModuleData Ref)
+  -- ^ all loaded modules
+  -> HM.HashMap Text Ref
+  -- ^ the refs of the module we're verifying
   -> ExceptT VerificationFailure IO [Table]
-moduleTables modules ModuleData{..} = do
+moduleTables modules refMap = do
   -- All tables defined in this module, and imported by it. We're going to look
   -- through these for their schemas, which we'll look through for invariants.
   let tables = flip mapMaybe (modules ^@.. traversed . mdRefMap . itraversed) $
@@ -504,7 +524,7 @@ moduleTables modules ModuleData{..} = do
 
   -- TODO: need mapMaybe for HashMap
   -- Note(emily): i can handle this in the current PR - lets discuss.
-  let schemas = HM.fromList $ flip mapMaybe (HM.toList _mdRefMap) $ \case
+  let schemas = HM.fromList $ flip mapMaybe (HM.toList refMap) $ \case
         (name, Ref (schema@TSchema {})) -> Just (name, schema)
         _                               -> Nothing
 
@@ -586,6 +606,7 @@ data PropertyScope
   -- ^ This property applies to all but the named functions (and pacts)
   | Including (Set Text)
   -- ^ This property applies to only the named functions (and pacts)
+  deriving Show
 
 data ModuleCheck = ModuleCheck
   { _moduleCheckType   :: Prop 'TyBool -> Check
@@ -683,8 +704,8 @@ parseModuleModelDecl exps = traverse parseDecl exps where
 
 -- | Get the set ('HM.HashMap') of refs to functions, pacts, and constants in
 -- this module.
-moduleTypecheckableRefs :: ModuleData Ref -> TypecheckableRefs
-moduleTypecheckableRefs ModuleData{..} = foldl f noRefs (HM.toList _mdRefMap)
+moduleTypecheckableRefs :: HM.HashMap Text Ref -> TypecheckableRefs
+moduleTypecheckableRefs refMap = foldl f noRefs (HM.toList refMap)
   where
     f accum (name, ref) = case ref of
       Ref (TDef (Def{_dDefType, _dDefBody}) _) -> case _dDefType of
@@ -695,7 +716,6 @@ moduleTypecheckableRefs ModuleData{..} = foldl f noRefs (HM.toList _mdRefMap)
       _            -> accum
 
     noRefs = TypecheckableRefs HM.empty HM.empty HM.empty
-
 
 -- | Module-level propery definitions and declarations
 data ModelDecl = ModelDecl
@@ -921,7 +941,7 @@ getStepChecks
   :: CheckEnv
   -> HM.HashMap Text Ref
   -> ExceptT VerificationFailure IO (HM.HashMap (Text, Int) [CheckResult])
-getStepChecks env@(CheckEnv tables consts propDefs _ _) defpactRefs = do
+getStepChecks env@(CheckEnv tables consts propDefs _ _ _) defpactRefs = do
 
   (steps :: HM.HashMap (Text, Int)
     ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
@@ -969,13 +989,7 @@ getFunChecks
     ( HM.HashMap Text [CheckResult]
     , HM.HashMap Text (TableMap [CheckResult])
     )
-getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
-
-  caps <- moduleCapabilities moduleData
-
-  let modName :: ModuleName
-      modName = moduleDefName $ _mdModule moduleData
-
+getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
   ModelDecl _ checkExps <-
     withExceptT ModuleParseFailure $ liftEither $
       moduleModelDecl moduleData
@@ -1020,8 +1034,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
   invariantChecks <- ifor invariantCheckable $ \name (toplevel, checkType) ->
     case toplevel of
       TopFun fun _ -> withExceptT ModuleCheckFailure $ ExceptT $
-        verifyFunctionInvariants modName tables caps (mkFunInfo fun) name
-          checkType
+        verifyFunctionInvariants env (mkFunInfo fun) name checkType
       _ -> error "invariant violation: anything but a TopFun is unexpected in \
         \invariantCheckable"
 
@@ -1034,23 +1047,73 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _caps) refs = do
 
   pure (funChecks'', invariantChecks)
 
+-- | Check that every property variable is in scope.
+scopeCheckInterface
+  :: Set Text
+  -- ^ A set of table, definition and property names in scope
+  -> HM.HashMap Text Ref
+  -- ^ The set of refs to check
+  -> [ScopeError]
+scopeCheckInterface globalNames refs = refs <&&> \case
+  Pact.Direct _ -> [ScopeInvalidRefType]
+  Pact.Ref defn -> case defn ^? tDef . dMeta . mModel of
+    Nothing -> []
+    Just model -> case normalizeListLit model of
+      Nothing ->
+        [ ScopeParseFailure
+          -- reconstruct an `Exp Info` for this list
+          ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
+          , "malformed list (inconsistent use of comma separators?)"
+          )
+        ]
+      Just model' -> case collectProperties model' of
+        Left err   -> [ScopeParseFailure err]
+        Right exps -> exps <&&> \(_propTy, meta) -> do
+          let args     = fmap _aName $ defn ^. tDef . dFunType . ftArgs
+              nameEnv  = Map.fromList $ ("result", 0) : zip args [1..]
+              genStart = fromIntegral $ length nameEnv
+          case evalStateT (runReaderT (expToPreProp meta) nameEnv) genStart of
+            Left err           -> [ScopeParseFailure (meta, err)]
+            Right preTypedBody -> prePropGlobals preTypedBody <&&>
+              \globalName ->
+                if globalName `Set.notMember` globalNames
+                then [NotInScope globalName]
+                else []
+  where
+
+    (<&&>) :: Foldable t => t a -> (a -> [ScopeError]) -> [ScopeError]
+    (<&&>) = flip foldMap
+
+moduleGovernance :: ModuleData Ref -> ExceptT VerificationFailure IO Governance
+moduleGovernance moduleData = case _mdModule moduleData of
+  Pact.MDModule (Pact.Module {_mGovernance}) ->
+    case _gGovernance _mGovernance of
+      Left (Pact.KeySetName rn) ->
+        pure $ KsGovernance $ RegistryName rn
+      Right (Def {_dDefName=Pact.DefName dn}) ->
+        pure $ CapGovernance $ CapName $ T.unpack dn
+  Pact.MDInterface _ ->
+    throwError InvalidRefType
+
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
-verifyModule modules moduleData = runExceptT $ do
-  tables <- moduleTables modules moduleData
+-- verifyModule modules moduleData@(ModuleData Pact.MDInterface{} refs) = runExceptT $ do
+verifyModule modules moduleData@(ModuleData modDef refs) = runExceptT $ do
+  tables <- moduleTables modules refs
 
   let -- HM.unions is biased towards the start of the list. This module should
       -- shadow the others. Note that load / shadow order of imported modules
       -- is undefined and in particular not the same as their import order.
       allModules = moduleData : HM.elems modules
 
-  allModuleModelDecls <-
-    withExceptT ModuleParseFailure $ liftEither $
-      traverse moduleModelDecl allModules
+  allModuleModelDecls <- for allModules $ \modul ->
+    case moduleModelDecl modul of
+      Left err        -> throwError $ ModuleParseFailure err
+      Right modelDecl -> pure modelDecl
 
   let allModulePropDefs = fmap _moduleDefProperties allModuleModelDecls
 
@@ -1062,27 +1125,46 @@ verifyModule modules moduleData = runExceptT $ do
         $ foldl (\acc k -> acc & at k %~ (Just . maybe 0 succ)) HM.empty
         $ concatMap HM.keys allModulePropDefs
 
+      warnings = VerificationWarnings allModulePropNameDuplicates
+
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
 
-      defunRefs, defpactRefs, defconstRefs :: HM.HashMap Text Ref
-      TypecheckableRefs defunRefs defpactRefs defconstRefs
-        = moduleTypecheckableRefs moduleData
+  case modDef of
+    -- If we're passed an interface there is no implementation to check so we
+    -- just check that every property variable referenced is in scope
+    Pact.MDInterface{} ->
+      let success = ModuleChecks HM.empty HM.empty HM.empty warnings
+          globalNames = Set.unions $ fmap Set.fromList
+            [ fmap _tableName tables
+            , HM.keys propDefs
+            , HM.keys refs
+            ]
+          scopeErrors = scopeCheckInterface globalNames refs
 
-  consts <- getConsts defconstRefs
-  caps   <- moduleCapabilities moduleData
+      in if length scopeErrors > 0
+         then throwError $ ScopeErrors scopeErrors
+         else pure success
 
-  let checkEnv = CheckEnv tables consts propDefs moduleData caps
+    -- If we're passed a module we actually check properties
+    Pact.MDModule{} -> do
+      let defunRefs, defpactRefs, defconstRefs :: HM.HashMap Text Ref
+          TypecheckableRefs defunRefs defpactRefs defconstRefs
+            = moduleTypecheckableRefs refs
 
-  -- Note that invariants are only checked at the defpact level, not in
-  -- individual steps.
-  (funChecks, invariantChecks)
-    <- getFunChecks checkEnv $ defunRefs <> defpactRefs
-  stepChecks <- getStepChecks checkEnv defpactRefs
+      consts <- getConsts defconstRefs
+      caps   <- moduleCapabilities moduleData
+      gov    <- moduleGovernance moduleData
 
-  let warnings = VerificationWarnings allModulePropNameDuplicates
+      let checkEnv = CheckEnv tables consts propDefs moduleData caps gov
 
-  pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
+      -- Note that invariants are only checked at the defpact level, not in
+      -- individual steps.
+      (funChecks, invariantChecks)
+        <- getFunChecks checkEnv $ defunRefs <> defpactRefs
+      stepChecks <- getStepChecks checkEnv defpactRefs
+
+      pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
 
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
 renderVerifiedModule = \case
@@ -1100,6 +1182,8 @@ renderVerifiedModule = \case
     [T.pack (renderInfo info) <>
       ":Warning: Verification requires all tables to have schemas"
     ]
+  Left (ScopeErrors errs) ->
+    ":Warning: Scope checking errors" : fmap describeScopeError errs
   Right (ModuleChecks propResults stepResults invariantResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         stepResults'      = toListOf (traverse.each)          stepResults
@@ -1124,9 +1208,10 @@ verifyCheck moduleData funName check checkType = do
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
 
   caps   <- moduleCapabilities moduleData
-  tables <- moduleTables modules moduleData
+  tables <- moduleTables modules $ _mdRefMap moduleData
+  gov    <- moduleGovernance moduleData
 
-  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps
+  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov
 
   case moduleFun moduleData funName of
     Just funRef -> do

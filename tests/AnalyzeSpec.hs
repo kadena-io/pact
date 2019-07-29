@@ -21,7 +21,7 @@ import           Data.Foldable                (asum, find, for_)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Maybe                   (fromJust, isJust)
+import           Data.Maybe                   (fromJust, isJust, isNothing)
 import           Data.SBV                     (isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
@@ -38,7 +38,7 @@ import qualified Test.HUnit                   as HUnit
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
 import           Pact.Repl.Types              (ReplMode (StringEval))
-import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref)
+import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref, ModuleName)
 import           Pact.Types.Pretty            (Pretty, renderCompactString)
 import           Pact.Types.Util              (tShow)
 
@@ -100,6 +100,7 @@ data TestFailure
   | NoTestModule
   | ReplError String
   | VerificationFailure VerificationFailure
+  | ScopeError' ScopeError
   deriving Show
 
 renderTestFailure :: TestFailure -> IO String
@@ -117,19 +118,23 @@ renderTestFailure = \case
   ReplError err -> pure $ "ReplError: " ++ err
   VerificationFailure vf ->
     pure $ T.unpack $ T.unlines $ renderVerifiedModule $ Left vf
+  ScopeError' err -> pure $ "ScopeError: " ++ show err
 
 --
 -- TODO: use ExceptT
 --
 
-compile :: Text -> IO (Either TestFailure (ModuleData Ref))
-compile code = do
+compile' :: ModuleName -> Text -> IO (Either TestFailure (ModuleData Ref))
+compile' modName code = do
   replState0 <- initReplState StringEval Nothing
   (_, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
-  moduleM <- replLookupModule replState "test"
+  moduleM <- replLookupModule replState modName
   pure $ case moduleM of
     Left err -> Left $ ReplError (show err)
     Right m -> Right m
+
+compile :: Text -> IO (Either TestFailure (ModuleData Ref))
+compile = compile' "test"
 
 runVerification :: Text -> IO (Maybe TestFailure)
 runVerification code = do
@@ -165,6 +170,17 @@ runCheck checkType code check = do
         Right (Left cf) -> Just $ TestCheckFailure cf
         Right (Right _) -> Nothing
 
+checkInterface :: Text -> IO (Maybe TestFailure)
+checkInterface code = do
+  eModuleData <- compile' "coin-sig" code
+  case eModuleData of
+    Left tf -> pure $ Just tf
+    Right moduleData -> do
+      result <- verifyModule HM.empty moduleData
+      pure $ case result of
+        Left failure -> Just $ VerificationFailure failure
+        Right _      -> Nothing
+
 -- | 'TestEnv' represents the environment a test runs in. Used with
 -- 'expectTest'.
 data TestEnv = TestEnv
@@ -191,7 +207,7 @@ expectTest (TestEnv code check name p) = do
   it name $ p res
 
 handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> IO ()
-handlePositiveTestResult = withFrozenCallStack $ \case
+handlePositiveTestResult = \case
   Nothing -> pure ()
   Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
     -> pendingWith msg
@@ -215,7 +231,10 @@ expectFalsified' model code = withFrozenCallStack $ do
 
 expectPass :: HasCallStack => Text -> Check -> Spec
 expectPass code check = withFrozenCallStack $ expectTest
-  testEnv { testCode = wrap code "", testCheck = check }
+  testEnv { testCode = wrap code ""
+          , testCheck = check
+          , testPred = handlePositiveTestResult
+          }
 
 expectFail :: HasCallStack => Text -> Check -> Spec
 expectFail code check = withFrozenCallStack $ expectTest
@@ -811,19 +830,39 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable Success'
 
-  describe "create-user-guard" $ do
+  describe "create-user-guard passing" $ do
     let code =
           [text|
-            (defun fail:bool (o:object{account})
+            (defun enforce-range:bool (x:integer)
+              (enforce (> x 1) ""))
+
+            (defun test:bool (x:integer)
+              @model [(property (> x 1))]
+              (enforce-guard (create-user-guard (enforce-range x))))
+          |]
+    expectVerified code
+
+  describe "create-user-guard failing" $ do
+    let code =
+          [text|
+            (defun enforce-impossible:bool ()
               (enforce false ""))
 
             (defun test:bool ()
-              (enforce-guard (create-user-guard {} "fail")))
+              (enforce-guard (create-user-guard (enforce-impossible))))
           |]
-    -- We leave user guards completely free for now, until we inline them into
-    -- a new construct during typechecking:
-    expectPass code $ Satisfiable Abort'
-    expectPass code $ Satisfiable Success'
+    expectPass code $ Valid Abort'
+
+  describe "user guards can't fail unless enforced" $ do
+    let code =
+          [text|
+            (defun enforce-impossible:bool ()
+              (enforce false ""))
+
+            (defun test:guard ()
+              (create-user-guard (enforce-impossible)))
+          |]
+    expectPass code $ Valid Success'
 
   describe "call-by-value semantics for inlining" $ do
     let code =
@@ -858,6 +897,18 @@ spec = describe "analyze" $ do
           [text|
             (defcap CAP (i:integer)
               true)
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                true))
+          |]
+    expectPass code $ Valid Success'
+
+  describe "capability returning false succeeds because it doesn't throw" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              false)
 
             (defun test:bool ()
               (with-capability (CAP 1)
@@ -1027,6 +1078,73 @@ spec = describe "analyze" $ do
           |]
 
     expectPass code $ Valid Abort'
+
+  let expectCapGovPass :: Text -> Check -> Spec
+      expectCapGovPass code check = withFrozenCallStack $ expectTest $ testEnv
+        { testCode =
+            [text|
+              (begin-tx)
+              (module test GOV
+                $code
+                )
+              (commit-tx)
+            |]
+        , testCheck = check
+        , testPred = handlePositiveTestResult
+        , testName = "passed check"
+        }
+
+  describe "capability-based governance is not analyzed and can always pass or fail" $ do
+    let code =
+          [text|
+            (defcap GOV ()
+              true)
+
+            (defun test:bool ()
+              (enforce-guard (create-module-guard "governance")))
+          |]
+
+    expectCapGovPass code $ Satisfiable Success'
+    expectCapGovPass code $ Satisfiable Abort'
+
+  describe "property language can describe whether cap-based governance \
+    \passes" $ do
+      res <- runIO $ runVerification $
+        [text|
+          (begin-tx)
+          (module test GOV
+              (defcap GOV ()
+                true)
+
+              (defun test:bool ()
+                @model [(property governance-passes)]
+                (enforce-guard (create-module-guard "governance")))
+            )
+          (commit-tx)
+        |]
+
+      it "passes in-code checks" $
+        handlePositiveTestResult res
+
+  describe "property language can describe whether ks-based governance passes \
+    \without mentioning the keyset" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                @model [(property governance-passes)]
+                (enforce-guard (create-module-guard "governance")))
+            |]
+      expectVerified code
+
+  describe "keyset-based governance is connected to authorized-by" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              @model [(property (authorized-by 'ks))]
+              (enforce-guard (create-module-guard "governance")))
+          |]
+
+    expectVerified code
 
   describe "enforce-one.1" $ do
     let code =
@@ -3511,3 +3629,26 @@ spec = describe "analyze" $ do
         (fails-when    (<= x 0)   { 'except: [] })
       |]
       "(defun test:bool (x:integer) (enforce (> x 0)))"
+
+  describe "scope-checking interfaces" $ do
+    res <- runIO $ checkInterface [text|
+      (interface coin-sig
+        (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+          @model [ (property (> amount 0.0))
+                   (property (not (= sender reciever)))
+                 ]
+          )
+      )
+      |]
+    it "flags reciever != receiver" $ isJust res
+
+    res' <- runIO $ checkInterface [text|
+      (interface coin-sig
+        (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+          @model [ (property (> amount 0.0))
+                   (property (not (= sender receiver)))
+                 ]
+          )
+      )
+      |]
+    it "checks when spelled correctly" $ isNothing res'

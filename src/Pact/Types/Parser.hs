@@ -37,7 +37,7 @@ instance TokenParsing p => TokenParsing (PactParser p) where
   token p     = p <* whiteSpace
 
 symbols :: CharParsing m => m Char
-symbols = oneOf "%#+-_&$@<>=^?*!|/"
+symbols = oneOf "%#+-_&$@<>=^?*!|/~"
 
 style :: CharParsing m => IdentifierStyle m
 style = IdentifierStyle "atom"

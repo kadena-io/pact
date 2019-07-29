@@ -1,0 +1,32 @@
+(expect
+ "RFC7748 alice keypair validates"
+ true
+ (validate-keypair
+  "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
+  "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"))
+
+(expect
+ "RFC7748 bob keypair validates"
+ true
+ (validate-keypair
+  "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
+  "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"))
+
+(expect-failure
+   "bad keypair fails"
+   (validate-keypair
+    "a236ee764da1bde16f3452df78ed0d46d94c0763042330a8341511cfe537da62"
+    "92702bbc9026d489f0ecefe266d694b9ad321965f3345758d1f937fba8817184"))
+
+(expect
+   "decryption test succeeds with base64url of 'message'"
+   "bWVzc2FnZQ"
+   (let
+       ((nonce "000000000102030405060708")
+        (aad "616164")
+        (mac "1583fa946ef1abb684c6fa1a1c81fc26")
+        (ciphertext "Zi1REj5-iA")
+        (pubkey "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a")
+        (seckey "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
+        )
+     (decrypt-cc20p1305 ciphertext nonce aad mac pubkey seckey)))
