@@ -1,4 +1,4 @@
-3.0.2
+3.1.0
 ---
 * Add SPV endorsement functionality to `defpact`s
 * Bug fix: '=' now compares only like terms
