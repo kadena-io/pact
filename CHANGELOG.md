@@ -11,8 +11,11 @@
 * Added new decryption and keypair validation primitives for CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD)
 * Added bitwise integer native functions `&`, `~`, `shift`, `xor`, and `|`
 * Added analysis for `chain-data` pact native
+* Add user-facing `chain-data` native schema type
 * Scope checking for interfaces
 * Documentation for namespaces and interfaces
+* Add base-64 case to `str-to-int` and improve error messages
+* Add `int-to-str` native
 
 3.0.1
 ---
