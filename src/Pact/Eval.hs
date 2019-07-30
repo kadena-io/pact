@@ -325,11 +325,12 @@ evalUse (Use mn h mis i) = do
               $ "Interfaces should not have associated hashes: "
               <> pretty (_interfaceName i')
 
-      validateImports i mis (_mdRefMap md)
-      installModule False mis md
+      validateImports i (_mdRefMap md) mis
+      installModule False md mis
 
-validateImports :: Info -> Maybe (V.Vector Text) -> HM.HashMap Text Ref -> Eval e ()
-validateImports i mis rs = maybe (return ()) (traverse_ go) mis
+validateImports :: Info -> HM.HashMap Text Ref -> Maybe (V.Vector Text) -> Eval e ()
+validateImports _ _ Nothing = return ()
+validateImports i rs (Just is) = traverse_ go is
   where
     go imp = case HM.lookup imp rs of
       Nothing -> evalError i $ "imported name not found: " <> pretty imp
@@ -374,7 +375,7 @@ loadModule m bod1 mi g0 = do
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
-  installModule True Nothing md
+  installModule True md Nothing
   return (g1,md)
 
 loadInterface
@@ -393,7 +394,7 @@ loadInterface i body info gas0 = do
     _ -> evalError' t "Invalid interface member"
   evaluatedDefs <- evaluateDefs info $ mangleDefs (_interfaceName i) <$> idefs
   let md = ModuleData (MDInterface i) evaluatedDefs
-  installModule True Nothing md
+  installModule True md Nothing
   return (gas1,md)
 
 -- | Retrieve map of definition names to their corresponding terms
@@ -858,8 +859,8 @@ resolveFreeVars i b = traverse r b where
 -- | Install module into local namespace. If supplied a vector of qualified imports,
 -- only load those references. If updated/new, update loaded modules.
 --
-installModule :: Bool -> Maybe (V.Vector Text) -> ModuleData Ref -> Eval e ()
-installModule updated mis md = maybe (go allDefs) (go . filteredDefs) mis
+installModule :: Bool -> ModuleData Ref -> Maybe (V.Vector Text) -> Eval e ()
+installModule updated md = go . maybe allDefs filteredDefs
   where
     go f = do
       evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty $ _mdRefMap md)
