@@ -1015,6 +1015,28 @@ the future – please let us know if you need this functionality.
 
 Supported in properties only.
 
+.. _FGovernancePasses:
+
+governance-passes
+~~~~~~~~~~~~~~~~~
+
+.. code:: lisp
+
+   governance-passes
+
+-  of type ``bool``
+
+Whether the governance predicate passes. For keyset-based governance,
+this is the same as something like
+``(authorized-by 'governance-ks-name)``. Pact’s property checking system
+currently does not analyze the body of a capability when it is used for
+governance due to challenges around capabilities making DB modifications
+– the system currently assumes that a capability-based governance
+predicate is equally capable of succeeding or failing. This feature
+allows describing the scenarios where the predicate passes or fails.
+
+Supported in properties only.
+
 .. _FFunctionResult:
 
 result

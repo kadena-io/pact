@@ -261,6 +261,22 @@ Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE.
    pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
    "Sanity prevails"
 
+int-to-str
+~~~~~~~~~~
+
+*base* ``integer`` *val* ``integer`` *→* ``string``
+
+Represent integer VAL as a string in BASE. BASE can be 2-16, or 64 for
+unpadded base64URL. Only positive values are allowed for base64URL
+conversion.
+
+.. code:: lisp
+
+   pact> (int-to-str 16 65535)
+   "ffff"
+   pact> (int-to-str 64 43981)
+   "q80"
+
 length
 ~~~~~~
 
@@ -471,8 +487,9 @@ str-to-int
 *base* ``integer`` *str-val* ``string`` *→* ``integer``
 
 Compute the integer value of STR-VAL in base 10, or in BASE if
-specified. STR-VAL must be <= 128 chars in length and BASE must be
-between 2 and 16. Each digit must be in the correct range for the base.
+specified. STR-VAL can be up to 512 chars in length. BASE must be
+between 2 and 16, or 64 to perform unpadded base64url conversion. Each
+digit must be in the correct range for the base.
 
 .. code:: lisp
 
@@ -480,6 +497,8 @@ between 2 and 16. Each digit must be in the correct range for the base.
    188900967593046
    pact> (str-to-int "123456")
    123456
+   pact> (str-to-int 64 "q80")
+   43981
 
 take
 ~~~~
@@ -887,6 +906,20 @@ True if X does not equal Y.
    pact> (!= "hello" "goodbye")
    true
 
+& {#&}
+~~~~~~
+
+*x* ``integer`` *y* ``integer`` *→* ``integer``
+
+Compute bitwise X and Y.
+
+.. code:: lisp
+
+   pact> (& 2 3)
+   2
+   pact> (& 5 -7)
+   1
+
 .. _star:
 
 \*
@@ -1286,6 +1319,26 @@ precision as decimal.
    pact> (round 100.15234 2)
    100.15
 
+shift
+~~~~~
+
+*x* ``integer`` *y* ``integer`` *→* ``integer``
+
+Shift X Y bits left if Y is positive, or right by -Y bits otherwise.
+Right shifts perform sign extension on signed number types; i.e. they
+fill the top bits with 1 if the x is negative and with 0 otherwise.
+
+.. code:: lisp
+
+   pact> (shift 255 8)
+   65280
+   pact> (shift 255 -1)
+   127
+   pact> (shift -255 8)
+   -65280
+   pact> (shift -255 -1)
+   -128
+
 sqrt
 ~~~~
 
@@ -1297,6 +1350,50 @@ Square root of X.
 
    pact> (sqrt 25)
    5
+
+xor
+~~~
+
+*x* ``integer`` *y* ``integer`` *→* ``integer``
+
+Compute bitwise X xor Y.
+
+.. code:: lisp
+
+   pact> (xor 127 64)
+   63
+   pact> (xor 5 -7)
+   -4
+
+.. _section-1:
+
+\| {#|}
+~~~~~~~
+
+*x* ``integer`` *y* ``integer`` *→* ``integer``
+
+Compute bitwise X or Y.
+
+.. code:: lisp
+
+   pact> (| 2 3)
+   3
+   pact> (| 5 -7)
+   -3
+
+.. _section-2:
+
+~ {#~}
+~~~~~~
+
+*x* ``integer`` *→* ``integer``
+
+Reverse all bits in X.
+
+.. code:: lisp
+
+   pact> (~ 15)
+   -16
 
 .. _Keysets:
 
@@ -1427,12 +1524,11 @@ the pact id.
 create-user-guard
 ~~~~~~~~~~~~~~~~~
 
-*data* ``<a>`` *predfun* ``string`` *→* ``guard``
+*closure* ``-> bool`` *→* ``guard``
 
-Defines a custom guard predicate, where DATA will be passed to PREDFUN
-at time of enforcement. DATA must be an object. PREDFUN is a valid name
-in the declaring environment. PREDFUN must refer to a pure function or
-enforcement will fail at runtime.
+Defines a custom guard CLOSURE whose arguments are strictly evaluated at
+definition time, to be supplied to indicated function at enforcement
+time.
 
 enforce-guard
 ~~~~~~~~~~~~~
@@ -1511,6 +1607,43 @@ payload types and return values.
 .. code:: lisp
 
    (verify-spv "TXOUT" (read-msg "proof"))
+
+.. _Commitments:
+
+Commitments
+-----------
+
+decrypt-cc20p1305
+~~~~~~~~~~~~~~~~~
+
+*ciphertext* ``string`` *nonce* ``string`` *aad* ``string``
+*mac* ``string`` *public-key* ``string`` *secret-key* ``string``
+*→* ``string``
+
+Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305
+Authenticated Encryption with Associated Data (AEAD) construction
+described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string.
+NONCE is a 12-byte base16 string. AAD is base16 additional
+authentication data of any length. MAC is the “detached” base16 tag
+value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY
+are base-16 Curve25519 values to form the DH symmetric key.Result is
+unpadded base64URL.
+
+.. code:: lisp
+
+   (decrypt-cc20p1305 ciphertext nonce aad mac pubkey privkey)
+
+validate-keypair
+~~~~~~~~~~~~~~~~
+
+*public* ``string`` *secret* ``string`` *→* ``bool``
+
+Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values
+are base-16 strings of length 32.
+
+.. code:: lisp
+
+   (validate-keypair pubkey privkey)
 
 .. _repl-lib:
 
