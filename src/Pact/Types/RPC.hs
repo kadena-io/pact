@@ -72,7 +72,7 @@ instance ToJSON c => ToJSON (ExecMsg c) where
 
 data ContMsg = ContMsg
   { _cmPactId :: !PactId
-  , _cmStep :: !Int
+  , _cmStep :: {-# UNPACK #-} !Int
   , _cmRollback :: !Bool
   , _cmData :: !Value
   , _cmProof :: !(Maybe ContProof)

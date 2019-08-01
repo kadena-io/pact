@@ -45,12 +45,10 @@ import Pact.Types.Orphans ()
 import Pact.Types.Pretty
 import Pact.Types.Util
 
---import Pact.Types.Crypto (Hash(..))
-
 -- | Code location, length from parsing.
 data Parsed = Parsed {
-  _pDelta :: Delta,
-  _pLength :: Int
+  _pDelta :: !Delta,
+  _pLength :: {-# UNPACK #-} !Int
   } deriving (Eq,Show,Ord,Generic)
 
 instance NFData Parsed

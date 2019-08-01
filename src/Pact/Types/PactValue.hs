@@ -40,7 +40,7 @@ import Pact.Types.Type (Type(TyAny))
 
 
 data PactValue
-  = PLiteral Literal
+  = PLiteral !Literal
   | PList (Vector PactValue)
   | PObject (ObjectMap PactValue)
   | PGuard (Guard PactValue)

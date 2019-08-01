@@ -247,8 +247,8 @@ instance Pretty SomeDoc where
 
 -- | Type to allow for special-casing rendering of a type
 data SpecialPretty n
-  = SPSpecial Text
-  | SPNormal n
+  = SPSpecial !Text
+  | SPNormal !n
 
 instance Pretty n => Pretty (SpecialPretty n) where
   pretty (SPSpecial t) = pretty t

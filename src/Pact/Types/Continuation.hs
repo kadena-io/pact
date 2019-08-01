@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData #-}
 
 -- |
 -- Module      :  Pact.Types.Continuation
@@ -49,9 +50,9 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 -- data to 'endorse' a yield object.
 --
 data Provenance = Provenance
-  { _pTargetChainId :: !ChainId
+  { _pTargetChainId :: {-# UNPACK #-} !ChainId
     -- ^ the target chain id for the endorsement
-  , _pModuleHash :: ModuleHash
+  , _pModuleHash :: {-# UNPACK #-} ModuleHash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
 
@@ -78,11 +79,11 @@ instance FromJSON Yield where parseJSON = lensyParseJSON 2
 -- | Environment setup for pact execution, from ContMsg request.
 --
 data PactStep = PactStep
-  { _psStep :: !Int
+  { _psStep :: {-# UNPACK #-} !Int
     -- ^ intended step to execute
   , _psRollback :: !Bool
     -- ^ rollback
-  , _psPactId :: !PactId
+  , _psPactId :: {-# UNPACK #-} !PactId
     -- ^ pact id
   , _psResume :: !(Maybe Yield)
     -- ^ resume value. Note that this is only set in Repl tests and in private use cases;
@@ -106,15 +107,15 @@ instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
 -- | Result of evaluation of a 'defpact'.
 --
 data PactExec = PactExec
-  { _peStepCount :: Int
+  { _peStepCount :: {-# UNPACK #-} !Int
     -- ^ Count of steps in pact (discovered when code is executed)
   , _peYield :: !(Maybe Yield)
     -- ^ Yield value if invoked
   , _peExecuted :: Maybe Bool
     -- ^ Only populated for private pacts, indicates if step was executed or skipped.
-  , _peStep :: Int
+  , _peStep :: {-# UNPACK #-} !Int
     -- ^ Step that was executed or skipped
-  , _pePactId :: PactId
+  , _pePactId :: {-# UNPACK #-} PactId
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _peContinuation :: PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.

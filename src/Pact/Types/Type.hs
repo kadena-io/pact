@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StrictData #-}
 
 -- |
 -- Module      :  Pact.Types.Type
@@ -66,9 +67,9 @@ newtype TypeName = TypeName Text
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
-  _aName :: Text,
-  _aType :: Type o,
-  _aInfo :: Info
+  _aName :: !Text,
+  _aType :: !(Type o),
+  _aInfo :: !Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (Arg o)
@@ -80,7 +81,7 @@ instance FromJSON o => FromJSON (Arg o) where parseJSON = lensyParseJSON 2
 -- | Function type
 data FunType o = FunType {
   _ftArgs :: [Arg o],
-  _ftReturn :: Type o
+  _ftReturn :: !(Type o)
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (FunType o)
@@ -213,8 +214,8 @@ instance Show TypeVarName where show (TypeVarName t) = show t
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
-  TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
-  SchemaVar { _tvName :: TypeVarName }
+  TypeVar { _tvName :: !TypeVarName, _tvConstraint :: [Type v] } |
+  SchemaVar { _tvName :: !TypeVarName }
   deriving (Functor,Foldable,Traversable,Generic,Show)
 
 instance ToJSON v => ToJSON (TypeVar v) where toJSON = lensyToJSON 3
@@ -267,18 +268,19 @@ showPartial (PartialSchema ks)
 showPartial AnySubschema = "~"
 
 -- | Pact types.
-data Type v =
-  TyAny |
-  TyVar { _tyVar :: TypeVar v } |
-  TyPrim PrimType |
-  TyList { _tyListType :: Type v } |
-  TySchema
-  { _tySchema :: SchemaType
-  , _tySchemaType :: Type v
-  , _tySchemaPartial :: SchemaPartial } |
-  TyFun { _tyFunType :: FunType v } |
-  TyUser { _tyUser :: v }
-    deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
+data Type v
+  = TyAny
+  | TyVar { _tyVar :: !(TypeVar v) }
+  | TyPrim !PrimType
+  | TyList { _tyListType :: !(Type v) }
+  | TySchema
+    { _tySchema :: !SchemaType
+    , _tySchemaType :: !(Type v)
+    , _tySchemaPartial :: !SchemaPartial
+    }
+  | TyFun { _tyFunType ::  !(FunType v) }
+  | TyUser { _tyUser :: v }
+  deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)
 

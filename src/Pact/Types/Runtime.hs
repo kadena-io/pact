@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE StrictData #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -95,7 +96,7 @@ permissiveNamespacePolicy = NamespacePolicy $ const True
 data StackFrame = StackFrame {
       _sfName :: !Text
     , _sfLoc :: !Info
-    , _sfApp :: Maybe (FunApp,[Text])
+    , _sfApp :: !(Maybe (FunApp,[Text]))
     } deriving (Eq,Generic)
 instance ToJSON StackFrame where toJSON = toJSON . show
 
@@ -117,8 +118,8 @@ instance ToJSON PactErrorType
 instance FromJSON PactErrorType
 
 data PactError = PactError
-  { peType :: PactErrorType
-  , peInfo :: Info
+  { peType :: !PactErrorType
+  , peInfo :: !Info
   , peCallStack :: [StackFrame]
   , peDoc :: Doc }
   deriving (Eq,Generic)
@@ -221,7 +222,7 @@ data RefState = RefState {
       -- | Modules that were loaded, and flag if updated.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
-    , _rsNamespace :: Maybe Namespace
+    , _rsNamespace :: !(Maybe Namespace)
     } deriving (Eq,Show)
 makeLenses ''RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing
@@ -242,7 +243,7 @@ data EvalState = EvalState {
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
       -- | Gas tally
-    , _evalGas :: Gas
+    , _evalGas :: {-# UNPACK #-} !Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
     } deriving (Show)

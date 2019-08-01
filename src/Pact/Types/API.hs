@@ -89,7 +89,7 @@ instance FromJSON ListenerRequest where
   parseJSON = withObject "ListenerRequest" $ \o -> ListenerRequest <$> o .: "listen"
 
 data ListenResponse
-  = ListenTimeout Int
+  = ListenTimeout {-# UNPACK #-} !Int
   | ListenResponse (CommandResult Hash)
   deriving (Eq,Show,Generic)
 instance ToJSON ListenResponse where

@@ -11,6 +11,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE StrictData #-}
 
 -- |
 -- Module      :  Pact.Types.Exp
@@ -174,7 +175,7 @@ instance Pretty (LiteralExp i) where
 data AtomExp i = AtomExp
   { _atomAtom :: !Text
   , _atomQualifiers :: ![Text]
-  , _atomInfo :: i
+  , _atomInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
@@ -227,11 +228,11 @@ instance Pretty (SeparatorExp i) where
   pretty (SeparatorExp sep' _) = pretty sep'
 
 -- | Pact syntax expressions
-data Exp i =
-  ELiteral (LiteralExp i) |
-  EAtom (AtomExp i) |
-  EList (ListExp i) |
-  ESeparator (SeparatorExp i)
+data Exp i
+  = ELiteral !(LiteralExp i)
+  | EAtom !(AtomExp i)
+  | EList !(ListExp i)
+  | ESeparator !(SeparatorExp i)
   deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 
 instance Pretty (Exp i) where
