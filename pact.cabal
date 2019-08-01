@@ -1,5 +1,5 @@
 name:                pact
-version:             3.0.1
+version:             3.1.0
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -35,6 +35,7 @@ library
                      , Pact.Native.Time
                      , Pact.Native.Ops
                      , Pact.Native.Keysets
+                     , Pact.Native.Decrypt
                      , Pact.Parse
                      , Pact.PersistPactDb
                      , Pact.Persist
@@ -230,7 +231,8 @@ library
 
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options:         -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  if !impl(ghcjs)
+    ghc-options:         -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
 
 executable pact

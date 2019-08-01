@@ -1,8 +1,10 @@
+
 packages:
     pact.cabal
 
 package pact
     tests: True
+    profiling: True
 
 debug-info: True
 

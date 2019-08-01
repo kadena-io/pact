@@ -21,19 +21,20 @@ module Pact.Native.Ops
     , sqrtDef, lnDef, expDef, absDef
     , roundDef, ceilDef, floorDef
     , gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
+    , bitAndDef, bitOrDef, xorDef, complementDef, shiftDef
     ) where
 
 
+import Data.Bits
 import Data.Decimal
 import Data.Default
 import qualified Data.Map.Strict as M
 import Data.Text (Text)
 
-import Pact.Native.Internal
-import Pact.Types.Runtime
-import Pact.Types.Pretty
-
 import Pact.Eval
+import Pact.Native.Internal
+import Pact.Types.Pretty
+import Pact.Types.Runtime
 
 
 modDef :: NativeDef
@@ -197,6 +198,7 @@ opDefs = ("Operators",
     ,gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
     ,addDef, subDef, mulDef, divDef, powDef, logDef
     ,modDef, sqrtDef, lnDef, expDef, absDef, roundDef, ceilDef, floorDef
+    ,bitAndDef, bitOrDef, xorDef, complementDef, shiftDef
     ])
     where r = mkTyVar "r" []
 
@@ -287,8 +289,11 @@ eq f i as = case as of
   _ -> argsError i as
 {-# INLINE eq #-}
 
+-- | Convenience for singleton unary 'FunTys'. Argument is named X.
 unaryTy :: Type n -> Type n -> FunTypes n
 unaryTy rt ta = funType rt [("x",ta)]
+
+-- | Convenience for singleton binary 'FunTys'. Arguments are named X and Y.
 binTy :: Type n -> Type n -> Type n -> FunTypes n
 binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
@@ -361,3 +366,42 @@ unopd :: (Double -> Double) -> RNativeFun e
 unopd op _ [TLitInteger i] = return $ toTerm $ f2Dec $ op $ int2F i
 unopd op _ [TLiteral (LDecimal n) _] = return $ toTerm $ f2Dec $ op $ dec2F n
 unopd _ i as = argsError i as
+
+
+doBits :: NativeDefName -> [Example] -> Text -> (Integer -> Integer -> Integer) -> NativeDef
+doBits n exs verb f = defRNative n go
+  (binTy tTyInteger tTyInteger tTyInteger)
+  exs
+  ("Compute bitwise X " <> verb <> " Y.")
+  where
+    go _i [TLitInteger x,TLitInteger y] = return $ toTerm $ x `f` y
+    go i as = argsError i as
+
+xorDef :: NativeDef
+xorDef = doBits "xor" ["(xor 127 64)","(xor 5 -7)"] "xor" xor
+
+bitAndDef :: NativeDef
+bitAndDef = doBits "&" ["(& 2 3)","(& 5 -7)"] "and" (.&.)
+
+bitOrDef :: NativeDef
+bitOrDef = doBits "|" ["(| 2 3)","(| 5 -7)"] "or" (.|.)
+
+complementDef :: NativeDef
+complementDef = defRNative "~" go
+  (unaryTy tTyInteger tTyInteger)
+  ["(~ 15)"]
+  "Reverse all bits in X."
+  where
+    go _i [TLitInteger x] = return $ toTerm $ complement x
+    go i as = argsError i as
+
+shiftDef :: NativeDef
+shiftDef =  defRNative "shift" go
+  (binTy tTyInteger tTyInteger tTyInteger)
+  ["(shift 255 8)","(shift 255 -1)","(shift -255 8)","(shift -255 -1)"]
+  "Shift X Y bits left if Y is positive, or right by -Y bits otherwise. \
+  \Right shifts perform sign extension on signed number types; \
+  \i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise."
+  where
+    go _ [TLitInteger x,TLitInteger y] = return $ toTerm $ shift x (fromIntegral y)
+    go i as = argsError i as

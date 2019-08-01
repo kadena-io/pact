@@ -10,3 +10,12 @@
 (expect-failure "str-to-int empty string" (str-to-int ""))
 (expect-failure "str-to-int char out of range with base" (str-to-int 8 "8"))
 (expect-failure "str-to-int char out of range without base" (str-to-int "a"))
+
+(expect "str-to-int 64" 43981 (str-to-int 64 "q80"))
+
+(expect "int-to-str 2" "101010111100110111101111000100100011010001010110"
+        (int-to-str 2 188900967593046))
+(expect "int-to-str 10" "12345" (int-to-str 10 12345))
+(expect "int-to-str 16" "12345abcdef" (int-to-str 16 1251004370415))
+(expect "int-to-str 64" "q80" (int-to-str 64 43981))
+(expect-failure "int-to-str 17" (int-to-str 17 3245342))

@@ -234,6 +234,20 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 ```
 
 
+### int-to-str {#int-to-str}
+
+*base*&nbsp;`integer` *val*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Represent integer VAL as a string in BASE. BASE can be 2-16, or 64 for unpadded base64URL. Only positive values are allowed for base64URL conversion.
+```lisp
+pact> (int-to-str 16 65535)
+"ffff"
+pact> (int-to-str 64 43981)
+"q80"
+```
+
+
 ### length {#length}
 
 *x*&nbsp;`<a[[<l>],string,object:<{o}>]>` *&rarr;*&nbsp;`integer`
@@ -436,12 +450,14 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 *base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
-Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for the base.
+Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL can be up to 512 chars in length. BASE must be between 2 and 16, or 64 to perform unpadded base64url conversion. Each digit must be in the correct range for the base.
 ```lisp
 pact> (str-to-int 16 "abcdef123456")
 188900967593046
 pact> (str-to-int "123456")
 123456
+pact> (str-to-int 64 "q80")
+43981
 ```
 
 
@@ -809,6 +825,20 @@ true
 ```
 
 
+### & {#&}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Compute bitwise X and Y.
+```lisp
+pact> (& 2 3)
+2
+pact> (& 5 -7)
+1
+```
+
+
 ### * {#star}
 
 *x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
@@ -1161,6 +1191,24 @@ pact> (round 100.15234 2)
 ```
 
 
+### shift {#shift}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Shift X Y bits left if Y is positive, or right by -Y bits otherwise. Right shifts perform sign extension on signed number types; i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise.
+```lisp
+pact> (shift 255 8)
+65280
+pact> (shift 255 -1)
+127
+pact> (shift -255 8)
+-65280
+pact> (shift -255 -1)
+-128
+```
+
+
 ### sqrt {#sqrt}
 
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
@@ -1170,6 +1218,46 @@ Square root of X.
 ```lisp
 pact> (sqrt 25)
 5
+```
+
+
+### xor {#xor}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Compute bitwise X xor Y.
+```lisp
+pact> (xor 127 64)
+63
+pact> (xor 5 -7)
+-4
+```
+
+
+### | {#|}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Compute bitwise X or Y.
+```lisp
+pact> (| 2 3)
+3
+pact> (| 5 -7)
+-3
+```
+
+
+### ~ {#~}
+
+*x*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Reverse all bits in X.
+```lisp
+pact> (~ 15)
+-16
 ```
 
 ## Keysets {#Keysets}
@@ -1280,10 +1368,10 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 
 ### create-user-guard {#create-user-guard}
 
-*data*&nbsp;`<a>` *predfun*&nbsp;`string` *&rarr;*&nbsp;`guard`
+*closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
 
 
-Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. DATA must be an object. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
+Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
 
 
 ### enforce-guard {#enforce-guard}
@@ -1339,6 +1427,29 @@ Specifies and requests grant of CAPABILITY which is an application of a 'defcap'
 Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of the PAYLOAD object depends on TYPE, as does the format of the return object. Platforms such as Chainweb will document the specific payload types and return values.
 ```lisp
 (verify-spv "TXOUT" (read-msg "proof"))
+```
+
+## Commitments {#Commitments}
+
+### decrypt-cc20p1305 {#decrypt-cc20p1305}
+
+*ciphertext*&nbsp;`string` *nonce*&nbsp;`string` *aad*&nbsp;`string` *mac*&nbsp;`string` *public-key*&nbsp;`string` *secret-key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string. NONCE is a 12-byte base16 string. AAD is base16 additional authentication data of any length. MAC is the "detached" base16 tag value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key.Result is unpadded base64URL.
+```lisp
+(decrypt-cc20p1305 ciphertext nonce aad mac pubkey privkey)
+```
+
+
+### validate-keypair {#validate-keypair}
+
+*public*&nbsp;`string` *secret*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values are base-16 strings of length 32.
+```lisp
+(validate-keypair pubkey privkey)
 ```
 
 ## REPL-only functions {#repl-lib}

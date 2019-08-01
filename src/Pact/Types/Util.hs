@@ -20,7 +20,7 @@ module Pact.Types.Util
     ParseText(..)
   , fromText, fromText'
   -- | JSON helpers
-  , lensyToJSON, lensyParseJSON
+  , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
   -- | Base 16 helpers
@@ -28,7 +28,7 @@ module Pact.Types.Util
   , toB16JSON, toB16Text
   -- | Base64Url helpers
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
-  , parseB64UrlUnpaddedText, toB64UrlUnpaddedText
+  , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText', toB64UrlUnpaddedText
   -- | AsString
   , AsString(..), asString'
   -- | MVar-as-state utils
@@ -109,6 +109,9 @@ parseB64UrlUnpaddedText t = case decodeBase64UrlUnpadded (encodeUtf8 t) of
   Right s -> return s
   Left e -> fail $ "Base64URL decode failed: " ++ e
 {-# INLINE parseB64UrlUnpaddedText #-}
+
+parseB64UrlUnpaddedText' :: Text -> Either String ByteString
+parseB64UrlUnpaddedText' = resultToEither . parse parseB64UrlUnpaddedText
 
 toB64UrlUnpaddedText :: ByteString -> Text
 toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s

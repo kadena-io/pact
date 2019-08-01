@@ -110,7 +110,7 @@ data BoundedType where
   BoundedBool    ::             BoundedType
   BoundedKeySet  ::             BoundedType
 
-  BoundedList :: BoundedType -> BoundedType
+  BoundedList :: Int -> BoundedType -> BoundedType
 
   -- TODO: cover objects
 
@@ -267,7 +267,7 @@ genCore BoundedBool = Gen.recursive Gen.choice [
                  STime    -> BoundedTime
                  _        -> error "impossible"
            Gen.subtermM2
-             (genCore (BoundedList aSize)) (genCore (BoundedList aSize)) $
+             (genCore (BoundedList 10 aSize)) (genCore (BoundedList 10 aSize)) $
                \elst1 elst2 -> case (elst1, elst2) of
                  (Some (SList lty1) l1, Some (SList lty2) l2) ->
                    case singEq lty1 ty of
@@ -290,8 +290,11 @@ genCore BoundedTime = Gen.recursive Gen.choice [
   ]
 genCore BoundedKeySet = Some SGuard . Lit' . Guard
   <$> genInteger (0 ... 2)
-genCore bound@(BoundedList elemBound) = Gen.recursive Gen.choice
-  [ Gen.subtermM2 (genCore (BoundedInt (0 ... 5))) (genCore elemBound) $
+genCore bound@(BoundedList lenBound elemBound) = Gen.recursive Gen.choice
+
+  [ Gen.subtermM2
+    (Some SInteger . Lit' <$> genInteger (0 ... fromIntegral lenBound))
+    (genCore elemBound) $
       \elst1 elst2 -> case (elst1, elst2) of
       (Some SInteger i, Some ty a)
         -> pure $ Some (SList ty) $ Inj $ MakeList ty i a
@@ -304,12 +307,13 @@ genCore bound@(BoundedList elemBound) = Gen.recursive Gen.choice
   , Gen.subtermM (genCore bound) $ \case
       Some lty@(SList ty) lst -> pure $ Some lty $ Inj $ ListSort ty lst
       other -> error (show other)
-  , Gen.subtermM2 (genCore bound) (genCore bound) $ \elst1 elst2 ->
-    case (elst1, elst2) of
-      (Some lty@(SList ty) l1, Some lty2 l2) -> case singEq lty lty2 of
-        Nothing   -> error "impossible"
-        Just Refl -> pure $ Some lty $ Inj $ ListConcat ty l1 l2
-      _ -> listError elst1 elst2
+  , let bound' = BoundedList (lenBound `div` 2) elemBound
+    in Gen.subtermM2 (genCore bound') (genCore bound') $ \elst1 elst2 ->
+         case (elst1, elst2) of
+           (Some lty@(SList ty) l1, Some lty2 l2) -> case singEq lty lty2 of
+             Nothing   -> error "impossible"
+             Just Refl -> pure $ Some lty $ Inj $ ListConcat ty l1 l2
+           _ -> listError elst1 elst2
   , Gen.subtermM2 (genCore bound) (genCore (BoundedInt (0 +/- 10))) $
       \elst1 elst2 -> case (elst1, elst2) of
       (Some lty@(SList ty) l, Some SInteger i)
@@ -360,17 +364,17 @@ genAnyTerm = Gen.choice
   , genTerm BoundedBool
   , genTerm BoundedTime
   -- , genTerm BoundedKeySet
-  , genTerm (BoundedList intSize)
-  , genTerm (BoundedList decSize)
-  , genTerm (BoundedList strSize)
-  , genTerm (BoundedList BoundedBool)
-  , genTerm (BoundedList BoundedTime)
+  , genTerm (BoundedList 10 intSize)
+  , genTerm (BoundedList 10 decSize)
+  , genTerm (BoundedList 10 strSize)
+  , genTerm (BoundedList 10 BoundedBool)
+  , genTerm (BoundedList 10 BoundedTime)
   ]
 
 genTerm
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => BoundedType -> m ETerm
-genTerm size@(BoundedList _) = scale 2 $ genCore size
+genTerm size@(BoundedList _ _) = scale 2 $ genCore size
 genTerm size = scale 2 $ Gen.choice [genCore size, genTermSpecific size]
 
 genTermSpecific
@@ -480,7 +484,7 @@ genTermSpecific BoundedTime = scale 8 $ Gen.choice
        timeStr <- genTimeOfFormat standardTimeFormat
        pure $ Some STime $ ParseTime Nothing $ StrLit timeStr
   ]
-genTermSpecific (BoundedList _)
+genTermSpecific (BoundedList _ _)
   = error "There are no term-specific list constructors"
 
 genBaseChar :: MonadGen m => Int -> m Char

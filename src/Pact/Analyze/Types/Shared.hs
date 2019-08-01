@@ -330,6 +330,7 @@ data Provenance
   | FromRegistry (S RegistryName)
   | FromInput    Unmunged
   | FromMetadata (S Str)
+  | FromGovernanceCap
   --
   -- TODO: in the future, probably have FromYield?
   --
@@ -446,6 +447,9 @@ fromRegistry = FromRegistry
 
 fromMetadata :: S Str -> Provenance
 fromMetadata = FromMetadata
+
+fromGovCap :: Provenance
+fromGovCap = FromGovernanceCap
 
 symRowKey :: S Str -> S RowKey
 symRowKey = coerceS
@@ -732,7 +736,7 @@ instance SMTValue Any
 
 newtype Guard
   = Guard Integer
-  deriving (Eq, Ord, Data, Show, Read, Pretty)
+  deriving (Eq, Ord, Enum, Data, Show, Read, Pretty)
 
 instance SymVal Guard where
   mkSymVal = SBVI.genMkSymVar KUnbounded
@@ -1243,3 +1247,8 @@ type instance Index (TableMap a) = TableName
 type instance IxValue (TableMap a) = a
 instance Ixed (TableMap a) where ix k = tableMap.ix k
 instance At (TableMap a) where at k = tableMap.at k
+
+data Governance
+  = KsGovernance RegistryName
+  | CapGovernance CapName
+  deriving (Eq, Ord, Show)
