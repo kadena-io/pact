@@ -12,11 +12,12 @@
 
 
 module Pact.Native.Decrypt
-  ( decryptDefs
-#if !defined(ghcjs_HOST_OS)
-  , doEncrypt
-#endif
-  ) where
+  -- ( decryptDefs
+-- #if !defined(ghcjs_HOST_OS)
+--   , doEncrypt
+-- #endif
+--   )
+where
 
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -93,9 +94,9 @@ decryptDef =
   ("Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated " <>
    "Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. " <>
     "CIPHERTEXT is an unpadded base64url string. " <>
-    "NONCE is a 12-byte base16 string. " <>
-    "AAD is base16 additional authentication data of any length. " <>
-    "MAC is the \"detached\" base16 tag value for validating POLY1305 authentication. " <>
+    "NONCE is a 12-byte base64 string. " <>
+    "AAD is base64 additional authentication data of any length. " <>
+    "MAC is the \"detached\" base64 tag value for validating POLY1305 authentication. " <>
     "PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key." <>
     "Result is unpadded base64URL.")
   where
@@ -103,9 +104,9 @@ decryptDef =
     decrypt' i [c@(TLitString c'),n@(TLitString n'),a@(TLitString a'),
                 m@(TLitString m'),p@(TLitString p'),s@(TLitString s')] = do
       ciphertext <- doBase64Url c c'
-      aad <- doBase16 a a'
-      nonce <- ofLength n "nonce" 12 =<< doBase16 n n'
-      mac <- doBase16 m m'
+      aad <- doBase64Url a a'
+      nonce <- ofLength n "nonce" 12 =<< doBase64Url n n'
+      mac <- doBase64Url m m'
       public <- doPublic p p'
       secret <- doSecret s s'
       (toTerm . toB64UrlUnpaddedText) <$> doDecrypt i ciphertext nonce aad mac public secret
@@ -210,11 +211,11 @@ _pk = either error id $ parseB16TextOnly "a236ee764da1bde16f3452df78ed0d46d94c07
 _sk :: ByteString
 _sk = either error id $ parseB16TextOnly "92702bbc9026d489f0ecefe266d694b9ad321965f3345758d1f937fba8817184"
 _nonce :: ByteString
-_nonce = either error id $ parseB16TextOnly "000000000102030405060708"
+_nonce = either error id $ decodeBase64UrlUnpadded "AAAAAAECAwQFBgcI"
 _plaintext :: ByteString
 _plaintext = either error id $ decodeBase64UrlUnpadded "bWVzc2FnZQ" -- base64url of "message"
 _aad :: ByteString
-_aad = either error id $ parseB16TextOnly "616164" -- "aad"
+_aad = either error id $ decodeBase64UrlUnpadded "YWFk" -- "aad"
 
 _i :: Info
 _i = def
@@ -285,7 +286,7 @@ _decrypt p s (ct,tag) = do
   toB64UrlUnpaddedText <$> _jankyRunEval (doDecrypt _i ct _nonce _aad tag (fst p') (fst s'))
 
 -- _roundtrip _alicePK _bobSK --> ("message","message")
--- _roundtrip _bobPK aliceSK --> ("message","message")
+-- _roundtrip _bobPK _aliceSK --> ("message","message")
 _roundtrip
   :: IO (ByteString, PublicKey)
      -> IO (ByteString, SecretKey) -> IO (ByteString, ByteString)
