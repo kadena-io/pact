@@ -12,12 +12,11 @@
 
 
 module Pact.Native.Decrypt
-  -- ( decryptDefs
--- #if !defined(ghcjs_HOST_OS)
---   , doEncrypt
--- #endif
---   )
-where
+  ( decryptDefs
+#if !defined(ghcjs_HOST_OS)
+  , doEncrypt
+#endif
+  ) where
 
 import Control.Monad
 import Data.ByteString (ByteString)
