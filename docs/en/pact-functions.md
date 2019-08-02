@@ -339,7 +339,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.0.1"
+"3.2.0"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1436,7 +1436,7 @@ Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of th
 *ciphertext*&nbsp;`string` *nonce*&nbsp;`string` *aad*&nbsp;`string` *mac*&nbsp;`string` *public-key*&nbsp;`string` *secret-key*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string. NONCE is a 12-byte base16 string. AAD is base16 additional authentication data of any length. MAC is the "detached" base16 tag value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key.Result is unpadded base64URL.
+Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string. NONCE is a 12-byte base64 string. AAD is base64 additional authentication data of any length. MAC is the "detached" base64 tag value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key.Result is unpadded base64URL.
 ```lisp
 (decrypt-cc20p1305 ciphertext nonce aad mac pubkey privkey)
 ```
