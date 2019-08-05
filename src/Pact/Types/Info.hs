@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
+{-# LANGUAGE StrictData #-}
 -- |
 -- Module      :  Pact.Types.Info
 -- Copyright   :  (C) 2016 Stuart Popejoy

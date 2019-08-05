@@ -85,7 +85,7 @@ import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
 -- is the fully executable specialization.
 data Command a = Command
   { _cmdPayload :: !a
-  , _cmdSigs :: [UserSig]
+  , _cmdSigs :: ![UserSig]
   , _cmdHash :: !PactHash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
@@ -108,7 +108,7 @@ instance NFData a => NFData (Command a)
 -- | Strict Either thing for attempting to deserialize a Command.
 data ProcessedCommand m a =
   ProcSucc !(Command (Payload m a)) |
-  ProcFail String
+  ProcFail !String
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
@@ -200,7 +200,7 @@ verifyUserSig msg UserSig{..} Signer{..} =
 -- | Pair parsed Pact expressions with the original text.
 data ParsedCode = ParsedCode
   { _pcCode :: !Text
-  , _pcExps :: [Exp Parsed]
+  , _pcExps :: ![Exp Parsed]
   } deriving (Eq,Show,Generic)
 instance NFData ParsedCode
 
@@ -239,7 +239,7 @@ data Payload m c = Payload
   { _pPayload :: !(PactRPC c)
   , _pNonce :: !Text
   , _pMeta :: !m
-  , _pSigners :: [Signer]
+  , _pSigners :: ![Signer]
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
 instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where toJSON = lensyToJSON 2

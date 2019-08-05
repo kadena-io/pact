@@ -50,9 +50,9 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 -- data to 'endorse' a yield object.
 --
 data Provenance = Provenance
-  { _pTargetChainId :: {-# UNPACK #-} !ChainId
+  { _pTargetChainId :: !ChainId
     -- ^ the target chain id for the endorsement
-  , _pModuleHash :: {-# UNPACK #-} ModuleHash
+  , _pModuleHash :: !ModuleHash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
 
@@ -83,7 +83,7 @@ data PactStep = PactStep
     -- ^ intended step to execute
   , _psRollback :: !Bool
     -- ^ rollback
-  , _psPactId :: {-# UNPACK #-} !PactId
+  , _psPactId :: !PactId
     -- ^ pact id
   , _psResume :: !(Maybe Yield)
     -- ^ resume value. Note that this is only set in Repl tests and in private use cases;
@@ -111,11 +111,11 @@ data PactExec = PactExec
     -- ^ Count of steps in pact (discovered when code is executed)
   , _peYield :: !(Maybe Yield)
     -- ^ Yield value if invoked
-  , _peExecuted :: Maybe Bool
+  , _peExecuted :: !(Maybe Bool)
     -- ^ Only populated for private pacts, indicates if step was executed or skipped.
   , _peStep :: {-# UNPACK #-} !Int
     -- ^ Step that was executed or skipped
-  , _pePactId :: {-# UNPACK #-} PactId
+  , _pePactId :: !PactId
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _peContinuation :: PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.
