@@ -5,7 +5,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StrictData #-}
 
 -- |
 -- Module      :  Pact.Types.Type
