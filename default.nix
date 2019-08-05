@@ -106,8 +106,8 @@ in
 
             sbv = dontCheck (callHackageDirect {
               pkg = "sbv";
-              ver = "8.1";
-              sha256 = "07kwnkgc65mjqikfiw29gd0lzb5ddcw15zhq43vr3saq85lb6d69";
+              ver = "8.2";
+              sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
             });
 
             # need crackNum 2.3
