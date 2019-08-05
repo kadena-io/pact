@@ -72,7 +72,7 @@ initModuleState :: ModuleName -> ModuleHash -> ModuleState
 initModuleState n h = ModuleState n h def def def
 
 data CompileState = CompileState
-  { _csFresh :: Int
+  { _csFresh :: {-# UNPACK #-} !Int
   , _csModule :: Maybe ModuleState
   }
 makeLenses ''CompileState

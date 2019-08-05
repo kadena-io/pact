@@ -110,8 +110,8 @@ instance HasPlafMeta () where
 
 data PublicData = PublicData
   { _pdPublicMeta :: PublicMeta
-  , _pdBlockHeight :: Word64
-  , _pdBlockTime :: Int64
+  , _pdBlockHeight :: {-# UNPACK #-} !Word64
+  , _pdBlockTime :: {-# UNPACK #-} !Int64
   }
   deriving (Show, Eq, Generic)
 makeLenses ''PublicData

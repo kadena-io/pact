@@ -94,7 +94,7 @@ permissiveNamespacePolicy :: NamespacePolicy
 permissiveNamespacePolicy = NamespacePolicy $ const True
 
 data StackFrame = StackFrame {
-      _sfName :: !Text
+      _sfName :: Text
     , _sfLoc :: !Info
     , _sfApp :: !(Maybe (FunApp,[Text]))
     } deriving (Eq,Generic)
@@ -187,7 +187,7 @@ data EvalEnv e = EvalEnv {
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode
-    , _eeMode :: ExecutionMode
+    , _eeMode :: !ExecutionMode
       -- | Entity governing private/encrypted 'pact' executions.
     , _eeEntity :: !(Maybe EntityName)
       -- | Step value for 'pact' executions.
@@ -197,15 +197,15 @@ data EvalEnv e = EvalEnv {
       -- | Back-end function record.
     , _eePactDb :: PactDb e
       -- | Pure indicator
-    , _eePurity :: Purity
+    , _eePurity :: !Purity
       -- | Transaction hash
-    , _eeHash :: Hash
+    , _eeHash :: !Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
       -- | Namespace Policy
-    , _eeNamespacePolicy :: NamespacePolicy
+    , _eeNamespacePolicy :: !NamespacePolicy
       -- | SPV backend
-    , _eeSPVSupport :: SPVSupport
+    , _eeSPVSupport :: !SPVSupport
       -- | Env public data
     , _eePublicData :: PublicData
     }

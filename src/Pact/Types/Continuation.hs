@@ -49,9 +49,9 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 -- data to 'endorse' a yield object.
 --
 data Provenance = Provenance
-  { _pTargetChainId :: !ChainId
+  { _pTargetChainId :: ChainId
     -- ^ the target chain id for the endorsement
-  , _pModuleHash :: !ModuleHash
+  , _pModuleHash :: ModuleHash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
 
@@ -114,7 +114,7 @@ data PactExec = PactExec
     -- ^ Only populated for private pacts, indicates if step was executed or skipped.
   , _peStep :: {-# UNPACK #-} !Int
     -- ^ Step that was executed or skipped
-  , _pePactId :: !PactId
+  , _pePactId :: PactId
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _peContinuation :: PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.
