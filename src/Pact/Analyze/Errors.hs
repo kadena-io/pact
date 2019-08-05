@@ -20,6 +20,7 @@ data AnalyzeFailureNoLoc
   | AValUnexpectedlySVal SBVI.SVal
   | KeyNotPresent Text EType
   | MalformedLogicalOpExec LogicalOp Int
+  | MalformedBitwiseOp BitwiseOp Int
   | ObjFieldOfWrongType Text EType
   | PossibleRoundoff Text
   | UnsupportedDecArithOp ArithOp
@@ -43,6 +44,7 @@ describeAnalyzeFailureNoLoc = \case
     AValUnexpectedlySVal sval -> "in evalProp, unexpectedly found AVal: " <> tShow sval
     KeyNotPresent key obj -> "key " <> key <> " unexpectedly not found in object " <> tShow obj
     MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
+    MalformedBitwiseOp op count -> "malformed bitwise op " <> tShow op <> " with " <> tShow count <> " args"
     ObjFieldOfWrongType fName fType -> "object field " <> fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
     PossibleRoundoff msg -> msg
     UnsupportedDecArithOp op -> "unsupported decimal arithmetic op: " <> tShow op

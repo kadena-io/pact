@@ -75,6 +75,9 @@ toPactTm = \case
       ModOp x y ->
         mkApp modDef [Some SInteger x, Some SInteger y]
 
+      BitwiseOp op args ->
+        mkApp (bitwiseOpToDef op) (Some SInteger <$> args)
+
     StrLength x ->
       mkApp lengthDef [Some SStr x]
 
@@ -214,6 +217,14 @@ toPactTm = \case
       Div -> divDef
       Pow -> powDef
       Log -> logDef
+
+    bitwiseOpToDef :: BitwiseOp -> NativeDef
+    bitwiseOpToDef = \case
+      BitwiseAnd -> bitAndDef
+      BitwiseOr  -> bitOrDef
+      Xor        -> xorDef
+      Shift      -> shiftDef
+      Complement -> complementDef
 
     unaryArithOpToDef :: UnaryArithOp -> NativeDef
     unaryArithOpToDef = \case

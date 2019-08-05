@@ -264,6 +264,26 @@ unaryArithOpP = mkOpNamePrism
 instance Pretty UnaryArithOp where
   pretty = toDoc unaryArithOpP
 
+data BitwiseOp
+  = BitwiseAnd
+  | BitwiseOr
+  | Xor
+  | Shift
+  | Complement
+  deriving (Show, Eq, Ord)
+
+bitwiseOpP :: Prism' Text BitwiseOp
+bitwiseOpP = mkOpNamePrism
+  [ (SBitwiseAnd, BitwiseAnd)
+  , (SBitwiseOr,  BitwiseOr)
+  , (SXor,        Xor)
+  , (SShift,      Shift)
+  , (SComplement, Complement)
+  ]
+
+instance Pretty BitwiseOp where
+  pretty = toDoc bitwiseOpP
+
 -- decimal -> integer -> decimal
 -- decimal -> decimal
 data RoundingLikeOp
@@ -316,6 +336,7 @@ data Numerical t (a :: Ty) where
   ModOp           :: t 'TyInteger    -> t 'TyInteger ->                 Numerical t 'TyInteger
   RoundingLikeOp1 :: RoundingLikeOp  -> t 'TyDecimal ->                 Numerical t 'TyInteger
   RoundingLikeOp2 :: RoundingLikeOp  -> t 'TyDecimal -> t 'TyInteger -> Numerical t 'TyDecimal
+  BitwiseOp       :: BitwiseOp       -> [t 'TyInteger]               -> Numerical t 'TyInteger
 
 instance (Pretty (t 'TyInteger), Pretty (t 'TyDecimal))
   => Pretty (Numerical t a) where
@@ -329,6 +350,7 @@ instance (Pretty (t 'TyInteger), Pretty (t 'TyDecimal))
     ModOp a b              -> [pretty SModulus, pretty a, pretty b]
     RoundingLikeOp1 op a   -> [pretty op, pretty a]
     RoundingLikeOp2 op a b -> [pretty op, pretty a, pretty b]
+    BitwiseOp op args      -> pretty op : fmap pretty args
 
 deriving instance (Eq   (t 'TyDecimal), Eq   (t 'TyInteger)) => Eq   (Numerical t a)
 deriving instance (Show (t 'TyDecimal), Show (t 'TyInteger)) => Show (Numerical t a)
