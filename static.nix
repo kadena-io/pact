@@ -12,6 +12,12 @@ let
 in (rp.ghcMusl64.override {
   overrides = self: super:
     let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
+        callHackageDirect = {pkg, ver, sha256}@args:
+          let pkgver = "${pkg}-${ver}";
+          in self.callCabal2nix pkg (rp.nixpkgs.fetchzip {
+               url = "http://hackage.haskell.org/package/${pkgver}/${pkgver}.tar.gz";
+               inherit sha256;
+             }) {};
       in with rp.nixpkgs.haskell.lib; {
         clock = overrideCabal super.clock (drv: {
           postPatch = ''
@@ -58,13 +64,11 @@ in (rp.ghcMusl64.override {
           hlint = self.callHackage "hlint" "2.0.14" {};
           # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-          # sbv 8.1
-          sbv = dontHaddock (dontCheck (self.callCabal2nix "sbv" (rp.nixpkgs.fetchFromGitHub {
-            owner = "LeventErkok";
-            repo = "sbv";
-            rev = "365b1a369a2550d6284608df3fbc17e2663c4d3c";
-            sha256 = "134f148g28dg7b3c1rvkh85pfl9pdlvrvl6al4vlz72f3y5mb2xg";
-          }) {}));
+          sbv = dontCheck (callHackageDirect {
+            pkg = "sbv";
+            ver = "8.2";
+            sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
+          });
 
           # Our own custom fork
           thyme = dontHaddock (dontCheck (self.callCabal2nix "thyme" (rp.nixpkgs.fetchFromGitHub {

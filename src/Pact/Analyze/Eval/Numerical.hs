@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
@@ -14,7 +15,9 @@
 module Pact.Analyze.Eval.Numerical where
 
 import           Data.Coerce             (Coercible)
-import           Data.SBV                (EqSymbolic ((.==)), sDiv, sMod, (.<))
+import           Data.SBV                (EqSymbolic ((.==)), complement, sDiv,
+                                          sMod, shift, unliteral, xor, (.&.),
+                                          (.<), (.|.))
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Types
@@ -65,6 +68,7 @@ evalNumerical (DecUnaryArithOp op x)   = evalUnaryArithOp op x
 evalNumerical (ModOp x y)              = evalModOp x y
 evalNumerical (RoundingLikeOp1 op x)   = evalRoundingLikeOp1 op x
 evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
+evalNumerical (BitwiseOp op args)      = evalBitwiseOp op args
 
 -- In principle this could share an implementation with evalDecArithOp. In
 -- practice, evaluation can be slower because you're multiplying both inputs by
@@ -187,3 +191,33 @@ evalRoundingLikeOp2 op xT precisionT = do
 -- Round a real exactly between two integers (_.5) to the nearest even
 banker'sMethodS :: S Decimal -> S Integer
 banker'sMethodS (S prov x) = S prov $ banker'sMethod x
+
+evalBitwiseOp
+  :: Analyzer m
+  => BitwiseOp
+  -> [TermOf m 'TyInteger]
+  -> m (S Integer)
+evalBitwiseOp BitwiseAnd [xT, yT] = do
+  S _ x <- eval xT
+  S _ y <- eval yT
+  pure $ sansProv $ x .&. y
+evalBitwiseOp BitwiseOr [xT, yT] = do
+  S _ x <- eval xT
+  S _ y <- eval yT
+  pure $ sansProv $ x .|. y
+evalBitwiseOp Xor [xT, yT] = do
+  S _ x <- eval xT
+  S _ y <- eval yT
+  pure $ sansProv $ x `xor` y
+evalBitwiseOp Complement [xT] = do
+  S _ x <- eval xT
+  pure $ sansProv $ complement x
+evalBitwiseOp Shift [xT, yT] = do
+  S _ x <- eval xT
+  S _ y <- eval yT
+  case unliteral y of
+    Just y'  -> pure $ sansProv $ shift x $ fromIntegral y'
+    Nothing  -> throwErrorNoLoc $ UnhandledTerm
+      "shift currently requires a statically determined shift size"
+evalBitwiseOp op terms
+  = throwErrorNoLoc $ MalformedBitwiseOp op $ length terms

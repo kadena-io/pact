@@ -174,7 +174,7 @@ nix-shell --run 'hoogle server --local'
 ```
 
 This runs hoogle locally on port 8080.  Running it this way, however, does not
-include haddocks for the pact (or whatever tho local project is).  It only
+include haddocks for the pact (or whatever the local project is).  It only
 includes docs for the dependencies.  To fix this, use the following command
 instead:
 

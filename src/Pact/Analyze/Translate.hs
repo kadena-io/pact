@@ -1509,6 +1509,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 
+  AST_NFun _node (toOp bitwiseOpP -> Just op) args -> do
+    args' <- for args $ \arg -> do
+      Some SInteger arg' <- translateNode arg
+      pure arg'
+    pure $ Some SInteger $ inject @(Numerical Term) $
+      BitwiseOp op args'
+
   _ -> throwError' $ UnexpectedNode astNode
 
 captureOneFreeVar :: TranslateM (VarId, Text, EType)

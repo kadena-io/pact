@@ -22,9 +22,9 @@
    "decryption test succeeds with base64url of 'message'"
    "bWVzc2FnZQ"
    (let
-       ((nonce "000000000102030405060708")
-        (aad "616164")
-        (mac "1583fa946ef1abb684c6fa1a1c81fc26")
+       ((nonce "AAAAAAECAwQFBgcI")
+        (aad "YWFk")
+        (mac "FYP6lG7xq7aExvoaHIH8Jg")
         (ciphertext "Zi1REj5-iA")
         (pubkey "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a")
         (seckey "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
