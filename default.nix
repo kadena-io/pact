@@ -104,13 +104,11 @@ in
             hlint = self.callHackage "hlint" "2.0.14" {};
             # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-            # sbv 8.1
-            sbv = dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
-              owner = "LeventErkok";
-              repo = "sbv";
-              rev = "365b1a369a2550d6284608df3fbc17e2663c4d3c";
-              sha256 = "134f148g28dg7b3c1rvkh85pfl9pdlvrvl6al4vlz72f3y5mb2xg";
-            }) {});
+            sbv = dontCheck (callHackageDirect {
+              pkg = "sbv";
+              ver = "8.1";
+              sha256 = "07kwnkgc65mjqikfiw29gd0lzb5ddcw15zhq43vr3saq85lb6d69";
+            });
 
             # need crackNum 2.3
             crackNum = pkgs.haskell.lib.dontCheck (self.callCabal2nix "crackNum" (pkgs.fetchFromGitHub {
