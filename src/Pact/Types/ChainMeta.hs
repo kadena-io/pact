@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StrictData #-}
+
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2019 Stuart Popejoy

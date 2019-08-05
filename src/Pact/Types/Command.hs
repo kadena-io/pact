@@ -13,7 +13,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE StrictData #-}
 
 -- |
 -- Module      :  Pact.Types.Command

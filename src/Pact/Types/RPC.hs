@@ -56,7 +56,7 @@ instance ToJSON c => ToJSON (PactRPC c) where
 
 
 data ExecMsg c = ExecMsg
-  { _pmCode :: !c
+  { _pmCode :: c
   , _pmData :: !Value
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
