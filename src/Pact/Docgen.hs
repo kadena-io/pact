@@ -19,7 +19,7 @@
 
 module Pact.Docgen where
 
-import           Control.Lens                 (ifor_)
+import           Control.Lens                 (ifor_, view, _2, _1)
 import           Control.Monad
 import           Control.Monad.Catch
 import           Data.Foldable                (for_)
@@ -30,6 +30,7 @@ import qualified Data.Text                    as T
 import           System.IO
 
 import qualified Pact.Analyze.Feature as Analyze
+import           Pact.Native.Internal         (NativeFunType)
 import           Pact.Native
 import           Pact.Repl
 import           Pact.Repl.Lib
@@ -46,7 +47,9 @@ renderFunctions :: Handle -> IO ()
 renderFunctions h = do
   hPutStrLn h "# Built-in Functions {#builtins}"
 
-  let renderSection ns = forM_ (map snd $ sortBy (compare `on` fst) ns) $ \t -> renderTerm h t
+  let
+    renderSection :: [(NativeDefName, Term Name, NativeFunType)] -> IO ()
+    renderSection ns = forM_ (map (view _2) $ sortBy (compare `on` (view _1)) ns) $ \t -> renderTerm h t
   forM_ natives $ \(sect,ns) -> do
     hPutStrLn h $ "## " ++ unpack (asString sect) ++ " {#" ++ unpack (asString sect) ++ "}"
     renderSection ns

@@ -107,25 +107,30 @@ setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
 -- | Specify a 'NativeFun'
 defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defNative n fun ftype examples docs =
-  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def)
+  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def, NativeFunType)
 
 -- | Specify a 'GasRNativeFun'
 defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
-defGasRNative name fun = defNative name (reduced fun)
-    where reduced f fi as = preGas fi as >>= \(g,as') -> f g fi as'
+defGasRNative name fun ftype examples docs = set _3 GasRNativeFunType reducedDef
+    where
+      reducedDef = defNative name (reduced fun) ftype examples docs
+      reduced f fi as = preGas fi as >>= \(g,as') -> f g fi as'
 
 -- | Specify a 'RNativeFun'
 defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
-defRNative name fun = defNative name (reduced fun)
-    where reduced f fi as = preGas fi as >>= \(g,as') -> (g,) <$> f fi as'
+defRNative name fun ftype examples docs = set _3 RNativeFunType reducedDef
+    where
+      reducedDef = defNative name (reduced fun) ftype examples docs
+      reduced f fi as = preGas fi as >>= \(g,as') -> (g,) <$> f fi as'
 
 
-defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
-defSchema n doc fields =
+defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeFunType -> NativeDef
+defSchema n doc fields nativeFunType =
   (n,
    TSchema (TypeName $ asString n) (ModuleName "" Nothing) (Meta (Just doc) [])
    (map (\(fr,ty) -> Arg (asString fr) ty def) fields)
-   def)
+   def,
+   nativeFunType)
 
 
 foldDefs :: Monad m => [m a] -> m [a]

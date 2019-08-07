@@ -559,7 +559,7 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
   where
     objectType = TySchema
       TyObject
-      (TyUser $ snd chainDataSchema)
+      (TyUser $ view _2 chainDataSchema)
       AnySubschema
 
     envChainData :: RNativeFun LibState

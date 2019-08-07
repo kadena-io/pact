@@ -41,14 +41,21 @@ isSpecialForm :: NativeDefName -> Maybe SpecialForm
 isSpecialForm = (`M.lookup` sfLookup)
 
 
+data NativeFunType = NativeFunType | GasRNativeFunType | RNativeFunType
+
+
 -- | Native function with un-reduced arguments that computes gas.
+--   Opertations with cost dependent on amount of computation performed.
 type NativeFun e = FunApp -> [Term Ref] -> Eval e (Gas,Term Name)
 
 -- | Native function with reduced arguments, initial gas pre-compute that computes final gas.
+--   Gas = Cost of Opertation * How Many Times Operation Occurs
+--   Database functions (i.e. read) are examples of this.
 type GasRNativeFun e = Gas -> FunApp -> [Term Name] -> Eval e (Gas,Term Name)
 
--- | Native function with reduced arguments, final gas pre-compute.
+-- | Native function with reduced arguments, final gas pre-computed.
+--   Operations with fixed cost.
 type RNativeFun e = FunApp -> [Term Name] -> Eval e (Term Name)
 
-type NativeDef = (NativeDefName,Term Name)
+type NativeDef = (NativeDefName,Term Name,NativeFunType)
 type NativeModule = (ModuleName,[NativeDef])
