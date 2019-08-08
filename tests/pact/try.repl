@@ -1,0 +1,51 @@
+(begin-tx)
+
+(module try-module GOVERNANCE
+
+  "Test the try/handle-based control flow primitives"
+
+  (defcap GOVERNANCE ()
+    (enforce false "non-upgradeable test"))
+
+  (defun t:string ()
+    (try false (enforce (= "emily" "emily") "failure")))
+
+  (defun u:string ()
+    (try false (enforce (= "will" "stuart"))))
+
+  (defun v:string ()
+    (try "jklol"
+      (decrypt-cc20p1305  "the" "end" "is" "nigh" "chaos" "reigns")
+      ))
+
+  (defun w:string ()
+    (try "not cool"
+      (let
+       ((nonce "AAAAAAECAwQFBgcI")
+        (aad "YWFk")
+        (mac "FYP6lG7xq7aExvoaHIH8Jg")
+        (ciphertext "Zi1REj5-iA")
+        (pubkey "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a")
+        (seckey "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
+        )
+       (decrypt-cc20p1305 ciphertext nonce aad mac pubkey seckey)
+       )))
+)
+
+(commit-tx)
+
+(begin-tx)
+
+(use try-module)
+
+;; success case with enforce
+(expect "trying 't' should return 'true' on successful enforce" true (t))
+
+;; failure case with enforce
+(expect "trying 'u' should return 'false' on failed enforce" false (u))
+
+;; failure case with decrypt
+(expect "trying 'v' should return 'jklol' on failed decrypt" "jklol" (v))
+
+;; success case with decrypt
+(expect "trying 'w' should return 'bWVzc2FnZQ' on successful decrypt" "bWVzc2FnZQ" (w))
