@@ -140,7 +140,7 @@ enforceOneDef =
   where
 
     enforceOne :: NativeFun e
-    enforceOne i as@[msg,TList conds _ _] = runReadOnly (_faInfo i) $
+    enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do
         msg' <- reduce msg >>= \m -> case m of
           TLitString s -> return s
@@ -154,6 +154,19 @@ enforceOneDef =
           Nothing -> failTx (_faInfo i) $ pretty msg'
           Just b' -> return b'
     enforceOne i as = argsError' i as
+
+tryDef :: NativeDef
+tryDef =
+  defNative "try" try' (funType a [("default", a), ("action", a)])
+  ["(try 3 (enforce (= 1 2)))"]
+  "Attempt ACTION, returning DEFAULT in the case of failure"
+  where
+    try' :: NativeFun e
+    try' i as@[da, action] = runReadOnly i $ gasUnreduced i as $ do
+      ra <- reduce da
+      catch (reduce action) $ \(_ :: SomeException) ->
+        return ra
+    try' i as = argsError' i as
 
 pactVersionDef :: NativeDef
 pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
@@ -460,6 +473,7 @@ langDefs =
     ,atDef
     ,enforceDef
     ,enforceOneDef
+    ,tryDef
     ,formatDef
     ,defRNative "pact-id" pactId (funType tTyString []) []
      "Return ID if called during current pact execution, failing if not."
