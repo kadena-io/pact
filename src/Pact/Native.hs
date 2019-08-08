@@ -159,7 +159,7 @@ tryDef :: NativeDef
 tryDef =
   defNative "try" try' (funType a [("default", a), ("action", a)])
   ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"]
-  "Attempt ACTION, returning DEFAULT in the case of failure"
+  "Attempt a pure ACTION, returning DEFAULT in the case of failure"
   where
     try' :: NativeFun e
     try' i as@[da, action] = runReadOnly i $ gasUnreduced i as $ do

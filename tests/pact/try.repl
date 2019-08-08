@@ -7,11 +7,11 @@
   (defcap GOVERNANCE ()
     (enforce false "non-upgradeable test"))
 
-  (defun t:string ()
+  (defun t:bool ()
     (try false (enforce (= "emily" "emily") "failure")))
 
-  (defun u:string ()
-    (try false (enforce (= "will" "stuart")) "failure"))
+  (defun u:bool ()
+    (try false (enforce (= "will" "stuart") "failure")))
 
   (defun v:string ()
     (try "jklol"

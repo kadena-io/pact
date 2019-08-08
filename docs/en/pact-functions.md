@@ -479,6 +479,18 @@ pact> (take ['name] { 'name: "Vlad", 'active: false})
 ```
 
 
+### try {#try}
+
+*default*&nbsp;`<a>` *action*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Attempt a pure ACTION, returning DEFAULT in the case of failure
+```lisp
+pact> (try 3 (enforce (= 1 2) "this will definitely fail"))
+3
+```
+
+
 ### tx-hash {#tx-hash}
 
  *&rarr;*&nbsp;`string`
