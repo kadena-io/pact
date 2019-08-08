@@ -334,7 +334,7 @@ instance HasInfo FunApp where getInfo = _faInfo
 -- | Variable type for an evaluable 'Term'.
 data Ref' d =
   -- | "Reduced" (evaluated) or native (irreducible) term.
-  Direct d |
+  Direct !d |
   -- | Unevaulated/un-reduced term, never a native.
   Ref (Term (Ref' d))
   deriving (Eq,Show,Functor,Foldable,Traversable,Generic)
@@ -382,7 +382,7 @@ data BindType n =
   -- | Normal "let" bind
   BindLet |
   -- | Schema-style binding, with string value for key
-  BindSchema { _bType :: n }
+  BindSchema { _bType :: !n }
   deriving (Eq,Functor,Foldable,Traversable,Ord,Show,Generic)
 
 instance (Pretty n) => Pretty (BindType n) where
@@ -423,7 +423,7 @@ instance Pretty TableName where pretty (TableName s) = pretty s
 
 data ModuleName = ModuleName
   { _mnName      :: Text
-  , _mnNamespace :: Maybe NamespaceName
+  , _mnNamespace :: !(Maybe NamespaceName)
   } deriving (Eq, Ord, Generic, Show)
 
 instance Hashable ModuleName where
@@ -458,8 +458,8 @@ newtype DefName = DefName Text
 
 -- | A named reference from source.
 data Name
-  = QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info }
-  | Name { _nName :: Text, _nInfo :: Info }
+  = QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: !Info }
+  | Name { _nName :: Text, _nInfo :: !Info }
   deriving (Generic, Show)
 
 instance HasInfo Name where
@@ -602,7 +602,7 @@ data Interface = Interface
   { _interfaceName :: !ModuleName
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
-  , _interfaceImports :: [Use]
+  , _interfaceImports :: ![Use]
   } deriving (Eq,Show,Generic)
 instance Pretty Interface where
   pretty Interface{..} = parensSep [ "interface", pretty _interfaceName ]
@@ -681,8 +681,8 @@ newtype NamespaceName = NamespaceName Text
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData)
 
 data Namespace = Namespace
-  { _nsName   :: NamespaceName
-  , _nsGuard  :: (Guard (Term Name))
+  { _nsName   :: !NamespaceName
+  , _nsGuard  :: Guard (Term Name)
   } deriving (Eq, Show, Generic)
 
 instance Pretty Namespace where
@@ -774,7 +774,7 @@ instance Default (ObjectMap v) where
 data Object n = Object
   { _oObject :: !(ObjectMap (Term n))
   , _oObjectType :: !(Type (Term n))
-  , _oKeyOrder :: Maybe [FieldKey]
+  , _oKeyOrder :: !(Maybe [FieldKey])
   , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
 
@@ -897,11 +897,11 @@ data Term n =
     , _tInfo :: !Info
     } |
     TUse {
-      _tUse :: Use
-    , _tInfo :: Info
+      _tUse :: !Use
+    , _tInfo :: !Info
     } |
     TStep {
-      _tStep :: Step (Term n)
+      _tStep :: !(Step (Term n))
     , _tMeta :: !Meta
     , _tInfo :: !Info
     } |
