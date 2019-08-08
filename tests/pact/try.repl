@@ -11,7 +11,7 @@
     (try false (enforce (= "emily" "emily") "failure")))
 
   (defun u:string ()
-    (try false (enforce (= "will" "stuart"))))
+    (try false (enforce (= "will" "stuart")) "failure"))
 
   (defun v:string ()
     (try "jklol"
