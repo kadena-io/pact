@@ -479,6 +479,19 @@ pact> (take ['name] { 'name: "Vlad", 'active: false})
 ```
 
 
+### try {#try}
+
+*default*&nbsp;`<a>` *action*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions are expressions which do not do i/o or work with non-deterministic state in contrast to impure expressions such as reading and writing to a table.
+```lisp
+pact> (try 3 (enforce (= 1 2) "this will definitely fail"))
+3
+(expect "impure expression fails and returns default" KAD (try KAD (with-read accounts id {'ccy := ccy}) ccy))
+```
+
+
 ### tx-hash {#tx-hash}
 
  *&rarr;*&nbsp;`string`

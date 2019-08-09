@@ -138,9 +138,8 @@ enforceOneDef =
   ["(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])"]
   "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success."
   where
-
     enforceOne :: NativeFun e
-    enforceOne i as@[msg,TList conds _ _] = runReadOnly (_faInfo i) $
+    enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do
         msg' <- reduce msg >>= \m -> case m of
           TLitString s -> return s
@@ -148,12 +147,34 @@ enforceOneDef =
         let tryCond r@Just {} _ = return r
             tryCond Nothing cond = catch
               (Just <$> reduce cond)
+              -- TODO: instead of catching all here, make pure violations
+              -- independently catchable
               (\(_ :: SomeException) -> return Nothing)
         r <- foldM tryCond Nothing conds
         case r of
           Nothing -> failTx (_faInfo i) $ pretty msg'
           Just b' -> return b'
     enforceOne i as = argsError' i as
+
+tryDef :: NativeDef
+tryDef =
+  defNative "try" try' (funType a [("default", a), ("action", a)])
+  ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
+  ,LitExample "(expect \"impure expression fails and returns default\" \"default\" \
+   \(try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
+  ]
+  "Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions \
+  \are expressions which do not do i/o or work with non-deterministic state in contrast \
+  \to impure expressions such as reading and writing to a table."
+  where
+    try' :: NativeFun e
+    try' i as@[da, action] = gasUnreduced i as $ do
+      ra <- reduce da
+      -- TODO: instead of catching all here, make pure violations
+      -- independently catchable
+      catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) ->
+        return ra
+    try' i as = argsError' i as
 
 pactVersionDef :: NativeDef
 pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
@@ -460,6 +481,7 @@ langDefs =
     ,atDef
     ,enforceDef
     ,enforceOneDef
+    ,tryDef
     ,formatDef
     ,defRNative "pact-id" pactId (funType tTyString []) []
      "Return ID if called during current pact execution, failing if not."
