@@ -374,7 +374,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.2.0"
+   "3.2.1"
 
 Top level only: this function will fail if used in module code.
 
@@ -534,7 +534,7 @@ reading and writing to a table.
 
    pact> (try 3 (enforce (= 1 2) "this will definitely fail"))
    3
-   (expect "impure expression fails and returns default" KAD (try KAD (with-read accounts id {'ccy := ccy}) ccy))
+   (expect "impure expression fails and returns default" "default" (try "default" (with-read accounts id {'ccy := ccy}) ccy))
 
 tx-hash
 ~~~~~~~
