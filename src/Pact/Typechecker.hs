@@ -394,8 +394,12 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
         Nothing -> do
           let !n = length ftargs
               !m = length argASTs
+
+          liftIO $ putStrLn $ showPretty argASTs
+          liftIO $ putStrLn "-----------"
+          liftIO $ putStrLn $ showPretty ftargs
           -- check arg arity so we don't accidentally trim any zipped args
-          unless (n == m) $ die' (_aId $ _aNode a)
+          unless (n == m) $ addFailure (_aId $ _aNode a)
             $ "native function supplied "
             <> (if n < m then "too few" else "too many")
             <> " args: "

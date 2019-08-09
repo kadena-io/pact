@@ -5,47 +5,58 @@
   "Test the try/handle-based control flow primitives"
 
   (defcap GOVERNANCE ()
-    (enforce false "non-upgradeable test"))
+    true)
 
-  (defun t:bool ()
+  (defschema test-schema
+    test:bool)
+
+  (deftable test-table:{test-schema})
+
+  (defun successful-enforce:bool ()
     (try false (enforce (= "emily" "emily") "failure")))
 
-  (defun u:bool ()
+  (defun failed-enforce:bool ()
     (try false (enforce (= "will" "stuart") "failure")))
 
-  (defun v:string ()
-    (try "jklol"
-      (decrypt-cc20p1305  "the" "end" "is" "nigh" "chaos" "reigns")
-      ))
+  (defun failed-complex-enforce:string ()
+    (try "default" (let ((r "broken")) (enforce false "will fail") r)))
 
-  (defun w:string ()
-    (try "not cool"
-      (let
-       ((nonce "AAAAAAECAwQFBgcI")
-        (aad "YWFk")
-        (mac "FYP6lG7xq7aExvoaHIH8Jg")
-        (ciphertext "Zi1REj5-iA")
-        (pubkey "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a")
-        (seckey "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
-        )
-       (decrypt-cc20p1305 ciphertext nonce aad mac pubkey seckey)
-       )))
+  (defun failed-expr:decimal ()
+    (try 0.0 (/ 1 0)))
+
+  (defun failed-write:string ()
+    (try "no writes" (write test-table "emily" { "test" : true })))
+
+  (defun successful-read:bool ()
+    (try false (with-read test-table "emily" { "test" := t} t)))
+
 )
 
+(create-table test-table)
 (commit-tx)
 
 (begin-tx)
 
 (use try-module)
 
-;; success case with enforce
-(expect "trying 't' should return 'true' on successful enforce" true (t))
+;; success case for enforce
+(expect "should return 'true' on successful enforce" true (successful-enforce))
 
-;; failure case with enforce
-(expect "trying 'u' should return 'false' on failed enforce" false (u))
+;; failure case for enforce
+(expect "should return 'false' on failed enforce" false (failed-enforce))
 
-;; failure case with decrypt
-(expect "trying 'v' should return 'jklol' on failed decrypt" "jklol" (v))
+;; failure case for slightly more complex enforce
+(expect "should return 'false' on failed enforce" "default" (failed-complex-enforce))
 
-;; success case with decrypt
-(expect "trying 'w' should return 'bWVzc2FnZQ' on successful decrypt" "bWVzc2FnZQ" (w))
+;; failure case for std expression
+(expect "return 0.0 on failed division by 0" 0.0 (failed-expr))
+
+; TODO: instead of expecting here, we should expect failure by
+; independently handling impure exceptions
+;
+;; failure case for writes in pure context
+(expect "failure on attempting to write to the db" "no writes" (failed-write))
+
+(insert test-table "emily" { "test" : true })
+;; failure case for reads in pure context
+(expect "failure when on attempting to reads from the db" true (successful-read))

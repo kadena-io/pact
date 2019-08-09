@@ -147,6 +147,8 @@ enforceOneDef =
         let tryCond r@Just {} _ = return r
             tryCond Nothing cond = catch
               (Just <$> reduce cond)
+              -- TODO: instead of catching all here, make pure violations
+              -- independently catchable
               (\(_ :: SomeException) -> return Nothing)
         r <- foldM tryCond Nothing conds
         case r of
@@ -157,13 +159,20 @@ enforceOneDef =
 tryDef :: NativeDef
 tryDef =
   defNative "try" try' (funType a [("default", a), ("action", a)])
-  ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"]
-  "Attempt a pure ACTION, returning DEFAULT in the case of failure"
+  ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
+  ,LitExample "(expect \"impure expression fails and returns default\" KAD \
+   \(try KAD (with-read accounts id {'ccy := ccy}) ccy))"
+  ]
+  "Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions \
+  \are expressions which do not do i/o or work with non-deterministic state in contrast \
+  \to impure expressions such as reading and writing to a table."
   where
     try' :: NativeFun e
-    try' i as@[da, action] = runReadOnly i $ gasUnreduced i as $ do
+    try' i as@[da, action] = gasUnreduced i as $ do
       ra <- reduce da
-      catch (reduce action) $ \(_ :: SomeException) ->
+      -- TODO: instead of catching all here, make pure violations
+      -- independently catchable
+      catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) ->
         return ra
     try' i as = argsError' i as
 
