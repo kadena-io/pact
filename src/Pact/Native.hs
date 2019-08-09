@@ -138,7 +138,6 @@ enforceOneDef =
   ["(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])"]
   "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success."
   where
-
     enforceOne :: NativeFun e
     enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do

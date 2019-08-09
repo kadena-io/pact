@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -385,7 +386,22 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
     orgFunType@FunType {} :| [] -> do
 
       let mangledFunType = mangleFunType (_aId i) orgFunType
+          ftargs = _ftArgs mangledFunType
+
       debug $ "Mangled funtype: " ++ showPretty orgFunType ++ " -> " ++ showPretty mangledFunType
+
+      case _fSpecial of
+        Nothing -> do
+          let !n = length ftargs
+              !m = length argASTs
+          -- check arg arity so we don't accidentally trim any zipped args
+          unless (n == m) $ die' (_aId $ _aNode a)
+            $ "native function supplied "
+            <> (if n < m then "too few" else "too many")
+            <> " args: "
+            <> showPretty argASTs
+
+        Just{} -> return ()
 
       -- zip funtype 'Arg's with AST args, and assoc each.
       args <- (\f -> zipWithM f (_ftArgs mangledFunType) argASTs) $ \(Arg _ argTy _) argAST -> case (argTy,argAST) of
