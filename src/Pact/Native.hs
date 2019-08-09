@@ -160,8 +160,8 @@ tryDef :: NativeDef
 tryDef =
   defNative "try" try' (funType a [("default", a), ("action", a)])
   ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
-  ,LitExample "(expect \"impure expression fails and returns default\" KAD \
-   \(try KAD (with-read accounts id {'ccy := ccy}) ccy))"
+  ,LitExample "(expect \"impure expression fails and returns default\" \"default\" \
+   \(try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
   ]
   "Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions \
   \are expressions which do not do i/o or work with non-deterministic state in contrast \
