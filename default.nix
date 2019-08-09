@@ -1,4 +1,7 @@
-{ rpRef ? "f3ff81d519b226752c83eefd4df6718539c3efdc", rpSha ?  "1ijxfwl36b9b2j4p9j3bv8vf7qfi570m1c5fjyvyac0gy0vi5g8j", system ? builtins.currentSystem }:
+{ rpRef ? "cfbbd5205019febade3e52ed479490d66e621995"
+, rpSha ?  "1r3kcvy0zf6qdvnasins43hb77lpn0r26vvmnh3cf3yrvpy86sam"
+, system ? builtins.currentSystem
+}:
 
 let rp = builtins.fetchTarball {
   url = "https://github.com/reflex-frp/reflex-platform/archive/${rpRef}.tar.gz";
@@ -24,7 +27,8 @@ in
         sha256 = "1vzfi3i3fpl8wqs1yq95jzdi6cpaby80n8xwnwa8h2jvcw3j7kdz";
       }) {};
   in
-  {
+  rec {
+
     name = "pact";
     overrides = self: super: with pkgs.haskell.lib;
       let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
@@ -147,5 +151,6 @@ in
       ghc = ["pact"];
       ghcjs = ["pact"];
     };
+    passthru = { inherit overrides; };
 
   })
