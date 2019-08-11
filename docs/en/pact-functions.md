@@ -339,7 +339,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.2.0"
+"3.2.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -488,7 +488,7 @@ Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expression
 ```lisp
 pact> (try 3 (enforce (= 1 2) "this will definitely fail"))
 3
-(expect "impure expression fails and returns default" KAD (try KAD (with-read accounts id {'ccy := ccy}) ccy))
+(expect "impure expression fails and returns default" "default" (try "default" (with-read accounts id {'ccy := ccy}) ccy))
 ```
 
 

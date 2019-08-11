@@ -1,4 +1,5 @@
 3.2.1
+---
 
 * New native function `try` has been added
 * Bug fixes to the typechecker

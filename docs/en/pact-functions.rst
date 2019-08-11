@@ -374,7 +374,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.0.1"
+   "3.2.1"
 
 Top level only: this function will fail if used in module code.
 
@@ -519,6 +519,22 @@ from OBJECT. If COUNT is negative, take from end.
    [3 4 5]
    pact> (take ['name] { 'name: "Vlad", 'active: false})
    {"name": "Vlad"}
+
+try
+~~~
+
+*default* ``<a>`` *action* ``<a>`` *→* ``<a>``
+
+Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure
+expressions are expressions which do not do i/o or work with
+non-deterministic state in contrast to impure expressions such as
+reading and writing to a table.
+
+.. code:: lisp
+
+   pact> (try 3 (enforce (= 1 2) "this will definitely fail"))
+   3
+   (expect "impure expression fails and returns default" "default" (try "default" (with-read accounts id {'ccy := ccy}) ccy))
 
 tx-hash
 ~~~~~~~
@@ -1623,8 +1639,8 @@ decrypt-cc20p1305
 Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305
 Authenticated Encryption with Associated Data (AEAD) construction
 described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string.
-NONCE is a 12-byte base16 string. AAD is base16 additional
-authentication data of any length. MAC is the “detached” base16 tag
+NONCE is a 12-byte base64 string. AAD is base64 additional
+authentication data of any length. MAC is the “detached” base64 tag
 value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY
 are base-16 Curve25519 values to form the DH symmetric key.Result is
 unpadded base64URL.

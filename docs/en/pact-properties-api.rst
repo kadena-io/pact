@@ -303,6 +303,96 @@ Integer modulus
 
 Supported in either invariants or properties.
 
+.. _Bitwise:
+
+Bitwise operators
+-----------------
+
+.. _FBitwiseAnd:
+
+&
+~
+
+.. code:: lisp
+
+   (& x y)
+
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
+
+Bitwise and
+
+Supported in either invariants or properties.
+
+.. _FBitwiseOr:
+
+\|
+~~
+
+.. code:: lisp
+
+   (| x y)
+
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
+
+Bitwise or
+
+Supported in either invariants or properties.
+
+.. _FXor:
+
+xor
+~~~
+
+.. code:: lisp
+
+   (xor x y)
+
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
+
+Bitwise exclusive-or
+
+Supported in either invariants or properties.
+
+.. _FShift:
+
+shift
+~~~~~
+
+.. code:: lisp
+
+   (shift x y)
+
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
+
+Shift ``x`` ``y`` bits left if ``y`` is positive, or right by ``-y``
+bits otherwise.
+
+Supported in either invariants or properties.
+
+.. _FComplement:
+
+~
+~
+
+.. code:: lisp
+
+   (~ x)
+
+-  takes ``x``: ``integer``
+-  produces ``integer``
+
+Reverse all bits in ``x``
+
+Supported in either invariants or properties.
+
 .. _Logical:
 
 Logical operators
