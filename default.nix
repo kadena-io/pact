@@ -21,29 +21,32 @@ overlay = self: super: {
   });
 };
 rp = import rpSrc { inherit system; nixpkgsOverlays = [ overlay ]; };
-in
-  rp.project ({ pkgs, ... }:
-  let gitignore = pkgs.callPackage (pkgs.fetchFromGitHub {
-        owner = "siers";
-        repo = "nix-gitignore";
-        rev = "4f2d85f2f1aa4c6bff2d9fcfd3caad443f35476e";
-        sha256 = "1vzfi3i3fpl8wqs1yq95jzdi6cpaby80n8xwnwa8h2jvcw3j7kdz";
-      }) {};
-  in
-  {
-    name = "pact";
-    overrides = self: super: (import ./overrides.nix pkgs self super) // {
-    };
-    packages = {
-      pact = gitignore.gitignoreSource [".git" ".gitlab-ci.yml" "CHANGELOG.md" "README.md"] ./.;
-    };
-    shellToolOverrides = ghc: super: {
-      z3 = pkgs.z3;
-      stack = pkgs.stack;
-    };
-    shells = {
-      ghc = ["pact"];
-      ghcjs = ["pact"];
-    };
+in {
+  inherit rpRef rpSha rpSrc overlay rp;
+  proj =
+    rp.project ({ pkgs, ... }:
+    let gitignore = pkgs.callPackage (pkgs.fetchFromGitHub {
+          owner = "siers";
+          repo = "nix-gitignore";
+          rev = "4f2d85f2f1aa4c6bff2d9fcfd3caad443f35476e";
+          sha256 = "1vzfi3i3fpl8wqs1yq95jzdi6cpaby80n8xwnwa8h2jvcw3j7kdz";
+        }) {};
+    in
+    {
+      name = "pact";
+      overrides = self: super: (import ./overrides.nix pkgs self super) // {
+      };
+      packages = {
+        pact = gitignore.gitignoreSource [".git" ".gitlab-ci.yml" "CHANGELOG.md" "README.md"] ./.;
+      };
+      shellToolOverrides = ghc: super: {
+        z3 = pkgs.z3;
+        stack = pkgs.stack;
+      };
+      shells = {
+        ghc = ["pact"];
+        ghcjs = ["pact"];
+      };
 
-  })
+    });
+}
