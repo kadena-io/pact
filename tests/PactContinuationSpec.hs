@@ -629,9 +629,7 @@ twoPartyEscrow testCmds mgr act = do
   (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
   let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
-
   allResults <- runAll mgr allCmds
-
 
   runResults allResults $ do
     sysModuleCmd `succeedsWith` textVal "system module loaded"
