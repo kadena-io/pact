@@ -4,8 +4,8 @@ packages:
 
 package pact
     tests: True
-    profiling: True
-    profiling-detail: all-functions
+    -- profiling: True
+    -- profiling-detail: all-functions
 
 debug-info: True
 
