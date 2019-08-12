@@ -56,13 +56,14 @@ data GenState = GenState
   , _txKeySets        :: !(Map.Map String (Pact.KeySet, Guard))
   , _txDecimals       :: !(Map.Map String Decimal)
   , _txIntegers       :: !(Map.Map String Integer)
+  , _txStrings        :: !(Map.Map String Str)
   } deriving Show
 
 makeLenses ''GenEnv
 makeLenses ''GenState
 
 emptyGenState :: GenState
-emptyGenState = GenState 0 Map.empty Map.empty Map.empty Map.empty
+emptyGenState = GenState 0 Map.empty Map.empty Map.empty Map.empty Map.empty
 
 -- Explicitly shrink the size parameter to generate smaller terms.
 scale :: MonadGen m => Size -> m a -> m a
@@ -387,7 +388,7 @@ genTerm size = scale 2 $ Gen.choice [genCore size, genTermSpecific size]
 genTermSpecific
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => BoundedType -> m ETerm
-genTermSpecific size@(BoundedInt _len) = Gen.choice
+genTermSpecific size@(BoundedInt len) = Gen.choice
   [ do
       base      <- Gen.int    (Range.linear 2 16)
       formatted <- Gen.string (Range.exponential 1 128) (genBaseChar base)
@@ -400,6 +401,7 @@ genTermSpecific size@(BoundedInt _len) = Gen.choice
   -- TODO:
   -- , Some SInteger . ReadInteger . StrLit <$> genIntegerName len
   , genTermSpecific' size
+  , Some SInteger . ReadInteger . StrLit <$> genIntegerName len
   ]
 genTermSpecific BoundedBool       = Gen.choice
   [
@@ -425,7 +427,7 @@ genTermSpecific BoundedBool       = Gen.choice
   , Some SBool . Lit' <$> Gen.bool
   , genTermSpecific' BoundedBool
   ]
-genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
+genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
   -- TODO: cover Write
   -- [ do
   --      tables <- view envTables
@@ -476,6 +478,7 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
           ]
     in Some SStr . Hash <$> genHashableTerm
   , genTermSpecific' size
+  , Some SStr . ReadString . StrLit <$> genStringName len
   ]
 genTermSpecific BoundedKeySet = scale 2 $
   Some SGuard . ReadKeySet . StrLit <$> genKeySetName
@@ -549,6 +552,17 @@ genIntegerName size = do
   i         <- genInteger size
   let k = show nat
   txIntegers . at k ?= i
+  pure k
+
+genStringName
+  :: (MonadGen m, MonadState GenState m)
+  => Int -> m String
+genStringName len = do
+  idGen %= succ
+  TagId nat <- use idGen
+  s         <- Gen.string (Range.exponential 1 len) Gen.latin1
+  let k = show nat
+  txStrings . at k ?= Str s
   pure k
 
 genNatural :: MonadGen m => Range Natural -> m Natural

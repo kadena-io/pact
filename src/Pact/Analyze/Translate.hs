@@ -934,6 +934,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr nameT <- translateNode nameA
     return $ Some SInteger $ ReadInteger nameT
 
+  AST_ReadString nameA -> do
+    Some SStr nameT <- translateNode nameA
+    return $ Some SStr $ ReadString nameT
+
   AST_ReadMsg _ -> throwError' $ NoReadMsg astNode
 
   AST_PactId -> pure $ Some SStr PactId

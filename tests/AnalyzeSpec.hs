@@ -588,6 +588,30 @@ spec = describe "analyze" $ do
   -- TODO: test use of read-integer from property once possible
   --
 
+  describe "read-string" $ do
+    describe "value can be anything" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= "arbitrary string"
+                     (read-string "some-key"))
+                  ""))
+            |]
+      expectPass code $ Satisfiable Abort'
+      expectPass code $ Satisfiable Success'
+
+    describe "read always produces the same value" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (read-string "some-key")
+                     (read-string "some-key"))
+                  ""))
+            |]
+      expectPass code $ Valid Success'
+
   describe "enforce-keyset.row-level.at" $ do
     let code =
           [text|
