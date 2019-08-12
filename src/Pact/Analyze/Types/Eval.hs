@@ -105,18 +105,34 @@ data PactMetadata
     }
   deriving Show
 
-data ExistentialVal where
-  SomeVal :: SingTy a -> S (Maybe (Concrete a)) -> ExistentialVal
+-- | An existentially wrapped symbolic value that might not always be set.
+-- Consider a value that might only be set on one side of a conditional. We
+-- can't "just use" 'EVal' for this case because we need 'a' to be of kind
+-- 'Ty', and 'Ty' doesn't have a notion of Maybe-ness.
+data EPossibleVal where
+  PossibleVal :: SingTy a -> S (Maybe (Concrete a)) -> EPossibleVal
 
-instance Mergeable ExistentialVal where
-  symbolicMerge force test (SomeVal lTy lVal) (SomeVal rTy rVal)
+instance Mergeable EPossibleVal where
+  symbolicMerge force test (PossibleVal lTy lVal) (PossibleVal rTy rVal)
     = case singEq lTy rTy of
       Nothing   -> error $ "failed symbolic merge with different types: " ++
         show lTy ++ " vs " ++ show rTy
-      Just Refl -> SomeVal lTy $ withSymVal lTy $
+      Just Refl -> PossibleVal lTy $ withSymVal lTy $
         symbolicMerge force test lVal rVal
 
-instance Show ExistentialVal where
+instance Show EPossibleVal where
+  showsPrec p (PossibleVal ty s)
+    = showParen (p > 10)
+    $ showString "PossibleVal "
+    . showsPrec 11 ty
+    . showChar ' '
+    . showsPrec 11 s
+
+-- | An existentially-wrapped symbolic value.
+data EVal where
+  SomeVal :: SingTy a -> S (Concrete a) -> EVal
+
+instance Show EVal where
   showsPrec p (SomeVal ty s)
     = showParen (p > 10)
     $ showString "SomeVal "
@@ -299,8 +315,8 @@ data LatticeAnalyzeState a
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
     , _lasPendingGrants       :: TokenGrants
-    , _lasYieldedInPrevious   :: Maybe ExistentialVal
-    , _lasYieldedInCurrent    :: Maybe ExistentialVal
+    , _lasYieldedInPrevious   :: Maybe EPossibleVal
+    , _lasYieldedInCurrent    :: Maybe EPossibleVal
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -313,6 +329,7 @@ data GlobalAnalyzeState
     { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
     , _gasRollbacks        :: [ETerm]
     -- ^ the stack of rollbacks to perform on failure
+    , _gasCachedChainData  :: Maybe EVal
     }
   deriving (Show)
 
@@ -395,6 +412,7 @@ mkInitialAnalyzeState trivialGuard tables caps = AnalyzeState
     , _globalState = GlobalAnalyzeState
         { _gasGuardProvenances = mempty
         , _gasRollbacks        = []
+        , _gasCachedChainData  = Nothing
         }
     }
 

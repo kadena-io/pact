@@ -119,6 +119,9 @@ pattern AST_ReadMsg name <-
 pattern AST_PactId :: AST a
 pattern AST_PactId <- App _node (NativeFunc "pact-id") []
 
+pattern AST_ChainData :: a -> AST a
+pattern AST_ChainData node <- App node (NativeFunc "chain-data") []
+
 typeSatisfying :: (Lang.Type TC.UserType -> Bool) -> AST Node -> Maybe (AST Node)
 typeSatisfying test x = case x ^? aNode.aTy of
   Just ty | test ty -> Just x

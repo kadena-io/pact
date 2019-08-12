@@ -1334,7 +1334,8 @@ data Term (a :: Ty) where
 
   -- TODO: ReadMsg
 
-  PactId          :: Term 'TyStr
+  PactId    ::                         Term 'TyStr
+  ChainData :: SingTy ('TyObject m) -> Term ('TyObject m)
 
   -- Guards
   MkKsRefGuard  :: Term 'TyStr                  -> Term 'TyGuard
@@ -1506,6 +1507,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
   ReadString  name -> showString "ReadString " . showsPrec 11 name
   PactId           -> showString "PactId"
+  ChainData a      -> showString "ChainData " . showsPrec 11 a
   Pact steps       -> showString "Pact " . showList steps
   Yield tid a      ->
     showString "Yield " . showsPrec 11 tid . showChar ' ' . singShowsTm ty 11 a
@@ -1590,6 +1592,7 @@ prettyTerm ty = \case
   ReadInteger name      -> parensSep ["read-integer", pretty name]
   ReadString name       -> parensSep ["read-string", pretty name]
   PactId                -> parensSep ["pact-id"]
+  ChainData _           -> parensSep ["chain-data"]
   MkKsRefGuard name     -> parensSep ["keyset-ref-guard", pretty name]
   MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard g t       -> parensSep ["create-user-guard", pretty g, pretty t]

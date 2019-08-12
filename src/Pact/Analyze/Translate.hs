@@ -942,6 +942,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_PactId -> pure $ Some SStr PactId
 
+  AST_ChainData node -> do
+    EType objTy@(SObject _schema) <- translateType node
+    pure $ Some objTy $ ChainData objTy
+
   AST_KeysetRefGuard strA -> do
     Some SStr strT <- translateNode strA
     pure $ Some SGuard $ MkKsRefGuard strT
