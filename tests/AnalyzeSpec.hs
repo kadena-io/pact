@@ -588,6 +588,30 @@ spec = describe "analyze" $ do
   -- TODO: test use of read-integer from property once possible
   --
 
+  describe "read-string" $ do
+    describe "value can be anything" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= "arbitrary string"
+                     (read-string "some-key"))
+                  ""))
+            |]
+      expectPass code $ Satisfiable Abort'
+      expectPass code $ Satisfiable Success'
+
+    describe "read always produces the same value" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (read-string "some-key")
+                     (read-string "some-key"))
+                  ""))
+            |]
+      expectPass code $ Valid Success'
+
   describe "enforce-keyset.row-level.at" $ do
     let code =
           [text|
@@ -1880,6 +1904,76 @@ spec = describe "analyze" $ do
                       (enforce (= 6 z) "2 + 3 + 1 != 6"))))
               |]
         in expectPass code $ Valid $ sNot Abort'
+
+  describe "chain-data" $ do
+    describe "block-height field" $
+      let code =
+            [text|
+              (defun test:integer ()
+                @model [(property (>= result 0))]
+                (at "block-height" (chain-data)))
+            |]
+      in expectVerified code
+
+    describe "block-time field" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (at "block-time" (chain-data))
+                     (time "2024-03-21T00:00:00Z"))
+                  "block time can't be this arbitrary date"))
+            |]
+      in expectPass code $ Satisfiable Success'
+
+    describe "chain-id field" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (at "chain-id" (chain-data))
+                     "anything")
+                  "chain-id can not be anything"))
+            |]
+      in expectPass code $ Satisfiable Success'
+
+    describe "gas-limit field" $
+      let code =
+            [text|
+              (defun test:integer ()
+                @model [(property (>= result 0))]
+                (at "gas-limit" (chain-data)))
+            |]
+      in expectVerified code
+
+    describe "gas-price field" $
+      let code =
+            [text|
+              (defun test:decimal ()
+                @model [(property (>= result 0.0))]
+                (at "gas-price" (chain-data)))
+            |]
+      in expectVerified code
+
+    describe "sender field" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (at "sender" (chain-data))
+                     "anything")
+                  "sender can not be anything"))
+            |]
+      in expectPass code $ Satisfiable Success'
+
+    describe "caching" $
+      let code =
+            [text|
+              (defun test:bool ()
+                @model [(property result)]
+                (= (chain-data) (chain-data)))
+            |]
+      in expectVerified code
 
   describe "time" $
     let code =

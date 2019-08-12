@@ -30,9 +30,10 @@ import           Pact.Analyze.Eval.Term   (evalETerm)
 import           Pact.Analyze.Types       hiding (Object, Term)
 import           Pact.Analyze.Types.Eval  (aeRegistry, aeTrivialGuard,
                                            aeTxMetadata, tmDecimals,
-                                           tmIntegers, tmKeySets, mkAnalyzeEnv,
-                                           mkPactMetadata, mkRegistry,
-                                           mkInitialAnalyzeState, registryMap)
+                                           tmIntegers, tmKeySets, tmStrings,
+                                           mkAnalyzeEnv, mkPactMetadata,
+                                           mkRegistry, mkInitialAnalyzeState,
+                                           registryMap)
 import           Pact.Analyze.Util        (dummyInfo)
 
 import           Pact.Eval                (reduce)
@@ -95,7 +96,7 @@ analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
 analyzeEval etm@(Some ty _tm) gs = analyzeEval' etm ty gs
 
 analyzeEval' :: ETerm -> SingTy a -> GenState -> IO (Either String ETerm)
-analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
+analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts txStrs) = do
   -- analyze setup
   let tables      = []
       caps        = []
@@ -152,10 +153,10 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
             writeArray' (literal (Str k)) (literal v)))
         (Map.toList txInts)
 
-      --
-      -- TODO: add read-msg support here
-      --
-      withStrings = id
+      withStrings = flip (foldr
+          (\(k, v) -> aeTxMetadata.tmStrings %~
+            writeArray' (literal (Str k)) (literal v)))
+        (Map.toList txStrs)
 
   -- evaluate via analyze
   (analyzeVal, las)
@@ -176,7 +177,7 @@ analyzeEval' etm ty (GenState _ registryKSs txKSs txDecs txInts) = do
 -- in the generated term. This generates an environment with just keysets and
 -- decimals.
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
-mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts) = do
+mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts txStrs) = do
   evalEnv <- liftIO $ initPureEvalEnv Nothing
   let xformKsMap = HM.fromList
         . fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
@@ -190,5 +191,8 @@ mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts) = do
       txInts' = HM.fromList
         $ fmap (\(k, v) -> (T.pack k, toJSON v))
         $ Map.toList txInts
-      body = Object $ HM.unions [registryKSs', txKSs', txDecs', txInts']
+      txStrs' = HM.fromList
+        $ fmap (\(k, Str v) -> (T.pack k, toJSON v))
+        $ Map.toList txStrs
+      body = Object $ HM.unions [registryKSs', txKSs', txDecs', txInts', txStrs']
   pure $ evalEnv & eeMsgBody .~ body
