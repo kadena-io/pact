@@ -26,13 +26,11 @@ in {
     sha256 = "0afy9awszaf30ip6h6zrcxaihl3270b7qm30ljyw8cs34yx2vjyw";
   }));
 
-  # sbv 8.1
-  sbv = dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
-    owner = "LeventErkok";
-    repo = "sbv";
-    rev = "365b1a369a2550d6284608df3fbc17e2663c4d3c";
-    sha256 = "134f148g28dg7b3c1rvkh85pfl9pdlvrvl6al4vlz72f3y5mb2xg";
-  }) {});
+  sbv = dontCheck (callHackageDirect {
+    pkg = "sbv";
+    ver = "8.2";
+    sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
+  });
 
   # Our own custom fork
   thyme = dontCheck (self.callCabal2nix "thyme" (pkgs.fetchFromGitHub {
