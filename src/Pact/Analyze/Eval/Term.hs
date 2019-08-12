@@ -32,10 +32,10 @@ import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==), (./=)),
-                                              OrdSymbolic ((.>=)), HasKind,
+                                              OrdSymbolic ((.>=)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymVal, ite, literal, (.<),
-                                              writeArray)
+                                              uninterpret, writeArray)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.Maybe              as SBV
 import qualified Data.SBV.String             as SBV
@@ -297,11 +297,11 @@ mkChainData (SObjectUnsafe (SCons' sym (fieldType :: SingTy v) subSchema)) = do
         _        -> Nothing
 
   withSymVal fieldType $ do
-    when (any (fieldName ==) ["block-height", "gas-limit", "gas-price"]) $ do
+    when (fieldName `elem` ["block-height", "gas-limit", "gas-price"]) $ do
       case mNumDict of
         Just numDict ->
           let zero = withDict numDict $ literal 0
-           in withOrd fieldType $ addConstraint $ sansProv $ sbv .>= zero
+          in withOrd fieldType $ addConstraint $ sansProv $ sbv .>= zero
         Nothing ->
           error $ "impossible: " ++ fieldName ++ " must be a number"
 
@@ -560,7 +560,7 @@ evalTerm = \case
           Nothing -> error "impossible: type mismatch for chain-data cache"
       Nothing -> do
         cd <- mkChainData objTy
-        globalState.gasCachedChainData .= Just (SomeVal objTy cd)
+        globalState.gasCachedChainData ?= SomeVal objTy cd
         pure cd
 
   --
