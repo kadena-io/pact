@@ -377,7 +377,7 @@ spec = describe "analyze" $ do
                   1.5811388300841925223288550988445549742724468531346309495428665472399639648496680411494875076793255338200521528740886266294574044913261377201695510306266771994578476399139180068539229254218727314228818363809792
                 ))
                     (y:decimal 2.500000000000008243836642384325766770967352358818865769190857605784112966024663251834475644384046904403556387019539234091871481832161009920035987673979588455403008477585022252399854826133637675727060845285897044645837341219331160090749369830048441622744791))
-                (enforce (= x y))))
+                (enforce (= x y) "x and y are not equal")))
           |]
     expectPass code $ Valid Success'
 
@@ -396,7 +396,7 @@ spec = describe "analyze" $ do
                   1581138830084.192220194412674817793768840142081644758814711734437239116786835916965025889939456340088832614965073903903044055232345709136743725518878029119488000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
                 ))
                     (y:decimal 2500000000000007812618040.433562734137684699135011741551181715981891159652849247733486729055338549963875582523604695139936764674737736206382376787827325735603006181405156090936148131370459148823374617217523084670407741689762536216481173675491045653179580074788284514172469055900877))
-                (enforce (= x y))))
+                (enforce (= x y) "x and y are not equal")))
           |]
     expectPass code' $ Valid Success'
 
@@ -587,6 +587,30 @@ spec = describe "analyze" $ do
   --
   -- TODO: test use of read-integer from property once possible
   --
+
+  describe "read-string" $ do
+    describe "value can be anything" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= "arbitrary string"
+                     (read-string "some-key"))
+                  ""))
+            |]
+      expectPass code $ Satisfiable Abort'
+      expectPass code $ Satisfiable Success'
+
+    describe "read always produces the same value" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (read-string "some-key")
+                     (read-string "some-key"))
+                  ""))
+            |]
+      expectPass code $ Valid Success'
 
   describe "enforce-keyset.row-level.at" $ do
     let code =
@@ -1171,8 +1195,8 @@ spec = describe "analyze" $ do
           [text|
         (defun test:bool ()
           (enforce-one ""
-            [(enforce false)
-             (enforce true)]))
+            [(enforce false "")
+             (enforce true "")]))
           |]
 
     expectPass code $ Valid Success'
@@ -1183,8 +1207,8 @@ spec = describe "analyze" $ do
           [text|
         (defun test:bool ()
           (enforce-one ""
-            [(enforce false)
-             (enforce false)]))
+            [(enforce false "")
+             (enforce false "")]))
           |]
 
     expectPass code $ Valid $ PNot Success'
@@ -1194,9 +1218,9 @@ spec = describe "analyze" $ do
           [text|
         (defun test:bool ()
           (enforce-one ""
-            [(enforce true)
-             (and (enforce true)
-                  (enforce false))]))
+            [(enforce true "")
+             (and (enforce true "")
+                  (enforce false ""))]))
           |]
 
     expectPass code $ Valid Success'
@@ -1209,8 +1233,8 @@ spec = describe "analyze" $ do
           [text|
         (defun test:bool ()
           (enforce-one ""
-            [(or (enforce false)
-                 (enforce true))]))
+            [(or (enforce false "")
+                 (enforce true ""))]))
           |]
 
     expectPass code $ Valid $ PNot Success'
@@ -1222,8 +1246,8 @@ spec = describe "analyze" $ do
           [text|
         (defun test:bool ()
           (enforce-one ""
-            [(or (enforce true)
-                 (enforce false))]))
+            [(or (enforce true "")
+                 (enforce false ""))]))
           |]
 
     expectPass code $ Valid Success'
@@ -1234,12 +1258,12 @@ spec = describe "analyze" $ do
           [text|
             (defun test:bool ()
               (enforce-one ""
-                [(enforce false)
+                [(enforce false "")
                  (enforce-one "" ; nested enforce-one
-                   [(enforce false)
-                    (enforce true)
-                    (enforce false)])
-                 (enforce false)]))
+                   [(enforce false "")
+                    (enforce true "")
+                    (enforce false "")])
+                 (enforce false "")]))
           |]
 
     expectPass code $ Valid Success'
@@ -1250,7 +1274,7 @@ spec = describe "analyze" $ do
           [text|
             (defun test:bool ()
               (enforce-one ""
-                [(enforce false) false (enforce false)]))
+                [(enforce false "") false (enforce false "")]))
           |]
 
     expectPass code $ Valid Success'
@@ -1305,7 +1329,7 @@ spec = describe "analyze" $ do
       let code =
             [text|
           (defun test:bool (x: bool)
-            (and x (enforce false)))
+            (and x (enforce false "")))
             |]
 
       expectPass code $ Valid $ PVar 1 "x" .=> PNot (Inj Success)
@@ -1315,7 +1339,7 @@ spec = describe "analyze" $ do
       let code =
             [text|
           (defun test:bool (x: bool)
-            (or x (enforce false)))
+            (or x (enforce false "")))
             |]
 
       expectPass code $ Valid $ PVar 1 "x" .=> Inj Success
@@ -1881,6 +1905,76 @@ spec = describe "analyze" $ do
               |]
         in expectPass code $ Valid $ sNot Abort'
 
+  describe "chain-data" $ do
+    describe "block-height field" $
+      let code =
+            [text|
+              (defun test:integer ()
+                @model [(property (>= result 0))]
+                (at "block-height" (chain-data)))
+            |]
+      in expectVerified code
+
+    describe "block-time field" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (at "block-time" (chain-data))
+                     (time "2024-03-21T00:00:00Z"))
+                  "block time can't be this arbitrary date"))
+            |]
+      in expectPass code $ Satisfiable Success'
+
+    describe "chain-id field" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (at "chain-id" (chain-data))
+                     "anything")
+                  "chain-id can not be anything"))
+            |]
+      in expectPass code $ Satisfiable Success'
+
+    describe "gas-limit field" $
+      let code =
+            [text|
+              (defun test:integer ()
+                @model [(property (>= result 0))]
+                (at "gas-limit" (chain-data)))
+            |]
+      in expectVerified code
+
+    describe "gas-price field" $
+      let code =
+            [text|
+              (defun test:decimal ()
+                @model [(property (>= result 0.0))]
+                (at "gas-price" (chain-data)))
+            |]
+      in expectVerified code
+
+    describe "sender field" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (at "sender" (chain-data))
+                     "anything")
+                  "sender can not be anything"))
+            |]
+      in expectPass code $ Satisfiable Success'
+
+    describe "caching" $
+      let code =
+            [text|
+              (defun test:bool ()
+                @model [(property result)]
+                (= (chain-data) (chain-data)))
+            |]
+      in expectVerified code
+
   describe "time" $
     let code =
           [text|
@@ -2012,7 +2106,7 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (let ((x:decimal 5230711750420325051373061834485335325985428731552400523071175042032505137306183448533532598542873155240052307117504203250513730.618344853353259854287315524005230711750420325051373061834485335325985428731552400523071175042032505137306183448533532598542873155240052307117504203250513730618344853353259854287315524005230711750420325051373061834485335325985428731552400523071175042032505)
                     (y:integer 300))
-              (enforce (= (round x y) x))))
+              (enforce (= (round x y) x) "")))
           |]
     in expectPass code $ Valid $ sNot Abort'
 
@@ -2131,7 +2225,19 @@ spec = describe "analyze" $ do
                   (/
                     1581138830084.1918464
                     1581138830084)
-                  1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864))
+                  1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864) "")
+
+                (enforce (= 2 (& 2 3)) "bitwise 2 and 3" )
+                (enforce (= 1 (& 5 -7)) "bitwise 5 and -7")
+                (enforce (= 3 (| 2 3)) "bitwise 2 or 3")
+                (enforce (= -3 (| 5 -7)) "bitwise 5 or -7")
+                (enforce (= 6 (xor 2 4)) "bitwise 2 xor 4")
+                (enforce (= -4 (xor 5 -7)) "bitwise 5 xor -7")
+                (enforce (= -16 (~ 15)) "complement 15")
+                (enforce (= 65280 (shift 255 8)) "shift 255 8")
+                (enforce (= -65280 (shift -255 8)) "shift -255 8")
+                (enforce (= 127 (shift 255 -1)) "shift 255 -1")
+                (enforce (= -128 (shift -255 -1)) "shift -255 -1")
               ))
           |]
     in expectPass code $ Valid $ sNot Abort'
@@ -2210,18 +2316,18 @@ spec = describe "analyze" $ do
                      (time2in  "2016-07-22T11:26:35Z")
                      (time2    (time time2in))
                      (time2out (format-time "%Y-%m-%dT%H:%M:%SZ" time2)))
-                (enforce (= time1in time1out))
-                (enforce (= time2in time2out)))
+                (enforce (= time1in time1out) "")
+                (enforce (= time2in time2out) ""))
 
                 (enforce
                   (= (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
-                     "2016-07-23T13:30:45+00:00"))
+                     "2016-07-23T13:30:45+00:00") "")
                 (enforce
                   (= (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
-                     "Sat, 23 Jul 2016 13:30:45 UTC"))
+                     "Sat, 23 Jul 2016 13:30:45 UTC") "")
                 (enforce
                   (= (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
-                     "2016-07-23 13:30:45.001002"))
+                     "2016-07-23 13:30:45.001002") "")
                      )
           |]
     expectPass code $ Valid Success'
@@ -2230,11 +2336,11 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defun test:bool (str:string)
-              (enforce (= (format "{}-{}" ["a" "z"]) "a-z"))
-              (enforce (= (format "{}/{}" [11 26]) "11/26"))
-              (enforce (= (format "{} or {}" [true false]) "true or false"))
+              (enforce (= (format "{}-{}" ["a" "z"]) "a-z") "")
+              (enforce (= (format "{}/{}" [11 26]) "11/26") "")
+              (enforce (= (format "{} or {}" [true false]) "true or false") "")
 
-              (enforce (= (format "{}" [str]) str))
+              (enforce (= (format "{}" [str]) str) "")
             )
           |]
     expectPass code $ Valid Success'
@@ -2245,30 +2351,30 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce (=
                 (hash "hello")
-                "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"))
+                "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8") "")
 
               (enforce (=
                 (hash (- 2 1))
-                "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"))
+                "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY") "")
 
               (enforce (=
                 (hash (or true false))
-                "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"))
+                "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag") "")
 
               (enforce (=
                 (hash (and true false))
-                "W916vIYivbAEzKIDWpFi3aPZvPoSBhloENpwZ8tcaQA"))
+                "W916vIYivbAEzKIDWpFi3aPZvPoSBhloENpwZ8tcaQA") "")
 
 
               ; TODO:
               ; (enforce (=
               ;   (hash 3.14)
-              ;   "gMjZ6T4J6fexaH7KaSIQxgyat9drIvbBkLx4qVJtztE"))
+              ;   "gMjZ6T4J6fexaH7KaSIQxgyat9drIvbBkLx4qVJtztE") "")
 
               ; TODO:
               ; (enforce (=
               ;   (hash { 'foo: 1 })
-              ;   "njeoJOdMu4SEI7x7zkb9rQcl44irAn61o1F7IiDge7s"))
+              ;   "njeoJOdMu4SEI7x7zkb9rQcl44irAn61o1F7IiDge7s") "")
             )
           |]
     expectPass code $ Valid Success'
@@ -2905,7 +3011,7 @@ spec = describe "analyze" $ do
             [text|
               (defun test:integer ()
                 (write accounts "test" {"balance": 5})
-                (enforce false)
+                (enforce false "")
                 (at 'balance (read accounts "test")))
             |]
       expectTrace CheckDefun code Success' [push, write, assert]
@@ -2915,9 +3021,9 @@ spec = describe "analyze" $ do
             [text|
               (defun test:bool ()
                 (enforce-one ""
-                  [(enforce false)
+                  [(enforce false "")
                    true
-                   (enforce false)
+                   (enforce false "")
                   ]))
             |]
       expectTrace CheckDefun code (sNot Success')
@@ -3066,7 +3172,7 @@ spec = describe "analyze" $ do
               ]
             (write accounts acct { 'balance: 0 })
             (with-read accounts acct { 'balance := bal }
-              (enforce (> bal 0))
+              (enforce (> bal 0) "")
               (write accounts acct { 'balance: 100 })))
           |]
     let acct           = PVar 1 "acct"
@@ -3613,7 +3719,7 @@ spec = describe "analyze" $ do
           (succeeds-when (> x 1000))
           (fails-when    (< x -1000))
           ]
-        (enforce (> x 0)))
+        (enforce (> x 0) ""))
       |]
 
     -- succeeds-when / fails-when also work at the module level
@@ -3628,7 +3734,7 @@ spec = describe "analyze" $ do
         (succeeds-when (> x 1000) { 'except: [] })
         (fails-when    (<= x 0)   { 'except: [] })
       |]
-      "(defun test:bool (x:integer) (enforce (> x 0)))"
+      "(defun test:bool (x:integer) (enforce (> x 0) \"\"))"
 
   describe "scope-checking interfaces" $ do
     res <- runIO $ checkInterface [text|

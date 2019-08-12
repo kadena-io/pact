@@ -934,9 +934,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr nameT <- translateNode nameA
     return $ Some SInteger $ ReadInteger nameT
 
+  AST_ReadString nameA -> do
+    Some SStr nameT <- translateNode nameA
+    return $ Some SStr $ ReadString nameT
+
   AST_ReadMsg _ -> throwError' $ NoReadMsg astNode
 
   AST_PactId -> pure $ Some SStr PactId
+
+  AST_ChainData node -> do
+    EType objTy@(SObject _schema) <- translateType node
+    pure $ Some objTy $ ChainData objTy
 
   AST_KeysetRefGuard strA -> do
     Some SStr strT <- translateNode strA
@@ -1508,6 +1516,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some partialReadTy $ Resume tid
 
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
+
+  AST_NFun _node (toOp bitwiseOpP -> Just op) args -> do
+    args' <- for args $ \arg -> do
+      Some SInteger arg' <- translateNode arg
+      pure arg'
+    pure $ Some SInteger $ inject @(Numerical Term) $
+      BitwiseOp op args'
 
   _ -> throwError' $ UnexpectedNode astNode
 

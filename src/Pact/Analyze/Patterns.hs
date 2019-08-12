@@ -108,12 +108,19 @@ pattern AST_ReadInteger :: forall a. AST a -> AST a
 pattern AST_ReadInteger name <-
   App _node (NativeFunc "read-integer") [name]
 
+pattern AST_ReadString :: forall a. AST a -> AST a
+pattern AST_ReadString name <-
+  App _node (NativeFunc "read-string") [name]
+
 pattern AST_ReadMsg :: forall a. AST a -> AST a
 pattern AST_ReadMsg name <-
   App _node (NativeFunc "read-msg") [name]
 
 pattern AST_PactId :: AST a
 pattern AST_PactId <- App _node (NativeFunc "pact-id") []
+
+pattern AST_ChainData :: a -> AST a
+pattern AST_ChainData node <- App node (NativeFunc "chain-data") []
 
 typeSatisfying :: (Lang.Type TC.UserType -> Bool) -> AST Node -> Maybe (AST Node)
 typeSatisfying test x = case x ^? aNode.aTy of

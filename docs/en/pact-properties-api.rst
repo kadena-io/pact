@@ -303,6 +303,96 @@ Integer modulus
 
 Supported in either invariants or properties.
 
+.. _Bitwise:
+
+Bitwise operators
+-----------------
+
+.. _FBitwiseAnd:
+
+&
+~
+
+.. code:: lisp
+
+   (& x y)
+
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
+
+Bitwise and
+
+Supported in either invariants or properties.
+
+.. _FBitwiseOr:
+
+\|
+~~
+
+.. code:: lisp
+
+   (| x y)
+
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
+
+Bitwise or
+
+Supported in either invariants or properties.
+
+.. _FXor:
+
+xor
+~~~
+
+.. code:: lisp
+
+   (xor x y)
+
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
+
+Bitwise exclusive-or
+
+Supported in either invariants or properties.
+
+.. _FShift:
+
+shift
+~~~~~
+
+.. code:: lisp
+
+   (shift x y)
+
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
+
+Shift ``x`` ``y`` bits left if ``y`` is positive, or right by ``-y``
+bits otherwise.
+
+Supported in either invariants or properties.
+
+.. _FComplement:
+
+~
+~
+
+.. code:: lisp
+
+   (~ x)
+
+-  takes ``x``: ``integer``
+-  produces ``integer``
+
+Reverse all bits in ``x``
+
+Supported in either invariants or properties.
+
 .. _Logical:
 
 Logical operators
@@ -1012,6 +1102,28 @@ expressing propositions that do not assume transaction success.
 Propositions defined via ``property`` implicitly assume transaction
 success. We will be adding a new mode in which to use this feature in
 the future – please let us know if you need this functionality.
+
+Supported in properties only.
+
+.. _FGovernancePasses:
+
+governance-passes
+~~~~~~~~~~~~~~~~~
+
+.. code:: lisp
+
+   governance-passes
+
+-  of type ``bool``
+
+Whether the governance predicate passes. For keyset-based governance,
+this is the same as something like
+``(authorized-by 'governance-ks-name)``. Pact’s property checking system
+currently does not analyze the body of a capability when it is used for
+governance due to challenges around capabilities making DB modifications
+– the system currently assumes that a capability-based governance
+predicate is equally capable of succeeding or failing. This feature
+allows describing the scenarios where the predicate passes or fails.
 
 Supported in properties only.
 

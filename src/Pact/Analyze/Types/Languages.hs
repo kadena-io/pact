@@ -454,6 +454,8 @@ eqNumerical _ty (RoundingLikeOp1 op1 a1) (RoundingLikeOp1 op2 a2)
   = op1 == op2 && eqTm a1 a2
 eqNumerical _ty (RoundingLikeOp2 op1 a1 b1) (RoundingLikeOp2 op2 a2 b2)
   = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ty (BitwiseOp op1 args1) (BitwiseOp op2 args2)
+  = op1 == op2 && and (zipWith eqTm args1 args2)
 eqNumerical _ _ _ = False
 
 showsNumerical :: IsTerm tm => SingTy a -> Int -> Numerical tm a -> ShowS
@@ -513,6 +515,11 @@ showsNumerical _ty p tm = showParen (p > 10) $ case tm of
     . showsTm 11 a
     . showChar ' '
     . showsTm 11 b
+  BitwiseOp op args ->
+      showString "BitwiseOp "
+    . showsPrec 11 op
+    . showChar ' '
+    . showListWith (singShowsTm SInteger 0) args
 
 prettyNumerical :: IsTerm tm => SingTy a -> Numerical tm a -> Doc
 prettyNumerical _ty = \case
@@ -525,6 +532,7 @@ prettyNumerical _ty = \case
   ModOp a b              -> parensSep [prettyTm a, prettyTm b            ]
   RoundingLikeOp1 op a   -> parensSep [pretty op,  prettyTm a            ]
   RoundingLikeOp2 op a b -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  BitwiseOp op args      -> parensSep $ pretty op : fmap prettyTm args
 
 eqCoreTm :: IsTerm tm => SingTy ty -> Core tm ty -> Core tm ty -> Bool
 eqCoreTm ty (Lit a)                      (Lit b)
@@ -1322,10 +1330,12 @@ data Term (a :: Ty) where
   ReadKeySet      :: Term 'TyStr -> Term 'TyGuard
   ReadDecimal     :: Term 'TyStr -> Term 'TyDecimal
   ReadInteger     :: Term 'TyStr -> Term 'TyInteger
+  ReadString      :: Term 'TyStr -> Term 'TyStr
 
   -- TODO: ReadMsg
 
-  PactId          :: Term 'TyStr
+  PactId    ::                         Term 'TyStr
+  ChainData :: SingTy ('TyObject m) -> Term ('TyObject m)
 
   -- Guards
   MkKsRefGuard  :: Term 'TyStr                  -> Term 'TyGuard
@@ -1495,7 +1505,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   ReadKeySet  name -> showString "ReadKeySet " . showsPrec 11 name
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
+  ReadString  name -> showString "ReadString " . showsPrec 11 name
   PactId           -> showString "PactId"
+  ChainData a      -> showString "ChainData " . showsPrec 11 a
   Pact steps       -> showString "Pact " . showList steps
   Yield tid a      ->
     showString "Yield " . showsPrec 11 tid . showChar ' ' . singShowsTm ty 11 a
@@ -1578,7 +1590,9 @@ prettyTerm ty = \case
   ReadKeySet name       -> parensSep ["read-keyset", pretty name]
   ReadDecimal name      -> parensSep ["read-decimal", pretty name]
   ReadInteger name      -> parensSep ["read-integer", pretty name]
+  ReadString name       -> parensSep ["read-string", pretty name]
   PactId                -> parensSep ["pact-id"]
+  ChainData _           -> parensSep ["chain-data"]
   MkKsRefGuard name     -> parensSep ["keyset-ref-guard", pretty name]
   MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard g t       -> parensSep ["create-user-guard", pretty g, pretty t]
@@ -1612,6 +1626,8 @@ eqTerm _ty (ReadKeySet a) (ReadKeySet b)
 eqTerm _ty (ReadDecimal a) (ReadDecimal b)
   = a == b
 eqTerm _ty (ReadInteger a) (ReadInteger b)
+  = a == b
+eqTerm _ty (ReadString a) (ReadString b)
   = a == b
 eqTerm _ty (GuardPasses a1 b1) (GuardPasses a2 b2)
   = a1 == a2 && b1 == b2
