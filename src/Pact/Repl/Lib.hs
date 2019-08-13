@@ -585,6 +585,6 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
     go _i pd (k, (TLiteral (LString l) _))
       | k == cdChainId = pure $ set (pdPublicMeta . pmChainId) (ChainId l) pd
       | k == cdSender = pure $ set (pdPublicMeta . pmSender) l pd
-      | k == cdBlockHash = pure $ set pdBlockHash (Hash $ encodeUtf8 l) pd
+      | k == cdBlockHash = pure $ set pdBlockHash l pd
 
     go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as

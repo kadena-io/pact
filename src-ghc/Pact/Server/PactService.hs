@@ -23,6 +23,7 @@ import Data.Word (Word64)
 import Data.Default
 import Data.Aeson (Value, encode)
 import qualified Data.ByteString.Lazy  as BSL
+import Data.Text (Text)
 
 import Pact.Gas
 import Pact.Interpreter
@@ -50,7 +51,7 @@ initPactService CommandConfig {..} loggers spv = do
       gasModel = constGasModel (fromIntegral gasRate)
       blockHeight = 0
       blockTime = 0
-      blockHash = pactInitialHash
+      blockHash = ""
 
   let mkCEI p@PactDbEnv {..} = do
         klog "Creating Pact Schema"
@@ -76,7 +77,7 @@ applyCmd :: Logger ->
             GasModel ->
             Word64 ->
             Int64 ->
-            Hash ->
+            Text ->
             SPVSupport ->
             ExecutionMode ->
             Command a ->

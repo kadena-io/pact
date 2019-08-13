@@ -413,7 +413,7 @@ chainDataDef = defRNative "chain-data" chainData
         [ (cdChainId, toTerm _pmChainId)
         , (cdBlockHeight, toTerm _pdBlockHeight)
         , (cdBlockTime, toTime _pdBlockTime)
-        , (cdBlockHash, toTerm $ decodeUtf8 $ unHash _pdBlockHash)
+        , (cdBlockHash, toTerm _pdBlockHash)
         , (cdSender, toTerm _pmSender)
         , (cdGasLimit, toTerm _pmGasLimit)
         , (cdGasPrice, toTerm _pmGasPrice)

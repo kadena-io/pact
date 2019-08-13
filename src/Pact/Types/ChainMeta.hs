@@ -46,7 +46,6 @@ import Data.Word (Word64)
 import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
-import Pact.Types.Hash
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
 
 
@@ -143,11 +142,11 @@ data PublicData = PublicData
   { _pdPublicMeta :: !PublicMeta
   , _pdBlockHeight :: !Word64
   , _pdBlockTime :: !Int64
-  , _pdBlockHash :: !Hash
+  , _pdBlockHash :: !Text
   }
   deriving (Show, Eq, Generic)
 makeLenses ''PublicData
 
 instance ToJSON PublicData where toJSON = lensyToJSON 3
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
-instance Default PublicData where def = PublicData def def def pactInitialHash
+instance Default PublicData where def = PublicData def def def def
