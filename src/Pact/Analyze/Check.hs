@@ -155,19 +155,10 @@ data CheckFailure = CheckFailure
 
 type CheckResult = Either CheckFailure CheckSuccess
 
--- | For error reporting, we use 'Text' here because the type differs per
--- scenario and we just want user-friendly textual output.
-data RefMismatch
-  = RefMismatch { _rmActual :: Text, _rmExpected :: Text }
-  deriving (Eq, Show)
-
-directInsteadOfRef :: RefMismatch
-directInsteadOfRef = RefMismatch "direct" "ref"
-
 data ScopeError
   = ScopeParseFailure ParseFailure
   | NotInScope Text
-  | ScopeInvalidRefType RefMismatch
+  | ScopeInvalidDirectRef
   deriving (Eq, Show)
 
 describeScopeError :: ScopeError -> Text
@@ -176,9 +167,8 @@ describeScopeError = \case
     describeParseFailure pf
   NotInScope name ->
     "Variable not in scope: " <> name
-  ScopeInvalidRefType (RefMismatch actual expected) ->
-    "Invalid reference type (" <> actual <>
-      ") given to scope checker (instead of " <> expected <> ")."
+  ScopeInvalidDirectRef ->
+    "Invalid Direct reference given to scope checker instead of Ref."
 
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
@@ -226,7 +216,8 @@ data VerificationFailure
   = ModuleParseFailure ParseFailure
   | ModuleCheckFailure CheckFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
-  | InvalidRefType RefMismatch
+  | InvalidDirectReference
+  | ExpectedConcreteModule
   | FailedConstTranslation String
   | SchemalessTable Info
   | ScopeErrors [ScopeError]
@@ -1020,7 +1011,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
     :: HM.HashMap Text
       ((TopLevel Node, CheckableType), Either ParseFailure [Located Check]))
     <- hoist generalize $ for funTypes $ \case
-      (Pact.Direct _, _, _, _) -> throwError (InvalidRefType directInsteadOfRef)
+      (Pact.Direct _, _, _, _) -> throwError InvalidDirectReference
       (Pact.Ref defn, toplevel, userTy, checkType) -> ((toplevel,checkType),)
         <$> moduleFunCheck tables checkExps consts propDefs defn userTy
 
@@ -1056,7 +1047,7 @@ scopeCheckInterface
   -- ^ The set of refs to check
   -> [ScopeError]
 scopeCheckInterface globalNames refs = refs <&&> \case
-  Pact.Direct _ -> [ScopeInvalidRefType directInsteadOfRef]
+  Pact.Direct _ -> [ScopeInvalidDirectRef]
   Pact.Ref defn -> case defn ^? tDef . dMeta . mModel of
     Nothing -> []
     Just model -> case normalizeListLit model of
@@ -1094,7 +1085,7 @@ moduleGovernance moduleData = case _mdModule moduleData of
       Right (Def {_dDefName=Pact.DefName dn}) ->
         pure $ CapGovernance $ CapName $ T.unpack dn
   Pact.MDInterface _ ->
-    throwError $ InvalidRefType $ RefMismatch "interface" "module"
+    throwError ExpectedConcreteModule
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -1175,9 +1166,10 @@ renderVerifiedModule = \case
     [describeCheckFailure checkFailure]
   Left (TypeTranslationFailure msg ty) ->
     [msg <> ": " <> tShow ty]
-  Left (InvalidRefType (RefMismatch actual expected)) ->
-    ["Invalid reference type (" <> actual <>
-       ") given to typechecker (instead of " <> expected <> ")."]
+  Left InvalidDirectReference ->
+    ["Invalid Direct reference given to typechecker instead of Ref"]
+  Left ExpectedConcreteModule ->
+    ["Expected concrete module but encountered an interface"]
   Left (NonDefTerm term) ->
     ["Expected TDef Term but encountered: " <> tShow term]
   Left (FailedConstTranslation msg) ->
