@@ -934,9 +934,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr nameT <- translateNode nameA
     return $ Some SInteger $ ReadInteger nameT
 
+  AST_ReadString nameA -> do
+    Some SStr nameT <- translateNode nameA
+    return $ Some SStr $ ReadString nameT
+
   AST_ReadMsg _ -> throwError' $ NoReadMsg astNode
 
   AST_PactId -> pure $ Some SStr PactId
+
+  AST_ChainData node -> do
+    EType objTy@(SObject _schema) <- translateType node
+    pure $ Some objTy $ ChainData objTy
 
   AST_KeysetRefGuard strA -> do
     Some SStr strT <- translateNode strA

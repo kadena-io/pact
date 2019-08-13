@@ -1,3 +1,18 @@
+3.2.1
+---
+
+* New native function `try` has been added
+* Bug fixes to the typechecker
+* Improved documentation
+
+3.2.0
+---
+
+* All non key-related data for `decrypt-cc20p1305` is now required to be base64-encoded
+* Improved documentation
+* Analysis:
+  * bitwise operators are now supported
+
 3.1.0
 ---
 * Add SPV endorsement functionality to `defpact`s

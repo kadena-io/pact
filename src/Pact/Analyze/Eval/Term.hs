@@ -18,7 +18,7 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               (.~), (<&>), (?~), (?=), (^.),
                                               (^?), _1, _2, _head, _Just,
                                               ifoldlM)
-import           Control.Monad               (void)
+import           Control.Monad               (void, when)
 import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
@@ -26,14 +26,16 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
+import           Data.Constraint             (Dict (Dict), withDict)
 import           Data.Default                (def)
 import           Data.Foldable               (foldl', foldlM)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==), (./=)),
+                                              OrdSymbolic ((.>=)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymVal, ite, literal, (.<),
-                                              writeArray)
+                                              uninterpret, writeArray)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.SBV.Maybe              as SBV
 import qualified Data.SBV.String             as SBV
@@ -280,6 +282,32 @@ readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
     AVal _ _ -> error
       "impossible: unexpected type of cell provenance in readFields"
 
+mkChainData :: SingTy ('TyObject ty) -> Analyze (S (ConcreteObj ty))
+mkChainData (SObjectUnsafe SNil') = pure $ sansProv $ literal ()
+mkChainData (SObjectUnsafe (SCons' sym (fieldType :: SingTy v) subSchema)) = do
+  let fieldName = symbolVal sym
+      subObjTy = SObjectUnsafe subSchema
+      sbv = withHasKind fieldType $ uninterpret $ "chain_data_" <>
+        (map (\c -> if c == '-' then '_' else c) fieldName)
+
+      mNumDict :: Maybe (Dict (Num (Concrete v)))
+      mNumDict = case fieldType of
+        SInteger -> Just Dict
+        SDecimal -> Just Dict
+        _        -> Nothing
+
+  withSymVal fieldType $ do
+    when (fieldName `elem` ["block-height", "gas-limit", "gas-price"]) $ do
+      case mNumDict of
+        Just numDict ->
+          let zero = withDict numDict $ literal 0
+          in withOrd fieldType $ addConstraint $ sansProv $ sbv .>= zero
+        Nothing ->
+          error $ "impossible: " ++ fieldName ++ " must be a number"
+
+    S _ obj' <- mkChainData subObjTy
+    withSymVal subObjTy $ pure $ sansProv $ tuple (sbv, obj')
+
 readField
   :: TableName -> ColumnName -> S RowKey -> S Bool -> SingTy ty -> Analyze AVal
 readField tn cn sRk sDirty ty
@@ -516,11 +544,24 @@ evalTerm = \case
   ReadKeySet  nameT -> readKeySet  =<< evalTerm nameT
   ReadDecimal nameT -> readDecimal =<< evalTerm nameT
   ReadInteger nameT -> readInteger =<< evalTerm nameT
+  ReadString  nameT -> readString  =<< evalTerm nameT
 
   PactId -> do
     whetherInPact <- view inPact
     succeeds %= (.&& whetherInPact)
     view currentPactId
+
+  ChainData objTy -> do
+    mCached <- use $ globalState.gasCachedChainData
+    case mCached of
+      Just (SomeVal objTy' cd) ->
+        case singEq objTy objTy' of
+          Just Refl -> pure cd
+          Nothing -> error "impossible: type mismatch for chain-data cache"
+      Nothing -> do
+        cd <- mkChainData objTy
+        globalState.gasCachedChainData ?= SomeVal objTy cd
+        pure cd
 
   --
   -- If in the future Pact is able to store guards other than keysets in the
@@ -716,12 +757,12 @@ evalTerm = \case
     tagYield tid $ mkAVal sVal
     let ty = sing :: SingTy a
     withSymVal ty $
-      latticeState . lasYieldedInCurrent ?= SomeVal ty (S prov (SBV.sJust val))
+      latticeState . lasYieldedInCurrent ?= PossibleVal ty (S prov (SBV.sJust val))
     pure sVal
 
   Resume tid -> use (latticeState . lasYieldedInPrevious) >>= \case
     Nothing -> throwErrorNoLoc "No previously yielded value for resume"
-    Just (SomeVal ty (S prov mVal)) -> case singEq ty (sing :: SingTy a) of
+    Just (PossibleVal ty (S prov mVal)) -> case singEq ty (sing :: SingTy a) of
       Nothing   -> throwErrorNoLoc "Resume of unexpected type"
       Just Refl -> withSymVal ty $ do
         markFailure $ SBV.isNothing mVal
@@ -756,6 +797,7 @@ withReset number action = do
       txMetadata   = TxMetadata (mkFreeArray $ "txKeySets"  <> tShow number)
                                 (mkFreeArray $ "txDecimals" <> tShow number)
                                 (mkFreeArray $ "txIntegers" <> tShow number)
+                                (mkFreeArray $ "txStrings"  <> tShow number)
 
       newRegistry = Registry $ mkFreeArray $ "registry" <> tShow number
       newGuardPasses = writeArray (mkFreeArray $ "guardPasses" <> tShow number)
