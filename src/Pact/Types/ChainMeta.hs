@@ -21,7 +21,7 @@ module Pact.Types.ChainMeta
   , EntityName(..)
     -- * optics
   , aFrom, aTo
-  , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmTtl, pmCreationTime
+  , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmTTL, pmCreationTime
   , pdPublicMeta, pdBlockHeight, pdBlockTime
   ) where
 
@@ -93,14 +93,32 @@ data PublicMeta = PublicMeta
   , _pmSender :: !Text
   , _pmGasLimit :: !GasLimit
   , _pmGasPrice :: !GasPrice
-  , _pmTtl :: !TTLSeconds
+  , _pmTTL :: !TTLSeconds
   , _pmCreationTime :: !TxCreationTime
   } deriving (Eq, Show, Generic)
 makeLenses ''PublicMeta
 
 instance Default PublicMeta where def = PublicMeta "" "" 0 0 0 0
-instance ToJSON PublicMeta where toJSON = lensyToJSON 3
-instance FromJSON PublicMeta where parseJSON = lensyParseJSON 3
+
+instance ToJSON PublicMeta where
+  toJSON (PublicMeta cid s gl gp ttl ct) = object
+    [ "chainId" .= cid
+    , "sender" .= s
+    , "gasLimit" .= gl
+    , "gasPrice" .= gp
+    , "ttl" .= ttl
+    , "creationTime" .= ct
+    ]
+
+instance FromJSON PublicMeta where
+  parseJSON = withObject "PublicMeta" $ \o -> PublicMeta
+    <$> o .: "chainId"
+    <*> o .: "sender"
+    <*> o .: "gasLimit"
+    <*> o .: "gasPrice"
+    <*> o .: "ttl"
+    <*> o .: "creationTime"
+
 instance NFData PublicMeta
 instance Serialize PublicMeta
 
