@@ -530,8 +530,6 @@ moduleTables modules refMap = do
           (name, Ref (table@TTable {})) -> Just (name, table)
           _                             -> Nothing
 
-  -- TODO: need mapMaybe for HashMap
-  -- Note(emily): i can handle this in the current PR - lets discuss.
   let schemas = HM.fromList $ flip mapMaybe (HM.toList refMap) $ \case
         (name, Ref (schema@TSchema {})) -> Just (name, schema)
         _                               -> Nothing
