@@ -307,10 +307,6 @@ smtToCheckFailure info = CheckFailure info . SmtFailure
 smtToQueryFailure :: Info -> SmtFailure -> CheckFailure
 smtToQueryFailure info = CheckFailure info . QueryFailure
 
---
--- TODO: implement machine-friendly JSON output for CheckResult
---
-
 resultQuery
   :: Goal
   -> Model 'Symbolic
