@@ -19,6 +19,8 @@ module Pact.Types.ChainMeta
   , HasPlafMeta(..)
   , PublicData(..)
   , EntityName(..)
+  , TTLSeconds(..)
+  , TxCreationTime(..)
     -- * optics
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmTTL, pmCreationTime
