@@ -290,7 +290,6 @@ falsifyingModel :: CheckFailure -> Maybe (Model 'Concrete)
 falsifyingModel (CheckFailure _ (SmtFailure (Invalid m))) = Just m
 falsifyingModel _                                         = Nothing
 
--- TODO: don't throw out these Infos
 translateToCheckFailure :: TranslateFailure -> CheckFailure
 translateToCheckFailure (TranslateFailure info err)
   = CheckFailure info (TranslateFailure' err)
