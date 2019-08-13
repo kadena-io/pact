@@ -47,9 +47,9 @@ import           Control.Lens               (at, each, filtered, ifoldl,
                                              _2, _Left)
 import           Control.Monad              (void, (<=<))
 import           Control.Monad.Except       (Except, ExceptT (ExceptT),
-                                             MonadError, catchError, runExceptT,
-                                             throwError, withExcept,
-                                             withExceptT)
+                                             catchError, liftEither,
+                                             runExceptT, throwError,
+                                             withExcept, withExceptT)
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.State.Strict (evalStateT)
@@ -899,10 +899,6 @@ typecheck ref = do
   pure $ if Set.null failures
             then Right toplevel
             else Left $ CheckFailure info $ TypecheckFailure failures
-
--- TODO: use from Control.Monad.Except when on mtl 2.2.2
-liftEither :: MonadError e m => Either e a -> m a
-liftEither = either throwError return
 
 -- | Extract constants by typechecking and translating to properties.
 getConsts
