@@ -77,7 +77,7 @@ import           Pact.Types.Lang            (pattern ColonExp, pattern CommaExp,
                                              Def (..), DefType (..), Info,
                                              dFunType, dMeta, mModel,
                                              renderInfo, tDef, tInfo, tMeta,
-                                             _aName, _tDef)
+                                             _aName, _dMeta, _mModel, _tDef)
 import           Pact.Types.Pretty          (renderCompactText)
 import           Pact.Types.Runtime         (Exp, ModuleData (..), ModuleName,
                                              Ref, Ref' (Ref),
@@ -230,6 +230,7 @@ data VerificationFailure
   | FailedConstTranslation String
   | SchemalessTable Info
   | ScopeErrors [ScopeError]
+  | NonDefTerm (Pact.Term (Ref' (Pact.Term Pact.Name)))
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -847,35 +848,33 @@ moduleFunCheck
   -> Pact.FunType TC.UserType
   -- ^ The type of the term under analysis
   -> Except VerificationFailure (Either ParseFailure [Located Check])
-moduleFunCheck tables modCheckExps consts propDefs defn funTy = do
+moduleFunCheck tables modCheckExps consts propDefs defTerm funTy = do
   FunctionEnvironment envVidStart nameVids vidTys
     <- makeFunctionEnvironment funTy
 
-  -- TODO: this was very hard code to debug as the unsafe lenses just result in
-  -- properties not showing up, instead of a compile error when I changed
-  -- 'TDef' to a safe constructor. Please consider moving this code to use
-  -- pattern matches to ensure the proper constructor is found; and/or change
-  -- 'funTypes' to hold 'Def' objects
-  checks <- case defn ^? tDef . dMeta . mModel of
-    Nothing -> pure []
-    Just model -> case normalizeListLit model of
-      Nothing -> throwError $ ModuleParseFailure
-        -- reconstruct an `Exp Info` for this list
-        ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
-        , "malformed list (inconsistent use of comma separators?)"
-        )
-      Just model' -> withExcept ModuleParseFailure $ liftEither $ do
-        exps <- collectProperties model'
-        let funName = _dDefName (_tDef defn)
-            applicableModuleChecks =
-              filter (applicableCheck funName) modCheckExps
-                <&> \(ModuleCheck ty prop _scope) -> (ty, prop)
+  checks <- case defTerm of
+    TDef def info ->
+      let model = _mModel (_dMeta def)
+      in case normalizeListLit model of
+        Nothing -> throwError $ ModuleParseFailure
+          -- reconstruct an `Exp Info` for this list
+          ( Pact.EList (Pact.ListExp model Pact.Brackets info)
+          , "malformed list (inconsistent use of comma separators?)"
+          )
+        Just model' -> withExcept ModuleParseFailure $ liftEither $ do
+          exps <- collectProperties model'
+          let funName = _dDefName (_tDef defTerm)
+              applicableModuleChecks =
+                filter (applicableCheck funName) modCheckExps
+                  <&> \(ModuleCheck ty prop _scope) -> (ty, prop)
 
-        for (applicableModuleChecks <> exps) $ \(propTy, meta) ->
-          case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
-            consts propDefs propTy meta of
-            Left err   -> Left (meta, err)
-            Right good -> Right (Located (getInfo meta) good)
+          for (applicableModuleChecks <> exps) $ \(propTy, meta) ->
+            case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
+              consts propDefs propTy meta of
+              Left err   -> Left (meta, err)
+              Right good -> Right (Located (getInfo meta) good)
+    _ ->
+      throwError $ NonDefTerm defTerm
 
   pure $ Right checks
 
@@ -1179,6 +1178,8 @@ renderVerifiedModule = \case
   Left (InvalidRefType (RefMismatch actual expected)) ->
     ["Invalid reference type (" <> actual <>
        ") given to typechecker (instead of " <> expected <> ")."]
+  Left (NonDefTerm term) ->
+    ["Expected TDef Term but encountered: " <> tShow term]
   Left (FailedConstTranslation msg) ->
     [T.pack msg]
   Left (SchemalessTable info) ->
