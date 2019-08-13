@@ -19,6 +19,8 @@ module Pact.Types.ChainMeta
   , HasPlafMeta(..)
   , PublicData(..)
   , EntityName(..)
+  , TTLSeconds(..)
+  , TxCreationTime(..)
     -- * optics
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmTTL, pmCreationTime
@@ -53,13 +55,13 @@ newtype EntityName = EntityName Text
   deriving stock (Eq, Ord, Generic)
   deriving newtype (Show, NFData, Hashable, Serialize, Default, ToJSON, FromJSON, IsString, AsString)
 
--- | Wrapper for 'PublicMeta' ttl field in micros since posix epoch.
+-- | Wrapper for 'PublicMeta' ttl field in seconds since offset
 --
 newtype TTLSeconds = TTLSeconds ParsedInteger
   deriving stock (Eq, Ord, Generic)
   deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
 
--- | Wrapper for 'PublicMeta' creation time field in micros since posix epoch.
+-- | Wrapper for 'PublicMeta' creation time field in seonds since offset
 --
 newtype TxCreationTime = TxCreationTime ParsedInteger
   deriving stock (Eq, Ord, Generic)
