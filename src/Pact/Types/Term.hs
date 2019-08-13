@@ -313,7 +313,7 @@ instance Pretty DefType where
   pretty = prettyString . defTypeRep
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData)
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData,Hashable)
 
 instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name
@@ -327,6 +327,7 @@ data FunApp = FunApp {
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
     } deriving (Show,Eq,Generic)
+instance NFData FunApp
 instance ToJSON FunApp where toJSON = lensyToJSON 3
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 instance HasInfo FunApp where getInfo = _faInfo
@@ -353,7 +354,7 @@ instance HasInfo n => HasInfo (Ref' n) where
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON,Generic)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON,Generic,NFData)
 
 instance Pretty Gas where
   pretty (Gas i) = pretty i

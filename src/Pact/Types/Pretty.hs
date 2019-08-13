@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Pact.Types.Pretty
   ( (<+>)
@@ -56,6 +57,8 @@ module Pact.Types.Pretty
   , vsep
   ) where
 
+import           Control.DeepSeq      (NFData(..))
+import           GHC.Generics         (Generic(..))
 import           Bound.Var
 import           Data.Aeson           (Value(..))
 import qualified Data.ByteString.UTF8 as UTF8
@@ -90,8 +93,13 @@ data Annot
   | Val
   | Example
   | BadExample
+  deriving (Generic)
+
+instance NFData Annot
 
 type Doc = PP.Doc Annot
+
+instance NFData (PP.Doc Annot)
 instance Eq Doc where
   d1 == d2 = show d1 == show d2
   d1 /= d2 = show d1 /= show d2

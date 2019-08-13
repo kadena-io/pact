@@ -51,6 +51,7 @@ import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
@@ -75,8 +76,9 @@ import Pact.Types.Util
 data Capability
   = ModuleAdminCapability ModuleName
   | UserCapability ModuleName DefName [Term Name]
-  deriving (Eq,Show)
+  deriving (Eq,Show,Generic)
 
+instance NFData Capability
 instance Pretty Capability where
   pretty (ModuleAdminCapability mn) = pretty mn
   pretty (UserCapability mn name tms)  = parensSep (pretty mn <> colon <> pretty name : fmap pretty tms)
@@ -97,6 +99,7 @@ data StackFrame = StackFrame {
     , _sfLoc :: !Info
     , _sfApp :: Maybe (FunApp,[Text])
     } deriving (Eq,Generic)
+instance NFData StackFrame
 instance ToJSON StackFrame where toJSON = toJSON . show
 
 instance Show StackFrame where
@@ -113,6 +116,7 @@ data PactErrorType
   | SyntaxError
   | GasError
   deriving (Show,Eq,Generic)
+instance NFData PactErrorType
 instance ToJSON PactErrorType
 instance FromJSON PactErrorType
 
@@ -123,6 +127,7 @@ data PactError = PactError
   , peDoc :: Doc }
   deriving (Eq,Generic)
 
+instance NFData PactError
 instance Exception PactError
 instance ToJSON PactError where
   toJSON (PactError t i s d) =
@@ -222,14 +227,16 @@ data RefState = RefState {
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe Namespace
-    } deriving (Eq,Show)
+    } deriving (Eq,Show,Generic)
 makeLenses ''RefState
+instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing
 
 data Capabilities = Capabilities
   { _capGranted :: [Capability]
   , _capComposed :: [Capability]
-  } deriving (Show)
+  } deriving (Show,Generic)
+instance NFData Capabilities
 instance Default Capabilities where def = Capabilities def def
 makeLenses ''Capabilities
 
@@ -245,8 +252,9 @@ data EvalState = EvalState {
     , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
-    } deriving (Show)
+    } deriving (Show, Generic)
 makeLenses ''EvalState
+instance NFData EvalState
 instance Default EvalState where def = EvalState def def def 0 def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.

@@ -42,6 +42,7 @@ isSpecialForm = (`M.lookup` sfLookup)
 
 
 data NativeFunType = NativeFunType | GasRNativeFunType | RNativeFunType
+  deriving (Eq)
 
 
 -- | Native function with un-reduced arguments that computes gas.
