@@ -775,10 +775,6 @@ makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
         (zip vids argTys' <&> \(vid, (Unmunged nm, ty))
           -> Binding vid (Unmunged nm) (Munged nm) ty)
 
-      --
-      -- TODO: should the map sent to parsing should be Un/Munged, instead of
-      -- Text?
-      --
       nameVids :: Map Text VarId
       nameVids = Map.fromList $ env <&> \(Binding vid (Unmunged nm) _ _)
         -> (nm, vid)
