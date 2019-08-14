@@ -43,7 +43,7 @@ mockRuns (GasUnitTests tests) = mapM_ run (NEL.toList tests)
   where
     run (SomeGasTest test) = do
       (res,_) <- bracket (_gasTestMockEnv test) (_gasTestCleanup test) (mockRun test)
-      eitherDie res
+      eitherDie (_gasTestDescription test) res
 
 
 mockRuns'
@@ -52,7 +52,7 @@ mockRuns'
 mockRuns' (GasUnitTests tests) = mapM run (NEL.toList tests)
   where
     run (SomeGasTest test) = do
-      print $ "Results for " ++ show (_gasTestDescription test)
+      print $ "Results for: " ++ T.unpack (_gasTestDescription test)
       (res,state) <- bracket (_gasTestMockEnv test) (_gasTestCleanup test) (mockRun test)
       printResult res
       return (res,state)
@@ -88,6 +88,11 @@ benches
   -> C.Benchmark
 benches groupName (GasUnitTests tests)
   = C.bgroup (T.unpack groupName) (map bench $ NEL.toList tests)
+
+
+_testGasUnitTests :: GasUnitTests -> IO ()
+_testGasUnitTests g = do
+  mockRuns g
 
 
 main :: IO ()

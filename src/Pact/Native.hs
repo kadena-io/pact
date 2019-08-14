@@ -483,7 +483,7 @@ atDef :: NativeDef
 atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
                       funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
   ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
-  "Index LIST at IDX, or get value with key IDX from OBJECT."
+  "Index LIST at IDX (indices start at 0), or get value with key IDX from OBJECT."
 
 langDefs :: NativeModule
 langDefs =
