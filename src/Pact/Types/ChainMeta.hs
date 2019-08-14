@@ -22,7 +22,7 @@ module Pact.Types.ChainMeta
     -- * optics
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmTTL, pmCreationTime
-  , pdPublicMeta, pdBlockHeight, pdBlockTime, pdBlockHash
+  , pdPublicMeta, pdBlockHeight, pdBlockTime, pdPrevBlockHash
   ) where
 
 
@@ -142,7 +142,7 @@ data PublicData = PublicData
   { _pdPublicMeta :: !PublicMeta
   , _pdBlockHeight :: !Word64
   , _pdBlockTime :: !Int64
-  , _pdBlockHash :: !Text
+  , _pdPrevBlockHash :: !Text
   }
   deriving (Show, Eq, Generic)
 makeLenses ''PublicData

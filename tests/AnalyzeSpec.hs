@@ -1966,6 +1966,17 @@ spec = describe "analyze" $ do
             |]
       in expectPass code $ Satisfiable Success'
 
+    describe "prev-block-hash field" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (at "prev-block-hash" (chain-data))
+                     "anything")
+                  "prev-block-hash can not be anything"))
+            |]
+      in expectPass code $ Satisfiable Success'
+
     describe "caching" $
       let code =
             [text|

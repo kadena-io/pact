@@ -46,7 +46,7 @@ module Pact.Native
     , atDef
     , chainDataSchema
     , cdChainId, cdBlockHeight, cdBlockTime, cdSender, cdGasLimit, cdGasPrice
-    , cdBlockHash
+    , cdPrevBlockHash
     ) where
 
 import Control.Arrow hiding (app)
@@ -373,8 +373,8 @@ cdBlockHeight :: FieldKey
 cdBlockHeight = "block-height"
 cdBlockTime :: FieldKey
 cdBlockTime = "block-time"
-cdBlockHash :: FieldKey
-cdBlockHash = "block-hash"
+cdPrevBlockHash :: FieldKey
+cdPrevBlockHash = "prev-block-hash"
 cdSender :: FieldKey
 cdSender = "sender"
 cdGasLimit :: FieldKey
@@ -388,7 +388,7 @@ chainDataSchema = defSchema "public-chain-data"
     [ (cdChainId, tTyString)
     , (cdBlockHeight, tTyInteger)
     , (cdBlockTime, tTyTime)
-    , (cdBlockHash, tTyString)
+    , (cdPrevBlockHash, tTyString)
     , (cdSender, tTyString)
     , (cdGasLimit, tTyInteger)
     , (cdGasPrice, tTyDecimal)
@@ -413,7 +413,7 @@ chainDataDef = defRNative "chain-data" chainData
         [ (cdChainId, toTerm _pmChainId)
         , (cdBlockHeight, toTerm _pdBlockHeight)
         , (cdBlockTime, toTime _pdBlockTime)
-        , (cdBlockHash, toTerm _pdBlockHash)
+        , (cdPrevBlockHash, toTerm _pdPrevBlockHash)
         , (cdSender, toTerm _pmSender)
         , (cdGasLimit, toTerm _pmGasLimit)
         , (cdGasPrice, toTerm _pmGasPrice)

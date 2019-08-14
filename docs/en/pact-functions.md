@@ -37,7 +37,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"block-hash": "","block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"sender": ""}
+{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"prev-block-hash": "","sender": ""}
 ```
 
 
@@ -353,7 +353,7 @@ Fields:
 &nbsp;&nbsp;`chain-id:string`
 &nbsp;&nbsp;`block-height:integer`
 &nbsp;&nbsp;`block-time:time`
-&nbsp;&nbsp;`block-hash:string`
+&nbsp;&nbsp;`prev-block-hash:string`
 &nbsp;&nbsp;`sender:string`
 &nbsp;&nbsp;`gas-limit:integer`
 &nbsp;&nbsp;`gas-price:decimal`
