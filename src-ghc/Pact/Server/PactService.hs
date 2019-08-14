@@ -23,6 +23,7 @@ import Data.Word (Word64)
 import Data.Default
 import Data.Aeson (Value, encode)
 import qualified Data.ByteString.Lazy  as BSL
+import Data.Text (Text)
 
 import Pact.Gas
 import Pact.Interpreter
@@ -50,6 +51,7 @@ initPactService CommandConfig {..} loggers spv = do
       gasModel = constGasModel (fromIntegral gasRate)
       blockHeight = 0
       blockTime = 0
+      prevBlockHash = ""
 
   let mkCEI p@PactDbEnv {..} = do
         klog "Creating Pact Schema"
@@ -57,9 +59,9 @@ initPactService CommandConfig {..} loggers spv = do
         return CommandExecInterface
           { _ceiApplyCmd = \eMode cmd ->
               applyCmd logger _ccEntity p gasModel
-                blockHeight blockTime spv eMode cmd (verifyCommand cmd)
+                blockHeight blockTime prevBlockHash spv eMode cmd (verifyCommand cmd)
           , _ceiApplyPPCmd = applyCmd logger _ccEntity p gasModel
-                             blockHeight blockTime spv }
+                             blockHeight blockTime prevBlockHash spv }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -75,20 +77,21 @@ applyCmd :: Logger ->
             GasModel ->
             Word64 ->
             Int64 ->
+            Text ->
             SPVSupport ->
             ExecutionMode ->
             Command a ->
             ProcessedCommand PublicMeta ParsedCode ->
             IO (CommandResult Hash)
-applyCmd _ _ _ _ _ _ _ _ cmd (ProcFail s) =
+applyCmd _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
   return $ resultFailure
            Nothing
            (cmdToRequestKey cmd)
            (PactError TxFailure def def . viaShow $ s)
-applyCmd logger conf dbv gasModel bh bt spv exMode _ (ProcSucc cmd) = do
+applyCmd logger conf dbv gasModel bh bt pbh spv exMode _ (ProcSucc cmd) = do
   let pubMeta = _pMeta $ _cmdPayload cmd
       gasEnv = GasEnv (_pmGasLimit pubMeta) (_pmGasPrice pubMeta) gasModel
-      pd = PublicData pubMeta bh bt
+      pd = PublicData pubMeta bh bt pbh
 
   res <- catchesPactError $ runCommand
                             (CommandEnv conf exMode dbv logger gasEnv pd spv)
