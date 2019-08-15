@@ -1,6 +1,5 @@
 stages:
   - build
-  - bench
   # - deploy
 
 pact-macos:
@@ -15,32 +14,17 @@ pact-macos:
   #   paths:
   #   - public-macos/
 
-# pact-macos:
-#   stage: bench
-#   tags:
-#      - macos
-#   script:
-#     - nix-shell
-#     - cabal bench
-
 pact-linux:
   stage: build
   tags:
     - linux
   script:
     - nix-build
+    - nix-shell --pure --run 'cabal bench'
 #    - ./collectArtifacts.sh linux
 #  artifacts:
 #    paths:
 #    - public-linux/
-
-pact-linux:
-  stage: bench
-  tags:
-     - linux
-  script:
-    - nix-shell
-    - cabal bench
 
 # deploy-nix-cache:
 #   stage: deploy
