@@ -92,6 +92,7 @@ defaultGasTable =
     , ("and?", const 1)
     , ("log", const 1)
     , ("read-decimal", const 1)
+    , ("read-string", const 1)
     , ("length", const 1)
     , ("sqrt", const 1)
     , ("<", const 1)

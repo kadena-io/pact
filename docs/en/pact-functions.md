@@ -37,7 +37,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"sender": ""}
+{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"prev-block-hash": "","sender": ""}
 ```
 
 
@@ -339,7 +339,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.2.0"
+"3.2.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -353,6 +353,7 @@ Fields:
 &nbsp;&nbsp;`chain-id:string`
 &nbsp;&nbsp;`block-height:integer`
 &nbsp;&nbsp;`block-time:time`
+&nbsp;&nbsp;`prev-block-hash:string`
 &nbsp;&nbsp;`sender:string`
 &nbsp;&nbsp;`gas-limit:integer`
 &nbsp;&nbsp;`gas-price:decimal`
@@ -392,6 +393,17 @@ Read KEY from top level of message data body, or data body itself if not provide
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+```
+
+
+### read-string {#read-string}
+
+*key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Parse KEY string or number value from top level of message data body as string.
+```lisp
+(read-string "sender")
 ```
 
 
@@ -476,6 +488,19 @@ pact> (take (- 3) [1 2 3 4 5])
 [3 4 5]
 pact> (take ['name] { 'name: "Vlad", 'active: false})
 {"name": "Vlad"}
+```
+
+
+### try {#try}
+
+*default*&nbsp;`<a>` *action*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions are expressions which do not do i/o or work with non-deterministic state in contrast to impure expressions such as reading and writing to a table.
+```lisp
+pact> (try 3 (enforce (= 1 2) "this will definitely fail"))
+3
+(expect "impure expression fails and returns default" "default" (try "default" (with-read accounts id {'ccy := ccy}) ccy))
 ```
 
 

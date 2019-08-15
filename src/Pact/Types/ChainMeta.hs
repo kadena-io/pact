@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE DerivingStrategies #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2019 Stuart Popejoy
@@ -19,10 +19,12 @@ module Pact.Types.ChainMeta
   , HasPlafMeta(..)
   , PublicData(..)
   , EntityName(..)
+  , TTLSeconds(..)
+  , TxCreationTime(..)
     -- * optics
   , aFrom, aTo
-  , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice
-  , pdPublicMeta, pdBlockHeight, pdBlockTime
+  , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmTTL, pmCreationTime
+  , pdPublicMeta, pdBlockHeight, pdBlockTime, pdPrevBlockHash
   ) where
 
 
@@ -43,23 +45,33 @@ import Data.Word (Word64)
 
 -- internal pact modules
 
+import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
 
 
 newtype EntityName = EntityName Text
-  deriving (Eq, Ord, NFData, ToJSON, FromJSON, Default, Generic, IsString, Serialize, Hashable, AsString)
+  deriving stock (Eq, Ord, Generic)
+  deriving newtype (Show, NFData, Hashable, Serialize, Default, ToJSON, FromJSON, IsString, AsString)
 
-instance Show EntityName where show (EntityName t) = show t
+-- | Wrapper for 'PublicMeta' ttl field in seconds since offset
+--
+newtype TTLSeconds = TTLSeconds ParsedInteger
+  deriving stock (Eq, Ord, Generic)
+  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
 
+-- | Wrapper for 'PublicMeta' creation time field in seonds since offset
+--
+newtype TxCreationTime = TxCreationTime ParsedInteger
+  deriving stock (Eq, Ord, Generic)
+  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
 
 -- | Confidential/Encrypted addressing info, for use in metadata on privacy-supporting platforms.
 data Address = Address
   { _aFrom :: EntityName
   , _aTo :: Set EntityName
-  }
-  deriving (Eq,Show,Ord,Generic)
+  } deriving (Eq,Show,Ord,Generic)
 
 instance NFData Address
 instance Serialize Address
@@ -79,16 +91,36 @@ instance Serialize PrivateMeta
 
 -- | Contains all necessary metadata for a Chainweb-style public chain.
 data PublicMeta = PublicMeta
-  { _pmChainId :: ChainId
-  , _pmSender :: Text
-  , _pmGasLimit :: GasLimit
-  , _pmGasPrice :: GasPrice
+  { _pmChainId :: !ChainId
+  , _pmSender :: !Text
+  , _pmGasLimit :: !GasLimit
+  , _pmGasPrice :: !GasPrice
+  , _pmTTL :: !TTLSeconds
+  , _pmCreationTime :: !TxCreationTime
   } deriving (Eq, Show, Generic)
 makeLenses ''PublicMeta
 
-instance Default PublicMeta where def = PublicMeta "" "" 0 0
-instance ToJSON PublicMeta where toJSON = lensyToJSON 3
-instance FromJSON PublicMeta where parseJSON = lensyParseJSON 3
+instance Default PublicMeta where def = PublicMeta "" "" 0 0 0 0
+
+instance ToJSON PublicMeta where
+  toJSON (PublicMeta cid s gl gp ttl ct) = object
+    [ "chainId" .= cid
+    , "sender" .= s
+    , "gasLimit" .= gl
+    , "gasPrice" .= gp
+    , "ttl" .= ttl
+    , "creationTime" .= ct
+    ]
+
+instance FromJSON PublicMeta where
+  parseJSON = withObject "PublicMeta" $ \o -> PublicMeta
+    <$> o .: "chainId"
+    <*> o .: "sender"
+    <*> o .: "gasLimit"
+    <*> o .: "gasPrice"
+    <*> o .: "ttl"
+    <*> o .: "creationTime"
+
 instance NFData PublicMeta
 instance Serialize PublicMeta
 
@@ -109,13 +141,14 @@ instance HasPlafMeta () where
   getPublicMeta = const def
 
 data PublicData = PublicData
-  { _pdPublicMeta :: PublicMeta
-  , _pdBlockHeight :: {-# UNPACK #-} !Word64
-  , _pdBlockTime :: {-# UNPACK #-} !Int64
+  { _pdPublicMeta :: !PublicMeta
+  , _pdBlockHeight :: !Word64
+  , _pdBlockTime :: !Int64
+  , _pdPrevBlockHash :: !Text
   }
   deriving (Show, Eq, Generic)
 makeLenses ''PublicData
 
 instance ToJSON PublicData where toJSON = lensyToJSON 3
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
-instance Default PublicData where def = PublicData def def def
+instance Default PublicData where def = PublicData def def def def

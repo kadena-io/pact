@@ -1,0 +1,62 @@
+(begin-tx)
+
+(module try-module GOVERNANCE
+
+  "Test the try/handle-based control flow primitives"
+
+  (defcap GOVERNANCE ()
+    true)
+
+  (defschema test-schema
+    test:bool)
+
+  (deftable test-table:{test-schema})
+
+  (defun successful-enforce:bool ()
+    (try false (enforce (= "emily" "emily") "failure")))
+
+  (defun failed-enforce:bool ()
+    (try false (enforce (= "will" "stuart") "failure")))
+
+  (defun failed-complex-enforce:string ()
+    (try "default" (let ((r "broken")) (enforce false "will fail") r)))
+
+  (defun failed-expr:decimal ()
+    (try 0.0 (/ 1 0)))
+
+  (defun failed-write:string ()
+    (try "no writes" (write test-table "emily" { "test" : true })))
+
+  (defun successful-read:bool ()
+    (try false (with-read test-table "emily" { "test" := t} t)))
+
+)
+
+(create-table test-table)
+(commit-tx)
+
+(begin-tx)
+
+(use try-module)
+
+;; success case for enforce
+(expect "should return 'true' on successful enforce" true (successful-enforce))
+
+;; failure case for enforce
+(expect "should return 'false' on failed enforce" false (failed-enforce))
+
+;; failure case for slightly more complex enforce
+(expect "should return 'false' on failed enforce" "default" (failed-complex-enforce))
+
+;; failure case for std expression
+(expect "return 0.0 on failed division by 0" 0.0 (failed-expr))
+
+; TODO: instead of expecting here, we should expect failure by
+; independently handling impure exceptions
+;
+;; failure case for writes in pure context
+(expect "failure on attempting to write to the db" "no writes" (failed-write))
+
+(insert test-table "emily" { "test" : true })
+;; failure case for reads in pure context
+(expect "failure when on attempting to reads from the db" true (successful-read))

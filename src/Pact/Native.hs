@@ -29,6 +29,8 @@ module Pact.Native
     , hashDef
     , ifDef
     , readDecimalDef
+    , readIntegerDef
+    , readStringDef
     , baseStrToInt
     , mapDef
     , foldDef
@@ -44,6 +46,7 @@ module Pact.Native
     , atDef
     , chainDataSchema
     , cdChainId, cdBlockHeight, cdBlockTime, cdSender, cdGasLimit, cdGasPrice
+    , cdPrevBlockHash
     ) where
 
 import Control.Arrow hiding (app)
@@ -138,9 +141,8 @@ enforceOneDef =
   ["(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])"]
   "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success."
   where
-
     enforceOne :: NativeFun e
-    enforceOne i as@[msg,TList conds _ _] = runReadOnly (_faInfo i) $
+    enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do
         msg' <- reduce msg >>= \m -> case m of
           TLitString s -> return s
@@ -148,12 +150,34 @@ enforceOneDef =
         let tryCond r@Just {} _ = return r
             tryCond Nothing cond = catch
               (Just <$> reduce cond)
+              -- TODO: instead of catching all here, make pure violations
+              -- independently catchable
               (\(_ :: SomeException) -> return Nothing)
         r <- foldM tryCond Nothing conds
         case r of
           Nothing -> failTx (_faInfo i) $ pretty msg'
           Just b' -> return b'
     enforceOne i as = argsError' i as
+
+tryDef :: NativeDef
+tryDef =
+  defNative "try" try' (funType a [("default", a), ("action", a)])
+  ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
+  ,LitExample "(expect \"impure expression fails and returns default\" \"default\" \
+   \(try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
+  ]
+  "Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions \
+  \are expressions which do not do i/o or work with non-deterministic state in contrast \
+  \to impure expressions such as reading and writing to a table."
+  where
+    try' :: NativeFun e
+    try' i as@[da, action] = gasUnreduced i as $ do
+      ra <- reduce da
+      -- TODO: instead of catching all here, make pure violations
+      -- independently catchable
+      catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) ->
+        return ra
+    try' i as = argsError' i as
 
 pactVersionDef :: NativeDef
 pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
@@ -250,13 +274,39 @@ readDecimalDef = defRNative "read-decimal" readDecimal
   (funType tTyDecimal [("key",tTyString)])
   [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
   "Parse KEY string or number value from top level of message data body as decimal."
-  where
 
+  where
     readDecimal :: RNativeFun e
     readDecimal i [TLitString key] = do
       (ParsedDecimal a') <- parseMsgKey i "read-decimal" key
       return $ toTerm a'
     readDecimal i as = argsError i as
+
+readIntegerDef :: NativeDef
+readIntegerDef = defRNative "read-integer" readInteger
+  (funType tTyInteger [("key",tTyString)])
+  [LitExample "(read-integer \"age\")"]
+  "Parse KEY string or number value from top level of message data body as integer."
+
+  where
+    readInteger :: RNativeFun e
+    readInteger i [TLitString key] = do
+      (ParsedInteger a') <- parseMsgKey i "read-integer" key
+      return $ toTerm a'
+    readInteger i as = argsError i as
+
+readStringDef :: NativeDef
+readStringDef = defRNative "read-string" readString
+  (funType tTyString [("key",tTyString)])
+  [LitExample "(read-string \"sender\")"]
+  "Parse KEY string or number value from top level of message data body as string."
+
+  where
+    readString :: RNativeFun e
+    readString i [TLitString key] = do
+      txt <- parseMsgKey i "read-string" key
+      return $ tStr txt
+    readString i as = argsError i as
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
@@ -323,6 +373,8 @@ cdBlockHeight :: FieldKey
 cdBlockHeight = "block-height"
 cdBlockTime :: FieldKey
 cdBlockTime = "block-time"
+cdPrevBlockHash :: FieldKey
+cdPrevBlockHash = "prev-block-hash"
 cdSender :: FieldKey
 cdSender = "sender"
 cdGasLimit :: FieldKey
@@ -336,6 +388,7 @@ chainDataSchema = defSchema "public-chain-data"
     [ (cdChainId, tTyString)
     , (cdBlockHeight, tTyInteger)
     , (cdBlockTime, tTyTime)
+    , (cdPrevBlockHash, tTyString)
     , (cdSender, tTyString)
     , (cdGasLimit, tTyInteger)
     , (cdGasPrice, tTyDecimal)
@@ -360,6 +413,7 @@ chainDataDef = defRNative "chain-data" chainData
         [ (cdChainId, toTerm _pmChainId)
         , (cdBlockHeight, toTerm _pdBlockHeight)
         , (cdBlockTime, toTime _pdBlockTime)
+        , (cdPrevBlockHash, toTerm _pdPrevBlockHash)
         , (cdSender, toTerm _pmSender)
         , (cdGasLimit, toTerm _pmGasLimit)
         , (cdGasPrice, toTerm _pmGasPrice)
@@ -460,13 +514,13 @@ langDefs =
     ,atDef
     ,enforceDef
     ,enforceOneDef
+    ,tryDef
     ,formatDef
     ,defRNative "pact-id" pactId (funType tTyString []) []
      "Return ID if called during current pact execution, failing if not."
     ,readDecimalDef
-    ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
-     [LitExample "(read-integer \"age\")"]
-     "Parse KEY string or number value from top level of message data body as integer."
+    ,readIntegerDef
+    ,readStringDef
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
      [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
      "Read KEY from top level of message data body, or data body itself if not provided. \
@@ -662,12 +716,6 @@ readMsg i [TLitString key] = fromPactValue <$> parseMsgKey i "read-msg" key
 readMsg i [] = fromPactValue <$> parseMsgKey' i "read-msg" Nothing
 readMsg i as = argsError i as
 
-
-readInteger :: RNativeFun e
-readInteger i [TLitString key] = do
-  (ParsedInteger a') <- parseMsgKey i "read-integer" key
-  return $ toTerm a'
-readInteger i as = argsError i as
 
 
 pactId :: RNativeFun e
