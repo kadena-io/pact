@@ -173,23 +173,24 @@ data TxMetadata
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeModuleName   :: Pact.ModuleName
-    , _aePactMetadata :: PactMetadata
-    , _aeRegistry     :: Registry
-    , _aeTxMetadata   :: TxMetadata
-    , _aeScope        :: Map VarId AVal -- used as a stack
-    , _aeStepChoices  :: Map VarId (SBV Bool)
-    , _invariants     :: TableMap [Located (Invariant 'TyBool)]
-    , _aeColumnIds    :: TableMap (Map Text VarId)
-    , _aeModelTags    :: ModelTags 'Symbolic
-    , _aeInfo         :: Info
-    , _aeTrivialGuard :: S Guard
-    , _aeModuleGuard  :: S Guard
-    , _aeEmptyGrants  :: TokenGrants
+    { _aeModuleName    :: Pact.ModuleName
+    , _aePactMetadata  :: PactMetadata
+    , _aeRegistry      :: Registry
+    , _aeTxMetadata    :: TxMetadata
+    , _aeScope         :: Map VarId AVal -- used as a stack
+    , _aeStepChoices   :: Map VarId (SBV Bool)
+    , _invariants      :: TableMap [Located (Invariant 'TyBool)]
+    , _aeColumnIds     :: TableMap (Map Text VarId)
+    , _aeModelTags     :: ModelTags 'Symbolic
+    , _aeInfo          :: Info
+    , _aeTrivialGuard  :: S Guard
+    , _aeModuleGuard   :: S Guard
+    , _aeEmptyGrants   :: TokenGrants
     -- ^ the default, blank slate of grants, where no token is granted.
-    , _aeActiveGrants :: TokenGrants
+    , _aeActiveGrants  :: TokenGrants
     -- ^ the current set of tokens that are granted, manipulated as a stack
-    , _aeTables       :: [Table]
+    , _aeTables        :: [Table]
+    , _aeDbRestriction :: Maybe DbRestriction
     } deriving Show
 
 mkAnalyzeEnv
@@ -248,7 +249,7 @@ mkAnalyzeEnv modName pactMetadata gov registry tables caps args stepChoices tags
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args
     stepChoices invariants' columnIds' tags info (sansProv trivialGuard)
-    modGuard emptyGrants activeGrants tables
+    modGuard emptyGrants activeGrants tables mempty
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
