@@ -90,10 +90,21 @@ benches groupName (GasUnitTests tests)
   = C.bgroup (T.unpack groupName) (map bench $ NEL.toList tests)
 
 
-_testGasUnitTests :: GasUnitTests -> IO ()
-_testGasUnitTests g = do
-  mockRuns g
-
+runGasTestByName :: T.Text -> IO ()
+runGasTestByName nname = do
+  case (unitTestFromDef (NativeDefName nname)) of
+    Nothing -> print $ show nname ++ "'s gas tests not found."
+    Just g -> do
+      print $ show nname
+      _ <- mockRuns' g
+      print ""
+ 
+{--  mapM_ (\(n,t) -> do
+            print $ show n
+            _ <- mockRuns' t
+            print "")
+        (HM.toList unitTests) 
+--}
 
 main :: IO ()
 main = do
