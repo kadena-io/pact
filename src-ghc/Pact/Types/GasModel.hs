@@ -300,11 +300,141 @@ unitTestFromDef nativeName = case (asString nativeName) of
   -- "namespace" -> Just namespaceTests --TODO
   -- "pact-id" -> Just pactIdTests --TODO
   -- "pact-version" -> Just pactVersionTests --TODO
-  -- "public-chain-data" -> Just publicChainDataTests --TODO
+  -- "read-decimal" -> Just readDecimalTests --TODO
+  -- "read-integer" -> Just readIntegerTests --TODO
+  -- "read-msg" -> Just readMsgTests --TODO
+  "remove" -> Just removeTests
+  -- "resume" -> Just resumeTests --TODO
+  "reverse" -> Just reverseTests
+  "sort" -> Just sortTests
+  "str-to-int" -> Just strToIntTests
+  "take" -> Just takeTests
+  "try" -> Just tryTests
+  --"tx-hash" -> Just txHashTests --TODO because even with something else, returns def tx hash
+  "typeof" -> Just typeOfTests
+  "where" -> Just whereTests
+  --"yield" -> Just yieldTests --TODO
   _ -> Nothing
 
 
 -- | General native function tests
+whereTests :: GasUnitTests
+whereTests = defGasUnitTests allExprs
+  where
+    whereExpr obj =
+      [text| (where "a1" (constantly true) $obj) |]
+
+    allExprs = NEL.map whereExpr strKeyIntValMapsExpr
+
+
+typeOfTests :: GasUnitTests
+typeOfTests = defGasUnitTests allExprs
+  where
+    typeOfExpr t =
+      [text| (typeof $t) |]
+
+    allExprs = NEL.map typeOfExpr strKeyIntValMapsExpr
+      <> NEL.map typeOfExpr escapedStringsExpr
+      <> NEL.map typeOfExpr intListsExpr
+      <> NEL.map (typeOfExpr . toText . MockInt) sizes
+
+
+tryTests :: GasUnitTests
+tryTests = defGasUnitTests allExprs
+  where
+    tryPassExpr =
+      [text| (try true (enforce true "this will definitely pass")) |]
+    tryFailExpr =
+      [text| (try true (enforce false "this will definitely fail")) |]
+
+    allExprs = tryPassExpr :| [ tryFailExpr ]
+
+
+takeTests :: GasUnitTests
+takeTests = defGasUnitTests allExprs
+  where
+    takeFirstExpr t =
+      [text| (take 1 $t) |]
+    takeLastExpr t =
+      [text| (take -1 $t) |]
+    takeKeysExpr (keyList, obj) =
+      [text| (take $keyList $obj) |]
+    takeSingleKeyExpr obj =
+      [text| (take ["a1"] $obj) |]
+    
+    keysToTakeArgs = NEL.zip escapedStrListsExpr strKeyIntValMapsExpr
+
+    allExprs =
+         NEL.map takeFirstExpr intListsExpr
+      <> NEL.map takeLastExpr intListsExpr
+      <> NEL.map takeKeysExpr keysToTakeArgs
+      <> NEL.map takeSingleKeyExpr strKeyIntValMapsExpr
+
+
+strToIntTests :: GasUnitTests
+strToIntTests = defGasUnitTests allExprs
+  where
+    str2intExpr valInt =
+      [text| (str-to-int $valStr) |]
+        where valStr = escapeText $ intToStr valInt
+    str2intLongHex = [text| (str-to-int 16 "186A0") |]
+    str2intMedHex = [text| (str-to-int 16 "64") |]
+    str2intSmallHex = [text| (str-to-int 16 "a") |]
+
+    str2intLongBinary = [text| (str-to-int 2 "11000011010100000") |]
+    str2intMedBinary = [text| (str-to-int 2 "1100100") |]
+    str2intSmallBinary = [text| (str-to-int 2 "1010") |]
+      
+    str2intLongBase64 = [text| (str-to-int 64 "AYag") |]
+    str2intMedBase64 = [text| (str-to-int 64 "ZA") |]
+    str2intSmallBase64 = [text| (str-to-int 64 "Cg") |]
+    
+    allExprs = NEL.map str2intExpr sizes
+      <> (str2intLongHex :|
+          [ str2intMedHex,
+            str2intSmallHex,
+            
+            str2intLongBinary,
+            str2intMedBinary,
+            str2intSmallBinary,
+            
+            str2intLongBase64,
+            str2intMedBase64,
+            str2intSmallBase64
+          ])
+
+
+sortTests :: GasUnitTests
+sortTests = defGasUnitTests allExprs
+  where
+    sortListExpr li =
+      [text| (sort $li) |]
+
+    reversedListExpr = NEL.map makeExpr intLists
+    makeExpr li = toText $ MockList
+                  $ map MockInt (reverse $ NEL.toList li)
+        
+    allExprs = NEL.map sortListExpr reversedListExpr
+
+
+reverseTests :: GasUnitTests
+reverseTests = defGasUnitTests allExprs
+  where
+    reverseExpr li =
+      [text| (reverse $li) |]
+
+    allExprs = NEL.map reverseExpr intListsExpr
+
+
+removeTests :: GasUnitTests
+removeTests = defGasUnitTests allExprs
+  where
+    removeExpr obj =
+      [text| (remove "a1" $obj) |]
+
+    allExprs = NEL.map removeExpr strKeyIntValMapsExpr
+
+
 mapTests :: GasUnitTests
 mapTests = defGasUnitTests allExprs
   where
@@ -346,6 +476,7 @@ intToStrTests = defGasUnitTests allExprs
     baseList :: NonEmpty Integer
     baseList = 64 :| [2..16]
     -- TODO is foldr1 the best thing to do here
+    -- | Test every base conversion against three different number sizes
     args = F.foldr1 (<>) $ NEL.map (\n -> NEL.map (\b -> (n,b)) baseList) sizes
     
     allExprs = NEL.map int2strExpr args

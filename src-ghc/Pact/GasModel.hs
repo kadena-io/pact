@@ -97,14 +97,12 @@ runGasTestByName nname = do
     Just g -> do
       print $ show nname
       _ <- mockRuns' g
-      print ""
- 
-{--  mapM_ (\(n,t) -> do
-            print $ show n
-            _ <- mockRuns' t
-            print "")
-        (HM.toList unitTests) 
---}
+      return ()
+  
+runAllGasTests :: IO ()
+runAllGasTests = do
+  mapM_ (\(_,t) -> mockRuns' t)
+        (HM.toList unitTests)
 
 main :: IO ()
 main = do
