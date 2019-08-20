@@ -189,6 +189,9 @@ sizes =
     1
   ]
 
+sizesExpr :: NEL.NonEmpty PactExpression
+sizesExpr = NEL.map (toText . MockInt) sizes
+
 -- | List of integers of varying sizes
 intLists :: NEL.NonEmpty (NEL.NonEmpty Integer)
 intLists = NEL.map (\n -> 1 :| [2..n]) sizes
@@ -275,46 +278,465 @@ unitTests = HM.fromList $ foldl' getUnitTest [] allNatives
 unitTestFromDef :: NativeDefName -> Maybe GasUnitTests
 unitTestFromDef nativeName = case (asString nativeName) of
   -- | General native functions
-  "at" -> Just atTests
-  "bind" -> Just bindTests
+  "at"           -> Just atTests
+  "bind"         -> Just bindTests
   -- "chain-data" -> chainDataTests --TODO
-  "compose" -> Just composeTests
-  "constantly" -> Just constantlyTests
-  "contains" -> Just containsTests
+  "compose"      -> Just composeTests
+  "constantly"   -> Just constantlyTests
+  "contains"     -> Just containsTests
   -- "define-namespace" -> Just defineNamespaceTests --TODO
-  "drop" -> Just dropTests
-  "enforce" -> Just enforceTests
-  "enforce-one" -> Just enforceOneTests
+  "drop"         -> Just dropTests
+  "enforce"      -> Just enforceTests
+  "enforce-one"  -> Just enforceOneTests
   -- "enforce-pact-version" -> Just enforcePactVersionTests --TODO
-  "filter" -> Just filterTests
-  "fold" -> Just foldTests
-  "format" -> Just formatTests
-  "hash" -> Just hashTests
-  "identity" -> Just identityTests
-  "if" -> Just ifTests
-  "int-to-str" -> Just intToStrTests
-  "length" -> Just lengthTests
+  "filter"       -> Just filterTests
+  "fold"         -> Just foldTests
+  "format"       -> Just formatTests
+  "hash"         -> Just hashTests
+  "identity"     -> Just identityTests
+  "if"           -> Just ifTests
+  "int-to-str"   -> Just intToStrTests
+  "length"       -> Just lengthTests
   -- "list-module" -> Just listModuleTests --TODO
-  "make-list" -> Just makeListTests
-  "map" -> Just mapTests
+  "make-list"    -> Just makeListTests
+  "map"          -> Just mapTests
   -- "namespace" -> Just namespaceTests --TODO
   -- "pact-id" -> Just pactIdTests --TODO
   -- "pact-version" -> Just pactVersionTests --TODO
   -- "read-decimal" -> Just readDecimalTests --TODO
   -- "read-integer" -> Just readIntegerTests --TODO
   -- "read-msg" -> Just readMsgTests --TODO
-  "remove" -> Just removeTests
+  "remove"       -> Just removeTests
   -- "resume" -> Just resumeTests --TODO
-  "reverse" -> Just reverseTests
-  "sort" -> Just sortTests
-  "str-to-int" -> Just strToIntTests
-  "take" -> Just takeTests
-  "try" -> Just tryTests
+  "reverse"      -> Just reverseTests
+  "sort"         -> Just sortTests
+  "str-to-int"   -> Just strToIntTests
+  "take"         -> Just takeTests
+  "try"          -> Just tryTests
   --"tx-hash" -> Just txHashTests --TODO because even with something else, returns def tx hash
-  "typeof" -> Just typeOfTests
-  "where" -> Just whereTests
+  "typeof"       -> Just typeOfTests
+  "where"        -> Just whereTests
   --"yield" -> Just yieldTests --TODO
+
+  -- | Operators native functions
+  "!="      -> Just notEqualOptTests
+  "&"       -> Just bitwiseOptTests
+  "*"       -> Just multOptTests
+  "+"       -> Just addOptTests
+  "-"       -> Just subOptTests
+  "/"       -> Just divOptTests
+  "<"       -> Just lessThanOptTests
+  "<="      -> Just lessThanEqualOptTests
+  "="       -> Just equalOptTests
+  ">"       -> Just greaterThanOptTests
+  ">="      -> Just greaterThanEqOptTests
+  "^"       -> Just raiseOptTests
+  "abs"     -> Just absOptTests
+  "and"     -> Just andOptTests
+  "and?"    -> Just andFuncOptTests
+  "ceiling" -> Just ceilingOptTests
+  "exp"     -> Just expOptTests
+  "floor"   -> Just floorOptTests
+  "ln"      -> Just lnOptTests
+  "log"     -> Just logOptTests
+  "mod"     -> Just modOptTests
+  "not"     -> Just notOptTests
+  "not?"    -> Just notFuncOptTests
+  "or"      -> Just orOptTests
+  "or?"     -> Just orFuncOptTests
+  "round"   -> Just roundOptTests
+  "shift"   -> Just shiftOptTests
+  "sqrt"    -> Just sqrtOptTests
+  "xor"     -> Just xorOptTests
+  "|"       -> Just bitwiseOrOptTests
+  "~"       -> Just reverseBitsOptTests
+  
   _ -> Nothing
+
+
+-- | Operators native function tests
+reverseBitsOptTests :: GasUnitTests
+reverseBitsOptTests = defGasUnitTests allExprs
+  where
+    reverseBitsExpr x = [text| (~ $x) |]
+
+    allExprs = NEL.map reverseBitsExpr sizesExpr
+
+
+bitwiseOrOptTests :: GasUnitTests
+bitwiseOrOptTests = defGasUnitTests allExprs
+  where
+    bitwiseOrExpr x = [text| (| 2 $x) |]
+
+    allExprs = NEL.map bitwiseOrExpr sizesExpr
+
+
+xorOptTests :: GasUnitTests
+xorOptTests = defGasUnitTests allExprs
+  where
+    xorExpr x = [text| (xor 2 $x) |]
+
+    allExprs = NEL.map xorExpr sizesExpr
+
+
+sqrtOptTests :: GasUnitTests
+sqrtOptTests = defGasUnitTests allExprs
+  where
+    sqrtExpr x = [text| (sqrt $x) |]
+    sqrtDecimalExpr x = [text| (sqrt $x.1) |]
+
+    allExprs = NEL.map sqrtExpr sizesExpr
+      <> NEL.map sqrtDecimalExpr sizesExpr
+
+
+shiftOptTests :: GasUnitTests
+shiftOptTests = defGasUnitTests allExprs
+  where
+    shiftExpr x =
+      [text| (shift 2 $x) |]
+    shiftNegExpr x =
+      [text| (shift -2 $x) |]
+
+    allExprs = NEL.map shiftExpr sizesExpr
+      <> NEL.map shiftNegExpr sizesExpr
+
+
+roundOptTests :: GasUnitTests
+roundOptTests = defGasUnitTests allExprs
+  where
+    roundExpr x =
+      [text| (round $x.12345) |]
+    roundPrecExpr x =
+      [text| (round $x.12345 4) |]
+
+    allExprs = NEL.map roundExpr sizesExpr
+      <> NEL.map roundPrecExpr sizesExpr
+
+
+orFuncOptTests :: GasUnitTests
+orFuncOptTests = defGasUnitTests allExprs
+  where
+    orFuncExpr = [text| (or? (identity) (identity) true) |]
+
+    allExprs = orFuncExpr :| []
+
+
+orOptTests :: GasUnitTests
+orOptTests = defGasUnitTests allExprs
+  where
+    orExpr = [text| (or false false) |]
+
+    allExprs = orExpr :| []
+
+
+notFuncOptTests :: GasUnitTests
+notFuncOptTests = defGasUnitTests allExprs
+  where
+    notFuncExpr = [text| (not? (identity) true) |]
+
+    allExprs = notFuncExpr :| []
+
+
+notOptTests :: GasUnitTests
+notOptTests = defGasUnitTests allExprs
+  where
+    notExpr = [text| (not true) |]
+
+    allExprs = notExpr :| []
+
+
+modOptTests :: GasUnitTests
+modOptTests = defGasUnitTests allExprs
+  where
+    modExpr x =
+      [text| (mod $x 2) |]
+
+    allExprs = NEL.map modExpr sizesExpr
+
+
+
+logOptTests :: GasUnitTests
+logOptTests = defGasUnitTests allExprs
+  where
+    logExpr y =
+      [text| (log 2 $y) |]
+    logDecimalExpr y =
+      [text| (log 2 $y.1) |]
+
+    allExprs = NEL.map logExpr sizesExpr
+      <> NEL.map logDecimalExpr sizesExpr
+
+
+
+lnOptTests :: GasUnitTests
+lnOptTests = defGasUnitTests allExprs
+  where
+    lnExpr x =
+      [text| (ln $x) |]
+    lnDecimalExpr x =
+      [text| (ln $x.1) |]
+
+    allExprs = NEL.map lnExpr sizesExpr
+      <> NEL.map lnDecimalExpr sizesExpr
+
+
+floorOptTests :: GasUnitTests
+floorOptTests = defGasUnitTests allExprs
+  where
+    floorExpr x =
+      [text| (floor $x.12345) |]
+    floorPrecExpr x =
+      [text| (floor $x.12345 4) |]
+
+    allExprs = NEL.map floorExpr sizesExpr
+      <> NEL.map floorPrecExpr sizesExpr
+
+
+expOptTests :: GasUnitTests
+expOptTests = defGasUnitTests allExprs
+  where
+    expExprSmall =
+      [text| (exp 1) |]
+    expExprMed =
+      [text| (exp 10) |]
+    expExprLarge =
+      [text| (exp 100) |]
+
+    allExprs = expExprSmall :| [expExprMed, expExprLarge]
+
+
+ceilingOptTests :: GasUnitTests
+ceilingOptTests = defGasUnitTests allExprs
+  where
+    ceilingExpr x =
+      [text| (ceiling $x.12345) |]
+    ceilingPrecExpr x =
+      [text| (ceiling $x.12345 4) |]
+
+    allExprs = NEL.map ceilingExpr sizesExpr
+      <> NEL.map ceilingPrecExpr sizesExpr
+        
+
+andFuncOptTests :: GasUnitTests
+andFuncOptTests = defGasUnitTests allExprs
+  where
+    andFuncExpr =
+      [text| (and? (identity) (identity) true) |]
+
+    allExprs = andFuncExpr :| []
+
+
+andOptTests :: GasUnitTests
+andOptTests = defGasUnitTests allExprs
+  where
+    andExpr =
+      [text| (and false true) |]
+
+    allExprs = andExpr :| []
+
+
+absOptTests :: GasUnitTests
+absOptTests = defGasUnitTests allExprs
+  where
+    absExpr x =
+      [text| (abs -$x) |]
+    absDecimalExpr x =
+      [text| (abs -$x.0) |]
+
+    allExprs = NEL.map absExpr sizesExpr
+      <> NEL.map absDecimalExpr sizesExpr
+
+        
+raiseOptTests :: GasUnitTests
+raiseOptTests = defGasUnitTests allExprs
+  where
+    raiseExpr y = 
+      [text| (^ 2 $y) |]
+    raiseDecimalExpr y =
+      [text| (^ 2.1 $y.1) |]
+    raiseBothExpr y =
+      [text| (^ 2.1 $y) |]
+
+    allExprs = NEL.map raiseExpr sizesExpr
+      <> NEL.map raiseDecimalExpr sizesExpr
+      <> NEL.map raiseBothExpr sizesExpr
+
+
+greaterThanEqOptTests :: GasUnitTests
+greaterThanEqOptTests = defGasUnitTests allExprs
+  where
+    greaterEqExpr x =
+      [text| (>= $x $x) |]
+    greaterEqDecimalExpr x =
+      [text| (>= $x.0 $x.0) |]
+    greaterEqTimeExpr =
+      [text| (>= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+        :| []
+   
+    allExprs = NEL.map greaterEqExpr sizesExpr
+      <> NEL.map greaterEqDecimalExpr sizesExpr
+      <> NEL.map greaterEqExpr escapedStringsExpr
+      <> greaterEqTimeExpr
+
+
+greaterThanOptTests :: GasUnitTests
+greaterThanOptTests = defGasUnitTests allExprs
+  where
+    greaterExpr x =
+      [text| (> $x $x) |]
+    greaterDecimalExpr x =
+      [text| (> $x.0 $x.0) |]
+    greaterTimeExpr =
+      [text| (> (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+        :| []
+   
+    allExprs = NEL.map greaterExpr sizesExpr
+      <> NEL.map greaterDecimalExpr sizesExpr
+      <> NEL.map greaterExpr escapedStringsExpr
+      <> greaterTimeExpr
+    
+
+
+equalOptTests :: GasUnitTests
+equalOptTests = defGasUnitTests allExprs
+  where
+    eqExpr x =
+      [text| (= $x $x) |]
+    eqDecimalExpr x =
+      [text| (= $x.0 $x.0) |]
+
+    allExprs = NEL.map eqExpr sizesExpr
+      <> NEL.map eqDecimalExpr sizesExpr
+      <> NEL.map eqExpr escapedStringsExpr
+      <> NEL.map eqExpr strKeyIntValMapsExpr
+      <> NEL.map eqExpr intListsExpr
+
+
+lessThanEqualOptTests :: GasUnitTests
+lessThanEqualOptTests = defGasUnitTests allExprs
+  where
+    lessEqExpr x =
+      [text| (<= $x $x) |]
+    lessEqDecimalExpr x =
+      [text| (<= $x.0 $x.0) |]
+    lessEqTimeExpr =
+      [text| (<= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+        :| []
+   
+    allExprs = NEL.map lessEqExpr sizesExpr
+      <> NEL.map lessEqDecimalExpr sizesExpr
+      <> NEL.map lessEqExpr escapedStringsExpr
+      <> lessEqTimeExpr
+
+
+lessThanOptTests :: GasUnitTests
+lessThanOptTests = defGasUnitTests allExprs
+  where
+    lessExpr x =
+      [text| (< $x $x) |]
+    lessDecimalExpr x =
+      [text| (< $x.0 $x.0) |]
+    lessTimeExpr =
+      [text| (< (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+        :| []
+   
+    allExprs = NEL.map lessExpr sizesExpr
+      <> NEL.map lessDecimalExpr sizesExpr
+      <> NEL.map lessExpr escapedStringsExpr
+      <> lessTimeExpr
+
+
+divOptTests :: GasUnitTests
+divOptTests = defGasUnitTests allExprs
+  where
+    divExpr x =
+      [text| (/ $x $x) |]
+    divDecimalExpr x =
+      [text| (/ $x.0 $x.0) |]
+    divBothExpr x =
+      [text| (/ $x.0 $x) |]
+   
+    allExprs = NEL.map divExpr sizesExpr
+      <> NEL.map divDecimalExpr sizesExpr
+      <> NEL.map divBothExpr sizesExpr
+
+
+subOptTests :: GasUnitTests
+subOptTests = defGasUnitTests allExprs
+  where
+    subExpr x =
+      [text| (+ $x $x) |]
+    subDecimalExpr x =
+      [text| (+ $x.0 $x.0) |]
+    subBothExpr x =
+      [text| (+ $x.0 $x) |]
+    subOneExpr x =
+      [text| (- $x) |]
+    subOneDecimalExpr x =
+      [text| (- $x.0) |]
+   
+    allExprs = NEL.map subExpr sizesExpr
+      <> NEL.map subDecimalExpr sizesExpr
+      <> NEL.map subBothExpr sizesExpr
+      <> NEL.map subOneExpr sizesExpr
+      <> NEL.map subOneDecimalExpr sizesExpr
+
+
+addOptTests :: GasUnitTests
+addOptTests = defGasUnitTests allExprs
+  where
+    addExpr x =
+      [text| (+ $x $x) |]
+    addDecimalExpr x =
+      [text| (+ $x.0 $x.0) |]
+    addBothExpr x =
+      [text| (+ $x.0 $x) |]
+
+    allExprs = NEL.map addExpr sizesExpr
+      <> NEL.map addDecimalExpr sizesExpr
+      <> NEL.map addBothExpr sizesExpr
+      <> NEL.map addExpr escapedStringsExpr
+      <> NEL.map addExpr strKeyIntValMapsExpr
+
+
+multOptTests :: GasUnitTests
+multOptTests = defGasUnitTests allExprs
+  where
+    multIntExpr x =
+      [text| (* $x $x) |]
+    multDecimalExpr x =
+      [text| (* $x.0 $x.0) |]
+    multBothExpr x =
+      [text| (* $x.0 $x) |]
+
+    allExprs = NEL.map multIntExpr sizesExpr
+      <> NEL.map multDecimalExpr sizesExpr
+      <> NEL.map multBothExpr sizesExpr
+
+
+bitwiseOptTests :: GasUnitTests
+bitwiseOptTests = defGasUnitTests allExprs
+  where
+    bitwiseExpr x =
+      [text| (& $x $x) |]
+
+    allExprs = NEL.map bitwiseExpr sizesExpr
+
+
+notEqualOptTests :: GasUnitTests
+notEqualOptTests = defGasUnitTests allExprs
+  where
+    notEqualExpr x =
+      [text| (!= $x $x) |]
+    notEqualDecimalExpr x =
+      [text| (!= $x.0 $x.0) |]
+        
+    allExprs = NEL.map notEqualExpr sizesExpr
+      <> NEL.map notEqualExpr escapedStringsExpr
+      <> NEL.map notEqualDecimalExpr sizesExpr
+      <> NEL.map notEqualExpr intListsExpr
+      <> NEL.map notEqualExpr strKeyIntValMapsExpr
+
 
 
 -- | General native function tests
