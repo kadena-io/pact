@@ -350,8 +350,82 @@ unitTestFromDef nativeName = case (asString nativeName) of
   "xor"     -> Just xorOptTests
   "|"       -> Just bitwiseOrOptTests
   "~"       -> Just reverseBitsOptTests
+
+  -- | Time native functions
+  "add-time"    -> Just addTimeTests
+  "days"        -> Just daysTests
+  "diff-time"   -> Just diffTimeTests
+  "format-time" -> Just formatTimeTests
+  "hours"       -> Just hoursTests
+  "minutes"     -> Just minutesTests
+  "parse-time"  -> Just parseTimeTests
+  "time"        -> Just timeTests
   
   _ -> Nothing
+
+
+-- | Time native function tests
+addTimeTests :: GasUnitTests
+addTimeTests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text| (add-time (time "2016-07-22T12:00:00Z") 15) |] :| []
+
+
+daysTests :: GasUnitTests
+daysTests = defGasUnitTests allExprs
+  where
+    daysExpr n =
+      [text| (days $n) |]
+    allExprs = NEL.map daysExpr sizesExpr
+
+
+diffTimeTests :: GasUnitTests
+diffTimeTests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text| (diff-time (time "2016-07-22T12:00:00Z")
+                        (time "2018-07-22T12:00:00Z"))
+      |] :| []
+
+
+formatTimeTests :: GasUnitTests
+formatTimeTests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text| (format-time "%F" (time "2016-07-22T12:00:00Z")) |] :|
+      [[text| (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z")) |]]
+
+
+hoursTests :: GasUnitTests
+hoursTests = defGasUnitTests allExprs
+  where
+    hoursExpr n =
+      [text| (hours $n) |]
+    allExprs = NEL.map hoursExpr sizesExpr
+
+
+minutesTests :: GasUnitTests
+minutesTests = defGasUnitTests allExprs
+  where
+    minutesExpr n =
+      [text| (minutes $n) |]
+    allExprs = NEL.map minutesExpr sizesExpr
+
+
+parseTimeTests :: GasUnitTests
+parseTimeTests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text| (parse-time "%F" "2016-07-22") |] :|
+      [[text| (parse-time "%Y-%m-%dT%H:%M:%S%N" "2016-07-23T13:30:45+00:00") |]]
+
+
+timeTests :: GasUnitTests
+timeTests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text| (time "2016-07-22T12:00:00Z") |] :| []
 
 
 -- | Operators native function tests
@@ -604,12 +678,16 @@ equalOptTests = defGasUnitTests allExprs
       [text| (= $x $x) |]
     eqDecimalExpr x =
       [text| (= $x.0 $x.0) |]
+    eqTimeExpr =
+      [text| (= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+        :| []
 
     allExprs = NEL.map eqExpr sizesExpr
       <> NEL.map eqDecimalExpr sizesExpr
       <> NEL.map eqExpr escapedStringsExpr
       <> NEL.map eqExpr strKeyIntValMapsExpr
       <> NEL.map eqExpr intListsExpr
+      <> eqTimeExpr
 
 
 lessThanEqualOptTests :: GasUnitTests
