@@ -40,6 +40,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet        as HS
 import qualified Data.Foldable       as F
 import qualified Data.Set            as S
+import qualified Data.Map            as M
 import qualified Data.Text           as T
 import qualified Data.List.NonEmpty  as NEL
 
@@ -50,7 +51,7 @@ import Pact.Native
 import Pact.Types.Native
 import Pact.Compile               (compileExps, mkTextInfo)
 import Pact.MockDb
-import Pact.Types.PactValue       (toPactValueLenient)
+import Pact.Types.PactValue       (toPactValueLenient, PactValue(..))
 
 import Pact.Gas
 import Pact.Interpreter
@@ -142,6 +143,9 @@ defGasUnitTests pactExprs
 defModuleName :: ModuleName
 defModuleName = ModuleName "some-module" Nothing
 
+defModuleHash :: ModuleHash
+defModuleHash = ModuleHash $ pactHash ""
+
 defStackFrame :: StackFrame
 defStackFrame =
   StackFrame "" def
@@ -150,8 +154,8 @@ defStackFrame =
         ,[])
   )
 
-defModuleDataDef :: ModuleData Ref
-defModuleDataDef = ModuleData modDef refMap
+defModuleData :: ModuleData Ref
+defModuleData = ModuleData modDef refMap
   where refMap = HM.empty
         ref = Direct $ TVar (Name "" def) def
         fst' :: Ref -> Maybe Int
@@ -165,7 +169,7 @@ defModuleDataDef = ModuleData modDef refMap
         defOfRef = Def (DefName "") defModuleName Defun (FunType [] TyAny) scopeOfRef def def
         modDef = MDModule mod'
         gov = Governance $ Right defOfRef
-        mod' = Module defModuleName gov def (Code "") (ModuleHash $ pactHash "") HS.empty [] []
+        mod' = Module defModuleName gov def (Code "") defModuleHash HS.empty [] []
 
 
 
@@ -1053,9 +1057,9 @@ yieldTests = GasUnitTests tests
                           (PactId "somePactId")
                           (PactContinuation (Name "some-defpact-func" def) [])
 
-    mockModules = HM.fromList [(defModuleName, defModuleDataDef)]
+    mockModules = HM.fromList [(defModuleName, defModuleData)]
     mockStackframe = [defStackFrame]
-    updateWithStackFrame = setState (set evalCallStack mockStackframe)
+    updateStateWithStackFrame = setState (set evalCallStack mockStackframe)
     updateStateWithPactExec = setState (set evalPactExec mockPactExec)
     mkGasTestWithModule e = GasTest e e
                             (initStateModules mockModules)
@@ -1063,7 +1067,7 @@ yieldTests = GasUnitTests tests
                             mockEnvCleanup
     
     tests =    NEL.map (SomeGasTest .
-                        updateWithStackFrame .
+                        updateStateWithStackFrame .
                         updateStateWithPactExec .
                         mkGasTestWithModule .
                         yieldExprWithTargetChain) strKeyIntValMapsExpr
@@ -1074,7 +1078,46 @@ yieldTests = GasUnitTests tests
 
 
 resumeTests :: GasUnitTests
-resumeTests = undefined
+resumeTests = GasUnitTests tests
+  where
+    resumeExpr binding = [text|(resume $binding a1)|]
+
+    yieldData m = (ObjectMap . M.fromList . toPactValueInt . HM.toList) m
+       where toPactValueInt = map (\(t,v) -> (FieldKey t, PLiteral $ LInteger v))
+
+    chainId = ChainId "some-chain-id"
+    provenance = Just $ Provenance chainId defModuleHash
+    toYield m = Yield (yieldData m)
+    
+    toPactStep y = Just $ PactStep 2 False (PactId "") (Just y)
+
+    args = NEL.zip strKeyIntValMaps strKeyIntValBindingsExpr
+
+    testWithSPV (m, bindExpr) = setupTestWithSPV gasTestWithModule
+      where updateEnvWithProvidence = setEnv (set eePactStep (toPactStep $ toYield m provenance))
+            updateEnvWithChainId = setEnv (set (eePublicData . pdPublicMeta . pmChainId) chainId)
+            updateStateWithStackFrame = setState (set evalCallStack [defStackFrame])
+            updateGasTestDesc = set gasTestDescription $ (resumeExpr bindExpr) <> " with provenance"
+            
+            mockModules = HM.fromList [(defModuleName, defModuleData)]
+            gasTestWithModule = GasTest
+                                  (resumeExpr bindExpr)
+                                  (resumeExpr bindExpr)
+                                  (initStateModules mockModules)
+                                  createDefMockEnv
+                                  mockEnvCleanup
+            setupTestWithSPV = SomeGasTest .
+                               updateGasTestDesc .
+                               updateEnvWithProvidence .
+                               updateEnvWithChainId .
+                               updateStateWithStackFrame
+
+    testSimple (m, bindExpr) = setupTestSimple $ defGasTest (resumeExpr bindExpr)
+      where updateEnvWithYield = setEnv (set eePactStep (toPactStep $ toYield m Nothing))
+            setupTestSimple = SomeGasTest . updateEnvWithYield
+
+    tests =    NEL.map testWithSPV args
+            <> NEL.map testSimple args
 
 
 pactVersionTests :: GasUnitTests
