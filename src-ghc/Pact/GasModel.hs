@@ -109,12 +109,12 @@ main = do
   -- | Checks that unit tests succeed
   mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)
-
+{--
   -- | Run benchmarks
   C.defaultMain $
     map (\(n,t) -> benches (asString n) t)
         (HM.toList unitTests)
-
+--}
   -- | Report gas testing coverage
   print $ (show $ length untestedNatives)
           ++ " out of "

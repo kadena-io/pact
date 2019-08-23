@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GADTs #-}
 
 
 module Pact.Types.GasModel
@@ -23,6 +24,7 @@ module Pact.Types.GasModel
   
   ) where
 
+import Bound                      (abstract, Scope)
 import Control.Lens               hiding ((.=),DefName)
 import Control.DeepSeq            (NFData(..))
 import Control.Exception          (throwIO)
@@ -33,8 +35,11 @@ import NeatInterpolation          (text)
 import Data.List.NonEmpty         (NonEmpty(..))
 
 
+import qualified Data.Aeson          as A
 import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet        as HS
 import qualified Data.Foldable       as F
+import qualified Data.Set            as S
 import qualified Data.Text           as T
 import qualified Data.List.NonEmpty  as NEL
 
@@ -92,7 +97,7 @@ defGasTest expr =
   expr
   defEvalState
   createDefMockEnv
-  (const $ return ())
+  mockEnvCleanup
 
 defEvalState :: EvalState
 defEvalState = def
@@ -103,16 +108,66 @@ defEvalEnv db =
   initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
   where entity = Just $ EntityName "entity"
 
+setEnv :: (EvalEnv e -> EvalEnv e) -> GasTest e -> GasTest e
+setEnv f test = setEnv'
+  where
+    newEnv = fmap f $ view gasTestMockEnv test
+    setEnv' = set gasTestMockEnv newEnv test
+
+setState :: (EvalState -> EvalState) -> GasTest e -> GasTest e
+setState f test = setState'
+  where
+    newState = f $ view gasTestMockState test
+    setState' = set gasTestMockState newState test
+
 createDefMockEnv :: IO (EvalEnv ())
 createDefMockEnv = do
   db <- mkMockEnv def
   return $ defEvalEnv db
+
+createMockEnv :: MockDb -> IO (EvalEnv ())
+createMockEnv mdb = do
+  db <- mkMockEnv mdb
+  return $ defEvalEnv db
+
+mockEnvCleanup :: EvalEnv e -> IO ()
+mockEnvCleanup = const $ return ()
 
 defGasUnitTests
   :: NEL.NonEmpty T.Text
   -> GasUnitTests
 defGasUnitTests pactExprs
   = GasUnitTests $ NEL.map (SomeGasTest . defGasTest) pactExprs
+
+defModuleName :: ModuleName
+defModuleName = ModuleName "some-module" Nothing
+
+defStackFrame :: StackFrame
+defStackFrame =
+  StackFrame "" def
+  (Just ((FunApp def ""
+           (Just defModuleName) Defun (funTypes $ FunType [] TyAny) Nothing)
+        ,[])
+  )
+
+defModuleDataDef :: ModuleData Ref
+defModuleDataDef = ModuleData modDef refMap
+  where refMap = HM.empty
+        ref = Direct $ TVar (Name "" def) def
+        fst' :: Ref -> Maybe Int
+        fst' = const Nothing
+        scd' :: Term Ref
+        scd' = TVar ref def
+        
+        scopeOfRef :: Scope Int Term Ref
+        scopeOfRef = abstract fst' scd'
+        
+        defOfRef = Def (DefName "") defModuleName Defun (FunType [] TyAny) scopeOfRef def def
+        modDef = MDModule mod'
+        gov = Governance $ Right defOfRef
+        mod' = Module defModuleName gov def (Code "") (ModuleHash $ pactHash "") HS.empty [] []
+
+
 
 --- Helper functions
 ---
@@ -177,6 +232,11 @@ toPactBinding  m = "{ " <> allKeys <> " }"
   where
     allKeys = T.intercalate ", " $ map bindingFormat (HM.toList m)
     bindingFormat (key, _) = escapeText key <> " := " <> key
+
+toPactKeyset :: T.Text -> T.Text -> Maybe T.Text -> A.Value
+toPactKeyset ksName ksValue predicate =
+  A.object [ksName A..= A.object ["keys" A..= [ksValue], "pred" A..= pred']]
+  where pred' = maybe ">" id predicate
 
 
 --- Sample Pact literals
@@ -278,45 +338,45 @@ unitTests = HM.fromList $ foldl' getUnitTest [] allNatives
 unitTestFromDef :: NativeDefName -> Maybe GasUnitTests
 unitTestFromDef nativeName = case (asString nativeName) of
   -- | General native functions
-  "at"           -> Just atTests
-  "bind"         -> Just bindTests
-  -- "chain-data" -> chainDataTests --TODO
-  "compose"      -> Just composeTests
-  "constantly"   -> Just constantlyTests
-  "contains"     -> Just containsTests
-  -- "define-namespace" -> Just defineNamespaceTests --TODO
-  "drop"         -> Just dropTests
-  "enforce"      -> Just enforceTests
-  "enforce-one"  -> Just enforceOneTests
-  -- "enforce-pact-version" -> Just enforcePactVersionTests --TODO
-  "filter"       -> Just filterTests
-  "fold"         -> Just foldTests
-  "format"       -> Just formatTests
-  "hash"         -> Just hashTests
-  "identity"     -> Just identityTests
-  "if"           -> Just ifTests
-  "int-to-str"   -> Just intToStrTests
-  "length"       -> Just lengthTests
-  -- "list-module" -> Just listModuleTests --TODO
-  "make-list"    -> Just makeListTests
-  "map"          -> Just mapTests
-  -- "namespace" -> Just namespaceTests --TODO
-  -- "pact-id" -> Just pactIdTests --TODO
-  -- "pact-version" -> Just pactVersionTests --TODO
-  -- "read-decimal" -> Just readDecimalTests --TODO
-  -- "read-integer" -> Just readIntegerTests --TODO
-  -- "read-msg" -> Just readMsgTests --TODO
-  "remove"       -> Just removeTests
-  -- "resume" -> Just resumeTests --TODO
-  "reverse"      -> Just reverseTests
-  "sort"         -> Just sortTests
-  "str-to-int"   -> Just strToIntTests
-  "take"         -> Just takeTests
-  "try"          -> Just tryTests
-  --"tx-hash" -> Just txHashTests --TODO because even with something else, returns def tx hash
-  "typeof"       -> Just typeOfTests
-  "where"        -> Just whereTests
-  --"yield" -> Just yieldTests --TODO
+  "at"                   -> Just atTests
+  "bind"                 -> Just bindTests
+  "chain-data"           -> Just chainDataTests
+  "compose"              -> Just composeTests
+  "constantly"           -> Just constantlyTests
+  "contains"             -> Just containsTests
+  "define-namespace"     -> Just defineNamespaceTests
+  "drop"                 -> Just dropTests
+  "enforce"              -> Just enforceTests
+  "enforce-one"          -> Just enforceOneTests
+  "enforce-pact-version" -> Just enforcePactVersionTests
+  "filter"               -> Just filterTests
+  "fold"                 -> Just foldTests
+  "format"               -> Just formatTests
+  "hash"                 -> Just hashTests
+  "identity"             -> Just identityTests
+  "if"                   -> Just ifTests
+  "int-to-str"           -> Just intToStrTests
+  "length"               -> Just lengthTests
+  "list-module"          -> Just listModuleTests
+  "make-list"            -> Just makeListTests
+  "map"                  -> Just mapTests
+  "namespace"            -> Just namespaceTests
+  "pact-id"              -> Just pactIdTests
+  "pact-version"         -> Just pactVersionTests
+  "read-decimal"         -> Just readDecimalTests
+  "read-integer"         -> Just readIntegerTests
+  "read-msg"             -> Just readMsgTests
+  "remove"               -> Just removeTests
+  "resume"               -> Just resumeTests
+  "reverse"              -> Just reverseTests
+  "sort"                 -> Just sortTests
+  "str-to-int"           -> Just strToIntTests
+  "take"                 -> Just takeTests
+  "try"                  -> Just tryTests
+  "tx-hash"              -> Just txHashTests
+  "typeof"               -> Just typeOfTests
+  "where"                -> Just whereTests
+  "yield"                -> Just yieldTests
 
   -- | Operators native functions
   "!="      -> Just notEqualOptTests
@@ -360,8 +420,37 @@ unitTestFromDef nativeName = case (asString nativeName) of
   "minutes"     -> Just minutesTests
   "parse-time"  -> Just parseTimeTests
   "time"        -> Just timeTests
-  
+
+  -- | Commitments native functions
+  "decrypt-cc20p1305" -> Just decryptCc20p1305Tests
+  "validate-keypair"  -> Just validateKeypairTests
+
+
   _ -> Nothing
+
+
+-- | Commitments native function tests
+decryptCc20p1305Tests :: GasUnitTests
+decryptCc20p1305Tests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text| (decrypt-cc20p1305
+              "Zi1REj5-iA"
+              "AAAAAAECAwQFBgcI"
+              "YWFk"
+              "FYP6lG7xq7aExvoaHIH8Jg"
+              "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
+              "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
+      |] :| []
+
+validateKeypairTests :: GasUnitTests
+validateKeypairTests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text| (validate-keypair
+             "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
+             "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a") |]
+        :| []
 
 
 -- | Time native function tests
@@ -839,6 +928,12 @@ typeOfTests = defGasUnitTests allExprs
       <> NEL.map (typeOfExpr . toText . MockInt) sizes
 
 
+txHashTests :: GasUnitTests
+txHashTests = defGasUnitTests allExprs
+  where
+    allExprs = [text| (tx-hash) |] :| []
+
+
 tryTests :: GasUnitTests
 tryTests = defGasUnitTests allExprs
   where
@@ -935,6 +1030,105 @@ removeTests = defGasUnitTests allExprs
     allExprs = NEL.map removeExpr strKeyIntValMapsExpr
 
 
+pactIdTests :: GasUnitTests
+pactIdTests = GasUnitTests tests
+  where
+    pactIdExpr = [text|(pact-id)|]
+    
+    mockPactExec = Just $ PactExec 2 Nothing Nothing 0
+                          (PactId "somePactId")
+                          (PactContinuation (Name "some-defpact-func" def) [])
+    updateState = setState (set evalPactExec mockPactExec)
+    test = updateState $ defGasTest pactIdExpr
+    tests = SomeGasTest test :| []
+
+
+yieldTests :: GasUnitTests
+yieldTests = GasUnitTests tests
+  where
+    yieldExprWithTargetChain obj = [text| (yield $obj "some-chain-id") |]
+    yieldExpr obj = [text| (yield $obj) |]
+
+    mockPactExec = Just $ PactExec 2 Nothing Nothing 0
+                          (PactId "somePactId")
+                          (PactContinuation (Name "some-defpact-func" def) [])
+
+    mockModules = HM.fromList [(defModuleName, defModuleDataDef)]
+    mockStackframe = [defStackFrame]
+    updateWithStackFrame = setState (set evalCallStack mockStackframe)
+    updateStateWithPactExec = setState (set evalPactExec mockPactExec)
+    mkGasTestWithModule e = GasTest e e
+                            (initStateModules mockModules)
+                            createDefMockEnv
+                            mockEnvCleanup
+    
+    tests =    NEL.map (SomeGasTest .
+                        updateWithStackFrame .
+                        updateStateWithPactExec .
+                        mkGasTestWithModule .
+                        yieldExprWithTargetChain) strKeyIntValMapsExpr
+            <> NEL.map (SomeGasTest .
+                        updateStateWithPactExec .
+                        defGasTest .
+                        yieldExpr) strKeyIntValMapsExpr
+
+
+resumeTests :: GasUnitTests
+resumeTests = undefined
+
+
+pactVersionTests :: GasUnitTests
+pactVersionTests = defGasUnitTests allExprs
+  where
+    versionExpr =
+      [text| (pact-version) |]
+
+    allExprs = versionExpr :| []
+
+
+readMsgTests :: GasUnitTests
+readMsgTests = GasUnitTests tests
+  where
+    readMsgExpr = [text|(read-msg)|]
+    setupTest g m = (updateDesc . updateEnv) g
+      where updateEnv = setEnv (set eeMsgBody $ toJSON m)
+            updateDesc = set gasTestDescription
+                             (readMsgExpr <> " when "
+                              <> (T.pack $ show $ toJSON m))
+    tests' = NEL.map (setupTest $ defGasTest readMsgExpr) strKeyIntValMapsExpr
+    tests = NEL.map SomeGasTest tests'
+
+
+readIntegerTests :: GasUnitTests
+readIntegerTests = GasUnitTests tests
+  where
+    readIntExpr = [text|(read-integer "amount")|]
+    formatToIntVal i = A.object ["amount" A..= i]
+    setupTest g i = (updateDesc . updateEnv) g
+      where updateEnv = setEnv (set eeMsgBody $ formatToIntVal i)
+            updateDesc = set gasTestDescription
+                             (readIntExpr <> " when "
+                              <> (T.pack $ show $ formatToIntVal i))
+    tests' = NEL.map (setupTest $ defGasTest readIntExpr) sizesExpr
+    tests = NEL.map SomeGasTest tests'
+
+
+readDecimalTests :: GasUnitTests
+readDecimalTests = GasUnitTests tests
+  where
+    readDecExpr = [text|(read-decimal "amount")|]
+    formatToDecVal d = A.object ["amount" A..= decText]
+      where d' = d <> "1"
+            decText = [text|0.$d'|]
+    setupTest g d = (updateDesc . updateEnv) g
+      where updateEnv = setEnv (set eeMsgBody $ formatToDecVal d)
+            updateDesc = set gasTestDescription
+                             (readDecExpr <> " when "
+                              <> (T.pack $ show $ formatToDecVal d))
+    tests' = NEL.map (setupTest $ defGasTest readDecExpr) sizesExpr
+    tests = NEL.map SomeGasTest tests'
+
+
 mapTests :: GasUnitTests
 mapTests = defGasUnitTests allExprs
   where
@@ -951,6 +1145,15 @@ makeListTests = defGasUnitTests allExprs
       [text| (make-list $len true) |]
 
     allExprs = NEL.map (makeListExpr . intToStr) sizes
+
+
+listModuleTests :: GasUnitTests
+listModuleTests = defGasUnitTests allExprs
+  where
+    listModulesExpr =
+      [text| (list-modules) |]
+
+    allExprs = listModulesExpr :| []
 
 
 lengthTests :: GasUnitTests
@@ -1070,6 +1273,13 @@ enforceOneTests = defGasUnitTests allExprs
       = NEL.map enforceOneExpr listOfEnforcesListExpr
 
 
+enforcePactVersionTests :: GasUnitTests
+enforcePactVersionTests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text| (enforce-pact-version "3.0")|] :| []
+
+
 -- TODO unable to currently test when enforce's
 --      predicate function returns false.
 enforceTests :: GasUnitTests
@@ -1098,6 +1308,77 @@ dropTests = defGasUnitTests allExprs
       <> NEL.map dropLastExpr intListsExpr
       <> NEL.map dropKeysExpr keysToDropArgs
       <> NEL.map dropSingleKeyExpr strKeyIntValMapsExpr
+
+
+namespaceTests :: GasUnitTests
+namespaceTests = GasUnitTests tests
+  where
+    tests = simpleTest :| []
+    simpleTest = SomeGasTest setNamespaceTest
+      where
+        name = "my-namespace"
+        expr = [text| (namespace '$name) |]
+        
+        pubKeys = [PublicKey "something"]
+        keyset = KeySet pubKeys (Name "keys-all" def) 
+        oldNamespace = Namespace (NamespaceName name) (GKeySet keyset)
+        updateMsgSig = set eeMsgSigs (S.fromList pubKeys)
+
+        nsRead :: Domain k v -> k -> Method () (Maybe v)
+        nsRead Namespaces _ = rc (Just oldNamespace)
+        nsRead _ _ = rc Nothing
+
+        mockdb = def {mockRead = MockRead nsRead }
+        testEnv = createMockEnv mockdb
+
+        setNamespaceTest =
+          setEnv updateMsgSig $
+            GasTest expr
+                    expr
+                    defEvalState
+                    testEnv
+                    mockEnvCleanup
+        
+
+defineNamespaceTests :: GasUnitTests
+defineNamespaceTests = GasUnitTests tests
+  where
+    tests = simpleDefTest :| [rotateNamespaceTest]
+    
+    simpleDefTest = SomeGasTest $ 
+      setEnv (set eeMsgBody simpleDefData) (defGasTest simpleDefExpr)
+      where
+        simpleDefExpr =
+          [text| (define-namespace 'my-namespace (read-keyset 'my-keyset)) |]
+        simpleDefData =
+          toPactKeyset "my-keyset" "something" Nothing
+
+    rotateNamespaceTest = SomeGasTest $ rotateTest
+      where
+        name = "my-namespace"
+        rotateExpr = [text| (define-namespace '$name (read-keyset 'my-keyset)) |]
+        exprKeysetVal = toPactKeyset "my-keyset" "something" Nothing
+        updateMsgBody = set eeMsgBody exprKeysetVal
+
+        oldPublicKeys = [PublicKey "something"]
+        oldKeyset = KeySet oldPublicKeys (Name "keys-all" def) 
+        oldNamespace = Namespace (NamespaceName name) (GKeySet oldKeyset)
+        updateMsgSig = set eeMsgSigs (S.fromList oldPublicKeys)
+
+        nsRead :: Domain k v -> k -> Method () (Maybe v)
+        nsRead Namespaces _ = rc (Just oldNamespace)
+        nsRead _ _ = rc Nothing
+
+        mockdb = def {mockRead = MockRead nsRead }
+        testEnv = createMockEnv mockdb
+
+        rotateTest = 
+          setEnv (updateMsgBody . updateMsgSig) $
+            GasTest rotateExpr
+                    "Defining namespace with the same name as one already defined."
+                    defEvalState
+                    testEnv
+                    mockEnvCleanup
 
 
 containsTests :: GasUnitTests
@@ -1144,6 +1425,12 @@ composeTests = defGasUnitTests allExprs
     composeExpr =
       [text| (compose (+ 0) (+ 0) 0) |]
     allExprs = composeExpr :| []
+
+
+chainDataTests :: GasUnitTests
+chainDataTests = defGasUnitTests allExprs
+  where
+    allExprs = [text| (chain-data) |] :| []
 
 
 atTests :: GasUnitTests
