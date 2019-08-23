@@ -116,6 +116,7 @@ main = do
         (HM.toList unitTests)
 --}
   -- | Report gas testing coverage
+  mapM_ (print . show) untestedNatives
   print $ (show $ length untestedNatives)
           ++ " out of "
           ++ (show $ length allNatives)

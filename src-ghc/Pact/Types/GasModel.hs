@@ -361,7 +361,7 @@ unitTestFromDef nativeName = case (asString nativeName) of
   "if"                   -> Just ifTests
   "int-to-str"           -> Just intToStrTests
   "length"               -> Just lengthTests
-  "list-module"          -> Just listModuleTests
+  "list-modules"         -> Just listModulesTests
   "make-list"            -> Just makeListTests
   "map"                  -> Just mapTests
   "namespace"            -> Just namespaceTests
@@ -429,8 +429,110 @@ unitTestFromDef nativeName = case (asString nativeName) of
   "decrypt-cc20p1305" -> Just decryptCc20p1305Tests
   "validate-keypair"  -> Just validateKeypairTests
 
+  -- | Keyset native functions
+  "define-keyset"  -> Just defineKeysetTests
+  "enforce-keyset" -> Just enforceKeysetTests
+  "keys-2"         -> Just keys2Tests
+  "keys-all"       -> Just keysAllTests
+  "keys-any"       -> Just keysAnyTests
+  "read-keyset"    -> Just readKeysetTests
 
   _ -> Nothing
+
+
+-- | Keyset native function tests
+defineKeysetTests :: GasUnitTests
+defineKeysetTests = GasUnitTests tests
+  where
+    tests = simpleDefTest :| [rotateKeysetTest]
+
+    simpleDefTest = SomeGasTest $ updateEnvWithSig (defGasTest simpleDefExpr)
+      where
+        simpleDefExpr =
+          [text| (define-keyset 'my-pact-keyset (read-keyset 'my-keyset)) |]
+        simpleDefData =
+          toPactKeyset "my-keyset" "something" Nothing
+        updateEnvWithSig = setEnv (set eeMsgBody simpleDefData)
+
+    rotateKeysetTest = SomeGasTest $ rotateTest
+      where
+        name = "my-pact-keyset"
+        rotateExpr = [text| (define-keyset '$name (read-keyset 'my-keyset)) |]
+        exprKeysetVal = toPactKeyset "my-keyset" "something" Nothing
+        updateEnvMsgBody = setEnv (set eeMsgBody exprKeysetVal)
+
+        oldPublicKeys = [PublicKey "something"]
+        oldKeyset = KeySet oldPublicKeys (Name "keys-all" def)
+        updateEnvMsgSig = setEnv (set eeMsgSigs (S.fromList oldPublicKeys))
+
+        ksRead :: Domain k v -> k -> Method () (Maybe v)
+        ksRead KeySets _ = rc (Just oldKeyset)
+        ksRead _ _ = rc Nothing
+
+        mockdb = def { mockRead = MockRead ksRead }
+        testEnv = createMockEnv mockdb
+
+        gasTest = GasTest rotateExpr
+                  "Defining keyset with the same name as one already defined."
+                  defEvalState
+                  testEnv
+                  mockEnvCleanup
+
+        rotateTest = (updateEnvMsgBody . updateEnvMsgSig) gasTest
+
+
+enforceKeysetTests :: GasUnitTests
+enforceKeysetTests = GasUnitTests tests
+  where
+    enforceKeysetExpr = [text| (enforce-keyset 'my-keyset) |]
+
+    pubKeys = [PublicKey "something"]
+    keyset = KeySet pubKeys (Name "keys-all" def)
+    updateEnvWithSig = setEnv $ set eeMsgSigs (S.fromList pubKeys)
+    
+    ksRead :: Domain k v -> k -> Method () (Maybe v)
+    ksRead KeySets _ = rc (Just keyset)
+    ksRead _ _ = rc Nothing
+
+    mockdb = def { mockRead = MockRead ksRead }
+    testEnv = createMockEnv mockdb
+
+    gasTest = updateEnvWithSig $
+              GasTest enforceKeysetExpr
+                      enforceKeysetExpr
+                      defEvalState
+                      testEnv
+                      mockEnvCleanup
+    tests = SomeGasTest gasTest :| []
+    
+
+readKeysetTests :: GasUnitTests
+readKeysetTests = GasUnitTests tests
+  where
+    readKeysetExpr = [text| (read-keyset 'my-keyset) |]
+    dataWithKeyset = toPactKeyset "my-keyset" "something" Nothing
+    test = setEnv (set eeMsgBody dataWithKeyset) (defGasTest readKeysetExpr)
+
+    tests = SomeGasTest test :| []
+
+
+keysAnyTests :: GasUnitTests
+keysAnyTests = defGasUnitTests allExprs
+  where
+    allExprs = [text|(keys-any 10 1)|] :| []
+
+
+keysAllTests :: GasUnitTests
+keysAllTests = defGasUnitTests allExprs
+  where
+    allExprs = [text|(keys-all 3 3)|] :| []
+
+
+keys2Tests :: GasUnitTests
+keys2Tests = defGasUnitTests allExprs
+  where
+    allExprs = [text|(keys-2 3 1)|] :| []
+
 
 
 -- | Commitments native function tests
@@ -1190,8 +1292,8 @@ makeListTests = defGasUnitTests allExprs
     allExprs = NEL.map (makeListExpr . intToStr) sizes
 
 
-listModuleTests :: GasUnitTests
-listModuleTests = defGasUnitTests allExprs
+listModulesTests :: GasUnitTests
+listModulesTests = defGasUnitTests allExprs
   where
     listModulesExpr =
       [text| (list-modules) |]
@@ -1363,7 +1465,7 @@ namespaceTests = GasUnitTests tests
         expr = [text| (namespace '$name) |]
         
         pubKeys = [PublicKey "something"]
-        keyset = KeySet pubKeys (Name "keys-all" def) 
+        keyset = KeySet pubKeys (Name "keys-all" def)
         oldNamespace = Namespace (NamespaceName name) (GKeySet keyset)
         updateMsgSig = set eeMsgSigs (S.fromList pubKeys)
 
@@ -1371,7 +1473,7 @@ namespaceTests = GasUnitTests tests
         nsRead Namespaces _ = rc (Just oldNamespace)
         nsRead _ _ = rc Nothing
 
-        mockdb = def {mockRead = MockRead nsRead }
+        mockdb = def { mockRead = MockRead nsRead }
         testEnv = createMockEnv mockdb
 
         setNamespaceTest =
