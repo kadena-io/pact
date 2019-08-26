@@ -16,7 +16,7 @@ module Pact.Types.GasModel
   , allNatives
   , untestedNatives
   
-  , parseCode
+  , compileCode
   , printResult
   , eitherDie
 
@@ -52,6 +52,11 @@ import Pact.Types.Native
 import Pact.Compile               (compileExps, mkTextInfo)
 import Pact.MockDb
 import Pact.Types.PactValue       (toPactValueLenient, PactValue(..))
+import Pact.Types.Logger          (neverLog)
+
+import Pact.PersistPactDb         (DbEnv)
+import Pact.Persist.Pure          (PureDb)
+import Pact.Eval                  (eval)
 
 import Pact.Gas
 import Pact.Interpreter
@@ -132,11 +137,29 @@ createMockEnv mdb state = do
 mockEnvCleanup :: (EvalEnv e, EvalState) -> IO ()
 mockEnvCleanup (_, _) = return ()
 
+
 defGasUnitTests
   :: NEL.NonEmpty T.Text
   -> GasUnitTests
 defGasUnitTests pactExprs
   = GasUnitTests $ NEL.map (SomeGasTest . defGasTest) pactExprs
+
+
+getLoadedState
+  :: T.Text
+  -> (EvalEnv (DbEnv PureDb) -> EvalEnv (DbEnv PureDb))
+  -> EvalState
+  -> IO (EvalState)
+getLoadedState code updateEnv state = do
+  terms <- compileCode code
+
+  pureDb <- mkPureEnv neverLog
+  initSchema pureDb
+  let env = updateEnv $ defEvalEnv pureDb
+  
+  (_, newState) <- runEval state env $ mapM eval terms
+  return newState
+
 
 -- | Mock module name for testing
 defModuleName :: ModuleName
@@ -178,12 +201,17 @@ defModuleData = ModuleData modDef refMap
 --- Helper functions
 ---
 
-parseCode :: T.Text -> IO [Term Name]
-parseCode m = do
-  parsedCode <- ParsedCode m <$> eitherDie m (parseExprs m)
+compileCode :: T.Text -> IO [Term Name]
+compileCode m = do
+  parsedCode <- parseCode m
   throwEither $ compileExps
                 (mkTextInfo $ _pcCode parsedCode)
                 (_pcExps parsedCode)
+
+parseCode :: T.Text -> IO ParsedCode
+parseCode m = do
+  ParsedCode m <$> eitherDie m (parseExprs m)
+
 
 printResult :: Either PactError [Term Name] -> IO ()
 printResult res = case res of
@@ -440,33 +468,112 @@ unitTestFromDef nativeName = case (asString nativeName) of
   "read-keyset"    -> Just readKeysetTests
 
   -- | Database nataive functions
-  "create-table" -> Just createTableTests
+  "create-table"    -> Just createTableTests
+  "describe-keyset" -> Just describeKeysetTests
+  "describe-module" -> Just describeModuleTests
+  "describe-table"  -> Just describeTableTests
+  --"inset"           -> 
 
   _ -> Nothing
 
 
 -- | Database native function tests
-createTableTests :: GasUnitTests
-createTableTests = defGasUnitTests allExprs
+describeTableTests :: GasUnitTests
+describeTableTests = GasUnitTests tests
   where
-    allExprs =
-      [text|
-           (module accounts GOV
+    describeTableExpr = [text| (describe-table $moduleName.accounts) |]
 
-(defcap GOV ()
-    true)
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
 
-(defschema account
-    "Row type for accounts table."
-     balance:decimal
-     )
+       (defcap GOV ()
+         true)
 
-  (deftable accounts:{account}
-    "Main table for accounts module.")
-)
-(create-table accounts)
+       (defschema account
+         balance:decimal
+       )
 
-   |] :| []
+       (deftable accounts:{account})
+     ) |]
+
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv def state
+
+
+    test = GasTest describeTableExpr describeTableExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+describeModuleTests :: GasUnitTests
+describeModuleTests = GasUnitTests tests
+  where
+    describeModuleExpr = [text| (describe-module "$moduleName") |]
+
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv def state
+      
+    test = GasTest describeModuleExpr describeModuleExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+describeKeysetTests :: GasUnitTests
+describeKeysetTests = GasUnitTests tests
+  where
+    describeKeysetExpr = [text| (describe-keyset "some-keyset") |]
+    
+    someKeyset = KeySet [PublicKey "something"] (Name "keys-all" def)
+    ksRead :: Domain k v -> k -> Method () (Maybe v)
+    ksRead KeySets _ = rc (Just someKeyset)
+    ksRead _ _ = rc Nothing
+
+    mockdb = def {mockRead = MockRead ksRead }
+    testEnv = createMockEnv mockdb defEvalState
+
+    test = GasTest describeKeysetExpr describeKeysetExpr testEnv mockEnvCleanup
+    tests = SomeGasTest test :| []
+    
+
+createTableTests :: GasUnitTests
+createTableTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv def state
+      
+    createTableExpr = [text| (create-table $moduleName.accounts) |]
+    test = GasTest createTableExpr createTableExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
 
 
 -- | Keyset native function tests
@@ -488,8 +595,9 @@ defineKeysetTests = GasUnitTests tests
       where
         name = "my-pact-keyset"
         rotateExpr = [text| (define-keyset '$name some-loaded-keyset) |]
-        exprKeysetVal = toPactKeyset "my-keyset" "something" Nothing
-        updateEnvMsgBody = setEnv (set eeMsgBody exprKeysetVal)
+        loaded = HM.singleton (Name "some-loaded-keyset" def)
+                 (Direct $ TGuard (GKeySet oldKeyset) def)
+        stateWithKeysetLoaded = set (evalRefs . rsLoaded) loaded defEvalState
 
         oldPublicKeys = [PublicKey "something"]
         oldKeyset = KeySet oldPublicKeys (Name "keys-all" def)
@@ -500,9 +608,6 @@ defineKeysetTests = GasUnitTests tests
         ksRead _ _ = rc Nothing
 
         mockdb = def { mockRead = MockRead ksRead }
-        loaded = HM.singleton (Name "some-loaded-keyset" def)
-                 (Direct $ TGuard (GKeySet oldKeyset) def)
-        stateWithKeysetLoaded = set (evalRefs . rsLoaded) loaded defEvalState
         testEnv = createMockEnv mockdb stateWithKeysetLoaded
 
         gasTest = GasTest rotateExpr
@@ -510,8 +615,7 @@ defineKeysetTests = GasUnitTests tests
                   testEnv
                   mockEnvCleanup
 
-        rotateTest = (updateEnvMsgBody . updateEnvMsgSig)
-                     gasTest
+        rotateTest = updateEnvMsgSig gasTest
 
 
 enforceKeysetTests :: GasUnitTests
@@ -1541,7 +1645,7 @@ defineNamespaceTests = GasUnitTests tests
         loadedKeyset = KeySet [PublicKey "something"] (Name "keys-all" def)
         loaded = HM.singleton (Name "some-loaded-keyset" def)
                  (Direct $ TGuard (GKeySet loadedKeyset) def)
-        updateStateWithKeysetLoaded = setState $ set (evalRefs . rsLoaded) loaded
+        stateWithKeysetLoaded = set (evalRefs . rsLoaded) loaded defEvalState
 
         oldPublicKeys = [PublicKey "something"]
         oldKeyset = KeySet oldPublicKeys (Name "keys-all" def) 
@@ -1553,11 +1657,11 @@ defineNamespaceTests = GasUnitTests tests
         nsRead _ _ = rc Nothing
 
         mockdb = def {mockRead = MockRead nsRead }
-        testEnv = createMockEnv mockdb defEvalState
+        testEnv = createMockEnv mockdb stateWithKeysetLoaded
 
-        rotateTest = (updateStateWithKeysetLoaded . updateMsgSig) $
+        rotateTest = updateMsgSig $
             GasTest rotateExpr
-                    "Defining namespace with the same name as one already defined."
+                    (rotateExpr <> ": Defining namespace with the same name as one already defined.")
                     testEnv
                     mockEnvCleanup
 

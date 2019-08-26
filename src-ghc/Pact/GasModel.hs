@@ -32,7 +32,7 @@ mockRun
   -> (EvalEnv e, EvalState)
   -> IO (Either PactError [Term Name], EvalState)
 mockRun (GasTest expr _ _ _) (env, state) = do
-  terms <- parseCode expr
+  terms <- compileCode expr
   exec state env terms
 
 
@@ -63,7 +63,7 @@ benchRun
   -> (EvalEnv e, EvalState)
   -> C.Benchmark
 benchRun (GasTest expr desc _ _) (env, state) =
-  C.env (parseCode expr) execBench
+  C.env (compileCode expr) execBench
   where
     execBench terms =
       C.bench (T.unpack desc) $
