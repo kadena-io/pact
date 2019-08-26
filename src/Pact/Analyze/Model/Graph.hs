@@ -97,14 +97,10 @@ linearize model = go traceEvents
     -- the possibility of 'TraceAssert' and 'TraceGuard' affecting control
     -- flow.
     traceEvents :: [TraceEvent]
-    traceEvents = concat $ restrictKeys edgeEvents (reachableEdges model)
+    traceEvents = concat $ Map.restrictKeys edgeEvents (reachableEdges model)
 
     edgeEvents :: Map Edge [TraceEvent]
     edgeEvents = model ^. modelExecutionGraph.egEdgeEvents
-
--- TODO: use Map.restrictKeys once using containers >= 0.5.8
-restrictKeys :: Ord k => Map k a -> Set k -> Map k a
-restrictKeys m kset = Map.filterWithKey (\k _v -> k `Set.member` kset) m
 
 reachablePaths :: Model 'Concrete -> Set Path
 reachablePaths model = Map.foldlWithKey'
@@ -118,7 +114,7 @@ reachablePaths model = Map.foldlWithKey'
 
 reachableEdges :: Model 'Concrete -> Set Edge
 reachableEdges model = Set.fromList . concat $
-    restrictKeys pathEdges (reachablePaths model)
+    Map.restrictKeys pathEdges (reachablePaths model)
 
   where
     pathEdges :: Map Path [Edge]

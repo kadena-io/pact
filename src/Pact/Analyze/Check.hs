@@ -47,9 +47,9 @@ import           Control.Lens               (at, each, filtered, ifoldl,
                                              _2, _Left)
 import           Control.Monad              (void, (<=<))
 import           Control.Monad.Except       (Except, ExceptT (ExceptT),
-                                             MonadError, catchError, runExceptT,
-                                             throwError, withExcept,
-                                             withExceptT)
+                                             catchError, liftEither,
+                                             runExceptT, throwError,
+                                             withExcept, withExceptT)
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.State.Strict (evalStateT)
@@ -77,7 +77,7 @@ import           Pact.Types.Lang            (pattern ColonExp, pattern CommaExp,
                                              Def (..), DefType (..), Info,
                                              dFunType, dMeta, mModel,
                                              renderInfo, tDef, tInfo, tMeta,
-                                             _aName, _tDef)
+                                             _aName, _dMeta, _mModel, _tDef)
 import           Pact.Types.Pretty          (renderCompactText)
 import           Pact.Types.Runtime         (Exp, ModuleData (..), ModuleName,
                                              Ref, Ref' (Ref),
@@ -158,14 +158,17 @@ type CheckResult = Either CheckFailure CheckSuccess
 data ScopeError
   = ScopeParseFailure ParseFailure
   | NotInScope Text
-  | ScopeInvalidRefType
+  | ScopeInvalidDirectRef
   deriving (Eq, Show)
 
 describeScopeError :: ScopeError -> Text
 describeScopeError = \case
-  ScopeParseFailure pf -> describeParseFailure pf
-  NotInScope name      -> "Variable not in scope: " <> name
-  ScopeInvalidRefType  -> "Invalid reference type given to scope checker."
+  ScopeParseFailure pf ->
+    describeParseFailure pf
+  NotInScope name ->
+    "Variable not in scope: " <> name
+  ScopeInvalidDirectRef ->
+    "Invalid Direct reference given to scope checker instead of Ref."
 
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
@@ -213,10 +216,12 @@ data VerificationFailure
   = ModuleParseFailure ParseFailure
   | ModuleCheckFailure CheckFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
-  | InvalidRefType -- TODO: make this error more informative
+  | InvalidDirectReference
+  | ExpectedConcreteModule
   | FailedConstTranslation String
   | SchemalessTable Info
   | ScopeErrors [ScopeError]
+  | NonDefTerm (Pact.Term (Ref' (Pact.Term Pact.Name)))
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -277,7 +282,6 @@ falsifyingModel :: CheckFailure -> Maybe (Model 'Concrete)
 falsifyingModel (CheckFailure _ (SmtFailure (Invalid m))) = Just m
 falsifyingModel _                                         = Nothing
 
--- TODO: don't throw out these Infos
 translateToCheckFailure :: TranslateFailure -> CheckFailure
 translateToCheckFailure (TranslateFailure info err)
   = CheckFailure info (TranslateFailure' err)
@@ -294,10 +298,6 @@ smtToCheckFailure info = CheckFailure info . SmtFailure
 
 smtToQueryFailure :: Info -> SmtFailure -> CheckFailure
 smtToQueryFailure info = CheckFailure info . QueryFailure
-
---
--- TODO: implement machine-friendly JSON output for CheckResult
---
 
 resultQuery
   :: Goal
@@ -522,8 +522,6 @@ moduleTables modules refMap = do
           (name, Ref (table@TTable {})) -> Just (name, table)
           _                             -> Nothing
 
-  -- TODO: need mapMaybe for HashMap
-  -- Note(emily): i can handle this in the current PR - lets discuss.
   let schemas = HM.fromList $ flip mapMaybe (HM.toList refMap) $ \case
         (name, Ref (schema@TSchema {})) -> Just (name, schema)
         _                               -> Nothing
@@ -777,10 +775,6 @@ makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
         (zip vids argTys' <&> \(vid, (Unmunged nm, ty))
           -> Binding vid (Unmunged nm) (Munged nm) ty)
 
-      --
-      -- TODO: should the map sent to parsing should be Un/Munged, instead of
-      -- Text?
-      --
       nameVids :: Map Text VarId
       nameVids = Map.fromList $ env <&> \(Binding vid (Unmunged nm) _ _)
         -> (nm, vid)
@@ -841,35 +835,33 @@ moduleFunCheck
   -> Pact.FunType TC.UserType
   -- ^ The type of the term under analysis
   -> Except VerificationFailure (Either ParseFailure [Located Check])
-moduleFunCheck tables modCheckExps consts propDefs defn funTy = do
+moduleFunCheck tables modCheckExps consts propDefs defTerm funTy = do
   FunctionEnvironment envVidStart nameVids vidTys
     <- makeFunctionEnvironment funTy
 
-  -- TODO: this was very hard code to debug as the unsafe lenses just result in
-  -- properties not showing up, instead of a compile error when I changed
-  -- 'TDef' to a safe constructor. Please consider moving this code to use
-  -- pattern matches to ensure the proper constructor is found; and/or change
-  -- 'funTypes' to hold 'Def' objects
-  checks <- case defn ^? tDef . dMeta . mModel of
-    Nothing -> pure []
-    Just model -> case normalizeListLit model of
-      Nothing -> throwError $ ModuleParseFailure
-        -- reconstruct an `Exp Info` for this list
-        ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
-        , "malformed list (inconsistent use of comma separators?)"
-        )
-      Just model' -> withExcept ModuleParseFailure $ liftEither $ do
-        exps <- collectProperties model'
-        let funName = _dDefName (_tDef defn)
-            applicableModuleChecks =
-              filter (applicableCheck funName) modCheckExps
-                <&> \(ModuleCheck ty prop _scope) -> (ty, prop)
+  checks <- case defTerm of
+    TDef def info ->
+      let model = _mModel (_dMeta def)
+      in case normalizeListLit model of
+        Nothing -> throwError $ ModuleParseFailure
+          -- reconstruct an `Exp Info` for this list
+          ( Pact.EList (Pact.ListExp model Pact.Brackets info)
+          , "malformed list (inconsistent use of comma separators?)"
+          )
+        Just model' -> withExcept ModuleParseFailure $ liftEither $ do
+          exps <- collectProperties model'
+          let funName = _dDefName (_tDef defTerm)
+              applicableModuleChecks =
+                filter (applicableCheck funName) modCheckExps
+                  <&> \(ModuleCheck ty prop _scope) -> (ty, prop)
 
-        for (applicableModuleChecks <> exps) $ \(propTy, meta) ->
-          case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
-            consts propDefs propTy meta of
-            Left err   -> Left (meta, err)
-            Right good -> Right (Located (getInfo meta) good)
+          for (applicableModuleChecks <> exps) $ \(propTy, meta) ->
+            case expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
+              consts propDefs propTy meta of
+              Left err   -> Left (meta, err)
+              Right good -> Right (Located (getInfo meta) good)
+    _ ->
+      throwError $ NonDefTerm defTerm
 
   pure $ Right checks
 
@@ -899,10 +891,6 @@ typecheck ref = do
   pure $ if Set.null failures
             then Right toplevel
             else Left $ CheckFailure info $ TypecheckFailure failures
-
--- TODO: use from Control.Monad.Except when on mtl 2.2.2
-liftEither :: MonadError e m => Either e a -> m a
-liftEither = either throwError return
 
 -- | Extract constants by typechecking and translating to properties.
 getConsts
@@ -1019,7 +1007,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
     :: HM.HashMap Text
       ((TopLevel Node, CheckableType), Either ParseFailure [Located Check]))
     <- hoist generalize $ for funTypes $ \case
-      (Pact.Direct _, _, _, _) -> throwError InvalidRefType
+      (Pact.Direct _, _, _, _) -> throwError InvalidDirectReference
       (Pact.Ref defn, toplevel, userTy, checkType) -> ((toplevel,checkType),)
         <$> moduleFunCheck tables checkExps consts propDefs defn userTy
 
@@ -1055,7 +1043,7 @@ scopeCheckInterface
   -- ^ The set of refs to check
   -> [ScopeError]
 scopeCheckInterface globalNames refs = refs <&&> \case
-  Pact.Direct _ -> [ScopeInvalidRefType]
+  Pact.Direct _ -> [ScopeInvalidDirectRef]
   Pact.Ref defn -> case defn ^? tDef . dMeta . mModel of
     Nothing -> []
     Just model -> case normalizeListLit model of
@@ -1093,7 +1081,7 @@ moduleGovernance moduleData = case _mdModule moduleData of
       Right (Def {_dDefName=Pact.DefName dn}) ->
         pure $ CapGovernance $ CapName $ T.unpack dn
   Pact.MDInterface _ ->
-    throwError InvalidRefType
+    throwError ExpectedConcreteModule
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -1174,8 +1162,12 @@ renderVerifiedModule = \case
     [describeCheckFailure checkFailure]
   Left (TypeTranslationFailure msg ty) ->
     [msg <> ": " <> tShow ty]
-  Left (InvalidRefType) ->
-    ["Invalid reference type given to typechecker."]
+  Left InvalidDirectReference ->
+    ["Invalid Direct reference given to typechecker instead of Ref"]
+  Left ExpectedConcreteModule ->
+    ["Expected concrete module but encountered an interface"]
+  Left (NonDefTerm term) ->
+    ["Expected TDef Term but encountered: " <> tShow term]
   Left (FailedConstTranslation msg) ->
     [T.pack msg]
   Left (SchemalessTable info) ->
