@@ -29,9 +29,9 @@ exec s e terms = runEval' s e $ mapM eval terms
 
 mockRun
   :: GasTest e
-  -> EvalEnv e
+  -> (EvalEnv e, EvalState)
   -> IO (Either PactError [Term Name], EvalState)
-mockRun (GasTest expr _ state _ _) env = do
+mockRun (GasTest expr _ _ _) (env, state) = do
   terms <- parseCode expr
   exec state env terms
 
@@ -60,9 +60,9 @@ mockRuns' (GasUnitTests tests) = mapM run (NEL.toList tests)
 
 benchRun
   :: GasTest e
-  -> EvalEnv e
+  -> (EvalEnv e, EvalState)
   -> C.Benchmark
-benchRun (GasTest expr desc state _ _) env =
+benchRun (GasTest expr desc _ _) (env, state) =
   C.env (parseCode expr) execBench
   where
     execBench terms =

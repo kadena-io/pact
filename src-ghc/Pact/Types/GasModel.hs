@@ -6,7 +6,7 @@
 
 
 module Pact.Types.GasModel
-  ( GasTest(..)
+  ( GasTest(..) 
   , SomeGasTest(..)
   , GasUnitTests(..)
 
@@ -66,9 +66,8 @@ import Pact.Types.SPV
 data GasTest e = GasTest
   { _gasTestExpression :: !T.Text
   , _gasTestDescription :: !T.Text
-  , _gasTestMockState :: !EvalState
-  , _gasTestMockEnv :: !(IO (EvalEnv e))
-  , _gasTestCleanup :: !(EvalEnv e -> IO ())
+  , _gasTestMockEnv :: !(IO ((EvalEnv e), EvalState))
+  , _gasTestCleanup :: !((EvalEnv e, EvalState) -> IO ())
   }
 makeLenses ''GasTest
 
@@ -96,7 +95,6 @@ defGasTest expr =
   GasTest
   expr
   expr
-  defEvalState
   createDefMockEnv
   mockEnvCleanup
 
@@ -112,27 +110,27 @@ defEvalEnv db =
 setEnv :: (EvalEnv e -> EvalEnv e) -> GasTest e -> GasTest e
 setEnv f test = setEnv'
   where
-    newEnv = fmap f $ view gasTestMockEnv test
+    newEnv = fmap (\(e,s) -> (f e, s)) $ view gasTestMockEnv test
     setEnv' = set gasTestMockEnv newEnv test
 
 setState :: (EvalState -> EvalState) -> GasTest e -> GasTest e
 setState f test = setState'
   where
-    newState = f $ view gasTestMockState test
-    setState' = set gasTestMockState newState test
+    newState = fmap (\(e,s) -> (e, f s)) $ view gasTestMockEnv test
+    setState' = set gasTestMockEnv newState test
 
-createDefMockEnv :: IO (EvalEnv ())
+createDefMockEnv :: IO (EvalEnv (), EvalState)
 createDefMockEnv = do
   db <- mkMockEnv def
-  return $ defEvalEnv db
+  return $ (defEvalEnv db, defEvalState)
 
-createMockEnv :: MockDb -> IO (EvalEnv ())
-createMockEnv mdb = do
+createMockEnv :: MockDb -> EvalState -> IO (EvalEnv (), EvalState)
+createMockEnv mdb state = do
   db <- mkMockEnv mdb
-  return $ defEvalEnv db
+  return $ (defEvalEnv db, state)
 
-mockEnvCleanup :: EvalEnv e -> IO ()
-mockEnvCleanup = const $ return ()
+mockEnvCleanup :: (EvalEnv e, EvalState) -> IO ()
+mockEnvCleanup (_, _) = return ()
 
 defGasUnitTests
   :: NEL.NonEmpty T.Text
@@ -140,12 +138,15 @@ defGasUnitTests
 defGasUnitTests pactExprs
   = GasUnitTests $ NEL.map (SomeGasTest . defGasTest) pactExprs
 
+-- | Mock module name for testing
 defModuleName :: ModuleName
 defModuleName = ModuleName "some-module" Nothing
 
+-- | Mock module hash for testing
 defModuleHash :: ModuleHash
 defModuleHash = ModuleHash $ pactHash ""
 
+-- | Mock stack frame with mock module name
 defStackFrame :: StackFrame
 defStackFrame =
   StackFrame "" def
@@ -154,6 +155,7 @@ defStackFrame =
         ,[])
   )
 
+-- | Mock module data with mock module name for testing
 defModuleData :: ModuleData Ref
 defModuleData = ModuleData modDef refMap
   where refMap = HM.empty
@@ -437,7 +439,34 @@ unitTestFromDef nativeName = case (asString nativeName) of
   "keys-any"       -> Just keysAnyTests
   "read-keyset"    -> Just readKeysetTests
 
+  -- | Database nataive functions
+  "create-table" -> Just createTableTests
+
   _ -> Nothing
+
+
+-- | Database native function tests
+createTableTests :: GasUnitTests
+createTableTests = defGasUnitTests allExprs
+  where
+    allExprs =
+      [text|
+           (module accounts GOV
+
+(defcap GOV ()
+    true)
+
+(defschema account
+    "Row type for accounts table."
+     balance:decimal
+     )
+
+  (deftable accounts:{account}
+    "Main table for accounts module.")
+)
+(create-table accounts)
+
+   |] :| []
 
 
 -- | Keyset native function tests
@@ -446,18 +475,19 @@ defineKeysetTests = GasUnitTests tests
   where
     tests = simpleDefTest :| [rotateKeysetTest]
 
-    simpleDefTest = SomeGasTest $ updateEnvWithSig (defGasTest simpleDefExpr)
+    simpleDefTest = SomeGasTest $ updateStateWithKeysetLoaded (defGasTest simpleDefExpr)
       where
         simpleDefExpr =
-          [text| (define-keyset 'my-pact-keyset (read-keyset 'my-keyset)) |]
-        simpleDefData =
-          toPactKeyset "my-keyset" "something" Nothing
-        updateEnvWithSig = setEnv (set eeMsgBody simpleDefData)
+          [text| (define-keyset 'my-pact-keyset some-loaded-keyset) |]
+        loadedKeyset = KeySet [PublicKey "something"] (Name "keys-all" def)
+        loaded = HM.singleton (Name "some-loaded-keyset" def)
+                 (Direct $ TGuard (GKeySet loadedKeyset) def)
+        updateStateWithKeysetLoaded = setState $ set (evalRefs . rsLoaded) loaded
 
     rotateKeysetTest = SomeGasTest $ rotateTest
       where
         name = "my-pact-keyset"
-        rotateExpr = [text| (define-keyset '$name (read-keyset 'my-keyset)) |]
+        rotateExpr = [text| (define-keyset '$name some-loaded-keyset) |]
         exprKeysetVal = toPactKeyset "my-keyset" "something" Nothing
         updateEnvMsgBody = setEnv (set eeMsgBody exprKeysetVal)
 
@@ -470,15 +500,18 @@ defineKeysetTests = GasUnitTests tests
         ksRead _ _ = rc Nothing
 
         mockdb = def { mockRead = MockRead ksRead }
-        testEnv = createMockEnv mockdb
+        loaded = HM.singleton (Name "some-loaded-keyset" def)
+                 (Direct $ TGuard (GKeySet oldKeyset) def)
+        stateWithKeysetLoaded = set (evalRefs . rsLoaded) loaded defEvalState
+        testEnv = createMockEnv mockdb stateWithKeysetLoaded
 
         gasTest = GasTest rotateExpr
-                  "Defining keyset with the same name as one already defined."
-                  defEvalState
+                  (rotateExpr <> ": Defining keyset with the same name as one already defined.")
                   testEnv
                   mockEnvCleanup
 
-        rotateTest = (updateEnvMsgBody . updateEnvMsgSig) gasTest
+        rotateTest = (updateEnvMsgBody . updateEnvMsgSig)
+                     gasTest
 
 
 enforceKeysetTests :: GasUnitTests
@@ -495,12 +528,11 @@ enforceKeysetTests = GasUnitTests tests
     ksRead _ _ = rc Nothing
 
     mockdb = def { mockRead = MockRead ksRead }
-    testEnv = createMockEnv mockdb
+    testEnv = createMockEnv mockdb defEvalState
 
     gasTest = updateEnvWithSig $
               GasTest enforceKeysetExpr
                       enforceKeysetExpr
-                      defEvalState
                       testEnv
                       mockEnvCleanup
     tests = SomeGasTest gasTest :| []
@@ -1163,10 +1195,12 @@ yieldTests = GasUnitTests tests
     mockStackframe = [defStackFrame]
     updateStateWithStackFrame = setState (set evalCallStack mockStackframe)
     updateStateWithPactExec = setState (set evalPactExec mockPactExec)
-    mkGasTestWithModule e = GasTest e e
-                            (initStateModules mockModules)
-                            createDefMockEnv
-                            mockEnvCleanup
+
+    setInitialState = const (initStateModules mockModules)
+    mkGasTestWithModule e = setState setInitialState
+                            $ GasTest e e
+                              createDefMockEnv
+                              mockEnvCleanup
     
     tests =    NEL.map (SomeGasTest .
                         updateStateWithStackFrame .
@@ -1202,10 +1236,11 @@ resumeTests = GasUnitTests tests
             updateGasTestDesc = set gasTestDescription $ (resumeExpr bindExpr) <> " with provenance"
             
             mockModules = HM.fromList [(defModuleName, defModuleData)]
-            gasTestWithModule = GasTest
+            setInitialState = const (initStateModules mockModules)
+            gasTestWithModule = setState setInitialState
+                                $ GasTest
                                   (resumeExpr bindExpr)
                                   (resumeExpr bindExpr)
-                                  (initStateModules mockModules)
                                   createDefMockEnv
                                   mockEnvCleanup
             setupTestWithSPV = SomeGasTest .
@@ -1474,13 +1509,12 @@ namespaceTests = GasUnitTests tests
         nsRead _ _ = rc Nothing
 
         mockdb = def { mockRead = MockRead nsRead }
-        testEnv = createMockEnv mockdb
+        testEnv = createMockEnv mockdb defEvalState
 
         setNamespaceTest =
           setEnv updateMsgSig $
             GasTest expr
                     expr
-                    defEvalState
                     testEnv
                     mockEnvCleanup
         
@@ -1491,37 +1525,39 @@ defineNamespaceTests = GasUnitTests tests
     tests = simpleDefTest :| [rotateNamespaceTest]
     
     simpleDefTest = SomeGasTest $ 
-      setEnv (set eeMsgBody simpleDefData) (defGasTest simpleDefExpr)
+      updateStateWithKeysetLoaded (defGasTest simpleDefExpr)
       where
         simpleDefExpr =
-          [text| (define-namespace 'my-namespace (read-keyset 'my-keyset)) |]
-        simpleDefData =
-          toPactKeyset "my-keyset" "something" Nothing
+          [text| (define-namespace 'my-namespace some-loaded-keyset) |]
+        loadedKeyset = KeySet [PublicKey "something"] (Name "keys-all" def)
+        loaded = HM.singleton (Name "some-loaded-keyset" def)
+                 (Direct $ TGuard (GKeySet loadedKeyset) def)
+        updateStateWithKeysetLoaded = setState $ set (evalRefs . rsLoaded) loaded
 
     rotateNamespaceTest = SomeGasTest $ rotateTest
       where
         name = "my-namespace"
-        rotateExpr = [text| (define-namespace '$name (read-keyset 'my-keyset)) |]
-        exprKeysetVal = toPactKeyset "my-keyset" "something" Nothing
-        updateMsgBody = set eeMsgBody exprKeysetVal
+        rotateExpr = [text| (define-namespace '$name some-loaded-keyset) |]
+        loadedKeyset = KeySet [PublicKey "something"] (Name "keys-all" def)
+        loaded = HM.singleton (Name "some-loaded-keyset" def)
+                 (Direct $ TGuard (GKeySet loadedKeyset) def)
+        updateStateWithKeysetLoaded = setState $ set (evalRefs . rsLoaded) loaded
 
         oldPublicKeys = [PublicKey "something"]
         oldKeyset = KeySet oldPublicKeys (Name "keys-all" def) 
         oldNamespace = Namespace (NamespaceName name) (GKeySet oldKeyset)
-        updateMsgSig = set eeMsgSigs (S.fromList oldPublicKeys)
+        updateMsgSig = setEnv $ set eeMsgSigs (S.fromList oldPublicKeys)
 
         nsRead :: Domain k v -> k -> Method () (Maybe v)
         nsRead Namespaces _ = rc (Just oldNamespace)
         nsRead _ _ = rc Nothing
 
         mockdb = def {mockRead = MockRead nsRead }
-        testEnv = createMockEnv mockdb
+        testEnv = createMockEnv mockdb defEvalState
 
-        rotateTest = 
-          setEnv (updateMsgBody . updateMsgSig) $
+        rotateTest = (updateStateWithKeysetLoaded . updateMsgSig) $
             GasTest rotateExpr
                     "Defining namespace with the same name as one already defined."
-                    defEvalState
                     testEnv
                     mockEnvCleanup
 
