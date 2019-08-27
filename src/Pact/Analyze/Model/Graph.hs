@@ -29,7 +29,10 @@ linearize model = go traceEvents
     go = foldr
       (\event (ExecutionTrace futureEvents mRes) ->
         let continue = ExecutionTrace (event : futureEvents) mRes
-            stop     = ExecutionTrace [event] Nothing
+            continueUntil path = ExecutionTrace
+              (event : dropWhile (/= TraceSubpathStart path) futureEvents)
+              mRes
+            stop = ExecutionTrace [event] Nothing
 
             handleDbAccess
               :: Traversal' (ModelTags 'Concrete) (SBV Bool)
@@ -54,21 +57,8 @@ linearize model = go traceEvents
                      error "impossible: missing enforce tag, or symbolic value"
                    Just False ->
                      case recov of
-                       Recoverable _resumptionPath ->
-                         --
-                         -- TODO: instead of just continuing, we should
-                         -- actually skip future events (in the same case)
-                         -- until we hit this "resumption path".  this would
-                         -- produce better output for cases with any events
-                         -- after a failed enforce:
-                         --
-                         --   (enforce-one
-                         --     [(let ((x (enforce false)))
-                         --        (enforce true)) ; <- we should not see this
-                         --      true
-                         --      ])
-                         --
-                         continue
+                       Recoverable resumptionPath ->
+                         continueUntil resumptionPath
                        Unrecoverable ->
                          stop
                    Just True ->
@@ -94,8 +84,8 @@ linearize model = go traceEvents
     -- over monotonically increasing 'Vertex's across the execution graph
     -- yields a topological sort. Additionally the 'TraceEvent's on each 'Edge'
     -- are ordered, so we now have a linear trace of events. But we still have
-    -- the possibility of 'TraceAssert' and 'TraceGuard' affecting control
-    -- flow.
+    -- the possibility of events like 'TraceAssert' and 'TraceGuard' affecting
+    -- control flow.
     traceEvents :: [TraceEvent]
     traceEvents = concat $ Map.restrictKeys edgeEvents (reachableEdges model)
 

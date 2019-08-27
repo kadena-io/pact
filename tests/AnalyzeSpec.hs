@@ -3040,8 +3040,18 @@ spec = describe "analyze" $ do
       expectTrace CheckDefun code (sNot Success')
         [push, assert, {- failure -} path, {- success -} path, pop]
 
-    it "doesn't include events after the first failure in an enforce-one case" $
-      pendingWith "use of resumptionPath"
+    describe "doesn't include events after the first failure in an enforce-one case" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce-one ""
+                  [(let ((x (enforce false "")))
+                     (enforce true "")) ; <-- shouldn't see this!
+                   true
+                  ]))
+            |]
+      expectTrace CheckDefun code (sNot Success')
+        [push, assert, {- failure -} path, {- success -} path, pop]
 
     -- The falsifying model we should get executes the first step successfully,
     -- then cancels.
