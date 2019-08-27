@@ -1252,3 +1252,15 @@ data Governance
   = KsGovernance RegistryName
   | CapGovernance CapName
   deriving (Eq, Ord, Show)
+
+-- | A restriction to permitted database activity for while evaluating certain
+-- subexpressions.
+data DbRestriction
+  = DisallowWrites
+  | DisallowDb
+  deriving (Eq, Show)
+
+instance Semigroup DbRestriction where
+  DisallowWrites <> DisallowWrites = DisallowWrites
+  DisallowDb     <> _              = DisallowDb
+  _              <> DisallowDb     = DisallowDb
