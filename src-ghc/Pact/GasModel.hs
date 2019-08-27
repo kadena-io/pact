@@ -121,12 +121,3 @@ main = do
           ++ " out of "
           ++ (show $ length allNatives)
           ++ " natives still need to be benchmarked."
-  
-  
-{--  let test = GasTest "(+ 1 2)" "(+ 1 2) 1" defEvalState createDefMockSetup (const $ return ())
-  (res,_) <- bracket (_gasTestMockEnv test) (_gasTestCleanup test) (mockRun test)
-  mapM_ (print . show) untestedNatives
-  --C.defaultMain [benchmark (SomeGasTest test)]
-
-  printResult res
---}

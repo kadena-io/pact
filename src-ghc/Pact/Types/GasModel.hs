@@ -25,6 +25,7 @@ module Pact.Types.GasModel
   ) where
 
 import Bound                      (abstract, Scope)
+import Control.Concurrent         (readMVar)
 import Control.Lens               hiding ((.=),DefName)
 import Control.DeepSeq            (NFData(..))
 import Control.Exception          (throwIO)
@@ -33,6 +34,7 @@ import Data.Default               (def)
 import Data.List                  (foldl')
 import NeatInterpolation          (text)
 import Data.List.NonEmpty         (NonEmpty(..))
+import System.Directory           (removeFile)
 
 
 import qualified Data.Aeson          as A
@@ -43,6 +45,7 @@ import qualified Data.Set            as S
 import qualified Data.Map            as M
 import qualified Data.Text           as T
 import qualified Data.List.NonEmpty  as NEL
+import qualified Pact.Persist.SQLite as PSL
 
 
 -- Internal exports
@@ -52,9 +55,10 @@ import Pact.Types.Native
 import Pact.Compile               (compileExps, mkTextInfo)
 import Pact.MockDb
 import Pact.Types.PactValue       (toPactValueLenient, PactValue(..))
-import Pact.Types.Logger          (neverLog)
+import Pact.Types.Logger          (neverLog, Loggers(..))
+import Pact.Types.SQLite          (SQLiteConfig(..))
 
-import Pact.PersistPactDb         (DbEnv)
+import Pact.PersistPactDb         (DbEnv(..))
 import Pact.Persist.Pure          (PureDb)
 import Pact.Eval                  (eval)
 
@@ -67,15 +71,20 @@ import Pact.Types.Runtime
 import Pact.Types.SPV
 
 
+type SQLiteDb = DbEnv PSL.SQLite
+type GasSetup e = (EvalEnv e, EvalState)
+
+data GasTestBackend = GasMockDb | GasSQLiteDb
 
 data GasTest e = GasTest
   { _gasTestExpression :: !T.Text
   , _gasTestDescription :: !T.Text
-  , _gasTestMockEnv :: !(IO ((EvalEnv e), EvalState))
-  , _gasTestCleanup :: !((EvalEnv e, EvalState) -> IO ())
+  , _gasTestEvalEnvUpdate :: !(EvalEnv e -> EvalEnv e)
+  , _gasTestEvalStateUpdate :: !(EvalState -> EvalState)
+  , _gasTestSetup :: !(IO (GasSetup e))
+  , _gasTestSetupCleanup :: !((GasSetup e) -> IO ())
   }
 makeLenses ''GasTest
-
 
 
 data SomeGasTest
@@ -94,55 +103,91 @@ instance NFData (NoopNFData a) where
   rnf _ = ()
 
 
-
-defGasTest :: T.Text -> GasTest ()
-defGasTest expr =
+defMockGasTest :: T.Text -> GasTest ()
+defMockGasTest expr =
   GasTest
   expr
   expr
-  createDefMockEnv
-  mockEnvCleanup
+  id
+  id
+  defMockSetup
+  mockSetupCleanup
 
-defEvalState :: EvalState
-defEvalState = def
-
-defEvalEnv :: PactDbEnv e -> EvalEnv e
-defEvalEnv db =
-  setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-  initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  where entity = Just $ EntityName "entity"
-
-setEnv :: (EvalEnv e -> EvalEnv e) -> GasTest e -> GasTest e
-setEnv f test = setEnv'
-  where
-    newEnv = fmap (\(e,s) -> (f e, s)) $ view gasTestMockEnv test
-    setEnv' = set gasTestMockEnv newEnv test
-
-setState :: (EvalState -> EvalState) -> GasTest e -> GasTest e
-setState f test = setState'
-  where
-    newState = fmap (\(e,s) -> (e, f s)) $ view gasTestMockEnv test
-    setState' = set gasTestMockEnv newState test
-
-createDefMockEnv :: IO (EvalEnv (), EvalState)
-createDefMockEnv = do
-  db <- mkMockEnv def
-  return $ (defEvalEnv db, defEvalState)
-
-createMockEnv :: MockDb -> EvalState -> IO (EvalEnv (), EvalState)
-createMockEnv mdb state = do
-  db <- mkMockEnv mdb
-  return $ (defEvalEnv db, state)
-
-mockEnvCleanup :: (EvalEnv e, EvalState) -> IO ()
-mockEnvCleanup (_, _) = return ()
+defSqliteGasTest :: T.Text -> GasTest SQLiteDb
+defSqliteGasTest expr =
+  GasTest
+  expr
+  expr
+  id
+  id
+  defSqliteSetup
+  sqliteSetupCleanup
 
 
 defGasUnitTests
-  :: NEL.NonEmpty T.Text
+  :: GasTestBackend
+  -> NEL.NonEmpty T.Text
   -> GasUnitTests
-defGasUnitTests pactExprs
-  = GasUnitTests $ NEL.map (SomeGasTest . defGasTest) pactExprs
+defGasUnitTests backendType pactExprs = case backendType of
+  GasMockDb -> GasUnitTests
+               $ NEL.map (SomeGasTest . defMockGasTest) pactExprs
+  GasSQLiteDb -> GasUnitTests
+                 $ NEL.map (SomeGasTest . defSqliteGasTest) pactExprs
+
+
+-- | Sample pact code and helper functions/values for testing
+acctModuleName :: ModuleName
+acctModuleName = ModuleName "accounts" def
+
+accountsModule :: ModuleName -> T.Text
+accountsModule moduleName = [text|
+     (module $moduleNameText GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+  where moduleNameText = asString moduleName
+
+acctRow :: ObjectMap PactValue
+acctRow = ObjectMap $ M.fromList
+          [("balance", PLiteral (LDecimal 100.0))]
+
+
+samplePubKeys :: [PublicKey]
+samplePubKeys = [PublicKey "something"]
+
+
+sampleKeyset :: KeySet
+sampleKeyset = KeySet samplePubKeys (Name "keys-all" def)
+
+
+sampleNamespaceName :: T.Text
+sampleNamespaceName = "my-namespace"
+
+
+sampleNamespace :: Namespace
+sampleNamespace = Namespace
+                  (NamespaceName sampleNamespaceName)
+                  (GKeySet sampleKeyset)
+
+
+-- | Helper functions for manipulating EvalState 
+setState :: (EvalState -> EvalState) -> GasTest e -> GasTest e
+setState f test = setState'
+  where
+    newState = fmap (\(e,s) -> (e, f s))
+               $ view gasTestSetup test
+    setState' = set gasTestSetup newState test
+
+
+defEvalState :: EvalState
+defEvalState = def
 
 
 getLoadedState
@@ -152,15 +197,102 @@ getLoadedState
   -> IO (EvalState)
 getLoadedState code updateEnv state = do
   terms <- compileCode code
-
   pureDb <- mkPureEnv neverLog
   initSchema pureDb
   let env = updateEnv $ defEvalEnv pureDb
-  
   (_, newState) <- runEval state env $ mapM eval terms
   return newState
 
 
+defEvalStateCaching :: IO EvalState
+defEvalStateCaching = do
+  getLoadedState (accountsModule acctModuleName) id defEvalState
+
+
+
+-- | Helper functions for manipulating EvalEnv
+setEnv :: (EvalEnv e -> EvalEnv e) -> GasTest e -> GasTest e
+setEnv f test = setEnv'
+  where
+    newEnv = fmap (\(e,s) -> (f e, s)) $ view gasTestSetup test
+    setEnv' = set gasTestSetup newEnv test
+
+
+defEvalEnv :: PactDbEnv e -> EvalEnv e
+defEvalEnv db =
+  setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
+  initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
+  where entity = Just $ EntityName "entity"
+
+
+defMockDb :: MockDb
+defMockDb = mockdb
+  where
+    mockdb = def { mockRead = MockRead rowRead
+                 , mockKeys = MockKeys keysRead
+                 , mockTxIds = MockTxIds txIdsRead
+                 , mockGetTxLog = MockGetTxLog getTxLogRead
+                 }
+    
+    rowRead :: Domain k v -> k -> Method () (Maybe v)
+    rowRead UserTables {} _ = rc (Just acctRow)
+    rowRead KeySets _ = rc (Just sampleKeyset)
+    rowRead _ _ = rc Nothing
+
+    txIdsRead :: TableName -> TxId -> Method () [TxId]
+    txIdsRead _ i = rc [i]
+
+    getTxLogRead :: Domain k v -> TxId -> Method () [TxLog v]
+    getTxLogRead UserTables {} _ = rc [TxLog "accounts.accounts" "some-id" acctRow]
+    getTxLogRead _ _ = rc []
+
+    keysRead :: Domain k v -> Method () [k]
+    keysRead UserTables {} = rc ["some-id"]
+    keysRead _ = rc []
+
+
+defMockSetup :: IO (GasSetup ())
+defMockSetup = do
+  state <- defEvalStateCaching
+  createMockSetup defMockDb state  
+
+
+createMockSetup
+  :: MockDb
+  -> EvalState
+  -> IO (GasSetup ())
+createMockSetup mdb state = do
+  db <- mkMockEnv mdb
+  return $ (defEvalEnv db, state)
+
+
+mockSetupCleanup :: GasSetup () -> IO ()
+mockSetupCleanup (_, _) = return ()
+
+
+sqliteFile :: T.Text
+sqliteFile = "log/bench.sqlite"
+
+defSqliteSetup :: IO (GasSetup SQLiteDb)
+defSqliteSetup = do
+  sqliteDb <- mkSQLiteEnv
+              (newLogger neverLog "")
+              True
+              (SQLiteConfig sqliteFile [])
+              neverLog
+  initSchema sqliteDb
+  state <- defEvalStateCaching
+  return $ (defEvalEnv sqliteDb, state)
+
+
+sqliteSetupCleanup :: GasTest (SQLiteDb) -> IO ()
+sqliteSetupCleanup (env, _) = do
+  c <- readMVar $ _eePactDb env
+  _ <- PSL.closeSQLite $ _db c
+  removeFile sqliteFile
+
+
+-- TODO get rid?
 -- | Mock module name for testing
 defModuleName :: ModuleName
 defModuleName = ModuleName "some-module" Nothing
@@ -198,9 +330,7 @@ defModuleData = ModuleData modDef refMap
 
 
 
---- Helper functions
----
-
+-- | Helper functions for manipulating Text and other util functions
 compileCode :: T.Text -> IO [Term Name]
 compileCode m = do
   parsedCode <- parseCode m
@@ -273,22 +403,24 @@ toPactKeyset ksName ksValue predicate =
   where pred' = maybe ">" id predicate
 
 
---- Sample Pact literals
----
 
+-- | Sample Pact literals for testing different sizes of lists/strings/integers
 sizes :: NEL.NonEmpty Integer
-sizes =
+sizes = --TODO write correct sizes (100000, 100, 10)
     10 :|
   [ 5,
     1
   ]
 
+
 sizesExpr :: NEL.NonEmpty PactExpression
 sizesExpr = NEL.map (toText . MockInt) sizes
+
 
 -- | List of integers of varying sizes
 intLists :: NEL.NonEmpty (NEL.NonEmpty Integer)
 intLists = NEL.map (\n -> 1 :| [2..n]) sizes
+
 
 -- | example: [ "[1 2 3 4]" ]
 intListsExpr :: NEL.NonEmpty PactExpression
@@ -302,19 +434,13 @@ intListsExpr = NEL.map makeExpr intLists
 strLists :: NEL.NonEmpty (NEL.NonEmpty T.Text)
 strLists = NEL.map (NEL.map (("a" <>) . intToStr)) intLists
 
+
 -- | example: [ "[ \"a1\" \"a2\" \"a3\" \"a4\" ]" ]
 escapedStrListsExpr :: NEL.NonEmpty PactExpression
 escapedStrListsExpr = NEL.map makeExpr strLists
   where
     makeExpr li = toText $ MockList
                   $ map MockString (NEL.toList li)
-
--- | example: [ "[ a1 a2 a3 a4]" ]
-unescapedStrListsExpr :: NEL.NonEmpty PactExpression
-unescapedStrListsExpr = NEL.map makeExpr strLists
-  where
-    makeExpr li = toText $ MockList
-                  $ map MockExpr (NEL.toList li)
 
 
 -- | Maps of varying sizes. The keys are strings and the values are integers.
@@ -324,9 +450,11 @@ strKeyIntValMaps = NEL.map toMap allLists
         toMap (kList, vList) =
           HM.fromList $ zip (NEL.toList kList) (NEL.toList vList)
 
+
 -- | example: "{ \"a5\": 5, \"a3\": 3 }"
 strKeyIntValMapsExpr :: NEL.NonEmpty PactExpression
 strKeyIntValMapsExpr = NEL.map (toText . MockObject) strKeyIntValMaps
+
 
 -- | example: "{ \"a5\" := a5, \"a3\" := a3 }"
 strKeyIntValBindingsExpr :: NEL.NonEmpty PactExpression
@@ -337,39 +465,35 @@ strKeyIntValBindingsExpr = NEL.map (toText . MockBinding) strKeyIntValMaps
 strings :: NEL.NonEmpty T.Text
 strings = NEL.map (T.concat . NEL.toList) strLists
 
+
 -- | example: "\"a1a2a3a4\""
 escapedStringsExpr :: NEL.NonEmpty PactExpression
 escapedStringsExpr = NEL.map (toText . MockString) strings
 
--- | example: "a1a2a3a4"
-unescapedStringsExpr :: NEL.NonEmpty PactExpression
-unescapedStringsExpr = NEL.map (toText . MockExpr) strings
 
-
---- Gas unit tests
----
+-- | Gas benchmark tests for Pact native functions
 allNatives :: [NativeDef]
 allNatives = concatMap snd natives
 
-untestedNatives :: [NativeDefName]
-untestedNatives = foldl' check [] allNatives
+untestedNatives :: GasTestBackend -> [NativeDefName]
+untestedNatives backendType = foldl' check [] allNatives
   where
-    check li (nativeName,_,_) = case (HM.lookup nativeName unitTests) of
+    check li (nativeName,_,_) = case (HM.lookup nativeName (unitTests backendType)) of
       Nothing -> nativeName : li
       Just _ -> li
 
 
-unitTests :: HM.HashMap NativeDefName GasUnitTests
-unitTests = HM.fromList $ foldl' getUnitTest [] allNatives 
+unitTests :: GasTestBackend -> HM.HashMap NativeDefName GasUnitTests
+unitTests backendType = HM.fromList $ foldl' getUnitTest [] allNatives 
   where
     getUnitTest li (nativeName,_,_) =
-      case unitTestFromDef nativeName of
+      case unitTestFromDef nativeName backendType of
         Nothing -> li
         Just ts -> (nativeName, ts) : li
     
 
 
-unitTestFromDef :: NativeDefName -> Maybe GasUnitTests
+unitTestFromDef :: NativeDefName -> GasTestBackend -> Maybe GasUnitTests
 unitTestFromDef nativeName = case (asString nativeName) of
   -- | General native functions
   "at"                   -> Just atTests
@@ -489,23 +613,9 @@ unitTestFromDef nativeName = case (asString nativeName) of
 
 -- | Database native function tests
 --   NOTE: Using MockDb means that database insert/write/update always succeed
-txlogTests :: GasUnitTests
-txlogTests = GasUnitTests tests
+txlogTests :: GasTestBackend -> GasUnitTests
+txlogTests backendType = GasUnitTests tests
   where
-    moduleName = "accounts"
-    moduleCode m = [text|
-     (module $m GOV
-
-       (defcap GOV ()
-         true)
-
-       (defschema account
-         balance:decimal
-       )
-
-       (deftable accounts:{account})
-     ) |]
-
     keyLogExpr = [text| (txlog $moduleName.accounts 1) |]
 
     acctRow = ObjectMap $ M.fromList [("balance", PLiteral (LDecimal 100.0))]
@@ -519,7 +629,7 @@ txlogTests = GasUnitTests tests
       createMockEnv mockDb state
 
     test = GasTest keyLogExpr keyLogExpr env mockEnvCleanup
-    tests = SomeGasTest test :| []  
+    tests = SomeGasTest defMockGasTest :| []  
 
 
 txidsTests :: GasUnitTests
