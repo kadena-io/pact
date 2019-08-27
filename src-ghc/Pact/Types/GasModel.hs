@@ -468,16 +468,412 @@ unitTestFromDef nativeName = case (asString nativeName) of
   "read-keyset"    -> Just readKeysetTests
 
   -- | Database nataive functions
-  "create-table"    -> Just createTableTests
-  "describe-keyset" -> Just describeKeysetTests
-  "describe-module" -> Just describeModuleTests
-  "describe-table"  -> Just describeTableTests
-  --"inset"           -> 
+  "create-table"      -> Just createTableTests
+  "describe-keyset"   -> Just describeKeysetTests
+  "describe-module"   -> Just describeModuleTests
+  "describe-table"    -> Just describeTableTests
+  "insert"            -> Just insertTests
+  "keylog"            -> Just keylogTests
+  "keys"              -> Just keysTests
+  "read"              -> Just readTests
+  "select"            -> Just selectTests
+  "txids"             -> Just txidsTests
+  "txlog"             -> Just txlogTests
+  "update"            -> Just updateTests
+  "with-default-read" -> Just withDefaultReadTests
+  "with-read"         -> Just withReadTests
+  "write"             -> Just writeTests
 
   _ -> Nothing
 
 
 -- | Database native function tests
+--   NOTE: Using MockDb means that database insert/write/update always succeed
+txlogTests :: GasUnitTests
+txlogTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    keyLogExpr = [text| (txlog $moduleName.accounts 1) |]
+
+    acctRow = ObjectMap $ M.fromList [("balance", PLiteral (LDecimal 100.0))]
+    getTxLogRead :: Domain k v -> TxId -> Method () [TxLog v]
+    getTxLogRead UserTables {} _ = rc [TxLog "accounts.accounts" "some-id" acctRow]
+    getTxLogRead _ _ = rc []
+
+    mockDb = def { mockGetTxLog = MockGetTxLog getTxLogRead }
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv mockDb state
+
+    test = GasTest keyLogExpr keyLogExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []  
+
+
+txidsTests :: GasUnitTests
+txidsTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    txidsExpr = [text| (txids $moduleName.accounts 1) |]
+
+    txIdsRead :: TableName -> TxId -> Method () [TxId]
+    txIdsRead _ i = rc [i]
+
+    mockDb = def { mockTxIds = MockTxIds txIdsRead }
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv mockDb state
+
+    test = GasTest txidsExpr txidsExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+keylogTests :: GasUnitTests
+keylogTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    keyLogExpr = [text| (keylog $moduleName.accounts "some-id" 1) |]
+
+    txIdsRead :: TableName -> TxId -> Method () [TxId]
+    txIdsRead _ i = rc [i]
+
+    acctRow = ObjectMap $ M.fromList [("balance", PLiteral (LDecimal 100.0))]
+    getTxLogRead :: Domain k v -> TxId -> Method () [TxLog v]
+    getTxLogRead UserTables {} _ = rc [TxLog "accounts.accounts" "some-id" acctRow]
+    getTxLogRead _ _ = rc []
+
+    mockDb = def { mockTxIds = MockTxIds txIdsRead,
+                   mockGetTxLog = MockGetTxLog getTxLogRead
+                 }
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv mockDb state
+
+    test = GasTest keyLogExpr keyLogExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+keysTests :: GasUnitTests
+keysTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    keysExpr = [text| (keys $moduleName.accounts) |]
+    
+    keysRead :: Domain k v -> Method () [k]
+    keysRead UserTables {} = rc ["some-id"]
+    keysRead _ = rc []
+
+    mockDb = def { mockKeys = MockKeys keysRead }
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv mockDb state
+
+    test = GasTest keysExpr keysExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+
+selectTests :: GasUnitTests
+selectTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    selectExpr = [text| (select $moduleName.accounts (where "balance" (constantly true)) ) |]
+
+    acctRow = ObjectMap $ M.fromList [("balance", PLiteral (LDecimal 100.0))]
+    rowRead :: Domain k v -> k -> Method () (Maybe v)
+    rowRead UserTables {} _ = rc (Just acctRow)
+    rowRead _ _ = rc Nothing
+
+    keysRead :: Domain k v -> Method () [k]
+    keysRead UserTables {} = rc ["some-id"]
+    keysRead _ = rc []
+
+    mockDb = def { mockRead = MockRead rowRead,
+                   mockKeys = MockKeys keysRead
+                 }
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv mockDb state
+
+    test = GasTest selectExpr selectExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+withReadTests :: GasUnitTests
+withReadTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    withReadExpr =
+      [text| (with-read
+                $moduleName.accounts
+                "some-id"
+                { "balance":= bal }
+                bal
+             )
+      |]
+
+    acctRow = ObjectMap $ M.fromList [("balance", PLiteral (LDecimal 100.0))]
+    rowRead :: Domain k v -> k -> Method () (Maybe v)
+    rowRead UserTables {} _ = rc (Just acctRow)
+    rowRead _ _ = rc Nothing
+    mockDb = def { mockRead = MockRead rowRead }
+
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv mockDb state
+
+    test = GasTest withReadExpr
+                   (withReadExpr <> " where row IS found.")
+                   env
+                   mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+withDefaultReadTests :: GasUnitTests
+withDefaultReadTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    withDefReadExpr =
+      [text| (with-default-read
+                $moduleName.accounts
+                "some-id"
+                { "balance": 1.0 }
+                { "balance":= bal }
+                bal
+             )
+      |]
+
+    acctRow = ObjectMap $ M.fromList [("balance", PLiteral (LDecimal 100.0))]
+    rowRead :: Domain k v -> k -> Method () (Maybe v)
+    rowRead UserTables {} _ = rc (Just acctRow)
+    rowRead _ _ = rc Nothing
+    mockDb = def { mockRead = MockRead rowRead }
+
+    envEmptyRead = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv def state
+
+    envWithRow = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv mockDb state
+
+    testUsingDef =
+      GasTest withDefReadExpr
+              (withDefReadExpr <> " where NO row found.")
+              envEmptyRead
+              mockEnvCleanup
+    testNotUsingDef =
+      GasTest withDefReadExpr
+              (withDefReadExpr <> " where row IS found.")
+              envWithRow
+              mockEnvCleanup
+    tests = SomeGasTest testUsingDef :|
+            [SomeGasTest testNotUsingDef]
+
+
+readTests :: GasUnitTests
+readTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    readExpr = [text| (read $moduleName.accounts "someId") |]
+
+    acctRow = ObjectMap $ M.fromList [("balance", PLiteral (LDecimal 100.0))]
+    rowRead :: Domain k v -> k -> Method () (Maybe v)
+    rowRead UserTables {} _ = rc (Just acctRow)
+    rowRead _ _ = rc Nothing
+    mockDb = def { mockRead = MockRead rowRead }
+
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv mockDb state
+
+    test = GasTest readExpr readExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+writeTests :: GasUnitTests
+writeTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    writeExpr = [text| (write $moduleName.accounts "someId" { "balance": 0.0 }) |]
+
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv def state
+
+    test = GasTest writeExpr writeExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+updateTests :: GasUnitTests
+updateTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    updateExpr = [text| (update $moduleName.accounts "someId" { "balance": 0.0 }) |]
+
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv def state
+
+    test = GasTest updateExpr updateExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
+insertTests :: GasUnitTests
+insertTests = GasUnitTests tests
+  where
+    moduleName = "accounts"
+    moduleCode m = [text|
+     (module $m GOV
+
+       (defcap GOV ()
+         true)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (deftable accounts:{account})
+     ) |]
+
+    insertExpr = [text| (insert $moduleName.accounts "someId" { "balance": 0.0 })|]
+    
+    env = do
+      state <- getLoadedState (moduleCode moduleName) id defEvalState
+      createMockEnv def state
+
+    test = GasTest insertExpr insertExpr env mockEnvCleanup
+    tests = SomeGasTest test :| []
+
+
 describeTableTests :: GasUnitTests
 describeTableTests = GasUnitTests tests
   where
