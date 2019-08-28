@@ -492,7 +492,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
     -- assuming transaction success, throw an error if it is not possible for
     -- the transaction to succeed.
     --
-    -- **Unfortunately** we need a completely separate `query` here. We cannot
+    -- Unfortunately we need a completely separate `query` here. We cannot
     -- combine this with the query-success check by using `inNewAssertionStack`
     -- because this breaks support for quantifiers in properties. e.g.:
     --
