@@ -49,11 +49,11 @@ analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case
     PropertyHolds p -> assumingSuccess =<< evalProp p
     SucceedsWhen p  -> do
-      success <- view (qeAnalyzeState.succeeds)
+      success <- txSucceeds
       p'      <- evalProp p
       pure $ p' .=> success
     FailsWhen p  -> do
-      success <- view (qeAnalyzeState.succeeds)
+      success <- txSucceeds
       p'      <- evalProp p
       pure $ p' .=> sNot success
     Valid p         -> evalProp p
@@ -62,7 +62,7 @@ analyzeCheck = \case
   where
     assumingSuccess :: S Bool -> Query (S Bool)
     assumingSuccess p = do
-      success <- view (qeAnalyzeState.succeeds)
+      success <- txSucceeds
       pure $ success .=> p
 
 -- | A convenience to treat a nested 'TableMap', '[]', and tuple as a single
@@ -77,7 +77,7 @@ analyzeInvariants = assumingSuccess =<< invariantsHold''
   where
     assumingSuccess :: InvariantsF (S Bool) -> Query (InvariantsF (S Bool))
     assumingSuccess ps = do
-      success <- view (qeAnalyzeState.succeeds)
+      success <- txSucceeds
       pure $ (success .=>) <$> ps
 
     invariantsHold :: Query (TableMap (ZipList (Located (SBV Bool))))
@@ -140,10 +140,15 @@ runAnalysis' modName gov query tables caps args stepChoices tm rootPath tags inf
       state1' = state1 &  latticeState . lasExtra .~ ()
       qEnv    = mkQueryEnv aEnv state1' cv0 cv1 funResult
       ksProvs = state1 ^. globalState.gasGuardProvenances
+      query'  = do
+        txSucc <- txSucceeds
+        res <- query
+        pure (txSucc, res)
 
-  (results, querySucceeds)
-    <- hoist runAlloc $ runReaderT (runStateT (queryAction query) sTrue) qEnv
-  pure $ results <&> \prop -> AnalysisResult querySucceeds (_sSbv prop) ksProvs
+  ((txSuccess, results), querySucceeds)
+    <- hoist runAlloc $ runReaderT (runStateT (queryAction query') sTrue) qEnv
+  pure $ results <&> \prop ->
+    AnalysisResult querySucceeds (_sSbv txSuccess) (_sSbv prop) ksProvs
 
 runPropertyAnalysis
   :: ModuleName

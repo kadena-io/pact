@@ -353,6 +353,7 @@ type EvalAnalyzeState  = AnalyzeState CellValues
 data AnalysisResult
   = AnalysisResult
     { _arEvalSuccess   :: SymbolicSuccess
+    , _arTxSuccess     :: SBV Bool
     , _arProposition   :: SBV Bool
     , _arKsProvenances :: Map TagId Provenance
     }
