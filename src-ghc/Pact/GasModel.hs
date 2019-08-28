@@ -39,21 +39,28 @@ mockRun (GasTest expr _ _ _) (env, state) = do
 mockRuns
   :: GasUnitTests
   -> IO ()
-mockRuns (GasUnitTests tests) = mapM_ run (NEL.toList tests)
+mockRuns tests = do
+  mapM_ run (NEL.toList $ _gasUnitTestsSqlite tests)
+  mapM_ run (NEL.toList $ _gasUnitTestsMock tests)
   where
-    run (SomeGasTest test) = do
-      (res,_) <- bracket (_gasTestMockEnv test) (_gasTestCleanup test) (mockRun test)
+    run test = do
+      (res,_) <- bracket (_gasTestSetup test) (_gasTestSetupCleanup test) (mockRun test)
       eitherDie (_gasTestDescription test) res
 
 
 mockRuns'
   :: GasUnitTests
   -> IO [(Either PactError [Term Name], EvalState)]
-mockRuns' (GasUnitTests tests) = mapM run (NEL.toList tests)
+mockRuns' tests = do
+  print "-- SQLiteDb Tests --"
+  sqliteRes <- mapM run (NEL.toList $ _gasUnitTestsSqlite tests)
+  print "-- MockDb Tests --"
+  mockRes <- mapM run (NEL.toList $ _gasUnitTestsMock tests)
+  return (sqliteRes <> mockRes)
   where
-    run (SomeGasTest test) = do
+    run test = do
       print $ "Results for: " ++ T.unpack (_gasTestDescription test)
-      (res,state) <- bracket (_gasTestMockEnv test) (_gasTestCleanup test) (mockRun test)
+      (res,state) <- bracket (_gasTestSetup test) (_gasTestSetupCleanup test) (mockRun test)
       printResult res
       return (res,state)
 
@@ -70,15 +77,15 @@ benchRun (GasTest expr desc _ _) (env, state) =
               C.nfIO (exec state env terms)
 
 bench
-  :: SomeGasTest
+  :: GasTest e
   -> C.Benchmark
-bench (SomeGasTest test) = C.envWithCleanup setup teardown run
+bench test = C.envWithCleanup setup teardown run
   where
     setup = do
-      s <- _gasTestMockEnv test
+      s <- _gasTestSetup test
       return $ NoopNFData s
     teardown (NoopNFData env) = do
-      (_gasTestCleanup test) env
+      (_gasTestSetupCleanup test) env
     run (NoopNFData env) =
       benchRun test env
 
@@ -86,10 +93,33 @@ benches
   :: T.Text
   -> GasUnitTests
   -> C.Benchmark
-benches groupName (GasUnitTests tests)
-  = C.bgroup (T.unpack groupName) (map bench $ NEL.toList tests)
+benches groupName allTests = C.bgroup (T.unpack groupName)
+     [ C.bgroup "SQLiteDb" (runBenches $ _gasUnitTestsSqlite allTests)
+     , C.bgroup "MockDb" (runBenches $ _gasUnitTestsMock allTests)
+     ]
+  where
+    runBenches tests
+      = map bench $ NEL.toList tests
 
+main :: IO ()
+main = do
+  -- | Checks that unit tests succeed
+  mapM_ (\(_,t) -> mockRuns t)
+        (HM.toList unitTests)
 
+  {-- -- | Run benchmarks 
+  C.defaultMain $
+    map (\(n,t) -> benches (asString n) t)
+        (HM.toList unitTests)
+--}
+  -- | Report gas testing coverage
+  mapM_ (print . show) untestedNatives
+  print $ (show $ length untestedNatives)
+          ++ " out of "
+          ++ (show $ length allNatives)
+          ++ " natives still need to be benchmarked."
+
+-- | For debugging
 runGasTestByName :: T.Text -> IO ()
 runGasTestByName nname = do
   case (unitTestFromDef (NativeDefName nname)) of
@@ -103,21 +133,3 @@ runAllGasTests :: IO ()
 runAllGasTests = do
   mapM_ (\(_,t) -> mockRuns' t)
         (HM.toList unitTests)
-
-main :: IO ()
-main = do
-  -- | Checks that unit tests succeed
-  mapM_ (\(_,t) -> mockRuns t)
-        (HM.toList unitTests)
-{--
-  -- | Run benchmarks
-  C.defaultMain $
-    map (\(n,t) -> benches (asString n) t)
-        (HM.toList unitTests)
---}
-  -- | Report gas testing coverage
-  mapM_ (print . show) untestedNatives
-  print $ (show $ length untestedNatives)
-          ++ " out of "
-          ++ (show $ length allNatives)
-          ++ " natives still need to be benchmarked."
