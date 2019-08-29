@@ -86,8 +86,8 @@ bench test = C.envWithCleanup setup teardown run
       return $ NoopNFData s
     teardown (NoopNFData env) = do
       (_gasTestSetupCleanup test) env
-    run (NoopNFData env) =
-      benchRun test env
+    run ~(NoopNFData (env,state)) =
+      benchRun test (env,state)
 
 benches
   :: T.Text
@@ -107,11 +107,11 @@ main = do
   mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)
 
-  {-- -- | Run benchmarks 
+   -- | Run benchmarks 
   C.defaultMain $
     map (\(n,t) -> benches (asString n) t)
         (HM.toList unitTests)
---}
+
   -- | Report gas testing coverage
   mapM_ (print . show) untestedNatives
   print $ (show $ length untestedNatives)
