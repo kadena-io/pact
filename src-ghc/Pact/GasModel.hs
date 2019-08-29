@@ -106,18 +106,19 @@ main = do
   -- | Checks that unit tests succeed
   mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)
-
+{--
    -- | Run benchmarks 
   C.defaultMain $
     map (\(n,t) -> benches (asString n) t)
         (HM.toList unitTests)
-
+--}
   -- | Report gas testing coverage
   mapM_ (print . show) untestedNatives
-  print $ (show $ length untestedNatives)
+  print $ "Missing benchmark tests for "
+          ++ (show $ length untestedNatives)
           ++ " out of "
           ++ (show $ length allNatives)
-          ++ " natives still need to be benchmarked."
+          ++ " native functions."
 
 -- | For debugging
 runGasTestByName :: T.Text -> IO ()

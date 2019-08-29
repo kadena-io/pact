@@ -31,10 +31,10 @@ import Control.Exception          (throwIO)
 import Data.Aeson                 (toJSON, ToJSON(..))
 import Data.Default               (def)
 import Data.List                  (foldl')
+import Data.Bool                  (bool)
 import NeatInterpolation          (text)
 import Data.List.NonEmpty         (NonEmpty(..))
 import System.Directory           (removeFile)
-import Pact.Persist.SQLite
 
 
 import qualified Data.Aeson          as A
@@ -59,7 +59,6 @@ import Pact.Types.Logger          (neverLog, Loggers(..))
 import Pact.Types.SQLite          (SQLiteConfig(..))
 
 import Pact.PersistPactDb         (DbEnv(..))
-import Pact.Persist.Pure          (PureDb)
 import Pact.Eval                  (eval)
 
 import Pact.Gas
@@ -88,6 +87,19 @@ data GasUnitTests = GasUnitTests
   { _gasUnitTestsSqlite :: SQLiteGasTests
   , _gasUnitTestsMock :: MockGasTests
   }
+instance Semigroup (GasUnitTests) where
+  g <> g' = GasUnitTests
+            (_gasUnitTestsSqlite g <> _gasUnitTestsSqlite g')
+            (_gasUnitTestsMock g <> _gasUnitTestsMock g)
+
+
+concatGasUnitTests :: NEL.NonEmpty GasUnitTests -> GasUnitTests
+concatGasUnitTests listOfTests =
+  foldl' (<>) baseCase rest
+  where
+    baseCase = NEL.head listOfTests
+    rest = NEL.tail listOfTests
+
 
 
 -- | Newtype to provide a noop NFData instance.
@@ -104,17 +116,22 @@ defMockGasTest expr =
   GasTest
   expr
   expr
-  defMockSetup
+  (createSetup defMockBackend defEvalState)
   mockSetupCleanup
-
 
 defSqliteGasTest :: T.Text -> GasTest SQLiteDb
 defSqliteGasTest expr =
   GasTest
   expr
   expr
-  defSqliteSetup
+  (createSetup defSqliteBackend defEvalState)
   sqliteSetupCleanup
+
+createSetup :: IO (EvalEnv e) -> IO EvalState -> IO (GasSetup e)
+createSetup env state = do
+  e <- env
+  s <- state
+  return (e,s)
 
 
 defGasUnitTests
@@ -126,19 +143,31 @@ defGasUnitTests pactExprs = GasUnitTests sqliteTests mockTests
     sqliteTests = NEL.map defSqliteGasTest pactExprs
 
 
-createGasUnitTestsWithSQLite
+createGasUnitTests
+  :: (GasTest SQLiteDb -> GasTest SQLiteDb)
+  -> (GasTest () -> GasTest ())
+  -> NEL.NonEmpty T.Text
+  -> GasUnitTests
+createGasUnitTests sqliteUpdate mockUpdate pactExprs =
+  GasUnitTests sqliteTests mockTests
+  where
+    mockTests = NEL.map (mockUpdate . defMockGasTest) pactExprs
+    sqliteTests = NEL.map (sqliteUpdate . defSqliteGasTest) pactExprs
+
+
+createSQLiteTests
   :: (GasTest SQLiteDb -> GasTest SQLiteDb)
   -> NEL.NonEmpty T.Text
   -> SQLiteGasTests
-createGasUnitTestsWithSQLite sqliteUpdate pactExprs =
+createSQLiteTests sqliteUpdate pactExprs =
   NEL.map (sqliteUpdate . defSqliteGasTest) pactExprs
 
 
-createGasUnitTestsWithMock
+createMockTests
   :: (GasTest () -> GasTest ())
   -> NEL.NonEmpty T.Text
   -> MockGasTests
-createGasUnitTestsWithMock mockUpdate pactExprs =
+createMockTests mockUpdate pactExprs =
   NEL.map (mockUpdate . defMockGasTest) pactExprs
 
 
@@ -175,14 +204,11 @@ sampleLoadedKeysetName = "some-loaded-keyset"
 samplePubKeys :: [PublicKey]
 samplePubKeys = [PublicKey "something"]
 
-
 sampleKeyset :: KeySet
 sampleKeyset = KeySet samplePubKeys (Name "keys-all" def)
 
-
 sampleNamespaceName :: T.Text
 sampleNamespaceName = "my-namespace"
-
 
 sampleNamespace :: Namespace
 sampleNamespace = Namespace
@@ -198,27 +224,22 @@ setState f test = setState'
                $ view gasTestSetup test
     setState' = set gasTestSetup newState test
 
-
-defEvalState :: EvalState
-defEvalState = def
-
-
 getLoadedState
   :: T.Text
-  -> EvalState
   -> IO (EvalState)
-getLoadedState code state = do
+getLoadedState code = do
   terms <- compileCode code
   pureDb <- mkPureEnv neverLog
   initSchema pureDb
   let env = defEvalEnv pureDb
-  (_, newState) <- runEval state env $ mapM eval terms
+  (_, newState) <- runEval def env $ mapM eval terms
   return newState
 
 
-defEvalStateCaching :: IO EvalState
-defEvalStateCaching = do
-  stateWithModule <- getLoadedState (accountsModule acctModuleName) defEvalState
+-- the default state caches sample keyset and account module
+defEvalState :: IO EvalState
+defEvalState = do
+  stateWithModule <- getLoadedState (accountsModule acctModuleName)
   let loaded = HM.singleton (Name sampleLoadedKeysetName def)
                (Direct $ TGuard (GKeySet sampleKeyset) def)
   return $ set (evalRefs . rsLoaded) loaded stateWithModule
@@ -239,38 +260,54 @@ defEvalEnv db =
   initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
   where entity = Just $ EntityName "entity"
 
+-----------------------
+-----------------------
+-- | Default backends for gas testing have the following loaded:
+--   * Sample accounts module and table
+--   * An account "someId" with 0.0 as its balance
+--   * Sample keyset and namespace
+
+defMockBackend :: IO (EvalEnv ())
+defMockBackend = do
+  db <- mkMockEnv defMockDb
+  return $ defEvalEnv db
 
 defMockDb :: MockDb
 defMockDb = mockdb
   where
-    mockdb = def { mockRead = MockRead rowRead
-                 , mockKeys = MockKeys keysRead
-                 , mockTxIds = MockTxIds txIdsRead
-                 , mockGetTxLog = MockGetTxLog getTxLogRead
-                 }
+    mockdb = def { mockRead = MockRead rowRead }
     
     rowRead :: Domain k v -> k -> Method () (Maybe v)
     rowRead UserTables {} _ = rc (Just acctRow)
-    rowRead KeySets _ = rc (Just sampleKeyset)
+    rowRead KeySets (KeySetName ks)
+      | ks == sampleLoadedKeysetName = rc (Just sampleKeyset)
+      | otherwise = rc Nothing
+    rowRead Namespaces (NamespaceName n)
+      | n == sampleNamespaceName = rc (Just sampleNamespace)
+      | otherwise = rc Nothing
     rowRead _ _ = rc Nothing
 
-    txIdsRead :: TableName -> TxId -> Method () [TxId]
-    txIdsRead _ i = rc [i]
+defSqliteBackend :: IO (EvalEnv SQLiteDb)
+defSqliteBackend = do
+  sqliteDb <- mkSQLiteEnv (newLogger neverLog "")
+              True (SQLiteConfig sqliteFile []) neverLog
+  initSchema sqliteDb
+  let env = defEvalEnv sqliteDb
+      setupExprs =
+        (accountsModule acctModuleName) <>
+        [text| (create-table $acctModuleNameText.accounts)
+               (insert $acctModuleNameText.accounts
+                     "someId"
+                     { "balance": 0.0 })
+               (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName)
+               (define-namespace "$sampleNamespaceName" $sampleLoadedKeysetName)
+        |]
+  setupTerms <- compileCode setupExprs
+  _ <- runEval def env $ mapM eval setupTerms
+  return env
 
-    getTxLogRead :: Domain k v -> TxId -> Method () [TxLog v]
-    getTxLogRead UserTables {} _ = rc [TxLog "accounts.accounts" "some-id" acctRow]
-    getTxLogRead _ _ = rc []
-
-    keysRead :: Domain k v -> Method () [k]
-    keysRead UserTables {} = rc ["some-id"]
-    keysRead _ = rc []
-
-
-defMockSetup :: IO (GasSetup ())
-defMockSetup = do
-  state <- defEvalStateCaching
-  createMockSetup defMockDb state
-
+-----------------------
+-----------------------
 
 createMockSetup
   :: MockDb
@@ -287,29 +324,6 @@ mockSetupCleanup (_, _) = return ()
 
 sqliteFile :: String
 sqliteFile = "log/bench.sqlite"
-
-defSqliteSetup :: IO (GasSetup SQLiteDb)
-defSqliteSetup = do
-  sqliteDb <- mkSQLiteEnv
-              (newLogger neverLog "")
-              True
-              (SQLiteConfig sqliteFile [])
-              neverLog
-  initSchema sqliteDb
-  state <- defEvalStateCaching
-  return $ (defEvalEnv sqliteDb, state)
-
-
-setupSqliteDb
-  :: T.Text
-  -> (EvalEnv SQLiteDb -> EvalEnv SQLiteDb)
-  -> IO (GasSetup SQLiteDb)
-setupSqliteDb code updateEnv = do
-  pc <- parseCode code
-  terms <- compileCode code
-  (env, defState) <- defSqliteSetup
-  _ <- runEval defState env $ mapM eval terms
-  return (env, defState)
 
 
 sqliteSetupCleanup :: GasSetup (SQLiteDb) -> IO ()
@@ -524,7 +538,7 @@ unitTestFromDef :: NativeDefName -> Maybe GasUnitTests
 unitTestFromDef nativeName = tests
   where
     tests = case (asString nativeName) of
-{--      -- | General native functions
+      -- | General native functions
       "at"                   -> Just atTests
       "bind"                 -> Just bindTests
       "chain-data"           -> Just chainDataTests
@@ -619,7 +633,7 @@ unitTestFromDef nativeName = tests
       "keys-all"       -> Just keysAllTests
       "keys-any"       -> Just keysAnyTests
       "read-keyset"    -> Just readKeysetTests
---}
+
       -- | Database nataive functions
       "create-table"      -> Just createTableTests
       "describe-keyset"   -> Just describeKeysetTests
@@ -642,85 +656,35 @@ unitTestFromDef nativeName = tests
 -- | Database native function tests
 --   NOTE: Using MockDb means that database insert/write/update always succeed
 txlogTests :: GasUnitTests
-txlogTests = GasUnitTests sqliteTests mockTests
+txlogTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ (setupSqliteDb sqliteSetupExprs id))
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (txlog $acctModuleNameText.accounts 0) |] :| []
 
 txidsTests :: GasUnitTests
-txidsTests = GasUnitTests sqliteTests mockTests
+txidsTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (txids $acctModuleNameText.accounts 0) |] :| []
 
 
 keylogTests :: GasUnitTests
-keylogTests = GasUnitTests sqliteTests mockTests
+keylogTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (keylog $acctModuleNameText.accounts "someId" 0) |] :| []
 
 
 keysTests :: GasUnitTests
-keysTests = GasUnitTests sqliteTests mockTests
+keysTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (keys $acctModuleNameText.accounts) |] :| []
 
 
 selectTests :: GasUnitTests
-selectTests = GasUnitTests sqliteTests mockTests
+selectTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (select $acctModuleNameText.accounts
                      (where "balance" (constantly true))
@@ -728,18 +692,8 @@ selectTests = GasUnitTests sqliteTests mockTests
 
 
 withReadTests :: GasUnitTests
-withReadTests = GasUnitTests sqliteTests mockTests
+withReadTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (with-read
                 $acctModuleNameText.accounts
@@ -750,18 +704,8 @@ withReadTests = GasUnitTests sqliteTests mockTests
       |] :| []
 
 withDefaultReadTests :: GasUnitTests
-withDefaultReadTests = GasUnitTests sqliteTests mockTests
+withDefaultReadTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (with-default-read
                 $acctModuleNameText.accounts
@@ -771,54 +715,27 @@ withDefaultReadTests = GasUnitTests sqliteTests mockTests
                 bal
              )
       |] :| []
-      -- TODO Add test for testing when default used
 
 readTests :: GasUnitTests
-readTests = GasUnitTests sqliteTests mockTests
+readTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (read $acctModuleNameText.accounts "someId") |] :| []
 
 
 writeTests :: GasUnitTests
-writeTests = GasUnitTests sqliteTests mockTests
+writeTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts) |]
     allExprs =
       [text| (write $acctModuleNameText.accounts
-                    "someId"
+                    "some-id-that-is-not-present"
                     { "balance": 0.0 }
              ) |] :| []
 
 
 updateTests :: GasUnitTests
-updateTests = GasUnitTests sqliteTests mockTests
+updateTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts)
-             (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })                   
-      |]
     allExprs =
       [text| (update $acctModuleNameText.accounts
                      "someId"
@@ -827,17 +744,11 @@ updateTests = GasUnitTests sqliteTests mockTests
 
 
 insertTests :: GasUnitTests
-insertTests = GasUnitTests sqliteTests mockTests
+insertTests = defGasUnitTests allExprs
   where
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  (set gasTestSetup $ setupSqliteDb sqliteSetupExprs id)
-                  allExprs
-    sqliteSetupExprs =
-      [text| (create-table $acctModuleNameText.accounts) |]
     allExprs =
       [text| (insert $acctModuleNameText.accounts
-                     "someId"
+                     "some-id-that-is-not-present"
                      { "balance": 0.0 }
              )|] :| []
 
@@ -857,20 +768,10 @@ describeModuleTests = defGasUnitTests allExprs
 
 
 describeKeysetTests :: GasUnitTests
-describeKeysetTests = GasUnitTests sqliteTests mockTests
+describeKeysetTests = defGasUnitTests allExprs
   where
-    runSqliteSetupExpr =
-      set gasTestSetup $ setupSqliteDb sqliteSetupExprs id
-
-    mockTests = createGasUnitTestsWithMock id allExprs
-    sqliteTests = createGasUnitTestsWithSQLite
-                  runSqliteSetupExpr
-                  allExprs
-    sqliteSetupExprs =
-      [text| (define-keyset "some-keyset" some-loaded-keyset)                   
-      |]
     allExprs =
-      [text| (describe-keyset "some-keyset") |] :| []
+      [text| (describe-keyset "$sampleLoadedKeysetName") |] :| []
     
 
 createTableTests :: GasUnitTests
@@ -879,81 +780,62 @@ createTableTests = defGasUnitTests allExprs
     allExprs =
       [text| (create-table $acctModuleNameText.accounts) |] :| []
 
-{--
+
 -- | Keyset native function tests
 defineKeysetTests :: GasUnitTests
-defineKeysetTests = GasUnitTests tests
+defineKeysetTests = tests
   where
-    tests = simpleDefTest :| [rotateKeysetTest]
+    rotateExpr = [text| (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName) |]
 
-    simpleDefTest = SomeGasTest $ updateStateWithKeysetLoaded (defGasTest simpleDefExpr)
-      where
-        simpleDefExpr =
-          [text| (define-keyset 'my-pact-keyset some-loaded-keyset) |]
-        loadedKeyset = KeySet [PublicKey "something"] (Name "keys-all" def)
-        loaded = HM.singleton (Name "some-loaded-keyset" def)
-                 (Direct $ TGuard (GKeySet loadedKeyset) def)
-        updateStateWithKeysetLoaded = setState $ set (evalRefs . rsLoaded) loaded
-
-    rotateKeysetTest = SomeGasTest $ rotateTest
-      where
-        name = "my-pact-keyset"
-        rotateExpr = [text| (define-keyset '$name some-loaded-keyset) |]
-        loaded = HM.singleton (Name "some-loaded-keyset" def)
-                 (Direct $ TGuard (GKeySet oldKeyset) def)
-        stateWithKeysetLoaded = set (evalRefs . rsLoaded) loaded defEvalState
-
-        oldPublicKeys = [PublicKey "something"]
-        oldKeyset = KeySet oldPublicKeys (Name "keys-all" def)
-        updateEnvMsgSig = setEnv (set eeMsgSigs (S.fromList oldPublicKeys))
-
-        ksRead :: Domain k v -> k -> Method () (Maybe v)
-        ksRead KeySets _ = rc (Just oldKeyset)
-        ksRead _ _ = rc Nothing
-
-        mockdb = def { mockRead = MockRead ksRead }
-        testEnv = createMockEnv mockdb stateWithKeysetLoaded
-
-        gasTest = GasTest rotateExpr
-                  (rotateExpr <> ": Defining keyset with the same name as one already defined.")
-                  testEnv
-                  mockEnvCleanup
-
-        rotateTest = updateEnvMsgSig gasTest
+    -- Keyset rotation causes previous keyset to be enforced
+    updateEnvMsgSig :: GasTest e -> GasTest e
+    updateEnvMsgSig = setEnv (set eeMsgSigs (S.fromList samplePubKeys))
+        
+    updateTestDesc :: GasTest e -> GasTest e
+    updateTestDesc =
+      set gasTestDescription
+      (rotateExpr <> ": rotating keyset")
+    
+    tests =
+      createGasUnitTests
+      (updateTestDesc . updateEnvMsgSig)
+      (updateTestDesc . updateEnvMsgSig)
+      (rotateExpr :| [])
 
 
 enforceKeysetTests :: GasUnitTests
-enforceKeysetTests = GasUnitTests tests
+enforceKeysetTests = tests
   where
-    enforceKeysetExpr = [text| (enforce-keyset 'my-keyset) |]
+    enforceKeysetExpr = [text| (enforce-keyset '$sampleLoadedKeysetName) |]
 
-    pubKeys = [PublicKey "something"]
-    keyset = KeySet pubKeys (Name "keys-all" def)
-    updateEnvWithSig = setEnv $ set eeMsgSigs (S.fromList pubKeys)
-    
-    ksRead :: Domain k v -> k -> Method () (Maybe v)
-    ksRead KeySets _ = rc (Just keyset)
-    ksRead _ _ = rc Nothing
+    updateEnvMsgSig :: GasTest e -> GasTest e
+    updateEnvMsgSig = setEnv (set eeMsgSigs (S.fromList samplePubKeys))
 
-    mockdb = def { mockRead = MockRead ksRead }
-    testEnv = createMockEnv mockdb defEvalState
-
-    gasTest = updateEnvWithSig $
-              GasTest enforceKeysetExpr
-                      enforceKeysetExpr
-                      testEnv
-                      mockEnvCleanup
-    tests = SomeGasTest gasTest :| []
+    tests =
+      createGasUnitTests
+      updateEnvMsgSig
+      updateEnvMsgSig
+      (enforceKeysetExpr :| [])
     
 
 readKeysetTests :: GasUnitTests
-readKeysetTests = GasUnitTests tests
+readKeysetTests = tests
   where
     readKeysetExpr = [text| (read-keyset 'my-keyset) |]
+    
     dataWithKeyset = toPactKeyset "my-keyset" "something" Nothing
-    test = setEnv (set eeMsgBody dataWithKeyset) (defGasTest readKeysetExpr)
+    updateMsgBodyWithKeyset = setEnv (set eeMsgBody dataWithKeyset)
 
-    tests = SomeGasTest test :| []
+    mockTests =
+      createMockTests
+      updateMsgBodyWithKeyset
+      (readKeysetExpr :| [])
+    sqliteTests =
+      createSQLiteTests
+      updateMsgBodyWithKeyset
+      (readKeysetExpr :| [])
+
+    tests = GasUnitTests sqliteTests mockTests
 
 
 keysAnyTests :: GasUnitTests
@@ -1577,7 +1459,7 @@ removeTests = defGasUnitTests allExprs
 
 
 pactIdTests :: GasUnitTests
-pactIdTests = GasUnitTests tests
+pactIdTests = tests
   where
     pactIdExpr = [text|(pact-id)|]
     
@@ -1585,15 +1467,16 @@ pactIdTests = GasUnitTests tests
                           (PactId "somePactId")
                           (PactContinuation (Name "some-defpact-func" def) [])
     updateState = setState (set evalPactExec mockPactExec)
-    test = updateState $ defGasTest pactIdExpr
-    tests = SomeGasTest test :| []
+    
+    tests =
+      createGasUnitTests updateState updateState (pactIdExpr :| [])
 
 
 yieldTests :: GasUnitTests
-yieldTests = GasUnitTests tests
+yieldTests = tests
   where
-    yieldExprWithTargetChain obj = [text| (yield $obj "some-chain-id") |]
     yieldExpr obj = [text| (yield $obj) |]
+    yieldExprWithTargetChain obj = [text| (yield $obj "some-chain-id") |]
 
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
                           (PactId "somePactId")
@@ -1603,66 +1486,97 @@ yieldTests = GasUnitTests tests
     mockStackframe = [defStackFrame]
     updateStateWithStackFrame = setState (set evalCallStack mockStackframe)
     updateStateWithPactExec = setState (set evalPactExec mockPactExec)
+    setInitialState = setState $ const (initStateModules mockModules)
 
-    setInitialState = const (initStateModules mockModules)
-    mkGasTestWithModule e = setState setInitialState
-                            $ GasTest e e
-                              createDefMockEnv
-                              mockEnvCleanup
-    
-    tests =    NEL.map (SomeGasTest .
-                        updateStateWithStackFrame .
-                        updateStateWithPactExec .
-                        mkGasTestWithModule .
-                        yieldExprWithTargetChain) strKeyIntValMapsExpr
-            <> NEL.map (SomeGasTest .
-                        updateStateWithPactExec .
-                        defGasTest .
-                        yieldExpr) strKeyIntValMapsExpr
+
+    allUpdatesForNoChain =
+      updateStateWithPactExec
+    allExprsNoChain =
+      NEL.map yieldExpr strKeyIntValMapsExpr
+    testsWithNoChain =
+      createGasUnitTests
+      allUpdatesForNoChain
+      allUpdatesForNoChain
+      allExprsNoChain
+
+  
+    allUpdatesForChain =
+      updateStateWithStackFrame .
+      updateStateWithPactExec .
+      setInitialState
+    allExprsWithChain =
+      NEL.map yieldExprWithTargetChain strKeyIntValMapsExpr
+    testsWithChain =
+      createGasUnitTests
+      allUpdatesForChain
+      allUpdatesForChain
+      allExprsWithChain
+
+
+    tests = testsWithNoChain <> testsWithChain
 
 
 resumeTests :: GasUnitTests
-resumeTests = GasUnitTests tests
+resumeTests = tests
   where
     resumeExpr binding = [text|(resume $binding a1)|]
 
-    yieldData m = (ObjectMap . M.fromList . toPactValueInt . HM.toList) m
-       where toPactValueInt = map (\(t,v) -> (FieldKey t, PLiteral $ LInteger v))
+    args = NEL.map (\(m,b) -> (m,resumeExpr b))
+           $ NEL.zip strKeyIntValMaps strKeyIntValBindingsExpr
 
-    chainId = ChainId "some-chain-id"
-    provenance = Just $ Provenance chainId defModuleHash
-    toYield m = Yield (yieldData m)
-    
-    toPactStep y = Just $ PactStep 2 False (PactId "") (Just y)
+    toSPVTests (yieldMap, expr)
+      = createGasUnitTests
+        (setupForResume True (yieldMap, expr))
+        (setupForResume True (yieldMap, expr))
+        (expr :| [])
 
-    args = NEL.zip strKeyIntValMaps strKeyIntValBindingsExpr
+    toNonSPVTests (yieldMap, expr)
+      = createGasUnitTests
+        (setupForResume False (yieldMap, expr))
+        (setupForResume False (yieldMap, expr))
+        (expr :| [])
 
-    testWithSPV (m, bindExpr) = setupTestWithSPV gasTestWithModule
-      where updateEnvWithProvidence = setEnv (set eePactStep (toPactStep $ toYield m provenance))
-            updateEnvWithChainId = setEnv (set (eePublicData . pdPublicMeta . pmChainId) chainId)
-            updateStateWithStackFrame = setState (set evalCallStack [defStackFrame])
-            updateGasTestDesc = set gasTestDescription $ (resumeExpr bindExpr) <> " with provenance"
-            
-            mockModules = HM.fromList [(defModuleName, defModuleData)]
-            setInitialState = const (initStateModules mockModules)
-            gasTestWithModule = setState setInitialState
-                                $ GasTest
-                                  (resumeExpr bindExpr)
-                                  (resumeExpr bindExpr)
-                                  createDefMockEnv
-                                  mockEnvCleanup
-            setupTestWithSPV = SomeGasTest .
-                               updateGasTestDesc .
-                               updateEnvWithProvidence .
-                               updateEnvWithChainId .
-                               updateStateWithStackFrame
+    tests = concatGasUnitTests $
+            NEL.map toSPVTests args <>
+            NEL.map toNonSPVTests args
 
-    testSimple (m, bindExpr) = setupTestSimple $ defGasTest (resumeExpr bindExpr)
-      where updateEnvWithYield = setEnv (set eePactStep (toPactStep $ toYield m Nothing))
-            setupTestSimple = SomeGasTest . updateEnvWithYield
+    setupForResume isProv (yielded, expr) = allUpdates
+      where
+        allUpdates
+          = bool
+            ( updateEnvWithYield )    -- No provenance needed
+            ( updateGasTestDesc .
+              updateStateWithStackFrame .
+              updateEnvWithChaindId .
+              updateEnvWithYield .
+              setInitialState
+            )
+            isProv
+        
+        updateEnvWithYield =
+          setEnv (set eePactStep pactStep)
+        updateEnvWithChaindId
+          = setEnv (set (eePublicData . pdPublicMeta . pmChainId) chainId)
+        updateStateWithStackFrame
+          = setState (set evalCallStack [defStackFrame])
+        updateGasTestDesc
+          = set gasTestDescription $ expr <> " with provenance"
+        setInitialState = setState $ const (initStateModules mockModules)
 
-    tests =    NEL.map testWithSPV args
-            <> NEL.map testSimple args
+        mockModules
+          = HM.fromList [(defModuleName, defModuleData)]
+        pactStep
+          = Just $ PactStep 2 False (PactId "") (Just yieldVal)
+        yieldVal
+          = Yield yieldData provenance
+        provenance
+          = bool Nothing (Just $ Provenance chainId defModuleHash) isProv
+        chainId
+          = ChainId "some-chain-id"
+        yieldData
+          = (ObjectMap . M.fromList . toPactValueInt . HM.toList) yielded
+        toPactValueInt
+          = map (\(t,v) -> (FieldKey t, PLiteral $ LInteger v))
 
 
 pactVersionTests :: GasUnitTests
@@ -1675,46 +1589,78 @@ pactVersionTests = defGasUnitTests allExprs
 
 
 readMsgTests :: GasUnitTests
-readMsgTests = GasUnitTests tests
+readMsgTests = tests
   where
     readMsgExpr = [text|(read-msg)|]
-    setupTest g m = (updateDesc . updateEnv) g
-      where updateEnv = setEnv (set eeMsgBody $ toJSON m)
-            updateDesc = set gasTestDescription
-                             (readMsgExpr <> " when "
-                              <> (T.pack $ show $ toJSON m))
-    tests' = NEL.map (setupTest $ defGasTest readMsgExpr) strKeyIntValMapsExpr
-    tests = NEL.map SomeGasTest tests'
+       
+    allUpdates m = setupMsgBody . updateDesc
+      where
+        setupMsgBody
+          = setEnv (set eeMsgBody $ toJSON m)
+        updateDesc
+          = set gasTestDescription
+            (readMsgExpr <> " when " <> (T.pack $ show $ toJSON m))
+    
+    setupTests m
+      = createGasUnitTests
+        (allUpdates m)
+        (allUpdates m)
+        (readMsgExpr :| [])
+
+    tests = concatGasUnitTests $
+            NEL.map setupTests strKeyIntValMapsExpr
 
 
 readIntegerTests :: GasUnitTests
-readIntegerTests = GasUnitTests tests
+readIntegerTests = tests
   where
     readIntExpr = [text|(read-integer "amount")|]
-    formatToIntVal i = A.object ["amount" A..= i]
-    setupTest g i = (updateDesc . updateEnv) g
-      where updateEnv = setEnv (set eeMsgBody $ formatToIntVal i)
-            updateDesc = set gasTestDescription
-                             (readIntExpr <> " when "
-                              <> (T.pack $ show $ formatToIntVal i))
-    tests' = NEL.map (setupTest $ defGasTest readIntExpr) sizesExpr
-    tests = NEL.map SomeGasTest tests'
+    
+    allUpdates i = (updateDesc . updateEnv)
+      where
+        intVal
+          = A.object ["amount" A..= i]
+        updateEnv
+          = setEnv (set eeMsgBody intVal)
+        updateDesc
+          = set gasTestDescription
+            (readIntExpr <> " when "
+             <> (T.pack $ show intVal))
+
+    setupTests i
+      = createGasUnitTests
+        (allUpdates i)
+        (allUpdates i)
+        (readIntExpr :| [])
+
+    tests = concatGasUnitTests $
+            NEL.map setupTests sizesExpr
 
 
 readDecimalTests :: GasUnitTests
-readDecimalTests = GasUnitTests tests
+readDecimalTests = tests
   where
     readDecExpr = [text|(read-decimal "amount")|]
-    formatToDecVal d = A.object ["amount" A..= decText]
-      where d' = d <> "1"
-            decText = [text|0.$d'|]
-    setupTest g d = (updateDesc . updateEnv) g
-      where updateEnv = setEnv (set eeMsgBody $ formatToDecVal d)
-            updateDesc = set gasTestDescription
-                             (readDecExpr <> " when "
-                              <> (T.pack $ show $ formatToDecVal d))
-    tests' = NEL.map (setupTest $ defGasTest readDecExpr) sizesExpr
-    tests = NEL.map SomeGasTest tests'
+    
+    allUpdates d = updateDesc . updateEnv
+      where
+        d' = d <> "1"
+        decVal = A.object ["amount" A..= [text|0.$d'|]]
+        updateEnv
+          = setEnv (set eeMsgBody decVal)
+        updateDesc
+          = set gasTestDescription
+            (readDecExpr <> " when "
+              <> (T.pack $ show decVal))
+
+    setupTests d
+      = createGasUnitTests
+        (allUpdates d)
+        (allUpdates d)
+        (readDecExpr :| [])
+   
+    tests = concatGasUnitTests $
+            NEL.map setupTests sizesExpr
 
 
 mapTests :: GasUnitTests
@@ -1899,75 +1845,44 @@ dropTests = defGasUnitTests allExprs
 
 
 namespaceTests :: GasUnitTests
-namespaceTests = GasUnitTests tests
+namespaceTests = tests
   where
-    tests = simpleTest :| []
-    simpleTest = SomeGasTest setNamespaceTest
-      where
-        name = "my-namespace"
-        expr = [text| (namespace '$name) |]
-        
-        pubKeys = [PublicKey "something"]
-        keyset = KeySet pubKeys (Name "keys-all" def)
-        oldNamespace = Namespace (NamespaceName name) (GKeySet keyset)
-        updateMsgSig = set eeMsgSigs (S.fromList pubKeys)
+    namespaceExpr = [text| (namespace '$sampleNamespaceName) |] :| []
 
-        nsRead :: Domain k v -> k -> Method () (Maybe v)
-        nsRead Namespaces _ = rc (Just oldNamespace)
-        nsRead _ _ = rc Nothing
+    updateEnvWithSig =
+      setEnv $ set eeMsgSigs (S.fromList samplePubKeys)
 
-        mockdb = def { mockRead = MockRead nsRead }
-        testEnv = createMockEnv mockdb defEvalState
+    tests = createGasUnitTests
+            updateEnvWithSig
+            updateEnvWithSig
+            namespaceExpr
 
-        setNamespaceTest =
-          setEnv updateMsgSig $
-            GasTest expr
-                    expr
-                    testEnv
-                    mockEnvCleanup
-        
 
 defineNamespaceTests :: GasUnitTests
-defineNamespaceTests = GasUnitTests tests
+defineNamespaceTests = tests
   where
-    tests = simpleDefTest :| [rotateNamespaceTest]
+    tests = simpleDefTests <> rotateNamespaceTests
     
-    simpleDefTest = SomeGasTest $ 
-      updateStateWithKeysetLoaded (defGasTest simpleDefExpr)
+    simpleDefTests = defGasUnitTests simpleDefExpr
       where
         simpleDefExpr =
-          [text| (define-namespace 'my-namespace some-loaded-keyset) |]
-        loadedKeyset = KeySet [PublicKey "something"] (Name "keys-all" def)
-        loaded = HM.singleton (Name "some-loaded-keyset" def)
-                 (Direct $ TGuard (GKeySet loadedKeyset) def)
-        updateStateWithKeysetLoaded = setState $ set (evalRefs . rsLoaded) loaded
-
-    rotateNamespaceTest = SomeGasTest $ rotateTest
+          [text| (define-namespace 'some-other-namespace $sampleLoadedKeysetName) |] :| []
+ 
+    rotateNamespaceTests = rotateTests
       where
-        name = "my-namespace"
-        rotateExpr = [text| (define-namespace '$name some-loaded-keyset) |]
-        loadedKeyset = KeySet [PublicKey "something"] (Name "keys-all" def)
-        loaded = HM.singleton (Name "some-loaded-keyset" def)
-                 (Direct $ TGuard (GKeySet loadedKeyset) def)
-        stateWithKeysetLoaded = set (evalRefs . rsLoaded) loaded defEvalState
+        rotateExpr = [text| (define-namespace '$sampleNamespaceName $sampleLoadedKeysetName) |]
 
-        oldPublicKeys = [PublicKey "something"]
-        oldKeyset = KeySet oldPublicKeys (Name "keys-all" def) 
-        oldNamespace = Namespace (NamespaceName name) (GKeySet oldKeyset)
-        updateMsgSig = setEnv $ set eeMsgSigs (S.fromList oldPublicKeys)
+        updateMsgSig =
+          setEnv $ set eeMsgSigs (S.fromList samplePubKeys)
+        updateDesc =
+          set gasTestDescription $
+          rotateExpr <> ": Defining namespace with the same name as one already defined."
 
-        nsRead :: Domain k v -> k -> Method () (Maybe v)
-        nsRead Namespaces _ = rc (Just oldNamespace)
-        nsRead _ _ = rc Nothing
-
-        mockdb = def {mockRead = MockRead nsRead }
-        testEnv = createMockEnv mockdb stateWithKeysetLoaded
-
-        rotateTest = updateMsgSig $
-            GasTest rotateExpr
-                    (rotateExpr <> ": Defining namespace with the same name as one already defined.")
-                    testEnv
-                    mockEnvCleanup
+        rotateTests =
+          createGasUnitTests
+          (updateMsgSig . updateDesc)
+          (updateMsgSig . updateDesc)
+          (rotateExpr :| [])
 
 
 containsTests :: GasUnitTests
@@ -2048,7 +1963,7 @@ bindTests = defGasUnitTests allExprs
            strKeyIntValBindingsExpr
 
     allExprs = NEL.map bindExpr args
---}
+
   {--
 All native functions
 "NativeDefName \"decrypt-cc20p1305\""
