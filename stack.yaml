@@ -1,6 +1,6 @@
 # stack yaml for ghc builds
 
-resolver: lts-13.24
+resolver: lts-13.30
 
 extra-deps:
   # --- Missing from Stackage --- #
