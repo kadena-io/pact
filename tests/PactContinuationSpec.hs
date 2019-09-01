@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
 
@@ -33,7 +34,9 @@ import Pact.Types.Runtime
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Util (toB16JSON)
 import Pact.Types.SPV
-
+#if !MIN_VERSION_servant_client(0,16,0)
+import TestUtils (ClientError)
+#endif
 
 
 ---- TESTS -----

@@ -1,26 +1,29 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE OverloadedLists   #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module ClientSpec (spec) where
 
+import qualified Control.Exception as Exception
 import Data.Aeson
 import Data.Default (def)
-import Test.Hspec
+import Data.Text (Text)
 import qualified Network.HTTP.Client as HTTP
-import qualified Control.Exception as Exception
+import Servant.Client
+import Test.Hspec
 
 import Pact.ApiReq
-import Pact.Types.API
-import Pact.Types.Command
-import Data.Text (Text)
 import Pact.Server.API
 import Pact.Server.Test
-import Servant.Client
-import Pact.Types.Runtime
+import Pact.Types.API
+import Pact.Types.Command
 import Pact.Types.PactValue
-
+import Pact.Types.Runtime
+#if !MIN_VERSION_servant_client(0,16,0)
+import TestUtils (ClientError)
+#endif
 
 _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
 _testLogDir = testDir ++ "test-log/"

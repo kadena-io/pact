@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -30,6 +31,9 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Server.API
 import Pact.Types.Runtime
+#if !MIN_VERSION_servant_client(0,16,0)
+import TestUtils (ClientError)
+#endif
 
 spec :: Spec
 spec = do

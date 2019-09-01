@@ -328,3 +328,4 @@ test-suite hspec
                 , ClientSpec
                 , SchemeSpec
                 , HistoryServiceSpec
+                , TestUtils
