@@ -859,12 +859,12 @@ run mgr cmds = do
 
 
 
-doSend :: Manager -> SubmitBatch -> IO (Either ServantError RequestKeys)
+doSend :: Manager -> SubmitBatch -> IO (Either ClientError RequestKeys)
 doSend mgr req = do
   baseUrl <- serverBaseUrl
   runClientM (sendClient req) (mkClientEnv mgr baseUrl)
 
-doPoll :: Manager -> Poll -> IO (Either ServantError PollResponses)
+doPoll :: Manager -> Poll -> IO (Either ClientError PollResponses)
 doPoll mgr req = do
   baseUrl <- serverBaseUrl
   runClientM (pollClient req) (mkClientEnv mgr baseUrl)

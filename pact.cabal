@@ -143,7 +143,7 @@ library
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
-                     , algebraic-graphs >= 0.2 && < 0.4
+                     , algebraic-graphs >= 0.2 && < 0.5
                      , prettyprinter >= 1.2 && < 1.3
                      , prettyprinter-ansi-terminal >= 1.1 && < 1.2
                      , prettyprinter-convert-ansi-wl-pprint
@@ -185,14 +185,14 @@ library
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-algorithms >= 0.7
-                     , vector-space >= 0.10.4 && < 0.16
+                     , vector-space >= 0.10.4 && < 0.17
                      , mmorph >= 1.1 && < 1.2
                      , constraints
                      , servant
                      , servant-client
                      , servant-client-core
                      , servant-swagger
-                     , swagger2 >= 2.3
+                     , swagger2 >= 2.3 && < 2.4
 
   if impl(ghcjs)
     build-depends:
@@ -211,7 +211,7 @@ library
                 , memory
                 , neat-interpolation
                 , safe-exceptions >= 0.1.5.0 && < 0.2
-                , sbv >= 7.11
+                , sbv >= 7.11 && < 8.3
                 , servant-server
                 , statistics >= 0.13.3 && < 0.16
                 , wai-cors
@@ -283,7 +283,7 @@ test-suite hspec
               , errors >= 2.3
               , exceptions
               , filepath
-              , hedgehog == 0.6.*
+              , hedgehog >= 0.6 && < 0.7
               , hspec
               , hw-hspec-hedgehog == 0.1.*
               , intervals

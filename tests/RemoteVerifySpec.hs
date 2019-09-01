@@ -54,7 +54,7 @@ stateModuleData nm replState = replLookupModule replState nm
 serve :: Int -> IO ThreadId
 serve port = forkIO $ runServantServer port
 
-serveAndRequest :: Int -> Remote.Request -> IO (Either ServantError (Remote.Response))
+serveAndRequest :: Int -> Remote.Request -> IO (Either ClientError Remote.Response)
 serveAndRequest port body = do
   let url = "http://localhost:" ++ show port
   verifyBaseUrl <- parseBaseUrl url

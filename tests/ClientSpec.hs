@@ -102,7 +102,7 @@ spec = describe "Servant API client tests" $ do
         ListenResponse lr -> (Right $ _crResult lr) `shouldSatisfy` (failWith ArgsError)
 
 
-failWith :: PactErrorType -> Either ServantError PactResult -> Bool
+failWith :: PactErrorType -> Either ClientError PactResult -> Bool
 failWith errType res = case res of
   Left _ -> False
   Right res' -> case res' of
