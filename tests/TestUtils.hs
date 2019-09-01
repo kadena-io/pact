@@ -2,8 +2,8 @@
 
 module TestUtils where
 
+#if !MIN_VERSION_servant_client(0,16,0)
 import Servant.Client
 
-#if !MIN_VERSION_servant_client(0,16,0)
 type ClientError = ServantError
 #endif
