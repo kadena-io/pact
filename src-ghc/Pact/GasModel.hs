@@ -110,7 +110,7 @@ main = do
    -- | Run benchmarks 
   C.defaultMain $
     map (\(n,t) -> benches (asString n) t)
-        (HM.toList unitTests)
+        (HM.toList unitTests) 
 --}
   -- | Report gas testing coverage
   mapM_ (print . show) untestedNatives
@@ -119,6 +119,8 @@ main = do
           ++ " out of "
           ++ (show $ length allNatives)
           ++ " native functions."
+
+
 
 -- | For debugging
 runGasTestByName :: T.Text -> IO ()

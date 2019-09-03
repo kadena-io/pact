@@ -155,23 +155,6 @@ createGasUnitTests sqliteUpdate mockUpdate pactExprs =
     sqliteTests = NEL.map (sqliteUpdate . defSqliteGasTest) pactExprs
 
 
-createSQLiteTests
-  :: (GasTest SQLiteDb -> GasTest SQLiteDb)
-  -> NEL.NonEmpty T.Text
-  -> SQLiteGasTests
-createSQLiteTests sqliteUpdate pactExprs =
-  NEL.map (sqliteUpdate . defSqliteGasTest) pactExprs
-
-
-createMockTests
-  :: (GasTest () -> GasTest ())
-  -> NEL.NonEmpty T.Text
-  -> MockGasTests
-createMockTests mockUpdate pactExprs =
-  NEL.map (mockUpdate . defMockGasTest) pactExprs
-
-
-
 -- | Sample pact code and helper functions/values for testing
 acctModuleName :: ModuleName
 acctModuleName = ModuleName "accounts" def
@@ -188,6 +171,16 @@ accountsModule moduleName = [text|
 
        (defschema account
          balance:decimal
+       )
+
+       (defun test-with-cap-func ()
+       @doc "Function to test the `with-capability` function"
+         (with-capability (GOV) "")
+       )
+
+       (defun enforce-true ()
+       @doc "Function to test the `create-user-guard` function"
+         (enforce true "")
        )
 
        (deftable accounts:{account})
@@ -292,6 +285,7 @@ defSqliteBackend = do
   sqliteDb <- mkSQLiteEnv (newLogger neverLog "")
               True (SQLiteConfig sqliteFile []) neverLog
   initSchema sqliteDb
+  state <- defEvalState
   let env = defEvalEnv sqliteDb
       setupExprs =
         (accountsModule acctModuleName) <>
@@ -303,34 +297,25 @@ defSqliteBackend = do
                (define-namespace "$sampleNamespaceName" $sampleLoadedKeysetName)
         |]
   setupTerms <- compileCode setupExprs
-  _ <- runEval def env $ mapM eval setupTerms
+  _ <- runEval state env $ mapM eval setupTerms
   return env
 
 -----------------------
 -----------------------
 
-createMockSetup
-  :: MockDb
-  -> EvalState
-  -> IO (GasSetup ())
-createMockSetup mdb state = do
-  db <- mkMockEnv mdb
-  return $ (defEvalEnv db, state)
-
-
 mockSetupCleanup :: GasSetup () -> IO ()
 mockSetupCleanup (_, _) = return ()
-
 
 sqliteFile :: String
 sqliteFile = "log/bench.sqlite"
 
-
-sqliteSetupCleanup :: GasSetup (SQLiteDb) -> IO ()
+sqliteSetupCleanup :: GasSetup SQLiteDb -> IO ()
 sqliteSetupCleanup (env, _) = do
   c <- readMVar $ _eePactDbVar env
   _ <- PSL.closeSQLite $ _db c
   removeFile sqliteFile
+
+
 
 
 -- TODO get rid?
@@ -634,7 +619,7 @@ unitTestFromDef nativeName = tests
       "keys-any"       -> Just keysAnyTests
       "read-keyset"    -> Just readKeysetTests
 
-      -- | Database nataive functions
+      -- | Database native functions
       "create-table"      -> Just createTableTests
       "describe-keyset"   -> Just describeKeysetTests
       "describe-module"   -> Just describeModuleTests
@@ -650,7 +635,117 @@ unitTestFromDef nativeName = tests
       "with-default-read" -> Just withDefaultReadTests
       "with-read"         -> Just withReadTests
       "write"             -> Just writeTests
+
+      -- | Capabilities native functions
+      "compose-capability"  -> Just composeCapabilityTests
+      "create-module-guard" -> Just createModuleGuardTests
+      "create-pact-guard"   -> Just createPactGuardTests
+      "create-user-guard"   -> Just createUserGuardTests
+      "enforce-guard"       -> Just enforceGuardTests
+      "keyset-ref-guard"    -> Just keysetRefGuardTests
+      "require-capability"  -> Just requireCapabilityTests
+      "with-capability"     -> Just withCapabilityTests
+      
       _ -> Nothing
+
+
+-- | Capabilities native function tests
+enforceGuardTests :: GasUnitTests
+enforceGuardTests = tests
+  where
+    enforceGuardExpr = [text| (enforce-guard "$sampleLoadedKeysetName") |] :| []
+
+    signEnvWithKeyset = setEnv (set eeMsgSigs (S.fromList samplePubKeys))
+
+    tests =
+      createGasUnitTests
+      signEnvWithKeyset
+      signEnvWithKeyset
+      enforceGuardExpr
+
+
+keysetRefGuardTests :: GasUnitTests
+keysetRefGuardTests = defGasUnitTests keysetRefGuardExpr
+  where
+    keysetRefGuardExpr = [text| (keyset-ref-guard "$sampleLoadedKeysetName") |] :| []
+
+
+createUserGuardTests :: GasUnitTests
+createUserGuardTests = defGasUnitTests createUserGuardExpr
+  where
+    createUserGuardExpr = [text| (create-user-guard ($acctModuleNameText.enforce-true)) |] :| []
+
+
+createPactGuardTests :: GasUnitTests
+createPactGuardTests = tests
+  where
+    createPactGuardExpr = [text| (create-pact-guard "test") |] :| []
+
+    mockPactExec = Just $ PactExec 2 Nothing Nothing 0
+                          (PactId "somePactId")
+                          (PactContinuation (Name "some-defpact-func" def) [])
+    updateWithPactExec = setState (set evalPactExec mockPactExec)
+
+    tests =
+      createGasUnitTests
+      updateWithPactExec
+      updateWithPactExec
+      createPactGuardExpr
+
+
+createModuleGuardTests :: GasUnitTests
+createModuleGuardTests = tests
+  where
+    createModuleGuardExpr = [text| (create-module-guard "test") |]
+
+    updateStackFrame = setState (set evalCallStack [defStackFrame])
+
+    tests =
+      createGasUnitTests
+      updateStackFrame
+      updateStackFrame
+      (createModuleGuardExpr :| []) 
+
+
+withCapabilityTests :: GasUnitTests
+withCapabilityTests = defGasUnitTests withCapExpr
+  where
+    withCapExpr = [text| ($acctModuleNameText.test-with-cap-func) |] :| []
+
+
+requireCapabilityTests :: GasUnitTests
+requireCapabilityTests = tests
+  where
+    requireCapExpr = [text| (require-capability ($acctModuleNameText.GOV)) |]
+ 
+    cap = UserCapability acctModuleName (DefName "GOV") []
+    updateGrantedCap = setState (set (evalCapabilities . capGranted) [cap])
+
+    tests =
+      createGasUnitTests
+      updateGrantedCap
+      updateGrantedCap
+      (requireCapExpr :| [])
+
+
+composeCapabilityTests :: GasUnitTests
+composeCapabilityTests = tests
+  where
+    composeCapExpr = [text| (compose-capability ($acctModuleNameText.GOV)) |]
+
+    capInStackframe =
+      StackFrame "" def
+      (Just ((FunApp def ""
+           (Just defModuleName) Defcap (funTypes $ FunType [] TyAny) Nothing)
+        ,[])
+      )
+    updateStateWithCap = setState (set evalCallStack [capInStackframe])
+
+    tests =
+      createGasUnitTests
+      updateStateWithCap
+      updateStateWithCap
+      (composeCapExpr :| [])
 
 
 -- | Database native function tests
@@ -808,7 +903,6 @@ enforceKeysetTests = tests
   where
     enforceKeysetExpr = [text| (enforce-keyset '$sampleLoadedKeysetName) |]
 
-    updateEnvMsgSig :: GasTest e -> GasTest e
     updateEnvMsgSig = setEnv (set eeMsgSigs (S.fromList samplePubKeys))
 
     tests =
@@ -826,16 +920,11 @@ readKeysetTests = tests
     dataWithKeyset = toPactKeyset "my-keyset" "something" Nothing
     updateMsgBodyWithKeyset = setEnv (set eeMsgBody dataWithKeyset)
 
-    mockTests =
-      createMockTests
+    tests =
+      createGasUnitTests
+      updateMsgBodyWithKeyset
       updateMsgBodyWithKeyset
       (readKeysetExpr :| [])
-    sqliteTests =
-      createSQLiteTests
-      updateMsgBodyWithKeyset
-      (readKeysetExpr :| [])
-
-    tests = GasUnitTests sqliteTests mockTests
 
 
 keysAnyTests :: GasUnitTests
