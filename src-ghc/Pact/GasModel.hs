@@ -52,9 +52,9 @@ mockRuns'
   :: GasUnitTests
   -> IO [(Either PactError [Term Name], EvalState)]
 mockRuns' tests = do
-  print "-- SQLiteDb Tests --"
+  print ("SQLITE DATABASE" :: String)
   sqliteRes <- mapM run (NEL.toList $ _gasUnitTestsSqlite tests)
-  print "-- MockDb Tests --"
+  print ("MOCK DATABASE" :: String)
   mockRes <- mapM run (NEL.toList $ _gasUnitTestsMock tests)
   return (sqliteRes <> mockRes)
   where

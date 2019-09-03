@@ -90,7 +90,7 @@ data GasUnitTests = GasUnitTests
 instance Semigroup (GasUnitTests) where
   g <> g' = GasUnitTests
             (_gasUnitTestsSqlite g <> _gasUnitTestsSqlite g')
-            (_gasUnitTestsMock g <> _gasUnitTestsMock g)
+            (_gasUnitTestsMock g <> _gasUnitTestsMock g')
 
 
 concatGasUnitTests :: NEL.NonEmpty GasUnitTests -> GasUnitTests
@@ -184,6 +184,9 @@ accountsModule moduleName = [text|
        )
 
        (deftable accounts:{account})
+       
+       ; table for testing `create-table`
+       (deftable accounts-for-testing-table-creation:{account})
      ) |]
   where moduleNameText = asString moduleName
 
@@ -552,6 +555,7 @@ unitTestFromDef nativeName = tests
       "read-decimal"         -> Just readDecimalTests
       "read-integer"         -> Just readIntegerTests
       "read-msg"             -> Just readMsgTests
+      "read-string"          -> Just readStringTests
       "remove"               -> Just removeTests
       "resume"               -> Just resumeTests
       "reverse"              -> Just reverseTests
@@ -873,7 +877,7 @@ createTableTests :: GasUnitTests
 createTableTests = defGasUnitTests allExprs
   where
     allExprs =
-      [text| (create-table $acctModuleNameText.accounts) |] :| []
+      [text| (create-table $acctModuleNameText.accounts-for-testing-table-creation) |] :| []
 
 
 -- | Keyset native function tests
@@ -1675,6 +1679,32 @@ pactVersionTests = defGasUnitTests allExprs
       [text| (pact-version) |]
 
     allExprs = versionExpr :| []
+
+
+readStringTests :: GasUnitTests
+readStringTests = tests
+  where
+    readStringExpr = [text|(read-string "name")|]
+
+    allUpdates i = (updateDesc . updateEnv)
+      where
+        strVal
+          = A.object ["name" A..= i]
+        updateEnv
+          = setEnv (set eeMsgBody strVal)
+        updateDesc
+          = set gasTestDescription
+            (readStringExpr <> " when "
+             <> (T.pack $ show strVal))
+
+    setupTests i
+      = createGasUnitTests
+        (allUpdates i)
+        (allUpdates i)
+        (readStringExpr :| [])
+
+    tests = concatGasUnitTests $
+            NEL.map setupTests escapedStringsExpr
 
 
 readMsgTests :: GasUnitTests
