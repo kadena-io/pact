@@ -106,12 +106,12 @@ main = do
   -- | Checks that unit tests succeed
   mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)
-{--
+
    -- | Run benchmarks 
   C.defaultMain $
     map (\(n,t) -> benches (asString n) t)
-        (HM.toList unitTests) 
---}
+        (HM.toList unitTests)
+
   -- | Report gas testing coverage
   mapM_ (print . show) untestedNatives
   print $ "Missing benchmark tests for "

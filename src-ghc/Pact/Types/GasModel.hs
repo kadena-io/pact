@@ -7,6 +7,10 @@
 
 module Pact.Types.GasModel
   ( GasTest(..)
+  , gasTestExpression
+  , gasTestDescription
+  , gasTestSetup
+  , gasTestSetupCleanup
   , GasUnitTests(..)
 
   , NoopNFData(..)
@@ -435,10 +439,10 @@ toPactKeyset ksName ksValue predicate =
 
 -- | Sample Pact literals for testing different sizes of lists/strings/integers
 sizes :: NEL.NonEmpty Integer
-sizes = --TODO write correct sizes (100000, 100, 10)
-    10 :|
-  [ 5,
-    1
+sizes =
+    100000 :|
+  [ 100,
+    10
   ]
 
 
@@ -2082,118 +2086,3 @@ bindTests = defGasUnitTests allExprs
            strKeyIntValBindingsExpr
 
     allExprs = NEL.map bindExpr args
-
-  {--
-All native functions
-"NativeDefName \"decrypt-cc20p1305\""
-"NativeDefName \"validate-keypair\""
-"NativeDefName \"verify-spv\""
-"NativeDefName \"keyset-ref-guard\""
-"NativeDefName \"create-module-guard\""
-"NativeDefName \"create-pact-guard\""
-"NativeDefName \"create-user-guard\""
-"NativeDefName \"compose-capability\""
-"NativeDefName \"require-capability\""
-"NativeDefName \"enforce-guard\""
-"NativeDefName \"with-capability\""
-"NativeDefName \"keys-2\""
-"NativeDefName \"keys-any\""
-"NativeDefName \"keys-all\""
-"NativeDefName \"enforce-keyset\""
-"NativeDefName \"define-keyset\""
-"NativeDefName \"read-keyset\""
-"NativeDefName \"shift\""
-"NativeDefName \"~\""
-"NativeDefName \"xor\""
-"NativeDefName \"|\""
-"NativeDefName \"&\""
-"NativeDefName \"floor\""
-"NativeDefName \"ceiling\""
-"NativeDefName \"round\""
-"NativeDefName \"abs\""
-"NativeDefName \"exp\""
-"NativeDefName \"ln\""
-"NativeDefName \"sqrt\""
-"NativeDefName \"mod\""
-"NativeDefName \"log\""
-"NativeDefName \"^\""
-"NativeDefName \"/\""
-"NativeDefName \"*\""
-"NativeDefName \"-\""
-"NativeDefName \"+\""
-"NativeDefName \"!=\""
-"NativeDefName \"=\""
-"NativeDefName \"<=\""
-"NativeDefName \">=\""
-"NativeDefName \"<\""
-"NativeDefName \">\""
-"NativeDefName \"not\""
-"NativeDefName \"and\""
-"NativeDefName \"or\""
-"NativeDefName \"not?\""
-"NativeDefName \"and?\""
-"NativeDefName \"or?\""
-"NativeDefName \"format-time\""
-"NativeDefName \"days\""
-"NativeDefName \"hours\""
-"NativeDefName \"minutes\""
-"NativeDefName \"diff-time\""
-"NativeDefName \"add-time\""
-"NativeDefName \"parse-time\""
-"NativeDefName \"time\""
-"NativeDefName \"describe-module\""
-"NativeDefName \"describe-keyset\""
-"NativeDefName \"describe-table\""
-"NativeDefName \"keylog\""
-"NativeDefName \"txlog\""
-"NativeDefName \"update\""
-"NativeDefName \"insert\""
-"NativeDefName \"write\""
-"NativeDefName \"txids\""
-"NativeDefName \"keys\""
-"NativeDefName \"select\""
-"NativeDefName \"read\""
-"NativeDefName \"with-default-read\""
-"NativeDefName \"with-read\""
-"NativeDefName \"create-table\""
-"NativeDefName \"public-chain-data\""
-"NativeDefName \"chain-data\""
-"NativeDefName \"namespace\""
-"NativeDefName \"define-namespace\""
-"NativeDefName \"hash\""
-"NativeDefName \"int-to-str\""
-"NativeDefName \"str-to-int\""
-"NativeDefName \"identity\""
-"NativeDefName \"constantly\""
-"NativeDefName \"contains\""
-"NativeDefName \"enforce-pact-version\""
-"NativeDefName \"pact-version\""
-"NativeDefName \"resume\""
-"NativeDefName \"yield\""
-"NativeDefName \"list-modules\""
-"NativeDefName \"typeof\""
-"NativeDefName \"bind\""
-"NativeDefName \"tx-hash\""
-"NativeDefName \"read-msg\""
-"NativeDefName \"read-integer\""
-"NativeDefName \"read-decimal\""
-"NativeDefName \"pact-id\""
-"NativeDefName \"format\""
-"NativeDefName \"enforce-one\""
-"NativeDefName \"enforce\""
-"NativeDefName \"at\""
-"NativeDefName \"remove\""
-"NativeDefName \"drop\""
-"NativeDefName \"take\""
-"NativeDefName \"length\""
-"NativeDefName \"compose\""
-"NativeDefName \"where\""
-"NativeDefName \"sort\""
-"NativeDefName \"filter\""
-"NativeDefName \"reverse\""
-"NativeDefName \"make-list\""
-"NativeDefName \"list\""
-"NativeDefName \"fold\""
-"NativeDefName \"map\""
-"NativeDefName \"if\""
---}
