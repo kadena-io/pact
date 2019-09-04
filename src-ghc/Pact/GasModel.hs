@@ -40,6 +40,7 @@ mockRuns
   :: GasUnitTests
   -> IO ()
 mockRuns tests = do
+  putStrLn "In MockRuns"
   mapM_ run (NEL.toList $ _gasUnitTestsSqlite tests)
   mapM_ run (NEL.toList $ _gasUnitTestsMock tests)
   where
@@ -103,15 +104,18 @@ benches groupName allTests = C.bgroup (T.unpack groupName)
 
 main :: IO ()
 main = do
+  putStrLn "Running unit tests for succeess"
   -- | Checks that unit tests succeed
   mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)
 
+  putStrLn "Running benchmarks"
    -- | Run benchmarks 
   C.defaultMain $
     map (\(n,t) -> benches (asString n) t)
         (HM.toList unitTests)
 
+  putStrLn "Reporting coverage"
   -- | Report gas testing coverage
   mapM_ (print . show) untestedNatives
   print $ "Missing benchmark tests for "
