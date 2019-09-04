@@ -40,11 +40,11 @@ mockRuns
   :: GasUnitTests
   -> IO ()
 mockRuns tests = do
-  putStrLn "In MockRuns"
   mapM_ run (NEL.toList $ _gasUnitTestsSqlite tests)
   mapM_ run (NEL.toList $ _gasUnitTestsMock tests)
   where
     run test = do
+      putStrLn $ "MockRun for " ++ T.unpack (_gasTestDescription test)
       (res,_) <- bracket (_gasTestSetup test) (_gasTestSetupCleanup test) (mockRun test)
       eitherDie (_gasTestDescription test) res
 
@@ -53,9 +53,9 @@ mockRuns'
   :: GasUnitTests
   -> IO [(Either PactError [Term Name], EvalState)]
 mockRuns' tests = do
-  print ("SQLITE DATABASE" :: String)
+  putStrLn "SQLITE DATABASE"
   sqliteRes <- mapM run (NEL.toList $ _gasUnitTestsSqlite tests)
-  print ("MOCK DATABASE" :: String)
+  putStrLn "MOCK DATABASE"
   mockRes <- mapM run (NEL.toList $ _gasUnitTestsMock tests)
   return (sqliteRes <> mockRes)
   where
@@ -104,7 +104,7 @@ benches groupName allTests = C.bgroup (T.unpack groupName)
 
 main :: IO ()
 main = do
-  putStrLn "Running unit tests for succeess"
+  putStrLn "Doing dry run of benchmark tests"
   -- | Checks that unit tests succeed
   mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)
@@ -117,13 +117,12 @@ main = do
 
   putStrLn "Reporting coverage"
   -- | Report gas testing coverage
-  mapM_ (print . show) untestedNatives
   print $ "Missing benchmark tests for "
-          ++ (show $ length untestedNatives)
+          ++ show (length untestedNatives)
           ++ " out of "
-          ++ (show $ length allNatives)
+          ++ show (length allNatives)
           ++ " native functions."
-
+  mapM_ (print . show) untestedNatives
 
 
 -- | For debugging
