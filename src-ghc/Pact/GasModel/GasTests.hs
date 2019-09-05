@@ -67,7 +67,7 @@ unitTestFromDef :: NativeDefName -> Maybe GasUnitTests
 unitTestFromDef nativeName = tests
   where
     tests = case (asString nativeName) of
-      -- | General native functions
+      -- General native functions
       "at"                   -> Just atTests
       "bind"                 -> Just bindTests
       "chain-data"           -> Just chainDataTests
@@ -109,7 +109,7 @@ unitTestFromDef nativeName = tests
       "where"                -> Just whereTests
       "yield"                -> Just yieldTests
 
-      -- | Operators native functions
+      -- Operators native functions
       "!="      -> Just notEqualOptTests
       "&"       -> Just bitwiseOptTests
       "*"       -> Just multOptTests
@@ -142,7 +142,7 @@ unitTestFromDef nativeName = tests
       "|"       -> Just bitwiseOrOptTests
       "~"       -> Just reverseBitsOptTests
 
-      -- | Time native functions
+      -- Time native functions
       "add-time"    -> Just addTimeTests
       "days"        -> Just daysTests
       "diff-time"   -> Just diffTimeTests
@@ -152,11 +152,11 @@ unitTestFromDef nativeName = tests
       "parse-time"  -> Just parseTimeTests
       "time"        -> Just timeTests
 
-      -- | Commitments native functions
+      -- Commitments native functions
       "decrypt-cc20p1305" -> Just decryptCc20p1305Tests
       "validate-keypair"  -> Just validateKeypairTests
 
-      -- | Keyset native functions
+      -- Keyset native functions
       "define-keyset"  -> Just defineKeysetTests
       "enforce-keyset" -> Just enforceKeysetTests
       "keys-2"         -> Just keys2Tests
@@ -164,7 +164,7 @@ unitTestFromDef nativeName = tests
       "keys-any"       -> Just keysAnyTests
       "read-keyset"    -> Just readKeysetTests
 
-      -- | Database native functions
+      -- Database native functions
       "create-table"      -> Just createTableTests
       "describe-keyset"   -> Just describeKeysetTests
       "describe-module"   -> Just describeModuleTests
@@ -181,7 +181,7 @@ unitTestFromDef nativeName = tests
       "with-read"         -> Just withReadTests
       "write"             -> Just writeTests
 
-      -- | Capabilities native functions
+      -- Capabilities native functions
       "compose-capability"  -> Just composeCapabilityTests
       "create-module-guard" -> Just createModuleGuardTests
       "create-pact-guard"   -> Just createPactGuardTests
@@ -1604,11 +1604,8 @@ containsTests = defGasUnitTests allExprs
     strArgs = NEL.zip sizesExpr escapedStringsExpr
 
     allExprs =
-      -- | When testing that a list contains a value
          NEL.map containsListExpr listArgs
-      -- | When testing that an object has a key entry
       <> NEL.map (over both containsObjExpr) strKeyIntValMapsExpr
-      -- | When testing that a string contains a value
       <> NEL.map containsStrExpr strArgs
 
 

@@ -106,18 +106,18 @@ benches groupName allTests = C.bgroup (T.unpack groupName)
 
 main :: IO ()
 main = do
-  -- | Checks that unit tests succeed
+  -- Checks that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
   mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)
 
-  -- | Run benchmarks
+  -- Run benchmarks
   putStrLn "Running benchmarks"
   C.defaultMain $
     map (\(n,t) -> benches (asString n) t)
         (HM.toList unitTests)
 
-  -- | Report gas testing coverage
+  -- Report gas testing coverage
   putStrLn "Reporting coverage"
   print $ "Missing benchmark tests for "
           ++ show (length untestedNatives)
