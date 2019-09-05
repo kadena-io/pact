@@ -193,7 +193,7 @@ toPactTm = \case
   where
     mkApp :: NativeDef -> [ETerm]
       -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
-    mkApp (_, defTm, _) args = do
+    mkApp (_, defTm) args = do
       args' <- traverse toPactTm args
       pure $ TApp (App (liftTerm defTm) args' dummyInfo) dummyInfo
 
@@ -204,7 +204,7 @@ toPactTm = \case
       -> ETerm
       -> [ETerm]
       -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
-    mkApp' (_, defTm, _) arg argList = do
+    mkApp' (_, defTm) arg argList = do
       arg'     <- toPactTm arg
       argList' <- traverse toPactTm argList
       pure $ (`TApp` dummyInfo) $ App (liftTerm defTm)

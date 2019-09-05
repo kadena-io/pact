@@ -48,6 +48,7 @@ module Pact.Native
     , cdChainId, cdBlockHeight, cdBlockTime, cdSender, cdGasLimit, cdGasPrice
     ) where
 
+import Control.Arrow hiding (app)
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Catch
@@ -105,11 +106,8 @@ nativeDefs :: HM.HashMap Name Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
 moduleToMap :: NativeModule -> HM.HashMap Name Ref
-moduleToMap = HM.fromList . map fromNativeRef . snd
-  where
-    fromNativeRef :: (NativeDefName, Term Name, NativeFunType) -> (Name, Ref' (Term Name))
-    fromNativeRef (defName, terms, _)
-      = ( Name (asString defName) def, Direct terms )
+moduleToMap = HM.fromList . map (((`Name` def) . asString) *** Direct) . snd
+
 
 lengthDef :: NativeDef
 lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
@@ -391,7 +389,6 @@ chainDataSchema = defSchema "public-chain-data"
     , (cdGasLimit, tTyInteger)
     , (cdGasPrice, tTyDecimal)
     ]
-    RNativeFunType
 
 chainDataDef :: NativeDef
 chainDataDef = defRNative "chain-data" chainData
@@ -400,7 +397,7 @@ chainDataDef = defRNative "chain-data" chainData
     "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
     \'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
   where
-    pcTy = TyUser (view _2 chainDataSchema)
+    pcTy = TyUser (snd chainDataSchema)
     chainData :: RNativeFun e
     chainData _ [] = do
       PublicData{..} <- view eePublicData

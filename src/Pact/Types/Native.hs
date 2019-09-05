@@ -41,10 +41,6 @@ isSpecialForm :: NativeDefName -> Maybe SpecialForm
 isSpecialForm = (`M.lookup` sfLookup)
 
 
-data NativeFunType = NativeFunType | GasRNativeFunType | RNativeFunType
-  deriving (Eq)
-
-
 -- | Native function with un-reduced arguments that computes gas.
 --   Opertations with cost dependent on amount of computation performed.
 type NativeFun e = FunApp -> [Term Ref] -> Eval e (Gas,Term Name)
@@ -58,5 +54,5 @@ type GasRNativeFun e = Gas -> FunApp -> [Term Name] -> Eval e (Gas,Term Name)
 --   Operations with fixed cost.
 type RNativeFun e = FunApp -> [Term Name] -> Eval e (Term Name)
 
-type NativeDef = (NativeDefName,Term Name,NativeFunType)
+type NativeDef = (NativeDefName,Term Name)
 type NativeModule = (ModuleName,[NativeDef])

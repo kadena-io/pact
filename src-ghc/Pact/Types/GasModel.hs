@@ -537,7 +537,7 @@ allNatives = concatMap snd natives
 untestedNatives :: [NativeDefName]
 untestedNatives = foldl' check [] allNatives
   where
-    check li (nativeName,_,_) = case (HM.lookup nativeName unitTests) of
+    check li (nativeName,_) = case (HM.lookup nativeName unitTests) of
       Nothing -> nativeName : li
       Just _ -> li
 
@@ -545,7 +545,7 @@ untestedNatives = foldl' check [] allNatives
 unitTests :: HM.HashMap NativeDefName GasUnitTests
 unitTests = HM.fromList $ foldl' getUnitTest [] allNatives 
   where
-    getUnitTest li (nativeName,_,_) =
+    getUnitTest li (nativeName,_) =
       case unitTestFromDef nativeName of
         Nothing -> li
         Just ts -> (nativeName, ts) : li
