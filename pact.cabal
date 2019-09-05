@@ -165,7 +165,7 @@ library
                      , hspec >= 2.2.4 && < 2.8
                      , lens >= 4.14 && < 4.18
                      , lens-aeson >= 1.0.0.5 && < 1.1
-                     , megaparsec >= 7
+                     , megaparsec >= 6
                      , mtl >= 2.2.1 && < 2.3
                      , old-locale >= 1.0.0.7 && < 1.1
                      , optparse-applicative >= 0.12.1.0 && < 0.15
