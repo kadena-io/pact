@@ -96,7 +96,7 @@ moduleNotFoundP = MP.string "<interactive>:"
                *> digitsP *> MP.char ':'
                *> digitsP *> MP.char ':'
                *> MP.string " Module "
-               *> fmap fromString (MP.some $ MP.notChar ' ')
+               *> fmap fromString (MP.some $ MP.anySingleBut ' ')
                <* MP.string " not found"
   where
     digitsP :: MP.Parsec Void String ()
