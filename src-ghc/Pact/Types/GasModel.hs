@@ -441,7 +441,7 @@ toPactKeyset ksName ksValue predicate =
 -- | Sample Pact literals for testing different sizes of lists/strings/integers
 sizes :: NEL.NonEmpty (T.Text, Integer)
 sizes =
-    ("long", 10000) :|
+    ("long", 1000) :|
   [ ("med", 100),
     ("small", 10)
   ]
