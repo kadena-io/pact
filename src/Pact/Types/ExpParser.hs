@@ -47,7 +47,7 @@ import Text.Megaparsec as MP
 import Text.Megaparsec.Internal (ParsecT(..))
 import Data.Proxy
 import Data.Void
-import Data.List.NonEmpty (NonEmpty(..),fromList{-,toList-})
+import Data.List.NonEmpty (NonEmpty(..),fromList,toList)
 import Data.List
 import Control.Monad
 import Control.Monad.State
@@ -91,11 +91,10 @@ instance Stream Cursor where
   chunkToTokens Proxy = id
   chunkLength Proxy = length
   chunkEmpty Proxy = null
-  -- advance1 Proxy = defaultAdvance1
-  -- advanceN Proxy w = foldl' (defaultAdvance1 w)
-  reachOffset = error "reachOffset undefined"
-  reachOffsetNoLine = error "reachOffsetNoLine undefined"
-  showTokens Proxy ts = show ts
+  reachOffset _ ps = (pstateSourcePos ps,"reachOffset-unsupported",ps)
+  -- ^ assuming this is unused (undefined passed unit tests), but
+  -- if the unsupported shows up then we need something better
+  showTokens Proxy ts = renderCompactString $ toList ts
   take1_ Cursor{..} = case _cStream of
     [] -> Nothing
     (t:ts) -> Just (t, Cursor _cContext ts)
@@ -138,19 +137,21 @@ runCompile :: ExpParse s a -> ParseState s -> Exp Info -> Either PactError a
 runCompile act cs a =
   case runParser (runStateT act cs) "" (Cursor Nothing [a]) of
     (Right (r,_)) -> Right r
-    (Left q) -> Left $ PactError SyntaxError def [] (prettyString (show q))
-    {-
-    (Left (TrivialError _ itemMay expect)) -> Left $ PactError SyntaxError inf [] (prettyString msg)
-      where expectList = S.toList expect
-            items = maybe expectList (:expectList) itemMay
-            msg = intercalate ", " msgs
-            (inf,msgs) = foldr go (def,[]) items
-            go item (ri,rmsgs) = case item of
-              Label s -> (ri,toList s:rmsgs)
-              EndOfInput -> (ri,"Unexpected end of input":rmsgs)
-              Tokens (x :| _) -> (getInfo x,rmsgs)
-    (Left (FancyError _ errs)) -> Left $ PactError SyntaxError def [] (prettyString $ show errs)
--}
+    (Left (ParseErrorBundle es _)) ->
+      Left $ PactError SyntaxError inf [] (prettyString msg)
+      where
+        msg = intercalate ", " msgs
+        (inf,msgs) = foldr go (def,[]) (toList es)
+        go e (i,ms) = case e of
+          (TrivialError _ itemMay expect) -> foldr go' (i,ms) items
+            where expectList = S.toList expect
+                  items = maybe expectList (:expectList) itemMay
+                  go' item (ri,rmsgs) = case item of
+                    Label s -> (ri,toList s:rmsgs)
+                    EndOfInput -> (ri,"Unexpected end of input":rmsgs)
+                    Tokens (x :| _) -> (getInfo x,rmsgs)
+          (FancyError _ errs) -> (i,show errs:ms)
+
 
 {-# INLINE strErr #-}
 strErr :: String -> ErrorItem t
