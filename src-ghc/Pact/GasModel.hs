@@ -13,6 +13,8 @@ import qualified Data.Text            as T
 -- Internal exports
 --
 import Pact.Eval                  (eval)
+import Pact.GasModel.Utils
+import Pact.GasModel.GasTests
 import Pact.Types.GasModel
 import Pact.Types.Lang
 import Pact.Types.Runtime
@@ -104,19 +106,19 @@ benches groupName allTests = C.bgroup (T.unpack groupName)
 
 main :: IO ()
 main = do
-  putStrLn "Doing dry run of benchmark tests"
   -- | Checks that unit tests succeed
+  putStrLn "Doing dry run of benchmark tests"
   mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)
 
+  -- | Run benchmarks
   putStrLn "Running benchmarks"
-   -- | Run benchmarks 
   C.defaultMain $
     map (\(n,t) -> benches (asString n) t)
         (HM.toList unitTests)
 
-  putStrLn "Reporting coverage"
   -- | Report gas testing coverage
+  putStrLn "Reporting coverage"
   print $ "Missing benchmark tests for "
           ++ show (length untestedNatives)
           ++ " out of "

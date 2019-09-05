@@ -142,6 +142,8 @@ library
                     Pact.Types.Server
                     Pact.Types.SQLite
                     Pact.Types.GasModel
+                    Pact.GasModel.Utils
+                    Pact.GasModel.GasTests
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
