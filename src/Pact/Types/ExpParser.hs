@@ -72,17 +72,8 @@ data Cursor = Cursor
   } deriving (Show)
 instance Default Cursor where def = Cursor def def
 
--- | adapted from Text.Megaparsec.Stream
-_defaultAdvance1
-  :: Pos               -- ^ Tab width (unused)
-  -> SourcePos         -- ^ Current position
-  -> t                 -- ^ Current token
-  -> SourcePos         -- ^ Incremented position
-_defaultAdvance1 _width (SourcePos n l c) _t = SourcePos n l (c <> pos1)
-{-# INLINE _defaultAdvance1 #-}
 
--- | Adapt Cursor to MP Stream, patterned after
--- [Char] instance.
+-- | Adapt Cursor to MP Stream
 instance Stream Cursor where
   type Token Cursor = Exp Info
   type Tokens Cursor = [Exp Info]
