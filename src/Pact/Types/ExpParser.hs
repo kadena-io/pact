@@ -132,8 +132,11 @@ runCompile act cs a =
       Left $ PactError SyntaxError inf [] (prettyString msg)
       where
         msg = intercalate ", " msgs
+        -- concat errors in bundle. Info is extracted from
+        -- any 'Tokens' found.
         (inf,msgs) = foldr go (def,[]) (toList es)
         go e (i,ms) = case e of
+          -- concat errors in TrivialError
           (TrivialError _ itemMay expect) -> foldr go' (i,ms) items
             where expectList = S.toList expect
                   items = maybe expectList (:expectList) itemMay
@@ -141,6 +144,7 @@ runCompile act cs a =
                     Label s -> (ri,toList s:rmsgs)
                     EndOfInput -> (ri,"Unexpected end of input":rmsgs)
                     Tokens (x :| _) -> (getInfo x,rmsgs)
+          -- FancyError isn't used but add just in case
           (FancyError _ errs) -> (i,show errs:ms)
 
 
@@ -222,10 +226,7 @@ exp :: String -> Prism' (Exp Info) a -> ExpParse s (a,Exp Info)
 exp ty prism = do
   let test i = case firstOf prism i of
         Just a -> Just (a,i)
-        Nothing -> Nothing -- err i ("Expected: " ++ ty)
-      --err i s = Left (pure (strErr s),
-      --                S.singleton (Tokens (i:|[])))
-  -- t <- context
+        Nothing -> Nothing
   r <- lift $! pTokenEpsilon test (S.fromList [strErr $ "Expected: " ++ ty])
   psCurrent .= snd r
   return r
