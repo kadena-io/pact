@@ -92,7 +92,6 @@ in
             prettyprinter-ansi-terminal = dontCheck super.prettyprinter-ansi-terminal;
             prettyprinter-convert-ansi-wl-pprint = dontCheck super.prettyprinter-convert-ansi-wl-pprint;
 
-            # Needed to get around a requirement on `hspec-discover`.
             megaparsec = dontCheck (callHackageDirect {
               pkg = "megaparsec";
               ver = "7.0.5";
