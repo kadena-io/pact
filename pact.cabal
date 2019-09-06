@@ -209,7 +209,7 @@ library
                 , haskeline >= 0.7.3 && < 0.8
                 , http-client
                 , memory
-                , neat-interpolation
+                , neat-interpolation >= 0.3.2.2
                 , safe-exceptions >= 0.1.5.0 && < 0.2
                 , sbv >= 7.11
                 , servant-server
