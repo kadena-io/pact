@@ -265,7 +265,7 @@ describeVacuousProperty = \case
   Invalid _ -> "Unexpected solver response during vacuous property check: please report this as a bug"
   Unknown reason -> describeUnknownFailure reason
   err@SortMismatch{} -> "Vacuous property check: " <> describeSmtFailure err
-  Unsatisfiable -> "Vacuous property encountered! There is no way for a transaction to succeed if it is calls this function from the top-level. Because all `property` expressions in Pact assume transaction success, in this case it would be possible to validate *any* `property`, even e.g. `false`."
+  Unsatisfiable -> "Vacuous property encountered! There is no way for a transaction to succeed if this function is called from the top-level. Because all `property` expressions in Pact assume transaction success, in this case it would be possible to validate *any* `property`, even e.g. `false`."
   UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeCheckFailure :: CheckFailure -> Text
