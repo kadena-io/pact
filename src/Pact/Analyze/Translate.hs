@@ -345,19 +345,20 @@ startNewSubpath = do
   pure p
 
 tagDbAccess
-  :: (ESchema -> Located TagId -> TraceEvent)
+  :: (TableName -> ESchema -> Located TagId -> TraceEvent)
+  -> TableName
   -> Node
   -> ESchema
   -> TranslateM TagId
-tagDbAccess mkEvent node schema = do
+tagDbAccess mkEvent tname node schema = do
   tid <- genTagId
-  emit $ mkEvent schema (Located (nodeInfo node) tid)
+  emit $ mkEvent tname schema (Located (nodeInfo node) tid)
   pure tid
 
-tagRead :: Node -> ESchema -> TranslateM TagId
+tagRead :: TableName -> Node -> ESchema -> TranslateM TagId
 tagRead = tagDbAccess TraceRead
 
-tagWrite :: WriteType -> Node -> ESchema -> TranslateM TagId
+tagWrite :: WriteType -> TableName -> Node -> ESchema -> TranslateM TagId
 tagWrite = tagDbAccess . TraceWrite
 
 tagYield :: EType -> TranslateM TagId
@@ -1175,9 +1176,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     Some SStr row'                   <- translateNode row
     Some objTy@(SObject schema) obj' <- translateNode obj
-    tid                              <- tagWrite writeType node $ ESchema schema
+    let tname = TableName (T.unpack tn)
+    tid                              <- tagWrite writeType tname node (ESchema schema)
     pure $ Some SStr $
-      Write objTy writeType tid (TableName (T.unpack tn)) row' obj'
+      Write objTy writeType tid tname row' obj'
 
   AST_If _ cond tBranch fBranch -> do
     Some SBool cond' <- translateNode cond
@@ -1214,10 +1216,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     EType objTy@SObject{}                <- translateType schemaNode
     Some SStr key'                       <- translateNode key
     EType partialReadTy@(SObject schema) <- typeOfPartialBind objTy bindings
-    tid                                  <- tagRead node $ ESchema schema
+    let tname = TableName (T.unpack table)
+    tid                                  <- tagRead tname node (ESchema schema)
 
     let readT = Some partialReadTy $
-          Read partialReadTy Nothing tid (TableName (T.unpack table)) key'
+          Read partialReadTy Nothing tid tname key'
     withNodeContext node $
       translateObjBinding bindings partialReadTy body readT
 
@@ -1226,7 +1229,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr key'                       <- translateNode key
     Some objTy'@SObject{} def            <- translateNode defaultNode
     EType partialReadTy@(SObject schema) <- typeOfPartialBind objTy bindings
-    tid                                  <- tagRead node $ ESchema schema
+    let tname = TableName (T.unpack table)
+    tid                                  <- tagRead tname node (ESchema schema)
 
     -- Expect the bound type to equal the provided default object type
     case singEq partialReadTy objTy' of
@@ -1281,8 +1285,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Read node table key -> do
     Some SStr key'               <- translateNode key
     EType objTy@(SObject schema) <- translateType node
-    tid                          <- tagRead node $ ESchema schema
-    pure $ Some objTy $ Read objTy Nothing tid (TableName (T.unpack table)) key'
+    let tname = TableName (T.unpack table)
+    tid                          <- tagRead tname node (ESchema schema)
+    pure $ Some objTy $ Read objTy Nothing tid tname key'
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
@@ -1306,14 +1311,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
             else ESchema subSchema)
           tableSchema
 
+    let tname = TableName (T.unpack table)
+
     case eFilteredSchema of
       ESchema filteredSchema -> do
         let filteredObjTy = mkSObject filteredSchema
-        tid <- tagRead node $ ESchema tableSchema
+        tid <- tagRead tname node (ESchema tableSchema)
         pure $ Some filteredObjTy $
           CoreTerm $ ObjTake tableObjTy
             (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> litColumns)))
-            (Read tableObjTy Nothing tid (TableName (T.unpack table)) key')
+            (Read tableObjTy Nothing tid tname key')
 
   AST_At node index obj -> do
     obj'     <- translateNode obj
