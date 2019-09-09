@@ -1,13 +1,19 @@
+{-# LANGUAGE OverloadedStrings #-}
 
 module Pact.GasModel where
 
 
 import Control.Exception              (bracket)
+import Statistics.Types               (Estimate(..))
 
-import qualified Criterion.Main       as C
-import qualified Data.HashMap.Strict  as HM
-import qualified Data.List.NonEmpty   as NEL
-import qualified Data.Text            as T
+import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Criterion.Main             as C
+import qualified Criterion                  as C
+import qualified Criterion.Types            as C
+import qualified Data.HashMap.Strict        as HM
+import qualified Data.List.NonEmpty         as NEL
+import qualified Data.Text                  as T
+import qualified Data.Csv                   as Csv
 
 
 -- Internal exports
@@ -42,7 +48,9 @@ mockRuns
   :: GasUnitTests
   -> IO ()
 mockRuns tests = do
+  putStrLn "SQLITE DATABASE"
   mapM_ run (NEL.toList $ _gasUnitTestsSqlite tests)
+  putStrLn "MOCK DATABASE"
   mapM_ run (NEL.toList $ _gasUnitTestsMock tests)
   where
     run test = do
@@ -68,41 +76,59 @@ mockRuns' tests = do
       return (res,state)
 
 
-benchRun
-  :: GasTest e
-  -> (EvalEnv e, EvalState)
-  -> C.Benchmark
-benchRun (GasTest expr desc _ _) (env, state) =
-  C.env (compileCode expr) execBench
-  where
-    execBench terms =
-      C.bench (T.unpack desc) $
-              C.nfIO (exec state env terms)
+type BenchResults = (T.Text, T.Text, T.Text, Double, Double, Double)
+csvHeader :: (T.Text, T.Text, T.Text, T.Text, T.Text, T.Text)
+csvHeader = ("function", "backendType", "description", "mean1", "mean2", "mean3")
 
 bench
-  :: GasTest e
-  -> C.Benchmark
-bench test = C.envWithCleanup setup teardown run
+  :: T.Text
+  -> T.Text
+  -> GasTest e
+  -> IO BenchResults
+bench funName backendType test = do
+  terms <- compileCode (_gasTestExpression test)
+  bracket setup teardown $ \s -> do
+    putStrLn $ T.unpack funName ++ "/" ++
+               T.unpack backendType ++ "/" ++
+               T.unpack (_gasTestDescription test)
+    r1 <- C.benchmark' (run terms s)
+    r2 <- C.benchmark' (run terms s)
+    r3 <- C.benchmark' (run terms s)
+    return (funName,
+            backendType,
+            (_gasTestDescription test),
+            (estPoint $ C.anMean $ C.reportAnalysis r1),
+            (estPoint $ C.anMean $ C.reportAnalysis r2),
+            (estPoint $ C.anMean $ C.reportAnalysis r3))
+
   where
     setup = do
       s <- _gasTestSetup test
       return $ NoopNFData s
     teardown (NoopNFData env) = do
       (_gasTestSetupCleanup test) env
-    run ~(NoopNFData (env,state)) =
-      benchRun test (env,state)
+    run terms ~(NoopNFData (env, state)) =
+          C.nfIO (exec state env terms)
+
 
 benches
   :: T.Text
   -> GasUnitTests
-  -> C.Benchmark
-benches groupName allTests = C.bgroup (T.unpack groupName)
-     [ C.bgroup "SQLiteDb" (runBenches $ _gasUnitTestsSqlite allTests)
-     , C.bgroup "MockDb" (runBenches $ _gasUnitTestsMock allTests)
-     ]
-  where
-    runBenches tests
-      = map bench $ NEL.toList tests
+  -> IO [BenchResults]
+benches funName tests = do
+  sqliteBenches <- mapM (bench funName "SQLiteDb")
+                   (NEL.toList $ _gasUnitTestsSqlite tests)
+  mockBenches <- mapM (bench funName "MockDb")
+                 (NEL.toList $ _gasUnitTestsSqlite tests)
+  return $ sqliteBenches <> mockBenches
+
+
+writeCSV :: [BenchResults] -> IO ()
+writeCSV results = do
+  let content = Csv.encode results
+      header = Csv.encode [csvHeader]
+  BSL8.writeFile "gas-model.csv" (header <> content)
+
 
 main :: IO ()
 main = do
@@ -113,9 +139,11 @@ main = do
 
   -- Run benchmarks
   putStrLn "Running benchmarks"
-  C.defaultMain $
-    map (\(n,t) -> benches (asString n) t)
-        (HM.toList unitTests)
+  allBenches <- mapM (\(n,t) -> benches (asString n) t)
+                (HM.toList unitTests)
+
+  putStrLn "Exporting benchmarks"
+  writeCSV (concat allBenches)
 
   -- Report gas testing coverage
   putStrLn "Reporting coverage"
