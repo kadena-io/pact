@@ -283,7 +283,7 @@ test-suite hspec
               , errors >= 2.3
               , exceptions
               , filepath
-              , hedgehog == 0.6.*
+              , hedgehog == 1.0.*
               , hspec
               , hw-hspec-hedgehog == 0.1.*
               , intervals

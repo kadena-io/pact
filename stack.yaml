@@ -15,3 +15,10 @@ extra-deps:
   # --- Custom Pins --- #
   - git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
+
+  # pre-release of hedgehog because we need de401e9 for its relaxed typeclass
+  # constraint:
+  - git: https://github.com/hedgehogqa/haskell-hedgehog.git
+    commit: 921e4af72a181f01d90816fd7055b823bf885b3b
+    subdirs:
+      - hedgehog
