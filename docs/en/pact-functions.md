@@ -248,6 +248,34 @@ pact> (int-to-str 64 43981)
 ```
 
 
+### is-ascii {#is-ascii}
+
+*input*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Check that a string INPUT conforms to the ASCII character set
+```lisp
+pact> (is-ascii "hello world")
+true
+pact> (is-ascii "I am nÖt ascii")
+false
+```
+
+
+### is-charset {#is-charset}
+
+*char-set*&nbsp;`string` *input*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Check that a string INPUT conforms to the ASCII character set
+```lisp
+pact> (is-charset "ascii" "hello world")
+true
+pact> (is-charset "latin" "I am nÖt ascii, but I am Latin!")
+true
+```
+
+
 ### length {#length}
 
 *x*&nbsp;`<a[[<l>],string,object:<{o}>]>` *&rarr;*&nbsp;`integer`

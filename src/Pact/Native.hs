@@ -58,7 +58,7 @@ import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
-import Data.Char (digitToInt,intToDigit)
+import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
 import Data.Foldable
@@ -235,7 +235,7 @@ intToStrDef = defRNative "int-to-str" intToStr
     intToStr _ [b'@(TLitInteger base),v'@(TLitInteger v)]
       | base >= 2 && base <= 16 =
           return $ toTerm $ T.pack $
-          showIntAtBase base intToDigit v ""
+          showIntAtBase base Char.intToDigit v ""
       | base == 64 && v >= 0 = doBase64 v
       | base == 64 = evalError' v' "Only positive values allowed for base64URL conversion."
       | otherwise = evalError' b' "Invalid base, must be 2-16 or 64"
@@ -487,6 +487,40 @@ atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyV
   ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
   "Index LIST at IDX, or get value with key IDX from OBJECT."
 
+-- | Check whether a character string consists of ascii characters
+--
+isAsciiDef :: NativeDef
+isAsciiDef =
+  defRNative "is-ascii" isAscii
+  (funType tTyBool [("input", tTyString)])
+  ["(is-ascii \"hello world\")", "(is-ascii \"I am nÖt ascii\")"]
+  "Check that a string INPUT conforms to the ASCII character set"
+  where
+    isAscii :: RNativeFun e
+    isAscii i as = isCharset i ([toTerm ("ascii" :: Text)] <> as)
+
+isCharsetDef :: NativeDef
+isCharsetDef =
+  defRNative "is-charset" isCharset
+  (funType tTyBool [("char-set", tTyString), ("input", tTyString)])
+  ["(is-charset \"ascii\" \"hello world\")"
+  , "(is-charset \"latin\" \"I am nÖt ascii, but I am Latin!\")"
+  ]
+  "Check that a string INPUT conforms to the ASCII character set"
+
+-- | Check that a given string conforms to a specified character set.
+-- Supported character sets include latin (ISO 8859-1)
+--
+isCharset :: RNativeFun e
+isCharset i as = case as of
+  [TLitString cs, TLitString t] -> case cs of
+    "ascii" -> go Char.isAscii t
+    "latin" -> go Char.isLatin1 t
+    _ -> evalError' i $ "Unsupported character set: " <> pretty cs
+  _ -> argsError i as
+  where
+    go k = return . toTerm . all k . T.unpack
+
 langDefs :: NativeModule
 langDefs =
     ("General",[
@@ -579,6 +613,8 @@ langDefs =
     ,namespaceDef
     ,chainDataDef
     ,chainDataSchema
+    ,isAsciiDef
+    ,isCharsetDef
     ])
     where
           d = mkTyVar "d" []
@@ -905,7 +941,7 @@ baseStrToInt base t =
   where
     go :: Integer -> Char -> Either Text Integer
     go acc c' =
-      let val = fromIntegral . digitToInt $ c'
+      let val = fromIntegral . Char.digitToInt $ c'
       in if val < base
          then pure $ base * acc + val
          else Left $ "character '" <> T.singleton c' <>
