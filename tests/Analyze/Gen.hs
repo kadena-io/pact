@@ -440,9 +440,7 @@ genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
   , do
        let genFormattableTerm = Gen.choice
              [ genTerm intSize
-             , do
-                  x <- genTerm strSize
-                  pure x
+             , genTerm strSize
              , genTerm BoundedBool
              ]
        (str, tms) <- Gen.choice
