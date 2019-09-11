@@ -109,7 +109,7 @@ Top level only: this function will fail if used in module code.
 *keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
-Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end.
+Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range.
 ```lisp
 pact> (drop 2 "vwxyz")
 "xyz"
@@ -480,7 +480,7 @@ pact> (str-to-int 64 "q80")
 *keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
-Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end.
+Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range.
 ```lisp
 pact> (take 2 "abcd")
 "ab"
