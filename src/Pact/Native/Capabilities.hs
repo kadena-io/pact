@@ -81,7 +81,7 @@ withCapability =
 evalCap :: Bool -> App (Term Ref) -> Eval e (Maybe Capability)
 evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
       when inModule $ guardForModuleCall _appInfo _dModule $ return ()
-      prep@(args,_) <- prepareUserAppArgs d _appArgs
+      prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
       let cap = UserCapability _dModule _dDefName args
       acquired <- acquireCapability cap $ do
         g <- computeUserAppGas d _appInfo
@@ -106,7 +106,7 @@ requireCapability =
   where
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
-      (args,_) <- prepareUserAppArgs d _appArgs
+      (args,_) <- prepareUserAppArgs d _appArgs _appInfo
       let cap = UserCapability _dModule _dDefName args
       granted <- capabilityGranted cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap

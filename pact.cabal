@@ -170,7 +170,7 @@ library
                      , hspec >= 2.2.4 && < 2.8
                      , lens >= 4.14 && < 4.18
                      , lens-aeson >= 1.0.0.5 && < 1.1
-                     , megaparsec >= 6
+                     , megaparsec >= 7
                      , mtl >= 2.2.1 && < 2.3
                      , old-locale >= 1.0.0.7 && < 1.1
                      , optparse-applicative >= 0.12.1.0 && < 0.15
@@ -214,7 +214,7 @@ library
                 , haskeline >= 0.7.3 && < 0.8
                 , http-client
                 , memory
-                , neat-interpolation
+                , neat-interpolation >= 0.3.2.4
                 , safe-exceptions >= 0.1.5.0 && < 0.2
                 , sbv >= 7.11
                 , servant-server

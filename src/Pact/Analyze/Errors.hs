@@ -32,10 +32,15 @@ data AnalyzeFailureNoLoc
   | OpaqueValEncountered
   | VarNotInScope Text VarId
   | UnsupportedObjectInDbCell
-  | InvalidDbWrite Pact.WriteType ESchema EType
+  | DisallowedWrite TableName Pact.WriteType DbRestriction
+  | DisallowedRead TableName DbRestriction
   -- For cases we don't handle yet:
   | UnhandledTerm Text
   deriving (Eq, Show)
+
+restrictionContextName :: DbRestriction -> Text
+restrictionContextName DisallowDb = "pure"
+restrictionContextName DisallowWrites = "read-only"
 
 describeAnalyzeFailureNoLoc :: AnalyzeFailureNoLoc -> Text
 describeAnalyzeFailureNoLoc = \case
@@ -52,7 +57,6 @@ describeAnalyzeFailureNoLoc = \case
     UnsupportedUnaryOp op -> "unsupported unary arithmetic op: " <> tShow op
     UnsupportedRoundingLikeOp1 op -> "unsupported rounding (1) op: " <> tShow op
     UnsupportedRoundingLikeOp2 op -> "unsupported rounding (2) op: " <> tShow op
-
     -- these are likely user-facing errors
     FailureMessage msg -> msg
     UnhandledTerm termText -> foundUnsupported termText
@@ -64,7 +68,8 @@ describeAnalyzeFailureNoLoc = \case
     --
     OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
     UnsupportedObjectInDbCell -> "We encountered the use of an object in a DB cell, which we don't yet support. " <> pleaseReportThis
-    InvalidDbWrite writeType sch obj -> "invalid " <> tShow writeType <> " of " <> tShow obj <> " to DB row with schema " <> tShow sch
+    DisallowedRead tn res -> "Encountered disallowed DB read from table " <> tShow tn <> " in " <> restrictionContextName res <> " context"
+    DisallowedWrite tn writeType res -> "Encountered disallowed DB " <> T.toLower (tShow writeType) <> " to table " <> tShow tn <> " in " <> restrictionContextName res <> " context"
 
   where
     foundUnsupported :: Text -> Text

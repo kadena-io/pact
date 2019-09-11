@@ -72,17 +72,8 @@ data Cursor = Cursor
   } deriving (Show)
 instance Default Cursor where def = Cursor def def
 
--- | adapted from Text.Megaparsec.Stream
-defaultAdvance1
-  :: Pos               -- ^ Tab width (unused)
-  -> SourcePos         -- ^ Current position
-  -> t                 -- ^ Current token
-  -> SourcePos         -- ^ Incremented position
-defaultAdvance1 _width (SourcePos n l c) _t = SourcePos n l (c <> pos1)
-{-# INLINE defaultAdvance1 #-}
 
--- | Adapt Cursor to MP Stream, patterned after
--- [Char] instance.
+-- | Adapt Cursor to MP Stream
 instance Stream Cursor where
   type Token Cursor = Exp Info
   type Tokens Cursor = [Exp Info]
@@ -91,8 +82,10 @@ instance Stream Cursor where
   chunkToTokens Proxy = id
   chunkLength Proxy = length
   chunkEmpty Proxy = null
-  advance1 Proxy = defaultAdvance1
-  advanceN Proxy w = foldl' (defaultAdvance1 w)
+  reachOffset _ ps = (pstateSourcePos ps,"reachOffset-unsupported",ps)
+  -- ^ assuming this is unused (undefined passed unit tests), but
+  -- if the unsupported shows up then we need something better
+  showTokens Proxy ts = renderCompactString $ toList ts
   take1_ Cursor{..} = case _cStream of
     [] -> Nothing
     (t:ts) -> Just (t, Cursor _cContext ts)
@@ -101,6 +94,7 @@ instance Stream Cursor where
     | null _cStream = Nothing
     | otherwise = Just $ second (Cursor _cContext) $ splitAt n _cStream
   takeWhile_ f Cursor{..} = second (Cursor _cContext) $ span f _cStream
+
 
 -- | Capture last-parsed Exp, plus arbitrary state.
 data ParseState a = ParseState
@@ -134,16 +128,24 @@ runCompile :: ExpParse s a -> ParseState s -> Exp Info -> Either PactError a
 runCompile act cs a =
   case runParser (runStateT act cs) "" (Cursor Nothing [a]) of
     (Right (r,_)) -> Right r
-    (Left (TrivialError _ itemMay expect)) -> Left $ PactError SyntaxError inf [] (prettyString msg)
-      where expectList = S.toList expect
-            items = maybe expectList (:expectList) itemMay
-            msg = intercalate ", " msgs
-            (inf,msgs) = foldr go (def,[]) items
-            go item (ri,rmsgs) = case item of
-              Label s -> (ri,toList s:rmsgs)
-              EndOfInput -> (ri,"Unexpected end of input":rmsgs)
-              Tokens (x :| _) -> (getInfo x,rmsgs)
-    (Left (FancyError _ errs)) -> Left $ PactError SyntaxError def [] (prettyString $ show errs)
+    (Left (ParseErrorBundle es _)) ->
+      Left $ PactError SyntaxError inf [] (prettyString msg)
+      where
+        msg = intercalate ", " msgs
+        -- concat errors in bundle. Info is extracted from
+        -- any 'Tokens' found.
+        (inf,msgs) = foldr go (def,[]) (toList es)
+        go e (i,ms) = case e of
+          -- concat errors in TrivialError
+          (TrivialError _ itemMay expect) -> foldr go' (i,ms) items
+            where expectList = S.toList expect
+                  items = maybe expectList (:expectList) itemMay
+                  go' item (ri,rmsgs) = case item of
+                    Label s -> (ri,toList s:rmsgs)
+                    EndOfInput -> (ri,"Unexpected end of input":rmsgs)
+                    Tokens (x :| _) -> (getInfo x,rmsgs)
+          -- FancyError isn't used but add just in case
+          (FancyError _ errs) -> (i,show errs:ms)
 
 
 {-# INLINE strErr #-}
@@ -190,28 +192,25 @@ nes x = x :| []
 -- | Test a token in the stream for epsilon/"trivial" acceptance,
 -- allowing for further tests on the result before committing.
 -- This is copypasta from Megaparsec's implementation of 'token' as
--- of version 6.5.0, so this might break in future MP versions.
+-- of version 7.0.x, so this might break in future MP versions.
 pTokenEpsilon :: forall e s m a. Stream s
-  => (Token s -> Either ( Maybe (ErrorItem (Token s))
-                        , S.Set (ErrorItem (Token s)) ) a)
-  -> Maybe (Token s)
+  => (Token s -> Maybe a)
+  -> S.Set (ErrorItem (Token s))
   -> ParsecT e s m a
-pTokenEpsilon test mtoken = ParsecT $ \s@(State input (pos:|z) tp w) _ _ eok eerr ->
+pTokenEpsilon test ps = ParsecT $ \s@(State input o pst) _ _ eok eerr ->
   case take1_ input of
     Nothing ->
       let us = pure EndOfInput
-          ps = maybe S.empty (S.singleton . Tokens . nes) mtoken
-      in eerr (TrivialError (pos:|z) us ps) s
+      in eerr (TrivialError o us ps) s
     Just (c,cs) ->
       case test c of
-        Left (us, ps) ->
-          let !apos = positionAt1 (Proxy :: Proxy s) pos c
-          in eerr (TrivialError (apos:|z) us ps)
-                  (State input (apos:|z) tp w)
-        Right x ->
-          let !npos = advance1 (Proxy :: Proxy s) w pos c
-              newstate = State cs (npos:|z) (tp + 1) w
-          in eok x newstate mempty -- this is the only change from 'token'
+        Nothing ->
+          let us = (Just . Tokens . nes) c
+          in eerr (TrivialError o us ps)
+                  (State input o pst)
+        Just x ->
+          eok x (State cs (o + 1) pst) mempty -- this is only change from 'pToken'
+-- {-# INLINE pToken #-}
 
 -- | Call commit continuation with current state.
 pCommit :: forall e s m. ParsecT e s m ()
@@ -226,18 +225,16 @@ commit = lift pCommit
 exp :: String -> Prism' (Exp Info) a -> ExpParse s (a,Exp Info)
 exp ty prism = do
   let test i = case firstOf prism i of
-        Just a -> Right (a,i)
-        Nothing -> err i ("Expected: " ++ ty)
-      err i s = Left (pure (strErr s),
-                      S.singleton (Tokens (i:|[])))
-  r <- context >>= (lift . pTokenEpsilon test)
+        Just a -> Just (a,i)
+        Nothing -> Nothing
+  r <- lift $! pTokenEpsilon test (S.fromList [strErr $ "Expected: " ++ ty])
   psCurrent .= snd r
   return r
 
 -- | Recognize any Exp, committing.
 {-# INLINE anyExp #-}
 anyExp :: ExpParse s (Exp Info)
-anyExp = token Right Nothing
+anyExp = token Just mempty
 
 -- | Enter a list context, setting the token stream to its contents
 {-# INLINE enter #-}

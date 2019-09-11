@@ -224,6 +224,16 @@ expectVerified' model code = withFrozenCallStack $ do
 expectFalsified :: HasCallStack => Text -> Spec
 expectFalsified = withFrozenCallStack $ expectFalsified' ""
 
+expectFalsifiedMessage :: HasCallStack => Text -> Text -> Spec
+expectFalsifiedMessage code needleMsg = withFrozenCallStack $ do
+  res <- runIO $ runVerification $ wrap code ""
+  it "passes in-code checks" $
+    res `shouldSatisfy` \case
+      Just (TestCheckFailure cf) ->
+        needleMsg `T.isInfixOf` (describeCheckFailure cf)
+      _ ->
+        False
+
 expectFalsified' :: HasCallStack => Text -> Text -> Spec
 expectFalsified' model code = withFrozenCallStack $ do
   res <- runIO $ runVerification $ wrap code model
@@ -241,6 +251,18 @@ expectFail code check = withFrozenCallStack $ expectTest
   testEnv { testCode  = wrap code ""
           , testCheck = check
           , testPred  = (`shouldSatisfy` isJust)
+          }
+
+expectFailureMessage :: HasCallStack => Text -> Text -> Spec
+expectFailureMessage code needleMsg = withFrozenCallStack $ expectTest
+  testEnv { testCode = wrap code ""
+          , testCheck = Valid (CoreProp $ IntegerComparison Eq 0 0)
+          , testPred =
+              \res -> res `shouldSatisfy` \case
+                        Just (TestCheckFailure cf) ->
+                          needleMsg `T.isInfixOf` (describeCheckFailure cf)
+                        _ ->
+                          False
           }
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
@@ -507,6 +529,58 @@ spec = describe "analyze" $ do
       Inj Success .&&
         (CoreProp $ BoolComparison Eq (Inj Result :: Prop 'TyBool) sTrue)
 
+  describe "enforce.purity.read" $ do
+    let code =
+          [text|
+            (defschema row i:integer)
+            (deftable integers:{row})
+
+            (defun test:bool ()
+              (enforce
+                (= 1 (at "i" (read integers "key")))
+                ""))
+          |]
+    expectFailureMessage code "disallowed DB read"
+
+  describe "enforce.purity.write" $ do
+    let code =
+          [text|
+            (defschema row i:integer)
+            (deftable integers:{row})
+
+            (defun test:bool ()
+              (enforce
+                (= "key" (write integers "key" {"i": 10}))
+                ""))
+          |]
+    expectFailureMessage code "disallowed DB write"
+
+  describe "enforce.purity.insert" $ do
+    let code =
+          [text|
+            (defschema row i:integer)
+            (deftable integers:{row})
+
+            (defun test:bool ()
+              (enforce
+                (= "key" (insert integers "key" {"i": 10}))
+                ""))
+          |]
+    expectFailureMessage code "disallowed DB insert"
+
+  describe "enforce.purity.update" $ do
+    let code =
+          [text|
+            (defschema row i:integer)
+            (deftable integers:{row})
+
+            (defun test:bool ()
+              (enforce
+                (= "key" (update integers "key" {"i": 10}))
+                ""))
+          |]
+    expectFailureMessage code "disallowed DB update"
+
   describe "read-keyset.equality" $ do
     let code =
           [text|
@@ -551,6 +625,17 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable Success'
 
+  describe "enforce-keyset.purity" $ do
+    let code =
+          [text|
+            (defschema row ks:keyset)
+            (deftable keysets:{row})
+
+            (defun test:bool ()
+              (enforce-keyset (at "ks" (read keysets "123"))))
+          |]
+    expectFailureMessage code "disallowed DB read"
+
   describe "enforce-guard" $ do
     let code =
           [text|
@@ -559,6 +644,17 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable Success'
+
+  describe "enforce-guard.purity" $ do
+    let code =
+          [text|
+            (defschema row ks:keyset)
+            (deftable keysets:{row})
+
+            (defun test:bool ()
+              (enforce-guard (at "ks" (read keysets "123"))))
+          |]
+    expectFailureMessage code "disallowed DB read"
 
   describe "read-decimal" $ do
     let code =
@@ -1299,6 +1395,53 @@ spec = describe "analyze" $ do
 
     expectPass code $ Valid Success'
 
+  describe "enforce-one.allow-reads" $ do
+    let code =
+          [text|
+            (defschema row b:bool)
+            (deftable bools:{row})
+
+            (defun test:bool ()
+              (enforce-one ""
+                [(enforce false "")
+                 (at "b" (read bools "foo"))
+                 ]))
+          |]
+
+    expectPass code $ Satisfiable Success'
+
+  describe "enforce-one.disallow-writes" $ do
+    let code =
+          [text|
+            (defschema row b:bool)
+            (deftable bools:{row})
+
+            (defun test:bool ()
+              (enforce-one ""
+                [(enforce false "")
+                 (= "b" (write bools "foo" {"b": true}))
+                 ]))
+          |]
+
+    expectFailureMessage code "disallowed DB write"
+
+  describe "enforce-one.purity-from-outer-enforce" $ do
+    let code =
+          [text|
+            (defschema row b:bool)
+            (deftable bools:{row})
+
+            (defun test:bool ()
+              (enforce          ; enforce does not allow reads in any subexpr
+                (enforce-one "" ; enforce-one on its own allows reads
+                  [(enforce false "")
+                   (at "b" (read bools "foo"))
+                   ])
+                ""))
+          |]
+
+    expectFailureMessage code "disallowed DB read"
+
   describe "enforce-one.single-case-regression" $ do
     let code =
           [text|
@@ -1963,6 +2106,17 @@ spec = describe "analyze" $ do
                   (= (at "sender" (chain-data))
                      "anything")
                   "sender can not be anything"))
+            |]
+      in expectPass code $ Satisfiable Success'
+
+    describe "prev-block-hash field" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (at "prev-block-hash" (chain-data))
+                     "anything")
+                  "prev-block-hash can not be anything"))
             |]
       in expectPass code $ Satisfiable Success'
 
@@ -3029,8 +3183,18 @@ spec = describe "analyze" $ do
       expectTrace CheckDefun code (sNot Success')
         [push, assert, {- failure -} path, {- success -} path, pop]
 
-    it "doesn't include events after the first failure in an enforce-one case" $
-      pendingWith "use of resumptionPath"
+    describe "doesn't include events after the first failure in an enforce-one case" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce-one ""
+                  [(let ((x (enforce false "")))
+                     (enforce true "")) ; <-- shouldn't see this!
+                   true
+                  ]))
+            |]
+      expectTrace CheckDefun code (sNot Success')
+        [push, assert, {- failure -} path, {- success -} path, pop]
 
     -- The falsifying model we should get executes the first step successfully,
     -- then cancels.
@@ -3758,3 +3922,11 @@ spec = describe "analyze" $ do
       )
       |]
     it "checks when spelled correctly" $ isNothing res'
+
+  describe "vacuous property produces error" $ do
+    expectFalsifiedMessage [text|
+      (defun test:bool (x:integer)
+        @model [(property false)] ; here we can "prove" anything with property
+        (enforce false ""))
+      |]
+      "Vacuous property encountered!"

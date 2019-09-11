@@ -120,8 +120,11 @@ beforeAfterLens = \case
   Before -> before
   After  -> after
 
+txSucceeds :: Query (S Bool)
+txSucceeds = view $ qeAnalyzeState.succeeds
+
 evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
-evalPropSpecific Success = view $ qeAnalyzeState.succeeds
+evalPropSpecific Success = txSucceeds
 evalPropSpecific Abort = sNot <$> evalPropSpecific Success
 evalPropSpecific GovPasses = do
   guard <- view moduleGuard

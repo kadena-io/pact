@@ -24,7 +24,7 @@ module Pact.Types.ChainMeta
     -- * optics
   , aFrom, aTo
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmTTL, pmCreationTime
-  , pdPublicMeta, pdBlockHeight, pdBlockTime
+  , pdPublicMeta, pdBlockHeight, pdBlockTime, pdPrevBlockHash
   ) where
 
 
@@ -144,10 +144,11 @@ data PublicData = PublicData
   { _pdPublicMeta :: !PublicMeta
   , _pdBlockHeight :: !Word64
   , _pdBlockTime :: !Int64
+  , _pdPrevBlockHash :: !Text
   }
   deriving (Show, Eq, Generic)
 makeLenses ''PublicData
 
 instance ToJSON PublicData where toJSON = lensyToJSON 3
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
-instance Default PublicData where def = PublicData def def def
+instance Default PublicData where def = PublicData def def def def

@@ -16,8 +16,8 @@ import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', preview, use,
                                               view, (%=), (%~), (&), (+=), (.=),
                                               (.~), (<&>), (?~), (?=), (^.),
-                                              (^?), _1, _2, _head, _Just,
-                                              ifoldlM)
+                                              (^?), (<>~), _1, _2, _head,
+                                              _Just, ifoldlM)
 import           Control.Monad               (void, when)
 import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Except        (Except, MonadError (throwError))
@@ -413,6 +413,9 @@ extendingGrants newGrants = local $ aeActiveGrants %~ (<> newGrants)
 isGranted :: Token -> Analyze (S Bool)
 isGranted t = view $ activeGrants.tokenGranted t
 
+restrictingDbAccess :: DbRestriction -> Analyze a -> Analyze a
+restrictingDbAccess res = local $ aeDbRestriction <>~ Just res
+
 evalTerm :: forall a. SingI a => Term a -> Analyze (S (Concrete a))
 evalTerm = \case
   CoreTerm a -> evalCore a
@@ -427,9 +430,8 @@ evalTerm = \case
       (evalTerm then')
       (evalTerm else')
 
-  -- TODO: check that the body of enforce is pure
   Enforce mTid cond -> do
-    cond' <- evalTerm cond
+    cond' <- restrictingDbAccess DisallowDb $ evalTerm cond
     maybe (pure ()) (`tagAssert` cond') mTid
     succeeds %= (.&& cond')
     pure sTrue
@@ -439,16 +441,13 @@ evalTerm = \case
     succeeds .= sFalse
     pure sTrue           -- <- this value doesn't matter.
 
-  -- TODO: check that each cond is pure. checking that @Enforce@ terms are pure
-  -- does *NOT* suffice; we can have arbitrary expressions in an @enforce-one@
-  -- list.
   EnforceOne (Right conds) -> do
     initSucceeds <- use succeeds
 
     (result, anySucceeded) <- foldlM
       (\(prevRes, earlierSuccess) ((failTag, passTag), cond) -> do
         succeeds .= sTrue
-        res <- evalTerm cond
+        res <- restrictingDbAccess DisallowWrites $ evalTerm cond
         currentSucceeded <- use succeeds
         tagFork passTag failTag (sNot earlierSuccess) currentSucceeded
 
@@ -479,6 +478,12 @@ evalTerm = \case
     pure granted
 
   Read objTy mDefault tid tn rowKey -> do
+    currRestriction <- view aeDbRestriction
+    case currRestriction of
+      Just res@DisallowDb -> throwErrorNoLoc $ DisallowedRead tn res
+      Just DisallowWrites -> pure ()
+      Nothing -> pure ()
+
     sRk <- symRowKey <$> evalTerm rowKey
     tableRead tn .= sTrue
     rowReadCount tn sRk += 1
@@ -500,6 +505,11 @@ evalTerm = \case
         iteS readSucceeds readObject (eval defObj)
 
   Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
+    currRestriction <- view aeDbRestriction
+    case currRestriction of
+      Just res -> throwErrorNoLoc $ DisallowedWrite tn writeType res
+      Nothing -> pure ()
+
     obj <- withSing objTy $ evalTerm objT
     sRk <- symRowKey <$> evalTerm rowKey
 
@@ -574,17 +584,14 @@ evalTerm = \case
     succeeds %= (.&& whetherInPact)
     view aeTrivialGuard
 
-  --
-  -- TODO: really, for stuff like this, we should be erroring out if we detect
-  --       that a program e.g. tries to write the DB in a guard
-  --
   MkUserGuard guard bodyET -> do
     -- NOTE: a user guard can not access user tables, so we can run it ahead of
     -- its use and store whether the guard permits the tx to succeed. If we
     -- instead deferred the execution to the use (rather than closure) site,
     -- then we would need to capture the environment here for later use.
     prevSucceeds <- use succeeds
-    void $ evalETerm bodyET
+    restrictingDbAccess DisallowDb $
+      void $ evalETerm bodyET
     postGuardSucceeds <- use succeeds
     succeeds .= prevSucceeds
 
