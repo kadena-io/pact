@@ -10,7 +10,34 @@ let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
 in {
   pact = doCoverage (addBuildDepend super.pact pkgs.z3);
 
+  Glob = whenGhcjs dontCheck super.Glob;
+  algebraic-graphs = whenGhcjs dontCheck super.algebraic-graphs;
+  base-compat-batteries = whenGhcjs dontCheck super.base-compat-batteries;
+  bound = whenGhcjs dontCheck super.bound;
+  bsb-http-chunked = whenGhcjs dontCheck super.bsb-http-chunked;
+  bytes = whenGhcjs dontCheck super.bytes;
+  extra = whenGhcjs dontCheck super.extra;
   haskeline = guardGhcjs super.haskeline;
+  http-date = whenGhcjs dontCheck super.http-date;
+  http-media = whenGhcjs dontCheck super.http-media;
+  http2 = whenGhcjs dontCheck super.http2;
+  inspection-testing = guardGhcjs super.inspection-testing;
+  intervals = whenGhcjs dontCheck super.intervals;
+  iproute = whenGhcjs dontCheck super.iproute;
+  lens-aeson = whenGhcjs dontCheck super.lens-aeson;
+  network-byte-order = whenGhcjs dontCheck super.network-byte-order;
+  prettyprinter-ansi-terminal = whenGhcjs dontCheck super.prettyprinter-ansi-terminal;
+  prettyprinter-convert-ansi-wl-pprint = whenGhcjs dontCheck super.prettyprinter-convert-ansi-wl-pprint;
+  servant = whenGhcjs dontCheck super.servant;
+  servant-client = whenGhcjs dontCheck super.servant-client;
+  servant-server = whenGhcjs dontCheck super.servant-server;
+  swagger2 = whenGhcjs dontCheck super.swagger2;
+  tdigest = whenGhcjs dontCheck super.tdigest;
+  temporary = whenGhcjs dontCheck super.temporary;
+  trifecta = whenGhcjs dontCheck super.trifecta;
+  unix-time = whenGhcjs dontCheck super.unix-time;
+  wai-app-static = whenGhcjs dontCheck super.wai-app-static;
+  wai-extra = whenGhcjs dontCheck super.wai-extra;
 
   megaparsec = dontCheck (callHackageDirect {
     pkg = "megaparsec";
