@@ -503,20 +503,23 @@ isCharsetDef :: NativeDef
 isCharsetDef =
   defRNative "is-charset" isCharset
   (funType tTyBool [("char-set", tTyString), ("input", tTyString)])
-  ["(is-charset \"ascii\" \"hello world\")"
-  , "(is-charset \"latin1\" \"I am nÖt ascii, but I am Latin1!\")"
+  [ "(is-charset \"ascii\" \"hello world\")"
+  , "(is-charset \"iso-8859-1\" \"I am nÖt ascii, but I am latin1!\")"
   ]
-  "Check that a string INPUT conforms to the a supported character set. \
-  \Character sets currently supported are latin1 (ISO 8859-1) and ascii."
+  "Check that a string INPUT conforms to the a supported character set CHAR-SET.       \
+  \Character sets currently supported are: 'iso-8859-1' (latin1), and 'ascii' (ASCII). \
+  \Support for sets up through ISO 8859-5 supplement will be added in the future."
 
 -- | Check that a given string conforms to a specified character set.
 -- Supported character sets include latin (ISO 8859-1)
+--
+-- TODO: add support for ISO-8859-5 standard
 --
 isCharset :: RNativeFun e
 isCharset i as = case as of
   [TLitString cs, TLitString t] -> case cs of
     "ascii" -> go Char.isAscii t
-    "latin1" -> go Char.isLatin1 t
+    "iso-8859-1" -> go Char.isLatin1 t
     _ -> evalError' i $ "Unsupported character set: " <> pretty cs
   _ -> argsError i as
   where
