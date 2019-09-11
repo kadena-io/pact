@@ -267,11 +267,11 @@ false
 *char-set*&nbsp;`string` *input*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Check that a string INPUT conforms to the ASCII character set
+Check that a string INPUT conforms to the a supported character set. Character sets currently supported are latin1 (ISO 8859-1) and ascii.
 ```lisp
 pact> (is-charset "ascii" "hello world")
 true
-pact> (is-charset "latin" "I am nÖt ascii, but I am Latin!")
+pact> (is-charset "latin1" "I am nÖt ascii, but I am Latin1!")
 true
 ```
 
