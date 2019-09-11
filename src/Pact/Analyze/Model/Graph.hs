@@ -29,7 +29,10 @@ linearize model = go traceEvents
     go = foldr
       (\event (ExecutionTrace futureEvents mRes) ->
         let continue = ExecutionTrace (event : futureEvents) mRes
-            stop     = ExecutionTrace [event] Nothing
+            continueUntil path = ExecutionTrace
+              (event : dropWhile (/= TraceSubpathStart path) futureEvents)
+              mRes
+            stop = ExecutionTrace [event] Nothing
 
             handleDbAccess
               :: Traversal' (ModelTags 'Concrete) (SBV Bool)
@@ -54,21 +57,8 @@ linearize model = go traceEvents
                      error "impossible: missing enforce tag, or symbolic value"
                    Just False ->
                      case recov of
-                       Recoverable _resumptionPath ->
-                         --
-                         -- TODO: instead of just continuing, we should
-                         -- actually skip future events (in the same case)
-                         -- until we hit this "resumption path".  this would
-                         -- produce better output for cases with any events
-                         -- after a failed enforce:
-                         --
-                         --   (enforce-one
-                         --     [(let ((x (enforce false)))
-                         --        (enforce true)) ; <- we should not see this
-                         --      true
-                         --      ])
-                         --
-                         continue
+                       Recoverable resumptionPath ->
+                         continueUntil resumptionPath
                        Unrecoverable ->
                          stop
                    Just True ->
@@ -82,9 +72,9 @@ linearize model = go traceEvents
              TraceRequireGrant recov _ _ (_located -> tid) ->
                handleEnforce recov $
                  mtGrantRequests.at tid._Just.located.grSuccess
-             TraceRead _schema (Located _i tid) ->
+             TraceRead _tname _schema (Located _i tid) ->
                handleDbAccess $ mtReads.at tid._Just.located.accSuccess
-             TraceWrite _writeType _schema (Located _i tid) ->
+             TraceWrite _writeType _tname _schema (Located _i tid) ->
                handleDbAccess $ mtWrites.at tid._Just.located.accSuccess
              _ ->
                continue)
@@ -94,17 +84,13 @@ linearize model = go traceEvents
     -- over monotonically increasing 'Vertex's across the execution graph
     -- yields a topological sort. Additionally the 'TraceEvent's on each 'Edge'
     -- are ordered, so we now have a linear trace of events. But we still have
-    -- the possibility of 'TraceAssert' and 'TraceGuard' affecting control
-    -- flow.
+    -- the possibility of events like 'TraceAssert' and 'TraceGuard' affecting
+    -- control flow.
     traceEvents :: [TraceEvent]
-    traceEvents = concat $ restrictKeys edgeEvents (reachableEdges model)
+    traceEvents = concat $ Map.restrictKeys edgeEvents (reachableEdges model)
 
     edgeEvents :: Map Edge [TraceEvent]
     edgeEvents = model ^. modelExecutionGraph.egEdgeEvents
-
--- TODO: use Map.restrictKeys once using containers >= 0.5.8
-restrictKeys :: Ord k => Map k a -> Set k -> Map k a
-restrictKeys m kset = Map.filterWithKey (\k _v -> k `Set.member` kset) m
 
 reachablePaths :: Model 'Concrete -> Set Path
 reachablePaths model = Map.foldlWithKey'
@@ -118,7 +104,7 @@ reachablePaths model = Map.foldlWithKey'
 
 reachableEdges :: Model 'Concrete -> Set Edge
 reachableEdges model = Set.fromList . concat $
-    restrictKeys pathEdges (reachablePaths model)
+    Map.restrictKeys pathEdges (reachablePaths model)
 
   where
     pathEdges :: Map Path [Edge]

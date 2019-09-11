@@ -12,19 +12,17 @@ in {
 
   haskeline = guardGhcjs super.haskeline;
 
-  # This megaparsec override necessitates the overrides for neat-interpolation
-  # and versions.  Once we upgrade to the new megaparsec those can go away.
-  megaparsec = dontCheck (doJailbreak (callHackageDirect {
+  megaparsec = dontCheck (callHackageDirect {
     pkg = "megaparsec";
-    ver = "6.5.0";
-    sha256 = "0x6k0c839knl826hyimg993fyrl95ym89n4b56diipkwxa7lfr2z";
-  }));
+    ver = "7.0.5";
+    sha256 = "1wizfz8vdplz3sf81vh33sny6p8ynhlpvjxqjpsym7ssb186h0f1";
+  });
 
-  neat-interpolation = dontCheck (doJailbreak (callHackageDirect {
+  neat-interpolation = dontCheck (callHackageDirect {
     pkg = "neat-interpolation";
-    ver = "0.3.2.2";
-    sha256 = "0afy9awszaf30ip6h6zrcxaihl3270b7qm30ljyw8cs34yx2vjyw";
-  }));
+    ver = "0.3.2.4";
+    sha256 = "0gygd2f0wbqa668dz7k8jfryilmbyzravlz7ysp3d13n8h00irba";
+  });
 
   sbv = dontCheck (callHackageDirect {
     pkg = "sbv";
