@@ -146,6 +146,7 @@ data CheckFailureNoLoc
   | AnalyzeFailure' AnalyzeFailureNoLoc
   | SmtFailure SmtFailure
   | QueryFailure SmtFailure
+  | VacuousProperty SmtFailure
   deriving (Eq, Show)
 
 data CheckFailure = CheckFailure
@@ -248,12 +249,23 @@ describeSmtFailure = \case
     ]
   UnexpectedFailure smtE -> T.pack $ show smtE
 
+describeUnknownFailure :: SBV.SMTReasonUnknown -> Text
+describeUnknownFailure reason = "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one (actually, please report this as an issue: https://github.com/kadena-io/pact/issues).\n\nGood luck...\n" <> tShow reason
+
 describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
   Invalid model  -> "Wow. We (the compiler) have bad news for you. You know that property / invariant you wrote? It's great. Really. It's just that it divides by zero or somesuch and we don't know what to do with this. Good news is we have a model which may (fingers crossed) help debug the problem:\n" <> showModel model
-  Unknown reason -> "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one (actually, please report this as an issue: https://github.com/kadena-io/pact/issues).\n\nGood luck...\n" <> tShow reason
+  Unknown reason -> describeUnknownFailure reason
   err@SortMismatch{} -> "(QueryFailure): " <> describeSmtFailure err
   Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
+  UnexpectedFailure smtE -> T.pack $ show smtE
+
+describeVacuousProperty :: SmtFailure -> Text
+describeVacuousProperty = \case
+  Invalid _ -> "Unexpected solver response during vacuous property check: please report this as a bug"
+  Unknown reason -> describeUnknownFailure reason
+  err@SortMismatch{} -> "Vacuous property check: " <> describeSmtFailure err
+  Unsatisfiable -> "Vacuous property encountered! There is no way for a transaction to succeed if this function is called from the top-level. Because all `property` expressions in Pact assume transaction success, in this case it would be possible to validate *any* `property`, even e.g. `false`."
   UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeCheckFailure :: CheckFailure -> Text
@@ -270,6 +282,7 @@ describeCheckFailure (CheckFailure info failure) = case failure of
           AnalyzeFailure' err   -> describeAnalyzeFailureNoLoc err
           SmtFailure err        -> describeSmtFailure err
           QueryFailure err      -> describeQueryFailure err
+          VacuousProperty err   -> describeVacuousProperty err
     in prefix info <> str
 
   where
@@ -298,6 +311,9 @@ smtToCheckFailure info = CheckFailure info . SmtFailure
 
 smtToQueryFailure :: Info -> SmtFailure -> CheckFailure
 smtToQueryFailure info = CheckFailure info . QueryFailure
+
+smtToVacuousProperty :: Info -> SmtFailure -> CheckFailure
+smtToVacuousProperty info = CheckFailure info . VacuousProperty
 
 resultQuery
   :: Goal
@@ -395,7 +411,7 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov)
         ExceptT $ fmap Right $
           SBV.query $
             for2 resultsTable $ \(Located info
-              (AnalysisResult querySucceeds prop ksProvs)) -> do
+              (AnalysisResult querySucceeds _ prop ksProvs)) -> do
               let model = Model modelArgs' tags ksProvs graph
 
               _ <- runExceptT $ inNewAssertionStack $ do
@@ -405,7 +421,7 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov)
 
               queryResult <- runExceptT $ inNewAssertionStack $ do
                 void $ lift $ SBV.constrain $ sNot prop
-                resultQuery goal model
+                resultQuery Validation model
 
               -- Either SmtFailure CheckSuccess -> CheckResult
               pure $ case queryResult of
@@ -414,9 +430,6 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov)
                  Right pass      -> Right pass
 
   where
-    goal :: Goal
-    goal = Validation
-
     config :: SBV.SMTConfig
     config = SBV.z3 { SBVI.allowQuantifiedQueries = True }
 
@@ -455,7 +468,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
           tags         <- lift $ runAlloc $ allocModelTags modelArgs'
             (Located funInfo tm) graph
           let rootPath = _egRootPath graph
-          ar@(AnalysisResult _querySucceeds _prop ksProvs)
+          ar@(AnalysisResult _querySucceeds _txSuccess _prop ksProvs)
             <- withExceptT analyzeToCheckFailure $
               runPropertyAnalysis modName gov check tables caps
                 (analysisArgs modelArgs') stepChoices' tm rootPath tags funInfo
@@ -468,15 +481,39 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
     -- succeed if the (pure) property throws an error (eg division by 0 or
     -- indexing to an invalid array position). If the query fails we bail.
     _ <- ExceptT $ catchingExceptions $ runSymbolicSat $ runExceptT $ do
-      (AnalysisResult querySucceeds _ _, model) <- setupSmtProblem
+      (AnalysisResult querySucceeds _txSucc _ _, model) <- setupSmtProblem
 
       void $ lift $ SBV.output $ SBV.sNot $ successBool querySucceeds
       hoist SBV.query $ do
         withExceptT (smtToQueryFailure propInfo) $
           resultQuery Validation model
 
+    -- If the-end user is checking for the validity of a proposition while
+    -- assuming transaction success, throw an error if it is not possible for
+    -- the transaction to succeed.
+    --
+    -- Unfortunately we need a completely separate `query` here. We cannot
+    -- combine this with the query-success check by using `inNewAssertionStack`
+    -- because this breaks support for quantifiers in properties. e.g.:
+    --
+    --    (property
+    --      (forall (i:integer)
+    --        (when (and (>= i 0) (<  i 5))
+    --          (= (at i result) a))))
+    --
+    case check of
+      PropertyHolds _ ->
+        void $ ExceptT $ catchingExceptions $ runSymbolicSat $ runExceptT $ do
+          (AnalysisResult _ txSuccess _ _, model) <- setupSmtProblem
+          void $ lift $ SBV.output txSuccess
+          hoist SBV.query $ do
+            withExceptT (smtToVacuousProperty propInfo) $
+              resultQuery Satisfaction model
+      _ ->
+        pure ()
+
     ExceptT $ catchingExceptions $ runSymbolicGoal $ runExceptT $ do
-      (AnalysisResult _ prop _, model) <- setupSmtProblem
+      (AnalysisResult _ _txSucc prop _, model) <- setupSmtProblem
 
       void $ lift $ SBV.output prop
       hoist SBV.query $ do

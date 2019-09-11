@@ -224,6 +224,16 @@ expectVerified' model code = withFrozenCallStack $ do
 expectFalsified :: HasCallStack => Text -> Spec
 expectFalsified = withFrozenCallStack $ expectFalsified' ""
 
+expectFalsifiedMessage :: HasCallStack => Text -> Text -> Spec
+expectFalsifiedMessage code needleMsg = withFrozenCallStack $ do
+  res <- runIO $ runVerification $ wrap code ""
+  it "passes in-code checks" $
+    res `shouldSatisfy` \case
+      Just (TestCheckFailure cf) ->
+        needleMsg `T.isInfixOf` (describeCheckFailure cf)
+      _ ->
+        False
+
 expectFalsified' :: HasCallStack => Text -> Text -> Spec
 expectFalsified' model code = withFrozenCallStack $ do
   res <- runIO $ runVerification $ wrap code model
@@ -244,9 +254,9 @@ expectFail code check = withFrozenCallStack $ expectTest
           }
 
 expectFailureMessage :: HasCallStack => Text -> Text -> Spec
-expectFailureMessage code needleMsg  = withFrozenCallStack $ expectTest
+expectFailureMessage code needleMsg = withFrozenCallStack $ expectTest
   testEnv { testCode = wrap code ""
-          , testCheck = Satisfiable (CoreProp $ IntegerComparison Eq 0 0)
+          , testCheck = Valid (CoreProp $ IntegerComparison Eq 0 0)
           , testPred =
               \res -> res `shouldSatisfy` \case
                         Just (TestCheckFailure cf) ->
@@ -3912,3 +3922,11 @@ spec = describe "analyze" $ do
       )
       |]
     it "checks when spelled correctly" $ isNothing res'
+
+  describe "vacuous property produces error" $ do
+    expectFalsifiedMessage [text|
+      (defun test:bool (x:integer)
+        @model [(property false)] ; here we can "prove" anything with property
+        (enforce false ""))
+      |]
+      "Vacuous property encountered!"
