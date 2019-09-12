@@ -459,9 +459,9 @@ evaluateDefs info defs = do
     AcyclicSCC v -> return v
     CyclicSCC vs -> do
       let i = if null vs then info else _tInfo $ view _1 $ head vs
-          pl = vs
-            & traverse . _1 %~ fmap mkSomeDoc
-            & traverse . _3 %~ (SomeDoc . prettyList)
+          pl = over (traverse . _3) (SomeDoc . prettyList)
+            $ over (traverse . _1) (fmap mkSomeDoc)
+            $ vs
 
       evalError i $ "Recursion detected: " <> prettyList pl
 
@@ -857,7 +857,8 @@ resolveFreeVars i b = traverse r b where
              Just d -> return d
 
 -- | Install module into local namespace. If supplied a vector of qualified imports,
--- only load those references. If updated/new, update loaded modules.
+-- only load those references. If supplied an 'True' (updated/new module), update
+-- loaded modules.
 --
 installModule :: Bool -> ModuleData Ref -> Maybe (V.Vector Text) -> Eval e ()
 installModule updated md = go . maybe allDefs filteredDefs
@@ -877,7 +878,7 @@ installModule updated md = go . maybe allDefs filteredDefs
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'
 
-enscope ::  Term Name -> Eval e (Term Ref)
+enscope :: Term Name -> Eval e (Term Ref)
 enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothing) $ t)
 
 instantiate' :: Scope n Term a -> Term a

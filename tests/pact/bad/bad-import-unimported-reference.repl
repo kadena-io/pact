@@ -1,3 +1,5 @@
+;; Bad import - cannot reference unimported member of module defined
+;; in previous tx.
 (begin-tx)
 
 (module f F

@@ -289,7 +289,6 @@ lit' ty prism = lit >>= \LiteralExp{..} -> case firstOf prism _litLiteral of
 str :: ExpParse s Text
 str = lit' "string" _LString
 
-
 -- | Recognize a list with specified delimiter, committing.
 {-# INLINE list' #-}
 list' :: ListDelimiter -> ExpParse s (ListExp Info,Exp Info)

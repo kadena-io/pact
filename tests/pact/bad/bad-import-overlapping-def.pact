@@ -1,3 +1,4 @@
+;; Bad import - name overlap between definitions and imports
 (module f F
   (defcap F () true)
   (defun f () true)

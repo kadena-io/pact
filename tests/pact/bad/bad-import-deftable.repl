@@ -1,3 +1,4 @@
+;; Bad Import - tables are non-importable
 (module f F
 
   (defschema s

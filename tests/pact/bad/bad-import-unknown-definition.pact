@@ -1,3 +1,4 @@
+;; Bad Import - cannot import undefined member
 (module f F
   (defcap F () true)
   (defun f () true)

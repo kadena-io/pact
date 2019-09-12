@@ -43,6 +43,7 @@ findTests :: IO [FilePath]
 findTests = (map (tdir </>) . filter ((== ".repl") . reverse . take 5 . reverse)) <$> getDirectoryContents tdir
             where tdir = "tests" </> "pact"
 
+
 runScript :: String -> SpecWith ()
 runScript fp = describe fp $ do
   (r,ReplState{..}) <- runIO $ execScript' (Script False fp) fp

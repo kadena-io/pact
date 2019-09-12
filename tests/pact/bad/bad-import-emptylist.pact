@@ -1,3 +1,4 @@
+;; Bad import - empty import lists should fail
 (module f F
   (defcap F () true)
   (defun f () true)
