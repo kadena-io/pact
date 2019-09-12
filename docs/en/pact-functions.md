@@ -37,7 +37,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"sender": ""}
+{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"prev-block-hash": "","sender": ""}
 ```
 
 
@@ -109,7 +109,7 @@ Top level only: this function will fail if used in module code.
 *keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
-Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end.
+Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range.
 ```lisp
 pact> (drop 2 "vwxyz")
 "xyz"
@@ -353,6 +353,7 @@ Fields:
 &nbsp;&nbsp;`chain-id:string`
 &nbsp;&nbsp;`block-height:integer`
 &nbsp;&nbsp;`block-time:time`
+&nbsp;&nbsp;`prev-block-hash:string`
 &nbsp;&nbsp;`sender:string`
 &nbsp;&nbsp;`gas-limit:integer`
 &nbsp;&nbsp;`gas-price:decimal`
@@ -392,6 +393,17 @@ Read KEY from top level of message data body, or data body itself if not provide
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+```
+
+
+### read-string {#read-string}
+
+*key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Parse KEY string or number value from top level of message data body as string.
+```lisp
+(read-string "sender")
 ```
 
 
@@ -468,7 +480,7 @@ pact> (str-to-int 64 "q80")
 *keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
-Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end.
+Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range.
 ```lisp
 pact> (take 2 "abcd")
 "ab"
@@ -476,6 +488,19 @@ pact> (take (- 3) [1 2 3 4 5])
 [3 4 5]
 pact> (take ['name] { 'name: "Vlad", 'active: false})
 {"name": "Vlad"}
+```
+
+
+### try {#try}
+
+*default*&nbsp;`<a>` *action*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions are expressions which do not do i/o or work with non-deterministic state in contrast to impure expressions such as reading and writing to a table.
+```lisp
+pact> (try 3 (enforce (= 1 2) "this will definitely fail"))
+3
+(expect "impure expression fails and returns default" "default" (try "default" (with-read accounts id {'ccy := ccy}) ccy))
 ```
 
 
@@ -1436,7 +1461,7 @@ Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of th
 *ciphertext*&nbsp;`string` *nonce*&nbsp;`string` *aad*&nbsp;`string` *mac*&nbsp;`string` *public-key*&nbsp;`string` *secret-key*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string. NONCE is a 12-byte base16 string. AAD is base16 additional authentication data of any length. MAC is the "detached" base16 tag value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key.Result is unpadded base64URL.
+Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string. NONCE is a 12-byte base64 string. AAD is base64 additional authentication data of any length. MAC is the "detached" base64 tag value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key.Result is unpadded base64URL.
 ```lisp
 (decrypt-cc20p1305 ciphertext nonce aad mac pubkey privkey)
 ```

@@ -171,6 +171,9 @@
   (defun tc-chain-data-2:object{public-chain-data} ()
     (chain-data))
 
+
+  (defun fails-native-partial-saturation:bool ()
+    (enforce (enforce (= "will" "stuart")) "foo"))
 )
 
 (create-table persons)

@@ -22,6 +22,7 @@ import           Pact.Native               (dropDef, enforceDef, enforceOneDef,
                                             formatDef, hashDef, ifDef,
                                             lengthDef, makeListDef,
                                             pactVersionDef, readDecimalDef,
+                                            readIntegerDef, readStringDef,
                                             reverseDef, sortDef, strToIntDef,
                                             takeDef
   -- TODO: mapDef foldDef filterDef whereDef composeDef atDef
@@ -75,6 +76,9 @@ toPactTm = \case
       ModOp x y ->
         mkApp modDef [Some SInteger x, Some SInteger y]
 
+      BitwiseOp op args ->
+        mkApp (bitwiseOpToDef op) (Some SInteger <$> args)
+
     StrLength x ->
       mkApp lengthDef [Some SStr x]
 
@@ -86,9 +90,6 @@ toPactTm = \case
 
     StrToIntBase b s ->
       mkApp strToIntDef [Some SInteger b, Some SStr s]
-
-    -- TODO:
-    -- ReadInteger
 
     Comparison ty' op x y ->
       mkApp (comparisonOpToDef op) [Some ty' x, Some ty' y]
@@ -163,6 +164,10 @@ toPactTm = \case
 
   Some SDecimal (ReadDecimal x) -> mkApp readDecimalDef [Some SStr x]
 
+  Some SInteger (ReadInteger x) -> mkApp readIntegerDef [Some SStr x]
+
+  Some SStr (ReadString x) -> mkApp readStringDef [Some SStr x]
+
   Some STime (ParseTime Nothing x) ->
     mkApp timeDef [Some SStr x]
 
@@ -214,6 +219,14 @@ toPactTm = \case
       Div -> divDef
       Pow -> powDef
       Log -> logDef
+
+    bitwiseOpToDef :: BitwiseOp -> NativeDef
+    bitwiseOpToDef = \case
+      BitwiseAnd -> bitAndDef
+      BitwiseOr  -> bitOrDef
+      Xor        -> xorDef
+      Shift      -> shiftDef
+      Complement -> complementDef
 
     unaryArithOpToDef :: UnaryArithOp -> NativeDef
     unaryArithOpToDef = \case

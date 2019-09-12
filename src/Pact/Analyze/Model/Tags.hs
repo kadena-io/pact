@@ -116,11 +116,11 @@ allocModelTags argsMap locatedTm graph = ModelTags
             Just arg -> pure (vid, arg)
 
     allocAccesses
-      :: Traversal' TraceEvent (ESchema, Located TagId)
+      :: Traversal' TraceEvent (TableName, ESchema, Located TagId)
       -> Alloc (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
       for (toListOf (traverse.p) events) $
-        \(ESchema schema, Located info tid) -> do
+        \(_tname, ESchema schema, Located info tid) -> do
           srk <- allocS @TyRowKey "row_key"
           obj <- allocSchema schema
           suc <- allocSbv @'TyBool "access_success"
@@ -133,10 +133,10 @@ allocModelTags argsMap locatedTm graph = ModelTags
     allocWrites = allocAccesses traceWriteT
 
       where
-        traceWriteT :: Traversal' TraceEvent (ESchema, Located TagId)
+        traceWriteT :: Traversal' TraceEvent (TableName, ESchema, Located TagId)
         traceWriteT f event = case event of
-          TraceWrite _writeType schema tid -> const event <$> f (schema, tid)
-          _                                -> pure event
+          TraceWrite _wTy tname sch tid -> const event <$> f (tname, sch, tid)
+          _                             -> pure event
 
     allocYieldResume
       :: String

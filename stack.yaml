@@ -8,8 +8,6 @@ extra-deps:
   - prettyprinter-convert-ansi-wl-pprint-1.1
 
   # --- Forced Downgrades --- #
-  - megaparsec-6.5.0
-  - neat-interpolation-0.3.2.2  # Due to megaparsec 7
 
   # --- Forced Upgrades --- #
   - sbv-8.2

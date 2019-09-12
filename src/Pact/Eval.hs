@@ -199,10 +199,10 @@ enforceModuleAdmin i modGov =
       Left ks -> enforceKeySetName i ks
       Right d@Def{..} -> case _dDefType of
         Defcap -> do
-          af <- prepareUserAppArgs d []
+          af <- prepareUserAppArgs d [] _dInfo
           g <- computeUserAppGas d _dInfo
           void $ evalUserAppBody d af _dInfo g reduceBody
-        _ -> evalError i "acquireModuleAdmin: module governance must be defcap"
+        _ -> evalError i "enforceModuleAdmin: module governance must be defcap"
 
 
 
@@ -670,7 +670,7 @@ reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
-  af <- prepareUserAppArgs d as
+  af <- prepareUserAppArgs d as ai
   evalUserAppBody d af ai g $ \bod' ->
     case _dDefType of
       Defun ->
@@ -689,11 +689,15 @@ computeUserAppGas :: Def Ref -> Info -> Eval e Gas
 computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) GUserApp
 
 -- | prepare reduced args and funtype, and typecheck
-prepareUserAppArgs :: Def Ref -> [Term Ref] -> Eval e ([Term Name], FunType (Term Name))
-prepareUserAppArgs Def{..} as = do
-  as' <- mapM reduce as
+prepareUserAppArgs :: Def Ref -> [Term Ref] -> Info -> Eval e ([Term Name], FunType (Term Name))
+prepareUserAppArgs Def{..} args i = do
+  as' <- mapM reduce args
   ft' <- traverse reduce _dFunType
-  typecheck (zip (_ftArgs ft') as')
+  let params = _ftArgs ft'
+  when (length params /= length args) $
+    evalError i $ pretty _dDefName <> ": Incorrect number of arguments (" <>
+      pretty (length args) <> ") supplied; expected " <> pretty (length params)
+  typecheck (zip params as')
   return (as',ft')
 
 -- | Instantiate args in body and evaluate using supplied action.
@@ -833,7 +837,7 @@ resumePactExec i req ctx = do
   let args = map (liftTerm . fromPactValue) (_pcArgs (_peContinuation ctx))
 
   g <- computeUserAppGas def' i
-  af <- prepareUserAppArgs def' args
+  af <- prepareUserAppArgs def' args i
 
   -- if resume is in step, use that, otherwise get from exec state
   let resume = case _psResume req of

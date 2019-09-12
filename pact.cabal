@@ -1,3 +1,4 @@
+cabal-version:       2.2
 name:                pact
 version:             3.3.0
 synopsis:            Smart contract language library and REPL
@@ -7,14 +8,13 @@ description:
             <http://kadena.io/pact>.
 homepage:            https://github.com/kadena-io/pact
 bug-reports:         https://github.com/kadena-io/pact/issues
-license:             BSD3
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Stuart Popejoy
 maintainer:          stuart@kadena.io
 copyright:           Copyright (C) 2016 Stuart Popejoy
 category:            Language
 build-type:          Simple
-cabal-version:       >=1.22
 
 flag cryptonite-ed25519
   description: use cryptonite instead of ed25519-donna
@@ -165,7 +165,7 @@ library
                      , hspec >= 2.2.4 && < 2.8
                      , lens >= 4.14 && < 4.18
                      , lens-aeson >= 1.0.0.5 && < 1.1
-                     , megaparsec >= 6
+                     , megaparsec >= 7
                      , mtl >= 2.2.1 && < 2.3
                      , old-locale >= 1.0.0.7 && < 1.1
                      , optparse-applicative >= 0.12.1.0 && < 0.15
@@ -209,7 +209,7 @@ library
                 , haskeline >= 0.7.3 && < 0.8
                 , http-client
                 , memory
-                , neat-interpolation
+                , neat-interpolation >= 0.3.2.4
                 , safe-exceptions >= 0.1.5.0 && < 0.2
                 , sbv >= 7.11
                 , servant-server
@@ -248,7 +248,8 @@ executable pact
   if os(darwin)
     ghc-options: -optP-Wno-nonportable-include-path
 
-executable bench
+benchmark bench
+  type:                exitcode-stdio-1.0
   main-is:             Bench.hs
   build-depends:       base
                      , pact

@@ -92,8 +92,17 @@ in
             prettyprinter-ansi-terminal = dontCheck super.prettyprinter-ansi-terminal;
             prettyprinter-convert-ansi-wl-pprint = dontCheck super.prettyprinter-convert-ansi-wl-pprint;
 
-            # Needed to get around a requirement on `hspec-discover`.
-            megaparsec = dontCheck super.megaparsec;
+            megaparsec = dontCheck (callHackageDirect {
+              pkg = "megaparsec";
+              ver = "7.0.5";
+              sha256 = "1wizfz8vdplz3sf81vh33sny6p8ynhlpvjxqjpsym7ssb186h0f1";
+            });
+
+            neat-interpolation = dontCheck (callHackageDirect {
+              pkg = "neat-interpolation";
+              ver = "0.3.2.4";
+              sha256 = "0gygd2f0wbqa668dz7k8jfryilmbyzravlz7ysp3d13n8h00irba";
+            });
 
             hedgehog = self.callCabal2nix "hedgehog" (pkgs.fetchFromGitHub {
               owner = "hedgehogqa";
@@ -104,13 +113,11 @@ in
             hlint = self.callHackage "hlint" "2.0.14" {};
             # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-            # sbv 8.1
-            sbv = dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
-              owner = "LeventErkok";
-              repo = "sbv";
-              rev = "365b1a369a2550d6284608df3fbc17e2663c4d3c";
-              sha256 = "134f148g28dg7b3c1rvkh85pfl9pdlvrvl6al4vlz72f3y5mb2xg";
-            }) {});
+            sbv = dontCheck (callHackageDirect {
+              pkg = "sbv";
+              ver = "8.2";
+              sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
+            });
 
             # need crackNum 2.3
             crackNum = pkgs.haskell.lib.dontCheck (self.callCabal2nix "crackNum" (pkgs.fetchFromGitHub {

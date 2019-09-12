@@ -105,18 +105,34 @@ data PactMetadata
     }
   deriving Show
 
-data ExistentialVal where
-  SomeVal :: SingTy a -> S (Maybe (Concrete a)) -> ExistentialVal
+-- | An existentially wrapped symbolic value that might not always be set.
+-- Consider a value that might only be set on one side of a conditional. We
+-- can't "just use" 'EVal' for this case because we need 'a' to be of kind
+-- 'Ty', and 'Ty' doesn't have a notion of Maybe-ness.
+data EPossibleVal where
+  PossibleVal :: SingTy a -> S (Maybe (Concrete a)) -> EPossibleVal
 
-instance Mergeable ExistentialVal where
-  symbolicMerge force test (SomeVal lTy lVal) (SomeVal rTy rVal)
+instance Mergeable EPossibleVal where
+  symbolicMerge force test (PossibleVal lTy lVal) (PossibleVal rTy rVal)
     = case singEq lTy rTy of
       Nothing   -> error $ "failed symbolic merge with different types: " ++
         show lTy ++ " vs " ++ show rTy
-      Just Refl -> SomeVal lTy $ withSymVal lTy $
+      Just Refl -> PossibleVal lTy $ withSymVal lTy $
         symbolicMerge force test lVal rVal
 
-instance Show ExistentialVal where
+instance Show EPossibleVal where
+  showsPrec p (PossibleVal ty s)
+    = showParen (p > 10)
+    $ showString "PossibleVal "
+    . showsPrec 11 ty
+    . showChar ' '
+    . showsPrec 11 s
+
+-- | An existentially-wrapped symbolic value.
+data EVal where
+  SomeVal :: SingTy a -> S (Concrete a) -> EVal
+
+instance Show EVal where
   showsPrec p (SomeVal ty s)
     = showParen (p > 10)
     $ showString "SomeVal "
@@ -151,29 +167,30 @@ data TxMetadata
     { _tmKeySets  :: SFunArray Str Guard
     , _tmDecimals :: SFunArray Str Decimal
     , _tmIntegers :: SFunArray Str Integer
-    -- TODO: strings
+    , _tmStrings  :: SFunArray Str Str
     }
   deriving Show
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeModuleName   :: Pact.ModuleName
-    , _aePactMetadata :: PactMetadata
-    , _aeRegistry     :: Registry
-    , _aeTxMetadata   :: TxMetadata
-    , _aeScope        :: Map VarId AVal -- used as a stack
-    , _aeStepChoices  :: Map VarId (SBV Bool)
-    , _invariants     :: TableMap [Located (Invariant 'TyBool)]
-    , _aeColumnIds    :: TableMap (Map Text VarId)
-    , _aeModelTags    :: ModelTags 'Symbolic
-    , _aeInfo         :: Info
-    , _aeTrivialGuard :: S Guard
-    , _aeModuleGuard  :: S Guard
-    , _aeEmptyGrants  :: TokenGrants
+    { _aeModuleName    :: Pact.ModuleName
+    , _aePactMetadata  :: PactMetadata
+    , _aeRegistry      :: Registry
+    , _aeTxMetadata    :: TxMetadata
+    , _aeScope         :: Map VarId AVal -- used as a stack
+    , _aeStepChoices   :: Map VarId (SBV Bool)
+    , _invariants      :: TableMap [Located (Invariant 'TyBool)]
+    , _aeColumnIds     :: TableMap (Map Text VarId)
+    , _aeModelTags     :: ModelTags 'Symbolic
+    , _aeInfo          :: Info
+    , _aeTrivialGuard  :: S Guard
+    , _aeModuleGuard   :: S Guard
+    , _aeEmptyGrants   :: TokenGrants
     -- ^ the default, blank slate of grants, where no token is granted.
-    , _aeActiveGrants :: TokenGrants
+    , _aeActiveGrants  :: TokenGrants
     -- ^ the current set of tokens that are granted, manipulated as a stack
-    , _aeTables       :: [Table]
+    , _aeTables        :: [Table]
+    , _aeDbRestriction :: Maybe DbRestriction
     } deriving Show
 
 mkAnalyzeEnv
@@ -192,6 +209,7 @@ mkAnalyzeEnv modName pactMetadata gov registry tables caps args stepChoices tags
   let txMetadata   = TxMetadata (mkFreeArray "txKeySets")
                                 (mkFreeArray "txDecimals")
                                 (mkFreeArray "txIntegers")
+                                (mkFreeArray "txStrings")
       --
       -- NOTE: for now we create an always-passing singleton "trivial guard"
       -- that we hand out for pact and module creation. this will not suffice
@@ -231,7 +249,7 @@ mkAnalyzeEnv modName pactMetadata gov registry tables caps args stepChoices tags
 
   pure $ AnalyzeEnv modName pactMetadata registry txMetadata args
     stepChoices invariants' columnIds' tags info (sansProv trivialGuard)
-    modGuard emptyGrants activeGrants tables
+    modGuard emptyGrants activeGrants tables mempty
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -298,8 +316,8 @@ data LatticeAnalyzeState a
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
     , _lasPendingGrants       :: TokenGrants
-    , _lasYieldedInPrevious   :: Maybe ExistentialVal
-    , _lasYieldedInCurrent    :: Maybe ExistentialVal
+    , _lasYieldedInPrevious   :: Maybe EPossibleVal
+    , _lasYieldedInCurrent    :: Maybe EPossibleVal
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -312,6 +330,7 @@ data GlobalAnalyzeState
     { _gasGuardProvenances :: Map TagId Provenance -- added as we accum guard info
     , _gasRollbacks        :: [ETerm]
     -- ^ the stack of rollbacks to perform on failure
+    , _gasCachedChainData  :: Maybe EVal
     }
   deriving (Show)
 
@@ -334,6 +353,7 @@ type EvalAnalyzeState  = AnalyzeState CellValues
 data AnalysisResult
   = AnalysisResult
     { _arEvalSuccess   :: SymbolicSuccess
+    , _arTxSuccess     :: SBV Bool
     , _arProposition   :: SBV Bool
     , _arKsProvenances :: Map TagId Provenance
     }
@@ -394,6 +414,7 @@ mkInitialAnalyzeState trivialGuard tables caps = AnalyzeState
     , _globalState = GlobalAnalyzeState
         { _gasGuardProvenances = mempty
         , _gasRollbacks        = []
+        , _gasCachedChainData  = Nothing
         }
     }
 
@@ -485,6 +506,9 @@ class HasAnalyzeEnv a where
 
   txIntegers :: Lens' a (SFunArray Str Integer)
   txIntegers = analyzeEnv.aeTxMetadata.tmIntegers
+
+  txStrings :: Lens' a (SFunArray Str Str)
+  txStrings = analyzeEnv.aeTxMetadata.tmStrings
 
   inPact :: Lens' a (S Bool)
   inPact = analyzeEnv.aePactMetadata.pmInPact
@@ -712,6 +736,14 @@ readDecimal
   -> m (S Decimal)
 readDecimal sStr = fmap (withProv $ fromMetadata sStr) $
   readArray <$> view txDecimals <*> pure (_sSbv sStr)
+
+-- | Reads a named string from tx metadata
+readString
+  :: (MonadReader r m, HasAnalyzeEnv r)
+  => S Str
+  -> m (S Str)
+readString sStr = fmap (withProv $ fromMetadata sStr) $
+  readArray <$> view txStrings <*> pure (_sSbv sStr)
 
 -- | Reads a named integer from tx metadata
 readInteger

@@ -210,8 +210,8 @@ script:
   set -ex
   case "$BUILD" in
     stack)
-      stack build --no-terminal --test --ghc-options="-Werror" $ARGS
-      stack exec -- bench +RTS -K1k
+      stack build --no-terminal --test --bench --no-run-benchmarks --ghc-options="-Werror" $ARGS
+      stack bench --no-terminal --benchmark-arguments "+RTS -K1k"
       ;;
     cabal)
       cabal install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES

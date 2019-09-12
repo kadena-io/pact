@@ -241,6 +241,77 @@ Integer modulus
 
 Supported in either invariants or properties.
 
+## Bitwise operators {#Bitwise}
+
+### & {#FBitwiseAnd}
+
+```lisp
+(& x y)
+```
+
+* takes `x`: `integer`
+* takes `y`: `integer`
+* produces `integer`
+
+Bitwise and
+
+Supported in either invariants or properties.
+
+### | {#FBitwiseOr}
+
+```lisp
+(| x y)
+```
+
+* takes `x`: `integer`
+* takes `y`: `integer`
+* produces `integer`
+
+Bitwise or
+
+Supported in either invariants or properties.
+
+### xor {#FXor}
+
+```lisp
+(xor x y)
+```
+
+* takes `x`: `integer`
+* takes `y`: `integer`
+* produces `integer`
+
+Bitwise exclusive-or
+
+Supported in either invariants or properties.
+
+### shift {#FShift}
+
+```lisp
+(shift x y)
+```
+
+* takes `x`: `integer`
+* takes `y`: `integer`
+* produces `integer`
+
+Shift `x` `y` bits left if `y` is positive, or right by `-y` bits otherwise.
+
+Supported in either invariants or properties.
+
+### ~ {#FComplement}
+
+```lisp
+(~ x)
+```
+
+* takes `x`: `integer`
+* produces `integer`
+
+Reverse all bits in `x`
+
+Supported in either invariants or properties.
+
 ## Logical operators {#Logical}
 
 ### > {#FGreaterThan}
