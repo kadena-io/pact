@@ -1,3 +1,10 @@
+3.3.0
+---
+
+* Add explicit import system. Users may now import function, constant and schema symbols
+* Enforces unique names across the board
+* Typechecking interfaces now succeeds
+
 3.2.1
 ---
 
