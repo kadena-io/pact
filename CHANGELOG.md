@@ -4,6 +4,7 @@
 * Add explicit import system. Users may now import function, constant and schema symbols
 * Enforces unique names across the board
 * Typechecking interfaces now succeeds
+* Add new natives `is-ascii` and `is-charset`. These natives provide support for ASCII and ISO 8859-1 (latin1 supplement) character sets
 
 3.2.1
 ---
