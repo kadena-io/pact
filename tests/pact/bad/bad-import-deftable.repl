@@ -1,0 +1,17 @@
+;; Bad Import - tables are non-importable
+(module f F
+
+  (defschema s
+    a:string)
+
+  (deftable t:{s})
+
+  (defcap F () true)
+  (defun f () true)
+)
+
+(module g G
+  (use f [t])
+  (defcap G () true)
+  (defun g () (f))
+)

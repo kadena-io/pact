@@ -2502,6 +2502,8 @@ ROLLBACK-EXPR functions as a "cancel function" to be explicitly executed by a pa
 ```
 (use MODULE)
 (use MODULE HASH)
+(use MODULE IMPORTS)
+(use MODULE HASH IMPORTS)
 ```
 
 Import an existing MODULE into a namespace. Can only be issued at the top-level, or within a module
@@ -2509,8 +2511,25 @@ declaration. MODULE can be a string, symbol or bare atom. With HASH, validate th
 hash matches HASH, failing if not. Use [describe-module](pact-functions.html#describe-module) to query for the
 hash of a loaded module on the chain.
 
+An optional list of IMPORTS consisting of function, constant, and schema names may be supplied. When this explicit import list is present, only those names will be made available for use in the module body. If no list is supplied, then every name in the imported module will be brought into scope. When two modules are defined in the same transaction, all names will be in scope for all modules, and import behavior will be defaulted to the entire module.
+
 ```lisp
 (use accounts)
+(transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+"Write succeeded"
+```
+```lisp
+(use accounts "ToV3sYFMghd7AN1TFKdWk_w00HjUepVlqKL79ckHG_s")
+(transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+"Write succeeded"
+```
+```lisp
+(use accounts [ transfer example-fun ])
+(transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+"Write succeeded"
+```
+```lisp
+(use accounts "ToV3sYFMghd7AN1TFKdWk_w00HjUepVlqKL79ckHG_s" [ transfer example-fun ])
 (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
 "Write succeeded"
 ```
