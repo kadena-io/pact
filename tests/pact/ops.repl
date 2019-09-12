@@ -121,3 +121,19 @@
 (expect "shift -255 8" -65280 (shift -255 8))
 (expect "shift 255 -1" 127 (shift 255 -1))
 (expect "shift -255 -1" -128 (shift -255 -1))
+
+"===== drop"
+(expect "pos drop within range" [3 4 5] (drop 2 [1 2 3 4 5]))
+(expect "neg drop within range" [1 2 3] (drop -2 [1 2 3 4 5]))
+(expect "pos drop beyond range" [] (drop 10 [1 2 3 4 5]))
+(expect "neg drop beyond range" [] (drop -10 [1 2 3 4 5]))
+(expect "pos drop at 63-bit boundary" (drop 9223372036854775807 [1 2 3 4 5]) (drop 9223372036854775808 [1 2 3 4 5]))
+(expect "neg drop at 63-bit boundary" (drop -9223372036854775807 [1 2 3 4 5]) (drop -9223372036854775808 [1 2 3 4 5]))
+
+"===== take"
+(expect "pos take within range" [1 2] (take 2 [1 2 3 4 5]))
+(expect "neg take within range" [4 5] (take -2 [1 2 3 4 5]))
+(expect "pos take beyond range" [1 2 3 4 5] (take 10 [1 2 3 4 5]))
+(expect "neg take beyond range" [1 2 3 4 5] (take -10 [1 2 3 4 5]))
+(expect "pos take at 63-bit boundary" (take 9223372036854775807 [1 2 3 4 5]) (take 9223372036854775808 [1 2 3 4 5]))
+(expect "neg take at 63-bit boundary" (take -9223372036854775807 [1 2 3 4 5]) (take -9223372036854775808 [1 2 3 4 5]))

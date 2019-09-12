@@ -516,6 +516,7 @@ instance Ord Name where
 data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe ModuleHash)
+  , _uImports :: !(Maybe (Vector Text))
   , _uInfo :: !Info
   } deriving (Eq, Show, Generic)
 
@@ -527,13 +528,18 @@ instance Pretty Use where
     in parensSep $ "use" : args
 
 instance ToJSON Use where
-  toJSON Use{..} =
-    object $ ("module" .= _uModuleName) : ("i" .= _uInfo) :
-    (maybe [] (return . ("hash" .=)) _uModuleHash)
+  toJSON Use{..} = object $
+    [ "module" .= _uModuleName
+    , "hash" .= _uModuleHash
+    , "imports" .= _uImports
+    ,  "i" .= _uInfo
+    ]
+
 instance FromJSON Use where
   parseJSON = withObject "Use" $ \o ->
     Use <$> o .: "module"
         <*> o .:? "hash"
+        <*> o .:? "imports"
         <*> o .: "i"
 
 instance NFData Use
@@ -611,7 +617,6 @@ instance ToJSON Interface where toJSON = lensyToJSON 10
 instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
 instance NFData Interface
-
 
 data ModuleDef g
   = MDModule !(Module g)

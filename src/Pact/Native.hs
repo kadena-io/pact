@@ -471,7 +471,7 @@ takeDef = defRNative "take" take' takeDrop
   , "(take (- 3) [1 2 3 4 5])"
   , "(take ['name] { 'name: \"Vlad\", 'active: false})"
   ]
-  "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end."
+  "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
 
 dropDef :: NativeDef
 dropDef = defRNative "drop" drop' takeDrop
@@ -479,7 +479,7 @@ dropDef = defRNative "drop" drop' takeDrop
   , "(drop (- 2) [1 2 3 4 5])"
   , "(drop ['name] { 'name: \"Vlad\", 'active: false})"
   ]
-  "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end."
+  "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
 
 atDef :: NativeDef
 atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
@@ -694,7 +694,6 @@ take' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.take c' l) t def
 take' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tordL take c' (unpack l)
 take' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList >>= \l ->
   return $ toTObjectMap oTy def $ ObjectMap $ M.restrictKeys o l
-
 take' i as = argsError i as
 
 drop' :: RNativeFun e
@@ -711,13 +710,25 @@ asKeyList l = fmap (S.fromList . V.toList) . V.forM l $ \t -> case t of
 
 -- | "take or drop" handling negative "take/drop from reverse"
 tord :: (l -> l) -> (Int -> l -> l) -> Integer -> l -> l
-tord rev f c' l | c' >= 0 = f (fromIntegral c') l
-                | otherwise = rev $ f (fromIntegral (negate c')) (rev l)
+tord rev f c' l | c' >= 0 = f (fromIntegral (limit c')) l
+                | otherwise = rev $ f (fromIntegral (negate (limit c'))) (rev l)
+  where
+    -- {Vector,List}.{take,drop} ops produce undefined behavior (crashing for
+    -- Vector) when provided an int outside of the range (-2^63, 2^63). This
+    -- function truncates an integer to this range.
+    limit :: Integer -> Integer
+    limit i
+      | i < -bound = -bound
+      | i > bound = bound
+      | otherwise = i
+      where
+        bound = (2 ^ (63 :: Integer)) - 1
 
 tordV
   :: (Int -> V.Vector a -> V.Vector a)
      -> Integer -> V.Vector a -> V.Vector a
 tordV = tord V.reverse
+
 tordL :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
 tordL = tord reverse
 
