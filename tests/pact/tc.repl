@@ -43,7 +43,7 @@
   (defun tc-at-typed-list (vals:[integer])
     (at 1 vals))
 
-  (defun tc-at-literal-typed-list-1:integer (as:[integer])
+  (defun tc-at-literal-typed-list-arg:integer (as:[integer])
     (at 0 as))
 
   (defun age-gt (age person)
@@ -124,7 +124,7 @@
   ;;not tc per se but runtime type enforce error
   (defun rtc-empty-string-list:[string] (input:[string]) input)
 
-  (defun tc-at-literal-typed-list-2:integer (a:integer)
+  (defun tc-at-literal-typed-list-literal:integer (a:integer)
     (at 0 [a]))
 
   (defun tc-format-heterogenous:string ()
