@@ -523,7 +523,7 @@ isCharset i as = case as of
     _ -> evalError' i $ "Unsupported character set: " <> pretty cs
   _ -> argsError i as
   where
-    go k = return . toTerm . all k . T.unpack
+    go k = return . toTerm . T.all k
 
 langDefs :: NativeModule
 langDefs =
