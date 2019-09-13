@@ -1,0 +1,13 @@
+; Capabilities should ot be accessible via FQN across modules
+(begin-tx)
+(module m A
+
+  (defcap A () true)
+
+  )
+(commit-tx)
+
+(module n B
+  (use m)
+  (defcap B () A)
+)
