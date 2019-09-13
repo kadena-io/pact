@@ -1,3 +1,4 @@
+; Capabilities should ot be accessible via FQN across modules
 (begin-tx)
 (module m A
 

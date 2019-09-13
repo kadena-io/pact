@@ -1,3 +1,4 @@
+; Capabilities should not be accessible via import
 (begin-tx)
 (module m A
 
