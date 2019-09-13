@@ -487,28 +487,17 @@ atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyV
   ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
   "Index LIST at IDX, or get value with key IDX from OBJECT."
 
--- | Check whether a character string consists of ascii characters
---
-isAsciiDef :: NativeDef
-isAsciiDef =
-  defRNative "is-ascii" isAscii
-  (funType tTyBool [("input", tTyString)])
-  ["(is-ascii \"hello world\")", "(is-ascii \"I am nÖt ascii\")"]
-  "Check that a string INPUT conforms to the ASCII character set"
-  where
-    isAscii :: RNativeFun e
-    isAscii i as = isCharset i ([toTerm ("ascii" :: Text)] <> as)
-
 isCharsetDef :: NativeDef
 isCharsetDef =
   defRNative "is-charset" isCharset
-  (funType tTyBool [("char-set", tTyString), ("input", tTyString)])
-  [ "(is-charset \"ascii\" \"hello world\")"
-  , "(is-charset \"iso-8859-1\" \"I am nÖt ascii, but I am latin1!\")"
+  (funType tTyBool [("charset", tTyString), ("input", tTyString)])
+  [ "(is-charset \"CHARSET_ASCII\" \"hello world\")"
+  , "(is-charset \"CHARSET_LATIN1\" \"I am nÖt ascii, but I am latin1!\")"
   ]
-  "Check that a string INPUT conforms to the a supported character set CHAR-SET.       \
-  \Character sets currently supported are: 'iso-8859-1' (latin1), and 'ascii' (ASCII). \
-  \Support for sets up through ISO 8859-5 supplement will be added in the future."
+  "Check that a string INPUT conforms to the a supported character set CHARSET.       \
+  \Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         \
+  \'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be \
+  \added in the future."
 
 -- | Check that a given string conforms to a specified character set.
 -- Supported character sets include latin (ISO 8859-1)
@@ -518,8 +507,8 @@ isCharsetDef =
 isCharset :: RNativeFun e
 isCharset i as = case as of
   [TLitString cs, TLitString t] -> case cs of
-    "ascii" -> go Char.isAscii t
-    "iso-8859-1" -> go Char.isLatin1 t
+    "CHARSET_ASCII" -> go Char.isAscii t
+    "CHARSET_LATIN1" -> go Char.isLatin1 t
     _ -> evalError' i $ "Unsupported character set: " <> pretty cs
   _ -> argsError i as
   where
@@ -617,7 +606,6 @@ langDefs =
     ,namespaceDef
     ,chainDataDef
     ,chainDataSchema
-    ,isAsciiDef
     ,isCharsetDef
     ])
     where

@@ -248,30 +248,16 @@ pact> (int-to-str 64 43981)
 ```
 
 
-### is-ascii {#is-ascii}
-
-*input*&nbsp;`string` *&rarr;*&nbsp;`bool`
-
-
-Check that a string INPUT conforms to the ASCII character set
-```lisp
-pact> (is-ascii "hello world")
-true
-pact> (is-ascii "I am nÖt ascii")
-false
-```
-
-
 ### is-charset {#is-charset}
 
-*char-set*&nbsp;`string` *input*&nbsp;`string` *&rarr;*&nbsp;`bool`
+*charset*&nbsp;`string` *input*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Check that a string INPUT conforms to the a supported character set CHAR-SET.       Character sets currently supported are: 'iso-8859-1' (latin1), and 'ascii' (ASCII). Support for sets up through ISO 8859-5 supplement will be added in the future.
+Check that a string INPUT conforms to the a supported character set CHARSET.       Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be added in the future.
 ```lisp
-pact> (is-charset "ascii" "hello world")
+pact> (is-charset "CHARSET_ASCII" "hello world")
 true
-pact> (is-charset "iso-8859-1" "I am nÖt ascii, but I am latin1!")
+pact> (is-charset "CHARSET_LATIN1" "I am nÖt ascii, but I am latin1!")
 true
 ```
 
