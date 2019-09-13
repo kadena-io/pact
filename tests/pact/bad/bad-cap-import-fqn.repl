@@ -1,0 +1,12 @@
+(begin-tx)
+(module m A
+
+  (defcap A () true)
+
+)
+(commit-tx)
+
+(module n B
+
+  (defcap B () m.A)
+)

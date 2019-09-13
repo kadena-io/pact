@@ -45,7 +45,9 @@ module Pact.Eval
     ,searchCallStackApps
     ) where
 
+
 import Bound
+
 import Control.Arrow hiding (app)
 import Control.Lens hiding (DefName)
 import Control.Monad
@@ -53,6 +55,7 @@ import Control.Monad.Catch (throwM)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+
 import Data.Aeson (Value)
 import Data.Default
 import Data.Foldable
@@ -64,7 +67,9 @@ import Data.Maybe
 import qualified Data.Set as S
 import qualified Data.Vector as V
 import Data.Text (Text, pack)
-import Safe
+
+import Safe hiding (at)
+
 import Unsafe.Coerce
 
 import Pact.Gas
@@ -571,16 +576,29 @@ moduleResolver lkp i mn = do
 
 
 resolveRef :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
-resolveRef i (QName q n _) = moduleResolver (lookupQn n) i q
+resolveRef i name = case name of
+  QName q n _ -> moduleResolver (lookupQn n) i q
+  nn -> do
+    nm <- view $ eeRefStore . rsNatives . at nn
+    case nm of
+      Nothing -> use $ evalRefs . rsLoaded . at nn
+      r -> return r
   where
-    lookupQn n' i' q' = do
-      m <- lookupModule i' q'
-      return $ join $ HM.lookup n' . _mdRefMap <$> m
-resolveRef _i nn@(Name _ _) = do
-  nm <- preview $ eeRefStore . rsNatives . ix nn
-  case nm of
-    d@Just {} -> return d
-    Nothing -> preuse $ evalRefs . rsLoaded . ix nn
+    lookupQn n i' q = do
+      m <- lookupModule i' q
+      case m of
+        Nothing -> return Nothing
+        Just md -> case view (mdRefMap . at n) md of
+          Nothing -> return Nothing
+          Just r -> go r
+
+    go r = case r of
+      Ref (TDef d i') -> case _dDefType d of
+        Defcap -> evalError i' "Cannot access capabilities across modules"
+        _ -> return $ Just r
+      _ -> return $ Just r
+
+
 
 -- | This should be impure. See 'evaluateDefs'. Refs are
 -- expected to exist, and if they don't, it is a serious bug
