@@ -4,10 +4,10 @@
 
   (defcap A () true)
 
-)
+  )
 (commit-tx)
 
 (module n B
-
-  (defcap B () m.A)
+  (use m)
+  (defcap B () A)
 )
