@@ -581,11 +581,7 @@ resolveRef i name = case name of
   nn -> do
     nm <- view $ eeRefStore . rsNatives . at nn
     case nm of
-      Nothing -> do
-        m <- use $ evalRefs . rsLoaded . at nn
-        case m of
-          Nothing -> return Nothing
-          Just r -> go r
+      Nothing -> use $ evalRefs . rsLoaded . at nn
       r -> return r
   where
     lookupQn n i' q = do
