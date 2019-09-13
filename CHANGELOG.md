@@ -4,6 +4,7 @@
 * New native function `try` has been added
 * Bug fixes to the typechecker
 * Improved documentation
+* Add `is-charset` native for testing whether a string conforms to a given charset. Charsets currently supported are ASCII and ISO 8859-1 (latin1)
 
 3.2.0
 ---
