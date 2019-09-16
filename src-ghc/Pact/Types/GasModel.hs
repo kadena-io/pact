@@ -46,7 +46,7 @@ import qualified Pact.Persist.SQLite as PSL
 import Pact.GasModel.Utils
 import Pact.MockDb
 import Pact.Types.Logger          (neverLog, Loggers(..))
-import Pact.Types.SQLite          (SQLiteConfig(..))
+import Pact.Types.SQLite          (SQLiteConfig(..),fastNoJournalPragmas)
 
 import Pact.PersistPactDb         (DbEnv(..))
 import Pact.Eval                  (eval)
@@ -222,7 +222,7 @@ defMockDb = mockdb
 defSqliteBackend :: IO (EvalEnv SQLiteDb)
 defSqliteBackend = do
   sqliteDb <- mkSQLiteEnv (newLogger neverLog "")
-              True (SQLiteConfig sqliteFile []) neverLog
+              True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   state <- defEvalState
   let env = defEvalEnv sqliteDb

@@ -931,11 +931,11 @@ subOptTests :: GasUnitTests
 subOptTests = defGasUnitTests allExprs
   where
     subExpr x =
-      [text| (+ $x $x) |]
+      [text| (- $x $x) |]
     subDecimalExpr x =
-      [text| (+ $x.0 $x.0) |]
+      [text| (- $x.0 $x.0) |]
     subBothExpr x =
-      [text| (+ $x.0 $x) |]
+      [text| (- $x.0 $x) |]
     subOneExpr x =
       [text| (- $x) |]
     subOneDecimalExpr x =
