@@ -1,9 +1,10 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.GasModel where
 
-
 import Control.Exception              (bracket)
+import Control.Monad                  (unless)
 import Statistics.Types               (Estimate(..))
 
 import qualified Data.ByteString.Lazy.Char8 as BSL8
@@ -14,6 +15,7 @@ import qualified Data.HashMap.Strict        as HM
 import qualified Data.List.NonEmpty         as NEL
 import qualified Data.Text                  as T
 import qualified Data.Csv                   as Csv
+import qualified Options.Applicative        as O
 
 
 -- Internal exports
@@ -81,25 +83,30 @@ csvHeader :: (T.Text, T.Text, T.Text, T.Text, T.Text, T.Text)
 csvHeader = ("function", "backendType", "description", "mean1", "mean2", "mean3")
 
 bench
-  :: T.Text
+  :: Bool
+  -> T.Text
   -> T.Text
   -> GasTest e
   -> IO BenchResults
-bench funName backendType test = do
+bench justBench funName backendType test = do
   terms <- compileCode (_gasTestExpression test)
   bracket setup teardown $ \s -> do
     putStrLn $ T.unpack funName ++ "/" ++
                T.unpack backendType ++ "/" ++
                T.unpack (_gasTestDescription test)
     r1 <- C.benchmark' (run terms s)
-    r2 <- C.benchmark' (run terms s)
-    r3 <- C.benchmark' (run terms s)
-    return (funName,
-            backendType,
-            (_gasTestDescription test),
-            (estPoint $ C.anMean $ C.reportAnalysis r1),
-            (estPoint $ C.anMean $ C.reportAnalysis r2),
-            (estPoint $ C.anMean $ C.reportAnalysis r3))
+    if justBench
+      then do
+        return (funName,backendType,(_gasTestDescription test),0,0,0)
+      else do
+        r2 <- C.benchmark' (run terms s)
+        r3 <- C.benchmark' (run terms s)
+        return (funName,
+                backendType,
+                (_gasTestDescription test),
+                (estPoint $ C.anMean $ C.reportAnalysis r1),
+                (estPoint $ C.anMean $ C.reportAnalysis r2),
+                (estPoint $ C.anMean $ C.reportAnalysis r3))
 
   where
     setup = do
@@ -112,13 +119,14 @@ bench funName backendType test = do
 
 
 benches
-  :: T.Text
+  :: Bool
+  -> T.Text
   -> GasUnitTests
   -> IO [BenchResults]
-benches funName tests = do
-  sqliteBenches <- mapM (bench funName "SQLiteDb")
+benches justBench funName tests = do
+  sqliteBenches <- mapM (bench justBench funName "SQLiteDb")
                    (NEL.toList $ _gasUnitTestsSqlite tests)
-  mockBenches <- mapM (bench funName "MockDb")
+  mockBenches <- mapM (bench justBench funName "MockDb")
                  (NEL.toList $ _gasUnitTestsSqlite tests)
   return $ sqliteBenches <> mockBenches
 
@@ -130,29 +138,55 @@ writeCSV results = do
   BSL8.writeFile "gas-model.csv" (header <> content)
 
 
+data Option = Option
+  { _oFilter :: Maybe T.Text
+  , _oBenchOnly :: Bool
+  }
+  deriving (Eq,Show)
+options :: O.ParserInfo Option
+options = O.info (O.helper <*> parser)
+          (O.fullDesc <> O.header "Gas Model Benchmarks")
+  where
+    parser =
+      Option
+      <$> ((Just <$> O.strOption
+            (O.short 'f' <> O.long "filter" <> O.metavar "NATIVE" <>
+             O.help "Pipe-delimited list of natives to run")) O.<|>
+            pure Nothing)
+      <*> (O.flag False True
+           (O.short 'b' <> O.long "bench" <> O.help "Just bench"))
+
+
 main :: IO ()
 main = do
+  Option{..} <- O.execParser options
+  let tests = HM.toList $ case _oFilter of
+        Nothing -> unitTests
+        Just ts -> HM.filterWithKey matching unitTests
+          where tlist = NativeDefName <$> T.split (== '|') ts
+                matching k _ = k `elem` tlist
+
   -- Checks that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
-  mapM_ (\(_,t) -> mockRuns t)
-        (HM.toList unitTests)
+  mapM_ (\(_,t) -> mockRuns t) tests
 
   -- Run benchmarks
   putStrLn "Running benchmarks"
-  allBenches <- mapM (\(n,t) -> benches (asString n) t)
-                (HM.toList unitTests)
+  allBenches <- mapM (\(n,t) -> benches _oBenchOnly (asString n) t) tests
 
-  putStrLn "Exporting benchmarks"
-  writeCSV (concat allBenches)
+  unless _oBenchOnly $ do
 
-  -- Report gas testing coverage
-  putStrLn "Reporting coverage"
-  print $ "Missing benchmark tests for "
-          ++ show (length untestedNatives)
-          ++ " out of "
-          ++ show (length allNatives)
-          ++ " native functions."
-  mapM_ (print . show) untestedNatives
+      putStrLn "Exporting benchmarks"
+      writeCSV (concat allBenches)
+
+      -- Report gas testing coverage
+      putStrLn "Reporting coverage"
+      print $ "Missing benchmark tests for "
+              ++ show (length untestedNatives)
+              ++ " out of "
+              ++ show (length allNatives)
+              ++ " native functions."
+      mapM_ (print . show) untestedNatives
 
 
 -- | For debugging
@@ -164,7 +198,7 @@ runGasTestByName nname = do
       print $ show nname
       _ <- mockRuns' g
       return ()
-  
+
 runAllGasTests :: IO ()
 runAllGasTests = do
   mapM_ (\(_,t) -> mockRuns' t)
