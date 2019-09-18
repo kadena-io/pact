@@ -8,12 +8,16 @@
 module Pact.Types.GasModel
   ( GasTest(..)
   , gasTestExpression
-  , gasTestDescription
+  , gasTestBackendType
+  , gasTestAbridgedExpr
   , gasTestSetup
   , gasTestSetupCleanup
 
+  , getDescription
+
   , GasUnitTests(..)
   , concatGasUnitTests
+  , mapOverGasUnitTests
 
   , NoopNFData(..)
   
@@ -63,24 +67,31 @@ type GasSetup e = (EvalEnv e, EvalState)
 type SQLiteGasTests = NEL.NonEmpty (GasTest SQLiteDb)
 type MockGasTests = NEL.NonEmpty (GasTest ())
 
+
 data GasTest e = GasTest
   { _gasTestExpression :: !PactExpression
-  , _gasTestDescription :: !T.Text
+  , _gasTestBackendType :: !T.Text
+  , _gasTestAbridgedExpr :: !T.Text
   , _gasTestSetup :: !(IO (GasSetup e))
   , _gasTestSetupCleanup :: !((GasSetup e) -> IO ())
   }
 makeLenses ''GasTest
 
 
+getDescription :: GasTest e -> T.Text
+getDescription test =
+  (_gasTestBackendType test) <> "/" <>
+  (_gasTestAbridgedExpr test)
+
+
 data GasUnitTests = GasUnitTests
   { _gasUnitTestsSqlite :: SQLiteGasTests
   , _gasUnitTestsMock :: MockGasTests
   }
-instance Semigroup (GasUnitTests) where
+instance Semigroup GasUnitTests where
   g <> g' = GasUnitTests
             (_gasUnitTestsSqlite g <> _gasUnitTestsSqlite g')
             (_gasUnitTestsMock g <> _gasUnitTestsMock g')
-
 
 concatGasUnitTests :: NEL.NonEmpty GasUnitTests -> GasUnitTests
 concatGasUnitTests listOfTests =
@@ -89,6 +100,24 @@ concatGasUnitTests listOfTests =
     baseCase = NEL.head listOfTests
     rest = NEL.tail listOfTests
 
+gasUnitTestsToLists
+  :: GasUnitTests
+  -> ([GasTest SQLiteDb], [GasTest ()])
+gasUnitTestsToLists (GasUnitTests sqlite mock) =
+  (NEL.toList sqlite, NEL.toList mock)
+
+mapOverGasUnitTests
+  :: GasUnitTests
+  -> (GasTest SQLiteDb -> IO f)
+  -> (GasTest () -> IO f)
+  -> IO [f]
+mapOverGasUnitTests tests sqliteFun mockFun = do
+  sResults <- mapM sqliteFun sTests
+  mResults <- mapM mockFun mTests
+  return (sResults <> mResults)
+  where
+    (sTests, mTests) =
+      gasUnitTestsToLists tests
 
 
 -- | Newtype to provide a noop NFData instance.
@@ -127,6 +156,7 @@ defMockGasTest :: (T.Text, PactExpression) -> GasTest ()
 defMockGasTest (desc, expr) =
   GasTest
   expr
+  "MockDb"
   desc
   (createSetup defMockBackend defEvalState)
   mockSetupCleanup
@@ -135,6 +165,7 @@ defSqliteGasTest :: (T.Text, PactExpression) -> GasTest SQLiteDb
 defSqliteGasTest (desc, expr) =
   GasTest
   expr
+  "SQLiteDb"
   desc
   (createSetup defSqliteBackend defEvalState)
   sqliteSetupCleanup
