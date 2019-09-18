@@ -1508,10 +1508,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_NFun node "yield" [ obj ] -> doYield node obj
-
-  -- for analysis, ignore target chain (for now). TODO add test coverage
-  AST_NFun node "yield" [ obj, _ ] -> doYield node obj
+  -- NOTE: we ignore the optional target chain during analysis, for now at
+  -- least.
+  AST_NFun node "yield" (obj : _optionalTargetChain) -> do
+    Some objTy obj' <- translateNode obj
+    ety <- translateType node
+    tid <- tagYield ety
+    pure $ Some objTy $ Yield tid obj'
 
   -- Translate into a resume-and-bind
   AST_Resume node bindings schemaNode body -> do
@@ -1531,13 +1534,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       BitwiseOp op args'
 
   _ -> throwError' $ UnexpectedNode astNode
-
-  where
-    doYield node obj = do
-      Some objTy obj' <- translateNode obj
-      ety <- translateType node
-      tid <- tagYield ety
-      pure $ Some objTy $ Yield tid obj'
 
 captureOneFreeVar :: TranslateM (VarId, Text, EType)
 captureOneFreeVar = do
