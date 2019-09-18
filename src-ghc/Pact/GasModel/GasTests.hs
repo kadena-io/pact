@@ -459,7 +459,7 @@ defineKeysetTests = tests
         
     updateTestDesc :: GasTest e -> GasTest e
     updateTestDesc =
-      set gasTestDescription
+      set gasTestAbridgedExpr
       (rotateExpr <> ": rotating keyset")
     
     tests =
@@ -1246,7 +1246,7 @@ resumeTests = tests
         updateStateWithStackFrame
           = setState (set evalCallStack [someStackFrame])
         updateGasTestDesc
-          = set gasTestDescription $ desc <> " with provenance"
+          = set gasTestAbridgedExpr $ desc <> " with provenance"
         setInitialState = setState $ const (initStateModules mockModules)
 
         mockModules
@@ -1576,7 +1576,7 @@ defineNamespaceTests = tests
         updateMsgSig =
           setEnv $ set eeMsgSigs (S.fromList samplePubKeys)
         updateDesc =
-          set gasTestDescription $
+          set gasTestAbridgedExpr $
           rotateExpr <> ": Defining namespace with the same name as one already defined."
 
         rotateTests =

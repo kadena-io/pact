@@ -4,7 +4,7 @@
 module Pact.GasModel where
 
 import Control.Exception              (bracket)
-import Control.Monad                  (unless)
+import Control.Monad                  (void)
 import Statistics.Types               (Estimate(..))
 
 import qualified Data.ByteString.Lazy.Char8 as BSL8
@@ -28,121 +28,12 @@ import Pact.Types.Lang
 import Pact.Types.Runtime
 
 
-
-exec
-  :: EvalState
-  -> EvalEnv e
-  -> [Term Name]
-  -> IO (Either PactError [Term Name], EvalState)
-exec s e terms = runEval' s e $ mapM eval terms
-
-
-mockRun
-  :: GasTest e
-  -> (EvalEnv e, EvalState)
-  -> IO (Either PactError [Term Name], EvalState)
-mockRun (GasTest expr _ _ _) (env, state) = do
-  terms <- compileCode expr
-  exec state env terms
-
-
-mockRuns
-  :: GasUnitTests
-  -> IO ()
-mockRuns tests = do
-  putStrLn "SQLITE DATABASE"
-  mapM_ run (NEL.toList $ _gasUnitTestsSqlite tests)
-  putStrLn "MOCK DATABASE"
-  mapM_ run (NEL.toList $ _gasUnitTestsMock tests)
-  where
-    run test = do
-      putStrLn $ "MockRun for " ++ T.unpack (_gasTestDescription test)
-      (res,_) <- bracket (_gasTestSetup test) (_gasTestSetupCleanup test) (mockRun test)
-      eitherDie (_gasTestDescription test) res
-
-
-mockRuns'
-  :: GasUnitTests
-  -> IO [(Either PactError [Term Name], EvalState)]
-mockRuns' tests = do
-  putStrLn "SQLITE DATABASE"
-  sqliteRes <- mapM run (NEL.toList $ _gasUnitTestsSqlite tests)
-  putStrLn "MOCK DATABASE"
-  mockRes <- mapM run (NEL.toList $ _gasUnitTestsMock tests)
-  return (sqliteRes <> mockRes)
-  where
-    run test = do
-      print $ "Results for: " ++ T.unpack (_gasTestDescription test)
-      (res,state) <- bracket (_gasTestSetup test) (_gasTestSetupCleanup test) (mockRun test)
-      printResult res
-      return (res,state)
-
-
-type BenchResults = (T.Text, T.Text, T.Text, Double, Double, Double)
-csvHeader :: (T.Text, T.Text, T.Text, T.Text, T.Text, T.Text)
-csvHeader = ("function", "backendType", "description", "mean1", "mean2", "mean3")
-
-bench
-  :: Bool
-  -> T.Text
-  -> T.Text
-  -> GasTest e
-  -> IO BenchResults
-bench justBench funName backendType test = do
-  terms <- compileCode (_gasTestExpression test)
-  bracket setup teardown $ \s -> do
-    putStrLn $ T.unpack funName ++ "/" ++
-               T.unpack backendType ++ "/" ++
-               T.unpack (_gasTestDescription test)
-    r1 <- C.benchmark' (run terms s)
-    if justBench
-      then do
-        return (funName,backendType,(_gasTestDescription test),0,0,0)
-      else do
-        r2 <- C.benchmark' (run terms s)
-        r3 <- C.benchmark' (run terms s)
-        return (funName,
-                backendType,
-                (_gasTestDescription test),
-                (estPoint $ C.anMean $ C.reportAnalysis r1),
-                (estPoint $ C.anMean $ C.reportAnalysis r2),
-                (estPoint $ C.anMean $ C.reportAnalysis r3))
-
-  where
-    setup = do
-      s <- _gasTestSetup test
-      return $ NoopNFData s
-    teardown (NoopNFData env) = do
-      (_gasTestSetupCleanup test) env
-    run terms ~(NoopNFData (env, state)) =
-          C.nfIO (exec state env terms)
-
-
-benches
-  :: Bool
-  -> T.Text
-  -> GasUnitTests
-  -> IO [BenchResults]
-benches justBench funName tests = do
-  sqliteBenches <- mapM (bench justBench funName "SQLiteDb")
-                   (NEL.toList $ _gasUnitTestsSqlite tests)
-  mockBenches <- mapM (bench justBench funName "MockDb")
-                 (NEL.toList $ _gasUnitTestsSqlite tests)
-  return $ sqliteBenches <> mockBenches
-
-
-writeCSV :: [BenchResults] -> IO ()
-writeCSV results = do
-  let content = Csv.encode results
-      header = Csv.encode [csvHeader]
-  BSL8.writeFile "gas-model.csv" (header <> content)
-
-
 data Option = Option
   { _oFilter :: Maybe T.Text
   , _oBenchOnly :: Bool
   }
   deriving (Eq,Show)
+
 options :: O.ParserInfo Option
 options = O.info (O.helper <*> parser)
           (O.fullDesc <> O.header "Gas Model Benchmarks")
@@ -156,6 +47,151 @@ options = O.info (O.helper <*> parser)
       <*> (O.flag False True
            (O.short 'b' <> O.long "bench" <> O.help "Just bench"))
 
+parseNativeFunList :: Option -> [NativeDefName]
+parseNativeFunList opt =
+  case _oFilter opt of
+    Nothing -> []
+    Just t -> NativeDefName <$> T.split (== '|') t
+
+
+type Mean = Double
+
+data BenchResult = BenchResult
+  { _benchResultFunName :: NativeDefName
+  , _benchResultBackendType :: T.Text
+  , _benchResultAbridgedExpr :: T.Text
+  , _benchResultMeans :: (Mean, Mean, Mean)
+  }
+instance Csv.ToRecord BenchResult where
+  toRecord (BenchResult funName backend abridgedExpr (m1, m2, m3)) =
+    Csv.record [Csv.toField (asString funName),
+                Csv.toField backend,
+                Csv.toField abridgedExpr,
+                Csv.toField m1,
+                Csv.toField m2,
+                Csv.toField m3
+               ]
+csvHeader
+  :: (T.Text, T.Text, T.Text, T.Text, T.Text, T.Text)
+csvHeader =
+  ("function", "backendType", "description", "mean1", "mean2", "mean3")
+
+
+exec
+  :: EvalState
+  -> EvalEnv e
+  -> [Term Name]
+  -> IO (Either PactError [Term Name], EvalState)
+exec s e terms = runEval' s e $ mapM eval terms
+
+
+mockRun
+  :: GasTest e
+  -> (EvalEnv e, EvalState)
+  -> IO (Either PactError [Term Name], EvalState)
+mockRun (GasTest expr _ _ _ _) (env, state) = do
+  terms <- compileCode expr
+  exec state env terms
+
+
+mockRuns
+  :: GasUnitTests
+  -> IO ()
+mockRuns tests = do
+  mapM_ run (NEL.toList $ _gasUnitTestsSqlite tests)
+  mapM_ run (NEL.toList $ _gasUnitTestsMock tests)
+  where
+    run test = do
+      putStrLn $ "Dry run for " ++ T.unpack (getDescription test)
+      (res,_) <- bracket (_gasTestSetup test)
+                         (_gasTestSetupCleanup test)
+                         (mockRun test)
+      eitherDie (getDescription test) res
+
+
+-- | For debugging purposes
+mockRuns'
+  :: GasUnitTests
+  -> IO [(Either PactError [Term Name], EvalState)]
+mockRuns' tests = do
+  sqliteRes <- mapM run (NEL.toList $ _gasUnitTestsSqlite tests)
+  mockRes <- mapM run (NEL.toList $ _gasUnitTestsMock tests)
+  return (sqliteRes <> mockRes)
+  where
+    run test = do
+      print $ "Pact results for: " ++ T.unpack (getDescription test)
+      (res,state) <- bracket (_gasTestSetup test)
+                             (_gasTestSetupCleanup test)
+                             (mockRun test)
+      printResult res
+      return (res,state)
+
+
+bench
+  :: GasTest e
+  -> IO Mean
+bench test = do
+  terms <- compileCode (_gasTestExpression test)
+  putStrLn $ T.unpack (getDescription test)
+
+  report <- bracket setup teardown $ \s ->
+    C.benchmark' (run terms s)
+
+  return $ estPoint $
+           C.anMean $
+           C.reportAnalysis report
+  where
+    setup = do
+      s <- _gasTestSetup test
+      return $ NoopNFData s
+    teardown (NoopNFData env) = do
+      (_gasTestSetupCleanup test) env
+    run terms ~(NoopNFData (env, state)) =
+          C.nfIO (exec state env terms)
+
+
+benchesOnce
+  :: GasUnitTests
+  -> IO ()
+benchesOnce tests =
+  void $ mapOverGasUnitTests tests bench bench
+
+
+-- | Benchmarks each native function's tests three times
+benchesMultiple
+  :: (NativeDefName, GasUnitTests)
+  -> IO [BenchResult]
+benchesMultiple (funName, tests) =
+  mapOverGasUnitTests tests run run
+  where
+    run test = do
+      mean1 <- bench test
+      mean2 <- bench test
+      mean3 <- bench test
+      return $ BenchResult
+               funName
+               (_gasTestBackendType test)
+               (_gasTestAbridgedExpr test)
+               (mean1, mean2, mean3)
+
+
+
+writeCSV :: [BenchResult] -> IO ()
+writeCSV results = do
+  let content = Csv.encode results
+      header = Csv.encode [csvHeader]
+  BSL8.writeFile "gas-model.csv" (header <> content)
+
+
+coverageReport :: IO ()
+coverageReport = do
+  print $ "Missing benchmark tests for "
+           ++ show (length untestedNatives)
+           ++ " out of "
+           ++ show (length allNatives)
+           ++ " native functions."
+  mapM_ (print . show) untestedNatives
+
 
 main :: IO ()
 main = do
@@ -166,27 +202,22 @@ main = do
           where tlist = NativeDefName <$> T.split (== '|') ts
                 matching k _ = k `elem` tlist
 
-  -- Checks that unit tests succeed
+  -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
   mapM_ (\(_,t) -> mockRuns t) tests
 
-  -- Run benchmarks
-  putStrLn "Running benchmarks"
-  allBenches <- mapM (\(n,t) -> benches _oBenchOnly (asString n) t) tests
+  putStrLn "Running benchmark(s)"
 
-  unless _oBenchOnly $ do
+  if _oBenchOnly then
+    mapM_ (\(_,t) -> benchesOnce t) tests
+  else do
+    allBenches <- mapM benchesMultiple tests
 
-      putStrLn "Exporting benchmarks"
-      writeCSV (concat allBenches)
+    putStrLn "Exporting benchmarks"
+    writeCSV (concat allBenches)
 
-      -- Report gas testing coverage
-      putStrLn "Reporting coverage"
-      print $ "Missing benchmark tests for "
-              ++ show (length untestedNatives)
-              ++ " out of "
-              ++ show (length allNatives)
-              ++ " native functions."
-      mapM_ (print . show) untestedNatives
+    putStrLn "Reporting coverage"
+    coverageReport
 
 
 -- | For debugging
