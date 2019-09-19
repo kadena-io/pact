@@ -6,7 +6,6 @@ module Pact.GasModel.Utils
     compileCode
   , printResult
   , eitherDie
-  , dupe
 
   , sizes
   , sizesExpr
@@ -24,7 +23,9 @@ module Pact.GasModel.Utils
   , strings
   , escapedStringsExpr
   
-  , PactExpression
+  , PactExpression(..)
+  , defPactExpression
+  , createPactExpr
   , MockPactType(..)
   , toText
   , intToStr
@@ -99,9 +100,6 @@ eitherDie :: (Show b) => T.Text -> Either b a -> IO a
 eitherDie annot
   = either (throwIO . userError . ((show annot ++ " : ") ++) . show) (return $!)
 
-dupe :: a -> (a,a)
-dupe a = (a,a)
-
 
 
 -- | Pact literals of different sizes and textual description
@@ -113,11 +111,12 @@ sizes =
   ]
 
 -- example: "100"
-sizesExpr :: NEL.NonEmpty (T.Text, PactExpression)
+sizesExpr :: NEL.NonEmpty PactExpression
 sizesExpr = NEL.map format sizes
   where
-    format (desc, i) = (desc <> "Number",
-                        toText (MockInt i))
+    format (desc, i) = PactExpression
+                       (toText (MockInt i))
+                       (Just $ desc <> "Number")
 
 
 -- List of integers of varying sizes
@@ -128,11 +127,12 @@ intLists = NEL.map format sizes
 
 
 -- example: [ "[1 2 3 4]" ]
-intListsExpr :: NEL.NonEmpty (T.Text, PactExpression)
+intListsExpr :: NEL.NonEmpty PactExpression
 intListsExpr = NEL.map format intLists
   where
-    format (desc, li) = (desc <> "NumberList",
-                         makeExpr li)
+    format (desc, li) = PactExpression
+                        (makeExpr li)
+                        (Just $ desc <> "NumberList")
     makeExpr li =
       toText $ MockList $ map MockInt (NEL.toList li)
 
@@ -146,11 +146,12 @@ strLists = NEL.map format intLists
 
 
 -- example: [ "[ \"a1\" \"a2\" \"a3\" \"a4\" ]" ]
-escapedStrListsExpr :: NEL.NonEmpty (T.Text, PactExpression)
+escapedStrListsExpr :: NEL.NonEmpty PactExpression
 escapedStrListsExpr = NEL.map format strLists
   where
-    format (desc, li) = (desc <> "EscapedStrList",
-                         makeExpr li)
+    format (desc, li) = PactExpression
+                        (makeExpr li)
+                        (Just $ desc <> "EscapedStrList")
     makeExpr li =
       toText $ MockList $ map MockString (NEL.toList li)
 
@@ -166,17 +167,21 @@ strKeyIntValMaps = NEL.map toMap allLists
 
 
 -- example: "{ \"a5\": 5, \"a3\": 3 }"
-strKeyIntValMapsExpr :: NEL.NonEmpty (T.Text, PactExpression)
+strKeyIntValMapsExpr :: NEL.NonEmpty PactExpression
 strKeyIntValMapsExpr = NEL.map format strKeyIntValMaps
   where
-    format (desc, m) = (desc <> "OjectMap", toText (MockObject m))
+    format (desc, m) = PactExpression
+                       (toText (MockObject m))
+                       (Just $ desc <> "OjectMap")
 
 
 -- example: "{ \"a5\" := a5, \"a3\" := a3 }"
-strKeyIntValBindingsExpr :: NEL.NonEmpty (T.Text, PactExpression)
+strKeyIntValBindingsExpr :: NEL.NonEmpty PactExpression
 strKeyIntValBindingsExpr = NEL.map format strKeyIntValMaps
   where
-    format (desc, m) = (desc <> "Binding", toText (MockBinding m))
+    format (desc, m) = PactExpression
+                       (toText (MockBinding m))
+                       (Just $ desc <> "Binding")
 
 
 -- Strings of varying sizes
@@ -188,16 +193,34 @@ strings = NEL.map format sizes
                         
 
 -- example: "\"aaaaa\""
-escapedStringsExpr :: NEL.NonEmpty (T.Text, PactExpression)
+escapedStringsExpr :: NEL.NonEmpty PactExpression
 escapedStringsExpr = NEL.map format strings
   where
-    format (desc, s) = (desc <> "String",
-                        toText (MockString s))
+    format (desc, s) = PactExpression
+                       (toText (MockString s))
+                       (Just $ desc <> "String")
 
 
 
 -- | Helper functions and types for creating pact expressions
-type PactExpression = T.Text
+data PactExpression = PactExpression
+  { _pactExpressionFull :: T.Text
+  , _pactExpressionAbridged :: Maybe T.Text
+  }
+
+defPactExpression :: T.Text -> PactExpression
+defPactExpression expr = PactExpression expr Nothing
+
+
+createPactExpr
+  :: (T.Text -> T.Text)
+  -> PactExpression
+  -> PactExpression
+createPactExpr f (PactExpression arg abridged) =
+  case abridged of
+    Nothing -> PactExpression (f arg) (Just $ f arg)
+    Just a -> PactExpression (f arg) (Just $ f a)
+
 
 data MockPactType =
     MockObject (HM.HashMap T.Text Integer)
@@ -209,7 +232,7 @@ data MockPactType =
   | MockExpr T.Text
   deriving (Show)
 
-toText :: MockPactType -> PactExpression
+toText :: MockPactType -> T.Text
 toText (MockObject m) = toPactMap m
 toText (MockBinding m) = toPactBinding m
 toText (MockList li) = "[ " <> T.unwords (map toText li) <> " ]"
@@ -222,12 +245,12 @@ toText (MockExpr t) = t
 intToStr :: Integer -> T.Text
 intToStr = T.pack . show
 
-escapeText :: T.Text -> PactExpression
+escapeText :: T.Text -> T.Text
 escapeText n = "\"" <> n <> "\""
 
 toPactMap
   :: HM.HashMap T.Text Integer
-  -> PactExpression
+  -> T.Text
 toPactMap m = "{ " <> allKeys <> " }"
   where
     allKeys = T.intercalate ", " $ map colonFormat (HM.toList m)
@@ -235,7 +258,7 @@ toPactMap m = "{ " <> allKeys <> " }"
 
 toPactBinding
   :: HM.HashMap T.Text Integer
-  -> PactExpression
+  -> T.Text
 toPactBinding  m = "{ " <> allKeys <> " }"
   where
     allKeys = T.intercalate ", " $ map bindingFormat (HM.toList m)

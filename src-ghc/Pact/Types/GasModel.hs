@@ -7,17 +7,11 @@
 
 module Pact.Types.GasModel
   ( GasTest(..)
-  , gasTestExpression
-  , gasTestBackendType
-  , gasTestAbridgedExpr
-  , gasTestSetup
-  , gasTestSetupCleanup
+  , GasSetup(..)
 
   , getDescription
-
+  
   , GasUnitTests(..)
-  , concatGasUnitTests
-  , mapOverGasUnitTests
 
   , NoopNFData(..)
   
@@ -63,32 +57,29 @@ import Pact.Types.SPV
 
 
 type SQLiteDb = DbEnv PSL.SQLite
-type GasSetup e = (EvalEnv e, EvalState)
-type SQLiteGasTests = NEL.NonEmpty (GasTest SQLiteDb)
-type MockGasTests = NEL.NonEmpty (GasTest ())
+
+data GasSetup e = GasSetup
+  { _gasSetupEnv :: !(IO (EvalEnv e))
+  , _gasSetupState :: !(IO EvalState)
+  , _gasSetupBackendType :: !T.Text
+  , _gasSetupCleanup :: !((EvalEnv e, EvalState) -> IO ())
+  }
+makeLenses ''GasSetup
 
 
-data GasTest e = GasTest
+data GasTest = GasTest
   { _gasTestExpression :: !PactExpression
-  , _gasTestBackendType :: !T.Text
-  , _gasTestAbridgedExpr :: !T.Text
-  , _gasTestSetup :: !(IO (GasSetup e))
-  , _gasTestSetupCleanup :: !((GasSetup e) -> IO ())
+  , _gasTestSetups :: !(GasSetup SQLiteDb, GasSetup ())
   }
-makeLenses ''GasTest
 
 
-getDescription :: GasTest e -> T.Text
-getDescription test =
-  (_gasTestBackendType test) <> "/" <>
-  (_gasTestAbridgedExpr test)
+getDescription :: T.Text -> GasSetup e -> T.Text
+getDescription abridgedExpr testSetup =
+  (_gasSetupBackendType testSetup) <> "/" <> abridgedExpr
 
 
-data GasUnitTests = GasUnitTests
-  { _gasUnitTestsSqlite :: SQLiteGasTests
-  , _gasUnitTestsMock :: MockGasTests
-  }
-instance Semigroup GasUnitTests where
+newtype GasUnitTests = GasUnitTests (NEL.NonEmpty GasTest)
+{--instance Semigroup GasUnitTests where
   g <> g' = GasUnitTests
             (_gasUnitTestsSqlite g <> _gasUnitTestsSqlite g')
             (_gasUnitTestsMock g <> _gasUnitTestsMock g')
@@ -114,10 +105,10 @@ mapOverGasUnitTests
 mapOverGasUnitTests tests sqliteFun mockFun = do
   sResults <- mapM sqliteFun sTests
   mResults <- mapM mockFun mTests
-  return (sResults <> mResults)
+  return $ sResults <> mResults
   where
     (sTests, mTests) =
-      gasUnitTestsToLists tests
+      gasUnitTestsToLists tests--}
 
 
 -- | Newtype to provide a noop NFData instance.
@@ -131,65 +122,62 @@ instance NFData (NoopNFData a) where
 
 
 defGasUnitTests
-  :: NEL.NonEmpty (T.Text, PactExpression)
+  :: NEL.NonEmpty PactExpression
   -> GasUnitTests
-defGasUnitTests pactExprs = GasUnitTests sqliteTests mockTests
-  where
-    mockTests = NEL.map defMockGasTest pactExprs
-    sqliteTests = NEL.map defSqliteGasTest pactExprs
+defGasUnitTests pactExprs =
+  GasUnitTests $ NEL.map defGasTest pactExprs
 
 
 createGasUnitTests
-  :: (GasTest SQLiteDb -> GasTest SQLiteDb)
-  -> (GasTest () -> GasTest ())
-  -> NEL.NonEmpty (T.Text, PactExpression)
+  :: (GasSetup SQLiteDb -> GasSetup SQLiteDb)
+  -> (GasSetup () -> GasSetup ())
+  -> NEL.NonEmpty PactExpression
   -> GasUnitTests
 createGasUnitTests sqliteUpdate mockUpdate pactExprs =
-  GasUnitTests sqliteTests mockTests
+  GasUnitTests $ NEL.map createTest pactExprs
   where
-    mockTests = NEL.map (mockUpdate . defMockGasTest) pactExprs
-    sqliteTests = NEL.map (sqliteUpdate . defSqliteGasTest) pactExprs
+    createTest expr =
+      GasTest expr
+      (sqliteUpdate defSqliteGasSetup,
+       mockUpdate defMockGasSetup)
 
 
 -- | Default Gas Tests
-defMockGasTest :: (T.Text, PactExpression) -> GasTest ()
-defMockGasTest (desc, expr) =
+defGasTest :: PactExpression -> GasTest
+defGasTest expr =
   GasTest
   expr
-  "MockDb"
-  desc
-  (createSetup defMockBackend defEvalState)
-  mockSetupCleanup
+  (defSqliteGasSetup, defMockGasSetup)
 
-defSqliteGasTest :: (T.Text, PactExpression) -> GasTest SQLiteDb
-defSqliteGasTest (desc, expr) =
-  GasTest
-  expr
+defSqliteGasSetup :: GasSetup SQLiteDb
+defSqliteGasSetup =
+  GasSetup
+  defSqliteBackend
+  defEvalState
   "SQLiteDb"
-  desc
-  (createSetup defSqliteBackend defEvalState)
   sqliteSetupCleanup
 
-createSetup :: IO (EvalEnv e) -> IO EvalState -> IO (GasSetup e)
-createSetup env state = do
-  e <- env
-  s <- state
-  return (e,s)
+defMockGasSetup :: GasSetup ()
+defMockGasSetup =
+  GasSetup
+  defMockBackend
+  defEvalState
+  "MockDb"
+  mockSetupCleanup
 
 
 -- | Helper functions for manipulating Gas Tests 
-setState :: (EvalState -> EvalState) -> GasTest e -> GasTest e
-setState f test = setState'
+setState :: (EvalState -> EvalState) -> GasSetup e -> GasSetup e
+setState f setup = setState'
   where
-    newState = fmap (\(e,s) -> (e, f s))
-               $ view gasTestSetup test
-    setState' = set gasTestSetup newState test
+    newState = fmap f $ view gasSetupState setup
+    setState' = set gasSetupState newState setup
 
-setEnv :: (EvalEnv e -> EvalEnv e) -> GasTest e -> GasTest e
-setEnv f test = setEnv'
+setEnv :: (EvalEnv e -> EvalEnv e) -> GasSetup e -> GasSetup e
+setEnv f setup = setEnv'
   where
-    newEnv = fmap (\(e,s) -> (f e, s)) $ view gasTestSetup test
-    setEnv' = set gasTestSetup newEnv test
+    newEnv = fmap f $ view gasSetupEnv setup
+    setEnv' = set gasSetupEnv newEnv setup
 
 
 -- | Default EvalState
@@ -272,10 +260,10 @@ defSqliteBackend = do
 
 
 -- | Default GasSetup cleanup
-mockSetupCleanup :: GasSetup () -> IO ()
+mockSetupCleanup :: (EvalEnv (), EvalState) -> IO ()
 mockSetupCleanup (_, _) = return ()
 
-sqliteSetupCleanup :: GasSetup SQLiteDb -> IO ()
+sqliteSetupCleanup :: (EvalEnv SQLiteDb, EvalState) -> IO ()
 sqliteSetupCleanup (env, _) = do
   c <- readMVar $ _eePactDbVar env
   _ <- PSL.closeSQLite $ _db c

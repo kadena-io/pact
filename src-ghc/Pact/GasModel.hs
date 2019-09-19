@@ -6,6 +6,7 @@ module Pact.GasModel where
 import Control.Exception              (bracket)
 import Control.Monad                  (void)
 import Statistics.Types               (Estimate(..))
+import Data.List                  (foldl')
 
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Criterion.Main             as C
@@ -55,21 +56,29 @@ parseNativeFunList opt =
 
 
 type Mean = Double
+newtype Average = Average {_averagens :: Double }
+instance Csv.ToField Average where
+  toField (Average avg) = Csv.toField avg
+
+average :: [Mean] -> Average
+average nums = Average avgNanoSeconds
+  where s = foldl' (+) 0.0 nums
+        n = fromIntegral (length nums)
+        avgSeconds = s / n
+        avgNanoSeconds = avgSeconds * 1000000000
 
 data BenchResult = BenchResult
   { _benchResultFunName :: NativeDefName
   , _benchResultBackendType :: T.Text
   , _benchResultAbridgedExpr :: T.Text
-  , _benchResultMeans :: (Mean, Mean, Mean)
+  , _benchResultMeans :: Average
   }
 instance Csv.ToRecord BenchResult where
-  toRecord (BenchResult funName backend abridgedExpr (m1, m2, m3)) =
+  toRecord (BenchResult funName backend abridgedExpr avg) =
     Csv.record [Csv.toField (asString funName),
                 Csv.toField backend,
                 Csv.toField abridgedExpr,
-                Csv.toField m1,
-                Csv.toField m2,
-                Csv.toField m3
+                Csv.toField avg
                ]
 csvHeader
   :: (T.Text, T.Text, T.Text, T.Text, T.Text, T.Text)
@@ -133,10 +142,7 @@ bench
 bench test = do
   terms <- compileCode (_gasTestExpression test)
   putStrLn $ T.unpack (getDescription test)
-
-  report <- bracket setup teardown $ \s ->
-    C.benchmark' (run terms s)
-
+  report <- bracket setup teardown $ C.benchmark' . (run terms)
   return $ estPoint $
            C.anMean $
            C.reportAnalysis report
@@ -172,15 +178,14 @@ benchesMultiple (funName, tests) =
                funName
                (_gasTestBackendType test)
                (_gasTestAbridgedExpr test)
-               (mean1, mean2, mean3)
-
+               (average [mean1, mean2, mean3])
 
 
 writeCSV :: [BenchResult] -> IO ()
 writeCSV results = do
   let content = Csv.encode results
       header = Csv.encode [csvHeader]
-  BSL8.writeFile "gas-model.csv" (header <> content)
+  BSL8.writeFile "gas-model-raw-data.csv" (header <> content)
 
 
 coverageReport :: IO ()
