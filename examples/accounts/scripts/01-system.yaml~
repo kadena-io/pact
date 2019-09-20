@@ -1,0 +1,13 @@
+# Provides mock system module for 'accounts'
+code: |-
+  (define-keyset 'k (read-keyset "accounts-admin-keyset"))
+  (module system 'k
+    (defun get-system-time ()
+      (time "2017-10-31T12:00:00Z")))
+  (get-system-time)
+data:
+  accounts-admin-keyset: ["ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"]
+keyPairs:
+  - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+    secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+nonce: step01
