@@ -58,6 +58,7 @@ library
                      , Pact.Types.Info
                      , Pact.Types.Lang
                      , Pact.Types.Logger
+                     , Pact.Types.Names
                      , Pact.Types.Native
                      , Pact.Types.PactValue
                      , Pact.Types.Parser

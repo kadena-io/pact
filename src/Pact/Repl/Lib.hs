@@ -484,7 +484,7 @@ verify i as = case as of
   _ -> argsError i as
 
 sigKeyset :: RNativeFun LibState
-sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (Name (asString KeysAll) def)
+sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (Name $ BareName (asString KeysAll) def)
 
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")

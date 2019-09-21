@@ -203,7 +203,7 @@ createUserGuard =
       args <- mapM reduce _appArgs
       fun <- case _appFun of
         (TVar (Ref (TDef Def{..} _)) _) -> case _dDefType of
-          Defun -> return (QName _dModule (asString _dDefName) _dInfo)
+          Defun -> return (QName $ QualifiedName _dModule (asString _dDefName) _dInfo)
           _ -> evalError _appInfo $ "User guard closure must be defun, found: " <> pretty _dDefType
         t -> evalError (_tInfo t) $ "User guard closure function must be def: " <> pretty _appFun
       return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard fun args)

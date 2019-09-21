@@ -108,7 +108,7 @@ runPactExec benchMod dbEnv pc = do
   toJSON . _erOutput <$> evalExec s e pc
 
 benchKeySet :: KeySet
-benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
+benchKeySet = KeySet [PublicKey "benchadmin"] (Name $ BareName ">" def)
 
 acctRow :: ObjectMap PactValue
 acctRow = ObjectMap $ M.fromList [("balance",PLiteral (LDecimal 100.0))]

@@ -244,7 +244,7 @@ lookupModule i mn = do
       case stored of
         Just mdStored -> do
           natives <- view $ eeRefStore . rsNatives
-          let natLookup (NativeDefName n) = case HM.lookup (Name n def) natives of
+          let natLookup (NativeDefName n) = case HM.lookup (Name (BareName n def)) natives of
                 Just (Direct t) -> Just t
                 _ -> Nothing
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
@@ -420,7 +420,7 @@ collectNames g0 args body k = case instantiate' body of
       Nothing -> return (g, ds)
       Just dn -> do
         -- disallow native overlap
-        when (isJust $ HM.lookup (Name dn def) ns) $
+        when (isJust $ HM.lookup (Name (BareName dn def)) ns) $
           evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
         -- disallow conflicting members
         when (isJust $ HM.lookup dn ds) $
@@ -435,7 +435,7 @@ resolveGovernance
   -> Module (Term Name)
   -> Eval e (ModuleDef (Def Ref))
 resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
-    TVar (Name n _) _ -> case HM.lookup n solvedDefs of
+    TVar (Name (BareName n _)) _ -> case HM.lookup n solvedDefs of
       Just r -> case r of
         Ref (TDef govDef _) -> case _dDefType govDef of
           Defcap -> return govDef
@@ -478,11 +478,11 @@ evaluateDefs info defs = do
         dm <- resolveRef f f
         case (dm, f) of
           (Just t, _) -> return (Right t)
-          (Nothing, Name fn _) ->
+          (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn ds of
               Just _ -> return (Left fn)
-              Nothing -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
-          (Nothing, _) -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
+              Nothing -> evalError (getInfo f) $ "Cannot resolve " <> dquotes (pretty f)
+          (Nothing, _) -> evalError (getInfo f) $ "Cannot resolve " <> dquotes (pretty f)
 
       return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
 
@@ -571,12 +571,12 @@ moduleResolver lkp i mn = do
 
 
 resolveRef :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
-resolveRef i (QName q n _) = moduleResolver (lookupQn n) i q
+resolveRef i (QName (QualifiedName q n _)) = moduleResolver (lookupQn n) i q
   where
     lookupQn n' i' q' = do
       m <- lookupModule i' q'
       return $ join $ HM.lookup n' . _mdRefMap <$> m
-resolveRef _i nn@(Name _ _) = do
+resolveRef _i nn@Name {} = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
@@ -676,7 +676,7 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
       Defun ->
         reduceBody bod'
       Defpact -> do
-        continuation <- PactContinuation (QName _dModule (asString _dDefName) def)
+        continuation <- PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
           <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
       Defcap ->
@@ -874,10 +874,10 @@ installModule updated md = go . maybe allDefs filteredDefs
 
     filteredDefs is m k v =
       if V.elem k is
-      then HM.insert (Name k def) v m
+      then HM.insert (Name $ BareName k def) v m
       else m
 
-    allDefs m k v = HM.insert (Name k def) v m
+    allDefs m k v = HM.insert (Name $ BareName k def) v m
 
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'

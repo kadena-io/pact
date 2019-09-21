@@ -151,7 +151,7 @@ instance AsString KeyPredBuiltins where
   asString Keys2 = "keys-2"
 
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
-keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
+keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [minBound .. maxBound]
 
 -- | Storage for natives.
 data RefStore = RefStore {
