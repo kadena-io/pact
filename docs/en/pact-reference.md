@@ -875,9 +875,9 @@ The continuation request yaml for a private blockchain takes the following keys:
 
 ```yaml
   type: "cont"
-  pactTxHash: Integer transaction id of pact
-  step: Integer next step of a pact
-  rollback: Boolean for rollingback a pact
+  pactTxHash: integer transaction id of pact
+  step: integer next step of a pact
+  rollback: boolean for rolling back a pact
   data: JSON transaction data
   dataFile: JSON transaction data file
   keyPairs: list of key pairs for signing (use pact -g to generate): [
