@@ -1508,7 +1508,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_NFun node "yield" [ obj ] -> do
+  -- NOTE: we ignore the optional target chain during analysis, for now at
+  -- least.
+  AST_NFun node "yield" (obj : _optionalTargetChain) -> do
     Some objTy obj' <- translateNode obj
     ety <- translateType node
     tid <- tagYield ety

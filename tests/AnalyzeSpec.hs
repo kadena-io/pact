@@ -3848,6 +3848,20 @@ spec = describe "analyze" $ do
                   (write accounts acct { 'balance: (+ bal amount) }))))))
         |]
 
+    describe "yield with chain-id specified" $
+      expectVerified [text|
+        (defschema yield-obj val:integer)
+
+        (defpact foo ()
+          @model [ (property (= 1 1)) ]
+          (step
+            (let ((obj:object{yield-obj} {"val": 5}))
+              (yield obj "some-chain-id")))
+          (step
+            (resume { 'val := val }
+              "bar")))
+        |]
+
   describe "with-default-read" $ do
     expectVerified [text|
       (defun test:integer (acct:string)
