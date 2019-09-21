@@ -26,14 +26,19 @@
 module Pact.Types.Command
   ( Command(..),cmdPayload,cmdSigs,cmdHash
 #if !defined(ghcjs_HOST_OS)
-  , mkCommand, keyPairsToSigners, mkCommand', verifyUserSig, verifyCommand
+  , mkCommand
+  , mkCommand'
+  , keyPairToSigner
+  , keyPairsToSigners
+  , verifyUserSig
+  , verifyCommand
 #else
   , PPKScheme(..)
 #endif
   , ProcessedCommand(..),_ProcSucc,_ProcFail
   , Payload(..),pMeta,pNonce,pPayload,pSigners
   , ParsedCode(..),pcCode,pcExps
-  , Signer(..),siScheme, siPubKey, siAddress
+  , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..),usSig
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
@@ -127,12 +132,19 @@ mkCommand creds meta nonce rpc = mkCommand' creds encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
         payload = Payload rpc nonce meta $ keyPairsToSigners creds
 
+keyPairToSigner :: SomeKeyPair -> Signer
+keyPairToSigner cred = Signer scheme pub addr []
+      where scheme = case kpToPPKScheme cred of
+              ED25519 -> Nothing
+              s -> Just s
+            pub = toB16Text $ getPublic cred
+            addr = case scheme of
+              Nothing -> Nothing
+              Just {} -> Just $ toB16Text $ formatPublicKey cred
+
 keyPairsToSigners :: [SomeKeyPair] -> [Signer]
-keyPairsToSigners creds = map toSigner creds
-  where toSigner cred = Signer
-                        (kpToPPKScheme cred)
-                        (toB16Text $ getPublic cred)
-                        (toB16Text $ formatPublicKey cred)
+keyPairsToSigners creds = map keyPairToSigner creds
+
 
 
 mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
@@ -182,16 +194,22 @@ hasInvalidSigs hsh sigs signers
 verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
 verifyUserSig msg UserSig{..} Signer{..} =
   case (pubT, sigT, addrT) of
-    (Right p, Right sig, Right addr) ->
-      (isValidAddr addr p) && verify (toScheme _siScheme) (toUntypedHash msg) (PubBS p) (SigBS sig)
+    (Right p, Right sig, addr) ->
+      (isValidAddr addr p) &&
+      verify (toScheme $ fromMaybe defPPKScheme _siScheme)
+             (toUntypedHash msg) (PubBS p) (SigBS sig)
     _ -> False
   where pubT = parseB16TextOnly _siPubKey
         sigT = parseB16TextOnly _usSig
-        addrT = parseB16TextOnly _siAddress
-        isValidAddr givenAddr pubBS =
-          case formatPublicKeyBS (toScheme _siScheme) (PubBS pubBS) of
-            Right expectAddr -> givenAddr == expectAddr
-            Left _           -> False
+        addrT = parseB16TextOnly <$> _siAddress
+        toScheme' = toScheme . fromMaybe ED25519
+        isValidAddr addrM pubBS = case addrM of
+          Nothing -> True
+          Just (Left _) -> False
+          Just (Right givenAddr) ->
+            case formatPublicKeyBS (toScheme' _siScheme) (PubBS pubBS) of
+              Right expectAddr -> givenAddr == expectAddr
+              Left _           -> False
 
 #endif
 
@@ -208,28 +226,38 @@ instance NFData ParsedCode
 -- | Signer combines PPKScheme, PublicKey, and the Address (aka the
 --   formatted PublicKey).
 data Signer = Signer
- { _siScheme :: !PPKScheme
+ { _siScheme :: !(Maybe PPKScheme)
+ -- ^ PPKScheme, which is defaulted to 'defPPKScheme' if not present
  , _siPubKey :: !Text
- , _siAddress :: !Text
+ -- ^ pub key value
+ , _siAddress :: !(Maybe Text)
+ -- ^ optional "address", for different pub key formats like ETH
+ , _siCapList :: [Text]
+ -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 
 instance NFData Signer
 instance Serialize Signer
 instance ToJSON Signer where
-  toJSON Signer{..} = object [
-    "scheme" .= _siScheme,
-    "pubKey" .= _siPubKey,
-    "addr" .= _siAddress]
+  toJSON Signer{..} = object $
+    consMay "scheme" _siScheme $
+    consMay "addr" _siAddress $
+    consListMay "clist" _siCapList $
+    [ "pubKey" .= _siPubKey ]
+    where
+      consMay f mv ol = maybe ol (consPair f ol) mv
+      consPair f ol v = (f .= v):ol
+      consListMay f cl ol
+        | null cl = ol
+        | otherwise = consPair f ol cl
 instance FromJSON Signer where
-  parseJSON = withObject "Signer" $ \o -> do
-    pub <- o .: "pubKey"
-    scheme <- o .:? "scheme"   -- defaults to PPKScheme default
-    addr <- o .:? "addr"       -- defaults to full Public Key
-
-    return $ Signer
-             (fromMaybe defPPKScheme scheme)
-             pub
-             (fromMaybe pub addr)
+  parseJSON = withObject "Signer" $ \o -> Signer
+    <$> o .:? "scheme"
+    <*> o .: "pubKey"
+    <*> o .:? "addr"
+    <*> (listMay <$> (o .:? "clist"))
+    where
+      listMay = fromMaybe []
 
 
 

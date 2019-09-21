@@ -631,6 +631,8 @@ twoPartyEscrow testCmds mgr act = do
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
   allResults <- runAll mgr allCmds
 
+  print $ _cmdHash runEscrowCmd
+
   runResults allResults $ do
     sysModuleCmd `succeedsWith` textVal "system module loaded"
     acctModuleCmd `succeedsWith` textVal "TableCreated"
@@ -880,7 +882,7 @@ toActualResult (PactResult (Left (PactError _ _ _ d))) = ActualResult . Left $ s
 toActualResult (PactResult (Right pv)) = ActualResult . Right $ pv
 
 
-resultShouldBe :: ActualResult -> ExpectResult -> Expectation
+resultShouldBe :: HasCallStack => ActualResult -> ExpectResult -> Expectation
 resultShouldBe (ActualResult actual) (ExpectResult expect) =
   case (expect,actual) of
     (Left (Just expErr),
