@@ -8,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- Suppress unused constraint on enforce-keyset.
 -- TODO unused constraint is a dodgy warning, probably should not do it.
@@ -18,7 +19,8 @@
 -- Module      :  Pact.Eval
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
--- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>,
+--                Emily Pillmore <emily@kadena.io>
 --
 -- Pact interpreter.
 --
@@ -668,17 +670,20 @@ enforcePactValue' = traverse enforcePactValue
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App (TDef d@Def{..} _) as ai) = do
+reduceApp (App (TDef d _) as ai) = do
   g <- computeUserAppGas d ai
   af <- prepareUserAppArgs d as ai
   evalUserAppBody d af ai g $ \bod' ->
-    case _dDefType of
+    case _dDefType d of
       Defun ->
         reduceBody bod'
       Defpact -> do
-        continuation <- PactContinuation (QName _dModule (asString _dDefName) def)
-          <$> enforcePactValue' (fst af)
-        initPact ai continuation bod'
+        let qn = QName (_dModule d) (asString $ _dDefName d) def
+
+        pv <- enforcePactValue' $ fst af
+
+        let pc = PactContinuation qn pv
+        initPact ai pc bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
@@ -701,12 +706,22 @@ prepareUserAppArgs Def{..} args i = do
   return (as',ft')
 
 -- | Instantiate args in body and evaluate using supplied action.
-evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
-                -> (Term Ref -> Eval e a) -> Eval e a
-evalUserAppBody Def{..} (as',ft') ai g run =
-  let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
-      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
-  in appCall fa ai as' $ fmap (g,) $ run bod'
+evalUserAppBody
+  :: Def Ref
+  -> ([Term Name], FunType (Term Name))
+  -> Info
+  -> Gas
+  -> (Term Ref -> Eval e a)
+  -> Eval e a
+evalUserAppBody d (as',ft') ai g run =
+  appCall funApp ai as' $ (g,) <$> run bod
+  where
+    bod = instantiate (resolveArg ai (map mkDirect as')) $ _dDefBody d
+    dn = asString $ _dDefName d
+    dm = Just $ _dModule d
+    dt = _dDefType d
+    meta = _mDocs $ _dMeta d
+    funApp = FunApp (_dInfo d) dn dm dt (funTypes ft') meta
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
@@ -733,17 +748,17 @@ initPact i app bod = view eePactStep >>= \es -> case es of
 
 -- | Apply or resume a pactdef step.
 applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
-applyPact i app (TList steps _ _) PactStep {..} = do
+applyPact i app (TList steps _ _) PactStep{..} = do
 
   -- only one pact state allowed in a transaction
   use evalPactExec >>= \bad -> unless (isNothing bad) $
     evalError i "Multiple or nested pact exec found"
 
   -- retrieve indicated step from code
-  st <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
-  step <- case st of
-    TStep step _meta _i -> return step
-    t -> evalError (_tInfo t) "expected step"
+  step <- case steps V.!? _psStep of
+    Nothing -> evalError i $ "applyPact: step not found: " <> pretty _psStep
+    Just (TStep s _ _) -> return s
+    Just t -> evalError (_tInfo t) "expected step"
 
   -- determine if step is skipped (for private execution)
   executePrivate <- traverse reduce (_sEntity step) >>= traverse (\stepEntity -> case stepEntity of
@@ -753,15 +768,16 @@ applyPact i app (TList steps _ _) PactStep {..} = do
     t -> evalError' t "applyPact: step entity must be String value")
 
   let stepCount = length steps
+      rollback = isJust $ _sRollback step
 
   -- init pact state
   evalPactExec .=
-      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app)
+      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback)
 
   -- evaluate
   result <- case executePrivate of
     Just False -> return $ tStr "skip step"
-    _ -> case (_psRollback,_sRollback step) of
+    _ -> case (_psRollback, _sRollback step) of
       (False,_) -> reduce $ _sExec step
       (True,Just rexp) -> reduce rexp
       (True,Nothing) -> evalError' step $ "Rollback requested but none in step"

@@ -17,19 +17,38 @@
 -- Pact Continuation data
 --
 module Pact.Types.Continuation
-  ( -- * Types
-    PactStep(..)
-  , PactContinuation(..)
-  , PactExec(..)
-  , Yield(..)
-  , Provenance(..)
-    -- * Optics
-  , peStepCount, peYield, peExecuted, pePactId, peStep, peContinuation
-  , psStep, psRollback, psPactId, psResume
-  , pcDef, pcArgs
-  , yData, yProvenance
-  , pTargetChainId, pModuleHash
-  ) where
+( -- * Pact Exec
+  PactExec(..)
+, peStepCount
+, peYield
+, peExecuted
+, pePactId
+, peStep
+, peContinuation
+, peRollback
+
+  -- * Pact Step
+, PactStep(..)
+, psStep
+, psRollback
+, psPactId
+, psResume
+
+  -- * Continuations
+, PactContinuation(..)
+, pcDef
+, pcArgs
+
+  -- * Yields
+, Yield(..)
+, yData
+, yProvenance
+
+  -- * Provenance
+, Provenance(..)
+, pTargetChainId
+, pModuleHash
+) where
 
 import GHC.Generics (Generic)
 
@@ -118,6 +137,9 @@ data PactExec = PactExec
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _peContinuation :: PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.
+  , _peRollback :: !Bool
+    -- ^ Track whether a given pact contains rollbacks, disallowing in the
+    -- case where we see cross-chain yields.
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec

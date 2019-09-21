@@ -763,11 +763,14 @@ yield i as = case as of
       eym <- use evalPactExec
       case eym of
         Nothing -> evalError' i "Yield not in defpact context"
-        Just PactExec{..} -> do
+        Just pe -> do
           o' <- enforcePactValue' o
           y <- case tid of
             Nothing -> return $ Yield o' Nothing
-            Just t -> fmap (Yield o') $ provenanceOf i t
+            Just t -> do
+              if _peRollback pe
+                then evalError' i "Rollbacks disallowed in cross-chain defpacts"
+                else fmap (Yield o') $ provenanceOf i t
           evalPactExec . _Just . peYield .= Just y
           return u
 

@@ -4,8 +4,9 @@
 
 (module yieldtest 'k
 
-  "Define one test: 'tester' executes a single-chain pact and ensures rollbacks \
-  \and step behavior works properly."
+  "Define two tests: 'tester' executes a single-chain pact and ensures rollbacks \
+  \and 'cross-chain' executes a cross-chain pact and step behavior works         \
+  \properly."
 
   (defschema schema-a a-result:string)
 
@@ -28,9 +29,6 @@
 
 
   (defpact cross-chain (name)
-    "Define one test: 'endorsement-test' executes a single cross-chain pact and \
-    \ensures step behavior and yield enforcement works properly."
-
     (step
      (let*
          ((nameA (+ name "->A"))
@@ -38,6 +36,21 @@
 
        (yield r "1")
        nameA))
+
+    (step
+     (resume { "a-result" := ar }
+             (+ ar "->B")))
+    )
+
+  (defpact failure-cross-chain (name)
+    (step-with-rollback
+     (let*
+         ((nameA (+ name "->A"))
+          (r:object{schema-a} { "a-result": nameA }))
+
+       (yield r "1")
+       nameA)
+     "this is a rollback")
 
     (step
      (resume { "a-result" := ar }
@@ -131,3 +144,12 @@
 (env-chain-data { "chain-id" : "1" })
 (expect "step 1 executes on correct chain with new yield value" "someRandomStr->B"
 	(continue-pact 1 false (hash "emily-pact-id") {"a-result": "someRandomStr"}))
+
+
+;; reset state
+(pact-state true)
+
+(env-chain-data { "chain-id" : "0" })
+(env-hash (hash "bad-pact"))
+
+(expect-failure "yield fails due to cross-chain rollback" (failure-cross-chain 'emily))
