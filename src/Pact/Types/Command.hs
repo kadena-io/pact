@@ -46,10 +46,12 @@ module Pact.Types.Command
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
   , cmdToRequestKey, requestKeyToB16Text
+  , SigCapability(..), parseSigCapability
   ) where
 
 
 import Control.Applicative
+import Control.Error (fmapL)
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.DeepSeq
@@ -58,17 +60,19 @@ import Data.Serialize as SZ
 import Data.String
 import Data.Hashable (Hashable)
 import Data.Aeson as A
-import Data.Text (Text)
+import Data.Text (Text,unpack)
 import Data.Maybe  (fromMaybe)
 
 
 import GHC.Generics
 import Prelude
 
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Compile (compileExps,mkTextInfo)
 import Pact.Types.Orphans ()
+import Pact.Types.PactValue (PactValue(..),toPactValue)
+import Pact.Types.Pretty
 import Pact.Types.RPC
-import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.Runtime hiding (PublicKey)
 
 
 #if !defined(ghcjs_HOST_OS)
@@ -171,13 +175,15 @@ verifyCommand orig@Command{..} =
     toProcSucc payload = ProcSucc $ orig { _cmdPayload = payload }
     toProcFail errStr = ProcFail $ "Invalid command: " ++ errStr
 
-    parsePact :: Text -> Either String ParsedCode
-    parsePact code = ParsedCode code <$> parseExprs code
     parsedPayload = traverse parsePact
                     =<< A.eitherDecodeStrict' _cmdPayload
 
     verifiedHash = verifyHash _cmdHash _cmdPayload
 {-# INLINE verifyCommand #-}
+
+parsePact :: Text -> Either String ParsedCode
+parsePact code = ParsedCode code <$> parseExprs code
+{-# INLINABLE parsePact #-}
 
 
 hasInvalidSigs :: PactHash -> [UserSig] -> [Signer] -> Maybe String
@@ -222,6 +228,33 @@ data ParsedCode = ParsedCode
 instance NFData ParsedCode
 
 
+data SigCapability = SigCapability
+  { _scName :: !QualifiedName
+  , _scArgs :: ![PactValue]
+  } deriving (Eq,Show,Generic)
+instance NFData SigCapability
+
+instance Pretty SigCapability where
+  pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
+
+instance ToJSON SigCapability
+  where toJSON = toJSON . renderCompactText
+
+instance FromJSON SigCapability where
+  parseJSON = withText "SigCapability" $ \t -> case parseSigCapability t of
+    Right c -> return c
+    Left e -> fail e
+
+parseSigCapability :: Text -> Either String SigCapability
+parseSigCapability txt = parsed >>= compiled >>= parseApp
+  where
+    parseApp ts = case ts of
+      [(TApp (App (TVar (QName q) _) as _) _)] -> SigCapability q <$> mapM toPV as
+      _ -> fail $ "Sig capability parse failed: Expected single qualified capability in form (qual.DEFCAP arg arg ...)"
+    compiled ParsedCode{..} = fmapL (("Sig capability parse failed: " ++) . show) $
+      compileExps (mkTextInfo _pcCode) _pcExps
+    parsed = parsePact txt
+    toPV a = fmapL (("Sig capability argument parse failed, expected simple pact value: " ++) . unpack) $ toPactValue a
 
 -- | Signer combines PPKScheme, PublicKey, and the Address (aka the
 --   formatted PublicKey).

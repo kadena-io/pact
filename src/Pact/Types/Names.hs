@@ -110,7 +110,7 @@ instance ToJSON QualifiedName where
   toJSON = toJSON . renderCompactString
 
 instance FromJSON QualifiedName where
-  parseJSON = withText "Name" $ \t -> case parseQualifiedName def t of
+  parseJSON = withText "QualifiedName" $ \t -> case parseQualifiedName def t of
     Left s  -> fail s
     Right n -> return n
 

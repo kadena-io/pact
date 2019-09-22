@@ -160,6 +160,7 @@ library
                      , deepseq >= 1.4.2.0 && < 1.5
                      , deriving-compat >= 0.5.1
                      , directory >= 1.2.6.2 && < 1.4
+                     , errors >= 2.3
                      , exceptions >= 0.8.3 && < 0.11
                      , filepath >= 1.4.1.0 && < 1.5
                      , hashable >= 1.2.4.0 && < 1.3
