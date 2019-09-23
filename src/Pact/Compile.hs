@@ -57,7 +57,7 @@ import Pact.Types.ExpParser
 import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Pretty hiding (nest, sep)
-import Pact.Types.Runtime (PactError)
+import Pact.Types.PactError
 import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util

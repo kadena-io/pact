@@ -60,6 +60,7 @@ library
                      , Pact.Types.Logger
                      , Pact.Types.Names
                      , Pact.Types.Native
+                     , Pact.Types.PactError
                      , Pact.Types.PactValue
                      , Pact.Types.Parser
                      , Pact.Types.Persistence
