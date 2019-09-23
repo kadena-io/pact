@@ -41,21 +41,6 @@
      (resume { "a-result" := ar }
              (+ ar "->B")))
     )
-
-  (defpact failure-cross-chain (name)
-    (step-with-rollback
-     (let*
-         ((nameA (+ name "->A"))
-          (r:object{schema-a} { "a-result": nameA }))
-
-       (yield r "1")
-       nameA)
-     "this is a rollback")
-
-    (step
-     (resume { "a-result" := ar }
-             (+ ar "->B")))
-    )
 )
 
 (commit-tx)
@@ -144,12 +129,3 @@
 (env-chain-data { "chain-id" : "1" })
 (expect "step 1 executes on correct chain with new yield value" "someRandomStr->B"
 	(continue-pact 1 false (hash "emily-pact-id") {"a-result": "someRandomStr"}))
-
-
-;; reset state
-(pact-state true)
-
-(env-chain-data { "chain-id" : "0" })
-(env-hash (hash "bad-pact"))
-
-(expect-failure "yield fails due to cross-chain rollback" (failure-cross-chain 'emily))
