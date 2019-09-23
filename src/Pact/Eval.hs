@@ -681,9 +681,7 @@ reduceApp (App (TDef d _) as ai) = do
         let qn = QName (_dModule d) (asString $ _dDefName d) def
 
         pv <- enforcePactValue' $ fst af
-
-        let pc = PactContinuation qn pv
-        initPact ai pc bod'
+        initPact ai (PactContinuation qn pv) bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
