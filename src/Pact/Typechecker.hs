@@ -792,15 +792,32 @@ toFun t = die (_tInfo t) "Non-var in fun position"
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
 assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
-  void $ toStepYRs >>= foldM go (Nothing,0::Int)
+  toStepYRs >>= foldM_ go (Nothing, 0::Int)
   where
     lastStep = pred $ length steps
+
     toStepYRs = forM steps $ \step -> case step of
-      Step{..} -> return (_aNode,_aYieldResume)
+      Step n _ _ rb yr _ -> case (yr, rb) of
+
+        -- check that a cross-chain yield and rollback do not occur
+        -- in the same step, otherwise build the tuple
+
+        (Just y, Just{}) ->
+          if _yrCrossChain y
+          then die'' step "Illegal rollback with yield"
+          else return (n, yr)
+        _ -> return (n, yr)
       _ -> die'' step "Non-step in defpact"
+
     yrMay l yr = preview (_Just . l . _Just) yr
-    go :: (Maybe (YieldResume Node),Int) -> (Node, Maybe (YieldResume Node)) -> TC (Maybe (YieldResume Node),Int)
-    go (prev,idx) (n,curr) = do
+
+    go
+      :: (Maybe (YieldResume Node),Int)
+        -- ^ previous yield-resume pair * step index
+      -> (Node, Maybe (YieldResume Node))
+        -- ^ node * current yield resume * rollback
+      -> TC (Maybe (YieldResume Node),Int)
+    go (prev, idx) (n, curr) = do
       case (yrMay yrYield prev, yrMay yrYield curr, yrMay yrResume curr) of
         -- resume in first step
         (_,_,Just{}) | idx == 0 -> die' (_aId n) "Illegal resume in first step"
@@ -809,15 +826,17 @@ assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
         -- yield in previous step, no resume in current step
         (Just{},_,Nothing) -> die' (_aId n) "Missing resume after yield"
         -- resume in current step, no yield in last step
-        (Nothing,_,Just {}) -> die' (_aId n) "Missing yield before resume"
+        (Nothing,_,Just{}) -> die' (_aId n) "Missing yield before resume"
         -- yield in previous step, resume in current step: associate
         (Just y,_,Just r) -> assocYRSchemas y r
         -- just yield in current: noop
-        (Nothing,Just {},Nothing) -> return ()
+        (Nothing,Just{},Nothing) -> return ()
         -- nothing: noop
         (Nothing,Nothing,Nothing) -> return ()
       return (curr,succ idx)
+
     lookupSchemaTy n = (resolveTy . snd) =<< lookupAst "assocStepYieldReturns" (_aId n)
+
     assocYRSchemas a b = do
       a' <- lookupSchemaTy a
       b' <- lookupSchemaTy b
@@ -925,6 +944,7 @@ toAST (TApp Term.App{..} _) = do
             YieldSF -> do
               app' <- mkApp fun' args'
               setOrAssocYR yrYield (_aNode app')
+              tcYieldResume . _Just . yrCrossChain .= (argCount >= 2)
               return app'
             Resume -> do
               app' <- specialBind
