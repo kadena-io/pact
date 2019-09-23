@@ -17,7 +17,6 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import qualified Data.Set as S
 import Data.Text (Text, unpack, pack)
 
 import System.Directory
@@ -82,13 +81,13 @@ loadBenchModule :: PactDbEnv e -> IO (ModuleData Ref,PersistModuleData)
 loadBenchModule db = do
   m <- pack <$> readFile "tests/bench/bench.pact"
   pc <- parseCode m
-  let md = MsgData S.empty
+  let md = MsgData
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
            pactInitialHash
   let e = setupEvalEnv db entity Transactional md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  void $ evalExec def e pc
+  void $ evalExec [] def e pc
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
   p <- either (throwIO . userError . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
   return (benchMod,p)
@@ -105,7 +104,7 @@ runPactExec benchMod dbEnv pc = do
   let e = setupEvalEnv dbEnv entity Transactional (initMsgData pactInitialHash)
           initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
       s = maybe def (initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
-  toJSON . _erOutput <$> evalExec s e pc
+  toJSON . _erOutput <$> evalExec [] s e pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name $ BareName ">" def)

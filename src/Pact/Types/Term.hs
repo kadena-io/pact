@@ -234,7 +234,7 @@ instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 data UserGuard a = UserGuard
   { _ugFun :: !Name
   , _ugArgs :: ![a]
-  } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
+  } deriving (Eq,Generic,Show,Functor,Foldable,Traversable,Ord)
 
 instance NFData a => NFData (UserGuard a)
 
@@ -253,7 +253,7 @@ data Guard a
   | GKeySetRef !KeySetName
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
-  deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
+  deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
 
 instance NFData a => NFData (Guard a)
 

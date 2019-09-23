@@ -15,14 +15,16 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
+import Control.Lens
 import Control.Monad
+import Control.Monad.State (state)
+import Data.Maybe (isJust)
+
 import Pact.Eval
 import Pact.Native.Internal
-import Pact.Types.Runtime
-import Control.Lens
-import Control.Monad.State (state)
+import Pact.Types.PactValue
 import Pact.Types.Pretty
-import Data.Maybe (isJust)
+import Pact.Types.Runtime
 
 
 capDefs :: NativeModule
@@ -82,13 +84,18 @@ evalCap :: Bool -> App (Term Ref) -> Eval e (Maybe Capability)
 evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
       when inModule $ guardForModuleCall _appInfo _dModule $ return ()
       prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-      let cap = UserCapability _dModule _dDefName args
+      cap <- UserCapability _dModule _dDefName <$> argsToParams _appInfo args
       acquired <- acquireCapability cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
       return $ case acquired of
         NewlyAcquired -> Just cap
         AlreadyAcquired -> Nothing
+
+argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
+argsToParams i = mapM $ \arg -> case toPactValue arg of
+  Right pv -> return pv
+  Left e -> evalError i $ "Invalid capability argument: " <> pretty e
 
 requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
 requireDefcap App{..} = case _appFun of
@@ -107,7 +114,7 @@ requireCapability =
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
       (args,_) <- prepareUserAppArgs d _appArgs _appInfo
-      let cap = UserCapability _dModule _dDefName args
+      cap <- UserCapability _dModule _dDefName <$> argsToParams _appInfo args
       granted <- capabilityGranted cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True

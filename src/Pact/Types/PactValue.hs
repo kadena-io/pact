@@ -44,7 +44,7 @@ data PactValue
   | PList (Vector PactValue)
   | PObject (ObjectMap PactValue)
   | PGuard (Guard PactValue)
-  deriving (Eq,Show,Generic)
+  deriving (Eq,Show,Generic,Ord)
 
 instance NFData PactValue
 

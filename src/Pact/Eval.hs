@@ -98,8 +98,11 @@ enforceKeySetName mi mksn = do
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
+  granted <- S.fromList <$> use (evalCapabilities . capGranted)
   let count = length _ksKeys
-      matched = S.size $ S.intersection (S.fromList _ksKeys) sigs
+      filterSigs (pk,caps) = pk `elem` _ksKeys && (S.null caps || not (S.null matchedCaps))
+        where matchedCaps = S.intersection caps granted
+      matched = V.length $ V.filter filterSigs sigs
       failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <>
         maybe "" (\ksn' -> ": " <> pretty ksn') ksn
       runBuiltIn p | p count matched = return ()

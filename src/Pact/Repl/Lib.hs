@@ -31,7 +31,6 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import qualified Data.Map as M
 import Data.Semigroup (Endo(..))
-import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
@@ -275,7 +274,7 @@ setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i (V.toList ts)
-  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) (V.toList ks)))
+  setenv eeMsgSigs (V.fromList (map ((,mempty) . PublicKey . encodeUtf8) (V.toList ks)))
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
@@ -484,7 +483,7 @@ verify i as = case as of
   _ -> argsError i as
 
 sigKeyset :: RNativeFun LibState
-sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (Name $ BareName (asString KeysAll) def)
+sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (V.toList $ V.map fst ss) (Name $ BareName (asString KeysAll) def)
 
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")

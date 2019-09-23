@@ -33,12 +33,16 @@ module Pact.Interpreter
 import Control.Concurrent
 import Control.Monad.Catch
 import Control.Monad.Except
+import Control.Monad.Reader
 import Control.Lens
 
 import Data.Aeson
 import Data.Default
 import Data.HashMap.Strict (HashMap)
+import Data.Maybe
 import qualified Data.Set as S
+import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Vector as V
 import System.Directory
 
 
@@ -61,14 +65,13 @@ data PactDbEnv e = PactDbEnv {
   }
 
 data MsgData = MsgData {
-  mdSigs :: !(S.Set PublicKey),
   mdData :: !Value,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash
   }
 
 initMsgData :: Hash -> MsgData
-initMsgData = MsgData def Null def
+initMsgData = MsgData Null def
 
 data EvalResult = EvalResult
   { _erInput :: !(Either (Maybe PactExec) [Term Name])
@@ -82,24 +85,24 @@ data EvalResult = EvalResult
 
 
 -- | Execute pact statements.
-evalExec :: EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
-evalExec initState evalEnv ParsedCode {..} = do
+evalExec :: [Signer] -> EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
+evalExec ss initState evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
-  interpret initState evalEnv (Right terms)
+  interpret ss initState evalEnv (Right terms)
 
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
 initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 -- | Resume a defpact execution, with optional PactExec.
-evalContinuation :: EvalState -> EvalEnv e -> ContMsg -> IO EvalResult
-evalContinuation initState ee cm = case (_cmProof cm) of
+evalContinuation :: [Signer] -> EvalState -> EvalEnv e -> ContMsg -> IO EvalResult
+evalContinuation ss initState ee cm = case (_cmProof cm) of
   Nothing ->
-    interpret initState (setStep Nothing) (Left Nothing)
+    interpret ss initState (setStep Nothing) (Left Nothing)
   Just p -> do
     etpe <- (_spvVerifyContinuation . _eeSPVSupport $ ee) p
     pe <- throwEither . over _Left (userError . show) $ etpe
-    interpret initState (setStep (_peYield pe)) (Left $ Just pe)
+    interpret ss initState (setStep (_peYield pe)) (Left $ Just pe)
   where
     setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
 
@@ -117,7 +120,7 @@ setupEvalEnv
 setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
   EvalEnv {
     _eeRefStore = refStore
-  , _eeMsgSigs = mdSigs msgData
+  , _eeMsgSigs = mempty
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
   , _eeEntity = ent
@@ -155,25 +158,34 @@ initSchema :: PactDbEnv (DbEnv p) -> IO ()
 initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 
-interpret :: EvalState -> EvalEnv e -> Either (Maybe PactExec) [Term Name] -> IO EvalResult
-interpret initState evalEnv terms = do
+interpret :: [Signer] -> EvalState -> EvalEnv e -> Either (Maybe PactExec) [Term Name] -> IO EvalResult
+interpret ss initState evalEnv terms = do
   ((rs,logs,txid),state) <-
-    runEval initState evalEnv $ evalTerms terms
+    runEval initState evalEnv $ evalTerms ss terms
   let gas = _evalGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
   return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
 
-evalTerms :: Either (Maybe PactExec) [Term Name] -> Eval e ([Term Name],[TxLog Value],Maybe TxId)
-evalTerms terms = do
-  let safeRollback =
+evalTerms :: [Signer] -> Either (Maybe PactExec) [Term Name] -> Eval e ([Term Name],[TxLog Value],Maybe TxId)
+evalTerms ss terms = handle (\(e :: SomeException) -> safeRollback >> throwM e) go
+  where
+    safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
-  handle (\(e :: SomeException) -> safeRollback >> throwM e) $ do
-        txid <- evalBeginTx def
-        rs <- case terms of
-          Right ts -> mapM eval ts
-          Left pe -> (:[]) <$> resumePact def pe
-        logs <- evalCommitTx def
-        return (rs,logs,txid)
+    go = do
+      txid <- evalBeginTx def
+      sigs <- resolveSignerCaps ss
+      rs <- local (set eeMsgSigs sigs) $ case terms of
+        Right ts -> mapM eval ts
+        Left pe -> (:[]) <$> resumePact def pe
+      logs <- evalCommitTx def
+      return (rs,logs,txid)
 {-# INLINE evalTerms #-}
+
+resolveSignerCaps :: [Signer] -> Eval e (V.Vector (PublicKey, S.Set Capability))
+resolveSignerCaps = return . V.fromList . map toPair
+  where
+    toPair Signer{..} = (pk,mempty) -- TODO
+      where pk = toPK $ fromMaybe _siPubKey _siAddress
+            toPK = PublicKey . encodeUtf8
