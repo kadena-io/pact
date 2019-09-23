@@ -29,7 +29,7 @@ import Control.Monad.Catch
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Data.Semigroup (Endo(..))
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text
@@ -105,7 +105,13 @@ replDefs = ("Repl",
       "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
-      "Set transaction signature KEYS."
+      "Set transaction signature KEYS. See 'env-sigs' for setting keys with associated capabilities."
+     ,defZRNative "env-sigs" setsigs' (funType tTyString [("sigs",TyList (tTyObject TyAny))])
+      [LitExample $ "(env-sigs [{'key: \"my-key\", 'clist: [(accounts.USER_GUARD \"my-account\")]}, " <>
+        "{'key: \"admin-key\", 'clist: []}"]
+      ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
+       "specifying the sig key, and \"clist\" specifying a list of capabilities.")
+
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
@@ -277,6 +283,15 @@ setsigs i [TList ts _ _] = do
   setenv eeMsgSigs (V.fromList (map ((,mempty) . PublicKey . encodeUtf8) (V.toList ks)))
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
+
+setsigs' :: RNativeFun LibState
+setsigs' i [TList ts _ _] = do
+  sigs <- forM ts $ \t -> case t of
+    (TObject (Object (ObjectMap om) _ _ _) _) -> do
+      case (M.lookup "key" om,M.lookup "clist" om) of
+        (Just (TLitString k),Just (TList clist _ _)) -> undefined
+  undefined
+
 
 setmsg :: RNativeFun LibState
 setmsg i as = case as of

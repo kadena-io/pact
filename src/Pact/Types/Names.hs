@@ -97,7 +97,7 @@ data QualifiedName = QualifiedName
   { _qnQual :: ModuleName
   , _qnName :: Text
   , _qnInfo :: Info
-  } deriving (Generic,Eq,Show)
+  } deriving (Generic,Eq,Show,Ord)
 
 instance Pretty QualifiedName where
   pretty QualifiedName{..} = pretty _qnQual <> "." <> pretty _qnName

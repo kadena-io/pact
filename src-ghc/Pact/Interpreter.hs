@@ -1,6 +1,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | "Production" interpreter for Pact, as opposed to the REPL.
 --
 -- Includes initializers for RefStore and test DB environments.
@@ -55,6 +57,7 @@ import Pact.PersistPactDb
 import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Types.PactValue
+import Pact.Types.Pretty
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
@@ -184,8 +187,15 @@ evalTerms ss terms = handle (\(e :: SomeException) -> safeRollback >> throwM e) 
 {-# INLINE evalTerms #-}
 
 resolveSignerCaps :: [Signer] -> Eval e (V.Vector (PublicKey, S.Set Capability))
-resolveSignerCaps = return . V.fromList . map toPair
+resolveSignerCaps ss = V.fromList <$> mapM toPair ss
   where
-    toPair Signer{..} = (pk,mempty) -- TODO
-      where pk = toPK $ fromMaybe _siPubKey _siAddress
-            toPK = PublicKey . encodeUtf8
+    toPair Signer{..} = (pk,) . S.fromList <$> mapM resolveCap _siCapList
+      where
+        pk = PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
+        resolveCap :: SigCapability -> Eval e Capability
+        resolveCap SigCapability{..} =
+          resolveRef _scName (QName _scName) >>= \m -> case m of
+            Just (Ref (TDef Def{..} _)) | _dDefType == Defcap ->
+              return $ UserCapability _dModule _dDefName $ _scArgs
+            Just _ -> evalError' _scName $ "resolveSignerCaps: expected defcap reference"
+            Nothing -> evalError' _scName $ "resolveSignerCaps: cannot resolve " <> pretty _scName

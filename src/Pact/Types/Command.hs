@@ -222,12 +222,11 @@ data Signer = Signer
  -- ^ pub key value
  , _siAddress :: !(Maybe Text)
  -- ^ optional "address", for different pub key formats like ETH
- , _siCapList :: [Text]
+ , _siCapList :: [SigCapability]
  -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 
 instance NFData Signer
-instance Serialize Signer
 instance ToJSON Signer where
   toJSON Signer{..} = object $
     consMay "scheme" _siScheme $

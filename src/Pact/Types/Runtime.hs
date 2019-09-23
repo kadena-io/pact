@@ -91,7 +91,7 @@ instance Pretty Capability where
 data SigCapability = SigCapability
   { _scName :: !QualifiedName
   , _scArgs :: ![PactValue]
-  } deriving (Eq,Show,Generic)
+  } deriving (Eq,Show,Generic,Ord)
 instance NFData SigCapability
 
 instance Pretty SigCapability where
