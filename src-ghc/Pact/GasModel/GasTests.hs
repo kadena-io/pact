@@ -1174,8 +1174,8 @@ pactIdTests = tests
 yieldTests :: GasUnitTests
 yieldTests = tests
   where
-    yieldExpr obj = defPactExpression [text| (yield $obj) |]
-    yieldExprWithTargetChain obj = defPactExpression [text| (yield $obj "some-chain-id") |]
+    yieldExpr obj = [text| (yield $obj) |]
+    yieldExprWithTargetChain obj = [text| (yield $obj "some-chain-id") |]
 
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
                           (PactId "somePactId")
@@ -1218,29 +1218,35 @@ yieldTests = tests
 resumeTests :: GasUnitTests
 resumeTests = tests
   where
-    resumeExpr binding = defPactExpression [text|(resume $binding a1)|]
+    resumeExprText binding = [text|(resume $binding a1)|]
+ 
+    addProvenanceDesc (PactExpression expr desc) =
+      PactExpression
+      expr
+      (over _Just (<> " with provenance") desc)
 
-    args :: NEL.NonEmpty (HM.HashMap T.Text Integer, (T.Text, defPactExpression))
-    args = NEL.map (\((_,m),b) -> (m,createPactExpr resumeExpr b))
+    args :: NEL.NonEmpty ((HM.HashMap T.Text Integer), PactExpression)
+    args = NEL.map (\((_,m),b) -> (m,
+                                   createPactExpr resumeExprText b))
            $ NEL.zip strKeyIntValMaps strKeyIntValBindingsExpr
 
     toSPVTests ::
-      (HM.HashMap T.Text Integer, (T.Text, defPactExpression))
+      (HM.HashMap T.Text Integer, PactExpression)
       -> GasUnitTests
-    toSPVTests (yieldMap, (desc, expr))
+    toSPVTests (yieldMap, expr)
       = createGasUnitTests
-        (setupForResume True (yieldMap, desc))
-        (setupForResume True (yieldMap, desc))
-        ((desc,expr) :| [])
+        (setupForResume True yieldMap)
+        (setupForResume True yieldMap)
+        (expr :| [])
 
     toNonSPVTests ::
-      (HM.HashMap T.Text Integer, (T.Text, defPactExpression))
+      (HM.HashMap T.Text Integer, PactExpression)
       -> GasUnitTests
-    toNonSPVTests (yieldMap, (desc, expr))
+    toNonSPVTests (yieldMap, expr)
       = createGasUnitTests
-        (setupForResume False (yieldMap, desc))
-        (setupForResume False (yieldMap, desc))
-        ((desc,expr) :| [])
+        (setupForResume False yieldMap)
+        (setupForResume False yieldMap)
+        ((addProvenanceDesc expr) :| [])
 
     tests = concatGasUnitTests $
             NEL.map toSPVTests args <>
@@ -1248,15 +1254,14 @@ resumeTests = tests
 
     setupForResume
       :: Bool
-      -> (HM.HashMap T.Text Integer, T.Text)
-      -> (GasTest e -> GasTest e)
-    setupForResume isProv (yielded, desc) = allUpdates
+      -> HM.HashMap T.Text Integer
+      -> (GasSetup e -> GasSetup e)
+    setupForResume isProv yielded = allUpdates
       where
         allUpdates
           = bool
-            ( updateEnvWithYield )    -- No provenance needed
-            ( updateGasTestDesc .
-              updateStateWithStackFrame .
+            ( updateEnvWithYield )    -- No provenance setup needed
+            ( updateStateWithStackFrame .
               updateEnvWithChaindId .
               updateEnvWithYield .
               setInitialState
@@ -1269,8 +1274,6 @@ resumeTests = tests
           = setEnv (set (eePublicData . pdPublicMeta . pmChainId) chainId)
         updateStateWithStackFrame
           = setState (set evalCallStack [someStackFrame])
-        updateGasTestDesc
-          = set gasTestAbridgedExpr $ desc <> " with provenance"
         setInitialState = setState $ const (initStateModules mockModules)
 
         mockModules
@@ -1301,88 +1304,97 @@ pactVersionTests = defGasUnitTests allExprs
 readStringTests :: GasUnitTests
 readStringTests = tests
   where
-    readStringExpr = defPactExpression [text|(read-string "name")|]
+    readStringExprText = [text|(read-string "name")|]
+    
+    readStringExpr desc =
+      PactExpression
+      readStringExprText
+      (Just $ readStringExprText <>
+              " with name=" <> desc <> "String")
 
-    allUpdates i = updateEnv
-      where
-        strVal
-          = A.object ["name" A..= i]
-        updateEnv
-          = setEnv (set eeMsgBody strVal)
+    updateEnvWithData s =
+      setEnv (set eeMsgBody $ A.object ["name" A..= s])
 
     setupTests (desc, s)
       = createGasUnitTests
-        (allUpdates s)
-        (allUpdates s)
-        ( (readStringExpr <> " with " <> desc,
-           readStringExpr) :| [])
+        (updateEnvWithData s)
+        (updateEnvWithData s)
+        ( (readStringExpr desc) :| [])
 
     tests = concatGasUnitTests $
-            NEL.map setupTests escapedStringsExpr
+            NEL.map setupTests strings
 
 
 readMsgTests :: GasUnitTests
 readMsgTests = tests
   where
-    readMsgExpr = defPactExpression [text|(read-msg)|]
+    readMsgExprText = [text|(read-msg)|]
+    readMsgExpr desc =
+      PactExpression
+      readMsgExprText
+      (Just $ readMsgExprText <>
+              " with msg=" <> desc <> "ObjectMap")
        
-    allUpdates m = setEnv (set eeMsgBody $ toJSON m)
+    updateEnvWithData m =
+      setEnv (set eeMsgBody $ toJSON m)
     
     setupTests (desc, m)
       = createGasUnitTests
-        (allUpdates m)
-        (allUpdates m)
-        ((readMsgExpr <> " with " <> desc,
-          readMsgExpr) :| [])
+        (updateEnvWithData m)
+        (updateEnvWithData m)
+        ((readMsgExpr desc) :| [])
 
     tests = concatGasUnitTests $
-            NEL.map setupTests strKeyIntValMapsExpr
+            NEL.map setupTests strKeyIntValMaps
 
 
 readIntegerTests :: GasUnitTests
 readIntegerTests = tests
   where
-    readIntExpr = defPactExpression [text|(read-integer "amount")|]
-    
-    allUpdates i = updateEnv
-      where
-        intVal
-          = A.object ["amount" A..= i]
-        updateEnv
-          = setEnv (set eeMsgBody intVal)
+    readIntExprText = [text|(read-integer "amount")|]
+    readIntExpr desc =
+      PactExpression
+      readIntExprText
+      (Just $ readIntExprText <>
+              " with amount=" <> desc <> "Number")
+
+    updateEnvWithData i =
+      setEnv (set eeMsgBody $ A.object ["amount" A..= i])
 
     setupTests (desc, i)
       = createGasUnitTests
-        (allUpdates i)
-        (allUpdates i)
-        ((readIntExpr <> " with " <> desc,
-          readIntExpr) :| [])
+        (updateEnvWithData i)
+        (updateEnvWithData i)
+        ((readIntExpr desc) :| [])
 
     tests = concatGasUnitTests $
-            NEL.map setupTests sizesExpr
+            NEL.map setupTests sizes
 
 
 readDecimalTests :: GasUnitTests
 readDecimalTests = tests
   where
-    readDecExpr = defPactExpression [text|(read-decimal "amount")|]
+    readDecExprText = [text|(read-decimal "amount")|]
+    readDecExpr desc =
+      PactExpression
+      readDecExprText
+      (Just $ readDecExprText <>
+              " with amount=" <> desc <> "Decimal")
     
-    allUpdates d = updateEnv
+    updateEnvWithData d =
+      setEnv (set eeMsgBody decVal)
       where
-        d' = d <> "1"
-        decVal = A.object ["amount" A..= [text|0.$d'|]]
-        updateEnv
-          = setEnv (set eeMsgBody decVal)
+        d' = "0." <> intToStr d <> "1"
+        decVal = A.object ["amount" A..= d']
 
     setupTests (desc, d)
       = createGasUnitTests
-        (allUpdates d)
-        (allUpdates d)
-        ((readDecExpr <> " with " <> desc,
-          readDecExpr) :| [])
+        (updateEnvWithData d)
+        (updateEnvWithData d)
+        ((readDecExpr desc) :| [])
    
     tests = concatGasUnitTests $
-            NEL.map setupTests sizesExpr
+            NEL.map setupTests sizes
 
 
 mapTests :: GasUnitTests
@@ -1409,7 +1421,7 @@ listModulesTests = defGasUnitTests allExprs
     listModulesExpr =
       defPactExpression [text| (list-modules) |]
 
-    allExprs = dupe listModulesExpr :| []
+    allExprs = listModulesExpr :| []
 
 
 lengthTests :: GasUnitTests
@@ -1472,9 +1484,11 @@ hashTests = defGasUnitTests allExprs
 formatTests :: GasUnitTests
 formatTests = defGasUnitTests allExprs
   where
-    formatExpr (str,(desc,li)) =
-      (defPactExpression [text| (format "{}...{}" $desc)|]
-      ,defPactExpression [text| (format "$str" $li )|])
+    formatExpr (str,(PactExpression expr desc')) =
+      PactExpression
+      [text| (format "$str" $expr )|]
+      (Just [text| (format "{}...{}" $desc)|])
+      where desc = fromMaybe expr desc'
 
     curlyBraces =
       NEL.map
@@ -1524,7 +1538,7 @@ enforceOneTests = defGasUnitTests allExprs
         sizes
     listOfEnforcesListExpr
       = NEL.map
-        (\(desc, li) -> PactExpression (toText (MockList li)) (desc <> "EnforceList"))
+        (\(desc, li) -> PactExpression (toText (MockList li)) (Just $ desc <> "EnforceList"))
         listOfEnforcesList
 
     allExprs
@@ -1599,19 +1613,19 @@ defineNamespaceTests = tests
  
     rotateNamespaceTests = rotateTests
       where
-        rotateExpr =
-          defPactExpression [text| (define-namespace '$sampleNamespaceName $sampleLoadedKeysetName) |]
+        rotateExprText = [text| (define-namespace '$sampleNamespaceName $sampleLoadedKeysetName) |]
+        rotateExpr = 
+          PactExpression
+          rotateExprText
+          (Just $ rotateExprText <> ": Defining namespace with the same name as one already defined.")
 
         updateMsgSig =
           setEnv $ set eeMsgSigs (S.fromList samplePubKeys)
-        updateDesc =
-          set gasTestAbridgedExpr $
-          rotateExpr <> ": Defining namespace with the same name as one already defined."
 
         rotateTests =
           createGasUnitTests
-          (updateMsgSig . updateDesc)
-          (updateMsgSig . updateDesc)
+          (updateMsgSig)
+          (updateMsgSig)
           (rotateExpr :| [])
 
 
@@ -1674,7 +1688,7 @@ chainDataTests = defGasUnitTests allExprs
 atTests :: GasUnitTests
 atTests = defGasUnitTests allExprs
   where
-    atListExpr ((_,idx), PactExpression li liDesc') =
+    atListExpr (PactExpression idx _, PactExpression li liDesc') =
       PactExpression
       [text| (at $idx $li) |]
       (Just [text| (at $idx $liDesc) |])
@@ -1694,9 +1708,13 @@ atTests = defGasUnitTests allExprs
 bindTests :: GasUnitTests
 bindTests = defGasUnitTests allExprs
   where
-    bindExpr ((objDesc, obj), (bindingDesc, binding)) =
-      (defPactExpression [text| (bind $objDesc $bindingDesc a1) |]
-      ,defPactExpression [text| (bind $obj $binding a1) |])
+    bindExprText obj bind = [text| (bind $obj $bind a1) |]
+    bindExpr (PactExpression obj objDesc', PactExpression binding bindingDesc') =
+      PactExpression
+      (bindExprText obj binding)
+      (Just $ bindExprText objDesc bindingDesc)
+      where objDesc = fromMaybe obj objDesc'
+            bindingDesc = fromMaybe binding bindingDesc'
 
     args = NEL.zip
            strKeyIntValMapsExpr

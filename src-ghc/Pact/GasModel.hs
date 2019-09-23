@@ -6,14 +6,13 @@ module Pact.GasModel where
 import Control.Exception              (bracket)
 import Control.Monad                  (void)
 import Statistics.Types               (Estimate(..))
-import Data.List                  (foldl')
+import Data.List                      (foldl')
 
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Criterion.Main             as C
 import qualified Criterion                  as C
 import qualified Criterion.Types            as C
 import qualified Data.HashMap.Strict        as HM
-import qualified Data.List.NonEmpty         as NEL
 import qualified Data.Text                  as T
 import qualified Data.Csv                   as Csv
 import qualified Options.Applicative        as O
@@ -48,11 +47,13 @@ options = O.info (O.helper <*> parser)
       <*> (O.flag False True
            (O.short 'b' <> O.long "bench" <> O.help "Just bench"))
 
-parseNativeFunList :: Option -> [NativeDefName]
-parseNativeFunList opt =
+optionToGasTests :: Option -> [(NativeDefName, GasUnitTests)]
+optionToGasTests opt = HM.toList $
   case _oFilter opt of
-    Nothing -> []
-    Just t -> NativeDefName <$> T.split (== '|') t
+    Nothing -> unitTests
+    Just ts -> HM.filterWithKey matchingFuns unitTests
+      where tlist = NativeDefName <$> T.split (== '|') ts
+            matchingFuns k _ = k `elem` tlist
 
 
 type Mean = Double
@@ -67,6 +68,91 @@ average nums = Average avgNanoSeconds
         avgSeconds = s / n
         avgNanoSeconds = avgSeconds * 1000000000
 
+
+exec
+  :: EvalState
+  -> EvalEnv e
+  -> [Term Name]
+  -> IO (Either PactError [Term Name], EvalState)
+exec s e terms = runEval' s e $ mapM eval terms
+
+
+setupEnv :: GasSetup e -> IO (EvalEnv e, EvalState)
+setupEnv (GasSetup e s _ _) = do
+  env <- e
+  state <- s
+  return (env, state)
+
+
+mockRun
+  :: PactExpression
+  -> (EvalEnv e, EvalState)
+  -> IO (Either PactError [Term Name], EvalState)
+mockRun expr (env, state) = do
+  terms <- compileCode (_pactExpressionFull expr)
+  exec state env terms
+
+
+mockRuns
+  :: GasUnitTests
+  -> IO ()
+mockRuns tests = do
+  void $ mapOverGasUnitTests tests run run
+  where
+    run expr dbSetup = do
+      putStrLn $ "Dry run for " ++ T.unpack (getDescription expr dbSetup)
+
+      (res,_) <- bracket (setupEnv dbSetup)
+                         (gasSetupCleanup dbSetup)
+                         (mockRun expr)
+      eitherDie (getDescription expr dbSetup) res
+
+
+-- | For debugging purposes
+mockRuns'
+  :: GasUnitTests
+  -> IO [(Either PactError [Term Name], EvalState)]
+mockRuns' tests = do
+  mapOverGasUnitTests tests run run
+  where
+    run expr dbSetup = do
+      putStrLn $ "Pact results for: " ++ T.unpack (getDescription expr dbSetup)
+      (res,state) <- bracket (setupEnv dbSetup)
+                         (gasSetupCleanup dbSetup)
+                         (mockRun expr)
+      printResult res
+      return (res,state)
+
+
+bench
+  :: PactExpression
+  -> GasSetup e
+  -> IO Mean
+bench expr dbSetup = do
+  terms <- compileCode (_pactExpressionFull expr)
+  putStrLn $ T.unpack (getDescription expr dbSetup)
+  report <- bracket setup teardown $ C.benchmark' . (run terms)
+  return $ estPoint $
+           C.anMean $
+           C.reportAnalysis report
+  where
+    setup = do
+      s <- setupEnv dbSetup
+      return $ NoopNFData s
+    teardown (NoopNFData env) = do
+      (gasSetupCleanup dbSetup) env
+    run terms ~(NoopNFData (env, state)) =
+          C.nfIO (exec state env terms)
+
+
+benchesOnce
+  :: GasUnitTests
+  -> IO ()
+benchesOnce tests =
+  void $ mapOverGasUnitTests tests bench bench
+
+
+-- | Benchmarks each native function's tests three times
 data BenchResult = BenchResult
   { _benchResultFunName :: NativeDefName
   , _benchResultBackendType :: T.Text
@@ -86,98 +172,20 @@ csvHeader =
   ("function", "backendType", "description", "mean1", "mean2", "mean3")
 
 
-exec
-  :: EvalState
-  -> EvalEnv e
-  -> [Term Name]
-  -> IO (Either PactError [Term Name], EvalState)
-exec s e terms = runEval' s e $ mapM eval terms
-
-
-mockRun
-  :: GasTest e
-  -> (EvalEnv e, EvalState)
-  -> IO (Either PactError [Term Name], EvalState)
-mockRun (GasTest expr _ _ _ _) (env, state) = do
-  terms <- compileCode expr
-  exec state env terms
-
-
-mockRuns
-  :: GasUnitTests
-  -> IO ()
-mockRuns tests = do
-  mapM_ run (NEL.toList $ _gasUnitTestsSqlite tests)
-  mapM_ run (NEL.toList $ _gasUnitTestsMock tests)
-  where
-    run test = do
-      putStrLn $ "Dry run for " ++ T.unpack (getDescription test)
-      (res,_) <- bracket (_gasTestSetup test)
-                         (_gasTestSetupCleanup test)
-                         (mockRun test)
-      eitherDie (getDescription test) res
-
-
--- | For debugging purposes
-mockRuns'
-  :: GasUnitTests
-  -> IO [(Either PactError [Term Name], EvalState)]
-mockRuns' tests = do
-  sqliteRes <- mapM run (NEL.toList $ _gasUnitTestsSqlite tests)
-  mockRes <- mapM run (NEL.toList $ _gasUnitTestsMock tests)
-  return (sqliteRes <> mockRes)
-  where
-    run test = do
-      print $ "Pact results for: " ++ T.unpack (getDescription test)
-      (res,state) <- bracket (_gasTestSetup test)
-                             (_gasTestSetupCleanup test)
-                             (mockRun test)
-      printResult res
-      return (res,state)
-
-
-bench
-  :: GasTest e
-  -> IO Mean
-bench test = do
-  terms <- compileCode (_gasTestExpression test)
-  putStrLn $ T.unpack (getDescription test)
-  report <- bracket setup teardown $ C.benchmark' . (run terms)
-  return $ estPoint $
-           C.anMean $
-           C.reportAnalysis report
-  where
-    setup = do
-      s <- _gasTestSetup test
-      return $ NoopNFData s
-    teardown (NoopNFData env) = do
-      (_gasTestSetupCleanup test) env
-    run terms ~(NoopNFData (env, state)) =
-          C.nfIO (exec state env terms)
-
-
-benchesOnce
-  :: GasUnitTests
-  -> IO ()
-benchesOnce tests =
-  void $ mapOverGasUnitTests tests bench bench
-
-
--- | Benchmarks each native function's tests three times
 benchesMultiple
   :: (NativeDefName, GasUnitTests)
   -> IO [BenchResult]
 benchesMultiple (funName, tests) =
   mapOverGasUnitTests tests run run
   where
-    run test = do
-      mean1 <- bench test
-      mean2 <- bench test
-      mean3 <- bench test
+    run expr setup = do
+      mean1 <- bench expr setup
+      mean2 <- bench expr setup
+      mean3 <- bench expr setup
       return $ BenchResult
                funName
-               (_gasTestBackendType test)
-               (_gasTestAbridgedExpr test)
+               (gasSetupBackendType setup)
+               (getDescription expr setup)
                (average [mean1, mean2, mean3])
 
 
@@ -237,5 +245,5 @@ runGasTestByName nname = do
 
 runAllGasTests :: IO ()
 runAllGasTests = do
-  mapM_ (\(_,t) -> mockRuns' t)
+  mapM_ (\(_,t) -> mockRuns t)
         (HM.toList unitTests)

@@ -12,6 +12,8 @@ module Pact.Types.GasModel
   , getDescription
   
   , GasUnitTests(..)
+  , concatGasUnitTests
+  , mapOverGasUnitTests
 
   , NoopNFData(..)
   
@@ -31,6 +33,7 @@ import Data.Default               (def)
 import Data.List                  (foldl')
 import NeatInterpolation          (text)
 import System.Directory           (removeFile)
+import Data.Maybe                 (fromMaybe)
 
 
 import qualified Data.HashMap.Strict as HM
@@ -61,9 +64,10 @@ type SQLiteDb = DbEnv PSL.SQLite
 data GasSetup e = GasSetup
   { _gasSetupEnv :: !(IO (EvalEnv e))
   , _gasSetupState :: !(IO EvalState)
-  , _gasSetupBackendType :: !T.Text
-  , _gasSetupCleanup :: !((EvalEnv e, EvalState) -> IO ())
+  , gasSetupBackendType :: !T.Text
+  , gasSetupCleanup :: !((EvalEnv e, EvalState) -> IO ())
   }
+-- only makes lenses for fields prefixed with underscore
 makeLenses ''GasSetup
 
 
@@ -73,16 +77,18 @@ data GasTest = GasTest
   }
 
 
-getDescription :: T.Text -> GasSetup e -> T.Text
-getDescription abridgedExpr testSetup =
-  (_gasSetupBackendType testSetup) <> "/" <> abridgedExpr
+getDescription :: PactExpression -> GasSetup e -> T.Text
+getDescription expr testSetup =
+  (gasSetupBackendType testSetup) <> "/" <> exprDesc
+  where exprDesc = fromMaybe
+                   (_pactExpressionFull expr)
+                   (_pactExpressionAbridged expr)
 
 
 newtype GasUnitTests = GasUnitTests (NEL.NonEmpty GasTest)
-{--instance Semigroup GasUnitTests where
-  g <> g' = GasUnitTests
-            (_gasUnitTestsSqlite g <> _gasUnitTestsSqlite g')
-            (_gasUnitTestsMock g <> _gasUnitTestsMock g')
+instance Semigroup GasUnitTests where
+  (GasUnitTests g) <> (GasUnitTests g') =
+    GasUnitTests (g <> g')
 
 concatGasUnitTests :: NEL.NonEmpty GasUnitTests -> GasUnitTests
 concatGasUnitTests listOfTests =
@@ -91,24 +97,22 @@ concatGasUnitTests listOfTests =
     baseCase = NEL.head listOfTests
     rest = NEL.tail listOfTests
 
-gasUnitTestsToLists
-  :: GasUnitTests
-  -> ([GasTest SQLiteDb], [GasTest ()])
-gasUnitTestsToLists (GasUnitTests sqlite mock) =
-  (NEL.toList sqlite, NEL.toList mock)
 
 mapOverGasUnitTests
   :: GasUnitTests
-  -> (GasTest SQLiteDb -> IO f)
-  -> (GasTest () -> IO f)
+  -> (PactExpression -> GasSetup SQLiteDb -> IO f)
+  -> (PactExpression -> GasSetup () -> IO f)
   -> IO [f]
-mapOverGasUnitTests tests sqliteFun mockFun = do
-  sResults <- mapM sqliteFun sTests
-  mResults <- mapM mockFun mTests
-  return $ sResults <> mResults
+mapOverGasUnitTests (GasUnitTests tests) sqliteFun mockFun = do
+  resSqlite <- mapM runSqlite (NEL.toList tests)
+  resMock <- mapM runMock (NEL.toList tests)
+  return (resSqlite <> resMock)
   where
-    (sTests, mTests) =
-      gasUnitTestsToLists tests--}
+    runSqlite (GasTest expr (sqlitedb, _)) =
+      sqliteFun expr sqlitedb
+    runMock (GasTest expr (_, mockdb)) =
+      mockFun expr mockdb
+
 
 
 -- | Newtype to provide a noop NFData instance.
