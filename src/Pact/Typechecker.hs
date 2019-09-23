@@ -802,7 +802,7 @@ assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
         -- check that a cross-chain yield and rollback do not occur
         -- in the same step, otherwise build the tuple
 
-        (Just y, Just{}) -> do
+        (Just y, Just{}) ->
           if _yrCrossChain y
           then die'' step "Illegal rollback with yield"
           else return (n, yr)
