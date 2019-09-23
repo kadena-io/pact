@@ -20,6 +20,7 @@ module Pact.Native.Internal
   ,enforceGuard
   ,defNative,defGasRNative,defRNative
   ,defSchema
+  ,defConst
   ,setTopLevelOnly
   ,foldDefs
   ,funType,funType'
@@ -127,6 +128,13 @@ defSchema n doc fields =
    (map (\(fr,ty) -> Arg (asString fr) ty def) fields)
    def)
 
+defConst :: NativeDefName -> Text -> Type (Term Name) -> Term Name -> NativeDef
+defConst name doc ty term = (name, TConst arg mn cval meta def )
+  where
+    mn = ModuleName "" Nothing
+    arg = Arg (asString name) ty def
+    meta = Meta (Just doc) []
+    cval = CVEval term term
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []

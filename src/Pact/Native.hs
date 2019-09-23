@@ -487,10 +487,25 @@ atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyV
   ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
   "Index LIST at IDX, or get value with key IDX from OBJECT."
 
+asciiConst :: NativeDef
+asciiConst = defConst "CHARSET_ASCII"
+  "Constant denoting the ASCII charset"
+  tTyInteger
+  (toTerm (0 :: Integer))
+
+latin1Const :: NativeDef
+latin1Const = defConst "CHARSET_LATIN1"
+  "Constant denoting the Latin-1 charset ISO-8859-1"
+  tTyInteger
+  (toTerm (1 :: Integer))
+
+-- | Check that a given string conforms to a specified character set.
+-- Supported character sets include latin (ISO 8859-1)
+--
 isCharsetDef :: NativeDef
 isCharsetDef =
   defRNative "is-charset" isCharset
-  (funType tTyBool [("charset", tTyString), ("input", tTyString)])
+  (funType tTyBool [("charset", tTyInteger), ("input", tTyString)])
   [ "(is-charset 'CHARSET_ASCII \"hello world\")"
   , "(is-charset 'CHARSET_ASCII \"I am nÖt ascii\")"
   , "(is-charset 'CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
@@ -499,21 +514,16 @@ isCharsetDef =
   \Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         \
   \'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be \
   \added in the future."
-
--- | Check that a given string conforms to a specified character set.
--- Supported character sets include latin (ISO 8859-1)
---
--- TODO: add support for ISO-8859-5 standard
---
-isCharset :: RNativeFun e
-isCharset i as = case as of
-  [TLitString cs, TLitString t] -> case cs of
-    "CHARSET_ASCII" -> go Char.isAscii t
-    "CHARSET_LATIN1" -> go Char.isLatin1 t
-    _ -> evalError' i $ "Unsupported character set: " <> pretty cs
-  _ -> argsError i as
   where
-    go k = return . toTerm . T.all k
+    isCharset :: RNativeFun e
+    isCharset i as = case as of
+      [TLitInteger cs, TLitString t] -> case cs of
+        0 -> go Char.isAscii t
+        1 -> go Char.isLatin1 t
+        _ -> evalError' i $ "Unsupported character set: " <> pretty cs
+      _ -> argsError i as
+      where
+        go k = return . toTerm . T.all k
 
 langDefs :: NativeModule
 langDefs =
@@ -608,6 +618,8 @@ langDefs =
     ,chainDataDef
     ,chainDataSchema
     ,isCharsetDef
+    ,asciiConst
+    ,latin1Const
     ])
     where
           d = mkTyVar "d" []
