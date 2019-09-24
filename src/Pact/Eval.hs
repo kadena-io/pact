@@ -8,7 +8,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE LambdaCase #-}
 
 -- Suppress unused constraint on enforce-keyset.
 -- TODO unused constraint is a dodgy warning, probably should not do it.
@@ -670,18 +669,17 @@ enforcePactValue' = traverse enforcePactValue
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App (TDef d _) as ai) = do
+reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
   af <- prepareUserAppArgs d as ai
   evalUserAppBody d af ai g $ \bod' ->
-    case _dDefType d of
+    case _dDefType of
       Defun ->
         reduceBody bod'
       Defpact -> do
-        let qn = QName (_dModule d) (asString $ _dDefName d) def
-
-        pv <- enforcePactValue' $ fst af
-        initPact ai (PactContinuation qn pv) bod'
+        continuation <- PactContinuation (QName _dModule (asString _dDefName) def)
+          <$> enforcePactValue' (fst af)
+        initPact ai continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
@@ -742,7 +740,7 @@ applyPact i app (TList steps _ _) PactStep {..} = do
   use evalPactExec >>= \bad -> unless (isNothing bad) $
     evalError i "Multiple or nested pact exec found"
 
-    -- retrieve indicated step from code
+  -- retrieve indicated step from code
   st <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
   step <- case st of
     TStep step _meta _i -> return step
