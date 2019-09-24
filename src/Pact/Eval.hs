@@ -704,22 +704,12 @@ prepareUserAppArgs Def{..} args i = do
   return (as',ft')
 
 -- | Instantiate args in body and evaluate using supplied action.
-evalUserAppBody
-  :: Def Ref
-  -> ([Term Name], FunType (Term Name))
-  -> Info
-  -> Gas
-  -> (Term Ref -> Eval e a)
-  -> Eval e a
-evalUserAppBody d (as',ft') ai g run =
-  appCall funApp ai as' $ (g,) <$> run bod
-  where
-    bod = instantiate (resolveArg ai (map mkDirect as')) $ _dDefBody d
-    dn = asString $ _dDefName d
-    dm = Just $ _dModule d
-    dt = _dDefType d
-    meta = _mDocs $ _dMeta d
-    funApp = FunApp (_dInfo d) dn dm dt (funTypes ft') meta
+evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
+                -> (Term Ref -> Eval e a) -> Eval e a
+evalUserAppBody Def{..} (as',ft') ai g run =
+  let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
+      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+  in appCall fa ai as' $ fmap (g,) $ run bod'
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
@@ -746,17 +736,17 @@ initPact i app bod = view eePactStep >>= \es -> case es of
 
 -- | Apply or resume a pactdef step.
 applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
-applyPact i app (TList steps _ _) PactStep{..} = do
+applyPact i app (TList steps _ _) PactStep {..} = do
 
   -- only one pact state allowed in a transaction
   use evalPactExec >>= \bad -> unless (isNothing bad) $
     evalError i "Multiple or nested pact exec found"
 
-  -- retrieve indicated step from code
-  step <- case steps V.!? _psStep of
-    Nothing -> evalError i $ "applyPact: step not found: " <> pretty _psStep
-    Just (TStep s _ _) -> return s
-    Just t -> evalError (_tInfo t) "expected step"
+    -- retrieve indicated step from code
+  st <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
+  step <- case st of
+    TStep step _meta _i -> return step
+    t -> evalError (_tInfo t) "expected step"
 
   -- determine if step is skipped (for private execution)
   executePrivate <- traverse reduce (_sEntity step) >>= traverse (\stepEntity -> case stepEntity of
@@ -775,7 +765,7 @@ applyPact i app (TList steps _ _) PactStep{..} = do
   -- evaluate
   result <- case executePrivate of
     Just False -> return $ tStr "skip step"
-    _ -> case (_psRollback, _sRollback step) of
+    _ -> case (_psRollback,_sRollback step) of
       (False,_) -> reduce $ _sExec step
       (True,Just rexp) -> reduce rexp
       (True,Nothing) -> evalError' step $ "Rollback requested but none in step"

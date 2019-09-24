@@ -123,8 +123,8 @@ data Failure = Failure TcId String deriving (Eq,Ord,Show)
 data YieldResume n = YieldResume
   { _yrYield :: Maybe n
   , _yrResume :: Maybe n
-  , _yrCrossChain :: !Bool
-  } deriving (Eq,Show,Functor,Foldable,Traversable)
+  , _yrCrossChain :: !Bool }
+  deriving (Eq,Show,Functor,Foldable,Traversable)
 instance Default (YieldResume n) where def = YieldResume def def False
 
 -- | Typechecker state.

@@ -25,7 +25,7 @@ module Pact.Types.Continuation
 , pePactId
 , peStep
 , peContinuation
-, peRollback
+, peStepHasRollback
 
   -- * Pact Step
 , PactStep(..)
@@ -137,9 +137,8 @@ data PactExec = PactExec
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _peContinuation :: PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.
-  , _peRollback :: !Bool
-    -- ^ Track whether a given pact contains rollbacks, disallowing in the
-    -- case where we see cross-chain yields.
+  , _peStepHasRollback :: !Bool
+    -- ^ Track whether a current step has a rollback
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec
