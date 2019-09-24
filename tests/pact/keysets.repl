@@ -125,3 +125,50 @@
 
 (env-keys ["c"])
 (enforce-keyset 'rotate-me)
+
+(begin-tx)
+
+
+;;; test caps
+
+(env-data { "a": ["a"], "ab": { "keys": ["a","b"], "pred": "keys-any" } })
+
+(module sig-caps G
+  (defcap G () true)
+
+  (defconst KEYSET_A (read-keyset "a"))
+  (defconst KEYSET_AB (read-keyset "ab"))
+
+  (defcap A (x:string y:bool)
+    (enforce-keyset KEYSET_A))
+
+  (defcap AB ()
+    (enforce-keyset KEYSET_AB))
+
+  (defun run-A (x:string y:bool)
+    (with-capability (A x y) true))
+
+  (defun run-AB ()
+    (with-capability (AB) true))
+  )
+
+(env-keys ["a"])
+(expect "A succeeds with unscoped sig" true
+        (run-A "foo" false))
+(expect "AB succeeds with unscoped A sig" true
+        (run-AB))
+
+(env-sigs [{ 'key: "a", 'clist: [(A "bar" true)] },
+           { 'key: "b", 'clist: [(A "foo" false)] }])
+
+(expect-failure "a not in scope for (A foo false) cap"
+                (run-A "foo" false))
+(expect-failure "b not in scope for AB cap"
+                (run-AB))
+
+(env-sigs [{ 'key: "a", 'clist: [(A "bar" true),(AB)] }])
+
+(expect "A succeeds with a in scope" true
+        (run-A "bar" true))
+(expect "AB succeeds with a in scope" true
+        (run-AB))

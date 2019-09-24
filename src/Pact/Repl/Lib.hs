@@ -31,6 +31,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import qualified Data.Map.Strict as M
 import Data.Semigroup (Endo(..))
+import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
@@ -106,7 +107,7 @@ replDefs = ("Repl",
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
       "Set transaction signature KEYS. See 'env-sigs' for setting keys with associated capabilities."
-     ,defZRNative "env-sigs" setsigs' (funType tTyString [("sigs",TyList (tTyObject TyAny))])
+     ,defZNative "env-sigs" setsigs' (funType tTyString [("sigs",TyList (tTyObject TyAny))])
       [LitExample $ "(env-sigs [{'key: \"my-key\", 'clist: [(accounts.USER_GUARD \"my-account\")]}, " <>
         "{'key: \"admin-key\", 'clist: []}"]
       ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
@@ -284,13 +285,21 @@ setsigs i [TList ts _ _] = do
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
-setsigs' :: RNativeFun LibState
+setsigs' :: ZNativeFun LibState
 setsigs' i [TList ts _ _] = do
   sigs <- forM ts $ \t -> case t of
     (TObject (Object (ObjectMap om) _ _ _) _) -> do
       case (M.lookup "key" om,M.lookup "clist" om) of
-        (Just (TLitString k),Just (TList clist _ _)) -> undefined
-  undefined
+        (Just (TLitString k),Just (TList clist _ _)) -> do
+          caps <- forM clist $ \cap -> case cap of
+            (TApp a _) -> view _1 <$> appToCap a
+            _ -> evalError' i $ "Expected capability invocation"
+          return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
+        _ -> evalError' i "Expected object with 'key': string, 'clist': [capability]"
+    _ -> evalError' i $ "Expected object"
+  setenv eeMsgSigs sigs
+  return $ tStr "Setting transaction signatures/caps"
+setsigs' i as = argsError' i as
 
 
 setmsg :: RNativeFun LibState

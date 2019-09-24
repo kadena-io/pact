@@ -108,6 +108,7 @@ enforceKeySet i ksn KeySet{..} = do
       runBuiltIn p | p count matched = return ()
                    | otherwise = failed
       atLeast t m = m >= t
+  liftIO $ print (sigs,granted)
   case M.lookup _ksPredFun keyPredBuiltins of
     Just KeysAll -> runBuiltIn (\c m -> atLeast c m)
     Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)

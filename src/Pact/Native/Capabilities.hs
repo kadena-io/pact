@@ -22,7 +22,6 @@ import Data.Maybe (isJust)
 
 import Pact.Eval
 import Pact.Native.Internal
-import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -81,10 +80,9 @@ withCapability =
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be run within module scope.
 evalCap :: Bool -> App (Term Ref) -> Eval e (Maybe Capability)
-evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
-      when inModule $ guardForModuleCall _appInfo _dModule $ return ()
-      prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-      cap <- UserCapability _dModule _dDefName <$> argsToParams _appInfo args
+evalCap inModule a@App{..} = do
+      (cap,d,prep) <- appToCap a
+      when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
       acquired <- acquireCapability cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
@@ -92,17 +90,6 @@ evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
         NewlyAcquired -> Just cap
         AlreadyAcquired -> Nothing
 
-argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
-argsToParams i = mapM $ \arg -> case toPactValue arg of
-  Right pv -> return pv
-  Left e -> evalError i $ "Invalid capability argument: " <> pretty e
-
-requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
-requireDefcap App{..} = case _appFun of
-  (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
-    Defcap -> return d
-    _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
-  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " <> pretty _appFun
 
 requireCapability :: NativeDef
 requireCapability =
@@ -112,9 +99,8 @@ requireCapability =
   "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment."
   where
     requireCapability' :: NativeFun e
-    requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
-      (args,_) <- prepareUserAppArgs d _appArgs _appInfo
-      cap <- UserCapability _dModule _dDefName <$> argsToParams _appInfo args
+    requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ do
+      (cap,_,_) <- appToCap a
       granted <- capabilityGranted cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
