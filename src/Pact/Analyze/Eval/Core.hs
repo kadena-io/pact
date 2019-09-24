@@ -17,7 +17,7 @@ import           Control.Lens                (over)
 import           Data.Foldable               (asum)
 import qualified Data.Map.Strict             as Map
 import           Data.Maybe                  (fromMaybe)
-import           Data.Monoid                 ((<>))
+import           Data.Monoid                 ((<>), Sum (Sum, getSum))
 import           Data.SBV                    (EqSymbolic ((./=), (.==)), OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                               SBV, SymVal, ite, literal,
                                               uninterpret, unliteral)
@@ -378,6 +378,9 @@ evalCore (ObjTake ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
   S prov obj' <- eval obj
   case sing @a of
     SObjectUnsafe schema -> pure $ S prov $ evalDropTake (obj' :< schema') schema
+
+evalCore (ObjLength (SObjectUnsafe (SingList hlist)) _obj) = pure $
+  getSum $ foldHList (\_ _ -> Sum 1) hlist
 
 -- | Implementation for both drop and take.
 --

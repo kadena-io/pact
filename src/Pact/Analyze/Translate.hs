@@ -459,21 +459,20 @@ maybeTranslateType' restrictKeys = \case
   TyPrim Pact.TyTime        -> pure $ EType STime
   TyPrim (Pact.TyGuard _)   -> pure $ EType SGuard
 
+  TyVar (Pact.SchemaVar (Pact.TypeVarName "table")) -> pure QTable
+
   -- Pretend any and an unknown var are the same -- we can't analyze either of
   -- them.
   -- TODO(joel): revisit this assumption
-  TyVar (Pact.SchemaVar (Pact.TypeVarName "table")) -> pure QTable
   TyVar _                                           -> pure $ EType SAny
   Pact.TyAny                                        -> pure $ EType SAny
+
   Pact.TyList a -> do
     ty <- maybeTranslateType' Nothing a
     case ty of
       EType ty' -> pure $ EType $ SList ty'
       _         -> empty
 
-  --
-  -- TODO: handle these:
-  --
   TyFun _             -> empty
 
 throwError'
@@ -775,7 +774,7 @@ translateObjBinding
   -> ETerm
   -> TranslateM ETerm
 translateObjBinding pairs schema bodyA rhsT = do
-  let bindingAs = fst $ unzip pairs
+  let bindingAs = map fst pairs
   bindingTs <- traverse translateBinding bindingAs
   cols <- for pairs $ \case
     (_, AST_StringLit colName) ->
@@ -1168,10 +1167,21 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun_Basic fn@(toOp arithOpP -> Just _) args
     -> throwError' $ MalformedArithOp fn args
-
-  AST_NFun _node "length" [a] -> do
-    Some SStr a' <- translateNode a
-    pure $ Some SInteger $ CoreTerm $ StrLength a'
+  --
+  -- NOTE: We don't use a feature symbol here because `length` is overloaded
+  -- across multiple (3) features.
+  --
+  AST_NFun node "length" [a] -> do
+    Some ty a' <- translateNode a
+    case ty of
+      SStr ->
+        pure $ Some SInteger $ CoreTerm $ StrLength a'
+      SList sty ->
+        pure $ Some SInteger $ CoreTerm $ ListLength sty a'
+      SObjectUnsafe _ ->
+        pure $ Some SInteger $ CoreTerm $ ObjLength ty a'
+      _ ->
+        throwError' $ TypeError node
 
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     Some SStr row'                   <- translateNode row
@@ -1201,11 +1211,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Refl <- singEq ta tb ?? BranchesDifferentTypes (EType ta) (EType tb)
     pure $ Some ta $ IfThenElse ta cond' (truePath, a) (falsePath, b)
 
-  AST_NFun _node "str-to-int" [s] -> do
+  AST_NFun _node SStringToInteger [s] -> do
     Some SStr s' <- translateNode s
     pure $ Some SInteger $ CoreTerm $ StrToInt s'
 
-  AST_NFun _node "str-to-int" [b, s] -> do
+  AST_NFun _node SStringToInteger [b, s] -> do
     Some SInteger b' <- translateNode b
     Some SStr s'     <- translateNode s
     pure $ Some SInteger $ CoreTerm $ StrToIntBase b' s'
