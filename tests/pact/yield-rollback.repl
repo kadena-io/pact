@@ -78,7 +78,6 @@
 
 (use yield-rollback-failure)
 
-
 ;; set chain id to something sane
 (env-chain-data { "chain-id": "0" })
 (env-hash (hash "emily-pact-id"))
@@ -88,4 +87,6 @@
 
 (env-chain-data { "chain-id" : "1" })
 (expect-failure "step 1 fails to execute on chain 1 due to rollback" (continue-pact 1))
-(expect-failure "typechecking fails for defpacts with rollbacks and yield in the same step" (typecheck 'yield-rollback-failure))
+(expect-failure
+  "typechecking fails for defpacts with rollbacks and yield in the same step"
+  (typecheck 'yield-rollback-failure))
