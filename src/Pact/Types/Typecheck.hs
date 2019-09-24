@@ -40,7 +40,7 @@ module Pact.Types.Typecheck
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
     aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,
     Visit(..),Visitor,
-    YieldResume(..),yrYield,yrResume
+    YieldResume(..),yrYield,yrResume,yrCrossChain
   ) where
 
 import Control.Monad.Catch
@@ -122,9 +122,10 @@ data Failure = Failure TcId String deriving (Eq,Ord,Show)
 
 data YieldResume n = YieldResume
   { _yrYield :: Maybe n
-  , _yrResume :: Maybe n }
+  , _yrResume :: Maybe n
+  , _yrCrossChain :: !Bool }
   deriving (Eq,Show,Functor,Foldable,Traversable)
-instance Default (YieldResume n) where def = YieldResume def def
+instance Default (YieldResume n) where def = YieldResume def def False
 
 -- | Typechecker state.
 data TcState = TcState {
