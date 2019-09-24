@@ -792,7 +792,7 @@ toFun t = die (_tInfo t) "Non-var in fun position"
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
 assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
-  void $ toStepYRs >>= foldM go (Nothing, 0::Int)
+  void $ toStepYRs >>= foldM go (Nothing,0::Int)
   where
     lastStep = pred $ length steps
     toStepYRs = forM steps $ \step -> case step of
@@ -807,7 +807,6 @@ assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
         _ -> return (_aNode, _aYieldResume)
       _ -> die'' step "Non-step in defpact"
     yrMay l yr = preview (_Just . l . _Just) yr
-
     go :: (Maybe (YieldResume Node),Int) -> (Node, Maybe (YieldResume Node)) -> TC (Maybe (YieldResume Node),Int)
     go (prev,idx) (n,curr) = do
       case (yrMay yrYield prev, yrMay yrYield curr, yrMay yrResume curr) of
