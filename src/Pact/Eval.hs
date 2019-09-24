@@ -17,7 +17,7 @@
 
 -- |
 -- Module      :  Pact.Eval
--- Copyright   :  (C) 2016 Stuart Popejoy
+-- Copyright   :  (C) 2016,2019 Stuart Popejoy, Emily Pillmore, Kadena LLC
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>,
 --                Emily Pillmore <emily@kadena.io>

@@ -769,7 +769,7 @@ yield i as = case as of
             Nothing -> return $ Yield o' Nothing
             Just t -> do
               if _peRollback pe
-                then evalError' i "Rollbacks disallowed in cross-chain defpacts"
+                then evalError' i "Cross-chain yield not allowed in step with rollback"
                 else fmap (Yield o') $ provenanceOf i t
           evalPactExec . _Just . peYield .= Just y
           return u
