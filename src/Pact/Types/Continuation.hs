@@ -17,38 +17,20 @@
 -- Pact Continuation data
 --
 module Pact.Types.Continuation
-( -- * Pact Exec
-  PactExec(..)
-, peStepCount
-, peYield
-, peExecuted
-, pePactId
-, peStep
-, peContinuation
-, peStepHasRollback
-
-  -- * Pact Step
-, PactStep(..)
-, psStep
-, psRollback
-, psPactId
-, psResume
-
-  -- * Continuations
-, PactContinuation(..)
-, pcDef
-, pcArgs
-
-  -- * Yields
-, Yield(..)
-, yData
-, yProvenance
-
-  -- * Provenance
-, Provenance(..)
-, pTargetChainId
-, pModuleHash
-) where
+  ( -- * Types
+    PactStep(..)
+  , PactContinuation(..)
+  , PactExec(..)
+  , Yield(..)
+  , Provenance(..)
+    -- * Optics
+  , peStepCount, peYield, peExecuted, pePactId
+  , peStep, peContinuation, peStepHasRollback
+  , psStep, psRollback, psPactId, psResume
+  , pcDef, pcArgs
+  , yData, yProvenance
+  , pTargetChainId, pModuleHash
+  ) where
 
 import GHC.Generics (Generic)
 
