@@ -96,6 +96,7 @@ import Data.Aeson hiding (pairs,Object, (<?>))
 import Data.Aeson hiding (pairs,Object)
 #endif
 import qualified Data.Attoparsec.Text as AP
+import Data.Bool (bool)
 import qualified Data.ByteString.UTF8 as BS
 import Data.Decimal
 import Data.Default
@@ -961,8 +962,13 @@ instance Pretty n => Pretty (Term n) where
                 exs ->
                      line <> line <> annotate Header "Examples:"
                   <> line <> align (vsep (pretty <$> exs))
-    TConst{..} -> "constant " <> pretty _tModule <> "." <> pretty _tConstArg
-      <> " " <> pretty _tMeta
+    TConst{..} ->
+      let
+        m = pretty _tModule
+      in "constant "
+        <> (bool m "native" $ m == "")
+        <> "." <> pretty _tConstArg
+        <> " " <> pretty _tMeta
     TApp a _ -> pretty a
     TVar n _ -> pretty n
     TBinding pairs body BindLet _i -> parensSep
