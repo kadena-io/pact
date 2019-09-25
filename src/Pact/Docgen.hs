@@ -98,14 +98,13 @@ renderTerm h (TConst (Arg n ty _) _ cval meta _) = do
       hPutStrLn h ""
 
   hPutStrLn h "Constant: "
-  hPutStrLn h
+  hPutStr h
     $ "&nbsp;&nbsp;`" <> unpack n
     <> ":" <> renderCompactString ty
-    <> "`"
 
-  hPutStrLn h "Value: "
-  renderTerm h $ _cvRaw cval
-  hPutStrLn h ""
+  case _cvRaw cval of
+    TLiteral l _ -> hPutStr h $ " = " <> renderLiteral l <> "`"
+    _ -> hPutStr stderr $ "No value for constant term"
 
 renderTerm _ _ = return ()
 

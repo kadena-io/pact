@@ -6,19 +6,13 @@
 Constant denoting the ASCII charset
 
 Constant: 
-&nbsp;&nbsp;`CHARSET_ASCII:integer`
-Value: 
-
-
+&nbsp;&nbsp;`CHARSET_ASCII:integer = 0`
 ### CHARSET_LATIN1 {#CHARSET_LATIN1}
 
 Constant denoting the Latin-1 charset ISO-8859-1
 
 Constant: 
-&nbsp;&nbsp;`CHARSET_LATIN1:integer`
-Value: 
-
-
+&nbsp;&nbsp;`CHARSET_LATIN1:integer = 1`
 ### at {#at}
 
 *idx*&nbsp;`integer` *list*&nbsp;`[<l>]` *&rarr;*&nbsp;`<a>`
