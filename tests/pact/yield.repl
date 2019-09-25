@@ -4,8 +4,9 @@
 
 (module yieldtest 'k
 
-  "Define one test: 'tester' executes a single-chain pact and ensures rollbacks \
-  \and step behavior works properly."
+  "Define two tests: 'tester' executes a single-chain pact and ensures rollbacks \
+  \and 'cross-chain' executes a cross-chain pact and step behavior works         \
+  \properly."
 
   (defschema schema-a a-result:string)
 
@@ -28,9 +29,6 @@
 
 
   (defpact cross-chain (name)
-    "Define one test: 'endorsement-test' executes a single cross-chain pact and \
-    \ensures step behavior and yield enforcement works properly."
-
     (step
      (let*
          ((nameA (+ name "->A"))

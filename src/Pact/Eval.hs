@@ -16,9 +16,10 @@
 
 -- |
 -- Module      :  Pact.Eval
--- Copyright   :  (C) 2016 Stuart Popejoy
+-- Copyright   :  (C) 2016,2019 Stuart Popejoy, Emily Pillmore, Kadena LLC
 -- License     :  BSD-style (see the file LICENSE)
--- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>,
+--                Emily Pillmore <emily@kadena.io>
 --
 -- Pact interpreter.
 --
@@ -778,10 +779,11 @@ applyPact i app (TList steps _ _) PactStep {..} = do
     t -> evalError' t "applyPact: step entity must be String value")
 
   let stepCount = length steps
+      rollback = isJust $ _sRollback step
 
   -- init pact state
   evalPactExec .=
-      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app)
+      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback)
 
   -- evaluate
   result <- case executePrivate of

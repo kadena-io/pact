@@ -379,6 +379,9 @@ evalCore (ObjTake ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
   case sing @a of
     SObjectUnsafe schema -> pure $ S prov $ evalDropTake (obj' :< schema') schema
 
+evalCore (ObjLength (SObjectUnsafe (SingList hlist)) _obj) = pure $ literalS $
+  hListLength hlist
+
 -- | Implementation for both drop and take.
 --
 -- We @schema@ -- the type of the object we're starting with, and @schema'@ --
