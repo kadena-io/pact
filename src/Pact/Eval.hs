@@ -35,8 +35,9 @@ module Pact.Eval
     ,liftTerm,apply
     ,preGas
     ,acquireCapability,acquireModuleAdmin,enforceModuleAdmin
+    ,popCapStack
     ,capabilityGranted
-    ,revokeCapability,revokeAllCapabilities
+    ,revokeAllCapabilities
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,resumePact
@@ -109,7 +110,6 @@ enforceKeySet i ksn KeySet{..} = do
       runBuiltIn p | p count matched = return ()
                    | otherwise = failed
       atLeast t m = m >= t
-  liftIO $ print (sigs,granted)
   case M.lookup _ksPredFun keyPredBuiltins of
     Just KeysAll -> runBuiltIn (\c m -> atLeast c m)
     Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
@@ -180,10 +180,19 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
 grantedCaps :: Eval e (S.Set Capability)
-grantedCaps = S.fromList . concatMap toList <$> use (evalCapabilities . capsGranted)
+grantedCaps = S.fromList . toList <$> use evalCapabilities
 
 capabilityGranted :: Capability -> Eval e Bool
 capabilityGranted cap = S.member cap <$> grantedCaps
+
+popCapStack :: (CapSlot Capability -> Eval e a) -> Eval e a
+popCapStack act = do
+  s <- use $ evalCapabilities . capStack
+  case s of
+    [] -> evalError def "acquireCapability: unexpected error: empty stack"
+    (c:cs) -> do
+      evalCapabilities . capStack .= cs
+      act c
 
 -- | Test if capability is already installed, if not
 -- evaluate `test` which is expected to fail by some
@@ -193,24 +202,19 @@ acquireCapability :: CapScope -> Capability -> Eval e () -> Eval e CapAcquireRes
 acquireCapability scope cap test = do
   granted <- capabilityGranted cap
   if granted then return AlreadyAcquired else do
-    -- push onto pending stack
-    evalCapabilities . capsPending %= (CapSlot scope cap []:)
+    -- push onto stack, which doubles as a "pending" queue for collecting composed caps.
+    evalCapabilities . capStack %= (CapSlot scope cap []:)
     -- run test
     test
-    -- pop off pending stack and grant/compose
-    pendings <- use $ evalCapabilities . capsPending
-    case pendings of
-      [] -> evalError def "acquireCapability: unexpected error, pending caps stack empty"
-      (c:cs) -> do
-        -- pop off stack
-        evalCapabilities . capsPending .= cs
-        if scope == CapComposed
-          then
-            -- install composed into head of pending
-            evalCapabilities . capsPending . _head . csComposed %= (_csCap c:)
-          else
-            -- grant capability
-            evalCapabilities . capsGranted %= (c:)
+    case scope of
+      CapCallStack -> return ()
+      CapManaged -> popCapStack $ \c ->
+        -- install managed
+        evalCapabilities . capManaged %= (c:)
+      CapComposed -> popCapStack $ \c ->
+        -- install composed into slot at head of stack
+        evalCapabilities . capStack . _head . csComposed %= (_csCap c:)
+
     return NewlyAcquired
 
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
@@ -232,9 +236,6 @@ enforceModuleAdmin i modGov =
 
 revokeAllCapabilities :: Eval e ()
 revokeAllCapabilities = evalCapabilities .= def
-
-revokeCapability :: Capability -> Eval e ()
-revokeCapability c = evalCapabilities . capsGranted %= filter (\CapSlot{..} -> _csCap == c)
 
 -- | Evaluate current namespace and prepend namespace to the
 -- module name. This should be done before any lookups, as

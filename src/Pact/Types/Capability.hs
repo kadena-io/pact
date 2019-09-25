@@ -22,7 +22,7 @@ module Pact.Types.Capability
   , CapAcquireResult(..)
   , SigCapability(..)
   , parseSigCapability
-  , Capabilities(..), capsGranted, capsPending
+  , Capabilities(..), capStack, capManaged
   , CapScope(..)
   , CapSlot(..), csCap, csComposed, csScope
   ) where
@@ -104,10 +104,11 @@ data CapSlot c = CapSlot
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable)
 makeLenses ''CapSlot
 
-data Capabilities = Capabilities
-  { _capsGranted :: [CapSlot Capability]
-  , _capsPending :: [CapSlot Capability] }
-  deriving (Eq,Show)
+data Capabilities c = Capabilities
+  { _capStack :: [CapSlot c]
+  , _capManaged :: [CapSlot c]
+  }
+  deriving (Eq,Show,Functor,Foldable,Traversable)
 makeLenses ''Capabilities
 
-instance Default Capabilities where def = Capabilities [] []
+instance Default (Capabilities a) where def = Capabilities [] []

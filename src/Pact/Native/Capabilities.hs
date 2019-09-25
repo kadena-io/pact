@@ -63,31 +63,29 @@ withCapability =
       enforceNotWithinDefcap i "with-capability"
 
       -- evaluate in-module cap
-      grantedCap <- evalCap CapCallStack True (_tApp c)
+      acquireResult <- evalCap CapCallStack True (_tApp c)
 
       -- execute scoped code
       r <- reduceBody body
 
-      -- only revoke if newly granted.
-      -- TODO would be cleaner to "stack" caps and not worry about dupes/already installed
-      forM_ grantedCap $ \newcap -> do
-        revokeCapability newcap
+      -- pop if newly acquired
+      when (acquireResult == NewlyAcquired) $ popCapStack (const (return ()))
+
       return r
+
     withCapability' i as = argsError' i as
 
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be run within module scope.
-evalCap :: CapScope -> Bool -> App (Term Ref) -> Eval e (Maybe Capability)
+evalCap :: CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
 evalCap scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquired <- acquireCapability scope cap $ do
+      acquireCapability scope cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
-      return $ case acquired of
-        NewlyAcquired -> Just cap
-        AlreadyAcquired -> Nothing
+
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
 enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $

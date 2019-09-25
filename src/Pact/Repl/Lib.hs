@@ -569,8 +569,8 @@ testCapability :: ZNativeFun ReplState
 testCapability _ [ c@TApp{} ] = do
   cap <- evalCap CapManaged False $ _tApp c
   return . tStr $ case cap of
-    Nothing -> "Capability granted"
-    Just cap' -> "Capability granted: " <> tShow cap'
+    AlreadyAcquired -> "Capability already granted"
+    NewlyAcquired -> "Capability granted"
 testCapability i as = argsError' i as
 
 -- | Modify existing env chain data with new data, replacing just those
