@@ -507,8 +507,8 @@ evaluateDefs info defs = do
           (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn ds of
               Just _ -> return (Left fn)
-              Nothing -> evalError (getInfo f) $ "Cannot resolve " <> dquotes (pretty f)
-          (Nothing, _) -> evalError (getInfo f) $ "Cannot resolve " <> dquotes (pretty f)
+              Nothing -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+          (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
 
       return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
 

@@ -282,22 +282,22 @@ setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i (V.toList ts)
-  setenv eeMsgSigs (V.fromList (map ((,mempty) . PublicKey . encodeUtf8) (V.toList ks)))
+  setenv eeMsgSigs ((,mempty) . PublicKey . encodeUtf8 <$> ks)
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
 setsigs' :: ZNativeFun LibState
-setsigs' i [TList ts _ _] = do
+setsigs' _ [TList ts _ _] = do
   sigs <- forM ts $ \t -> case t of
     (TObject (Object (ObjectMap om) _ _ _) _) -> do
       case (M.lookup "key" om,M.lookup "clist" om) of
         (Just (TLitString k),Just (TList clist _ _)) -> do
           caps <- forM clist $ \cap -> case cap of
             (TApp a _) -> view _1 <$> appToCap a
-            _ -> evalError' i $ "Expected capability invocation"
+            o -> evalError' o $ "Expected capability invocation"
           return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
-        _ -> evalError' i "Expected object with 'key': string, 'clist': [capability]"
-    _ -> evalError' i $ "Expected object"
+        _ -> evalError' t "Expected object with 'key': string, 'clist': [capability]"
+    _ -> evalError' t $ "Expected object"
   setenv eeMsgSigs sigs
   return $ tStr "Setting transaction signatures/caps"
 setsigs' i as = argsError' i as
