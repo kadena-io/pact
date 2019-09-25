@@ -24,7 +24,8 @@ module Pact.Types.Continuation
   , Yield(..)
   , Provenance(..)
     -- * Optics
-  , peStepCount, peYield, peExecuted, pePactId, peStep, peContinuation
+  , peStepCount, peYield, peExecuted, pePactId
+  , peStep, peContinuation, peStepHasRollback
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
   , yData, yProvenance
@@ -118,6 +119,8 @@ data PactExec = PactExec
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _peContinuation :: PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.
+  , _peStepHasRollback :: !Bool
+    -- ^ Track whether a current step has a rollback
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec

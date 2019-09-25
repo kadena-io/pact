@@ -1454,6 +1454,33 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Success'
     expectPass code $ Valid Success'
 
+  describe "string length" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              @model [ (property (= result 2)) ]
+              (length "ab"))
+          |]
+    expectVerified code
+
+  describe "list length" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              @model [ (property (= result 3)) ]
+              (length [5 5 5]))
+          |]
+    expectVerified code
+
+  describe "object length" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              @model [ (property (= result 3)) ]
+              (length {"ab": 7, "cd": 8, "ef": 9}))
+          |]
+    expectVerified code
+
   describe "pact-id" $ do
     let code =
           [text|
@@ -3846,6 +3873,20 @@ spec = describe "analyze" $ do
                 "noop"
                 (with-default-read accounts acct { 'balance: 0 } { 'balance := bal }
                   (write accounts acct { 'balance: (+ bal amount) }))))))
+        |]
+
+    describe "yield with chain-id specified" $
+      expectVerified [text|
+        (defschema yield-obj val:integer)
+
+        (defpact foo ()
+          @model [ (property (= 1 1)) ]
+          (step
+            (let ((obj:object{yield-obj} {"val": 5}))
+              (yield obj "some-chain-id")))
+          (step
+            (resume { 'val := val }
+              "bar")))
         |]
 
   describe "with-default-read" $ do

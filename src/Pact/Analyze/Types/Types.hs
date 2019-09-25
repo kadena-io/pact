@@ -28,6 +28,7 @@ module Pact.Analyze.Types.Types
   , HList(..)
   , foldrHList
   , foldHList
+  , hListLength
   , pattern UnSingList
   , pattern SNil'
   , pattern SCons'
@@ -57,6 +58,7 @@ module Pact.Analyze.Types.Types
 
 import           Data.Kind                    (Type)
 import           Data.Maybe                   (isJust)
+import           Data.Monoid                  (Sum (Sum, getSum))
 import           Data.Semigroup               ((<>))
 import           Data.Type.Equality           ((:~:) (Refl), apply)
 import           Data.Typeable                (Typeable, Proxy(Proxy))
@@ -112,6 +114,9 @@ foldHList
   -> HList f schema
   -> a
 foldHList f = foldrHList mempty (\sym fb accum -> f sym fb <> accum)
+
+hListLength :: Num a => HList f schema -> a
+hListLength = getSum . foldHList (\_ _ -> Sum 1)
 
 pattern UnSingList :: Sing n -> HList Sing n
 pattern UnSingList l <- (SingList -> l) where
