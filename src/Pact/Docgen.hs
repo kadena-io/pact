@@ -106,6 +106,8 @@ renderTerm h (TConst (Arg n ty _) _ cval meta _) = do
     TLiteral l _ -> hPutStr h $ " = " <> renderLiteral l <> "`"
     _ -> hPutStr stderr $ "No value for constant term"
 
+  hPutStrLn h ""
+
 renderTerm _ _ = return ()
 
 termHeader :: AsString a => Handle -> a -> IO ()
