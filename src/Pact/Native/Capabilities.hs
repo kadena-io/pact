@@ -17,11 +17,11 @@ module Pact.Native.Capabilities
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.State (state)
 import Data.Maybe (isJust)
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.Types.Capability
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -59,37 +59,39 @@ withCapability =
   \but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap."
   where
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
-      -- ensure not within defcap
-      defcapInStack >>= \p -> when p $ evalError' i "with-capability not allowed within defcap execution"
-      -- erase composed
-      evalCapabilities . capComposed .= []
+
+      enforceNotWithinDefcap i "with-capability"
+
       -- evaluate in-module cap
-      grantedCap <- evalCap True (_tApp c)
-      -- grab composed caps and clear composed state
-      composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
-                                     set (evalCapabilities . capComposed) [] s)
+      grantedCap <- evalCap CapCallStack True (_tApp c)
+
+      -- execute scoped code
       r <- reduceBody body
-      -- only revoke if newly granted
+
+      -- only revoke if newly granted.
+      -- TODO would be cleaner to "stack" caps and not worry about dupes/already installed
       forM_ grantedCap $ \newcap -> do
         revokeCapability newcap
-        mapM_ revokeCapability composedCaps
       return r
     withCapability' i as = argsError' i as
 
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be run within module scope.
-evalCap :: Bool -> App (Term Ref) -> Eval e (Maybe Capability)
-evalCap inModule a@App{..} = do
+evalCap :: CapScope -> Bool -> App (Term Ref) -> Eval e (Maybe Capability)
+evalCap scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquired <- acquireCapability cap $ do
+      acquired <- acquireCapability scope cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
       return $ case acquired of
         NewlyAcquired -> Just cap
         AlreadyAcquired -> Nothing
 
+enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
+enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $
+  evalError' i $ msg <> " not allowed within defcap execution"
 
 requireCapability :: NativeDef
 requireCapability =
@@ -101,6 +103,7 @@ requireCapability =
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ do
       (cap,_,_) <- appToCap a
+      enforceNotWithinDefcap i "require-capability"
       granted <- capabilityGranted cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
@@ -123,10 +126,8 @@ composeCapability =
     composeCapability' i [TApp app _] = gasUnreduced i [] $ do
       -- enforce in defcap
       defcapInStack >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
-      -- should be granted in-module
-      granted <- evalCap True app
-      -- if newly granted, add to composed list
-      forM_ granted $ \newcap -> evalCapabilities . capComposed %= (newcap:)
+      -- evalCap as composed, which will install onto head of pending cap
+      void $ evalCap CapComposed True app
       return $ toTerm True
     composeCapability' i as = argsError' i as
 

@@ -68,6 +68,7 @@ import Safe
 import Unsafe.Coerce
 
 import Pact.Gas
+import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
@@ -98,7 +99,7 @@ enforceKeySetName mi mksn = do
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
-  granted <- S.fromList <$> use (evalCapabilities . capGranted)
+  granted <- grantedCaps
   let count = length _ksKeys
       filterSigs (pk,caps) = pk `elem` _ksKeys && (S.null caps || not (S.null matchedCaps))
         where matchedCaps = S.intersection caps granted
@@ -178,24 +179,43 @@ topLevelCall
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
+grantedCaps :: Eval e (S.Set Capability)
+grantedCaps = S.fromList . concatMap toList <$> use (evalCapabilities . capsGranted)
+
 capabilityGranted :: Capability -> Eval e Bool
-capabilityGranted cap = (cap `elem`) <$> use (evalCapabilities . capGranted)
+capabilityGranted cap = S.member cap <$> grantedCaps
 
 -- | Test if capability is already installed, if not
 -- evaluate `test` which is expected to fail by some
 -- guard throwing a failure. Upon successful return of
 -- `test` install capability.
-acquireCapability :: Capability -> Eval e () -> Eval e CapAcquireResult
-acquireCapability cap test = do
+acquireCapability :: CapScope -> Capability -> Eval e () -> Eval e CapAcquireResult
+acquireCapability scope cap test = do
   granted <- capabilityGranted cap
   if granted then return AlreadyAcquired else do
+    -- push onto pending stack
+    evalCapabilities . capsPending %= (CapSlot scope cap []:)
+    -- run test
     test
-    evalCapabilities . capGranted %= (cap:)
+    -- pop off pending stack and grant/compose
+    pendings <- use $ evalCapabilities . capsPending
+    case pendings of
+      [] -> evalError def "acquireCapability: unexpected error, pending caps stack empty"
+      (c:cs) -> do
+        -- pop off stack
+        evalCapabilities . capsPending .= cs
+        if scope == CapComposed
+          then
+            -- install composed into head of pending
+            evalCapabilities . capsPending . _head . csComposed %= (_csCap c:)
+          else
+            -- grant capability
+            evalCapabilities . capsGranted %= (c:)
     return NewlyAcquired
 
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modGov =
-  acquireCapability (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
+  acquireCapability CapManaged (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
 
 enforceModuleAdmin :: Info -> Governance (Def Ref) -> Eval e ()
 enforceModuleAdmin i modGov =
@@ -211,10 +231,10 @@ enforceModuleAdmin i modGov =
 
 
 revokeAllCapabilities :: Eval e ()
-revokeAllCapabilities = evalCapabilities . capGranted .= []
+revokeAllCapabilities = evalCapabilities .= def
 
 revokeCapability :: Capability -> Eval e ()
-revokeCapability c = evalCapabilities . capGranted %= filter (/= c)
+revokeCapability c = evalCapabilities . capsGranted %= filter (\CapSlot{..} -> _csCap == c)
 
 -- | Evaluate current namespace and prepend namespace to the
 -- module name. This should be done before any lookups, as
@@ -283,7 +303,7 @@ eval (TModule (MDModule m) bod i) =
       -- governance however is not called on install
       _ -> return ()
     -- in any case, grant module admin to this transaction
-    void $ acquireCapability (ModuleAdminCapability $ _mName m) $ return ()
+    void $ acquireCapability CapManaged (ModuleAdminCapability $ _mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM

@@ -51,6 +51,7 @@ import Unsafe.Coerce
 
 import Pact.Eval
 import Pact.Gas
+import Pact.Types.Capability
 import Pact.Types.Native
 import Pact.Types.PactValue
 import Pact.Types.Pretty

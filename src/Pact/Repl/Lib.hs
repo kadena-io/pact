@@ -71,6 +71,7 @@ import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
+import Pact.Types.Capability
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -566,7 +567,7 @@ setGasModel _ as = do
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
 testCapability _ [ c@TApp{} ] = do
-  cap <- evalCap False $ _tApp c
+  cap <- evalCap CapManaged False $ _tApp c
   return . tStr $ case cap of
     Nothing -> "Capability granted"
     Just cap' -> "Capability granted: " <> tShow cap'

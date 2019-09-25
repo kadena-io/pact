@@ -1634,10 +1634,21 @@ pact> (env-hash (hash "hello"))
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-Set transaction signature KEYS.
+Set transaction signature KEYS. See 'env-sigs' for setting keys with associated capabilities.
 ```lisp
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
+```
+
+
+### env-sigs {#env-sigs}
+
+*sigs*&nbsp;`[object:*]` *&rarr;*&nbsp;`string`
+
+
+Set transaction signature keys and capabilities. SIGS is a list of objects with "key" specifying the sig key, and "clist" specifying a list of capabilities.
+```lisp
+(env-sigs [{'key: "my-key", 'clist: [(accounts.USER_GUARD "my-account")]}, {'key: "admin-key", 'clist: []}
 ```
 
 

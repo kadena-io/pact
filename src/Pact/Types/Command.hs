@@ -66,6 +66,7 @@ import GHC.Generics
 import Prelude
 
 import Pact.Parse (parsePact)
+import Pact.Types.Capability
 import Pact.Types.Exp (ParsedCode(..))
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue (PactValue(..))

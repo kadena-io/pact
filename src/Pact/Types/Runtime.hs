@@ -30,9 +30,6 @@ module Pact.Types.Runtime
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
-   Capability(..),CapAcquireResult(..),
-   Capabilities(..),capGranted,capComposed,
-   SigCapability(..), parseSigCapability,
    NamespacePolicy(..), nsPolicy,
    permissiveNamespacePolicy,
    module Pact.Types.Lang,
@@ -46,8 +43,6 @@ module Pact.Types.Runtime
 
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
-import Control.DeepSeq (NFData)
-import Control.Error (fmapL)
 import Control.Lens hiding ((.=),DefName)
 import Control.Monad.Catch
 import Control.Monad.Except
@@ -60,64 +55,20 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Vector as V
 import Data.String
-import Data.Text (Text, unpack)
+import Data.Text (Text,)
 
-import GHC.Generics
-
-import Pact.Compile
-import Pact.Parse (parsePact)
+import Pact.Types.Capability
 import Pact.Types.ChainMeta
 import Pact.Types.Continuation
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.PactError
-import Pact.Types.PactValue
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
 import Pact.Types.Util
 
-
-data Capability
-  = ModuleAdminCapability ModuleName
-  | UserCapability ModuleName DefName [PactValue]
-  deriving (Eq,Show,Ord)
-
-instance Pretty Capability where
-  pretty (ModuleAdminCapability mn) = pretty mn
-  pretty (UserCapability mn name tms)  = parensSep (pretty mn <> colon <> pretty name : fmap pretty tms)
-
-data SigCapability = SigCapability
-  { _scName :: !QualifiedName
-  , _scArgs :: ![PactValue]
-  } deriving (Eq,Show,Generic,Ord)
-instance NFData SigCapability
-
-instance Pretty SigCapability where
-  pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
-
-instance ToJSON SigCapability
-  where toJSON = toJSON . renderCompactText
-
-instance FromJSON SigCapability where
-  parseJSON = withText "SigCapability" $ \t -> case parseSigCapability t of
-    Right c -> return c
-    Left e -> fail e
-
-parseSigCapability :: Text -> Either String SigCapability
-parseSigCapability txt = parsed >>= compiled >>= parseApp
-  where
-    parseApp ts = case ts of
-      [(TApp (App (TVar (QName q) _) as _) _)] -> SigCapability q <$> mapM toPV as
-      _ -> fail $ "Sig capability parse failed: Expected single qualified capability in form (qual.DEFCAP arg arg ...)"
-    compiled ParsedCode{..} = fmapL (("Sig capability parse failed: " ++) . show) $
-      compileExps (mkTextInfo _pcCode) _pcExps
-    parsed = parsePact txt
-    toPV a = fmapL (("Sig capability argument parse failed, expected simple pact value: " ++) . unpack) $ toPactValue a
-
-data CapAcquireResult = NewlyAcquired|AlreadyAcquired
-  deriving (Eq,Show)
 
 newtype NamespacePolicy = NamespacePolicy
   { _nsPolicy :: Maybe Namespace -> Bool
@@ -209,13 +160,6 @@ data RefState = RefState {
     } deriving (Eq,Show)
 makeLenses ''RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing
-
-data Capabilities = Capabilities
-  { _capGranted :: [Capability]
-  , _capComposed :: [Capability]
-  } deriving (Show)
-instance Default Capabilities where def = Capabilities def def
-makeLenses ''Capabilities
 
 -- | Interpreter mutable state.
 data EvalState = EvalState {
