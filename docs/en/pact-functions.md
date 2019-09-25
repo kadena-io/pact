@@ -5,16 +5,18 @@
 
 Constant denoting the ASCII charset
 
-Value: 
+Constant: 
 &nbsp;&nbsp;`CHARSET_ASCII:integer`
+Value: 
 
 
 ### CHARSET_LATIN1 {#CHARSET_LATIN1}
 
 Constant denoting the Latin-1 charset ISO-8859-1
 
-Value: 
+Constant: 
 &nbsp;&nbsp;`CHARSET_LATIN1:integer`
+Value: 
 
 
 ### at {#at}

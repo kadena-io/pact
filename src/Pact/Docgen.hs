@@ -89,7 +89,7 @@ renderTerm h TSchema{..} = do
     hPutStrLn h $ "&nbsp;&nbsp;`" ++ unpack n ++ ":" ++ renderCompactString t ++ "`"
   hPutStrLn h ""
 
-renderTerm h (TConst (Arg n ty _) _ _ meta _) = do
+renderTerm h (TConst (Arg n ty _) _ cval meta _) = do
   termHeader h n
   case _mDocs meta of
     Nothing -> hPutStrLn stderr $ "No docs for constant " <> renderCompactString n
@@ -97,8 +97,14 @@ renderTerm h (TConst (Arg n ty _) _ _ meta _) = do
       hPutStrLn h $ unpack docs
       hPutStrLn h ""
 
+  hPutStrLn h "Constant: "
+  hPutStrLn h
+    $ "&nbsp;&nbsp;`" <> unpack n
+    <> ":" <> renderCompactString ty
+    <> "`"
+
   hPutStrLn h "Value: "
-  hPutStrLn h $ "&nbsp;&nbsp;`" <> unpack n <> ":" <> renderCompactString ty <> "`"
+  renderTerm h $ _cvRaw cval
   hPutStrLn h ""
 
 renderTerm _ _ = return ()
