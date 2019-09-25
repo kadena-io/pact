@@ -8,6 +8,7 @@
 module Pact.Types.GasModel
   ( GasTest(..)
   , GasSetup(..)
+  , GasTestResult(..)
 
   , getDescription
   
@@ -72,9 +73,18 @@ makeLenses ''GasSetup
 
 
 data GasTest = GasTest
-  { _gasTestExpression :: !PactExpression
+  { _gasTestFunctionName :: NativeDefName
+  , _gasTestExpression :: !PactExpression
   , _gasTestSetups :: !(GasSetup SQLiteDb, GasSetup ())
   }
+
+
+data GasTestResult a = GasTestResult
+ { _gasTestResultFunctionName :: !NativeDefName
+ , _gasTestResultDesciption :: !T.Text
+ , _gasTestResultSqliteDb :: !a
+ , _gasTestResultMockDb :: !a
+ }
 
 
 getDescription :: PactExpression -> GasSetup e -> T.Text
@@ -98,20 +108,22 @@ concatGasUnitTests listOfTests =
     rest = NEL.tail listOfTests
 
 
+
 mapOverGasUnitTests
   :: GasUnitTests
   -> (PactExpression -> GasSetup SQLiteDb -> IO f)
   -> (PactExpression -> GasSetup () -> IO f)
-  -> IO [f]
+  -> IO [GasTestResult f]
 mapOverGasUnitTests (GasUnitTests tests) sqliteFun mockFun = do
-  resSqlite <- mapM runSqlite (NEL.toList tests)
-  resMock <- mapM runMock (NEL.toList tests)
-  return (resSqlite <> resMock)
+  mapM run (NEL.toList tests)
   where
-    runSqlite (GasTest expr (sqlitedb, _)) =
-      sqliteFun expr sqlitedb
-    runMock (GasTest expr (_, mockdb)) =
-      mockFun expr mockdb
+    description (PactExpression full abrid) =
+      fromMaybe full abrid
+    run (GasTest funName expr (sqlitedb, mockdb)) = do
+      resSqlite <- sqliteFun expr sqlitedb
+      resMock <- mockFun expr mockdb
+      return $
+        GasTestResult funName (description expr) resSqlite resMock
 
 
 
@@ -127,29 +139,32 @@ instance NFData (NoopNFData a) where
 
 defGasUnitTests
   :: NEL.NonEmpty PactExpression
+  -> NativeDefName
   -> GasUnitTests
-defGasUnitTests pactExprs =
-  GasUnitTests $ NEL.map defGasTest pactExprs
+defGasUnitTests pactExprs funName =
+  GasUnitTests $ NEL.map (\e -> defGasTest e funName) pactExprs
 
 
 createGasUnitTests
   :: (GasSetup SQLiteDb -> GasSetup SQLiteDb)
   -> (GasSetup () -> GasSetup ())
   -> NEL.NonEmpty PactExpression
+  -> NativeDefName
   -> GasUnitTests
-createGasUnitTests sqliteUpdate mockUpdate pactExprs =
+createGasUnitTests sqliteUpdate mockUpdate pactExprs funName =
   GasUnitTests $ NEL.map createTest pactExprs
   where
     createTest expr =
-      GasTest expr
+      GasTest funName expr
       (sqliteUpdate defSqliteGasSetup,
        mockUpdate defMockGasSetup)
 
 
 -- | Default Gas Tests
-defGasTest :: PactExpression -> GasTest
-defGasTest expr =
+defGasTest :: PactExpression -> NativeDefName -> GasTest
+defGasTest expr funName =
   GasTest
+  funName
   expr
   (defSqliteGasSetup, defMockGasSetup)
 
