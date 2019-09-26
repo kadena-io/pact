@@ -28,8 +28,8 @@ getByteString = fst . B16.decode
 
 type Address = Maybe Text
 
-getKeyPairComponents :: SomeKeyPair -> (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
-getKeyPairComponents kp = (PubBS $ getPublic kp,
+getKeyPairComponents :: SomeKeyPairCaps -> (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
+getKeyPairComponents (kp,_) = (PubBS $ getPublic kp,
                            PrivBS $ getPrivate kp,
                            addy,
                            scheme)
@@ -63,10 +63,10 @@ someETHPair = (PubBS $ getByteString
 toApiKeyPairs :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> [ApiKeyPair]
 toApiKeyPairs kps = map makeAKP kps
   where makeAKP (pub, priv, add, scheme) =
-          ApiKeyPair priv (Just pub) add (Just scheme)
+          ApiKeyPair priv (Just pub) add (Just scheme) Nothing
 
 
-mkCommandTest :: [SomeKeyPair] -> [Signer] -> Text -> IO (Command ByteString)
+mkCommandTest :: [SomeKeyPairCaps] -> [Signer] -> Text -> IO (Command ByteString)
 mkCommandTest kps signers code = mkCommand' kps $ toExecPayload signers code
 
 
@@ -121,7 +121,7 @@ testDefSchemeApiKeyPair =
   context "when scheme not provided in API" $
     it "makes the scheme the default PPKScheme" $ do
       let (pub, priv, addr, _) = someED25519Pair
-          apiKP = ApiKeyPair priv (Just pub) addr Nothing
+          apiKP = ApiKeyPair priv (Just pub) addr Nothing Nothing
       kp <- mkKeyPairs [apiKP]
       (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
 
@@ -131,7 +131,9 @@ testAddrApiKeyPair :: Spec
 testAddrApiKeyPair =
   it "throws error when address provided in API doesn't match derived address" $ do
      let (pub, priv, _, scheme) = someETHPair
-         apiKP = ApiKeyPair priv (Just pub) (Just "9f491e44a3f87df60d6cb0eefd5a9083ae6c3f32") (Just scheme)
+         apiKP = ApiKeyPair priv (Just pub)
+                 (Just "9f491e44a3f87df60d6cb0eefd5a9083ae6c3f32") (Just scheme)
+                 Nothing
      mkKeyPairs [apiKP] `shouldThrow` isUserError
 
 
@@ -140,7 +142,7 @@ testPublicKeyImport :: Spec
 testPublicKeyImport = do
   it "derives PublicKey from the PrivateKey when PublicKey not provided" $ do
     let (_, priv, addr, scheme) = someETHPair
-        apiKP = ApiKeyPair priv Nothing addr (Just scheme)
+        apiKP = ApiKeyPair priv Nothing addr (Just scheme) Nothing
     kp <- mkKeyPairs [apiKP]
     (map getKeyPairComponents kp) `shouldBe` [someETHPair]
 
@@ -149,7 +151,7 @@ testPublicKeyImport = do
     let (_, priv, addr, scheme) = someETHPair
         fakePub = PubBS $ getByteString
                   "c640e94730fb7b7fce01b11086645741fcb5174d1c634888b9d146613730243a171833259cd7dab9b3435421dcb2816d3efa55033ff0899de6cc8b1e0b20e56c"
-        apiKP   = ApiKeyPair priv (Just fakePub) addr (Just scheme)
+        apiKP   = ApiKeyPair priv (Just fakePub) addr (Just scheme) Nothing
     mkKeyPairs [apiKP] `shouldThrow` isUserError
 
 
@@ -168,7 +170,7 @@ testUserSig = do
     let hsh = hash "(somePactFunction)"
         (_,_,wrongAddr,_) = someETHPair
     [signer] <- toSigners [someED25519Pair]
-    [kp]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
+    [(kp,_)]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     sig      <- sign kp (toUntypedHash hsh)
     let myUserSig   = UserSig (toB16Text sig)
         wrongSigner = Lens.set siAddress wrongAddr signer
@@ -179,7 +181,7 @@ testUserSig = do
   it "fails UserSig validation when UserSig has unexpected Scheme" $ do
     let hsh = hash "(somePactFunction)"
     [signer] <- toSigners [someED25519Pair]
-    [kp]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
+    [(kp,_)]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     sig      <- sign kp (toUntypedHash hsh)
     let myUserSig   = UserSig (toB16Text sig)
         wrongScheme = ETH

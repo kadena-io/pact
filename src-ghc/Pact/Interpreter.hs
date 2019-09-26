@@ -41,10 +41,10 @@ import Control.Lens
 import Data.Aeson
 import Data.Default
 import Data.HashMap.Strict (HashMap)
+import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
 import Data.Text.Encoding (encodeUtf8)
-import qualified Data.Vector as V
 import System.Directory
 
 
@@ -187,8 +187,8 @@ evalTerms ss terms = handle (\(e :: SomeException) -> safeRollback >> throwM e) 
       return (rs,logs,txid)
 {-# INLINE evalTerms #-}
 
-resolveSignerCaps :: [Signer] -> Eval e (V.Vector (PublicKey, S.Set Capability))
-resolveSignerCaps ss = V.fromList <$> mapM toPair ss
+resolveSignerCaps :: [Signer] -> Eval e (M.Map PublicKey (S.Set Capability))
+resolveSignerCaps ss = M.fromList <$> mapM toPair ss
   where
     toPair Signer{..} = (pk,) . S.fromList <$> mapM resolveCap _siCapList
       where

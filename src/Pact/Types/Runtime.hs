@@ -53,7 +53,6 @@ import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import qualified Data.Vector as V
 import Data.String
 import Data.Text (Text,)
 
@@ -117,7 +116,7 @@ data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
-    , _eeMsgSigs :: !(V.Vector (PublicKey, S.Set Capability))
+    , _eeMsgSigs :: !(M.Map PublicKey (S.Set Capability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode

@@ -107,12 +107,13 @@ replDefs = ("Repl",
       "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
-      "Set transaction signature KEYS. See 'env-sigs' for setting keys with associated capabilities."
+      ("DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. "<>
+       "See 'env-sigs' for setting keys with associated capabilities.")
      ,defZNative "env-sigs" setsigs' (funType tTyString [("sigs",TyList (tTyObject TyAny))])
-      [LitExample $ "(env-sigs [{'key: \"my-key\", 'clist: [(accounts.USER_GUARD \"my-account\")]}, " <>
-        "{'key: \"admin-key\", 'clist: []}"]
+      [LitExample $ "(env-sigs [{'key: \"my-key\", 'caps: [(accounts.USER_GUARD \"my-account\")]}, " <>
+        "{'key: \"admin-key\", 'caps: []}"]
       ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
-       "specifying the sig key, and \"clist\" specifying a list of capabilities.")
+       "specifying the signer key, and \"caps\" specifying a list of associated capabilities.")
 
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
@@ -282,7 +283,7 @@ setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i (V.toList ts)
-  setenv eeMsgSigs ((,mempty) . PublicKey . encodeUtf8 <$> ks)
+  setenv eeMsgSigs $ M.fromList ((,mempty) . PublicKey . encodeUtf8 <$> V.toList ks)
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
@@ -298,7 +299,7 @@ setsigs' _ [TList ts _ _] = do
           return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
         _ -> evalError' t "Expected object with 'key': string, 'clist': [capability]"
     _ -> evalError' t $ "Expected object"
-  setenv eeMsgSigs sigs
+  setenv eeMsgSigs $ M.fromList $ V.toList sigs
   return $ tStr "Setting transaction signatures/caps"
 setsigs' i as = argsError' i as
 
@@ -508,7 +509,8 @@ verify i as = case as of
   _ -> argsError i as
 
 sigKeyset :: RNativeFun LibState
-sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (V.toList $ V.map fst ss) (Name $ BareName (asString KeysAll) def)
+sigKeyset _ _ = view eeMsgSigs >>= \ss ->
+  return $ toTerm $ KeySet (M.keys ss) (Name $ BareName (asString KeysAll) def)
 
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")

@@ -139,6 +139,7 @@
   (defconst KEYSET_A (read-keyset "a"))
   (defconst KEYSET_AB (read-keyset "ab"))
 
+  ;; params 'x' and 'y' intentionally ignored, just for sig scoping
   (defcap A (x:string y:bool)
     (enforce-keyset KEYSET_A))
 

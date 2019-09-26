@@ -127,7 +127,7 @@ benchReadValue benchMod (DataTable t) _k
 benchReadValue _ (TxTable _t) _k = rcp Nothing
 
 
-mkBenchCmd :: [SomeKeyPair] -> (String, Text) -> IO (String, Command ByteString)
+mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" ()
                                             (keyPairsToSigners kps)))
@@ -151,7 +151,7 @@ main = do
   !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue (benchReadValue benchMod) }
   void $ loadBenchModule mockPersistDb
   print =<< runPactExec Nothing mockPersistDb benchCmd
-  cmds_ <- traverse (mkBenchCmd [keyPair]) exps
+  cmds_ <- traverse (mkBenchCmd [(keyPair,[])]) exps
   !cmds <- return $!! cmds_
   let sqliteFile = "log/bench.sqlite"
   sqliteDb <- mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile []) neverLog

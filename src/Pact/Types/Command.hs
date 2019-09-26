@@ -32,6 +32,7 @@ module Pact.Types.Command
   , keyPairsToSigners
   , verifyUserSig
   , verifyCommand
+  , SomeKeyPairCaps
 #else
   , PPKScheme(..)
 #endif
@@ -121,11 +122,12 @@ instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 #if !defined(ghcjs_HOST_OS)
 
+type SomeKeyPairCaps = (SomeKeyPair,[SigCapability])
 
 -- CREATING AND SIGNING TRANSACTIONS
 
 mkCommand :: (ToJSON m, ToJSON c) =>
-             [SomeKeyPair] ->
+             ([SomeKeyPairCaps]) ->
              m ->
              Text ->
              PactRPC c ->
@@ -134,8 +136,8 @@ mkCommand creds meta nonce rpc = mkCommand' creds encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
         payload = Payload rpc nonce meta $ keyPairsToSigners creds
 
-keyPairToSigner :: SomeKeyPair -> Signer
-keyPairToSigner cred = Signer scheme pub addr []
+keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
+keyPairToSigner cred caps = Signer scheme pub addr caps
       where scheme = case kpToPPKScheme cred of
               ED25519 -> Nothing
               s -> Just s
@@ -144,15 +146,15 @@ keyPairToSigner cred = Signer scheme pub addr []
               Nothing -> Nothing
               Just {} -> Just $ toB16Text $ formatPublicKey cred
 
-keyPairsToSigners :: [SomeKeyPair] -> [Signer]
-keyPairsToSigners creds = map keyPairToSigner creds
+keyPairsToSigners :: [SomeKeyPairCaps] -> [Signer]
+keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 
 
 
-mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
+mkCommand' :: [(SomeKeyPair,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
-      toUserSig cred = UserSig . toB16Text <$>
+      toUserSig (cred,_) = UserSig . toB16Text <$>
                        sign cred (toUntypedHash hsh)
   sigs <- traverse toUserSig creds
   return $ Command env sigs hsh

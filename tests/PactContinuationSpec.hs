@@ -1,10 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TupleSections #-}
 
 module PactContinuationSpec (spec) where
 
 import qualified Control.Exception as Exception
+import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Data.Aeson
 import Data.Decimal
@@ -92,7 +94,7 @@ testSimpleServerCmd :: HTTP.Manager -> IO (Maybe (CommandResult Hash))
 testSimpleServerCmd mgr = do
   simpleKeys <- genKeys
   cmd <- mkExec  "(+ 1 2)" Null def
-             [simpleKeys] (Just "test1")
+             [(simpleKeys,[])] (Just "test1")
   allResults <- runAll mgr [cmd]
   return $ HM.lookup (cmdToRequestKey cmd) allResults
 
@@ -610,13 +612,18 @@ testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
   it "throws error when final price negotiated up" $
     testPriceNegUp mgr
 
-  context "when both debtor and creditor finish together" $
+  context "when both debtor and creditor finish together" $ do
     it "finishes escrow if final price stays the same or negotiated down" $
       testValidEscrowFinish mgr
+    it "with valid price, still fails if bad cap is on a signature" $
+      testPriceNegDownBadCaps mgr
 
 
-twoPartyEscrow :: [Command Text] -> HTTP.Manager ->
-                  ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO () -> Expectation
+twoPartyEscrow
+  :: [Command Text]
+  -> HTTP.Manager
+  -> (PactHash -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ())
+  -> Expectation
 twoPartyEscrow testCmds mgr act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
 
@@ -631,8 +638,6 @@ twoPartyEscrow testCmds mgr act = do
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
   allResults <- runAll mgr allCmds
 
-  print $ _cmdHash runEscrowCmd
-
   runResults allResults $ do
     sysModuleCmd `succeedsWith` textVal "system module loaded"
     acctModuleCmd `succeedsWith` textVal "TableCreated"
@@ -641,23 +646,39 @@ twoPartyEscrow testCmds mgr act = do
     resetTimeCmd `succeedsWith`  Nothing
     runEscrowCmd `succeedsWith`  Nothing
     balanceCmd `succeedsWith` decValue 98.00
-    act
+    act (_cmdHash runEscrowCmd)
 
 
 decValue :: Decimal -> Maybe PactValue
 decValue = Just . PLiteral . LDecimal
 
+checkContHash
+  :: HasCallStack
+  => [(ApiReq,String,Value,PublicMeta)]
+  -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+  -> PactHash
+  -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+checkContHash reqs act hsh = forM_ reqs $ \req ->
+  let desc = show $ view (_1 . to _ylNonce) req
+  in case preview (_1 . to _ylPactTxHash . _Just) req of
+    Nothing -> liftIO $ expectationFailure $ "Expected pact hash in request: " ++ desc
+    Just ph | ph == toUntypedHash hsh -> act
+            | otherwise -> liftIO $ toExpectationFailure' ("checkContHash for req " ++ desc ++ ": ") ph hsh
+
+
 testDebtorPreTimeoutCancel :: HTTP.Manager -> Expectation
 testDebtorPreTimeoutCancel mgr = do
   let testPath = testDir ++ "cont-scripts/fail-deb-cancel-"
 
-  (_, tryCancelCmd)        <- mkApiReq (testPath ++ "01-rollback.yaml")
+  (req, tryCancelCmd)        <- mkApiReq (testPath ++ "01-rollback.yaml")
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "02-balance.yaml")
+
   let allCmds = [tryCancelCmd, checkStillEscrowCmd]
 
   let cancelMsg = "Cancel can only be effected by" <>
                   " creditor, or debitor after timeout"
-  twoPartyEscrow allCmds mgr $ do
+
+  twoPartyEscrow allCmds mgr $ checkContHash [req] $ do
     tryCancelCmd `failsWith` Just cancelMsg
     checkStillEscrowCmd `succeedsWith` decValue 98.00
 
@@ -667,11 +688,11 @@ testDebtorPostTimeoutCancel mgr = do
   let testPath = testDir ++ "cont-scripts/pass-deb-cancel-"
 
   (_, setTimeCmd)          <- mkApiReq (testPath ++ "01-set-time.yaml")
-  (_, tryCancelCmd)        <- mkApiReq (testPath ++ "02-rollback.yaml")
+  (req, tryCancelCmd)        <- mkApiReq (testPath ++ "02-rollback.yaml")
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "03-balance.yaml")
   let allCmds = [setTimeCmd, tryCancelCmd, checkStillEscrowCmd]
 
-  twoPartyEscrow allCmds mgr $ do
+  twoPartyEscrow allCmds mgr $ checkContHash [req] $ do
     setTimeCmd `succeedsWith`  Nothing
     tryCancelCmd `succeedsWith`  Nothing
     checkStillEscrowCmd `succeedsWith` decValue 100.00
@@ -682,11 +703,11 @@ testCreditorCancel mgr = do
   let testPath = testDir ++ "cont-scripts/pass-cred-cancel-"
 
   (_, resetTimeCmd)        <- mkApiReq (testPath ++ "01-reset.yaml")
-  (_, credCancelCmd)       <- mkApiReq (testPath ++ "02-rollback.yaml")
+  (req, credCancelCmd)       <- mkApiReq (testPath ++ "02-rollback.yaml")
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "03-balance.yaml")
   let allCmds = [resetTimeCmd, credCancelCmd, checkStillEscrowCmd]
 
-  twoPartyEscrow allCmds mgr $ do
+  twoPartyEscrow allCmds mgr $ checkContHash [req] $ do
     resetTimeCmd `succeedsWith`  Nothing
     credCancelCmd `succeedsWith`  Nothing
     checkStillEscrowCmd `succeedsWith` decValue 100.00
@@ -697,11 +718,11 @@ testFinishAlone mgr = do
   let testPathCred  = testDir ++ "cont-scripts/fail-cred-finish-"
       testPathDeb   = testDir ++ "cont-scripts/fail-deb-finish-"
 
-  (_, tryCredAloneCmd) <- mkApiReq (testPathCred ++ "01-cont.yaml")
-  (_, tryDebAloneCmd)  <- mkApiReq (testPathDeb ++ "01-cont.yaml")
+  (r1, tryCredAloneCmd) <- mkApiReq (testPathCred ++ "01-cont.yaml")
+  (r2, tryDebAloneCmd)  <- mkApiReq (testPathDeb ++ "01-cont.yaml")
   let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
 
-  twoPartyEscrow allCmds mgr $ do
+  twoPartyEscrow allCmds mgr $ checkContHash [r1, r2] $ do
     tryCredAloneCmd `failsWith` (Just "Keyset failure (keys-all)")
     tryDebAloneCmd `failsWith` (Just "Keyset failure (keys-all)")
 
@@ -710,8 +731,8 @@ testPriceNegUp :: HTTP.Manager -> Expectation
 testPriceNegUp mgr = do
   let testPath = testDir ++ "cont-scripts/fail-both-price-up-"
 
-  (_, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
-  twoPartyEscrow [tryNegUpCmd] mgr $ do
+  (req, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
+  twoPartyEscrow [tryNegUpCmd] mgr $ checkContHash [req] $ do
     tryNegUpCmd `failsWith` (Just "Price cannot negotiate up")
 
 
@@ -719,18 +740,24 @@ testValidEscrowFinish :: HTTP.Manager -> Expectation
 testValidEscrowFinish mgr = do
   let testPath = testDir ++ "cont-scripts/pass-both-price-down-"
 
-  (_, tryNegDownCmd)  <- mkApiReq (testPath ++ "01-cont.yaml")
+  (req, tryNegDownCmd)  <- mkApiReq (testPath ++ "01-cont.yaml")
   (_, credBalanceCmd) <- mkApiReq (testPath ++ "02-cred-balance.yaml")
   (_, debBalanceCmd)  <- mkApiReq (testPath ++ "03-deb-balance.yaml")
   let allCmds = [tryNegDownCmd, credBalanceCmd, debBalanceCmd]
 
-  twoPartyEscrow allCmds mgr $ do
+  twoPartyEscrow allCmds mgr $ checkContHash [req] $ do
     tryNegDownCmd `succeedsWith`
                          (textVal "Escrow completed with 1.75 paid and 0.25 refunded")
     credBalanceCmd `succeedsWith` decValue 1.75
     debBalanceCmd `succeedsWith` decValue 98.25
 
+testPriceNegDownBadCaps :: HTTP.Manager -> Expectation
+testPriceNegDownBadCaps mgr = do
+  let testPath = testDir ++ "cont-scripts/fail-both-price-down-"
 
+  (req, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont-badcaps.yaml")
+  twoPartyEscrow [tryNegUpCmd] mgr $ checkContHash [req] $ do
+    tryNegUpCmd `failsWith` (Just "Keyset failure (keys-all)")
 
 
 
@@ -761,7 +788,7 @@ runResults rs act = runReaderT act rs
 
 makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
 makeExecCmd keyPairs code =
-  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [keyPairs] Nothing
+  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing
 
 
 formatPubKeyForCmd :: SomeKeyPair -> Value
@@ -790,7 +817,7 @@ makeContCmd'
   -> String       -- nonce
   -> IO (Command Text)
 makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
-  mkCont (getPactId pactExecCmd) step isRollback cmdData def [keyPairs] (Just nonce) contProofM
+  mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM
 
 textVal :: Text -> Maybe PactValue
 textVal = Just . PLiteral . LString
@@ -898,5 +925,8 @@ resultShouldBe (ActualResult actual) (ExpectResult expect) =
 
 
 toExpectationFailure :: (HasCallStack, Show e, Show a) => e -> a -> Expectation
-toExpectationFailure expect actual =
-  expectationFailure $ "Expected " ++ show expect ++ ", found " ++ show actual
+toExpectationFailure = toExpectationFailure' ""
+
+toExpectationFailure' :: (HasCallStack, Show e, Show a) => String -> e -> a -> Expectation
+toExpectationFailure' msg expect actual =
+  expectationFailure $ msg ++ "Expected " ++ show expect ++ ", found " ++ show actual

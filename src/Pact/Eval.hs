@@ -103,9 +103,9 @@ enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   granted <- grantedCaps
   let count = length _ksKeys
-      filterSigs (pk,caps) = pk `elem` _ksKeys && (S.null caps || not (S.null matchedCaps))
+      filterSigs pk caps = pk `elem` _ksKeys && (S.null caps || not (S.null matchedCaps))
         where matchedCaps = S.intersection caps granted
-      matched = V.length $ V.filter filterSigs sigs
+      matched = M.size $ M.filterWithKey filterSigs sigs
       failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <>
         maybe "" (\ksn' -> ": " <> pretty ksn') ksn
       runBuiltIn p | p count matched = return ()
