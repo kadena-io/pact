@@ -33,8 +33,6 @@ import Pact.Types.Runtime         hiding (GasPrice)
 data Option = Option
   { _oFilter :: Maybe T.Text
   , _oBenchOnly :: Bool
-  --, _oOS :: T.Text
-  --, _oHardwareNotes :: T.Text
   }
   deriving (Eq,Show)
 
@@ -50,12 +48,7 @@ options = O.info (O.helper <*> parser)
             pure Nothing)
       <*> (O.flag False True
            (O.short 'b' <> O.long "bench" <> O.help "Just bench"))
-{--      <*> (O.strOption
-           (O.long "os" <> O.metavar "OS" <> O.help "Operating system benchmarks being run in"))
-      <*> (O.strOption
-           (O.short 'h' <> O.long "hardware-notes" <> O.metavar "HARDWARE-NOTES" <>
-            O.help "Other relevant information on the hardware running the benchmarks"))
---}
+
 optionToGasTests
   :: Option
   -> [(NativeDefName, GasUnitTests)]
@@ -275,32 +268,32 @@ encodeGasPrice allResults =
       filter simpleTestCheck results
 
 
-gasPriceExplanation :: [(T.Text, T.Text)]
+gasPriceExplanation :: [T.Text]
 gasPriceExplanation = [purpose, numCores, os, hardwareNotes,
-                           implementation, numOfIterations, backend, calcPrice]
+                       implementation, numOfIterations, backend, calcPrice, ""]
   where
-    purpose = ("purpose", "Calculate the gas price of Pact native functions using a data-driven model")
-    numCores = ("number of cores available for benchmarks", T.pack (show numCapabilities))
-    os = ("Operating System", "")
-    hardwareNotes = ("More inforamtion on hardware used", "")
-    implementation = ("implementation", "For every native function, executes and benchmarks "
-                       <> "(using Criterion) simple examples of said function.")
-    numOfIterations = ("number of iterations", "Each function's tests are run three times against each backend type")
-    backend = ("benchmark backend(s)", "[Sqlite db, Mock db]")
-    calcPrice = ("from benchmark to a native function's price", "For every backend type, all of the means of the function's"
-                  <>" benchmark examples are converted into nanoseconds, averaged together, divided by "
-                  <> T.pack (show gasPriceDivisor)
-                  <> ", and rounded up to the nearest integer.")
+    purpose = "Purpose: Calculate the gas price of Pact native functions using a data-driven model"
+    numCores = "Number of cores available for benchmarks: " <> T.pack (show numCapabilities)
+    os = "Operating System: <INSERT OS>"
+    hardwareNotes = "More inforamtion on hardware used: <INSERT MORE INFORMATION ON HARDWARE USED>"
+    implementation = "Implementation: For every native function, executes and benchmarks "
+                     <> "(using Criterion) simple examples of said function."
+    numOfIterations = "Number of iterations: Each function's tests are run three times against each backend type"
+    backend = "Benchmark backend(s): [Sqlite db with `fastNoJournalPragmas`, Mock db]"
+    calcPrice = "From benchmark to a native function's price: For every backend type, all of the means of the function's"
+                <>" benchmark examples are converted into nanoseconds, averaged together, divided by "
+                <> T.pack (show gasPriceDivisor)
+                <> ", and rounded up to the nearest integer."
 
 
 writeGasPriceCSV
-  :: Option
-  -> [(NativeDefName, [GasTestResult Means])]
+  :: [(NativeDefName, [GasTestResult Means])]
   -> IO ()
-writeGasPriceCSV _ results = do
+writeGasPriceCSV results = do
   let (headers, records) = encodeGasPrice results
       content = Csv.encodeByName headers records
-      explanation = Csv.encode gasPriceExplanation
+      explanation = Csv.encode $
+        map (\t -> Csv.record [Csv.toField t]) gasPriceExplanation
   BSL8.writeFile "gas-prices.csv" (explanation <> content)
 
 
@@ -335,7 +328,7 @@ main = do
     writeRawCSV (concatMap snd allBenches)
 
     putStrLn "Exporting data-driven gas prices"
-    writeGasPriceCSV opt allBenches
+    writeGasPriceCSV allBenches
 
     putStrLn "Reporting coverage"
     coverageReport
