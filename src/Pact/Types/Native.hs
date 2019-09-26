@@ -46,8 +46,6 @@ isSpecialForm = (`M.lookup` sfLookup)
 type NativeFun e = FunApp -> [Term Ref] -> Eval e (Gas,Term Name)
 
 -- | Native function with reduced arguments, initial gas pre-compute that computes final gas.
---   Gas = Cost of Opertation * How Many Times Operation Occurs
---   Database functions (i.e. read) are examples of this.
 type GasRNativeFun e = Gas -> FunApp -> [Term Name] -> Eval e (Gas,Term Name)
 
 -- | Native function with reduced arguments, final gas pre-computed.
