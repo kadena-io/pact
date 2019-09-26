@@ -46,6 +46,8 @@ newtype ChainId = ChainId { _chainId :: Text }
 
 instance Wrapped ChainId
 
+-- | Lens into the text value of a 'ChainId'
+--
 chainId :: Lens' ChainId Text
 chainId =  lens _chainId (\t b -> t { _chainId = b })
 
@@ -61,5 +63,7 @@ newtype NetworkId = NetworkId { _networkId :: Text }
 
 instance Wrapped NetworkId
 
+-- | Lens into the value of 'NetworkId'
+--
 networkId :: Lens' NetworkId Text
 networkId =  lens _networkId (\t b -> t { _networkId = b })
