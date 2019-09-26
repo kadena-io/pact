@@ -102,6 +102,7 @@ renderTerm h (TConst (Arg n ty _) _ cval meta _) = do
     $ "&nbsp;&nbsp;`" <> unpack n
     <> ":" <> renderCompactString ty
     <> " = " <> showPretty (_cvRaw cval)
+    <> "`"
 
   hPutStrLn h ""
 
