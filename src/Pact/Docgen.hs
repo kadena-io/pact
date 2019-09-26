@@ -101,10 +101,7 @@ renderTerm h (TConst (Arg n ty _) _ cval meta _) = do
   hPutStr h
     $ "&nbsp;&nbsp;`" <> unpack n
     <> ":" <> renderCompactString ty
-
-  case _cvRaw cval of
-    TLiteral l _ -> hPutStr h $ " = " <> renderLiteral l <> "`"
-    _ -> hPutStr stderr $ "No value for constant term"
+    <> " = " <> showPretty (_cvRaw cval)
 
   hPutStrLn h ""
 

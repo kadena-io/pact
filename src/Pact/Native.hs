@@ -506,9 +506,9 @@ isCharsetDef :: NativeDef
 isCharsetDef =
   defRNative "is-charset" isCharset
   (funType tTyBool [("charset", tTyInteger), ("input", tTyString)])
-  [ "(is-charset 'CHARSET_ASCII \"hello world\")"
-  , "(is-charset 'CHARSET_ASCII \"I am nÖt ascii\")"
-  , "(is-charset 'CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
+  [ "(is-charset CHARSET_ASCII \"hello world\")"
+  , "(is-charset CHARSET_ASCII \"I am nÖt ascii\")"
+  , "(is-charset CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
   ]
   "Check that a string INPUT conforms to the a supported character set CHARSET.       \
   \Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         \

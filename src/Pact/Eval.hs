@@ -603,7 +603,7 @@ evalConsts r = return r
 
 deref :: Ref -> Eval e (Term Name)
 deref (Direct t@TConst{}) = case _tConstVal t of
-  CVEval _ v -> enscope v >>= reduce
+  CVEval _ v -> return v
   CVRaw _ -> evalError' t $ "internal error: deref: unevaluated const: " <> pretty t
 deref (Direct n) = return n
 deref (Ref r) = reduce r
