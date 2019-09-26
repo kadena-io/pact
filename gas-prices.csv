@@ -1,7 +1,7 @@
 Purpose: Calculate the gas price of Pact native functions using a data-driven model
 Number of cores available for benchmarks: 1
 Operating System: Linux/NixOS
-More inforamtion on hardware used: "AWS t2.large, x86_64, 4 CPU cores, 16GB Memory"
+More inforamtion on hardware used: "AWS t2.xlarge, x86_64, 4 CPU cores, 16GB Memory"
 "Implementation: For every native function, executes and benchmarks (using Criterion) simple examples of said function."
 Number of iterations: Each function's tests are run three times against each backend type
 "Benchmark backend(s): [Sqlite db with `fastNoJournalPragmas`, Mock db]"
