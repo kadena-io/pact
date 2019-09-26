@@ -343,3 +343,4 @@ test-suite hspec
                 , ClientSpec
                 , SchemeSpec
                 , HistoryServiceSpec
+                , GasModelSpec
