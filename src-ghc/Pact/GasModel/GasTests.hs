@@ -31,7 +31,7 @@ import qualified Data.List.NonEmpty  as NEL
 
 
 import Pact.GasModel.Utils
-import Pact.Types.GasModel
+import Pact.GasModel.Types
 import Pact.Native
 import Pact.Types.Native
 import Pact.Types.PactValue       (PactValue(..))

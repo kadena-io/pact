@@ -3,7 +3,7 @@
 module Main where
 
 #if !defined(ghcjs_HOST_OS)
-import qualified Pact.GasModel as GasModel
+import qualified Pact.GasModel.GasModel as GasModel
 #endif
 
 

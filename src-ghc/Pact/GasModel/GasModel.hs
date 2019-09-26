@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Pact.GasModel where
+module Pact.GasModel.GasModel where
 
 import Control.Exception              (bracket)
 import Control.Monad                  (void)
@@ -25,7 +25,7 @@ import qualified Options.Applicative        as O
 import Pact.Eval                  (eval)
 import Pact.GasModel.Utils
 import Pact.GasModel.GasTests
-import Pact.Types.GasModel
+import Pact.GasModel.Types
 import Pact.Types.Lang
 import Pact.Types.Runtime         hiding (GasPrice)
 

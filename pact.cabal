@@ -121,7 +121,6 @@ library
                     Pact.Analyze.Remote.Server
                     Pact.ApiReq
                     Pact.Bench
-                    Pact.GasModel
                     Pact.Docgen
                     Pact.Interpreter
                     Pact.Main
@@ -141,7 +140,8 @@ library
                     Pact.Types.ECDSA
                     Pact.Types.Server
                     Pact.Types.SQLite
-                    Pact.Types.GasModel
+                    Pact.GasModel.GasModel
+                    Pact.GasModel.Types
                     Pact.GasModel.Utils
                     Pact.GasModel.GasTests
 

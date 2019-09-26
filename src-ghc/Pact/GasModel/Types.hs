@@ -5,7 +5,7 @@
 {-# LANGUAGE GADTs #-}
 
 
-module Pact.Types.GasModel
+module Pact.GasModel.Types
   ( GasTest(..)
   , GasSetup(..)
   , GasTestResult(..)
