@@ -1,6 +1,6 @@
 # Creditor (Bob) can cancel anytime
 type: "cont"
-pactTxHash: "UdHK68FFwBrAHGBE4_kuIp-MA3FknDU-Lusx42_RwEo"
+pactTxHash: "s3i2mMMRdjGnQSFi4hwNGMyHBAuIJq_iyY7vw6eNRQs"
 step: 0
 rollback: True
 keyPairs:

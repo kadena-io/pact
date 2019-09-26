@@ -130,9 +130,13 @@ benchReadValue _ (TxTable _t) _k = rcp Nothing
 
 mkBenchCmd :: [SomeKeyPair] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
-  cmd <- mkCommand' kps (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" ()
-                                            (keyPairsToSigners kps)))
+  cmd <- mkCommand' kps
+    $ toStrict . encode
+    $ Payload payload "nonce" () ss Nothing
   return (str, cmd)
+  where
+    payload = Exec $ ExecMsg t Null
+    ss = keyPairsToSigners kps
 
 
 main :: IO ()

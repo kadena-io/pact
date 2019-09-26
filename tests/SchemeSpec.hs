@@ -73,7 +73,8 @@ toSigners kps = return $ map makeSigner kps
 
 toExecPayload :: [Signer] -> Text -> ByteString
 toExecPayload signers t = BSL.toStrict $ A.encode payload
-  where payload = (Payload (Exec (ExecMsg t Null)) "nonce" () signers)
+  where
+    payload = Payload (Exec (ExecMsg t Null)) "nonce" () signers Nothing
 
 
 shouldBeProcFail ::  ProcessedCommand () ParsedCode -> Expectation
@@ -203,7 +204,7 @@ testSigNonMalleability = do
   it "fails when invalid signature provided for signer specified in the payload" $ do
     wrongSigners <- toSigners [someED25519Pair]
     kps          <- mkKeyPairs $ toApiKeyPairs [someETHPair]
-    
+
     cmdWithWrongSig <- mkCommandTest kps wrongSigners "(somePactFunction)"
     shouldBeProcFail (verifyCommand cmdWithWrongSig)
 

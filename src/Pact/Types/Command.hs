@@ -31,7 +31,7 @@ module Pact.Types.Command
   , PPKScheme(..)
 #endif
   , ProcessedCommand(..),_ProcSucc,_ProcFail
-  , Payload(..),pMeta,pNonce,pPayload,pSigners
+  , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress
   , UserSig(..),usSig
@@ -46,29 +46,26 @@ module Pact.Types.Command
 
 import Control.Applicative
 import Control.Lens hiding ((.=))
-import Control.Monad.Reader
 import Control.DeepSeq
+
 import Data.ByteString (ByteString)
 import Data.Serialize as SZ
-import Data.String
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
 import Data.Maybe  (fromMaybe)
 
-
 import GHC.Generics
-import Prelude
 
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.ChainId
 import Pact.Types.Orphans ()
-import Pact.Types.RPC
 import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.RPC
+import Pact.Types.Runtime hiding (PublicKey)
 
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
-
 import Pact.Parse (parseExprs)
 import Pact.Types.Crypto              as Base
 #else
@@ -117,15 +114,18 @@ instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 -- CREATING AND SIGNING TRANSACTIONS
 
-mkCommand :: (ToJSON m, ToJSON c) =>
-             [SomeKeyPair] ->
-             m ->
-             Text ->
-             PactRPC c ->
-             IO (Command ByteString)
-mkCommand creds meta nonce rpc = mkCommand' creds encodedPayload
+mkCommand
+  :: ToJSON m
+  => ToJSON c
+  => [SomeKeyPair]
+  -> m
+  -> Text
+  -> Maybe NetworkId
+  -> PactRPC c
+  -> IO (Command ByteString)
+mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
-        payload = Payload rpc nonce meta $ keyPairsToSigners creds
+        payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
 keyPairsToSigners :: [SomeKeyPair] -> [Signer]
 keyPairsToSigners creds = map toSigner creds
@@ -239,6 +239,7 @@ data Payload m c = Payload
   , _pNonce :: !Text
   , _pMeta :: !m
   , _pSigners :: ![Signer]
+  , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
 instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where toJSON = lensyToJSON 2
