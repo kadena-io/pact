@@ -506,9 +506,9 @@ isCharsetDef :: NativeDef
 isCharsetDef =
   defRNative "is-charset" isCharset
   (funType tTyBool [("charset", tTyInteger), ("input", tTyString)])
-  [ "(is-charset CHARSET_ASCII \"hello world\")"
-  , "(is-charset CHARSET_ASCII \"I am nÖt ascii\")"
-  , "(is-charset CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
+  [ "(is-charset 'CHARSET_ASCII \"hello world\")"
+  , "(is-charset 'CHARSET_ASCII \"I am nÖt ascii\")"
+  , "(is-charset 'CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
   ]
   "Check that a string INPUT conforms to the a supported character set CHARSET.       \
   \Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         \
@@ -517,12 +517,10 @@ isCharsetDef =
   where
     isCharset :: RNativeFun e
     isCharset i as = case as of
-      [tc@TConst{..}, TLitString t]
-         | _aName _tConstArg == "CHARSET_ASCII" ->
-           go Char.isAscii t
-         | _aName _tConstArg == "CHARSET_LATIN1" ->
-           go Char.isLatin1 t
-         | otherwise -> evalError' i $ "Unsupported character set: " <> pretty tc
+      [TLitInteger cs, TLitString t] -> case cs of
+        0 -> go Char.isAscii t
+        1 -> go Char.isLatin1 t
+        _ -> evalError' i $ "Unsupported character set: " <> pretty cs
       _ -> argsError i as
 
     go k = return . toTerm . T.all k

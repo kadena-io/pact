@@ -134,7 +134,7 @@ defConst name doc ty term = (name, TConst arg mn cval meta def )
     mn = ModuleName "" Nothing
     arg = Arg (asString name) ty def
     meta = Meta (Just doc) []
-    cval = CVRaw term
+    cval = CVEval term term
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
