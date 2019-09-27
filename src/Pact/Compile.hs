@@ -26,13 +26,17 @@ module Pact.Compile
   , Reserved(..)
   ) where
 
+import Prelude hiding (exp)
+
 import Bound
+
 import Control.Applicative hiding (some,many)
 import Control.Arrow ((&&&),first)
 import Control.Exception hiding (try)
 import Control.Lens hiding (prism)
 import Control.Monad
 import Control.Monad.State
+
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -43,7 +47,7 @@ import Data.String
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Vector as V
-import Prelude hiding (exp)
+
 import Text.Megaparsec as MP
 import qualified Text.Trifecta as TF hiding (expected)
 
@@ -53,7 +57,7 @@ import Pact.Types.ExpParser
 import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Pretty hiding (nest, sep)
-import Pact.Types.Runtime (PactError)
+import Pact.Types.PactError
 import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util
@@ -280,13 +284,13 @@ varAtom = do
   AtomExp{..} <- atom
   checkReserved _atomAtom
   n <- case _atomQualifiers of
-    [] -> return $ Name _atomAtom _atomInfo
+    [] -> return $ Name $ BareName _atomAtom _atomInfo
     [q] -> do
       checkReserved q
-      return $ QName (ModuleName q Nothing) _atomAtom _atomInfo
+      return $ QName $ QualifiedName (ModuleName q Nothing) _atomAtom _atomInfo
     [ns,q] -> do
       checkReserved ns >> checkReserved q
-      return $ QName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
+      return $ QName $ QualifiedName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
     _ -> expected "bareword or qualified atom"
   commit
   return $ TVar n _atomInfo
@@ -317,7 +321,7 @@ literal = lit >>= \LiteralExp{..} ->
 withCapability :: Compile (Term Name)
 withCapability = do
   wcInf <- getInfo <$> current
-  let wcVar = TVar (Name (asString RWithCapability) wcInf) wcInf
+  let wcVar = TVar (Name $ BareName (asString RWithCapability) wcInf) wcInf
   capApp <- sexp app
   body@(top:_) <- some valueLevel
   i <- contextInfo
@@ -431,7 +435,7 @@ moduleForm = do
   gov <- Governance <$>
     (((Left . KeySetName) <$> str) <|>
      (userAtom >>= \AtomExp{..} ->
-         return $ Right $ TVar (Name _atomAtom _atomInfo) _atomInfo))
+         return $ Right $ TVar (Name $ BareName _atomAtom _atomInfo) _atomInfo))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
@@ -545,12 +549,15 @@ letsForm = do
 useForm :: Compile (Term Name)
 useForm = do
   mn <- qualifiedModuleName
-  i  <- contextInfo
-  u  <- Use mn <$> optional hash' <*> pure i
+  i <- contextInfo
+  h <- optional hash'
+  l <- optional $ withList' Brackets (some userAtom <* eof)
+
+  let v = fmap (V.fromList . fmap _atomAtom) l
+      u = Use mn h v i
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
   return $ TUse u i
-
 
 hash' :: Compile ModuleHash
 hash' = str >>= \s -> case fromText' s of
@@ -565,7 +572,7 @@ arg = typedAtom >>= \(AtomExp{..},ty) ->
   return $ Arg _atomAtom ty _atomInfo
 
 arg2Name :: Arg n -> Name
-arg2Name Arg{..} = Name _aName _aInfo
+arg2Name Arg{..} = Name $ BareName _aName _aInfo
 
 
 typed :: Compile (Type (Term Name))
@@ -598,7 +605,7 @@ parseSchemaType tyRep sty = symbol tyRep >>
 parseUserSchemaType :: Compile (Type (Term Name))
 parseUserSchemaType = withList Braces $ \ListExp{..} -> do
   AtomExp{..} <- userAtom
-  return $ TyUser (return $ Name _atomAtom _listInfo)
+  return $ TyUser (return $ Name $ BareName _atomAtom _listInfo)
 
 bodyForm :: Compile (Term Name) -> Compile (Term Name)
 bodyForm term = do

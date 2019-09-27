@@ -10,7 +10,9 @@ import Pact.GasModel.GasTests       (untestedNatives)
 import Pact.Types.Util              (asString)
 
 spec :: Spec
-spec = describe "untested natives" untestedNativesCheck
+spec = describe "gas model tests" $ do
+  describe "untestedNativesCheck" untestedNativesCheck
+  --describe "allGasTestsShouldPass" allGasTestsShouldPass
 
 untestedNativesCheck :: Spec
 untestedNativesCheck = do
@@ -18,3 +20,8 @@ untestedNativesCheck = do
     S.fromList (map asString untestedNatives)
     `shouldBe`
     (S.fromList ["verify-spv", "public-chain-data", "list"])
+
+{--allGasTestsShouldPass :: Spec
+allGasTestsShouldPass = do
+  it "" $ undefined
+--}

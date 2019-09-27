@@ -15,14 +15,15 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
+import Control.Lens
 import Control.Monad
+import Data.Maybe (isJust)
+
 import Pact.Eval
 import Pact.Native.Internal
-import Pact.Types.Runtime
-import Control.Lens
-import Control.Monad.State (state)
+import Pact.Types.Capability
 import Pact.Types.Pretty
-import Data.Maybe (isJust)
+import Pact.Types.Runtime
 
 
 capDefs :: NativeModule
@@ -58,44 +59,37 @@ withCapability =
   \but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap."
   where
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
-      -- ensure not within defcap
-      defcapInStack >>= \p -> when p $ evalError' i "with-capability not allowed within defcap execution"
-      -- erase composed
-      evalCapabilities . capComposed .= []
+
+      enforceNotWithinDefcap i "with-capability"
+
       -- evaluate in-module cap
-      grantedCap <- evalCap True (_tApp c)
-      -- grab composed caps and clear composed state
-      composedCaps <- state $ \s -> (view (evalCapabilities . capComposed) s,
-                                     set (evalCapabilities . capComposed) [] s)
+      acquireResult <- evalCap CapCallStack True (_tApp c)
+
+      -- execute scoped code
       r <- reduceBody body
-      -- only revoke if newly granted
-      forM_ grantedCap $ \newcap -> do
-        revokeCapability newcap
-        mapM_ revokeCapability composedCaps
+
+      -- pop if newly acquired
+      when (acquireResult == NewlyAcquired) $ popCapStack (const (return ()))
+
       return r
+
     withCapability' i as = argsError' i as
 
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be run within module scope.
-evalCap :: Bool -> App (Term Ref) -> Eval e (Maybe Capability)
-evalCap inModule a@App{..} = requireDefcap a >>= \d@Def{..} -> do
-      when inModule $ guardForModuleCall _appInfo _dModule $ return ()
-      prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-      let cap = UserCapability _dModule _dDefName args
-      acquired <- acquireCapability cap $ do
+evalCap :: CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
+evalCap scope inModule a@App{..} = do
+      (cap,d,prep) <- appToCap a
+      when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
+      acquireCapability scope cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
-      return $ case acquired of
-        NewlyAcquired -> Just cap
-        AlreadyAcquired -> Nothing
 
-requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
-requireDefcap App{..} = case _appFun of
-  (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
-    Defcap -> return d
-    _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
-  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " <> pretty _appFun
+
+enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
+enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $
+  evalError' i $ msg <> " not allowed within defcap execution"
 
 requireCapability :: NativeDef
 requireCapability =
@@ -105,9 +99,9 @@ requireCapability =
   "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment."
   where
     requireCapability' :: NativeFun e
-    requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ requireDefcap a >>= \d@Def{..} -> do
-      (args,_) <- prepareUserAppArgs d _appArgs _appInfo
-      let cap = UserCapability _dModule _dDefName args
+    requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ do
+      (cap,_,_) <- appToCap a
+      enforceNotWithinDefcap i "require-capability"
       granted <- capabilityGranted cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
@@ -130,10 +124,8 @@ composeCapability =
     composeCapability' i [TApp app _] = gasUnreduced i [] $ do
       -- enforce in defcap
       defcapInStack >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
-      -- should be granted in-module
-      granted <- evalCap True app
-      -- if newly granted, add to composed list
-      forM_ granted $ \newcap -> evalCapabilities . capComposed %= (newcap:)
+      -- evalCap as composed, which will install onto head of pending cap
+      void $ evalCap CapComposed True app
       return $ toTerm True
     composeCapability' i as = argsError' i as
 
@@ -203,7 +195,7 @@ createUserGuard =
       args <- mapM reduce _appArgs
       fun <- case _appFun of
         (TVar (Ref (TDef Def{..} _)) _) -> case _dDefType of
-          Defun -> return (QName _dModule (asString _dDefName) _dInfo)
+          Defun -> return (QName $ QualifiedName _dModule (asString _dDefName) _dInfo)
           _ -> evalError _appInfo $ "User guard closure must be defun, found: " <> pretty _dDefType
         t -> evalError (_tInfo t) $ "User guard closure function must be def: " <> pretty _appFun
       return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard fun args)

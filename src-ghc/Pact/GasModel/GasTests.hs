@@ -24,7 +24,6 @@ import Data.Maybe                 (fromMaybe)
 import qualified Data.Aeson          as A
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Foldable       as F
-import qualified Data.Set            as S
 import qualified Data.Map            as M
 import qualified Data.Text           as T
 import qualified Data.List.NonEmpty  as NEL
@@ -35,6 +34,7 @@ import Pact.GasModel.Types
 import Pact.Native
 import Pact.Types.Native
 import Pact.Types.PactValue       (PactValue(..))
+import Pact.Types.Capability
 
 import Pact.Interpreter
 import Pact.Types.Lang
@@ -203,7 +203,7 @@ enforceGuardTests = tests
       PactExpression [text| (enforce-guard "$sampleLoadedKeysetName") |] Nothing
     allExprs = enforceGuardExpr :| []
 
-    signEnvWithKeyset = setEnv (set eeMsgSigs (S.fromList samplePubKeys))
+    signEnvWithKeyset = setEnv (set eeMsgSigs (M.fromList samplePubKeysWithCaps))
 
     tests =
       createGasUnitTests
@@ -239,7 +239,8 @@ createPactGuardTests = tests
 
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
                           (PactId "somePactId")
-                          (PactContinuation (Name "some-defpact-func" def) [])
+                          (PactContinuation (Name $ BareName "some-defpact-func" def) [])
+                          False
     updateWithPactExec = setState (set evalPactExec mockPactExec)
 
     tests =
@@ -280,7 +281,8 @@ requireCapabilityTests = tests
     allExprs = requireCapExpr :| []
 
     cap = UserCapability acctModuleName (DefName "GOV") []
-    updateGrantedCap = setState (set (evalCapabilities . capGranted) [cap])
+    capSlot = CapSlot CapCallStack cap []
+    updateGrantedCap = setState (set (evalCapabilities . capStack) [capSlot])
 
     tests =
       createGasUnitTests
@@ -479,7 +481,7 @@ defineKeysetTests = tests
 
     -- Keyset rotation causes previous keyset to be enforced
     updateEnvMsgSig :: GasSetup e -> GasSetup e
-    updateEnvMsgSig = setEnv (set eeMsgSigs (S.fromList samplePubKeys))
+    updateEnvMsgSig = setEnv (set eeMsgSigs (M.fromList samplePubKeysWithCaps))
     
     tests =
       createGasUnitTests
@@ -494,7 +496,7 @@ enforceKeysetTests = tests
     enforceKeysetExpr = defPactExpression [text| (enforce-keyset '$sampleLoadedKeysetName) |]
     allExprs = enforceKeysetExpr :| []
 
-    updateEnvMsgSig = setEnv (set eeMsgSigs (S.fromList samplePubKeys))
+    updateEnvMsgSig = setEnv (set eeMsgSigs (M.fromList samplePubKeysWithCaps))
 
     tests =
       createGasUnitTests
@@ -1164,7 +1166,8 @@ pactIdTests = tests
     
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
                           (PactId "somePactId")
-                          (PactContinuation (Name "some-defpact-func" def) [])
+                          (PactContinuation (Name $ BareName "some-defpact-func" def) [])
+                          False
     updateState = setState (set evalPactExec mockPactExec)
     
     tests =
@@ -1179,7 +1182,8 @@ yieldTests = tests
 
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
                           (PactId "somePactId")
-                          (PactContinuation (Name "some-defpact-func" def) [])
+                          (PactContinuation (Name $ BareName "some-defpact-func" def) [])
+                          False
 
     mockModules = HM.fromList [(someModuleName, someModuleData)]
     mockStackframe = [someStackFrame]
@@ -1273,7 +1277,7 @@ resumeTests nativeName = tests
         updateEnvWithYield =
           setEnv (set eePactStep pactStep)
         updateEnvWithChaindId
-          = setEnv (set (eePublicData . pdPublicMeta . pmChainId) chainId)
+          = setEnv (set (eePublicData . pdPublicMeta . pmChainId) chainIdTest)
         updateStateWithStackFrame
           = setState (set evalCallStack [someStackFrame])
         setInitialState = setState $ const (initStateModules mockModules)
@@ -1285,8 +1289,8 @@ resumeTests nativeName = tests
         yieldVal
           = Yield yieldData provenance
         provenance
-          = bool Nothing (Just $ Provenance chainId someModuleHash) isProv
-        chainId
+          = bool Nothing (Just $ Provenance chainIdTest someModuleHash) isProv
+        chainIdTest
           = ChainId "some-chain-id"
         yieldData
           = (ObjectMap . M.fromList . toPactValueInt . HM.toList) yielded
@@ -1599,7 +1603,7 @@ namespaceTests = tests
     namespaceExpr = defPactExpression [text| (namespace '$sampleNamespaceName) |]
 
     updateEnvWithSig =
-      setEnv $ set eeMsgSigs (S.fromList samplePubKeys)
+      setEnv $ set eeMsgSigs (M.fromList samplePubKeysWithCaps)
 
     tests = createGasUnitTests
             updateEnvWithSig
@@ -1626,7 +1630,7 @@ defineNamespaceTests = tests
           (Just $ rotateExprText <> ": Defining namespace with the same name as one already defined.")
 
         updateMsgSig =
-          setEnv $ set eeMsgSigs (S.fromList samplePubKeys)
+          setEnv $ set eeMsgSigs (M.fromList samplePubKeysWithCaps)
 
         rotateTests =
           createGasUnitTests

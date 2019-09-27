@@ -41,6 +41,7 @@ module Pact.GasModel.Utils
   , sampleLoadedKeysetName
   , sampleKeyset
   , samplePubKeys
+  , samplePubKeysWithCaps
 
   , sampleNamespaceName
   , sampleNamespace
@@ -63,6 +64,7 @@ import Data.List.NonEmpty         (NonEmpty(..))
 import qualified Data.Aeson          as A
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet        as HS
+import qualified Data.Set            as S
 import qualified Data.Map            as M
 import qualified Data.Text           as T
 import qualified Data.List.NonEmpty  as NEL
@@ -70,6 +72,7 @@ import qualified Data.List.NonEmpty  as NEL
 
 import Pact.Compile               (compileExps, mkTextInfo)
 import Pact.Types.PactValue       (toPactValueLenient, PactValue(..))
+import Pact.Types.Capability      (Capability)
 
 import Pact.Parse
 import Pact.Types.Command
@@ -315,8 +318,11 @@ sampleLoadedKeysetName = "some-loaded-keyset"
 samplePubKeys :: [PublicKey]
 samplePubKeys = [PublicKey "something"]
 
+samplePubKeysWithCaps :: [(PublicKey, S.Set Capability)]
+samplePubKeysWithCaps = map (\p -> (p,S.empty)) samplePubKeys
+
 sampleKeyset :: KeySet
-sampleKeyset = KeySet samplePubKeys (Name "keys-all" def)
+sampleKeyset = KeySet samplePubKeys (Name $ BareName "keys-all" def)
 
 sampleNamespaceName :: T.Text
 sampleNamespaceName = "my-namespace"
@@ -343,7 +349,7 @@ someStackFrame =
 someModuleData :: ModuleData Ref
 someModuleData = ModuleData modDef refMap
   where refMap = HM.empty
-        ref = Direct $ TVar (Name "" def) def
+        ref = Direct $ TVar (Name $ BareName "" def) def
         fst' :: Ref -> Maybe Int
         fst' = const Nothing
         scd' :: Term Ref

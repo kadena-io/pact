@@ -796,7 +796,15 @@ assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
   where
     lastStep = pred $ length steps
     toStepYRs = forM steps $ \step -> case step of
-      Step{..} -> return (_aNode,_aYieldResume)
+      Step{..} -> case (_aYieldResume, _aRollback) of
+
+        -- check that a cross-chain yield and rollback do not occur
+        -- in the same step, otherwise build the tuple
+        (Just y, Just{}) ->
+          if _yrCrossChain y
+          then die'' step "Illegal rollback with yield"
+          else return (_aNode, _aYieldResume)
+        _ -> return (_aNode, _aYieldResume)
       _ -> die'' step "Non-step in defpact"
     yrMay l yr = preview (_Just . l . _Just) yr
     go :: (Maybe (YieldResume Node),Int) -> (Node, Maybe (YieldResume Node)) -> TC (Maybe (YieldResume Node),Int)
@@ -925,6 +933,7 @@ toAST (TApp Term.App{..} _) = do
             YieldSF -> do
               app' <- mkApp fun' args'
               setOrAssocYR yrYield (_aNode app')
+              tcYieldResume . _Just . yrCrossChain .= (argCount >= 2)
               return app'
             Resume -> do
               app' <- specialBind
@@ -1160,9 +1169,10 @@ typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abb
 
 -- | Typecheck all productions in a module.
 typecheckModule :: Bool -> ModuleData Ref -> IO ([TopLevel Node],[Failure])
-typecheckModule dbg ModuleData{..} = do
-  debug' dbg $ "Typechecking module " ++ show (moduleDefName _mdModule)
+typecheckModule dbg (ModuleData (MDModule m) rm) = do
+  debug' dbg $ "Typechecking module " ++ show (_mName m)
   let tc ((tls,fails),sup) r = do
         (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
-  fst <$> foldM tc (([],[]),0) (HM.elems _mdRefMap)
+  fst <$> foldM tc (([],[]),0) (HM.elems rm)
+typecheckModule _ _ = return mempty
