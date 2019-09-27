@@ -30,6 +30,7 @@ capDefs :: NativeModule
 capDefs =
   ("Capabilities",
    [ withCapability
+   , installCapability
    , enforceGuardDef "enforce-guard"
    , requireCapability
    , composeCapability
@@ -47,7 +48,7 @@ withCapability =
   defNative (specialForm WithCapability) withCapability'
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
   [LitExample "(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))"]
-  "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
+  "Specifies and requests grant of _scoped_ CAPABILITY which is an application of a 'defcap' \
   \production. Given the unique token specified by this application, ensure \
   \that the token is granted in the environment during execution of BODY. \
   \'with-capability' can only be called in the same module that declares the \
@@ -74,6 +75,37 @@ withCapability =
       return r
 
     withCapability' i as = argsError' i as
+
+installCapability :: NativeDef
+installCapability =
+  defNative "install-capability" installCapability'
+  (funType tTyString
+    [("capability",TyFun $ funType' tTyBool [])
+    ,("mgr-fun",TyFun $ funType' ctype
+                [("installed", ctype)
+                ,("requested", ctype)])
+    ])
+  [LitExample "(install-capability (PAY \"alice\" \"bob\" 10.0) (manage-PAY))"]
+  "Specifies, and validates install of, a _managed_ CAPABILITY whose scope is controlled \
+  \by MGR-FUN. The type of the objects in the MGR_FUN parameters, C-TYPE, is the name of the \
+  \specified 'defcap' of CAPABILITY. The C-TYPE defcap is evaluated to validate the \
+  \install of CAPABILITY into the 'managed' runtime c-list. Upon request of a scoped \
+  \capability of type C-TYPE using 'with-capability', MGR-FUN is invoked for each capability \
+  \in the 'managed' c-list of type C-TYPE: for each, MGR-FUN is called with MANAGED having the \
+  \parameters the managed capability, and with REQUESTED having the parameters of the requested \
+  \scoped capability. MGR-FUN enforces that the requested capability matches the managed one, \
+  \and produces a new managed capability parameter object to replace the previous managed one, \
+  \if the desired logic allows it, otherwise it should fail. Upon success, the managed capability \
+  \is swapped with the new parameters returned by MGR-FUN, and the requested capability \
+  \successfully enters into callstack scope. \
+  \Note that signatures that are scoped to a managed capability are only validated upon the \
+  \first install of the capability, after which they can no longer be used in the context of that \
+  \capability. This ensures that the managed capability can only be installed once (if controlled \
+  \by the associated signature[s])."
+  where
+    ctype = tTyObject (mkSchemaVar "c-type")
+    installCapability' = undefined
+
 
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
