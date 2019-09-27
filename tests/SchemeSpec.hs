@@ -26,13 +26,18 @@ getByteString :: ByteString -> ByteString
 getByteString = fst . B16.decode
 
 
-type Address = Text
+type Address = Maybe Text
 
-getKeyPairComponents :: SomeKeyPair -> (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
-getKeyPairComponents kp = (PubBS $ getPublic kp,
+getKeyPairComponents :: SomeKeyPairCaps -> (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
+getKeyPairComponents (kp,_) = (PubBS $ getPublic kp,
                            PrivBS $ getPrivate kp,
-                           toB16Text $ formatPublicKey kp,
-                           kpToPPKScheme kp)
+                           addy,
+                           scheme)
+  where
+    scheme = kpToPPKScheme kp
+    addy = case scheme of
+      ED25519 -> Nothing
+      ETH -> Just $ toB16Text $ formatPublicKey kp
 
 
 someED25519Pair :: (PublicKeyBS, PrivateKeyBS, Address, PPKScheme)
@@ -40,7 +45,7 @@ someED25519Pair = (PubBS $ getByteString
                    "ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d",
                    PrivBS $ getByteString
                    "8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332",
-                   "ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d",
+                   Nothing,
                    ED25519)
 
 
@@ -51,29 +56,30 @@ someETHPair = (PubBS $ getByteString
                "836b35a026743e823a90a0ee3b91bf615c6a757e2b60b9e1dc1826fd0dd16106f7bc1e8179f665015f43c6c81f39062fc2086ed849625c06e04697698b21855e",
                PrivBS $ getByteString
                "208065a247edbe5df4d86fbdc0171303f23a76961be9f6013850dd2bdc759bbb",
-               "0bed7abd61247635c1973eb38474a2516ed1d884",
+               Just $ "0bed7abd61247635c1973eb38474a2516ed1d884",
                ETH)
 
 
 toApiKeyPairs :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> [ApiKeyPair]
 toApiKeyPairs kps = map makeAKP kps
   where makeAKP (pub, priv, add, scheme) =
-          ApiKeyPair priv (Just pub) (Just add) (Just scheme)
+          ApiKeyPair priv (Just pub) add (Just scheme) Nothing
 
 
-mkCommandTest :: [SomeKeyPair] -> [Signer] -> Text -> IO (Command ByteString)
+mkCommandTest :: [SomeKeyPairCaps] -> [Signer] -> Text -> IO (Command ByteString)
 mkCommandTest kps signers code = mkCommand' kps $ toExecPayload signers code
 
 
 toSigners :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> IO [Signer]
 toSigners kps = return $ map makeSigner kps
   where makeSigner (PubBS pub, _, add, scheme) =
-          Signer scheme (toB16Text pub) add
+          Signer (Just scheme) (toB16Text pub) add []
 
 
 toExecPayload :: [Signer] -> Text -> ByteString
 toExecPayload signers t = BSL.toStrict $ A.encode payload
-  where payload = (Payload (Exec (ExecMsg t Null)) "nonce" () signers)
+  where
+    payload = Payload (Exec (ExecMsg t Null)) "nonce" () signers Nothing
 
 
 shouldBeProcFail ::  ProcessedCommand () ParsedCode -> Expectation
@@ -116,7 +122,7 @@ testDefSchemeApiKeyPair =
   context "when scheme not provided in API" $
     it "makes the scheme the default PPKScheme" $ do
       let (pub, priv, addr, _) = someED25519Pair
-          apiKP = ApiKeyPair priv (Just pub) (Just addr) Nothing
+          apiKP = ApiKeyPair priv (Just pub) addr Nothing Nothing
       kp <- mkKeyPairs [apiKP]
       (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
 
@@ -126,7 +132,9 @@ testAddrApiKeyPair :: Spec
 testAddrApiKeyPair =
   it "throws error when address provided in API doesn't match derived address" $ do
      let (pub, priv, _, scheme) = someETHPair
-         apiKP = ApiKeyPair priv (Just pub) (Just "9f491e44a3f87df60d6cb0eefd5a9083ae6c3f32") (Just scheme)
+         apiKP = ApiKeyPair priv (Just pub)
+                 (Just "9f491e44a3f87df60d6cb0eefd5a9083ae6c3f32") (Just scheme)
+                 Nothing
      mkKeyPairs [apiKP] `shouldThrow` isUserError
 
 
@@ -135,7 +143,7 @@ testPublicKeyImport :: Spec
 testPublicKeyImport = do
   it "derives PublicKey from the PrivateKey when PublicKey not provided" $ do
     let (_, priv, addr, scheme) = someETHPair
-        apiKP = ApiKeyPair priv Nothing (Just addr) (Just scheme)
+        apiKP = ApiKeyPair priv Nothing addr (Just scheme) Nothing
     kp <- mkKeyPairs [apiKP]
     (map getKeyPairComponents kp) `shouldBe` [someETHPair]
 
@@ -144,7 +152,7 @@ testPublicKeyImport = do
     let (_, priv, addr, scheme) = someETHPair
         fakePub = PubBS $ getByteString
                   "c640e94730fb7b7fce01b11086645741fcb5174d1c634888b9d146613730243a171833259cd7dab9b3435421dcb2816d3efa55033ff0899de6cc8b1e0b20e56c"
-        apiKP   = ApiKeyPair priv (Just fakePub) (Just addr) (Just scheme)
+        apiKP   = ApiKeyPair priv (Just fakePub) addr (Just scheme) Nothing
     mkKeyPairs [apiKP] `shouldThrow` isUserError
 
 
@@ -163,7 +171,7 @@ testUserSig = do
     let hsh = hash "(somePactFunction)"
         (_,_,wrongAddr,_) = someETHPair
     [signer] <- toSigners [someED25519Pair]
-    [kp]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
+    [(kp,_)]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     sig      <- sign kp (toUntypedHash hsh)
     let myUserSig   = UserSig (toB16Text sig)
         wrongSigner = Lens.set siAddress wrongAddr signer
@@ -174,11 +182,11 @@ testUserSig = do
   it "fails UserSig validation when UserSig has unexpected Scheme" $ do
     let hsh = hash "(somePactFunction)"
     [signer] <- toSigners [someED25519Pair]
-    [kp]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
+    [(kp,_)]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     sig      <- sign kp (toUntypedHash hsh)
     let myUserSig   = UserSig (toB16Text sig)
         wrongScheme = ETH
-        wrongSigner = Lens.set siScheme wrongScheme signer
+        wrongSigner = Lens.set siScheme (Just wrongScheme) signer
     (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` False
 
 
@@ -203,7 +211,7 @@ testSigNonMalleability = do
   it "fails when invalid signature provided for signer specified in the payload" $ do
     wrongSigners <- toSigners [someED25519Pair]
     kps          <- mkKeyPairs $ toApiKeyPairs [someETHPair]
-    
+
     cmdWithWrongSig <- mkCommandTest kps wrongSigners "(somePactFunction)"
     shouldBeProcFail (verifyCommand cmdWithWrongSig)
 

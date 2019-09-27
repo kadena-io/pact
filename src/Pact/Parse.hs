@@ -27,6 +27,7 @@ module Pact.Parse
     ,number
     ,PactParser(unPactParser)
     ,ParsedInteger(..),ParsedDecimal(..)
+    ,parsePact
     )
 
 where
@@ -169,9 +170,20 @@ instance Wrapped ParsedInteger
 
 
 
+
+
+
 -- | "Production" parser: atto, parse multiple exps.
 parseExprs :: Text -> Either String [Exp Parsed]
 parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
+
+
+-- | ParsedCode version of 'parseExprs'
+parsePact :: Text -> Either String ParsedCode
+parsePact code = ParsedCode code <$> parseExprs code
+{-# INLINABLE parsePact #-}
+
+
 
 _parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
 _parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp

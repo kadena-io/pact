@@ -7,7 +7,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies, GADTs, DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- |
 -- Module      :  Pact.Types.Crypto
@@ -44,9 +48,10 @@ module Pact.Types.Crypto
 import Prelude
 import GHC.Generics
 
-import Data.Aeson.Types   (toJSONKeyText)
-import Data.Text.Encoding
 import Data.ByteString    (ByteString)
+import Data.String        (IsString(..))
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Data.Aeson                        as A
 import Data.Serialize                    as SZ
@@ -77,40 +82,49 @@ class ConvertBS a where
 
 
 
--- Scheme class created to enforce at the type level that Public Key,
+-- | Scheme class created to enforce at the type level that Public Key,
 -- Private Key, and Signature are of the same scheme when signing
 -- and validating.
-
--- Also ensures that each scheme specifies its payload hash and
+--
+-- Also ensures that each scheme specifies
 -- how it will transform its public keys to Pact Runtime public keys.
 
-class (ConvertBS (PublicKey a),  Eq (PublicKey a),
-       ConvertBS (PrivateKey a),
-       ConvertBS (Signature a))  =>
+class ( ConvertBS (PublicKey a),  Eq (PublicKey a), Show (PublicKey a)
+      , ConvertBS (PrivateKey a)
+      , ConvertBS (Signature a), Eq (Signature a), Show (Signature a)
+      , Show a
+      ) =>
       Scheme a where
 
   type PublicKey a
+  -- ^ Associated public key type
+
   type PrivateKey a
+  -- ^ Associated private key type
+
   type Signature a
+  -- ^ Associated cryptographic signature type
 
   _sign :: a -> Hash -> PublicKey a -> PrivateKey a -> IO (Signature a)
+  -- ^ Sign a hash given public and private key
+
   _valid :: a -> Hash -> PublicKey a -> Signature a -> Bool
+  -- ^ Validate a signature given a public key and hash
+
   _genKeyPair :: a -> IO (PublicKey a, PrivateKey a)
-
-
-  -- Trivial to derive in Elliptic Curve Cryptography.
-  -- Return Nothing if not possible to derive.
+  -- ^ Randomly generate a keypair
 
   _getPublic :: a -> PrivateKey a -> Maybe (PublicKey a)
-
-
-  -- Converts Cryptographic public keys to Pact Runtime public keys depending on the scheme.
-  -- Pact uses Cryptographic PKs to sign/validate transactions.
-  -- While it uses Runtime PKs during keyset enforcement to denote ownership and permissions.
-  -- Certain schemes (i.e. Ethereum) call Runtime public keys 'addresses'.
+  -- ^ Trivial to derive in Elliptic Curve Cryptography.
+  -- Return Nothing if not possible to derive.
 
   _formatPublicKey :: a -> PublicKey a -> ByteString
-
+  -- ^ Converts "Cryptographic" public keys to "Runtime" public keys depending on the scheme.
+  -- Cryptographic PKs are used to sign/validate transactions, while "Runtime PKs"
+  -- are used during keyset enforcement in the Pact environment.
+  -- With schemes like ETH or BTC that have address formats that differ from the public key itself,
+  -- the "Runtime PK" is in the address format. This allows migration of ownership ledgers
+  -- from those blockchains to the Pact system.
 
 
 
@@ -235,37 +249,60 @@ instance ConvertBS (ECDSA.Signature) where
 
 --------- SCHEME HELPER DATA TYPES ---------
 
--- KeyPair existential allows a transaction to be signed by
--- key pairs of different schemes
 
+-- | Specialized KeyPair datatype for schemes
 data KeyPair a = KeyPair
   { _kpScheme :: a
   , _kpPublicKey :: PublicKey a
   , _kpPrivateKey :: PrivateKey a
   }
-data SomeKeyPair = forall a. Scheme (SPPKScheme a) => SomeKeyPair (KeyPair (SPPKScheme a))
 
+instance Scheme a => Show (KeyPair a) where
+  show KeyPair{..} = "KeyPair { _kpScheme = " ++ show _kpScheme ++
+                     ", _kpPublicKey = " ++ show _kpPublicKey ++
+                     ", _kpPrivateKey = ... }"
+
+
+-- | SomeKeyPair existential allows a transaction to be signed by
+-- key pairs of different schemes
+data SomeKeyPair =
+  forall a. Scheme (SPPKScheme a) =>
+    SomeKeyPair (KeyPair (SPPKScheme a))
+
+instance Show SomeKeyPair where
+  show (SomeKeyPair kp) = "SomeKeyPair (" ++ show kp ++")"
 
 
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Generic)
 instance ToJSON PublicKeyBS where
   toJSON (PubBS p) = toB16JSON p
 instance FromJSON PublicKeyBS where
   parseJSON = withText "PublicKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PubBS s'
+instance IsString PublicKeyBS where
+  fromString s = case parseB16TextOnly (T.pack s) of
+    Left e -> PubBS $ "Bad public key: " <> T.encodeUtf8 (T.pack e)
+    Right b -> PubBS b
+instance Show PublicKeyBS where
+  show (PubBS b) = T.unpack $ toB16Text b
 
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Generic)
 instance ToJSON PrivateKeyBS where
   toJSON (PrivBS p) = toB16JSON p
 instance FromJSON PrivateKeyBS where
   parseJSON = withText "PrivateKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PrivBS s'
-
+instance IsString PrivateKeyBS where
+  fromString s = case parseB16TextOnly (T.pack s) of
+    Left e -> PrivBS $ "Bad private key: " <> T.encodeUtf8 (T.pack e)
+    Right b -> PrivBS b
+instance Show PrivateKeyBS where
+  show (PrivBS b) = T.unpack $ toB16Text b
 
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic)
@@ -310,7 +347,6 @@ getPrivate :: SomeKeyPair -> ByteString
 getPrivate (SomeKeyPair kp) = toBS (_kpPrivateKey kp)
 
 
-
 -- Key Pair setter functions
 
 genKeyPair :: SomeScheme -> IO SomeKeyPair
@@ -344,22 +380,7 @@ importKeyPair (SomeScheme scheme) maybePubBS (PrivBS privBS) = do
 
 
 
-
---------- BYTESTRING INSTANCES ---------
-
-instance ToJSON ByteString where
-  toJSON = String . decodeUtf8
-instance FromJSON ByteString where
-  parseJSON = withText "ByteString" (return . encodeUtf8)
-instance ToJSONKey ByteString where
-  toJSONKey = toJSONKeyText decodeUtf8
-instance FromJSONKey ByteString where
-  fromJSONKey = FromJSONKeyText encodeUtf8
-
-
-
-
---------- ED25519 FUNCTIONS AND INSTANCES ---------
+--------- ED25519 FUNCTIONS AND ORPHANS ---------
 
 #ifdef CRYPTONITE_ED25519
 ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.SecretKey)

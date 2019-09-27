@@ -34,7 +34,7 @@ import           Pact.Analyze.Util          (dummyInfo)
 
 import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Pretty          (renderCompactString', pretty, vsep)
-import           Pact.Types.Term            (Name (Name))
+import           Pact.Types.Term            (Name (Name), BareName(..))
 import qualified Pact.Types.Term            as Pact
 
 import           Analyze.TimeGen
@@ -651,7 +651,7 @@ genEnv = GenEnv
         SCons' (SSymbol @"name") SStr
           SNil'
     )]
-  [ (Pact.KeySet [alice, bob] (Name "keys-all" dummyInfo), Guard 0)
-  , (Pact.KeySet [alice, bob] (Name "keys-any" dummyInfo), Guard 1)
-  , (Pact.KeySet [alice, bob] (Name "keys-2" dummyInfo), Guard 2)
+  [ (Pact.KeySet [alice, bob] (Name $ BareName "keys-all" dummyInfo), Guard 0)
+  , (Pact.KeySet [alice, bob] (Name $ BareName "keys-any" dummyInfo), Guard 1)
+  , (Pact.KeySet [alice, bob] (Name $ BareName "keys-2" dummyInfo), Guard 2)
   ]

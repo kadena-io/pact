@@ -57,7 +57,7 @@ import Pact.Types.ExpParser
 import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Pretty hiding (nest, sep)
-import Pact.Types.Runtime (PactError)
+import Pact.Types.PactError
 import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util
@@ -284,13 +284,13 @@ varAtom = do
   AtomExp{..} <- atom
   checkReserved _atomAtom
   n <- case _atomQualifiers of
-    [] -> return $ Name _atomAtom _atomInfo
+    [] -> return $ Name $ BareName _atomAtom _atomInfo
     [q] -> do
       checkReserved q
-      return $ QName (ModuleName q Nothing) _atomAtom _atomInfo
+      return $ QName $ QualifiedName (ModuleName q Nothing) _atomAtom _atomInfo
     [ns,q] -> do
       checkReserved ns >> checkReserved q
-      return $ QName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
+      return $ QName $ QualifiedName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
     _ -> expected "bareword or qualified atom"
   commit
   return $ TVar n _atomInfo
@@ -321,7 +321,7 @@ literal = lit >>= \LiteralExp{..} ->
 withCapability :: Compile (Term Name)
 withCapability = do
   wcInf <- getInfo <$> current
-  let wcVar = TVar (Name (asString RWithCapability) wcInf) wcInf
+  let wcVar = TVar (Name $ BareName (asString RWithCapability) wcInf) wcInf
   capApp <- sexp app
   body@(top:_) <- some valueLevel
   i <- contextInfo
@@ -351,7 +351,7 @@ defconst = do
   a <- arg
   v <- valueLevel
   m <- meta ModelNotAllowed
-  TConst a modName (CVRaw v) m <$> contextInfo
+  TConst a (Just modName) (CVRaw v) m <$> contextInfo
 
 data ModelAllowed
   = ModelAllowed
@@ -395,7 +395,7 @@ defschema = do
   tn <- _atomAtom <$> userAtom
   m <- meta ModelAllowed
   fields <- many arg
-  TSchema (TypeName tn) modName m fields <$> contextInfo
+  TSchema (TypeName tn) (Just modName) m fields <$> contextInfo
 
 defunOrCap :: DefType -> Compile (Term Name)
 defunOrCap dt = do
@@ -435,7 +435,7 @@ moduleForm = do
   gov <- Governance <$>
     (((Left . KeySetName) <$> str) <|>
      (userAtom >>= \AtomExp{..} ->
-         return $ Right $ TVar (Name _atomAtom _atomInfo) _atomInfo))
+         return $ Right $ TVar (Name $ BareName _atomAtom _atomInfo) _atomInfo))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
@@ -572,7 +572,7 @@ arg = typedAtom >>= \(AtomExp{..},ty) ->
   return $ Arg _atomAtom ty _atomInfo
 
 arg2Name :: Arg n -> Name
-arg2Name Arg{..} = Name _aName _aInfo
+arg2Name Arg{..} = Name $ BareName _aName _aInfo
 
 
 typed :: Compile (Type (Term Name))
@@ -605,7 +605,7 @@ parseSchemaType tyRep sty = symbol tyRep >>
 parseUserSchemaType :: Compile (Type (Term Name))
 parseUserSchemaType = withList Braces $ \ListExp{..} -> do
   AtomExp{..} <- userAtom
-  return $ TyUser (return $ Name _atomAtom _listInfo)
+  return $ TyUser (return $ Name $ BareName _atomAtom _listInfo)
 
 bodyForm :: Compile (Term Name) -> Compile (Term Name)
 bodyForm term = do

@@ -59,7 +59,7 @@ signature must correspond to the `ith` signer in `cmd`'s list of
 ```yaml
 name: "sig"                     # Cryptographic signature of current
 type: string (base16)           # transaction.
-required: true    
+required: true
 ```
 
 ##### Example command
@@ -129,10 +129,15 @@ type: string (base16)         # Must be valid public key for specified `scheme`.
 required: true
 ```
 ```yaml
-name: "addr"                  # Address derived from public key.
+name: "addr"                  # Address derived from public key, if needed from scheme.
+                              # Only ETH scheme requires an address currently.
 type: string (base16)         # Must be valid address for specified `scheme`.
-required: false               # Defaults to ED25519's address representation,
-                              # which is the full public key.
+required: false               # Defaults to null.
+```
+```yaml
+name: "caps"                  # List of capabilities to scope this signature.
+type: list[string]            # Example: ["(accounts.PAY "alice" "bob" 10.0)"]
+required: false               # Defaults to empty list.
 ```
 
 ###### `"payload"`
@@ -152,9 +157,8 @@ the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
         }
       },
       "signers":[{
-        "addr":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca",
-        "scheme":"ED25519",
-        "pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca"
+        "pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca",
+        "caps": ["(accounts.PAY \"alice\" \"bob\" 20.0)"]
         }],
       "meta":{
         "gasLimit":1000,
@@ -348,7 +352,7 @@ required: true
 children:
   name: "args"              # `args`: `defpact` arguments when it was
     type: [PactValue]       #         first invoked.
-    required: true      
+    required: true
   name: "def"               # `def`: Name of continuation ("pact").
     type: string
     required: true
@@ -1497,6 +1501,37 @@ present does it actually execute the code in the `defcap` body.
 As a result, **`defcap`s cannot be executed directly**, as this would violate the semantics described here.
 This is an important security property as it ensures that the granting code can only be called in the
 appropriate way.
+
+### Scoping signatures with capabilities
+
+Pact 3.3 introduces the ability to limit the scope of a signature such that any keysets requiring the signer
+key will only pass if checked in the context of the specified capability. This can be simulated using the
+new `env-sigs` REPL function as follows:
+
+```lisp
+(module accounts GOV
+  ...
+  (defcap PAY (sender receiver amount)
+    (enforce-keyset (at 'keyset (read accounts sender))))
+
+  (defun pay (sender receiver amount)
+    (with-capability (PAY sender receiver amount)
+      (transfer sender receiver amount)))
+  ...
+)
+
+(set-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
+(accounts.pay "alice" "bob" 10.0) ;; works as the cap match the signature caps
+
+(set-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
+(expect-failure "payment to bob will no longer be able to enforce alice's keyset"
+  (accounts.pay "alice" "bob" 10.0))
+```
+
+This allows signatures to be _designated_ to a particular _authority_ as opposed to simply providing
+an ambient authorization. This allows for instance a transaction to pay gas with one account and call
+a smart contract to pay it for some service: without the capability restriction, the gas-paying account
+would be wide open for the smart contract to steal from it.
 
 
 ### Guard types
