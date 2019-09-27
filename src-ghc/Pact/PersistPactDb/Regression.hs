@@ -42,7 +42,7 @@ loadModule = do
         show (view (rEvalState . evalRefs . rsLoadedModules) s)
 
 nativeLookup :: NativeDefName -> Maybe (Term Name)
-nativeLookup (NativeDefName n) = case HM.lookup (Name n def) nativeDefs of
+nativeLookup (NativeDefName n) = case HM.lookup (Name $ BareName n def) nativeDefs of
   Just (Direct t) -> Just t
   _ -> Nothing
 
@@ -70,7 +70,7 @@ runRegression p = do
   let row' = ObjectMap $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
   _writeRow pactdb Update usert "key1" row' v
   assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
-  let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)
+  let ks = KeySet [PublicKey "skdjhfskj"] (Name $ BareName "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
   (modName,modRef,mod') <- loadModule

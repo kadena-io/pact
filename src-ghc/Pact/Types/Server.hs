@@ -62,11 +62,14 @@ import Pact.Types.Logger
 import Pact.Interpreter
 import Pact.Types.SPV
 
-
+-- | Grab "runtime" public key from Signer, which is address
+-- if specified, otherwise pubkey
 userSigToPactPubKey :: Signer -> Pact.PublicKey
-userSigToPactPubKey Signer{..} = Pact.PublicKey $ encodeUtf8 _siAddress
+userSigToPactPubKey Signer{..} =
+  Pact.PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
 
 
+-- | See 'userSigToPactPubKey'
 userSigsToPactKeySet :: [Signer] -> S.Set Pact.PublicKey
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 
