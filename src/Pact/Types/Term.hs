@@ -31,7 +31,6 @@
 
 module Pact.Types.Term
  ( Namespace(..), nsName, nsGuard,
-   NamespaceName(..),
    Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..),
@@ -43,20 +42,16 @@ module Pact.Types.Term
    Guard(..),
    DefType(..),_Defun,_Defpact,_Defcap,
    defTypeRep,
-   NativeDefName(..),DefName(..),
    FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
    Ref'(..),_Direct,_Ref,Ref,
    NativeDFun(..),
    BindType(..),
    BindPair(..),bpArg,bpVal,toBindPairs,
-   TableName(..),
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
    ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
    Governance(..),
-   ModuleName(..), mnName, mnNamespace,
    ModuleHash(..), mhHash,
-   Name(..),parseName,
    ConstVal(..),constTerm,
    Use(..),
    App(..),appFun,appArgs,appInfo,
@@ -80,6 +75,7 @@ module Pact.Types.Term
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
    Gas(..)
+   , module Pact.Types.Names
    ) where
 
 
@@ -95,7 +91,6 @@ import Data.Aeson hiding (pairs,Object, (<?>))
 #else
 import Data.Aeson hiding (pairs,Object)
 #endif
-import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString.UTF8 as BS
 import Data.Decimal
 import Data.Default
@@ -121,13 +116,12 @@ import Data.Word (Word64, Word32)
 import GHC.Generics (Generic)
 import Prelude
 import Text.Show.Deriving
-import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 
 import Pact.Types.Codec
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info
-import Pact.Types.Parser
+import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.Type
 import Pact.Types.Util
@@ -192,7 +186,7 @@ instance FromJSON KeySet where
                     KeySet <$> o .: "keys" <*>
                     (fromMaybe defPred <$> o .:? "pred")) v <|>
                   (KeySet <$> parseJSON v <*> pure defPred)
-      where defPred = Name "keys-all" def
+      where defPred = Name (BareName "keys-all" def)
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 
@@ -240,7 +234,7 @@ instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 data UserGuard a = UserGuard
   { _ugFun :: !Name
   , _ugArgs :: ![a]
-  } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
+  } deriving (Eq,Generic,Show,Functor,Foldable,Traversable,Ord)
 
 instance NFData a => NFData (UserGuard a)
 
@@ -259,7 +253,7 @@ data Guard a
   | GKeySetRef !KeySetName
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
-  deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
+  deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
 
 instance NFData a => NFData (Guard a)
 
@@ -312,11 +306,6 @@ defTypeRep Defcap = "defcap"
 instance Pretty DefType where
   pretty = prettyString . defTypeRep
 
-newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData)
-
-instance Pretty NativeDefName where
-  pretty (NativeDefName name) = pretty name
 
 -- | Capture function application metadata
 data FunApp = FunApp {
@@ -416,101 +405,6 @@ instance NFData n => NFData (BindPair n)
 
 instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
-
-newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show,NFData,ToJSON,FromJSON)
-instance Pretty TableName where pretty (TableName s) = pretty s
-
-data ModuleName = ModuleName
-  { _mnName      :: Text
-  , _mnNamespace :: Maybe NamespaceName
-  } deriving (Eq, Ord, Generic, Show)
-
-instance Hashable ModuleName where
-  hashWithSalt s (ModuleName n Nothing)   =
-    s `hashWithSalt` (0::Int) `hashWithSalt` n
-  hashWithSalt s (ModuleName n (Just ns)) =
-    s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
-
-instance NFData ModuleName
-
-instance AsString ModuleName where
-  asString (ModuleName n Nothing) = n
-  asString (ModuleName n (Just (NamespaceName ns))) = ns <> "." <> n
-
-instance IsString ModuleName where
-  fromString = coalesce . T.splitOn "." . pack
-    where
-      coalesce l = case l of
-        [ns,n] -> ModuleName n (Just (NamespaceName ns))
-        [n]    -> ModuleName n Nothing
-        _      -> ModuleName (pack . show $ l) (Just . NamespaceName $ "Err: malformed name")
-
-instance Pretty ModuleName where
-  pretty (ModuleName n Nothing)   = pretty n
-  pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
-
-instance ToJSON ModuleName where toJSON = lensyToJSON 3
-instance FromJSON ModuleName where parseJSON = lensyParseJSON 3
-
-newtype DefName = DefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
-
--- | A named reference from source.
-data Name
-  = QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info }
-  | Name { _nName :: Text, _nInfo :: Info }
-  deriving (Generic, Show)
-
-instance HasInfo Name where
-  getInfo (QName _ _ i) = i
-  getInfo (Name _ i) = i
-
-instance Pretty Name where
-  pretty = \case
-    QName modName nName _ -> pretty modName <> "." <> pretty nName
-    Name nName _          -> pretty nName
-
-instance AsString Name where asString = renderCompactText
-
-instance ToJSON Name where
-  toJSON = toJSON . renderCompactString
-
-instance FromJSON Name where
-  parseJSON = withText "Name" $ \t -> case parseName def t of
-    Left s  -> fail s
-    Right n -> return n
-
-instance NFData Name
-
-parseName :: Info -> Text -> Either String Name
-parseName i = AP.parseOnly (nameParser i <* eof)
-
-
-nameParser :: (TokenParsing m, Monad m) => Info -> m Name
-nameParser i = do
-  a <- ident style
-  b <- optional (dot *> (ident style))
-  case b of
-    Nothing -> return (Name a i)
-    Just b' -> do
-      c <- optional (dot *> ident style)
-      case c of
-        Nothing -> return (QName (ModuleName a Nothing) b' i) <?> "qualified name"
-        Just c' -> return (QName (ModuleName b' (Just . NamespaceName $ a)) c' i)
-
-instance Hashable Name where
-  hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
-  hashWithSalt s (QName q n _) = s `hashWithSalt` (1::Int) `hashWithSalt` q `hashWithSalt` n
-instance Eq Name where
-  (QName a b _) == (QName c d _) = (a,b) == (c,d)
-  (Name a _) == (Name b _) = a == b
-  _ == _ = False
-instance Ord Name where
-  (QName a b _) `compare` (QName c d _) = (a,b) `compare` (c,d)
-  (Name a _) `compare` (Name b _) = a `compare` b
-  Name {} `compare` QName {} = LT
-  QName {} `compare` Name {} = GT
 
 
 data Use = Use
@@ -678,12 +572,9 @@ instance (ToJSON n, FromJSON n) => ToJSON (Def n) where toJSON = lensyToJSON 2
 instance (ToJSON n, FromJSON n) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
 
 derefDef :: Def Ref -> Name
-derefDef Def{..} = QName _dModule (asString _dDefName) _dInfo
+derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
 
-
-newtype NamespaceName = NamespaceName Text
-  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData)
 
 data Namespace = Namespace
   { _nsName   :: NamespaceName
@@ -1124,6 +1015,7 @@ instance ToTerm UTCTime where toTerm = tLit . LTime
 instance ToTerm Word32 where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Word64 where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Int64 where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm TableName where toTerm = tLit . LString . asString
 
 
 toTObject :: Type (Term n) -> Info -> [(FieldKey,Term n)] -> Term n
@@ -1230,7 +1122,6 @@ makeLenses ''Interface
 makePrisms ''ModuleDef
 makeLenses ''App
 makeLenses ''Def
-makeLenses ''ModuleName
 makePrisms ''DefType
 makeLenses ''Object
 makeLenses ''BindPair
@@ -1291,5 +1182,5 @@ _roundtripJSON | r == (Success tmod) = show r
             (toTList TyAny def
              [(TVar na def),(TVar nb def)])) -- free var + bound var
            BindLet def
-    na = Name "a" def
-    nb = Name "b" def
+    na = Name $ BareName "a" def
+    nb = Name $ BareName "b" def

@@ -107,7 +107,7 @@ nativeDefs :: HM.HashMap Name Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
 moduleToMap :: NativeModule -> HM.HashMap Name Ref
-moduleToMap = HM.fromList . map (((`Name` def) . asString) *** Direct) . snd
+moduleToMap = HM.fromList . map ((Name . (`BareName` def) . asString) *** Direct) . snd
 
 
 lengthDef :: NativeDef

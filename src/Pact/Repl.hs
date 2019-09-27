@@ -110,7 +110,7 @@ initReplState m verifyUri =
 initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   mv <- initLibState neverLog verifyUri >>= newMVar
-  return $ EvalEnv (RefStore nativeDefs) def Null Transactional
+  return $ EvalEnv (RefStore nativeDefs) mempty Null Transactional
     def def mv repldb def pactInitialHash freeGasEnv permissiveNamespacePolicy (spvs mv) def
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport

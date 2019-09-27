@@ -36,8 +36,9 @@ module Pact.Eval
     ,liftTerm,apply
     ,preGas
     ,acquireCapability,acquireModuleAdmin,enforceModuleAdmin
+    ,popCapStack
     ,capabilityGranted
-    ,revokeCapability,revokeAllCapabilities
+    ,revokeAllCapabilities
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,resumePact
@@ -69,6 +70,7 @@ import Safe
 import Unsafe.Coerce
 
 import Pact.Gas
+import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
@@ -99,8 +101,11 @@ enforceKeySetName mi mksn = do
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
+  granted <- grantedCaps
   let count = length _ksKeys
-      matched = S.size $ S.intersection (S.fromList _ksKeys) sigs
+      filterSigs pk caps = pk `elem` _ksKeys && (S.null caps || not (S.null matchedCaps))
+        where matchedCaps = S.intersection caps granted
+      matched = M.size $ M.filterWithKey filterSigs sigs
       failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <>
         maybe "" (\ksn' -> ": " <> pretty ksn') ksn
       runBuiltIn p | p count matched = return ()
@@ -175,24 +180,47 @@ topLevelCall
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
+grantedCaps :: Eval e (S.Set Capability)
+grantedCaps = S.fromList . toList <$> use evalCapabilities
+
 capabilityGranted :: Capability -> Eval e Bool
-capabilityGranted cap = (cap `elem`) <$> use (evalCapabilities . capGranted)
+capabilityGranted cap = S.member cap <$> grantedCaps
+
+popCapStack :: (CapSlot Capability -> Eval e a) -> Eval e a
+popCapStack act = do
+  s <- use $ evalCapabilities . capStack
+  case s of
+    [] -> evalError def "acquireCapability: unexpected error: empty stack"
+    (c:cs) -> do
+      evalCapabilities . capStack .= cs
+      act c
 
 -- | Test if capability is already installed, if not
 -- evaluate `test` which is expected to fail by some
 -- guard throwing a failure. Upon successful return of
 -- `test` install capability.
-acquireCapability :: Capability -> Eval e () -> Eval e CapAcquireResult
-acquireCapability cap test = do
+acquireCapability :: CapScope -> Capability -> Eval e () -> Eval e CapAcquireResult
+acquireCapability scope cap test = do
   granted <- capabilityGranted cap
   if granted then return AlreadyAcquired else do
+    -- push onto stack, which doubles as a "pending" queue for collecting composed caps.
+    evalCapabilities . capStack %= (CapSlot scope cap []:)
+    -- run test
     test
-    evalCapabilities . capGranted %= (cap:)
+    case scope of
+      CapCallStack -> return ()
+      CapManaged -> popCapStack $ \c ->
+        -- install managed
+        evalCapabilities . capManaged %= (c:)
+      CapComposed -> popCapStack $ \c ->
+        -- install composed into slot at head of stack
+        evalCapabilities . capStack . _head . csComposed %= (_csCap c:)
+
     return NewlyAcquired
 
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modGov =
-  acquireCapability (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
+  acquireCapability CapManaged (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
 
 enforceModuleAdmin :: Info -> Governance (Def Ref) -> Eval e ()
 enforceModuleAdmin i modGov =
@@ -208,10 +236,7 @@ enforceModuleAdmin i modGov =
 
 
 revokeAllCapabilities :: Eval e ()
-revokeAllCapabilities = evalCapabilities . capGranted .= []
-
-revokeCapability :: Capability -> Eval e ()
-revokeCapability c = evalCapabilities . capGranted %= filter (/= c)
+revokeAllCapabilities = evalCapabilities .= def
 
 -- | Evaluate current namespace and prepend namespace to the
 -- module name. This should be done before any lookups, as
@@ -245,7 +270,7 @@ lookupModule i mn = do
       case stored of
         Just mdStored -> do
           natives <- view $ eeRefStore . rsNatives
-          let natLookup (NativeDefName n) = case HM.lookup (Name n def) natives of
+          let natLookup (NativeDefName n) = case HM.lookup (Name (BareName n def)) natives of
                 Just (Direct t) -> Just t
                 _ -> Nothing
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
@@ -280,7 +305,7 @@ eval (TModule (MDModule m) bod i) =
       -- governance however is not called on install
       _ -> return ()
     -- in any case, grant module admin to this transaction
-    void $ acquireCapability (ModuleAdminCapability $ _mName m) $ return ()
+    void $ acquireCapability CapManaged (ModuleAdminCapability $ _mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
@@ -421,7 +446,7 @@ collectNames g0 args body k = case instantiate' body of
       Nothing -> return (g, ds)
       Just dn -> do
         -- disallow native overlap
-        when (isJust $ HM.lookup (Name dn def) ns) $
+        when (isJust $ HM.lookup (Name (BareName dn def)) ns) $
           evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
         -- disallow conflicting members
         when (isJust $ HM.lookup dn ds) $
@@ -436,7 +461,7 @@ resolveGovernance
   -> Module (Term Name)
   -> Eval e (ModuleDef (Def Ref))
 resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
-    TVar (Name n _) _ -> case HM.lookup n solvedDefs of
+    TVar (Name (BareName n _)) _ -> case HM.lookup n solvedDefs of
       Just r -> case r of
         Ref (TDef govDef _) -> case _dDefType govDef of
           Defcap -> return govDef
@@ -479,11 +504,11 @@ evaluateDefs info defs = do
         dm <- resolveRef f f
         case (dm, f) of
           (Just t, _) -> return (Right t)
-          (Nothing, Name fn _) ->
+          (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn ds of
               Just _ -> return (Left fn)
-              Nothing -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
-          (Nothing, _) -> evalError (_nInfo f) $ "Cannot resolve " <> dquotes (pretty f)
+              Nothing -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+          (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
 
       return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
 
@@ -572,12 +597,12 @@ moduleResolver lkp i mn = do
 
 
 resolveRef :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
-resolveRef i (QName q n _) = moduleResolver (lookupQn n) i q
+resolveRef i (QName (QualifiedName q n _)) = moduleResolver (lookupQn n) i q
   where
     lookupQn n' i' q' = do
       m <- lookupModule i' q'
       return $ join $ HM.lookup n' . _mdRefMap <$> m
-resolveRef _i nn@(Name _ _) = do
+resolveRef _i nn@Name {} = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
@@ -677,7 +702,7 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
       Defun ->
         reduceBody bod'
       Defpact -> do
-        continuation <- PactContinuation (QName _dModule (asString _dDefName) def)
+        continuation <- PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
           <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
       Defcap ->
@@ -876,10 +901,10 @@ installModule updated md = go . maybe allDefs filteredDefs
 
     filteredDefs is m k v =
       if V.elem k is
-      then HM.insert (Name k def) v m
+      then HM.insert (Name $ BareName k def) v m
       else m
 
-    allDefs m k v = HM.insert (Name k def) v m
+    allDefs m k v = HM.insert (Name $ BareName k def) v m
 
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'

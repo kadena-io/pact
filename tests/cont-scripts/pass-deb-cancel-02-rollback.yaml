@@ -1,6 +1,6 @@
 # Debtor (Alice) can cancel after timeout
 type: "cont"
-pactTxHash: "s3i2mMMRdjGnQSFi4hwNGMyHBAuIJq_iyY7vw6eNRQs"
+pactTxHash: "9UrJZjG4Jn-U3oJRPsuDHtARsqOCi6Fr7SZMor7I2O0"
 step: 0
 rollback: True
 keyPairs:
