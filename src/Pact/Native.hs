@@ -58,7 +58,7 @@ import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
-import Data.Char (digitToInt,intToDigit)
+import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
 import Data.Foldable
@@ -235,7 +235,7 @@ intToStrDef = defRNative "int-to-str" intToStr
     intToStr _ [b'@(TLitInteger base),v'@(TLitInteger v)]
       | base >= 2 && base <= 16 =
           return $ toTerm $ T.pack $
-          showIntAtBase base intToDigit v ""
+          showIntAtBase base Char.intToDigit v ""
       | base == 64 && v >= 0 = doBase64 v
       | base == 64 = evalError' v' "Only positive values allowed for base64URL conversion."
       | otherwise = evalError' b' "Invalid base, must be 2-16 or 64"
@@ -487,6 +487,44 @@ atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyV
   ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
   "Index LIST at IDX, or get value with key IDX from OBJECT."
 
+asciiConst :: NativeDef
+asciiConst = defConst "CHARSET_ASCII"
+  "Constant denoting the ASCII charset"
+  tTyInteger
+  (toTerm (0 :: Integer))
+
+latin1Const :: NativeDef
+latin1Const = defConst "CHARSET_LATIN1"
+  "Constant denoting the Latin-1 charset ISO-8859-1"
+  tTyInteger
+  (toTerm (1 :: Integer))
+
+-- | Check that a given string conforms to a specified character set.
+-- Supported character sets include latin (ISO 8859-1)
+--
+isCharsetDef :: NativeDef
+isCharsetDef =
+  defRNative "is-charset" isCharset
+  (funType tTyBool [("charset", tTyInteger), ("input", tTyString)])
+  [ "(is-charset CHARSET_ASCII \"hello world\")"
+  , "(is-charset CHARSET_ASCII \"I am nÖt ascii\")"
+  , "(is-charset CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
+  ]
+  "Check that a string INPUT conforms to the a supported character set CHARSET.       \
+  \Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         \
+  \'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be \
+  \added in the future."
+  where
+    isCharset :: RNativeFun e
+    isCharset i as = case as of
+      [TLitInteger cs, TLitString t] -> case cs of
+        0 -> go Char.isAscii t
+        1 -> go Char.isLatin1 t
+        _ -> evalError' i $ "Unsupported character set: " <> pretty cs
+      _ -> argsError i as
+
+    go k = return . toTerm . T.all k
+
 langDefs :: NativeModule
 langDefs =
     ("General",[
@@ -579,6 +617,9 @@ langDefs =
     ,namespaceDef
     ,chainDataDef
     ,chainDataSchema
+    ,isCharsetDef
+    ,asciiConst
+    ,latin1Const
     ])
     where
           d = mkTyVar "d" []
@@ -919,7 +960,7 @@ baseStrToInt base t =
   where
     go :: Integer -> Char -> Either Text Integer
     go acc c' =
-      let val = fromIntegral . digitToInt $ c'
+      let val = fromIntegral . Char.digitToInt $ c'
       in if val < base
          then pure $ base * acc + val
          else Left $ "character '" <> T.singleton c' <>

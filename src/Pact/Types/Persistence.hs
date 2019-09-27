@@ -53,6 +53,7 @@ import Pact.Types.Exp
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Term
+import Pact.Types.Type
 import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
 
 
@@ -78,7 +79,8 @@ instance Pretty PersistDirect where
 
 toPersistDirect :: Term Name -> Either Text PersistDirect
 toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
-toPersistDirect (TSchema n (ModuleName "" Nothing) _ _ _) = pure $ PDNative (NativeDefName (asString n))
+toPersistDirect (TSchema n Nothing _ _ _) = pure $ PDNative (NativeDefName (asString n))
+toPersistDirect (TConst carg Nothing _ _ _) = pure $ PDNative (NativeDefName $ _aName carg)
 toPersistDirect t = case toPactValue t of
   Right v -> pure $ PDValue v
   Left e -> Left e

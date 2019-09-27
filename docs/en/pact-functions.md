@@ -1,6 +1,20 @@
 # Built-in Functions {#builtins}
 ## General {#General}
 
+### CHARSET_ASCII {#CHARSET_ASCII}
+
+Constant denoting the ASCII charset
+
+Constant: 
+&nbsp;&nbsp;`CHARSET_ASCII:integer = 0`
+
+### CHARSET_LATIN1 {#CHARSET_LATIN1}
+
+Constant denoting the Latin-1 charset ISO-8859-1
+
+Constant: 
+&nbsp;&nbsp;`CHARSET_LATIN1:integer = 1`
+
 ### at {#at}
 
 *idx*&nbsp;`integer` *list*&nbsp;`[<l>]` *&rarr;*&nbsp;`<a>`
@@ -245,6 +259,22 @@ pact> (int-to-str 16 65535)
 "ffff"
 pact> (int-to-str 64 43981)
 "q80"
+```
+
+
+### is-charset {#is-charset}
+
+*charset*&nbsp;`integer` *input*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Check that a string INPUT conforms to the a supported character set CHARSET.       Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be added in the future.
+```lisp
+pact> (is-charset CHARSET_ASCII "hello world")
+true
+pact> (is-charset CHARSET_ASCII "I am nÖt ascii")
+false
+pact> (is-charset CHARSET_LATIN1 "I am nÖt ascii, but I am latin1!")
+true
 ```
 
 
