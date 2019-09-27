@@ -25,7 +25,7 @@ module Pact.Types.Exp
  (
    Literal(..),
    _LString,_LInteger,_LDecimal,_LBool,_LTime,
-   simpleISO8601,formatLTime,renderLiteral,
+   simpleISO8601,formatLTime,
    litToPrim,
    LiteralExp(..),AtomExp(..),ListExp(..),SeparatorExp(..),
    Exp(..),
@@ -104,14 +104,6 @@ instance FromJSON Literal where
     (LTime <$> decoder timeCodec o) <|>
     (LDecimal <$> decoder decimalCodec o)
   parseJSON _t = fail "Literal parse failed"
-
-renderLiteral :: Literal -> String
-renderLiteral s = case s of
-  LString a -> show a
-  LInteger i -> show i
-  LDecimal d -> show d
-  LBool b -> show b
-  LTime t -> show $ formatLTime t
 
 litToPrim :: Literal -> PrimType
 litToPrim LString {} = TyString
