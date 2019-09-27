@@ -37,7 +37,7 @@ module Pact.Types.Command
   , PPKScheme(..)
 #endif
   , ProcessedCommand(..),_ProcSucc,_ProcFail
-  , Payload(..),pMeta,pNonce,pPayload,pSigners
+  , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..),usSig
@@ -52,22 +52,21 @@ module Pact.Types.Command
 
 import Control.Applicative
 import Control.Lens hiding ((.=))
-import Control.Monad.Reader
 import Control.DeepSeq
+
 import Data.ByteString (ByteString)
 import Data.Serialize as SZ
-import Data.String
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
 import Data.Maybe  (fromMaybe)
 
-
 import GHC.Generics
-import Prelude
+
 
 import Pact.Parse (parsePact)
 import Pact.Types.Capability
+import Pact.Types.ChainId
 import Pact.Types.Exp (ParsedCode(..))
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue (PactValue(..))
@@ -77,7 +76,6 @@ import Pact.Types.Runtime hiding (PublicKey)
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
-
 import Pact.Types.Crypto              as Base
 #else
 import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
@@ -126,15 +124,18 @@ type SomeKeyPairCaps = (SomeKeyPair,[SigCapability])
 
 -- CREATING AND SIGNING TRANSACTIONS
 
-mkCommand :: (ToJSON m, ToJSON c) =>
-             ([SomeKeyPairCaps]) ->
-             m ->
-             Text ->
-             PactRPC c ->
-             IO (Command ByteString)
-mkCommand creds meta nonce rpc = mkCommand' creds encodedPayload
+mkCommand
+  :: ToJSON m
+  => ToJSON c
+  => [SomeKeyPairCaps]
+  -> m
+  -> Text
+  -> Maybe NetworkId
+  -> PactRPC c
+  -> IO (Command ByteString)
+mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
-        payload = Payload rpc nonce meta $ keyPairsToSigners creds
+        payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
 keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
@@ -259,6 +260,7 @@ data Payload m c = Payload
   , _pNonce :: !Text
   , _pMeta :: !m
   , _pSigners :: ![Signer]
+  , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
 instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where toJSON = lensyToJSON 2

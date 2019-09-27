@@ -26,15 +26,14 @@ module Pact.Types.Names
   , Name(..), parseName
   , QualifiedName(..), parseQualifiedName
   , BareName(..)
-    ) where
+  ) where
 
 
 import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
 import Control.Monad
-import qualified Data.Aeson as A
-import Data.Aeson
+import Data.Aeson (ToJSON(..), FromJSON(..), withText)
 import qualified Data.Attoparsec.Text as AP
 import Data.Default
 import Data.Function

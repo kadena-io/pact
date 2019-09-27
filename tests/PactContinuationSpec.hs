@@ -93,8 +93,7 @@ testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
 testSimpleServerCmd :: HTTP.Manager -> IO (Maybe (CommandResult Hash))
 testSimpleServerCmd mgr = do
   simpleKeys <- genKeys
-  cmd <- mkExec  "(+ 1 2)" Null def
-             [(simpleKeys,[])] (Just "test1")
+  cmd <- mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] Nothing (Just "test1")
   allResults <- runAll mgr [cmd]
   return $ HM.lookup (cmdToRequestKey cmd) allResults
 
@@ -648,7 +647,6 @@ twoPartyEscrow testCmds mgr act = do
     balanceCmd `succeedsWith` decValue 98.00
     act (_cmdHash runEscrowCmd)
 
-
 decValue :: Decimal -> Maybe PactValue
 decValue = Just . PLiteral . LDecimal
 
@@ -788,7 +786,7 @@ runResults rs act = runReaderT act rs
 
 makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
 makeExecCmd keyPairs code =
-  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing
+  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing Nothing
 
 
 formatPubKeyForCmd :: SomeKeyPair -> Value
@@ -817,7 +815,7 @@ makeContCmd'
   -> String       -- nonce
   -> IO (Command Text)
 makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
-  mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM
+  mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM Nothing
 
 textVal :: Text -> Maybe PactValue
 textVal = Just . PLiteral . LString

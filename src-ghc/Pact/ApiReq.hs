@@ -75,7 +75,8 @@ data ApiReq = ApiReq {
   _ylCodeFile :: Maybe FilePath,
   _ylKeyPairs :: [ApiKeyPair],
   _ylNonce :: Maybe String,
-  _ylPublicMeta :: Maybe PublicMeta
+  _ylPublicMeta :: Maybe PublicMeta,
+  _ylNetworkId :: Maybe NetworkId
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
@@ -118,15 +119,32 @@ mkApiReqExec ar@ApiReq{..} kps fp = do
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
     return (code,cdata)
   let pubMeta = fromMaybe def _ylPublicMeta
-  ((ar,code,cdata,pubMeta),) <$> mkExec code cdata pubMeta kps _ylNonce
+  cmd <- mkExec code cdata pubMeta kps _ylNetworkId _ylNonce
+  return ((ar,code,cdata,pubMeta), cmd)
 
-mkExec :: String -> Value -> PublicMeta -> [SomeKeyPairCaps] -> Maybe String -> IO (Command Text)
-mkExec code mdata pubMeta kps ridm = do
+-- | Construct an Exec request message
+--
+mkExec
+  :: String
+    -- ^ code
+  -> Value
+    -- ^ optional environment data
+  -> PublicMeta
+    -- ^ public metadata
+  -> [SomeKeyPairCaps]
+    -- ^ signing keypairs + caplists
+  -> Maybe NetworkId
+    -- ^ optional 'NetworkId'
+  -> Maybe String
+    -- ^ optional nonce
+  -> IO (Command Text)
+mkExec code mdata pubMeta kps nid ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   cmd <- mkCommand
          kps
          pubMeta
          (pack $ show rid)
+         nid
          (Exec (ExecMsg (pack code) mdata))
   return $ decodeUtf8 <$> cmd
 
@@ -155,16 +173,38 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
   let pubMeta = fromMaybe def _ylPublicMeta
       pactId = toPactId apiPactId
-  ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce _ylProof
+  cmd <- mkCont pactId step rollback cdata pubMeta kps _ylNonce _ylProof _ylNetworkId
+  return ((ar,"",cdata,pubMeta), cmd)
 
-mkCont :: PactId -> Int -> Bool -> Value -> PublicMeta -> [SomeKeyPairCaps]
-  -> Maybe String -> Maybe ContProof -> IO (Command Text)
-mkCont txid step rollback mdata pubMeta kps ridm proof = do
+-- | Construct a Cont request message
+--
+mkCont
+  :: PactId
+    -- ^ pact tx hash of the continuation
+  -> Int
+    -- ^ cont step
+  -> Bool
+    -- ^ has rollback?
+  -> Value
+    -- ^ environment data
+  -> PublicMeta
+    -- ^ command public metadata
+  -> [SomeKeyPairCaps]
+    -- ^ signing keypairs
+  -> Maybe String
+    -- ^ optional nonce
+  -> Maybe ContProof
+    -- ^ optional continuation proof (required for cross-chain)
+  -> Maybe NetworkId
+    -- ^ optional network id
+  -> IO (Command Text)
+mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   cmd <- mkCommand
          kps
          pubMeta
          (pack $ show rid)
+         nid
          (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
