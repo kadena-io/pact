@@ -26,14 +26,20 @@
 module Pact.Types.Command
   ( Command(..),cmdPayload,cmdSigs,cmdHash
 #if !defined(ghcjs_HOST_OS)
-  , mkCommand, keyPairsToSigners, mkCommand', verifyUserSig, verifyCommand
+  , mkCommand
+  , mkCommand'
+  , keyPairToSigner
+  , keyPairsToSigners
+  , verifyUserSig
+  , verifyCommand
+  , SomeKeyPairCaps
 #else
   , PPKScheme(..)
 #endif
   , ProcessedCommand(..),_ProcSucc,_ProcFail
-  , Payload(..),pMeta,pNonce,pPayload,pSigners
+  , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
-  , Signer(..),siScheme, siPubKey, siAddress
+  , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..),usSig
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
@@ -46,30 +52,30 @@ module Pact.Types.Command
 
 import Control.Applicative
 import Control.Lens hiding ((.=))
-import Control.Monad.Reader
 import Control.DeepSeq
+
 import Data.ByteString (ByteString)
 import Data.Serialize as SZ
-import Data.String
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
 import Data.Maybe  (fromMaybe)
 
-
 import GHC.Generics
-import Prelude
 
-import Pact.Types.Runtime hiding (PublicKey)
+
+import Pact.Parse (parsePact)
+import Pact.Types.Capability
+import Pact.Types.ChainId
+import Pact.Types.Exp (ParsedCode(..))
 import Pact.Types.Orphans ()
-import Pact.Types.RPC
 import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.RPC
+import Pact.Types.Runtime hiding (PublicKey)
 
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
-
-import Pact.Parse (parseExprs)
 import Pact.Types.Crypto              as Base
 #else
 import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
@@ -114,31 +120,42 @@ instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 #if !defined(ghcjs_HOST_OS)
 
+type SomeKeyPairCaps = (SomeKeyPair,[SigCapability])
 
 -- CREATING AND SIGNING TRANSACTIONS
 
-mkCommand :: (ToJSON m, ToJSON c) =>
-             [SomeKeyPair] ->
-             m ->
-             Text ->
-             PactRPC c ->
-             IO (Command ByteString)
-mkCommand creds meta nonce rpc = mkCommand' creds encodedPayload
+mkCommand
+  :: ToJSON m
+  => ToJSON c
+  => [SomeKeyPairCaps]
+  -> m
+  -> Text
+  -> Maybe NetworkId
+  -> PactRPC c
+  -> IO (Command ByteString)
+mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
-        payload = Payload rpc nonce meta $ keyPairsToSigners creds
+        payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
-keyPairsToSigners :: [SomeKeyPair] -> [Signer]
-keyPairsToSigners creds = map toSigner creds
-  where toSigner cred = Signer
-                        (kpToPPKScheme cred)
-                        (toB16Text $ getPublic cred)
-                        (toB16Text $ formatPublicKey cred)
+keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
+keyPairToSigner cred caps = Signer scheme pub addr caps
+      where scheme = case kpToPPKScheme cred of
+              ED25519 -> Nothing
+              s -> Just s
+            pub = toB16Text $ getPublic cred
+            addr = case scheme of
+              Nothing -> Nothing
+              Just {} -> Just $ toB16Text $ formatPublicKey cred
+
+keyPairsToSigners :: [SomeKeyPairCaps] -> [Signer]
+keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 
 
-mkCommand' :: [SomeKeyPair] -> ByteString -> IO (Command ByteString)
+
+mkCommand' :: [(SomeKeyPair,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
-      toUserSig cred = UserSig . toB16Text <$>
+      toUserSig (cred,_) = UserSig . toB16Text <$>
                        sign cred (toUntypedHash hsh)
   sigs <- traverse toUserSig creds
   return $ Command env sigs hsh
@@ -159,14 +176,11 @@ verifyCommand orig@Command{..} =
     toProcSucc payload = ProcSucc $ orig { _cmdPayload = payload }
     toProcFail errStr = ProcFail $ "Invalid command: " ++ errStr
 
-    parsePact :: Text -> Either String ParsedCode
-    parsePact code = ParsedCode code <$> parseExprs code
     parsedPayload = traverse parsePact
                     =<< A.eitherDecodeStrict' _cmdPayload
 
     verifiedHash = verifyHash _cmdHash _cmdPayload
 {-# INLINE verifyCommand #-}
-
 
 hasInvalidSigs :: PactHash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers
@@ -182,54 +196,61 @@ hasInvalidSigs hsh sigs signers
 verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
 verifyUserSig msg UserSig{..} Signer{..} =
   case (pubT, sigT, addrT) of
-    (Right p, Right sig, Right addr) ->
-      (isValidAddr addr p) && verify (toScheme _siScheme) (toUntypedHash msg) (PubBS p) (SigBS sig)
+    (Right p, Right sig, addr) ->
+      (isValidAddr addr p) &&
+      verify (toScheme $ fromMaybe defPPKScheme _siScheme)
+             (toUntypedHash msg) (PubBS p) (SigBS sig)
     _ -> False
   where pubT = parseB16TextOnly _siPubKey
         sigT = parseB16TextOnly _usSig
-        addrT = parseB16TextOnly _siAddress
-        isValidAddr givenAddr pubBS =
-          case formatPublicKeyBS (toScheme _siScheme) (PubBS pubBS) of
-            Right expectAddr -> givenAddr == expectAddr
-            Left _           -> False
+        addrT = parseB16TextOnly <$> _siAddress
+        toScheme' = toScheme . fromMaybe ED25519
+        isValidAddr addrM pubBS = case addrM of
+          Nothing -> True
+          Just (Left _) -> False
+          Just (Right givenAddr) ->
+            case formatPublicKeyBS (toScheme' _siScheme) (PubBS pubBS) of
+              Right expectAddr -> givenAddr == expectAddr
+              Left _           -> False
 
 #endif
-
-
--- | Pair parsed Pact expressions with the original text.
-data ParsedCode = ParsedCode
-  { _pcCode :: !Text
-  , _pcExps :: ![Exp Parsed]
-  } deriving (Eq,Show,Generic)
-instance NFData ParsedCode
 
 
 
 -- | Signer combines PPKScheme, PublicKey, and the Address (aka the
 --   formatted PublicKey).
 data Signer = Signer
- { _siScheme :: !PPKScheme
+ { _siScheme :: !(Maybe PPKScheme)
+ -- ^ PPKScheme, which is defaulted to 'defPPKScheme' if not present
  , _siPubKey :: !Text
- , _siAddress :: !Text
+ -- ^ pub key value
+ , _siAddress :: !(Maybe Text)
+ -- ^ optional "address", for different pub key formats like ETH
+ , _siCapList :: [SigCapability]
+ -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 
 instance NFData Signer
-instance Serialize Signer
 instance ToJSON Signer where
-  toJSON Signer{..} = object [
-    "scheme" .= _siScheme,
-    "pubKey" .= _siPubKey,
-    "addr" .= _siAddress]
+  toJSON Signer{..} = object $
+    consMay "scheme" _siScheme $
+    consMay "addr" _siAddress $
+    consListMay "clist" _siCapList $
+    [ "pubKey" .= _siPubKey ]
+    where
+      consMay f mv ol = maybe ol (consPair f ol) mv
+      consPair f ol v = (f .= v):ol
+      consListMay f cl ol
+        | null cl = ol
+        | otherwise = consPair f ol cl
 instance FromJSON Signer where
-  parseJSON = withObject "Signer" $ \o -> do
-    pub <- o .: "pubKey"
-    scheme <- o .:? "scheme"   -- defaults to PPKScheme default
-    addr <- o .:? "addr"       -- defaults to full Public Key
-
-    return $ Signer
-             (fromMaybe defPPKScheme scheme)
-             pub
-             (fromMaybe pub addr)
+  parseJSON = withObject "Signer" $ \o -> Signer
+    <$> o .:? "scheme"
+    <*> o .: "pubKey"
+    <*> o .:? "addr"
+    <*> (listMay <$> (o .:? "clist"))
+    where
+      listMay = fromMaybe []
 
 
 
@@ -239,6 +260,7 @@ data Payload m c = Payload
   , _pNonce :: !Text
   , _pMeta :: !m
   , _pSigners :: ![Signer]
+  , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
 instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where toJSON = lensyToJSON 2

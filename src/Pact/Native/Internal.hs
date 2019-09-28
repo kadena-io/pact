@@ -20,6 +20,7 @@ module Pact.Native.Internal
   ,enforceGuard
   ,defNative,defGasRNative,defRNative
   ,defSchema
+  ,defConst
   ,setTopLevelOnly
   ,foldDefs
   ,funType,funType'
@@ -35,6 +36,7 @@ module Pact.Native.Internal
   ,getModule
   ,provenanceOf
   ,enforceYield
+  ,appToCap
   ) where
 
 import Bound
@@ -50,7 +52,9 @@ import Unsafe.Coerce
 
 import Pact.Eval
 import Pact.Gas
+import Pact.Types.Capability
 import Pact.Types.Native
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -123,10 +127,16 @@ defRNative name fun = defNative name (reduced fun)
 defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
 defSchema n doc fields =
   (n,
-   TSchema (TypeName $ asString n) (ModuleName "" Nothing) (Meta (Just doc) [])
+   TSchema (TypeName $ asString n) Nothing (Meta (Just doc) [])
    (map (\(fr,ty) -> Arg (asString fr) ty def) fields)
    def)
 
+defConst :: NativeDefName -> Text -> Type (Term Name) -> Term Name -> NativeDef
+defConst name doc ty term = (name, TConst arg Nothing cval meta def )
+  where
+    arg = Arg (asString name) ty def
+    meta = Meta (Just doc) []
+    cval = CVEval term term
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
@@ -268,3 +278,29 @@ enforceYield fa y = case _yProvenance y of
       evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p
 
     return y
+
+
+
+requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
+requireDefcap App{..} = case _appFun of
+  (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
+    Defcap -> return d
+    _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
+  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " <> pretty _appFun
+
+
+argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
+argsToParams i = mapM $ \arg -> case toPactValue arg of
+  Right pv -> return pv
+  Left e -> evalError i $ "Invalid capability argument: " <> pretty e
+
+-- | Workhorse to convert App to Capability by capturing Def,
+-- reducing args and converting to pact value, and returning
+-- byproducts.
+appToCap
+  :: App (Term Ref)
+  -> Eval e (Capability, Def Ref, ([Term Name], FunType (Term Name)))
+appToCap a@App{..} = requireDefcap a >>= \d@Def{..} -> do
+  prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
+  cap <- UserCapability _dModule _dDefName <$> argsToParams _appInfo args
+  return (cap,d,prep)

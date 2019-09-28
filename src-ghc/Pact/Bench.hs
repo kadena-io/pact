@@ -17,7 +17,6 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import qualified Data.Set as S
 import Data.Text (Text, unpack, pack)
 
 import System.Directory
@@ -82,13 +81,13 @@ loadBenchModule :: PactDbEnv e -> IO (ModuleData Ref,PersistModuleData)
 loadBenchModule db = do
   m <- pack <$> readFile "tests/bench/bench.pact"
   pc <- parseCode m
-  let md = MsgData S.empty
+  let md = MsgData
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
            pactInitialHash
   let e = setupEvalEnv db entity Transactional md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  void $ evalExec def e pc
+  void $ evalExec [] def e pc
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
   p <- either (throwIO . userError . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
   return (benchMod,p)
@@ -105,10 +104,10 @@ runPactExec benchMod dbEnv pc = do
   let e = setupEvalEnv dbEnv entity Transactional (initMsgData pactInitialHash)
           initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
       s = maybe def (initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
-  toJSON . _erOutput <$> evalExec s e pc
+  toJSON . _erOutput <$> evalExec [] s e pc
 
 benchKeySet :: KeySet
-benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
+benchKeySet = KeySet [PublicKey "benchadmin"] (Name $ BareName ">" def)
 
 acctRow :: ObjectMap PactValue
 acctRow = ObjectMap $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
@@ -128,11 +127,15 @@ benchReadValue benchMod (DataTable t) _k
 benchReadValue _ (TxTable _t) _k = rcp Nothing
 
 
-mkBenchCmd :: [SomeKeyPair] -> (String, Text) -> IO (String, Command ByteString)
+mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
-  cmd <- mkCommand' kps (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" ()
-                                            (keyPairsToSigners kps)))
+  cmd <- mkCommand' kps
+    $ toStrict . encode
+    $ Payload payload "nonce" () ss Nothing
   return (str, cmd)
+  where
+    payload = Exec $ ExecMsg t Null
+    ss = keyPairsToSigners kps
 
 
 main :: IO ()
@@ -152,7 +155,7 @@ main = do
   !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue (benchReadValue benchMod) }
   void $ loadBenchModule mockPersistDb
   print =<< runPactExec Nothing mockPersistDb benchCmd
-  cmds_ <- traverse (mkBenchCmd [keyPair]) exps
+  cmds_ <- traverse (mkBenchCmd [(keyPair,[])]) exps
   !cmds <- return $!! cmds_
   let sqliteFile = "log/bench.sqlite"
   sqliteDb <- mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile []) neverLog

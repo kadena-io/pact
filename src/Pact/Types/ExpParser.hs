@@ -62,7 +62,7 @@ import qualified Data.Set as S
 
 import Pact.Types.Exp
 import Pact.Types.Pretty hiding (list, sep)
-import Pact.Types.Runtime (PactError(..),PactErrorType(..))
+import Pact.Types.PactError (PactError(..),PactErrorType(..))
 import Pact.Types.Info
 
 -- | Exp stream type.

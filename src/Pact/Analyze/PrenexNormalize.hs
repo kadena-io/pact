@@ -175,6 +175,8 @@ singFloat ty p = case p of
   CoreProp (ObjAt ty' str obj) -> PObjAt ty' <$> float str <*> singFloat ty' obj
   CoreProp (ObjContains ty' a b) -> CoreProp <$>
     (ObjContains ty' <$> float a <*> singFloat ty' b)
+  CoreProp (ObjLength ty' obj) -> CoreProp <$>
+    (ObjLength ty' <$> singFloat ty' obj)
   CoreProp (ObjDrop ty' keys obj) -> CoreProp <$>
     (ObjDrop ty' <$> float keys <*> singFloat ty' obj)
   CoreProp (ObjTake ty' keys obj) -> CoreProp <$>

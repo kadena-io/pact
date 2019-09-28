@@ -9,11 +9,16 @@
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>,
 --                Emily Pillmore <emily@kadena.io>
 --
--- ChainId data
+-- Chain and Network Identifiers
 --
 module Pact.Types.ChainId
-( -- * types
+( -- * Chain Id
   ChainId(..)
+, chainId
+
+  -- * Network Id
+, NetworkId(..)
+, networkId
 ) where
 
 import GHC.Generics
@@ -32,12 +37,33 @@ import Pact.Types.Pretty
 -- | Expresses unique platform-specific chain identifier.
 --
 newtype ChainId = ChainId { _chainId :: Text }
-  deriving (Eq, Generic, IsString, ToJSON, FromJSON, Serialize)
-  deriving newtype (NFData)
-
-instance Show ChainId where show (ChainId c) = show c
-instance Pretty ChainId where pretty = viaShow
-
-instance ToTerm ChainId where toTerm (ChainId i) = toTerm i
+  deriving stock (Eq, Generic)
+  deriving newtype
+    ( Show, Pretty, IsString
+    , ToJSON, FromJSON
+    , Serialize, ToTerm, NFData
+    )
 
 instance Wrapped ChainId
+
+-- | Lens into the text value of a 'ChainId'
+--
+chainId :: Lens' ChainId Text
+chainId =  lens _chainId (\t b -> t { _chainId = b })
+
+-- | Network Ids are blockchain-specific network identifiers
+--
+newtype NetworkId = NetworkId { _networkId :: Text }
+  deriving stock (Eq, Generic)
+  deriving newtype
+    ( Show, Pretty, IsString
+    , ToJSON, FromJSON
+    , Serialize, ToTerm, NFData
+    )
+
+instance Wrapped NetworkId
+
+-- | Lens into the value of 'NetworkId'
+--
+networkId :: Lens' NetworkId Text
+networkId =  lens _networkId (\t b -> t { _networkId = b })

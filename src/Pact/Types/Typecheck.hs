@@ -40,7 +40,7 @@ module Pact.Types.Typecheck
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
     aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,
     Visit(..),Visitor,
-    YieldResume(..),yrYield,yrResume
+    YieldResume(..),yrYield,yrResume,yrCrossChain
   ) where
 
 import Control.Monad.Catch
@@ -65,12 +65,12 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 -- | Model a user type. Currently only Schemas are supported..
 data UserType = Schema {
   _utName :: TypeName,
-  _utModule :: ModuleName,
+  _utModule :: Maybe ModuleName,
   _utFields :: [Arg UserType],
   _utInfo :: Info
   } deriving (Eq,Ord)
 instance Show UserType where
-  show Schema {..} = "{" ++ unpack (asString _utModule) ++ "." ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
+  show Schema {..} = "{" ++ unpack (maybe "" ((<>) "." . asString) _utModule) ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
 instance Pretty UserType where
   pretty Schema {..} = braces (pretty _utModule <> dot <> pretty _utName)
 
@@ -122,9 +122,10 @@ data Failure = Failure TcId String deriving (Eq,Ord,Show)
 
 data YieldResume n = YieldResume
   { _yrYield :: Maybe n
-  , _yrResume :: Maybe n }
+  , _yrResume :: Maybe n
+  , _yrCrossChain :: !Bool }
   deriving (Eq,Show,Functor,Foldable,Traversable)
-instance Default (YieldResume n) where def = YieldResume def def
+instance Default (YieldResume n) where def = YieldResume def def False
 
 -- | Typechecker state.
 data TcState = TcState {

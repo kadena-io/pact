@@ -488,21 +488,25 @@ evalTerm = \case
     tableRead tn .= sTrue
     rowReadCount tn sRk += 1
 
-    readSucceeds <- use $ rowExists id tn sRk
-    tagAccessKey mtReads tid sRk readSucceeds
+    rowExisted <- use $ rowExists id tn sRk
 
     let readObject = do
           (sObj, aValFields) <- readFields tn sRk tid objTy
           applyInvariants tn aValFields $ mapM_ addConstraint
           pure sObj
 
+        tagAccess :: S Bool -> Analyze ()
+        tagAccess readSucceeds = tagAccessKey mtReads tid sRk readSucceeds
+
     case mDefault of
       Nothing -> do
-        succeeds %= (.&& readSucceeds)
+        tagAccess rowExisted
+        succeeds %= (.&& rowExisted)
         readObject
 
-      Just defObj -> withSymVal objTy $
-        iteS readSucceeds readObject (eval defObj)
+      Just defObj -> withSymVal objTy $ do
+        tagAccess sTrue
+        iteS rowExisted readObject (eval defObj)
 
   Write objTy@(SObjectUnsafe schema) writeType tid tn rowKey objT -> do
     currRestriction <- view aeDbRestriction

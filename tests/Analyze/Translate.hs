@@ -275,7 +275,7 @@ toAnalyze
 toAnalyze ty tm = do
   let cnst = TConst
         (Pact.Arg "tm" ty dummyInfo)
-        "module"
+        (Just "module")
         (Pact.CVRaw tm)
         (Meta Nothing [])
         dummyInfo

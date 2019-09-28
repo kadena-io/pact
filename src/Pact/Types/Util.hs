@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -163,6 +164,7 @@ instance AsString Text where asString = id
 instance AsString B.ByteString where asString = asString . decodeUtf8
 instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
 instance AsString Integer where asString = pack . show
+instance AsString a => AsString (Maybe a) where asString = maybe "" asString
 
 asString' :: AsString a => a -> String
 asString' = unpack . asString

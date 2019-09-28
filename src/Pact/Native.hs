@@ -58,7 +58,7 @@ import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
-import Data.Char (digitToInt,intToDigit)
+import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
 import Data.Foldable
@@ -107,7 +107,7 @@ nativeDefs :: HM.HashMap Name Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
 moduleToMap :: NativeModule -> HM.HashMap Name Ref
-moduleToMap = HM.fromList . map (((`Name` def) . asString) *** Direct) . snd
+moduleToMap = HM.fromList . map ((Name . (`BareName` def) . asString) *** Direct) . snd
 
 
 lengthDef :: NativeDef
@@ -235,7 +235,7 @@ intToStrDef = defRNative "int-to-str" intToStr
     intToStr _ [b'@(TLitInteger base),v'@(TLitInteger v)]
       | base >= 2 && base <= 16 =
           return $ toTerm $ T.pack $
-          showIntAtBase base intToDigit v ""
+          showIntAtBase base Char.intToDigit v ""
       | base == 64 && v >= 0 = doBase64 v
       | base == 64 = evalError' v' "Only positive values allowed for base64URL conversion."
       | otherwise = evalError' b' "Invalid base, must be 2-16 or 64"
@@ -471,7 +471,7 @@ takeDef = defRNative "take" take' takeDrop
   , "(take (- 3) [1 2 3 4 5])"
   , "(take ['name] { 'name: \"Vlad\", 'active: false})"
   ]
-  "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end."
+  "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
 
 dropDef :: NativeDef
 dropDef = defRNative "drop" drop' takeDrop
@@ -479,13 +479,51 @@ dropDef = defRNative "drop" drop' takeDrop
   , "(drop (- 2) [1 2 3 4 5])"
   , "(drop ['name] { 'name: \"Vlad\", 'active: false})"
   ]
-  "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end."
+  "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
 
 atDef :: NativeDef
 atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
                       funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
   ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
   "Index LIST at IDX, or get value with key IDX from OBJECT."
+
+asciiConst :: NativeDef
+asciiConst = defConst "CHARSET_ASCII"
+  "Constant denoting the ASCII charset"
+  tTyInteger
+  (toTerm (0 :: Integer))
+
+latin1Const :: NativeDef
+latin1Const = defConst "CHARSET_LATIN1"
+  "Constant denoting the Latin-1 charset ISO-8859-1"
+  tTyInteger
+  (toTerm (1 :: Integer))
+
+-- | Check that a given string conforms to a specified character set.
+-- Supported character sets include latin (ISO 8859-1)
+--
+isCharsetDef :: NativeDef
+isCharsetDef =
+  defRNative "is-charset" isCharset
+  (funType tTyBool [("charset", tTyInteger), ("input", tTyString)])
+  [ "(is-charset CHARSET_ASCII \"hello world\")"
+  , "(is-charset CHARSET_ASCII \"I am nÖt ascii\")"
+  , "(is-charset CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
+  ]
+  "Check that a string INPUT conforms to the a supported character set CHARSET.       \
+  \Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         \
+  \'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be \
+  \added in the future."
+  where
+    isCharset :: RNativeFun e
+    isCharset i as = case as of
+      [TLitInteger cs, TLitString t] -> case cs of
+        0 -> go Char.isAscii t
+        1 -> go Char.isLatin1 t
+        _ -> evalError' i $ "Unsupported character set: " <> pretty cs
+      _ -> argsError i as
+
+    go k = return . toTerm . T.all k
 
 langDefs :: NativeModule
 langDefs =
@@ -579,6 +617,9 @@ langDefs =
     ,namespaceDef
     ,chainDataDef
     ,chainDataSchema
+    ,isCharsetDef
+    ,asciiConst
+    ,latin1Const
     ])
     where
           d = mkTyVar "d" []
@@ -654,7 +695,6 @@ take' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.take c' l) t def
 take' _ [TLitInteger c',TLitString l] = return $ toTerm $ pack $ tordL take c' (unpack l)
 take' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList >>= \l ->
   return $ toTObjectMap oTy def $ ObjectMap $ M.restrictKeys o l
-
 take' i as = argsError i as
 
 drop' :: RNativeFun e
@@ -671,13 +711,25 @@ asKeyList l = fmap (S.fromList . V.toList) . V.forM l $ \t -> case t of
 
 -- | "take or drop" handling negative "take/drop from reverse"
 tord :: (l -> l) -> (Int -> l -> l) -> Integer -> l -> l
-tord rev f c' l | c' >= 0 = f (fromIntegral c') l
-                | otherwise = rev $ f (fromIntegral (negate c')) (rev l)
+tord rev f c' l | c' >= 0 = f (fromIntegral (limit c')) l
+                | otherwise = rev $ f (fromIntegral (negate (limit c'))) (rev l)
+  where
+    -- {Vector,List}.{take,drop} ops produce undefined behavior (crashing for
+    -- Vector) when provided an int outside of the range (-2^63, 2^63). This
+    -- function truncates an integer to this range.
+    limit :: Integer -> Integer
+    limit i
+      | i < -bound = -bound
+      | i > bound = bound
+      | otherwise = i
+      where
+        bound = (2 ^ (63 :: Integer)) - 1
 
 tordV
   :: (Int -> V.Vector a -> V.Vector a)
      -> Integer -> V.Vector a -> V.Vector a
 tordV = tord V.reverse
+
 tordL :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
 tordL = tord reverse
 
@@ -752,11 +804,14 @@ yield i as = case as of
       eym <- use evalPactExec
       case eym of
         Nothing -> evalError' i "Yield not in defpact context"
-        Just PactExec{..} -> do
+        Just pe -> do
           o' <- enforcePactValue' o
           y <- case tid of
             Nothing -> return $ Yield o' Nothing
-            Just t -> fmap (Yield o') $ provenanceOf i t
+            Just t -> do
+              if _peStepHasRollback pe
+                then evalError' i "Cross-chain yield not allowed in step with rollback"
+                else fmap (Yield o') $ provenanceOf i t
           evalPactExec . _Just . peYield .= Just y
           return u
 
@@ -905,7 +960,7 @@ baseStrToInt base t =
   where
     go :: Integer -> Char -> Either Text Integer
     go acc c' =
-      let val = fromIntegral . digitToInt $ c'
+      let val = fromIntegral . Char.digitToInt $ c'
       in if val < base
          then pure $ base * acc + val
          else Left $ "character '" <> T.singleton c' <>
