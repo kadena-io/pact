@@ -61,7 +61,7 @@ newtype TTLSeconds = TTLSeconds ParsedInteger
   deriving stock (Eq, Ord, Generic)
   deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
 
--- | Wrapper for 'PublicMeta' creation time field in seconds since epoch
+-- | Wrapper for 'PublicMeta' creation time field in seonds since offset
 --
 newtype TxCreationTime = TxCreationTime ParsedInteger
   deriving stock (Eq, Ord, Generic)

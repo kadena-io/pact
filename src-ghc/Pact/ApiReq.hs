@@ -236,32 +236,17 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
                                                ++ show (toB16Text actualAddr)
 
 dieAR :: String -> IO a
-dieAR errMsg = throwM . userError $ intercalate "\n" $
-  ["Failure reading request yaml. Valid fields are: "
-  ,"Common fields:"
-  ,"  type: 'exec' or 'cont', indicating Exec or Cont message type"
-  ,"  data|dataFile: (optional) JSON transaction data, as yaml (data) or a yaml file (dataFile)"
-  ,"  keyPairs: list of key pairs for signing (use pact -g to generate): ["
-  ,"    public: base 16 public key"
-  ,"    secret: base 16 secret key"
-  ,"    address: (required for ETH) base 16 address"
-  ,"    scheme: optional, 'ETH' or 'ED25519', default ED25519"
-  ,"    caps: capability list as strings, in form \"[(module.CAP param1 param2)]\""
-  ,"    ] "
-  ,"  nonce: (optional) request nonce, defaults to current time"
-  ,"  publicMeta: (optional) data for public-chain execution: ["
-  ,"    chainId: chain or shard identifier"
-  ,"    sender: gas-paying sender account"
-  ,"    gasLimit: integer gas max limit"
-  ,"    gasPrice: decimal gas unit price"
-  ,"    ttl: TTL value in seconds"
-  ,"    creationTime: epoch time integer value in seconds"
-  ,"Exec-only fields:"
-  ,"  code|codeFile: [exec only] Pact code, as a string (code) or file path (codeFile)"
-  ,"Cont-only fields:"
-  ,"  pactTxHash: pact ID to continue"
-  ,"  step: step index to continue"
-  ,"  rollback: rollback/cancel flag"
-  ,"  proof: platform-specific continuation proof data"
-  ,"Error message: " ++ errMsg
-  ]
+dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
+  \  code: Transaction code \n\
+  \  codeFile: Transaction code file \n\
+  \  data: JSON transaction data \n\
+  \  dataFile: JSON transaction data file \n\
+  \  keyPairs: list of key pairs for signing (use pact -g to generate): [\n\
+  \    public: base 16 public key \n\
+  \    secret: base 16 secret key \n\
+  \    address: base 16 address   \n\
+  \    scheme: cryptographic scheme \n\
+  \    caps: capability list as strings, in form \"(module.CAP param1 param2)\" \n\
+  \    ] \n\
+  \  nonce: optional request nonce, will use current time if not provided \n\
+  \Error message: " ++ errMsg
