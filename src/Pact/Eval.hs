@@ -30,7 +30,6 @@ module Pact.Eval
     ,reduce,reduceBody
     ,resolveFreeVars,resolveArg,resolveRef,lookupModule
     ,enforceKeySet,enforceKeySetName
-    ,checkUserType
     ,deref
     ,runSysOnly,runReadOnly,Purity
     ,liftTerm,apply
@@ -48,7 +47,6 @@ module Pact.Eval
     ) where
 
 import Bound
-import Control.Arrow hiding (app)
 import Control.Lens hiding (DefName)
 import Control.Monad
 import Control.Monad.Catch (throwM)
@@ -60,7 +58,6 @@ import Data.Default
 import Data.Foldable
 import Data.Graph
 import qualified Data.HashMap.Strict as HM
-import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
@@ -70,6 +67,7 @@ import Safe
 import Unsafe.Coerce
 
 import Pact.Gas
+import Pact.RuntimeTypecheck
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -722,11 +720,7 @@ prepareUserAppArgs :: Def Ref -> [Term Ref] -> Info -> Eval e ([Term Name], FunT
 prepareUserAppArgs Def{..} args i = do
   as' <- mapM reduce args
   ft' <- traverse reduce _dFunType
-  let params = _ftArgs ft'
-  when (length params /= length args) $
-    evalError i $ pretty _dDefName <> ": Incorrect number of arguments (" <>
-      pretty (length args) <> ") supplied; expected " <> pretty (length params)
-  typecheck (zip params as')
+  typecheckArgs i _dDefName ft' as'
   return (as',ft')
 
 -- | Instantiate args in body and evaluate using supplied action.
@@ -917,108 +911,6 @@ enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothi
 
 instantiate' :: Scope n Term a -> Term a
 instantiate' = instantiate1 (toTerm ("No bindings" :: Text))
-
--- | Runtime input typecheck, enforced on let bindings, consts, user defun app args.
--- Output checking -- app return values -- left to static TC.
--- Native funs not checked here, as they use pattern-matching etc.
-typecheck :: [(Arg (Term Name),Term Name)] -> Eval e ()
-typecheck ps = foldM_ tvarCheck M.empty ps where
-  tvarCheck m (Arg {..},t) = do
-    r <- typecheckTerm _aInfo _aType t
-    case r of
-      Nothing -> return m
-      Just (v,ty) -> case M.lookup v m of
-        Nothing -> return $ M.insert v ty m
-        Just prevTy | prevTy == ty -> return m
-                    | otherwise ->
-                        evalError (_tInfo t) $ "Type error: values for variable " <> pretty _aType <>
-                        " do not match: " <> pretty (prevTy,ty)
-
--- | 'typecheckTerm i spec t' checks a Term 't' against a specified type 'spec'.
--- Returns `Nothing` on successful check against concrete/untyped,
--- or `Just` a pair for successful check against a type variable, where
--- the pair is the type variable itself and the term type.
-typecheckTerm :: forall e . Info -> Type (Term Name) -> Term Name
-       -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
-typecheckTerm i spec t = do
-
-  ty <- case typeof t of
-    Left s -> evalError i $ "Invalid type in value location: " <> pretty s
-    Right r -> return r
-
-  let
-
-    tcFail :: Pretty a => a -> Eval e b
-    tcFail found = evalError i $
-      "Type error: expected " <> pretty spec <> ", found " <> pretty found
-
-    tcOK = return Nothing
-
-    -- | check container parameterized type.
-    -- 'paramCheck pspec pty check' check specified param ty 'pspec' with
-    -- value param ty 'pty'. If not trivially equal, use 'check'
-    -- to determine actual container value type, and compare for equality
-    -- with specified.
-    paramCheck :: Type (Term Name)
-               -> Type (Term Name)
-               -> (Type (Term Name) -> Eval e (Type (Term Name)))
-               -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
-    paramCheck TyAny _ _ = tcOK -- no spec
-    paramCheck pspec pty check
-      | pspec == pty = tcOK -- equality OK
-      | otherwise = do
-          -- run check function to get actual content type
-          checked <- check pspec
-          -- final check expects full match with toplevel 'spec'
-          if checked == spec then tcOK else tcFail checked
-
-    -- | infer list value type
-    checkList es lty = return $ TyList $
-                    case nub (map typeof $ V.toList es) of
-                      [Right a] -> a -- uniform value type: return it
-                      [] -> lty -- empty: return specified
-                      _ -> TyAny -- otherwise untyped
-
-  case (spec,ty,t) of
-    (_,_,_) | spec == ty -> tcOK -- identical types always OK
-    (TyAny,_,_) -> tcOK -- var args are untyped
-    (TyVar {..},_,_) ->
-      if spec `canUnifyWith` ty
-      then return $ Just (_tyVar,ty) -- collect found types under vars
-      else tcFail ty -- constraint failed
-    -- check list
-    (TyList lspec,TyList lty,TList {..}) ->
-      paramCheck lspec lty (checkList _tList)
-    -- check object
-    (TySchema TyObject ospec specPartial,TySchema TyObject oty _,TObject {..}) ->
-      paramCheck ospec oty (checkUserType specPartial i (_oObject _tObject))
-    (TyPrim (TyGuard a),TyPrim (TyGuard b),_) -> case (a,b) of
-      (Nothing,Just _) -> tcOK
-      (Just _,Nothing) -> tcOK
-      (c,d) -> if c == d then tcOK else tcFail ty
-    _ -> tcFail ty
-
--- | check object args. Used in 'typecheckTerm' above and also in DB writes.
--- Total flag allows for partial row types if False.
-checkUserType :: SchemaPartial -> Info -> ObjectMap (Term Name) -> Type (Term Name) -> Eval e (Type (Term Name))
-checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
-  -- fields is lookup from name to arg.
-  -- TODO consider OMap or equivalent for schema fields
-  let fields = M.fromList . map (FieldKey . _aName &&& id) $ _tFields
-  aps <- forM (M.toList ps) $ \(k,v) -> case M.lookup k fields of
-      Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty k
-      Just a -> return (a,v)
-  let findMissing fs = do
-        let missing = M.difference fs (M.fromList (map (first $ FieldKey . _aName) aps))
-        unless (M.null missing) $ evalError i $
-          "Missing fields for {" <> pretty _tSchemaName <> "}: " <> prettyList (M.elems missing)
-  case partial of
-    FullSchema -> findMissing fields
-    PartialSchema fs -> findMissing (M.restrictKeys fields (S.map FieldKey fs))
-    AnySubschema -> return ()
-  typecheck aps
-  return $ TySchema TyObject (TyUser tu) partial
-checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " <> pretty t
 
 runSysOnly :: Eval (EnvSysOnly e) a -> Eval e a
 runSysOnly action = ask >>= \env -> case _eePurity env of

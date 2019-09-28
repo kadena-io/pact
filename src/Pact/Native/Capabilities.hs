@@ -21,6 +21,7 @@ import Data.Maybe (isJust)
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.RuntimeTypecheck
 import Pact.Types.Capability
 import Pact.Types.Pretty
 import Pact.Types.Runtime
@@ -81,9 +82,7 @@ installCapability =
   defNative "install-capability" installCapability'
   (funType tTyString
     [("capability",TyFun $ funType' tTyBool [])
-    ,("mgr-fun",TyFun $ funType' ctype
-                [("installed", ctype)
-                ,("requested", ctype)])
+    ,("mgr-fun",TyFun mgrFunTy)
     ])
   [LitExample "(install-capability (PAY \"alice\" \"bob\" 10.0) (manage-PAY))"]
   "Specifies, and validates install of, a _managed_ CAPABILITY whose scope is controlled \
@@ -104,7 +103,22 @@ installCapability =
   \by the associated signature[s])."
   where
     ctype = tTyObject (mkSchemaVar "c-type")
-    installCapability' = undefined
+    mgrFunTy = funType' ctype [("installed", ctype),("requested", ctype)]
+
+    installCapability' i as = case as of
+      [TApp cap _,TApp mgrFun _] -> gasUnreduced i [] $ do
+
+        enforceNotWithinDefcap i "install-capability"
+
+        mfDef <- requireDefApp Defun mgrFun
+        defTy <- traverse reduce $ _dFunType mfDef
+        typecheckDef mfDef defTy mgrFunTy
+
+        void $ evalCap CapManaged True cap
+
+        return $ tStr $ "Installed capability"
+
+      _ -> argsError' i as
 
 
 -- | Given cap app, enforce in-module call, eval args to form capability,

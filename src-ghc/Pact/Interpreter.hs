@@ -54,6 +54,7 @@ import Pact.Native (nativeDefs)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
+import Pact.RuntimeTypecheck
 import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Logger
@@ -196,7 +197,9 @@ resolveSignerCaps ss = M.fromList <$> mapM toPair ss
         resolveCap :: SigCapability -> Eval e Capability
         resolveCap SigCapability{..} =
           resolveRef _scName (QName _scName) >>= \m -> case m of
-            Just (Ref (TDef Def{..} _)) | _dDefType == Defcap ->
+            Just (Ref (TDef Def{..} _)) | _dDefType == Defcap -> do
+              fty <- traverse reduce _dFunType
+              typecheckArgs _scName _dDefName fty (map fromPactValue _scArgs)
               return $ UserCapability _dModule _dDefName $ _scArgs
             Just _ -> evalError' _scName $ "resolveSignerCaps: expected defcap reference"
             Nothing -> evalError' _scName $ "resolveSignerCaps: cannot resolve " <> pretty _scName
