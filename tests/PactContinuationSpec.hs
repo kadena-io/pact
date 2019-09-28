@@ -32,6 +32,7 @@ import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
 import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Util (toB16JSON)
@@ -572,11 +573,13 @@ testCrossChainYield mgr = step0
       flushDb
 
       chain1Results <- runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv
+      let completedPactMsg =
+            "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
 
       runResults chain1Results $ do
         moduleCmd `succeedsWith`  Nothing
         chain1Cont `succeedsWith` textVal "emily->A->B"
-        chain1ContDupe `failsWith` Just "death"
+        chain1ContDupe `failsWith` Just completedPactMsg
 
 
 pactCrossChainYield :: T.Text

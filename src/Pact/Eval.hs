@@ -818,22 +818,56 @@ applyPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list
 -- | Resume a pact, either as specified or as found in database.
 -- Expects a 'PactStep' to be populated in the environment.
 resumePact :: Info -> Maybe PactExec -> Eval e (Term Name)
-resumePact i pe = do
+resumePact i crossChainContinuation = do
 
   ps@PactStep{..} <- view eePactStep >>= (`maybe` pure)
     (evalError i "resumePact: no step in environment")
 
-  context <- case pe of
-    Just p -> return p
-    Nothing -> do
-      contextM <- readRow i Pacts _psPactId >>= (`maybe` pure)
-        (evalError i $ "resumePact: no previous execution found for: " <> pretty _psPactId)
+  -- query for previous exec
+  dbState <- readRow i Pacts _psPactId
 
-      case contextM of
-        Nothing -> evalError i $ "resumePact: pact completed: " <> pretty _psPactId
-        Just c -> return c
+  -- validate db state
+  let proceed = resumePactExec i ps
+  case (dbState,crossChainContinuation) of
 
-  resumePactExec i ps context
+    -- Terminated pact in db: always fail
+    (Just Nothing,_) ->
+      evalError i $ "resumePact: pact completed: " <> pretty _psPactId
+
+    -- Nothing in db, Nothing cross-chain continuation: fail
+    (Nothing,Nothing) ->
+      evalError i $ "resumePact: no previous execution found for: " <> pretty _psPactId
+
+    -- Nothing in db, Just cross-chain continuation: proceed with cross-chain
+    (Nothing,Just ccExec) -> proceed ccExec
+
+    -- Active db record, Nothing cross-chain continuation: proceed with db
+    (Just (Just dbExec),Nothing) -> proceed dbExec
+
+    -- Active db record, cross-chain continuation:
+    -- TODO: this is a fishy case, consider disallowing.
+    -- TODO: if we do decide to allow, cover in tests.
+    -- For now, a valid possibility iff this is a flip-flop from another chain, e.g.
+    --   0. This chain: start pact
+    --   1. Other chain: continue pact
+    --   2. This chain: continue pact
+    (Just (Just dbExec),Just ccExec)
+
+      -- validate exactly one step skipped
+      | _peStep ccExec /= _peStep dbExec + 2 ->
+          evalError i $ "resumePact: db step " <> pretty (_peStep dbExec) <>
+             " must be at least 2 steps before cross-chain continuation step " <>
+             pretty (_peStep ccExec)
+
+      -- validate continuation exact match
+      | _peContinuation ccExec /= _peContinuation dbExec ->
+          evalError i $ "resumePact: cross-chain continuation " <>
+             viaShow (_peContinuation ccExec) <>
+             " does not match db continuation " <>
+             viaShow (_peContinuation dbExec)
+
+      -- good to go
+      | otherwise -> proceed dbExec
 
 
 -- | Resume a pact with supplied PactExec context.

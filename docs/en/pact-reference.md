@@ -146,6 +146,13 @@ _type:_ [exec](#exec-payload) **or** [cont](#cont-payload) payload `required`
 The `cmd` field supports two types of JSON payloads:
 the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
 
+###### `"networkId"`
+_type:_ **string** `optional`
+
+Platform specific network ID, e.g. to distinguish between a testnet and production
+chain, or completely different chain (ie private chain ID, if supported). Platform
+may require this value.
+
 ##### Example `cmd` field
 ```json
 {
@@ -166,7 +173,8 @@ the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
         "gasPrice":1.0e-2,
         "sender":"sender00"
         },
-      "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\""
+      "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\"",
+      "networkId": "testnet00"
     }
 }
 
@@ -251,8 +259,8 @@ required: false               # This data will be injected into the scope of
 ```
 ```yaml
 name: "proof"                 # Must be `null` or Bytestring.
-type: string (base64url)      # to the fact that the previous step has been
-required: false               # confirmed and is recorded in the ledger.
+type: string (base64url)      # Provide SPV proof that the previous step has been
+required: false               # confirmed and recorded in the ledger.
                               # The blockchain automatically verifies this
                               # proof when it is supplied.
                               # If doing cross-chain continuations, then

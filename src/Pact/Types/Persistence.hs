@@ -124,10 +124,16 @@ newtype RowKey = RowKey Text
 -- | Specify key and value types for database domains.
 data Domain k v where
   UserTables :: !TableName -> Domain RowKey (ObjectMap PactValue)
+  -- ^ User tables accept a TableName and map to an 'ObjectMap PactValue'
   KeySets :: Domain KeySetName KeySet
+  -- ^ Keysets
   Modules :: Domain ModuleName PersistModuleData
+  -- ^ Modules
   Namespaces :: Domain NamespaceName Namespace
+  -- ^ Namespaces
   Pacts :: Domain PactId (Maybe PactExec)
+  -- ^ Pacts map to 'Maybe PactExec' where Nothing indicates
+  -- a terminated pact.
 
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
