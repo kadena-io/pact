@@ -110,7 +110,7 @@ Transaction nonce values. Needs to be unique for every call.
 ###### `"meta"`
 _type:_ **object** `required`
 
-Platform-specific metadata.
+Platform-specific metadata. For chainweb platforms, see [public-meta](#public-meta-field)
 
 ###### `"signers"` {#cmd-signers}
 _type:_ **[ object ]** `required`
@@ -178,6 +178,37 @@ may require this value.
     }
 }
 
+```
+
+#### Public meta {#public-meta-field}
+_type:_ **object**
+Information for Chainweb platforms.
+
+```yaml
+name: "chainId"       # Numeric chain ID as string. Ex: "0", "1"
+type: string
+required: true
+
+name: "sender"        # Coin account name for gas payer.
+type: string
+required: true
+
+name: "gasLimit"      # Maximum allowed gas for tx.
+type: integer         # Sender account must have balance (gasLimit * gasPrice).
+required: true
+
+name: "gasPrice"      # Gas unit price to be charged.
+type: decimal         # Sender account must have balance (gasLimit * gasPrice).
+required: true        # Price can be used to get tx priority; miners may reject
+                      # prices that are too low.
+
+name: "ttl"           # Time-to-live in seconds, to be validated against 'creationTime'.
+type: decimal         # Expired commands will not be processed.
+required: true
+
+name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
+type: integer         # Platform will validate time as within some range of network time.
+required: true
 ```
 
 #### The `exec` payload {#exec-payload}
