@@ -54,7 +54,7 @@ import Pact.Native (nativeDefs)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
-import Pact.RuntimeTypecheck
+import Pact.Runtime.Typecheck
 import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Logger

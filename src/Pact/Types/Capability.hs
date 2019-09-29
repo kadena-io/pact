@@ -91,8 +91,8 @@ data CapAcquireResult
 data CapScope
   = CapCallStack
     -- ^ Call stack scope a la 'with-capability'
-  | CapManaged
-    -- ^ Other non-stack scoping, for now "tx scope"
+  | CapManaged (Maybe (Def Ref))
+    -- ^ Managed-scope capability
   | CapComposed
     -- ^ Composed into some other capability
   deriving (Eq,Show,Ord)

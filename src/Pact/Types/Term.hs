@@ -558,6 +558,9 @@ data Def n = Def
 deriving instance Show n => Show (Def n)
 deriving instance Eq n => Eq (Def n)
 instance NFData n => NFData (Def n)
+instance Eq n => Ord (Def n) where
+  a `compare` b = nm a `compare` nm b
+    where nm d = (_dModule d, _dDefName d)
 
 instance HasInfo (Def n) where getInfo = _dInfo
 

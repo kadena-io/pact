@@ -32,7 +32,7 @@ import qualified Data.Vector as V
 import Data.Text (pack)
 
 import Pact.Eval
-import Pact.RuntimeTypecheck
+import Pact.Runtime.Typecheck
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime

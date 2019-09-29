@@ -21,7 +21,8 @@ import Data.Maybe (isJust)
 
 import Pact.Eval
 import Pact.Native.Internal
-import Pact.RuntimeTypecheck
+import Pact.Runtime.Capabilities
+import Pact.Runtime.Typecheck
 import Pact.Types.Capability
 import Pact.Types.Pretty
 import Pact.Types.Runtime
@@ -114,7 +115,7 @@ installCapability =
         defTy <- traverse reduce $ _dFunType mfDef
         typecheckDef mfDef defTy mgrFunTy
 
-        void $ evalCap CapManaged True cap
+        void $ evalCap (CapManaged (Just mfDef)) True cap
 
         return $ tStr $ "Installed capability"
 

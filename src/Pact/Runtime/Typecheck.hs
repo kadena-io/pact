@@ -11,7 +11,7 @@
 
 
 -- |
--- Module      :  Pact.RuntimeTypecheck
+-- Module      :  Pact.Runtime.Typecheck
 -- Copyright   :  (C) 2019 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
@@ -19,7 +19,7 @@
 -- Runtime typechecking of 'Term' arguments.
 --
 
-module Pact.RuntimeTypecheck
+module Pact.Runtime.Typecheck
   ( typecheck
   , checkUserType
   , typecheckDef

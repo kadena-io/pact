@@ -43,7 +43,8 @@ library
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
-                     , Pact.RuntimeTypecheck
+                     , Pact.Runtime.Capabilities
+                     , Pact.Runtime.Typecheck
                      , Pact.Server.API
                      , Pact.Types.API
                      , Pact.Types.Capability
