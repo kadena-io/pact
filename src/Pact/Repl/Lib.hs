@@ -569,7 +569,7 @@ setGasModel _ as = do
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
 testCapability _ [ c@TApp{} ] = do
-  cap <- evalCap (CapManaged Nothing) False $ _tApp c
+  cap <- evalCap CapCallStack False $ _tApp c
   return . tStr $ case cap of
     AlreadyAcquired -> "Capability already granted"
     NewlyAcquired -> "Capability granted"

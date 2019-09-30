@@ -200,6 +200,6 @@ resolveSignerCaps ss = M.fromList <$> mapM toPair ss
             Just (Ref (TDef Def{..} _)) | _dDefType == Defcap -> do
               fty <- traverse reduce _dFunType
               typecheckArgs _scName _dDefName fty (map fromPactValue _scArgs)
-              return $ UserCapability _dModule _dDefName $ _scArgs
+              return $ UserCapability (QualifiedName _dModule (asString _dDefName) def) $ _scArgs
             Just _ -> evalError' _scName $ "resolveSignerCaps: expected defcap reference"
             Nothing -> evalError' _scName $ "resolveSignerCaps: cannot resolve " <> pretty _scName

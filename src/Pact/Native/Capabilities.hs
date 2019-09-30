@@ -15,8 +15,12 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
+import Control.Error (hush)
 import Control.Lens
 import Control.Monad
+import Control.Monad.Catch
+import Data.Default
+import qualified Data.Map.Strict as M
 import Data.Maybe (isJust)
 
 import Pact.Eval
@@ -24,6 +28,7 @@ import Pact.Native.Internal
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
 import Pact.Types.Capability
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -129,10 +134,32 @@ evalCap :: CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
 evalCap scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquireCapability scope cap $ do
+      acquireCapability (applyMgrFun d) scope cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
 
+applyMgrFun :: Def Ref -> Def Ref -> [PactValue] -> [PactValue] -> Eval e (Maybe [PactValue])
+applyMgrFun capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArgs] >>= handleResult
+  where
+    doApply :: [Term Name] -> Eval e (Maybe (Term Name))
+    doApply as = handle (\PactError {} -> return Nothing)
+      (Just <$> apply (App appVar [] (getInfo mgrFunDef)) as)
+    capDefArgs :: [Arg (Term Ref)]
+    capDefArgs = _ftArgs (_dFunType capDef)
+    toObj :: [PactValue] -> Term Name
+    toObj as = TObject (Object (ObjectMap (toMap as)) (tTyObject TyAny) Nothing def) def
+    toMap as = M.fromList $ zipWith toPair capDefArgs as
+    toPair (Arg n _ _) pv = (FieldKey n,fromPactValue pv)
+    appVar = TVar (Ref (TDef mgrFunDef (getInfo mgrFunDef))) def
+    handleResult :: Maybe (Term Name) -> Eval e (Maybe [PactValue])
+    handleResult r = case r of
+      Nothing -> return Nothing
+      Just (TObject (Object (ObjectMap rm) _ _ _) _) -> return $ toPVs rm
+      _ -> return Nothing
+    toPVs :: M.Map FieldKey (Term Name) -> Maybe [PactValue]
+    toPVs rm = sequence $ (`map` capDefArgs) $ \(Arg n _ _) -> case M.lookup (FieldKey n) rm of
+      Nothing -> Nothing
+      Just t -> hush $ toPactValue t
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
 enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $
@@ -149,7 +176,7 @@ requireCapability =
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ do
       (cap,_,_) <- appToCap a
       enforceNotWithinDefcap i "require-capability"
-      granted <- capabilityGranted cap
+      granted <- capabilityGranted CapCallStack cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
     requireCapability' i as = argsError' i as

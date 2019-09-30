@@ -35,7 +35,6 @@ module Pact.Eval
     ,liftTerm,apply
     ,preGas
     ,acquireModuleAdmin
-    ,enforceModuleAdmin
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,resumePact
@@ -180,7 +179,7 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modGov =
-  acquireCapability (CapManaged Nothing) (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
+  acquireCapability noopApplyMgrFun (CapManaged Nothing) (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
 
 enforceModuleAdmin :: Info -> Governance (Def Ref) -> Eval e ()
 enforceModuleAdmin i modGov =
@@ -262,7 +261,7 @@ eval (TModule (MDModule m) bod i) =
       -- governance however is not called on install
       _ -> return ()
     -- in any case, grant module admin to this transaction
-    void $ acquireCapability (CapManaged Nothing) (ModuleAdminCapability $ _mName m) $ return ()
+    void $ acquireCapability noopApplyMgrFun (CapManaged Nothing) (ModuleAdminCapability $ _mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM

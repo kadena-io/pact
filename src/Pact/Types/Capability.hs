@@ -19,6 +19,7 @@
 
 module Pact.Types.Capability
   ( Capability(..)
+  , CapabilityType(..), capType
   , CapAcquireResult(..)
   , SigCapability(..)
   , parseSigCapability
@@ -47,12 +48,21 @@ import Pact.Types.Pretty
 
 data Capability
   = ModuleAdminCapability ModuleName
-  | UserCapability ModuleName DefName [PactValue]
+  | UserCapability QualifiedName [PactValue]
   deriving (Eq,Show,Ord)
+
+data CapabilityType
+  = CapTypeModuleAdmin ModuleName
+  | CapTypeUser QualifiedName -- TODO add args for full type
+  deriving (Eq,Show,Ord)
+
+capType :: Capability -> CapabilityType
+capType (ModuleAdminCapability m) = CapTypeModuleAdmin m
+capType (UserCapability qn _) = CapTypeUser qn
 
 instance Pretty Capability where
   pretty (ModuleAdminCapability mn) = pretty mn
-  pretty (UserCapability mn name tms)  = parensSep (pretty mn <> colon <> pretty name : fmap pretty tms)
+  pretty (UserCapability n tms)  = parensSep (pretty n : fmap pretty tms)
 
 data SigCapability = SigCapability
   { _scName :: !QualifiedName

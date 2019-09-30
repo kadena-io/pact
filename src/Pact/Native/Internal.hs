@@ -231,7 +231,7 @@ enforceGuard i g = case g of
         if r then
           return ()
         else
-          enforceModuleAdmin (_faInfo i) _mGovernance
+          void $ acquireModuleAdmin (_faInfo i) _mName _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugFun _ugArgs (_faInfo i)
@@ -304,5 +304,5 @@ appToCap
   -> Eval e (Capability, Def Ref, ([Term Name], FunType (Term Name)))
 appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
   prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-  cap <- UserCapability _dModule _dDefName <$> argsToParams _appInfo args
+  cap <- UserCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
   return (cap,d,prep)
