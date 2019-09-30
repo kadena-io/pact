@@ -227,16 +227,14 @@ getLoadedState code = do
 --   * An account "someId" with 0.0 as its balance
 --   * Sample keyset and namespace
 
-sqliteFile :: String
-sqliteFile = "log/bench.sqlite"
-
-
 defEvalEnv :: PactDbEnv e -> EvalEnv e
 defEvalEnv db =
   setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
   initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
   where entity = Just $ EntityName "entity"
 
+-- MockDb
+--
 defMockBackend :: IO (EvalEnv ())
 defMockBackend = do
   db <- mkMockEnv defMockDb
@@ -256,6 +254,11 @@ defMockDb = mockdb
       | n == sampleNamespaceName = rc (Just sampleNamespace)
       | otherwise = rc Nothing
     rowRead _ _ = rc Nothing
+
+-- SQLite Db
+--
+sqliteFile :: String
+sqliteFile = "log/bench.sqlite"
 
 defSqliteBackend :: IO (EvalEnv SQLiteDb)
 defSqliteBackend = do

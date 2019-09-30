@@ -32,7 +32,6 @@ import qualified Data.List.NonEmpty  as NEL
 import Pact.GasModel.Utils
 import Pact.GasModel.Types
 import Pact.Native
-import Pact.Types.Native
 import Pact.Types.PactValue       (PactValue(..))
 import Pact.Types.Capability
 
@@ -43,13 +42,19 @@ import Pact.Types.Runtime
 
 
 -- | Gas benchmark tests for Pact native functions
-allNatives :: [NativeDef]
-allNatives = concatMap snd natives
+allNatives :: [NativeDefName]
+allNatives = map fst (concatMap snd natives) <> nonNatives
+
+-- | Non-native concepts to benchmark
+nonNatives :: [NativeDefName]
+nonNatives = [NativeDefName "use",
+              NativeDefName "module",
+              NativeDefName "interface"]
 
 untestedNatives :: [NativeDefName]
 untestedNatives = foldl' check [] allNatives
   where
-    check li (nativeName,_) = case (HM.lookup nativeName unitTests) of
+    check li nativeName = case (HM.lookup nativeName unitTests) of
       Nothing -> nativeName : li
       Just _ -> li
 
@@ -57,7 +62,7 @@ untestedNatives = foldl' check [] allNatives
 unitTests :: HM.HashMap NativeDefName GasUnitTests
 unitTests = HM.fromList $ foldl' getUnitTest [] allNatives 
   where
-    getUnitTest li (nativeName,_) =
+    getUnitTest li nativeName =
       case unitTestFromDef nativeName of
         Nothing -> li
         Just ts -> (nativeName, ts) : li
@@ -191,8 +196,56 @@ unitTestFromDef nativeName = tests
       "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
       "require-capability"  -> Just $ requireCapabilityTests nativeName
       "with-capability"     -> Just $ withCapabilityTests nativeName
+
+      -- Non-native concepts to benchmark
+      "use"       -> Just $ useTests nativeName
+      "module"    -> Just $ moduleTests nativeName
+      "interface" -> Just $ interfaceTests nativeName
       
       _ -> Nothing
+
+
+-- | Non-native concepts tests
+interfaceTests :: NativeDefName -> GasUnitTests
+interfaceTests = defGasUnitTests allExprs
+  where
+    interfaceExprText = [text|
+    (interface my-interface
+      (defun say-hello:string (name:string))
+    )
+
+    (module some-random-module GOV
+      (implements my-interface)
+      (defcap GOV ()
+        true
+      )
+
+      (defun say-hello:string (name:string)
+        name)
+    )|]
+
+    interfaceExpr = PactExpression interfaceExprText Nothing
+    allExprs = interfaceExpr :| []
+
+
+moduleTests :: NativeDefName -> GasUnitTests
+moduleTests = defGasUnitTests allExprs
+  where
+    moduleExprText = [text|
+    (module some-random-module GOV
+      (defcap GOV ()
+        true ))|]
+    moduleExpr = PactExpression moduleExprText Nothing
+    moduleRotateDesc = [text|(module accounts GOV [...some module code ...]) update module|]
+    moduleRotateExpr = PactExpression (accountsModule acctModuleName) (Just moduleRotateDesc)
+    allExprs = moduleExpr :| [moduleRotateExpr]
+
+
+useTests :: NativeDefName -> GasUnitTests
+useTests = defGasUnitTests allExprs
+  where
+    useExpr = PactExpression [text| (use $acctModuleNameText) |] Nothing
+    allExprs = useExpr :| []
 
 
 -- | Capabilities native function tests

@@ -137,11 +137,12 @@ mockRuns' tests = do
   mapOverGasUnitTests tests run run
   where
     run expr dbSetup = do
-      putStrLn $ "Pact results for: " ++ T.unpack (getDescription expr dbSetup)
+      print $ "Pact results for: " ++ T.unpack (getDescription expr dbSetup)
       (res,state) <- bracket (setupEnv dbSetup)
                          (gasSetupCleanup dbSetup)
                          (mockRun expr)
       printResult res
+      putStrLn ""
       return (res,state)
 
 

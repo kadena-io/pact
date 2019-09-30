@@ -96,8 +96,8 @@ parseCode m = do
 
 printResult :: Either PactError [Term Name] -> IO ()
 printResult res = case res of
-  Left err -> print $ show err
-  Right ts -> print $ show $ toJSON $ map (toJSON . toPactValueLenient) ts
+  Left err -> print (show err)
+  Right ts -> print $ show (toJSON $ map (toJSON . toPactValueLenient) ts)
 
 eitherDie :: (Show b) => T.Text -> Either b a -> IO a
 eitherDie annot
