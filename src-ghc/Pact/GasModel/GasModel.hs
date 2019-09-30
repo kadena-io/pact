@@ -231,7 +231,7 @@ encodeGasPrice allResults =
   )
   where
     headers = Csv.header $
-      map Csv.toField ["function", sqliteHeader, mockHeader]
+      map Csv.toField ["function", sqliteHeader]
 
     calcPriceAndEncode (funName, results) =
       Csv.namedRecord $
@@ -242,20 +242,12 @@ encodeGasPrice allResults =
       "sqlitedb gas price ("
       <> T.pack (show gasPriceDivisor)
       <> " ns)"
-    mockHeader =
-      "mockdb gas price ("
-      <> T.pack (show gasPriceDivisor)
-      <> " ns)"
 
     calcPrice results =
-      [Csv.toField sqliteHeader Csv..= gasPrice sqliteMeans,
-       Csv.toField mockHeader Csv..= gasPrice mockMeans
-      ]
+      [Csv.toField sqliteHeader Csv..= gasPrice sqliteMeans]
       where
         sqliteMeans = concatMap
           (toNsList . _gasTestResultSqliteDb) results
-        mockMeans = concatMap
-          (toNsList . _gasTestResultMockDb) results
         toNsList (n1, n2, n3) = [n1, n2, n3]
 
     simpleTestCheck (GasTestResult _ desc _ _) =
@@ -277,7 +269,7 @@ gasPriceExplanation = [purpose, numCores, os, hardwareNotes,
     implementation = "Implementation: For every native function, executes and benchmarks "
                      <> "(using Criterion) simple examples of said function."
     numOfIterations = "Number of iterations: Each function's tests are run three times against each backend type"
-    backend = "Benchmark backend(s): [Sqlite db with `fastNoJournalPragmas`, Mock db]"
+    backend = "Benchmark backend(s): [Sqlite db with `fastNoJournalPragmas`]"
     calcPrice = "From benchmark to a native function's price: For every backend type, all of the means of the function's"
                 <>" benchmark examples are converted into nanoseconds, averaged together, divided by "
                 <> T.pack (show gasPriceDivisor)
