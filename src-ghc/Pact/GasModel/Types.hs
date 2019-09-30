@@ -271,8 +271,8 @@ defSqliteBackend = do
         (accountsModule acctModuleName) <>
         [text| (create-table $acctModuleNameText.accounts)
                (insert $acctModuleNameText.accounts
-                     "someId"
-                     { "balance": 0.0 })
+                  "someId"
+                  { "balance": 0.0 })
                (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName)
                (define-namespace "$sampleNamespaceName" $sampleLoadedKeysetName)
         |]
