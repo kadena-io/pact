@@ -376,9 +376,9 @@ mangleDefs mn term = modifyMn term
   where
     modifyMn = case term of
       TDef{}    -> set (tDef . dModule) mn
-      TConst{}  -> set tModule mn
-      TSchema{} -> set tModule mn
-      TTable{}  -> set tModule mn
+      TConst{}  -> set tModule $ Just mn
+      TSchema{} -> set tModule $ Just mn
+      TTable{}  -> set tModuleName mn
       _         -> id
 
 -- | Make table of module definitions for storage in namespace/RefStore.
@@ -627,6 +627,9 @@ evalConsts r = return r
 
 
 deref :: Ref -> Eval e (Term Name)
+deref (Direct t@TConst{}) = case _tConstVal t of
+  CVEval _ v -> return v
+  CVRaw _ -> evalError' t $ "internal error: deref: unevaluated const: " <> pretty t
 deref (Direct n) = return n
 deref (Ref r) = reduce r
 
@@ -656,7 +659,7 @@ reduce t@TModule{} = evalError (_tInfo t) "Modules and Interfaces only allowed a
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
-reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
+reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

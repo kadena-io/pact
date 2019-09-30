@@ -351,7 +351,7 @@ defconst = do
   a <- arg
   v <- valueLevel
   m <- meta ModelNotAllowed
-  TConst a modName (CVRaw v) m <$> contextInfo
+  TConst a (Just modName) (CVRaw v) m <$> contextInfo
 
 data ModelAllowed
   = ModelAllowed
@@ -395,7 +395,7 @@ defschema = do
   tn <- _atomAtom <$> userAtom
   m <- meta ModelAllowed
   fields <- many arg
-  TSchema (TypeName tn) modName m fields <$> contextInfo
+  TSchema (TypeName tn) (Just modName) m fields <$> contextInfo
 
 defunOrCap :: DefType -> Compile (Term Name)
 defunOrCap dt = do

@@ -65,12 +65,12 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 -- | Model a user type. Currently only Schemas are supported..
 data UserType = Schema {
   _utName :: TypeName,
-  _utModule :: ModuleName,
+  _utModule :: Maybe ModuleName,
   _utFields :: [Arg UserType],
   _utInfo :: Info
   } deriving (Eq,Ord)
 instance Show UserType where
-  show Schema {..} = "{" ++ unpack (asString _utModule) ++ "." ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
+  show Schema {..} = "{" ++ unpack (maybe "" ((<>) "." . asString) _utModule) ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
 instance Pretty UserType where
   pretty Schema {..} = braces (pretty _utModule <> dot <> pretty _utName)
 

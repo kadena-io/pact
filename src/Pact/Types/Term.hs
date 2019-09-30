@@ -67,7 +67,7 @@ module Pact.Types.Term
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
-   tTableName,tTableType,tVar,tStep,
+   tTableName,tTableType,tVar,tStep,tModuleName,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -754,7 +754,7 @@ data Term n =
     } |
     TConst {
       _tConstArg :: !(Arg (Term n))
-    , _tModule :: !ModuleName
+    , _tModule :: !(Maybe ModuleName)
     , _tConstVal :: !(ConstVal (Term n))
     , _tMeta :: !Meta
     , _tInfo :: !Info
@@ -779,7 +779,7 @@ data Term n =
     } |
     TSchema {
       _tSchemaName :: !TypeName
-    , _tModule :: !ModuleName
+    , _tModule :: !(Maybe ModuleName)
     , _tMeta :: !Meta
     , _tFields :: ![Arg (Term n)]
     , _tInfo :: !Info
@@ -803,7 +803,7 @@ data Term n =
     } |
     TTable {
       _tTableName :: !TableName
-    , _tModule :: ModuleName
+    , _tModuleName :: ModuleName
     , _tHash :: !ModuleHash
     , _tTableType :: !(Type (Term n))
     , _tMeta :: !Meta
@@ -852,8 +852,10 @@ instance Pretty n => Pretty (Term n) where
                 exs ->
                      line <> line <> annotate Header "Examples:"
                   <> line <> align (vsep (pretty <$> exs))
-    TConst{..} -> "constant " <> pretty _tModule <> "." <> pretty _tConstArg
-      <> " " <> pretty _tMeta
+    TConst{..} -> "constant "
+        <> maybe "" ((<>) "." .  pretty) _tModule
+        <> pretty _tConstArg
+        <> " " <> pretty _tMeta
     TApp a _ -> pretty a
     TVar n _ -> pretty n
     TBinding pairs body BindLet _i -> parensSep
@@ -911,7 +913,7 @@ instance Monad Term where
     TUse u i >>= _ = TUse u i
     TStep (Step ent e r si) meta i >>= f = TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) meta i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
-    TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
+    TTable {..} >>= f = TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
 
 
 termCodec :: (ToJSON n,FromJSON n) => Codec (Term n)

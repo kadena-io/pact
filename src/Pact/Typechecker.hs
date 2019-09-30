@@ -854,8 +854,11 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
       TLiteral {..} ->
         -- Handle references to pre-evaluated constants:
         trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
-      _ ->
-        die i $ "Native in value context: " ++ show t
+      TConst{..} -> case _tModule of
+        -- if modulename is nothing, it's a builtin
+        Nothing -> toAST $ return $ Left (Direct $ constTerm _tConstVal)
+        _ -> die i $ "Non-native constant value in native context: " ++ show t
+      _ -> die i $ "Native in value context: " <> show t
   (Right t) -> return t
 
 toAST (TApp Term.App{..} _) = do
@@ -988,7 +991,7 @@ toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
   ty <- TySchema TyTable <$> traverse toUserType _tTableType <*> pure FullSchema
   Table
-    <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
+    <$> (trackNode ty =<< freshId _tInfo (asString _tModuleName <> "." <> asString _tTableName))
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
@@ -1051,7 +1054,7 @@ mkTop t@TConst {..} = do
     toAST (constTerm _tConstVal) <*> pure (_mDocs _tMeta)
 mkTop t@TTable {..} = do
   debug $ "===== Table: " ++ abbrevStr (AbbrevNode <$> t)
-  TopTable _tInfo (asString _tModule <> "." <> asString _tTableName) <$>
+  TopTable _tInfo (asString _tModuleName <> "." <> asString _tTableName) <$>
     traverse toUserType _tTableType <*> pure _tMeta
 mkTop t@TSchema {..} = do
   debug $ "===== Schema: " ++ abbrevStr (AbbrevNode <$> t)

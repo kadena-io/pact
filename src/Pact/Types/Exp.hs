@@ -106,8 +106,6 @@ instance FromJSON Literal where
     (LDecimal <$> decoder decimalCodec o)
   parseJSON _t = fail "Literal parse failed"
 
-
-
 litToPrim :: Literal -> PrimType
 litToPrim LString {} = TyString
 litToPrim LInteger {} = TyInteger
