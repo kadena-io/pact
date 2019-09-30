@@ -258,7 +258,7 @@ defMockDb = mockdb
 -- SQLite Db
 --
 sqliteFile :: String
-sqliteFile = "log/bench.sqlite"
+sqliteFile = "gasmodel.sqlite"
 
 defSqliteBackend :: IO (EvalEnv SQLiteDb)
 defSqliteBackend = do
