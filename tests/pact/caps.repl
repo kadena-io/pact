@@ -207,3 +207,36 @@
 (expect-failure "shadowed cap fails" (caps-shadow.bad-shadow-granted "k1"))
 
 (expect "" "success" (test-module-guard-other))
+
+(env-data { "alice": ["alice"] })
+(module mgd-caps G
+  (defcap G () true)
+  (defcap PAY (sender:string receiver:string amount:integer)
+    (enforce-keyset (read-keyset sender)))
+  (defun PAY-mgr (mgd reqd)
+    (enforce (= (at "sender" mgd) (at "sender" reqd)) "sender matches")
+    (enforce (= (at "receiver" mgd) (at "receiver" mgd)) "receiver matches")
+    (let* ((req-amount (at "amount" reqd))
+           (bal (- (at "amount" mgd) req-amount)))
+      (enforce (> req-amount 0) "requested amount > 0")
+      (enforce (> bal 0) (format "sufficient balance: {} {} {}" [bal reqd mgd]))
+      (+ { "amount": bal } mgd)))
+  (defun pay (sender receiver amount)
+    (with-capability (PAY sender receiver amount)
+                     amount)))
+
+
+(expect-failure "keyset not in sigs"
+                (install-capability (PAY "alice" "bob" 10) (PAY-mgr)))
+
+(env-sigs [{ "key": "alice", "caps": [(PAY "alice" "bob" 10)] }] )
+
+(expect "Success on cap install" "Installed capability"
+        (install-capability (PAY "alice" "bob" 10) (PAY-mgr)))
+
+(expect-failure "Payment should fail on different sender"
+                (pay "dave" "bob" 6))
+(expect-failure "Payment should fail on different receiver"
+                (pay "alice" "dave" 6))
+(expect "Success on first pmt" 6
+        (pay "alice" "bob" 6))

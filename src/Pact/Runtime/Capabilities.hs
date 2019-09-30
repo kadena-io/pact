@@ -27,6 +27,7 @@ module Pact.Runtime.Capabilities
     ,ApplyMgrFun,noopApplyMgrFun
     ) where
 
+import Control.Monad.IO.Class
 import Control.Lens hiding (DefName)
 import Data.Bool
 import Data.Default
@@ -35,14 +36,15 @@ import qualified Data.Set as S
 
 import Pact.Types.Capability
 import Pact.Types.PactValue
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 
 -- | Tie the knot with Pact.Eval by having caller supply `apply` and inflate/deflate
 -- params to proper object arguments.
-type ApplyMgrFun e = Def Ref -> [PactValue] -> [PactValue] -> Eval e (Maybe [PactValue])
+type ApplyMgrFun e = Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either String [PactValue])
 
 noopApplyMgrFun :: ApplyMgrFun e
-noopApplyMgrFun _ _ _ = return Nothing
+noopApplyMgrFun _ _ _ = return $ Left "mgmt disabled"
 
 
 grantedCaps :: Eval e (S.Set Capability)
@@ -96,47 +98,54 @@ acquireCapability af scope cap test = granted >>= bool evalCap alreadyGranted
     -- push and test.
     evalStack = checkManaged af cap >>= \r -> case r of
       Nothing -> push >> test
-      Just {} -> push
+      Just (Left e) -> evalError def (prettyString e)
+      Just (Right ()) -> push
 
     -- Composed: check if managed, in which case install onto head,
     -- otherwise push, test, pop and install onto head
     evalComposed = checkManaged af cap >>= \r -> case r of
       Nothing -> push >> test >> popCapStack installComposed
-      Just {} -> installComposed (CapSlot scope cap [])
+      Just (Left e) -> evalError def (prettyString e)
+      Just (Right ()) -> installComposed (CapSlot scope cap [])
 
     installComposed c = evalCapabilities . capStack . _head . csComposed %= (_csCap c:)
 
     push = evalCapabilities . capStack %= (CapSlot scope cap []:)
 
 
-checkManaged :: ApplyMgrFun e -> Capability -> Eval e (Maybe ())
+checkManaged :: ApplyMgrFun e -> Capability -> Eval e (Maybe (Either String ()))
 checkManaged applyF cap = use (evalCapabilities . capManaged) >>= check []
   where
-    check _ [] = return Nothing
+    noMatch = return $ Nothing
+
+    check _ [] = noMatch
     check rms (mgd:ms) = runManaged mgd >>= handleResult rms ms (check (mgd:rms) ms)
 
-    runManaged mcs = case _csScope mcs of -- validate scope
+    runManaged mcs = do
+     case _csScope mcs of -- validate scope
       CapManaged (Just mf) -> case _csCap mcs of -- validate user mg cap and has mgr fun
         UserCapability mqn mas -> case cap of -- validate user test cap
           UserCapability cqn cas
             | cqn == mqn -> -- check type match and apply mgr fun
-              applyMgrFun mcs mqn mf mas cas
-            | otherwise -> return Nothing
-          _ -> return Nothing
-        _ -> return Nothing
-      _ -> return Nothing
+                Just <$> applyMgrFun mcs mqn mf mas cas
+            | otherwise -> noMatch
+          _ -> noMatch
+        _ -> noMatch
+      _ -> noMatch
 
-    handleResult _ _ next Nothing = next
-    handleResult rms ms _ (Just mgd') = do
+    handleResult rms ms _ (Just (Right mgd')) = do
       -- install modified mgd cap
       evalCapabilities . capManaged .= (rms ++ (mgd':ms))
       -- success
-      return $ Just ()
+      return $ Just $ Right ()
+    handleResult _ _ _ (Just (Left e)) = return $ Just (Left e)
+    handleResult _ _ next Nothing = next
 
-    applyMgrFun mcs mqn mf mas cas = applyF mf mas cas >>= \r -> case r of
-      Nothing -> return Nothing
-      Just mas' -> return $ Just $ set csCap (UserCapability mqn mas') mcs
+    applyMgrFun mcs mqn mf mas cas = debug ("checkManaged",mas,cas) >> applyF mf mas cas >>= \r -> case r of
+      Left e -> return $ Left $ "Managed cap acquire failed: " ++ show e
+      Right mas' -> return $ Right $ set csCap (UserCapability mqn mas') mcs
 
+    debug = liftIO . print
 
 revokeAllCapabilities :: Eval e ()
 revokeAllCapabilities = evalCapabilities .= def

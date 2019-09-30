@@ -15,7 +15,8 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
-import Control.Error (hush)
+import Control.Monad.IO.Class
+import Control.Error (hush,fmapL)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Catch
@@ -138,12 +139,12 @@ evalCap scope inModule a@App{..} = do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
 
-applyMgrFun :: Def Ref -> Def Ref -> [PactValue] -> [PactValue] -> Eval e (Maybe [PactValue])
+applyMgrFun :: Def Ref -> Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either String [PactValue])
 applyMgrFun capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArgs] >>= handleResult
   where
-    doApply :: [Term Name] -> Eval e (Maybe (Term Name))
-    doApply as = handle (\PactError {} -> return Nothing)
-      (Just <$> apply (App appVar [] (getInfo mgrFunDef)) as)
+    doApply :: [Term Name] -> Eval e (Either String (Term Name))
+    doApply as = handle (\err@PactError {} -> return $ Left $ show err)
+      (Right <$> (liftIO (print ("applyMgrFun",showPretty as)) >> apply (App appVar [] (getInfo mgrFunDef)) as))
     capDefArgs :: [Arg (Term Ref)]
     capDefArgs = _ftArgs (_dFunType capDef)
     toObj :: [PactValue] -> Term Name
@@ -151,15 +152,15 @@ applyMgrFun capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArg
     toMap as = M.fromList $ zipWith toPair capDefArgs as
     toPair (Arg n _ _) pv = (FieldKey n,fromPactValue pv)
     appVar = TVar (Ref (TDef mgrFunDef (getInfo mgrFunDef))) def
-    handleResult :: Maybe (Term Name) -> Eval e (Maybe [PactValue])
+    handleResult :: Either String (Term Name) -> Eval e (Either String [PactValue])
     handleResult r = case r of
-      Nothing -> return Nothing
-      Just (TObject (Object (ObjectMap rm) _ _ _) _) -> return $ toPVs rm
-      _ -> return Nothing
-    toPVs :: M.Map FieldKey (Term Name) -> Maybe [PactValue]
+      Left e -> return $ Left e
+      Right (TObject (Object (ObjectMap rm) _ _ _) _) -> return $ toPVs rm
+      Right t -> return $ Left $ "Invalid return value from mgr function: " ++ showPretty t
+    toPVs :: M.Map FieldKey (Term Name) -> Either String [PactValue]
     toPVs rm = sequence $ (`map` capDefArgs) $ \(Arg n _ _) -> case M.lookup (FieldKey n) rm of
-      Nothing -> Nothing
-      Just t -> hush $ toPactValue t
+      Nothing -> Left $ "Missing field in mgr fun result: " ++ show n
+      Just t -> fmapL show $ toPactValue t
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
 enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $
