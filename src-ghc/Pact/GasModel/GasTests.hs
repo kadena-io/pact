@@ -92,6 +92,7 @@ unitTestFromDef nativeName = tests
       "identity"             -> Just $ identityTests nativeName
       "if"                   -> Just $ ifTests nativeName
       "int-to-str"           -> Just $ intToStrTests nativeName
+      "is-charset"           -> Just $ isCharsetTests nativeName
       "length"               -> Just $ lengthTests nativeName
       "list-modules"         -> Just $ listModulesTests nativeName
       "make-list"            -> Just $ makeListTests nativeName
@@ -235,7 +236,7 @@ moduleTests = defGasUnitTests allExprs
     (module some-random-module GOV
       (defcap GOV ()
         true ))|]
-    moduleExpr = PactExpression moduleExprText Nothing
+    moduleExpr = defPactExpression moduleExprText
     moduleRotateDesc = [text|(module accounts GOV [...some module code ...]) update module|]
     moduleRotateExpr = PactExpression (accountsModule acctModuleName) (Just moduleRotateDesc)
     allExprs = moduleExpr :| [moduleRotateExpr]
@@ -244,7 +245,7 @@ moduleTests = defGasUnitTests allExprs
 useTests :: NativeDefName -> GasUnitTests
 useTests = defGasUnitTests allExprs
   where
-    useExpr = PactExpression [text| (use $acctModuleNameText) |] Nothing
+    useExpr = defPactExpression [text| (use $acctModuleNameText) |]
     allExprs = useExpr :| []
 
 
@@ -252,8 +253,8 @@ useTests = defGasUnitTests allExprs
 enforceGuardTests :: NativeDefName -> GasUnitTests
 enforceGuardTests = tests
   where
-    enforceGuardExpr =
-      PactExpression [text| (enforce-guard "$sampleLoadedKeysetName") |] Nothing
+    enforceGuardExpr = defPactExpression
+      [text| (enforce-guard "$sampleLoadedKeysetName") |]
     allExprs = enforceGuardExpr :| []
 
     signEnvWithKeyset = setEnv (set eeMsgSigs (M.fromList samplePubKeysWithCaps))
@@ -269,7 +270,7 @@ keysetRefGuardTests :: NativeDefName -> GasUnitTests
 keysetRefGuardTests = defGasUnitTests allExprs
   where
     keysetRefGuardExpr =
-      PactExpression [text| (keyset-ref-guard "$sampleLoadedKeysetName") |] Nothing
+      defPactExpression [text| (keyset-ref-guard "$sampleLoadedKeysetName") |]
     allExprs = keysetRefGuardExpr :| []
 
 
@@ -277,9 +278,8 @@ createUserGuardTests :: NativeDefName -> GasUnitTests
 createUserGuardTests = defGasUnitTests allExprs
   where
     createUserGuardExpr =
-      PactExpression
+      defPactExpression
       [text| (create-user-guard ($acctModuleNameText.enforce-true)) |]
-      Nothing
     allExprs = createUserGuardExpr :| []
 
 
@@ -287,7 +287,7 @@ createPactGuardTests :: NativeDefName -> GasUnitTests
 createPactGuardTests = tests
   where
     createPactGuardExpr =
-      PactExpression [text| (create-pact-guard "test") |] Nothing
+      defPactExpression [text| (create-pact-guard "test") |]
     allExprs = createPactGuardExpr :| []
 
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
@@ -322,7 +322,7 @@ withCapabilityTests :: NativeDefName -> GasUnitTests
 withCapabilityTests = defGasUnitTests allExprs
   where
     withCapExpr =
-      PactExpression [text| ($acctModuleNameText.test-with-cap-func) |] Nothing
+      defPactExpression [text| ($acctModuleNameText.test-with-cap-func) |]
     allExprs = withCapExpr :| []
  
 
@@ -330,7 +330,7 @@ requireCapabilityTests :: NativeDefName -> GasUnitTests
 requireCapabilityTests = tests
   where
     requireCapExpr =
-      PactExpression [text| (require-capability ($acctModuleNameText.GOV)) |] Nothing
+      defPactExpression [text| (require-capability ($acctModuleNameText.GOV)) |]
     allExprs = requireCapExpr :| []
 
     cap = UserCapability acctModuleName (DefName "GOV") []
@@ -348,7 +348,7 @@ composeCapabilityTests :: NativeDefName -> GasUnitTests
 composeCapabilityTests = tests
   where
     composeCapExpr =
-      PactExpression [text| (compose-capability ($acctModuleNameText.GOV)) |] Nothing
+      defPactExpression [text| (compose-capability ($acctModuleNameText.GOV)) |]
     allExprs = composeCapExpr :| []
       
     capInStackframe =
@@ -372,14 +372,14 @@ txlogTests :: NativeDefName -> GasUnitTests
 txlogTests = defGasUnitTests allExprs
   where
     txLogExpr =
-      PactExpression [text| (txlog $acctModuleNameText.accounts 0) |] Nothing
+      defPactExpression [text| (txlog $acctModuleNameText.accounts 0) |]
     allExprs = txLogExpr :| []
 
 txidsTests :: NativeDefName -> GasUnitTests
 txidsTests = defGasUnitTests allExprs
   where
     txIdsExpr =
-      PactExpression [text| (txids $acctModuleNameText.accounts 0) |] Nothing
+      defPactExpression [text| (txids $acctModuleNameText.accounts 0) |]
     allExprs = txIdsExpr :| []
       
 
@@ -387,7 +387,7 @@ keylogTests :: NativeDefName -> GasUnitTests
 keylogTests = defGasUnitTests allExprs
   where
     keyLogExpr =
-      PactExpression [text| (keylog $acctModuleNameText.accounts "someId" 0) |] Nothing
+      defPactExpression [text| (keylog $acctModuleNameText.accounts "someId" 0) |]
     allExprs = keyLogExpr :| []
       
 
@@ -395,7 +395,7 @@ keysTests :: NativeDefName -> GasUnitTests
 keysTests = defGasUnitTests allExprs
   where
     keysExprs =
-      PactExpression [text| (keys $acctModuleNameText.accounts) |] Nothing
+      defPactExpression [text| (keys $acctModuleNameText.accounts) |]
     allExprs = keysExprs :| []
       
 
@@ -403,11 +403,10 @@ selectTests :: NativeDefName -> GasUnitTests
 selectTests = defGasUnitTests allExprs
   where
     selectExpr =
-      PactExpression
+      defPactExpression
       [text| (select $acctModuleNameText.accounts
                (where "balance" (constantly true))
              ) |]
-      Nothing
     allExprs = selectExpr :| []
       
 
@@ -415,14 +414,13 @@ withReadTests :: NativeDefName -> GasUnitTests
 withReadTests = defGasUnitTests allExprs
   where
     withReadExpr =
-      PactExpression [text| (with-read
+      defPactExpression [text| (with-read
                 $acctModuleNameText.accounts
                 "someId"
                 { "balance":= bal }
                 bal
              )
       |]
-      Nothing
     allExprs = withReadExpr :| []
  
 
@@ -430,7 +428,7 @@ withDefaultReadTests :: NativeDefName -> GasUnitTests
 withDefaultReadTests = defGasUnitTests allExprs
   where
     withDefReadExpr =
-      PactExpression [text| (with-default-read
+      defPactExpression [text| (with-default-read
                 $acctModuleNameText.accounts
                 "someId"
                 { "balance": 1.0 }
@@ -438,7 +436,6 @@ withDefaultReadTests = defGasUnitTests allExprs
                 bal
              )
       |]
-      Nothing
     allExprs = withDefReadExpr :| []
 
 
@@ -446,7 +443,7 @@ readTests :: NativeDefName -> GasUnitTests
 readTests = defGasUnitTests allExprs
   where
     readExpr =
-      PactExpression [text| (read $acctModuleNameText.accounts "someId") |] Nothing
+      defPactExpression [text| (read $acctModuleNameText.accounts "someId") |]
     allExprs = readExpr :| []
       
 
@@ -454,11 +451,10 @@ writeTests :: NativeDefName -> GasUnitTests
 writeTests = defGasUnitTests allExprs
   where
     writeExpr =
-      PactExpression [text| (write $acctModuleNameText.accounts
+      defPactExpression [text| (write $acctModuleNameText.accounts
                     "some-id-that-is-not-present"
                     { "balance": 0.0 }
              ) |]
-      Nothing
     allExprs = writeExpr :| []
         
 
@@ -466,11 +462,10 @@ updateTests :: NativeDefName -> GasUnitTests
 updateTests = defGasUnitTests allExprs
   where
     updateExpr =
-      PactExpression [text| (update $acctModuleNameText.accounts
+      defPactExpression [text| (update $acctModuleNameText.accounts
                      "someId"
                      { "balance": 10.0 }
              ) |]
-      Nothing
     allExprs = updateExpr :| []
       
 
@@ -478,11 +473,10 @@ insertTests :: NativeDefName -> GasUnitTests
 insertTests = defGasUnitTests allExprs
   where
     insertExpr =
-      PactExpression [text| (insert $acctModuleNameText.accounts
+      defPactExpression [text| (insert $acctModuleNameText.accounts
                      "some-id-that-is-not-present"
                      { "balance": 0.0 }
              )|]
-      Nothing
     allExprs = insertExpr :| []
 
 
@@ -490,7 +484,7 @@ describeTableTests :: NativeDefName -> GasUnitTests
 describeTableTests = defGasUnitTests allExprs
   where
     describeTableExpr =
-      PactExpression [text| (describe-table $acctModuleNameText.accounts) |] Nothing
+      defPactExpression [text| (describe-table $acctModuleNameText.accounts) |]
     allExprs = describeTableExpr :| []
       
 
@@ -498,7 +492,7 @@ describeModuleTests :: NativeDefName -> GasUnitTests
 describeModuleTests = defGasUnitTests allExprs
   where
     describeModuleExpr =
-      PactExpression [text| (describe-module "$acctModuleNameText") |] Nothing
+      defPactExpression [text| (describe-module "$acctModuleNameText") |]
     allExprs = describeModuleExpr :| []
       
 
@@ -506,7 +500,7 @@ describeKeysetTests :: NativeDefName -> GasUnitTests
 describeKeysetTests = defGasUnitTests allExprs
   where
     describeKeysetExpr =
-      PactExpression [text| (describe-keyset "$sampleLoadedKeysetName") |] Nothing
+      defPactExpression [text| (describe-keyset "$sampleLoadedKeysetName") |]
     allExprs = describeKeysetExpr :| []
     
 
@@ -514,9 +508,8 @@ createTableTests :: NativeDefName -> GasUnitTests
 createTableTests = defGasUnitTests allExprs
   where
     createTableExpr =
-      PactExpression
+      defPactExpression
       [text| (create-table $acctModuleNameText.accounts-for-testing-table-creation) |]
-      Nothing
     allExprs = createTableExpr :| []
       
 
@@ -525,9 +518,8 @@ defineKeysetTests :: NativeDefName -> GasUnitTests
 defineKeysetTests = tests
   where
     simpleExpr =
-      PactExpression
+      defPactExpression
       [text| (define-keyset "some-keyset-name-not-present-already" $sampleLoadedKeysetName) |]
-      Nothing
     rotateExprText = [text| (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName) |]
     rotateExpr = PactExpression rotateExprText (Just $ rotateExprText <> ": rotating keyset")
     allExprs = rotateExpr :| [simpleExpr]
@@ -1497,6 +1489,18 @@ lengthTests = defGasUnitTests allExprs
          NEL.map (createPactExpr lengthExpr) intListsExpr
       <> NEL.map (createPactExpr lengthExpr) escapedStringsExpr
       <> NEL.map (createPactExpr lengthExpr) strKeyIntValMapsExpr
+
+isCharsetTests :: NativeDefName -> GasUnitTests
+isCharsetTests = defGasUnitTests allExprs
+  where
+    isCharsetExprAscii =
+      defPactExpression [text|(is-charset CHARSET_ASCII "hello world")|]
+    isCharsetExprNotAscii =
+      defPactExpression [text|(is-charset CHARSET_ASCII "I am nÖt ascii")|]
+    isCharsetExprLatin1 =
+      defPactExpression [text|(is-charset CHARSET_LATIN1 "I am nÖt ascii, but I am latin1!")|]
+    allExprs = isCharsetExprAscii :|
+               [isCharsetExprNotAscii, isCharsetExprLatin1]
 
 
 intToStrTests :: NativeDefName -> GasUnitTests

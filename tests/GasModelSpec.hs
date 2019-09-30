@@ -23,10 +23,11 @@ spec = describe "gas model tests" $ do
 
 untestedNativesCheck :: Spec
 untestedNativesCheck = do
-  it "only deprecated natives should be missing gas model tests" $
+  it "only deprecated or constant natives should be missing gas model tests" $
     S.fromList (map asString untestedNatives)
     `shouldBe`
-    (S.fromList ["verify-spv", "public-chain-data", "list"])
+    (S.fromList ["CHARSET_ASCII","CHARSET_LATIN1",
+                 "verify-spv", "public-chain-data", "list"])
 
 allGasTestsShouldPass :: Spec
 allGasTestsShouldPass = do
