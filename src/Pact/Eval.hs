@@ -828,6 +828,13 @@ resumePact i crossChainContinuation = do
 
   -- validate db state
   let proceed = resumePactExec i ps
+      matchCC :: (Eq b, Pretty b) => (a -> b) -> Text -> a -> a -> Eval e ()
+      matchCC acc fname cc db
+        | acc cc == acc db = return ()
+        | otherwise = evalError i $ "resumePact: cross-chain " <> pretty fname <> " " <>
+             pretty (acc cc) <>
+             " does not match db " <> pretty fname <> " " <>
+             pretty (acc db)
   case (dbState,crossChainContinuation) of
 
     -- Terminated pact in db: always fail
@@ -845,29 +852,24 @@ resumePact i crossChainContinuation = do
     (Just (Just dbExec),Nothing) -> proceed dbExec
 
     -- Active db record, cross-chain continuation:
-    -- TODO: this is a fishy case, consider disallowing.
-    -- TODO: if we do decide to allow, cover in tests.
-    -- For now, a valid possibility iff this is a flip-flop from another chain, e.g.
+    -- A valid possibility iff this is a flip-flop from another chain, e.g.
     --   0. This chain: start pact
     --   1. Other chain: continue pact
     --   2. This chain: continue pact
-    (Just (Just dbExec),Just ccExec)
+    -- Thus check at least one step skipped.
+    (Just (Just dbExec),Just ccExec) -> do
 
-      -- validate exactly one step skipped
-      | _peStep ccExec /= _peStep dbExec + 2 ->
-          evalError i $ "resumePact: db step " <> pretty (_peStep dbExec) <>
-             " must be at least 2 steps before cross-chain continuation step " <>
-             pretty (_peStep ccExec)
+      unless (_peStep ccExec > _peStep dbExec + 1) $
+        evalError i $ "resumePact: db step " <> pretty (_peStep dbExec) <>
+        " must be at least 2 steps before cross-chain continuation step " <>
+        pretty (_peStep ccExec)
 
-      -- validate continuation exact match
-      | _peContinuation ccExec /= _peContinuation dbExec ->
-          evalError i $ "resumePact: cross-chain continuation " <>
-             viaShow (_peContinuation ccExec) <>
-             " does not match db continuation " <>
-             viaShow (_peContinuation dbExec)
+      -- validate continuation and step count against db
+      -- peExecuted and peStepHasRollback is ignored in 'resumePactExec'
+      matchCC _peContinuation "continuation" ccExec dbExec
+      matchCC _peStepCount "step count" ccExec dbExec
 
-      -- good to go
-      | otherwise -> proceed dbExec
+      proceed ccExec
 
 
 -- | Resume a pact with supplied PactExec context.

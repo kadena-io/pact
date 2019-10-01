@@ -100,6 +100,9 @@ data PactContinuation = PactContinuation
   , _pcArgs :: [PactValue]
   } deriving (Eq, Show, Generic)
 
+instance Pretty PactContinuation where
+  pretty (PactContinuation d as) = parensSep (pretty d:map pretty as)
+
 instance NFData PactContinuation
 instance ToJSON PactContinuation where toJSON = lensyToJSON 3
 instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
