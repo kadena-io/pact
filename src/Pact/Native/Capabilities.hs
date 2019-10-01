@@ -15,7 +15,6 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
-import Control.Error (fmapL)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Catch
@@ -134,16 +133,22 @@ evalCap :: CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
 evalCap scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquireCapability (applyMgrFun d) scope cap $ do
+      acquireCapability (applyMgrFun a d) scope cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
 
-applyMgrFun :: Def Ref -> Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either String [PactValue])
-applyMgrFun capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArgs] >>= handleResult
+-- | Continuation to tie the knot with Pact.Eval (ie, 'apply') and also because the capDef is
+-- more accessible here.
+applyMgrFun :: HasInfo i => i -> Def Ref -> Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either PactError [PactValue])
+applyMgrFun i capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArgs]
   where
-    doApply :: [Term Name] -> Eval e (Either String (Term Name))
-    doApply as = handle (\err@PactError {} -> return $ Left $ show err)
-      (Right <$> apply (App appVar [] (getInfo mgrFunDef)) as)
+
+    doApply as = try $ do
+      r <- apply (App appVar [] (getInfo mgrFunDef)) as
+      case r of
+        (TObject (Object (ObjectMap rm) _ _ _) _) -> toPVs rm
+        t -> evalError' i $ "Invalid return value from mgr function: " <> pretty t
+
     capDefArgs :: [Arg (Term Ref)]
     capDefArgs = _ftArgs (_dFunType capDef)
     toObj :: [PactValue] -> Term Name
@@ -151,15 +156,13 @@ applyMgrFun capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArg
     toMap as = M.fromList $ zipWith toPair capDefArgs as
     toPair (Arg n _ _) pv = (FieldKey n,fromPactValue pv)
     appVar = TVar (Ref (TDef mgrFunDef (getInfo mgrFunDef))) def
-    handleResult :: Either String (Term Name) -> Eval e (Either String [PactValue])
-    handleResult r = case r of
-      Left e -> return $ Left e
-      Right (TObject (Object (ObjectMap rm) _ _ _) _) -> return $ toPVs rm
-      Right t -> return $ Left $ "Invalid return value from mgr function: " ++ showPretty t
-    toPVs :: M.Map FieldKey (Term Name) -> Either String [PactValue]
-    toPVs rm = sequence $ (`map` capDefArgs) $ \(Arg n _ _) -> case M.lookup (FieldKey n) rm of
-      Nothing -> Left $ "Missing field in mgr fun result: " ++ show n
-      Just t -> fmapL show $ toPactValue t
+
+    toPVs :: M.Map FieldKey (Term Name) -> Eval e [PactValue]
+    toPVs rm = forM capDefArgs $ \(Arg n _ _) -> case M.lookup (FieldKey n) rm of
+      Nothing -> evalError' i $ "Missing field in mgr fun result: " <> pretty n
+      Just t -> case toPactValue t of
+        Left e -> evalError' i $ "Invalid return value for field " <> pretty n <> ": " <> pretty e
+        Right v -> return v
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
 enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $

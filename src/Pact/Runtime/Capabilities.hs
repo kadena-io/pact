@@ -32,6 +32,7 @@ import Control.Lens hiding (DefName)
 import Data.Bool
 import Data.Default
 import Data.Foldable
+import Data.List
 import qualified Data.Set as S
 
 import Pact.Types.Capability
@@ -41,10 +42,10 @@ import Pact.Types.Runtime
 
 -- | Tie the knot with Pact.Eval by having caller supply `apply` and inflate/deflate
 -- params to proper object arguments.
-type ApplyMgrFun e = Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either String [PactValue])
+type ApplyMgrFun e = Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either PactError [PactValue])
 
 noopApplyMgrFun :: ApplyMgrFun e
-noopApplyMgrFun _ _ _ = return $ Left "mgmt disabled"
+noopApplyMgrFun _ mgd _ = return $ Right mgd
 
 
 grantedCaps :: Eval e (S.Set Capability)
@@ -126,7 +127,9 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
           return $ Just $ Right ()
         Nothing -> case failures of
           [] -> return Nothing
-          es -> return $ Just $ Left $ "Acquire of managed capability failed: " ++ show es
+          es -> return $ Just $ Left $
+            "Acquire of managed capability failed: " ++
+            (intercalate "," (map (renderCompactString' . peDoc) es))
 
     check (successR,failedRs,ms) m = case successR of
       Just {} -> return (successR,[],m:ms) -- short circuit on success
@@ -150,7 +153,7 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
       _ -> noMatch
 
     applyMgrFun mcs mqn mf mas cas = applyF mf mas cas >>= \r -> case r of
-      Left e -> return $ Left $ "Managed cap acquire failed: " ++ show e
+      Left e -> return $ Left e
       Right mas' -> return $ Right $ set csCap (UserCapability mqn mas') mcs
 
 revokeAllCapabilities :: Eval e ()
