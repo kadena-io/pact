@@ -197,6 +197,8 @@ library
                      , servant-client-core
                      , servant-swagger
                      , swagger2 >= 2.3
+                     , integer-gmp
+                     , ghc-prim
 
   if impl(ghcjs)
     build-depends:
