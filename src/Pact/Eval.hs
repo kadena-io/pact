@@ -57,9 +57,9 @@ import Data.Graph
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Maybe
-import qualified Data.Set as S
 import qualified Data.Vector as V
 import Data.Text (Text, pack)
+import qualified Data.Text as T
 import Safe
 import Unsafe.Coerce
 
@@ -95,29 +95,33 @@ enforceKeySetName mi mksn = do
 
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySet i ksn KeySet{..} = do
-  sigs <- view eeMsgSigs
-  granted <- grantedCaps
-  let count = length _ksKeys
-      filterSigs pk caps = pk `elem` _ksKeys && (S.null caps || not (S.null matchedCaps))
-        where matchedCaps = S.intersection caps granted
-      matched = M.size $ M.filterWithKey filterSigs sigs
-      failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <>
-        maybe "" (\ksn' -> ": " <> pretty ksn') ksn
-      runBuiltIn p | p count matched = return ()
-                   | otherwise = failed
-      atLeast t m = m >= t
-  case M.lookup _ksPredFun keyPredBuiltins of
-    Just KeysAll -> runBuiltIn (\c m -> atLeast c m)
-    Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
-    Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
-    Nothing -> do
-      r <- evalByName _ksPredFun [toTerm count,toTerm matched] i
-      case r of
-        (TLiteral (LBool b) _) | b -> return ()
-                               | otherwise -> failTx i $ "Keyset failure: " <>
-                                   maybe "[dynamic]" pretty ksn
-        _ -> evalError i $ "Invalid response from keyset predicate: " <> pretty r
+enforceKeySet i ksn KeySet{..} = go
+  where
+    go = do
+      sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
+      sigs' <- checkSigCaps sigs
+      runPred (M.size sigs')
+    matchKey k _ = k `elem` _ksKeys
+    failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
+      maybe (pretty $ map (elide . asString) _ksKeys) pretty ksn
+    atLeast t m = m >= t
+    elide pk | T.length pk < 8 = pk
+             | otherwise = T.take 8 pk <> "..."
+    count = length _ksKeys
+    runPred matched =
+      case M.lookup _ksPredFun keyPredBuiltins of
+        Just KeysAll -> runBuiltIn (\c m -> atLeast c m)
+        Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
+        Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
+        Nothing -> do
+          r <- evalByName _ksPredFun [toTerm count,toTerm matched] i
+          case r of
+            (TLiteral (LBool b) _) | b -> return ()
+                                   | otherwise -> failed
+            _ -> evalError i $ "Invalid response from keyset predicate: " <> pretty r
+      where
+        runBuiltIn p | p count matched = return ()
+                     | otherwise = failed
 {-# INLINE enforceKeySet #-}
 
 

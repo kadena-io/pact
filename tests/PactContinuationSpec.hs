@@ -721,8 +721,10 @@ testFinishAlone mgr = do
   let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
 
   twoPartyEscrow allCmds mgr $ checkContHash [r1, r2] $ do
-    tryCredAloneCmd `failsWith` (Just "Keyset failure (keys-all)")
-    tryDebAloneCmd `failsWith` (Just "Keyset failure (keys-all)")
+    tryCredAloneCmd `failsWith`
+      (Just "Keyset failure (keys-all): [7d0c9ba1...]")
+    tryDebAloneCmd `failsWith`
+      (Just "Keyset failure (keys-all): [ac69d985...]")
 
 
 testPriceNegUp :: HTTP.Manager -> Expectation
@@ -755,7 +757,7 @@ testPriceNegDownBadCaps mgr = do
 
   (req, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont-badcaps.yaml")
   twoPartyEscrow [tryNegUpCmd] mgr $ checkContHash [req] $ do
-    tryNegUpCmd `failsWith` (Just "Keyset failure (keys-all)")
+    tryNegUpCmd `failsWith` (Just "Keyset failure (keys-all): [7d0c9ba1...]")
 
 
 

@@ -25,6 +25,7 @@ module Pact.Runtime.Capabilities
     ,revokeAllCapabilities
     ,grantedCaps
     ,ApplyMgrFun,noopApplyMgrFun
+    ,checkSigCaps
     ) where
 
 import Control.Monad
@@ -33,6 +34,8 @@ import Data.Bool
 import Data.Default
 import Data.Foldable
 import Data.List
+import Data.Maybe
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 import Pact.Types.Capability
@@ -44,6 +47,7 @@ import Pact.Types.Runtime
 -- params to proper object arguments.
 type ApplyMgrFun e = Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either PactError [PactValue])
 
+-- | Noop fun always matches/returns same
 noopApplyMgrFun :: ApplyMgrFun e
 noopApplyMgrFun _ mgd _ = return $ Right mgd
 
@@ -158,3 +162,34 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
 
 revokeAllCapabilities :: Eval e ()
 revokeAllCapabilities = evalCapabilities .= def
+
+-- | Check signature caps against current granted set, and track what caps
+-- were matched in this transaction in order to only match once.
+checkSigCaps
+  :: M.Map PublicKey (S.Set Capability)
+     -> Eval e (M.Map PublicKey (S.Set Capability))
+checkSigCaps sigs = go
+  where
+    go = do
+      alreadyMatched <- use (evalCapabilities . capSigMatched)
+      granted <- grantedCaps
+      let (sigs',newMatched) = M.foldrWithKey (match granted) (mempty,alreadyMatched) sigs
+      evalCapabilities . capSigMatched .= newMatched
+      return sigs'
+
+    -- | Grr why doesn't Set have this
+    removeAll [] s = s
+    removeAll (r:rs) s = removeAll rs (S.delete r s)
+
+    match granted pk sigCaps (r,matched) =
+      if S.null sigCaps then
+        (M.insert pk sigCaps r,matched)
+      else
+        if S.null sigGranted then
+          (r,matched)
+        else
+          (M.insert pk sigGranted r,M.insertWith (S.union) pk sigGranted matched)
+      where
+        sigMatched = fromMaybe mempty $ M.lookup pk matched
+        sigUnmatched = removeAll (S.toList sigMatched) sigCaps
+        sigGranted = S.intersection sigUnmatched granted

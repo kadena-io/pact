@@ -23,7 +23,7 @@ module Pact.Types.Capability
   , CapAcquireResult(..)
   , SigCapability(..)
   , parseSigCapability
-  , Capabilities(..), capStack, capManaged
+  , Capabilities(..), capStack, capManaged, capSigMatched
   , CapScope(..)
   , CapSlot(..), csCap, csComposed, csScope
   ) where
@@ -33,6 +33,8 @@ import Control.Error (fmapL)
 import Control.Lens hiding ((.=),DefName)
 import Data.Aeson
 import Data.Default
+import Data.Map.Strict (Map)
+import Data.Set (Set)
 import Data.Text (Text, unpack)
 
 import GHC.Generics
@@ -117,8 +119,9 @@ makeLenses ''CapSlot
 data Capabilities c = Capabilities
   { _capStack :: [CapSlot c]
   , _capManaged :: [CapSlot c]
+  , _capSigMatched :: (Map PublicKey (Set Capability))
   }
   deriving (Eq,Show,Functor,Foldable,Traversable)
 makeLenses ''Capabilities
 
-instance Default (Capabilities a) where def = Capabilities [] []
+instance Default (Capabilities a) where def = Capabilities [] [] mempty
