@@ -215,11 +215,11 @@
     (enforce-keyset (read-keyset sender)))
   (defun PAY-mgr (mgd reqd)
     (enforce (= (at "sender" mgd) (at "sender" reqd)) "sender matches")
-    (enforce (= (at "receiver" mgd) (at "receiver" mgd)) "receiver matches")
+    (enforce (= (at "receiver" mgd) (at "receiver" reqd)) "receiver matches")
     (let* ((req-amount (at "amount" reqd))
            (bal (- (at "amount" mgd) req-amount)))
       (enforce (> req-amount 0) "requested amount > 0")
-      (enforce (> bal 0) (format "sufficient balance: {} {} {}" [bal reqd mgd]))
+      (enforce (>= bal 0) (format "sufficient balance: {} {} {}" [bal reqd mgd]))
       (+ { "amount": bal } mgd)))
   (defun pay (sender receiver amount)
     (with-capability (PAY sender receiver amount)
@@ -229,14 +229,29 @@
 (expect-failure "keyset not in sigs"
                 (install-capability (PAY "alice" "bob" 10) (PAY-mgr)))
 
-(env-sigs [{ "key": "alice", "caps": [(PAY "alice" "bob" 10)] }] )
+(env-sigs [{ "key": "alice", "caps": [(PAY "alice" "bob" 10),(PAY "alice" "carl" 1)] }] )
 
-(expect "Success on cap install" "Installed capability"
+(expect-failure "Failure on unmatched cap install"
+        (install-capability (PAY "alice" "bob" 12) (PAY-mgr)))
+(expect "Success on alice-bob cap install" "Installed capability"
         (install-capability (PAY "alice" "bob" 10) (PAY-mgr)))
+(expect "Success on alice-carl cap install" "Installed capability"
+        (install-capability (PAY "alice" "carl" 1) (PAY-mgr)))
 
 (expect-failure "Payment should fail on different sender"
                 (pay "dave" "bob" 6))
 (expect-failure "Payment should fail on different receiver"
                 (pay "alice" "dave" 6))
+(expect-failure "Payment should fail with too-high balance"
+                (pay "alice" "bob" 11))
 (expect "Success on first pmt" 6
         (pay "alice" "bob" 6))
+(expect-failure "2nd payment should fail with too-high balance"
+                (pay "alice" "bob" 5))
+(expect "Success on second pmt" 4
+        (pay "alice" "bob" 4))
+(expect-failure "3rd payment should fail with too-high balance"
+                (pay "alice" "bob" 1))
+(expect "Payment to carl succeeds" 1 (pay "alice" "carl" 1))
+(expect-failure "2nd payment to carl fails"
+                (pay "alice" "bob" 1))

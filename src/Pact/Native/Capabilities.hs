@@ -15,8 +15,7 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
-import Control.Monad.IO.Class
-import Control.Error (hush,fmapL)
+import Control.Error (fmapL)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Catch
@@ -144,7 +143,7 @@ applyMgrFun capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArg
   where
     doApply :: [Term Name] -> Eval e (Either String (Term Name))
     doApply as = handle (\err@PactError {} -> return $ Left $ show err)
-      (Right <$> (liftIO (print ("applyMgrFun",showPretty as)) >> apply (App appVar [] (getInfo mgrFunDef)) as))
+      (Right <$> apply (App appVar [] (getInfo mgrFunDef)) as)
     capDefArgs :: [Arg (Term Ref)]
     capDefArgs = _ftArgs (_dFunType capDef)
     toObj :: [PactValue] -> Term Name

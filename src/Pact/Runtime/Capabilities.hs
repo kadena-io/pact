@@ -27,7 +27,7 @@ module Pact.Runtime.Capabilities
     ,ApplyMgrFun,noopApplyMgrFun
     ) where
 
-import Control.Monad.IO.Class
+import Control.Monad
 import Control.Lens hiding (DefName)
 import Data.Bool
 import Data.Default
@@ -114,15 +114,31 @@ acquireCapability af scope cap test = granted >>= bool evalCap alreadyGranted
 
 
 checkManaged :: ApplyMgrFun e -> Capability -> Eval e (Maybe (Either String ()))
-checkManaged applyF cap = use (evalCapabilities . capManaged) >>= check []
+checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
   where
     noMatch = return $ Nothing
 
-    check _ [] = noMatch
-    check rms (mgd:ms) = runManaged mgd >>= handleResult rms ms (check (mgd:rms) ms)
+    go mgdCaps = do
+      (success,failures,processedMgdCaps) <- foldM check (Nothing,[],[]) mgdCaps
+      case success of
+        Just _c -> do
+          evalCapabilities . capManaged .= processedMgdCaps
+          return $ Just $ Right ()
+        Nothing -> case failures of
+          [] -> return Nothing
+          es -> return $ Just $ Left $ "Acquire of managed capability failed: " ++ show es
 
-    runManaged mcs = do
-     case _csScope mcs of -- validate scope
+    check (successR,failedRs,ms) m = case successR of
+      Just {} -> return (successR,[],m:ms) -- short circuit on success
+      Nothing -> do
+        r <- runManaged m
+        case r of
+          Nothing -> return (Nothing,failedRs,m:ms) -- skip
+          Just (Left e) -> return (Nothing,e:failedRs,m:ms) -- record failure and continue
+          Just (Right newMgdCap) ->
+            return (Just newMgdCap,[],newMgdCap:ms)
+
+    runManaged mcs = case _csScope mcs of -- validate scope
       CapManaged (Just mf) -> case _csCap mcs of -- validate user mg cap and has mgr fun
         UserCapability mqn mas -> case cap of -- validate user test cap
           UserCapability cqn cas
@@ -133,19 +149,9 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= check []
         _ -> noMatch
       _ -> noMatch
 
-    handleResult rms ms _ (Just (Right mgd')) = do
-      -- install modified mgd cap
-      evalCapabilities . capManaged .= (rms ++ (mgd':ms))
-      -- success
-      return $ Just $ Right ()
-    handleResult _ _ _ (Just (Left e)) = return $ Just (Left e)
-    handleResult _ _ next Nothing = next
-
-    applyMgrFun mcs mqn mf mas cas = debug ("checkManaged",mas,cas) >> applyF mf mas cas >>= \r -> case r of
+    applyMgrFun mcs mqn mf mas cas = applyF mf mas cas >>= \r -> case r of
       Left e -> return $ Left $ "Managed cap acquire failed: " ++ show e
       Right mas' -> return $ Right $ set csCap (UserCapability mqn mas') mcs
-
-    debug = liftIO . print
 
 revokeAllCapabilities :: Eval e ()
 revokeAllCapabilities = evalCapabilities .= def
