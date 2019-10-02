@@ -48,6 +48,25 @@ spec = describe "pacts in dev server" $ do
   describe "testPactYield" $ testPactYield mgr
   describe "testTwoPartyEscrow" $ testTwoPartyEscrow mgr
   describe "testNestedPacts" $ testNestedPacts mgr
+  describe "testManagedCaps" $ testManagedCaps mgr
+
+
+testManagedCaps :: HTTP.Manager -> Spec
+testManagedCaps mgr = before_ flushDb $ after_ flushDb $
+  it "exercises managed PAY cap" $ do
+    let setupPath = testDir ++ "cont-scripts/setup-"
+
+    (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
+    (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
+    (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
+    let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd]
+    allResults <- runAll mgr allCmds
+
+    runResults allResults $ do
+      sysModuleCmd `succeedsWith` textVal "system module loaded"
+      acctModuleCmd `succeedsWith` textVal "TableCreated"
+      createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
+
 
 testNestedPacts :: HTTP.Manager -> Spec
 testNestedPacts mgr = before_ flushDb $ after_ flushDb $

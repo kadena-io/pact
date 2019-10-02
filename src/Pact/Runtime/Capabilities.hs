@@ -109,21 +109,23 @@ acquireCapability af scope cap test = granted >>= bool evalCap alreadyGranted
     evalStack = checkManaged af cap >>= \r -> case r of
       Nothing -> push >> test
       Just (Left e) -> evalError def (prettyString e)
-      Just (Right ()) -> push
+      Just (Right mgd) -> pushSlot (CapSlot scope cap (_csComposed mgd))
 
     -- Composed: check if managed, in which case install onto head,
     -- otherwise push, test, pop and install onto head
     evalComposed = checkManaged af cap >>= \r -> case r of
       Nothing -> push >> test >> popCapStack installComposed
       Just (Left e) -> evalError def (prettyString e)
-      Just (Right ()) -> installComposed (CapSlot scope cap [])
+      Just (Right mgd) -> installComposed (CapSlot scope cap (_csComposed mgd))
 
     installComposed c = evalCapabilities . capStack . _head . csComposed %= (_csCap c:)
 
-    push = evalCapabilities . capStack %= (CapSlot scope cap []:)
+    push = pushSlot (CapSlot scope cap [])
+
+    pushSlot s = evalCapabilities . capStack %= (s:)
 
 
-checkManaged :: ApplyMgrFun e -> Capability -> Eval e (Maybe (Either String ()))
+checkManaged :: ApplyMgrFun e -> Capability -> Eval e (Maybe (Either String (CapSlot Capability)))
 checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
   where
     noMatch = return $ Nothing
@@ -131,9 +133,9 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
     go mgdCaps = do
       (success,failures,processedMgdCaps) <- foldM check (Nothing,[],[]) mgdCaps
       case success of
-        Just _c -> do
+        Just newMgdCap -> do
           evalCapabilities . capManaged .= processedMgdCaps
-          return $ Just $ Right ()
+          return $ Just $ Right newMgdCap
         Nothing -> case failures of
           [] -> return Nothing
           es -> return $ Just $ Left $
@@ -181,6 +183,7 @@ checkSigCaps sigs = go
       let (sigs',newMatched) = M.foldrWithKey (match granted) (mempty,alreadyMatched) sigs
       evalCapabilities . capSigMatched .= newMatched
       return sigs'
+
 
     -- | Grr why doesn't Set have this
     removeAll [] s = s
