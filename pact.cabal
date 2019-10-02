@@ -197,8 +197,9 @@ library
                      , servant-client-core
                      , servant-swagger
                      , swagger2 >= 2.3
+                     -- TODO is this compatible with GHCJS?
                      , integer-gmp
-                     , ghc-prim
+                     , primitive
 
   if impl(ghcjs)
     build-depends:

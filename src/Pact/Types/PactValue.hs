@@ -41,8 +41,11 @@ import qualified Data.List as L
 import qualified Data.ByteString.UTF8 as BS
 import Text.Trifecta.Delta (Delta(..))
 import GHC.Integer.GMP.Internals (Integer(..),BigNat(..))
-import qualified GHC.Prim as BA
+import qualified Data.Primitive.ByteArray as BA
 import GHC.Exts (Int(..))
+import Data.Word (Word8)
+import Data.Int (Int64)
+import Control.Lens (view)
 
 import Pact.Types.Exp (Literal(..))
 import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
@@ -105,248 +108,208 @@ toPactValueLenient t = case toPactValue t of
 
 
 
--- Based on: http://wiki.haskell.org/GHC/Memory_Footprint
--- and https://stackoverflow.com/questions/3254758/memory-footprint-of-haskell-data-types
--- Assumes GHC
+-- |  Estimate of number of bytes needed to represent data type
+--
+-- Assumptions: GHC, 64-bit machine
+-- General approach:
+--   Memory Consumption = Constructor Header Size + Cost of Constructor Field(s)
+--   Cost of Constructor Field(s)* = 1 word per field + cost of each field's value
+-- (*) See Resource 2 for exceptions to these rules
+-- Resources:
+-- 1. http://wiki.haskell.org/GHC/Memory_Footprint
+-- 2. https://stackoverflow.com/questions/3254758/memory-footprint-of-haskell-data-types
+
+class SizeOf t where
+  sizeOf :: t -> Bytes
+
 
 type Bytes = Int
 
-wordSize32 :: Bytes
+-- TOOD Figure out how to detect machine arch
+-- | "word" is 4 bytes on 32-bit arch, but 8 bytes on 64-bit
+wordSize32, wordSize64, wordSize :: Bytes
 wordSize32 = 4
-
-wordSize64 :: Bytes
 wordSize64 = 8
-
--- TODO: switch the word value if running 32-bit vs 64-bit machine?
-wordSize :: Int
 wordSize = wordSize64
 
+-- | Constructor header is 1 word
+headerCost :: Bytes
+headerCost = 1 * wordSize
 
-sizeOfPactValue :: PactValue -> Bytes
-sizeOfPactValue pv = headerSize + fieldsSize
-  where
-    headerSize = 1 * wordSize
-    fieldsSize = case pv of
-      PLiteral l -> (1 * wordSize) + (sizeOfLiteral l)
-      PList v -> (1 * wordSize) + (sizeOfVector v)
-      PObject o -> (1 * wordSize) + (sizeOfObjectMap o)
-      PGuard g -> (1 * wordSize) + (sizeOfGuard g)
+-- | In general, each constructor field costs 1 word
+constructorFieldCost :: Int -> Bytes
+constructorFieldCost numFields = numFields * wordSize
 
-
-sizeOfLiteral :: Literal -> Bytes
-sizeOfLiteral l = headerSize + fieldsSize
-  where
-    headerSize = 1 * wordSize
-    fieldsSize = case l of
-      LString t -> (1 * wordSize) + (sizeOfText t)
-      LInteger i -> (1 * wordSize) + (sizeOfInteger i)
-      LDecimal d -> (1 * wordSize) + (sizeOfDecimal d)
-      LBool _ -> (1 * wordSize) + 0
-      LTime ti -> (1 * wordSize) + (sizeOfTime ti)
+-- | Total cost for constructor
+constructorCost :: Int -> Bytes
+constructorCost numFields = headerCost + (constructorFieldCost numFields)
 
 
-sizeOfVector :: Vector PactValue -> Bytes
-sizeOfVector v = vectorSize
-  where
-    vectorSize =
-      ((7 + vectorLength) * wordSize) + sizeOfContents
-    vectorLength = V.length v
-    sizeOfContents = V.foldl' (\acc pv -> acc + (sizeOfPactValue pv)) 0 v
+instance SizeOf PactValue where
+  sizeOf (PLiteral l) = (constructorCost 1) + (sizeOf l)
+  sizeOf (PList v) = (constructorCost 1) + (sizeOf v)
+  sizeOf (PObject o) = (constructorCost 1) + (sizeOf o)
+  sizeOf (PGuard g) = (constructorCost 1) + (sizeOf g)
+
+instance SizeOf Literal where
+  sizeOf (LString t) = (constructorCost 1) + (sizeOf t)
+  sizeOf (LInteger i) = (constructorCost 1) + (sizeOf i)
+  sizeOf (LDecimal d) = (constructorCost 1) + (sizeOf d)
+  sizeOf (LBool _) = (constructorCost 1) + 0
+  sizeOf (LTime ti) = (constructorCost 1) + (sizeOf ti)
+
+instance (SizeOf v) => SizeOf (Vector v) where
+  sizeOf v = vectorSize
+    where
+      vectorSize =
+        ((7 + vectorLength) * wordSize) + sizeOfContents
+      vectorLength = V.length v
+      sizeOfContents = V.foldl' (\acc pv -> acc + (sizeOf pv)) 0 v
+
+instance (SizeOf m) => SizeOf (ObjectMap m) where
+  -- newtype is free
+  sizeOf (ObjectMap m) = sizeOf m    
+
+instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
+  sizeOf m = mapSize
+    where
+      mapSize = (6 * mapLength * wordSize) + sizeOfKeys + sizeOfValues
+      mapLength = M.size m
+      sizeOfValues = M.foldl' (\acc pv -> acc + (sizeOf pv)) 0 m
+      sizeOfKeys = M.foldlWithKey' (\acc fk _ -> acc + (sizeOf fk)) 0 m
+
+instance (SizeOf p) => SizeOf (Guard p) where
+  sizeOf (GPact pg) = (constructorCost 1) + (sizeOf pg)
+  sizeOf (GKeySet ks) = (constructorCost 1) + (sizeOf ks)
+  sizeOf (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ksr)
+  sizeOf (GModule mg) = (constructorCost 1) + (sizeOf mg)
+  sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
 
 
--- A constructor defined with newtype is free
-sizeOfObjectMap :: ObjectMap PactValue -> Bytes
-sizeOfObjectMap (ObjectMap m) = sizeOfMap m 
+instance SizeOf PactGuard where
+  sizeOf (PactGuard pid pn) =
+    (constructorCost 2) + (sizeOf pid) + (sizeOf pn)
 
+instance SizeOf KeySet where
+  sizeOf (KeySet pkArr ksPred) =
+    (constructorCost 2) + (sizeOf pkArr) + (sizeOf ksPred)
 
-sizeOfGuard :: Guard PactValue -> Bytes
-sizeOfGuard g = headerSize + fieldsSize
-  where
-    headerSize = 1 * wordSize
-    fieldsSize = case g of
-      GPact pg -> (1 * wordSize) + (sizeOfPactGuard pg)
-      GKeySet ks -> (1 * wordSize) + (sizeOfKeySet ks)
-      GKeySetRef ksr -> (1 * wordSize) + (sizeOfKeySetRef ksr)
-      GModule mg -> (1 * wordSize) + (sizeOfModuleGuard mg)
-      GUser ug -> (1 * wordSize) + (sizeOfUserGuard ug)
+instance SizeOf KeySetName where
+  -- newtype is free
+  sizeOf (KeySetName n) = sizeOf n
 
+instance SizeOf ModuleGuard where
+  sizeOf (ModuleGuard md n) =
+    (constructorCost 2) + (sizeOf md) + (sizeOf n)
 
-sizeOfPactGuard :: PactGuard -> Bytes
-sizeOfPactGuard pg = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case pg of
-      PactGuard pid pn ->
-        (2 * wordSize) + (sizeOfPactId pid) + (sizeOfText pn)
+instance (SizeOf p) => SizeOf (UserGuard p) where
+  sizeOf (UserGuard n arr) =
+    (constructorCost 2) + (sizeOf n) + (sizeOf arr)
 
-sizeOfKeySet :: KeySet -> Bytes
-sizeOfKeySet ks = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case ks of
-      KeySet pkArr ksPred ->
-        (2 * wordSize) + (sizeOfArray sizeOfPublicKey pkArr) + (sizeOfName ksPred)
+instance SizeOf Name where
+  sizeOf (QName qn) = (constructorCost 1) + sizeOf qn
+  sizeOf (Name bn) = (constructorCost 1) + sizeOf bn
 
-sizeOfKeySetRef :: KeySetName -> Bytes
-sizeOfKeySetRef (KeySetName n) = sizeOfText n
+instance SizeOf QualifiedName where
+  sizeOf (QualifiedName modName n i) =
+    (constructorCost 3) + (sizeOf modName) + (sizeOf n) + (sizeOf i)
 
-sizeOfModuleGuard :: ModuleGuard -> Bytes
-sizeOfModuleGuard mg = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case mg of
-      ModuleGuard md n ->
-        (2 * wordSize) + (sizeOfModuleName md) + (sizeOfText n)
+instance SizeOf BareName where
+  sizeOf (BareName n i) =
+    (constructorCost 2) + (sizeOf n) + (sizeOf i)
 
-sizeOfUserGuard :: UserGuard PactValue -> Bytes
-sizeOfUserGuard ug = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case ug of
-      UserGuard n arr -> (2 * wordSize) + (sizeOfName n) + (sizeOfArray sizeOfPactValue arr)
+instance SizeOf ModuleName where
+  sizeOf (ModuleName mn namespace) =
+    (constructorCost 2) + (sizeOf mn) + (sizeOf namespace)
 
-sizeOfName :: Name -> Bytes
-sizeOfName n = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case n of
-      QName qn -> (1 * wordSize) + sizeOfQualifiedName qn
-      Name bn -> (1 * wordSize) + sizeOfBareName bn
+instance SizeOf Info where
+  sizeOf (Info may) = sizeOf may
 
-sizeOfQualifiedName :: QualifiedName -> Bytes
-sizeOfQualifiedName qn = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case qn of
-      QualifiedName modName n i ->
-        (3 * wordSize) + (sizeOfModuleName modName) + (sizeOfText n) + (sizeOfInfo i)
+instance SizeOf Parsed where
+  sizeOf (Parsed d len) =
+    (constructorCost 2) + (sizeOf d) + (sizeOf len)
 
-sizeOfBareName :: BareName -> Bytes
-sizeOfBareName bn = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case bn of
-      BareName n i -> (2 * wordSize) + (sizeOfText n) + (sizeOfInfo i)
+instance SizeOf Delta where
+  -- Most of delta's arguments are unpacked (unboxed) Int64
+  -- Most unboxed types just take one word
+  -- Exceptions being Int64#, Word64#, and Double# which take 2 words on a 32-bit machine.
+  -- TODO - Assumes 64-bit machine  
+  sizeOf (Columns _ _) = 2 * wordSize
+  sizeOf (Tab _ _ _) = 3 * wordSize
+  sizeOf (Lines _ _ _ _) = 4 * wordSize
+  -- bs is the only packed argument
+  sizeOf (Directed bs _ _ _ _) =
+    (constructorCost 1) + (4 * wordSize) + (sizeOf bs)   
 
-sizeOfModuleName :: ModuleName -> Bytes
-sizeOfModuleName modName = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case modName of
-      ModuleName mn namespace ->
-        (2 * wordSize) + (sizeOfText mn) + (sizeOfMaybe sizeOfNamespaceName namespace)
+instance SizeOf Code where
+  -- newtype is free
+  sizeOf (Code c) = sizeOf c
 
-sizeOfInfo :: Info -> Bytes
-sizeOfInfo (Info may) = sizeOfMaybe (sizeOfTuple sizeOfCode sizeOfParsed) may
-      
+instance (SizeOf a, SizeOf b) => SizeOf (a,b) where
+  sizeOf (a,b) = (constructorCost 3) + (sizeOf a) + (sizeOf b)
 
-sizeOfParsed :: Parsed -> Bytes
-sizeOfParsed p = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case p of
-      Parsed d len -> (2 * wordSize) + (sizeOfDelta d) + (sizeOfInt len)
+instance (SizeOf a) => SizeOf (Maybe a) where
+  sizeOf (Just e) = (constructorCost 1) + (sizeOf e)
+  sizeOf Nothing = constructorCost 0
 
+instance SizeOf NamespaceName where
+  -- newtype is free
+  sizeOf (NamespaceName n) = sizeOf n
 
-sizeOfDelta :: Delta -> Bytes
-sizeOfDelta d = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case d of
-      -- Most of delta's arguments are unpacked (unboxed) Int64
-      -- Most unboxed types take one word
-      -- Exceptions being Int64#, Word64#, and Double# which take 2 words on a 32-bit machine.
-      -- TODO - Assumes 64-bit machine
-      Columns _ _ -> 2 * wordSize
-      Tab _ _ _ -> 3 * wordSize
-      Lines _ _ _ _ -> 4 * wordSize
-      -- bs is only unpacked argument
-      Directed bs _ _ _ _ -> (1 * wordSize) + (4 * wordSize) + (sizeOfByteString bs)   
+instance (SizeOf a) => SizeOf [a] where
+  sizeOf arr = arrSize
+    where
+      arrSize = ((1 + (3 * arrLength)) * wordSize) + sizeOfContents
+      arrLength = L.length arr
+      sizeOfContents = L.foldl' (\acc e -> acc + (sizeOf e)) 0 arr
 
+instance SizeOf PublicKey where
+  -- newtype is free
+  sizeOf (PublicKey bs) = sizeOf bs
 
--- A constructor defined with newtype is free
-sizeOfCode :: Code -> Bytes
-sizeOfCode (Code c) = sizeOfText c
+instance SizeOf BS.ByteString where
+  sizeOf bs = byteStringSize
+    where
+      byteStringSize = (9 * wordSize) + byteStringLength
+      byteStringLength = BS.length bs
 
-sizeOfTuple :: (a -> Bytes) -> (b -> Bytes) -> (a,b) -> Bytes
-sizeOfTuple sizeOfa sizeOfb (a,b) = tupleSize
-  where
-    tupleSize = (3 * wordSize) + (sizeOfa a) + (sizeOfb b)
+instance SizeOf PactId where
+  -- newtype is free
+  sizeOf (PactId t) = sizeOf t
 
+instance SizeOf FieldKey where
+  -- newtype is free
+  sizeOf (FieldKey t) = sizeOf t
 
-sizeOfMaybe :: (a -> Bytes) -> Maybe a -> Bytes
-sizeOfMaybe sizeOfa may = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case may of
-      Just e -> (1 * wordSize) + (sizeOfa e)
-      Nothing -> 0
+instance SizeOf Text where
+  sizeOf t = (6 * wordSize) + (2 * (T.length t))
 
--- A constructor defined with newtype is free
-sizeOfNamespaceName :: NamespaceName -> Bytes
-sizeOfNamespaceName (NamespaceName n) = sizeOfText n
+instance SizeOf BigNat where
+  sizeOf (BN# barr) =
+    (constructorCost 1) + (BA.sizeofByteArray (BA.ByteArray barr))
 
-sizeOfArray :: (a -> Bytes) -> [a] -> Bytes
-sizeOfArray sizeOfa arr = arrSize
-  where
-    arrSize = ((1 + (3 * arrLength)) * wordSize) + sizeOfContents
-    arrLength = L.length arr
-    sizeOfContents = L.foldl' (\acc e -> acc + sizeOfa e) 0 arr
+instance SizeOf Integer where
+  -- S's argument is an unboxed Int
+  -- TODO double check unboxed
+  sizeOf (S# _) = 1 * wordSize
+  sizeOf (Jp# bn) = (constructorCost 1) + sizeOf bn
+  sizeOf (Jn# bn) = (constructorCost 1) + sizeOf bn
 
-sizeOfPublicKey :: PublicKey -> Bytes
-sizeOfPublicKey (PublicKey bs) = sizeOfByteString bs
+instance SizeOf Int where
+  sizeOf _ = 2 * wordSize
 
-sizeOfByteString :: BS.ByteString -> Bytes
-sizeOfByteString bs = byteStringSize
-  where
-    byteStringSize = (9 * wordSize) + byteStringLength
-    byteStringLength = BS.length bs
+instance SizeOf Word8 where
+  sizeOf _ = 2 * wordSize
 
--- A constructor defined with newtype is free
-sizeOfPactId :: PactId -> Bytes
-sizeOfPactId (PactId t) = sizeOfText t
+instance (SizeOf i) => SizeOf (DecimalRaw i) where
+  sizeOf (Decimal p m) = (constructorCost 2) + (sizeOf p) + (sizeOf m)
 
-sizeOfMap :: M.Map FieldKey PactValue -> Bytes
-sizeOfMap m = mapSize
-  where
-    mapSize = (6 * mapLength * wordSize) + sizeOfKeys + sizeOfValues
-    mapLength = M.size m
-    sizeOfValues = M.foldl' (\acc pv -> acc + (sizeOfPactValue pv)) 0 m
-    sizeOfKeys = M.foldlWithKey' (\acc fk _ -> acc + (sizeOfFieldKey fk)) 0 m
+instance SizeOf Int64 where
+  -- Assumes 64-bit machine
+  sizeOf _ = 2 * wordSize
 
--- A constructor defined with newtype is free
-sizeOfFieldKey :: FieldKey -> Bytes
-sizeOfFieldKey (FieldKey t) = sizeOfText t
-
-sizeOfText :: Text -> Bytes
-sizeOfText t = (6 * wordSize) + (2 * (T.length t))
-
-sizeOfByteArray :: BA.ByteArray# -> Bytes
-sizeOfByteArray barr = undefined
-
-sizeOfBigNat :: BigNat -> Bytes
-sizeOfBigNat bn = undefined
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case bn of
-      BN# barr -> 1 * wordSize + (I# $ BA.sizeofByteArray# barr)
-
-sizeOfInteger :: Integer -> Bytes
-sizeOfInteger i = headerSize + fieldSize
-  where
-    headerSize = 1 * wordSize
-    fieldSize = case i of
-      -- S's argument is unboxed Int
-      S# _ -> 1 * wordSize
-      Jp# bn -> (1 * wordSize) + sizeOfBigNat bn
-      Jn# bn -> (1 * wordSize) + sizeOfBigNat bn
-
-
-sizeOfInt :: Int -> Bytes
-sizeOfInt _ = 2 * wordSize
-
-sizeOfDecimal :: Decimal -> Bytes
-sizeOfDecimal = undefined
-
-sizeOfTime :: UTCTime -> Bytes
-sizeOfTime = undefined
+instance SizeOf UTCTime where
+  -- newtype is free
+  -- Internally 'UTCTime' is just a 64-bit count of 'microseconds'
+  sizeOf ti =
+    (constructorCost 1) + (sizeOf (view (_utctDayTime . microseconds) ti))
