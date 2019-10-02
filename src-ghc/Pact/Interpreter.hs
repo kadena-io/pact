@@ -51,15 +51,14 @@ import System.Directory
 import Pact.Compile
 import Pact.Eval
 import Pact.Native (nativeDefs)
+import Pact.Native.Capabilities (resolveCapInstallMaybe)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
-import Pact.Runtime.Typecheck
 import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Types.PactValue
-import Pact.Types.Pretty
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
@@ -191,15 +190,6 @@ evalTerms ss terms = handle (\(e :: SomeException) -> safeRollback >> throwM e) 
 resolveSignerCaps :: [Signer] -> Eval e (M.Map PublicKey (S.Set Capability))
 resolveSignerCaps ss = M.fromList <$> mapM toPair ss
   where
-    toPair Signer{..} = (pk,) . S.fromList <$> mapM resolveCap _siCapList
+    toPair Signer{..} = (pk,) . S.fromList <$> mapM resolveCapInstallMaybe _siCapList
       where
         pk = PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
-        resolveCap :: SigCapability -> Eval e Capability
-        resolveCap SigCapability{..} =
-          resolveRef _scName (QName _scName) >>= \m -> case m of
-            Just (Ref (TDef Def{..} _)) | _dDefType == Defcap -> do
-              fty <- traverse reduce _dFunType
-              typecheckArgs _scName _dDefName fty (map fromPactValue _scArgs)
-              return $ UserCapability (QualifiedName _dModule (asString _dDefName) def) $ _scArgs
-            Just _ -> evalError' _scName $ "resolveSignerCaps: expected defcap reference"
-            Nothing -> evalError' _scName $ "resolveSignerCaps: cannot resolve " <> pretty _scName

@@ -13,6 +13,7 @@
 module Pact.Native.Capabilities
   ( capDefs
   , evalCap
+  , resolveCapInstallMaybe
   ) where
 
 import Control.Lens
@@ -190,6 +191,28 @@ applyMgrFun i capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capA
       Just t -> case toPactValue t of
         Left e -> evalError' i $ "Invalid return value for field " <> pretty n <> ": " <> pretty e
         Right v -> return v
+
+-- | Resolve and typecheck sig cap, and if "managed" (ie has a manager function),
+-- install.
+resolveCapInstallMaybe :: SigCapability -> Eval e Capability
+resolveCapInstallMaybe SigCapability{..} =
+  resolveRef _scName (QName _scName) >>= \m -> case m of
+    Just (Ref (TDef d@Def{..} _))
+      | _dDefType == Defcap -> do
+          fty <- traverse reduce _dFunType
+          let as = map fromPactValue _scArgs
+          typecheckArgs _scName _dDefName fty as
+          installMaybe d as
+          return $ UserCapability (QualifiedName _dModule (asString _dDefName) def) $ _scArgs
+    Just _ -> evalError' _scName $ "resolveCapInstallMaybe: expected defcap reference"
+    Nothing -> evalError' _scName $ "resolveCapInstallMaybe: cannot resolve " <> pretty _scName
+  where
+    installMaybe d@Def{..} as = case _dDefMeta of
+      Nothing -> return ()
+      Just _ -> void $ evalCap (CapManaged ()) False (mkApp d as)
+    mkApp d@Def{..} as =
+      App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
+          (map liftTerm as) (getInfo d)
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
 enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $
