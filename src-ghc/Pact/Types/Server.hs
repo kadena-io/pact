@@ -24,7 +24,8 @@
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
-  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger, cePublicData, ceGasEnv, ceSPVSupport
+  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger
+  , cePublicData, ceGasEnv, ceSPVSupport, ceNetworkId
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -37,23 +38,19 @@ module Pact.Types.Server
   , Inbound(..)
   ) where
 
-import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception.Safe
 import Control.Lens
 import Control.Monad.Reader
 import Control.Concurrent.Chan
 import Data.Maybe
-import Data.String
 import Data.ByteString (ByteString)
 import qualified Data.Set as S
 import Data.Text.Encoding
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
-import Data.Int
 
-import Prelude
-
+import Pact.Types.ChainId
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 import Pact.Types.SQLite
@@ -92,6 +89,7 @@ data CommandEnv p = CommandEnv {
     , _ceGasEnv :: GasEnv
     , _cePublicData :: PublicData
     , _ceSPVSupport :: SPVSupport
+    , _ceNetworkId :: Maybe NetworkId
     }
 $(makeLenses ''CommandEnv)
 

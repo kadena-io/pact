@@ -20,6 +20,7 @@ import Network.HTTP.Client (Manager)
 import qualified Network.HTTP.Client as HTTP
 import Prelude hiding (concat)
 import Servant.Client
+import System.Environment (withArgs)
 import System.Timeout
 
 import Test.Hspec
@@ -31,6 +32,7 @@ import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
 import Pact.Types.PactValue (PactValue(..))
+import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Util (toB16JSON)
@@ -67,6 +69,10 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
       acctModuleCmd `succeedsWith` textVal "TableCreated"
       createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
 
+
+-- | allows passing e.g. "-m CrossChain" to match only `testCrossChainYield` in ghci
+_runArgs :: String -> IO ()
+_runArgs args = withArgs (words args) $ hspec spec
 
 testNestedPacts :: HTTP.Manager -> Spec
 testNestedPacts mgr = before_ flushDb $ after_ flushDb $
@@ -531,59 +537,68 @@ pactWithSameNameYield moduleName = T.concat [begCode, T.pack moduleName, endCode
 
 
 testCrossChainYield :: HTTP.Manager -> Expectation
-testCrossChainYield mgr = do
-  adminKeys <- genKeys
+testCrossChainYield mgr = step0
+  where
 
-  -- STEP 0: runs on server for "chain0results"
-  -- note we're not changing server ID, just starting with
-  -- a fresh server to prove that a new pact coming through
-  -- SPV can start from step 1.
+    -- STEP 0: runs on server for "chain0results"
+    -- note we're not changing server ID, just starting with
+    -- a fresh server to prove that a new pact coming through
+    -- SPV can start from step 1.
+    step0 = do
+      adminKeys <- genKeys
 
-  let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (unpack pactCrossChainYield)
-  executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
+      let makeExecCmdWith = makeExecCmd adminKeys
+      moduleCmd        <- makeExecCmdWith (unpack pactCrossChainYield)
+      executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
 
-  chain0Results <- runAll mgr [moduleCmd,executePactCmd]
+      chain0Results <- runAll mgr [moduleCmd,executePactCmd]
 
-  runResults chain0Results $ do
-    moduleCmd `succeedsWith`  Nothing
-    executePactCmd `succeedsWith` textVal "emily->A"
+      runResults chain0Results $ do
+        moduleCmd `succeedsWith`  Nothing
+        executePactCmd `succeedsWith` textVal "emily->A"
 
-  let rk = cmdToRequestKey executePactCmd
+      let rk = cmdToRequestKey executePactCmd
 
-  case HM.lookup rk chain0Results of
-    Nothing -> expectationFailure $
-      "Could not find result " ++ show rk ++ ": " ++ show chain0Results
-    Just cr -> case _crContinuation cr of
-      Nothing -> expectationFailure $
-        "No continuation in result: " ++ show rk
-      Just pe -> do
+      case HM.lookup rk chain0Results of
+        Nothing -> expectationFailure $
+          "Could not find result " ++ show rk ++ ": " ++ show chain0Results
+        Just cr -> case _crContinuation cr of
+          Nothing -> expectationFailure $
+            "No continuation in result: " ++ show rk
+          Just pe -> do
+            step1 adminKeys executePactCmd moduleCmd pe
+            -- step1fail adminKeys executePactCmd moduleCmd pe
 
-        -- STEP 1: found the pact exec from step 0; return this
-        -- from the SPV operation. Run a fresh server, reload
-        -- the module, and run the step.
+    -- STEP 1: found the pact exec from step 0; return this
+    -- from the SPV operation. Run a fresh server, reload
+    -- the module, and run the step.
+    step1 adminKeys executePactCmd moduleCmd pe = do
 
-        let proof = (ContProof "hi there")
-            makeContCmdWith = makeContCmd' (Just proof) adminKeys False Null executePactCmd
-            spv = noSPVSupport {
-              _spvVerifyContinuation = \cp ->
-                  if cp == proof then
-                    return $ Right $ pe
-                  else
-                    return $ Left $ "Invalid proof"
-              }
+      let proof = (ContProof "hi there")
+          makeContCmdWith = makeContCmd' (Just proof) adminKeys False Null executePactCmd
+          spv = noSPVSupport {
+            _spvVerifyContinuation = \cp ->
+                if cp == proof then
+                  return $ Right $ pe
+                else
+                  return $ Left $ "Invalid proof"
+            }
 
-        chain1Cont <- makeContCmdWith 1 "chain1Cont"
+      chain1Cont <- makeContCmdWith 1 "chain1Cont"
+      chain1ContDupe <- makeContCmdWith 1 "chain1ContDupe"
 
-        -- flush db to ensure runAll' runs with fresh state
+      -- flush db to ensure runAll' runs with fresh state
 
-        flushDb
+      flushDb
 
-        chain1Results <- runAll' mgr [moduleCmd,chain1Cont] spv
+      chain1Results <- runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv
+      let completedPactMsg =
+            "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
 
-        runResults chain1Results $ do
-          moduleCmd `succeedsWith`  Nothing
-          chain1Cont `succeedsWith` textVal "emily->A->B"
+      runResults chain1Results $ do
+        moduleCmd `succeedsWith`  Nothing
+        chain1Cont `succeedsWith` textVal "emily->A->B"
+        chain1ContDupe `failsWith` Just completedPactMsg
 
 
 pactCrossChainYield :: T.Text
@@ -788,9 +803,12 @@ testConfigFilePath = testDir ++ "test-config.yaml"
 
 
 shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
-shouldMatch' CommandResultCheck{..} results = do
-          let apiRes = HM.lookup _crcReqKey results
-          checkResult _crcExpect apiRes
+shouldMatch' crc@CommandResultCheck{..} results = checkResult _crcExpect apiRes
+  where
+    apiRes = HM.lookup _crcReqKey results
+    checkResult expect result = case result of
+      Nothing -> expectationFailure $ "Failed to find ApiResult for " ++ show crc
+      Just CommandResult{..} -> (toActualResult _crResult) `resultShouldBe` expect
 
 succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
                 ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
@@ -917,11 +935,6 @@ doPoll mgr req = do
   baseUrl <- serverBaseUrl
   runClientM (pollClient req) (mkClientEnv mgr baseUrl)
 
-checkResult :: HasCallStack => ExpectResult -> Maybe (CommandResult Hash) -> Expectation
-checkResult expect result =
-  case result of
-    Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
-    Just CommandResult{..} -> (toActualResult _crResult) `resultShouldBe` expect
 
 toActualResult :: PactResult -> ActualResult
 toActualResult (PactResult (Left (PactError _ _ _ d))) = ActualResult . Left $ show d

@@ -854,8 +854,11 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
       TLiteral {..} ->
         -- Handle references to pre-evaluated constants:
         trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
-      _ ->
-        die i $ "Native in value context: " ++ show t
+      TConst{..} -> case _tModule of
+        -- if modulename is nothing, it's a builtin
+        Nothing -> toAST $ return $ Left (Direct $ constTerm _tConstVal)
+        _ -> die i $ "Non-native constant value in native context: " ++ show t
+      _ -> die i $ "Native in value context: " <> show t
   (Right t) -> return t
 
 toAST (TApp Term.App{..} _) = do
