@@ -89,12 +89,15 @@ applyCmd _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
            (cmdToRequestKey cmd)
            (PactError TxFailure def def . viaShow $ s)
 applyCmd logger conf dbv gasModel bh bt pbh spv exMode _ (ProcSucc cmd) = do
-  let pubMeta = _pMeta $ _cmdPayload cmd
+  let payload = _cmdPayload cmd
       gasEnv = GasEnv (_pmGasLimit pubMeta) (_pmGasPrice pubMeta) gasModel
       pd = PublicData pubMeta bh bt pbh
+      pubMeta = _pMeta payload
+      nid = _pNetworkId payload
+
 
   res <- catchesPactError $ runCommand
-                            (CommandEnv conf exMode dbv logger gasEnv pd spv)
+                            (CommandEnv conf exMode dbv logger gasEnv pd spv nid)
                             (runPayload cmd)
   case res of
     Right cr -> do
