@@ -193,23 +193,23 @@ applyMgrFun i capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capA
         Right v -> return v
 
 -- | Resolve and typecheck sig cap, and if "managed" (ie has a manager function),
--- install.
-resolveCapInstallMaybe :: SigCapability -> Eval e Capability
-resolveCapInstallMaybe SigCapability{..} =
+-- return install command.
+resolveCapInstallMaybe :: SigCapability -> Eval e (Capability,Maybe (Eval e CapAcquireResult))
+resolveCapInstallMaybe SigCapability{..} = do
   resolveRef _scName (QName _scName) >>= \m -> case m of
     Just (Ref (TDef d@Def{..} _))
       | _dDefType == Defcap -> do
           fty <- traverse reduce _dFunType
           let as = map fromPactValue _scArgs
           typecheckArgs _scName _dDefName fty as
-          installMaybe d as
-          return $ UserCapability (QualifiedName _dModule (asString _dDefName) def) $ _scArgs
+          doInst <- installMaybe d as
+          return $ (UserCapability (QualifiedName _dModule (asString _dDefName) def) $ _scArgs,doInst)
     Just _ -> evalError' _scName $ "resolveCapInstallMaybe: expected defcap reference"
     Nothing -> evalError' _scName $ "resolveCapInstallMaybe: cannot resolve " <> pretty _scName
   where
     installMaybe d@Def{..} as = case _dDefMeta of
-      Nothing -> return ()
-      Just _ -> void $ evalCap (CapManaged ()) False (mkApp d as)
+      Nothing -> return Nothing
+      Just _ -> return $ Just $ evalCap (CapManaged ()) False (mkApp d as)
     mkApp d@Def{..} as =
       App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
           (map liftTerm as) (getInfo d)

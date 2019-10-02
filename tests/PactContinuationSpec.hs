@@ -57,17 +57,22 @@ testManagedCaps :: HTTP.Manager -> Spec
 testManagedCaps mgr = before_ flushDb $ after_ flushDb $
   it "exercises managed PAY cap" $ do
     let setupPath = testDir ++ "cont-scripts/setup-"
+        testPath = testDir ++ "cont-scripts/managed-"
 
     (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
     (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
     (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
-    let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd]
+    (_, managedPay) <- mkApiReq (testPath ++ "01-pay.yaml")
+    (_, managedPayFails) <- mkApiReq (testPath ++ "02-pay-fails.yaml")
+    let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd,managedPay,managedPayFails]
     allResults <- runAll mgr allCmds
 
     runResults allResults $ do
       sysModuleCmd `succeedsWith` textVal "system module loaded"
       acctModuleCmd `succeedsWith` textVal "TableCreated"
       createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
+      managedPay `succeedsWith` Nothing
+      managedPayFails `failsWith` Just "Acquire of managed capability failed: insufficient balance"
 
 
 -- | allows passing e.g. "-m CrossChain" to match only `testCrossChainYield` in ghci
