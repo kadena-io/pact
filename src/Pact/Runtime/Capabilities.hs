@@ -186,7 +186,7 @@ checkSigCaps sigs = go
     removeAll [] s = s
     removeAll (r:rs) s = removeAll rs (S.delete r s)
 
-    match granted pk sigCaps (r,matched) =
+    match granted pk sigCaps (r,matched) = do
       if S.null sigCaps then
         (M.insert pk sigCaps r,matched)
       else

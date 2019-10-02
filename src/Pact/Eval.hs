@@ -888,5 +888,6 @@ runReadOnly i action = ask >>= \env -> case _eePurity env of
 runWithEnv :: Eval f b -> EvalEnv f -> Eval e b
 runWithEnv action pureEnv = do
   s <- get
-  (o,_s) <- liftIO $ runEval' s pureEnv action
+  (o,s') <- liftIO $ runEval' s pureEnv action
+  put s'
   either throwM return o

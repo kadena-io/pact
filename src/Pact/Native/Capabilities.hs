@@ -89,44 +89,44 @@ installCapability =
     [("capability",TyFun $ funType' tTyBool [])
     ])
   [LitExample "(install-capability (PAY \"alice\" \"bob\" 10.0) (manage-PAY))"]
-  "Specifies, and validates install of, a _managed_ CAPABILITY whose scope is controlled \
-  \by MGR-FUN. The type of the objects in the MGR_FUN parameters, C-TYPE, is the name of the \
-  \specified 'defcap' of CAPABILITY. The C-TYPE defcap is evaluated to validate the \
-  \install of CAPABILITY into the 'managed' runtime c-list. Upon request of a scoped \
-  \capability of type C-TYPE using 'with-capability', MGR-FUN is invoked for each capability \
-  \in the 'managed' c-list of type C-TYPE: for each, MGR-FUN is called with MANAGED having the \
-  \parameters the managed capability, and with REQUESTED having the parameters of the requested \
-  \scoped capability. MGR-FUN enforces that the requested capability matches the managed one, \
+  "Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' \
+  \which designates a 'manager function` using the '@managed' meta tag. After install, \
+  \CAPABILITY must still be brought into scope using 'with-capability', at which time \
+  \the 'manager function' is invoked to validate the request. \
+  \The manager function is of type \
+  \'managed:object{c-type} requested:object{c-type} -> object{c-type}', \
+  \where C-TYPE schema matches the parameter declaration of CAPABILITY, such that for \
+  \'(defcap FOO (bar:string baz:integer) ...)', \
+  \C-TYPE would be a schema '(bar:string, baz:integer)'. \
+  \The manager function enforces that REQUESTED matches MANAGED, \
   \and produces a new managed capability parameter object to replace the previous managed one, \
-  \if the desired logic allows it, otherwise it should fail. Upon success, the managed capability \
-  \is swapped with the new parameters returned by MGR-FUN, and the requested capability \
-  \successfully enters into callstack scope. \
-  \Note that signatures that are scoped to a managed capability are only validated upon the \
-  \first install of the capability, after which they can no longer be used in the context of that \
-  \capability. This ensures that the managed capability can only be installed once (if controlled \
-  \by the associated signature[s])."
+  \if the desired logic allows it, otherwise it should fail. An example would be a 'one-shot' \
+  \capability (ONE-SHOT fired:bool), installed with 'true', which upon request would enforce \
+  \that the bool is still 'true' but replace it with 'false', so that the next request would \
+  \fail. \
+  \NOTE that signatures scoped to managed capability cause the capability to be automatically \
+  \installed, and that the signature is only allowed to be checked once in the context of \
+  \the installed capability, such that a subsequent install would fail (assuming the capability \
+  \requires the associated signature)."
+
   where
-
-
     installCapability' i as = case as of
       [TApp cap _] -> gasUnreduced i [] $ do
 
         enforceNotWithinDefcap i "install-capability"
 
-        -- mfDef <- requireDefApp Defun mgrFun
-        --defTy <- traverse reduce $ _dFunType mfDef
-        -- typecheckDef mfDef defTy mgrFunTy
+        already <- evalCap (CapManaged ()) True cap
 
-        void $ evalCap (CapManaged ()) True cap
-
-        return $ tStr $ "Installed capability"
+        return $ tStr $ case already of
+          NewlyAcquired -> "Installed capability"
+          AlreadyAcquired -> "Capability already installed"
 
       _ -> argsError' i as
 
 
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
--- 'inModule' is 'True', natives can only be run within module scope.
+-- 'inModule' is 'True', natives can only be invoked within module code.
 evalCap :: CapScope () -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
 evalCap scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
@@ -138,7 +138,7 @@ evalCap scope inModule a@App{..} = do
 
 getMgrFun :: Def Ref -> () -> Eval e (Maybe (Def Ref))
 getMgrFun capDef _ = case _dDefMeta capDef of
-  Nothing -> return Nothing
+  Nothing -> evalError' capDef $ "Attempting to install non-managed capability"
   Just (DMDefcap (DefcapMeta t)) -> case t of
     (TVar (Ref (TDef d _)) i) -> do
       unless (_dDefType d == Defun) $
@@ -155,7 +155,18 @@ getMgrFun capDef _ = case _dDefMeta capDef of
 
 -- | Continuation to tie the knot with Pact.Eval (ie, 'apply') and also because the capDef is
 -- more accessible here.
-applyMgrFun :: HasInfo i => i -> Def Ref -> Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either PactError [PactValue])
+applyMgrFun
+  :: HasInfo i
+  => i
+  -> Def Ref
+  -- ^ capability def
+  -> Def Ref
+  -- ^ manager def
+  -> [PactValue]
+  -- ^ MANAGED argument
+  -> [PactValue]
+  -- ^ REQUESTED argument
+  -> Eval e (Either PactError [PactValue])
 applyMgrFun i capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArgs]
   where
 
