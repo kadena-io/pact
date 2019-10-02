@@ -100,17 +100,17 @@ data CapAcquireResult
   | AlreadyAcquired
   deriving (Eq,Show)
 
-data CapScope
+data CapScope m
   = CapCallStack
     -- ^ Call stack scope a la 'with-capability'
-  | CapManaged (Maybe (Def Ref))
+  | CapManaged m
     -- ^ Managed-scope capability
   | CapComposed
     -- ^ Composed into some other capability
-  deriving (Eq,Show,Ord)
+  deriving (Eq,Show,Ord,Functor,Foldable,Traversable)
 
 data CapSlot c = CapSlot
-  { _csScope :: CapScope
+  { _csScope :: CapScope (Maybe (Def Ref))
   , _csCap :: c
   , _csComposed :: [c]
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable)

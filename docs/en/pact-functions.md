@@ -1445,7 +1445,7 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 
 ### install-capability {#install-capability}
 
-*capability*&nbsp;` -> bool` *mgr-fun*&nbsp;`installed:object:<{c-type}> requested:object:<{c-type}> -> object:<{c-type}>` *&rarr;*&nbsp;`string`
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
 
 
 Specifies, and validates install of, a _managed_ CAPABILITY whose scope is controlled by MGR-FUN. The type of the objects in the MGR_FUN parameters, C-TYPE, is the name of the specified 'defcap' of CAPABILITY. The C-TYPE defcap is evaluated to validate the install of CAPABILITY into the 'managed' runtime c-list. Upon request of a scoped capability of type C-TYPE using 'with-capability', MGR-FUN is invoked for each capability in the 'managed' c-list of type C-TYPE: for each, MGR-FUN is called with MANAGED having the parameters the managed capability, and with REQUESTED having the parameters of the requested scoped capability. MGR-FUN enforces that the requested capability matches the managed one, and produces a new managed capability parameter object to replace the previous managed one, if the desired logic allows it, otherwise it should fail. Upon success, the managed capability is swapped with the new parameters returned by MGR-FUN, and the requested capability successfully enters into callstack scope. Note that signatures that are scoped to a managed capability are only validated upon the first install of the capability, after which they can no longer be used in the context of that capability. This ensures that the managed capability can only be installed once (if controlled by the associated signature[s]).

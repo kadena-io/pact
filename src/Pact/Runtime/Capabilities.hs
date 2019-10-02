@@ -57,7 +57,7 @@ grantedCaps = S.fromList . toList <$> use evalCapabilities
 
 -- | Matches Managed -> managed list, callstack and composed to stack list
 -- Composed should possibly check both ...
-capabilityGranted :: CapScope -> Capability -> Eval e Bool
+capabilityGranted :: CapScope m -> Capability -> Eval e Bool
 capabilityGranted scope cap = memSet <$> scopeCaps
   where
     memSet = S.member cap . S.fromList . concatMap toList
@@ -78,7 +78,12 @@ popCapStack act = do
 -- evaluate `test` which is expected to fail by some
 -- guard throwing a failure. Upon successful return of
 -- `test` install capability.
-acquireCapability :: ApplyMgrFun e -> CapScope -> Capability -> Eval e () -> Eval e CapAcquireResult
+acquireCapability
+  :: ApplyMgrFun e
+  -> CapScope (Maybe (Def Ref))
+  -> Capability
+  -> Eval e ()
+  -> Eval e CapAcquireResult
 acquireCapability af scope cap test = granted >>= bool evalCap alreadyGranted
   where
 

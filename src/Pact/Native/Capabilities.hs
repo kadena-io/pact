@@ -87,7 +87,6 @@ installCapability =
   defNative "install-capability" installCapability'
   (funType tTyString
     [("capability",TyFun $ funType' tTyBool [])
-    ,("mgr-fun",TyFun mgrFunTy)
     ])
   [LitExample "(install-capability (PAY \"alice\" \"bob\" 10.0) (manage-PAY))"]
   "Specifies, and validates install of, a _managed_ CAPABILITY whose scope is controlled \
@@ -107,19 +106,18 @@ installCapability =
   \capability. This ensures that the managed capability can only be installed once (if controlled \
   \by the associated signature[s])."
   where
-    ctype = tTyObject (mkSchemaVar "c-type")
-    mgrFunTy = funType' ctype [("installed", ctype),("requested", ctype)]
+
 
     installCapability' i as = case as of
-      [TApp cap _,TApp mgrFun _] -> gasUnreduced i [] $ do
+      [TApp cap _] -> gasUnreduced i [] $ do
 
         enforceNotWithinDefcap i "install-capability"
 
-        mfDef <- requireDefApp Defun mgrFun
-        defTy <- traverse reduce $ _dFunType mfDef
-        typecheckDef mfDef defTy mgrFunTy
+        -- mfDef <- requireDefApp Defun mgrFun
+        --defTy <- traverse reduce $ _dFunType mfDef
+        -- typecheckDef mfDef defTy mgrFunTy
 
-        void $ evalCap (CapManaged (Just mfDef)) True cap
+        void $ evalCap (CapManaged ()) True cap
 
         return $ tStr $ "Installed capability"
 
@@ -129,13 +127,31 @@ installCapability =
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be run within module scope.
-evalCap :: CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
+evalCap :: CapScope () -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
 evalCap scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
+      scope' <- traverse (getMgrFun d) scope
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquireCapability (applyMgrFun a d) scope cap $ do
+      acquireCapability (applyMgrFun a d) scope' cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
+
+getMgrFun :: Def Ref -> () -> Eval e (Maybe (Def Ref))
+getMgrFun capDef _ = case _dDefMeta capDef of
+  Nothing -> return Nothing
+  Just (DMDefcap (DefcapMeta t)) -> case t of
+    (TVar (Ref (TDef d _)) i) -> do
+      unless (_dDefType d == Defun) $
+        evalError i $ "Manager function must be defun"
+      defTy <- traverse reduce $ _dFunType d
+
+      typecheckDef d defTy mgrFunTy -- TODO would be nice to do this, module load?
+      return $ Just d
+    _ -> evalError' t $ "@managed must refer to a def of type " <> pretty mgrFunTy
+  where
+    ctype = tTyObject (mkSchemaVar "c-type")
+    mgrFunTy :: FunType (Term Name)
+    mgrFunTy = funType' ctype [("installed", ctype),("requested", ctype)]
 
 -- | Continuation to tie the knot with Pact.Eval (ie, 'apply') and also because the capDef is
 -- more accessible here.

@@ -516,8 +516,8 @@ solveConstraint info refName (Ref t) evalMap = do
       " while resolving module contraints: " <> pretty t
     Just (Ref s) ->
       case (t, s) of
-        (TDef (Def _n _mn dt (FunType args rty) _ m _) _,
-          TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _) _) -> do
+        (TDef (Def _n _mn dt (FunType args rty) _ m _ _) _,
+          TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _ _) _) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: "
             <> pretty dt <> line <> pretty dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: "

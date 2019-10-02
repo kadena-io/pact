@@ -55,7 +55,9 @@ module Pact.Types.Term
    ConstVal(..),constTerm,
    Use(..),
    App(..),appFun,appArgs,appInfo,
-   Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
+   Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,dDefMeta,
+   DefMeta(..),
+   DefcapMeta(..),
    Example(..),
    derefDef,
    ObjectMap(..),objectMapToListWith,
@@ -543,7 +545,32 @@ moduleDefMeta :: ModuleDef g -> Meta
 moduleDefMeta (MDModule m) = _mMeta m
 moduleDefMeta (MDInterface m) = _interfaceMeta m
 
+-- | Metadata specific to Defcaps.
+newtype DefcapMeta n = DefcapMeta
+  { _dcMgrFun :: n
+    -- ^ Name/Ref referring to associated manager fun.
+  }
+  deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
+instance NFData n => NFData (DefcapMeta n)
+instance Pretty n => Pretty (DefcapMeta n) where
+  pretty (DefcapMeta n) = "@managed " <> pretty n
+instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
+  toJSON = lensyToJSON 3
+instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
+  parseJSON = lensyParseJSON 3
 
+-- | Def metadata specific to 'DefType'.
+-- Currently only specified for Defcap.
+data DefMeta n =
+  DMDefcap !(DefcapMeta n)
+  deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
+instance NFData n => NFData (DefMeta n)
+instance Pretty n => Pretty (DefMeta n) where
+  pretty (DMDefcap m) = pretty m
+instance (ToJSON n,FromJSON n) => ToJSON (DefMeta n) where
+  toJSON (DMDefcap m) = toJSON m
+instance (ToJSON n,FromJSON n) => FromJSON (DefMeta n) where
+  parseJSON = fmap DMDefcap . parseJSON
 
 data Def n = Def
   { _dDefName :: !DefName
@@ -552,6 +579,7 @@ data Def n = Def
   , _dFunType :: !(FunType (Term n))
   , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
+  , _dDefMeta :: !(Maybe (DefMeta (Term n)))
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
@@ -570,6 +598,7 @@ instance Pretty n => Pretty (Def n) where
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
     , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
+    ++ maybe [] (pure . pretty) _dDefMeta
 
 instance (ToJSON n, FromJSON n) => ToJSON (Def n) where toJSON = lensyToJSON 2
 instance (ToJSON n, FromJSON n) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
@@ -903,7 +932,8 @@ instance Monad Term where
     return a = TVar a def
     TModule m b i >>= f = TModule (fmap (>>= f) m) (b >>>= f) i
     TList bs t i >>= f = TList (V.map (>>= f) bs) (fmap (>>= f) t) i
-    TDef (Def n m dt ft b d i) i' >>= f = TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d i) i'
+    TDef (Def n m dt ft b d dm i) i' >>= f =
+      TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d (fmap (fmap (>>= f)) dm) i) i'
     TNative n fn t exs d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) exs d tl i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp a i >>= f = TApp (fmap (>>= f) a) i
@@ -1140,6 +1170,8 @@ deriveEq1 ''BindPair
 deriveEq1 ''App
 deriveEq1 ''BindType
 deriveEq1 ''ConstVal
+deriveEq1 ''DefcapMeta
+deriveEq1 ''DefMeta
 deriveEq1 ''Def
 deriveEq1 ''ModuleDef
 deriveEq1 ''Module
@@ -1157,6 +1189,8 @@ deriveShow1 ''ObjectMap
 deriveShow1 ''Object
 deriveShow1 ''BindType
 deriveShow1 ''ConstVal
+deriveShow1 ''DefcapMeta
+deriveShow1 ''DefMeta
 deriveShow1 ''Def
 deriveShow1 ''ModuleDef
 deriveShow1 ''Module
