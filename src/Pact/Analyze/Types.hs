@@ -22,10 +22,11 @@ module Pact.Analyze.Types
   , Quantifier(..)
   , Table(..)
   , CheckableType(..)
-  , TypecheckableRefs(..)
+  , ModuleRefs(..)
   , defuns
   , defpacts
   , defconsts
+  , defschemas
 
   , checkGoal
   , genId
@@ -117,10 +118,11 @@ data CheckableType
 
 makeLenses ''Table
 
-data TypecheckableRefs = TypecheckableRefs
-  { _defuns    :: HM.HashMap Text Ref
-  , _defpacts  :: HM.HashMap Text Ref
-  , _defconsts :: HM.HashMap Text Ref
+data ModuleRefs = ModuleRefs
+  { _defuns     :: HM.HashMap Text Ref
+  , _defpacts   :: HM.HashMap Text Ref
+  , _defconsts  :: HM.HashMap Text Ref
+  , _defschemas :: HM.HashMap Text Ref
   } deriving Show
 
-makeLenses ''TypecheckableRefs
+makeLenses ''ModuleRefs

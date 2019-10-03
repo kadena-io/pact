@@ -72,6 +72,8 @@ module Pact.Analyze.Types.Languages
   , singShowsTm
   , singPrettyTm
   , singPrettyListTm
+
+  , propToInvariant
   ) where
 
 import           Control.Lens                  (Prism', review, preview, prism')
@@ -89,7 +91,9 @@ import           Text.Show                     (showListWith)
 import           Pact.Types.Pretty             (commaBraces, commaBrackets,
                                                 parens, parensSep,
                                                 Pretty(pretty), Doc, viaShow,
-                                                vsep, prettyString, prettyList)
+                                                vsep, prettyString, prettyList,
+                                                renderPrettyString',
+                                                RenderColor(RPlain))
 import           Pact.Types.Persistence        (WriteType)
 
 import           Pact.Analyze.Feature          hiding (Doc, Sym, Var, col, str,
@@ -1753,3 +1757,152 @@ instance IsTerm tm => IsTerm (Core tm) where
   singEqTm        = eqCoreTm
   singShowsTm     = showsPrecCore
   singPrettyTm ty = prettyCore ty
+
+propToInvariant :: Prop t -> Either String (Invariant t)
+propToInvariant (PropSpecific ps) = Left $
+  "encountered a term that's only valid in properties, and not invariants: " ++
+    renderPrettyString' RPlain (pretty ps)
+propToInvariant (CoreProp core) = CoreInvariant <$> case core of
+  Lit x ->
+    pure $ Lit x
+  Sym s ->
+    pure $ Sym s
+  Var vid nm ->
+    pure $ Var vid nm
+  Identity ty tm ->
+    Identity ty <$> f tm
+  Constantly ty t1 t2 ->
+    Constantly ty <$> f t1 <*> f t2
+  Compose ty1 ty2 ty3 tm o1 o2 ->
+    Compose ty1 ty2 ty3 <$> f tm <*> openF o1 <*> openF o2
+  StrConcat tm1 tm2 ->
+    StrConcat <$> f tm1 <*> f tm2
+  StrLength tm ->
+    StrLength <$> f tm
+  StrToInt tm ->
+    StrToInt <$> f tm
+  StrToIntBase tm1 tm2 ->
+    StrToIntBase <$> f tm1 <*> f tm2
+  StrContains tm1 tm2 ->
+    StrContains <$> f tm1 <*> f tm2
+  Numerical num ->
+    Numerical <$> numF num
+  IntAddTime tm1 tm2 ->
+    IntAddTime <$> f tm1 <*> f tm2
+  DecAddTime tm1 tm2 ->
+    DecAddTime <$> f tm1 <*> f tm2
+  Comparison ty op tm1 tm2 ->
+    Comparison ty op <$> f tm1 <*> f tm2
+  GuardEqNeq op tm1 tm2 ->
+    GuardEqNeq op <$> f tm1 <*> f tm2
+  ObjectEqNeq ty1 ty2 op tm1 tm2 ->
+    ObjectEqNeq ty1 ty2 op <$> f tm1 <*> f tm2
+  ObjAt ty tm1 tm2 ->
+    ObjAt ty <$> f tm1 <*> f tm2
+  ObjContains ty tm1 tm2 ->
+    ObjContains ty <$> f tm1 <*> f tm2
+  ObjLength ty tm ->
+    ObjLength ty <$> f tm
+  ObjDrop ty tm1 tm2 ->
+    ObjDrop ty <$> f tm1 <*> f tm2
+  ObjTake ty tm1 tm2 ->
+    ObjTake ty <$> f tm1 <*> f tm2
+  ObjMerge ty1 ty2 tm1 tm2 ->
+    ObjMerge ty1 ty2 <$> f tm1 <*> f tm2
+  LiteralObject ty obj ->
+    LiteralObject ty <$> objF obj
+  Logical op tms ->
+    Logical op <$> traverse f tms
+  ListEqNeq ty op tm1 tm2 ->
+    ListEqNeq ty op <$> f tm1 <*> f tm2
+  ListAt ty tm1 tm2 ->
+    ListAt ty <$> f tm1 <*> f tm2
+  ListContains ty tm1 tm2 ->
+    ListContains ty <$> f tm1 <*> f tm2
+  ListLength ty tm ->
+    ListLength ty <$> f tm
+  ListReverse ty tm ->
+    ListReverse ty <$> f tm
+  ListSort ty tm ->
+    ListSort ty <$> f tm
+  ListConcat ty tm1 tm2 ->
+    ListConcat ty <$> f tm1 <*> f tm2
+  ListDrop ty tm1 tm2 ->
+    ListDrop ty <$> f tm1 <*> f tm2
+  ListTake ty tm1 tm2 ->
+    ListTake ty <$> f tm1 <*> f tm2
+  MakeList ty tm1 tm2 ->
+    MakeList ty <$> f tm1 <*> f tm2
+  LiteralList ty tms ->
+    LiteralList ty <$> traverse f tms
+  ListMap ty1 ty2 o tm ->
+    ListMap ty1 ty2 <$> openF o <*> f tm
+  ListFilter ty o tm ->
+    ListFilter ty <$> openF o <*> f tm
+  ListFold ty1 ty2 o tm1 tm2 ->
+    ListFold ty1 ty2 <$> mapOpen openF o <*> f tm1 <*> f tm2
+  AndQ ty o1 o2 tm ->
+    AndQ ty <$> openF o1 <*> openF o2 <*> f tm
+  OrQ ty o1 o2 tm ->
+    OrQ ty <$> openF o1 <*> openF o2 <*> f tm
+  Where ty1 ty2 tm1 o tm2 ->
+    Where ty1 ty2 <$> f tm1 <*> openF o <*> f tm2
+  Typeof ty tm ->
+    Typeof ty <$> f tm
+
+  where
+    f = propToInvariant
+    openF = openPropToInv
+    numF = numPropToInv
+    objF = objPropToInv
+
+objPropToInv :: Object Prop a -> Either String (Object Invariant a)
+objPropToInv (Object hlist) = Object <$> hListPropToInv hlist
+  where
+    hListPropToInv
+      :: HList (Column Prop) a
+      -> Either String (HList (Column Invariant) a)
+    hListPropToInv SNil = pure SNil
+    hListPropToInv (SCons ty tm rest) = SCons ty
+      <$> colPropToInvariant tm
+      <*> hListPropToInv rest
+
+    colPropToInvariant :: Column Prop ty -> Either String (Column Invariant ty)
+    colPropToInvariant (Column ty tm) = Column ty <$> propToInvariant tm
+
+mapOpen
+  :: forall f s t a b
+   . Functor f
+  => (forall c. s c -> f (t c))
+  -> Open a s b
+  -> f (Open a t b)
+mapOpen f (Open vid nm tm) = Open vid nm <$> f tm
+
+openPropToInv :: Open a Prop b -> Either String (Open a Invariant b)
+openPropToInv = mapOpen propToInvariant
+
+numPropToInv :: Numerical Prop a -> Either String (Numerical Invariant a)
+numPropToInv num = case num of
+  DecArithOp op tm1 tm2 ->
+    DecArithOp op <$> f tm1 <*> f tm2
+  IntArithOp op tm1 tm2 ->
+    IntArithOp op <$> f tm1 <*> f tm2
+  DecUnaryArithOp op tm ->
+    DecUnaryArithOp op <$> f tm
+  IntUnaryArithOp op tm ->
+    IntUnaryArithOp op <$> f tm
+  DecIntArithOp op tm1 tm2 ->
+    DecIntArithOp op <$> f tm1 <*> f tm2
+  IntDecArithOp op tm1 tm2 ->
+    IntDecArithOp op <$> f tm1 <*> f tm2
+  ModOp tm1 tm2 ->
+    ModOp <$> f tm1 <*> f tm2
+  RoundingLikeOp1 op tm ->
+    RoundingLikeOp1 op <$> f tm
+  RoundingLikeOp2 op tm1 tm2 ->
+    RoundingLikeOp2 op <$> f tm1 <*> f tm2
+  BitwiseOp op tms ->
+    BitwiseOp op <$> traverse f tms
+
+  where
+    f = propToInvariant
