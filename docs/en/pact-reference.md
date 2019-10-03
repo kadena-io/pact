@@ -835,7 +835,7 @@ Expects a [Command](#the-command-object) object with stringified JSON payload.
 ```
 
 ##### Response schema
-Returns a [Comamnd Result](#the-command-result-object) object.
+Returns a [Command Result](#the-command-result-object) object.
 
 ##### Example response
 
