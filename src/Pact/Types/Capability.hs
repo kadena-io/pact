@@ -76,7 +76,7 @@ parseSigCapability txt = parsed >>= compiled >>= parseApp
   where
     parseApp ts = case ts of
       [(TApp (App (TVar (QName q) _) as _) _)] -> SigCapability q <$> mapM toPV as
-      _ -> fail $ "Sig capability parse failed: Expected single qualified capability in form (qual.DEFCAP arg arg ...)"
+      _ -> Left $ "Sig capability parse failed: Expected single qualified capability in form (qual.DEFCAP arg arg ...)"
     compiled ParsedCode{..} = fmapL (("Sig capability parse failed: " ++) . show) $
       compileExps (mkTextInfo _pcCode) _pcExps
     parsed = parsePact txt
