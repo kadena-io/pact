@@ -538,7 +538,7 @@ mkESchema tys = case go tys of
                 ESchema $ SCons' (SSymbol @k) ty restSchema
 
 -- | When given a column mapping, this function gives a canonical way to assign
--- var ids to each column. Also see 'invariantEnvs'.
+-- var ids to each column. Also see 'mkInvariantEnv'.
 varIdColumns :: SingList m -> Map Text VarId
 varIdColumns
   = Map.fromList
