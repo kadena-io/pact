@@ -34,7 +34,6 @@ module Pact.Eval
     ,deref
     ,runSysOnly,runReadOnly,Purity
     ,liftTerm,apply
-    ,preGas
     ,acquireCapability,acquireModuleAdmin,enforceModuleAdmin
     ,popCapStack
     ,capabilityGranted
@@ -169,11 +168,6 @@ evalByName n as i = do
 -- | Application with additional args.
 apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
 apply app as = reduceApp $ over appArgs (++ map liftTerm as) app
-
--- | Precompute gas on unreduced args returning reduced values.
-preGas :: FunApp -> [Term Ref] -> Eval e (Gas,[Term Name])
-preGas i as =
-  computeGas (Right i) (GUnreduced as) >>= \g -> (g,) <$> mapM reduce as
 
 topLevelCall
   :: Info -> Text -> GasArgs -> (Gas -> Eval e (Gas, a)) -> Eval e a

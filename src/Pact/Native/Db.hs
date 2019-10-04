@@ -267,7 +267,8 @@ select' i as _ _ _ = argsError' i as
 
 withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
-  (!g0,!tkd) <- preGas fi [table',key',defaultRow']
+  let argsToReduce = [table',key',defaultRow']
+  (!g0,!tkd) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tkd of
     [table@TTable {..}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
       guardTable fi table
@@ -280,7 +281,8 @@ withDefaultRead fi as = argsError' fi as
 
 withRead :: NativeFun e
 withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
-  (!g0,!tk) <- preGas fi [table',key']
+  let argsToReduce = [table',key']
+  (!g0,!tk) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tk of
     [table@TTable {..},TLitString key] -> do
       guardTable fi table
