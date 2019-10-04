@@ -98,13 +98,6 @@ exec
 exec s e terms = runEval' s e $ mapM eval terms
 
 
-setupEnv :: GasSetup e -> IO (EvalEnv e, EvalState)
-setupEnv (GasSetup e s _ _) = do
-  env <- e
-  state <- s
-  return (env, state)
-
-
 mockRun
   :: PactExpression
   -> (EvalEnv e, EvalState)
@@ -112,6 +105,13 @@ mockRun
 mockRun expr (env, state) = do
   terms <- compileCode (_pactExpressionFull expr)
   exec state env terms
+
+
+setupEnv :: GasSetup e -> IO (EvalEnv e, EvalState)
+setupEnv (GasSetup e s _ _) = do
+  env <- e
+  state <- s
+  return (env, state)
 
 
 mockRuns
@@ -137,13 +137,7 @@ mockRuns' tests = do
   mapOverGasUnitTests tests run run
   where
     run expr dbSetup = do
-      print $ "Pact results for: " ++ T.unpack (getDescription expr dbSetup)
-      (res,state) <- bracket (setupEnv dbSetup)
-                         (gasSetupCleanup dbSetup)
-                         (mockRun expr)
-      printResult res
-      putStrLn ""
-      return (res,state)
+      bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
 
 
 bench
@@ -305,7 +299,7 @@ main = do
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
-  mapM_ (mockRuns . snd) tests
+  runAllGasTests
 
   putStrLn "Running benchmark(s)"
 
@@ -326,14 +320,11 @@ main = do
 
 
 -- | For debugging
-runGasTestByName :: T.Text -> IO ()
+runGasTestByName :: T.Text -> IO [GasTestResult (Either PactError [Term Name], EvalState)]
 runGasTestByName nname = do
   case (unitTestFromDef (NativeDefName nname)) of
-    Nothing -> print $ show nname ++ "'s gas tests not found."
-    Just g -> do
-      print $ show nname
-      _ <- mockRuns' g
-      return ()
+    Nothing -> eitherDie nname (Left ("gas tests not found" :: T.Text))
+    Just g -> mockRuns' g
 
 runAllGasTests :: IO ()
 runAllGasTests = do
