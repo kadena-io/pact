@@ -344,14 +344,14 @@ write :: WriteType -> SchemaPartial -> NativeFun e
 write wt partial i as = do
   ts <- mapM reduce as
   case ts of
-    [table@TTable {..},TLitString key,obj@(TObject (Object ps _ _ _) _)] -> do
-      cost <- computeGas (Right i) (GWrite wt table obj)
+    [table@TTable {..},TLitString key,(TObject (Object ps _ _ _) _)] -> do
+      ps' <- enforcePactValue' ps
+      cost <- computeGas (Right i) (GWrite wt table ps')
       guardTable i table
       case _tTableType of
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      ps' <- enforcePactValue' ps
       r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) ps'
       return (cost, r)
     _ -> argsError i ts

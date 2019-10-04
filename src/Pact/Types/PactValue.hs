@@ -22,6 +22,7 @@ module Pact.Types.PactValue
   , toPactValue
   , toPactValueLenient
   , fromPactValue
+  , SizeOf(..)
   ) where
 
 import Control.Applicative ((<|>))
@@ -123,7 +124,7 @@ class SizeOf t where
   sizeOf :: t -> Bytes
 
 
-type Bytes = Int
+type Bytes = Int64
 
 -- TOOD Figure out how to detect machine arch
 -- | "word" is 4 bytes on 32-bit arch, but 8 bytes on 64-bit
@@ -137,11 +138,11 @@ headerCost :: Bytes
 headerCost = 1 * wordSize
 
 -- | In general, each constructor field costs 1 word
-constructorFieldCost :: Int -> Bytes
+constructorFieldCost :: Int64 -> Bytes
 constructorFieldCost numFields = numFields * wordSize
 
 -- | Total cost for constructor
-constructorCost :: Int -> Bytes
+constructorCost :: Int64 -> Bytes
 constructorCost numFields = headerCost + (constructorFieldCost numFields)
 
 
@@ -163,7 +164,7 @@ instance (SizeOf v) => SizeOf (Vector v) where
     where
       vectorSize =
         ((7 + vectorLength) * wordSize) + sizeOfContents
-      vectorLength = V.length v
+      vectorLength = fromIntegral (V.length v)
       sizeOfContents = V.foldl' (\acc pv -> acc + (sizeOf pv)) 0 v
 
 instance (SizeOf m) => SizeOf (ObjectMap m) where
@@ -174,7 +175,7 @@ instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
   sizeOf m = mapSize
     where
       mapSize = (6 * mapLength * wordSize) + sizeOfKeys + sizeOfValues
-      mapLength = M.size m
+      mapLength = fromIntegral (M.size m)
       sizeOfValues = M.foldl' (\acc pv -> acc + (sizeOf pv)) 0 m
       sizeOfKeys = M.foldlWithKey' (\acc fk _ -> acc + (sizeOf fk)) 0 m
 
@@ -260,7 +261,7 @@ instance (SizeOf a) => SizeOf [a] where
   sizeOf arr = arrSize
     where
       arrSize = ((1 + (3 * arrLength)) * wordSize) + sizeOfContents
-      arrLength = L.length arr
+      arrLength = fromIntegral (L.length arr)
       sizeOfContents = L.foldl' (\acc e -> acc + (sizeOf e)) 0 arr
 
 instance SizeOf PublicKey where
@@ -271,7 +272,7 @@ instance SizeOf BS.ByteString where
   sizeOf bs = byteStringSize
     where
       byteStringSize = (9 * wordSize) + byteStringLength
-      byteStringLength = BS.length bs
+      byteStringLength = fromIntegral (BS.length bs)
 
 instance SizeOf PactId where
   -- newtype is free
@@ -282,11 +283,11 @@ instance SizeOf FieldKey where
   sizeOf (FieldKey t) = sizeOf t
 
 instance SizeOf Text where
-  sizeOf t = (6 * wordSize) + (2 * (T.length t))
+  sizeOf t = (6 * wordSize) + (2 * (fromIntegral (T.length t)))
 
 instance SizeOf BigNat where
   sizeOf (BN# barr) =
-    (constructorCost 1) + (BA.sizeofByteArray (BA.ByteArray barr))
+    (constructorCost 1) + (fromIntegral (BA.sizeofByteArray (BA.ByteArray barr)))
 
 instance SizeOf Integer where
   -- S's argument is an unboxed Int

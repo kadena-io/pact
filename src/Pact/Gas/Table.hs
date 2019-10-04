@@ -7,6 +7,8 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Pact.Types.PactValue
+import Data.Int (Int64)
 import Pact.Types.Gas
 import Pact.Types.Term
 
@@ -28,6 +30,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_useModuleCost :: Gas
   , _gasCostConfig_interfaceCost :: Gas
   , _gasCostConfig_writeCost :: Gas
+  , _gasCostConfig_writeBytesCost :: Gas -- cost per bytes to write a row
   , _gasCostConfig_functionApplicationCost :: Gas
   }
 
@@ -42,6 +45,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_useModuleCost = 1
   , _gasCostConfig_interfaceCost = 1
   , _gasCostConfig_writeCost = 1
+  , _gasCostConfig_writeBytesCost = 1
   , _gasCostConfig_functionApplicationCost = 1
   }
 
@@ -188,7 +192,9 @@ tableGasModel gasConfig =
         GUnreduced ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
           Just g -> g ts
           Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
-        GWrite _writeType _tableTerm _objectTerm -> _gasCostConfig_writeCost gasConfig
+        GWrite _writeType _tableTerm _objPactValues ->
+          (_gasCostConfig_writeCost gasConfig) +
+          (estimateMemoryCost _objPactValues (_gasCostConfig_writeBytesCost gasConfig))
         GUse _moduleName _mHash -> _gasCostConfig_useModuleCost gasConfig
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GModuleDecl _module -> _gasCostConfig_moduleCost gasConfig
@@ -200,3 +206,10 @@ tableGasModel gasConfig =
       , gasModelDesc = "table-based cost model"
       , runGasModel = run
       }
+
+
+costPerByte :: Int64
+costPerByte = 1
+
+estimateMemoryCost :: (SizeOf a) => a -> Gas -> Gas
+estimateMemoryCost val (Gas factor) = Gas $ (sizeOf val) * factor * costPerByte

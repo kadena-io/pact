@@ -77,7 +77,8 @@ data GasArgs
   | GSelect (Maybe [(Info,FieldKey)]) (Term Ref) (Term Name)
   | GSortFieldLookup Int
   | GUnreduced [Term Ref]
-  | GWrite WriteType (Term Name) (Term Name)
+  -- | Write: write type, table term, and object of pact values
+  | GWrite WriteType (Term Name) (ObjectMap PactValue)
   | GUse ModuleName (Maybe ModuleHash)
   | GModuleDecl (Module (Term Name))
   | GInterfaceDecl Interface
