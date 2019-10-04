@@ -7,8 +7,8 @@ pact-macos:
   tags:
     - macos
   script:
-    - nix-build
-    - nix-build -A ghc.pact.doc
+    - nix-build -A proj.ghc.pact
+    - nix-build -A proj.ghc.pact.doc
     # - ./collectArtifacts.sh macos
   # artifacts:
   #   paths:
@@ -19,7 +19,7 @@ pact-linux:
   tags:
     - linux
   script:
-    - nix-build
+    - nix-build -A proj.ghc.pact
 #    - ./collectArtifacts.sh linux
 #  artifacts:
 #    paths:
