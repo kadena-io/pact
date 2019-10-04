@@ -788,7 +788,9 @@ data VarEnv = VarEnv
   }
 
 -- | Given a schema, returns an environment of canonical assignment of var ids
--- to each column, and an environment of types. Also see 'varIdColumns'.
+-- to each column, and an environment of types. The canonical ordering is
+-- determined by the lexicographic order of variable names. Also see
+-- 'varIdColumns'.
 mkInvariantEnv :: UserType -> Except VerificationFailure VarEnv
 mkInvariantEnv TC.Schema{_utFields} = do
   tys <- Map.fromList . map (first (env Map.!)) <$>
@@ -796,6 +798,8 @@ mkInvariantEnv TC.Schema{_utFields} = do
   pure $ VarEnv vidStart env tys
 
   where
+    -- Order variables lexicographically over their names when assigning
+    -- variable IDs.
     env :: Map Text VarId
     env = Map.fromList $ flip zip [0..] $ List.sort $ map Pact._aName _utFields
 
