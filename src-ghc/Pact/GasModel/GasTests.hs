@@ -52,9 +52,9 @@ nonNatives = [NativeDefName "use",
               NativeDefName "interface"]
 
 untestedNatives :: [NativeDefName]
-untestedNatives = foldl' check [] allNatives
+untestedNatives = foldl' untested [] allNatives
   where
-    check li nativeName = case (HM.lookup nativeName unitTests) of
+    untested li nativeName = case (HM.lookup nativeName unitTests) of
       Nothing -> nativeName : li
       Just _ -> li
 
