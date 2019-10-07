@@ -477,7 +477,7 @@ evalTerm = \case
     tagGrantRequest tid granted
     pure granted
 
-  Read objTy mDefault tid tn rowKey -> do
+  Read rowTy objTy mDefault tid tn rowKey -> do
     currRestriction <- view aeDbRestriction
     case currRestriction of
       Just res@DisallowDb -> throwErrorNoLoc $ DisallowedRead tn res
@@ -491,9 +491,9 @@ evalTerm = \case
     rowExisted <- use $ rowExists id tn sRk
 
     let readObject = do
-          (sObj, aValFields) <- readFields tn sRk tid objTy
+          (sObj, aValFields) <- readFields tn sRk tid rowTy
           applyInvariants tn aValFields $ mapM_ addConstraint
-          pure sObj
+          pure $ subObjectS rowTy objTy sObj
 
         tagAccess :: S Bool -> Analyze ()
         tagAccess readSucceeds = tagAccessKey mtReads tid sRk readSucceeds

@@ -1223,33 +1223,33 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _node "pact-version" [] -> pure $ Some SStr PactVersion
 
   AST_WithRead node table key bindings schemaNode body -> do
-    EType objTy@SObject{}                <- translateType schemaNode
+    EType rowTy@SObject{}                <- translateType schemaNode
     Some SStr key'                       <- translateNode key
-    EType partialReadTy@(SObject schema) <- typeOfPartialBind objTy bindings
+    EType partialReadTy@(SObject schema) <- typeOfPartialBind rowTy bindings
     let tname = TableName (T.unpack table)
     tid                                  <- tagRead tname node (ESchema schema)
 
     let readT = Some partialReadTy $
-          Read partialReadTy Nothing tid tname key'
+          Read rowTy partialReadTy Nothing tid tname key'
     withNodeContext node $
       translateObjBinding bindings partialReadTy body readT
 
   AST_WithDefaultRead node table key bindings schemaNode defaultNode body -> do
-    EType objTy@SObject{}                <- translateType schemaNode
-    Some SStr key'                       <- translateNode key
-    Some objTy'@SObject{} def            <- translateNode defaultNode
-    EType partialReadTy@(SObject schema) <- typeOfPartialBind objTy bindings
+    EType rowTy@SObject{}           <- translateType schemaNode
+    Some SStr key'                  <- translateNode key
+    Some defTy@SObject{} def        <- translateNode defaultNode
+    EType subsetTy@(SObject schema) <- typeOfPartialBind rowTy bindings
     let tname = TableName (T.unpack table)
-    tid                                  <- tagRead tname node (ESchema schema)
+    tid                             <- tagRead tname node (ESchema schema)
 
     -- Expect the bound type to equal the provided default object type
-    case singEq partialReadTy objTy' of
+    case singEq subsetTy defTy of
       Nothing -> throwError' $
-        UnexpectedDefaultReadType (EType objTy') (EType partialReadTy)
+        UnexpectedDefaultReadType (EType defTy) (EType subsetTy)
       Just Refl -> do
-        let readT = Some objTy' $
-              Read objTy' (Just def) tid (TableName (T.unpack table)) key'
-        withNodeContext node $ translateObjBinding bindings objTy' body readT
+        let readT = Some subsetTy $
+              Read rowTy subsetTy (Just def) tid (TableName (T.unpack table)) key'
+        withNodeContext node $ translateObjBinding bindings defTy body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
     EType objTy@SObject{}         <- translateType schemaNode
@@ -1297,7 +1297,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     EType objTy@(SObject schema) <- translateType node
     let tname = TableName (T.unpack table)
     tid                          <- tagRead tname node (ESchema schema)
-    pure $ Some objTy $ Read objTy Nothing tid tname key'
+    pure $ Some objTy $ Read objTy objTy Nothing tid tname key'
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
@@ -1330,7 +1330,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         pure $ Some filteredObjTy $
           CoreTerm $ ObjTake tableObjTy
             (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> litColumns)))
-            (Read tableObjTy Nothing tid tname key')
+            (Read tableObjTy tableObjTy Nothing tid tname key')
 
   AST_At node index obj -> do
     obj'     <- translateNode obj

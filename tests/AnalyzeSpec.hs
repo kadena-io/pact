@@ -2487,6 +2487,20 @@ spec = describe "analyze" $ do
       .=>
       Success'
 
+  describe "schema-invariants.var-out-of-scope-regression" $ do
+    expectVerified
+      [text|
+        (defschema coin-schema
+          @model [(invariant (<= 0.0 balance))]
+          balance:decimal
+          guard:guard)
+        (deftable coin-table:{coin-schema})
+
+        (defun transfer:string ()
+          (with-read coin-table 'receiver { "guard" := g }
+            "we should support not binding a column with an invariant defined on it"))
+      |]
+
   describe "format-time / parse-time" $ do
     let code =
           [text|
