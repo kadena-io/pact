@@ -173,6 +173,15 @@ defaultGasTable =
    ,("keyset-ref-guard",    const 1)
    ,("require-capability",  const 1)
    ,("with-capability",     const 2)
+
+   -- Native Constants + Schemas
+   ,("CHARSET_ASCII",       const 1)
+   ,("CHARSET_LATIN1",      const 1)
+   ,("public-chain-data",   const 1)
+
+   -- Deprecated functions
+   ,("verify-spv",          const 1)
+   ,("list",                const 1)
    ]
 
 tableGasModel :: GasCostConfig -> GasModel
