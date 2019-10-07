@@ -163,9 +163,10 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
         _ -> noMatch
       _ -> noMatch
 
-    applyMgrFun mcs mqn mf mas cas = applyF mf mas cas >>= \r -> case r of
-      Left e -> return $ Left e
-      Right mas' -> return $ Right $ set csCap (UserCapability mqn mas') mcs
+    applyMgrFun mcs mqn mf mas cas = fmap updateManagedSlot <$> applyF mf mas cas
+      where
+        -- on success stick updated managed params into slot for reinstall
+        updateManagedSlot mas' = set csCap (UserCapability mqn mas') mcs
 
 revokeAllCapabilities :: Eval e ()
 revokeAllCapabilities = evalCapabilities .= def
@@ -184,11 +185,6 @@ checkSigCaps sigs = go
       evalCapabilities . capSigMatched .= newMatched
       return sigs'
 
-
-    -- | Grr why doesn't Set have this
-    removeAll [] s = s
-    removeAll (r:rs) s = removeAll rs (S.delete r s)
-
     match granted pk sigCaps (r,matched) = do
       if S.null sigCaps then
         (M.insert pk sigCaps r,matched)
@@ -199,5 +195,5 @@ checkSigCaps sigs = go
           (M.insert pk sigGranted r,M.insertWith (S.union) pk sigGranted matched)
       where
         sigMatched = fromMaybe mempty $ M.lookup pk matched
-        sigUnmatched = removeAll (S.toList sigMatched) sigCaps
+        sigUnmatched = sigCaps S.\\ sigMatched
         sigGranted = S.intersection sigUnmatched granted

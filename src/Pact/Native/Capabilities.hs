@@ -89,7 +89,7 @@ installCapability =
   (funType tTyString
     [("capability",TyFun $ funType' tTyBool [])
     ])
-  [LitExample "(install-capability (PAY \"alice\" \"bob\" 10.0) (manage-PAY))"]
+  [LitExample "(install-capability (PAY \"alice\" \"bob\" 10.0))"]
   "Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' \
   \which designates a 'manager function` using the '@managed' meta tag. After install, \
   \CAPABILITY must still be brought into scope using 'with-capability', at which time \

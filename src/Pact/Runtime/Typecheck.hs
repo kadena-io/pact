@@ -110,11 +110,11 @@ typecheckTerm i spec t = do
 
     tcOK = return Nothing
 
-    -- | check container parameterized type.
+    -- | check container (list or object) parameterized type.
     -- 'paramCheck pspec pty check' check specified param ty 'pspec' with
     -- value param ty 'pty'. If not trivially equal, use 'check'
     -- to determine actual container value type, and compare for equality
-    -- with specified.
+    -- with top-level specified type 'spec'.
     paramCheck :: Type (Term Name)
                -> Type (Term Name)
                -> (Type (Term Name) -> Eval e (Type (Term Name)))
@@ -161,7 +161,8 @@ checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
   -- fields is lookup from name to arg.
   -- TODO consider OMap or equivalent for schema fields
   let fields = M.fromList . map (FieldKey . _aName &&& id) $ _tFields
-  aps <- forM (M.toList ps) $ \(k,v) -> case M.lookup k fields of
+  aps :: [(Arg (Term Name), Term Name)] <- forM (M.toList ps) $ \(k,v) ->
+    case M.lookup k fields of
       Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty k
       Just a -> return (a,v)
   let findMissing fs = do

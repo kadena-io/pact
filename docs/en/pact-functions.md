@@ -1450,7 +1450,7 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 
 Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' which designates a 'manager function` using the '@managed' meta tag. After install, CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request. The manager function is of type 'managed:object{c-type} requested:object{c-type} -> object{c-type}', where C-TYPE schema matches the parameter declaration of CAPABILITY, such that for '(defcap FOO (bar:string baz:integer) ...)', C-TYPE would be a schema '(bar:string, baz:integer)'. The manager function enforces that REQUESTED matches MANAGED, and produces a new managed capability parameter object to replace the previous managed one, if the desired logic allows it, otherwise it should fail. An example would be a 'one-shot' capability (ONE-SHOT fired:bool), installed with 'true', which upon request would enforce that the bool is still 'true' but replace it with 'false', so that the next request would fail. NOTE that signatures scoped to managed capability cause the capability to be automatically installed, and that the signature is only allowed to be checked once in the context of the installed capability, such that a subsequent install would fail (assuming the capability requires the associated signature).
 ```lisp
-(install-capability (PAY "alice" "bob" 10.0) (manage-PAY))
+(install-capability (PAY "alice" "bob" 10.0))
 ```
 
 
