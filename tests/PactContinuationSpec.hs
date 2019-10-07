@@ -50,6 +50,30 @@ spec = describe "pacts in dev server" $ do
   describe "testPactYield" $ testPactYield mgr
   describe "testTwoPartyEscrow" $ testTwoPartyEscrow mgr
   describe "testNestedPacts" $ testNestedPacts mgr
+  describe "testManagedCaps" $ testManagedCaps mgr
+
+
+testManagedCaps :: HTTP.Manager -> Spec
+testManagedCaps mgr = before_ flushDb $ after_ flushDb $
+  it "exercises managed PAY cap" $ do
+    let setupPath = testDir ++ "cont-scripts/setup-"
+        testPath = testDir ++ "cont-scripts/managed-"
+
+    (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
+    (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
+    (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
+    (_, managedPay) <- mkApiReq (testPath ++ "01-pay.yaml")
+    (_, managedPayFails) <- mkApiReq (testPath ++ "02-pay-fails.yaml")
+    let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd,managedPay,managedPayFails]
+    allResults <- runAll mgr allCmds
+
+    runResults allResults $ do
+      sysModuleCmd `succeedsWith` textVal "system module loaded"
+      acctModuleCmd `succeedsWith` textVal "TableCreated"
+      createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
+      managedPay `succeedsWith` Nothing
+      managedPayFails `failsWith` Just "Acquire of managed capability failed: insufficient balance"
+
 
 -- | allows passing e.g. "-m CrossChain" to match only `testCrossChainYield` in ghci
 _runArgs :: String -> IO ()
@@ -736,8 +760,10 @@ testFinishAlone mgr = do
   let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
 
   twoPartyEscrow allCmds mgr $ checkContHash [r1, r2] $ do
-    tryCredAloneCmd `failsWith` (Just "Keyset failure (keys-all)")
-    tryDebAloneCmd `failsWith` (Just "Keyset failure (keys-all)")
+    tryCredAloneCmd `failsWith`
+      (Just "Keyset failure (keys-all): [7d0c9ba1...]")
+    tryDebAloneCmd `failsWith`
+      (Just "Keyset failure (keys-all): [ac69d985...]")
 
 
 testPriceNegUp :: HTTP.Manager -> Expectation
@@ -770,7 +796,7 @@ testPriceNegDownBadCaps mgr = do
 
   (req, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont-badcaps.yaml")
   twoPartyEscrow [tryNegUpCmd] mgr $ checkContHash [req] $ do
-    tryNegUpCmd `failsWith` (Just "Keyset failure (keys-all)")
+    tryNegUpCmd `failsWith` (Just "Keyset failure (keys-all): [7d0c9ba1...]")
 
 
 

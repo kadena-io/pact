@@ -37,10 +37,12 @@ module Pact.Types.Runtime
    module Pact.Types.Persistence,
    module Pact.Types.Gas,
    module Pact.Types.ChainMeta,
-   module Pact.Types.PactError
+   module Pact.Types.PactError,
+   liftIO
    ) where
 
 
+import Control.Monad.IO.Class (liftIO) -- just for export
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName)

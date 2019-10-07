@@ -256,6 +256,11 @@ userAtom = do
   checkReserved _atomAtom
   pure a
 
+-- | Bare atom as an unqualified TVar.
+userVar :: Compile (Term Name)
+userVar = userAtom >>= \AtomExp{..} ->
+  return $ TVar (Name $ BareName _atomAtom _atomInfo) _atomInfo
+
 app :: Compile (Term Name)
 app = do
   v <- varAtom
@@ -403,11 +408,14 @@ defunOrCap dt = do
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
+  dm <- case dt of
+    Defcap -> optional (DMDefcap . DefcapMeta <$> (symbol "@managed" *> userVar))
+    _ -> return Nothing
   b <- abstractBody valueLevel args
   i <- contextInfo
   return $ (`TDef` i) $
     Def (DefName defname) modName dt (FunType args returnTy)
-      b m i
+      b m dm i
 
 
 defpact :: Compile (Term Name)
@@ -426,16 +434,16 @@ defpact = do
       \is complete)"
     _ -> pure ()
   i <- contextInfo
-  return $ TDef (Def (DefName defname) modName Defpact (FunType args returnTy)
-                  (abstractBody' args (TList (V.fromList body) TyAny bi)) m i) i
+  return $ TDef
+    (Def (DefName defname) modName Defpact (FunType args returnTy)
+      (abstractBody' args (TList (V.fromList body) TyAny bi))
+      m Nothing i) i
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
   gov <- Governance <$>
-    (((Left . KeySetName) <$> str) <|>
-     (userAtom >>= \AtomExp{..} ->
-         return $ Right $ TVar (Name $ BareName _atomAtom _atomInfo) _atomInfo))
+    (((Left . KeySetName) <$> str) <|> (Right <$> userVar))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
@@ -450,6 +458,7 @@ moduleForm = do
   return $ TModule
     (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
     (abstract (const Nothing) (TList (V.fromList (concat bd)) TyAny bi)) i
+
 
 implements :: Compile ()
 implements = do
@@ -489,7 +498,8 @@ emptyDef = do
   info <- contextInfo
   return $ (`TDef` info) $
     Def (DefName defName) modName Defun
-    (FunType args returnTy) (abstract (const Nothing) (TList V.empty TyAny info)) m info
+      (FunType args returnTy) (abstract (const Nothing) (TList V.empty TyAny info))
+      m Nothing info
 
 
 step :: Compile (Term Name)

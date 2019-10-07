@@ -159,15 +159,15 @@
 (expect "AB succeeds with unscoped A sig" true
         (run-AB))
 
-(env-sigs [{ 'key: "a", 'clist: [(A "bar" true)] },
-           { 'key: "b", 'clist: [(A "foo" false)] }])
+(env-sigs [{ 'key: "a", 'caps: [(A "bar" true)] },
+           { 'key: "b", 'caps: [(A "foo" false)] }])
 
 (expect-failure "a not in scope for (A foo false) cap"
                 (run-A "foo" false))
 (expect-failure "b not in scope for AB cap"
                 (run-AB))
 
-(env-sigs [{ 'key: "a", 'clist: [(A "bar" true),(AB)] }])
+(env-sigs [{ 'key: "a", 'caps: [(A "bar" true),(AB)] }])
 
 (expect "A succeeds with a in scope" true
         (run-A "bar" true))

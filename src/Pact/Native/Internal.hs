@@ -37,6 +37,7 @@ module Pact.Native.Internal
   ,provenanceOf
   ,enforceYield
   ,appToCap
+  ,requireDefApp
   ) where
 
 import Bound
@@ -230,7 +231,7 @@ enforceGuard i g = case g of
         if r then
           return ()
         else
-          enforceModuleAdmin (_faInfo i) _mGovernance
+          void $ acquireModuleAdmin (_faInfo i) _mName _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugFun _ugArgs (_faInfo i)
@@ -280,13 +281,14 @@ enforceYield fa y = case _yProvenance y of
     return y
 
 
-
-requireDefcap :: App (Term Ref) -> Eval e (Def Ref)
-requireDefcap App{..} = case _appFun of
-  (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
-    Defcap -> return d
-    _ -> evalError _appInfo $ "Can only apply defcap here, found: " <> pretty _dDefType
-  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " <> pretty _appFun
+-- | Validate App of indicated DefType and return Def
+requireDefApp :: DefType -> App (Term Ref) -> Eval e (Def Ref)
+requireDefApp dt App{..} = case _appFun of
+  (TVar (Ref (TDef d@Def{..} _)) _)
+    | _dDefType == dt -> return d
+    | otherwise -> evalError _appInfo $ "Can only apply " <> pretty dt <>
+                            " here, found: " <> pretty _dDefType
+  t -> evalError (_tInfo t) $ "def required: " <> pretty _appFun
 
 
 argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
@@ -300,7 +302,7 @@ argsToParams i = mapM $ \arg -> case toPactValue arg of
 appToCap
   :: App (Term Ref)
   -> Eval e (Capability, Def Ref, ([Term Name], FunType (Term Name)))
-appToCap a@App{..} = requireDefcap a >>= \d@Def{..} -> do
+appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
   prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-  cap <- UserCapability _dModule _dDefName <$> argsToParams _appInfo args
+  cap <- UserCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
   return (cap,d,prep)

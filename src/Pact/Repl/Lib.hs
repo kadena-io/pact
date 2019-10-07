@@ -291,13 +291,13 @@ setsigs' :: ZNativeFun LibState
 setsigs' _ [TList ts _ _] = do
   sigs <- forM ts $ \t -> case t of
     (TObject (Object (ObjectMap om) _ _ _) _) -> do
-      case (M.lookup "key" om,M.lookup "clist" om) of
+      case (M.lookup "key" om,M.lookup "caps" om) of
         (Just (TLitString k),Just (TList clist _ _)) -> do
           caps <- forM clist $ \cap -> case cap of
             (TApp a _) -> view _1 <$> appToCap a
             o -> evalError' o $ "Expected capability invocation"
           return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
-        _ -> evalError' t "Expected object with 'key': string, 'clist': [capability]"
+        _ -> evalError' t "Expected object with 'key': string, 'caps': [capability]"
     _ -> evalError' t $ "Expected object"
   setenv eeMsgSigs $ M.fromList $ V.toList sigs
   return $ tStr "Setting transaction signatures/caps"
@@ -569,7 +569,7 @@ setGasModel _ as = do
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
 testCapability _ [ c@TApp{} ] = do
-  cap <- evalCap CapManaged False $ _tApp c
+  cap <- evalCap CapCallStack False $ _tApp c
   return . tStr $ case cap of
     AlreadyAcquired -> "Capability already granted"
     NewlyAcquired -> "Capability granted"
