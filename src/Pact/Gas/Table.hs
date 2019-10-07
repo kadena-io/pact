@@ -67,6 +67,7 @@ defaultGasTable =
    ,("hash",                 const 6)
    ,("identity",             const 2)
    ,("if",                   const 1)
+   ,("install-capability"    const 1) -- TODO benchmark
    ,("int-to-str",           const 1)
    ,("is-charset",           const 1) -- TODO benchmark
    ,("length",               const 1)
