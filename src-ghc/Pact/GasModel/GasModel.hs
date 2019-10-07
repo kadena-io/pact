@@ -5,26 +5,26 @@ module Pact.GasModel.GasModel where
 
 import Control.Exception              (bracket)
 import Control.Monad                  (void, replicateM)
-import Statistics.Types               (Estimate(..))
 import Data.List                      (foldl', sortOn)
 import GHC.Conc                       (numCapabilities)
+import Statistics.Types               (Estimate(..))
 
-import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Criterion.Main             as C
 import qualified Criterion                  as C
 import qualified Criterion.Types            as C
+import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Data.Csv                   as Csv
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
-import qualified Data.Csv                   as Csv
 import qualified Options.Applicative        as O
 
 
 -- Internal exports
 --
 import Pact.Eval                  (eval)
-import Pact.GasModel.Utils
 import Pact.GasModel.GasTests
 import Pact.GasModel.Types
+import Pact.GasModel.Utils
 import Pact.Types.Lang
 import Pact.Types.Runtime         hiding (GasPrice)
 
