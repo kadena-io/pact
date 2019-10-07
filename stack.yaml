@@ -1,13 +1,11 @@
 # stack yaml for ghc builds
 
-resolver: lts-13.24
+resolver: lts-13.30
 
 extra-deps:
   # --- Missing from Stackage --- #
   - ed25519-donna-0.1.1
   - prettyprinter-convert-ansi-wl-pprint-1.1
-
-  # --- Forced Downgrades --- #
 
   # --- Forced Upgrades --- #
   - sbv-8.2
