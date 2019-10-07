@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Pact.GasModel.GasModel where
 
 import Control.Exception              (bracket)
-import Control.Monad                  (void)
+import Control.Monad                  (void, replicateM)
 import Statistics.Types               (Estimate(..))
 import Data.List                      (foldl', sortOn)
 import GHC.Conc                       (numCapabilities)
@@ -45,7 +46,7 @@ options = O.info (O.helper <*> parser)
              O.help "Pipe-delimited list of natives to run")) O.<|>
             pure Nothing)
       <*> (O.flag False True
-           (O.short 'b' <> O.long "bench" <> O.help "Just bench"))
+           (O.short 'b' <> O.long "bench" <> O.help "Just bench and display gas price"))
 
 optionToGasTests
   :: Option
@@ -69,14 +70,14 @@ newtype Average = Average Double
 instance Csv.ToField Average where
   toField (Average avg) = Csv.toField avg
 
-average :: [Double] -> Average
-average nums = Average avg
-  where meanSum = foldl' (+) 0.0 nums
-        total = fromIntegral (length nums)
-        avg = meanSum / total
+average :: (Foldable f) => f Double -> Average
+average nums = Average $! totalSum / (fromIntegral size)
+  where (totalSum,size) = foldl' f (0.0, 0 :: Int) nums
+        f (!sum', !size') x = (sum' + x, size' + 1)
 
 
 newtype GasPrice = GasPrice Integer
+  deriving (Show)
 instance Csv.ToField GasPrice where
   toField (GasPrice p) = Csv.toField p
 
@@ -164,52 +165,48 @@ bench expr dbSetup = do
 
 benchesOnce
   :: GasUnitTests
-  -> IO ()
+  -> IO [GasTestResult Average]
 benchesOnce tests =
-  void $ mapOverGasUnitTests tests bench bench
+  mapOverGasUnitTests tests run run
+  where
+    run expr setup = do
+      means <- replicateM 1 $ bench expr setup
+      return $! average means
 
-
-type Means = (NanoSeconds, NanoSeconds, NanoSeconds)
 
 -- | Benchmarks each native function's tests three times
 benchesMultiple
   :: (NativeDefName, GasUnitTests)
-  -> IO (NativeDefName, [GasTestResult Means])
+  -> IO (NativeDefName, [GasTestResult Average])
 benchesMultiple (funName, tests) = do
   results <- mapOverGasUnitTests tests run run
   return (funName, results)
   where
+    batchSize = 3
     run expr setup = do
-      mean1 <- bench expr setup
-      mean2 <- bench expr setup
-      mean3 <- bench expr setup
-      return (mean1, mean2, mean3)
+      means <- replicateM batchSize $ bench expr setup
+      return $! average means
 
 
 meansToCSVEncoding
-  :: [GasTestResult Means]
+  :: [GasTestResult Average]
   -> (Csv.Header, [Csv.NamedRecord])
 meansToCSVEncoding results =
   (Csv.header headersField, map toNamedRecord results)
   where
     headersField =
       map Csv.toField (["function", "description",
-                        "sqliteDbMean1 (ns)", "sqliteDbMean2 (ns)", "sqliteDbMean3 (ns)",
-                        "mockDbMean1 (ns)", "mockDbMean2 (ns)", "mockDbMean3 (ns)"] :: [T.Text])
-    toNamedRecord (GasTestResult funName desc (sql1,sql2,sql3) (mock1,mock2,mock3)) =
+                        "sqliteDbAverage (ns)", "mockDbAverage (ns)"] :: [T.Text])
+    toNamedRecord (GasTestResult funName desc sqlAvg mockAvg) =
       Csv.namedRecord $
       zip headersField [Csv.toField (asString funName),
                         Csv.toField desc,
-                        Csv.toField sql1,
-                        Csv.toField sql2,
-                        Csv.toField sql3,
-                        Csv.toField mock1,
-                        Csv.toField mock2,
-                        Csv.toField mock3
+                        Csv.toField sqlAvg,
+                        Csv.toField mockAvg
                        ]
 
 writeRawCSV
-  :: [GasTestResult Means]
+  :: [GasTestResult Average]
   -> IO ()
 writeRawCSV results = do
   let (headers, records) = meansToCSVEncoding results
@@ -217,40 +214,39 @@ writeRawCSV results = do
   BSL8.writeFile "gas-model-raw-data.csv" content
 
 
+sqliteGasPrice :: [GasTestResult Average] -> GasPrice
+sqliteGasPrice rawResults = gasPrice dataPoints
+  where
+    dataPoints =
+      map (liftAverage . _gasTestResultSqliteDb) onlySimpleTestResults
+      where liftAverage (Average d) = d
+
+    onlySimpleTestResults =
+      filter simpleTestCheck rawResults
+      where
+        simpleTestCheck (GasTestResult _ desc _ _) =
+          (not $ T.isInfixOf "med" desc) &&
+          (not $ T.isInfixOf "long" desc)
+
+
 encodeGasPrice
-  :: [(NativeDefName, [GasTestResult Means])]
+  :: [(NativeDefName, GasPrice)]
   -> (Csv.Header, [Csv.NamedRecord])
-encodeGasPrice allResults =
+encodeGasPrice allPrices =
   (headers,
-   map calcPriceAndEncode allResults
+   map encodeFunctionPrice allPrices
   )
   where
+    priceHeader =
+      "gas price (" <> T.pack (show gasPriceDivisor) <> " ns)"
+    functionNameHeader = "function"
     headers = Csv.header $
-      map Csv.toField ["function", sqliteHeader]
+      map Csv.toField [functionNameHeader, priceHeader]
 
-    calcPriceAndEncode (funName, results) =
+    encodeFunctionPrice (funName, price) =
       Csv.namedRecord $
-      ["function" Csv..= asString funName]
-      <> calcPrice (onlySimpleTestResults results)
-
-    sqliteHeader =
-      "sqlitedb gas price ("
-      <> T.pack (show gasPriceDivisor)
-      <> " ns)"
-
-    calcPrice results =
-      [Csv.toField sqliteHeader Csv..= gasPrice sqliteMeans]
-      where
-        sqliteMeans = concatMap
-          (toNsList . _gasTestResultSqliteDb) results
-        toNsList (n1, n2, n3) = [n1, n2, n3]
-
-    simpleTestCheck (GasTestResult _ desc _ _) =
-      (not $ T.isInfixOf "med" desc) &&
-      (not $ T.isInfixOf "long" desc)
-
-    onlySimpleTestResults results =
-      filter simpleTestCheck results
+      [(Csv.toField functionNameHeader) Csv..= asString funName] <>
+      [(Csv.toField priceHeader) Csv..= price]
 
 
 gasPriceExplanation :: [T.Text]
@@ -263,19 +259,21 @@ gasPriceExplanation = [purpose, numCores, os, hardwareNotes,
     hardwareNotes = "More inforamtion on hardware used: <INSERT MORE INFORMATION ON HARDWARE USED>"
     implementation = "Implementation: For every native function, executes and benchmarks "
                      <> "(using Criterion) simple examples of said function."
-    numOfIterations = "Number of iterations: Each function's tests are run three times against each backend type"
+    numOfIterations = "Number of iterations: Each function's tests are run three times against each backend type and averaged."
     backend = "Benchmark backend(s): [Sqlite db with `fastNoJournalPragmas`]"
     calcPrice = "From benchmark to a native function's price: For every backend type, all of the means of the function's"
                 <>" benchmark examples are converted into nanoseconds, averaged together, divided by "
                 <> T.pack (show gasPriceDivisor)
                 <> ", and rounded up to the nearest integer."
+                <> "Only the benchmark averages of the simple function tests are used when calculating the function's price."
 
 
 writeGasPriceCSV
-  :: [(NativeDefName, [GasTestResult Means])]
+  :: [(NativeDefName, [GasTestResult Average])]
   -> IO ()
-writeGasPriceCSV results = do
-  let (headers, records) = encodeGasPrice results
+writeGasPriceCSV allResults = do
+  let gasPrices = map (\(n,res) -> (n, sqliteGasPrice res)) allResults
+      (headers, records) = encodeGasPrice gasPrices
       content = Csv.encodeByName headers records
       explanation = Csv.encode $
         map (\t -> Csv.record [Csv.toField t]) gasPriceExplanation
@@ -299,12 +297,16 @@ main = do
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
-  runAllGasTests
+  mapM_ (mockRuns . snd) tests
 
   putStrLn "Running benchmark(s)"
 
   if _oBenchOnly opt then
-    mapM_ (benchesOnce . snd) tests
+    let displayGasPrice (funName, t) = do
+          res <- benchesOnce t
+          putStrLn $ (T.unpack (asString funName)) ++ ": " ++ show (sqliteGasPrice res)
+          putStrLn ""
+    in mapM_ displayGasPrice tests
   else do
     let testsSorted = sortOn fst tests
     allBenches <- mapM benchesMultiple testsSorted
