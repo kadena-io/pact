@@ -68,6 +68,7 @@ defaultGasTable =
    ,("identity",             const 2)
    ,("if",                   const 1)
    ,("int-to-str",           const 1)
+   ,("is-charset",           const 1) -- TODO benchmark
    ,("length",               const 1)
    ,("list-modules",         const 12)
    ,("make-list",            const 1)
