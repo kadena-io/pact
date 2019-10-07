@@ -67,7 +67,9 @@ defaultGasTable =
    ,("hash",                 const 6)
    ,("identity",             const 2)
    ,("if",                   const 1)
+   ,("install-capability",   const 1) -- TODO benchmark
    ,("int-to-str",           const 1)
+   ,("is-charset",           const 1) -- TODO benchmark
    ,("length",               const 1)
    ,("list-modules",         const 12)
    ,("make-list",            const 1)
@@ -172,6 +174,15 @@ defaultGasTable =
    ,("keyset-ref-guard",    const 1)
    ,("require-capability",  const 1)
    ,("with-capability",     const 2)
+
+   -- Native Constants + Schemas
+   ,("CHARSET_ASCII",       const 1)
+   ,("CHARSET_LATIN1",      const 1)
+   ,("public-chain-data",   const 1)
+
+   -- Deprecated functions
+   ,("verify-spv",          const 1)
+   ,("list",                const 1)
    ]
 
 tableGasModel :: GasCostConfig -> GasModel
