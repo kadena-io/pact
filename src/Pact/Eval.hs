@@ -208,16 +208,19 @@ evalNamespace info setter m = do
   mNs <- use $ evalRefs . rsNamespace
   case mNs of
     Nothing -> do
-      policy <- view (eeNamespacePolicy . nsPolicy)
-      unless (policy mNs) $ evalError info "Definitions in default namespace are not authorized"
+      policy <- view eeNamespacePolicy
+      unless (allowRoot policy) $
+        evalError info "Definitions in default namespace are not authorized"
       return m
-    Just (Namespace n _) -> return $ over setter (mangleModuleName n) m
+    Just (Namespace n _ _) -> return $ over setter (mangleModuleName n) m
   where
     mangleModuleName :: NamespaceName -> ModuleName -> ModuleName
     mangleModuleName n mn@(ModuleName nn ns) =
       case ns of
         Nothing -> ModuleName nn (Just n)
         Just {} -> mn
+    allowRoot (SimpleNamespacePolicy f) = f Nothing
+    allowRoot (SmartNamespacePolicy ar _) = ar
 
 -- | Lookup module in state or database with exact match on 'ModuleName'.
 lookupModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))

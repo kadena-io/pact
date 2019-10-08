@@ -13,8 +13,8 @@
 (env-keys ["alice", "bob"])
 
 ; Define namespace using a keyset guard
-(define-namespace 'alice (read-keyset 'alice-keys))
-(define-namespace 'bob (read-keyset 'bob-keys))
+(define-namespace 'alice (read-keyset 'alice-keys) (read-keyset 'alice-keys))
+(define-namespace 'bob (read-keyset 'bob-keys) (read-keyset 'bob-keys))
 
 ; Set tx namespace to 'alice'
 (namespace 'alice)
@@ -50,7 +50,7 @@
 (define-keyset 'carl-keys)
 (env-keys ["carl"])
 
-(define-namespace 'carl (read-keyset 'carl-keys))
+(define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
 (namespace 'carl)
 
 (module carl-module 'carl-keys
@@ -107,7 +107,7 @@
 (commit-tx)
 (begin-tx)
 
-(define-namespace 'test (read-keyset 'test-keys))
+(define-namespace 'test (read-keyset 'test-keys) (read-keyset 'test-keys))
 (namespace 'test)
 
 (module test-module 'test-keys
