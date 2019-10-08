@@ -173,7 +173,7 @@ data EvalState = EvalState {
       -- | Gas tally
     , _evalGas :: Gas
       -- | Capability list
-    , _evalCapabilities :: Capabilities Capability
+    , _evalCapabilities :: Capabilities
     } deriving (Show)
 makeLenses ''EvalState
 instance Default EvalState where def = EvalState def def def 0 def

@@ -183,7 +183,7 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modGov =
-  acquireCapability noopApplyMgrFun (CapManaged Nothing) (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
+  acquireCapability i noopApplyMgrFun (CapManaged Nothing) (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
 
 enforceModuleAdmin :: Info -> Governance (Def Ref) -> Eval e ()
 enforceModuleAdmin i modGov =
@@ -265,7 +265,7 @@ eval (TModule (MDModule m) bod i) =
       -- governance however is not called on install
       _ -> return ()
     -- in any case, grant module admin to this transaction
-    void $ acquireCapability noopApplyMgrFun (CapManaged Nothing) (ModuleAdminCapability $ _mName m) $ return ()
+    void $ acquireCapability i noopApplyMgrFun (CapManaged Nothing) (ModuleAdminCapability $ _mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM

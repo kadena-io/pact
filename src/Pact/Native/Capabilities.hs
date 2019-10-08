@@ -71,7 +71,7 @@ withCapability =
       enforceNotWithinDefcap i "with-capability"
 
       -- evaluate in-module cap
-      acquireResult <- evalCap CapCallStack True (_tApp c)
+      acquireResult <- evalCap i CapCallStack True (_tApp c)
 
       -- execute scoped code
       r <- reduceBody body
@@ -116,7 +116,7 @@ installCapability =
 
         enforceNotWithinDefcap i "install-capability"
 
-        already <- evalCap (CapManaged ()) True cap
+        already <- evalCap i (CapManaged ()) True cap
 
         return $ tStr $ case already of
           NewlyAcquired -> "Installed capability"
@@ -128,12 +128,12 @@ installCapability =
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be invoked within module code.
-evalCap :: CapScope () -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
-evalCap scope inModule a@App{..} = do
+evalCap :: HasInfo i => i -> CapScope () -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
+evalCap i scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
       scope' <- traverse (getMgrFun d) scope
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquireCapability (applyMgrFun a d) scope' cap $ do
+      acquireCapability i (applyMgrFun a d) scope' cap $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
 
@@ -209,7 +209,7 @@ resolveCapInstallMaybe SigCapability{..} = do
   where
     installMaybe d@Def{..} as = case _dDefMeta of
       Nothing -> return Nothing
-      Just _ -> return $ Just $ evalCap (CapManaged ()) False (mkApp d as)
+      Just _ -> return $ Just $ evalCap d (CapManaged ()) False (mkApp d as)
     mkApp d@Def{..} as =
       App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
           (map liftTerm as) (getInfo d)
@@ -252,7 +252,7 @@ composeCapability =
       -- enforce in defcap
       defcapInStack >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
       -- evalCap as composed, which will install onto head of pending cap
-      void $ evalCap CapComposed True app
+      void $ evalCap i CapComposed True app
       return $ toTerm True
     composeCapability' i as = argsError' i as
 
