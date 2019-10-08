@@ -148,10 +148,9 @@ library
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
-                     , algebraic-graphs >= 0.2 && < 0.4
+                     , algebraic-graphs >= 0.2 && < 0.5
                      , prettyprinter >= 1.2 && < 1.3
                      , prettyprinter-ansi-terminal >= 1.1 && < 1.2
-                     , prettyprinter-convert-ansi-wl-pprint
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.9.0.0 && < 4.13
                      , base16-bytestring >=0.1.1.6 && < 0.2
@@ -186,19 +185,19 @@ library
                      -- kadena ghcjs compat fork
                      , thyme == 0.3.6.0
                      , transformers >= 0.5.2.0 && < 0.6
-                     , trifecta >= 2 && < 2.1
+                     , trifecta >= 2.1
                      , unordered-containers >= 0.2.7.2 && < 0.3
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-algorithms >= 0.7
-                     , vector-space >= 0.10.4 && < 0.16
+                     , vector-space >= 0.10.4 && < 0.17
                      , mmorph >= 1.1 && < 1.2
                      , constraints
                      , servant
                      , servant-client
                      , servant-client-core
                      , servant-swagger
-                     , swagger2 >= 2.3
+                     , swagger2 >= 2.4
 
   if impl(ghcjs)
     build-depends:

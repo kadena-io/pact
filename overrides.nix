@@ -31,10 +31,8 @@ in {
   servant = whenGhcjs dontCheck super.servant;
   servant-client = whenGhcjs dontCheck super.servant-client;
   servant-server = whenGhcjs dontCheck super.servant-server;
-  swagger2 = whenGhcjs dontCheck super.swagger2;
   tdigest = whenGhcjs dontCheck super.tdigest;
   temporary = whenGhcjs dontCheck super.temporary;
-  trifecta = whenGhcjs dontCheck super.trifecta;
   unix-time = whenGhcjs dontCheck super.unix-time;
   wai-app-static = whenGhcjs dontCheck super.wai-app-static;
   wai-extra = whenGhcjs dontCheck super.wai-extra;
@@ -51,6 +49,24 @@ in {
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
   });
 
+  swagger2 = dontCheck (callHackageDirect {
+    pkg = "swagger2";
+    ver = "2.4";
+    sha256 = "1kgajvqbx8627191akn6pz4kiyi24gawvnvkyb7955dy7bnpd9pn";
+  });
+
+  insert-ordered-containers = dontCheck (callHackageDirect {
+    pkg = "insert-ordered-containers";
+    ver = "0.2.2";
+    sha256 = "1md93iaxsr4djx1i47zjwddd7pd4j3hzphj7495q7lz7mn8ifz4w";
+  });
+
+  servant-swagger = dontCheck (callHackageDirect {
+    pkg = "servant-swagger";
+    ver = "1.1.7.1";
+    sha256 = "1ymdcmdi234p9jbwa7rgj1j35n9xnx4kgfjba4gs2r8cnhqwak28";
+  });
+
   # Our own custom fork
   thyme = dontCheck (self.callCabal2nix "thyme" (pkgs.fetchFromGitHub {
     owner = "kadena-io";
@@ -59,4 +75,9 @@ in {
     sha256 = "09fcf896bs6i71qhj5w6qbwllkv3gywnn5wfsdrcm0w1y6h8i88f";
   }) {});
 
+  trifecta = dontCheck (callHackageDirect {
+    pkg = "trifecta";
+    ver = "2.1";
+    sha256 = "0hbv8q12rgg4ni679fbx7ac3blzqxj06dw1fyr6ipc8kjpypb049";
+  });
 }

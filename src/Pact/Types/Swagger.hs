@@ -3,6 +3,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Module      :  Pact.Types.Swagger
@@ -41,6 +42,7 @@ module Pact.Types.Swagger
   ) where
 
 import GHC.Exts (fromList)
+import Data.Proxy (Proxy(..))
 import Data.Swagger
 import Data.Swagger.Declare
 import Data.Swagger.Internal
@@ -56,7 +58,8 @@ import Pact.Types.Util
 declareGenericSchema ::
   forall a d f proxy. (Generic a, Rep a ~ D1 d f, Datatype d) =>
   Schema -> proxy a -> Declare (Definitions Schema) NamedSchema
-declareGenericSchema s proxy = pure $ genericNameSchema defaultSchemaOptions proxy s
+declareGenericSchema s _ = pure $
+  genericNameSchema defaultSchemaOptions (Proxy :: Proxy a) s
 
 -- | 'ToSchema' generic implementation with empty schema.
 declareGenericEmpty ::
@@ -71,6 +74,7 @@ declareGenericString = declareGenericSchema (schemaOf $ swaggerType SwaggerStrin
 
 -- | 'ToSchema' instance for unprefixing single-constructor field names.
 lensyDeclareNamedSchema ::
+  forall a proxy.
   (GenericHasSimpleShape a
     "genericDeclareNamedSchemaUnrestricted"
     (GenericShape (Rep a)),
@@ -78,8 +82,8 @@ lensyDeclareNamedSchema ::
   => Int
   -> proxy a
   -> Declare (Definitions Schema) NamedSchema
-lensyDeclareNamedSchema i proxy =
-  genericDeclareNamedSchema (fromAesonOptions $ lensyOptions i) proxy
+lensyDeclareNamedSchema i _ =
+  genericDeclareNamedSchema (fromAesonOptions $ lensyOptions i) (Proxy :: Proxy a)
 
 
 namedSchema :: Text -> Schema -> Declare (Definitions Schema) NamedSchema
@@ -88,7 +92,7 @@ namedSchema n s = return $ NamedSchema (Just n) s
 
 -- | like 'byteSchema' but with (non-standard) "base64url" in format.
 byteBase64url :: Schema
-byteBase64url = set type_ SwaggerString . set format (Just "base64url") $ mempty
+byteBase64url = set type_ (Just SwaggerString) . set format (Just "base64url") $ mempty
 
 fixedLength :: Integral i => i -> Schema -> Schema
 fixedLength i =
@@ -121,7 +125,7 @@ swaggerDescription d s = do
   return $ namedSchema' { _namedSchemaSchema = schema' }
 
 swaggerType :: SwaggerType 'SwaggerKindSchema -> Schema -> Schema
-swaggerType = set type_
+swaggerType = set type_ . Just
 
 schemaOf :: (Schema -> Schema) -> Schema
 schemaOf f = f mempty
@@ -130,5 +134,5 @@ withSchema :: Schema -> (Schema -> Schema) -> Schema
 withSchema s f = f s
 
 -- debugSchema
-debugSchema :: ToSchema a => proxy a -> NamedSchema
-debugSchema = undeclare . declareNamedSchema
+debugSchema :: forall a proxy. ToSchema a => proxy a -> NamedSchema
+debugSchema _ = undeclare $ declareNamedSchema (Proxy :: Proxy a)
