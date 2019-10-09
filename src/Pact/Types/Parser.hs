@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 -- |
@@ -25,6 +26,10 @@ import Prelude
 import qualified Data.HashSet as HS
 import Text.Parser.Token.Highlight
 import Text.Parser.Token.Style
+
+#if ! MIN_VERSION_base(4,13,0)
+import Control.Monad.Fail
+#endif
 
 newtype PactParser p a = PactParser { unPactParser :: p a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadFail, Parsing, CharParsing, DeltaParsing)

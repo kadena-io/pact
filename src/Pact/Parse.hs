@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
@@ -54,7 +55,9 @@ import Pact.Types.Parser
 import Pact.Types.Info
 import Pact.Types.Term (ToTerm)
 
-
+#if ! MIN_VERSION_base(4,13,0)
+import Control.Monad.Fail (MonadFail)
+#endif
 
 -- | Main parser for Pact expressions.
 expr :: (MonadFail m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)

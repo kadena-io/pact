@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
@@ -65,6 +66,10 @@ import           Pact.Analyze.LegacySFunArray
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
+
+#if ! MIN_VERSION_base(4,13,0)
+import Control.Monad.Fail (MonadFail(..))
+#endif
 
 newtype Analyze a
   = Analyze

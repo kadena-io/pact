@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
@@ -37,6 +38,9 @@ import qualified Pact.Analyze.Types         as Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
+#if ! MIN_VERSION_base(4,13,0)
+import Control.Monad.Fail (MonadFail(..))
+#endif
 
 --
 -- TODO: rename this. @Query@ is already taken by sbv.

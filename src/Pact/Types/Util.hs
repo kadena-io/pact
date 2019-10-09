@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -56,7 +57,9 @@ import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty)
 
-
+#if ! MIN_VERSION_base(4,13,0)
+import Control.Monad.Fail (MonadFail)
+#endif
 
 
 class ParseText a where

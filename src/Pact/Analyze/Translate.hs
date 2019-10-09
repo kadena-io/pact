@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
@@ -63,6 +64,10 @@ import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var, col,
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
+
+#if ! MIN_VERSION_base(4,13,0)
+import Control.Monad.Fail (MonadFail(..))
+#endif
 
 -- * Translation types
 

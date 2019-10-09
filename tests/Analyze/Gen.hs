@@ -18,6 +18,7 @@ import           Control.Monad.State.Strict (MonadState, StateT (runStateT))
 import qualified Data.Decimal               as Decimal
 import qualified Data.Map.Strict            as Map
 import qualified Data.Text                  as T
+import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           GHC.Stack                  (HasCallStack)
 import           Hedgehog                   hiding (Update, Var)
