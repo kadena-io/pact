@@ -96,8 +96,14 @@ data QualifiedName = QualifiedName
   { _qnQual :: ModuleName
   , _qnName :: Text
   , _qnInfo :: Info
-  } deriving (Generic,Eq,Show,Ord)
+  } deriving (Generic,Show)
 
+instance Eq QualifiedName where
+  (QualifiedName a b _c) == (QualifiedName d e _f) =
+    a == d && b == e
+instance Ord QualifiedName where
+  (QualifiedName a b _c) `compare` (QualifiedName d e _f) =
+    (a,b) `compare` (d,e)
 instance Pretty QualifiedName where
   pretty QualifiedName{..} = pretty _qnQual <> "." <> pretty _qnName
 instance HasInfo QualifiedName where getInfo = _qnInfo

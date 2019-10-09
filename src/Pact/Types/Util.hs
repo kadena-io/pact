@@ -55,6 +55,7 @@ import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty)
+import Control.Monad.Fail (MonadFail)
 
 
 
@@ -140,7 +141,7 @@ toB16JSON s = String $ toB16Text s
 toB16Text :: ByteString -> Text
 toB16Text s = decodeUtf8 $ B16.encode s
 
-failMaybe :: Monad m => String -> Maybe a -> m a
+failMaybe :: MonadFail m => String -> Maybe a -> m a
 failMaybe err m = maybe (fail err) return m
 
 maybeToEither :: String -> Maybe a -> Either String a

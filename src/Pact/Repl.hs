@@ -160,8 +160,8 @@ handleParse :: TF.Result [Exp Parsed] -> ([Exp Parsed] -> Repl (Either String a)
 handleParse (TF.Failure e) _ = do
   mode <- use rMode
   let errDoc = _errDoc e
-  outStrLn HErr $ renderPrettyString' (colors mode) $ unAnnotate $ fromAnsiWlPprint errDoc
-  return $ Left $ renderCompactString' $ unAnnotate $ fromAnsiWlPprint errDoc
+  outStrLn HErr $ renderPrettyString' (colors mode) $ unAnnotate errDoc
+  return $ Left $ renderCompactString' $ unAnnotate $ errDoc
 handleParse (TF.Success es) a = a es
 
 colors :: ReplMode -> RenderColor

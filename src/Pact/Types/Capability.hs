@@ -19,10 +19,11 @@
 
 module Pact.Types.Capability
   ( Capability(..)
+  , CapabilityType(..), capType
   , CapAcquireResult(..)
   , SigCapability(..)
   , parseSigCapability
-  , Capabilities(..), capStack, capManaged
+  , Capabilities(..), capStack, capManaged, capSigMatched
   , CapScope(..)
   , CapSlot(..), csCap, csComposed, csScope
   ) where
@@ -32,6 +33,8 @@ import Control.Error (fmapL)
 import Control.Lens hiding ((.=),DefName)
 import Data.Aeson
 import Data.Default
+import Data.Map.Strict (Map)
+import Data.Set (Set)
 import Data.Text (Text, unpack)
 
 import GHC.Generics
@@ -47,12 +50,21 @@ import Pact.Types.Pretty
 
 data Capability
   = ModuleAdminCapability ModuleName
-  | UserCapability ModuleName DefName [PactValue]
+  | UserCapability QualifiedName [PactValue]
   deriving (Eq,Show,Ord)
+
+data CapabilityType
+  = CapTypeModuleAdmin ModuleName
+  | CapTypeUser QualifiedName -- TODO add args for full type
+  deriving (Eq,Show,Ord)
+
+capType :: Capability -> CapabilityType
+capType (ModuleAdminCapability m) = CapTypeModuleAdmin m
+capType (UserCapability qn _) = CapTypeUser qn
 
 instance Pretty Capability where
   pretty (ModuleAdminCapability mn) = pretty mn
-  pretty (UserCapability mn name tms)  = parensSep (pretty mn <> colon <> pretty name : fmap pretty tms)
+  pretty (UserCapability n tms)  = parensSep (pretty n : fmap pretty tms)
 
 data SigCapability = SigCapability
   { _scName :: !QualifiedName
@@ -76,7 +88,7 @@ parseSigCapability txt = parsed >>= compiled >>= parseApp
   where
     parseApp ts = case ts of
       [(TApp (App (TVar (QName q) _) as _) _)] -> SigCapability q <$> mapM toPV as
-      _ -> fail $ "Sig capability parse failed: Expected single qualified capability in form (qual.DEFCAP arg arg ...)"
+      _ -> Left $ "Sig capability parse failed: Expected single qualified capability in form (qual.DEFCAP arg arg ...)"
     compiled ParsedCode{..} = fmapL (("Sig capability parse failed: " ++) . show) $
       compileExps (mkTextInfo _pcCode) _pcExps
     parsed = parsePact txt
@@ -88,17 +100,17 @@ data CapAcquireResult
   | AlreadyAcquired
   deriving (Eq,Show)
 
-data CapScope
+data CapScope m
   = CapCallStack
     -- ^ Call stack scope a la 'with-capability'
-  | CapManaged
-    -- ^ Other non-stack scoping, for now "tx scope"
+  | CapManaged m
+    -- ^ Managed-scope capability
   | CapComposed
     -- ^ Composed into some other capability
-  deriving (Eq,Show,Ord)
+  deriving (Eq,Show,Ord,Functor,Foldable,Traversable)
 
 data CapSlot c = CapSlot
-  { _csScope :: CapScope
+  { _csScope :: CapScope (Maybe (Def Ref))
   , _csCap :: c
   , _csComposed :: [c]
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable)
@@ -107,8 +119,9 @@ makeLenses ''CapSlot
 data Capabilities c = Capabilities
   { _capStack :: [CapSlot c]
   , _capManaged :: [CapSlot c]
+  , _capSigMatched :: (Map PublicKey (Set Capability))
   }
   deriving (Eq,Show,Functor,Foldable,Traversable)
 makeLenses ''Capabilities
 
-instance Default (Capabilities a) where def = Capabilities [] []
+instance Default (Capabilities a) where def = Capabilities [] [] mempty

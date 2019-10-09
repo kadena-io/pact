@@ -21,13 +21,14 @@ module Pact.Types.Parser
 import Text.Trifecta
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Fail (MonadFail)
 import Prelude
 import qualified Data.HashSet as HS
 import Text.Parser.Token.Highlight
 import Text.Parser.Token.Style
 
 newtype PactParser p a = PactParser { unPactParser :: p a }
-  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, DeltaParsing)
+  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadFail, Parsing, CharParsing, DeltaParsing)
 
 instance TokenParsing p => TokenParsing (PactParser p) where
   someSpace   = PactParser $ buildSomeSpaceParser someSpace $ CommentStyle "" "" ";" False

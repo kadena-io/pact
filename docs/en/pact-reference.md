@@ -110,7 +110,7 @@ Transaction nonce values. Needs to be unique for every call.
 ###### `"meta"`
 _type:_ **object** `required`
 
-Platform-specific metadata.
+Platform-specific metadata. For chainweb platforms, see [public-meta](#public-meta-field)
 
 ###### `"signers"` {#cmd-signers}
 _type:_ **[ object ]** `required`
@@ -146,6 +146,13 @@ _type:_ [exec](#exec-payload) **or** [cont](#cont-payload) payload `required`
 The `cmd` field supports two types of JSON payloads:
 the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
 
+###### `"networkId"`
+_type:_ **string** `optional`
+
+Platform specific network ID, e.g. to distinguish between a testnet and production
+chain, or completely different chain (ie private chain ID, if supported). Platform
+may require this value.
+
 ##### Example `cmd` field
 ```json
 {
@@ -166,10 +173,42 @@ the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
         "gasPrice":1.0e-2,
         "sender":"sender00"
         },
-      "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\""
+      "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\"",
+      "networkId": "testnet00"
     }
 }
 
+```
+
+#### Public meta {#public-meta-field}
+_type:_ **object**
+Information for Chainweb platforms.
+
+```yaml
+name: "chainId"       # Numeric chain ID as string. Ex: "0", "1"
+type: string
+required: true
+
+name: "sender"        # Coin account name for gas payer.
+type: string
+required: true
+
+name: "gasLimit"      # Maximum allowed gas for tx.
+type: integer         # Sender account must have balance (gasLimit * gasPrice).
+required: true
+
+name: "gasPrice"      # Gas unit price to be charged.
+type: decimal         # Sender account must have balance (gasLimit * gasPrice).
+required: true        # Price can be used to get tx priority; miners may reject
+                      # prices that are too low.
+
+name: "ttl"           # Time-to-live in seconds, to be validated against 'creationTime'.
+type: decimal         # Expired commands will not be processed.
+required: true
+
+name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
+type: integer         # Platform will validate time as within some range of network time.
+required: true
 ```
 
 #### The `exec` payload {#exec-payload}
@@ -251,8 +290,8 @@ required: false               # This data will be injected into the scope of
 ```
 ```yaml
 name: "proof"                 # Must be `null` or Bytestring.
-type: string (base64url)      # to the fact that the previous step has been
-required: false               # confirmed and is recorded in the ledger.
+type: string (base64url)      # Provide SPV proof that the previous step has been
+required: false               # confirmed and recorded in the ledger.
                               # The blockchain automatically verifies this
                               # proof when it is supplied.
                               # If doing cross-chain continuations, then
@@ -796,7 +835,7 @@ Expects a [Command](#the-command-object) object with stringified JSON payload.
 ```
 
 ##### Response schema
-Returns a [Comamnd Result](#the-command-result-object) object.
+Returns a [Command Result](#the-command-result-object) object.
 
 ##### Example response
 
