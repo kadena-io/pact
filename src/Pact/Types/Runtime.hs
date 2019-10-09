@@ -77,8 +77,8 @@ data NamespacePolicy =
   SimpleNamespacePolicy (Maybe Namespace -> Bool)
   -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
   |
-  SmartNamespacePolicy Bool (Def Ref)
-  -- ^ Bool governs root usage, Def governs ns creation.
+  SmartNamespacePolicy Bool QualifiedName
+  -- ^ Bool governs root usage, Name governs ns creation.
   -- Def is (defun xxx:bool (ns:string ns-admin:guard))
 
 permissiveNamespacePolicy :: NamespacePolicy

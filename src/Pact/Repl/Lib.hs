@@ -625,7 +625,9 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
 envNamespacePolicy :: ZNativeFun LibState
 envNamespacePolicy i as@[ar,TApp app _] = reduce ar >>= \ar' -> case ar' of
   (TLiteral (LBool allowRoot) _) -> requireDefApp Defun app >>= \d -> do
-    setenv eeNamespacePolicy (SmartNamespacePolicy allowRoot d)
+    setenv eeNamespacePolicy (SmartNamespacePolicy allowRoot (toQName d))
     return $ tStr $ "Installed namespace policy"
   _ -> argsError' i as
+  where
+    toQName Def{..} = QualifiedName _dModule (asString _dDefName) _dInfo
 envNamespacePolicy i as = argsError' i as
