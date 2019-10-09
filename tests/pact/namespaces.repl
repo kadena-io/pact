@@ -141,4 +141,46 @@
   (use test-module)
   (implements test-iface)
   (defun tif () 1)
-)
+  )
+
+;;;;;
+;; test managed namespaces
+;;;;;
+
+(begin-tx)
+(module test-mgd-ns GOV
+  (defcap GOV () true)
+  (defun the-guard () (create-module-guard "test"))
+  (defun manage (ns guard)
+    (if (= ns "approve") true
+      (if (= ns "check-guard")
+          (enforce (= guard (the-guard)) "Invalid guard")
+        false))))
+(commit-tx)
+(use test-mgd-ns)
+(expect
+ "ns policy install succeeds"
+ "Installed namespace policy"
+ (env-namespace-policy true (manage)))
+
+(env-data { "k1": ["k1"], "k2": ["k2"] })
+(expect
+ "define 'approve succeeds"
+ "Namespace defined: approve"
+ (define-namespace 'approve (read-keyset "k1") (read-keyset "k2")))
+
+(expect-failure
+ "define 'check-guard with wrong admin guard fails"
+ (define-namespace "check-guard" (read-keyset "k1") (read-keyset "k2")))
+
+(expect
+ "define 'check-guard with right admin guard succeeds"
+ "Namespace defined: check-guard"
+ (define-namespace "check-guard" (read-keyset "k1") (the-guard)))
+
+;; the following should succeed per ns policy above
+(module my-root-module G
+  (defcap G () true)
+  (defun foo () 1))
+
+;; testing allow-root in bad-root-namespace.repl
