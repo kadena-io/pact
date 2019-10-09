@@ -126,10 +126,8 @@ class SizeOf t where
 
 type Bytes = Int64
 
--- TOOD Figure out how to detect machine arch
--- | "word" is 4 bytes on 32-bit arch, but 8 bytes on 64-bit
-wordSize32, wordSize64, wordSize :: Bytes
-wordSize32 = 4
+-- | "word" is 8 bytes on 64-bit
+wordSize64, wordSize :: Bytes
 wordSize64 = 8
 wordSize = wordSize64
 
@@ -233,8 +231,6 @@ instance SizeOf Parsed where
 instance SizeOf Delta where
   -- Most of delta's arguments are unpacked (unboxed) Int64
   -- Most unboxed types just take one word
-  -- Exceptions being Int64#, Word64#, and Double# which take 2 words on a 32-bit machine.
-  -- TODO - Assumes 64-bit machine  
   sizeOf (Columns _ _) = 2 * wordSize
   sizeOf (Tab _ _ _) = 3 * wordSize
   sizeOf (Lines _ _ _ _) = 4 * wordSize
