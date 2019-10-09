@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes       #-}
@@ -21,6 +22,9 @@ import Servant.Client
 import Pact.Types.Runtime
 import Pact.Types.PactValue
 
+#if ! MIN_VERSION_servant_client(0,16,0)
+type ClientError = ServantError
+#endif
 
 _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
 _testLogDir = testDir ++ "test-log/"
@@ -38,12 +42,13 @@ bracket action = Exception.bracket
 simpleServerCmd :: IO (Command Text)
 simpleServerCmd = do
   simpleKeys <- genKeys
-  mkExec  "(+ 1 2)" Null def [simpleKeys] (Just "test1")
+  mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] Nothing (Just "test1")
+
 
 simpleServerCmdWithPactErr :: IO (Command Text)
 simpleServerCmdWithPactErr = do
   simpleKeys <- genKeys
-  mkExec  "(+ 1 2 3)" Null def [simpleKeys] (Just "test1")
+  mkExec  "(+ 1 2 3)" Null def [(simpleKeys,[])] Nothing (Just "test1")
 
 spec :: Spec
 spec = describe "Servant API client tests" $ do
@@ -102,7 +107,7 @@ spec = describe "Servant API client tests" $ do
         ListenResponse lr -> (Right $ _crResult lr) `shouldSatisfy` (failWith ArgsError)
 
 
-failWith :: PactErrorType -> Either ServantError PactResult -> Bool
+failWith :: PactErrorType -> Either ClientError PactResult -> Bool
 failWith errType res = case res of
   Left _ -> False
   Right res' -> case res' of

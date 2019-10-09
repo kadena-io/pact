@@ -32,6 +32,7 @@ import qualified Data.Vector as V
 import Data.Text (pack)
 
 import Pact.Eval
+import Pact.Runtime.Typecheck
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
@@ -139,7 +140,7 @@ dbDefs =
 descTable :: RNativeFun e
 descTable _ [TTable {..}] = return $ toTObject TyAny def [
   ("name",tStr $ asString _tTableName),
-  ("module", tStr $ asString _tModule),
+  ("module", tStr $ asString _tModuleName),
   ("type", toTerm $ pack $ showPretty _tTableType)]
 descTable i as = argsError i as
 
@@ -180,7 +181,7 @@ userTable = UserTables . userTable'
 
 -- | unsafe function to create TableName from TTable.
 userTable' :: Show n => Term n -> TableName
-userTable' TTable {..} = TableName $ asString _tModule <> "_" <> asString _tTableName
+userTable' TTable {..} = TableName $ asString _tModuleName <> "_" <> asString _tTableName
 userTable' t = error $ "creating user table from non-TTable: " ++ show t
 
 
@@ -361,12 +362,12 @@ createTable' :: RNativeFun e
 createTable' i [t@TTable {..}] = do
   guardTable i t
   let (UserTables tn) = userTable t
-  success "TableCreated" $ createUserTable (_faInfo i) tn _tModule
+  success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
 createTable' i as = argsError i as
 
 guardTable :: Pretty n => FunApp -> Term n -> Eval e ()
-guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModule $
-  enforceBlessedHashes i _tModule _tHash
+guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModuleName $
+  enforceBlessedHashes i _tModuleName _tHash
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> ModuleHash -> Eval e ()

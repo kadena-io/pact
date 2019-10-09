@@ -59,7 +59,7 @@ signature must correspond to the `ith` signer in `cmd`'s list of
 ```yaml
 name: "sig"                     # Cryptographic signature of current
 type: string (base16)           # transaction.
-required: true    
+required: true
 ```
 
 ##### Example command
@@ -110,7 +110,7 @@ Transaction nonce values. Needs to be unique for every call.
 ###### `"meta"`
 _type:_ **object** `required`
 
-Platform-specific metadata.
+Platform-specific metadata. For chainweb platforms, see [public-meta](#public-meta-field)
 
 ###### `"signers"` {#cmd-signers}
 _type:_ **[ object ]** `required`
@@ -129,10 +129,15 @@ type: string (base16)         # Must be valid public key for specified `scheme`.
 required: true
 ```
 ```yaml
-name: "addr"                  # Address derived from public key.
+name: "addr"                  # Address derived from public key, if needed from scheme.
+                              # Only ETH scheme requires an address currently.
 type: string (base16)         # Must be valid address for specified `scheme`.
-required: false               # Defaults to ED25519's address representation,
-                              # which is the full public key.
+required: false               # Defaults to null.
+```
+```yaml
+name: "caps"                  # List of capabilities to scope this signature.
+type: list[string]            # Example: ["(accounts.PAY "alice" "bob" 10.0)"]
+required: false               # Defaults to empty list.
 ```
 
 ###### `"payload"`
@@ -140,6 +145,13 @@ _type:_ [exec](#exec-payload) **or** [cont](#cont-payload) payload `required`
 
 The `cmd` field supports two types of JSON payloads:
 the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
+
+###### `"networkId"`
+_type:_ **string** `optional`
+
+Platform specific network ID, e.g. to distinguish between a testnet and production
+chain, or completely different chain (ie private chain ID, if supported). Platform
+may require this value.
 
 ##### Example `cmd` field
 ```json
@@ -152,9 +164,8 @@ the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
         }
       },
       "signers":[{
-        "addr":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca",
-        "scheme":"ED25519",
-        "pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca"
+        "pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca",
+        "caps": ["(accounts.PAY \"alice\" \"bob\" 20.0)"]
         }],
       "meta":{
         "gasLimit":1000,
@@ -162,10 +173,42 @@ the [exec payload](#exec-payload) and the [cont payload](#cont-payload).
         "gasPrice":1.0e-2,
         "sender":"sender00"
         },
-      "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\""
+      "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\"",
+      "networkId": "testnet00"
     }
 }
 
+```
+
+#### Public meta {#public-meta-field}
+_type:_ **object**
+Information for Chainweb platforms.
+
+```yaml
+name: "chainId"       # Numeric chain ID as string. Ex: "0", "1"
+type: string
+required: true
+
+name: "sender"        # Coin account name for gas payer.
+type: string
+required: true
+
+name: "gasLimit"      # Maximum allowed gas for tx.
+type: integer         # Sender account must have balance (gasLimit * gasPrice).
+required: true
+
+name: "gasPrice"      # Gas unit price to be charged.
+type: decimal         # Sender account must have balance (gasLimit * gasPrice).
+required: true        # Price can be used to get tx priority; miners may reject
+                      # prices that are too low.
+
+name: "ttl"           # Time-to-live in seconds, to be validated against 'creationTime'.
+type: decimal         # Expired commands will not be processed.
+required: true
+
+name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
+type: integer         # Platform will validate time as within some range of network time.
+required: true
 ```
 
 #### The `exec` payload {#exec-payload}
@@ -247,8 +290,8 @@ required: false               # This data will be injected into the scope of
 ```
 ```yaml
 name: "proof"                 # Must be `null` or Bytestring.
-type: string (base64url)      # to the fact that the previous step has been
-required: false               # confirmed and is recorded in the ledger.
+type: string (base64url)      # Provide SPV proof that the previous step has been
+required: false               # confirmed and recorded in the ledger.
                               # The blockchain automatically verifies this
                               # proof when it is supplied.
                               # If doing cross-chain continuations, then
@@ -348,7 +391,7 @@ required: true
 children:
   name: "args"              # `args`: `defpact` arguments when it was
     type: [PactValue]       #         first invoked.
-    required: true      
+    required: true
   name: "def"               # `def`: Name of continuation ("pact").
     type: string
     required: true
@@ -792,7 +835,7 @@ Expects a [Command](#the-command-object) object with stringified JSON payload.
 ```
 
 ##### Response schema
-Returns a [Comamnd Result](#the-command-result-object) object.
+Returns a [Command Result](#the-command-result-object) object.
 
 ##### Example response
 
@@ -1497,6 +1540,37 @@ present does it actually execute the code in the `defcap` body.
 As a result, **`defcap`s cannot be executed directly**, as this would violate the semantics described here.
 This is an important security property as it ensures that the granting code can only be called in the
 appropriate way.
+
+### Scoping signatures with capabilities
+
+Pact 3.3 introduces the ability to limit the scope of a signature such that any keysets requiring the signer
+key will only pass if checked in the context of the specified capability. This can be simulated using the
+new `env-sigs` REPL function as follows:
+
+```lisp
+(module accounts GOV
+  ...
+  (defcap PAY (sender receiver amount)
+    (enforce-keyset (at 'keyset (read accounts sender))))
+
+  (defun pay (sender receiver amount)
+    (with-capability (PAY sender receiver amount)
+      (transfer sender receiver amount)))
+  ...
+)
+
+(set-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
+(accounts.pay "alice" "bob" 10.0) ;; works as the cap match the signature caps
+
+(set-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
+(expect-failure "payment to bob will no longer be able to enforce alice's keyset"
+  (accounts.pay "alice" "bob" 10.0))
+```
+
+This allows signatures to be _designated_ to a particular _authority_ as opposed to simply providing
+an ambient authorization. This allows for instance a transaction to pay gas with one account and call
+a smart contract to pay it for some service: without the capability restriction, the gas-paying account
+would be wide open for the smart contract to steal from it.
 
 
 ### Guard types
@@ -2502,6 +2576,8 @@ ROLLBACK-EXPR functions as a "cancel function" to be explicitly executed by a pa
 ```
 (use MODULE)
 (use MODULE HASH)
+(use MODULE IMPORTS)
+(use MODULE HASH IMPORTS)
 ```
 
 Import an existing MODULE into a namespace. Can only be issued at the top-level, or within a module
@@ -2509,8 +2585,25 @@ declaration. MODULE can be a string, symbol or bare atom. With HASH, validate th
 hash matches HASH, failing if not. Use [describe-module](pact-functions.html#describe-module) to query for the
 hash of a loaded module on the chain.
 
+An optional list of IMPORTS consisting of function, constant, and schema names may be supplied. When this explicit import list is present, only those names will be made available for use in the module body. If no list is supplied, then every name in the imported module will be brought into scope. When two modules are defined in the same transaction, all names will be in scope for all modules, and import behavior will be defaulted to the entire module.
+
 ```lisp
 (use accounts)
+(transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+"Write succeeded"
+```
+```lisp
+(use accounts "ToV3sYFMghd7AN1TFKdWk_w00HjUepVlqKL79ckHG_s")
+(transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+"Write succeeded"
+```
+```lisp
+(use accounts [ transfer example-fun ])
+(transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+"Write succeeded"
+```
+```lisp
+(use accounts "ToV3sYFMghd7AN1TFKdWk_w00HjUepVlqKL79ckHG_s" [ transfer example-fun ])
 (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
 "Write succeeded"
 ```

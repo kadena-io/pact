@@ -345,19 +345,20 @@ startNewSubpath = do
   pure p
 
 tagDbAccess
-  :: (ESchema -> Located TagId -> TraceEvent)
+  :: (TableName -> ESchema -> Located TagId -> TraceEvent)
+  -> TableName
   -> Node
   -> ESchema
   -> TranslateM TagId
-tagDbAccess mkEvent node schema = do
+tagDbAccess mkEvent tname node schema = do
   tid <- genTagId
-  emit $ mkEvent schema (Located (nodeInfo node) tid)
+  emit $ mkEvent tname schema (Located (nodeInfo node) tid)
   pure tid
 
-tagRead :: Node -> ESchema -> TranslateM TagId
+tagRead :: TableName -> Node -> ESchema -> TranslateM TagId
 tagRead = tagDbAccess TraceRead
 
-tagWrite :: WriteType -> Node -> ESchema -> TranslateM TagId
+tagWrite :: WriteType -> TableName -> Node -> ESchema -> TranslateM TagId
 tagWrite = tagDbAccess . TraceWrite
 
 tagYield :: EType -> TranslateM TagId
@@ -458,21 +459,20 @@ maybeTranslateType' restrictKeys = \case
   TyPrim Pact.TyTime        -> pure $ EType STime
   TyPrim (Pact.TyGuard _)   -> pure $ EType SGuard
 
+  TyVar (Pact.SchemaVar (Pact.TypeVarName "table")) -> pure QTable
+
   -- Pretend any and an unknown var are the same -- we can't analyze either of
   -- them.
   -- TODO(joel): revisit this assumption
-  TyVar (Pact.SchemaVar (Pact.TypeVarName "table")) -> pure QTable
   TyVar _                                           -> pure $ EType SAny
   Pact.TyAny                                        -> pure $ EType SAny
+
   Pact.TyList a -> do
     ty <- maybeTranslateType' Nothing a
     case ty of
       EType ty' -> pure $ EType $ SList ty'
       _         -> empty
 
-  --
-  -- TODO: handle these:
-  --
   TyFun _             -> empty
 
 throwError'
@@ -774,7 +774,7 @@ translateObjBinding
   -> ETerm
   -> TranslateM ETerm
 translateObjBinding pairs schema bodyA rhsT = do
-  let bindingAs = fst $ unzip pairs
+  let bindingAs = map fst pairs
   bindingTs <- traverse translateBinding bindingAs
   cols <- for pairs $ \case
     (_, AST_StringLit colName) ->
@@ -1167,17 +1167,29 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun_Basic fn@(toOp arithOpP -> Just _) args
     -> throwError' $ MalformedArithOp fn args
-
-  AST_NFun _node "length" [a] -> do
-    Some SStr a' <- translateNode a
-    pure $ Some SInteger $ CoreTerm $ StrLength a'
+  --
+  -- NOTE: We don't use a feature symbol here because `length` is overloaded
+  -- across multiple (3) features.
+  --
+  AST_NFun node "length" [a] -> do
+    Some ty a' <- translateNode a
+    case ty of
+      SStr ->
+        pure $ Some SInteger $ CoreTerm $ StrLength a'
+      SList sty ->
+        pure $ Some SInteger $ CoreTerm $ ListLength sty a'
+      SObjectUnsafe _ ->
+        pure $ Some SInteger $ CoreTerm $ ObjLength ty a'
+      _ ->
+        throwError' $ TypeError node
 
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     Some SStr row'                   <- translateNode row
     Some objTy@(SObject schema) obj' <- translateNode obj
-    tid                              <- tagWrite writeType node $ ESchema schema
+    let tname = TableName (T.unpack tn)
+    tid                              <- tagWrite writeType tname node (ESchema schema)
     pure $ Some SStr $
-      Write objTy writeType tid (TableName (T.unpack tn)) row' obj'
+      Write objTy writeType tid tname row' obj'
 
   AST_If _ cond tBranch fBranch -> do
     Some SBool cond' <- translateNode cond
@@ -1199,11 +1211,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Refl <- singEq ta tb ?? BranchesDifferentTypes (EType ta) (EType tb)
     pure $ Some ta $ IfThenElse ta cond' (truePath, a) (falsePath, b)
 
-  AST_NFun _node "str-to-int" [s] -> do
+  AST_NFun _node SStringToInteger [s] -> do
     Some SStr s' <- translateNode s
     pure $ Some SInteger $ CoreTerm $ StrToInt s'
 
-  AST_NFun _node "str-to-int" [b, s] -> do
+  AST_NFun _node SStringToInteger [b, s] -> do
     Some SInteger b' <- translateNode b
     Some SStr s'     <- translateNode s
     pure $ Some SInteger $ CoreTerm $ StrToIntBase b' s'
@@ -1214,10 +1226,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     EType objTy@SObject{}                <- translateType schemaNode
     Some SStr key'                       <- translateNode key
     EType partialReadTy@(SObject schema) <- typeOfPartialBind objTy bindings
-    tid                                  <- tagRead node $ ESchema schema
+    let tname = TableName (T.unpack table)
+    tid                                  <- tagRead tname node (ESchema schema)
 
     let readT = Some partialReadTy $
-          Read partialReadTy Nothing tid (TableName (T.unpack table)) key'
+          Read partialReadTy Nothing tid tname key'
     withNodeContext node $
       translateObjBinding bindings partialReadTy body readT
 
@@ -1226,7 +1239,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr key'                       <- translateNode key
     Some objTy'@SObject{} def            <- translateNode defaultNode
     EType partialReadTy@(SObject schema) <- typeOfPartialBind objTy bindings
-    tid                                  <- tagRead node $ ESchema schema
+    let tname = TableName (T.unpack table)
+    tid                                  <- tagRead tname node (ESchema schema)
 
     -- Expect the bound type to equal the provided default object type
     case singEq partialReadTy objTy' of
@@ -1281,8 +1295,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Read node table key -> do
     Some SStr key'               <- translateNode key
     EType objTy@(SObject schema) <- translateType node
-    tid                          <- tagRead node $ ESchema schema
-    pure $ Some objTy $ Read objTy Nothing tid (TableName (T.unpack table)) key'
+    let tname = TableName (T.unpack table)
+    tid                          <- tagRead tname node (ESchema schema)
+    pure $ Some objTy $ Read objTy Nothing tid tname key'
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
@@ -1306,14 +1321,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
             else ESchema subSchema)
           tableSchema
 
+    let tname = TableName (T.unpack table)
+
     case eFilteredSchema of
       ESchema filteredSchema -> do
         let filteredObjTy = mkSObject filteredSchema
-        tid <- tagRead node $ ESchema tableSchema
+        tid <- tagRead tname node (ESchema tableSchema)
         pure $ Some filteredObjTy $
           CoreTerm $ ObjTake tableObjTy
             (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> litColumns)))
-            (Read tableObjTy Nothing tid (TableName (T.unpack table)) key')
+            (Read tableObjTy Nothing tid tname key')
 
   AST_At node index obj -> do
     obj'     <- translateNode obj
@@ -1501,7 +1518,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
-  AST_NFun node "yield" [ obj ] -> do
+  -- NOTE: we ignore the optional target chain during analysis, for now at
+  -- least.
+  AST_NFun node "yield" (obj : _optionalTargetChain) -> do
     Some objTy obj' <- translateNode obj
     ety <- translateType node
     tid <- tagYield ety

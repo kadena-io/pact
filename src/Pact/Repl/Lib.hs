@@ -29,7 +29,7 @@ import Control.Monad.Catch
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
@@ -71,6 +71,7 @@ import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
+import Pact.Types.Capability
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -106,7 +107,14 @@ replDefs = ("Repl",
       "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
-      "Set transaction signature KEYS."
+      ("DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. "<>
+       "See 'env-sigs' for setting keys with associated capabilities.")
+     ,defZNative "env-sigs" setsigs' (funType tTyString [("sigs",TyList (tTyObject TyAny))])
+      [LitExample $ "(env-sigs [{'key: \"my-key\", 'caps: [(accounts.USER_GUARD \"my-account\")]}, " <>
+        "{'key: \"admin-key\", 'caps: []}"]
+      ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
+       "specifying the signer key, and \"caps\" specifying a list of associated capabilities.")
+
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
@@ -192,6 +200,12 @@ replDefs = ("Repl",
       [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"]
        "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
      , envChainDataDef
+     ,defZNative "env-namespace-policy" envNamespacePolicy
+      (funType tTyString
+       [("allow-root", tTyBool),
+        ("ns-policy-fun",TyFun $ funType' tTyBool [("ns",tTyString),("ns-admin",tTyGuard Nothing)])])
+      [LitExample "(env-namespace-policy (my-ns-policy-fun))"]
+      "Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -275,9 +289,26 @@ setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i (V.toList ts)
-  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) (V.toList ks)))
+  setenv eeMsgSigs $ M.fromList ((,mempty) . PublicKey . encodeUtf8 <$> V.toList ks)
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
+
+setsigs' :: ZNativeFun LibState
+setsigs' _ [TList ts _ _] = do
+  sigs <- forM ts $ \t -> case t of
+    (TObject (Object (ObjectMap om) _ _ _) _) -> do
+      case (M.lookup "key" om,M.lookup "caps" om) of
+        (Just (TLitString k),Just (TList clist _ _)) -> do
+          caps <- forM clist $ \cap -> case cap of
+            (TApp a _) -> view _1 <$> appToCap a
+            o -> evalError' o $ "Expected capability invocation"
+          return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
+        _ -> evalError' t "Expected object with 'key': string, 'caps': [capability]"
+    _ -> evalError' t $ "Expected object"
+  setenv eeMsgSigs $ M.fromList $ V.toList sigs
+  return $ tStr "Setting transaction signatures/caps"
+setsigs' i as = argsError' i as
+
 
 setmsg :: RNativeFun LibState
 setmsg i as = case as of
@@ -484,7 +515,8 @@ verify i as = case as of
   _ -> argsError i as
 
 sigKeyset :: RNativeFun LibState
-sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (Name (asString KeysAll) def)
+sigKeyset _ _ = view eeMsgSigs >>= \ss ->
+  return $ toTerm $ KeySet (M.keys ss) (Name $ BareName (asString KeysAll) def)
 
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")
@@ -543,10 +575,10 @@ setGasModel _ as = do
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
 testCapability _ [ c@TApp{} ] = do
-  cap <- evalCap False $ _tApp c
+  cap <- evalCap CapCallStack False $ _tApp c
   return . tStr $ case cap of
-    Nothing -> "Capability granted"
-    Just cap' -> "Capability granted: " <> tShow cap'
+    AlreadyAcquired -> "Capability already granted"
+    NewlyAcquired -> "Capability granted"
 testCapability i as = argsError' i as
 
 -- | Modify existing env chain data with new data, replacing just those
@@ -588,3 +620,14 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       | k == cdPrevBlockHash = pure $ set pdPrevBlockHash l pd
 
     go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as
+
+
+envNamespacePolicy :: ZNativeFun LibState
+envNamespacePolicy i as@[ar,TApp app _] = reduce ar >>= \ar' -> case ar' of
+  (TLiteral (LBool allowRoot) _) -> requireDefApp Defun app >>= \d -> do
+    setenv eeNamespacePolicy (SmartNamespacePolicy allowRoot (toQName d))
+    return $ tStr $ "Installed namespace policy"
+  _ -> argsError' i as
+  where
+    toQName Def{..} = QualifiedName _dModule (asString _dDefName) _dInfo
+envNamespacePolicy i as = argsError' i as

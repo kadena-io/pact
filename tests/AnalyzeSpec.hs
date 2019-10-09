@@ -224,6 +224,16 @@ expectVerified' model code = withFrozenCallStack $ do
 expectFalsified :: HasCallStack => Text -> Spec
 expectFalsified = withFrozenCallStack $ expectFalsified' ""
 
+expectFalsifiedMessage :: HasCallStack => Text -> Text -> Spec
+expectFalsifiedMessage code needleMsg = withFrozenCallStack $ do
+  res <- runIO $ runVerification $ wrap code ""
+  it "passes in-code checks" $
+    res `shouldSatisfy` \case
+      Just (TestCheckFailure cf) ->
+        needleMsg `T.isInfixOf` (describeCheckFailure cf)
+      _ ->
+        False
+
 expectFalsified' :: HasCallStack => Text -> Text -> Spec
 expectFalsified' model code = withFrozenCallStack $ do
   res <- runIO $ runVerification $ wrap code model
@@ -244,9 +254,9 @@ expectFail code check = withFrozenCallStack $ expectTest
           }
 
 expectFailureMessage :: HasCallStack => Text -> Text -> Spec
-expectFailureMessage code needleMsg  = withFrozenCallStack $ expectTest
+expectFailureMessage code needleMsg = withFrozenCallStack $ expectTest
   testEnv { testCode = wrap code ""
-          , testCheck = Satisfiable (CoreProp $ IntegerComparison Eq 0 0)
+          , testCheck = Valid (CoreProp $ IntegerComparison Eq 0 0)
           , testPred =
               \res -> res `shouldSatisfy` \case
                         Just (TestCheckFailure cf) ->
@@ -1443,6 +1453,33 @@ spec = describe "analyze" $ do
     expectFail code $ Valid Abort'
     expectPass code $ Satisfiable Success'
     expectPass code $ Valid Success'
+
+  describe "string length" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              @model [ (property (= result 2)) ]
+              (length "ab"))
+          |]
+    expectVerified code
+
+  describe "list length" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              @model [ (property (= result 3)) ]
+              (length [5 5 5]))
+          |]
+    expectVerified code
+
+  describe "object length" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              @model [ (property (= result 3)) ]
+              (length {"ab": 7, "cd": 8, "ef": 9}))
+          |]
+    expectVerified code
 
   describe "pact-id" $ do
     let code =
@@ -3838,6 +3875,20 @@ spec = describe "analyze" $ do
                   (write accounts acct { 'balance: (+ bal amount) }))))))
         |]
 
+    describe "yield with chain-id specified" $
+      expectVerified [text|
+        (defschema yield-obj val:integer)
+
+        (defpact foo ()
+          @model [ (property (= 1 1)) ]
+          (step
+            (let ((obj:object{yield-obj} {"val": 5}))
+              (yield obj "some-chain-id")))
+          (step
+            (resume { 'val := val }
+              "bar")))
+        |]
+
   describe "with-default-read" $ do
     expectVerified [text|
       (defun test:integer (acct:string)
@@ -3912,3 +3963,11 @@ spec = describe "analyze" $ do
       )
       |]
     it "checks when spelled correctly" $ isNothing res'
+
+  describe "vacuous property produces error" $ do
+    expectFalsifiedMessage [text|
+      (defun test:bool (x:integer)
+        @model [(property false)] ; here we can "prove" anything with property
+        (enforce false ""))
+      |]
+      "Vacuous property encountered!"

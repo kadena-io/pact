@@ -3,7 +3,6 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
-{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ViewPatterns               #-}
 
 -- | Data and functions for generating documentation of the features found in
@@ -106,6 +105,7 @@ data Feature
   | FObjectMerge
   | FObjectDrop
   | FObjectTake
+  | FObjectLength
   -- List operators
   | FListProjection
   | FListLength
@@ -856,6 +856,21 @@ doc FObjectTake = Doc
       (TyCon obj)
   ]
 
+doc FObjectLength = Doc
+  "length"
+  CObject
+  InvAndProp
+  "the number of key-value pairs in the object"
+  [ Usage
+      "(length o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("o", TyCon obj)
+        ]
+      (TyCon int)
+  ]
+
 -- List features
 
 doc FListProjection = Doc
@@ -934,7 +949,6 @@ doc FContains = Doc
         ]
       (TyCon bool)
   ]
-
 
 doc FReverse = Doc
   "reverse"
@@ -1588,6 +1602,7 @@ doc FWhere = Doc
         ]
         (TyCon bool)
   ]
+
 doc FTypeof = Doc
   "typeof"
   COther
@@ -1681,6 +1696,7 @@ PAT(SFold, FFold)
 PAT(SObjectMerge, FObjectMerge)
 PAT(SObjectDrop, FObjectDrop)
 PAT(SObjectTake, FObjectTake)
+PAT(SObjectLength, FObjectLength)
 PAT(SStringLength, FStringLength)
 PAT(SConcatenation, FConcatenation)
 PAT(SStringToInteger, FStringToInteger)

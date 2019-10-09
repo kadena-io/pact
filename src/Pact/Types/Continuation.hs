@@ -24,7 +24,8 @@ module Pact.Types.Continuation
   , Yield(..)
   , Provenance(..)
     -- * Optics
-  , peStepCount, peYield, peExecuted, pePactId, peStep, peContinuation
+  , peStepCount, peYield, peExecuted, pePactId
+  , peStep, peContinuation, peStepHasRollback
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
   , yData, yProvenance
@@ -99,6 +100,9 @@ data PactContinuation = PactContinuation
   , _pcArgs :: [PactValue]
   } deriving (Eq, Show, Generic)
 
+instance Pretty PactContinuation where
+  pretty (PactContinuation d as) = parensSep (pretty d:map pretty as)
+
 instance NFData PactContinuation
 instance ToJSON PactContinuation where toJSON = lensyToJSON 3
 instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
@@ -118,6 +122,8 @@ data PactExec = PactExec
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
   , _peContinuation :: PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.
+  , _peStepHasRollback :: !Bool
+    -- ^ Track whether a current step has a rollback
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec

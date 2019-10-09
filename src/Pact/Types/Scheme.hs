@@ -51,3 +51,6 @@ defPPKScheme = ED25519
 data SPPKScheme :: PPKScheme -> * where
   SED25519 :: SPPKScheme 'ED25519
   SETH :: SPPKScheme 'ETH
+instance Show (SPPKScheme a) where
+  show SED25519 = show ED25519
+  show SETH = show ETH

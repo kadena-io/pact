@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -54,6 +55,7 @@ import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty)
+import Control.Monad.Fail (MonadFail)
 
 
 
@@ -139,7 +141,7 @@ toB16JSON s = String $ toB16Text s
 toB16Text :: ByteString -> Text
 toB16Text s = decodeUtf8 $ B16.encode s
 
-failMaybe :: Monad m => String -> Maybe a -> m a
+failMaybe :: MonadFail m => String -> Maybe a -> m a
 failMaybe err m = maybe (fail err) return m
 
 maybeToEither :: String -> Maybe a -> Either String a
@@ -163,6 +165,7 @@ instance AsString Text where asString = id
 instance AsString B.ByteString where asString = asString . decodeUtf8
 instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
 instance AsString Integer where asString = pack . show
+instance AsString a => AsString (Maybe a) where asString = maybe "" asString
 
 asString' :: AsString a => a -> String
 asString' = unpack . asString

@@ -53,6 +53,7 @@ import Pact.Types.Exp
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Term
+import Pact.Types.Type
 import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
 
 
@@ -78,7 +79,8 @@ instance Pretty PersistDirect where
 
 toPersistDirect :: Term Name -> Either Text PersistDirect
 toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
-toPersistDirect (TSchema n (ModuleName "" Nothing) _ _ _) = pure $ PDNative (NativeDefName (asString n))
+toPersistDirect (TSchema n Nothing _ _ _) = pure $ PDNative (NativeDefName (asString n))
+toPersistDirect (TConst carg Nothing _ _ _) = pure $ PDNative (NativeDefName $ _aName carg)
 toPersistDirect t = case toPactValue t of
   Right v -> pure $ PDValue v
   Left e -> Left e
@@ -121,10 +123,16 @@ newtype RowKey = RowKey Text
 
 -- | Specify key and value types for database domains.
 data Domain k v where
+  -- | User tables accept a TableName and map to an 'ObjectMap PactValue'
   UserTables :: !TableName -> Domain RowKey (ObjectMap PactValue)
+  -- | Keysets
   KeySets :: Domain KeySetName KeySet
+  -- | Modules
   Modules :: Domain ModuleName PersistModuleData
+  -- | Namespaces
   Namespaces :: Domain NamespaceName Namespace
+  -- | Pacts map to 'Maybe PactExec' where Nothing indicates
+  -- a terminated pact.
   Pacts :: Domain PactId (Maybe PactExec)
 
 deriving instance Eq (Domain k v)

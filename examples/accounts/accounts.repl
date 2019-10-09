@@ -131,7 +131,12 @@
 (expect "buyer refunded .25" 227.25 (test.get-balance "123"))
 
 
-
+;;exercise PAY
+(env-sigs
+ [{ 'key: "user123", "caps": [(accounts.PAY "123" "456" 1.0)]},
+  { 'key: "accountadmin", "caps": [] }])
+(install-capability (accounts.PAY "123" "456" 1.0))
+(accounts.pay "123" "456" 0.9 (time "2016-07-22T11:26:35Z"))
 
 
 ;

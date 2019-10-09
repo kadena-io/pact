@@ -132,6 +132,20 @@ evalLogicalOp NotOp [a] = sNot <$> eval a
 evalLogicalOp op terms
   = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
+-- Truncates a symbolic integer to the interval (-2^63,2^63) for use with
+-- take/drop, to mirror the semantics in concrete pact. See 'Pact.Native.tord'
+truncate63 :: SBV Integer -> SBV Integer
+truncate63 i = ite (i .< lowerBound)
+  lowerBound
+  (ite (i .> upperBound)
+    upperBound
+    i)
+
+  where
+    bound = (2 ^ (63 :: Integer)) - 1
+    upperBound = literal bound
+    lowerBound = literal (- bound)
+
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)
@@ -235,7 +249,7 @@ evalCore (ListDrop ty n list) = withSymVal ty $ withSing ty $ do
   -- count from the end.
   pure $ sansProv $ ite (n' .>= 0)
     (SBVL.drop n' list')
-    (SBVL.take (SBVL.length list' + n') list')
+    (SBVL.take (truncate63 (SBVL.length list' + n')) list')
 
 evalCore (ListTake ty n list) = withSymVal ty $ withSing ty $ do
   S _ n'    <- eval n
@@ -245,7 +259,7 @@ evalCore (ListTake ty n list) = withSymVal ty $ withSing ty $ do
   -- count from the end.
   pure $ sansProv $ ite (n' .>= 0)
     (SBVL.take n' list')
-    (SBVL.drop (SBVL.length list' + n') list')
+    (SBVL.drop (truncate63 (SBVL.length list' + n')) list')
 
 evalCore (ListConcat ty p1 p2) = withSymVal ty $ withSing ty $ do
   S _ p1' <- eval p1
@@ -364,6 +378,9 @@ evalCore (ObjTake ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
   S prov obj' <- eval obj
   case sing @a of
     SObjectUnsafe schema -> pure $ S prov $ evalDropTake (obj' :< schema') schema
+
+evalCore (ObjLength (SObjectUnsafe (SingList hlist)) _obj) = pure $ literalS $
+  hListLength hlist
 
 -- | Implementation for both drop and take.
 --

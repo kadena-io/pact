@@ -33,7 +33,8 @@ module Pact.Types.Exp
    ListDelimiter(..),enlist,
    Separator(..),
    pattern CommaExp,
-   pattern ColonExp
+   pattern ColonExp,
+   ParsedCode(..)
    ) where
 
 
@@ -104,8 +105,6 @@ instance FromJSON Literal where
     (LTime <$> decoder timeCodec o) <|>
     (LDecimal <$> decoder decimalCodec o)
   parseJSON _t = fail "Literal parse failed"
-
-
 
 litToPrim :: Literal -> PrimType
 litToPrim LString {} = TyString
@@ -270,3 +269,13 @@ pattern CommaExp <- ESeparator (SeparatorExp Comma _i)
 
 pattern ColonExp :: Exp t
 pattern ColonExp <- ESeparator (SeparatorExp Colon _i)
+
+
+
+
+-- | Pair parsed Pact expressions with the original text.
+data ParsedCode = ParsedCode
+  { _pcCode :: !Text
+  , _pcExps :: ![Exp Parsed]
+  } deriving (Eq,Show,Generic)
+instance NFData ParsedCode

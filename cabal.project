@@ -15,6 +15,6 @@ source-repository-package
     tag: 6ee9fcb026ebdb49b810802a981d166680d867c9
 
 constraints:
-    megaparsec < 7.0
-  , servant < 0.16
+    servant < 0.16
   , swagger2 < 2.4
+  , sbv == 8.2
