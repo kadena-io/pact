@@ -25,12 +25,12 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_selectColumnCost :: Gas -- up-front cost per column in a select operation
   , _gasCostConfig_readColumnCost :: Gas -- cost per column to read a row
   , _gasCostConfig_sortFactor :: Gas
+  , _gasCostConfig_concatenationFactor :: Gas
   , _gasCostConfig_moduleCost :: Gas
   , _gasCostConfig_moduleMemberCost :: Gas
   , _gasCostConfig_useModuleCost :: Gas
   , _gasCostConfig_interfaceCost :: Gas
-  , _gasCostConfig_writeCost :: Gas
-  , _gasCostConfig_writeBytesCost :: Gas -- cost per bytes to write a row
+  , _gasCostConfig_writeBytesFactor :: Gas -- additional cost per bytes to write a row
   , _gasCostConfig_functionApplicationCost :: Gas
   }
 
@@ -40,12 +40,12 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_selectColumnCost = 1
   , _gasCostConfig_readColumnCost = 1
   , _gasCostConfig_sortFactor = 1
-  , _gasCostConfig_moduleCost = 1
+  , _gasCostConfig_concatenationFactor = 10  -- TODO benchmark
+  , _gasCostConfig_moduleCost = 1        -- TODO benchmark
   , _gasCostConfig_moduleMemberCost = 1
-  , _gasCostConfig_useModuleCost = 1
-  , _gasCostConfig_interfaceCost = 1
-  , _gasCostConfig_writeCost = 1
-  , _gasCostConfig_writeBytesCost = 1
+  , _gasCostConfig_useModuleCost = 1     -- TODO benchmark
+  , _gasCostConfig_interfaceCost = 1     -- TODO benchmark
+  , _gasCostConfig_writeBytesFactor = 1
   , _gasCostConfig_functionApplicationCost = 1
   }
 
@@ -201,21 +201,25 @@ tableGasModel gasConfig =
           Just [] -> 1
           Just cs -> _gasCostConfig_selectColumnCost gasConfig * (fromIntegral (length cs))
         GSortFieldLookup n -> fromIntegral n * _gasCostConfig_sortFactor gasConfig
+        GConcatenation i j -> fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
         GUnreduced ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
           Just g -> g ts
           Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
         GWrite _writeType _tableTerm _key _objPactValues ->
-          (_gasCostConfig_writeCost gasConfig) +
-          (memoryCost _key (_gasCostConfig_writeBytesCost gasConfig)) +
-          (memoryCost _objPactValues (_gasCostConfig_writeBytesCost gasConfig))
+          (memoryCost _key (_gasCostConfig_writeBytesFactor gasConfig)) +
+          (memoryCost _objPactValues (_gasCostConfig_writeBytesFactor gasConfig))
         GUse _moduleName _mHash -> _gasCostConfig_useModuleCost gasConfig
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
-        GModuleDecl _module -> _gasCostConfig_moduleCost gasConfig
-        GInterfaceDecl _module -> _gasCostConfig_interfaceCost gasConfig
+        GModuleDecl _module ->
+          (_gasCostConfig_moduleCost gasConfig)
+          -- + (memoryCost _module (_gasCostConfig_writeBytesCost gasConfig))
+        GInterfaceDecl _interface ->
+          (_gasCostConfig_interfaceCost gasConfig)
+          -- + (memoryCost _interface (_gasCostConfig_writeBytesCost gasConfig))
         --GNamespaceDecl ns -> memoryCost ns (_gasCostConfig_writeBytesCost gasConfig)
         GKeySetDecl ksName ks ->
-          (memoryCost ks (_gasCostConfig_writeBytesCost gasConfig)) +
-          (memoryCost ksName (_gasCostConfig_writeBytesCost gasConfig))
+          (memoryCost ks (_gasCostConfig_writeBytesFactor gasConfig)) +
+          (memoryCost ksName (_gasCostConfig_writeBytesFactor gasConfig))
         GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
         GUserApp -> _gasCostConfig_functionApplicationCost gasConfig
   in GasModel

@@ -76,6 +76,7 @@ data GasArgs
   = GPostRead ReadValue
   | GSelect (Maybe [(Info,FieldKey)]) (Term Ref) (Term Name)
   | GSortFieldLookup Int
+  | GConcatenation Int Int
   | GUnreduced [Term Ref]
   | GWrite WriteType (Term Name) Text (ObjectMap PactValue)
   -- ^ Write: write type, table term, row key name, and object of pact values
