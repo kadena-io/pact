@@ -1,0 +1,13 @@
+(begin-tx)
+(module test-mgd-ns GOV
+  (defcap GOV () true)
+  (defun manage (ns guard) true))
+(commit-tx)
+(use test-mgd-ns)
+(env-namespace-policy false (manage))
+
+;; root install should fail
+
+(module my-bad-root G
+  (defcap G () true)
+  (defun foo () 1))

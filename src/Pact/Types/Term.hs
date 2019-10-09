@@ -30,7 +30,7 @@
 --
 
 module Pact.Types.Term
- ( Namespace(..), nsName, nsGuard,
+ ( Namespace(..), nsName, nsUser, nsAdmin,
    Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..),
@@ -609,8 +609,9 @@ derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
 
 data Namespace = Namespace
-  { _nsName   :: NamespaceName
-  , _nsGuard  :: (Guard (Term Name))
+  { _nsName :: NamespaceName
+  , _nsUser :: (Guard (Term Name))
+  , _nsAdmin :: (Guard (Term Name))
   } deriving (Eq, Show, Generic)
 
 instance Pretty Namespace where

@@ -200,6 +200,12 @@ replDefs = ("Repl",
       [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"]
        "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
      , envChainDataDef
+     ,defZNative "env-namespace-policy" envNamespacePolicy
+      (funType tTyString
+       [("allow-root", tTyBool),
+        ("ns-policy-fun",TyFun $ funType' tTyBool [("ns",tTyString),("ns-admin",tTyGuard Nothing)])])
+      [LitExample "(env-namespace-policy (my-ns-policy-fun))"]
+      "Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -614,3 +620,12 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       | k == cdPrevBlockHash = pure $ set pdPrevBlockHash l pd
 
     go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as
+
+
+envNamespacePolicy :: ZNativeFun LibState
+envNamespacePolicy i as@[ar,TApp app _] = reduce ar >>= \ar' -> case ar' of
+  (TLiteral (LBool allowRoot) _) -> requireDefApp Defun app >>= \d -> do
+    setenv eeNamespacePolicy (SmartNamespacePolicy allowRoot d)
+    return $ tStr $ "Installed namespace policy"
+  _ -> argsError' i as
+envNamespacePolicy i as = argsError' i as
