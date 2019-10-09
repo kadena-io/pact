@@ -196,15 +196,17 @@ tableGasModel gasConfig =
           ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
           ReadTxId -> _gasCostConfig_readColumnCost gasConfig
-        GSelect mColumns _expression _tableTerm -> _gasCostConfig_selectColumnCost gasConfig * case mColumns of
-          Nothing -> 1 -- not sure what to do here
-          Just cs -> fromIntegral (length cs)
+        GSelect mColumns _expression _tableTerm -> case mColumns of
+          Nothing -> 1
+          Just [] -> 1
+          Just cs -> _gasCostConfig_selectColumnCost gasConfig * (fromIntegral (length cs))
         GSortFieldLookup n -> fromIntegral n * _gasCostConfig_sortFactor gasConfig
         GUnreduced ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
           Just g -> g ts
           Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
-        GWrite _writeType _tableTerm _objPactValues ->
+        GWrite _writeType _tableTerm _key _objPactValues ->
           (_gasCostConfig_writeCost gasConfig) +
+          (memoryCost _key (_gasCostConfig_writeBytesCost gasConfig)) +
           (memoryCost _objPactValues (_gasCostConfig_writeBytesCost gasConfig))
         GUse _moduleName _mHash -> _gasCostConfig_useModuleCost gasConfig
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
