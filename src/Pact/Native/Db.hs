@@ -238,13 +238,14 @@ select i as = argsError' i as
 select' :: FunApp -> [Term Ref] -> Maybe [(Info,FieldKey)] ->
            Term Ref -> Term Name -> Eval e (Gas,Term Name)
 select' i _ cols' app@TApp{} tbl@TTable{} = do
-    g0 <- computeGas (Right i) $ GSelect cols' app tbl
+    g0 <- computeGas (Right i) (GUnreduced [])
+    g1 <- computeGas (Right i) $ GSelect cols' app tbl
     guardTable i tbl
     let fi = _faInfo i
         tblTy = _tTableType tbl
     ks <- keys fi (userTable tbl)
     fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $
-      (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
+      (\f -> foldM f (g0 + g1, []) ks) $ \(gPrev,rs) k -> do
 
       mrow <- readRow fi (userTable tbl) k
       case mrow of
@@ -348,14 +349,15 @@ write wt partial i as = do
   case ts of
     [table@TTable {..},TLitString key,(TObject (Object ps _ _ _) _)] -> do
       ps' <- enforcePactValue' ps
-      cost <- computeGas (Right i) (GWrite wt table ps')
+      cost0 <- computeGas (Right i) (GUnreduced [])
+      cost1 <- computeGas (Right i) (GWrite wt table ps')
       guardTable i table
       case _tTableType of
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
       r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) ps'
-      return (cost, r)
+      return (cost0 + cost1, r)
     _ -> argsError i ts
 
 
