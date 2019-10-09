@@ -52,7 +52,6 @@ import Statistics.Types (Estimate(..))
 
 import qualified Pact.Analyze.Check as Check
 import qualified Pact.Types.Crypto as Crypto
-import Pact.Types.Util (fromText')
 #endif
 
 import Pact.Typechecker

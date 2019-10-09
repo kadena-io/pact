@@ -11,7 +11,6 @@
 -- 'Term' or 'Invariant' languages).
 module Pact.Analyze.Eval.Prop where
 
-import Control.Monad.Fail
 import           Control.Lens               (Lens', at, ix, view, (%=), (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)

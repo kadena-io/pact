@@ -36,7 +36,6 @@ import Control.Applicative
 import Control.DeepSeq (NFData)
 import Control.Lens (Wrapped(..))
 import Control.Monad
-import Control.Monad.Fail (MonadFail)
 import qualified Data.Aeson as A
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (digitToInt)

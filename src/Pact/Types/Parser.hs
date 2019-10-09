@@ -21,7 +21,6 @@ module Pact.Types.Parser
 import Text.Trifecta
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Fail (MonadFail)
 import Prelude
 import qualified Data.HashSet as HS
 import Text.Parser.Token.Highlight

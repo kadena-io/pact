@@ -55,7 +55,6 @@ import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty)
-import Control.Monad.Fail (MonadFail)
 
 
 

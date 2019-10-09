@@ -16,13 +16,11 @@ import           Control.Monad              (void)
 import           Control.Monad.Except       (ExceptT(..), runExceptT,
                                              withExceptT)
 import           Control.Monad.State.Strict (StateT(..))
-import           Control.Monad.IO.Class     (liftIO)
 import qualified Data.Aeson                 as A
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import           Data.Default               (def)
 import           Data.Foldable              (traverse_)
 import qualified Data.HashMap.Strict        as HM
-import           Data.Monoid                ((<>))
 import           Data.String                (IsString, fromString)
 import qualified Data.Text                  as T
 import           Data.Void                  (Void)
@@ -36,11 +34,7 @@ import           Pact.Analyze.Remote.Types (Request(..), Response(..),
                                             ClientError(..))
 import           Pact.Repl                 (initReplState, evalRepl', replGetModules)
 import           Pact.Repl.Types
-import           Pact.Types.Info           (Code(_unCode))
 import           Pact.Types.Runtime
-import           Pact.Types.Term           (ModuleDef(..), moduleDefName, moduleDefCode,
-                                            ModuleName(..), Name(..),
-                                            KeySet(..),Ref)
 
 type VerifyAPI = "verify" :> ReqBody '[JSON] Request :> Post '[JSON] Response
 
