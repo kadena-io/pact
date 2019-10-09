@@ -194,11 +194,15 @@ tableGasModel gasConfig =
           Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
         GWrite _writeType _tableTerm _objPactValues ->
           (_gasCostConfig_writeCost gasConfig) +
-          (estimateMemoryCost _objPactValues (_gasCostConfig_writeBytesCost gasConfig))
+          (memoryCost _objPactValues (_gasCostConfig_writeBytesCost gasConfig))
         GUse _moduleName _mHash -> _gasCostConfig_useModuleCost gasConfig
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GModuleDecl _module -> _gasCostConfig_moduleCost gasConfig
         GInterfaceDecl _module -> _gasCostConfig_interfaceCost gasConfig
+        --GNamespaceDecl ns -> memoryCost ns (_gasCostConfig_writeBytesCost gasConfig)
+        GKeySetDecl ksName ks ->
+          (memoryCost ks (_gasCostConfig_writeBytesCost gasConfig)) +
+          (memoryCost ksName (_gasCostConfig_writeBytesCost gasConfig))
         GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
         GUserApp -> _gasCostConfig_functionApplicationCost gasConfig
   in GasModel
@@ -211,5 +215,5 @@ tableGasModel gasConfig =
 costPerByte :: Int64
 costPerByte = 1
 
-estimateMemoryCost :: (SizeOf a) => a -> Gas -> Gas
-estimateMemoryCost val (Gas factor) = Gas $ (sizeOf val) * factor * costPerByte
+memoryCost :: (SizeOf a) => a -> Gas -> Gas
+memoryCost val (Gas factor) = Gas $ (sizeOf val) * factor * costPerByte

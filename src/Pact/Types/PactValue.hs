@@ -184,7 +184,6 @@ instance (SizeOf p) => SizeOf (Guard p) where
   sizeOf (GModule mg) = (constructorCost 1) + (sizeOf mg)
   sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
 
-
 instance SizeOf PactGuard where
   sizeOf (PactGuard pid pn) =
     (constructorCost 2) + (sizeOf pid) + (sizeOf pn)

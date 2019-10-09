@@ -324,6 +324,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
     go fi nsn g = do
       let name = NamespaceName nsn
           info = _faInfo fi
+      _ <- computeGas (Right fi) (GNamespaceDecl (Namespace name g))
       mOldNs <- readRow info Namespaces name
       case mOldNs of
         Just ns'@(Namespace _ g') ->

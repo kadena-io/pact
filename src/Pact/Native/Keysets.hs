@@ -70,6 +70,7 @@ defineKeyset fi as = case as of
     go name ks = do
       let ksn = KeySetName name
           i = _faInfo fi
+      _ <- computeGas (Right fi) (GKeySetDecl ksn ks)
       old <- readRow i KeySets ksn
       case old of
         Nothing -> writeRow i Write KeySets ksn ks & success "Keyset defined"

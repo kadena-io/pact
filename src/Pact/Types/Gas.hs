@@ -77,11 +77,13 @@ data GasArgs
   | GSelect (Maybe [(Info,FieldKey)]) (Term Ref) (Term Name)
   | GSortFieldLookup Int
   | GUnreduced [Term Ref]
-  -- | Write: write type, table term, and object of pact values
   | GWrite WriteType (Term Name) (ObjectMap PactValue)
+  -- ^ Write: write type, table term, and object of pact values
   | GUse ModuleName (Maybe ModuleHash)
   | GModuleDecl (Module (Term Name))
   | GInterfaceDecl Interface
+  | GNamespaceDecl Namespace
+  | GKeySetDecl KeySetName KeySet
   | GModuleMember (ModuleDef (Term Name))
   | GUserApp
 
