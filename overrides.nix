@@ -45,8 +45,8 @@ in {
 
   sbv = dontCheck (callHackageDirect {
     pkg = "sbv";
-    ver = "8.2";
-    sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
+    ver = "8.3";
+    sha256 = "0r6f615129aih0j329c07dbkf11m9k8mnajs95jkvj0xf6vgh57h";
   });
 
   swagger2 = dontCheck (callHackageDirect {
