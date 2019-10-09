@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -38,7 +39,9 @@ import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Util (toB16JSON)
 import Pact.Types.SPV
 
-
+#if ! MIN_VERSION_servant_client(0,16,0)
+type ClientError = ServantError
+#endif
 
 ---- TESTS -----
 
@@ -930,12 +933,12 @@ run mgr cmds = do
 
 
 
-doSend :: Manager -> SubmitBatch -> IO (Either ServantError RequestKeys)
+doSend :: Manager -> SubmitBatch -> IO (Either ClientError RequestKeys)
 doSend mgr req = do
   baseUrl <- serverBaseUrl
   runClientM (sendClient req) (mkClientEnv mgr baseUrl)
 
-doPoll :: Manager -> Poll -> IO (Either ServantError PollResponses)
+doPoll :: Manager -> Poll -> IO (Either ClientError PollResponses)
 doPoll mgr req = do
   baseUrl <- serverBaseUrl
   runClientM (pollClient req) (mkClientEnv mgr baseUrl)

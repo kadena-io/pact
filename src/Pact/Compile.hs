@@ -635,7 +635,7 @@ _compileF :: FilePath -> IO (Either PactError [Term Name])
 _compileF f = _parseF f >>= _compile id
 
 handleParseError :: TF.Result a -> IO a
-handleParseError (TF.Failure f) = putDoc (fromAnsiWlPprint (TF._errDoc f)) >> error "parseFailed"
+handleParseError (TF.Failure f) = putDoc (TF._errDoc f) >> error "parseFailed"
 handleParseError (TF.Success a) = return a
 
 _compileWith :: Compile a -> (ParseState CompileState -> ParseState CompileState) ->
@@ -676,7 +676,7 @@ _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
     p <- _parseF f
     rs <- case p of
-            (TF.Failure e) -> putDoc (fromAnsiWlPprint (TF._errDoc e)) >> error "Parse failed"
+            (TF.Failure e) -> putDoc (TF._errDoc e) >> error "Parse failed"
             (TF.Success (es,s)) -> return $ map (compile s) es
     case sequence rs of
       Left e -> throwIO $ userError (show e)

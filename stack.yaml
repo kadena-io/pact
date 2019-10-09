@@ -1,14 +1,17 @@
 # stack yaml for ghc builds
 
-resolver: lts-13.30
+resolver: lts-14.7
 
 extra-deps:
   # --- Missing from Stackage --- #
   - ed25519-donna-0.1.1
-  - prettyprinter-convert-ansi-wl-pprint-1.1
+
+  # --- Forced Downgrades --- #
+  - hedgehog-0.6.1
+  - sbv-8.2
 
   # --- Forced Upgrades --- #
-  - sbv-8.2
+  - trifecta-2.1
 
   # --- Custom Pins --- #
   - git: https://github.com/kadena-io/thyme.git
