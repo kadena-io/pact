@@ -347,9 +347,16 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
         writeRow info Write Namespaces nn ns
 
 
-    applyNsPolicyFun :: HasInfo i => i -> Def Ref -> NamespaceName -> Namespace -> Eval e Bool
-    applyNsPolicyFun fi fun nn ns =
-      asBool =<< apply (App (TDef fun (getInfo fi)) [] (getInfo fi)) mkArgs
+    applyNsPolicyFun :: HasInfo i => i -> QualifiedName -> NamespaceName
+                     -> Namespace -> Eval e Bool
+    applyNsPolicyFun fi fun nn ns = do
+      let i = getInfo fi
+      refm <- resolveRef i (QName fun)
+      def' <- case refm of
+        (Just (Ref d@TDef {})) -> return d
+        Just t -> evalError i $ "invalid ns policy fun: " <> pretty t
+        Nothing -> evalError i $ "ns policy fun not found: " <> pretty fun
+      asBool =<< apply (App def' [] i) mkArgs
       where
         asBool (TLiteral (LBool allow) _) = return allow
         asBool t = evalError' fi $
