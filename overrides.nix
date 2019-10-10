@@ -37,10 +37,28 @@ in {
   wai-app-static = whenGhcjs dontCheck super.wai-app-static;
   wai-extra = whenGhcjs dontCheck super.wai-extra;
 
+  hedgehog = dontCheck (callHackageDirect {
+    pkg = "hedgehog";
+    ver = "1.0.1";
+    sha256 = "0h9qwd4gw5n8j8is9kn9mll32c8v6z1dv9mp4fmkmz7k5zi4asjq";
+  });
+
+  insert-ordered-containers = dontCheck (callHackageDirect {
+    pkg = "insert-ordered-containers";
+    ver = "0.2.2";
+    sha256 = "1md93iaxsr4djx1i47zjwddd7pd4j3hzphj7495q7lz7mn8ifz4w";
+  });
+
   megaparsec = dontCheck (callHackageDirect {
     pkg = "megaparsec";
     ver = "7.0.5";
     sha256 = "1wizfz8vdplz3sf81vh33sny6p8ynhlpvjxqjpsym7ssb186h0f1";
+  });
+
+  servant-swagger = dontCheck (callHackageDirect {
+    pkg = "servant-swagger";
+    ver = "1.1.7.1";
+    sha256 = "1ymdcmdi234p9jbwa7rgj1j35n9xnx4kgfjba4gs2r8cnhqwak28";
   });
 
   sbv = dontCheck (callHackageDirect {
@@ -55,16 +73,10 @@ in {
     sha256 = "1kgajvqbx8627191akn6pz4kiyi24gawvnvkyb7955dy7bnpd9pn";
   });
 
-  insert-ordered-containers = dontCheck (callHackageDirect {
-    pkg = "insert-ordered-containers";
-    ver = "0.2.2";
-    sha256 = "1md93iaxsr4djx1i47zjwddd7pd4j3hzphj7495q7lz7mn8ifz4w";
-  });
-
-  servant-swagger = dontCheck (callHackageDirect {
-    pkg = "servant-swagger";
-    ver = "1.1.7.1";
-    sha256 = "1ymdcmdi234p9jbwa7rgj1j35n9xnx4kgfjba4gs2r8cnhqwak28";
+  tasty-hedgehog = dontCheck (callHackageDirect {
+    pkg = "tasty-hedgehog";
+    ver = "1.0.0.1";
+    sha256 = "06mffkvscl8r81hjhsvjlyqa843szgv8fays1l9z4jaw2759glsr";
   });
 
   # Our own custom fork
