@@ -318,26 +318,52 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
   where
     defineNamespace :: RNativeFun e
     defineNamespace i as = case as of
-      [TLitString nsn, TGuard g _] -> go i nsn g
+      [TLitString nsn, TGuard userg _, TGuard adming _] -> go i nsn userg adming
       _ -> argsError i as
 
-    go fi nsn g = do
+    go fi nsn ug ag = do
       let name = NamespaceName nsn
           info = _faInfo fi
+          newNs = Namespace name ug ag
       mOldNs <- readRow info Namespaces name
       case mOldNs of
-        Just ns'@(Namespace _ g') ->
-          -- if namespace is defined, enforce old guard and rotate if policy allows
-          enforceGuard fi g' >> enforcePolicy info ns' >> writeNamespace info name g
-        Nothing -> writeNamespace info name g
+        Just (Namespace _ _ oldg) -> do
+          -- if namespace is defined, enforce old guard
+          enforceGuard fi oldg
+          writeNamespace info name newNs
+        Nothing -> do
+          enforcePolicy info name newNs
+          writeNamespace info name newNs
 
-    enforcePolicy info ns = do
-      NamespacePolicy{..} <- view eeNamespacePolicy
-      unless (_nsPolicy . Just $ ns) $ evalError info "Namespace definition not permitted"
+    enforcePolicy info nn ns = do
+      policy <- view eeNamespacePolicy
+      allowNs <- case policy of
+        SimpleNamespacePolicy f -> return $ f (Just ns)
+        SmartNamespacePolicy _ fun -> applyNsPolicyFun fun fun nn ns
+      unless allowNs $ evalError info "Namespace definition not permitted"
 
-    writeNamespace info n g =
-      success ("Namespace defined: " <> asString n) $
-      writeRow info Write Namespaces n (Namespace n g)
+    writeNamespace info nn ns =
+      success ("Namespace defined: " <> asString nn) $ do
+        writeRow info Write Namespaces nn ns
+
+
+    applyNsPolicyFun :: HasInfo i => i -> QualifiedName -> NamespaceName
+                     -> Namespace -> Eval e Bool
+    applyNsPolicyFun fi fun nn ns = do
+      let i = getInfo fi
+      refm <- resolveRef i (QName fun)
+      def' <- case refm of
+        (Just (Ref d@TDef {})) -> return d
+        Just t -> evalError i $ "invalid ns policy fun: " <> pretty t
+        Nothing -> evalError i $ "ns policy fun not found: " <> pretty fun
+      asBool =<< apply (App def' [] i) mkArgs
+      where
+        asBool (TLiteral (LBool allow) _) = return allow
+        asBool t = evalError' fi $
+          "Unexpected return value from namespace policy: " <> pretty t
+
+        mkArgs = [toTerm (asString nn),TGuard (_nsAdmin ns) def]
+
 
 namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
@@ -360,7 +386,7 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
 
       mNs <- readRow info Namespaces name
       case mNs of
-        Just n@(Namespace ns' g) -> do
+        Just n@(Namespace ns' g _) -> do
           enforceGuard fa g
           success ("Namespace set to " <> (asString ns')) $
             evalRefs . rsNamespace .= (Just n)

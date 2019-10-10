@@ -331,6 +331,7 @@ sampleNamespace :: Namespace
 sampleNamespace = Namespace
                   (NamespaceName sampleNamespaceName)
                   (GKeySet sampleKeyset)
+                  (GKeySet sampleKeyset)
 
 someModuleName :: ModuleName
 someModuleName = ModuleName "some-module" Nothing
@@ -358,7 +359,7 @@ someModuleData = ModuleData modDef refMap
         scopeOfRef :: Scope Int Term Ref
         scopeOfRef = abstract fst' scd'
         
-        defOfRef = Def (DefName "") someModuleName Defun (FunType [] TyAny) scopeOfRef def def
+        defOfRef = Def (DefName "") someModuleName Defun (FunType [] TyAny) scopeOfRef def def def
         modDef = MDModule mod'
         gov = Governance $ Right defOfRef
         mod' = Module someModuleName gov def (Code "") someModuleHash HS.empty [] []

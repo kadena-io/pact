@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -31,6 +32,10 @@ import Pact.Repl.Types
 import Pact.Server.API
 import Pact.Types.Runtime
 
+#if ! MIN_VERSION_servant_client(0,16,0)
+type ClientError = ServantError
+#endif
+
 spec :: Spec
 spec = do
   describe "single module"                       testSingleModule
@@ -54,7 +59,7 @@ stateModuleData nm replState = replLookupModule replState nm
 serve :: Int -> IO ThreadId
 serve port = forkIO $ runServantServer port
 
-serveAndRequest :: Int -> Remote.Request -> IO (Either ServantError (Remote.Response))
+serveAndRequest :: Int -> Remote.Request -> IO (Either ClientError Remote.Response)
 serveAndRequest port body = do
   let url = "http://localhost:" ++ show port
   verifyBaseUrl <- parseBaseUrl url

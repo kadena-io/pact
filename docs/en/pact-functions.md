@@ -1443,6 +1443,17 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```
 
 
+### install-capability {#install-capability}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
+
+
+Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' which designates a 'manager function` using the '@managed' meta tag. After install, CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request. The manager function is of type 'managed:object{c-type} requested:object{c-type} -> object{c-type}', where C-TYPE schema matches the parameter declaration of CAPABILITY, such that for '(defcap FOO (bar:string baz:integer) ...)', C-TYPE would be a schema '(bar:string, baz:integer)'. The manager function enforces that REQUESTED matches MANAGED, and produces a new managed capability parameter object to replace the previous managed one, if the desired logic allows it, otherwise it should fail. An example would be a 'one-shot' capability (ONE-SHOT fired:bool), installed with 'true', which upon request would enforce that the bool is still 'true' but replace it with 'false', so that the next request would fail. NOTE that signatures scoped to managed capability cause the capability to be automatically installed, and that the signature is only allowed to be checked once in the context of the installed capability, such that a subsequent install would fail (assuming the capability requires the associated signature).
+```lisp
+(install-capability (PAY "alice" "bob" 10.0))
+```
+
+
 ### keyset-ref-guard {#keyset-ref-guard}
 
 *keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
@@ -1467,7 +1478,7 @@ Specifies and tests for existing grant of CAPABILITY, failing if not found in en
 *capability*&nbsp;` -> bool` *body*&nbsp;`[*]` *&rarr;*&nbsp;`<a>`
 
 
-Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap.
+Specifies and requests grant of _scoped_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap.
 ```lisp
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```

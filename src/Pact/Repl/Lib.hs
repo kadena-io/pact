@@ -200,6 +200,12 @@ replDefs = ("Repl",
       [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"]
        "Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT."
      , envChainDataDef
+     ,defZNative "env-namespace-policy" envNamespacePolicy
+      (funType tTyString
+       [("allow-root", tTyBool),
+        ("ns-policy-fun",TyFun $ funType' tTyBool [("ns",tTyString),("ns-admin",tTyGuard Nothing)])])
+      [LitExample "(env-namespace-policy (my-ns-policy-fun))"]
+      "Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -291,13 +297,13 @@ setsigs' :: ZNativeFun LibState
 setsigs' _ [TList ts _ _] = do
   sigs <- forM ts $ \t -> case t of
     (TObject (Object (ObjectMap om) _ _ _) _) -> do
-      case (M.lookup "key" om,M.lookup "clist" om) of
+      case (M.lookup "key" om,M.lookup "caps" om) of
         (Just (TLitString k),Just (TList clist _ _)) -> do
           caps <- forM clist $ \cap -> case cap of
             (TApp a _) -> view _1 <$> appToCap a
             o -> evalError' o $ "Expected capability invocation"
           return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
-        _ -> evalError' t "Expected object with 'key': string, 'clist': [capability]"
+        _ -> evalError' t "Expected object with 'key': string, 'caps': [capability]"
     _ -> evalError' t $ "Expected object"
   setenv eeMsgSigs $ M.fromList $ V.toList sigs
   return $ tStr "Setting transaction signatures/caps"
@@ -569,7 +575,7 @@ setGasModel _ as = do
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
 testCapability _ [ c@TApp{} ] = do
-  cap <- evalCap CapManaged False $ _tApp c
+  cap <- evalCap CapCallStack False $ _tApp c
   return . tStr $ case cap of
     AlreadyAcquired -> "Capability already granted"
     NewlyAcquired -> "Capability granted"
@@ -614,3 +620,14 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       | k == cdPrevBlockHash = pure $ set pdPrevBlockHash l pd
 
     go i _ as = evalError i $ "envChainData: bad public metadata values: " <> pretty as
+
+
+envNamespacePolicy :: ZNativeFun LibState
+envNamespacePolicy i as@[ar,TApp app _] = reduce ar >>= \ar' -> case ar' of
+  (TLiteral (LBool allowRoot) _) -> requireDefApp Defun app >>= \d -> do
+    setenv eeNamespacePolicy (SmartNamespacePolicy allowRoot (toQName d))
+    return $ tStr $ "Installed namespace policy"
+  _ -> argsError' i as
+  where
+    toQName Def{..} = QualifiedName _dModule (asString _dDefName) _dInfo
+envNamespacePolicy i as = argsError' i as

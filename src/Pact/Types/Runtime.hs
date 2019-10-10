@@ -30,17 +30,19 @@ module Pact.Types.Runtime
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
-   NamespacePolicy(..), nsPolicy,
+   NamespacePolicy(..),
    permissiveNamespacePolicy,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
    module Pact.Types.Gas,
    module Pact.Types.ChainMeta,
-   module Pact.Types.PactError
+   module Pact.Types.PactError,
+   liftIO
    ) where
 
 
+import Control.Monad.IO.Class (liftIO) -- just for export
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName)
@@ -70,13 +72,20 @@ import Pact.Types.Pretty
 import Pact.Types.SPV
 import Pact.Types.Util
 
-newtype NamespacePolicy = NamespacePolicy
-  { _nsPolicy :: Maybe Namespace -> Bool
-  }
-makeLenses ''NamespacePolicy
+
+-- | Governance of namespace use. Policy dictates:
+-- 1. Whether a namespace can be created.
+-- 2. Whether the default namespace can be used.
+data NamespacePolicy =
+  SimpleNamespacePolicy (Maybe Namespace -> Bool)
+  -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
+  |
+  SmartNamespacePolicy Bool QualifiedName
+  -- ^ Bool governs root usage, Name governs ns creation.
+  -- Def is (defun xxx:bool (ns:string ns-admin:guard))
 
 permissiveNamespacePolicy :: NamespacePolicy
-permissiveNamespacePolicy = NamespacePolicy $ const True
+permissiveNamespacePolicy = SimpleNamespacePolicy $ const True
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
