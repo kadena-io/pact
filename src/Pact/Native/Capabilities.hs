@@ -305,13 +305,10 @@ keysetRefGuard =
   where
     keysetRefGuard' :: RNativeFun e
     keysetRefGuard' fa [TLitString kref] = do
-      ks <- readKeySet' fa kref
-
-      let n = KeySetName n
+      let n = KeySetName kref
           i = _faInfo fa
-
-      readRow i KeySets n >>= \case
-        Nothing -> evalError i $ "Keyset reference cannot be found: " <> kref
+      readRow i KeySets n >>= \t -> case t of
+        Nothing -> evalError i $ "Keyset reference cannot be found: " <> pretty kref
         Just _ -> return $ (`TGuard` i) $ GKeySetRef n
     keysetRefGuard' i as = argsError i as
 
