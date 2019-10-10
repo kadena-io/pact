@@ -53,32 +53,30 @@ module Pact.GasModel.Utils
   ) where
 
 
-import Bound                      (abstract, Scope)
-import Control.Exception          (throwIO)
-import Data.Aeson                 (toJSON, ToJSON(..))
-import Data.Default               (def)
-import NeatInterpolation          (text)
-import Data.List.NonEmpty         (NonEmpty(..))
+import Bound (abstract, Scope)
+import Control.Exception (throwIO)
+import Data.Aeson (toJSON, ToJSON(..))
+import Data.Default (def)
+import Data.List.NonEmpty (NonEmpty(..))
+import NeatInterpolation (text)
 
 
-import qualified Data.Aeson          as A
+import qualified Data.Aeson as A
 import qualified Data.HashMap.Strict as HM
-import qualified Data.HashSet        as HS
-import qualified Data.Set            as S
-import qualified Data.Map            as M
-import qualified Data.Text           as T
-import qualified Data.List.NonEmpty  as NEL
+import qualified Data.HashSet as HS
+import qualified Data.Set as S
+import qualified Data.Map as M
+import qualified Data.Text as T
+import qualified Data.List.NonEmpty as NEL
 
 
-import Pact.Compile               (compileExps, mkTextInfo)
-import Pact.Types.PactValue       (toPactValueLenient, PactValue(..))
-import Pact.Types.Capability      (Capability)
-
-import Pact.Parse
+import Pact.Compile (compileExps, mkTextInfo)
+import Pact.Types.Capability (Capability)
 import Pact.Types.Command
 import Pact.Types.Lang
+import Pact.Types.PactValue (toPactValueLenient, PactValue(..))
 import Pact.Types.Runtime
-
+import Pact.Parse
 
 
 -- | General helper functions

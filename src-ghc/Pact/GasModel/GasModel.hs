@@ -3,30 +3,29 @@
 
 module Pact.GasModel.GasModel where
 
-import Control.Exception              (bracket)
-import Control.Monad                  (void, replicateM)
-import Data.List                      (foldl', sortOn)
-import GHC.Conc                       (numCapabilities)
-import Statistics.Types               (Estimate(..))
+import Control.Exception (bracket)
+import Control.Monad (void, replicateM)
+import Data.List (foldl', sortOn)
+import GHC.Conc (numCapabilities)
+import Statistics.Types (Estimate(..))
 
-import qualified Criterion.Main             as C
-import qualified Criterion                  as C
-import qualified Criterion.Types            as C
+
+import qualified Criterion.Main as C
+import qualified Criterion as C
+import qualified Criterion.Types as C
 import qualified Data.ByteString.Lazy.Char8 as BSL8
-import qualified Data.Csv                   as Csv
-import qualified Data.HashMap.Strict        as HM
-import qualified Data.Text                  as T
-import qualified Options.Applicative        as O
+import qualified Data.Csv as Csv
+import qualified Data.HashMap.Strict as HM
+import qualified Data.Text as T
+import qualified Options.Applicative as O
 
 
--- Internal exports
---
-import Pact.Eval                  (eval)
+import Pact.Eval (eval)
 import Pact.GasModel.GasTests
 import Pact.GasModel.Types
 import Pact.GasModel.Utils
 import Pact.Types.Lang
-import Pact.Types.Runtime         hiding (GasPrice)
+import Pact.Types.Runtime hiding (GasPrice)
 
 
 data Option = Option

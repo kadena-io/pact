@@ -11,34 +11,32 @@ module Pact.GasModel.GasTests
 
   ) where
 
-import Control.Lens               hiding ((.=),DefName)
-import Data.Aeson                 (toJSON, ToJSON(..))
-import Data.Default               (def)
-import Data.List                  (foldl')
-import Data.Bool                  (bool)
-import NeatInterpolation          (text)
-import Data.List.NonEmpty         (NonEmpty(..))
-import Data.Maybe                 (fromMaybe)
+import Control.Lens hiding ((.=),DefName)
+import Data.Aeson (toJSON, ToJSON(..))
+import Data.Bool (bool)
+import Data.Default (def)
+import Data.List (foldl')
+import Data.Maybe (fromMaybe)
+import Data.List.NonEmpty (NonEmpty(..))
+import NeatInterpolation (text)
 
 
-import qualified Data.Aeson          as A
+import qualified Data.Aeson as A
+import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Foldable       as F
-import qualified Data.Map            as M
-import qualified Data.Text           as T
-import qualified Data.List.NonEmpty  as NEL
+import qualified Data.List.NonEmpty as NEL
+import qualified Data.Map as M
+import qualified Data.Text as T
 
 
-import Pact.GasModel.Utils
 import Pact.GasModel.Types
-import Pact.Native
-import Pact.Types.PactValue       (PactValue(..))
-import Pact.Types.Capability
-
+import Pact.GasModel.Utils
 import Pact.Interpreter
+import Pact.Native
+import Pact.Types.Capability
 import Pact.Types.Lang
+import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
-
 
 
 -- | Gas benchmark tests for Pact native functions

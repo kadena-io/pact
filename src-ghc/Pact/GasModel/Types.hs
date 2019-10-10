@@ -27,37 +27,33 @@ module Pact.GasModel.Types
   
   ) where
 
-import Control.Concurrent         (readMVar)
-import Control.Exception          (onException)
-import Control.Lens               hiding ((.=),DefName)
-import Control.DeepSeq            (NFData(..))
-import Data.Default               (def)
-import Data.List                  (foldl')
-import NeatInterpolation          (text)
-import System.Directory           (removeFile)
-import Data.Maybe                 (fromMaybe)
+import Control.Concurrent (readMVar)
+import Control.DeepSeq (NFData(..))
+import Control.Exception (onException)
+import Control.Lens hiding ((.=),DefName)
+import Data.Default (def)
+import Data.List (foldl')
+import Data.Maybe (fromMaybe)
+import NeatInterpolation (text)
+import System.Directory (removeFile)
 
 
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Text           as T
 import qualified Data.List.NonEmpty  as NEL
 import qualified Pact.Persist.SQLite as PSL
+import qualified Data.Text as T
 
 
--- Internal exports
---
-import Pact.GasModel.Utils
-import Pact.MockDb
-import Pact.Types.Logger          (neverLog, Loggers(..))
-import Pact.Types.SQLite          (SQLiteConfig(..),fastNoJournalPragmas)
-
-import Pact.PersistPactDb         (DbEnv(..))
-import Pact.Eval                  (eval)
-
+import Pact.Eval (eval)
 import Pact.Gas
+import Pact.GasModel.Utils
 import Pact.Interpreter
+import Pact.MockDb
+import Pact.PersistPactDb (DbEnv(..))
 import Pact.Types.Lang
+import Pact.Types.Logger (neverLog, Loggers(..))
 import Pact.Types.Runtime
+import Pact.Types.SQLite (SQLiteConfig(..),fastNoJournalPragmas)
 import Pact.Types.SPV
 
 
