@@ -197,7 +197,7 @@ library
                      , servant-client
                      , servant-client-core
                      , servant-swagger
-                     , swagger2 >= 2.4
+                     , swagger2 >= 2.3 && < 2.5
 
   if impl(ghcjs)
     build-depends:
