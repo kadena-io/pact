@@ -31,7 +31,7 @@ untestedNativesCheck = do
   it "only deprecated or constant natives should be missing gas model tests" $
     S.fromList (map asString untestedNatives)
     `shouldBe`
-    (S.fromList ["CHARSET_ASCII","CHARSET_LATIN1",
+    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1",
                  "verify-spv", "public-chain-data", "list"])
 
 allGasTestsShouldPass :: Spec
@@ -55,4 +55,6 @@ allNativesInGasTable = do
           Nothing -> name : li
           Just _ -> li
         absentNatives = foldl' absent [] justNatives
-    absentNatives `shouldBe` []
+    (S.fromList absentNatives)
+    `shouldBe`
+    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
