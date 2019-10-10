@@ -49,7 +49,7 @@ type NativeFun e = FunApp -> [Term Ref] -> Eval e (Gas,Term Name)
 type GasRNativeFun e = Gas -> FunApp -> [Term Name] -> Eval e (Gas,Term Name)
 
 -- | Native function with reduced arguments, final gas pre-computed.
---   Opertations with fixed cost.
+--   Operations with fixed cost.
 type RNativeFun e = FunApp -> [Term Name] -> Eval e (Term Name)
 
 type NativeDef = (NativeDefName,Term Name)
