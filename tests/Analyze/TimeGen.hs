@@ -1,11 +1,13 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase   #-}
+{-# LANGUAGE TypeFamilies #-}
 -- Hedgehog generators of times
 module Analyze.TimeGen where
 
-import           Hedgehog       hiding (Update)
-import qualified Hedgehog.Gen   as Gen
-import qualified Hedgehog.Range as Range
-import qualified Text.Printf    as T
+import           Data.Traversable (for)
+import           Hedgehog         hiding (Update)
+import qualified Hedgehog.Gen     as Gen
+import qualified Hedgehog.Range   as Range
+import qualified Text.Printf      as T
 
 -- with a few problematic ones disabled
 data TimeFormatAtom
@@ -120,7 +122,7 @@ genFormat = Gen.list (Range.exponential 0 25) (genEither Gen.enumBounded
   (Gen.string (Range.exponential 0 10) Gen.unicode))
 
 genTimeOfFormat :: MonadGen m => TimeFormat -> m String
-genTimeOfFormat fmt = fmap mconcat $ flip traverse fmt $ \case
+genTimeOfFormat fmt = fmap mconcat $ for fmt $ \case
   Right str -> pure str
   Left atom -> case atom of
     TimePercent -> pure "%"
