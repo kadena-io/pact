@@ -85,7 +85,7 @@ import Pact.Types.Runtime
 compileCode :: T.Text -> IO [Term Name]
 compileCode m = do
   parsedCode <- parseCode m
-  throwEither $ compileExps
+  eitherDie m $ compileExps
                 (mkTextInfo $ _pcCode parsedCode)
                 (_pcExps parsedCode)
 
@@ -285,6 +285,13 @@ accountsModule moduleName = [text|
      (module $moduleNameText GOV
 
        (defcap GOV ()
+         true)
+
+       (defcap MANAGEDCAP (s t)
+         @managed managed-cap-fun
+         true)
+
+       (defun managed-cap-fun (s t)
          true)
 
        (defschema account

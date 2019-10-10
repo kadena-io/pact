@@ -28,6 +28,7 @@ module Pact.GasModel.Types
   ) where
 
 import Control.Concurrent         (readMVar)
+import Control.Exception          (onException)
 import Control.Lens               hiding ((.=),DefName)
 import Control.DeepSeq            (NFData(..))
 import Data.Default               (def)
@@ -274,10 +275,11 @@ defSqliteBackend = do
                   "someId"
                   { "balance": 0.0 })
                (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName)
-               (define-namespace "$sampleNamespaceName" $sampleLoadedKeysetName)
+               (define-namespace "$sampleNamespaceName" $sampleLoadedKeysetName $sampleLoadedKeysetName)
         |]
   setupTerms <- compileCode setupExprs
-  _ <- runEval state env $ mapM eval setupTerms
+  (res,_) <- runEval' state env $ mapM eval setupTerms
+  _ <- onException (eitherDie "Sqlite setup expressions" res) (sqliteSetupCleanup (env,state))
   return env
 
 

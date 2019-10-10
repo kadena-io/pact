@@ -194,6 +194,7 @@ unitTestFromDef nativeName = tests
       "create-pact-guard"   -> Just $ createPactGuardTests nativeName
       "create-user-guard"   -> Just $ createUserGuardTests nativeName
       "enforce-guard"       -> Just $ enforceGuardTests nativeName
+      "install-capability"  -> Just $ installCapabilityTests nativeName
       "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
       "require-capability"  -> Just $ requireCapabilityTests nativeName
       "with-capability"     -> Just $ withCapabilityTests nativeName
@@ -316,6 +317,14 @@ createModuleGuardTests = tests
       updateStackFrame
       updateStackFrame
       allExprs
+
+
+installCapabilityTests :: NativeDefName -> GasUnitTests
+installCapabilityTests = defGasUnitTests allExprs
+  where
+    installCapExpr =
+      defPactExpression [text|(install-capability ($acctModuleNameText.MANAGEDCAP "" ""))|]
+    allExprs = installCapExpr :| []
 
 
 withCapabilityTests :: NativeDefName -> GasUnitTests
@@ -1676,11 +1685,11 @@ defineNamespaceTests = tests
     simpleDefTests = defGasUnitTests (simpleDefExpr :| [])
       where
         simpleDefExpr =
-          defPactExpression [text| (define-namespace 'some-other-namespace $sampleLoadedKeysetName) |]
+          defPactExpression [text| (define-namespace 'some-other-namespace $sampleLoadedKeysetName $sampleLoadedKeysetName) |]
  
     rotateNamespaceTests = rotateTests
       where
-        rotateExprText = [text| (define-namespace '$sampleNamespaceName $sampleLoadedKeysetName) |]
+        rotateExprText = [text| (define-namespace '$sampleNamespaceName $sampleLoadedKeysetName $sampleLoadedKeysetName) |]
         rotateExpr = 
           PactExpression
           rotateExprText
