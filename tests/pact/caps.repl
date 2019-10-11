@@ -307,5 +307,9 @@
  (pay "alice" "bob" 1))
 
 (expect-failure
- "reinstall of capability should fail (signature out of scope)"
+ "reinstall of capability should fail"
  (install-pay "alice" "bob" 10))
+
+(expect-failure
+ "reinstall of capability should fail"
+ (install-pay "alice" "carl" 1))
