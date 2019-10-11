@@ -41,7 +41,6 @@ module Pact.Types.Util
   , rewrap, rewrapping, wrap, unwrap
   ) where
 
-import Control.Monad.Fail (MonadFail)
 import Data.Aeson
 import Data.Aeson.Types
 import GHC.Generics
@@ -56,6 +55,9 @@ import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty)
+import Control.Monad.Fail (MonadFail)
+
+
 
 
 class ParseText a where
