@@ -51,25 +51,24 @@ noopApplyMgrFun _ mgd _ = return $ Right mgd
 
 -- | Get any cap that is currently granted, of any scope.
 grantedCaps :: Eval e (S.Set Capability)
-grantedCaps = toSet <$> getAllStackCaps <*> getAllManaged
+grantedCaps = S.union <$> getAllStackCaps <*> getAllManaged
   where
-    toSet a b = S.fromList $ a ++ b
-    getAllManaged = concatMap toList . S.toList <$> use (evalCapabilities . capManaged)
+    getAllManaged = S.fromList . concatMap toList <$> use (evalCapabilities . capManaged)
 
 -- | Matches Managed -> managed list, callstack and composed to stack list
 -- Composed should possibly check both ...
 capabilityGranted :: CapScope m -> Capability -> Eval e Bool
 capabilityGranted scope cap = elem cap <$> scopeCaps
   where
-    scopeCaps :: Eval e [Capability]
+    scopeCaps :: Eval e (S.Set Capability)
     scopeCaps = case scope of
       -- Managed: only check top-level, not composed
-      CapManaged _ -> map _csCap . S.toList <$> use (evalCapabilities . capManaged)
+      CapManaged _ -> S.map _csCap <$> use (evalCapabilities . capManaged)
       -- Other: check acquired, both top and composed.
       _ -> getAllStackCaps
 
-getAllStackCaps :: Eval e [Capability]
-getAllStackCaps = concatMap toList <$> use (evalCapabilities . capStack)
+getAllStackCaps :: Eval e (S.Set Capability)
+getAllStackCaps = S.fromList . concatMap toList <$> use (evalCapabilities . capStack)
 
 popCapStack :: (CapSlot Capability -> Eval e a) -> Eval e a
 popCapStack act = do
