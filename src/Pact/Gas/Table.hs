@@ -7,10 +7,10 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Pact.Types.Continuation
-import Pact.Types.PactValue
 import Data.Int (Int64)
+import Pact.Types.Continuation
 import Pact.Types.Gas
+import Pact.Types.SizeOf
 import Pact.Types.Term
 
 -- NB: If pact ends up not having any variadic primitives (currently, I didn't spot any thus far, but also the types don't rule it out)

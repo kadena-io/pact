@@ -43,6 +43,7 @@ import qualified Data.Vector as V
 
 import Pact.Types.Orphans ()
 import Pact.Types.Pretty
+import Pact.Types.SizeOf
 import Pact.Types.Util
 
 --import Pact.Types.Crypto (Hash(..))
@@ -60,7 +61,7 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString)
+  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString,SizeOf)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
   pretty (Code c)
@@ -79,6 +80,11 @@ instance Show Info where
     show (Info (Just (r,_d))) = renderCompactString r
 
 instance Default Info where def = Info Nothing
+
+-- | Charge zero for Info to avoid quadratic blowup (i.e. for modules)
+instance SizeOf Info where
+  sizeOf _ = 0 
+
 
 #if !defined(ghcjs_HOST_OS)
 instance Mergeable Info where

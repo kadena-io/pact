@@ -124,6 +124,7 @@ import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
+import Pact.Types.SizeOf
 import Pact.Types.Type
 import Pact.Types.Util
 
@@ -154,7 +155,7 @@ instance Monoid Meta where
   mempty = Meta Nothing []
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
-  deriving (Eq,Ord,Generic,IsString,AsString,Show)
+  deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
 
 instance Serialize PublicKey
 instance NFData PublicKey
@@ -180,6 +181,10 @@ instance Pretty KeySet where
     , "pred: " <> pretty f
     ]
 
+instance SizeOf KeySet where
+  sizeOf (KeySet pkArr ksPred) =
+    (constructorCost 2) + (sizeOf pkArr) + (sizeOf ksPred)
+
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
 instance FromJSON KeySet where
@@ -193,12 +198,12 @@ instance ToJSON KeySet where
 
 
 newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic)
+    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,SizeOf)
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
 newtype PactId = PactId Text
-    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,ToTerm)
+    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,ToTerm,SizeOf)
 
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
@@ -212,6 +217,10 @@ instance Pretty PactGuard where
     [ "pactId: " <> pretty _pgPactId
     , "name: "   <> pretty _pgName
     ]
+
+instance SizeOf PactGuard where
+  sizeOf (PactGuard pid pn) =
+    (constructorCost 2) + (sizeOf pid) + (sizeOf pn)
 
 instance ToJSON PactGuard where toJSON = lensyToJSON 3
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
@@ -229,6 +238,10 @@ instance Pretty ModuleGuard where
     , "name: " <> pretty _mgName
     ]
 
+instance SizeOf ModuleGuard where
+  sizeOf (ModuleGuard md n) =
+    (constructorCost 2) + (sizeOf md) + (sizeOf n)
+
 instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
@@ -244,6 +257,10 @@ instance Pretty a => Pretty (UserGuard a) where
     [ "fun: " <> pretty _ugFun
     , "args: " <> pretty _ugArgs
     ]
+
+instance (SizeOf p) => SizeOf (UserGuard p) where
+  sizeOf (UserGuard n arr) =
+    (constructorCost 2) + (sizeOf n) + (sizeOf arr)
 
 instance ToJSON a => ToJSON (UserGuard a) where toJSON = lensyToJSON 3
 instance FromJSON a => FromJSON (UserGuard a) where parseJSON = lensyParseJSON 3
@@ -265,6 +282,12 @@ instance Pretty a => Pretty (Guard a) where
   pretty (GUser g)      = pretty g
   pretty (GModule g)    = pretty g
 
+instance (SizeOf p) => SizeOf (Guard p) where
+  sizeOf (GPact pg) = (constructorCost 1) + (sizeOf pg)
+  sizeOf (GKeySet ks) = (constructorCost 1) + (sizeOf ks)
+  sizeOf (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ksr)
+  sizeOf (GModule mg) = (constructorCost 1) + (sizeOf mg)
+  sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
 
 guardCodec :: (ToJSON a, FromJSON a) => Codec (Guard a)
 guardCodec = Codec enc dec
@@ -476,7 +499,7 @@ instance FromJSON g => FromJSON (Governance g) where
 -- | Newtype wrapper differentiating 'Hash'es from module hashes
 --
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
-  deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText)
+  deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText, SizeOf)
   deriving newtype (NFData)
 
 data Module g = Module
@@ -616,6 +639,10 @@ data Namespace a = Namespace
 instance Pretty (Namespace a) where
   pretty Namespace{..} = "(namespace " <> prettyString (asString' _nsName) <> ")"
 
+instance (SizeOf n) => SizeOf (Namespace n) where
+  sizeOf (Namespace name ug ag) =
+    (constructorCost 3) + (sizeOf name) + (sizeOf ug) + (sizeOf ag)
+
 instance (ToJSON a, FromJSON a) => ToJSON (Namespace a) where toJSON = lensyToJSON 3
 instance (FromJSON a, ToJSON a) => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
 
@@ -667,13 +694,13 @@ instance NFData Example
 
 -- | Label type for objects.
 newtype FieldKey = FieldKey Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,ToJSONKey)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,ToJSONKey,SizeOf)
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
 -- | Simple dictionary for object values.
 newtype ObjectMap v = ObjectMap { _objectMap :: (M.Map FieldKey v) }
-  deriving (Eq,Ord,Show,Functor,Foldable,Traversable,Generic)
+  deriving (Eq,Ord,Show,Functor,Foldable,Traversable,Generic,SizeOf)
 
 instance NFData v => NFData (ObjectMap v)
 

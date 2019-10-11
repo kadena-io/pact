@@ -31,9 +31,9 @@ import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Data.Text
 
-import Pact.Types.Term (ToTerm(..))
-import Pact.Types.PactValue (SizeOf(..))
 import Pact.Types.Pretty
+import Pact.Types.SizeOf
+import Pact.Types.Term (ToTerm(..))
 
 -- | Expresses unique platform-specific chain identifier.
 --
@@ -43,11 +43,10 @@ newtype ChainId = ChainId { _chainId :: Text }
     ( Show, Pretty, IsString
     , ToJSON, FromJSON
     , Serialize, ToTerm, NFData
+    , SizeOf
     )
 
 instance Wrapped ChainId
-instance SizeOf ChainId where
-  sizeOf (ChainId t) = sizeOf t
 
 -- | Lens into the text value of a 'ChainId'
 --
