@@ -23,6 +23,7 @@ module Pact.Types.PactValue
   , toPactValueLenient
   , fromPactValue
   , SizeOf(..)
+  , constructorCost
   ) where
 
 import Control.Applicative ((<|>))
@@ -34,7 +35,7 @@ import Data.Text (Text)
 import Data.Text as T
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import GHC.Generics
+import GHC.Generics hiding (Meta)
 import qualified Data.Map.Strict as M
 import Data.Decimal
 import Data.Thyme hiding (Vector)
@@ -48,7 +49,8 @@ import Data.Word (Word8)
 import Data.Int (Int64)
 import Control.Lens (view)
 
-import Pact.Types.Exp (Literal(..))
+import Pact.Types.Exp
+import Pact.Types.Hash (Hash(..))
 import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
 import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
@@ -309,3 +311,13 @@ instance SizeOf UTCTime where
   -- Internally 'UTCTime' is just a 64-bit count of 'microseconds'
   sizeOf ti =
     (constructorCost 1) + (sizeOf (view (_utctDayTime . microseconds) ti))
+
+instance (SizeOf n) => SizeOf (Namespace n) where
+  sizeOf (Namespace name ug ag) =
+    (constructorCost 3) + (sizeOf name) + (sizeOf ug) + (sizeOf ag)
+
+instance SizeOf ModuleHash where
+  sizeOf (ModuleHash h) = sizeOf h
+
+instance SizeOf Hash where
+  sizeOf (Hash bs) = sizeOf bs

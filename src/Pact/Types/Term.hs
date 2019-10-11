@@ -608,19 +608,19 @@ derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
 
 
-data Namespace = Namespace
+data Namespace a = Namespace
   { _nsName :: NamespaceName
-  , _nsUser :: (Guard (Term Name))
-  , _nsAdmin :: (Guard (Term Name))
+  , _nsUser :: (Guard a)
+  , _nsAdmin :: (Guard a)
   } deriving (Eq, Show, Generic)
 
-instance Pretty Namespace where
+instance Pretty (Namespace a) where
   pretty Namespace{..} = "(namespace " <> prettyString (asString' _nsName) <> ")"
 
-instance ToJSON Namespace where toJSON = lensyToJSON 3
-instance FromJSON Namespace where parseJSON = lensyParseJSON 3
+instance (ToJSON a, FromJSON a) => ToJSON (Namespace a) where toJSON = lensyToJSON 3
+instance (FromJSON a, ToJSON a) => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
 
-instance NFData Namespace
+instance (NFData a) => NFData (Namespace a)
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |

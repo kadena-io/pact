@@ -148,7 +148,9 @@ descKeySet :: RNativeFun e
 descKeySet i [TLitString t] = do
   r <- readRow (_faInfo i) KeySets (KeySetName t)
   case r of
-    Just v -> return $ toTerm v
+    Just v -> do
+      _ <- computeGas (Right i) (GPostRead (ReadKeySet (KeySetName t) v))
+      return $ toTerm v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t
 descKeySet i as = argsError i as
 
@@ -240,7 +242,7 @@ select' :: FunApp -> [Term Ref] -> Maybe [(Info,FieldKey)] ->
            Term Ref -> Term Name -> Eval e (Gas,Term Name)
 select' i _ cols' app@TApp{} tbl@TTable{} = do
     g0 <- computeGas (Right i) (GUnreduced [])
-    g1 <- computeGas (Right i) $ GSelect cols' app tbl
+    g1 <- computeGas (Right i) $ GSelect cols'
     guardTable i tbl
     let fi = _faInfo i
         tblTy = _tTableType tbl
@@ -351,7 +353,7 @@ write wt partial i as = do
     [table@TTable {..},TLitString key,(TObject (Object ps _ _ _) _)] -> do
       ps' <- enforcePactValue' ps
       cost0 <- computeGas (Right i) (GUnreduced [])
-      cost1 <- computeGas (Right i) (GWrite wt table key ps')
+      cost1 <- computeGas (Right i) (GWrite (WriteData wt (asString key) ps'))
       guardTable i table
       case _tTableType of
         TyAny -> return ()
@@ -366,6 +368,7 @@ createTable' :: RNativeFun e
 createTable' i [t@TTable {..}] = do
   guardTable i t
   let (UserTables tn) = userTable t
+  _ <- computeGas (Right i) (GWrite (WriteTable (asString tn)))
   success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
 createTable' i as = argsError i as
 

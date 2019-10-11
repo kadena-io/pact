@@ -134,7 +134,7 @@ instance PactDbValue KeySet where
   prettyPactDbValue = pretty
 instance PactDbValue Value where
   prettyPactDbValue = pretty
-instance PactDbValue Namespace where
+instance PactDbValue (Namespace PactValue) where
   prettyPactDbValue = pretty
 instance PactDbValue (Maybe PactExec) where
   prettyPactDbValue = pretty

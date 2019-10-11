@@ -70,11 +70,14 @@ defineKeyset fi as = case as of
     go name ks = do
       let ksn = KeySetName name
           i = _faInfo fi
-      _ <- computeGas (Right fi) (GKeySetDecl ksn ks)
       old <- readRow i KeySets ksn
       case old of
-        Nothing -> writeRow i Write KeySets ksn ks & success "Keyset defined"
+        Nothing -> do
+          _ <- computeGas (Right fi) (GWrite (WriteKeySet ksn ks))
+          writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do
+          _ <- computeGas (Right fi) (GPostRead (ReadKeySet ksn oldKs))
+          _ <- computeGas (Right fi) (GWrite (WriteKeySet ksn ks))
           runSysOnly $ enforceKeySet i (Just ksn) oldKs
           writeRow i Write KeySets ksn ks & success "Keyset defined"
 

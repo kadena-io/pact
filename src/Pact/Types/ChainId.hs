@@ -32,6 +32,7 @@ import Data.String (IsString)
 import Data.Text
 
 import Pact.Types.Term (ToTerm(..))
+import Pact.Types.PactValue (SizeOf(..))
 import Pact.Types.Pretty
 
 -- | Expresses unique platform-specific chain identifier.
@@ -45,6 +46,8 @@ newtype ChainId = ChainId { _chainId :: Text }
     )
 
 instance Wrapped ChainId
+instance SizeOf ChainId where
+  sizeOf (ChainId t) = sizeOf t
 
 -- | Lens into the text value of a 'ChainId'
 --

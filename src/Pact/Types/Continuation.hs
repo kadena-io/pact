@@ -62,6 +62,9 @@ instance Pretty Provenance where
 instance NFData Provenance
 instance ToJSON Provenance where toJSON = lensyToJSON 2
 instance FromJSON Provenance where parseJSON = lensyParseJSON 2
+instance SizeOf Provenance where
+  sizeOf (Provenance chainId modHash) =
+    (constructorCost 2) + (sizeOf chainId) + (sizeOf modHash)
 
 -- | The type of a set of yielded values of a pact step.
 --
@@ -75,6 +78,9 @@ data Yield = Yield
 instance NFData Yield
 instance ToJSON Yield where toJSON = lensyToJSON 2
 instance FromJSON Yield where parseJSON = lensyParseJSON 2
+instance SizeOf Yield where
+  sizeOf (Yield dataYield prov) =
+    (constructorCost 2) + (sizeOf dataYield) + (sizeOf prov)
 
 -- | Environment setup for pact execution, from ContMsg request.
 --

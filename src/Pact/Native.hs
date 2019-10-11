@@ -308,6 +308,40 @@ readStringDef = defRNative "read-string" readString
       return $ tStr txt
     readString i as = argsError i as
 
+
+toGuardPactValue :: Guard (Term Name) -> Either Text (Guard PactValue)
+toGuardPactValue g = case g of
+  (GUser (UserGuard n ts)) -> do
+    pvs <- traverse toPactValue ts
+    return (GUser (UserGuard n pvs))
+  (GKeySet k) -> Right (GKeySet k)
+  (GKeySetRef k) -> Right (GKeySetRef k)
+  (GModule m) -> Right (GModule m)
+  (GPact p) -> Right (GPact p)
+
+fromGuardPactValue :: Guard PactValue -> Guard (Term Name)
+fromGuardPactValue g = case g of
+  (GUser (UserGuard n ts)) -> GUser (UserGuard n (map fromPactValue ts))
+  (GKeySet k) -> GKeySet k
+  (GKeySetRef k) -> GKeySetRef k
+  (GModule m) -> GModule m
+  (GPact p) -> GPact p
+
+toNamespacePactValue :: Info -> Namespace (Term Name) -> Eval e (Namespace PactValue)
+toNamespacePactValue info (Namespace name userg adming) = do
+  usergPv <- throwEitherText EvalError info
+             "Failed converting namespace user guard to pact value"
+             (toGuardPactValue userg)
+  admingPv <- throwEitherText EvalError info
+              "Failed converting namespace admin guard to pact value"
+              (toGuardPactValue adming)
+  return (Namespace name usergPv admingPv)
+
+fromNamespacePactValue :: Namespace PactValue -> Namespace (Term Name)
+fromNamespacePactValue (Namespace n userg adming) =
+  Namespace n (fromGuardPactValue userg) (fromGuardPactValue adming)
+
+
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
@@ -325,16 +359,20 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
       let name = NamespaceName nsn
           info = _faInfo fi
           newNs = Namespace name ug ag
-      _ <- computeGas (Right fi) (GNamespaceDecl newNs)
+      newNsPactValue <- toNamespacePactValue info newNs
       mOldNs <- readRow info Namespaces name
-      case mOldNs of
-        Just (Namespace _ _ oldg) -> do
+      case (fromNamespacePactValue <$> mOldNs) of
+        Just ns@(Namespace _ _ oldg) -> do
           -- if namespace is defined, enforce old guard
+          nsPactValue <- toNamespacePactValue info ns
+          _ <- computeGas (Right fi) (GPostRead (ReadNamespace nsPactValue))
           enforceGuard fi oldg
-          writeNamespace info name newNs
+          _ <- computeGas (Right fi) (GWrite (WriteNamespace newNsPactValue))
+          writeNamespace info name newNsPactValue
         Nothing -> do
           enforcePolicy info name newNs
-          writeNamespace info name newNs
+          _ <- computeGas (Right fi) (GWrite (WriteNamespace newNsPactValue))
+          writeNamespace info name newNsPactValue
 
     enforcePolicy info nn ns = do
       policy <- view eeNamespacePolicy
@@ -349,7 +387,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
 
 
     applyNsPolicyFun :: HasInfo i => i -> QualifiedName -> NamespaceName
-                     -> Namespace -> Eval e Bool
+                     -> (Namespace (Term Name)) -> Eval e Bool
     applyNsPolicyFun fi fun nn ns = do
       let i = getInfo fi
       refm <- resolveRef i (QName fun)
@@ -386,8 +424,10 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
           info = _faInfo fa
 
       mNs <- readRow info Namespaces name
-      case mNs of
+      case (fromNamespacePactValue <$> mNs) of
         Just n@(Namespace ns' g _) -> do
+          nsPactValue <- toNamespacePactValue info n
+          _ <- computeGas (Right fa) (GPostRead (ReadNamespace nsPactValue))
           enforceGuard fa g
           success ("Namespace set to " <> (asString ns')) $
             evalRefs . rsNamespace .= (Just n)
@@ -426,7 +466,7 @@ chainDataDef = defRNative "chain-data" chainData
     (funType (tTyObject pcTy) [])
     ["(chain-data)"]
     "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
-    \'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
+    \'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
   where
     pcTy = TyUser (snd chainDataSchema)
     chainData :: RNativeFun e
@@ -839,6 +879,7 @@ yield i as = case as of
               if _peStepHasRollback pe
                 then evalError' i "Cross-chain yield not allowed in step with rollback"
                 else fmap (Yield o') $ provenanceOf i t
+          _ <- computeGas (Right i) (GWrite (WriteYield y))
           evalPactExec . _Just . peYield .= Just y
           return u
 
@@ -849,6 +890,7 @@ resume i as = case as of
     case rm of
       Nothing -> evalError' i "Resume: no yielded value in context"
       Just y -> do
+        _ <- computeGas (Right i) (GPostRead (ReadYield y))
         o <- fmap fromPactValue . _yData <$> enforceYield i y
         l <- bindObjectLookup (toTObjectMap TyAny def o)
         bindReduce ps bd bi l
@@ -869,11 +911,12 @@ sort' _ [TList{..}] = liftIO $ do
     (TLiteral xl _,TLiteral yl _) -> xl `compare` yl
     _ -> EQ
   toTListV _tListType def <$> V.freeze m
-sort' _ [TList fields _ fi,l@(TList vs lty _)]
+sort' fa [TList fields _ fi,l@(TList vs lty _)]
   | V.null fields = evalError fi "Empty fields list"
   | V.null vs = return l
   | otherwise = do
       fields' <- asKeyList fields
+      _ <- computeGas (Right fa) (GSortFieldLookup (S.size fields'))
       liftIO $ do
         m <- V.thaw vs
         (`V.sortBy` m) $ \x y -> case (x,y) of
