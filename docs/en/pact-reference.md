@@ -989,7 +989,7 @@ Module names must be unique within a namespace.
 
 #### Interface Declaration {#interfacedeclaration}
 
-[Interfaces](#interface) contain an API specification and data definitions for smart contracts.
+[Interfaces](#interfaces) contain an API specification and data definitions for smart contracts.
 They are comprised of:
 
 - [function](#defun) specifications (i.e. function signatures)

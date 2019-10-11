@@ -195,7 +195,7 @@ instance Ord Name where
 
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData)
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData,Hashable)
 
 instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name

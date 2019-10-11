@@ -145,6 +145,10 @@ library
                     Pact.Types.ECDSA
                     Pact.Types.Server
                     Pact.Types.SQLite
+                    Pact.GasModel.GasModel
+                    Pact.GasModel.Types
+                    Pact.GasModel.Utils
+                    Pact.GasModel.GasTests
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
@@ -157,6 +161,7 @@ library
                      , base64-bytestring >= 1.0.0.1
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
+                     , cassava >= 0.5
                      , cereal >=0.5.4.0 && < 0.6
                      , containers >= 0.5.7 && < 0.7
                      , data-default >= 0.7.1.1 && < 0.8
@@ -263,6 +268,16 @@ benchmark bench
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+executable gasmodel
+  type:                exitcode-stdio-1.0
+  main-is:             GasModel.hs
+  build-depends:       base
+                     , pact
+  hs-source-dirs:      executables
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
 test-suite hspec
   if !impl(ghcjs)
     main-is:          hspec.hs
@@ -333,3 +348,4 @@ test-suite hspec
                 , ClientSpec
                 , SchemeSpec
                 , HistoryServiceSpec
+                , GasModelSpec
