@@ -38,14 +38,12 @@ import           Data.Constraint              (Dict (Dict), withDict)
 import           Data.Data                    (Data, Proxy, Typeable)
 import           Data.Function                (on)
 import           Data.Kind                    (Type)
-import           Data.List                    (sort)
-import           Data.List                    (sortBy)
+import           Data.List                    (sort, sortBy)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (isJust)
 import           Data.Monoid                  (First (..))
 import           Data.SBV                     (EqSymbolic, HasKind, Int64,
-                                               Kind (KString, KUnbounded),
                                                Mergeable (symbolicMerge),
                                                OrdSymbolic, SBV,
                                                SDivisible (sDivMod, sQuotRem),

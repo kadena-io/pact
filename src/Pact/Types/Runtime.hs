@@ -42,7 +42,6 @@ module Pact.Types.Runtime
    ) where
 
 
-import Control.Monad.IO.Class (liftIO) -- just for export
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName)

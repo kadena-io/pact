@@ -19,8 +19,8 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               (^?), (<>~), _1, _2, _head,
                                               _Just, ifoldlM)
 import           Control.Monad               (void, when)
-import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Except        (Except, MonadError (throwError))
+import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)

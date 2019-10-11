@@ -14,7 +14,7 @@ import           Control.DeepSeq
 import           Control.Lens               hiding (op, (...), Empty)
 import           Control.Monad.Catch        (MonadCatch (catch), SomeException)
 import           Control.Monad.Reader       (MonadReader, ReaderT (runReaderT))
-import           Control.Monad.State.Strict (MonadState, runStateT)
+import           Control.Monad.State.Strict (MonadState, StateT (runStateT))
 import qualified Data.Decimal               as Decimal
 import qualified Data.Map.Strict            as Map
 import qualified Data.Text                  as T
@@ -440,9 +440,7 @@ genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
   , do
        let genFormattableTerm = Gen.choice
              [ genTerm intSize
-             , do
-                  x <- genTerm strSize
-                  pure x
+             , genTerm strSize
              , genTerm BoundedBool
              ]
        (str, tms) <- Gen.choice
@@ -607,13 +605,18 @@ describeAnalyzeFailure (AnalyzeFailure info err) = unlines
   , T.unpack (describeAnalyzeFailureNoLoc err)
   ]
 
-genAnyTerm' :: Gen (ETerm, GenState)
-genAnyTerm' = runReaderT (runStateT genAnyTerm emptyGenState) genEnv
+runStack
+  :: MonadGen m
+  => GenT (StateT GenState (ReaderT GenEnv (GenBase m))) a
+  -> m (a, GenState)
+runStack act = runReaderT
+  (fromGenT $ (`runStateT` emptyGenState) $ distributeT act)
+  genEnv
 
 safeGenAnyTerm
   :: (MonadCatch m, HasCallStack) => PropertyT m (ETerm, GenState)
 safeGenAnyTerm = (do
-  (etm, gState) <- forAll genAnyTerm'
+  (etm, gState) <- forAll $ runStack genAnyTerm
   footnote $ renderCompactString' $ "term: " <> pretty etm
   pure $ show etm `deepseq` (etm, gState)
   ) `catch` (\(_e :: EmptyInterval)  -> discard) -- see note [EmptyInterval]
@@ -623,9 +626,7 @@ safeGenAnyTerm = (do
 genFormatTime :: Gen (ETerm, GenState)
 genFormatTime = do
   format <- genFormat
-  (someTm, gState) <- runReaderT
-    (runStateT (genTerm BoundedTime) emptyGenState)
-    genEnv
+  (someTm, gState) <- runStack $ genTerm BoundedTime
   case someTm of
     Some STime tm -> do
       let etm = Some SStr $ FormatTime (StrLit (showTimeFormat format)) tm

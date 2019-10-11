@@ -7,7 +7,6 @@ extra-deps:
   - ed25519-donna-0.1.1
 
   # --- Forced Downgrades --- #
-  - hedgehog-0.6.1
   - sbv-8.2
 
   # --- Forced Upgrades --- #

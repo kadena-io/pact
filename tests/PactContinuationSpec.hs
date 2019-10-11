@@ -35,8 +35,6 @@ import Pact.Types.Crypto as Crypto
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Pact.Types.Runtime (PactError(..))
-import Pact.Types.Util (toB16JSON)
 import Pact.Types.SPV
 
 #if ! MIN_VERSION_servant_client(0,16,0)
