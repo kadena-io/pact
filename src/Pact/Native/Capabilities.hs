@@ -304,8 +304,12 @@ keysetRefGuard =
   \store references alongside other guards in the database, etc."
   where
     keysetRefGuard' :: RNativeFun e
-    keysetRefGuard' i [TLitString ks] =
-      return $ (`TGuard` (_faInfo i)) $ GKeySetRef (KeySetName ks)
+    keysetRefGuard' fa [TLitString kref] = do
+      let n = KeySetName kref
+          i = _faInfo fa
+      readRow i KeySets n >>= \t -> case t of
+        Nothing -> evalError i $ "Keyset reference cannot be found: " <> pretty kref
+        Just _ -> return $ (`TGuard` i) $ GKeySetRef n
     keysetRefGuard' i as = argsError i as
 
 

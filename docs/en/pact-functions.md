@@ -1682,6 +1682,17 @@ pact> (env-keys ["my-key" "admin-key"])
 ```
 
 
+### env-namespace-policy {#env-namespace-policy}
+
+*allow-root*&nbsp;`bool` *ns-policy-fun*&nbsp;`ns:string ns-admin:guard -> bool` *&rarr;*&nbsp;`string`
+
+
+Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
+```lisp
+(env-namespace-policy (my-ns-policy-fun))
+```
+
+
 ### env-sigs {#env-sigs}
 
 *sigs*&nbsp;`[object:*]` *&rarr;*&nbsp;`string`

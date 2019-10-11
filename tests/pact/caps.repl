@@ -154,8 +154,32 @@
 (begin-tx)
 (use caps)
 
-(env-data { "k1": ["k1"], "k2": ["k2"] })
+(env-data { "k1": ["k1"], "k2": ["k2"], "k3" : ["k3"] })
+
+(expect-failure
+  "k3 fails ref guard construction when no keyset is defined"
+  (keyset-ref-guard "k3"))
+
+(define-keyset "k3" (read-keyset "k3"))
+
+(expect
+  "k3 succeeds now that a keyset is defined with that name"
+  "'k3"
+  (format "{}" [(keyset-ref-guard "k3")]))
+
+(expect-failure
+  "k3 cannot succeed since its keys are not in scope"
+  (enforce-guard (keyset-ref-guard "k3")))
+
+(env-keys ["k3"])
+
+(expect
+  "k3 succeeds now that keys are in scope"
+  "true"
+  (format "{}" [(enforce-guard (keyset-ref-guard "k3"))]))
+
 (env-keys ["k1"])
+
 (enforce-guard (msg-keyset-user-guard "k1"))
 (expect-failure "user guard reading keyset k2 fails"
                 (enforce-guard (msg-keyset-user-guard "k2")))
