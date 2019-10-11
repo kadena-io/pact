@@ -30,11 +30,9 @@ module Pact.Runtime.Capabilities
 
 import Control.Monad
 import Control.Lens hiding (DefName)
-import Data.Bool
 import Data.Default
 import Data.Foldable
 import Data.List
-import Data.Maybe
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -51,19 +49,26 @@ type ApplyMgrFun e = Def Ref -> [PactValue] -> [PactValue] -> Eval e (Either Pac
 noopApplyMgrFun :: ApplyMgrFun e
 noopApplyMgrFun _ mgd _ = return $ Right mgd
 
-
+-- | Get any cap that is currently granted, of any scope.
 grantedCaps :: Eval e (S.Set Capability)
-grantedCaps = S.fromList . toList <$> use evalCapabilities
+grantedCaps = S.union <$> getAllStackCaps <*> getAllManaged
+  where
+    getAllManaged = S.fromList . concatMap toList <$> use (evalCapabilities . capManaged)
 
 -- | Matches Managed -> managed list, callstack and composed to stack list
 -- Composed should possibly check both ...
 capabilityGranted :: CapScope m -> Capability -> Eval e Bool
-capabilityGranted scope cap = memSet <$> scopeCaps
+capabilityGranted scope cap = elem cap <$> scopeCaps
   where
-    memSet = S.member cap . S.fromList . concatMap toList
+    scopeCaps :: Eval e (S.Set Capability)
     scopeCaps = case scope of
-      CapManaged _ -> use $ evalCapabilities . capManaged
-      _ -> use $ evalCapabilities . capStack
+      -- Managed: only check top-level, not composed
+      CapManaged _ -> S.map _csCap <$> use (evalCapabilities . capManaged)
+      -- Other: check acquired, both top and composed.
+      _ -> getAllStackCaps
+
+getAllStackCaps :: Eval e (S.Set Capability)
+getAllStackCaps = S.fromList . concatMap toList <$> use (evalCapabilities . capStack)
 
 popCapStack :: (CapSlot Capability -> Eval e a) -> Eval e a
 popCapStack act = do
@@ -79,16 +84,31 @@ popCapStack act = do
 -- guard throwing a failure. Upon successful return of
 -- `test` install capability.
 acquireCapability
-  :: ApplyMgrFun e
+  :: HasInfo i
+  => i
+  -> ApplyMgrFun e
   -> CapScope (Maybe (Def Ref))
   -> Capability
   -> Eval e ()
   -> Eval e CapAcquireResult
-acquireCapability af scope cap test = granted >>= bool evalCap alreadyGranted
+acquireCapability i af scope cap test = go
   where
 
-    granted = capabilityGranted scope cap
     alreadyGranted = return AlreadyAcquired
+
+    go = do
+      granted <- capabilityGranted scope cap
+      if granted
+        then alreadyGranted
+        else do
+          seen <- seenCaps
+          if cap `S.member` seen
+            then evalError' i $ "Duplicate install of capability " <> pretty cap <> ", scope " <> pretty scope
+            else evalCap
+
+    seenCaps = case scope of
+      CapManaged _ -> use $ evalCapabilities . capManagedSeen
+      _ -> return mempty
 
     evalCap = do
       -- liftIO $ print ("acquireCapability",scope,cap)
@@ -102,7 +122,9 @@ acquireCapability af scope cap test = granted >>= bool evalCap alreadyGranted
     evalManaged =
       push >> test >> popCapStack installManaged
 
-    installManaged c = evalCapabilities . capManaged %= (c:)
+    installManaged cs = do
+      evalCapabilities . capManagedSeen %= S.insert (_csCap cs)
+      evalCapabilities . capManaged %= S.insert cs
 
     -- Callstack: check if managed, in which case push, otherwise
     -- push and test.
@@ -131,7 +153,7 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
     noMatch = return $ Nothing
 
     go mgdCaps = do
-      (success,failures,processedMgdCaps) <- foldM check (Nothing,[],[]) mgdCaps
+      (success,failures,processedMgdCaps) <- foldM check (Nothing,[],mempty) mgdCaps
       case success of
         Just newMgdCap -> do
           evalCapabilities . capManaged .= processedMgdCaps
@@ -143,14 +165,14 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
             (intercalate "," (map (renderCompactString' . peDoc) es))
 
     check (successR,failedRs,ms) m = case successR of
-      Just {} -> return (successR,[],m:ms) -- short circuit on success
+      Just {} -> return (successR,[],S.insert m ms) -- short circuit on success
       Nothing -> do
         r <- runManaged m
         case r of
-          Nothing -> return (Nothing,failedRs,m:ms) -- skip
-          Just (Left e) -> return (Nothing,e:failedRs,m:ms) -- record failure and continue
+          Nothing -> return (Nothing,failedRs,S.insert m ms) -- skip
+          Just (Left e) -> return (Nothing,e:failedRs,S.insert m ms) -- record failure and continue
           Just (Right newMgdCap) ->
-            return (Just newMgdCap,[],newMgdCap:ms)
+            return (Just newMgdCap,[],S.insert newMgdCap ms)
 
     runManaged mcs = case _csScope mcs of -- validate scope
       CapManaged (Just mf) -> case _csCap mcs of -- validate user mg cap and has mgr fun
@@ -171,29 +193,16 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
 revokeAllCapabilities :: Eval e ()
 revokeAllCapabilities = evalCapabilities .= def
 
--- | Check signature caps against current granted set, and track what caps
--- were matched in this transaction in order to only match once.
+-- | Check signature caps against current granted set.
 checkSigCaps
   :: M.Map PublicKey (S.Set Capability)
      -> Eval e (M.Map PublicKey (S.Set Capability))
 checkSigCaps sigs = go
   where
     go = do
-      alreadyMatched <- use (evalCapabilities . capSigMatched)
       granted <- grantedCaps
-      let (sigs',newMatched) = M.foldrWithKey (match granted) (mempty,alreadyMatched) sigs
-      evalCapabilities . capSigMatched .= newMatched
-      return sigs'
+      return $ M.filter (match granted) sigs
 
-    match granted pk sigCaps (r,matched) = do
-      if S.null sigCaps then
-        (M.insert pk sigCaps r,matched)
-      else
-        if S.null sigGranted then
-          (r,matched)
-        else
-          (M.insert pk sigGranted r,M.insertWith (S.union) pk sigGranted matched)
-      where
-        sigMatched = fromMaybe mempty $ M.lookup pk matched
-        sigUnmatched = sigCaps S.\\ sigMatched
-        sigGranted = S.intersection sigUnmatched granted
+    match granted sigCaps =
+      S.null sigCaps ||
+      not (S.null (S.intersection granted sigCaps))
