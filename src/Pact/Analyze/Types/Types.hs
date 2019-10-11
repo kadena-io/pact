@@ -59,7 +59,6 @@ module Pact.Analyze.Types.Types
 import           Data.Kind                    (Type)
 import           Data.Maybe                   (isJust)
 import           Data.Monoid                  (Sum (Sum, getSum))
-import           Data.Semigroup               ((<>))
 import           Data.Type.Equality           ((:~:) (Refl), apply)
 import           Data.Typeable                (Typeable, Proxy(Proxy))
 import           GHC.TypeLits                 (Symbol, KnownSymbol, symbolVal,

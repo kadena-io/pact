@@ -42,7 +42,6 @@ module Pact.Types.Runtime
    ) where
 
 
-import Control.Monad.IO.Class (liftIO) -- just for export
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName)
@@ -181,7 +180,7 @@ data EvalState = EvalState {
       -- | Gas tally
     , _evalGas :: Gas
       -- | Capability list
-    , _evalCapabilities :: Capabilities Capability
+    , _evalCapabilities :: Capabilities
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState

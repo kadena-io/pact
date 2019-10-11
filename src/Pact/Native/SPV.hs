@@ -13,7 +13,6 @@ module Pact.Native.SPV
   ( spvDefs
   ) where
 
-import Control.Monad.IO.Class (liftIO)
 import Control.Lens (view)
 
 import Data.Default

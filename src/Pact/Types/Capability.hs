@@ -23,7 +23,7 @@ module Pact.Types.Capability
   , CapAcquireResult(..)
   , SigCapability(..)
   , parseSigCapability
-  , Capabilities(..), capStack, capManaged, capSigMatched
+  , Capabilities(..), capStack, capManaged, capManagedSeen
   , CapScope(..)
   , CapSlot(..), csCap, csComposed, csScope
   ) where
@@ -33,7 +33,6 @@ import Control.Error (fmapL)
 import Control.Lens hiding ((.=),DefName)
 import Data.Aeson
 import Data.Default
-import Data.Map.Strict (Map)
 import Data.Set (Set)
 import Data.Text (Text, unpack)
 
@@ -111,6 +110,12 @@ data CapScope m
   deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
 instance NFData c => NFData (CapScope c)
 
+instance Pretty (CapScope m) where
+  pretty CapManaged {} = "CapManaged"
+  pretty CapCallStack = "CapCallStack"
+  pretty CapComposed = "CapComposed"
+
+-- | Runtime storage of capability.
 data CapSlot c = CapSlot
   { _csScope :: CapScope (Maybe (Def Ref))
   , _csCap :: c
@@ -119,13 +124,17 @@ data CapSlot c = CapSlot
 makeLenses ''CapSlot
 instance NFData c => NFData (CapSlot c)
 
-data Capabilities c = Capabilities
-  { _capStack :: [CapSlot c]
-  , _capManaged :: [CapSlot c]
-  , _capSigMatched :: (Map PublicKey (Set Capability))
+-- | Runtime datastructure.
+data Capabilities = Capabilities
+  { _capStack :: [CapSlot Capability]
+    -- ^ Stack of "acquired" capabilities.
+  , _capManaged :: Set (CapSlot Capability)
+    -- ^ Set of managed capabilities.
+  , _capManagedSeen :: (Set Capability)
+    -- ^ Record of managed granted capabilities.
   }
-  deriving (Eq,Show,Functor,Foldable,Traversable,Generic)
+  deriving (Eq,Show,Generic)
 makeLenses ''Capabilities
 
-instance (NFData c) => NFData (Capabilities c)
-instance Default (Capabilities a) where def = Capabilities [] [] mempty
+instance NFData Capabilities
+instance Default Capabilities where def = Capabilities [] mempty mempty

@@ -52,7 +52,6 @@ import Statistics.Types (Estimate(..))
 
 import qualified Pact.Analyze.Check as Check
 import qualified Pact.Types.Crypto as Crypto
-import Pact.Types.Util (fromText')
 #endif
 
 import Pact.Typechecker
@@ -574,8 +573,8 @@ setGasModel _ as = do
 -- | This is the only place we can do an external call to a capability,
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
-testCapability _ [ c@TApp{} ] = do
-  cap <- evalCap CapCallStack False $ _tApp c
+testCapability i [ c@TApp{} ] = do
+  cap <- evalCap i CapCallStack False $ _tApp c
   return . tStr $ case cap of
     AlreadyAcquired -> "Capability already granted"
     NewlyAcquired -> "Capability granted"

@@ -17,7 +17,7 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import Data.Text (Text, unpack, pack)
+import Data.Text (unpack, pack)
 
 import System.Directory
 import Unsafe.Coerce

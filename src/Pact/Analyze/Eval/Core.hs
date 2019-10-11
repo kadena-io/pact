@@ -17,7 +17,6 @@ import           Control.Lens                (over)
 import           Data.Foldable               (asum)
 import qualified Data.Map.Strict             as Map
 import           Data.Maybe                  (fromMaybe)
-import           Data.Monoid                 ((<>))
 import           Data.SBV                    (EqSymbolic ((./=), (.==)), OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                               SBV, SymVal, ite, literal,
                                               uninterpret, unliteral)
