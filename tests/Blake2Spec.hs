@@ -1,9 +1,9 @@
 module Blake2Spec (spec) where
 
-import Data.Foldable (foldlM)
 import Crypto.Hash.Blake2Native
 import Data.Bits
-import Data.ByteString (ByteString,pack)
+import Data.ByteString (ByteString, pack)
+import Data.Foldable (foldlM)
 import Data.Word
 import Test.Hspec
 
@@ -42,9 +42,9 @@ selftest_seq len seed =
 
 
 blake2b_selftest :: Spec
-blake2b_selftest = either fail p hashing
+blake2b_selftest =
+  it "final hash correct" $ (blake2b_final <$> hashing) `shouldBe` Right blake2b_res
   where hashing = blake2b_init 32 mempty >>= \cxinit -> foldlM f cxinit b2b_md_len
-        p cxr   = it "final hash correct" $ blake2b_final cxr `shouldBe` blake2b_res
         f cx outlen = foldlM g cx b2b_in_len
           where g cx0 inlen = do
                   let inB = selftest_seq inlen (fromIntegral inlen)
@@ -68,9 +68,9 @@ b2s_md_len :: [Int]; b2s_md_len = [ 16, 20, 28, 32 ];
 b2s_in_len :: [Int]; b2s_in_len = [ 0,  3,  64, 65, 255, 1024 ];
 
 blake2s_selftest :: Spec
-blake2s_selftest = either fail p hashing
+blake2s_selftest =
+  it "final hash correct" $ (blake2s_final <$> hashing) `shouldBe` Right blake2s_res
   where hashing = blake2s_init 32 mempty >>= \cxinit -> foldlM f cxinit b2s_md_len
-        p cxr   = it "final hash correct" $ blake2s_final cxr `shouldBe` blake2s_res
         f cx outlen = foldlM g cx b2s_in_len
           where g cx0 inlen = do
                   let inB = selftest_seq inlen (fromIntegral inlen)

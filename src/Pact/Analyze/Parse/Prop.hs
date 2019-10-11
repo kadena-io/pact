@@ -66,7 +66,6 @@ import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                PrimType (..), SchemaVar, TList,
                                                TableName, TyObject, Type, TyList)
 import           Pact.Types.Pretty
-import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Doc, Type, Var, ks, obj,
                                                str)

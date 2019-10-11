@@ -87,7 +87,6 @@ import Control.Arrow ((&&&))
 import Control.DeepSeq
 import Control.Lens (makeLenses,makePrisms)
 import Control.Monad
-import qualified Data.Aeson as A
 #if MIN_VERSION_aeson(1,4,3)
 import Data.Aeson hiding (pairs,Object, (<?>))
 #else

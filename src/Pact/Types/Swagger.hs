@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -53,6 +54,13 @@ import Control.Lens (set)
 import Data.Text as T
 import Pact.Types.Util
 
+#if MIN_VERSION_swagger2(2,4,0)
+just :: a -> Maybe a
+just = Just
+#else
+just :: a -> a
+just = id
+#endif
 
 -- | 'ToSchema' generic implementation with provided schema.
 declareGenericSchema ::
@@ -92,7 +100,7 @@ namedSchema n s = return $ NamedSchema (Just n) s
 
 -- | like 'byteSchema' but with (non-standard) "base64url" in format.
 byteBase64url :: Schema
-byteBase64url = set type_ (Just SwaggerString) . set format (Just "base64url") $ mempty
+byteBase64url = set type_ (just SwaggerString) . set format (Just "base64url") $ mempty
 
 fixedLength :: Integral i => i -> Schema -> Schema
 fixedLength i =
@@ -125,7 +133,7 @@ swaggerDescription d s = do
   return $ namedSchema' { _namedSchemaSchema = schema' }
 
 swaggerType :: SwaggerType 'SwaggerKindSchema -> Schema -> Schema
-swaggerType = set type_ . Just
+swaggerType = set type_ . just
 
 schemaOf :: (Schema -> Schema) -> Schema
 schemaOf f = f mempty
