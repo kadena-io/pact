@@ -50,7 +50,8 @@ import Pact.Types.Pretty
 data Capability
   = ModuleAdminCapability ModuleName
   | UserCapability QualifiedName [PactValue]
-  deriving (Eq,Show,Ord)
+  deriving (Eq,Show,Ord,Generic)
+instance NFData Capability
 
 data CapabilityType
   = CapTypeModuleAdmin ModuleName
@@ -106,7 +107,8 @@ data CapScope m
     -- ^ Managed-scope capability
   | CapComposed
     -- ^ Composed into some other capability
-  deriving (Eq,Show,Ord,Functor,Foldable,Traversable)
+  deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
+instance NFData c => NFData (CapScope c)
 
 instance Pretty (CapScope m) where
   pretty CapManaged {} = "CapManaged"
@@ -118,8 +120,9 @@ data CapSlot c = CapSlot
   { _csScope :: CapScope (Maybe (Def Ref))
   , _csCap :: c
   , _csComposed :: [c]
-  } deriving (Eq,Show,Ord,Functor,Foldable,Traversable)
+  } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
 makeLenses ''CapSlot
+instance NFData c => NFData (CapSlot c)
 
 -- | Runtime datastructure.
 data Capabilities = Capabilities
@@ -130,7 +133,8 @@ data Capabilities = Capabilities
   , _capManagedSeen :: (Set Capability)
     -- ^ Record of managed granted capabilities.
   }
-  deriving (Eq,Show)
+  deriving (Eq,Show,Generic)
 makeLenses ''Capabilities
 
+instance NFData Capabilities
 instance Default Capabilities where def = Capabilities [] mempty mempty

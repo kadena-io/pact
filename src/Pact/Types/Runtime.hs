@@ -49,6 +49,7 @@ import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
@@ -56,6 +57,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,)
+import GHC.Generics (Generic)
 
 import Pact.Types.Capability
 import Pact.Types.ChainMeta
@@ -68,6 +70,7 @@ import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
 import Pact.Types.Util
+
 
 -- | Governance of namespace use. Policy dictates:
 -- 1. Whether a namespace can be created.
@@ -82,7 +85,6 @@ data NamespacePolicy =
 
 permissiveNamespacePolicy :: NamespacePolicy
 permissiveNamespacePolicy = SimpleNamespacePolicy $ const True
-
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
@@ -162,8 +164,9 @@ data RefState = RefState {
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe (Namespace (Term Name))
-    } deriving (Eq,Show)
+    } deriving (Eq,Show,Generic)
 makeLenses ''RefState
+instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing
 
 -- | Interpreter mutable state.
@@ -178,8 +181,9 @@ data EvalState = EvalState {
     , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
-    } deriving (Show)
+    } deriving (Show, Generic)
 makeLenses ''EvalState
+instance NFData EvalState
 instance Default EvalState where def = EvalState def def def 0 def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.

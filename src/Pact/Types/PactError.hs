@@ -29,6 +29,7 @@ import Control.Monad.Catch
 import Data.Aeson hiding (Object)
 import Data.Default
 import Data.Text (Text, unpack)
+import Control.DeepSeq (NFData)
 
 import GHC.Generics
 
@@ -41,6 +42,7 @@ data StackFrame = StackFrame {
     , _sfLoc :: !Info
     , _sfApp :: Maybe (FunApp,[Text])
     } deriving (Eq,Generic)
+instance NFData StackFrame
 instance ToJSON StackFrame where toJSON = toJSON . show
 
 instance Show StackFrame where
@@ -57,6 +59,7 @@ data PactErrorType
   | SyntaxError
   | GasError
   deriving (Show,Eq,Generic)
+instance NFData PactErrorType
 instance ToJSON PactErrorType
 instance FromJSON PactErrorType
 
@@ -67,6 +70,7 @@ data PactError = PactError
   , peDoc :: Doc }
   deriving (Eq,Generic)
 
+instance NFData PactError
 instance Exception PactError
 instance ToJSON PactError where
   toJSON (PactError t i s d) =
