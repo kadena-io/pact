@@ -7,7 +7,6 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Data.Int (Int64)
 import Pact.Types.Continuation
 import Pact.Types.Gas
 import Pact.Types.SizeOf
@@ -31,7 +30,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_moduleMemberCost :: Gas
   , _gasCostConfig_useModuleCost :: Gas
   , _gasCostConfig_interfaceCost :: Gas
-  , _gasCostConfig_writeBytesFactor :: Gas -- additional cost per bytes to write to database
+  , _gasCostConfig_writeBytesCost :: Gas -- cost per bytes to write to database
   , _gasCostConfig_functionApplicationCost :: Gas
   , _gasCostConfig_defPactCost :: Gas
   }
@@ -47,7 +46,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_moduleMemberCost = 1
   , _gasCostConfig_useModuleCost = 1     -- TODO benchmark
   , _gasCostConfig_interfaceCost = 1     -- TODO benchmark
-  , _gasCostConfig_writeBytesFactor = 1
+  , _gasCostConfig_writeBytesCost = 1
   , _gasCostConfig_functionApplicationCost = 1
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   }
@@ -211,20 +210,20 @@ tableGasModel gasConfig =
           ReadYield (Yield _obj _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
         GWrite w -> case w of
           WriteData _type key obj ->
-            (memoryCost key (_gasCostConfig_writeBytesFactor gasConfig))
-            + (memoryCost obj (_gasCostConfig_writeBytesFactor gasConfig))
-          WriteTable tableName -> (memoryCost tableName (_gasCostConfig_writeBytesFactor gasConfig))
+            (memoryCost key (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost obj (_gasCostConfig_writeBytesCost gasConfig))
+          WriteTable tableName -> (memoryCost tableName (_gasCostConfig_writeBytesCost gasConfig))
           WriteModule _modName _mCode ->
-            (memoryCost _modName (_gasCostConfig_writeBytesFactor gasConfig))
-            + (memoryCost _mCode (_gasCostConfig_writeBytesFactor gasConfig))
+            (memoryCost _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost _mCode (_gasCostConfig_writeBytesCost gasConfig))
           WriteInterface _modName _mCode ->
-            (memoryCost _modName (_gasCostConfig_writeBytesFactor gasConfig))
-            + (memoryCost _mCode (_gasCostConfig_writeBytesFactor gasConfig))
-          WriteNamespace ns -> (memoryCost ns (_gasCostConfig_writeBytesFactor gasConfig))
+            (memoryCost _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost _mCode (_gasCostConfig_writeBytesCost gasConfig))
+          WriteNamespace ns -> (memoryCost ns (_gasCostConfig_writeBytesCost gasConfig))
           WriteKeySet ksName ks ->
-            (memoryCost ksName (_gasCostConfig_writeBytesFactor gasConfig))
-            + (memoryCost ks (_gasCostConfig_writeBytesFactor gasConfig))
-          WriteYield obj -> (memoryCost obj (_gasCostConfig_writeBytesFactor gasConfig))
+            (memoryCost ksName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost ks (_gasCostConfig_writeBytesCost gasConfig))
+          WriteYield obj -> (memoryCost obj (_gasCostConfig_writeBytesCost gasConfig))
         GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
         GModuleDecl _moduleName _mCode -> (_gasCostConfig_moduleCost gasConfig)
         GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
@@ -240,8 +239,11 @@ tableGasModel gasConfig =
       }
 
 
-costPerByte :: Int64
-costPerByte = 1
+perByteFactor :: Float
+perByteFactor = 1.0
 
 memoryCost :: (SizeOf a) => a -> Gas -> Gas
-memoryCost val (Gas factor) = Gas $ (sizeOf val) * factor * costPerByte
+memoryCost val (Gas cost) = Gas totalCost
+  where costFrac = realToFrac cost
+        sizeFrac = realToFrac (sizeOf val)
+        totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
