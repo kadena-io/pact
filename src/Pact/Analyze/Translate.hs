@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
@@ -29,6 +28,7 @@ import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              (<>~), (?=), (^.), (<&>), _1, (^..))
 import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
+import           Control.Monad.Fail         (MonadFail(..))
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, evalStateT,
@@ -64,10 +64,6 @@ import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var, col,
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
-
-#if ! MIN_VERSION_base(4,13,0)
-import Control.Monad.Fail (MonadFail(..))
-#endif
 
 -- * Translation types
 

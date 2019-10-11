@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -42,6 +41,7 @@ module Pact.Types.Util
   , rewrap, rewrapping, wrap, unwrap
   ) where
 
+import Control.Monad.Fail (MonadFail)
 import Data.Aeson
 import Data.Aeson.Types
 import GHC.Generics
@@ -56,10 +56,6 @@ import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty)
-
-#if ! MIN_VERSION_base(4,13,0)
-import Control.Monad.Fail (MonadFail)
-#endif
 
 
 class ParseText a where

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
@@ -37,6 +36,7 @@ import Control.Applicative
 import Control.DeepSeq (NFData)
 import Control.Lens (Wrapped(..))
 import Control.Monad
+import Control.Monad.Fail (MonadFail)
 import qualified Data.Aeson as A
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (digitToInt)
@@ -54,10 +54,6 @@ import Pact.Types.PactValue
 import Pact.Types.Parser
 import Pact.Types.Info
 import Pact.Types.Term (ToTerm)
-
-#if ! MIN_VERSION_base(4,13,0)
-import Control.Monad.Fail (MonadFail)
-#endif
 
 -- | Main parser for Pact expressions.
 expr :: (MonadFail m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
