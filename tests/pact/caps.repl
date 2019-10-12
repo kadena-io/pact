@@ -267,6 +267,8 @@
   )
 
 (commit-tx)
+
+(begin-tx)
 (use mgd-caps)
 (env-data { "alice": ["alice"] })
 
@@ -277,6 +279,10 @@
 (env-sigs [{ "key": "alice",
           "caps": [(PAY "alice" "bob" 10)
                   ,(PAY "alice" "carl" 1)] }] )
+
+(expect-failure
+ "Payment should fail with no cap installed"
+ (pay "alice" "bob" 6))
 
 (expect-failure
  "Failure on external install"

@@ -116,7 +116,7 @@ installCapability =
 
         enforceNotWithinDefcap i "install-capability"
 
-        already <- evalCap i (CapManaged ()) True cap
+        already <- evalCap i CapManaged True cap
 
         return $ tStr $ case already of
           NewlyAcquired -> "Installed capability"
@@ -128,25 +128,25 @@ installCapability =
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be invoked within module code.
-evalCap :: HasInfo i => i -> CapScope () -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
+evalCap :: HasInfo i => i -> CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
 evalCap i scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
-      scope' <- traverse (getMgrFun d) scope
+      mgrFunM <- getMgrFun d
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquireCapability i (applyMgrFun a d) scope' cap $ do
+      acquireCapability i (applyMgrFun a d) scope cap mgrFunM $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
 
-getMgrFun :: Def Ref -> () -> Eval e (Maybe (Def Ref))
-getMgrFun capDef _ = case _dDefMeta capDef of
-  Nothing -> evalError' capDef $ "Attempting to install non-managed capability"
+getMgrFun :: Def Ref -> Eval e (Maybe (Def Ref))
+getMgrFun capDef = case _dDefMeta capDef of
+  Nothing -> return Nothing
   Just (DMDefcap (DefcapMeta t)) -> case t of
     (TVar (Ref (TDef d _)) i) -> do
       unless (_dDefType d == Defun) $
         evalError i $ "Manager function must be defun"
       defTy <- traverse reduce $ _dFunType d
 
-      typecheckDef d defTy mgrFunTy -- TODO would be nice to do this, module load?
+      typecheckDef d defTy mgrFunTy -- TODO would be nice to do this in module load?
       return $ Just d
     _ -> evalError' t $ "@managed must refer to a def of type " <> pretty mgrFunTy
   where
@@ -209,7 +209,7 @@ resolveCapInstallMaybe SigCapability{..} = do
   where
     installMaybe d@Def{..} as = case _dDefMeta of
       Nothing -> return Nothing
-      Just _ -> return $ Just $ evalCap d (CapManaged ()) False (mkApp d as)
+      Just _ -> return $ Just $ evalCap d CapManaged False (mkApp d as)
     mkApp d@Def{..} as =
       App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
           (map liftTerm as) (getInfo d)
