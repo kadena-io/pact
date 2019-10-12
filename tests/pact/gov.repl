@@ -25,6 +25,8 @@
 (create-table votes)
 
 (commit-tx)
+
+(begin-tx)
 (use govtest)
 
 (vote-for-hash "alice" (hash "tx1"))
@@ -32,6 +34,11 @@
 (vote-for-hash "charlie" (hash "tx3"))
 (vote-for-hash "dinesh" (hash "tx2"))
 (vote-for-hash "erica" (hash "tx2"))
+
+(commit-tx)
+
+(begin-tx)
+(use govtest)
 
 ;; direct read will attempt to grant admin
 (env-hash (hash "tx1"))
@@ -43,3 +50,17 @@
 (env-hash (hash "tx2"))
 
 (expect "admin grant succeeds for tx2" { "vote-hash": (hash "tx2") } (read votes "bob"))
+
+;; prove that admin is granted for rest of tx by resetting tx-hash to non-winning value
+
+(env-hash (hash "tx1"))
+
+(expect "admin grant doesn't need re-acquire"
+        { "vote-hash": (hash "tx2") }
+        (read votes "bob"))
+(commit-tx)
+
+(begin-tx)
+(use govtest)
+(env-hash (hash "tx1"))
+(expect-failure "admin grant fails on new tx for tx1" (read votes "bob"))
