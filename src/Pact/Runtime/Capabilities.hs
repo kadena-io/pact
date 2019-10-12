@@ -128,14 +128,14 @@ acquireCapability i af scope cap test = go
 
     -- Callstack: check if managed, in which case push, otherwise
     -- push and test.
-    evalStack = checkManaged af cap >>= \r -> case r of
+    evalStack = checkManaged i af cap >>= \r -> case r of
       Nothing -> push >> test
       Just (Left e) -> evalError def (prettyString e)
       Just (Right mgd) -> pushSlot (CapSlot scope cap (_csComposed mgd))
 
     -- Composed: check if managed, in which case install onto head,
     -- otherwise push, test, pop and install onto head
-    evalComposed = checkManaged af cap >>= \r -> case r of
+    evalComposed = checkManaged i af cap >>= \r -> case r of
       Nothing -> push >> test >> popCapStack installComposed
       Just (Left e) -> evalError def (prettyString e)
       Just (Right mgd) -> installComposed (CapSlot scope cap (_csComposed mgd))
@@ -147,10 +147,14 @@ acquireCapability i af scope cap test = go
     pushSlot s = evalCapabilities . capStack %= (s:)
 
 
-checkManaged :: ApplyMgrFun e -> Capability -> Eval e (Maybe (Either String (CapSlot Capability)))
-checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
+checkManaged
+  :: HasInfo i
+  => i
+  -> ApplyMgrFun e
+  -> Capability
+  -> Eval e (Maybe (Either String (CapSlot Capability)))
+checkManaged i applyF cap = use (evalCapabilities . capManaged) >>= go
   where
-    noMatch = return $ Nothing
 
     go mgdCaps = do
       (success,failures,processedMgdCaps) <- foldM check (Nothing,[],mempty) mgdCaps
@@ -174,16 +178,25 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
           Just (Right newMgdCap) ->
             return (Just newMgdCap,[],S.insert newMgdCap ms)
 
-    runManaged mcs = case _csScope mcs of -- validate scope
-      CapManaged (Just mf) -> case _csCap mcs of -- validate user mg cap and has mgr fun
-        UserCapability mqn mas -> case cap of -- validate user test cap
-          UserCapability cqn cas
-            | cqn == mqn -> -- check type match and apply mgr fun
-                Just <$> applyMgrFun mcs mqn mf mas cas
-            | otherwise -> noMatch
-          _ -> noMatch
-        _ -> noMatch
-      _ -> noMatch
+    runManaged mcs = case (_csScope mcs,_csCap mcs,cap) of -- validate mgr fun, mgr cap, acquired cap
+      (CapManaged (Just mf),UserCapability mqn mas,UserCapability cqn cas) -- managed user cap w/ fun
+        | cqn == mqn -> -- apply mgr fun on cap domain match
+          Just <$> applyMgrFun mcs mqn mf mas cas
+        | otherwise -> noMatch
+      (CapManaged Nothing,ModuleAdminCapability mmn,ModuleAdminCapability cmn)
+        | mmn == cmn -> -- trivially succeed on matching module
+          return $ Just (Right mcs)
+        | otherwise -> noMatch
+      (CapManaged Just {},ModuleAdminCapability m,_) ->
+        evalError' i $ "Internal error, managed module admin: " <> pretty m
+      (CapManaged Nothing,uc@UserCapability {},_) ->
+        evalError' i $ "Internal error, unmanaged user cap: " <> pretty uc
+      (CapManaged _,_,_) ->
+        noMatch
+      (s,c,_) ->
+        evalError' i $ "Non-managed scope in managed collection: " <> pretty (s,c)
+
+    noMatch = return $ Nothing
 
     applyMgrFun mcs mqn mf mas cas = fmap updateManagedSlot <$> applyF mf mas cas
       where
