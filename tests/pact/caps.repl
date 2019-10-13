@@ -94,6 +94,12 @@
     (other.enforce-a-guard (get-module-guard))
     "success")
 
+  (defun bad-user-guard-compose ()
+    (with-capability (BAD_USER_GUARD_COMPOSE) true))
+
+  (defcap BAD_USER_GUARD_COMPOSE ()
+    (enforce-guard (create-user-guard (bad-compose-cap))))
+
 )
 
 (create-table guard-table)
@@ -243,6 +249,11 @@
 (expect-failure
  "failure creating a user guard with a defcap"
  (create-user-guard (KEYSET-ID-CAP "k1")))
+
+(env-keys ["a" "b" "c"])
+(expect-failure
+ "user guard with compose fails"
+ (bad-user-guard-compose))
 
 
 ;;

@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- |
 -- Module      :  Pact.Native.Capabilities
@@ -215,7 +216,7 @@ resolveCapInstallMaybe SigCapability{..} = do
           (map liftTerm as) (getInfo d)
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
-enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $
+enforceNotWithinDefcap i msg = defcapInStack Nothing >>= \p -> when p $
   evalError' i $ msg <> " not allowed within defcap execution"
 
 requireCapability :: NativeDef
@@ -249,7 +250,7 @@ composeCapability =
     composeCapability' :: NativeFun e
     composeCapability' i [TApp app _] = gasUnreduced i [] $ do
       -- enforce in defcap
-      defcapInStack >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
+      defcapInStack (Just 1) >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
       -- evalCap as composed, which will install onto head of pending cap
       void $ evalCap i CapComposed True app
       return $ toTerm True
@@ -257,8 +258,21 @@ composeCapability =
 
 -- | Traverse up the call stack returning 'True' if a containing
 -- defcap application is found.
-defcapInStack :: Eval e Bool
-defcapInStack = isJust <$> preuse (evalCallStack . traverse . sfApp . _Just . _1 . faDefType . _Defcap)
+defcapInStack :: Maybe Int -> Eval e Bool
+defcapInStack limit = use evalCallStack >>= return . go limit
+  where
+    go :: Maybe Int -> [StackFrame] -> Bool
+    go Nothing s = isJust . preview (funapps . faDefType . _Defcap) $ s
+    go (Just limit') s = case take limit'
+      (toListOf (traverse . sfApp . _Just . _1 . to defcapIfUserApp . traverse) s) of
+      [] -> False
+      dts -> Defcap `elem` dts
+
+    defcapIfUserApp FunApp{..} = _faDefType <$ _faModule
+
+    funapps :: Traversal' [StackFrame] FunApp
+    funapps = traverse . sfApp . _Just . _1
+
 
 
 
