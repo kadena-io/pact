@@ -191,6 +191,12 @@ checkManaged applyF cap (Just mgrFun) = use (evalCapabilities . capManaged) >>= 
 
         | otherwise -> noMatch
       (ModuleAdminCapability mmn,ModuleAdminCapability cmn)
+        -- TODO, this is unreachable, as module admin has 'Nothing' for mgrFun.
+        -- Leaving this in as there is no way currently to acquire admin (as opposed
+        -- to install, which is what 'acquireModuleAdmin' does, which always
+        -- succeeds with the "previously installed" check in 'acquireCapability'.
+        -- Leaving it here for the semantics, and noting that we need a better
+        -- rep of the mgrFun to represent admin if we implement acquire.
         | mmn == cmn -> -- admin trivially succeeds on matching module
           return $ Just (Right mcs)
         | otherwise -> noMatch

@@ -2,3 +2,66 @@
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
 (expect-failure "out of gas" (+ 1 2))
+
+
+;; gas cap example
+(env-gaslimit 1000)
+(module gas-charger G
+  (defcap G () true)
+
+  (defschema entry balance:decimal guard:guard)
+  (deftable ledger:{entry})
+
+  (defcap DEBIT
+    ( id:string
+      amount:decimal
+      )
+    (enforce-guard (at 'guard (read ledger id))))
+
+  (defcap GAS
+    ( sender:string
+      limit:integer
+      price:decimal )
+    (compose-capability (DEBIT sender (* limit price))))
+
+  (defun buy-gas
+      ( sender:string
+        limit:integer
+        price:decimal
+        )
+    (with-capability
+     (GAS sender limit price)
+     (let ((bal (get-balance sender))
+           (amount (* limit price)))
+       (enforce (>= bal amount) "Insufficient funds")
+       (update ledger sender (- bal amount))
+       "Gas buy succeeded")))
+
+  (defun get-balance
+      ( id )
+    (at 'balance (read ledger id))))
+
+(module gas-payer G
+  (defcap G () true)
+
+  (defschema entry balance:decimal guard:guard)
+  (deftable ledger:{entry})
+
+  (defcap DEBIT
+    ( id:string
+      amount:decimal
+      )
+    (enforce-guard (at 'guard (read ledger id))))
+
+  (defcap PAY_GAS
+    ( sender:string
+      amount:decimal
+      )
+
+    (compose-capability (DEBIT sender amount))
+
+    (let ((bal (get-balance sender)))
+      (enforce (>= bal amount) "Insufficient gas credits")
+      (update ledger sender (- bal amount))
+      true))
+)
