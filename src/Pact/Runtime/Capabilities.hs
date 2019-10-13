@@ -133,14 +133,14 @@ acquireCapability i af scope cap capMF test = go
 
     -- Callstack: check if managed, in which case push, otherwise
     -- push and test.
-    evalStack = checkManaged i af cap capMF >>= \r -> case r of
+    evalStack = checkManaged af cap capMF >>= \r -> case r of
       Nothing -> push >> test
       Just (Left e) -> evalError def (prettyString e)
       Just (Right mgd) -> pushSlot (CapSlot scope cap (_csComposed mgd))
 
     -- Composed: check if managed, in which case install onto head,
     -- otherwise push, test, pop and install onto head
-    evalComposed = checkManaged i af cap capMF >>= \r -> case r of
+    evalComposed = checkManaged af cap capMF >>= \r -> case r of
       Nothing -> push >> test >> popCapStack installComposed
       Just (Left e) -> evalError def (prettyString e)
       Just (Right mgd) -> installComposed (CapSlot scope cap (_csComposed mgd))
@@ -153,13 +153,12 @@ acquireCapability i af scope cap capMF test = go
 
 
 checkManaged
-  :: HasInfo i
-  => i
-  -> ApplyMgrFun e
+  :: ApplyMgrFun e
   -> Capability
   -> Maybe (Def Ref)
   -> Eval e (Maybe (Either String (CapSlot Capability)))
-checkManaged i applyF cap mgrFun = use (evalCapabilities . capManaged) >>= go
+checkManaged _ _ Nothing = return Nothing
+checkManaged applyF cap (Just mgrFun) = use (evalCapabilities . capManaged) >>= go
   where
 
     go mgdCaps = do
@@ -168,13 +167,11 @@ checkManaged i applyF cap mgrFun = use (evalCapabilities . capManaged) >>= go
         Just newMgdCap -> do
           evalCapabilities . capManaged .= processedMgdCaps
           return $ Just $ Right newMgdCap
-        Nothing -> case (failures,mgrFun) of
-          ([],Nothing) -> return Nothing -- can only allow no match if not managed
-          (es,_) -> return $ Just $ Left $
+        Nothing -> return $ Just $ Left $
             "Acquire of managed capability failed: " ++
-            (case es of
+            (case failures of
               [] -> "none installed"
-              _ -> intercalate "," (map (renderCompactString' . peDoc) es))
+              es -> intercalate "," (map (renderCompactString' . peDoc) es))
 
     check (successR,failedRs,ms) m = case successR of
       Just {} -> return (successR,[],S.insert m ms) -- short circuit on success
@@ -188,11 +185,10 @@ checkManaged i applyF cap mgrFun = use (evalCapabilities . capManaged) >>= go
 
     runManaged mcs = case (_csCap mcs,cap) of -- validate mgr fun, mgr cap, acquired cap
       (UserCapability mqn mas,UserCapability cqn cas) -- managed user cap w/ fun
-        | cqn == mqn -> case mgrFun of
+        | cqn == mqn ->
             -- apply mgr fun on cap domain match
-            Just mf -> Just <$> applyMgrFun mcs mqn mf mas cas
-            Nothing -> evalError' i $
-              "Internal error, managed user cap must have manager fun: " <> pretty cap
+            Just <$> applyMgrFun mcs mqn mgrFun mas cas
+
         | otherwise -> noMatch
       (ModuleAdminCapability mmn,ModuleAdminCapability cmn)
         | mmn == cmn -> -- admin trivially succeeds on matching module
