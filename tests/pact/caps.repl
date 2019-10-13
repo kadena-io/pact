@@ -230,7 +230,19 @@
 
 (expect-failure "shadowed cap fails" (caps-shadow.bad-shadow-granted "k1"))
 
-(expect "" "success" (test-module-guard-other))
+(expect "success enforcing module guard in foreign module"
+        "success"
+        (test-module-guard-other))
+
+(env-keys ["k1"])
+(expect
+ "success requiring a capability in user guard"
+ true
+ (enforce-guard (create-user-guard (test-id-cap "k1"))))
+
+(expect-failure
+ "failure creating a user guard with a defcap"
+ (create-user-guard (KEYSET-ID-CAP "k1")))
 
 
 ;;

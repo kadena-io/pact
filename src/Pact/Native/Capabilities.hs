@@ -228,7 +228,6 @@ requireCapability =
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ do
       (cap,_,_) <- appToCap a
-      enforceNotWithinDefcap i "require-capability"
       granted <- capabilityGranted CapCallStack cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
