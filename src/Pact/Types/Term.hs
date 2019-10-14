@@ -97,6 +97,7 @@ import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
 import Data.Foldable
+import Data.Functor.Classes (Eq1(..))
 import Data.Function
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -1141,7 +1142,7 @@ termEq (TObject (Object (ObjectMap a) _ _ _) _) (TObject (Object (ObjectMap b) _
           go [] [] _ = True
           go _ _ _ = False
 termEq (TLiteral a _) (TLiteral b _) = a == b
-termEq (TGuard a _) (TGuard b _) = a == b
+termEq (TGuard a _) (TGuard b _) = liftEq termEq a b
 termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g && d == h && x == y
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && d == h
 termEq _ _ = False
