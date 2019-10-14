@@ -140,7 +140,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   let evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData edata Nothing (toUntypedHash hsh))
                 initRefStore _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData
-  EvalResult{..} <- liftIO $ evalExec signers def evalEnv parsedCode
+  EvalResult{..} <- liftIO $ evalExec signers defaultInterpereter evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs
 
@@ -152,5 +152,5 @@ applyContinuation rk hsh signers cm = do
   let evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData (_cmData cm) Nothing (toUntypedHash hsh)) initRefStore
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData
-  EvalResult{..} <- liftIO $ evalContinuation signers def evalEnv cm
+  EvalResult{..} <- liftIO $ evalContinuation signers defaultInterpereter evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs

@@ -37,8 +37,8 @@ module Pact.Interpreter
   , BeginTx
   , CommitTx
   , WithRollback
-  , EvalRunner (..)
-  , defaultRunner
+  , Interpreter (..)
+  , defaultInterpereter
   ) where
 
 import Control.Concurrent
@@ -107,8 +107,8 @@ type CommitTx e = ([Term Name], Maybe TxId) -> Eval e EvalOutput
 type WithRollback e = Eval e EvalOutput -> Eval e EvalOutput
 
 -- | Fully general evaluator for some input.
-data EvalRunner e = EvalRunner
-  { evalRunner
+data Interpreter e = Interpreter
+  { interpreter
     :: BeginTx e
     -> CommitTx e
     -> WithRollback e
@@ -118,10 +118,9 @@ data EvalRunner e = EvalRunner
 
 
 -- | Standard runner starts a tx, runs input and commits, with rollback.
-defaultRunner :: EvalRunner e
-defaultRunner = EvalRunner $ \start end withRollback runInput ->
+defaultInterpereter :: Interpreter e
+defaultInterpereter = Interpreter $ \start end withRollback runInput ->
   withRollback $ (start runInput >>= end)
-
 
 data EvalResult = EvalResult
   { _erInput :: !EvalInput
@@ -134,7 +133,7 @@ data EvalResult = EvalResult
   } deriving (Eq,Show)
 
 -- | Execute pact statements.
-evalExec :: [Signer] -> EvalRunner e -> EvalEnv e -> ParsedCode -> IO EvalResult
+evalExec :: [Signer] -> Interpreter e -> EvalEnv e -> ParsedCode -> IO EvalResult
 evalExec ss runner evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
   interpret ss runner evalEnv (Right terms)
@@ -144,7 +143,7 @@ initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
 initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 -- | Resume a defpact execution, with optional PactExec.
-evalContinuation :: [Signer] -> EvalRunner e -> EvalEnv e -> ContMsg -> IO EvalResult
+evalContinuation :: [Signer] -> Interpreter e -> EvalEnv e -> ContMsg -> IO EvalResult
 evalContinuation ss runner ee cm = case (_cmProof cm) of
   Nothing ->
     interpret ss runner (setStep Nothing) (Left Nothing)
@@ -207,7 +206,7 @@ initSchema :: PactDbEnv (DbEnv p) -> IO ()
 initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 
-interpret :: [Signer] -> EvalRunner e -> EvalEnv e -> EvalInput -> IO EvalResult
+interpret :: [Signer] -> Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
 interpret ss runner evalEnv terms = do
   ((rs,logs,txid),state) <-
     runEval def evalEnv $ evalTerms runner ss terms
@@ -217,18 +216,17 @@ interpret ss runner evalEnv terms = do
   -- output uses lenient conversion
   return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
 
-evalTerms :: EvalRunner e -> [Signer] -> EvalInput -> Eval e EvalOutput
-evalTerms runner ss input = evalRunner runner start end withRollback runInput
+evalTerms :: Interpreter e -> [Signer] -> EvalInput -> Eval e EvalOutput
+evalTerms interp ss input = interpreter interp start end withRollback runInput
 
   where
     withRollback :: WithRollback e
     withRollback act = handle (\(e :: SomeException) -> safeRollback >> throwM e) act
+
     safeRollback :: Eval e ()
     safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
-    go act = do
-      (rs,txid) <- start act
-      end (rs,txid)
+
     start :: BeginTx e
     start act = do
       txid <- evalBeginTx def
@@ -238,6 +236,7 @@ evalTerms runner ss input = evalRunner runner start end withRollback runInput
         -- install any caps
         traverse_ (traverse_ (traverse_ $ \i -> i)) sigsAndInstallers
         (,txid) <$> act
+
     end :: CommitTx e
     end (rs,txid) = do
       logs <- evalCommitTx def
