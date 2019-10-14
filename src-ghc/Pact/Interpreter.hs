@@ -38,13 +38,15 @@ module Pact.Interpreter
   , CommitTx
   , WithRollback
   , Interpreter (..)
-  , defaultInterpereter
+  , defaultInterpreter
+  , defaultInterpreterState
   ) where
 
 import Control.Concurrent
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State (modify)
 import Control.Lens
 
 import Data.Aeson
@@ -118,9 +120,14 @@ data Interpreter e = Interpreter
 
 
 -- | Standard runner starts a tx, runs input and commits, with rollback.
-defaultInterpereter :: Interpreter e
-defaultInterpereter = Interpreter $ \start end withRollback runInput ->
+defaultInterpreter :: Interpreter e
+defaultInterpreter = Interpreter $ \start end withRollback runInput ->
   withRollback $ (start runInput >>= end)
+
+  -- | Standard runner starts a tx, runs input and commits, with rollback.
+defaultInterpreterState :: (EvalState -> EvalState) -> Interpreter e
+defaultInterpreterState stateF = Interpreter $ \start end withRollback runInput ->
+  withRollback $ (start (modify stateF >> runInput) >>= end)
 
 data EvalResult = EvalResult
   { _erInput :: !EvalInput
