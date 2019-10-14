@@ -18,6 +18,7 @@ module Pact.Types.Info
    Parsed(..),
    Code(..),
    Info(..),
+   mkInfo,
    renderInfo,
    renderParsed,
    HasInfo(..)
@@ -79,6 +80,12 @@ instance Show Info where
     show (Info (Just (r,_d))) = renderCompactString r
 
 instance Default Info where def = Info Nothing
+
+-- make an Info that refers to the indicated text
+mkInfo :: Text -> Info
+mkInfo t = Info $ Just (Code t,Parsed delt len)
+  where len = T.length t
+        delt = Directed (encodeUtf8 t) 0 0 (fromIntegral len) (fromIntegral len)
 
 #if !defined(ghcjs_HOST_OS)
 instance Mergeable Info where
