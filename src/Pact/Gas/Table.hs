@@ -68,6 +68,7 @@ defaultGasTable =
    ,("identity",             const 2)
    ,("if",                   const 1)
    ,("int-to-str",           const 1)
+   ,("is-charset",           const 1) -- TODO benchmark
    ,("length",               const 1)
    ,("list-modules",         const 12)
    ,("make-list",            const 1)
@@ -169,9 +170,13 @@ defaultGasTable =
    ,("create-pact-guard",   const 1)
    ,("create-user-guard",   const 1)
    ,("enforce-guard",       const 11)
+   ,("install-capability",  const 1) -- TODO benchmark
    ,("keyset-ref-guard",    const 1)
    ,("require-capability",  const 1)
    ,("with-capability",     const 2)
+
+   -- Deprecated functions
+   ,("verify-spv",          const 1)
    ]
 
 tableGasModel :: GasCostConfig -> GasModel

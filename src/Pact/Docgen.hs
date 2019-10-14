@@ -58,7 +58,7 @@ renderFunctions h = do
   renderSection (snd replDefs)
 
 renderTerm :: Pretty n => Handle -> Term n -> IO ()
-renderTerm h TNative {..} = do
+renderTerm h TNative{..} = do
   termHeader h _tNativeName
   forM_ _tFunTypes $ \FunType {..} -> do
     hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ unpack n ++
@@ -76,7 +76,8 @@ renderTerm h TNative {..} = do
     hPutStrLn h ""
     hPutStrLn h "Top level only: this function will fail if used in module code."
   hPutStrLn h ""
-renderTerm h TSchema {..} = do
+
+renderTerm h TSchema{..} = do
   termHeader h _tSchemaName
   case _mDocs _tMeta of
     Nothing -> hPutStrLn stderr $ "No docs for schema " ++ renderCompactString _tSchemaName
@@ -86,6 +87,23 @@ renderTerm h TSchema {..} = do
   hPutStrLn h "Fields:"
   forM_ (map (prettyTypeTerm <$>) _tFields) $ \(Arg n t _) ->
     hPutStrLn h $ "&nbsp;&nbsp;`" ++ unpack n ++ ":" ++ renderCompactString t ++ "`"
+  hPutStrLn h ""
+
+renderTerm h (TConst (Arg n ty _) _ cval meta _) = do
+  termHeader h n
+  case _mDocs meta of
+    Nothing -> hPutStrLn stderr $ "No docs for constant " <> renderCompactString n
+    Just docs -> do
+      hPutStrLn h $ unpack docs
+      hPutStrLn h ""
+
+  hPutStrLn h "Constant: "
+  hPutStr h
+    $ "&nbsp;&nbsp;`" <> unpack n
+    <> ":" <> renderCompactString ty
+    <> " = " <> showPretty (_cvRaw cval)
+    <> "`"
+
   hPutStrLn h ""
 
 renderTerm _ _ = return ()

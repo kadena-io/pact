@@ -45,6 +45,7 @@ import System.Directory
 import System.FilePath
 
 import Pact.Types.API
+import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Crypto
 import Pact.Types.RPC
@@ -55,7 +56,8 @@ data ApiKeyPair = ApiKeyPair {
   _akpSecret :: PrivateKeyBS,
   _akpPublic :: Maybe PublicKeyBS,
   _akpAddress :: Maybe Text,
-  _akpScheme :: Maybe PPKScheme
+  _akpScheme :: Maybe PPKScheme,
+  _akpCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
 instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
@@ -73,7 +75,8 @@ data ApiReq = ApiReq {
   _ylCodeFile :: Maybe FilePath,
   _ylKeyPairs :: [ApiKeyPair],
   _ylNonce :: Maybe String,
-  _ylPublicMeta :: Maybe PublicMeta
+  _ylPublicMeta :: Maybe PublicMeta,
+  _ylNetworkId :: Maybe NetworkId
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
@@ -100,7 +103,7 @@ mkApiReq fp = do
 
 
 
-mkApiReqExec :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
+mkApiReqExec :: ApiReq -> [SomeKeyPairCaps] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqExec ar@ApiReq{..} kps fp = do
   (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
@@ -116,20 +119,37 @@ mkApiReqExec ar@ApiReq{..} kps fp = do
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
     return (code,cdata)
   let pubMeta = fromMaybe def _ylPublicMeta
-  ((ar,code,cdata,pubMeta),) <$> mkExec code cdata pubMeta kps _ylNonce
+  cmd <- mkExec code cdata pubMeta kps _ylNetworkId _ylNonce
+  return ((ar,code,cdata,pubMeta), cmd)
 
-mkExec :: String -> Value -> PublicMeta -> [SomeKeyPair] -> Maybe String -> IO (Command Text)
-mkExec code mdata pubMeta kps ridm = do
+-- | Construct an Exec request message
+--
+mkExec
+  :: String
+    -- ^ code
+  -> Value
+    -- ^ optional environment data
+  -> PublicMeta
+    -- ^ public metadata
+  -> [SomeKeyPairCaps]
+    -- ^ signing keypairs + caplists
+  -> Maybe NetworkId
+    -- ^ optional 'NetworkId'
+  -> Maybe String
+    -- ^ optional nonce
+  -> IO (Command Text)
+mkExec code mdata pubMeta kps nid ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   cmd <- mkCommand
          kps
          pubMeta
          (pack $ show rid)
+         nid
          (Exec (ExecMsg (pack code) mdata))
   return $ decodeUtf8 <$> cmd
 
 
-mkApiReqCont :: ApiReq -> [SomeKeyPair] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
+mkApiReqCont :: ApiReq -> [SomeKeyPairCaps] -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReqCont ar@ApiReq{..} kps fp = do
   apiPactId <- case _ylPactTxHash of
     Just t -> return t
@@ -153,39 +173,61 @@ mkApiReqCont ar@ApiReq{..} kps fp = do
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
   let pubMeta = fromMaybe def _ylPublicMeta
       pactId = toPactId apiPactId
-  ((ar,"",cdata,pubMeta),) <$> mkCont pactId step rollback cdata pubMeta kps _ylNonce _ylProof
+  cmd <- mkCont pactId step rollback cdata pubMeta kps _ylNonce _ylProof _ylNetworkId
+  return ((ar,"",cdata,pubMeta), cmd)
 
-mkCont :: PactId -> Int -> Bool -> Value -> PublicMeta -> [SomeKeyPair]
-  -> Maybe String -> Maybe ContProof -> IO (Command Text)
-mkCont txid step rollback mdata pubMeta kps ridm proof = do
+-- | Construct a Cont request message
+--
+mkCont
+  :: PactId
+    -- ^ pact tx hash of the continuation
+  -> Int
+    -- ^ cont step
+  -> Bool
+    -- ^ has rollback?
+  -> Value
+    -- ^ environment data
+  -> PublicMeta
+    -- ^ command public metadata
+  -> [SomeKeyPairCaps]
+    -- ^ signing keypairs
+  -> Maybe String
+    -- ^ optional nonce
+  -> Maybe ContProof
+    -- ^ optional continuation proof (required for cross-chain)
+  -> Maybe NetworkId
+    -- ^ optional network id
+  -> IO (Command Text)
+mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   cmd <- mkCommand
          kps
          pubMeta
          (pack $ show rid)
+         nid
          (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
 
 
-mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPair]
+mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPairCaps]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
-  where isValidKeyPair ApiKeyPair{..} =
+  where importValidKeyPair ApiKeyPair{..} = fmap (,maybe [] id _akpCaps) $
           case _akpScheme of
             Nothing -> importKeyPair defaultScheme _akpPublic _akpSecret
             Just ppk -> importKeyPair (toScheme ppk) _akpPublic _akpSecret
 
         mkPair akp = case _akpAddress akp of
-          Nothing -> either dieAR return (isValidKeyPair akp)
+          Nothing -> either dieAR return (importValidKeyPair akp)
           Just addrT -> do
             addrBS <- either dieAR return (parseB16TextOnly addrT)
-            kp     <- either dieAR return (isValidKeyPair akp)
+            kp     <- either dieAR return (importValidKeyPair akp)
 
             -- Enforces that user provided address matches the address derived from the Public Key
             -- for transparency and a better user experience. User provided address not used except
             -- for this purpose.
 
-            case (addrBS, formatPublicKey kp) of
+            case (addrBS, formatPublicKey (fst kp)) of
               (expectAddr, actualAddr)
                 | expectAddr == actualAddr  -> return kp
                 | otherwise                 -> dieAR $ "Address provided "
@@ -194,16 +236,32 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
                                                ++ show (toB16Text actualAddr)
 
 dieAR :: String -> IO a
-dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
-  \  code: Transaction code \n\
-  \  codeFile: Transaction code file \n\
-  \  data: JSON transaction data \n\
-  \  dataFile: JSON transaction data file \n\
-  \  keyPairs: list of key pairs for signing (use pact -g to generate): [\n\
-  \    public: base 16 public key \n\
-  \    secret: base 16 secret key \n\
-  \    address: base 16 address   \n\
-  \    scheme: cryptographic scheme \n\
-  \    ] \n\
-  \  nonce: optional request nonce, will use current time if not provided \n\
-  \Error message: " ++ errMsg
+dieAR errMsg = throwM . userError $ intercalate "\n" $
+  ["Failure reading request yaml. Valid fields are: "
+  ,"Common fields:"
+  ,"  type: 'exec' or 'cont', indicating Exec or Cont message type"
+  ,"  data|dataFile: (optional) JSON transaction data, as yaml (data) or a yaml file (dataFile)"
+  ,"  keyPairs: list of key pairs for signing (use pact -g to generate): ["
+  ,"    public: base 16 public key"
+  ,"    secret: base 16 secret key"
+  ,"    address: (required for ETH) base 16 address"
+  ,"    scheme: optional, 'ETH' or 'ED25519', default ED25519"
+  ,"    caps: capability list as strings, in form \"[(module.CAP param1 param2)]\""
+  ,"    ] "
+  ,"  nonce: (optional) request nonce, defaults to current time"
+  ,"  publicMeta: (optional) data for public-chain execution: ["
+  ,"    chainId: chain or shard identifier"
+  ,"    sender: gas-paying sender account"
+  ,"    gasLimit: integer gas max limit"
+  ,"    gasPrice: decimal gas unit price"
+  ,"    ttl: TTL value in seconds"
+  ,"    creationTime: epoch time integer value in seconds"
+  ,"Exec-only fields:"
+  ,"  code|codeFile: [exec only] Pact code, as a string (code) or file path (codeFile)"
+  ,"Cont-only fields:"
+  ,"  pactTxHash: pact ID to continue"
+  ,"  step: step index to continue"
+  ,"  rollback: rollback/cancel flag"
+  ,"  proof: platform-specific continuation proof data"
+  ,"Error message: " ++ errMsg
+  ]

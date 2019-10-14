@@ -15,11 +15,7 @@ import qualified Data.HashMap.Strict as HM
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Exp
-import Pact.Types.Info (Info(..))
 import Pact.Types.Runtime
-import Pact.Types.Term
-    (Def(..), Interface(..), Meta(..), Module(..), ModuleDef(..),
-    ModuleName(..), Ref, Ref'(..), Term(..))
 
 
 spec :: Spec
@@ -62,7 +58,7 @@ aggregateFunctionModels :: ModuleData Ref -> [Exp Info]
 aggregateFunctionModels ModuleData{..} =
   foldMap (extractExp . snd) $ HM.toList _mdRefMap
   where
-    extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=m} _) _)) = m
+    extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=m} _ _) _)) = m
     extractExp _ = []
 
 -- Because models will necessarily have conflicting Info values

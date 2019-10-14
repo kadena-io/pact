@@ -17,30 +17,28 @@
 --
 
 module Pact.Types.Runtime
- ( PactError(..),PactErrorType(..),
-   evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
+ ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
    toPactId,
    Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
-   StackFrame(..),sfName,sfLoc,sfApp,
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
-   Capability(..),CapAcquireResult(..),
-   Capabilities(..),capGranted,capComposed,
-   NamespacePolicy(..), nsPolicy,
+   NamespacePolicy(..),
    permissiveNamespacePolicy,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
    module Pact.Types.Gas,
-   module Pact.Types.ChainMeta
+   module Pact.Types.ChainMeta,
+   module Pact.Types.PactError,
+   liftIO
    ) where
 
 
@@ -51,98 +49,42 @@ import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
-import Data.Text (Text, unpack)
+import Data.Text (Text,)
+import GHC.Generics (Generic)
 
-import GHC.Generics
-
+import Pact.Types.Capability
 import Pact.Types.ChainMeta
 import Pact.Types.Continuation
 import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
+import Pact.Types.PactError
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
 import Pact.Types.Util
 
 
-data Capability
-  = ModuleAdminCapability ModuleName
-  | UserCapability ModuleName DefName [Term Name]
-  deriving (Eq,Show)
-
-instance Pretty Capability where
-  pretty (ModuleAdminCapability mn) = pretty mn
-  pretty (UserCapability mn name tms)  = parensSep (pretty mn <> colon <> pretty name : fmap pretty tms)
-
-data CapAcquireResult = NewlyAcquired|AlreadyAcquired
-  deriving (Eq,Show)
-
-newtype NamespacePolicy = NamespacePolicy
-  { _nsPolicy :: Maybe Namespace -> Bool
-  }
-makeLenses ''NamespacePolicy
+-- | Governance of namespace use. Policy dictates:
+-- 1. Whether a namespace can be created.
+-- 2. Whether the default namespace can be used.
+data NamespacePolicy =
+  SimpleNamespacePolicy (Maybe Namespace -> Bool)
+  -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
+  |
+  SmartNamespacePolicy Bool QualifiedName
+  -- ^ Bool governs root usage, Name governs ns creation.
+  -- Def is (defun xxx:bool (ns:string ns-admin:guard))
 
 permissiveNamespacePolicy :: NamespacePolicy
-permissiveNamespacePolicy = NamespacePolicy $ const True
-
-data StackFrame = StackFrame {
-      _sfName :: !Text
-    , _sfLoc :: !Info
-    , _sfApp :: Maybe (FunApp,[Text])
-    } deriving (Eq,Generic)
-instance ToJSON StackFrame where toJSON = toJSON . show
-
-instance Show StackFrame where
-    show (StackFrame n i app) = renderInfo i ++ ": " ++ case app of
-      Nothing -> unpack n
-      Just (_,as) -> "(" ++ unpack n ++ concatMap (\a -> " " ++ unpack (asString a)) as ++ ")"
-makeLenses ''StackFrame
-
-data PactErrorType
-  = EvalError
-  | ArgsError
-  | DbError
-  | TxFailure
-  | SyntaxError
-  | GasError
-  deriving (Show,Eq,Generic)
-instance ToJSON PactErrorType
-instance FromJSON PactErrorType
-
-data PactError = PactError
-  { peType :: PactErrorType
-  , peInfo :: Info
-  , peCallStack :: [StackFrame]
-  , peDoc :: Doc }
-  deriving (Eq,Generic)
-
-instance Exception PactError
-instance ToJSON PactError where
-  toJSON (PactError t i s d) =
-    object [ "type" .= t, "info" .= renderInfo i, "callStack" .= s, "message" .= (show d)]
-instance FromJSON PactError where
-  parseJSON = withObject "PactError" $ \o -> do
-    typ <- o .: "type"
-    doc <- o .: "message"
-    pure $ PactError typ def def (prettyString doc)
-
-instance Show PactError where
-    show (PactError t i _ s) = show i ++ ": Failure: " ++ maybe "" (++ ": ") msg ++ show s
-      where msg = case t of
-              EvalError -> Nothing
-              ArgsError -> Nothing
-              TxFailure -> Just "Tx Failed"
-              DbError -> Just "Database exception"
-              SyntaxError -> Just "Syntax error"
-              GasError -> Just "Gas Error"
-
+permissiveNamespacePolicy = SimpleNamespacePolicy $ const True
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
@@ -151,7 +93,7 @@ instance AsString KeyPredBuiltins where
   asString Keys2 = "keys-2"
 
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
-keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
+keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [minBound .. maxBound]
 
 -- | Storage for natives.
 data RefStore = RefStore {
@@ -182,7 +124,7 @@ data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
-    , _eeMsgSigs :: !(S.Set PublicKey)
+    , _eeMsgSigs :: !(M.Map PublicKey (S.Set Capability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode
@@ -222,16 +164,10 @@ data RefState = RefState {
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe Namespace
-    } deriving (Eq,Show)
+    } deriving (Eq,Show,Generic)
 makeLenses ''RefState
+instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing
-
-data Capabilities = Capabilities
-  { _capGranted :: [Capability]
-  , _capComposed :: [Capability]
-  } deriving (Show)
-instance Default Capabilities where def = Capabilities def def
-makeLenses ''Capabilities
 
 -- | Interpreter mutable state.
 data EvalState = EvalState {
@@ -245,8 +181,9 @@ data EvalState = EvalState {
     , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
-    } deriving (Show)
+    } deriving (Show, Generic)
 makeLenses ''EvalState
+instance NFData EvalState
 instance Default EvalState where def = EvalState def def def 0 def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.

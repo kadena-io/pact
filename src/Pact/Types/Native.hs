@@ -42,12 +42,14 @@ isSpecialForm = (`M.lookup` sfLookup)
 
 
 -- | Native function with un-reduced arguments that computes gas.
+--   Operation cost implemented in definition.
 type NativeFun e = FunApp -> [Term Ref] -> Eval e (Gas,Term Name)
 
 -- | Native function with reduced arguments, initial gas pre-compute that computes final gas.
 type GasRNativeFun e = Gas -> FunApp -> [Term Name] -> Eval e (Gas,Term Name)
 
--- | Native function with reduced arguments, final gas pre-compute.
+-- | Native function with reduced arguments, final gas pre-computed.
+--   Operations with fixed cost.
 type RNativeFun e = FunApp -> [Term Name] -> Eval e (Term Name)
 
 type NativeDef = (NativeDefName,Term Name)

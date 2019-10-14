@@ -57,7 +57,7 @@ import Pact.Types.ExpParser
 import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Pretty hiding (nest, sep)
-import Pact.Types.Runtime (PactError)
+import Pact.Types.PactError
 import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util
@@ -256,6 +256,11 @@ userAtom = do
   checkReserved _atomAtom
   pure a
 
+-- | Bare atom as an unqualified TVar.
+userVar :: Compile (Term Name)
+userVar = userAtom >>= \AtomExp{..} ->
+  return $ TVar (Name $ BareName _atomAtom _atomInfo) _atomInfo
+
 app :: Compile (Term Name)
 app = do
   v <- varAtom
@@ -284,13 +289,13 @@ varAtom = do
   AtomExp{..} <- atom
   checkReserved _atomAtom
   n <- case _atomQualifiers of
-    [] -> return $ Name _atomAtom _atomInfo
+    [] -> return $ Name $ BareName _atomAtom _atomInfo
     [q] -> do
       checkReserved q
-      return $ QName (ModuleName q Nothing) _atomAtom _atomInfo
+      return $ QName $ QualifiedName (ModuleName q Nothing) _atomAtom _atomInfo
     [ns,q] -> do
       checkReserved ns >> checkReserved q
-      return $ QName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
+      return $ QName $ QualifiedName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
     _ -> expected "bareword or qualified atom"
   commit
   return $ TVar n _atomInfo
@@ -321,7 +326,7 @@ literal = lit >>= \LiteralExp{..} ->
 withCapability :: Compile (Term Name)
 withCapability = do
   wcInf <- getInfo <$> current
-  let wcVar = TVar (Name (asString RWithCapability) wcInf) wcInf
+  let wcVar = TVar (Name $ BareName (asString RWithCapability) wcInf) wcInf
   capApp <- sexp app
   body@(top:_) <- some valueLevel
   i <- contextInfo
@@ -351,7 +356,7 @@ defconst = do
   a <- arg
   v <- valueLevel
   m <- meta ModelNotAllowed
-  TConst a modName (CVRaw v) m <$> contextInfo
+  TConst a (Just modName) (CVRaw v) m <$> contextInfo
 
 data ModelAllowed
   = ModelAllowed
@@ -395,7 +400,7 @@ defschema = do
   tn <- _atomAtom <$> userAtom
   m <- meta ModelAllowed
   fields <- many arg
-  TSchema (TypeName tn) modName m fields <$> contextInfo
+  TSchema (TypeName tn) (Just modName) m fields <$> contextInfo
 
 defunOrCap :: DefType -> Compile (Term Name)
 defunOrCap dt = do
@@ -403,11 +408,14 @@ defunOrCap dt = do
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
+  dm <- case dt of
+    Defcap -> optional (DMDefcap . DefcapMeta <$> (symbol "@managed" *> userVar))
+    _ -> return Nothing
   b <- abstractBody valueLevel args
   i <- contextInfo
   return $ (`TDef` i) $
     Def (DefName defname) modName dt (FunType args returnTy)
-      b m i
+      b m dm i
 
 
 defpact :: Compile (Term Name)
@@ -426,16 +434,16 @@ defpact = do
       \is complete)"
     _ -> pure ()
   i <- contextInfo
-  return $ TDef (Def (DefName defname) modName Defpact (FunType args returnTy)
-                  (abstractBody' args (TList (V.fromList body) TyAny bi)) m i) i
+  return $ TDef
+    (Def (DefName defname) modName Defpact (FunType args returnTy)
+      (abstractBody' args (TList (V.fromList body) TyAny bi))
+      m Nothing i) i
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
   gov <- Governance <$>
-    (((Left . KeySetName) <$> str) <|>
-     (userAtom >>= \AtomExp{..} ->
-         return $ Right $ TVar (Name _atomAtom _atomInfo) _atomInfo))
+    (((Left . KeySetName) <$> str) <|> (Right <$> userVar))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
@@ -450,6 +458,7 @@ moduleForm = do
   return $ TModule
     (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
     (abstract (const Nothing) (TList (V.fromList (concat bd)) TyAny bi)) i
+
 
 implements :: Compile ()
 implements = do
@@ -489,7 +498,8 @@ emptyDef = do
   info <- contextInfo
   return $ (`TDef` info) $
     Def (DefName defName) modName Defun
-    (FunType args returnTy) (abstract (const Nothing) (TList V.empty TyAny info)) m info
+      (FunType args returnTy) (abstract (const Nothing) (TList V.empty TyAny info))
+      m Nothing info
 
 
 step :: Compile (Term Name)
@@ -572,7 +582,7 @@ arg = typedAtom >>= \(AtomExp{..},ty) ->
   return $ Arg _atomAtom ty _atomInfo
 
 arg2Name :: Arg n -> Name
-arg2Name Arg{..} = Name _aName _aInfo
+arg2Name Arg{..} = Name $ BareName _aName _aInfo
 
 
 typed :: Compile (Type (Term Name))
@@ -605,7 +615,7 @@ parseSchemaType tyRep sty = symbol tyRep >>
 parseUserSchemaType :: Compile (Type (Term Name))
 parseUserSchemaType = withList Braces $ \ListExp{..} -> do
   AtomExp{..} <- userAtom
-  return $ TyUser (return $ Name _atomAtom _listInfo)
+  return $ TyUser (return $ Name $ BareName _atomAtom _listInfo)
 
 bodyForm :: Compile (Term Name) -> Compile (Term Name)
 bodyForm term = do
@@ -625,7 +635,7 @@ _compileF :: FilePath -> IO (Either PactError [Term Name])
 _compileF f = _parseF f >>= _compile id
 
 handleParseError :: TF.Result a -> IO a
-handleParseError (TF.Failure f) = putDoc (fromAnsiWlPprint (TF._errDoc f)) >> error "parseFailed"
+handleParseError (TF.Failure f) = putDoc (TF._errDoc f) >> error "parseFailed"
 handleParseError (TF.Success a) = return a
 
 _compileWith :: Compile a -> (ParseState CompileState -> ParseState CompileState) ->
@@ -666,7 +676,7 @@ _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
     p <- _parseF f
     rs <- case p of
-            (TF.Failure e) -> putDoc (fromAnsiWlPprint (TF._errDoc e)) >> error "Parse failed"
+            (TF.Failure e) -> putDoc (TF._errDoc e) >> error "Parse failed"
             (TF.Success (es,s)) -> return $ map (compile s) es
     case sequence rs of
       Left e -> throwIO $ userError (show e)

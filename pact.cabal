@@ -43,8 +43,11 @@ library
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
+                     , Pact.Runtime.Capabilities
+                     , Pact.Runtime.Typecheck
                      , Pact.Server.API
                      , Pact.Types.API
+                     , Pact.Types.Capability
                      , Pact.Types.ChainId
                      , Pact.Types.ChainMeta
                      , Pact.Types.Codec
@@ -58,7 +61,9 @@ library
                      , Pact.Types.Info
                      , Pact.Types.Lang
                      , Pact.Types.Logger
+                     , Pact.Types.Names
                      , Pact.Types.Native
+                     , Pact.Types.PactError
                      , Pact.Types.PactValue
                      , Pact.Types.Parser
                      , Pact.Types.Persistence
@@ -140,59 +145,64 @@ library
                     Pact.Types.ECDSA
                     Pact.Types.Server
                     Pact.Types.SQLite
+                    Pact.GasModel.GasModel
+                    Pact.GasModel.Types
+                    Pact.GasModel.Utils
+                    Pact.GasModel.GasTests
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
-                     , algebraic-graphs >= 0.2 && < 0.4
-                     , prettyprinter >= 1.2 && < 1.3
+                     , algebraic-graphs >= 0.2 && < 0.6
+                     , prettyprinter >= 1.2 && < 1.4
                      , prettyprinter-ansi-terminal >= 1.1 && < 1.2
-                     , prettyprinter-convert-ansi-wl-pprint
                      , attoparsec >= 0.13.0.2 && < 0.14
-                     , base >=4.9.0.0 && < 4.13
+                     , base >=4.9.0.0 && < 4.14
                      , base16-bytestring >=0.1.1.6 && < 0.2
                      , base64-bytestring >= 1.0.0.1
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
+                     , cassava >= 0.5
                      , cereal >=0.5.4.0 && < 0.6
                      , containers >= 0.5.7 && < 0.7
                      , data-default >= 0.7.1.1 && < 0.8
                      , deepseq >= 1.4.2.0 && < 1.5
                      , deriving-compat >= 0.5.1
                      , directory >= 1.2.6.2 && < 1.4
+                     , errors >= 2.3
                      , exceptions >= 0.8.3 && < 0.11
                      , filepath >= 1.4.1.0 && < 1.5
-                     , hashable >= 1.2.4.0 && < 1.3
+                     , hashable >= 1.2.4.0 && < 1.4
                      , hspec >= 2.2.4 && < 2.8
-                     , lens >= 4.14 && < 4.18
-                     , lens-aeson >= 1.0.0.5 && < 1.1
+                     , lens >= 4.14 && < 4.19
+                     , lens-aeson >= 1.0.0.5 && < 1.2
                      , megaparsec >= 7
                      , mtl >= 2.2.1 && < 2.3
                      , old-locale >= 1.0.0.7 && < 1.1
-                     , optparse-applicative >= 0.12.1.0 && < 0.15
+                     , optparse-applicative >= 0.12.1.0 && < 0.16
                      , parsers >= 0.12.4 && < 0.13
                      , reflection
                      , safe >= 0.3.11 && < 0.4
                      , scientific >= 0.3.4.9 && < 0.4
-                     , semigroups >= 0.18.2 && < 0.19
+                     , semigroups >= 0.18.2 && < 0.20
                      , semigroupoids >= 5.0
                      , stm >= 2.4.4.1 && < 2.6
                      , text >= 1.2.2.1 && < 1.3
                      -- kadena ghcjs compat fork
                      , thyme == 0.3.6.0
                      , transformers >= 0.5.2.0 && < 0.6
-                     , trifecta >= 2 && < 2.1
+                     , trifecta >= 2.1
                      , unordered-containers >= 0.2.7.2 && < 0.3
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-algorithms >= 0.7
-                     , vector-space >= 0.10.4 && < 0.16
+                     , vector-space >= 0.10.4 && < 0.17
                      , mmorph >= 1.1 && < 1.2
                      , constraints
                      , servant
                      , servant-client
                      , servant-client-core
                      , servant-swagger
-                     , swagger2 >= 2.3
+                     , swagger2 >= 2.3 && < 2.5
 
   if impl(ghcjs)
     build-depends:
@@ -211,7 +221,7 @@ library
                 , memory
                 , neat-interpolation >= 0.3.2.4
                 , safe-exceptions >= 0.1.5.0 && < 0.2
-                , sbv >= 7.11
+                , sbv >= 7.11 && < 8.3
                 , servant-server
                 , statistics >= 0.13.3 && < 0.16
                 , wai-cors
@@ -258,6 +268,16 @@ benchmark bench
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+executable gasmodel
+  type:                exitcode-stdio-1.0
+  main-is:             GasModel.hs
+  build-depends:       base
+                     , pact
+  hs-source-dirs:      executables
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
 test-suite hspec
   if !impl(ghcjs)
     main-is:          hspec.hs
@@ -283,7 +303,7 @@ test-suite hspec
               , errors >= 2.3
               , exceptions
               , filepath
-              , hedgehog == 0.6.*
+              , hedgehog >= 1.0.1 && < 1.1
               , hspec
               , hw-hspec-hedgehog == 0.1.*
               , intervals
@@ -328,3 +348,4 @@ test-suite hspec
                 , ClientSpec
                 , SchemeSpec
                 , HistoryServiceSpec
+                , GasModelSpec

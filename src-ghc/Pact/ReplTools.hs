@@ -51,8 +51,8 @@ completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
 
   where
     unName :: Name -> Text
-    unName (QName _ name _) = name
-    unName (Name    name _) = name
+    unName (QName (QualifiedName _ name _)) = name
+    unName (Name (BareName name _)) = name
 
     nameOfModule :: ModuleName -> Text
     nameOfModule (ModuleName name _) = name

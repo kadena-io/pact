@@ -20,6 +20,7 @@ module Pact.Native.Internal
   ,enforceGuard
   ,defNative,defGasRNative,defRNative
   ,defSchema
+  ,defConst
   ,setTopLevelOnly
   ,foldDefs
   ,funType,funType'
@@ -35,6 +36,8 @@ module Pact.Native.Internal
   ,getModule
   ,provenanceOf
   ,enforceYield
+  ,appToCap
+  ,requireDefApp
   ) where
 
 import Bound
@@ -50,7 +53,9 @@ import Unsafe.Coerce
 
 import Pact.Eval
 import Pact.Gas
+import Pact.Types.Capability
 import Pact.Types.Native
+import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -123,10 +128,16 @@ defRNative name fun = defNative name (reduced fun)
 defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
 defSchema n doc fields =
   (n,
-   TSchema (TypeName $ asString n) (ModuleName "" Nothing) (Meta (Just doc) [])
+   TSchema (TypeName $ asString n) Nothing (Meta (Just doc) [])
    (map (\(fr,ty) -> Arg (asString fr) ty def) fields)
    def)
 
+defConst :: NativeDefName -> Text -> Type (Term Name) -> Term Name -> NativeDef
+defConst name doc ty term = (name, TConst arg Nothing cval meta def )
+  where
+    arg = Arg (asString name) ty def
+    meta = Meta (Just doc) []
+    cval = CVEval term term
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
@@ -220,7 +231,7 @@ enforceGuard i g = case g of
         if r then
           return ()
         else
-          enforceModuleAdmin (_faInfo i) _mGovernance
+          void $ acquireModuleAdmin (_faInfo i) _mName _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugFun _ugArgs (_faInfo i)
@@ -268,3 +279,30 @@ enforceYield fa y = case _yProvenance y of
       evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p
 
     return y
+
+
+-- | Validate App of indicated DefType and return Def
+requireDefApp :: DefType -> App (Term Ref) -> Eval e (Def Ref)
+requireDefApp dt App{..} = case _appFun of
+  (TVar (Ref (TDef d@Def{..} _)) _)
+    | _dDefType == dt -> return d
+    | otherwise -> evalError _appInfo $ "Can only apply " <> pretty dt <>
+                            " here, found: " <> pretty _dDefType
+  t -> evalError (_tInfo t) $ "def required: " <> pretty _appFun
+
+
+argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
+argsToParams i = mapM $ \arg -> case toPactValue arg of
+  Right pv -> return pv
+  Left e -> evalError i $ "Invalid capability argument: " <> pretty e
+
+-- | Workhorse to convert App to Capability by capturing Def,
+-- reducing args and converting to pact value, and returning
+-- byproducts.
+appToCap
+  :: App (Term Ref)
+  -> Eval e (Capability, Def Ref, ([Term Name], FunType (Term Name)))
+appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
+  prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
+  cap <- UserCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
+  return (cap,d,prep)

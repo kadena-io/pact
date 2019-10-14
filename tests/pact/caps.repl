@@ -154,8 +154,32 @@
 (begin-tx)
 (use caps)
 
-(env-data { "k1": ["k1"], "k2": ["k2"] })
+(env-data { "k1": ["k1"], "k2": ["k2"], "k3" : ["k3"] })
+
+(expect-failure
+  "k3 fails ref guard construction when no keyset is defined"
+  (keyset-ref-guard "k3"))
+
+(define-keyset "k3" (read-keyset "k3"))
+
+(expect
+  "k3 succeeds now that a keyset is defined with that name"
+  "'k3"
+  (format "{}" [(keyset-ref-guard "k3")]))
+
+(expect-failure
+  "k3 cannot succeed since its keys are not in scope"
+  (enforce-guard (keyset-ref-guard "k3")))
+
+(env-keys ["k3"])
+
+(expect
+  "k3 succeeds now that keys are in scope"
+  "true"
+  (format "{}" [(enforce-guard (keyset-ref-guard "k3"))]))
+
 (env-keys ["k1"])
+
 (enforce-guard (msg-keyset-user-guard "k1"))
 (expect-failure "user guard reading keyset k2 fails"
                 (enforce-guard (msg-keyset-user-guard "k2")))
@@ -207,3 +231,109 @@
 (expect-failure "shadowed cap fails" (caps-shadow.bad-shadow-granted "k1"))
 
 (expect "" "success" (test-module-guard-other))
+
+
+;;
+;; managed capability tests
+;;
+
+(begin-tx)
+
+(module mgd-caps G
+  "Exercise managed capability functionality"
+
+  (defcap G () (enforce false "module admin disabled"))
+
+  (defcap PAY (sender:string receiver:string amount:integer)
+    @managed PAY-mgr
+    (enforce-keyset (read-keyset sender)))
+
+  (defun install-pay (sender:string receiver:string amount:integer)
+    (install-capability (PAY sender receiver amount)))
+
+  (defun PAY-mgr (mgd reqd)
+    (enforce (= (at "sender" mgd) (at "sender" reqd)) "sender matches")
+    (enforce (= (at "receiver" mgd) (at "receiver" reqd)) "receiver matches")
+    (let* ((req-amount (at "amount" reqd))
+           (bal (- (at "amount" mgd) req-amount)))
+      (enforce (> req-amount 0) "requested amount > 0")
+      (enforce (>= bal 0) (format "sufficient balance: {} {} {}" [bal reqd mgd]))
+      (+ { "amount": bal } mgd)))
+
+  (defun pay (sender receiver amount)
+    (with-capability (PAY sender receiver amount)
+                     amount))
+
+  )
+
+(commit-tx)
+(use mgd-caps)
+(env-data { "alice": ["alice"] })
+
+(expect-failure
+ "keyset not in sigs"
+ (install-pay "alice" "bob" 10))
+
+(env-sigs [{ "key": "alice",
+          "caps": [(PAY "alice" "bob" 10)
+                  ,(PAY "alice" "carl" 1)] }] )
+
+(expect-failure
+ "Failure on external install"
+ (install-capability (PAY "alice" "bob" 10)))
+
+(expect-failure
+ "Failure on unmatched cap install"
+ (install-pay "alice" "bob" 12))
+
+(expect
+ "Success on alice-bob cap install" "Installed capability"
+ (install-pay "alice" "bob" 10))
+
+(expect
+ "Success on alice-carl cap install" "Installed capability"
+ (install-pay "alice" "carl" 1))
+
+(expect-failure
+ "Payment should fail on different sender"
+ (pay "dave" "bob" 6))
+
+(expect-failure
+ "Payment should fail on different receiver"
+ (pay "alice" "dave" 6))
+
+(expect-failure
+ "Payment should fail with too-high balance"
+ (pay "alice" "bob" 11))
+
+(expect
+ "Success on first pmt" 6
+ (pay "alice" "bob" 6))
+
+(expect-failure
+ "2nd payment should fail with too-high balance"
+ (pay "alice" "bob" 5))
+
+(expect
+ "Success on second pmt" 4
+ (pay "alice" "bob" 4))
+
+(expect-failure
+ "3rd payment should fail with too-high balance"
+ (pay "alice" "bob" 1))
+
+(expect
+ "Payment to carl succeeds" 1
+ (pay "alice" "carl" 1))
+
+(expect-failure
+ "2nd payment to carl fails"
+ (pay "alice" "bob" 1))
+
+(expect-failure
+ "reinstall of capability should fail"
+ (install-pay "alice" "bob" 10))
+
+(expect-failure
+ "reinstall of capability should fail"
+ (install-pay "alice" "carl" 1))

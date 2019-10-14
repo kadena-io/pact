@@ -17,7 +17,6 @@ module Pact.Types.ECDSA
 
 
 import Data.ByteString  (ByteString)
-import Data.Monoid      ((<>))
 
 import Crypto.PubKey.ECC.Generate  (generate, generateQ)
 import Crypto.PubKey.ECC.ECDSA     (PublicKey(..), PrivateKey(..), Signature(..))
@@ -38,7 +37,7 @@ curveECDSA :: ECDSA.Curve
 curveECDSA = ECDSA.getCurveByName ECDSA.SEC_p256k1
 
 
-hashAlgoETH :: H.SHA3_256 
+hashAlgoETH :: H.SHA3_256
 hashAlgoETH = H.SHA3_256
 
 

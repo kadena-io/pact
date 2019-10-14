@@ -1,6 +1,20 @@
 # Built-in Functions {#builtins}
 ## General {#General}
 
+### CHARSET_ASCII {#CHARSET_ASCII}
+
+Constant denoting the ASCII charset
+
+Constant: 
+&nbsp;&nbsp;`CHARSET_ASCII:integer = 0`
+
+### CHARSET_LATIN1 {#CHARSET_LATIN1}
+
+Constant denoting the Latin-1 charset ISO-8859-1
+
+Constant: 
+&nbsp;&nbsp;`CHARSET_LATIN1:integer = 1`
+
 ### at {#at}
 
 *idx*&nbsp;`integer` *list*&nbsp;`[<l>]` *&rarr;*&nbsp;`<a>`
@@ -245,6 +259,22 @@ pact> (int-to-str 16 65535)
 "ffff"
 pact> (int-to-str 64 43981)
 "q80"
+```
+
+
+### is-charset {#is-charset}
+
+*charset*&nbsp;`integer` *input*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Check that a string INPUT conforms to the a supported character set CHARSET.       Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be added in the future.
+```lisp
+pact> (is-charset CHARSET_ASCII "hello world")
+true
+pact> (is-charset CHARSET_ASCII "I am nÖt ascii")
+false
+pact> (is-charset CHARSET_LATIN1 "I am nÖt ascii, but I am latin1!")
+true
 ```
 
 
@@ -1413,6 +1443,17 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```
 
 
+### install-capability {#install-capability}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
+
+
+Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' which designates a 'manager function` using the '@managed' meta tag. After install, CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request. The manager function is of type 'managed:object{c-type} requested:object{c-type} -> object{c-type}', where C-TYPE schema matches the parameter declaration of CAPABILITY, such that for '(defcap FOO (bar:string baz:integer) ...)', C-TYPE would be a schema '(bar:string, baz:integer)'. The manager function enforces that REQUESTED matches MANAGED, and produces a new managed capability parameter object to replace the previous managed one, if the desired logic allows it, otherwise it should fail. An example would be a 'one-shot' capability (ONE-SHOT fired:bool), installed with 'true', which upon request would enforce that the bool is still 'true' but replace it with 'false', so that the next request would fail. NOTE that signatures scoped to managed capability cause the capability to be automatically installed, and that the signature is only allowed to be checked once in the context of the installed capability, such that a subsequent install would fail (assuming the capability requires the associated signature).
+```lisp
+(install-capability (PAY "alice" "bob" 10.0))
+```
+
+
 ### keyset-ref-guard {#keyset-ref-guard}
 
 *keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
@@ -1437,7 +1478,7 @@ Specifies and tests for existing grant of CAPABILITY, failing if not found in en
 *capability*&nbsp;` -> bool` *body*&nbsp;`[*]` *&rarr;*&nbsp;`<a>`
 
 
-Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap.
+Specifies and requests grant of _scoped_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap.
 ```lisp
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```
@@ -1634,10 +1675,32 @@ pact> (env-hash (hash "hello"))
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-Set transaction signature KEYS.
+DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
 ```lisp
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
+```
+
+
+### env-namespace-policy {#env-namespace-policy}
+
+*allow-root*&nbsp;`bool` *ns-policy-fun*&nbsp;`ns:string ns-admin:guard -> bool` *&rarr;*&nbsp;`string`
+
+
+Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
+```lisp
+(env-namespace-policy (my-ns-policy-fun))
+```
+
+
+### env-sigs {#env-sigs}
+
+*sigs*&nbsp;`[object:*]` *&rarr;*&nbsp;`string`
+
+
+Set transaction signature keys and capabilities. SIGS is a list of objects with "key" specifying the signer key, and "caps" specifying a list of associated capabilities.
+```lisp
+(env-sigs [{'key: "my-key", 'caps: [(accounts.USER_GUARD "my-account")]}, {'key: "admin-key", 'caps: []}
 ```
 
 

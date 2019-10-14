@@ -30,8 +30,7 @@
 --
 
 module Pact.Types.Term
- ( Namespace(..), nsName, nsGuard,
-   NamespaceName(..),
+ ( Namespace(..), nsName, nsUser, nsAdmin,
    Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..),
@@ -43,24 +42,22 @@ module Pact.Types.Term
    Guard(..),
    DefType(..),_Defun,_Defpact,_Defcap,
    defTypeRep,
-   NativeDefName(..),DefName(..),
    FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
    Ref'(..),_Direct,_Ref,Ref,
    NativeDFun(..),
    BindType(..),
    BindPair(..),bpArg,bpVal,toBindPairs,
-   TableName(..),
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
    ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
    Governance(..),
-   ModuleName(..), mnName, mnNamespace,
    ModuleHash(..), mhHash,
-   Name(..),parseName,
    ConstVal(..),constTerm,
    Use(..),
    App(..),appFun,appArgs,appInfo,
-   Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
+   Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,dDefMeta,
+   DefMeta(..),
+   DefcapMeta(..),
    Example(..),
    derefDef,
    ObjectMap(..),objectMapToListWith,
@@ -72,7 +69,7 @@ module Pact.Types.Term
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
-   tTableName,tTableType,tVar,tStep,
+   tTableName,tTableType,tVar,tStep,tModuleName,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -80,6 +77,7 @@ module Pact.Types.Term
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
    Gas(..)
+   , module Pact.Types.Names
    ) where
 
 
@@ -89,18 +87,17 @@ import Control.Arrow ((&&&))
 import Control.DeepSeq
 import Control.Lens (makeLenses,makePrisms)
 import Control.Monad
-import qualified Data.Aeson as A
 #if MIN_VERSION_aeson(1,4,3)
 import Data.Aeson hiding (pairs,Object, (<?>))
 #else
 import Data.Aeson hiding (pairs,Object)
 #endif
-import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString.UTF8 as BS
 import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
 import Data.Foldable
+import Data.Functor.Classes (Eq1(..))
 import Data.Function
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -121,13 +118,12 @@ import Data.Word (Word64, Word32)
 import GHC.Generics (Generic)
 import Prelude
 import Text.Show.Deriving
-import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 
 import Pact.Types.Codec
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info
-import Pact.Types.Parser
+import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.Type
 import Pact.Types.Util
@@ -192,7 +188,7 @@ instance FromJSON KeySet where
                     KeySet <$> o .: "keys" <*>
                     (fromMaybe defPred <$> o .:? "pred")) v <|>
                   (KeySet <$> parseJSON v <*> pure defPred)
-      where defPred = Name "keys-all" def
+      where defPred = Name (BareName "keys-all" def)
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 
@@ -240,7 +236,7 @@ instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 data UserGuard a = UserGuard
   { _ugFun :: !Name
   , _ugArgs :: ![a]
-  } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
+  } deriving (Eq,Generic,Show,Functor,Foldable,Traversable,Ord)
 
 instance NFData a => NFData (UserGuard a)
 
@@ -259,7 +255,7 @@ data Guard a
   | GKeySetRef !KeySetName
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
-  deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
+  deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
 
 instance NFData a => NFData (Guard a)
 
@@ -312,12 +308,6 @@ defTypeRep Defcap = "defcap"
 instance Pretty DefType where
   pretty = prettyString . defTypeRep
 
-newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData)
-
-instance Pretty NativeDefName where
-  pretty (NativeDefName name) = pretty name
-
 -- | Capture function application metadata
 data FunApp = FunApp {
       _faInfo :: !Info
@@ -327,6 +317,7 @@ data FunApp = FunApp {
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
     } deriving (Show,Eq,Generic)
+instance NFData FunApp
 instance ToJSON FunApp where toJSON = lensyToJSON 3
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 instance HasInfo FunApp where getInfo = _faInfo
@@ -353,7 +344,7 @@ instance HasInfo n => HasInfo (Ref' n) where
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON,Generic)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON,Generic,NFData)
 
 instance Pretty Gas where
   pretty (Gas i) = pretty i
@@ -416,101 +407,6 @@ instance NFData n => NFData (BindPair n)
 
 instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
-
-newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable,Show,NFData,ToJSON,FromJSON)
-instance Pretty TableName where pretty (TableName s) = pretty s
-
-data ModuleName = ModuleName
-  { _mnName      :: Text
-  , _mnNamespace :: Maybe NamespaceName
-  } deriving (Eq, Ord, Generic, Show)
-
-instance Hashable ModuleName where
-  hashWithSalt s (ModuleName n Nothing)   =
-    s `hashWithSalt` (0::Int) `hashWithSalt` n
-  hashWithSalt s (ModuleName n (Just ns)) =
-    s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
-
-instance NFData ModuleName
-
-instance AsString ModuleName where
-  asString (ModuleName n Nothing) = n
-  asString (ModuleName n (Just (NamespaceName ns))) = ns <> "." <> n
-
-instance IsString ModuleName where
-  fromString = coalesce . T.splitOn "." . pack
-    where
-      coalesce l = case l of
-        [ns,n] -> ModuleName n (Just (NamespaceName ns))
-        [n]    -> ModuleName n Nothing
-        _      -> ModuleName (pack . show $ l) (Just . NamespaceName $ "Err: malformed name")
-
-instance Pretty ModuleName where
-  pretty (ModuleName n Nothing)   = pretty n
-  pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
-
-instance ToJSON ModuleName where toJSON = lensyToJSON 3
-instance FromJSON ModuleName where parseJSON = lensyParseJSON 3
-
-newtype DefName = DefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
-
--- | A named reference from source.
-data Name
-  = QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info }
-  | Name { _nName :: Text, _nInfo :: Info }
-  deriving (Generic, Show)
-
-instance HasInfo Name where
-  getInfo (QName _ _ i) = i
-  getInfo (Name _ i) = i
-
-instance Pretty Name where
-  pretty = \case
-    QName modName nName _ -> pretty modName <> "." <> pretty nName
-    Name nName _          -> pretty nName
-
-instance AsString Name where asString = renderCompactText
-
-instance ToJSON Name where
-  toJSON = toJSON . renderCompactString
-
-instance FromJSON Name where
-  parseJSON = withText "Name" $ \t -> case parseName def t of
-    Left s  -> fail s
-    Right n -> return n
-
-instance NFData Name
-
-parseName :: Info -> Text -> Either String Name
-parseName i = AP.parseOnly (nameParser i <* eof)
-
-
-nameParser :: (TokenParsing m, Monad m) => Info -> m Name
-nameParser i = do
-  a <- ident style
-  b <- optional (dot *> (ident style))
-  case b of
-    Nothing -> return (Name a i)
-    Just b' -> do
-      c <- optional (dot *> ident style)
-      case c of
-        Nothing -> return (QName (ModuleName a Nothing) b' i) <?> "qualified name"
-        Just c' -> return (QName (ModuleName b' (Just . NamespaceName $ a)) c' i)
-
-instance Hashable Name where
-  hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
-  hashWithSalt s (QName q n _) = s `hashWithSalt` (1::Int) `hashWithSalt` q `hashWithSalt` n
-instance Eq Name where
-  (QName a b _) == (QName c d _) = (a,b) == (c,d)
-  (Name a _) == (Name b _) = a == b
-  _ == _ = False
-instance Ord Name where
-  (QName a b _) `compare` (QName c d _) = (a,b) `compare` (c,d)
-  (Name a _) `compare` (Name b _) = a `compare` b
-  Name {} `compare` QName {} = LT
-  QName {} `compare` Name {} = GT
 
 
 data Use = Use
@@ -649,7 +545,32 @@ moduleDefMeta :: ModuleDef g -> Meta
 moduleDefMeta (MDModule m) = _mMeta m
 moduleDefMeta (MDInterface m) = _interfaceMeta m
 
+-- | Metadata specific to Defcaps.
+newtype DefcapMeta n = DefcapMeta
+  { _dcMgrFun :: n
+    -- ^ Name/Ref referring to associated manager fun.
+  }
+  deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
+instance NFData n => NFData (DefcapMeta n)
+instance Pretty n => Pretty (DefcapMeta n) where
+  pretty (DefcapMeta n) = "@managed " <> pretty n
+instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
+  toJSON = lensyToJSON 3
+instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
+  parseJSON = lensyParseJSON 3
 
+-- | Def metadata specific to 'DefType'.
+-- Currently only specified for Defcap.
+data DefMeta n =
+  DMDefcap !(DefcapMeta n)
+  deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
+instance NFData n => NFData (DefMeta n)
+instance Pretty n => Pretty (DefMeta n) where
+  pretty (DMDefcap m) = pretty m
+instance (ToJSON n,FromJSON n) => ToJSON (DefMeta n) where
+  toJSON (DMDefcap m) = toJSON m
+instance (ToJSON n,FromJSON n) => FromJSON (DefMeta n) where
+  parseJSON = fmap DMDefcap . parseJSON
 
 data Def n = Def
   { _dDefName :: !DefName
@@ -658,12 +579,16 @@ data Def n = Def
   , _dFunType :: !(FunType (Term n))
   , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
+  , _dDefMeta :: !(Maybe (DefMeta (Term n)))
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
 deriving instance Show n => Show (Def n)
 deriving instance Eq n => Eq (Def n)
 instance NFData n => NFData (Def n)
+instance Eq n => Ord (Def n) where
+  a `compare` b = nm a `compare` nm b
+    where nm d = (_dModule d, _dDefName d)
 
 instance HasInfo (Def n) where getInfo = _dInfo
 
@@ -673,21 +598,20 @@ instance Pretty n => Pretty (Def n) where
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
     , parensSep $ pretty <$> _ftArgs _dFunType
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
+    ++ maybe [] (pure . pretty) _dDefMeta
 
 instance (ToJSON n, FromJSON n) => ToJSON (Def n) where toJSON = lensyToJSON 2
 instance (ToJSON n, FromJSON n) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
 
 derefDef :: Def Ref -> Name
-derefDef Def{..} = QName _dModule (asString _dDefName) _dInfo
+derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
 
-
-newtype NamespaceName = NamespaceName Text
-  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData)
 
 data Namespace = Namespace
-  { _nsName   :: NamespaceName
-  , _nsGuard  :: (Guard (Term Name))
+  { _nsName :: NamespaceName
+  , _nsUser :: (Guard (Term Name))
+  , _nsAdmin :: (Guard (Term Name))
   } deriving (Eq, Show, Generic)
 
 instance Pretty Namespace where
@@ -863,7 +787,7 @@ data Term n =
     } |
     TConst {
       _tConstArg :: !(Arg (Term n))
-    , _tModule :: !ModuleName
+    , _tModule :: !(Maybe ModuleName)
     , _tConstVal :: !(ConstVal (Term n))
     , _tMeta :: !Meta
     , _tInfo :: !Info
@@ -888,7 +812,7 @@ data Term n =
     } |
     TSchema {
       _tSchemaName :: !TypeName
-    , _tModule :: !ModuleName
+    , _tModule :: !(Maybe ModuleName)
     , _tMeta :: !Meta
     , _tFields :: ![Arg (Term n)]
     , _tInfo :: !Info
@@ -912,7 +836,7 @@ data Term n =
     } |
     TTable {
       _tTableName :: !TableName
-    , _tModule :: ModuleName
+    , _tModuleName :: ModuleName
     , _tHash :: !ModuleHash
     , _tTableType :: !(Type (Term n))
     , _tMeta :: !Meta
@@ -961,8 +885,10 @@ instance Pretty n => Pretty (Term n) where
                 exs ->
                      line <> line <> annotate Header "Examples:"
                   <> line <> align (vsep (pretty <$> exs))
-    TConst{..} -> "constant " <> pretty _tModule <> "." <> pretty _tConstArg
-      <> " " <> pretty _tMeta
+    TConst{..} -> "constant "
+        <> maybe "" ((<>) "." .  pretty) _tModule
+        <> pretty _tConstArg
+        <> " " <> pretty _tMeta
     TApp a _ -> pretty a
     TVar n _ -> pretty n
     TBinding pairs body BindLet _i -> parensSep
@@ -1007,7 +933,8 @@ instance Monad Term where
     return a = TVar a def
     TModule m b i >>= f = TModule (fmap (>>= f) m) (b >>>= f) i
     TList bs t i >>= f = TList (V.map (>>= f) bs) (fmap (>>= f) t) i
-    TDef (Def n m dt ft b d i) i' >>= f = TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d i) i'
+    TDef (Def n m dt ft b d dm i) i' >>= f =
+      TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d (fmap (fmap (>>= f)) dm) i) i'
     TNative n fn t exs d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) exs d tl i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp a i >>= f = TApp (fmap (>>= f) a) i
@@ -1020,7 +947,7 @@ instance Monad Term where
     TUse u i >>= _ = TUse u i
     TStep (Step ent e r si) meta i >>= f = TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) meta i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
-    TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
+    TTable {..} >>= f = TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
 
 
 termCodec :: (ToJSON n,FromJSON n) => Codec (Term n)
@@ -1124,6 +1051,7 @@ instance ToTerm UTCTime where toTerm = tLit . LTime
 instance ToTerm Word32 where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Word64 where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Int64 where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm TableName where toTerm = tLit . LString . asString
 
 
 toTObject :: Type (Term n) -> Info -> [(FieldKey,Term n)] -> Term n
@@ -1214,7 +1142,7 @@ termEq (TObject (Object (ObjectMap a) _ _ _) _) (TObject (Object (ObjectMap b) _
           go [] [] _ = True
           go _ _ _ = False
 termEq (TLiteral a _) (TLiteral b _) = a == b
-termEq (TGuard a _) (TGuard b _) = a == b
+termEq (TGuard a _) (TGuard b _) = liftEq termEq a b
 termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g && d == h && x == y
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && d == h
 termEq _ _ = False
@@ -1230,7 +1158,6 @@ makeLenses ''Interface
 makePrisms ''ModuleDef
 makeLenses ''App
 makeLenses ''Def
-makeLenses ''ModuleName
 makePrisms ''DefType
 makeLenses ''Object
 makeLenses ''BindPair
@@ -1244,6 +1171,8 @@ deriveEq1 ''BindPair
 deriveEq1 ''App
 deriveEq1 ''BindType
 deriveEq1 ''ConstVal
+deriveEq1 ''DefcapMeta
+deriveEq1 ''DefMeta
 deriveEq1 ''Def
 deriveEq1 ''ModuleDef
 deriveEq1 ''Module
@@ -1261,6 +1190,8 @@ deriveShow1 ''ObjectMap
 deriveShow1 ''Object
 deriveShow1 ''BindType
 deriveShow1 ''ConstVal
+deriveShow1 ''DefcapMeta
+deriveShow1 ''DefMeta
 deriveShow1 ''Def
 deriveShow1 ''ModuleDef
 deriveShow1 ''Module
@@ -1291,5 +1222,5 @@ _roundtripJSON | r == (Success tmod) = show r
             (toTList TyAny def
              [(TVar na def),(TVar nb def)])) -- free var + bound var
            BindLet def
-    na = Name "a" def
-    nb = Name "b" def
+    na = Name $ BareName "a" def
+    nb = Name $ BareName "b" def

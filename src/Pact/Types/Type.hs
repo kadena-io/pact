@@ -76,6 +76,7 @@ instance Pretty o => Pretty (Arg o) where
   pretty (Arg n t _) = pretty n <> colon <> pretty t
 instance ToJSON o => ToJSON (Arg o) where toJSON = lensyToJSON 2
 instance FromJSON o => FromJSON (Arg o) where parseJSON = lensyParseJSON 2
+instance HasInfo (Arg o) where getInfo = _aInfo
 
 -- | Function type
 data FunType o = FunType {

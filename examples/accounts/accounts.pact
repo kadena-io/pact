@@ -35,6 +35,26 @@
   (defcap ADMIN ()
     (enforce-keyset 'accounts-admin-keyset))
 
+  (defcap PAY (sender:string receiver:string amount:decimal)
+    "Demonstrates managed signature capabilities"
+    @managed manage-PAY
+    (compose-capability (USER_GUARD sender)))
+
+  (defun manage-PAY (mgd recd)
+    "Demonstrates managed caps. Matches sender and receiver, \
+    \and enforces linear constraint on amount."
+    (enforce (= (at "sender" mgd) (at "sender" recd)) "sender same")
+    (enforce (= (at "receiver" mgd) (at "receiver" recd)) "receiver same")
+    ;; valid amount handled in transfer
+    (let ((bal:decimal (- (at "amount" mgd) (at "amount" recd))))
+      (enforce (>= bal 0.0) "insufficient balance")
+      (+ { "amount": bal } mgd)))
+
+  (defun pay (sender:string receiver:string amount:decimal date)
+    "Demonstrate managed capability PAY"
+    (with-capability (PAY sender receiver amount)
+                     (transfer sender receiver amount date)))
+
   (defun create-account (address guard ccy date)
     (with-capability (ADMIN)
       (insert accounts address

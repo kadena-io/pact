@@ -89,12 +89,15 @@ applyCmd _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
            (cmdToRequestKey cmd)
            (PactError TxFailure def def . viaShow $ s)
 applyCmd logger conf dbv gasModel bh bt pbh spv exMode _ (ProcSucc cmd) = do
-  let pubMeta = _pMeta $ _cmdPayload cmd
+  let payload = _cmdPayload cmd
       gasEnv = GasEnv (_pmGasLimit pubMeta) (_pmGasPrice pubMeta) gasModel
       pd = PublicData pubMeta bh bt pbh
+      pubMeta = _pMeta payload
+      nid = _pNetworkId payload
+
 
   res <- catchesPactError $ runCommand
-                            (CommandEnv conf exMode dbv logger gasEnv pd spv)
+                            (CommandEnv conf exMode dbv logger gasEnv pd spv nid)
                             (runPayload cmd)
   case res of
     Right cr -> do
@@ -135,10 +138,9 @@ applyExec :: RequestKey -> PactHash -> [Signer] -> ExecMsg ParsedCode -> Command
 applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
-  let sigs = userSigsToPactKeySet signers
-      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs edata Nothing (toUntypedHash hsh))
+  let evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData edata Nothing (toUntypedHash hsh))
                 initRefStore _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData
-  EvalResult{..} <- liftIO $ evalExec def evalEnv parsedCode
+  EvalResult{..} <- liftIO $ evalExec signers def evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs
 
@@ -147,9 +149,8 @@ applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p
 applyContinuation rk hsh signers cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result
-  let sigs = userSigsToPactKeySet signers
-      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs (_cmData cm) Nothing (toUntypedHash hsh)) initRefStore
+  let evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
+                (MsgData (_cmData cm) Nothing (toUntypedHash hsh)) initRefStore
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData
-  EvalResult{..} <- liftIO $ evalContinuation def evalEnv cm
+  EvalResult{..} <- liftIO $ evalContinuation signers def evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs

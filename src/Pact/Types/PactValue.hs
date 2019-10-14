@@ -25,7 +25,6 @@ module Pact.Types.PactValue
 
 import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
-import qualified Data.Aeson as A
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
 import Data.Text (Text)
@@ -44,7 +43,7 @@ data PactValue
   | PList (Vector PactValue)
   | PObject (ObjectMap PactValue)
   | PGuard (Guard PactValue)
-  deriving (Eq,Show,Generic)
+  deriving (Eq,Show,Generic,Ord)
 
 instance NFData PactValue
 

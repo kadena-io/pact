@@ -86,7 +86,7 @@ import           Pact.Types.Runtime         (Exp, ModuleData (..), ModuleName,
                                              asString, getInfo, mdModule,
                                              mdRefMap, tShow)
 import qualified Pact.Types.Runtime         as Pact
-import           Pact.Types.Term            (DefName (..), DefType (Defcap),
+import           Pact.Types.Term            (DefName (..),
                                              dDefType, moduleDefMeta,
                                              moduleDefName, _Ref, _gGovernance)
 import           Pact.Types.Type            (ftArgs, _ftArgs)

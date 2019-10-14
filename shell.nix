@@ -1,1 +1,1 @@
-(import ./. {}).shells.ghc
+(import ./. {}).proj.shells.ghc

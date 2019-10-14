@@ -44,7 +44,6 @@ import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (isJust)
 import           Data.Monoid                  (First (..))
 import           Data.SBV                     (EqSymbolic, HasKind, Int64,
-                                               Kind (KString, KUnbounded),
                                                Mergeable (symbolicMerge),
                                                OrdSymbolic, SBV,
                                                SDivisible (sDivMod, sQuotRem),
