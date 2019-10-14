@@ -408,15 +408,17 @@ defunOrCap dt = do
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
-  dm <- case dt of
-    Defcap -> optional (DMDefcap . DefcapMeta <$> (symbol "@managed" *> userVar))
-    _ -> return Nothing
+  dm <- defcapManaged dt
   b <- abstractBody valueLevel args
   i <- contextInfo
   return $ (`TDef` i) $
     Def (DefName defname) modName dt (FunType args returnTy)
       b m dm i
 
+defcapManaged :: DefType -> Compile (Maybe (DefMeta (Term Name)))
+defcapManaged dt = case dt of
+  Defcap -> optional (DMDefcap . DefcapMeta <$> (symbol "@managed" *> userVar))
+  _ -> return Nothing
 
 defpact :: Compile (Term Name)
 defpact = do
@@ -481,25 +483,30 @@ interface = do
       ihash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
             bodyForm $ specialForm $ \r -> case r of
-              RDefun -> return emptyDef
+              RDefun -> return $ defSig Defun
               RDefconst -> return defconst
               RUse -> return useForm
+              RDefpact -> return $ defSig Defpact
+              RDefschema -> return defschema
+              RDefcap -> return $ defSig Defcap
               t -> syntaxError $ "Invalid interface declaration: " ++ show (asString t)
   return $ TModule
     (MDInterface $ Interface iname code m _msImports)
     (abstract (const Nothing) bd) info
 
-emptyDef :: Compile (Term Name)
-emptyDef = do
+-- | Recognize a signature of a Def.
+defSig :: DefType -> Compile (Term Name)
+defSig dt = do
   modName <- currentModuleName
   (defName, returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
+  dm <- defcapManaged dt
   info <- contextInfo
   return $ (`TDef` info) $
-    Def (DefName defName) modName Defun
+    Def (DefName defName) modName dt
       (FunType args returnTy) (abstract (const Nothing) (TList V.empty TyAny info))
-      m Nothing info
+      m dm info
 
 
 step :: Compile (Term Name)
@@ -613,9 +620,8 @@ parseSchemaType tyRep sty = symbol tyRep >>
 
 
 parseUserSchemaType :: Compile (Type (Term Name))
-parseUserSchemaType = withList Braces $ \ListExp{..} -> do
-  AtomExp{..} <- userAtom
-  return $ TyUser (return $ Name $ BareName _atomAtom _listInfo)
+parseUserSchemaType = withList Braces $ \ListExp{} -> TyUser <$> varAtom
+
 
 bodyForm :: Compile (Term Name) -> Compile (Term Name)
 bodyForm term = do
