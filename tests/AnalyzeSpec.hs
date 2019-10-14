@@ -1914,6 +1914,8 @@ spec = describe "analyze" $ do
                 it "should have no keyset provenance" $ do
                   ksProvs `shouldBe` Map.empty
 
+              [] -> runIO $ HUnit.assertFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
+
               other -> runIO $ HUnit.assertFailure $ show other
 
   describe "cell-delta.integer" $ do

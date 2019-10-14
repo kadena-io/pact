@@ -548,23 +548,21 @@ evalTerm = \case
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk writeSucceeds
 
+    Just rowETy <- view $ aeTableSchemas.at tn
+    prevAVals <- case rowETy of
+      EType rowTy@(SObject _) -> do
+        rowAVals <- peekFields tn sRk rowTy
+        -- assume invariants for values already in the DB:
+        applyInvariants tn rowAVals $ mapM_ addConstraint
+        pure rowAVals
+
     writeFields writeType tid tn sRk obj objTy
 
-    let readAVals = aValsOfObj schema (_sSbv obj)
+    let newAVals = aValsOfObj schema (_sSbv obj)
+        -- NOTE: left-biased union prefers the new values:
+        nextAVals = Map.union newAVals prevAVals
 
-    Just rowETy <- view $ aeTableSchemas.at tn
-    unreadAVals <- case rowETy of
-      EType rowTy@(SObject _) ->
-        case objTypeDrop (T.unpack <$> Map.keys readAVals) rowTy of
-          EType unreadTy@(SObject _) -> do
-            avals <- peekFields tn sRk unreadTy
-            -- assume invariants for these values already in the DB:
-            applyInvariants tn avals $ mapM_ addConstraint
-            pure avals
-
-    let allAVals = Map.union unreadAVals readAVals
-
-    applyInvariants tn allAVals $ \invariants' ->
+    applyInvariants tn nextAVals $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
           fs = ZipList $ (\s -> fmap (_sSbv s .&&)) <$> invariants'
       in maintainsInvariants . at tn . _Just %= (fs <*>)
