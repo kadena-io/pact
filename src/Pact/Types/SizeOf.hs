@@ -13,21 +13,20 @@ module Pact.Types.SizeOf
   , constructorCost
   ) where
 
+import Control.Lens (view)
+import qualified Data.ByteString.UTF8 as BS
+import Data.Decimal
+import Data.Int (Int64)
+import qualified Data.List as L
+import qualified Data.Map.Strict as M
 import Data.Text (Text)
-import Data.Text as T
+import qualified Data.Text as T
+import Data.Thyme hiding (Vector)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import qualified Data.Map.Strict as M
-import Data.Decimal
-import Data.Thyme hiding (Vector)
-import qualified Data.List as L
-import qualified Data.ByteString.UTF8 as BS
-import GHC.Integer.GMP.Internals (Integer(..),BigNat(..))
-import qualified Data.Primitive.ByteArray as BA
-import GHC.Exts (Int(..))
 import Data.Word (Word8)
-import Data.Int (Int64)
-import Control.Lens (view)
+import GHC.Exts (Int(..))
+
 
 
 -- |  Estimate of number of bytes needed to represent data type
@@ -105,16 +104,8 @@ instance SizeOf BS.ByteString where
 instance SizeOf Text where
   sizeOf t = (6 * wordSize) + (2 * (fromIntegral (T.length t)))
 
-instance SizeOf BigNat where
-  sizeOf (BN# barr) =
-    (constructorCost 1) + (fromIntegral (BA.sizeofByteArray (BA.ByteArray barr)))
-
 instance SizeOf Integer where
-  -- S's argument is an unboxed Int
-  -- TODO double check unboxed
-  sizeOf (S# _) = 1 * wordSize
-  sizeOf (Jp# bn) = (constructorCost 1) + sizeOf bn
-  sizeOf (Jn# bn) = (constructorCost 1) + sizeOf bn
+  sizeOf i = ceiling ((logBase 100000 (realToFrac i)) :: Double)
 
 instance SizeOf Int where
   sizeOf _ = 2 * wordSize
