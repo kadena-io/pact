@@ -1361,10 +1361,11 @@ data Term (a :: Ty) where
 
   -- Table access
   Read
-    :: SingTy ('TyObject m)
-    -> Maybe (Term ('TyObject m))
+    :: SingTy ('TyObject row)        -- schema of the full row
+    -> SingTy ('TyObject proj)       -- schema of the subset we're projecting
+    -> Maybe (Term ('TyObject proj)) -- optional default values for the subset
     -> TagId -> TableName -> Term 'TyStr
-    -> Term ('TyObject m)
+    -> Term ('TyObject proj)
   Write
     :: SingTy ('TyObject m)
     -> WriteType -> TagId -> TableName
@@ -1473,7 +1474,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showChar ' '
     . showsPrec 11 b
 
-  Read a b c d e ->
+  Read a b c d e f ->
       showString "Read "
     . showsPrec 11 a
     . showChar ' '
@@ -1484,6 +1485,8 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 d
     . showChar ' '
     . showsPrec 11 e
+    . showChar ' '
+    . showsPrec 11 f
 
   Write a b c d e f -> withSing a $
       showString "Write "
@@ -1593,8 +1596,8 @@ prettyTerm ty = \case
   WithCapability a x    -> parensSep ["with-capability", pretty a, prettyTerm ty x]
   Granting _ _ x        -> prettyTerm ty x
   HasGrant _ _ _        -> error "HasGrant should only appear inside of an Enforce"
-  Read _ Nothing    _ tab x -> parensSep ["read", pretty tab, pretty x]
-  Read _ (Just def) _ tab x -> parensSep ["with-default-read", singPrettyTm ty def, pretty tab, pretty x]
+  Read _ _ Nothing    _ tab x -> parensSep ["read", pretty tab, pretty x]
+  Read _ _ (Just def) _ tab x -> parensSep ["with-default-read", singPrettyTm ty def, pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
   PactVersion           -> parensSep ["pact-version"]
   Format x y            -> parensSep ["format", pretty x, prettyList y]
@@ -1646,9 +1649,9 @@ eqTerm _ty (ReadString a) (ReadString b)
   = a == b
 eqTerm _ty (GuardPasses a1 b1) (GuardPasses a2 b2)
   = a1 == a2 && b1 == b2
-eqTerm _ty (Read _ Nothing a1 b1 c1) (Read _ Nothing a2 b2 c2)
+eqTerm _ty (Read _ _ Nothing a1 b1 c1) (Read _ _ Nothing a2 b2 c2)
   = a1 == a2 && b1 == b2 && c1 == c2
-eqTerm ty (Read _ (Just a1) b1 c1 d1) (Read _ (Just a2) b2 c2 d2)
+eqTerm ty (Read _ _ (Just a1) b1 c1 d1) (Read _ _ (Just a2) b2 c2 d2)
   = singEqTm ty a1 a2 && b1 == b2 && c1 == c2 && d1 == d2
 eqTerm _ty Read{} Read{}
   = False
