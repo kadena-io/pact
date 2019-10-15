@@ -276,10 +276,13 @@ peekFields tn sRk (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
   pure $ Map.insert tFieldName av avs
 
 readFields
-  :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
-  -> Analyze (S (ConcreteObj ty), Map Text AVal)
+  :: TableName
+  -> S RowKey
+  -> TagId
+  -> SingTy ('TyObject ty)
+  -> Analyze (S (ConcreteObj ty))
 readFields _tn _sRk _tid (SObjectUnsafe SNil') =
-  pure (withProv (FromRow Map.empty) (literal ()), Map.empty)
+  pure (withProv (FromRow Map.empty) (literal ()))
 readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
@@ -293,11 +296,9 @@ readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
     OpaqueVal -> throwErrorNoLoc "Opaque value encountered in table read"
     AVal (Just (FromCell oc)) sval
       -> withSymVal fieldType $ withSymVal subObjTy $ do
-        (S (Just (FromRow ocMap)) obj', avs) <- readFields tn sRk tid subObjTy
-        pure ( withProv (FromRow $ Map.insert cn oc ocMap) $
-                 tuple (SBVI.SBV sval, obj')
-             , Map.insert tFieldName av avs
-             )
+        S (Just (FromRow ocMap)) obj' <- readFields tn sRk tid subObjTy
+        pure $ withProv (FromRow $ Map.insert cn oc ocMap) $
+          tuple (SBVI.SBV sval, obj')
     AVal _ _ -> error
       "impossible: unexpected type of cell provenance in readFields"
 
@@ -510,9 +511,9 @@ evalTerm = \case
     rowExisted <- use $ rowExists id tn sRk
 
     let readObject = do
-          (sObj, aValFields) <- readFields tn sRk tid rowTy
+          aValFields <- peekFields tn sRk rowTy
           applyInvariants tn aValFields $ mapM_ addConstraint
-          pure $ subObjectS rowTy objTy sObj
+          readFields tn sRk tid objTy
 
         tagAccess :: S Bool -> Analyze ()
         tagAccess readSucceeds = tagAccessKey mtReads tid sRk readSucceeds
