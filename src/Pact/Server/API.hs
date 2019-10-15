@@ -53,12 +53,16 @@ import Servant.Client.Core
 import Servant.Swagger
 
 import qualified Pact.Analyze.Remote.Types as Analyze
+import Pact.Parse
 import Pact.Types.API
+import Pact.Types.Capability
 import Pact.Types.ChainId
+import Pact.Types.ChainMeta
 import Pact.Types.Codec (timeCodec, encoder)
 import Pact.Types.Command
 import Pact.Types.Continuation
 import Pact.Types.Exp (Literal)
+import Pact.Types.Gas
 import Pact.Types.Hash
 import Pact.Types.Info (Info)
 import Pact.Types.PactValue (PactValue)
@@ -362,3 +366,10 @@ instance ToSchema Analyze.Response where
 instance ToSchema (ModuleDef t) where
   declareNamedSchema = declareGenericSchema $
     (schemaOf $ swaggerType SwaggerObject)
+
+instance ToSchema TTLSeconds
+instance ToSchema ParsedInteger
+instance ToSchema QualifiedName
+instance ToSchema GasLimit
+instance ToSchema SigCapability where
+  declareNamedSchema = lensyDeclareNamedSchema 3

@@ -103,11 +103,65 @@
 (expect "ceiling 2 prec" 101.95 (ceiling 101.9401 2))
 (expect "floor 1 prec" 100.1 (ceiling 100.01 1))
 
-"===== other equality"
+"===== list equality"
 (expect "= list list" true (= [1 2 3] [1 2 3]))
 (expect "not = list list" false (= [1 3 2] [1 2 3]))
+(expect "not != list list" false (!= [1 2 3] [1 2 3]))
+(expect "!= list list" true (!= [1 3 2] [1 2 3]))
+
+"===== object equality"
 (expect "= object object" true (= { "a": 1 } { "a": 1 }))
 (expect "not = object object" false (= { "a": 1 } { "a": 1, "b": 2 }))
+(expect "not != object object" false (!= { "a": 1 } { "a": 1 }))
+(expect "!= object object" true (!= { "a": 1 } { "a": 1, "b": 2 }))
+
+"===== keyset equality"
+(env-data { "k1": ["k1"], "k2": ["k2"] })
+(expect "= keyset keyset" true (= (read-keyset "k1") (read-keyset "k1")))
+(expect "not = keyset keyset" false (= (read-keyset "k1") (read-keyset "k2")))
+(expect "not != keyset keyset" false (!= (read-keyset "k1") (read-keyset "k1")))
+(expect "!= keyset keyset" true (!= (read-keyset "k1") (read-keyset "k2")))
+
+"===== keyset ref equality"
+(env-data { "k1": ["k1"], "k2": ["k2"] })
+(env-keys ["k1" "k2"])
+(define-keyset 'k1 (read-keyset "k1"))
+(define-keyset 'k2 (read-keyset "k2"))
+(expect "= keysetRef keysetRef" true (= (keyset-ref-guard "k1") (keyset-ref-guard "k1")))
+(expect "not = keysetRef keysetRef" false (= (keyset-ref-guard "k1") (keyset-ref-guard "k2")))
+(expect "not != keysetRef keysetRef" false (!= (keyset-ref-guard "k1") (keyset-ref-guard "k1")))
+(expect "!= keysetRef keysetRef" true (!= (keyset-ref-guard "k1") (keyset-ref-guard "k2")))
+
+(module tm G
+  (defcap G () true)
+  (defun mk (id) (create-module-guard id))
+  (defpact p (id1 id2)
+    (step [(create-pact-guard id1) (create-pact-guard id2)]))
+  (defun ug (id) true)
+  )
+
+"===== module guard equality"
+(expect "= moduleGuard moduleGuard" true (= (tm.mk "1") (tm.mk "1")))
+(expect "not = moduleGuard moduleGuard" false (= (tm.mk "2") (tm.mk "1")))
+(expect "not != moduleGuard moduleGuard" false (!= (tm.mk "1") (tm.mk "1")))
+(expect "!= moduleGuard moduleGuard" true (!= (tm.mk "2") (tm.mk "1")))
+
+"===== pact guard equality"
+(env-hash "aa")
+(let ((pgs (tm.p "1" "2")))
+  (expect "= pactGuard pactGuard" true (= (at 0 pgs) (at 0 pgs)))
+  (expect "not = pactGuard pactGuard" false (= (at 1 pgs) (at 0 pgs)))
+  (expect "not != pactGuard pactGuard" false (!= (at 0 pgs) (at 0 pgs)))
+  (expect "!= pactGuard pactGuard" true (!= (at 1 pgs) (at 0 pgs)))
+  )
+
+
+"===== userGuard equality"
+(expect "= userGuard userGuard" true (= (create-user-guard (tm.ug "1")) (create-user-guard (tm.ug "1"))))
+(expect "not = userGuard userGuard" false (= (create-user-guard (tm.ug "2")) (create-user-guard (tm.ug "1"))))
+(expect "not != userGuard userGuard" false (!= (create-user-guard (tm.ug "1")) (create-user-guard (tm.ug "1"))))
+(expect "!= userGuard userGuard" true (!= (create-user-guard (tm.ug "2")) (create-user-guard (tm.ug "1"))))
+
 
 "===== bitwise"
 (expect "bitwise 2 and 3" 2 (& 2 3))
