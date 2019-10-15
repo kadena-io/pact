@@ -57,13 +57,13 @@ grantedCaps = S.union <$> getAllStackCaps <*> getAllManaged
 
 -- | Matches Managed -> managed list, callstack and composed to stack list
 -- Composed should possibly check both ...
-capabilityGranted :: CapScope m -> Capability -> Eval e Bool
+capabilityGranted :: CapScope -> Capability -> Eval e Bool
 capabilityGranted scope cap = elem cap <$> scopeCaps
   where
     scopeCaps :: Eval e (S.Set Capability)
     scopeCaps = case scope of
       -- Managed: only check top-level, not composed
-      CapManaged _ -> S.map _csCap <$> use (evalCapabilities . capManaged)
+      CapManaged -> S.map _csCap <$> use (evalCapabilities . capManaged)
       -- Other: check acquired, both top and composed.
       _ -> getAllStackCaps
 
@@ -87,11 +87,16 @@ acquireCapability
   :: HasInfo i
   => i
   -> ApplyMgrFun e
-  -> CapScope (Maybe (Def Ref))
+  -- ^ knot-tying continuation for running a manager fun
+  -> CapScope
+  -- ^ acquiring/installing scope
   -> Capability
+  -- ^ acquiring/installing cap
+  -> Maybe (Def Ref)
+  -- ^ defined mgr fun
   -> Eval e ()
   -> Eval e CapAcquireResult
-acquireCapability i af scope cap test = go
+acquireCapability i af scope cap capMF test = go
   where
 
     alreadyGranted = return AlreadyAcquired
@@ -107,13 +112,13 @@ acquireCapability i af scope cap test = go
             else evalCap
 
     seenCaps = case scope of
-      CapManaged _ -> use $ evalCapabilities . capManagedSeen
+      CapManaged -> use $ evalCapabilities . capManagedSeen
       _ -> return mempty
 
     evalCap = do
       -- liftIO $ print ("acquireCapability",scope,cap)
       case scope of
-        CapManaged _ -> evalManaged
+        CapManaged -> evalManaged
         CapCallStack -> evalStack
         CapComposed -> evalComposed
       return NewlyAcquired
@@ -128,14 +133,14 @@ acquireCapability i af scope cap test = go
 
     -- Callstack: check if managed, in which case push, otherwise
     -- push and test.
-    evalStack = checkManaged af cap >>= \r -> case r of
+    evalStack = checkManaged af cap capMF >>= \r -> case r of
       Nothing -> push >> test
       Just (Left e) -> evalError def (prettyString e)
       Just (Right mgd) -> pushSlot (CapSlot scope cap (_csComposed mgd))
 
     -- Composed: check if managed, in which case install onto head,
     -- otherwise push, test, pop and install onto head
-    evalComposed = checkManaged af cap >>= \r -> case r of
+    evalComposed = checkManaged af cap capMF >>= \r -> case r of
       Nothing -> push >> test >> popCapStack installComposed
       Just (Left e) -> evalError def (prettyString e)
       Just (Right mgd) -> installComposed (CapSlot scope cap (_csComposed mgd))
@@ -147,10 +152,14 @@ acquireCapability i af scope cap test = go
     pushSlot s = evalCapabilities . capStack %= (s:)
 
 
-checkManaged :: ApplyMgrFun e -> Capability -> Eval e (Maybe (Either String (CapSlot Capability)))
-checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
+checkManaged
+  :: ApplyMgrFun e
+  -> Capability
+  -> Maybe (Def Ref)
+  -> Eval e (Maybe (Either String (CapSlot Capability)))
+checkManaged _ _ Nothing = return Nothing
+checkManaged applyF cap (Just mgrFun) = use (evalCapabilities . capManaged) >>= go
   where
-    noMatch = return $ Nothing
 
     go mgdCaps = do
       (success,failures,processedMgdCaps) <- foldM check (Nothing,[],mempty) mgdCaps
@@ -158,11 +167,11 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
         Just newMgdCap -> do
           evalCapabilities . capManaged .= processedMgdCaps
           return $ Just $ Right newMgdCap
-        Nothing -> case failures of
-          [] -> return Nothing
-          es -> return $ Just $ Left $
+        Nothing -> return $ Just $ Left $
             "Acquire of managed capability failed: " ++
-            (intercalate "," (map (renderCompactString' . peDoc) es))
+            (case failures of
+              [] -> "none installed"
+              es -> intercalate "," (map (renderCompactString' . peDoc) es))
 
     check (successR,failedRs,ms) m = case successR of
       Just {} -> return (successR,[],S.insert m ms) -- short circuit on success
@@ -174,16 +183,26 @@ checkManaged applyF cap = use (evalCapabilities . capManaged) >>= go
           Just (Right newMgdCap) ->
             return (Just newMgdCap,[],S.insert newMgdCap ms)
 
-    runManaged mcs = case _csScope mcs of -- validate scope
-      CapManaged (Just mf) -> case _csCap mcs of -- validate user mg cap and has mgr fun
-        UserCapability mqn mas -> case cap of -- validate user test cap
-          UserCapability cqn cas
-            | cqn == mqn -> -- check type match and apply mgr fun
-                Just <$> applyMgrFun mcs mqn mf mas cas
-            | otherwise -> noMatch
-          _ -> noMatch
-        _ -> noMatch
+    runManaged mcs = case (_csCap mcs,cap) of -- validate mgr fun, mgr cap, acquired cap
+      (UserCapability mqn mas,UserCapability cqn cas) -- managed user cap w/ fun
+        | cqn == mqn ->
+            -- apply mgr fun on cap domain match
+            Just <$> applyMgrFun mcs mqn mgrFun mas cas
+
+        | otherwise -> noMatch
+      (ModuleAdminCapability mmn,ModuleAdminCapability cmn)
+        -- TODO, this is unreachable, as module admin has 'Nothing' for mgrFun.
+        -- Leaving this in as there is no way currently to acquire admin (as opposed
+        -- to install, which is what 'acquireModuleAdmin' does, which always
+        -- succeeds with the "previously installed" check in 'acquireCapability'.
+        -- Leaving it here for the semantics, and noting that we need a better
+        -- rep of the mgrFun to represent admin if we implement acquire.
+        | mmn == cmn -> -- admin trivially succeeds on matching module
+          return $ Just (Right mcs)
+        | otherwise -> noMatch
       _ -> noMatch
+
+    noMatch = return $ Nothing
 
     applyMgrFun mcs mqn mf mas cas = fmap updateManagedSlot <$> applyF mf mas cas
       where

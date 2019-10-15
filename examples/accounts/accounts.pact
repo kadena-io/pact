@@ -71,7 +71,8 @@
     "transfer AMOUNT from SRC to DEST"
     (with-capability (TRANSFER)
       (debit src amount date { "transfer-to": dest })
-      (credit dest amount date { "transfer-from": src })))
+      (credit dest amount date { "transfer-from": src })
+      "Transfer succeeded"))
 
   (defun read-account-user (id)
     "Read data for account ID"

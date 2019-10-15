@@ -112,6 +112,8 @@
 (expect "escrow canceled" 229.0 (test.get-balance "123"))
 
 (rollback-tx) ; back to first step
+
+(begin-tx)
 ;; creditor cannot finish alone
 (env-keys ["user456"])
 (expect-failure "creditor cannot finish alone" (continue-pact 1 false (hash "run-escrow-pact-id")))
@@ -130,13 +132,28 @@
 (expect "seller paid 1.75" 6.75 (test.get-balance "456"))
 (expect "buyer refunded .25" 227.25 (test.get-balance "123"))
 
+(commit-tx)
 
 ;;exercise PAY
+(begin-tx)
+
 (env-sigs
  [{ 'key: "user123", "caps": [(accounts.PAY "123" "456" 1.0)]},
   { 'key: "accountadmin", "caps": [] }])
 (install-capability (accounts.PAY "123" "456" 1.0))
-(accounts.pay "123" "456" 0.9 (time "2016-07-22T11:26:35Z"))
+(expect
+ "Payment for 0.9 on 1.0 installed cap succeeds"
+ "Transfer succeeded"
+ (accounts.pay "123" "456" 0.9 (time "2016-07-22T11:26:35Z")))
 
+(commit-tx)
+
+(begin-tx)
+;;test that PAY cannot be used without install
+(env-keys ["user123"])
+
+(expect-failure
+ "PAY cannot be acquired without install"
+ (accounts.pay "123" "456" 0.9 (time "2016-07-22T11:26:35Z")))
 
 ;
