@@ -332,7 +332,7 @@ sampleKeyset = KeySet samplePubKeys (Name $ BareName "keys-all" def)
 sampleNamespaceName :: T.Text
 sampleNamespaceName = "my-namespace"
 
-sampleNamespace :: Namespace
+sampleNamespace :: Namespace PactValue
 sampleNamespace = Namespace
                   (NamespaceName sampleNamespaceName)
                   (GKeySet sampleKeyset)

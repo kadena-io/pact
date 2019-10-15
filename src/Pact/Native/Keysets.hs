@@ -72,8 +72,12 @@ defineKeyset fi as = case as of
           i = _faInfo fi
       old <- readRow i KeySets ksn
       case old of
-        Nothing -> writeRow i Write KeySets ksn ks & success "Keyset defined"
+        Nothing -> do
+          _ <- computeGas (Right fi) (GWrite (WriteKeySet ksn ks))
+          writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do
+          _ <- computeGas (Right fi) (GPostRead (ReadKeySet ksn oldKs))
+          _ <- computeGas (Right fi) (GWrite (WriteKeySet ksn ks))
           runSysOnly $ enforceKeySet i (Just ksn) oldKs
           writeRow i Write KeySets ksn ks & success "Keyset defined"
 

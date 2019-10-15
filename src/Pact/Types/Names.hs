@@ -50,11 +50,12 @@ import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 import Pact.Types.Info
 import Pact.Types.Parser
 import Pact.Types.Pretty hiding (dot)
+import Pact.Types.SizeOf
 import Pact.Types.Util
 
 
 newtype NamespaceName = NamespaceName Text
-  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData)
+  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData, SizeOf)
 
 
 data ModuleName = ModuleName
@@ -67,6 +68,10 @@ instance Hashable ModuleName where
     s `hashWithSalt` (0::Int) `hashWithSalt` n
   hashWithSalt s (ModuleName n (Just ns)) =
     s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
+
+instance SizeOf ModuleName where
+  sizeOf (ModuleName mn namespace) =
+    (constructorCost 2) + (sizeOf mn) + (sizeOf namespace)
 
 instance NFData ModuleName
 
@@ -110,6 +115,9 @@ instance HasInfo QualifiedName where getInfo = _qnInfo
 instance NFData QualifiedName
 instance AsString QualifiedName where asString = renderCompactText
 
+instance SizeOf QualifiedName where
+  sizeOf (QualifiedName modName n i) =
+    (constructorCost 3) + (sizeOf modName) + (sizeOf n) + (sizeOf i)
 
 instance ToJSON QualifiedName where
   toJSON = toJSON . renderCompactString
@@ -142,6 +150,10 @@ instance HasInfo BareName where getInfo = _bnInfo
 instance NFData BareName
 instance AsString BareName where asString = renderCompactText
 
+instance SizeOf BareName where
+  sizeOf (BareName n i) =
+    (constructorCost 2) + (sizeOf n) + (sizeOf i)
+
 -- | A named reference from source.
 data Name
   = QName QualifiedName
@@ -156,6 +168,10 @@ instance Pretty Name where
   pretty = \case
     QName q -> pretty q
     Name n -> pretty n
+
+instance SizeOf Name where
+  sizeOf (QName qn) = (constructorCost 1) + sizeOf qn
+  sizeOf (Name bn) = (constructorCost 1) + sizeOf bn
 
 instance AsString Name where asString = renderCompactText
 

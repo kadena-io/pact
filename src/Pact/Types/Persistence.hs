@@ -130,7 +130,7 @@ data Domain k v where
   -- | Modules
   Modules :: Domain ModuleName PersistModuleData
   -- | Namespaces
-  Namespaces :: Domain NamespaceName Namespace
+  Namespaces :: Domain NamespaceName (Namespace PactValue)
   -- | Pacts map to 'Maybe PactExec' where Nothing indicates
   -- a terminated pact.
   Pacts :: Domain PactId (Maybe PactExec)

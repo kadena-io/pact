@@ -12,6 +12,12 @@
   (defconst TEST1-C1 0)
   (defconst TEST1-C2 "const 1")
   (defconst TEST1-C3 2.0)
+
+  (defcap MGD_CAP:bool () @managed MGD_CAP_mgr)
+  (defun MGD_CAP_mgr:object (mgd:object req:object) "Mgr for CAP")
+  (defcap CAP:bool () "A cappy cap")
+  (defpact pact1:string (arg:object{schema1}) "A pacty pact")
+  (defschema schema1 "A scheming schema" fld:string)
 )
 
 ; more complex interface with model properties
@@ -108,6 +114,13 @@
   ; is allowed via dot-accessor notation.
   (defun use-consts:integer ()
     (+ sig-test1.TEST1-C1 sig-test3.TEST3-C2))
+
+  (defcap MGD_CAP:bool () @managed MGD_CAP_mgr true)
+  (defun MGD_CAP_mgr:object (mgd:object req:object) mgd)
+  (defcap CAP:bool () true)
+  (defpact pact1:string (arg:object{sig-test1.schema1})
+    (step arg)
+    (step 1))
 )
 
 (commit-tx)

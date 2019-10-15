@@ -214,7 +214,12 @@ pureEval ei e = do
             if null cs
               then outStrLn HErr serr
               else do
-              -- synthesize error at outer callsite
+              -- synthesize error at outer callsite.
+              -- TODO: this is designed to show the top-level call, i.e.
+              -- in repl tests, but
+              -- it makes e.g. module load errors hard to debug.
+              -- Test with Atom not doing this to see if instead Atom
+              -- can break up by file.
               let lastErr = last cs
                   outerErr = err { peInfo = _sfLoc lastErr }
               if peInfo outerErr == peInfo err

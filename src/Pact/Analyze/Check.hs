@@ -54,6 +54,7 @@ import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.State.Strict (evalStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
+import           Data.Bifunctor             (first)
 import           Data.Either                (partitionEithers)
 import qualified Data.HashMap.Strict        as HM
 import           Data.List                  (isPrefixOf)
@@ -548,10 +549,12 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
 moduleTables
   :: HM.HashMap ModuleName (ModuleData Ref)
   -- ^ all loaded modules
-  -> HM.HashMap Text Ref
+  -> ModuleRefs
   -- ^ the refs of the module we're verifying
+  -> HM.HashMap Text EProp
+  -- ^ constants in the module
   -> ExceptT VerificationFailure IO [Table]
-moduleTables modules refMap = do
+moduleTables modules modRefs consts = do
   -- All tables defined in this module, and imported by it. We're going to look
   -- through these for their schemas, which we'll look through for invariants.
   let tables = flip mapMaybe (modules ^@.. traversed . mdRefMap . itraversed) $
@@ -559,35 +562,36 @@ moduleTables modules refMap = do
           (name, Ref (table@TTable {})) -> Just (name, table)
           _                             -> Nothing
 
-  let schemas = HM.fromList $ flip mapMaybe (HM.toList refMap) $ \case
-        (name, Ref (schema@TSchema {})) -> Just (name, schema)
-        _                               -> Nothing
-
   for tables $ \(tabName, tab) -> do
     (TopTable _info _name tableTy _meta, _tcState)
       <- lift $ runTC 0 False $ typecheckTopLevel (Ref tab)
     case tableTy of
       Pact.TyUser schema -> do
+        VarEnv vidStart invEnv vidTys <- hoist generalize $
+          mkInvariantEnv schema
+
         let TC.Schema{_utName,_utFields} = schema
             schemaName = asString _utName
+            schemas = modRefs ^. defschemas
 
-        invariants <- case schemas ^? ix schemaName.tMeta.mModel of
+            mkInvariant :: Exp Info -> Either String (Invariant 'TyBool)
+            mkInvariant = expToInvariant vidStart invEnv vidTys consts SBool
+
+        invariants <- case schemas ^? ix schemaName._Ref.tMeta.mModel of
           -- no model = no invariants
           Nothing    -> pure []
           Just model -> case normalizeListLit model of
             Nothing -> throwError $ ModuleParseFailure
               -- reconstruct an `Exp Info` for this list
               ( Pact.EList $ Pact.ListExp model Pact.Brackets $
-                  schemas ^?! ix schemaName.tInfo
+                  schemas ^?! ix schemaName._Ref.tInfo
               , "malformed list (inconsistent use of comma separators?)"
               )
             Just model' -> withExceptT ModuleParseFailure $ liftEither $ do
               exps <- collectInvariants model'
-              let getInvariant meta = runReaderT
-                    (expToInvariant SBool meta)
-                    (varIdArgs _utFields)
+
               for exps $ \meta ->
-                case getInvariant meta of
+                case mkInvariant meta of
                   Left err   -> Left (meta, err)
                   Right good -> Right (Located (getInfo meta) good)
 
@@ -616,23 +620,26 @@ moduleCapabilities md = do
 
     mkCap :: TopLevel Node -> Except VerificationFailure Capability
     mkCap toplevel = do
-        eSchema <- mkESchema <$> traverse argType pactArgs
+        eSchema <- mkESchema <$> traverse (translateArgTy "argument") pactArgs
         pure $ case eSchema of
           ESchema schema -> Capability schema capName
 
       where
-        argType :: Pact.Arg UserType -> Except VerificationFailure (Text, EType)
-        argType (Pact.Arg name ty _info) =
-          case maybeTranslateType ty of
-            Just ety -> pure (name, ety)
-            Nothing  -> throwError $
-              TypeTranslationFailure "couldn't translate argument type" ty
-
         (capName, pactArgs) = case toplevel of
           TopFun FDefun{_fName,_fType} _ ->
             (CapName $ T.unpack _fName, _ftArgs _fType)
           _ ->
             error "invariant violation: defcap toplevel must be a defun"
+
+translateArgTy
+  :: Text
+  -> Pact.Arg UserType
+  -> Except VerificationFailure (Text, EType)
+translateArgTy errNoun (Pact.Arg name ty _info) =
+  case maybeTranslateType ty of
+    Just ety -> pure (name, ety)
+    Nothing  -> throwError $
+      TypeTranslationFailure ("couldn't translate " <> errNoun <> " type") ty
 
 data PropertyScope
   = Everywhere
@@ -737,20 +744,24 @@ parseModuleModelDecl exps = traverse parseDecl exps where
         _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")
 
--- | Get the set ('HM.HashMap') of refs to functions, pacts, and constants in
--- this module.
-moduleTypecheckableRefs :: HM.HashMap Text Ref -> TypecheckableRefs
-moduleTypecheckableRefs refMap = foldl f noRefs (HM.toList refMap)
+-- | Organize the module's refs by type
+moduleRefs :: ModuleData Ref -> ModuleRefs
+moduleRefs (ModuleData _ refMap) = foldl f noRefs (HM.toList refMap)
   where
     f accum (name, ref) = case ref of
-      Ref (TDef (Def{_dDefType, _dDefBody}) _) -> case _dDefType of
-        Defun   -> accum & defuns . at name ?~ ref
-        Defpact -> accum & defpacts . at name ?~ ref
-        Defcap  -> accum
-      Ref TConst{} -> accum & defconsts . at name ?~ ref
-      _            -> accum
+      Ref (TDef (Def{_dDefType, _dDefBody}) _) ->
+        case _dDefType of
+          Defun   -> accum & defuns . at name ?~ ref
+          Defpact -> accum & defpacts . at name ?~ ref
+          Defcap  -> accum
+      Ref TConst{} ->
+        accum & defconsts . at name ?~ ref
+      Ref TSchema{} ->
+        accum & defschemas . at name ?~ ref
+      _ ->
+        accum
 
-    noRefs = TypecheckableRefs HM.empty HM.empty HM.empty
+    noRefs = ModuleRefs HM.empty HM.empty HM.empty HM.empty
 
 -- | Module-level propery definitions and declarations
 data ModelDecl = ModelDecl
@@ -765,8 +776,8 @@ moduleModelDecl ModuleData{..} = do
   let (propList, checkList) = partitionEithers lst
   pure $ ModelDecl (HM.fromList propList) checkList
 
--- | Then environment for a function or step at the beginning of execution
-data FunctionEnvironment = FunctionEnvironment
+-- | Then environment for variables at the beginning of execution
+data VarEnv = VarEnv
   { _vidStart :: VarId
   -- ^ The first 'VarId' the function can issue.
   , _nameVids :: Map Text VarId
@@ -776,10 +787,29 @@ data FunctionEnvironment = FunctionEnvironment
   -- ^ The type of each variable in scope.
   }
 
+-- | Given a schema, returns an environment of canonical assignment of var ids
+-- to each column, and an environment of types. The canonical ordering is
+-- determined by the lexicographic order of variable names. Also see
+-- 'varIdColumns'.
+mkInvariantEnv :: UserType -> Except VerificationFailure VarEnv
+mkInvariantEnv TC.Schema{_utFields} = do
+  tys <- Map.fromList . map (first (env Map.!)) <$>
+    traverse (translateArgTy "schema field's") _utFields
+  pure $ VarEnv vidStart env tys
+
+  where
+    -- Order variables lexicographically over their names when assigning
+    -- variable IDs.
+    env :: Map Text VarId
+    env = Map.fromList $ flip zip [0..] $ List.sort $ map Pact._aName _utFields
+
+    vidStart :: VarId
+    vidStart = VarId $ Map.size env
+
 -- | Make an environment (binding result and args) from a function type.
-makeFunctionEnvironment
-  :: Pact.FunType TC.UserType -> Except VerificationFailure FunctionEnvironment
-makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
+makeFunctionEnv
+  :: Pact.FunType TC.UserType -> Except VerificationFailure VarEnv
+makeFunctionEnv (Pact.FunType argTys resultTy) = do
   let -- We use VID 0 for the result, the one for each argument variable.
       -- Finally, we start the VID generator in the translation environment at
       -- the next VID. envVidStart is the first VID that will be issued.
@@ -819,7 +849,7 @@ makeFunctionEnvironment (Pact.FunType argTys resultTy) = do
       vidTys :: Map VarId EType
       vidTys = Map.fromList $ fmap (\(Binding vid _ _ ty) -> (vid, ty)) env
 
-  pure $ FunctionEnvironment envVidStart nameVids vidTys
+  pure $ VarEnv envVidStart nameVids vidTys
 
 mkTableEnv :: [Table] -> TableMap (ColumnMap EType)
 mkTableEnv tables = TableMap $ Map.fromList $
@@ -845,8 +875,7 @@ stepCheck
   -- ^ The model
   -> Except VerificationFailure (Either ParseFailure [Located Check])
 stepCheck tables consts propDefs funTy model = do
-  FunctionEnvironment envVidStart nameVids vidTys
-    <- makeFunctionEnvironment funTy
+  VarEnv envVidStart nameVids vidTys <- makeFunctionEnv funTy
   let getCheck = expToCheck (mkTableEnv tables) envVidStart nameVids vidTys
         consts propDefs
   checks <- withExcept ModuleParseFailure $ liftEither $ do
@@ -873,8 +902,7 @@ moduleFunCheck
   -- ^ The type of the term under analysis
   -> Except VerificationFailure (Either ParseFailure [Located Check])
 moduleFunCheck tables modCheckExps consts propDefs defTerm funTy = do
-  FunctionEnvironment envVidStart nameVids vidTys
-    <- makeFunctionEnvironment funTy
+  VarEnv envVidStart nameVids vidTys <- makeFunctionEnv funTy
 
   checks <- case defTerm of
     TDef def info ->
@@ -1126,9 +1154,11 @@ verifyModule
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
--- verifyModule modules moduleData@(ModuleData Pact.MDInterface{} refs) = runExceptT $ do
-verifyModule modules moduleData@(ModuleData modDef refs) = runExceptT $ do
-  tables <- moduleTables modules refs
+verifyModule modules moduleData@(ModuleData modDef allRefs) = runExceptT $ do
+  let modRefs = moduleRefs moduleData
+
+  consts <- getConsts $ modRefs ^. defconsts
+  tables <- moduleTables modules modRefs consts
 
   let -- HM.unions is biased towards the start of the list. This module should
       -- shadow the others. Note that load / shadow order of imported modules
@@ -1163,9 +1193,9 @@ verifyModule modules moduleData@(ModuleData modDef refs) = runExceptT $ do
           globalNames = Set.unions $ fmap Set.fromList
             [ fmap _tableName tables
             , HM.keys propDefs
-            , HM.keys refs
+            , HM.keys allRefs
             ]
-          scopeErrors = scopeCheckInterface globalNames refs
+          scopeErrors = scopeCheckInterface globalNames allRefs
 
       in if length scopeErrors > 0
          then throwError $ ScopeErrors scopeErrors
@@ -1173,11 +1203,9 @@ verifyModule modules moduleData@(ModuleData modDef refs) = runExceptT $ do
 
     -- If we're passed a module we actually check properties
     Pact.MDModule{} -> do
-      let defunRefs, defpactRefs, defconstRefs :: HM.HashMap Text Ref
-          TypecheckableRefs defunRefs defpactRefs defconstRefs
-            = moduleTypecheckableRefs refs
+      let defunRefs, defpactRefs :: HM.HashMap Text Ref
+          ModuleRefs defunRefs defpactRefs _ _ = modRefs
 
-      consts <- getConsts defconstRefs
       caps   <- moduleCapabilities moduleData
       gov    <- moduleGovernance moduleData
 
@@ -1230,14 +1258,15 @@ verifyCheck
   -> ExceptT VerificationFailure IO CheckResult
 verifyCheck moduleData funName check checkType = do
   let info       = dummyInfo
-      module'    = moduleData ^. mdModule
-      moduleName = moduleDefName module'
+      moduleName = moduleDefName $ moduleData ^. mdModule
       modules    = HM.fromList [(moduleName, moduleData)]
       moduleFun :: ModuleData Ref -> Text -> Maybe Ref
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
+      modRefs    = moduleRefs moduleData
 
   caps   <- moduleCapabilities moduleData
-  tables <- moduleTables modules $ _mdRefMap moduleData
+  consts <- getConsts $ modRefs ^. defconsts
+  tables <- moduleTables modules modRefs consts
   gov    <- moduleGovernance moduleData
 
   let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov

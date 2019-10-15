@@ -41,6 +41,7 @@ import Control.Lens (set)
 import Data.Aeson hiding (Object)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal (Decimal)
+import Data.Default
 import Data.Proxy
 import Data.Swagger as Swagger hiding (Info,version)
 import Data.Text (Text)
@@ -53,17 +54,21 @@ import Servant.Client.Core
 import Servant.Swagger
 
 import qualified Pact.Analyze.Remote.Types as Analyze
+import Pact.Parse
 import Pact.Types.API
+import Pact.Types.Capability
 import Pact.Types.ChainId
+import Pact.Types.ChainMeta
 import Pact.Types.Codec (timeCodec, encoder)
 import Pact.Types.Command
 import Pact.Types.Continuation
-import Pact.Types.Exp (Literal)
+import Pact.Types.Exp
+import Pact.Types.Gas
 import Pact.Types.Hash
 import Pact.Types.Info (Info)
-import Pact.Types.PactValue (PactValue)
+import Pact.Types.PactValue
 import Pact.Types.Persistence (TxId)
-import Pact.Types.Pretty (Doc)
+import Pact.Types.Pretty
 import Pact.Types.Runtime (PactError,PactErrorType,StackFrame)
 import Pact.Types.Swagger
 import Pact.Types.Term
@@ -268,7 +273,8 @@ instance ToSchema Doc where
   declareNamedSchema = declareGenericString
 
 instance ToSchema ChainId where
-  declareNamedSchema = declareGenericString
+  declareNamedSchema = swaggerDescription "chainweb chain ID where the transaction will be executed" .
+                       declareGenericString
 instance ToSchema ModuleHash where
   declareNamedSchema = declareGenericSchema pactHashSchema
 instance ToSchema Provenance where
@@ -362,3 +368,27 @@ instance ToSchema Analyze.Response where
 instance ToSchema (ModuleDef t) where
   declareNamedSchema = declareGenericSchema $
     (schemaOf $ swaggerType SwaggerObject)
+
+instance ToSchema TTLSeconds where
+  declareNamedSchema = swaggerDescription desc . declareGenericSchema (schemaOf $ swaggerType SwaggerNumber)
+    where
+      desc = "number of seconds the transaction can wait in the mempool before expiring"
+instance ToSchema ParsedInteger
+instance ToSchema QualifiedName where
+  declareNamedSchema = declareGenericString
+instance ToSchema GasLimit where
+  declareNamedSchema = swaggerDescription desc . declareGenericSchema (schemaOf $ swaggerType SwaggerNumber)
+    where
+      desc = "max number of gas units you want to spend on this transaction"
+
+sigCapExample :: SigCapability
+sigCapExample = SigCapability qn [a "arg1", a "arg2"]
+  where
+    a = PLiteral . LString
+    qn = QualifiedName m "bar" def
+    m = ModuleName "foo" Nothing
+
+instance ToSchema SigCapability where
+  declareNamedSchema _ =
+    swaggerDescription "a capability and any arguments it requires" $
+      namedSchema "SigCapability" $ sketchSchema sigCapExample

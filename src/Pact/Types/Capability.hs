@@ -100,24 +100,24 @@ data CapAcquireResult
   | AlreadyAcquired
   deriving (Eq,Show)
 
-data CapScope m
+data CapScope
   = CapCallStack
     -- ^ Call stack scope a la 'with-capability'
-  | CapManaged m
+  | CapManaged
     -- ^ Managed-scope capability
   | CapComposed
     -- ^ Composed into some other capability
-  deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
-instance NFData c => NFData (CapScope c)
+  deriving (Eq,Show,Ord,Generic)
+instance NFData CapScope
 
-instance Pretty (CapScope m) where
+instance Pretty CapScope where
   pretty CapManaged {} = "CapManaged"
   pretty CapCallStack = "CapCallStack"
   pretty CapComposed = "CapComposed"
 
 -- | Runtime storage of capability.
 data CapSlot c = CapSlot
-  { _csScope :: CapScope (Maybe (Def Ref))
+  { _csScope :: CapScope
   , _csCap :: c
   , _csComposed :: [c]
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)

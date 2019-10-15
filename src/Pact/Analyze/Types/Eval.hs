@@ -180,6 +180,7 @@ data AnalyzeEnv
     , _aeScope         :: Map VarId AVal -- used as a stack
     , _aeStepChoices   :: Map VarId (SBV Bool)
     , _invariants      :: TableMap [Located (Invariant 'TyBool)]
+    , _aeTableSchemas  :: TableMap EType
     , _aeColumnIds     :: TableMap (Map Text VarId)
     , _aeModelTags     :: ModelTags 'Symbolic
     , _aeInfo          :: Info
@@ -226,14 +227,21 @@ mkAnalyzeEnv modName pactMetadata gov registry tables caps args stepChoices tags
         \(Table tname _ut someInvariants) ->
           (TableName (T.unpack tname), someInvariants)
 
-  columnIds <- for tables $ \(Table tname ut _) ->
+  tableETys <- for tables $ \(Table tname ut _) ->
     case maybeTranslateUserType' ut of
-      Just (EType (SObject ty)) -> Just
-        (TableName (T.unpack tname), varIdColumns ty)
-      _ -> Nothing
+      Just ety ->
+        Just (TableName (T.unpack tname), ety)
+      _ ->
+        Nothing
 
-  let columnIds'   = TableMap (Map.fromList columnIds)
-      emptyGrants  = mkTokenGrants caps
+  let tableSchemas :: TableMap EType
+      tableSchemas = TableMap $ Map.fromList tableETys
+
+  columnIds' <- for tableSchemas $ \ety -> do
+    EType (SObject ty) <- pure ety
+    pure $ varIdColumns ty
+
+  let emptyGrants  = mkTokenGrants caps
       activeGrants = emptyGrants
       modGuard     = case gov of
                        KsGovernance registryName ->
@@ -247,8 +255,8 @@ mkAnalyzeEnv modName pactMetadata gov registry tables caps args stepChoices tags
                          --
                          withProv fromGovCap $ uninterpret "cap_gov_guard"
 
-  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args
-    stepChoices invariants' columnIds' tags info (sansProv trivialGuard)
+  pure $ AnalyzeEnv modName pactMetadata registry txMetadata args stepChoices
+    invariants' tableSchemas columnIds' tags info (sansProv trivialGuard)
     modGuard emptyGrants activeGrants tables mempty
 
 mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b

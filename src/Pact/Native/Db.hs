@@ -148,7 +148,9 @@ descKeySet :: RNativeFun e
 descKeySet i [TLitString t] = do
   r <- readRow (_faInfo i) KeySets (KeySetName t)
   case r of
-    Just v -> return $ toTerm v
+    Just v -> do
+      _ <- computeGas (Right i) (GPostRead (ReadKeySet (KeySetName t) v))
+      return $ toTerm v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t
 descKeySet i as = argsError i as
 
@@ -239,13 +241,14 @@ select i as = argsError' i as
 select' :: FunApp -> [Term Ref] -> Maybe [(Info,FieldKey)] ->
            Term Ref -> Term Name -> Eval e (Gas,Term Name)
 select' i _ cols' app@TApp{} tbl@TTable{} = do
-    g0 <- computeGas (Right i) $ GSelect cols' app tbl
+    g0 <- computeGas (Right i) (GUnreduced [])
+    g1 <- computeGas (Right i) $ GSelect cols'
     guardTable i tbl
     let fi = _faInfo i
         tblTy = _tTableType tbl
     ks <- keys fi (userTable tbl)
     fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $
-      (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
+      (\f -> foldM f (g0 + g1, []) ks) $ \(gPrev,rs) k -> do
 
       mrow <- readRow fi (userTable tbl) k
       case mrow of
@@ -268,7 +271,8 @@ select' i as _ _ _ = argsError' i as
 
 withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
-  (!g0,!tkd) <- preGas fi [table',key',defaultRow']
+  let argsToReduce = [table',key',defaultRow']
+  (!g0,!tkd) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tkd of
     [table@TTable {..}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
       guardTable fi table
@@ -281,7 +285,8 @@ withDefaultRead fi as = argsError' fi as
 
 withRead :: NativeFun e
 withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
-  (!g0,!tk) <- preGas fi [table',key']
+  let argsToReduce = [table',key']
+  (!g0,!tk) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tk of
     [table@TTable {..},TLitString key] -> do
       guardTable fi table
@@ -345,16 +350,17 @@ write :: WriteType -> SchemaPartial -> NativeFun e
 write wt partial i as = do
   ts <- mapM reduce as
   case ts of
-    [table@TTable {..},TLitString key,obj@(TObject (Object ps _ _ _) _)] -> do
-      cost <- computeGas (Right i) (GWrite wt table obj)
+    [table@TTable {..},TLitString key,(TObject (Object ps _ _ _) _)] -> do
+      ps' <- enforcePactValue' ps
+      cost0 <- computeGas (Right i) (GUnreduced [])
+      cost1 <- computeGas (Right i) (GWrite (WriteData wt (asString key) ps'))
       guardTable i table
       case _tTableType of
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      ps' <- enforcePactValue' ps
       r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) ps'
-      return (cost, r)
+      return (cost0 + cost1, r)
     _ -> argsError i ts
 
 
@@ -362,6 +368,7 @@ createTable' :: RNativeFun e
 createTable' i [t@TTable {..}] = do
   guardTable i t
   let (UserTables tn) = userTable t
+  _ <- computeGas (Right i) (GWrite (WriteTable (asString tn)))
   success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
 createTable' i as = argsError i as
 

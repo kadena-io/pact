@@ -369,68 +369,71 @@ evalCore (ObjectEqNeq
 
 evalCore (ObjectEqNeq _ _ _ _ _) = vacuousMatch "covered by previous case"
 
-evalCore (ObjDrop ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
-  S prov obj' <- eval obj
-  case sing @a of
-    SObjectUnsafe schema -> pure $ S prov $ evalDropTake (obj' :< schema') schema
-evalCore (ObjTake ty@(SObjectUnsafe schema') _keys obj) = withSing ty $ do
-  S prov obj' <- eval obj
-  case sing @a of
-    SObjectUnsafe schema -> pure $ S prov $ evalDropTake (obj' :< schema') schema
+evalCore (ObjDrop argTy _keys obj) = withSing argTy $ do
+  obj' <- eval obj
+  pure $ subObjectS argTy (sing @a) obj'
+evalCore (ObjTake argTy _keys obj) = withSing argTy $ do
+  obj' <- eval obj
+  pure $ subObjectS argTy (sing @a) obj'
 
 evalCore (ObjLength (SObjectUnsafe (SingList hlist)) _obj) = pure $ literalS $
   hListLength hlist
 
--- | Implementation for both drop and take.
---
--- We @schema@ -- the type of the object we're starting with, and @schema'@ --
--- the type we need to produce. @schema'@ must be a sub-list of @schema@.
--- Therefore, we work through the elements of the object one at a time, keeping
--- the ones that go in the resulting object.
-evalDropTake
+-- | Implementation for both drop and take. The "sub" schema must be a sub-list
+-- of the "sup(er)" schema. See 'subObjectS' for a variant that works over 'S'.
+subObject
   :: HasCallStack
-  => SBV (ConcreteObj schema) :< SingList schema
-  -> SingList schema'
-  -> SBV (ConcreteObj schema')
-evalDropTake _ SNil' = literal ()
-evalDropTake
+  => SBV (ConcreteObj sup) :< SingList sup
+  -> SingList sub
+  -> SBV (ConcreteObj sub)
+subObject _ SNil' = literal ()
+subObject
    (obj :< SingList (SCons k  ty  ks ))
   schema'@(SingList (SCons k' ty' ks'))
   = withHasKind ty $ withSymVal (SObjectUnsafe (SingList ks))
 
   -- Test equality of both the key names and types. If the key matches then the
   -- type should as well, but we need to test both to convince ghc
-  $ fromMaybe (evalDropTake (_2 obj :< SingList ks) schema') $ do
+  $ fromMaybe (subObject (_2 obj :< SingList ks) schema') $ do
     Refl <- eqSym  k  k'
     Refl <- singEq ty ty'
     withSymVal ty $ withSymVal (SObjectUnsafe (SingList ks')) $ pure $
-      tuple (_1 obj, evalDropTake (_2 obj :< SingList ks) (SingList ks'))
+      tuple (_1 obj, subObject (_2 obj :< SingList ks) (SingList ks'))
 
-evalDropTake _ _ = error "evalDropTake invariant violation"
+subObject _ _ = error "subObject invariant violation"
+
+-- | Implementation for both drop and take. The "sub" schema must be a sub-list
+-- of the "sup(er)" schema. See 'subObject' for a variant that works over 'SBV'.
+subObjectS
+  :: SingTy ('TyObject sup)
+  -> SingTy ('TyObject sub)
+  -> S (ConcreteObj sup)
+  -> S (ConcreteObj sub)
+subObjectS (SObjectUnsafe supListTy) (SObjectUnsafe subListTy) (S prov supObj) =
+  S prov $ subObject (supObj, supListTy) subListTy
 
 data SomeObj where
   SomeObj :: SingList schema -> SBV (ConcreteObj schema) -> SomeObj
 
 -- | Shrink the given object to the largest subobject smaller than the search
 -- schema. Meaning its first key is > than the search schema's first key.
-subObject
+shrinkObject
   :: SBV (ConcreteObj schema) :< SingList schema
   -> SingList searchSchema
   -> SomeObj
-subObject (_ :< SNil') _ = SomeObj SNil' (literal ())
-subObject _ SNil'        = SomeObj SNil' (literal ())
-subObject
+shrinkObject (_ :< SNil') _ = SomeObj SNil' (literal ())
+shrinkObject _ SNil'        = SomeObj SNil' (literal ())
+shrinkObject
   (obj :< schema@(SingList (SCons k  v   kvs)))
     searchSchema@(SingList (SCons sk _sv _skvs))
   = withHasKind v $ withSymVal (SObjectUnsafe (SingList kvs)) $
     case cmpSym k sk of
       GT -> SomeObj schema obj
-      _  -> subObject (_2 obj :< SingList kvs) searchSchema
-
+      _  -> shrinkObject (_2 obj :< SingList kvs) searchSchema
 
 -- | Merge two objects, returning one with the requested schema.
 --
--- We simultaneously shrink each input object, via @subObject@ so that we're
+-- We simultaneously shrink each input object, via @shrinkObject@ so that we're
 -- always examining the smallest objects that could possibly match our
 -- searched-for schema.
 --
@@ -460,7 +463,7 @@ subObject
 --   obj2:   { z: 5       }
 --   schema: { z: integer }
 --
--- 3.5. switch to @evalDropTake@
+-- 3.5. switch to @subObject@
 --
 --   obj2:   { z: 5       }
 --   schema: { z: integer }
@@ -493,8 +496,8 @@ evalObjMerge'
     withSymVal ty $ withSymVal (SObjectUnsafe (SingList subSchema)) $
 
     fromMaybe (error "evalObjMerge' invariant violation") $
-      case subObject (obj1 :< schema1) schema of
-        SomeObj schema1' obj1' -> case subObject (obj2 :< schema2) schema of
+      case shrinkObject (obj1 :< schema1) schema of
+        SomeObj schema1' obj1' -> case shrinkObject (obj2 :< schema2) schema of
           SomeObj schema2' obj2' -> asum
             -- object 1 matches (left-biased)
             [ do Refl <- eqSym  k1  k
@@ -522,13 +525,13 @@ evalObjMerge'
   (obj1 :< schema1@(SingList SCons{}))
   (_    :<          SNil')
             schema@(SingList SCons{})
-  = evalDropTake (obj1 :< schema1) schema
+  = subObject (obj1 :< schema1) schema
 
 evalObjMerge'
   (_    :<          SNil')
   (obj2 :< schema2@(SingList SCons{}))
             schema@(SingList SCons{})
-  = evalDropTake (obj2 :< schema2) schema
+  = subObject (obj2 :< schema2) schema
 
 evalObjMerge' (_ :< SNil') (_ :< SNil') (SingList SCons{})
   = error "evalObjMerge' invariant violation: both input object exhausted"
