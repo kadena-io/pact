@@ -246,6 +246,7 @@ inferrable = \case
   PreApp f _
     | Just _ <- toOp arithOpP f      -> False
     | Just _ <- toOp unaryArithOpP f -> False
+    | f == "at"                      -> False
     | otherwise                      -> True
   _                                  -> True
 
@@ -781,8 +782,8 @@ expToCheck
   -> Exp Info
   -- ^ Exp to convert
   -> Either String Check
-expToCheck tableEnv' genStart nameEnv idEnv consts propDefs checkCtor body =
-  checkCtor . prenexConvert
+expToCheck tableEnv' genStart nameEnv idEnv consts propDefs mkCheck body =
+  mkCheck . prenexConvert
     <$> expToProp tableEnv' genStart nameEnv idEnv consts propDefs SBool body
 
 expToProp
