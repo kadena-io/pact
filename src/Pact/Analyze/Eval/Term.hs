@@ -256,6 +256,25 @@ applyInvariants tn aValFields addInvariants = do
 evalETerm :: ETerm -> Analyze AVal
 evalETerm tm = snd <$> evalExistential tm
 
+-- | Read the fields described by the schema of the row indexed by the symbolic
+-- RowKey, but without marking columns as read or tagging access to any cells.
+peekFields
+  :: TableName
+  -> S RowKey
+  -> SingTy ('TyObject ty)
+  -> Analyze (Map Text AVal)
+peekFields _tn _sRk (SObjectUnsafe SNil') =
+  pure $ Map.empty
+peekFields tn sRk (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
+  let fieldName  = symbolVal sym
+      tFieldName = T.pack fieldName
+      cn         = ColumnName fieldName
+      subObjTy   = SObjectUnsafe subSchema
+  sDirty <- use $ cellWritten tn cn sRk
+  av <- readField tn cn sRk sDirty fieldType
+  avs <- peekFields tn sRk subObjTy
+  pure $ Map.insert tFieldName av avs
+
 readFields
   :: TableName -> S RowKey -> TagId -> SingTy ('TyObject ty)
   -> Analyze (S (ConcreteObj ty), Map Text AVal)
@@ -529,10 +548,21 @@ evalTerm = \case
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk writeSucceeds
 
+    Just rowETy <- view $ aeTableSchemas.at tn
+    prevAVals <- case rowETy of
+      EType rowTy@(SObject _) -> do
+        rowAVals <- peekFields tn sRk rowTy
+        -- assume invariants for values already in the DB:
+        applyInvariants tn rowAVals $ mapM_ addConstraint
+        pure rowAVals
+
     writeFields writeType tid tn sRk obj objTy
 
-    let aValFields = aValsOfObj schema (_sSbv obj)
-    applyInvariants tn aValFields $ \invariants' ->
+    let newAVals = aValsOfObj schema (_sSbv obj)
+        -- NOTE: left-biased union prefers the new values:
+        nextAVals = Map.union newAVals prevAVals
+
+    applyInvariants tn nextAVals $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
           fs = ZipList $ (\s -> fmap (_sSbv s .&&)) <$> invariants'
       in maintainsInvariants . at tn . _Just %= (fs <*>)
