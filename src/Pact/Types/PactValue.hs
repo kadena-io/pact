@@ -2,9 +2,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MagicHash #-}
 
 -- |
--- Module      :  Pact.Types.Term
+-- Module      :  Pact.Types.PactValue
 -- Copyright   :  (C) 2019 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
@@ -30,11 +31,12 @@ import Data.Default (def)
 import Data.Text (Text)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import GHC.Generics
+import GHC.Generics hiding (Meta)
 
-import Pact.Types.Exp (Literal(..))
+import Pact.Types.Exp
 import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
-import Pact.Types.Term (ObjectMap(..),Term(..),Name(..),Object(..),Guard(..))
+import Pact.Types.SizeOf
+import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
 
 
@@ -66,6 +68,13 @@ instance Pretty PactValue where
   pretty (PObject l) = pretty l
   pretty (PList l) = pretty (V.toList l)
   pretty (PGuard l) = pretty l
+
+instance SizeOf PactValue where
+  sizeOf (PLiteral l) = (constructorCost 1) + (sizeOf l)
+  sizeOf (PList v) = (constructorCost 1) + (sizeOf v)
+  sizeOf (PObject o) = (constructorCost 1) + (sizeOf o)
+  sizeOf (PGuard g) = (constructorCost 1) + (sizeOf g)
+
 
 -- | Strict conversion.
 toPactValue :: Term Name -> Either Text PactValue

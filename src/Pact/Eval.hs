@@ -33,7 +33,6 @@ module Pact.Eval
     ,deref
     ,runSysOnly,runReadOnly,Purity
     ,liftTerm,apply
-    ,preGas
     ,acquireModuleAdmin
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
@@ -91,6 +90,7 @@ evalCommitTx i = do
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
+  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet mksn ks))
   runSysOnly $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
@@ -171,11 +171,6 @@ evalByName n as i = do
 apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
 apply app as = reduceApp $ over appArgs (++ map liftTerm as) app
 
--- | Precompute gas on unreduced args returning reduced values.
-preGas :: FunApp -> [Term Ref] -> Eval e (Gas,[Term Name])
-preGas i as =
-  computeGas (Right i) (GUnreduced as) >>= \g -> (g,) <$> mapM reduce as
-
 topLevelCall
   :: Info -> Text -> GasArgs -> (Gas -> Eval e (Gas, a)) -> Eval e a
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
@@ -243,6 +238,9 @@ lookupModule i mn = do
       stored <- readRow (getInfo i) Modules mn
       case stored of
         Just mdStored -> do
+          _ <- computeGas (Left ((getInfo i), "lookup module")) $ case (_mdModule mdStored) of
+            MDModule m -> GPostRead (ReadModule (_mName m) (_mCode m))
+            MDInterface int -> GPostRead (ReadInterface (_interfaceName int) (_interfaceCode int))
           natives <- view $ eeRefStore . rsNatives
           let natLookup (NativeDefName n) = case HM.lookup (Name (BareName n def)) natives of
                 Just (Direct t) -> Just t
@@ -260,7 +258,7 @@ eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval (TModule (MDModule m) bod i) =
-  topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
+  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
     -- enforce old module governance
@@ -284,17 +282,19 @@ eval (TModule (MDModule m) bod i) =
       _ -> void $ acquireModuleAdmin' i (_mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
+    _ <- computeGas (Left (i,"module")) (GWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 
 eval (TModule (MDInterface m) bod i) =
-  topLevelCall i "interface" (GInterfaceDecl m) $ \gas -> do
+  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m
     -- enforce no upgrades
     void $ lookupModule i (_interfaceName mangledI) >>= traverse
       (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
     (g,govI) <- loadInterface mangledI bod i gas
+    _ <- computeGas (Left (i, "interface")) (GWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 eval t = enscope t >>= reduce
@@ -705,7 +705,7 @@ reduceApp (App r _ ai) = evalError ai $ "Expected def: " <> pretty r
 
 -- | precompute "UserApp" cost
 computeUserAppGas :: Def Ref -> Info -> Eval e Gas
-computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) GUserApp
+computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) (GUserApp _dDefType)
 
 -- | prepare reduced args and funtype, and typecheck
 prepareUserAppArgs :: Def Ref -> [Term Ref] -> Info -> Eval e ([Term Name], FunType (Term Name))

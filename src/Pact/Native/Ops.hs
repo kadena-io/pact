@@ -30,6 +30,7 @@ import Data.Decimal
 import Data.Default
 import qualified Data.Map.Strict as M
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -57,19 +58,25 @@ addDef = defRNative "+" plus plusTy
   where
 
     plus :: RNativeFun e
-    plus _ [TLitString a,TLitString b] = return (tStr $ a <> b)
-    plus _ [TList a aty _,TList b bty _] = return $ TList
+    plus fi [TLitString a,TLitString b] = gasConcat fi (T.length a) (T.length b) >>
+      (return (tStr $ a <> b))
+    plus fi [TList a aty _,TList b bty _] = gasConcat fi (length a) (length b) >>
+      return (TList
       (a <> b)
       (if aty == bty then aty else TyAny)
-      def
-    plus _ [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
-      return $ (`TObject` def) $ Object
+      def)
+    plus fi [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
+      gasConcat fi (M.size as) (M.size bs) >>
+      return ((`TObject` def) $ Object
            (ObjectMap $ M.union as bs)
            (if aty == bty then aty else TyAny)
            def
-           def
+           def)
     plus i as = binop' (+) (+) i as
     {-# INLINE plus #-}
+
+    gasConcat :: FunApp -> Int -> Int -> Eval e Gas
+    gasConcat fi aLength bLength = computeGas (Right fi) (GConcatenation aLength bLength)
 
     plusTy :: FunTypes n
     plusTy = coerceBinNum <> binTy plusA plusA plusA

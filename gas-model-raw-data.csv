@@ -1,0 +1,11 @@
+function,description,sqliteDbAverage (ns),mockDbAverage (ns)
+insert,"(insert accounts.accounts
+        ""some-id-that-is-not-present""
+        { ""balance"": 0.0 }
+)
+",34229.385000851704,3842.6720837316147
+write,"(write accounts.accounts
+       ""some-id-that-is-not-present""
+       { ""balance"": 0.0 }
+)
+",44158.85202263007,3893.334605499831

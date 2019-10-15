@@ -55,6 +55,7 @@ import Data.String (IsString)
 
 import Pact.Types.Info
 import Pact.Types.Pretty
+import Pact.Types.SizeOf
 import Pact.Types.Type
 import Pact.Types.Codec
 
@@ -69,6 +70,13 @@ data Literal =
 
 instance Serialize Literal
 instance NFData Literal
+
+instance SizeOf Literal where
+  sizeOf (LString t) = (constructorCost 1) + (sizeOf t)
+  sizeOf (LInteger i) = (constructorCost 1) + (sizeOf i)
+  sizeOf (LDecimal d) = (constructorCost 1) + (sizeOf d)
+  sizeOf (LBool _) = (constructorCost 1) + 0
+  sizeOf (LTime ti) = (constructorCost 1) + (sizeOf ti)
 
 makePrisms ''Literal
 

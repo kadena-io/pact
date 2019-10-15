@@ -71,6 +71,7 @@ library
                      , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
+                     , Pact.Types.SizeOf
                      , Pact.Types.SPV
                      , Pact.Types.Swagger
                      , Pact.Types.Term
