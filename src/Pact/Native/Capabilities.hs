@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- |
 -- Module      :  Pact.Native.Capabilities
@@ -116,7 +117,7 @@ installCapability =
 
         enforceNotWithinDefcap i "install-capability"
 
-        already <- evalCap i (CapManaged ()) True cap
+        already <- evalCap i CapManaged True cap
 
         return $ tStr $ case already of
           NewlyAcquired -> "Installed capability"
@@ -128,25 +129,25 @@ installCapability =
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be invoked within module code.
-evalCap :: HasInfo i => i -> CapScope () -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
+evalCap :: HasInfo i => i -> CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
 evalCap i scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
-      scope' <- traverse (getMgrFun d) scope
+      mgrFunM <- getMgrFun d
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquireCapability i (applyMgrFun a d) scope' cap $ do
+      acquireCapability i (applyMgrFun a d) scope cap mgrFunM $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
 
-getMgrFun :: Def Ref -> () -> Eval e (Maybe (Def Ref))
-getMgrFun capDef _ = case _dDefMeta capDef of
-  Nothing -> evalError' capDef $ "Attempting to install non-managed capability"
+getMgrFun :: Def Ref -> Eval e (Maybe (Def Ref))
+getMgrFun capDef = case _dDefMeta capDef of
+  Nothing -> return Nothing
   Just (DMDefcap (DefcapMeta t)) -> case t of
     (TVar (Ref (TDef d _)) i) -> do
       unless (_dDefType d == Defun) $
         evalError i $ "Manager function must be defun"
       defTy <- traverse reduce $ _dFunType d
 
-      typecheckDef d defTy mgrFunTy -- TODO would be nice to do this, module load?
+      typecheckDef d defTy mgrFunTy -- TODO would be nice to do this in module load?
       return $ Just d
     _ -> evalError' t $ "@managed must refer to a def of type " <> pretty mgrFunTy
   where
@@ -209,13 +210,13 @@ resolveCapInstallMaybe SigCapability{..} = do
   where
     installMaybe d@Def{..} as = case _dDefMeta of
       Nothing -> return Nothing
-      Just _ -> return $ Just $ evalCap d (CapManaged ()) False (mkApp d as)
+      Just _ -> return $ Just $ evalCap d CapManaged False (mkApp d as)
     mkApp d@Def{..} as =
       App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
           (map liftTerm as) (getInfo d)
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
-enforceNotWithinDefcap i msg = defcapInStack >>= \p -> when p $
+enforceNotWithinDefcap i msg = defcapInStack Nothing >>= \p -> when p $
   evalError' i $ msg <> " not allowed within defcap execution"
 
 requireCapability :: NativeDef
@@ -228,7 +229,6 @@ requireCapability =
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ do
       (cap,_,_) <- appToCap a
-      enforceNotWithinDefcap i "require-capability"
       granted <- capabilityGranted CapCallStack cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
@@ -250,7 +250,7 @@ composeCapability =
     composeCapability' :: NativeFun e
     composeCapability' i [TApp app _] = gasUnreduced i [] $ do
       -- enforce in defcap
-      defcapInStack >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
+      defcapInStack (Just 1) >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
       -- evalCap as composed, which will install onto head of pending cap
       void $ evalCap i CapComposed True app
       return $ toTerm True
@@ -258,8 +258,21 @@ composeCapability =
 
 -- | Traverse up the call stack returning 'True' if a containing
 -- defcap application is found.
-defcapInStack :: Eval e Bool
-defcapInStack = isJust <$> preuse (evalCallStack . traverse . sfApp . _Just . _1 . faDefType . _Defcap)
+defcapInStack :: Maybe Int -> Eval e Bool
+defcapInStack limit = use evalCallStack >>= return . go limit
+  where
+    go :: Maybe Int -> [StackFrame] -> Bool
+    go Nothing s = isJust . preview (funapps . faDefType . _Defcap) $ s
+    go (Just limit') s = case take limit'
+      (toListOf (traverse . sfApp . _Just . _1 . to defcapIfUserApp . traverse) s) of
+      [] -> False
+      dts -> Defcap `elem` dts
+
+    defcapIfUserApp FunApp{..} = _faDefType <$ _faModule
+
+    funapps :: Traversal' [StackFrame] FunApp
+    funapps = traverse . sfApp . _Just . _1
+
 
 
 
@@ -304,8 +317,12 @@ keysetRefGuard =
   \store references alongside other guards in the database, etc."
   where
     keysetRefGuard' :: RNativeFun e
-    keysetRefGuard' i [TLitString ks] =
-      return $ (`TGuard` (_faInfo i)) $ GKeySetRef (KeySetName ks)
+    keysetRefGuard' fa [TLitString kref] = do
+      let n = KeySetName kref
+          i = _faInfo fa
+      readRow i KeySets n >>= \t -> case t of
+        Nothing -> evalError i $ "Keyset reference cannot be found: " <> pretty kref
+        Just _ -> return $ (`TGuard` i) $ GKeySetRef n
     keysetRefGuard' i as = argsError i as
 
 

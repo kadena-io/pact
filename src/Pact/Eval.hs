@@ -52,6 +52,7 @@ import Control.Monad.State.Strict
 import Data.Aeson (Value)
 import Data.Default
 import Data.Foldable
+import Data.Functor.Classes
 import Data.Graph
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
@@ -175,10 +176,20 @@ topLevelCall
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
-
+-- | Acquire module admin with enforce.
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modGov =
-  acquireCapability i noopApplyMgrFun (CapManaged Nothing) (ModuleAdminCapability modName) $ enforceModuleAdmin i modGov
+  acquireModuleAdmin' i modName $ enforceModuleAdmin i modGov
+
+-- | Acquire module admin with supplied test.
+acquireModuleAdmin'
+  :: Info
+  -> ModuleName
+  -> Eval e ()
+  -> Eval e CapAcquireResult
+acquireModuleAdmin' i modName test =
+  acquireCapability i noopApplyMgrFun CapManaged
+    (ModuleAdminCapability modName) Nothing test
 
 enforceModuleAdmin :: Info -> Governance (Def Ref) -> Eval e ()
 enforceModuleAdmin i modGov =
@@ -250,7 +261,7 @@ eval (TModule (MDModule m) bod i) =
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
-    -- enforce old module keysets
+    -- enforce old module governance
     oldM <- lookupModule i (_mName m)
     case oldM of
       Nothing -> return ()
@@ -261,12 +272,14 @@ eval (TModule (MDModule m) bod i) =
             "Name overlap: module " <> pretty (_mName m) <>
             " overlaps with interface  " <> pretty _interfaceName
     case _gGovernance $ _mGovernance mangledM of
-      -- enforce new module keyset
+      -- enforce new module keyset on install
       Left ks -> enforceKeySetName i ks
-      -- governance however is not called on install
-      _ -> return ()
-    -- in any case, grant module admin to this transaction
-    void $ acquireCapability i noopApplyMgrFun (CapManaged Nothing) (ModuleAdminCapability $ _mName m) $ return ()
+      -- governance is granted on install without testing the cap.
+      -- rationale is governance might be some vote or something
+      -- that doesn't exist yet. Of course, if governance is
+      -- busted somehow, this means we won't find out, and
+      -- can't fix it later.
+      _ -> void $ acquireModuleAdmin' i (_mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GWrite (WriteModule (_mName m) (_mCode m)))
@@ -490,7 +503,7 @@ evaluateConstraints info m evalMap =
         Nothing -> evalError info $
           "Interface not defined: " <> pretty ifn
         Just (ModuleData (MDInterface Interface{..}) irefs) -> do
-          em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
+          em' <- HM.foldrWithKey (solveConstraint ifn info) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
           pure (um, em')
         Just _ -> evalError info "Unexpected: module found in interface position while solving constraints"
@@ -498,20 +511,22 @@ evaluateConstraints info m evalMap =
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
 solveConstraint
-  :: Info
+  :: ModuleName
+  -> Info
   -> Text
   -> Ref
   -> Eval e (HM.HashMap Text Ref)
   -> Eval e (HM.HashMap Text Ref)
-solveConstraint info refName (Direct t) _ =
+solveConstraint _ifn info refName (Direct t) _ =
   evalError info $ "found native reference " <> pretty t
   <> " while resolving module contraints: " <> pretty refName
-solveConstraint info refName (Ref t) evalMap = do
+solveConstraint ifn info refName (Ref t) evalMap = do
   em <- evalMap
   case HM.lookup refName em of
     Nothing ->
       case t of
-        TConst{..} -> evalMap
+        TConst{} -> evalMap
+        TSchema{} -> evalMap
         _ -> evalError info $
           "found unimplemented member while resolving model constraints: " <> pretty refName
     Just (Direct s) ->
@@ -519,23 +534,35 @@ solveConstraint info refName (Ref t) evalMap = do
       " while resolving module contraints: " <> pretty t
     Just (Ref s) ->
       case (t, s) of
-        (TDef (Def _n _mn dt (FunType args rty) _ m _ _) _,
-          TDef (Def _n' _mn' dt' (FunType args' rty') _ _ _ _) _) -> do
-          when (dt /= dt') $ evalError info $ "deftypes mismatching: "
-            <> pretty dt <> line <> pretty dt'
-          when (rty /= rty') $ evalError info $ "return types mismatching: "
-            <> pretty rty <> line <> pretty rty'
-          when (length args /= length args') $ evalError info $ "mismatching argument lists: "
-            <> prettyList args <> line <> prettyList args'
-          forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
+        (TDef (Def _n _mn dt (FunType args rty) _ m dmeta _) _,
+          TDef (Def _n' _mn' dt' (FunType args' rty') _ _ dmeta' _) _) -> do
+          match s "Def type mismatch" dt dt'
+          matchWith termEq1 s "Return type mismatch" rty rty'
+          match s "Arity mismatch" (length args) (length args')
+          matchWith (liftEq defMetaEq) s "Defmeta mismatch" dmeta dmeta'
+          forM_ (args `zip` args') $ \((Arg n ty _), a@(Arg n' ty' _)) -> do
             -- FV requires exact argument names as opposed to positional info
-            when (n /= n') $ evalError info $ "argument names must match interface definition: "
-              <> pretty n <> " does not match " <> pretty n'
-            when (ty /= ty') $ evalError info $ "mismatching types: "
-              <> pretty ty <> " and " <> pretty ty'
+            match a "Argument name mismatch" n n'
+            matchWith termEq1 a ("Argument type mismatch for " <> n) ty ty'
           -- the model concatenation step: we reinsert the ref back into the map with new models
           pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
-        _ -> evalError info $ "found overlapping const refs - please resolve: " <> pretty t
+        _ -> evalError' s $ "found overlapping refs - please resolve: " <> pretty t
+
+  where
+    match :: (HasInfo i, Eq v, Pretty v) => i -> Text -> v -> v -> Eval e ()
+    match = matchWith (==)
+    matchWith :: (HasInfo i, Pretty v) => (v -> v -> Bool) -> i -> Text -> v -> v -> Eval e ()
+    matchWith test i desc expected actual = unless (expected `test` actual) $
+      evalError' i $ pretty desc <> " with " <> pretty ifn <> ": found " <>
+        pretty actual <> ", expected " <> pretty expected
+    termEq1 :: Eq1 f => f (Term Ref) -> f (Term Ref) -> Bool
+    termEq1 = liftEq termEq
+    -- | For DefcapMeta, we just want the mgr fun names to match
+    defMetaEq :: DefMeta (Term Ref) -> DefMeta (Term Ref) -> Bool
+    defMetaEq a b = getDefName a == getDefName b
+    getDefName (DMDefcap (DefcapMeta (TVar (Ref (TDef Def {..} _)) _))) = Just _dDefName
+    getDefName _ = Nothing
+
 
 -- | Lookup module in state or db, resolving against current namespace if unqualified.
 resolveModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))

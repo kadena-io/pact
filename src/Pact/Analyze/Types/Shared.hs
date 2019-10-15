@@ -8,6 +8,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE PolyKinds                  #-}
@@ -36,9 +37,8 @@ import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
 import           Data.Constraint              (Dict (Dict), withDict)
 import           Data.Data                    (Data, Proxy, Typeable)
-import           Data.Function                (on)
 import           Data.Kind                    (Type)
-import           Data.List                    (sort, sortBy)
+import           Data.List                    (sort)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (isJust)
@@ -537,20 +537,13 @@ mkESchema tys = case go tys of
                 ESchema $ SCons' (SSymbol @k) ty restSchema
 
 -- | When given a column mapping, this function gives a canonical way to assign
--- var ids to each column. Also see 'varIdArgs'.
+-- var ids to each column. Also see 'mkInvariantEnv'.
 varIdColumns :: SingList m -> Map Text VarId
 varIdColumns
   = Map.fromList
   . flip zip [0..]
   . sort
   . foldSingList (\name _ -> [T.pack (symbolVal name)])
-
--- | Given args representing the columns of a schema, this function gives a
--- canonical assignment of var ids to each column. Also see 'varIdColumns'.
-varIdArgs :: [Pact.Arg a] -> [(Pact.Arg a, VarId)]
-varIdArgs
-  = flip zip [0..]
-  . sortBy (compare `on` Pact._aName)
 
 -- | Untyped object
 newtype UObject = UObject (Map.Map Text TVal)

@@ -2487,6 +2487,20 @@ spec = describe "analyze" $ do
       .=>
       Success'
 
+  describe "schema-invariants.var-out-of-scope-regression" $ do
+    expectVerified
+      [text|
+        (defschema coin-schema
+          @model [(invariant (<= 0.0 balance))]
+          balance:decimal
+          guard:guard)
+        (deftable coin-table:{coin-schema})
+
+        (defun transfer:string ()
+          (with-read coin-table 'receiver { "guard" := g }
+            "we should support not binding a column with an invariant defined on it"))
+      |]
+
   describe "format-time / parse-time" $ do
     let code =
           [text|
@@ -2669,6 +2683,73 @@ spec = describe "analyze" $ do
               true)
             |]
       expectFalsified code'
+
+  describe "invariant features" $ do
+    describe "string concatenation" $ do
+      let code =
+            [text|
+              (defschema sch
+                @model [(invariant (= (+ col col) "abcabc"))]
+                col:string)
+              (deftable t:{sch})
+              (defun test:string ()
+                @model [(property (= result "abc"))]
+                (at "col" (read t 'key)))
+            |]
+      expectVerified code
+
+    describe "string length" $ do
+      let code =
+            [text|
+              (defschema sch
+                @model [(invariant (= (length col) 1))]
+                col:string)
+              (deftable t:{sch})
+              (defun test:string ()
+                @model [(property (= (length result) 1))]
+                (at "col" (read t 'key)))
+            |]
+      expectVerified code
+
+    describe "string to int" $ do
+      expectVerified
+        [text|
+          (defschema sch
+            @model [(invariant (= (str-to-int col) 50))]
+            col:string)
+          (deftable t:{sch})
+          (defun test:string ()
+            @model [(property (when (= (length result) 2) (= result "50")))]
+            (at "col" (read t 'key)))
+        |]
+
+    describe "string contains" $ do
+      expectVerified
+        [text|
+          (defschema sch
+            @model [(invariant (contains "foo" col))]
+            col:string)
+          (deftable t:{sch})
+          (defun test:string ()
+            @model [(property (> (length result) 2))]
+            (at "col" (read t 'key)))
+        |]
+
+    describe "floor on decimal balance using constant" $ do
+      expectVerified
+        [text|
+          (defconst MINIMUM_PRECISION 12
+            "Minimum allowed precision for coin transactions")
+          (defschema coin-schema
+            @model [(invariant (= (floor balance MINIMUM_PRECISION) balance))]
+            balance:decimal
+            guard:guard)
+          (deftable coin-table:{coin-schema})
+
+          (defun test:decimal ()
+            @model [(property (= (floor result MINIMUM_PRECISION) result))]
+            (at "balance" (read coin-table 'account1)))
+        |]
 
   describe "prop parse / typecheck" $ do
     let parseExprs' :: Text -> Either String [Exp Info]

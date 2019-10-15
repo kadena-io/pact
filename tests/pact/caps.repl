@@ -94,6 +94,12 @@
     (other.enforce-a-guard (get-module-guard))
     "success")
 
+  (defun bad-user-guard-compose ()
+    (with-capability (BAD_USER_GUARD_COMPOSE) true))
+
+  (defcap BAD_USER_GUARD_COMPOSE ()
+    (enforce-guard (create-user-guard (bad-compose-cap))))
+
 )
 
 (create-table guard-table)
@@ -154,8 +160,32 @@
 (begin-tx)
 (use caps)
 
-(env-data { "k1": ["k1"], "k2": ["k2"] })
+(env-data { "k1": ["k1"], "k2": ["k2"], "k3" : ["k3"] })
+
+(expect-failure
+  "k3 fails ref guard construction when no keyset is defined"
+  (keyset-ref-guard "k3"))
+
+(define-keyset "k3" (read-keyset "k3"))
+
+(expect
+  "k3 succeeds now that a keyset is defined with that name"
+  "'k3"
+  (format "{}" [(keyset-ref-guard "k3")]))
+
+(expect-failure
+  "k3 cannot succeed since its keys are not in scope"
+  (enforce-guard (keyset-ref-guard "k3")))
+
+(env-keys ["k3"])
+
+(expect
+  "k3 succeeds now that keys are in scope"
+  "true"
+  (format "{}" [(enforce-guard (keyset-ref-guard "k3"))]))
+
 (env-keys ["k1"])
+
 (enforce-guard (msg-keyset-user-guard "k1"))
 (expect-failure "user guard reading keyset k2 fails"
                 (enforce-guard (msg-keyset-user-guard "k2")))
@@ -206,7 +236,24 @@
 
 (expect-failure "shadowed cap fails" (caps-shadow.bad-shadow-granted "k1"))
 
-(expect "" "success" (test-module-guard-other))
+(expect "success enforcing module guard in foreign module"
+        "success"
+        (test-module-guard-other))
+
+(env-keys ["k1"])
+(expect
+ "success requiring a capability in user guard"
+ true
+ (enforce-guard (create-user-guard (test-id-cap "k1"))))
+
+(expect-failure
+ "failure creating a user guard with a defcap"
+ (create-user-guard (KEYSET-ID-CAP "k1")))
+
+(env-keys ["a" "b" "c"])
+(expect-failure
+ "user guard with compose fails"
+ (bad-user-guard-compose))
 
 
 ;;
@@ -243,6 +290,8 @@
   )
 
 (commit-tx)
+
+(begin-tx)
 (use mgd-caps)
 (env-data { "alice": ["alice"] })
 
@@ -253,6 +302,10 @@
 (env-sigs [{ "key": "alice",
           "caps": [(PAY "alice" "bob" 10)
                   ,(PAY "alice" "carl" 1)] }] )
+
+(expect-failure
+ "Payment should fail with no cap installed"
+ (pay "alice" "bob" 6))
 
 (expect-failure
  "Failure on external install"
