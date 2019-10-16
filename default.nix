@@ -16,7 +16,7 @@ overlay = self: super: {
       owner = "Z3Prover";
       repo = "z3";
       rev = "78ed71b8de7d4d089f2799bf2d06f411ac6b9062";
-      sha256 = "11ay98clv7ln0a5vqxzvh6wwqbswsjbik2084hav5kfws4xvklfa";
+      sha256 = "1sywcqj5y8yp28m4cdvzsgw74kd6zr1s3y1x17ky8pr9prvpvl6x";
     };
   });
 };
