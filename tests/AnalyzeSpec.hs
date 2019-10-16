@@ -3072,6 +3072,21 @@ spec = describe "analyze" $ do
 
     expectVerified code
 
+  describe "column-read" $ do
+    expectVerified $
+      [text|
+        (defschema sch a:integer b:integer)
+        (deftable tab:{sch})
+
+        (defun test:integer ()
+          @model [
+            (property (column-read tab 'a))
+            (property (not (column-read tab 'b)))
+          ]
+          (with-read tab "key" { "a" := a }
+            a))
+      |]
+
   describe "column quantification" $ do
     let code =
           [text|
