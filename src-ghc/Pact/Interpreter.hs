@@ -114,8 +114,7 @@ data Interpreter e = Interpreter
     :: BeginTx e
     -> CommitTx e
     -> WithRollback e
-    -> RunEval e
-    -- ^ input runner
+    -> RunEval e -- input runner
     -> Eval e EvalOutput }
 
 
