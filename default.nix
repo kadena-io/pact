@@ -9,14 +9,14 @@ let rpSrc = builtins.fetchTarball {
 };
 overlay = self: super: {
   z3 = super.z3.overrideAttrs (drv: {
-    name = "z3-4.8.5";
-    version = "4.8.5";
+    name = "z3-4.8.6";
+    version = "4.8.6";
     patches = [];
     src = self.fetchFromGitHub {
       owner = "Z3Prover";
       repo = "z3";
-      rev = "e79542cc689d52ec4cb34ce4ae3fbe56e7a0bf70";
-      sha256 = "11sy98clv7ln0a5vqxzvh6wwqbswsjbik2084hav5kfws4xvklfa";
+      rev = "78ed71b8de7d4d089f2799bf2d06f411ac6b9062";
+      sha256 = "11ay98clv7ln0a5vqxzvh6wwqbswsjbik2084hav5kfws4xvklfa";
     };
   });
 };
