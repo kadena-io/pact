@@ -114,7 +114,7 @@ data Interpreter e = Interpreter
     :: BeginTx e
     -> CommitTx e
     -> WithRollback e
-    -> RunEval e -- input runner
+    -> RunEval e
     -> Eval e EvalOutput }
 
 
@@ -123,7 +123,7 @@ defaultInterpreter :: Interpreter e
 defaultInterpreter = Interpreter $ \start end withRollback runInput ->
   withRollback $ (start runInput >>= end)
 
-  -- | Standard runner starts a tx, runs input and commits, with rollback.
+-- | Standard runner starts a tx, runs input and commits, with rollback.
 defaultInterpreterState :: (EvalState -> EvalState) -> Interpreter e
 defaultInterpreterState stateF = Interpreter $ \start end withRollback runInput ->
   withRollback $ (start (modify stateF >> runInput) >>= end)
