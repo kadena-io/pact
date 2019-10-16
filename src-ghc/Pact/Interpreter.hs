@@ -31,12 +31,22 @@ module Pact.Interpreter
   , mkPactDbEnv
   , initSchema
   , interpret
+  , EvalInput
+  , EvalOutput
+  , RunEval
+  , BeginTx
+  , CommitTx
+  , WithRollback
+  , Interpreter (..)
+  , defaultInterpreter
+  , defaultInterpreterState
   ) where
 
 import Control.Concurrent
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State (modify)
 import Control.Lens
 
 import Data.Aeson
@@ -79,8 +89,47 @@ data MsgData = MsgData {
 initMsgData :: Hash -> MsgData
 initMsgData = MsgData Null def
 
+-- | Describes either a ContMsg or ExecMsg.
+-- ContMsg is represented as a 'Maybe PactExec'
+-- where the PactExec represents a provided SPV continuation,
+-- or Nothing for same-chain pacts.
+-- ExecMsg is represented as a list of compiled expressions.
+type EvalInput = Either (Maybe PactExec) [Term Name]
+
+-- | Captures effects of execution not represented in 'EvalState'.
+type EvalOutput = ([Term Name],[TxLog Value],Maybe TxId)
+
+-- | Run some Pact input, get output
+type RunEval e = Eval e [Term Name]
+-- | Begin a tx and run some Pact Input, get output and txid
+type BeginTx e = RunEval e -> Eval e ([Term Name], Maybe TxId)
+-- | Given output and txid, commit the tx
+type CommitTx e = ([Term Name], Maybe TxId) -> Eval e EvalOutput
+-- | Bracket some complete action with tx rollback
+type WithRollback e = Eval e EvalOutput -> Eval e EvalOutput
+
+-- | Fully general evaluator for some input.
+data Interpreter e = Interpreter
+  { interpreter
+    :: BeginTx e
+    -> CommitTx e
+    -> WithRollback e
+    -> RunEval e
+    -> Eval e EvalOutput }
+
+
+-- | Standard runner starts a tx, runs input and commits, with rollback.
+defaultInterpreter :: Interpreter e
+defaultInterpreter = Interpreter $ \start end withRollback runInput ->
+  withRollback $ (start runInput >>= end)
+
+-- | Standard runner starts a tx, runs input and commits, with rollback.
+defaultInterpreterState :: (EvalState -> EvalState) -> Interpreter e
+defaultInterpreterState stateF = Interpreter $ \start end withRollback runInput ->
+  withRollback $ (start (modify stateF >> runInput) >>= end)
+
 data EvalResult = EvalResult
-  { _erInput :: !(Either (Maybe PactExec) [Term Name])
+  { _erInput :: !EvalInput
   , _erOutput :: ![PactValue]
   , _erLogs :: ![TxLog Value]
   , _erExec :: !(Maybe PactExec)
@@ -89,26 +138,25 @@ data EvalResult = EvalResult
   , _erTxId :: !(Maybe TxId)
   } deriving (Eq,Show)
 
-
 -- | Execute pact statements.
-evalExec :: [Signer] -> EvalState -> EvalEnv e -> ParsedCode -> IO EvalResult
-evalExec ss initState evalEnv ParsedCode {..} = do
+evalExec :: [Signer] -> Interpreter e -> EvalEnv e -> ParsedCode -> IO EvalResult
+evalExec ss runner evalEnv ParsedCode {..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
-  interpret ss initState evalEnv (Right terms)
+  interpret ss runner evalEnv (Right terms)
 
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
 initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 -- | Resume a defpact execution, with optional PactExec.
-evalContinuation :: [Signer] -> EvalState -> EvalEnv e -> ContMsg -> IO EvalResult
-evalContinuation ss initState ee cm = case (_cmProof cm) of
+evalContinuation :: [Signer] -> Interpreter e -> EvalEnv e -> ContMsg -> IO EvalResult
+evalContinuation ss runner ee cm = case (_cmProof cm) of
   Nothing ->
-    interpret ss initState (setStep Nothing) (Left Nothing)
+    interpret ss runner (setStep Nothing) (Left Nothing)
   Just p -> do
     etpe <- (_spvVerifyContinuation . _eeSPVSupport $ ee) p
     pe <- throwEither . over _Left (userError . show) $ etpe
-    interpret ss initState (setStep (_peYield pe)) (Left $ Just pe)
+    interpret ss runner (setStep (_peYield pe)) (Left $ Just pe)
   where
     setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
 
@@ -164,34 +212,47 @@ initSchema :: PactDbEnv (DbEnv p) -> IO ()
 initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 
-interpret :: [Signer] -> EvalState -> EvalEnv e -> Either (Maybe PactExec) [Term Name] -> IO EvalResult
-interpret ss initState evalEnv terms = do
+interpret :: [Signer] -> Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
+interpret ss runner evalEnv terms = do
   ((rs,logs,txid),state) <-
-    runEval initState evalEnv $ evalTerms ss terms
+    runEval def evalEnv $ evalTerms runner ss terms
   let gas = _evalGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
   return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
 
-evalTerms :: [Signer] -> Either (Maybe PactExec) [Term Name] -> Eval e ([Term Name],[TxLog Value],Maybe TxId)
-evalTerms ss terms = handle (\(e :: SomeException) -> safeRollback >> throwM e) go
+evalTerms :: Interpreter e -> [Signer] -> EvalInput -> Eval e EvalOutput
+evalTerms interp ss input = interpreter interp start end withRollback runInput
+
   where
+    withRollback :: WithRollback e
+    withRollback act = handle (\(e :: SomeException) -> safeRollback >> throwM e) act
+
+    safeRollback :: Eval e ()
     safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
-    go = do
+
+    start :: BeginTx e
+    start act = do
       txid <- evalBeginTx def
       sigsAndInstallers <- resolveSignerCaps ss
       -- install sigs into local environment
-      rs <- local (set eeMsgSigs (toSigs sigsAndInstallers)) $ do
+      local (set eeMsgSigs (toSigs sigsAndInstallers)) $ do
         -- install any caps
         traverse_ (traverse_ (traverse_ $ \i -> i)) sigsAndInstallers
-        case terms of
-          Right ts -> mapM eval ts
-          Left pe -> (:[]) <$> resumePact def pe
+        (,txid) <$> act
+
+    end :: CommitTx e
+    end (rs,txid) = do
       logs <- evalCommitTx def
       return (rs,logs,txid)
+
     toSigs = fmap (S.fromList . M.keys)
+    runInput = case input of
+      Right ts -> mapM eval ts
+      Left pe -> (:[]) <$> resumePact def pe
+
 
 {-# INLINE evalTerms #-}
 
