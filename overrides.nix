@@ -18,11 +18,11 @@ in {
 
   Glob = whenGhcjs dontCheck super.Glob;
 
-  aeson = callHackageDirect {
+  aeson = dontCheck (callHackageDirect {
     pkg = "aeson";
-    ver = "1.4.3.0";
-    sha256 = "13lim8vv78m9lhn7qfjswg7ax825gn0v75gcb80hckxawgk8zxc1";
-  };
+    ver = "1.4.5.0";
+    sha256 = "0imcy5kkgrdrdv7zkhkjvwpdp4sms5jba708xsap1vl9c2s63n5a";
+  });
 
   algebraic-graphs = whenGhcjs dontCheck super.algebraic-graphs;
   base-compat-batteries = whenGhcjs dontCheck super.base-compat-batteries;
