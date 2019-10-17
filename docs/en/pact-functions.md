@@ -48,7 +48,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
  *&rarr;*&nbsp;`object:{public-chain-data}`
 
 
-Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
+Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
 {"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"prev-block-hash": "","sender": ""}
@@ -1806,7 +1806,7 @@ Convenience function to build a keyset from keys present in message signatures, 
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
 
 
-Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the blockchain environment.
+Acquire (if unmanaged) or install (if managed) CAPABILITY. CAPABILITY and any composed capabilities are in scope for the rest of the transaction.
 ```lisp
 (test-capability (MY-CAP))
 ```

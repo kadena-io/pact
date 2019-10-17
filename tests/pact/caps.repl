@@ -366,3 +366,54 @@
 (expect-failure
  "reinstall of capability should fail"
  (install-pay "alice" "carl" 1))
+
+
+(commit-tx)
+
+(begin-tx)
+
+(interface mgd-iface
+  (defcap C:bool (id:string) @managed C-mgr)
+  (defschema c-schema
+    id:string)
+  (defun C-mgr:object{c-schema}
+      (m:object{c-schema} r:object{c-schema}))
+  )
+(env-keys ["a"])
+(env-data { "a": ["a"] })
+(define-keyset 'a (read-keyset 'a))
+(module mgd-mod G
+  (defcap G () true)
+  (implements mgd-iface)
+  (defcap C:bool (id:string) @managed C-mgr
+    (enforce-keyset id))
+  (defun C-mgr:object{mgd-iface.c-schema}
+      (m:object{mgd-iface.c-schema} r:object{mgd-iface.c-schema}) m)
+
+  (defcap D (allow:bool) @managed D-mgr (enforce allow "allowed"))
+  (defun D-mgr (m r) m)
+  (defun acquireD (allowed:bool) (with-capability (D allowed) true))
+  )
+
+(expect
+ "can install cap specified in interface"
+ "Installed capability"
+ (install-capability (C "a")))
+
+(expect-failure
+ "D not acquirable without install"
+ (acquireD true))
+
+(expect-failure
+ "test install enforces capability test"
+ (test-capability (D false)))
+
+(expect
+ "test install succeeds"
+ "Capability installed"
+ (test-capability (D true)))
+
+(expect
+ "D acquirable post-install"
+ true
+ (acquireD true))
