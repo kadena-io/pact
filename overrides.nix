@@ -53,6 +53,12 @@ in {
     sha256 = "1jg06ykz8fsk1vlwih4vjw3kpcysp8nfsv7qjm42y2gfyzn6jvsk";
   });
 
+  dec = dontCheck (callHackageDirect {
+    pkg = "dec";
+    ver = "0.0.3";
+    sha256 = "11b8g4nm421pr09yfb4zp18yb7sq4wah598fi3p5fb64yy4c2n4s";
+  });
+
   hedgehog = dontCheck (callHackageDirect {
     pkg = "hedgehog";
     ver = "1.0.1";
@@ -83,11 +89,11 @@ in {
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
   });
 
-  #singleton-bool = dontCheck (callHackageDirect {
-  #  pkg = "singleton-bool";
-  #  ver = "0.1.5";
-  #  sha256 = "1kjn5wgwgxdw2xk32d645v3ss2a70v3bzrihjdr2wbj2l4ydcah1";
-  #});
+  singleton-bool = dontCheck (callHackageDirect {
+    pkg = "singleton-bool";
+    ver = "0.1.5";
+    sha256 = "1kjn5wgwgxdw2xk32d645v3ss2a70v3bzrihjdr2wbj2l4ydcah1";
+  });
 
   servant = dontCheck (self.callCabal2nix "servant" "${servantSrc}/servant" {});
   servant-client = dontCheck (self.callCabal2nix "servant-client" "${servantSrc}/servant-client" {});
