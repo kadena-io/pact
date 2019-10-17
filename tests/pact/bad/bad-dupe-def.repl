@@ -1,0 +1,5 @@
+(module bad-dupe-def G
+  (defcap G () true)
+  (defschema a a:string)
+  (defun a () true)
+)

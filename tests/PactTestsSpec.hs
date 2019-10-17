@@ -96,6 +96,8 @@ badErrors = M.fromList
     "Cannot resolve")
   ,(pfx "bad-root-namespace.repl",
     "Definitions in default namespace are not authorized")
+  ,(pfx "bad-dupe-def.repl"
+   ,"definition name conflict")
   ]
   where
     pfx = ("tests/pact/bad/" ++)

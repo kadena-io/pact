@@ -15,6 +15,7 @@ module Pact.Native.Capabilities
   ( capDefs
   , evalCap
   , resolveCapInstallMaybe
+  , getMgrFun
   ) where
 
 import Control.Lens
@@ -145,9 +146,6 @@ getMgrFun capDef = case _dDefMeta capDef of
     (TVar (Ref (TDef d _)) i) -> do
       unless (_dDefType d == Defun) $
         evalError i $ "Manager function must be defun"
-      defTy <- traverse reduce $ _dFunType d
-
-      typecheckDef d defTy mgrFunTy -- TODO would be nice to do this in module load?
       return $ Just d
     _ -> evalError' t $ "@managed must refer to a def of type " <> pretty mgrFunTy
   where

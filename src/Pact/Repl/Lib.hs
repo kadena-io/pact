@@ -67,7 +67,7 @@ import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Types.Pretty
 import Pact.Repl.Types
-import Pact.Native.Capabilities (evalCap)
+import Pact.Native.Capabilities (evalCap,getMgrFun)
 import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
@@ -191,9 +191,8 @@ replDefs = ("Repl",
      ,defZNative "test-capability" testCapability
       (funType tTyString [("capability", TyFun $ funType' tTyBool [])])
       [LitExample "(test-capability (MY-CAP))"] $
-     "Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope " <>
-     "for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the " <>
-     "blockchain environment."
+     "Acquire (if unmanaged) or install (if managed) CAPABILITY. CAPABILITY and any composed capabilities are in scope " <>
+     "for the rest of the transaction."
      ,defZRNative "mock-spv" mockSPV
        (funType tTyString [("type",tTyString),("payload",tTyObject TyAny),("output",tTyObject TyAny)])
       [LitExample "(mock-spv \"TXOUT\" { 'proof: \"a54f54de54c54d89e7f\" } { 'amount: 10.0, 'account: \"Dave\", 'chainId: \"1\" })"]
@@ -573,11 +572,14 @@ setGasModel _ as = do
 -- | This is the only place we can do an external call to a capability,
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
-testCapability i [ c@TApp{} ] = do
-  cap <- evalCap i CapCallStack False $ _tApp c
-  return . tStr $ case cap of
-    AlreadyAcquired -> "Capability already granted"
-    NewlyAcquired -> "Capability granted"
+testCapability i [ (TApp app _) ] = do
+  (_,d,_) <- appToCap app
+  mfm <- getMgrFun d
+  let (scope,verb) = maybe (CapCallStack,"aquired") (const (CapManaged,"installed")) mfm
+  r <- evalCap i scope False $ app
+  return . tStr $ case r of
+    AlreadyAcquired -> "Capability already " <> verb
+    NewlyAcquired -> "Capability " <> verb
 testCapability i as = argsError' i as
 
 -- | Modify existing env chain data with new data, replacing just those
