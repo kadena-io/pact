@@ -51,7 +51,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"prev-block-hash": "","sender": ""}
+{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0.0,"prev-block-hash": "","sender": ""}
 ```
 
 
@@ -799,7 +799,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 Compute difference between TIME1 and TIME2 in seconds.
 ```lisp
 pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
-23400
+23400.0
 ```
 
 
@@ -904,7 +904,7 @@ pact> (& 5 -7)
 Multiply X by Y.
 ```lisp
 pact> (* 0.5 10.0)
-5
+5.0
 pact> (* 3 5)
 15
 ```
@@ -962,7 +962,7 @@ pact> (- 3 2)
 Divide X by Y.
 ```lisp
 pact> (/ 10.0 2.0)
-5
+5.0
 pact> (/ 8 3)
 2
 ```
@@ -1272,7 +1272,7 @@ pact> (shift -255 -1)
 Square root of X.
 ```lisp
 pact> (sqrt 25)
-5
+5.0
 ```
 
 
