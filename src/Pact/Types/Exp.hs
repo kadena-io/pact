@@ -88,10 +88,14 @@ formatLTime :: UTCTime -> Text
 formatLTime = pack . formatTime defaultTimeLocale simpleISO8601
 {-# INLINE formatLTime #-}
 
+-- | Pretty is supposed to match 1-1 with Pact representation
+-- for true literals, while time emits a 'simpleISO8601' string.
 instance Pretty Literal where
     pretty (LString s)   = dquotes $ pretty s
     pretty (LInteger i)  = pretty i
-    pretty (LDecimal r)  = viaShow r
+    pretty (LDecimal d@(Decimal e _))
+      | e == 0 = viaShow d <> ".0"
+      | otherwise = viaShow d
     pretty (LBool True)  = "true"
     pretty (LBool False) = "false"
     pretty (LTime t)     = dquotes $ pretty $ formatLTime t
