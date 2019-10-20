@@ -193,7 +193,7 @@ main = do
   void $ loadBenchModule sqliteDb
   void $ runPactExec "initSqliteDb" signer Null Nothing sqliteDb benchCmd
   mbenchCmd <- parseCode "(bench.mbench)"
-  print =<< runPactExec "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
+  void $ runPactExec "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
 
 
 
@@ -215,15 +215,20 @@ main = do
       (runPactExec "mockpersist" signer Null Nothing mockPersistDb benchCmd)
     , benchNFIO "sqlite"
       (runPactExec "sqlite" signer Null Nothing sqliteDb benchCmd)
-    , benchNFIO "puredb-withmod"
-      (runPactExec "puredb-withmod" signer Null (Just benchMod') pureDb benchCmd)
     , benchNFIO "mockdb-withmod"
       (runPactExec "mockdb-withmod" signer Null (Just benchMod') mockDb benchCmd)
     , benchNFIO "mockpersist-withmod"
       (runPactExec "mockpersist-withmod" signer Null (Just benchMod') mockPersistDb benchCmd)
     , sqlEnv $ benchNFIO "sqlite-withmod"
       (runPactExec "sqlite-withmod" signer Null (Just benchMod') sqliteDb benchCmd)
-    , benchNFIO "puredb-withmod-mbench" $
+      -- puredb transfer no caps
+    , benchNFIO "puredb-withmod"
+      (runPactExec "puredb-withmod" signer Null (Just benchMod') pureDb benchCmd)
+      -- puredb transfer caps
+    , benchNFIO "puredb-withmod-caps" $
+      runPactExec "puredb-withmod-bench-mcaps" msigner Null (Just benchMod') pureDb benchCmd
+      -- puredb mgd-transfer caps
+    , benchNFIO "puredb-withmod-caps-mbench" $
       runPactExec "puredb-withmod-mbench" msigner Null (Just benchMod') pureDb mbenchCmd
 
     ]
