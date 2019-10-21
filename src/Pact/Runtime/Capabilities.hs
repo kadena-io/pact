@@ -60,13 +60,7 @@ capabilityAcquired cap = elem cap <$> getAllStackCaps
 
 -- | Check for managed cap installed.
 capabilityInstalled :: UserCapability -> Eval e Bool
-capabilityInstalled cap = use (evalCapabilities . capManaged) >>= go . S.toList
-  where
-    go [] = return False
-    go (mc:mcs) | matchManaged mc cap = return True
-                | otherwise = go mcs
-
-
+capabilityInstalled cap = any (`matchManaged` cap) <$> use (evalCapabilities . capManaged)
 
 getAllStackCaps :: Eval e (S.Set UserCapability)
 getAllStackCaps = S.fromList . concatMap toList <$> use (evalCapabilities . capStack)
