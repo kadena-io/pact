@@ -268,20 +268,17 @@
   (defcap G () (enforce false "module admin disabled"))
 
   (defcap PAY (sender:string receiver:string amount:integer)
-    @managed PAY-mgr
+    @managed amount PAY-mgr
     (enforce-keyset (read-keyset sender)))
 
   (defun install-pay (sender:string receiver:string amount:integer)
     (install-capability (PAY sender receiver amount)))
 
-  (defun PAY-mgr (mgd reqd)
-    (enforce (= (at "sender" mgd) (at "sender" reqd)) "sender matches")
-    (enforce (= (at "receiver" mgd) (at "receiver" reqd)) "receiver matches")
-    (let* ((req-amount (at "amount" reqd))
-           (bal (- (at "amount" mgd) req-amount)))
-      (enforce (> req-amount 0) "requested amount > 0")
-      (enforce (>= bal 0) (format "sufficient balance: {} {} {}" [bal reqd mgd]))
-      (+ { "amount": bal } mgd)))
+  (defun PAY-mgr (mgd req)
+    (let ((bal (- mgd req)))
+      (enforce (> req 0) "requested amount > 0")
+      (enforce (>= bal 0) (format "sufficient balance: {} {} {}" [bal req mgd]))
+      bal))
 
   (defun pay (sender receiver amount)
     (with-capability (PAY sender receiver amount)
@@ -373,11 +370,11 @@
 (begin-tx)
 
 (interface mgd-iface
-  (defcap C:bool (id:string) @managed C-mgr)
+  (defcap C:bool (id:string) @managed id C-mgr)
   (defschema c-schema
     id:string)
-  (defun C-mgr:object{c-schema}
-      (m:object{c-schema} r:object{c-schema}))
+  (defun C-mgr:string
+      (m:string r:string))
   )
 (env-keys ["a"])
 (env-data { "a": ["a"] })
@@ -385,12 +382,12 @@
 (module mgd-mod G
   (defcap G () true)
   (implements mgd-iface)
-  (defcap C:bool (id:string) @managed C-mgr
+  (defcap C:bool (id:string) @managed id C-mgr
     (enforce-keyset id))
-  (defun C-mgr:object{mgd-iface.c-schema}
-      (m:object{mgd-iface.c-schema} r:object{mgd-iface.c-schema}) m)
+  (defun C-mgr:string
+      (m:string r:string) m)
 
-  (defcap D (allow:bool) @managed D-mgr (enforce allow "allowed"))
+  (defcap D (allow:bool) @managed allow D-mgr (enforce allow "allowed"))
   (defun D-mgr (m r) m)
   (defun acquireD (allowed:bool) (with-capability (D allowed) true))
   )

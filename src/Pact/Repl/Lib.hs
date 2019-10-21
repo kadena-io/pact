@@ -67,7 +67,7 @@ import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Types.Pretty
 import Pact.Repl.Types
-import Pact.Native.Capabilities (evalCap,getMgrFun)
+import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
@@ -574,8 +574,7 @@ setGasModel _ as = do
 testCapability :: ZNativeFun ReplState
 testCapability i [ (TApp app _) ] = do
   (_,d,_) <- appToCap app
-  mfm <- getMgrFun d
-  let (scope,verb) = maybe (CapCallStack,"aquired") (const (CapManaged,"installed")) mfm
+  let (scope,verb) = maybe (CapCallStack,"aquired") (const (CapManaged,"installed")) (_dDefMeta d)
   r <- evalCap i scope False $ app
   return . tStr $ case r of
     AlreadyAcquired -> "Capability already " <> verb

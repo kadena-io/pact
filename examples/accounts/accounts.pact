@@ -37,18 +37,15 @@
 
   (defcap PAY (sender:string receiver:string amount:decimal)
     "Demonstrates managed signature capabilities"
-    @managed manage-PAY
+    @managed amount manage-PAY
     (compose-capability (USER_GUARD sender)))
 
   (defun manage-PAY (mgd recd)
-    "Demonstrates managed caps. Matches sender and receiver, \
-    \and enforces linear constraint on amount."
-    (enforce (= (at "sender" mgd) (at "sender" recd)) "sender same")
-    (enforce (= (at "receiver" mgd) (at "receiver" recd)) "receiver same")
+    "Demonstrates managed caps, enforces linear constraint on amount."
     ;; valid amount handled in transfer
-    (let ((bal:decimal (- (at "amount" mgd) (at "amount" recd))))
+    (let ((bal:decimal (- mgd recd)))
       (enforce (>= bal 0.0) "insufficient balance")
-      (+ { "amount": bal } mgd)))
+      bal))
 
   (defun pay (sender:string receiver:string amount:decimal date)
     "Demonstrate managed capability PAY"

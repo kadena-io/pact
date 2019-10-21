@@ -13,8 +13,8 @@
   (defconst TEST1-C2 "const 1")
   (defconst TEST1-C3 2.0)
 
-  (defcap MGD_CAP:bool () @managed MGD_CAP_mgr)
-  (defun MGD_CAP_mgr:object (mgd:object req:object) "Mgr for CAP")
+  (defcap MGD_CAP:bool (val:integer) @managed val MGD_CAP_mgr)
+  (defun MGD_CAP_mgr:integer (mgd:integer req:integer) "Mgr for CAP")
   (defcap CAP:bool () "A cappy cap")
   (defpact pact1:string (arg:object{schema1}) "A pacty pact")
   (defschema schema1 "A scheming schema" fld:string)
@@ -115,8 +115,8 @@
   (defun use-consts:integer ()
     (+ sig-test1.TEST1-C1 sig-test3.TEST3-C2))
 
-  (defcap MGD_CAP:bool () @managed MGD_CAP_mgr true)
-  (defun MGD_CAP_mgr:object (mgd:object req:object) mgd)
+  (defcap MGD_CAP:bool (val:integer) @managed val MGD_CAP_mgr true)
+  (defun MGD_CAP_mgr:integer (mgd:integer req:integer) mgd)
   (defcap CAP:bool () true)
   (defpact pact1:string (arg:object{sig-test1.schema1})
     (step arg)
