@@ -124,7 +124,7 @@ data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
-    , _eeMsgSigs :: !(M.Map PublicKey (S.Set Capability))
+    , _eeMsgSigs :: !(M.Map PublicKey (S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode
@@ -312,7 +312,7 @@ throwEither :: (MonadThrow m,Exception e) => Either e a -> m a
 throwEither = either throwM return
 
 throwEitherText :: PactErrorType -> Info -> Doc -> Either Text a -> Eval e a
-throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) return 
+throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) return
 
 
 argsError :: FunApp -> [Term Name] -> Eval e a

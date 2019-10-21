@@ -569,14 +569,15 @@ moduleDefMeta (MDModule m) = _mMeta m
 moduleDefMeta (MDInterface m) = _interfaceMeta m
 
 -- | Metadata specific to Defcaps.
-newtype DefcapMeta n = DefcapMeta
-  { _dcMgrFun :: n
+data DefcapMeta n = DefcapMeta
+  { _dcManagerFun :: n
     -- ^ Name/Ref referring to associated manager fun.
+  , _dcManagedParam :: Text
   }
   deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
 instance NFData n => NFData (DefcapMeta n)
 instance Pretty n => Pretty (DefcapMeta n) where
-  pretty (DefcapMeta n) = "@managed " <> pretty n
+  pretty (DefcapMeta f p) = "@managed " <> pretty f <> " " <> pretty p
 instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
   toJSON = lensyToJSON 3
 instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where

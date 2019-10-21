@@ -179,17 +179,8 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 -- | Acquire module admin with enforce.
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modGov =
-  acquireModuleAdmin' i modName $ enforceModuleAdmin i modGov
+  acquireModuleAdminCapability modName $ enforceModuleAdmin i modGov
 
--- | Acquire module admin with supplied test.
-acquireModuleAdmin'
-  :: Info
-  -> ModuleName
-  -> Eval e ()
-  -> Eval e CapAcquireResult
-acquireModuleAdmin' i modName test =
-  acquireCapability i noopApplyMgrFun CapManaged
-    (ModuleAdminCapability modName) Nothing test
 
 enforceModuleAdmin :: Info -> Governance (Def Ref) -> Eval e ()
 enforceModuleAdmin i modGov =
@@ -279,7 +270,7 @@ eval (TModule (MDModule m) bod i) =
       -- that doesn't exist yet. Of course, if governance is
       -- busted somehow, this means we won't find out, and
       -- can't fix it later.
-      _ -> void $ acquireModuleAdmin' i (_mName m) $ return ()
+      _ -> void $ acquireModuleAdminCapability (_mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GWrite (WriteModule (_mName m) (_mCode m)))
@@ -560,7 +551,7 @@ solveConstraint ifn info refName (Ref t) evalMap = do
     -- | For DefcapMeta, we just want the mgr fun names to match
     defMetaEq :: DefMeta (Term Ref) -> DefMeta (Term Ref) -> Bool
     defMetaEq a b = getDefName a == getDefName b
-    getDefName (DMDefcap (DefcapMeta (TVar (Ref (TDef Def {..} _)) _))) = Just _dDefName
+    getDefName (DMDefcap (DefcapMeta (TVar (Ref (TDef Def {..} _)) _) an)) = Just (_dDefName,an)
     getDefName _ = Nothing
 
 

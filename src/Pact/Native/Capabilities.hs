@@ -14,21 +14,18 @@
 module Pact.Native.Capabilities
   ( capDefs
   , evalCap
-  , resolveCapInstallMaybe
-  , getMgrFun
   ) where
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.Catch
 import Data.Default
+import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import Data.Maybe (isJust)
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Runtime.Capabilities
-import Pact.Runtime.Typecheck
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -132,86 +129,35 @@ installCapability =
 -- 'inModule' is 'True', natives can only be invoked within module code.
 evalCap :: HasInfo i => i -> CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
 evalCap i scope inModule a@App{..} = do
+      initSigCapabilities
       (cap,d,prep) <- appToCap a
-      mgrFunM <- getMgrFun d
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      acquireCapability i (applyMgrFun a d) scope cap mgrFunM $ do
+      evalUserCapability i applyMgrFun scope cap d $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
-
-getMgrFun :: Def Ref -> Eval e (Maybe (Def Ref))
-getMgrFun capDef = case _dDefMeta capDef of
-  Nothing -> return Nothing
-  Just (DMDefcap (DefcapMeta t)) -> case t of
-    (TVar (Ref (TDef d _)) i) -> do
-      unless (_dDefType d == Defun) $
-        evalError i $ "Manager function must be defun"
-      return $ Just d
-    _ -> evalError' t $ "@managed must refer to a def of type " <> pretty mgrFunTy
-  where
-    ctype = tTyObject (mkSchemaVar "c-type")
-    mgrFunTy :: FunType (Term Name)
-    mgrFunTy = funType' ctype [("installed", ctype),("requested", ctype)]
 
 -- | Continuation to tie the knot with Pact.Eval (ie, 'apply') and also because the capDef is
 -- more accessible here.
 applyMgrFun
-  :: HasInfo i
-  => i
-  -> Def Ref
+  :: Def Ref
   -- ^ capability def
-  -> Def Ref
-  -- ^ manager def
-  -> [PactValue]
+  -> PactValue
   -- ^ MANAGED argument
-  -> [PactValue]
+  -> PactValue
   -- ^ REQUESTED argument
-  -> Eval e (Either PactError [PactValue])
-applyMgrFun i capDef mgrFunDef mgArgs capArgs = doApply [toObj mgArgs,toObj capArgs]
+  -> Eval e PactValue
+applyMgrFun mgrFunDef mgArg capArg = doApply [fromPactValue mgArg,fromPactValue capArg]
   where
 
-    doApply as = try $ do
+    doApply as = do
       r <- apply (App appVar [] (getInfo mgrFunDef)) as
-      case r of
-        (TObject (Object (ObjectMap rm) _ _ _) _) -> toPVs rm
-        t -> evalError' i $ "Invalid return value from mgr function: " <> pretty t
+      case toPactValue r of
+        Right pv -> return pv
+        Left e -> evalError' mgrFunDef $ "Invalid return value from mgr function: " <> pretty e
 
-    capDefArgs :: [Arg (Term Ref)]
-    capDefArgs = _ftArgs (_dFunType capDef)
-    toObj :: [PactValue] -> Term Name
-    toObj as = TObject (Object (ObjectMap (toMap as)) (tTyObject TyAny) Nothing def) def
-    toMap as = M.fromList $ zipWith toPair capDefArgs as
-    toPair (Arg n _ _) pv = (FieldKey n,fromPactValue pv)
     appVar = TVar (Ref (TDef mgrFunDef (getInfo mgrFunDef))) def
 
-    toPVs :: M.Map FieldKey (Term Name) -> Eval e [PactValue]
-    toPVs rm = forM capDefArgs $ \(Arg n _ _) -> case M.lookup (FieldKey n) rm of
-      Nothing -> evalError' i $ "Missing field in mgr fun result: " <> pretty n
-      Just t -> case toPactValue t of
-        Left e -> evalError' i $ "Invalid return value for field " <> pretty n <> ": " <> pretty e
-        Right v -> return v
 
--- | Resolve and typecheck sig cap, and if "managed" (ie has a manager function),
--- return install command.
-resolveCapInstallMaybe :: SigCapability -> Eval e (Capability,Maybe (Eval e CapAcquireResult))
-resolveCapInstallMaybe SigCapability{..} = do
-  resolveRef _scName (QName _scName) >>= \m -> case m of
-    Just (Ref (TDef d@Def{..} _))
-      | _dDefType == Defcap -> do
-          fty <- traverse reduce _dFunType
-          let as = map fromPactValue _scArgs
-          typecheckArgs _scName _dDefName fty as
-          doInst <- installMaybe d as
-          return $ (UserCapability (QualifiedName _dModule (asString _dDefName) def) $ _scArgs,doInst)
-    Just _ -> evalError' _scName $ "resolveCapInstallMaybe: expected defcap reference"
-    Nothing -> evalError' _scName $ "resolveCapInstallMaybe: cannot resolve " <> pretty _scName
-  where
-    installMaybe d@Def{..} as = case _dDefMeta of
-      Nothing -> return Nothing
-      Just _ -> return $ Just $ evalCap d CapManaged False (mkApp d as)
-    mkApp d@Def{..} as =
-      App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
-          (map liftTerm as) (getInfo d)
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
 enforceNotWithinDefcap i msg = defcapInStack Nothing >>= \p -> when p $
@@ -227,7 +173,7 @@ requireCapability =
     requireCapability' :: NativeFun e
     requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ do
       (cap,_,_) <- appToCap a
-      granted <- capabilityGranted CapCallStack cap
+      granted <- capabilityAcquired cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
       return $ toTerm True
     requireCapability' i as = argsError' i as
@@ -271,6 +217,34 @@ defcapInStack limit = use evalCallStack >>= return . go limit
     funapps :: Traversal' [StackFrame] FunApp
     funapps = traverse . sfApp . _Just . _1
 
+
+initSigCapabilities :: Eval e ()
+initSigCapabilities = use (evalCapabilities . capManaged) >>= \ms -> case ms of
+  Just {} -> return ()
+  Nothing -> do
+    evalCapabilities . capManaged .= Just mempty
+    sigCaps <- S.toList . S.unions . M.elems <$> view eeMsgSigs
+    forM_ sigCaps installManagedMaybe
+
+
+
+-- | Resolve sig cap
+installManagedMaybe :: SigCapability -> Eval e ()
+installManagedMaybe SigCapability{..} = do
+  resolveRef _scName (QName _scName) >>= \m -> case m of
+    Just (Ref (TDef d@Def{..} _))
+      | _dDefType == Defcap -> do
+          let as = map fromPactValue _scArgs
+          installMaybe d as
+    Just _ -> evalError' _scName $ "installManagedMaybe: expected defcap reference"
+    Nothing -> evalError' _scName $ "installManagedMaybe: cannot resolve " <> pretty _scName
+  where
+    installMaybe d@Def{..} as = case _dDefMeta of
+      Nothing -> return ()
+      Just _ -> void $ evalCap d CapManaged False (mkApp d as)
+    mkApp d@Def{..} as =
+      App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
+          (map liftTerm as) (getInfo d)
 
 
 
