@@ -1,4 +1,18 @@
-(env-data { "keyset": { "keys": ["benchadmin"], "pred": ">" } })
+(env-data
+  { "keyset": { "keys": ["benchadmin"], "pred": ">" }
+  , "acct": ["0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"]
+  }
+)
 (begin-tx)
 (load "bench.pact")
 (commit-tx)
+(use bench)
+(env-keys ["0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"])
+(expect "bench success" "Write succeeded"
+  (bench))
+(env-sigs
+  [{"key": "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
+   ,"caps":[(MTRANSFER "Acct1" "Acct2" 1.0)]}])
+(test-capability (MTRANSFER "Acct1" "Acct2" 1.0))
+(expect "mbench success" "Write succeeded"
+  (mbench))
