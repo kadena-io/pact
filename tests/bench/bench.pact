@@ -24,19 +24,15 @@
   )
 
   (defcap MTRANSFER (src dest amount)
-    @managed MTRANSFER-mgr
+    @managed amount MTRANSFER-mgr
     (with-read bench-accounts src {"guard":=g}
       (enforce-guard g)
     )
   )
 
   (defun MTRANSFER-mgr (m r)
-    (enforce (= (at 'src m) (at 'src r)) "m")
-    (enforce (= (at 'dest m) (at 'dest r)) "r")
-    (let ((bal (at 'amount m))
-          (amt (at 'amount r)))
-      (enforce (>= bal amt) "Exhausted")
-      (+ { 'amount: (- bal amt)} m))
+      (enforce (>= m r) "Exhausted")
+      (- m r)
   )
 
   (defun transfer (src dest amount)

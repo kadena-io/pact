@@ -240,7 +240,7 @@ evalTerms interp ss input = interpreter interp start end withRollback runInput
       -- install sigs into local environment
       local (set eeMsgSigs (toSigs sigsAndInstallers)) $ do
         -- install any caps
-        traverse_ (traverse_ (traverse_ $ \i -> i)) sigsAndInstallers
+        traverse_ (traverse_ (traverse_ id)) sigsAndInstallers
         (,txid) <$> act
 
     end :: CommitTx e
@@ -260,7 +260,7 @@ evalTerms interp ss input = interpreter interp start end withRollback runInput
 -- installing signature caps, and then running installs inside configured environment.
 resolveSignerCaps
   :: [Signer]
-  -> Eval e (M.Map PublicKey (M.Map Capability (Maybe (Eval e CapAcquireResult))))
+  -> Eval e (M.Map PublicKey (M.Map UserCapability (Maybe (Eval e CapAcquireResult))))
 resolveSignerCaps ss = M.fromList <$> mapM toPair ss
   where
     toPair Signer{..} = (pk,) . M.fromList <$> mapM resolveCapInstallMaybe _siCapList

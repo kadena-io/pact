@@ -73,7 +73,7 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
       acctModuleCmd `succeedsWith` textVal "TableCreated"
       createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
       managedPay `succeedsWith` Nothing
-      managedPayFails `failsWith` Just "Acquire of managed capability failed: insufficient balance"
+      managedPayFails `failsWith` Just "insufficient balance"
 
 
 -- | allows passing e.g. "-m CrossChain" to match only `testCrossChainYield` in ghci
