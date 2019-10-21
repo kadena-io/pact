@@ -55,7 +55,7 @@ withCapability =
   defNative (specialForm WithCapability) withCapability'
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
   [LitExample "(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))"]
-  "Specifies and requests grant of _scoped_ CAPABILITY which is an application of a 'defcap' \
+  "Specifies and requests grant of _acquired_ CAPABILITY which is an application of a 'defcap' \
   \production. Given the unique token specified by this application, ensure \
   \that the token is granted in the environment during execution of BODY. \
   \'with-capability' can only be called in the same module that declares the \
@@ -91,24 +91,20 @@ installCapability =
     ])
   [LitExample "(install-capability (PAY \"alice\" \"bob\" 10.0))"]
   "Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' \
-  \which designates a 'manager function` using the '@managed' meta tag. After install, \
-  \CAPABILITY must still be brought into scope using 'with-capability', at which time \
+  \in which a '@managed' tag designates a single parameter to be managed by a specified function. \
+  \After install, CAPABILITY must still be brought into scope using 'with-capability', at which time \
   \the 'manager function' is invoked to validate the request. \
   \The manager function is of type \
-  \'managed:object{c-type} requested:object{c-type} -> object{c-type}', \
-  \where C-TYPE schema matches the parameter declaration of CAPABILITY, such that for \
-  \'(defcap FOO (bar:string baz:integer) ...)', \
-  \C-TYPE would be a schema '(bar:string, baz:integer)'. \
-  \The manager function enforces that REQUESTED matches MANAGED, \
-  \and produces a new managed capability parameter object to replace the previous managed one, \
-  \if the desired logic allows it, otherwise it should fail. An example would be a 'one-shot' \
-  \capability (ONE-SHOT fired:bool), installed with 'true', which upon request would enforce \
-  \that the bool is still 'true' but replace it with 'false', so that the next request would \
-  \fail. \
-  \NOTE that signatures scoped to managed capability cause the capability to be automatically \
-  \installed, and that the signature is only allowed to be checked once in the context of \
-  \the installed capability, such that a subsequent install would fail (assuming the capability \
-  \requires the associated signature)."
+  \'managed:<p> requested:<p> -> <p>', \
+  \where '<p>' indicates the type of the managed parameter, such that for \
+  \'(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)', \
+  \the manager function would be '(defun FOO-mgr:integer (managed:integer requested:integer) ...)'. \
+  \Any capability matching the 'static' (non-managed) parameters will cause this function to \
+  \be invoked with the current managed value and that of the requested capability. \
+  \The function should perform whatever logic, presumably linear, to validate the request, \
+  \and return the new managed value representing the 'balance' of the request. \
+  \NOTE that signatures scoped to a managed capability cause the capability to be automatically \
+  \installed."
 
   where
     installCapability' i as = case as of
