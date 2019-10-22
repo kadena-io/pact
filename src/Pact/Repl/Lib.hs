@@ -37,6 +37,7 @@ import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Thyme.Time.Core
 import qualified Data.Vector as V
+import Data.List (isInfixOf)
 
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
@@ -151,9 +152,15 @@ replDefs = ("Repl",
      ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
       ["(expect \"Sanity prevails.\" 4 (+ 2 2))"]
       "Evaluate ACTUAL and verify that it equals EXPECTED."
-     ,defZNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)])
-      ["(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))"]
+
+     ,defZNative "expect-failure" expectFail
+      (funType tTyString [("doc",tTyString),("exp",a)] <>
+       funType tTyString [("doc",tTyString),("err",tTyString),("exp",a)])
+      ["(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))"
+      ,"(expect-failure \"Enforce fails with message\" \"Expected error\" (enforce false \"Expected error\"))"
+      ]
       "Evaluate EXP and succeed only if it throws an error."
+
      ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       [LitExample "(bench (+ 1 2))"] "Benchmark execution of EXPRS."
      ,defZRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
@@ -428,16 +435,25 @@ expect i [TLitString a,b,c] =
 expect i as = argsError i as
 
 expectFail :: ZNativeFun LibState
-expectFail i as@[a,b] = do
-  a' <- reduce a
-  case a' of
-    TLitString msg -> do
-      r <- catch (Right <$> reduce b) (\(_ :: SomeException) -> return $ Left ())
-      case r of
-        Right v -> testFailure i msg $ "FAILURE: " <> msg <> ": expected failure, got result = " <> pack (show v)
-        Left _ -> testSuccess msg $ "Expect failure: success: " <> msg
+expectFail i as = case as of
+  [doc,expr] -> go doc Nothing expr
+  [doc,err,expr] -> reduce err >>= \e -> case e of
+    TLitString errmsg -> go doc (Just $ unpack errmsg) expr
     _ -> argsError' i as
-expectFail i as = argsError' i as
+  _ -> argsError' i as
+  where
+    tsuccess msg = testSuccess msg $ "Expect failure: success: " <> msg
+    tfailure msg details = testFailure i msg $ "FAILURE: " <> msg <> ": " <> details
+    go doc errM expr = reduce doc >>= \d -> case d of
+      TLitString msg -> do
+        r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
+        case r of
+          Right v -> tfailure msg $ "expected failure, got result = " <> pack (show v)
+          Left e -> case errM of
+            Nothing -> tsuccess msg
+            Just err | err `isInfixOf` e -> tsuccess msg
+                     | otherwise -> tfailure msg $ "expected error message to contain '" <> pack err <> "', got '" <> pack e <> "'"
+      _ -> argsError' i as
 
 bench' :: ZNativeFun LibState
 #if !defined(ghcjs_HOST_OS)
