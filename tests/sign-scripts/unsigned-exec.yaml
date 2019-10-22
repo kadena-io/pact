@@ -1,0 +1,8 @@
+code: |-
+  (test.run-escrow "Alice" "Bob")
+signers:
+  - public: 7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804
+    caps:
+      - name: accounts.USER_GUARD
+        args: ["Alice"]
+nonce: just-sign-exec

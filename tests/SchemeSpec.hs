@@ -101,6 +101,7 @@ spec = describe "working with crypto schemes" $ do
   describe "test PublicKey import" testPublicKeyImport
   describe "test UserSig creation and verificaton" testUserSig
   describe "test signature non-malleability" testSigNonMalleability
+  describe "testSigsRoundtrip" testSigsRoundtrip
 #else
 spec = return ()
 #endif
@@ -224,3 +225,11 @@ testSigNonMalleability = do
 
     cmdWithWrongNumSig <- mkCommandTest [kp, wrongKp] [signer] "(somePactFunction)"
     shouldBeProcFail (verifyCommand cmdWithWrongNumSig)
+
+
+testSigsRoundtrip :: Spec
+testSigsRoundtrip = runIO $ do
+  apiReq' "tests/sign-scripts/unsigned-exec.yaml" True True
+  apiReq' "tests/sign-scripts/unsigned-cont.yaml" True True
+  signReq "tests/sign-scripts/sign-req.yaml"
+  addSigsReq "tests/sign-scripts/add-sigs.yaml" False

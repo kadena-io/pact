@@ -28,6 +28,8 @@ module Pact.Types.Command
 #if !defined(ghcjs_HOST_OS)
   , mkCommand
   , mkCommand'
+  , mkUnsignedCommand
+  , signHash
   , keyPairToSigner
   , keyPairsToSigners
   , verifyUserSig
@@ -146,19 +148,33 @@ keyPairToSigner cred caps = Signer scheme pub addr caps
               Nothing -> Nothing
               Just {} -> Just $ toB16Text $ formatPublicKey cred
 
+
 keyPairsToSigners :: [SomeKeyPairCaps] -> [Signer]
 keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
-
 
 
 mkCommand' :: [(SomeKeyPair,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
-      toUserSig (cred,_) = UserSig . toB16Text <$>
-                       sign cred (toUntypedHash hsh)
+      toUserSig (cred,_) = signHash hsh cred
   sigs <- traverse toUserSig creds
   return $ Command env sigs hsh
 
+mkUnsignedCommand
+  :: ToJSON m
+  => ToJSON c
+  => [Signer]
+  -> m
+  -> Text
+  -> Maybe NetworkId
+  -> PactRPC c
+  -> IO (Command ByteString)
+mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
+  where encodedPayload = BSL.toStrict $ A.encode payload
+        payload = Payload rpc nonce meta signers nid
+
+signHash :: TypedHash h -> SomeKeyPair -> IO UserSig
+signHash hsh cred = UserSig . toB16Text <$> sign cred (toUntypedHash hsh)
 
 -- VALIDATING TRANSACTIONS
 

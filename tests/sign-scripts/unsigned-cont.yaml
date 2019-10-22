@@ -1,0 +1,7 @@
+type: "cont"
+pactTxHash: "TNgO7o8nSZILVCfJPcg5IjHADy-XKvQ7o5RfAieJvwY"
+step: 1
+rollback: False
+signers:
+  - public: ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9
+nonce: just-sign-cont
