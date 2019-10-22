@@ -1720,11 +1720,15 @@ pact> (expect "Sanity prevails." 4 (+ 2 2))
 
 *doc*&nbsp;`string` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
+*doc*&nbsp;`string` *err*&nbsp;`string` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
 
 Evaluate EXP and succeed only if it throws an error.
 ```lisp
 pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 "Expect failure: success: Enforce fails on false"
+pact> (expect-failure "Enforce fails with message" "Expected error" (enforce false "Expected error"))
+"Expect failure: success: Enforce fails with message"
 ```
 
 
