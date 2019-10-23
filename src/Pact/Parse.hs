@@ -52,6 +52,7 @@ import Text.Trifecta.Delta as TF
 import Pact.Types.Exp
 import Pact.Types.PactValue
 import Pact.Types.Parser
+import Pact.Types.Pretty (Pretty(..),viaShow)
 import Pact.Types.Info
 import Pact.Types.Term (ToTerm)
 
@@ -130,7 +131,7 @@ exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 -- accepts both a String version (parsed as a Pact decimal) or
 -- a Number.
 newtype ParsedDecimal = ParsedDecimal Decimal
-  deriving (Eq,Show,Ord,Num,Real,RealFrac,Fractional,Generic,NFData,Serialize,ToTerm)
+  deriving (Eq,Ord,Num,Real,RealFrac,Fractional,Generic,NFData,Serialize,ToTerm)
 
 instance A.FromJSON ParsedDecimal where
   parseJSON (A.String s) =
@@ -144,13 +145,19 @@ instance A.FromJSON ParsedDecimal where
 instance A.ToJSON ParsedDecimal where
   toJSON (ParsedDecimal d) = A.Number $ fromRational $ toRational d
 
+instance Show ParsedDecimal where
+  show (ParsedDecimal d) = show d
+
+instance Pretty ParsedDecimal where
+  pretty (ParsedDecimal d) = viaShow d
+
 instance Wrapped ParsedDecimal
 
 -- | JSON serialization for 'readInteger' and public meta info;
 -- accepts both a String version (parsed as a Pact integer),
 -- a Number, or a PactValue { "int": ... } integer
 newtype ParsedInteger = ParsedInteger Integer
-  deriving (Eq,Show,Ord,Num,Real,Enum,Integral,Generic,NFData,Serialize,ToTerm)
+  deriving (Eq,Show,Ord,Num,Real,Enum,Integral,Generic,NFData,Serialize,ToTerm,Pretty)
 
 instance A.FromJSON ParsedInteger where
   parseJSON (A.String s) =
@@ -167,7 +174,6 @@ instance A.ToJSON ParsedInteger where
   toJSON (ParsedInteger i) = A.Number (fromIntegral i)
 
 instance Wrapped ParsedInteger
-
 
 
 
