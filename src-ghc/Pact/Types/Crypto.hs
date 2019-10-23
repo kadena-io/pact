@@ -42,6 +42,7 @@ module Pact.Types.Crypto
   , importKeyPair
   , KeyPair(..)
   , Scheme(..)
+  , ConvertBS(..)
   ) where
 
 

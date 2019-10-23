@@ -1,7 +1,7 @@
 # Both debtor and creditor can finish together if price remains the same
 # or negotiated down.
 type: "cont"
-pactTxHash: "TNgO7o8nSZILVCfJPcg5IjHADy-XKvQ7o5RfAieJvwY"
+pactTxHash: "L2N2SgjdQAHNEu6WY82VAa4LyxmqfrAuaR6sB41DUMQ"
 step: 1
 rollback: False
 data: {final-price: 1.75}
