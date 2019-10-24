@@ -93,6 +93,7 @@ in {
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
   });
 
+  #https://github.com/reflex-frp/reflex-platform/issues/549
   singleton-bool = overrideCabal
     (self.callCabal2nix "singleton-bool" (hackGet ./deps/singleton-bool) {})
     (drv: {
