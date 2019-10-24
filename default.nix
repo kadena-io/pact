@@ -24,7 +24,7 @@ rp = import rpSrc { inherit system; nixpkgsOverlays = [ overlay ]; };
 in {
   inherit rpRef rpSha rpSrc overlay rp;
   proj =
-    rp.project ({ pkgs, ... }:
+    rp.project ({ pkgs, hackGet, ... }:
     let gitignore = pkgs.callPackage (pkgs.fetchFromGitHub {
           owner = "siers";
           repo = "nix-gitignore";
@@ -34,7 +34,7 @@ in {
     in
     {
       name = "pact";
-      overrides = self: super: (import ./overrides.nix pkgs self super) // {
+      overrides = self: super: (import ./overrides.nix pkgs hackGet self super) // {
       };
       packages = {
         pact = gitignore.gitignoreSource [".git" ".gitlab-ci.yml" "CHANGELOG.md" "README.md"] ./.;

@@ -1,4 +1,4 @@
-pkgs: self: super: with pkgs.haskell.lib;
+pkgs: hackGet: self: super: with pkgs.haskell.lib;
 let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
     whenGhcjs = f: p: if self.ghc.isGhcjs or false then (f p) else p;
     callHackageDirect = {pkg, ver, sha256}@args:
@@ -93,11 +93,13 @@ in {
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
   });
 
-  singleton-bool = dontCheck (callHackageDirect {
-    pkg = "singleton-bool";
-    ver = "0.1.5";
-    sha256 = "1kjn5wgwgxdw2xk32d645v3ss2a70v3bzrihjdr2wbj2l4ydcah1";
-  });
+  singleton-bool = overrideCabal
+    (self.callCabal2nix "singleton-bool" (hackGet ./deps/singleton-bool) {})
+    (drv: {
+      editedCabalFile = null;
+      revision = null;
+    })
+  ;
 
   servant = dontCheck (self.callCabal2nix "servant" "${servantSrc}/servant" {});
   servant-client = dontCheck (self.callCabal2nix "servant-client" "${servantSrc}/servant-client" {});
