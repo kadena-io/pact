@@ -41,6 +41,7 @@ in {
   intervals = whenGhcjs dontCheck super.intervals;
   iproute = whenGhcjs dontCheck super.iproute;
   lens-aeson = whenGhcjs dontCheck super.lens-aeson;
+  memory = whenGhcjs dontCheck super.memory;
   network-byte-order = whenGhcjs dontCheck super.network-byte-order;
   prettyprinter-ansi-terminal = whenGhcjs dontCheck super.prettyprinter-ansi-terminal;
   prettyprinter-convert-ansi-wl-pprint = whenGhcjs dontCheck super.prettyprinter-convert-ansi-wl-pprint;
