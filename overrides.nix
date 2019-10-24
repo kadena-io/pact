@@ -93,9 +93,14 @@ in {
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
   });
 
-  #https://github.com/reflex-frp/reflex-platform/issues/549
+  # https://github.com/reflex-frp/reflex-platform/issues/549
   singleton-bool = overrideCabal
-    (self.callCabal2nix "singleton-bool" (hackGet ./deps/singleton-bool) {})
+    (self.callCabal2nix "singleton-bool" (pkgs.fetchFromGitHub {
+      owner = "obsidiansystems";
+      repo = "singleton-bool";
+      rev = "bf5c81fff6eaa9ed1286de9d0ecfffa7e0aa85d2";
+      sha256 = "0fzi6f5pl2gg9k8f7k88qyyvjflpcw08905y0vjmbylzc70wsykw";
+    }) {})
     (drv: {
       editedCabalFile = null;
       revision = null;

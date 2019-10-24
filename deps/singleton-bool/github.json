@@ -1,7 +1,0 @@
-{
-  "owner": "obsidiansystems",
-  "repo": "singleton-bool",
-  "branch": "workaround-cabal-impl-bug",
-  "rev": "bf5c81fff6eaa9ed1286de9d0ecfffa7e0aa85d2",
-  "sha256": "0fzi6f5pl2gg9k8f7k88qyyvjflpcw08905y0vjmbylzc70wsykw"
-}
