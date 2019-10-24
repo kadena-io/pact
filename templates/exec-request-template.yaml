@@ -15,9 +15,7 @@ publicMeta:
 keyPairs:
   [ public:
     secret:
-    caps:
-      [ optional managed capabilities
-      ]
+    caps: []
   ]
 nonce:
 type: exec

@@ -9,9 +9,7 @@ dataFile:
 keyPairs:
   [ public:
     secret:
-    caps:
-      [ optional managed capabilities
-      ]
+    caps: []
   ]
 networkId:
 publicMeta:
