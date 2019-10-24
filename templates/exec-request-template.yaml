@@ -1,0 +1,19 @@
+# Public chain exec request template
+
+code:
+codeFile:
+data:
+dataFile:
+publicMeta:
+  chainId:
+  sender:
+  gasLimit:
+  gasPrice:
+  ttl:
+  creationTime:
+keyPairs:
+  [ public:
+    secret:
+  ]
+nonce:
+type: exec

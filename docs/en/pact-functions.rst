@@ -61,13 +61,13 @@ chain-data
 *→* ``object:{public-chain-data}``
 
 Get transaction public metadata. Returns an object with ‘chain-id’,
-‘block-height’, ‘block-time’, ‘sender’, ‘gas-limit’, ‘gas-price’, and
-‘gas-fee’ fields.
+‘block-height’, ‘block-time’, ‘prev-block-hash’, ‘sender’, ‘gas-limit’,
+‘gas-price’, and ‘gas-fee’ fields.
 
 .. code:: lisp
 
    pact> (chain-data)
-   {"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"prev-block-hash": "","sender": ""}
+   {"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0.0,"prev-block-hash": "","sender": ""}
 
 compose
 ~~~~~~~
@@ -884,7 +884,7 @@ Compute difference between TIME1 and TIME2 in seconds.
 .. code:: lisp
 
    pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
-   23400
+   23400.0
 
 format-time
 ~~~~~~~~~~~
@@ -1003,7 +1003,7 @@ Multiply X by Y.
 .. code:: lisp
 
    pact> (* 0.5 10.0)
-   5
+   5.0
    pact> (* 3 5)
    15
 
@@ -1075,7 +1075,7 @@ Divide X by Y.
 .. code:: lisp
 
    pact> (/ 10.0 2.0)
-   5
+   5.0
    pact> (/ 8 3)
    2
 
@@ -1416,7 +1416,7 @@ Square root of X.
 .. code:: lisp
 
    pact> (sqrt 25)
-   5
+   5.0
 
 xor
 ~~~
@@ -1618,25 +1618,44 @@ install-capability
 *capability* ``-> bool`` *→* ``string``
 
 Specifies, and validates install of, a *managed* CAPABILITY, defined in
-a ‘defcap’ which designates a ‘manager function\` using the’@managed’
-meta tag. After install, CAPABILITY must still be brought into scope
-using ‘with-capability’, at which time the ‘manager function’ is invoked
-to validate the request. The manager function is of type
-‘managed:object{c-type} requested:object{c-type} -> object{c-type}’,
-where C-TYPE schema matches the parameter declaration of CAPABILITY,
-such that for ‘(defcap FOO (bar:string baz:integer) …)’, C-TYPE would be
-a schema ‘(bar:string, baz:integer)’. The manager function enforces that
-REQUESTED matches MANAGED, and produces a new managed capability
-parameter object to replace the previous managed one, if the desired
-logic allows it, otherwise it should fail. An example would be a
-‘one-shot’ capability (ONE-SHOT fired:bool), installed with ‘true’,
-which upon request would enforce that the bool is still ‘true’ but
-replace it with ‘false’, so that the next request would fail. NOTE that
-signatures scoped to managed capability cause the capability to be
-automatically installed, and that the signature is only allowed to be
-checked once in the context of the installed capability, such that a
-subsequent install would fail (assuming the capability requires the
-associated signature).
+a ‘defcap’ in which a ‘@managed’ tag designates a single parameter to be
+managed by a specified function. After install, CAPABILITY must still be
+brought into scope using ‘with-capability’, at which time the ‘manager
+function’ is invoked to validate the request. The manager function is of
+type ’managed:
+
+.. raw:: html
+
+   <p>
+
+requested:
+
+.. raw:: html
+
+   <p>
+
+->
+
+.. raw:: html
+
+   <p>
+
+‘, where’
+
+.. raw:: html
+
+   <p>
+
+’ indicates the type of the managed parameter, such that for ‘(defcap
+FOO (bar:string baz:integer) @managed baz FOO-mgr …)’, the manager
+function would be ‘(defun FOO-mgr:integer (managed:integer
+requested:integer) …)’. Any capability matching the ‘static’
+(non-managed) parameters will cause this function to be invoked with the
+current managed value and that of the requested capability. The function
+should perform whatever logic, presumably linear, to validate the
+request, and return the new managed value representing the ‘balance’ of
+the request. NOTE that signatures scoped to a managed capability cause
+the capability to be automatically installed.
 
 .. code:: lisp
 
@@ -1669,7 +1688,7 @@ with-capability
 
 *capability* ``-> bool`` *body* ``[*]`` *→* ``<a>``
 
-Specifies and requests grant of *scoped* CAPABILITY which is an
+Specifies and requests grant of *acquired* CAPABILITY which is an
 application of a ‘defcap’ production. Given the unique token specified
 by this application, ensure that the token is granted in the environment
 during execution of BODY. ‘with-capability’ can only be called in the
@@ -1959,12 +1978,16 @@ expect-failure
 
 *doc* ``string`` *exp* ``<a>`` *→* ``string``
 
+*doc* ``string`` *err* ``string`` *exp* ``<a>`` *→* ``string``
+
 Evaluate EXP and succeed only if it throws an error.
 
 .. code:: lisp
 
    pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
    "Expect failure: success: Enforce fails on false"
+   pact> (expect-failure "Enforce fails with message" "Expected error" (enforce false "Expected error"))
+   "Expect failure: success: Enforce fails with message"
 
 format-address
 ~~~~~~~~~~~~~~
@@ -2049,10 +2072,9 @@ test-capability
 
 *capability* ``-> bool`` *→* ``string``
 
-Specify and request grant of CAPABILITY. Once granted, CAPABILITY and
-any composed capabilities are in scope for the rest of the transaction.
-Allows direct invocation of capabilities, which is not available in the
-blockchain environment.
+Acquire (if unmanaged) or install (if managed) CAPABILITY. CAPABILITY
+and any composed capabilities are in scope for the rest of the
+transaction.
 
 .. code:: lisp
 

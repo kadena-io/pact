@@ -892,9 +892,13 @@ $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
 
 ### Request YAML file format {#request-yaml}
 Request yaml files takes two forms. An *execution* Request yaml file describes the [exec](#exec-payload) payload.
-Meanwhile, a *continuation* Request yaml file describes the [cont](#cont-payload) payload.
+Meanwhile, a *continuation* Request yaml file describes the [cont](#cont-payload) payload. Private and public
+blockchains require different metadata, so each payload format may have different fields depending on the context.
 
-The execution Request yaml takes the following keys:
+#### Private Blockchain YAML Format {#request-yaml-private-chain}
+
+The execution request yaml for a private blockchain takes the following keys:
+
 
 ```yaml
   code: Transaction code
@@ -910,7 +914,7 @@ The execution Request yaml takes the following keys:
   to: entity names for addressing private messages
 ```
 
-The continuation Request yaml takes the following keys:
+The continuation request yaml for a private blockchain takes the following keys:
 
 ```yaml
   type: "cont"
@@ -928,8 +932,56 @@ The continuation Request yaml takes the following keys:
   to: entity names for addressing private messages
 ```
 
+#### Public Blockchain YAML Format {#request-yaml-public-chain}
 
 
+The execution request yaml for a public blockchain takes the following keys:
+
+```yaml
+  code: Transaction code
+  codeFile: Transaction code file
+  data: JSON transaction data
+  dataFile: JSON transaction data file
+  keyPairs: list of key pairs for signing (use pact -g to generate): [
+    public: base 16 public key
+    secret: base 16 secret key
+    ]
+  nonce: optional request nonce, will use current time if not provided
+  publicMeta:
+    chainId: string chain id of the chain of execution
+    sender: string denoting the sender of the transaction
+    gasLimit: integer gas limit
+    gasPrice: decimal gas price
+    ttl: integer time-to-live value
+    creationTime: integer tx execution time after offset
+  type: exec
+```
+
+The continuation request yaml for a public blockchain takes the following keys:
+
+```yaml
+  pactTxHash: integer transaction id of pact
+  step: integer next step of a pact
+  rollback: boolean for rollingback a pact
+  proof: string spv proof of continuation (optional, cross-chain only)
+  data: JSON transaction data
+  dataFile: JSON transaction data file
+  keyPairs: list of key pairs for signing (use pact -g to generate): [
+    public: string base 16 public key
+    secret: string base 16 secret key
+    ]
+  publicMeta:
+    chainId: string chain id of the chain of execution
+    sender: string denoting the sender of the transaction
+    gasLimit: integer gas limit
+    gasPrice: decimal gas price
+    ttl: integer time-to-live value
+    creationTime: integer tx execution time after offset
+  nonce: optional request nonce, will use current time if not provided
+  type: cont
+```
+
+Note that the optional "proof" field only makes sense when using cross-chain continuations.
 
 Concepts {#concepts}
 ========
@@ -978,6 +1030,7 @@ Namespaces are defined using [define-namespace](#define-namespace). Namespaces a
 - [pact](#defpact) special functions
 - [constant](#defconst) values
 - [models](pact-properties.html)
+- [imports](#use)
 
 When a module is declared, all references to native functions, interfaces, or definitions from other modules are resolved. Resolution failure results in transaction rollback.
 
@@ -995,6 +1048,7 @@ They are comprised of:
 - [function](#defun) specifications (i.e. function signatures)
 - [constant](#defconst) values
 - [models](pact-properties.html)
+- [imports](#use)
 
 Interfaces represent an abstract api that a [module](#module) may implement by issuing an `implements` statement within the module declaration. Interfaces may import definitions from other modules by issuing a [use](#use) declaration, which may be used to construct new constant definitions, or make use of types defined in the imported module. Unlike Modules, Interface versioning is not supported. However, modules may implement multiple interfaces.
 
@@ -2625,6 +2679,46 @@ An optional list of IMPORTS consisting of function, constant, and schema names m
 (use accounts "ToV3sYFMghd7AN1TFKdWk_w00HjUepVlqKL79ckHG_s" [ transfer example-fun ])
 (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
 "Write succeeded"
+```
+
+### interface {#interface}
+```
+(interface NAME [DOR-OR-META] BODY...)
+```
+
+Define and install interface NAME, with optional DOC-OR-META.
+
+BODY is composed of definitions that will be scoped in the module. Valid expressions in a module include:
+
+- [defun](#defun)
+- [defconst](#defconst)
+- [defschema](#defschema)
+- [use](#use)
+- [models](#pact-properties.html)
+
+```lisp
+(interface coin-sig
+  "'coin-sig' represents the Kadena Coin Contract interface. This contract     \
+  \provides both the the general interface for a Kadena's token, supplying a   \
+  \transfer function, coinbase, account creation and balance query."
+  (defun create-account:string (account:string guard:guard)
+    @doc "Create an account for ACCOUNT, with GUARD controlling access to the  \
+    \account."
+    @model [ (property (not (= account ""))) ]
+    )
+  (defun transfer:string (sender:string receiver:string amount:decimal)
+    @doc "Transfer AMOUNT between accounts SENDER and RECEIVER on the same    \
+    \chain. This fails if either SENDER or RECEIVER does not exist.           \
+    \Create-on-transfer can be done using the 'transfer-and-create' function."
+    @model [ (property (> amount 0.0))
+             (property (not (= sender receiver)))
+           ]
+    )
+  (defun account-balance:decimal (account:string)
+    @doc "Check an account's balance"
+    @model [ (property (not (= account ""))) ]
+    )
+)
 ```
 
 ### module {#module}
