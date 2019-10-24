@@ -46,6 +46,7 @@ in {
   prettyprinter-convert-ansi-wl-pprint = whenGhcjs dontCheck super.prettyprinter-convert-ansi-wl-pprint;
   tdigest = whenGhcjs dontCheck super.tdigest;
   temporary = whenGhcjs dontCheck super.temporary;
+  text-short = whenGhcjs dontCheck super.text-short; # either hang or take a long time
   unix-time = whenGhcjs dontCheck super.unix-time;
   wai-app-static = whenGhcjs dontCheck super.wai-app-static;
   wai-extra = whenGhcjs dontCheck super.wai-extra;
