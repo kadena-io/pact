@@ -1,12 +1,29 @@
 3.3.0
 ---
 
+* Managed capabilities (see documentation)
+* Production Gas model v1
+* Added signing utilities
 * Add explicit import system. Users may now import function, constant and schema symbols
-* Enforces unique names across the board
+* Enforce unique names for in-module declarations
 * Typechecking interfaces now succeeds
-* Add new native `is-charset`. These natives provide support for testing string conformity with a given charset.
+* Previous block hashes added to public data
+* TTL + creation time added to public data
+* Added new natives:
+  * `is-charset`: provides support for testing string conformity with a given charset.
+  * `CHARSET_LATIN1`: built-in constant defining the latin1-charset
+  * `CHARSET_ASCII`: built-in constant defining the ascii-charset
+  * `test-capability` overload for granted capabilities
+  * `expect-failure` overload allowing users to match on substrings of errors
   Currently suppported charsets include: ASCII and ISO 8859-1 (latin1 supplement) character sets
 * Bug fix disallowing access to Capabilities via FQN
+* Steps with rollbacks now disallowed w/ cross-chain yields
+* Network-id requirement in payloads
+* Analysis:
+  * list and object length analysis
+  * `with-default-read` analysis bugs fixed
+  * Unbound column invariants
+  * vacuous property detection and report
 
 3.2.1
 ---

@@ -9,7 +9,11 @@ dataFile:
 keyPairs:
   [ public:
     secret:
+    caps:
+      [ optional managed capabilities
+      ]
   ]
+networkId:
 publicMeta:
   chainId:
   sender:

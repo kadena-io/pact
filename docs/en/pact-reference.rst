@@ -1136,9 +1136,13 @@ keys:
      codeFile: Transaction code file
      data: JSON transaction data
      dataFile: JSON transaction data file
-     keyPairs: list of key pairs for signing (use pact -g to generate): [
+     networkId: string identifier for a blockchain network
+     keyPairs: list of key pairs and capabilities for signing (use pact -g to generate): [
        public: base 16 public key
        secret: base 16 secret key
+       caps: [
+         optional managed capabilities
+         ]
        ]
      nonce: optional request nonce, will use current time if not provided
      from: entity name for addressing private messages
@@ -1155,9 +1159,13 @@ following keys:
      rollback: Boolean for rollingback a pact
      data: JSON transaction data
      dataFile: JSON transaction data file
+     networkId: string identifier for a blockchain network
      keyPairs: list of key pairs for signing (use pact -g to generate): [
        public: base 16 public key
        secret: base 16 secret key
+       caps: [
+         optional managed capabilities
+         ]
        ]
      nonce: optional request nonce, will use current time if not provided
      from: entity name for addressing private messages
@@ -1180,8 +1188,12 @@ keys:
      keyPairs: list of key pairs for signing (use pact -g to generate): [
        public: base 16 public key
        secret: base 16 secret key
+       caps: [
+         optional managed capabilities
+         ]
        ]
      nonce: optional request nonce, will use current time if not provided
+     networkId: string identifier for a blockchain network
      publicMeta:
        chainId: string chain id of the chain of execution
        sender: string denoting the sender of the transaction
@@ -1205,7 +1217,11 @@ following keys:
      keyPairs: list of key pairs for signing (use pact -g to generate): [
        public: string base 16 public key
        secret: string base 16 secret key
+       caps: [
+         optional managed capabilities
+         ]
        ]
+     networkId: string identifier for a blockchain network
      publicMeta:
        chainId: string chain id of the chain of execution
        sender: string denoting the sender of the transaction

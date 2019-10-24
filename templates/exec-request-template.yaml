@@ -4,6 +4,7 @@ code:
 codeFile:
 data:
 dataFile:
+networkId:
 publicMeta:
   chainId:
   sender:
@@ -14,6 +15,9 @@ publicMeta:
 keyPairs:
   [ public:
     secret:
+    caps:
+      [ optional managed capabilities
+      ]
   ]
 nonce:
 type: exec
