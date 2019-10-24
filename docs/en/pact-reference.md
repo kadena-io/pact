@@ -1046,6 +1046,7 @@ Namespaces are defined using [define-namespace](#define-namespace). Namespaces a
 - [pact](#defpact) special functions
 - [constant](#defconst) values
 - [models](pact-properties.html)
+- [capabilities](#caps)
 - [imports](#use)
 
 When a module is declared, all references to native functions, interfaces, or definitions from other modules are resolved. Resolution failure results in transaction rollback.
@@ -1063,7 +1064,10 @@ They are comprised of:
 
 - [function](#defun) specifications (i.e. function signatures)
 - [constant](#defconst) values
+- [schema](#defschema) definitions
+- [pact](#defpact) specifications
 - [models](pact-properties.html)
+- [capabilities](#caps) specifications
 - [imports](#use)
 
 Interfaces represent an abstract api that a [module](#module) may implement by issuing an `implements` statement within the module declaration. Interfaces may import definitions from other modules by issuing a [use](#use) declaration, which may be used to construct new constant definitions, or make use of types defined in the imported module. Unlike Modules, Interface versioning is not supported. However, modules may implement multiple interfaces.
@@ -2709,6 +2713,8 @@ BODY is composed of definitions that will be scoped in the module. Valid express
 - [defun](#defun)
 - [defconst](#defconst)
 - [defschema](#defschema)
+- [defpact](#defpact)
+- [defcap](#defcap)
 - [use](#use)
 - [models](#pact-properties.html)
 

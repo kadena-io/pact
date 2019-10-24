@@ -1309,6 +1309,7 @@ contracts. They are comprised of:
 -  `pact <#defpact>`__ special functions
 -  `constant <#defconst>`__ values
 -  `models <pact-properties.html>`__
+-  `capabilities <#caps>`__
 -  `imports <#use>`__
 
 When a module is declared, all references to native functions,
@@ -1342,7 +1343,10 @@ definitions for smart contracts. They are comprised of:
 
 -  `function <#defun>`__ specifications (i.e. function signatures)
 -  `constant <#defconst>`__ values
+-  `schema <#defschema>`__ definitions
+-  `pact <#defpact>`__ specifications
 -  `models <pact-properties.html>`__
+-  `capabilities <#caps>`__ specifications
 -  `imports <#use>`__
 
 Interfaces represent an abstract api that a `module <#module>`__ may
@@ -3480,6 +3484,8 @@ expressions in a module include:
 -  `defun <#defun>`__
 -  `defconst <#defconst>`__
 -  `defschema <#defschema>`__
+-  `defpact <#defpact>`__
+-  `defcap <#defcap>`__
 -  `use <#use>`__
 -  `models <#pact-properties.html>`__
 

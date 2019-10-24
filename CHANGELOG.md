@@ -4,6 +4,7 @@
 * Managed capabilities (see documentation)
 * Production Gas model v1
 * Added signing utilities
+* Interfaces now admit `defcap`, `defschema`, and `defpact` declarations
 * Add explicit import system. Users may now import function, constant and schema symbols
 * Enforce unique names for in-module declarations
 * Typechecking interfaces now succeeds
