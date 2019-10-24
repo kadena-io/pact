@@ -48,10 +48,10 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
  *&rarr;*&nbsp;`object:{public-chain-data}`
 
 
-Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
+Get transaction public metadata. Returns an object with 'chain-id', 'block-height', 'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields.
 ```lisp
 pact> (chain-data)
-{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"prev-block-hash": "","sender": ""}
+{"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0.0,"prev-block-hash": "","sender": ""}
 ```
 
 
@@ -799,7 +799,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 Compute difference between TIME1 and TIME2 in seconds.
 ```lisp
 pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
-23400
+23400.0
 ```
 
 
@@ -904,7 +904,7 @@ pact> (& 5 -7)
 Multiply X by Y.
 ```lisp
 pact> (* 0.5 10.0)
-5
+5.0
 pact> (* 3 5)
 15
 ```
@@ -962,7 +962,7 @@ pact> (- 3 2)
 Divide X by Y.
 ```lisp
 pact> (/ 10.0 2.0)
-5
+5.0
 pact> (/ 8 3)
 2
 ```
@@ -1272,7 +1272,7 @@ pact> (shift -255 -1)
 Square root of X.
 ```lisp
 pact> (sqrt 25)
-5
+5.0
 ```
 
 
@@ -1448,7 +1448,7 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
 
 
-Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' which designates a 'manager function` using the '@managed' meta tag. After install, CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request. The manager function is of type 'managed:object{c-type} requested:object{c-type} -> object{c-type}', where C-TYPE schema matches the parameter declaration of CAPABILITY, such that for '(defcap FOO (bar:string baz:integer) ...)', C-TYPE would be a schema '(bar:string, baz:integer)'. The manager function enforces that REQUESTED matches MANAGED, and produces a new managed capability parameter object to replace the previous managed one, if the desired logic allows it, otherwise it should fail. An example would be a 'one-shot' capability (ONE-SHOT fired:bool), installed with 'true', which upon request would enforce that the bool is still 'true' but replace it with 'false', so that the next request would fail. NOTE that signatures scoped to managed capability cause the capability to be automatically installed, and that the signature is only allowed to be checked once in the context of the installed capability, such that a subsequent install would fail (assuming the capability requires the associated signature).
+Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' in which a '@managed' tag designates a single parameter to be managed by a specified function. After install, CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request. The manager function is of type 'managed:<p> requested:<p> -> <p>', where '<p>' indicates the type of the managed parameter, such that for '(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)', the manager function would be '(defun FOO-mgr:integer (managed:integer requested:integer) ...)'. Any capability matching the 'static' (non-managed) parameters will cause this function to be invoked with the current managed value and that of the requested capability. The function should perform whatever logic, presumably linear, to validate the request, and return the new managed value representing the 'balance' of the request. NOTE that signatures scoped to a managed capability cause the capability to be automatically installed.
 ```lisp
 (install-capability (PAY "alice" "bob" 10.0))
 ```
@@ -1478,7 +1478,7 @@ Specifies and tests for existing grant of CAPABILITY, failing if not found in en
 *capability*&nbsp;` -> bool` *body*&nbsp;`[*]` *&rarr;*&nbsp;`<a>`
 
 
-Specifies and requests grant of _scoped_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap.
+Specifies and requests grant of _acquired_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap.
 ```lisp
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```
@@ -1720,11 +1720,15 @@ pact> (expect "Sanity prevails." 4 (+ 2 2))
 
 *doc*&nbsp;`string` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
+*doc*&nbsp;`string` *err*&nbsp;`string` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
 
 Evaluate EXP and succeed only if it throws an error.
 ```lisp
 pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 "Expect failure: success: Enforce fails on false"
+pact> (expect-failure "Enforce fails with message" "Expected error" (enforce false "Expected error"))
+"Expect failure: success: Enforce fails with message"
 ```
 
 
@@ -1806,7 +1810,7 @@ Convenience function to build a keyset from keys present in message signatures, 
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
 
 
-Specify and request grant of CAPABILITY. Once granted, CAPABILITY and any composed capabilities are in scope for the rest of the transaction. Allows direct invocation of capabilities, which is not available in the blockchain environment.
+Acquire (if unmanaged) or install (if managed) CAPABILITY. CAPABILITY and any composed capabilities are in scope for the rest of the transaction.
 ```lisp
 (test-capability (MY-CAP))
 ```

@@ -117,12 +117,12 @@ defNative n fun ftype examples docs =
 -- | Specify a 'GasRNativeFun'
 defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defGasRNative name fun = defNative name (reduced fun)
-    where reduced f fi as = preGas fi as >>= \(g,as') -> f g fi as'
+    where reduced f fi as = gasUnreduced fi as (mapM reduce as) >>= \(g,as') -> f g fi as'
 
 -- | Specify a 'RNativeFun'
 defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defRNative name fun = defNative name (reduced fun)
-    where reduced f fi as = preGas fi as >>= \(g,as') -> (g,) <$> f fi as'
+    where reduced f fi as = gasUnreduced fi as (mapM reduce as) >>= \(g,as') -> (g,) <$> f fi as'
 
 
 defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
@@ -166,7 +166,7 @@ findCallingModule =
 getCallingModule :: HasInfo i => i -> Eval e (Module (Def Ref))
 getCallingModule i = maybe resolveErr ((=<<) isModule . getModule i) =<< findCallingModule
   where
-    resolveErr = evalError' i $
+    resolveErr = evalError' i
       "Unable to resolve current calling module"
 
     isModule md = case _mdModule md of
@@ -301,8 +301,8 @@ argsToParams i = mapM $ \arg -> case toPactValue arg of
 -- byproducts.
 appToCap
   :: App (Term Ref)
-  -> Eval e (Capability, Def Ref, ([Term Name], FunType (Term Name)))
+  -> Eval e (UserCapability, Def Ref, ([Term Name], FunType (Term Name)))
 appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
   prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-  cap <- UserCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
+  cap <- SigCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
   return (cap,d,prep)

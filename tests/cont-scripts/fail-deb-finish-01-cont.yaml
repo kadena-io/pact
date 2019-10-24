@@ -1,6 +1,6 @@
 # Debtor (Alice) cannot finish alone
 type: "cont"
-pactTxHash: "9UrJZjG4Jn-U3oJRPsuDHtARsqOCi6Fr7SZMor7I2O0"
+pactTxHash: "L2N2SgjdQAHNEu6WY82VAa4LyxmqfrAuaR6sB41DUMQ"
 step: 1
 rollback: False
 keyPairs:

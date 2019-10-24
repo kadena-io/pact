@@ -224,10 +224,15 @@ commit = lift pCommit
 {-# INLINE exp #-}
 exp :: String -> Prism' (Exp Info) a -> ExpParse s (a,Exp Info)
 exp ty prism = do
+  t <- current
   let test i = case firstOf prism i of
         Just a -> Just (a,i)
         Nothing -> Nothing
-  r <- lift $! pTokenEpsilon test (S.fromList [strErr $ "Expected: " ++ ty])
+      errs = S.fromList [
+        strErr $ "Expected: " ++ ty,
+        Tokens (fromList [t])
+        ]
+  r <- lift $! pTokenEpsilon test errs
   psCurrent .= snd r
   return r
 

@@ -17,7 +17,7 @@
 --
 
 module Pact.Types.Runtime
- ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
+ ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwEitherText,throwErr,
    PactId(..),
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
@@ -76,7 +76,7 @@ import Pact.Types.Util
 -- 1. Whether a namespace can be created.
 -- 2. Whether the default namespace can be used.
 data NamespacePolicy =
-  SimpleNamespacePolicy (Maybe Namespace -> Bool)
+  SimpleNamespacePolicy (Maybe (Namespace (Term Name)) -> Bool)
   -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
   |
   SmartNamespacePolicy Bool QualifiedName
@@ -124,7 +124,7 @@ data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
-    , _eeMsgSigs :: !(M.Map PublicKey (S.Set Capability))
+    , _eeMsgSigs :: !(M.Map PublicKey (S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode
@@ -163,7 +163,7 @@ data RefState = RefState {
       -- | Modules that were loaded, and flag if updated.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
-    , _rsNamespace :: Maybe Namespace
+    , _rsNamespace :: Maybe (Namespace (Term Name))
     } deriving (Eq,Show,Generic)
 makeLenses ''RefState
 instance NFData RefState
@@ -310,6 +310,9 @@ throwDbError = throwM . PactError DbError def def
 -- | Throw an error coming from an Except/Either context.
 throwEither :: (MonadThrow m,Exception e) => Either e a -> m a
 throwEither = either throwM return
+
+throwEitherText :: PactErrorType -> Info -> Doc -> Either Text a -> Eval e a
+throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) return
 
 
 argsError :: FunApp -> [Term Name] -> Eval e a

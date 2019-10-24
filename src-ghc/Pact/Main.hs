@@ -57,17 +57,23 @@ data Option =
   | OGenKey
   | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
   | ORepl
-  | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
+  | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool, _oReqUnsigned :: Bool }
   | OServer { _oConfigYaml :: FilePath }
+  | OSignReq { _oReqYaml :: FilePath }
+  | OAddSigsReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
 replOpts =
-    O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version") <|>
-    O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins") <|>
-    O.flag' OGenKey (O.short 'g' <> O.long "genkey" <> O.help "Generate ED25519 keypair") <|>
+    O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version")
+    <|>
+    O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins")
+    <|>
+    O.flag' OGenKey (O.short 'g' <> O.long "genkey" <> O.help "Generate ED25519 keypair")
+    <|>
     (OServer <$> O.strOption (O.short 's' <> O.long "serve" <> O.metavar "config" <>
-                              O.help "Launch REST API server with config file")) <|>
+                              O.help "Launch REST API server with config file")
+    ) <|>
     (OLoad
      <$> O.flag False True
          (O.short 'r' <> O.long "findscript" <>
@@ -75,11 +81,27 @@ replOpts =
      <*> O.flag False True
          (O.short 't' <> O.long "trace" <> O.help "Show trace output")
      <*> O.argument O.str
-        (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")) <|>
+        (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")
+    ) <|>
     (OApiReq <$> O.strOption (O.short 'a' <> O.long "apireq" <> O.metavar "REQ_YAML" <>
                              O.help "Format API request JSON using REQ_YAML file")
-      <*> O.flag False True (O.short 'l' <> O.long "local" <> O.help "Format for /local endpoint")) <|>
+      <*> localFlag
+      <*> pure False
+    ) <|>
+    (OApiReq <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
+                             O.help "Format unsigned API request JSON using REQ_YAML file")
+      <*> pure True <*> pure True
+    ) <|>
+    (OAddSigsReq <$> O.strOption (O.short 'd' <> O.long "addsigs" <> O.metavar "REQ_YAML" <>
+                             O.help "Add signature to command")
+      <*> localFlag
+    ) <|>
+    (OSignReq <$> O.strOption (O.short 'w' <> O.long "sign" <> O.metavar "REQ_YAML" <>
+                             O.help "Sign hash")
+    ) <|>
     pure ORepl -- would be nice to bail on unrecognized args here
+  where
+    localFlag = O.flag False True (O.short 'l' <> O.long "local" <> O.help "Format for /local endpoint")
 
 argParser :: O.ParserInfo Option
 argParser = O.info (O.helper <*> replOpts)
@@ -108,7 +130,9 @@ main = do
         | otherwise -> execScript dolog fp >>= exitLoad
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
-    OApiReq cf l -> apiReq cf l
+    OApiReq cf l y -> apiReq' cf l y
+    OSignReq y -> signReq y
+    OAddSigsReq y l -> addSigsReq y l
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS

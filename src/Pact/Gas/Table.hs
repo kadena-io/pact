@@ -7,7 +7,9 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Pact.Types.Continuation
 import Pact.Types.Gas
+import Pact.Types.SizeOf
 import Pact.Types.Term
 
 -- NB: If pact ends up not having any variadic primitives (currently, I didn't spot any thus far, but also the types don't rule it out)
@@ -23,12 +25,14 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_selectColumnCost :: Gas -- up-front cost per column in a select operation
   , _gasCostConfig_readColumnCost :: Gas -- cost per column to read a row
   , _gasCostConfig_sortFactor :: Gas
+  , _gasCostConfig_concatenationFactor :: Gas
   , _gasCostConfig_moduleCost :: Gas
   , _gasCostConfig_moduleMemberCost :: Gas
   , _gasCostConfig_useModuleCost :: Gas
   , _gasCostConfig_interfaceCost :: Gas
-  , _gasCostConfig_writeCost :: Gas
+  , _gasCostConfig_writeBytesCost :: Gas -- cost per bytes to write to database
   , _gasCostConfig_functionApplicationCost :: Gas
+  , _gasCostConfig_defPactCost :: Gas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -37,12 +41,14 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_selectColumnCost = 1
   , _gasCostConfig_readColumnCost = 1
   , _gasCostConfig_sortFactor = 1
-  , _gasCostConfig_moduleCost = 1
+  , _gasCostConfig_concatenationFactor = 1  -- TODO benchmark
+  , _gasCostConfig_moduleCost = 1        -- TODO benchmark
   , _gasCostConfig_moduleMemberCost = 1
-  , _gasCostConfig_useModuleCost = 1
-  , _gasCostConfig_interfaceCost = 1
-  , _gasCostConfig_writeCost = 1
+  , _gasCostConfig_useModuleCost = 1     -- TODO benchmark
+  , _gasCostConfig_interfaceCost = 1     -- TODO benchmark
+  , _gasCostConfig_writeBytesCost = 1
   , _gasCostConfig_functionApplicationCost = 1
+  , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   }
 
 defaultGasTable :: Map Text ([Term Ref] -> Gas)
@@ -182,26 +188,62 @@ defaultGasTable =
 tableGasModel :: GasCostConfig -> GasModel
 tableGasModel gasConfig =
   let run name ga = case ga of
+        GSelect mColumns -> case mColumns of
+          Nothing -> 1
+          Just [] -> 1
+          Just cs -> _gasCostConfig_selectColumnCost gasConfig * (fromIntegral (length cs))
+        GSortFieldLookup n ->
+          fromIntegral n * _gasCostConfig_sortFactor gasConfig
+        GConcatenation i j ->
+          fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
+        GUnreduced ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
+          Just g -> g ts
+          Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
         GPostRead r -> case r of
           ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
           ReadTxId -> _gasCostConfig_readColumnCost gasConfig
-        GSelect mColumns _expression _tableTerm -> _gasCostConfig_selectColumnCost gasConfig * case mColumns of
-          Nothing -> 1 -- not sure what to do here
-          Just cs -> fromIntegral (length cs)
-        GSortFieldLookup n -> fromIntegral n * _gasCostConfig_sortFactor gasConfig
-        GUnreduced ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
-          Just g -> g ts
-          Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
-        GWrite _writeType _tableTerm _objectTerm -> _gasCostConfig_writeCost gasConfig
-        GUse _moduleName _mHash -> _gasCostConfig_useModuleCost gasConfig
-          -- The above seems somewhat suspect (perhaps cost should scale with the module?)
-        GModuleDecl _module -> _gasCostConfig_moduleCost gasConfig
-        GInterfaceDecl _module -> _gasCostConfig_interfaceCost gasConfig
+          ReadModule _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig
+          ReadInterface _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig
+          ReadNamespace _ns ->  _gasCostConfig_readColumnCost gasConfig
+          ReadKeySet _ksName _ks ->  _gasCostConfig_readColumnCost gasConfig
+          ReadYield (Yield _obj _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
+        GWrite w -> case w of
+          WriteData _type key obj ->
+            (memoryCost key (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost obj (_gasCostConfig_writeBytesCost gasConfig))
+          WriteTable tableName -> (memoryCost tableName (_gasCostConfig_writeBytesCost gasConfig))
+          WriteModule _modName _mCode ->
+            (memoryCost _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost _mCode (_gasCostConfig_writeBytesCost gasConfig))
+          WriteInterface _modName _mCode ->
+            (memoryCost _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost _mCode (_gasCostConfig_writeBytesCost gasConfig))
+          WriteNamespace ns -> (memoryCost ns (_gasCostConfig_writeBytesCost gasConfig))
+          WriteKeySet ksName ks ->
+            (memoryCost ksName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost ks (_gasCostConfig_writeBytesCost gasConfig))
+          WriteYield obj -> (memoryCost obj (_gasCostConfig_writeBytesCost gasConfig))
         GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
-        GUserApp -> _gasCostConfig_functionApplicationCost gasConfig
+        GModuleDecl _moduleName _mCode -> (_gasCostConfig_moduleCost gasConfig)
+        GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
+          -- The above seems somewhat suspect (perhaps cost should scale with the module?)
+        GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
+        GUserApp t -> case t of
+          Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
+          _ -> _gasCostConfig_functionApplicationCost gasConfig
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
       , runGasModel = run
       }
+
+
+perByteFactor :: Float
+perByteFactor = 1.0
+
+memoryCost :: (SizeOf a) => a -> Gas -> Gas
+memoryCost val (Gas cost) = Gas totalCost
+  where costFrac = realToFrac cost
+        sizeFrac = realToFrac (sizeOf val)
+        totalCost = ceiling (perByteFactor * sizeFrac * costFrac)

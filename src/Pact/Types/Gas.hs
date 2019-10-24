@@ -18,6 +18,7 @@ module Pact.Types.Gas
   , GasPrice(..)
   , GasEnv(..)
   , ReadValue(..)
+  , WriteValue(..)
   , GasModel(..)
   , GasArgs(..)
   , GasLimit(..)
@@ -37,6 +38,7 @@ import Data.Serialize
 
 import GHC.Generics
 
+import Pact.Types.Continuation
 import Pact.Types.Info
 import Pact.Types.Persistence
 import Pact.Types.Pretty
@@ -53,12 +55,9 @@ parseGT0 v = parseJSON v >>= \a ->
 
 -- | API Price value, basically a newtype over `Decimal`
 newtype GasPrice = GasPrice ParsedDecimal
-  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Serialize,Generic,ToTerm,ToJSON)
+  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Serialize,Generic,ToTerm,ToJSON,Pretty)
 instance Show GasPrice where
   show (GasPrice (ParsedDecimal d)) = show d
-
-instance Pretty GasPrice where
-  pretty (GasPrice p) = viaShow p
 
 instance FromJSON GasPrice where
   parseJSON = fmap GasPrice . parseGT0
@@ -71,27 +70,52 @@ data ReadValue
   = ReadData (ObjectMap PactValue)
   | ReadKey RowKey
   | ReadTxId
+  | ReadModule ModuleName Code
+  | ReadInterface ModuleName Code
+  | ReadNamespace (Namespace PactValue)
+  | ReadKeySet KeySetName KeySet
+  | ReadYield Yield
+
+
+data WriteValue
+  = WriteData WriteType Text (ObjectMap PactValue)
+  | WriteTable Text
+  | WriteModule ModuleName Code
+  | WriteInterface ModuleName Code
+  | WriteNamespace (Namespace PactValue)
+  | WriteKeySet KeySetName KeySet
+  | WriteYield Yield
+
 
 data GasArgs
-  = GPostRead ReadValue
-  | GSelect (Maybe [(Info,FieldKey)]) (Term Ref) (Term Name)
+  = GSelect (Maybe [(Info,FieldKey)])
+  -- ^ Cost of selecting columns from a user table
   | GSortFieldLookup Int
+  -- ^ Cost of sorting by lookup fields
+  | GConcatenation Int Int
+  -- ^ Cost of concatenating two strings, lists, and objects
   | GUnreduced [Term Ref]
-  | GWrite WriteType (Term Name) (Term Name)
-  | GUse ModuleName (Maybe ModuleHash)
-  | GModuleDecl (Module (Term Name))
-  | GInterfaceDecl Interface
+  -- ^ Cost of using a native function
+  | GPostRead ReadValue
+  -- ^ Cost for reading from database
+  | GWrite WriteValue
+  -- ^ Cost of writing to the database
   | GModuleMember (ModuleDef (Term Name))
-  | GUserApp
+  -- ^ TODO documentation
+  | GModuleDecl ModuleName Code
+  -- ^ Cost of creating a module
+  | GUse ModuleName (Maybe ModuleHash)
+  -- ^ Cost of using a (potentially blessed) module
+  | GInterfaceDecl ModuleName Code
+  -- ^ Cost of creating an interface
+  | GUserApp DefType
+  -- ^ Cost of using a function, capability, or defpact
 
 newtype GasLimit = GasLimit ParsedInteger
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
 
 instance Show GasLimit where
   show (GasLimit (ParsedInteger i)) = show i
-
-instance Pretty GasLimit where
-  pretty (GasLimit g) = viaShow g
 
 instance FromJSON GasLimit where
   parseJSON = fmap GasLimit . parseGT0

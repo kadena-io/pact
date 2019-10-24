@@ -7,10 +7,23 @@ let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
            url = "http://hackage.haskell.org/package/${pkgver}/${pkgver}.tar.gz";
            inherit sha256;
          }) {};
+    servantSrc = pkgs.fetchFromGitHub {
+      owner = "haskell-servant";
+      repo = "servant";
+      rev = "226154218b9bf9f40df02363f88b746bc4e065b3";
+      sha256 = "1msi9367wh2qsqxgv1bdz0qdp80lfc06acg60znicdjza9n88lzk";
+    };
 in {
   pact = doCoverage (addBuildDepend super.pact pkgs.z3);
 
   Glob = whenGhcjs dontCheck super.Glob;
+
+  aeson = dontCheck (callHackageDirect {
+    pkg = "aeson";
+    ver = "1.4.5.0";
+    sha256 = "0imcy5kkgrdrdv7zkhkjvwpdp4sms5jba708xsap1vl9c2s63n5a";
+  });
+
   algebraic-graphs = whenGhcjs dontCheck super.algebraic-graphs;
   base-compat-batteries = whenGhcjs dontCheck super.base-compat-batteries;
   bound = whenGhcjs dontCheck super.bound;
@@ -28,19 +41,34 @@ in {
   network-byte-order = whenGhcjs dontCheck super.network-byte-order;
   prettyprinter-ansi-terminal = whenGhcjs dontCheck super.prettyprinter-ansi-terminal;
   prettyprinter-convert-ansi-wl-pprint = whenGhcjs dontCheck super.prettyprinter-convert-ansi-wl-pprint;
-  servant = whenGhcjs dontCheck super.servant;
-  servant-client = whenGhcjs dontCheck super.servant-client;
-  servant-server = whenGhcjs dontCheck super.servant-server;
   tdigest = whenGhcjs dontCheck super.tdigest;
   temporary = whenGhcjs dontCheck super.temporary;
   unix-time = whenGhcjs dontCheck super.unix-time;
   wai-app-static = whenGhcjs dontCheck super.wai-app-static;
   wai-extra = whenGhcjs dontCheck super.wai-extra;
 
+  base-orphans = dontCheck (callHackageDirect {
+    pkg = "base-orphans";
+    ver = "0.8.1";
+    sha256 = "1jg06ykz8fsk1vlwih4vjw3kpcysp8nfsv7qjm42y2gfyzn6jvsk";
+  });
+
+  dec = dontCheck (callHackageDirect {
+    pkg = "dec";
+    ver = "0.0.3";
+    sha256 = "11b8g4nm421pr09yfb4zp18yb7sq4wah598fi3p5fb64yy4c2n4s";
+  });
+
   hedgehog = dontCheck (callHackageDirect {
     pkg = "hedgehog";
     ver = "1.0.1";
     sha256 = "0h9qwd4gw5n8j8is9kn9mll32c8v6z1dv9mp4fmkmz7k5zi4asjq";
+  });
+
+  http-api-data = dontCheck (callHackageDirect {
+    pkg = "http-api-data";
+    ver = "0.4.1";
+    sha256 = "0wqji0raiq3snh7yifmv754sg5zjvw2gisgz1d3d0ljib2sw4jiq";
   });
 
   insert-ordered-containers = dontCheck (callHackageDirect {
@@ -55,16 +83,27 @@ in {
     sha256 = "1wizfz8vdplz3sf81vh33sny6p8ynhlpvjxqjpsym7ssb186h0f1";
   });
 
-  servant-swagger = dontCheck (callHackageDirect {
-    pkg = "servant-swagger";
-    ver = "1.1.7.1";
-    sha256 = "1ymdcmdi234p9jbwa7rgj1j35n9xnx4kgfjba4gs2r8cnhqwak28";
-  });
-
   sbv = dontCheck (callHackageDirect {
     pkg = "sbv";
     ver = "8.2";
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
+  });
+
+  singleton-bool = dontCheck (callHackageDirect {
+    pkg = "singleton-bool";
+    ver = "0.1.5";
+    sha256 = "1kjn5wgwgxdw2xk32d645v3ss2a70v3bzrihjdr2wbj2l4ydcah1";
+  });
+
+  servant = dontCheck (self.callCabal2nix "servant" "${servantSrc}/servant" {});
+  servant-client = dontCheck (self.callCabal2nix "servant-client" "${servantSrc}/servant-client" {});
+  servant-client-core = dontCheck (self.callCabal2nix "servant-client-core" "${servantSrc}/servant-client-core" {});
+  servant-server = dontCheck (self.callCabal2nix "servant-server" "${servantSrc}/servant-server" {});
+
+  servant-swagger = dontCheck (callHackageDirect {
+    pkg = "servant-swagger";
+    ver = "1.1.7.1";
+    sha256 = "1ymdcmdi234p9jbwa7rgj1j35n9xnx4kgfjba4gs2r8cnhqwak28";
   });
 
   swagger2 = dontCheck (callHackageDirect {
@@ -87,9 +126,21 @@ in {
     sha256 = "09fcf896bs6i71qhj5w6qbwllkv3gywnn5wfsdrcm0w1y6h8i88f";
   }) {});
 
+  time-compat = dontCheck (callHackageDirect {
+    pkg = "time-compat";
+    ver = "1.9.2.2";
+    sha256 = "11kdcw1g8m9hl6ps9i8hqrcpgidmv0r19sbxcwm1qrp9wf0bfq1y";
+  });
+
   trifecta = dontCheck (callHackageDirect {
     pkg = "trifecta";
     ver = "2.1";
     sha256 = "0hbv8q12rgg4ni679fbx7ac3blzqxj06dw1fyr6ipc8kjpypb049";
+  });
+
+  unordered-containers = dontCheck (callHackageDirect {
+    pkg = "unordered-containers";
+    ver = "0.2.10.0";
+    sha256 = "16xpq9qb1ipl0mb86rlb3bx29xvgcwirpm2ds0ynxjh0ylwzavkk";
   });
 }

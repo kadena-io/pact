@@ -9,7 +9,7 @@ module Pact.GasModel.Utils
 
   , sizes
   , sizesExpr
-  
+
   , intLists
   , intListsExpr
 
@@ -22,7 +22,7 @@ module Pact.GasModel.Utils
 
   , strings
   , escapedStringsExpr
-  
+
   , PactExpression(..)
   , defPactExpression
   , createPactExpr
@@ -31,11 +31,11 @@ module Pact.GasModel.Utils
   , intToStr
   , escapeText
   , toPactKeyset
-  
+
   , acctModuleName
   , acctModuleNameText
   , accountsModule
-  
+
   , acctRow
 
   , sampleLoadedKeysetName
@@ -71,7 +71,7 @@ import qualified Data.List.NonEmpty as NEL
 
 
 import Pact.Compile (compileExps, mkTextInfo)
-import Pact.Types.Capability (Capability)
+import Pact.Types.Capability (SigCapability)
 import Pact.Types.Command
 import Pact.Types.Lang
 import Pact.Types.PactValue (toPactValueLenient, PactValue(..))
@@ -191,7 +191,7 @@ strings = NEL.map format sizes
   where
     toString i = T.replicate (fromIntegral i) "a"
     format (desc, i) = (desc, toString i)
-                        
+
 
 -- example: "\"aaaaa\""
 escapedStringsExpr :: NEL.NonEmpty PactExpression
@@ -286,11 +286,11 @@ accountsModule moduleName = [text|
          true)
 
        (defcap MANAGEDCAP (s t)
-         @managed managed-cap-fun
+         @managed s managed-cap-fun
          true)
 
        (defun managed-cap-fun (s t)
-         true)
+         s)
 
        (defschema account
          balance:decimal
@@ -307,7 +307,7 @@ accountsModule moduleName = [text|
        )
 
        (deftable accounts:{account})
-       
+
        ; table for testing `create-table`
        (deftable accounts-for-testing-table-creation:{account})
      ) |]
@@ -323,7 +323,7 @@ sampleLoadedKeysetName = "some-loaded-keyset"
 samplePubKeys :: [PublicKey]
 samplePubKeys = [PublicKey "something"]
 
-samplePubKeysWithCaps :: [(PublicKey, S.Set Capability)]
+samplePubKeysWithCaps :: [(PublicKey, S.Set SigCapability)]
 samplePubKeysWithCaps = map (\p -> (p,S.empty)) samplePubKeys
 
 sampleKeyset :: KeySet
@@ -332,7 +332,7 @@ sampleKeyset = KeySet samplePubKeys (Name $ BareName "keys-all" def)
 sampleNamespaceName :: T.Text
 sampleNamespaceName = "my-namespace"
 
-sampleNamespace :: Namespace
+sampleNamespace :: Namespace PactValue
 sampleNamespace = Namespace
                   (NamespaceName sampleNamespaceName)
                   (GKeySet sampleKeyset)
@@ -360,10 +360,10 @@ someModuleData = ModuleData modDef refMap
         fst' = const Nothing
         scd' :: Term Ref
         scd' = TVar ref def
-        
+
         scopeOfRef :: Scope Int Term Ref
         scopeOfRef = abstract fst' scd'
-        
+
         defOfRef = Def (DefName "") someModuleName Defun (FunType [] TyAny) scopeOfRef def def def
         modDef = MDModule mod'
         gov = Governance $ Right defOfRef

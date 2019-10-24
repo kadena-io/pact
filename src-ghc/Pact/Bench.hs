@@ -1,12 +1,14 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 module Pact.Bench where
 
 import Control.Arrow
 import Control.Concurrent
 import Control.DeepSeq
-import Control.Exception
+import Control.Error
+import Control.Monad.Catch
 import Control.Monad
 
 import Criterion.Main
@@ -18,6 +20,7 @@ import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Text (unpack, pack)
+import Data.Text.Encoding
 
 import System.Directory
 import Unsafe.Coerce
@@ -40,6 +43,7 @@ import Pact.Types.SPV
 import Pact.Native.Internal
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)
+import Pact.Types.Capability
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -71,8 +75,11 @@ benchVerify cs = bgroup "verify" $ (`map` cs) $
     bench bname $
       nf (verifyCommand :: Command ByteString -> ProcessedCommand () ParsedCode) c
 
-eitherDie :: Either String a -> IO a
-eitherDie = either (throwIO . userError) (return $!)
+die :: String -> String -> IO a
+die msg er = throwM $ userError $ msg ++ ": " ++ er
+
+eitherDie :: String -> Either String a -> IO a
+eitherDie msg = either (die msg) (return $!)
 
 entity :: Maybe EntityName
 entity = Just $ EntityName "entity"
@@ -82,35 +89,47 @@ loadBenchModule db = do
   m <- pack <$> readFile "tests/bench/bench.pact"
   pc <- parseCode m
   let md = MsgData
-           (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
+           (object
+            [ "keyset" .= object
+              [ "keys" .= ["benchadmin"::Text]
+              , "pred" .= (">"::Text)]
+            , "acct" .= [pk]
+            ])
            Nothing
            pactInitialHash
   let e = setupEvalEnv db entity Transactional md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  void $ evalExec [] def e pc
+  (r :: Either SomeException EvalResult) <- try $ evalExec [Signer Nothing pk Nothing []] defaultInterpreter e pc
+  void $ eitherDie "loadBenchModule (load)" $ fmapL show r
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
-  p <- either (throwIO . userError . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
+  p <- either (die "loadBenchModule" . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
   return (benchMod,p)
 
 
 parseCode :: Text -> IO ParsedCode
-parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
+parseCode m = ParsedCode m <$> eitherDie "parseCode" (parseExprs m)
 
 benchNFIO :: NFData a => String -> IO a -> Benchmark
 benchNFIO bname = bench bname . nfIO
 
-runPactExec :: Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
-runPactExec benchMod dbEnv pc = do
-  let e = setupEvalEnv dbEnv entity Transactional (initMsgData pactInitialHash)
+runPactExec :: String -> [Signer] -> Value -> Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
+runPactExec msg ss cdata benchMod dbEnv pc = do
+  let md = MsgData cdata Nothing pactInitialHash
+      e = setupEvalEnv dbEnv entity Transactional md
           initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
-      s = maybe def (initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
-  toJSON . _erOutput <$> evalExec [] s e pc
+      s = defaultInterpreterState $
+        maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
+  (r :: Either SomeException EvalResult) <- try $! evalExec ss s e pc
+  r' <- eitherDie ("runPactExec': " ++ msg) $ fmapL show r
+  return $! toJSON $ _erOutput r'
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name $ BareName ">" def)
 
 acctRow :: ObjectMap PactValue
-acctRow = ObjectMap $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
+acctRow = ObjectMap $ M.fromList
+  [("balance",PLiteral (LDecimal 100.0))
+  ,("guard",PGuard (GKeySet (KeySet [PublicKey $ encodeUtf8 pk] (Name $ BareName "keys-all" def))))]
 
 benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)
 benchRead _ KeySets _ = rc (Just benchKeySet)
@@ -137,31 +156,46 @@ mkBenchCmd kps (str, t) = do
     payload = Exec $ ExecMsg t Null
     ss = keyPairsToSigners kps
 
+pk :: Text
+pk = "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
 
 main :: IO ()
 main = do
-  !pub <- eitherDie $ parseB16TextOnly "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
-  !priv <- eitherDie $ parseB16TextOnly "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
-  !keyPair <- eitherDie $ importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS priv)
-  !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
+  !pub <- eitherDie "pub" $ parseB16TextOnly pk
+  !priv <- eitherDie "priv" $
+    parseB16TextOnly "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
+  !keyPair <- eitherDie "keyPair" $
+    importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS priv)
+  !parsedExps <- force <$> mapM (mapM (eitherDie "parseExps" . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
   initSchema pureDb
   (benchMod',benchMod) <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
-  print =<< runPactExec Nothing pureDb benchCmd
+  let
+    !params = [PLiteral $ LString "Acct1",PLiteral $ LString "Acct2", PLiteral $ LDecimal 1.0]
+    !mcaps = [SigCapability (QualifiedName "bench" "MTRANSFER" def) params
+             ,SigCapability (QualifiedName "bench" "TRANSFER" def) params]
+
+    !signer = [Signer Nothing pk Nothing []]
+    !msigner = [Signer Nothing pk Nothing mcaps]
+  void $ runPactExec "initPureDb" signer Null Nothing pureDb benchCmd
   !mockDb <- mkMockEnv def { mockRead = MockRead (benchRead benchMod) }
   void $ loadBenchModule mockDb
-  print =<< runPactExec Nothing mockDb benchCmd
+  void $ runPactExec "initMockDb" signer Null Nothing mockDb benchCmd
   !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue (benchReadValue benchMod) }
   void $ loadBenchModule mockPersistDb
-  print =<< runPactExec Nothing mockPersistDb benchCmd
+  void $ runPactExec "initMockPersistDb" signer Null Nothing mockPersistDb benchCmd
   cmds_ <- traverse (mkBenchCmd [(keyPair,[])]) exps
   !cmds <- return $!! cmds_
   let sqliteFile = "log/bench.sqlite"
   sqliteDb <- mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile []) neverLog
   initSchema sqliteDb
   void $ loadBenchModule sqliteDb
-  print =<< runPactExec Nothing sqliteDb benchCmd
+  void $ runPactExec "initSqliteDb" signer Null Nothing sqliteDb benchCmd
+  mbenchCmd <- parseCode "(bench.mbench)"
+  void $ runPactExec "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
+
+
 
   let cleanupSqlite = do
         c <- readMVar $ pdPactDbVar sqliteDb
@@ -173,12 +207,28 @@ main = do
     [ benchParse
     , benchCompile parsedExps
     , benchVerify cmds
-    , benchNFIO "puredb" (runPactExec Nothing pureDb benchCmd)
-    , benchNFIO "mockdb" (runPactExec Nothing mockDb benchCmd)
-    , benchNFIO "mockpersist" (runPactExec Nothing mockPersistDb benchCmd)
-    , benchNFIO "sqlite" (runPactExec Nothing sqliteDb benchCmd)
-    , benchNFIO "puredb-withmod" (runPactExec (Just benchMod') pureDb benchCmd)
-    , benchNFIO "mockdb-withmod" (runPactExec (Just benchMod') mockDb benchCmd)
-    , benchNFIO "mockpersist-withmod" (runPactExec (Just benchMod') mockPersistDb benchCmd)
-    , sqlEnv $ benchNFIO "sqlite-withmod" (runPactExec (Just benchMod') sqliteDb benchCmd)
+    , benchNFIO "puredb"
+      (runPactExec "puredb" signer Null Nothing pureDb benchCmd)
+    , benchNFIO "mockdb"
+      (runPactExec "mockdb" signer Null Nothing mockDb benchCmd)
+    , benchNFIO "mockpersist"
+      (runPactExec "mockpersist" signer Null Nothing mockPersistDb benchCmd)
+    , benchNFIO "sqlite"
+      (runPactExec "sqlite" signer Null Nothing sqliteDb benchCmd)
+    , benchNFIO "mockdb-withmod"
+      (runPactExec "mockdb-withmod" signer Null (Just benchMod') mockDb benchCmd)
+    , benchNFIO "mockpersist-withmod"
+      (runPactExec "mockpersist-withmod" signer Null (Just benchMod') mockPersistDb benchCmd)
+    , sqlEnv $ benchNFIO "sqlite-withmod"
+      (runPactExec "sqlite-withmod" signer Null (Just benchMod') sqliteDb benchCmd)
+      -- puredb transfer no caps
+    , benchNFIO "puredb-withmod"
+      (runPactExec "puredb-withmod" signer Null (Just benchMod') pureDb benchCmd)
+      -- puredb transfer caps
+    , benchNFIO "puredb-withmod-caps" $
+      runPactExec "puredb-withmod-bench-mcaps" msigner Null (Just benchMod') pureDb benchCmd
+      -- puredb mgd-transfer caps
+    , benchNFIO "puredb-withmod-caps-mbench" $
+      runPactExec "puredb-withmod-mbench" msigner Null (Just benchMod') pureDb mbenchCmd
+
     ]

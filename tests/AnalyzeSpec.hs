@@ -1914,6 +1914,8 @@ spec = describe "analyze" $ do
                 it "should have no keyset provenance" $ do
                   ksProvs `shouldBe` Map.empty
 
+              [] -> runIO $ HUnit.assertFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
+
               other -> runIO $ HUnit.assertFailure $ show other
 
   describe "cell-delta.integer" $ do
@@ -2488,18 +2490,32 @@ spec = describe "analyze" $ do
       Success'
 
   describe "schema-invariants.var-out-of-scope-regression" $ do
-    expectVerified
-      [text|
-        (defschema coin-schema
-          @model [(invariant (<= 0.0 balance))]
-          balance:decimal
-          guard:guard)
-        (deftable coin-table:{coin-schema})
+    describe "for reads" $ do
+      expectVerified
+        [text|
+          (defschema coin-schema
+            @model [(invariant (<= 0.0 balance))]
+            balance:decimal
+            guard:guard)
+          (deftable coin-table:{coin-schema})
 
-        (defun transfer:string ()
-          (with-read coin-table 'receiver { "guard" := g }
-            "we should support not binding a column with an invariant defined on it"))
-      |]
+          (defun transfer:string ()
+            (with-read coin-table 'receiver { "guard" := g }
+              "we should support not binding a column with an invariant defined on it"))
+        |]
+
+    describe "for writes" $ do
+      expectVerified
+        [text|
+          (defschema coin-schema
+            @model [(invariant (= 0.0 balance))]
+            balance:decimal
+            guard:guard)
+          (deftable coin-table:{coin-schema})
+
+          (defun test:string (account:string new-guard:guard)
+            (update coin-table account { "guard" : new-guard }))
+        |]
 
   describe "format-time / parse-time" $ do
     let code =
@@ -3055,6 +3071,21 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
+
+  describe "column-read" $ do
+    expectVerified $
+      [text|
+        (defschema sch a:integer b:integer)
+        (deftable tab:{sch})
+
+        (defun test:integer ()
+          @model [
+            (property (column-read tab 'a))
+            (property (not (column-read tab 'b)))
+          ]
+          (with-read tab "key" { "a" := a }
+            a))
+      |]
 
   describe "column quantification" $ do
     let code =

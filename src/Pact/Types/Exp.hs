@@ -55,6 +55,7 @@ import Data.String (IsString)
 
 import Pact.Types.Info
 import Pact.Types.Pretty
+import Pact.Types.SizeOf
 import Pact.Types.Type
 import Pact.Types.Codec
 
@@ -70,6 +71,13 @@ data Literal =
 instance Serialize Literal
 instance NFData Literal
 
+instance SizeOf Literal where
+  sizeOf (LString t) = (constructorCost 1) + (sizeOf t)
+  sizeOf (LInteger i) = (constructorCost 1) + (sizeOf i)
+  sizeOf (LDecimal d) = (constructorCost 1) + (sizeOf d)
+  sizeOf (LBool _) = (constructorCost 1) + 0
+  sizeOf (LTime ti) = (constructorCost 1) + (sizeOf ti)
+
 makePrisms ''Literal
 
 -- | ISO8601 Thyme format
@@ -80,10 +88,14 @@ formatLTime :: UTCTime -> Text
 formatLTime = pack . formatTime defaultTimeLocale simpleISO8601
 {-# INLINE formatLTime #-}
 
+-- | Pretty is supposed to match 1-1 with Pact representation
+-- for true literals, while time emits a 'simpleISO8601' string.
 instance Pretty Literal where
     pretty (LString s)   = dquotes $ pretty s
     pretty (LInteger i)  = pretty i
-    pretty (LDecimal r)  = viaShow r
+    pretty (LDecimal d@(Decimal e _))
+      | e == 0 = viaShow d <> ".0"
+      | otherwise = viaShow d
     pretty (LBool True)  = "true"
     pretty (LBool False) = "false"
     pretty (LTime t)     = dquotes $ pretty $ formatLTime t
