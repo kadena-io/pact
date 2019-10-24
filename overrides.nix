@@ -7,11 +7,13 @@ let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
            url = "http://hackage.haskell.org/package/${pkgver}/${pkgver}.tar.gz";
            inherit sha256;
          }) {};
+
+    # includes servant-jsaddle (needed for chainweaver)
     servantSrc = pkgs.fetchFromGitHub {
       owner = "haskell-servant";
       repo = "servant";
-      rev = "226154218b9bf9f40df02363f88b746bc4e065b3";
-      sha256 = "1msi9367wh2qsqxgv1bdz0qdp80lfc06acg60znicdjza9n88lzk";
+      rev = "925d50d7526a9b95918b7a2d49e57afa10985302";
+      sha256 = "0zzchj9pc9y50acvj8zbm94bgbvbxzxz2b0xd2zbck90bribwm5b";
     };
 in {
   pact = doCoverage (addBuildDepend super.pact pkgs.z3);
