@@ -1,0 +1,23 @@
+# Public chain continuation request template
+
+pactTxHash:
+step:
+rollback:
+proof:
+data:
+dataFile:
+keyPairs:
+  [ public:
+    secret:
+    caps: []
+  ]
+networkId:
+publicMeta:
+  chainId:
+  sender:
+  gasLimit:
+  gasPrice:
+  ttl:
+  creationTime:
+nonce:
+type: cont

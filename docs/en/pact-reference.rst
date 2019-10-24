@@ -74,7 +74,7 @@ following attribute(s):
 
    name: "sig"                     # Cryptographic signature of current
    type: string (base16)           # transaction.
-   required: true    
+   required: true
 
 Example command
 ^^^^^^^^^^^^^^^
@@ -137,7 +137,8 @@ Transaction nonce values. Needs to be unique for every call.
 
 *type:* **object** ``required``
 
-Platform-specific metadata.
+Platform-specific metadata. For chainweb platforms, see
+`public-meta <#public-meta-field>`__
 
 .. _cmd-signers:
 
@@ -163,10 +164,16 @@ current payload. This signer object has the following attributes:
 
 .. code:: yaml
 
-   name: "addr"                  # Address derived from public key.
+   name: "addr"                  # Address derived from public key, if needed from scheme.
+                                 # Only ETH scheme requires an address currently.
    type: string (base16)         # Must be valid address for specified `scheme`.
-   required: false               # Defaults to ED25519's address representation,
-                                 # which is the full public key.
+   required: false               # Defaults to null.
+
+.. code:: yaml
+
+   name: "caps"                  # List of capabilities to scope this signature.
+   type: list[string]            # Example: ["(accounts.PAY "alice" "bob" 10.0)"]
+   required: false               # Defaults to empty list.
 
 ``"payload"``
 '''''''''''''
@@ -176,6 +183,15 @@ current payload. This signer object has the following attributes:
 
 The ``cmd`` field supports two types of JSON payloads: the `exec
 payload <#exec-payload>`__ and the `cont payload <#cont-payload>`__.
+
+``"networkId"``
+'''''''''''''''
+
+*type:* **string** ``optional``
+
+Platform specific network ID, e.g. to distinguish between a testnet and
+production chain, or completely different chain (ie private chain ID, if
+supported). Platform may require this value.
 
 Example ``cmd`` field
 ^^^^^^^^^^^^^^^^^^^^^
@@ -191,9 +207,8 @@ Example ``cmd`` field
            }
          },
          "signers":[{
-           "addr":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca",
-           "scheme":"ED25519",
-           "pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca"
+           "pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca",
+           "caps": ["(accounts.PAY \"alice\" \"bob\" 20.0)"]
            }],
          "meta":{
            "gasLimit":1000,
@@ -201,9 +216,44 @@ Example ``cmd`` field
            "gasPrice":1.0e-2,
            "sender":"sender00"
            },
-         "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\""
+         "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\"",
+         "networkId": "testnet00"
        }
    }
+
+.. _public-meta-field:
+
+Public meta
+~~~~~~~~~~~
+
+*type:* **object** Information for Chainweb platforms.
+
+.. code:: yaml
+
+   name: "chainId"       # Numeric chain ID as string. Ex: "0", "1"
+   type: string
+   required: true
+
+   name: "sender"        # Coin account name for gas payer.
+   type: string
+   required: true
+
+   name: "gasLimit"      # Maximum allowed gas for tx.
+   type: integer         # Sender account must have balance (gasLimit * gasPrice).
+   required: true
+
+   name: "gasPrice"      # Gas unit price to be charged.
+   type: decimal         # Sender account must have balance (gasLimit * gasPrice).
+   required: true        # Price can be used to get tx priority; miners may reject
+                         # prices that are too low.
+
+   name: "ttl"           # Time-to-live in seconds, to be validated against 'creationTime'.
+   type: decimal         # Expired commands will not be processed.
+   required: true
+
+   name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
+   type: integer         # Platform will validate time as within some range of network time.
+   required: true
 
 .. _exec-payload:
 
@@ -312,8 +362,8 @@ following child attributes:
 .. code:: yaml
 
    name: "proof"                 # Must be `null` or Bytestring.
-   type: string (base64url)      # to the fact that the previous step has been
-   required: false               # confirmed and is recorded in the ledger.
+   type: string (base64url)      # Provide SPV proof that the previous step has been
+   required: false               # confirmed and recorded in the ledger.
                                  # The blockchain automatically verifies this
                                  # proof when it is supplied.
                                  # If doing cross-chain continuations, then
@@ -440,7 +490,7 @@ child attributes:
    children:
      name: "args"              # `args`: `defpact` arguments when it was
        type: [PactValue]       #         first invoked.
-       required: true      
+       required: true
      name: "def"               # `def`: Name of continuation ("pact").
        type: string
        required: true
@@ -1002,7 +1052,7 @@ Example request
 Response schema
 ^^^^^^^^^^^^^^^
 
-Returns a `Comamnd Result <#the-command-result-object>`__ object.
+Returns a `Command Result <#the-command-result-object>`__ object.
 
 .. _example-response-3:
 
@@ -1069,9 +1119,65 @@ Request YAML file format
 Request yaml files takes two forms. An *execution* Request yaml file
 describes the `exec <#exec-payload>`__ payload. Meanwhile, a
 *continuation* Request yaml file describes the `cont <#cont-payload>`__
-payload.
+payload. Private and public blockchains require different metadata, so
+each payload format may have different fields depending on the context.
 
-The execution Request yaml takes the following keys:
+.. _request-yaml-private-chain:
+
+Private Blockchain YAML Format
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The execution request yaml for a private blockchain takes the following
+keys:
+
+.. code:: yaml
+
+     code: Transaction code
+     codeFile: Transaction code file
+     data: JSON transaction data
+     dataFile: JSON transaction data file
+     networkId: string identifier for a blockchain network
+     keyPairs: list of key pairs and capabilities for signing (use pact -g to generate): [
+       public: base 16 public key
+       secret: base 16 secret key
+       caps: [
+         optional managed capabilities
+         ]
+       ]
+     nonce: optional request nonce, will use current time if not provided
+     from: entity name for addressing private messages
+     to: entity names for addressing private messages
+
+The continuation request yaml for a private blockchain takes the
+following keys:
+
+.. code:: yaml
+
+     type: "cont"
+     txId: Integer transaction id of pact
+     step: Integer next step of a pact
+     rollback: Boolean for rollingback a pact
+     data: JSON transaction data
+     dataFile: JSON transaction data file
+     networkId: string identifier for a blockchain network
+     keyPairs: list of key pairs for signing (use pact -g to generate): [
+       public: base 16 public key
+       secret: base 16 secret key
+       caps: [
+         optional managed capabilities
+         ]
+       ]
+     nonce: optional request nonce, will use current time if not provided
+     from: entity name for addressing private messages
+     to: entity names for addressing private messages
+
+.. _request-yaml-public-chain:
+
+Public Blockchain YAML Format
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The execution request yaml for a public blockchain takes the following
+keys:
 
 .. code:: yaml
 
@@ -1082,28 +1188,52 @@ The execution Request yaml takes the following keys:
      keyPairs: list of key pairs for signing (use pact -g to generate): [
        public: base 16 public key
        secret: base 16 secret key
+       caps: [
+         optional managed capabilities
+         ]
        ]
      nonce: optional request nonce, will use current time if not provided
-     from: entity name for addressing private messages
-     to: entity names for addressing private messages
+     networkId: string identifier for a blockchain network
+     publicMeta:
+       chainId: string chain id of the chain of execution
+       sender: string denoting the sender of the transaction
+       gasLimit: integer gas limit
+       gasPrice: decimal gas price
+       ttl: integer time-to-live value
+       creationTime: integer tx execution time after offset
+     type: exec
 
-The continuation Request yaml takes the following keys:
+The continuation request yaml for a public blockchain takes the
+following keys:
 
 .. code:: yaml
 
-     type: "cont"
-     txId: Integer transaction id of pact
-     step: Integer next step of a pact
-     rollback: Boolean for rollingback a pact
+     pactTxHash: integer transaction id of pact
+     step: integer next step of a pact
+     rollback: boolean for rollingback a pact
+     proof: string spv proof of continuation (optional, cross-chain only)
      data: JSON transaction data
      dataFile: JSON transaction data file
      keyPairs: list of key pairs for signing (use pact -g to generate): [
-       public: base 16 public key
-       secret: base 16 secret key
+       public: string base 16 public key
+       secret: string base 16 secret key
+       caps: [
+         optional managed capabilities
+         ]
        ]
+     networkId: string identifier for a blockchain network
+     publicMeta:
+       chainId: string chain id of the chain of execution
+       sender: string denoting the sender of the transaction
+       gasLimit: integer gas limit
+       gasPrice: decimal gas price
+       ttl: integer time-to-live value
+       creationTime: integer tx execution time after offset
      nonce: optional request nonce, will use current time if not provided
-     from: entity name for addressing private messages
-     to: entity names for addressing private messages
+     type: cont
+
+Note that the optional “proof” field only makes sense when using
+cross-chain continuations.
 
 Concepts
 ========
@@ -1179,6 +1309,8 @@ contracts. They are comprised of:
 -  `pact <#defpact>`__ special functions
 -  `constant <#defconst>`__ values
 -  `models <pact-properties.html>`__
+-  `capabilities <#caps>`__
+-  `imports <#use>`__
 
 When a module is declared, all references to native functions,
 interfaces, or definitions from other modules are resolved. Resolution
@@ -1206,12 +1338,16 @@ Module names must be unique within a namespace.
 Interface Declaration
 ^^^^^^^^^^^^^^^^^^^^^
 
-`Interfaces <#interface>`__ contain an API specification and data
+`Interfaces <#interfaces>`__ contain an API specification and data
 definitions for smart contracts. They are comprised of:
 
 -  `function <#defun>`__ specifications (i.e. function signatures)
 -  `constant <#defconst>`__ values
+-  `schema <#defschema>`__ definitions
+-  `pact <#defpact>`__ specifications
 -  `models <pact-properties.html>`__
+-  `capabilities <#caps>`__ specifications
+-  `imports <#use>`__
 
 Interfaces represent an abstract api that a `module <#module>`__ may
 implement by issuing an ``implements`` statement within the module
@@ -1702,119 +1838,214 @@ enhanced flexibility.
 Capabilities
 ~~~~~~~~~~~~
 
-The guards concept is powerful, but incomplete. In a given workflow, the
-*act of enforcing* a keyset or any guard is hard to encapsulate or
-reason about, and the result of enforcement – that is, the granting of
-some right – can only be expressed sequentially, by literally ensuring
-that the protected code “happens after” the enforcement. The granted
-right itself has no expression in the code beyond “we did stuff after
-enforcing some guard”.
+Capabilities are a new construct in Pact 3.0 that draws from capability
+theory to offer a system for managing runtime user rights in an
+explicit, literate, and principled fashion.
 
-With capabilities, Pact gains the ability to express such a granted
-right, or capability, directly in code, and use that capability to
-organize and govern code.
+Simply put, a *capability* is a “ticket” that when *acquired* allows the
+user to perform some sensitive task. If the user is unable to acquire
+the ticket, portions of the transaction that demand the ticket will
+fail.
 
-Let’s look at the classic ledger-oriented use case to illustrate. The
-normal workflow to allow debiting some account balance is to enforce a
-keyset stored in the account table:
+Using capabilities to protect code
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. code:: lisp
+Code can demand that a capability be “already granted”, that is, make no
+attempt to acquire the ticket, but fail if it was not acquired somewhere
+else. This is done with the construct ``require-capability``.
 
-   (defun debit (user amount)
-     (with-read accounts user { "keyset" := keyset, "balance" := balance }
-       (enforce-keyset keyset)
-       (update accounts user { "balance" := (- balance debit) }))
+Code can also directly attempt to acquire a capability, but only for a
+specific *scope*. This is done with the special form
+``with-capability``, which, like ``with-read``, scopes a body of code.
+Here, the ticket is granted while this body of code is executing, and is
+revoked when the body leaves execution.
+
+Expressing capabilities in code: ``defcap``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+We’ve described capabilities like a “ticket”, so let’s continue by
+adding some attributes to this ticket:
+
+-  It needs a general name, like “ALLOW_ENTRY”, to identify the
+   operation being protected.
+-  It needs *parameters*, so that a capability can be granted to a
+   specific entity (“user-id”), and/or for a particular amount (“amount”
+   some decimal, “active” flag).
+-  It needs a *predicate function* to perform whatever tests govern
+   whether to grant the ticket.
+
+Pact provides the ``defcap`` construct to do this.
+
+::
+
+   (defcap ALLOW_ENTRY (user-id:string)
+     "Govern entry operation."
+     (with-read table user-id
+       { "guard" := guard, "active" := active }
+       (enforce-guard guard)
+       (enforce active "Only active users allowed entry")))
+
+``ALLOW_ENTRY`` is the name or *domain* of the capability. ``user-id``
+is a *parameter*. Together, they form the *specification* of a
+capability. Thus, ``(ALLOW_ENTRY 'dave)`` and ``(ALLOW_ENTRY 'carol)``
+describe separate capailities. (Note that capability theory’s notion of
+*designation* is indicated here, which we’ll return to when we discuss
+capabilities and signatures).
+
+The body implements the predicate function. It accesses whatever data it
+needs to perform necessary tests to protect against improper granting of
+the ticket. The body can do more than that – it can import or *compose*
+additional capabilities, for instance – and it can even modify database
+state. This might be used to ensure a capability cannot be granted ever
+again after the first time it is acquired, for example.
+
+To acquire this capability, you would invoke ``with-capability``:
+
+::
+
+   (defun enter (user-name)
+     (with-capability (ALLOW_ENTRY user-name)
+       (do-entry user-name)            ;; call "protected" function
+       (update-entry-status user-name) ;; update database
+     )
+     (record-audit "ENTRY" user-name)  ;; some "unsafe" operation
    )
 
-Expressed as a capability, we could say that “the act of enforcing the
-user keyset allows you to update”, and importantly, we can declare
-exactly what code is controlled by this capability:
+To demand or *require* the capability, you would use
+``require-capability``:
 
-.. code:: lisp
+::
 
-   (defcap DEBIT (user)
-     "Capability to debit a user account balance, enforcing the keyset".
-     (with-read accounts user { "keyset" := keyset }
-       (enforce-keyset keyset)
-   ))
-
-   (defun debit (user amount)
-     (with-capability (DEBIT user)
-       (update accounts user { "balance" := (- balance debit) }))
+   (defun do-entry (user-name)
+     (require-capability (ALLOW_ENTRY user-name))
+     ...
    )
 
-What have we gained? We’ve given the act of checking the keyset a name,
-``DEBIT``, by defining the capability with ```defcap`` <#defcap>`__.
-We’ve also used ```with-capability`` <#with-capability>`__ to invoke the
-capability in a *scope*, within which we call ``update``.
+Requiring capabilities allow for “private” or “restricted” functions
+than cannot be called directly. Here we see that ``do-entry`` can only
+be called “privately”, by code inside the module somewhere. What’s more,
+it can only be called in an outer operation for this user in particular,
+“restricting” it to that user.
 
-Capabilities allow Pact to directly represent grants or rights, and
-offer some very useful features for controlling how code is executed.
-They come from the “capabilities” concept in computer science, which
-seeks to make ambient rights concrete or “reified”, instead of just
-being enforced ad-hoc. Capabilities are often contrasted with “access
-control lists” in UNIX, where a list of users is maintained to allow
-access to, say, the contents of some directory. By explicitly handing
-some process a data object representing their right to access some
-resource, we have more control over that right, including the ability to
-revoke it in real time.
+Composing capabilities
+^^^^^^^^^^^^^^^^^^^^^^
 
-In Pact, the concept gets narrowed to simply allow for a right to be
-granted over the body of some code, but it is still surprisingly useful
-for a number of goals.
+A ``defcap`` can “import” other capabilities, for modular factoring of
+guard code, or to “compose” the outer capability from “smaller”, “inner”
+capabilities.
+
+::
+
+   (defcap ALLOW_ENTRY (user-id:string)
+     "Govern entry operation."
+     (with-read table user-id
+       { "guard" := guard, "active" := active }
+       (enforce-guard guard)
+       (enforce active "Only active users allowed entry")
+       (compose-capability DB_LOG) ;; allow db logging while ALLOW_ENTRY is in scope
+       ))
+
+Composed capabilities are only in scope when their “parent” capability
+is granted.
+
+Signature capabilities
+~~~~~~~~~~~~~~~~~~~~~~
+
+In Pact transaction messages, each signer can “scope” their signature to
+one or more capabilities. This restricts keyset guard operations on that
+signature: keysets demanding the scoped signature will only succeed
+while the ticket is held, or is in the process of being acquired –
+keysets are often checked in order to grant a capability.
+
+This “scoping” allows the signer to safely call untrusted code. For
+instance, in the Chainweb gas system, the “sender” signs the message to
+fund whatever gas costs are charged for the transaction. By signing the
+message, the sender has potentially allowed any code to debit from their
+account!
+
+With that sender’s signature has ``(GAS)`` added to it, it is scoped
+within gas payments in the coin contract only. Third-party code is
+prohibited from accessing that account during the transaction.
+
+Signatures and Managed Capabilities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Signature capabilities are also a mechanism to *install* capabilities,
+but only if that capability is *managed*. “Vanilla” capabilities are
+just tickets to show before you try some protected operation, but
+*managed* capabilities are able to *change the state* of a capability as
+it is brought into and out of scope. The ticket metaphor breaks down
+here, as this is now a dynamic object that mediates whether capabilities
+are acquired.
+
+If a signer attaches a managed capability to their signature list, the
+capability is “installed”, which is not the same as “granted” or
+“acquired”: if the capability’s predicate function allows this signer to
+install the capability, the installed version will then govern any code
+needing the capability to unlock some protected operation, by means of a
+*manager function*.
+
+Capability management with a manager function
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A managed capability allows for safe interoperation with otherwise
+untrusted code. By signing with a managed capability, you are *allowing*
+some untrusted code to *request* grant of the capability; if the
+capability was not in the signature list, the untrusted code cannot
+request it.
+
+If the capability *manager function* doesn’t grant the request, the
+untrusted code fails to execute. The common usage of this is to grant a
+payment to third-party code, such that the third-party code can directly
+transfer on behalf of the user some amount of coin, but only up to the
+indicated amount.
+
+The TRANSFER managed capability
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+::
+
+   (defcap TRANSFER (sender:string receiver:string amount:decimal)
+     @managed amount TRANSFER_mgr
+     (compose-capability (DEBIT sender))
+     (compose-capability (CREDIT receiver)))
+
+   (defun TRANSFER_mgr:decimal (managed:decimal requested:decimal)
+     (enforce (>= managed requested) "Transfer quantity exhausted")
+     (- managed requested) ;; update managed quantity for next time
+   )
+
+``TRANSFER`` allows for ``sender`` to approve any number of payments to
+``receiver`` up to some ``amount``. Once the amount is exceeded, the
+capability can no longer be brought into scope.
+
+This allows third-party code to directly enact payments. Managed
+capabilities are an important feature to allow smart contracts to
+directly call some other trusted code in a tightly-constrained context.
 
 Guards vs Capabilities
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Guards and capabilities can be confusing: given we have guards and
-things like keysets, what do we need the capability concept for?
+Guards and capabilities can be confusing: given we have guards like
+keysets, what do we need the capability concept for?
 
 Guards allow us to define a *rule* that must be satisfied for the
 transaction to proceed. As such, they really are just a way to declare a
 pass-fail condition or predicate. The Pact guard system is flexible
 enough to express any rule you can code.
 
-Capabilities allow us to declare how that rule is deployed. In doing so,
-they illustrate the critical rights that are extended to users of the
-smart contract, and “protect” code from being called incorrectly.
-Finally, they tightly scope what code is protected, and allow the
-ability for code to demand that some capability *is already enforced*.
+Capabilities allow us to declare how that rule is deployed to grant some
+authority. In doing so, they enumerate the critical rights that are
+extended to users of the smart contract, and “protect” code from being
+called incorrectly.
 
-Protecting code with ``require-capability``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Note also that **capabilities can only be granted inside the module code
+that declares them**, whereas guards are simply data that can be tested
+anywhere. This is an important security property, as it ensures an
+attacker cannot elevate their privileges from outside the module code.
 
-The function `require-capability <#require-capability>`__ can be used to
-“protect” a function from being called improperly:
-
-.. code:: lisp
-
-   (defun debit (user amount)
-     (require-capability (DEBIT user)
-       (update accounts user ...)))
-
-This effectively prevents the function from ever being called at
-top-level. **Capabilities can only be granted by the module code that
-declares them**, which is an important security property, as it ensures
-an attacker cannot elevate their privileges from outside.
-
-Written this way, the only way ``debit`` could be called is by some
-other module code, like ``transfer``:
-
-.. code:: lisp
-
-   (defun transfer (to from amount)
-     (with-capability (DEBIT from)
-       (debit from amount)
-       (credit to amount)))
-
-Here, the ``with-capability`` call runs the code in ``DEBIT``, which on
-success installs the “DEBIT [from]” capability into the Pact
-environment. When ``debit`` issues ``require-capability (DEBIT user)``,
-the code will succeed. Meanwhile, if somebody directly called ``debit``
-from outside, the code will fail.
-
-Modeling capabilities
-~~~~~~~~~~~~~~~~~~~~~
+Modeling capabilities with ``compose-capability``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The only problem with the above code is it pushed the awareness of DEBIT
 into the ``transfer`` function, whereas separation of concerns would
@@ -1826,114 +2057,84 @@ that simply encloses ``debit`` and ``credit`` calls:
 
 .. code:: lisp
 
-   (defcap TRANSFER
-     "Capability to govern credit and debit calls"
-     true)
+   (defcap TRANSFER (from to amount)
+     (compose-capability (DEBIT from))
+     (compose-capability (CREDIT to)))
 
-   (defun transfer (to from amount)
-     (with-capability (TRANSFER)
+   (defcap DEBIT (from)
+     (enforce-guard (at 'guard (read table from))))
+
+   (defcap CREDIT (to)
+     (check-account-exists to))
+
+   (defun transfer (from to amount)
+     (with-capability (TRANSFER to from amount)
        (debit from amount)
        (credit to amount)))
 
    (defun debit (user amount)
-     (require-capability (TRANSFER)
-       (with-capability (DEBIT from)
-         (update accounts user ...))))
+     (require-capability (DEBIT user))
+       (update accounts user ...))
 
    (defun credit (user amount)
-     (require-capability (TRANSFER)
+     (require-capability (CREDIT user)
        (update accounts user ...)))
 
 Thus, ``TRANSFER`` protects ``debit`` and ``credit`` from being used
-improperly, while ``DEBIT`` governs specifically the ability to debit.
+independently, while ``DEBIT`` governs specifically the ability to
+debit, enforcing the guard, while ``CREDIT`` simply creates a
+“restricted” capability for ``credit``.
 
 Improving efficiency
 ~~~~~~~~~~~~~~~~~~~~
 
 Once capabilities are granted they are installed into the pact
 environment for the scope of the call to ``with-capability``; once that
-form is exited, the capability is uninstalled. This scoping alone is a
-security improvement, as it clearly delineates when the right is in
-effect (ie it doesn’t “bleed” into the outer calling environment).
-However, it also can improve efficiency.
-
-To illustrate, let’s specify an operation to rotate the user’s keyset,
-which like debit requires enforcing the user keyset first. Since
-checking the user keyset is now a more general capability, we rename it
-USER_KEYSET, and use it for both debit and rotate:
-
-.. code:: lisp
-
-   (defcap USER_KEYSET (user)
-     (with-read accounts user { "keyset" := keyset }
-       (enforce-keyset keyset)))
-
-   (defun debit (user amount)
-     (require-capability (TRANSFER)
-       (with-capability (USER_KEYSET from) ...)))
-
-   (defun rotate (user new-keyset)
-     (with-capability (USER_KEYSET user) ...))
-
-So far so good. However, if we had a (admittedly contrived)
-``rotate-and-transfer`` function, we’d be calling that code twice, which
-is inefficient. This can be solved by acquiring the capability at the
-outer level, because **capabilities that have already been acquired and
-are in-scope are not re-evaluated:**
-
-.. code:: lisp
-
-   (defun rotate-and-transfer (from to from-new-keyset amount)
-     (with-capability (USER_KEYSET from) ;; installs USER_KEYSET for 'from'
-       (transfer from to amount)         ;; 'debit' now won't reperform check
-       (rotate from from-new-keyset)))   ;; nor will 'rotate'
-
-Composing capabilities
-~~~~~~~~~~~~~~~~~~~~~~
-
-Capabilities can be *composed*, in order to bring multiple capabilities
-into a single scope. Imagine that our use case required the USER_KEYSET
-capability but also that OPERATE_ADMIN had additionally signed the
-transaction. We can compose these into a new composite capability:
-
-.. code:: lisp
-
-   (defcap OPERATE_AND_USER_KEYSET (user)
-     (compose-capability (OPERATE_ADMIN))
-     (compose-capability (USER_KEYSET user)))
-
-Now, a call to ``(with-capability (OPERATE_AND_USER_KEYSET user) ...)``
-will bring the two capabilities into scope, if not already there.
-Capabilities are never introduced twice, so if an outer code block had
-already granted OPERATE_ADMIN, just that capability would stay in scope
-(and not be evaluated twice) outside of the inner scope.
+form is exited, the capability is uninstalled. This scoping prevents
+duplicate testing of the predicate: **capabilities that have already
+been acquired (or installed) and are in-scope are not re-evaluated**,
+either by acquiring or requiring.
 
 ``defcap`` details
 ~~~~~~~~~~~~~~~~~~
 
-``defcap`` is used to define capabilities, and it looks like a normal
-function. However capabilities differ from normal functions in some
-important ways. A capability definition does double-duty by both
-*parameterizing* a capability that will be stored as a unique token in
-the environment, as well as *implementing* the enforcing code that
-protects the capability from being improperly granted.
+Since a ``defcap`` production both *specifies* a “domain” of capability
+instances, and *implements* the guard function, it has some surprising
+features. Since capability grant is cached in the environment, the
+function does not need to be called when invoked in ``with-capability``
+or ``require-capability`` asks for some already-granted ticket.
 
-For example, a capability ``(USER_KEYSET "alice")`` results in a token
-(USER_KEYSET,“alice”) being stored in the environment, as distinct from
-(USER_KEYSET,“bob”) etc. This token is what is checked by
-``(require-capability (USER_KEYSET "alice"))``, so that even though it
-looks like the USER_KEYSET code is being called, it is actually just
-being “referenced” to test for the token.
+As a result, **``defcap``\ s cannot be executed directly**, as arbitrary
+execution would violate the semantics described here. This is an
+important security property as it ensures that the granting code can
+only be called in approved contexts, inside the module.the appropriate
+way.
 
-Likewise, ``(with-capability (USER_KEYSET "alice") ...)`` does not
-*necessarily* call the code in the defcap: it accesses the unique token
-to see if it is already present in the environment. Only if it is not
-present does it actually execute the code in the ``defcap`` body.
+Testing scoping signatures with capabilities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As a result, **``defcap``\ s cannot be executed directly**, as this
-would violate the semantics described here. This is an important
-security property as it ensures that the granting code can only be
-called in the appropriate way.
+Scoped signatures can be testsed using the new ``env-sigs`` REPL
+function as follows:
+
+.. code:: lisp
+
+   (module accounts GOV
+     ...
+     (defcap PAY (sender receiver amount)
+       (enforce-keyset (at 'keyset (read accounts sender))))
+
+     (defun pay (sender receiver amount)
+       (with-capability (PAY sender receiver amount)
+         (transfer sender receiver amount)))
+     ...
+   )
+
+   (set-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
+   (accounts.pay "alice" "bob" 10.0) ;; works as the cap match the signature caps
+
+   (set-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
+   (expect-failure "payment to bob will no longer be able to enforce alice's keyset"
+     (accounts.pay "alice" "bob" 10.0))
 
 Guard types
 ~~~~~~~~~~~
@@ -2130,38 +2331,34 @@ This can be directly implemented in a governance capability as follows:
 Note the capability can have whatever name desired; GOVERNANCE is a good
 idiomatic name however.
 
-Governance capability details
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Governance capability and module admin
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As a ``defcap``, the governance function cannot be called directly by
-user code. It is only invoked in the following circumstances:
+user code. It is automatically invoked in the following circumstances:
 
 -  A module upgrade is being attempted
 -  Module tables are being directly accessed outside the module code
 -  A `module guard <#module-guards>`__ for this module is being
    enforced.
 
-Like any other capability, the governance capability can only be invoked
-within the declaring module with ``with-capability`` etc. Given that
-module code already has elevated module admin, there is never any need
-to acquire this particular capability. Using ``require-capability`` is
-useful however to protect some admin-only capability:
+In these cases, the transaction is tested for elevated access to “module
+admin”, defined as the grant of the *module admin capability*. This
+capability cannot be expressed in user code, so it cannot be installed,
+acquired, required or composed.
 
-.. code:: lisp
+However, the implementing capability, here called ``GOVERNANCE``, can be
+installed or acquired etc. If passed, this gets scoped like any normal
+capability, here over some protected code that only module admins can
+run.
 
-   (defun deactivate-user (user)
-     "Deactivate USER. Requires module admin."
-     (require-capability (GOVERNANCE))
-     (update users user { "active": false }))
+Module admin capability scope
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Capability scope
-^^^^^^^^^^^^^^^^
-
-Since module governance is acquired automatically for upgrades and
-external table writes, this means that the module governance capability
-**stays in scope for the rest of the calling transaction**. This is
-unlike “user” capabilities, which can only be acquired in a fixed scope
-specified by the body of ``with-capability``.
+The special module admin capability, once automatically installed in the
+cases described above, **stays in scope for the rest of the calling
+transaction**. This is unlike “user” capabilities, which can only be
+acquired in a fixed scope specified by the body of ``with-capability``.
 
 This may sound worrisome, but the rationale is that a governance
 capability once granted should not be based on some transient fact that
@@ -3230,6 +3427,8 @@ use
 
    (use MODULE)
    (use MODULE HASH)
+   (use MODULE IMPORTS)
+   (use MODULE HASH IMPORTS)
 
 Import an existing MODULE into a namespace. Can only be issued at the
 top-level, or within a module declaration. MODULE can be a string,
@@ -3238,11 +3437,82 @@ matches HASH, failing if not. Use
 `describe-module <pact-functions.html#describe-module>`__ to query for
 the hash of a loaded module on the chain.
 
+An optional list of IMPORTS consisting of function, constant, and schema
+names may be supplied. When this explicit import list is present, only
+those names will be made available for use in the module body. If no
+list is supplied, then every name in the imported module will be brought
+into scope. When two modules are defined in the same transaction, all
+names will be in scope for all modules, and import behavior will be
+defaulted to the entire module.
+
 .. code:: lisp
 
    (use accounts)
    (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
    "Write succeeded"
+
+.. code:: lisp
+
+   (use accounts "ToV3sYFMghd7AN1TFKdWk_w00HjUepVlqKL79ckHG_s")
+   (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+   "Write succeeded"
+
+.. code:: lisp
+
+   (use accounts [ transfer example-fun ])
+   (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+   "Write succeeded"
+
+.. code:: lisp
+
+   (use accounts "ToV3sYFMghd7AN1TFKdWk_w00HjUepVlqKL79ckHG_s" [ transfer example-fun ])
+   (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+   "Write succeeded"
+
+interface
+~~~~~~~~~
+
+::
+
+   (interface NAME [DOR-OR-META] BODY...)
+
+Define and install interface NAME, with optional DOC-OR-META.
+
+BODY is composed of definitions that will be scoped in the module. Valid
+expressions in a module include:
+
+-  `defun <#defun>`__
+-  `defconst <#defconst>`__
+-  `defschema <#defschema>`__
+-  `defpact <#defpact>`__
+-  `defcap <#defcap>`__
+-  `use <#use>`__
+-  `models <#pact-properties.html>`__
+
+.. code:: lisp
+
+   (interface coin-sig
+     "'coin-sig' represents the Kadena Coin Contract interface. This contract     \
+     \provides both the the general interface for a Kadena's token, supplying a   \
+     \transfer function, coinbase, account creation and balance query."
+     (defun create-account:string (account:string guard:guard)
+       @doc "Create an account for ACCOUNT, with GUARD controlling access to the  \
+       \account."
+       @model [ (property (not (= account ""))) ]
+       )
+     (defun transfer:string (sender:string receiver:string amount:decimal)
+       @doc "Transfer AMOUNT between accounts SENDER and RECEIVER on the same    \
+       \chain. This fails if either SENDER or RECEIVER does not exist.           \
+       \Create-on-transfer can be done using the 'transfer-and-create' function."
+       @model [ (property (> amount 0.0))
+                (property (not (= sender receiver)))
+              ]
+       )
+     (defun account-balance:decimal (account:string)
+       @doc "Check an account's balance"
+       @model [ (property (not (= account ""))) ]
+       )
+   )
 
 module
 ~~~~~~

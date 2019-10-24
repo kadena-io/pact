@@ -692,6 +692,22 @@ take entries having the specified keys from an object
 
 Supported in either invariants or properties.
 
+.. _FObjectLength:
+
+length
+~~~~~~
+
+.. code:: lisp
+
+   (length o)
+
+-  takes ``o``: ``object``
+-  produces ``integer``
+
+the number of key-value pairs in the object
+
+Supported in either invariants or properties.
+
 .. _List:
 
 List operators

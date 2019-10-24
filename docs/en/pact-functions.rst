@@ -8,6 +8,24 @@ Built-in Functions
 General
 -------
 
+.. _CHARSET_ASCII:
+
+CHARSET_ASCII
+~~~~~~~~~~~~~
+
+Constant denoting the ASCII charset
+
+Constant:   ``CHARSET_ASCII:integer = 0``
+
+.. _CHARSET_LATIN1:
+
+CHARSET_LATIN1
+~~~~~~~~~~~~~~
+
+Constant denoting the Latin-1 charset ISO-8859-1
+
+Constant:   ``CHARSET_LATIN1:integer = 1``
+
 at
 ~~
 
@@ -43,13 +61,13 @@ chain-data
 *→* ``object:{public-chain-data}``
 
 Get transaction public metadata. Returns an object with ‘chain-id’,
-‘block-height’, ‘block-time’, ‘sender’, ‘gas-limit’, ‘gas-price’, and
-‘gas-fee’ fields.
+‘block-height’, ‘block-time’, ‘prev-block-hash’, ‘sender’, ‘gas-limit’,
+‘gas-price’, and ‘gas-fee’ fields.
 
 .. code:: lisp
 
    pact> (chain-data)
-   {"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0,"sender": ""}
+   {"block-height": 0,"block-time": "1970-01-01T00:00:00Z","chain-id": "","gas-limit": 0,"gas-price": 0.0,"prev-block-hash": "","sender": ""}
 
 compose
 ~~~~~~~
@@ -126,7 +144,8 @@ drop
 *keys* ``[string]`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
 
 Drop COUNT values from LIST (or string), or entries having keys in KEYS
-from OBJECT. If COUNT is negative, drop from end.
+from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the
+interval (-2:sup:`63,2`\ 63), it is truncated to that range.
 
 .. code:: lisp
 
@@ -277,6 +296,25 @@ conversion.
    pact> (int-to-str 64 43981)
    "q80"
 
+is-charset
+~~~~~~~~~~
+
+*charset* ``integer`` *input* ``string`` *→* ``bool``
+
+Check that a string INPUT conforms to the a supported character set
+CHARSET. Character sets currently supported are: ‘CHARSET_LATIN1’
+(ISO-8859-1), and ‘CHARSET_ASCII’ (ASCII). Support for sets up through
+ISO 8859-5 supplement will be added in the future.
+
+.. code:: lisp
+
+   pact> (is-charset CHARSET_ASCII "hello world")
+   true
+   pact> (is-charset CHARSET_ASCII "I am nÖt ascii")
+   false
+   pact> (is-charset CHARSET_LATIN1 "I am nÖt ascii, but I am latin1!")
+   true
+
 length
 ~~~~~~
 
@@ -374,7 +412,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.2.1"
+   "3.3.0"
 
 Top level only: this function will fail if used in module code.
 
@@ -384,8 +422,8 @@ public-chain-data
 Schema type for data returned from ‘chain-data’.
 
 Fields:   ``chain-id:string``   ``block-height:integer``
-  ``block-time:time``   ``sender:string``   ``gas-limit:integer``
-  ``gas-price:decimal``
+  ``block-time:time``   ``prev-block-hash:string``   ``sender:string``
+  ``gas-limit:integer``   ``gas-price:decimal``
 
 read-decimal
 ~~~~~~~~~~~~
@@ -428,6 +466,18 @@ object.
 
    (defun exec ()
       (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
+
+read-string
+~~~~~~~~~~~
+
+*key* ``string`` *→* ``string``
+
+Parse KEY string or number value from top level of message data body as
+string.
+
+.. code:: lisp
+
+   (read-string "sender")
 
 remove
 ~~~~~~
@@ -509,7 +559,8 @@ take
 *keys* ``[string]`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
 
 Take COUNT values from LIST (or string), or entries having keys in KEYS
-from OBJECT. If COUNT is negative, take from end.
+from OBJECT. If COUNT is negative, take from end. If COUNT exceeds the
+interval (-2:sup:`63,2`\ 63), it is truncated to that range.
 
 .. code:: lisp
 
@@ -833,7 +884,7 @@ Compute difference between TIME1 and TIME2 in seconds.
 .. code:: lisp
 
    pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
-   23400
+   23400.0
 
 format-time
 ~~~~~~~~~~~
@@ -952,7 +1003,7 @@ Multiply X by Y.
 .. code:: lisp
 
    pact> (* 0.5 10.0)
-   5
+   5.0
    pact> (* 3 5)
    15
 
@@ -1024,7 +1075,7 @@ Divide X by Y.
 .. code:: lisp
 
    pact> (/ 10.0 2.0)
-   5
+   5.0
    pact> (/ 8 3)
    2
 
@@ -1365,7 +1416,7 @@ Square root of X.
 .. code:: lisp
 
    pact> (sqrt 25)
-   5
+   5.0
 
 xor
 ~~~
@@ -1561,6 +1612,55 @@ predicate logic.
    (enforce-guard 'admin-keyset)
    (enforce-guard row-guard)
 
+install-capability
+~~~~~~~~~~~~~~~~~~
+
+*capability* ``-> bool`` *→* ``string``
+
+Specifies, and validates install of, a *managed* CAPABILITY, defined in
+a ‘defcap’ in which a ‘@managed’ tag designates a single parameter to be
+managed by a specified function. After install, CAPABILITY must still be
+brought into scope using ‘with-capability’, at which time the ‘manager
+function’ is invoked to validate the request. The manager function is of
+type ’managed:
+
+.. raw:: html
+
+   <p>
+
+requested:
+
+.. raw:: html
+
+   <p>
+
+->
+
+.. raw:: html
+
+   <p>
+
+‘, where’
+
+.. raw:: html
+
+   <p>
+
+’ indicates the type of the managed parameter, such that for ‘(defcap
+FOO (bar:string baz:integer) @managed baz FOO-mgr …)’, the manager
+function would be ‘(defun FOO-mgr:integer (managed:integer
+requested:integer) …)’. Any capability matching the ‘static’
+(non-managed) parameters will cause this function to be invoked with the
+current managed value and that of the requested capability. The function
+should perform whatever logic, presumably linear, to validate the
+request, and return the new managed value representing the ‘balance’ of
+the request. NOTE that signatures scoped to a managed capability cause
+the capability to be automatically installed.
+
+.. code:: lisp
+
+   (install-capability (PAY "alice" "bob" 10.0))
+
 keyset-ref-guard
 ~~~~~~~~~~~~~~~~
 
@@ -1588,13 +1688,13 @@ with-capability
 
 *capability* ``-> bool`` *body* ``[*]`` *→* ``<a>``
 
-Specifies and requests grant of CAPABILITY which is an application of a
-‘defcap’ production. Given the unique token specified by this
-application, ensure that the token is granted in the environment during
-execution of BODY. ‘with-capability’ can only be called in the same
-module that declares the corresponding ‘defcap’, otherwise module-admin
-rights are required. If token is not present, the CAPABILITY is
-evaluated, with successful completion resulting in the
+Specifies and requests grant of *acquired* CAPABILITY which is an
+application of a ‘defcap’ production. Given the unique token specified
+by this application, ensure that the token is granted in the environment
+during execution of BODY. ‘with-capability’ can only be called in the
+same module that declares the corresponding ‘defcap’, otherwise
+module-admin rights are required. If token is not present, the
+CAPABILITY is evaluated, with successful completion resulting in the
 installation/granting of the token, which will then be revoked upon
 completion of BODY. Nested ‘with-capability’ calls for the same token
 will detect the presence of the token, and will not re-apply CAPABILITY,
@@ -1827,12 +1927,39 @@ env-keys
 
 *keys* ``[string]`` *→* ``string``
 
-Set transaction signature KEYS.
+DEPRECATED in favor of ‘set-sigs’. Set transaction signer KEYS. See
+‘env-sigs’ for setting keys with associated capabilities.
 
 .. code:: lisp
 
    pact> (env-keys ["my-key" "admin-key"])
    "Setting transaction keys"
+
+env-namespace-policy
+~~~~~~~~~~~~~~~~~~~~
+
+*allow-root* ``bool``
+*ns-policy-fun* ``ns:string ns-admin:guard -> bool`` *→* ``string``
+
+Install a managed namespace policy specifying ALLOW-ROOT and
+NS-POLICY-FUN.
+
+.. code:: lisp
+
+   (env-namespace-policy (my-ns-policy-fun))
+
+env-sigs
+~~~~~~~~
+
+*sigs* ``[object:*]`` *→* ``string``
+
+Set transaction signature keys and capabilities. SIGS is a list of
+objects with “key” specifying the signer key, and “caps” specifying a
+list of associated capabilities.
+
+.. code:: lisp
+
+   (env-sigs [{'key: "my-key", 'caps: [(accounts.USER_GUARD "my-account")]}, {'key: "admin-key", 'caps: []}
 
 expect
 ~~~~~~
@@ -1851,12 +1978,16 @@ expect-failure
 
 *doc* ``string`` *exp* ``<a>`` *→* ``string``
 
+*doc* ``string`` *err* ``string`` *exp* ``<a>`` *→* ``string``
+
 Evaluate EXP and succeed only if it throws an error.
 
 .. code:: lisp
 
    pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
    "Expect failure: success: Enforce fails on false"
+   pact> (expect-failure "Enforce fails with message" "Expected error" (enforce false "Expected error"))
+   "Expect failure: success: Enforce fails with message"
 
 format-address
 ~~~~~~~~~~~~~~
@@ -1941,10 +2072,9 @@ test-capability
 
 *capability* ``-> bool`` *→* ``string``
 
-Specify and request grant of CAPABILITY. Once granted, CAPABILITY and
-any composed capabilities are in scope for the rest of the transaction.
-Allows direct invocation of capabilities, which is not available in the
-blockchain environment.
+Acquire (if unmanaged) or install (if managed) CAPABILITY. CAPABILITY
+and any composed capabilities are in scope for the rest of the
+transaction.
 
 .. code:: lisp
 
