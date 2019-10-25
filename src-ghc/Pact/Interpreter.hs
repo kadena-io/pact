@@ -240,7 +240,7 @@ evalTerms interp ss input = interpreter interp start end withRollback runInput
       -- install sigs into local environment
       local (set eeMsgSigs (toSigs sigsAndInstallers)) $ do
         -- install any caps
-        traverse_ (traverse_ (traverse_ id)) sigsAndInstallers
+        -- traverse_ (traverse_ (traverse_ id)) sigsAndInstallers
         (,txid) <$> act
 
     end :: CommitTx e

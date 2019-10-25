@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Module      :  Pact.Native.Capabilities
@@ -22,7 +23,9 @@ module Pact.Native.Capabilities
 import Control.Lens
 import Control.Monad
 import Data.Default
+import Data.Foldable
 import Data.Maybe (isJust)
+import qualified Data.Set as S
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -114,9 +117,9 @@ installCapability =
 
         already <- evalCap i CapManaged True cap
 
-        return $ tStr $ case already of
-          NewlyAcquired -> "Installed capability"
-          AlreadyAcquired -> "Capability already installed"
+        case already of
+          NewlyInstalled _ -> return $ tStr $ "Installed capability"
+          _ -> evalError' i $ "Unexpected result from managed install"
 
       _ -> argsError' i as
 
@@ -124,11 +127,11 @@ installCapability =
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be invoked within module code.
-evalCap :: HasInfo i => i -> CapScope -> Bool -> App (Term Ref) -> Eval e CapAcquireResult
+evalCap :: HasInfo i => i -> CapScope -> Bool -> App (Term Ref) -> Eval e CapEvalResult
 evalCap i scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
-      evalUserCapability i applyMgrFun scope cap d $ do
+      evalUserCapability i capFuns scope cap d $ do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
 
@@ -167,10 +170,25 @@ applyMgrFun mgrFunDef mgArg capArg = doApply (map fromPactValue [mgArg,capArg])
 
     appVar = TVar (Ref (TDef mgrFunDef (getInfo mgrFunDef))) def
 
+capFuns :: (ApplyMgrFun e,InstallMgd e)
+capFuns = (applyMgrFun,installSigCap)
+
+installSigCap :: InstallMgd e
+installSigCap SigCapability{..} cdef = do
+  r <- evalCap cdef CapManaged True $ mkApp cdef (map fromPactValue _scArgs)
+  case r of
+    NewlyInstalled mc -> return mc
+    _ -> evalError' cdef "Unexpected result from managed sig cap install"
+  where
+    mkApp d@Def{..} as =
+      App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
+          (map liftTerm as) (getInfo d)
+
+
 
 -- | Resolve and typecheck sig cap, and if "managed" (ie has a manager function),
 -- return install command.
-resolveCapInstallMaybe :: SigCapability -> Eval e (SigCapability,Maybe (Eval e CapAcquireResult))
+resolveCapInstallMaybe :: SigCapability -> Eval e (SigCapability,Maybe (Eval e CapEvalResult))
 resolveCapInstallMaybe s@SigCapability{..} = go
   where
     go = resolveCap >>= fmap (s,) . installMaybe (map fromPactValue _scArgs)

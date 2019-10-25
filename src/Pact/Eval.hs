@@ -177,7 +177,7 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
 -- | Acquire module admin with enforce.
-acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapAcquireResult
+acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapEvalResult
 acquireModuleAdmin i modName modGov =
   acquireModuleAdminCapability modName $ enforceModuleAdmin i modGov
 

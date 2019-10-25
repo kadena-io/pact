@@ -19,7 +19,7 @@
 
 module Pact.Types.Capability
   ( Capability(..)
-  , CapAcquireResult(..)
+  , CapEvalResult(..)
   , SigCapability(..)
   , UserCapability
   , ManagedCapability(..), mcInstalled, mcStatic, mcManaged, mcManageParamIndex, mcManageParamName, mcMgrFun
@@ -78,10 +78,12 @@ instance FromJSON SigCapability where
     <$> o .: "name"
     <*> o .: "args"
 
--- | Literate boolean to signal whether cap was already in scope.
-data CapAcquireResult
+-- | Various results of evaluating a capability.
+-- Note: dupe managed install is an error, thus no case here.
+data CapEvalResult
   = NewlyAcquired
   | AlreadyAcquired
+  | NewlyInstalled (ManagedCapability UserCapability)
   deriving (Eq,Show)
 
 data CapScope
@@ -102,7 +104,6 @@ data CapSlot c = CapSlot
   , _csCap :: c
   , _csComposed :: [c]
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
-makeLenses ''CapSlot
 instance NFData c => NFData (CapSlot c)
 
 data ManagedCapability c = ManagedCapability
@@ -164,3 +165,4 @@ instance NFData Capabilities
 
 makeLenses ''ManagedCapability
 makeLenses ''Capabilities
+makeLenses ''CapSlot

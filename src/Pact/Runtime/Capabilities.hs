@@ -24,7 +24,8 @@ module Pact.Runtime.Capabilities
     ,popCapStack
     ,revokeAllCapabilities
     ,capabilityAcquired
-    ,ApplyMgrFun,noopApplyMgrFun
+    ,ApplyMgrFun
+    ,InstallMgd
     ,checkSigCaps
     ) where
 
@@ -41,12 +42,11 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
--- | Tie the knot with Pact.Eval by having caller supply `apply`
+-- | Tie the knot with Pact.Eval by having caller supply `apply` etc
 type ApplyMgrFun e = Def Ref -> PactValue -> PactValue -> Eval e PactValue
+-- | More knot tying to on-demand install a managed cap
+type InstallMgd e = UserCapability -> Def Ref -> Eval e (ManagedCapability UserCapability)
 
--- | Noop fun always matches/returns same
-noopApplyMgrFun :: ApplyMgrFun e
-noopApplyMgrFun _ mgd _ = return mgd
 
 -- | Check for acquired/stack (or composed therein) capability.
 capabilityAcquired :: UserCapability -> Eval e Bool
@@ -69,7 +69,7 @@ popCapStack act = do
       act c
 
 acquireModuleAdminCapability
-  :: ModuleName -> Eval e () -> Eval e CapAcquireResult
+  :: ModuleName -> Eval e () -> Eval e CapEvalResult
 acquireModuleAdminCapability mc test = do
   prev <- preuse $ evalCapabilities . capModuleAdmin . ix mc
   case prev of
@@ -86,8 +86,8 @@ acquireModuleAdminCapability mc test = do
 evalUserCapability
   :: HasInfo i
   => i
-  -> ApplyMgrFun e
-  -- ^ knot-tying continuation for running a manager fun
+  -> (ApplyMgrFun e,InstallMgd e)
+  -- ^ knot-tying continuations
   -> CapScope
   -- ^ acquiring/installing scope
   -> UserCapability
@@ -96,7 +96,7 @@ evalUserCapability
   -- ^ cap definition
   -> Eval e ()
   -- ^ test to validate install
-  -> Eval e CapAcquireResult
+  -> Eval e CapEvalResult
 evalUserCapability i af scope cap cdef test = go scope
   where
 
@@ -104,7 +104,6 @@ evalUserCapability i af scope cap cdef test = go scope
       ci <- capabilityInstalled cap
       when ci $ evalError' i $ "Duplicate install of managed capability " <> pretty cap
       push >> test >> popCapStack installManaged
-      return NewlyAcquired
     go CapCallStack = ifNotAcquired evalStack
     go CapComposed = ifNotAcquired evalComposed
 
@@ -118,23 +117,18 @@ evalUserCapability i af scope cap cdef test = go scope
 
     installManaged cs = mkMC >>= install
       where
-        install mc = evalCapabilities . capManaged %= S.insert mc
+        install mc = do
+          evalCapabilities . capManaged %= S.insert mc
+          return (NewlyInstalled mc)
         mkMC = case _dDefMeta cdef of
           Nothing -> evalError' i $ "Installing managed capability without @managed metadata"
-          Just (DMDefcap (DefcapMeta mgrFunRef argName)) -> case findArg argName of
-            Nothing ->
-              evalError' cdef $ "Invalid managed argument name: " <> pretty argName
-            Just idx -> case decomposeManaged' idx cap of
-              Nothing -> evalError' i $ "Missing argument index from capability: " <> pretty idx
-              Just (static,v) -> case mgrFunRef of
-                (TVar (Ref (TDef d di)) _) -> case _dDefType d of
-                  Defun -> return $! ManagedCapability cs static v idx argName d
-                  _ -> evalError' di $ "Capability manager ref must be defun"
-                t -> evalError' t $ "Capability manager ref must be a function"
-        findArg an = foldl' (matchArg an) Nothing (zip [0..] $ _ftArgs $ _dFunType cdef)
-        matchArg _ (Just idx) _ = Just idx
-        matchArg an Nothing (idx,Arg{..}) | _aName == an = Just idx
-                                          | otherwise = Nothing
+          Just (DMDefcap dcm@(DefcapMeta mgrFunRef argName)) -> do
+            (idx,static,v) <- defCapMetaParts i cap dcm cdef
+            case mgrFunRef of
+              (TVar (Ref (TDef d di)) _) -> case _dDefType d of
+                Defun -> return $! ManagedCapability cs static v idx argName d
+                _ -> evalError' di $ "Capability manager ref must be defun"
+              t -> evalError' t $ "Capability manager ref must be a function"
 
     -- Callstack: check if managed, in which case push, otherwise
     -- push and test.
@@ -154,23 +148,42 @@ evalUserCapability i af scope cap cdef test = go scope
 
     pushSlot s = evalCapabilities . capStack %= (s:)
 
+defCapMetaParts :: HasInfo i => i -> UserCapability -> DefcapMeta a -> Def Ref -> Eval e (Int, SigCapability, PactValue)
+defCapMetaParts i cap (DefcapMeta _ argName) cdef = case findArg argName of
+  Nothing ->
+    evalError' cdef $ "Invalid managed argument name: " <> pretty argName
+  Just idx -> case decomposeManaged' idx cap of
+    Nothing -> evalError' i $ "Missing argument index from capability: " <> pretty idx
+    Just (static,v) -> return (idx,static,v)
+  where
+    findArg an = foldl' (matchArg an) Nothing (zip [0..] $ _ftArgs $ _dFunType cdef)
+    matchArg _ (Just idx) _ = Just idx
+    matchArg an Nothing (idx,Arg{..}) | _aName == an = Just idx
+                                      | otherwise = Nothing
 
 checkManaged
   :: HasInfo i
   => i
-  -> ApplyMgrFun e
+  -> (ApplyMgrFun e,InstallMgd e)
   -> UserCapability
   -> Def Ref
   -> Eval e (Maybe [UserCapability])
-checkManaged i applyF cap@SigCapability{..} cdef
-  | isManaged cdef = use (evalCapabilities . capManaged) >>= go . S.toList
-  | otherwise = return Nothing
+checkManaged i (applyF,installF) cap@SigCapability{..} cdef = case _dDefMeta cdef of
+  Nothing -> return Nothing
+  Just (DMDefcap dcm) -> use (evalCapabilities . capManaged) >>= go dcm . S.toList
   where
-    go [] = evalError' i $ "Managed capability not installed: " <> pretty cap
-    go (mc@ManagedCapability{..}:mcs) = case decomposeManaged' _mcManageParamIndex cap of
-      Nothing -> go mcs
+    go dcm [] = do
+      checkSigs dcm >>= \r -> case r of
+        Nothing -> die
+        Just mc -> testMC mc die
+    go dcm (mc:mcs) = testMC mc (go dcm mcs)
+
+    die = evalError' i $ "Managed capability not installed: " <> pretty cap
+
+    testMC (mc@ManagedCapability{..}) cont = case decomposeManaged' _mcManageParamIndex cap of
+      Nothing -> cont
       Just (cap',rv)
-        | cap' /= _mcStatic -> go mcs
+        | cap' /= _mcStatic -> cont
         | otherwise -> check mc rv
 
     check mc@ManagedCapability{..} rv = do
@@ -178,7 +191,22 @@ checkManaged i applyF cap@SigCapability{..} cdef
       evalCapabilities . capManaged %= S.insert (set mcManaged newMgdValue mc)
       return $ Just $ _csComposed _mcInstalled
 
-    isManaged Def{..} = isJust _dDefMeta
+    getStatic dcm c = defCapMetaParts i c dcm cdef >>= \r -> case r of
+      (_,s,_) -> return s
+
+    checkSigs dcm = do
+      capStatic <- getStatic dcm cap
+      sigCaps <- foldl1 (<>) <$> view eeMsgSigs
+      foldrM (matchSig dcm capStatic) Nothing sigCaps
+
+    matchSig _ _ _ r@Just{} = return r
+    matchSig dcm capStatic sigCap Nothing = do
+      sigStatic <- getStatic dcm sigCap
+      if sigStatic == capStatic
+        then Just <$> doMgdInstall sigCap
+        else return Nothing
+
+    doMgdInstall sigCap = installF sigCap cdef
 
 
 revokeAllCapabilities :: Eval e ()
