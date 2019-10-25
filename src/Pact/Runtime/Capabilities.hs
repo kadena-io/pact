@@ -33,7 +33,6 @@ import Control.Monad
 import Control.Lens hiding (DefName)
 import Data.Default
 import Data.Foldable
-import Data.Maybe
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 

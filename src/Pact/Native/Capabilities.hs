@@ -16,16 +16,13 @@
 module Pact.Native.Capabilities
   ( capDefs
   , evalCap
-  , resolveCapInstallMaybe
   , getMgrFun
   ) where
 
 import Control.Lens
 import Control.Monad
 import Data.Default
-import Data.Foldable
 import Data.Maybe (isJust)
-import qualified Data.Set as S
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -184,25 +181,6 @@ installSigCap SigCapability{..} cdef = do
       App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
           (map liftTerm as) (getInfo d)
 
-
-
--- | Resolve and typecheck sig cap, and if "managed" (ie has a manager function),
--- return install command.
-resolveCapInstallMaybe :: SigCapability -> Eval e (SigCapability,Maybe (Eval e CapEvalResult))
-resolveCapInstallMaybe s@SigCapability{..} = go
-  where
-    go = resolveCap >>= fmap (s,) . installMaybe (map fromPactValue _scArgs)
-    resolveCap = resolveRef _scName (QName _scName) >>= \m -> case m of
-      Just (Ref (TDef d@Def{..} _))
-        | _dDefType == Defcap -> return d
-      Just _ -> evalError' _scName $ "resolveCapInstallMaybe: expected defcap reference"
-      Nothing -> evalError' _scName $ "resolveCapInstallMaybe: cannot resolve " <> pretty _scName
-    installMaybe as d@Def{..} = case _dDefMeta of
-      Nothing -> return Nothing
-      Just _ -> return $ Just $ evalCap d CapManaged False (mkApp d as)
-    mkApp d@Def{..} as =
-      App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
-          (map liftTerm as) (getInfo d)
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
 enforceNotWithinDefcap i msg = defcapInStack Nothing >>= \p -> when p $

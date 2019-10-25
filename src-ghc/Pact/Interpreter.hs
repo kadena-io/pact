@@ -51,7 +51,6 @@ import Control.Lens
 
 import Data.Aeson
 import Data.Default
-import Data.Foldable (traverse_)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.Map.Strict as M
 import Data.Maybe
@@ -63,11 +62,9 @@ import System.Directory
 import Pact.Compile
 import Pact.Eval
 import Pact.Native (nativeDefs)
-import Pact.Native.Capabilities (resolveCapInstallMaybe)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
-import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Types.PactValue
@@ -236,33 +233,23 @@ evalTerms interp ss input = interpreter interp start end withRollback runInput
     start :: BeginTx e
     start act = do
       txid <- evalBeginTx def
-      sigsAndInstallers <- resolveSignerCaps ss
       -- install sigs into local environment
-      local (set eeMsgSigs (toSigs sigsAndInstallers)) $ do
-        -- install any caps
-        -- traverse_ (traverse_ (traverse_ id)) sigsAndInstallers
-        (,txid) <$> act
+      local (set eeMsgSigs mkMsgSigs) $ (,txid) <$> act
 
     end :: CommitTx e
     end (rs,txid) = do
       logs <- evalCommitTx def
       return (rs,logs,txid)
 
-    toSigs = fmap (S.fromList . M.keys)
     runInput = case input of
       Right ts -> mapM eval ts
       Left pe -> (:[]) <$> resumePact def pe
 
+    mkMsgSigs = M.fromList $ map toPair ss
+      where
+        toPair Signer{..} = (pk,S.fromList _siCapList)
+          where
+            pk = PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
+
 
 {-# INLINE evalTerms #-}
-
--- | Resolves capabilities and returns a datastructure allowing for
--- installing signature caps, and then running installs inside configured environment.
-resolveSignerCaps
-  :: [Signer]
-  -> Eval e (M.Map PublicKey (M.Map UserCapability (Maybe (Eval e CapAcquireResult))))
-resolveSignerCaps ss = M.fromList <$> mapM toPair ss
-  where
-    toPair Signer{..} = (pk,) . M.fromList <$> mapM resolveCapInstallMaybe _siCapList
-      where
-        pk = PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
