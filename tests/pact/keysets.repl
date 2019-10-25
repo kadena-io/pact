@@ -151,6 +151,15 @@
 
   (defun run-AB ()
     (with-capability (AB) true))
+
+  (defcap M (a:integer) @managed a M_mgr
+    (enforce-keyset KEYSET_A))
+
+  (defun M_mgr (m r) m)
+
+  (defcap O ()
+    (enforce-keyset KEYSET_A))
+
   )
 
 (env-keys ["a"])
@@ -173,3 +182,22 @@
         (run-A "bar" true))
 (expect "AB succeeds with a in scope" true
         (run-AB))
+
+(env-sigs [{ 'key: "a", 'caps: [(M 1)] }])
+;; env-sigs does NOT install managed caps like Intepreter does
+(expect
+ "Managed install works with scoped keyset"
+ "Capability installed"
+ (test-capability (M 1)))
+
+(expect-failure
+ "O not in scope, managed M shouldn't allow it to pass"
+ "Keyset failure"
+ (test-capability (O)))
+
+(env-sigs [{ 'key: "a", 'caps: [(M 1),(O)] }])
+
+(expect
+ "Scoped acquire of O succeeds"
+ "Capability acquired"
+ (test-capability (O)))

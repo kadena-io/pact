@@ -448,7 +448,7 @@ expectFail i as = case as of
       TLitString msg -> do
         r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
         case r of
-          Right v -> tfailure msg $ "expected failure, got result = " <> pack (show v)
+          Right v -> tfailure msg $ "expected failure, got result = " <> pack (showPretty v)
           Left e -> case errM of
             Nothing -> tsuccess msg
             Just err | err `isInfixOf` e -> tsuccess msg
@@ -590,7 +590,7 @@ setGasModel _ as = do
 testCapability :: ZNativeFun ReplState
 testCapability i [ (TApp app _) ] = do
   (_,d,_) <- appToCap app
-  let (scope,verb) = maybe (CapCallStack,"aquired") (const (CapManaged,"installed")) (_dDefMeta d)
+  let (scope,verb) = maybe (CapCallStack,"acquired") (const (CapManaged,"installed")) (_dDefMeta d)
   r <- evalCap i scope False $ app
   return . tStr $ case r of
     AlreadyAcquired -> "Capability already " <> verb

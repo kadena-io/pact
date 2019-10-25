@@ -48,12 +48,6 @@ type ApplyMgrFun e = Def Ref -> PactValue -> PactValue -> Eval e PactValue
 noopApplyMgrFun :: ApplyMgrFun e
 noopApplyMgrFun _ mgd _ = return mgd
 
--- | Get any cap that is currently granted, of any scope.
-grantedCaps :: Eval e (S.Set UserCapability)
-grantedCaps = S.union <$> getAllStackCaps <*> getAllManaged
-  where
-    getAllManaged = S.fromList . concatMap toList <$> use (evalCapabilities . capManaged)
-
 -- | Check for acquired/stack (or composed therein) capability.
 capabilityAcquired :: UserCapability -> Eval e Bool
 capabilityAcquired cap = elem cap <$> getAllStackCaps
@@ -197,7 +191,7 @@ checkSigCaps
 checkSigCaps sigs = go
   where
     go = do
-      granted <- grantedCaps
+      granted <- getAllStackCaps
       return $ M.filter (match granted) sigs
 
     match granted sigCaps =
