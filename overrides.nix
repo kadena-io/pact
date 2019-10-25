@@ -20,11 +20,12 @@ in {
 
   Glob = whenGhcjs dontCheck super.Glob;
 
-  aeson = dontCheck (callHackageDirect {
-    pkg = "aeson";
-    ver = "1.4.5.0";
-    sha256 = "0imcy5kkgrdrdv7zkhkjvwpdp4sms5jba708xsap1vl9c2s63n5a";
-  });
+  aeson = dontCheck (self.callCabal2nix "aeson" (pkgs.fetchFromGitHub {
+    owner = "obsidiansystems";
+    repo = "aeson";
+    rev = "d6288c431a477f9a6e93aa80454a9e1712127548"; # branch v1450-text-jsstring containing (ToJSVal Value) instance and other fixes
+    sha256 = "102hj9b42z1h9p634g9226nvs756djwadrkz9yrb15na671f2xf4";
+  }) {});
 
   algebraic-graphs = whenGhcjs dontCheck super.algebraic-graphs;
   base-compat-batteries = whenGhcjs dontCheck super.base-compat-batteries;
@@ -93,11 +94,19 @@ in {
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
   });
 
-  singleton-bool = dontCheck (callHackageDirect {
-    pkg = "singleton-bool";
-    ver = "0.1.5";
-    sha256 = "1kjn5wgwgxdw2xk32d645v3ss2a70v3bzrihjdr2wbj2l4ydcah1";
-  });
+  # https://github.com/reflex-frp/reflex-platform/issues/549
+  singleton-bool = overrideCabal
+    (self.callCabal2nix "singleton-bool" (pkgs.fetchFromGitHub {
+      owner = "obsidiansystems";
+      repo = "singleton-bool";
+      rev = "bf5c81fff6eaa9ed1286de9d0ecfffa7e0aa85d2";
+      sha256 = "0fzi6f5pl2gg9k8f7k88qyyvjflpcw08905y0vjmbylzc70wsykw";
+    }) {})
+    (drv: {
+      editedCabalFile = null;
+      revision = null;
+    })
+  ;
 
   servant = dontCheck (self.callCabal2nix "servant" "${servantSrc}/servant" {});
   servant-client = dontCheck (self.callCabal2nix "servant-client" "${servantSrc}/servant-client" {});
