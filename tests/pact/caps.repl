@@ -267,6 +267,8 @@
 
   (defcap G () (enforce false "module admin disabled"))
 
+  (defcap O () "dummy empty cap" true)
+
   (defcap PAY (sender:string receiver:string amount:integer)
     @managed amount PAY-mgr
     (enforce-keyset (read-keyset sender)))
@@ -390,8 +392,24 @@
  "sufficient balance"
  (pay-admin "bob" 1))
 
+;; make sure different arity caps can play nice
 
+(env-sigs
+ [{ "key": "carl",
+ "caps": [(O)
+         ,(PAY_ADMIN "alice" 10)
+         ,(PAY "carl" "alice" 1)] }])
+(env-data { "carl": ["carl"] })
 
+(expect
+ "module admin alice succeeds"
+ 1
+ (pay-admin "alice" 1))
+
+(expect
+ "carl pay alice succeeds"
+ 1
+ (pay "carl" "alice" 1))
 
 (commit-tx)
 

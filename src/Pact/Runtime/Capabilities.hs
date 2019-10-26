@@ -122,9 +122,9 @@ evalUserCapability i af scope cap cdef test = go scope
           return (NewlyInstalled mc)
         mkMC = case _dDefMeta cdef of
           Nothing -> evalError' i $ "Installing managed capability without @managed metadata"
-          Just (DMDefcap dcm@(DefcapMeta mgrFunRef argName)) -> do
-            (idx,static,v) <- defCapMetaParts i cap dcm cdef
-            case mgrFunRef of
+          Just (DMDefcap dcm@(DefcapMeta mgrFunRef argName)) -> case defCapMetaParts cap dcm cdef of
+            Left e -> evalError' cdef e
+            Right (idx,static,v) -> case mgrFunRef of
               (TVar (Ref (TDef d di)) _) -> case _dDefType d of
                 Defun -> return $! ManagedCapability cs static v idx argName d
                 _ -> evalError' di $ "Capability manager ref must be defun"
@@ -148,12 +148,11 @@ evalUserCapability i af scope cap cdef test = go scope
 
     pushSlot s = evalCapabilities . capStack %= (s:)
 
-defCapMetaParts :: HasInfo i => i -> UserCapability -> DefcapMeta a -> Def Ref -> Eval e (Int, SigCapability, PactValue)
-defCapMetaParts i cap (DefcapMeta _ argName) cdef = case findArg argName of
-  Nothing ->
-    evalError' cdef $ "Invalid managed argument name: " <> pretty argName
+defCapMetaParts :: UserCapability -> DefcapMeta a -> Def Ref -> Either Doc (Int, SigCapability, PactValue)
+defCapMetaParts cap (DefcapMeta _ argName) cdef = case findArg argName of
+  Nothing -> Left $ "Invalid managed argument name: " <> pretty argName
   Just idx -> case decomposeManaged' idx cap of
-    Nothing -> evalError' i $ "Missing argument index from capability: " <> pretty idx
+    Nothing -> Left $ "Missing argument index from capability: " <> pretty idx
     Just (static,v) -> return (idx,static,v)
   where
     findArg an = findIndex ((==) an . _aName) $ _ftArgs (_dFunType cdef)
@@ -188,20 +187,19 @@ checkManaged i (applyF,installF) cap@SigCapability{..} cdef = case _dDefMeta cde
       evalCapabilities . capManaged %= S.insert (set mcManaged newMgdValue mc)
       return $ Just $ _csComposed _mcInstalled
 
-    getStatic dcm c = defCapMetaParts i c dcm cdef >>= \r -> case r of
-      (_,s,_) -> return s
+    getStatic dcm c = view _2 <$> defCapMetaParts c dcm cdef
 
-    checkSigs dcm = do
-      capStatic <- getStatic dcm cap
-      sigCaps <- S.unions . toList <$> view eeMsgSigs
-      foldM (matchSig dcm capStatic) Nothing sigCaps
+    checkSigs dcm = case getStatic dcm cap of
+      Left e -> evalError' cdef e
+      Right capStatic -> do
+        sigCaps <- S.unions . toList <$> view eeMsgSigs
+        foldM (matchSig dcm capStatic) Nothing sigCaps
 
     matchSig _ _ r@Just{} _ = return r
-    matchSig dcm capStatic Nothing sigCap = do
-      sigStatic <- getStatic dcm sigCap
-      if sigStatic == capStatic
-        then Just <$> doMgdInstall sigCap
-        else return Nothing
+    matchSig dcm capStatic Nothing sigCap = case getStatic dcm sigCap of
+      Left _ -> return Nothing
+      Right sigStatic | sigStatic == capStatic -> Just <$> doMgdInstall sigCap
+                      | otherwise -> return Nothing
 
     doMgdInstall sigCap = installF sigCap cdef
 
