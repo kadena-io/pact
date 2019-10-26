@@ -133,13 +133,14 @@ decomposeManaged' :: Int -> UserCapability -> Maybe (SigCapability,PactValue)
 decomposeManaged' idx cap@SigCapability{..} = case decomposeManaged idx cap of
   Nothing -> Nothing
   Just (h,v,t) -> Just (SigCapability _scName (h ++ t),v)
+{-# INLINABLE decomposeManaged' #-}
 
 -- | Match static value to managed.
 matchManaged :: ManagedCapability c -> UserCapability -> Bool
 matchManaged ManagedCapability{..} cap@SigCapability{..} = case decomposeManaged' _mcManageParamIndex cap of
   Nothing -> False
   Just (c,_) -> c == _mcStatic
-
+{-# INLINABLE matchManaged #-}
 
 instance Eq a => Eq (ManagedCapability a) where a == b = _mcStatic a == _mcStatic b
 instance Ord a => Ord (ManagedCapability a) where a `compare` b = _mcStatic a `compare` _mcStatic b
