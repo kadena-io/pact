@@ -33,6 +33,7 @@ import Control.Monad
 import Control.Lens hiding (DefName)
 import Data.Default
 import Data.Foldable
+import Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -155,10 +156,7 @@ defCapMetaParts i cap (DefcapMeta _ argName) cdef = case findArg argName of
     Nothing -> evalError' i $ "Missing argument index from capability: " <> pretty idx
     Just (static,v) -> return (idx,static,v)
   where
-    findArg an = foldl' (matchArg an) Nothing (zip [0..] $ _ftArgs $ _dFunType cdef)
-    matchArg _ (Just idx) _ = Just idx
-    matchArg an Nothing (idx,Arg{..}) | _aName == an = Just idx
-                                      | otherwise = Nothing
+    findArg an = findIndex ((==) an . _aName) $ _ftArgs (_dFunType cdef)
 
 checkManaged
   :: HasInfo i
@@ -195,11 +193,11 @@ checkManaged i (applyF,installF) cap@SigCapability{..} cdef = case _dDefMeta cde
 
     checkSigs dcm = do
       capStatic <- getStatic dcm cap
-      sigCaps <- foldl1 (<>) <$> view eeMsgSigs
-      foldrM (matchSig dcm capStatic) Nothing sigCaps
+      sigCaps <- S.unions . toList <$> view eeMsgSigs
+      foldM (matchSig dcm capStatic) Nothing sigCaps
 
-    matchSig _ _ _ r@Just{} = return r
-    matchSig dcm capStatic sigCap Nothing = do
+    matchSig _ _ r@Just{} _ = return r
+    matchSig dcm capStatic Nothing sigCap = do
       sigStatic <- getStatic dcm sigCap
       if sigStatic == capStatic
         then Just <$> doMgdInstall sigCap
