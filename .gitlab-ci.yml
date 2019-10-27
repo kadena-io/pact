@@ -7,10 +7,10 @@ pact-macos:
   tags:
     - macos
   script:
-    - nix-build -A proj.ghc.pact
-    - nix-build -A proj.ghc.pact.doc
-    - nix-build -A proj.ghcjs.pact
-    - nix-build -A proj.ghcjs.pact.doc
+    - nix-build
+    - nix-build project.nix -A proj.ghc.pact.doc
+    - nix-build project.nix -A proj.ghcjs.pact
+    - nix-build project.nix -A proj.ghcjs.pact.doc
     # - ./collectArtifacts.sh macos
   # artifacts:
   #   paths:
@@ -21,19 +21,12 @@ pact-linux:
   tags:
     - linux
   script:
-    - nix-build -A proj.ghc.pact
-    - nix-build -A proj.ghcjs.pact
+    - nix-build
+    - nix-build project.nix -A proj.ghcjs.pact
 #    - ./collectArtifacts.sh linux
 #  artifacts:
 #    paths:
 #    - public-linux/
-
-# deploy-nix-cache:
-#   stage: deploy
-#   allow_failure: true
-#   script:
-#     - if [ ! "$CACHIX_SIGNING_KEY" = "" ]; then nix-instantiate | cachix push pact fi
-#     - if [ ! "$CACHIX_SIGNING_KEY" = "" ]; then nix-instantiate shell.nix | cachix push pact fi
 
 # pages:
 #   stage: deploy
