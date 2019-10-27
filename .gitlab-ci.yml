@@ -9,8 +9,9 @@ pact-macos:
   script:
     - nix-build
     - nix-build project.nix -A proj.ghc.pact.doc
-    - nix-build project.nix -A proj.ghcjs.pact
-    - nix-build project.nix -A proj.ghcjs.pact.doc
+    # Disabling until singleton-bool issue is fixed
+    # See also https://github.com/reflex-frp/reflex-platform/issues/549
+    # - nix-build project.nix -A proj.ghcjs.pact
     # - ./collectArtifacts.sh macos
   # artifacts:
   #   paths:
@@ -22,7 +23,8 @@ pact-linux:
     - linux
   script:
     - nix-build
-    - nix-build project.nix -A proj.ghcjs.pact
+    # Disabling until singleton-bool issue is fixed
+    # - nix-build project.nix -A proj.ghcjs.pact
 #    - ./collectArtifacts.sh linux
 #  artifacts:
 #    paths:
