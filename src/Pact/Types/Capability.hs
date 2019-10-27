@@ -19,7 +19,7 @@
 
 module Pact.Types.Capability
   ( Capability(..)
-  , CapAcquireResult(..)
+  , CapEvalResult(..)
   , SigCapability(..)
   , UserCapability
   , ManagedCapability(..), mcInstalled, mcStatic, mcManaged, mcManageParamIndex, mcManageParamName, mcMgrFun
@@ -78,10 +78,12 @@ instance FromJSON SigCapability where
     <$> o .: "name"
     <*> o .: "args"
 
--- | Literate boolean to signal whether cap was already in scope.
-data CapAcquireResult
+-- | Various results of evaluating a capability.
+-- Note: dupe managed install is an error, thus no case here.
+data CapEvalResult
   = NewlyAcquired
   | AlreadyAcquired
+  | NewlyInstalled (ManagedCapability UserCapability)
   deriving (Eq,Show)
 
 data CapScope
@@ -102,7 +104,6 @@ data CapSlot c = CapSlot
   , _csCap :: c
   , _csComposed :: [c]
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
-makeLenses ''CapSlot
 instance NFData c => NFData (CapSlot c)
 
 data ManagedCapability c = ManagedCapability
@@ -132,13 +133,14 @@ decomposeManaged' :: Int -> UserCapability -> Maybe (SigCapability,PactValue)
 decomposeManaged' idx cap@SigCapability{..} = case decomposeManaged idx cap of
   Nothing -> Nothing
   Just (h,v,t) -> Just (SigCapability _scName (h ++ t),v)
+{-# INLINABLE decomposeManaged' #-}
 
 -- | Match static value to managed.
 matchManaged :: ManagedCapability c -> UserCapability -> Bool
 matchManaged ManagedCapability{..} cap@SigCapability{..} = case decomposeManaged' _mcManageParamIndex cap of
   Nothing -> False
   Just (c,_) -> c == _mcStatic
-
+{-# INLINABLE matchManaged #-}
 
 instance Eq a => Eq (ManagedCapability a) where a == b = _mcStatic a == _mcStatic b
 instance Ord a => Ord (ManagedCapability a) where a `compare` b = _mcStatic a `compare` _mcStatic b
@@ -164,3 +166,4 @@ instance NFData Capabilities
 
 makeLenses ''ManagedCapability
 makeLenses ''Capabilities
+makeLenses ''CapSlot

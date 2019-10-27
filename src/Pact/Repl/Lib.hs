@@ -590,11 +590,12 @@ setGasModel _ as = do
 testCapability :: ZNativeFun ReplState
 testCapability i [ (TApp app _) ] = do
   (_,d,_) <- appToCap app
-  let (scope,verb) = maybe (CapCallStack,"acquired") (const (CapManaged,"installed")) (_dDefMeta d)
+  let scope = maybe CapCallStack (const CapManaged) (_dDefMeta d)
   r <- evalCap i scope False $ app
   return . tStr $ case r of
-    AlreadyAcquired -> "Capability already " <> verb
-    NewlyAcquired -> "Capability " <> verb
+    AlreadyAcquired -> "Capability already acquired"
+    NewlyAcquired -> "Capability acquired"
+    NewlyInstalled _ -> "Capability installed"
 testCapability i as = argsError' i as
 
 -- | Modify existing env chain data with new data, replacing just those

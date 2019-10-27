@@ -267,12 +267,11 @@
 
   (defcap G () (enforce false "module admin disabled"))
 
+  (defcap O () "dummy empty cap" true)
+
   (defcap PAY (sender:string receiver:string amount:integer)
     @managed amount PAY-mgr
     (enforce-keyset (read-keyset sender)))
-
-  (defun install-pay (sender:string receiver:string amount:integer)
-    (install-capability (PAY sender receiver amount)))
 
   (defun PAY-mgr (mgd req)
     (let ((bal (- mgd req)))
@@ -284,6 +283,12 @@
     (with-capability (PAY sender receiver amount)
                      amount))
 
+  (defcap PAY_ADMIN (receiver:string amount:integer)
+    @managed amount PAY-mgr
+    (enforce-guard (create-module-guard "foo")))
+
+  (defun pay-admin (receiver:string amount:integer)
+    (with-capability (PAY_ADMIN receiver amount) amount))
   )
 
 (commit-tx)
@@ -292,44 +297,35 @@
 (use mgd-caps)
 (env-data { "alice": ["alice"] })
 
+(env-keys ["alice"])
+
 (expect-failure
- "keyset not in sigs"
- (install-pay "alice" "bob" 10))
+ "cap not in sigs"
+ (pay "alice" "bob" 10))
 
 (env-sigs [{ "key": "alice",
           "caps": [(PAY "alice" "bob" 10)
-                  ,(PAY "alice" "carl" 1)] }] )
-
-(expect-failure
- "Payment should fail with no cap installed"
- (pay "alice" "bob" 6))
+          ,(PAY "alice" "carl" 1)] }] )
 
 (expect-failure
  "Failure on external install"
  (install-capability (PAY "alice" "bob" 10)))
 
-(expect-failure
- "Failure on unmatched cap install"
- (install-pay "alice" "bob" 12))
-
-(expect
- "Success on alice-bob cap install" "Installed capability"
- (install-pay "alice" "bob" 10))
-
-(expect
- "Success on alice-carl cap install" "Installed capability"
- (install-pay "alice" "carl" 1))
 
 (expect-failure
  "Payment should fail on different sender"
+ "not installed"
  (pay "dave" "bob" 6))
+
 
 (expect-failure
  "Payment should fail on different receiver"
+ "not installed"
  (pay "alice" "dave" 6))
 
 (expect-failure
  "Payment should fail with too-high balance"
+ "sufficient balance"
  (pay "alice" "bob" 11))
 
 (expect
@@ -338,6 +334,7 @@
 
 (expect-failure
  "2nd payment should fail with too-high balance"
+ "sufficient balance"
  (pay "alice" "bob" 5))
 
 (expect
@@ -346,6 +343,7 @@
 
 (expect-failure
  "3rd payment should fail with too-high balance"
+ "sufficient balance"
  (pay "alice" "bob" 1))
 
 (expect
@@ -357,13 +355,61 @@
  (pay "alice" "bob" 1))
 
 (expect-failure
- "reinstall of capability should fail"
- (install-pay "alice" "bob" 10))
+ "module admin fails without cap"
+ "not installed"
+ (pay-admin "bob" 10))
+
+(env-sigs [{ "key": "dummy",
+          "caps": [(PAY_ADMIN "bob" 10)] }])
 
 (expect-failure
- "reinstall of capability should fail"
- (install-pay "alice" "carl" 1))
+ "module admin fails on diff receiver"
+ "not installed"
+ (pay-admin "dave" 10))
 
+(expect-failure
+ "module admin fails on too-big balance"
+ "sufficient balance"
+ (pay-admin "bob" 12))
+
+(expect
+ "module admin succeeds"
+ 6
+ (pay-admin "bob" 6))
+
+(expect-failure
+ "module admin fails on balance exceed"
+ "sufficient balance"
+ (pay-admin "bob" 5))
+
+(expect
+ "module admin balance succeeds"
+ 4
+ (pay-admin "bob" 4))
+
+(expect-failure
+ "module admin fails on exhausted balance"
+ "sufficient balance"
+ (pay-admin "bob" 1))
+
+;; make sure different arity caps can play nice
+
+(env-sigs
+ [{ "key": "carl",
+ "caps": [(O)
+         ,(PAY_ADMIN "alice" 10)
+         ,(PAY "carl" "alice" 1)] }])
+(env-data { "carl": ["carl"] })
+
+(expect
+ "module admin alice succeeds"
+ 1
+ (pay-admin "alice" 1))
+
+(expect
+ "carl pay alice succeeds"
+ 1
+ (pay "carl" "alice" 1))
 
 (commit-tx)
 
