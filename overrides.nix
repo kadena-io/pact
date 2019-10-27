@@ -20,12 +20,11 @@ in {
 
   Glob = whenGhcjs dontCheck super.Glob;
 
-  aeson = dontCheck (self.callCabal2nix "aeson" (pkgs.fetchFromGitHub {
-    owner = "obsidiansystems";
-    repo = "aeson";
-    rev = "d6288c431a477f9a6e93aa80454a9e1712127548"; # branch v1450-text-jsstring containing (ToJSVal Value) instance and other fixes
-    sha256 = "102hj9b42z1h9p634g9226nvs756djwadrkz9yrb15na671f2xf4";
-  }) {});
+  aeson = dontCheck (callHackageDirect {
+    pkg = "aeson";
+    ver = "1.4.5.0";
+    sha256 = "0imcy5kkgrdrdv7zkhkjvwpdp4sms5jba708xsap1vl9c2s63n5a";
+  });
 
   algebraic-graphs = whenGhcjs dontCheck super.algebraic-graphs;
   base-compat-batteries = whenGhcjs dontCheck super.base-compat-batteries;
