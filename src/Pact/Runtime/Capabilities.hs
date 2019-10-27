@@ -192,7 +192,7 @@ checkManaged i (applyF,installF) cap@SigCapability{..} cdef = case _dDefMeta cde
     checkSigs dcm = case getStatic dcm cap of
       Left e -> evalError' cdef e
       Right capStatic -> do
-        sigCaps <- S.unions . toList <$> view eeMsgSigs
+        sigCaps <- S.unions <$> view eeMsgSigs
         foldM (matchSig dcm capStatic) Nothing sigCaps
 
     matchSig _ _ r@Just{} _ = return r
