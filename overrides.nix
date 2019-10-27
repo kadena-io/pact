@@ -1,4 +1,4 @@
-pkgs: hackGet: self: super: with pkgs.haskell.lib;
+pkgs: self: super: with pkgs.haskell.lib;
 let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
     whenGhcjs = f: p: if self.ghc.isGhcjs or false then (f p) else p;
     callHackageDirect = {pkg, ver, sha256}@args:
@@ -7,25 +7,22 @@ let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
            url = "http://hackage.haskell.org/package/${pkgver}/${pkgver}.tar.gz";
            inherit sha256;
          }) {};
-
-    # includes servant-jsaddle (needed for chainweaver)
     servantSrc = pkgs.fetchFromGitHub {
       owner = "haskell-servant";
       repo = "servant";
-      rev = "925d50d7526a9b95918b7a2d49e57afa10985302";
-      sha256 = "0zzchj9pc9y50acvj8zbm94bgbvbxzxz2b0xd2zbck90bribwm5b";
+      rev = "226154218b9bf9f40df02363f88b746bc4e065b3";
+      sha256 = "1msi9367wh2qsqxgv1bdz0qdp80lfc06acg60znicdjza9n88lzk";
     };
 in {
   pact = doCoverage (addBuildDepend super.pact pkgs.z3);
 
   Glob = whenGhcjs dontCheck super.Glob;
 
-  aeson = dontCheck (self.callCabal2nix "aeson" (pkgs.fetchFromGitHub {
-    owner = "obsidiansystems";
-    repo = "aeson";
-    rev = "d6288c431a477f9a6e93aa80454a9e1712127548"; # branch v1450-text-jsstring containing (ToJSVal Value) instance and other fixes
-    sha256 = "102hj9b42z1h9p634g9226nvs756djwadrkz9yrb15na671f2xf4";
-  }) {});
+  aeson = dontCheck (callHackageDirect {
+    pkg = "aeson";
+    ver = "1.4.5.0";
+    sha256 = "0imcy5kkgrdrdv7zkhkjvwpdp4sms5jba708xsap1vl9c2s63n5a";
+  });
 
   algebraic-graphs = whenGhcjs dontCheck super.algebraic-graphs;
   base-compat-batteries = whenGhcjs dontCheck super.base-compat-batteries;
@@ -41,13 +38,11 @@ in {
   intervals = whenGhcjs dontCheck super.intervals;
   iproute = whenGhcjs dontCheck super.iproute;
   lens-aeson = whenGhcjs dontCheck super.lens-aeson;
-  memory = whenGhcjs dontCheck super.memory;
   network-byte-order = whenGhcjs dontCheck super.network-byte-order;
   prettyprinter-ansi-terminal = whenGhcjs dontCheck super.prettyprinter-ansi-terminal;
   prettyprinter-convert-ansi-wl-pprint = whenGhcjs dontCheck super.prettyprinter-convert-ansi-wl-pprint;
   tdigest = whenGhcjs dontCheck super.tdigest;
   temporary = whenGhcjs dontCheck super.temporary;
-  text-short = whenGhcjs dontCheck super.text-short; # either hang or take a long time
   unix-time = whenGhcjs dontCheck super.unix-time;
   wai-app-static = whenGhcjs dontCheck super.wai-app-static;
   wai-extra = whenGhcjs dontCheck super.wai-extra;
@@ -94,19 +89,11 @@ in {
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
   });
 
-  # https://github.com/reflex-frp/reflex-platform/issues/549
-  singleton-bool = overrideCabal
-    (self.callCabal2nix "singleton-bool" (pkgs.fetchFromGitHub {
-      owner = "obsidiansystems";
-      repo = "singleton-bool";
-      rev = "bf5c81fff6eaa9ed1286de9d0ecfffa7e0aa85d2";
-      sha256 = "0fzi6f5pl2gg9k8f7k88qyyvjflpcw08905y0vjmbylzc70wsykw";
-    }) {})
-    (drv: {
-      editedCabalFile = null;
-      revision = null;
-    })
-  ;
+  singleton-bool = dontCheck (callHackageDirect {
+    pkg = "singleton-bool";
+    ver = "0.1.5";
+    sha256 = "1kjn5wgwgxdw2xk32d645v3ss2a70v3bzrihjdr2wbj2l4ydcah1";
+  });
 
   servant = dontCheck (self.callCabal2nix "servant" "${servantSrc}/servant" {});
   servant-client = dontCheck (self.callCabal2nix "servant-client" "${servantSrc}/servant-client" {});
