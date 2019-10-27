@@ -93,19 +93,11 @@ in {
     sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
   });
 
-  # https://github.com/reflex-frp/reflex-platform/issues/549
-  singleton-bool = overrideCabal
-    (self.callCabal2nix "singleton-bool" (pkgs.fetchFromGitHub {
-      owner = "obsidiansystems";
-      repo = "singleton-bool";
-      rev = "bf5c81fff6eaa9ed1286de9d0ecfffa7e0aa85d2";
-      sha256 = "0fzi6f5pl2gg9k8f7k88qyyvjflpcw08905y0vjmbylzc70wsykw";
-    }) {})
-    (drv: {
-      editedCabalFile = null;
-      revision = null;
-    })
-  ;
+  singleton-bool = dontCheck (callHackageDirect {
+    pkg = "singleton-bool";
+    ver = "0.1.5";
+    sha256 = "1kjn5wgwgxdw2xk32d645v3ss2a70v3bzrihjdr2wbj2l4ydcah1";
+  });
 
   servant = dontCheck (self.callCabal2nix "servant" "${servantSrc}/servant" {});
   servant-client = dontCheck (self.callCabal2nix "servant-client" "${servantSrc}/servant-client" {});
