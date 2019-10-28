@@ -653,7 +653,7 @@ genEnv = GenEnv
         SCons' (SSymbol @"name") SStr
           SNil'
     )]
-  [ (Pact.KeySet (S.fromList [alice, bob]) (Name $ BareName "keys-all" dummyInfo), Guard 0)
-  , (Pact.KeySet (S.fromList [alice, bob]) (Name $ BareName "keys-any" dummyInfo), Guard 1)
-  , (Pact.KeySet (S.fromList [alice, bob]) (Name $ BareName "keys-2" dummyInfo), Guard 2)
+  [ (Pact.keysetFromList [alice, bob] $ Name $ BareName "keys-all" dummyInfo, Guard 0)
+  , (Pact.keysetFromList [alice, bob] $ Name $ BareName "keys-any" dummyInfo, Guard 1)
+  , (Pact.keysetFromList [alice, bob] $ Name $ BareName "keys-2" dummyInfo, Guard 2)
   ]

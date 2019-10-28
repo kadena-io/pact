@@ -125,12 +125,12 @@ runPactExec msg ss cdata benchMod dbEnv pc = do
   return $! toJSON $ _erOutput r'
 
 benchKeySet :: KeySet
-benchKeySet = KeySet (S.singleton $ PublicKey "benchadmin") (Name $ BareName ">" def)
+benchKeySet = keysetFromList [PublicKey "benchadmin"] (Name $ BareName ">" def)
 
 acctRow :: ObjectMap PactValue
 acctRow = ObjectMap $ M.fromList
   [("balance",PLiteral (LDecimal 100.0))
-  ,("guard",PGuard (GKeySet (KeySet (S.singleton $ PublicKey $ encodeUtf8 pk) (Name $ BareName "keys-all" def))))]
+  ,("guard",PGuard (GKeySet (keysetFromList [PublicKey $ encodeUtf8 pk] (Name $ BareName "keys-all" def))))]
 
 benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)
 benchRead _ KeySets _ = rc (Just benchKeySet)
