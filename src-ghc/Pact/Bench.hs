@@ -19,7 +19,6 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import qualified Data.Set as S
 import Data.Text (unpack, pack)
 import Data.Text.Encoding
 
