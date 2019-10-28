@@ -256,7 +256,7 @@ enforceGuardTests = tests
       [text| (enforce-guard "$sampleLoadedKeysetName") |]
     allExprs = enforceGuardExpr :| []
 
-    signEnvWithKeyset = setEnv (set eeMsgSigs (M.fromList samplePubKeysWithCaps))
+    signEnvWithKeyset = setEnv (set eeMsgSigs (M.fromList $ F.toList samplePubKeysWithCaps))
 
     tests =
       createGasUnitTests
@@ -533,7 +533,7 @@ defineKeysetTests = tests
 
     -- Keyset rotation causes previous keyset to be enforced
     updateEnvMsgSig :: GasSetup e -> GasSetup e
-    updateEnvMsgSig = setEnv (set eeMsgSigs (M.fromList samplePubKeysWithCaps))
+    updateEnvMsgSig = setEnv (set eeMsgSigs (M.fromList $ F.toList samplePubKeysWithCaps))
 
     tests =
       createGasUnitTests
@@ -548,7 +548,7 @@ enforceKeysetTests = tests
     enforceKeysetExpr = defPactExpression [text| (enforce-keyset '$sampleLoadedKeysetName) |]
     allExprs = enforceKeysetExpr :| []
 
-    updateEnvMsgSig = setEnv (set eeMsgSigs (M.fromList samplePubKeysWithCaps))
+    updateEnvMsgSig = setEnv (set eeMsgSigs (M.fromList $ F.toList samplePubKeysWithCaps))
 
     tests =
       createGasUnitTests
@@ -1667,7 +1667,7 @@ namespaceTests = tests
     namespaceExpr = defPactExpression [text| (namespace '$sampleNamespaceName) |]
 
     updateEnvWithSig =
-      setEnv $ set eeMsgSigs (M.fromList samplePubKeysWithCaps)
+      setEnv $ set eeMsgSigs (M.fromList $ F.toList samplePubKeysWithCaps)
 
     tests = createGasUnitTests
             updateEnvWithSig
@@ -1694,7 +1694,7 @@ defineNamespaceTests = tests
           (Just $ rotateExprText <> ": Defining namespace with the same name as one already defined.")
 
         updateMsgSig =
-          setEnv $ set eeMsgSigs (M.fromList samplePubKeysWithCaps)
+          setEnv $ set eeMsgSigs (M.fromList $ F.toList samplePubKeysWithCaps)
 
         rotateTests =
           createGasUnitTests

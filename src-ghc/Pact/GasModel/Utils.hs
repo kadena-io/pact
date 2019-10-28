@@ -320,11 +320,11 @@ acctRow = ObjectMap $ M.fromList
 sampleLoadedKeysetName :: T.Text
 sampleLoadedKeysetName = "some-loaded-keyset"
 
-samplePubKeys :: [PublicKey]
-samplePubKeys = [PublicKey "something"]
+samplePubKeys :: S.Set PublicKey
+samplePubKeys = S.fromList [PublicKey "something"]
 
-samplePubKeysWithCaps :: [(PublicKey, S.Set SigCapability)]
-samplePubKeysWithCaps = map (\p -> (p,S.empty)) samplePubKeys
+samplePubKeysWithCaps :: S.Set (PublicKey, S.Set SigCapability)
+samplePubKeysWithCaps = S.map (\p -> (p,S.empty)) samplePubKeys
 
 sampleKeyset :: KeySet
 sampleKeyset = KeySet samplePubKeys (Name $ BareName "keys-all" def)

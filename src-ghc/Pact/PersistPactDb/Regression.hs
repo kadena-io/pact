@@ -9,10 +9,12 @@ module Pact.PersistPactDb.Regression
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
-import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Strict as HM
 import Control.Lens hiding ((.=))
 import Control.DeepSeq
+
+import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
+import qualified Data.Set as S
 
 import Pact.PersistPactDb
 import Pact.Persist
@@ -70,7 +72,7 @@ runRegression p = do
   let row' = ObjectMap $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
   _writeRow pactdb Update usert "key1" row' v
   assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
-  let ks = KeySet [PublicKey "skdjhfskj"] (Name $ BareName "predfun" def)
+  let ks = KeySet (S.singleton $ PublicKey "skdjhfskj") (Name $ BareName "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
   (modName,modRef,mod') <- loadModule

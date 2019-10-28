@@ -106,6 +106,7 @@ import Data.Int (Int64)
 import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
+import Data.Set (Set)
 import Data.Serialize (Serialize)
 import Data.String
 import Data.Text (Text,pack)
@@ -169,16 +170,16 @@ instance Pretty PublicKey where
   pretty (PublicKey s) = prettyString (BS.toString s)
 
 -- | KeySet pairs keys with a predicate function name.
-data KeySet = KeySet {
-      _ksKeys :: ![PublicKey]
-    , _ksPredFun :: !Name
-    } deriving (Eq,Generic,Show,Ord)
+data KeySet = KeySet
+  { _ksKeys :: !(Set PublicKey)
+  , _ksPredFun :: ! Name
+  } deriving (Eq,Generic,Show,Ord)
 
 instance NFData KeySet
 
 instance Pretty KeySet where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
-    [ "keys: " <> prettyList ks
+    [ "keys: " <> prettyList (toList ks)
     , "pred: " <> pretty f
     ]
 

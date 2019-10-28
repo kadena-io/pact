@@ -21,6 +21,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import           Data.Default               (def)
 import           Data.Foldable              (traverse_)
 import qualified Data.HashMap.Strict        as HM
+import qualified Data.Set                   as S
 import           Data.String                (IsString, fromString)
 import qualified Data.Text                  as T
 import           Data.Void                  (Void)
@@ -67,7 +68,7 @@ initializeRepl :: IO ReplState
 initializeRepl = do
   rs <- initReplState StringEval Nothing
   let dbImpl = rs ^. rEnv . eePactDb
-      dummyKeySet = KeySet [] (Name $ BareName "keys-all" def)
+      dummyKeySet = KeySet S.empty (Name $ BareName "keys-all" def)
 
       -- Stub out all keyset accesses to return a dummy value. We don't care
       -- about real keys because we're not going to be doing any concrete

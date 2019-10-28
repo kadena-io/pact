@@ -19,6 +19,8 @@ import Data.Decimal
 import Data.Int (Int64)
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
+import Data.Set (Set)
+import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Thyme hiding (Vector)
@@ -70,7 +72,14 @@ instance (SizeOf v) => SizeOf (Vector v) where
       vectorSize =
         ((7 + vectorLength) * wordSize) + sizeOfContents
       vectorLength = fromIntegral (V.length v)
-      sizeOfContents = V.foldl' (\acc pv -> acc + (sizeOf pv)) 0 v  
+      sizeOfContents = V.foldl' (\acc pv -> acc + (sizeOf pv)) 0 v
+
+instance SizeOf a => SizeOf (Set a) where
+  sizeOf s = setSize
+    where
+      setSize = ((1 + 3 * setLength) * wordSize) + sizeOfSet
+      setLength = fromIntegral $ S.size s
+      sizeOfSet = S.foldl' (\acc a -> acc + sizeOf a) 0 s
 
 instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
   sizeOf m = mapSize
@@ -78,7 +87,7 @@ instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
       mapSize = (6 * mapLength * wordSize) + sizeOfKeys + sizeOfValues
       mapLength = fromIntegral (M.size m)
       sizeOfValues = M.foldl' (\acc pv -> acc + (sizeOf pv)) 0 m
-      sizeOfKeys = M.foldlWithKey' (\acc fk _ -> acc + (sizeOf fk)) 0 m 
+      sizeOfKeys = M.foldlWithKey' (\acc fk _ -> acc + (sizeOf fk)) 0 m
 
 instance (SizeOf a, SizeOf b) => SizeOf (a,b) where
   sizeOf (a,b) = (constructorCost 3) + (sizeOf a) + (sizeOf b)

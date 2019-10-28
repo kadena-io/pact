@@ -17,6 +17,7 @@ import           Control.Monad.Reader       (MonadReader, ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT (runStateT))
 import qualified Data.Decimal               as Decimal
 import qualified Data.Map.Strict            as Map
+import qualified Data.Set                   as S
 import qualified Data.Text                  as T
 import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
@@ -652,7 +653,7 @@ genEnv = GenEnv
         SCons' (SSymbol @"name") SStr
           SNil'
     )]
-  [ (Pact.KeySet [alice, bob] (Name $ BareName "keys-all" dummyInfo), Guard 0)
-  , (Pact.KeySet [alice, bob] (Name $ BareName "keys-any" dummyInfo), Guard 1)
-  , (Pact.KeySet [alice, bob] (Name $ BareName "keys-2" dummyInfo), Guard 2)
+  [ (Pact.KeySet (S.fromList [alice, bob]) (Name $ BareName "keys-all" dummyInfo), Guard 0)
+  , (Pact.KeySet (S.fromList [alice, bob]) (Name $ BareName "keys-any" dummyInfo), Guard 1)
+  , (Pact.KeySet (S.fromList [alice, bob]) (Name $ BareName "keys-2" dummyInfo), Guard 2)
   ]

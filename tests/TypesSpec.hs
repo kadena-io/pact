@@ -6,6 +6,7 @@ import Test.Hspec
 
 import Data.Aeson
 import Data.Map.Strict (fromList)
+import qualified Data.Set as S
 
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -27,7 +28,7 @@ testJSONPersist = do
   rt (PLiteral (LBool False))
   rt (PLiteral (LString "hello"))
   rt (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
-  rt (PGuard (GKeySet (KeySet [PublicKey "askjh",PublicKey "dfgh"] (Name $ BareName "predfun" def))))
+  rt (PGuard (GKeySet (KeySet (S.fromList [PublicKey "askjh",PublicKey "dfgh"]) (Name $ BareName "predfun" def))))
 
 testJSONColumns :: Spec
 testJSONColumns =
