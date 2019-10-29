@@ -104,7 +104,7 @@ enforceKeySet i ksn KeySet{..} = go
       runPred (M.size sigs')
     matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
-      maybe (pretty $ map (elide . asString) _ksKeys) pretty ksn
+      maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
     atLeast t m = m >= t
     elide pk | T.length pk < 8 = pk
              | otherwise = T.take 8 pk <> "..."

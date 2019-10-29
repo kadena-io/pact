@@ -30,11 +30,9 @@ import           Numeric.Interval.Exception (EmptyInterval)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Types         hiding (Term, Var)
 import qualified Pact.Analyze.Types         as Analyze
-import           Pact.Analyze.Util          (dummyInfo)
 
 import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Pretty          (renderCompactString', pretty, vsep)
-import           Pact.Types.Term            (Name (Name), BareName(..))
 import qualified Pact.Types.Term            as Pact
 
 import           Analyze.TimeGen
@@ -652,7 +650,7 @@ genEnv = GenEnv
         SCons' (SSymbol @"name") SStr
           SNil'
     )]
-  [ (Pact.KeySet [alice, bob] (Name $ BareName "keys-all" dummyInfo), Guard 0)
-  , (Pact.KeySet [alice, bob] (Name $ BareName "keys-any" dummyInfo), Guard 1)
-  , (Pact.KeySet [alice, bob] (Name $ BareName "keys-2" dummyInfo), Guard 2)
+  [ (Pact.mkKeySet [alice, bob] "keys-all", Guard 0)
+  , (Pact.mkKeySet [alice, bob] "keys-any", Guard 1)
+  , (Pact.mkKeySet [alice, bob] "keys-2", Guard 2)
   ]

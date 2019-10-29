@@ -33,7 +33,7 @@ module Pact.Types.Term
  ( Namespace(..), nsName, nsUser, nsAdmin,
    Meta(..),mDocs,mModel,
    PublicKey(..),
-   KeySet(..),
+   KeySet(..), mkKeySet,
    KeySetName(..),
    PactGuard(..),
    PactId(..),
@@ -106,6 +106,8 @@ import Data.Int (Int64)
 import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
+import Data.Set (Set)
+import qualified Data.Set as S
 import Data.Serialize (Serialize)
 import Data.String
 import Data.Text (Text,pack)
@@ -169,16 +171,16 @@ instance Pretty PublicKey where
   pretty (PublicKey s) = prettyString (BS.toString s)
 
 -- | KeySet pairs keys with a predicate function name.
-data KeySet = KeySet {
-      _ksKeys :: ![PublicKey]
-    , _ksPredFun :: !Name
-    } deriving (Eq,Generic,Show,Ord)
+data KeySet = KeySet
+  { _ksKeys :: !(Set PublicKey)
+  , _ksPredFun :: !Name
+  } deriving (Eq,Generic,Show,Ord)
 
 instance NFData KeySet
 
 instance Pretty KeySet where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
-    [ "keys: " <> prettyList ks
+    [ "keys: " <> prettyList (toList ks)
     , "pred: " <> pretty f
     ]
 
@@ -197,6 +199,9 @@ instance FromJSON KeySet where
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 
+
+mkKeySet :: [PublicKey] -> Text -> KeySet
+mkKeySet pks n = KeySet (S.fromList pks) (Name $ BareName n def)
 
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,SizeOf)
