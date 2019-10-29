@@ -858,6 +858,9 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
         -- if modulename is nothing, it's a builtin
         Nothing -> toAST $ return $ Left (Direct $ constTerm _tConstVal)
         _ -> die i $ "Non-native constant value in native context: " ++ show t
+      TGuard{..} -> do
+        g <- traverse (toAST . return . Left . Direct) _tGuard
+        trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard g)
       _ -> die i $ "Native in value context: " <> show t
   (Right t) -> return t
 
