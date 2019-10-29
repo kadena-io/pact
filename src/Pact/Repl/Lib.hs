@@ -530,7 +530,7 @@ verify i as = case as of
 
 sigKeyset :: RNativeFun LibState
 sigKeyset _ _ = view eeMsgSigs >>= \ss ->
-  return $ toTerm $ keysetFromList (M.keys ss) (Name $ BareName (asString KeysAll) def)
+  return $ toTerm $ mkKeySet (M.keys ss) (asString KeysAll)
 
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")

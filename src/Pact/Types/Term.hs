@@ -33,7 +33,7 @@ module Pact.Types.Term
  ( Namespace(..), nsName, nsUser, nsAdmin,
    Meta(..),mDocs,mModel,
    PublicKey(..),
-   KeySet(..), keysetFromList,
+   KeySet(..), mkKeySet,
    KeySetName(..),
    PactGuard(..),
    PactId(..),
@@ -200,8 +200,8 @@ instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 
 
-keysetFromList :: [PublicKey] -> Name -> KeySet
-keysetFromList = KeySet . S.fromList
+mkKeySet :: [PublicKey] -> Text -> KeySet
+mkKeySet pks n = KeySet (S.fromList pks) (Name $ BareName n def)
 
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,SizeOf)

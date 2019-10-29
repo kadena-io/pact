@@ -71,7 +71,7 @@ runRegression p = do
   let row' = ObjectMap $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
   _writeRow pactdb Update usert "key1" row' v
   assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
-  let ks = keysetFromList [PublicKey "skdjhfskj"] $ Name $ BareName "predfun" def
+  let ks = mkKeySet [PublicKey "skdjhfskj"] "predfun"
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
   (modName,modRef,mod') <- loadModule
