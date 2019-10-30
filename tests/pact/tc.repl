@@ -179,6 +179,10 @@
     (and
       (is-charset CHARSET_ASCII "emily")
       (is-charset CHARSET_LATIN1 "stuart")))
+
+  ; defconst + user guards
+  (defun f () true)
+  (defconst USER_GUARD (create-user-guard (f)))
 )
 
 (create-table persons)
