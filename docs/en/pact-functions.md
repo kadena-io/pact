@@ -38,7 +38,8 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 
 Decode STRING from unpadded base64
 ```lisp
-(base64-decode "aGVsbG8gd29ybGQh")
+pact> (base64-decode "aGVsbG8gd29ybGQh")
+"hello world!"
 ```
 
 
@@ -49,7 +50,8 @@ Decode STRING from unpadded base64
 
 Encode STRING as unpadded base64
 ```lisp
-(base64-encode "hello world!")
+pact> (base64-encode "hello world!")
+"aGVsbG8gd29ybGQh"
 ```
 
 

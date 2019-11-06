@@ -1043,7 +1043,7 @@ baseStrToInt base t =
 base64Encode :: NativeDef
 base64Encode = defRNative "base64-encode" go
   (funType tTyString [("string", tTyString)])
-  [LitExample "(base64-encode \"hello world!\")"]
+  ["(base64-encode \"hello world!\")"]
   "Encode STRING as unpadded base64"
   where
     go :: RNativeFun e
@@ -1060,7 +1060,7 @@ base64Encode = defRNative "base64-encode" go
 base64decode :: NativeDef
 base64decode = defRNative "base64-decode" go
   (funType tTyString [("string", tTyString)])
-  [LitExample "(base64-decode \"aGVsbG8gd29ybGQh\")"]
+  ["(base64-decode \"aGVsbG8gd29ybGQh\")"]
   "Decode STRING from unpadded base64"
   where
     go :: RNativeFun e
