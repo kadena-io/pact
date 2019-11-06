@@ -57,6 +57,7 @@ import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base64.URL as B64U
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
 import Data.Bits
@@ -67,7 +68,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
-import Data.Text.Encoding
+import qualified Data.Text.Encoding as T
 import Data.Thyme.Time.Core (fromMicroseconds,posixSecondsToUTCTime)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
@@ -251,7 +252,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   where
     hash' :: RNativeFun e
     hash' i as = case as of
-      [TLitString s] -> go $ encodeUtf8 s
+      [TLitString s] -> go $ T.encodeUtf8 s
       [a'] -> enforcePactValue a' >>= \pv -> go $ toStrict $ encode pv
       _ -> argsError i as
       where go = return . tStr . asString . pactHash
@@ -687,6 +688,8 @@ langDefs =
     ,isCharsetDef
     ,asciiConst
     ,latin1Const
+    ,base64Encode
+    ,base64decode
     ])
     where
           d = mkTyVar "d" []
@@ -1036,3 +1039,40 @@ baseStrToInt base t =
          else Left $ "character '" <> T.singleton c' <>
                 "' is out of range for base " <> tShow base <> ": " <> t
 {-# INLINABLE baseStrToInt #-}
+
+base64Encode :: NativeDef
+base64Encode = defRNative "base64-encode" go
+  (funType tTyString [("string", tTyString)])
+  [LitExample "(base64-encode \"hello world!\")"]
+  "Encode STRING as unpadded base64"
+  where
+    go :: RNativeFun e
+    go i as = case as of
+      [TLitString s] -> return
+        . tStr
+        . T.dropWhileEnd (== '=')
+        . T.decodeUtf8
+        . B64U.encode
+        . T.encodeUtf8
+        $ s
+      _ -> argsError i as
+
+base64decode :: NativeDef
+base64decode = defRNative "base64-decode" go
+  (funType tTyString [("string", tTyString)])
+  [LitExample "(base64-decode \"aGVsbG8gd29ybGQh\")"]
+  "Decode STRING from unpadded base64"
+  where
+    go :: RNativeFun e
+    go i as = case as of
+      [TLitString s] ->
+        case B64U.decode . T.encodeUtf8 $ pad s of
+          Left e -> evalError' i
+            $ "Could not decode string: "
+            <> pretty e
+          Right t -> return . tStr $ T.decodeUtf8 t
+      _ -> argsError i as
+
+    pad t =
+      let s = T.length t `mod` 4
+      in t <> T.replicate ((4 - s) `mod` 4) "="

@@ -1,0 +1,26 @@
+; round trip
+
+(expect
+  "Base64 decode sanity check"
+  "hello world!"
+  (base64-decode "aGVsbG8gd29ybGQh"))
+
+(expect
+  "Base64 encode sanity check"
+  "aGVsbG8gd29ybGQh"
+  (base64-encode "hello world!"))
+
+(expect
+  "Base64 encoding round trips"
+  "hello world!"
+  (base64-decode (base64-encode "hello world!")))
+
+(expect
+  "Base64 decoding round trips"
+  "aGVsbG8gd29ybGQh"
+  (base64-encode (base64-decode "aGVsbG8gd29ybGQh")))
+
+(expect-failure
+  "base64 decoding fails on non base64-encoded input"
+  "Could not decode string"
+  (base64-decode "aGVsbG8gd29ybGQh%"))

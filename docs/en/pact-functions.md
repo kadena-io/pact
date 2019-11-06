@@ -31,6 +31,28 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 ```
 
 
+### base64-decode {#base64-decode}
+
+*string*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Decode STRING from unpadded base64
+```lisp
+(base64-decode "aGVsbG8gd29ybGQh")
+```
+
+
+### base64-encode {#base64-encode}
+
+*string*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Encode STRING as unpadded base64
+```lisp
+(base64-encode "hello world!")
+```
+
+
 ### bind {#bind}
 
 *src*&nbsp;`object:<{row}>` *binding*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
