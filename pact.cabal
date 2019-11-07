@@ -21,8 +21,14 @@ flag cryptonite-ed25519
   default:     False
   manual:      True
 
+flag ghc-flags
+  description: Generate .ghc.flags files during compilation
+  default:     False
+  manual:      True
+
 library
-  exposed-modules:     Pact.Analyze.Remote.Types
+  exposed-modules:     Crypto.Hash.Blake2Native
+                     , Pact.Analyze.Remote.Types
                      , Pact.Compile
                      , Pact.Eval
                      , Pact.Gas
@@ -78,9 +84,12 @@ library
                      , Pact.Types.Type
                      , Pact.Types.Util
                      , Pact.Types.Version
-                     , Crypto.Hash.Blake2Native
                      , Pact.Types.Typecheck
                      , Pact.Typechecker
+
+  if flag(ghc-flags)
+    ghc-options: -fplugin GhcFlags.Plugin
+    build-depends: ghcflags
 
   if impl(ghcjs)
     build-depends: ghcjs-dom

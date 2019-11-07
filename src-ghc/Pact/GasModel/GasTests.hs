@@ -27,6 +27,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty as NEL
 import qualified Data.Map as M
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 
 import Pact.GasModel.Types
@@ -73,6 +74,8 @@ unitTestFromDef nativeName = tests
     tests = case (asString nativeName) of
       -- General native functions
       "at"                   -> Just $ atTests nativeName
+      "base64-decode"        -> Just $ base64DecodeTests nativeName
+      "base64-encode"        -> Just $ base64EncodeTests nativeName
       "bind"                 -> Just $ bindTests nativeName
       "chain-data"           -> Just $ chainDataTests nativeName
       "compose"              -> Just $ composeTests nativeName
@@ -349,7 +352,6 @@ requireCapabilityTests = tests
       updateGrantedCap
       updateGrantedCap
       allExprs
-
 
 composeCapabilityTests :: NativeDefName -> GasUnitTests
 composeCapabilityTests = tests
@@ -1174,6 +1176,34 @@ strToIntTests = defGasUnitTests allExprs
             str2intMedBase64,
             str2intSmallBase64
           ])
+
+base64EncodeTests :: NativeDefName -> GasUnitTests
+base64EncodeTests = defGasUnitTests exprs
+  where
+    exprs = NEL.fromList [fshort, fmedium, flong]
+
+    f i =
+      let s = toB64UrlUnpaddedText
+            $ T.encodeUtf8
+            $ T.replicate i "a"
+      in defPactExpression [text| (base64-decode "$s") |]
+
+    fshort = f 10
+    fmedium = f 100
+    flong = f 1000
+
+base64DecodeTests :: NativeDefName -> GasUnitTests
+base64DecodeTests = defGasUnitTests exprs
+  where
+    exprs = NEL.fromList [fshort, fmedium, flong]
+
+    f i =
+      let s = T.replicate i "a"
+      in defPactExpression [text| (base64-encode "$s") |]
+
+    fshort = f 10
+    fmedium = f 100
+    flong = f 1000
 
 
 sortTests :: NativeDefName -> GasUnitTests

@@ -67,7 +67,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
-import Data.Text.Encoding
+import qualified Data.Text.Encoding as T
 import Data.Thyme.Time.Core (fromMicroseconds,posixSecondsToUTCTime)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
@@ -251,7 +251,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   where
     hash' :: RNativeFun e
     hash' i as = case as of
-      [TLitString s] -> go $ encodeUtf8 s
+      [TLitString s] -> go $ T.encodeUtf8 s
       [a'] -> enforcePactValue a' >>= \pv -> go $ toStrict $ encode pv
       _ -> argsError i as
       where go = return . tStr . asString . pactHash
@@ -687,6 +687,8 @@ langDefs =
     ,isCharsetDef
     ,asciiConst
     ,latin1Const
+    ,base64Encode
+    ,base64decode
     ])
     where
           d = mkTyVar "d" []
@@ -1036,3 +1038,31 @@ baseStrToInt base t =
          else Left $ "character '" <> T.singleton c' <>
                 "' is out of range for base " <> tShow base <> ": " <> t
 {-# INLINABLE baseStrToInt #-}
+
+base64Encode :: NativeDef
+base64Encode = defRNative "base64-encode" go
+  (funType tTyString [("string", tTyString)])
+  ["(base64-encode \"hello world!\")"]
+  "Encode STRING as unpadded base64"
+  where
+    go :: RNativeFun e
+    go i as = case as of
+      [TLitString s] ->
+        return . tStr $ toB64UrlUnpaddedText $ T.encodeUtf8 s
+      _ -> argsError i as
+
+base64decode :: NativeDef
+base64decode = defRNative "base64-decode" go
+  (funType tTyString [("string", tTyString)])
+  ["(base64-decode \"aGVsbG8gd29ybGQh\")"]
+  "Decode STRING from unpadded base64"
+  where
+    go :: RNativeFun e
+    go i as = case as of
+      [TLitString s] ->
+        case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
+          Left e -> evalError' i
+            $ "Could not decode string: "
+            <> pretty e
+          Right t -> return $ tStr t
+      _ -> argsError i as
