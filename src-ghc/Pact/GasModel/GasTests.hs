@@ -1199,7 +1199,7 @@ base64DecodeTests = defGasUnitTests exprs
     exprs = NEL.fromList [fshort, fmedium, flong]
 
     f i =
-      let s = T.pack $ take i $ repeat 'a'
+      let s = T.replicate i "a"
       in defPactExpression [text| (base64-encode "$s") |]
 
     fshort = f 10
