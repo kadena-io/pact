@@ -27,7 +27,8 @@ flag ghc-flags
   manual:      True
 
 library
-  exposed-modules:     Pact.Analyze.Remote.Types
+  exposed-modules:     Crypto.Hash.Blake2Native
+                     , Pact.Analyze.Remote.Types
                      , Pact.Compile
                      , Pact.Eval
                      , Pact.Gas
@@ -83,9 +84,9 @@ library
                      , Pact.Types.Type
                      , Pact.Types.Util
                      , Pact.Types.Version
-                     , Crypto.Hash.Blake2Native
                      , Pact.Types.Typecheck
                      , Pact.Typechecker
+                     , Pact.Utils
 
   if flag(ghc-flags)
     ghc-options: -fplugin GhcFlags.Plugin

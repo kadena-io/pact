@@ -57,7 +57,6 @@ import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base64.URL as B64U
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
 import Data.Bits
@@ -89,6 +88,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
 import Pact.Types.Version
+import Pact.Utils
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -1048,13 +1048,8 @@ base64Encode = defRNative "base64-encode" go
   where
     go :: RNativeFun e
     go i as = case as of
-      [TLitString s] -> return
-        . tStr
-        . T.dropWhileEnd (== '=')
-        . T.decodeUtf8
-        . B64U.encode
-        . T.encodeUtf8
-        $ s
+      [TLitString s] ->
+        return . tStr $ encodeB64UrlNoPaddingText $ T.encodeUtf8 s
       _ -> argsError i as
 
 base64decode :: NativeDef
@@ -1066,13 +1061,9 @@ base64decode = defRNative "base64-decode" go
     go :: RNativeFun e
     go i as = case as of
       [TLitString s] ->
-        case B64U.decode . T.encodeUtf8 $ pad s of
+        case decodeB64UrlNoPaddingText s of
           Left e -> evalError' i
             $ "Could not decode string: "
             <> pretty e
           Right t -> return . tStr $ T.decodeUtf8 t
       _ -> argsError i as
-
-    pad t =
-      let s = T.length t `mod` 4
-      in t <> T.replicate ((4 - s) `mod` 4) "="

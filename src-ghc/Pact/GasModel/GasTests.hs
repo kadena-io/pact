@@ -22,7 +22,6 @@ import NeatInterpolation (text)
 
 
 import qualified Data.Aeson as A
-import qualified Data.ByteString.Base64.URL as B64U
 import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty as NEL
@@ -39,6 +38,7 @@ import Pact.Types.Capability
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
+import Pact.Utils
 
 
 -- | Gas benchmark tests for Pact native functions
@@ -1184,13 +1184,9 @@ base64EncodeTests = defGasUnitTests exprs
     exprs = NEL.fromList [fshort, fmedium, flong]
 
     f i =
-      let s = T.dropWhileEnd (== '=')
-            . T.decodeUtf8
-            . B64U.encode
-            . T.encodeUtf8
-            . T.pack
-            . take i
-            $ repeat 'a'
+      let s = encodeB64UrlNoPaddingText
+            $ T.encodeUtf8
+            $ T.replicate i "a"
       in defPactExpression [text| (base64-decode "$s") |]
 
     fshort = f 10

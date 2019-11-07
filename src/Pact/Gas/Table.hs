@@ -57,8 +57,8 @@ defaultGasTable =
   [
    -- General native functions
     ("at",                   const 2)
-   ,("base64-decode",        const 1)
-   ,("base64-encode",        const 1)
+   ,("base64-decode",        const 1) -- TODO benchmark
+   ,("base64-encode",        const 1) -- TODO benchmark
    ,("bind",                 const 5)
    ,("chain-data",           const 1)
    ,("compose",              const 1)
