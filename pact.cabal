@@ -86,7 +86,6 @@ library
                      , Pact.Types.Version
                      , Pact.Types.Typecheck
                      , Pact.Typechecker
-                     , Pact.Utils
 
   if flag(ghc-flags)
     ghc-options: -fplugin GhcFlags.Plugin

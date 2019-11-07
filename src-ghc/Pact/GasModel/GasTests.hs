@@ -38,7 +38,6 @@ import Pact.Types.Capability
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
-import Pact.Utils
 
 
 -- | Gas benchmark tests for Pact native functions
@@ -1184,7 +1183,7 @@ base64EncodeTests = defGasUnitTests exprs
     exprs = NEL.fromList [fshort, fmedium, flong]
 
     f i =
-      let s = encodeB64UrlNoPaddingText
+      let s = toB64UrlUnpaddedText
             $ T.encodeUtf8
             $ T.replicate i "a"
       in defPactExpression [text| (base64-decode "$s") |]

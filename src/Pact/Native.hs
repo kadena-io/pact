@@ -88,7 +88,6 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
 import Pact.Types.Version
-import Pact.Utils
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -1049,7 +1048,7 @@ base64Encode = defRNative "base64-encode" go
     go :: RNativeFun e
     go i as = case as of
       [TLitString s] ->
-        return . tStr $ encodeB64UrlNoPaddingText $ T.encodeUtf8 s
+        return . tStr $ toB64UrlUnpaddedText $ T.encodeUtf8 s
       _ -> argsError i as
 
 base64decode :: NativeDef
@@ -1061,9 +1060,9 @@ base64decode = defRNative "base64-decode" go
     go :: RNativeFun e
     go i as = case as of
       [TLitString s] ->
-        case decodeB64UrlNoPaddingText s of
+        case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
           Left e -> evalError' i
             $ "Could not decode string: "
             <> pretty e
-          Right t -> return . tStr $ T.decodeUtf8 t
+          Right t -> return $ tStr t
       _ -> argsError i as

@@ -29,7 +29,8 @@ module Pact.Types.Util
   , toB16JSON, toB16Text
   -- | Base64Url helpers
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
-  , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText', toB64UrlUnpaddedText
+  , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText'
+  , toB64UrlUnpaddedText, fromB64UrlUnpaddedText
   -- | AsString
   , AsString(..), asString'
   -- | MVar-as-state utils
@@ -118,9 +119,8 @@ parseB64UrlUnpaddedText' = resultToEither . parse parseB64UrlUnpaddedText
 toB64UrlUnpaddedText :: ByteString -> Text
 toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 
-
-
-
+fromB64UrlUnpaddedText :: ByteString -> Either String Text
+fromB64UrlUnpaddedText = fmap decodeUtf8 . decodeBase64UrlUnpadded
 
 parseB16JSON :: Value -> Parser ByteString
 parseB16JSON = withText "Base16" parseB16Text
