@@ -1,3 +1,13 @@
+3.3.1
+---
+
+* `base64-(encode|decode)` natives
+* Bugfix: you can now declare user guards as constants
+* keysets are now set-based so that keyset equality works regardless of key order
+* Bugfix: module guards with managed caps on demand installs works properly
+* Signature checks only consider acquired and pending caps
+* Better docs all around
+
 3.3.0
 ---
 
