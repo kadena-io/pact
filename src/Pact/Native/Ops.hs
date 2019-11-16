@@ -224,7 +224,7 @@ coerceBinNum = binTy numA numA numA <> binTy tTyDecimal numA (numV "b")
 plusA :: Type n
 plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def]
 
-defTrunc :: NativeDefName -> Text -> (Decimal -> Integer) -> NativeDef
+defTrunc :: NativeDefName -> Text -> (Rational -> Integer) -> NativeDef
 defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("prec",tTyInteger)] <>
                                       unaryTy tTyInteger tTyDecimal)
                      [ ExecExample $ "(" <> asString n <> " 3.5)"
@@ -232,10 +232,9 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
                      ]
                      (desc <> " value of decimal X as integer, or to PREC precision as decimal.")
     where fun :: RNativeFun e
-          fun _ [TLiteral (LDecimal d) _] = return $ toTerm $ op d
+          fun _ [TLiteral (LDecimal d) _] = return $ tLit $ LInteger $ truncate $ roundTo' op 0 d
           fun i [TLiteral (LDecimal d) _,TLitInteger p]
-              | p >= 0 = let p10 = (10 ^ p :: Decimal) in
-                         return $ toTerm (fromIntegral (op (d * p10)) / p10)
+              | p >= 0 = return $ toTerm $ roundTo' op (fromIntegral p) d
               | otherwise = evalError' i "Negative precision not allowed"
           fun i as = argsError i as
 
