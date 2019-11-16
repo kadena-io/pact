@@ -195,6 +195,8 @@ main = do
   void $ runPactExec "initSqliteDb" signer Null Nothing sqliteDb benchCmd
   mbenchCmd <- parseCode "(bench.mbench)"
   void $ runPactExec "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
+  !round0 <- parseCode "(round 123.456789)"
+  !round4 <- parseCode "(round 123.456789 4)"
 
 
 
@@ -231,5 +233,6 @@ main = do
       -- puredb mgd-transfer caps
     , benchNFIO "puredb-withmod-caps-mbench" $
       runPactExec "puredb-withmod-mbench" msigner Null (Just benchMod') pureDb mbenchCmd
-
+    , benchNFIO "round0" $ runPactExec "round0" [] Null Nothing pureDb round0
+    , benchNFIO "round4" $ runPactExec "round4" [] Null Nothing pureDb round4
     ]
