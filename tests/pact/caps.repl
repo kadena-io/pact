@@ -552,3 +552,28 @@
  "Attack with different parameters than signature cap fails"
  "Keyset failure"
  (go "bob" 1))
+
+(module test-empty-cap GOV
+  (defcap GOV () true)
+
+  (defcap GUARD (g)
+    (enforce-guard (read-keyset g)))
+
+  (defun enforce-cap (g)
+    (with-capability (GUARD g)
+      true))
+
+  (defun enforce-wo-cap (g)
+    (enforce-guard (read-keyset g)))
+)
+
+(env-data {"alice-keyset": ["alice"]})
+
+;; scenario: alice signs empty caps for a function that doesn't require cap
+(env-sigs [{ "key": "alice", "caps": []}])
+(expect "Enforce Guard in function" (enforce-wo-cap "alice-keyset"))
+
+;; scenario: alice signs empty caps for a function that requires cap
+(env-sigs [{ "key": "alice", "caps": [(GUARD "alice-keyset")]}])
+(expect "Enforce Guard in cap GUARD" true (enforce-cap "alice-keyset"))
+
