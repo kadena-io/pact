@@ -553,6 +553,11 @@
  "Keyset failure"
  (go "bob" 1))
 
+(commit-tx)
+(begin-tx)
+
+;;; test empty caps after autonomous tx
+;;;
 (module test-empty-cap GOV
   (defcap GOV () true)
 
@@ -569,11 +574,13 @@
 
 (env-data {"alice-keyset": ["alice"]})
 
-;; scenario: alice signs empty caps for a function that doesn't require cap
+;; scenario: alice signs empty caps for non-managed cap, works
 (env-sigs [{ "key": "alice", "caps": []}])
-(expect "Enforce Guard in function" (enforce-wo-cap "alice-keyset"))
+(expect "empty works with bare keyset read"  true (enforce-wo-cap "alice-keyset"))
+(expect "empty works with keyset read in guard"  true (enforce-wo-cap "alice-keyset"))
 
-;; scenario: alice signs empty caps for a function that requires cap
+;; scenario: alice signs caps, only works in non-managed cap
 (env-sigs [{ "key": "alice", "caps": [(GUARD "alice-keyset")]}])
-(expect "Enforce Guard in cap GUARD" true (enforce-cap "alice-keyset"))
-
+(expect "cap-scoped works with cap" true (enforce-cap "alice-keyset"))
+(expect-failure "cap-scoped does not work without cap" "Keyset failure"
+                (enforce-wo-cap "alice-keyset"))
