@@ -1,4 +1,418 @@
+; GAS MODEL TESTS
+
+; ============================================================ ;
+;; TEST: Out of gas error
+;;
 (env-gaslimit 10)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
 (expect-failure "out of gas" (+ 1 2))
+
+; ============================================================ ;
+;; SETUP: Load up simple module
+;;
+(begin-tx)
+(env-gasmodel "table")
+(env-gaslimit 30000)
+
+(env-gas 0)
+(module basic-module GOV
+  (defcap GOV () true)
+
+  (defschema account-with-nickname
+    balance:decimal
+    nickname:string)
+
+  (defschema account
+    balance:decimal)
+
+  (deftable accounts:{account})
+  (deftable accounts-with-longname:{account})
+  (deftable accounts-with-nickname:{account-with-nickname})
+
+  (defun transfer (senderId receiverId amount)
+    "Send money from sender to receiver"
+    ;;Read current account information of the sender
+    (with-read accounts senderId {
+      "balance":= senderBalance }
+       ;;Read current account information of the receiver
+       (with-read accounts receiverId {
+         "balance":= receiverBalance }
+         ;;Update account balance of the sender
+         (update accounts senderId {
+            "balance": (- senderBalance amount) })
+         ;;Update account balance of the receiver
+         (update accounts receiverId {
+            "balance": (+ receiverBalance amount) }))))
+
+  (defun balance (id)
+    (at "balance" (read accounts id ["balance"]))
+  )
+
+  (defpact tester ()
+    (step "dummy step")
+    (step
+      (yield { "r": "a" }))
+    (step
+      (resume {"r" := res0 }
+       res0))
+    (step
+      (yield { "g": "b", "y": "b"}))
+    (step
+      (resume {"g" := res3 }
+        res3))
+  )
+)
+;; Creating table here instead of in another transaction gives slightly cheaper gas
+;;(env-gas 0)
+;;(create-table accounts)
+;;(expect "Cost: creating table with short name" 1090 (env-gas))
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: Table and row creation
+;;
+(begin-tx)
+(use basic-module)
+
+(env-gas 0)
+(create-table accounts)
+(expect "Cost: creating table with short name" 1091 (env-gas)) ;; TODO where is this extra 1 coming from
+
+(env-gas 0)
+(create-table accounts-with-longname)
+(expect "Cost: creating table with longer name" 1118 (env-gas))
+
+(env-gas 0)
+(create-table accounts-with-nickname)
+(expect "Cost: creating table with longer name, more columns" 1118 (env-gas))
+
+(env-gas 0)
+(insert accounts-with-nickname "a" {"balance": 1.0, "nickname": "a"})
+(expect "Cost: inserting simple row" 3427 (env-gas))
+
+(env-gas 0)
+(insert accounts-with-nickname "a-longer-key" {"balance": 1.0, "nickname": "b"})
+(expect "Cost: inserting row with longer key name" 3449 (env-gas))
+
+(env-gas 0)
+(insert accounts-with-nickname "c" {"balance": 1.0, "nickname": "aaa"})
+(expect "Cost: insert row with longer column value" 3431 (env-gas))
+
+(insert accounts "a" {"balance": 1.0})
+(insert accounts "b" {"balance": 10.0})
+(insert accounts "c" {"balance": 20.0})
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: cost of transfer
+;;
+(begin-tx)
+(use basic-module)
+(insert accounts "Alice" {"balance": 10.0 })
+(insert accounts "Bob" {"balance": 0.0 })
+
+(env-gas 0)
+(transfer "Alice" "Bob" 5.0)
+(expect "Cost: simple transfer" 6523 (env-gas))
+
+(expect "Alice was debited 5" 5.0 (balance "Alice"))
+(expect "Bob was credited 5" 5.0 (balance "Bob"))
+
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: CPU-intensive operation
+;;
+(begin-tx)
+(env-gas 0)
+(make-list 1000 8)
+(env-gas)
+(expect "gas cost of make-list" 1 (env-gas))
+
+(env-gas 0) ;; reset gas state
+(map (+ 1) (make-list 1000 8))
+;; TODO Doesn't seem to take into account cost of `make-list` (costs 1)
+;; where is 4 coming from?
+(expect "Cost: Mapping over long list" 1004 (env-gas))
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: Load simple module
+;; TODO to sensitive to characters in modules.
+;; spacing and enters change the amount.
+;; Double charging for declaring module? And writing to db?
+;;
+(begin-tx)
+(env-gas 0)
+(module a G
+  (defcap G () true)
+)
+(expect "Cost: short module name, one member" 202 (env-gas))
+
+(env-gas 0)
+(module simple-simple G
+  (defcap G () true)
+)
+(expect "Cost: longer module name, one member" 250 (env-gas))
+
+(env-gas 0)
+(module b G
+  (defcap G () true)
+  (defun f () true)
+)
+(expect "Cost: short module name, two members" 243 (env-gas))
+
+(env-gas 0)
+(module c G
+  (defcap G () true)
+  (defun fun () true)
+)
+(expect "Cost: short module name, two members, longer member name" 247 (env-gas))
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: Load simple interface
+;; TODO double charging for declaring interface?
+;;
+(begin-tx)
+(env-gas 0)
+(interface i
+  (defconst G true)
+)
+(expect "Cost: short interface name, one member" 202 (env-gas))
+
+(env-gas 0)
+(interface my-interface
+  (defconst G true)
+)
+(expect "Cost: longer interface name, one member" 246 (env-gas))
+
+(env-gas 0)
+(interface j
+  (defconst G true)
+  (defconst f true)
+)
+(expect "Cost: short interface name, two members" 243 (env-gas))
+
+(env-gas 0)
+(interface k
+  (defconst G true)
+  (defconst fun true)
+)
+(expect "Cost: short interface name, two members, longer member name" 247 (env-gas))
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: Using module
+;; TODO: Does using qualified module name bring entire module
+;; into scope for tx?
+;;
+(begin-tx)
+(env-gas 0)
+(use b)
+(expect "Cost: using module with short name and one member" 2 (env-gas))
+
+(env-gas 0)
+(c.fun)
+(expect "Cost: using qualified module name with function" 2 (env-gas))
+
+(env-gas 0)
+(use c)
+(expect "Cost: using module previously called" 1 (env-gas))
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: Using interface
+;;
+(begin-tx)
+(env-gas 0)
+(module d G2
+  (defcap G2 () true)
+  (implements k)
+  (defconst G3 k.G)
+)
+(expect "Cost: using interface" 282 (env-gas))
+(commit-tx)
+
+(begin-tx)
+(env-gas 0)
+d.G3
+(expect "Cost: using interface constant" 1 (env-gas))
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: Writing yield, defPact user app cost
+;;
+(begin-tx)
+(use basic-module)
+
+(env-gas 0)
+(tester)
+(expect "Cost: defpact application" 1 (env-gas))
+
+(env-gas 0)
+(continue-pact 1)
+(expect "Cost: defpact, yield 1 value, short keys/values" 216 (env-gas))
+;; TODO ^ why is this so expensive?
+;; defpact cost is 1, yield is 3, plus size of yielded value
+
+(env-gas 0)
+(continue-pact 2)
+(expect "Cost: defpact, resume 1 out of 1 yielded values" 4 (env-gas))
+;; TODO where did the extra 1 come from?
+;; resume is 2, plus amount of yielded values from previous step
+
+(env-gas 0)
+(continue-pact 3)
+(expect "Cost: defpact, yield 2 values" 396 (env-gas)) ;; TODO why so high?
+
+(env-gas 0)
+(continue-pact 4)
+(expect "Cost: defpact, resume 1 out of 2 yielded values" 5 (env-gas))
+
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: select
+;; TODO don't understand all of the numbers
+(begin-tx)
+(use basic-module)
+
+(env-gas 0)
+(select accounts ["balance"] (constantly true))
+(expect "Cost: select with 1 out of 1 colum filter" 112 (env-gas))
+
+(env-gas 0)
+(select accounts [] (constantly true))
+(expect "Cost: select with empty column list" 111 (env-gas))
+
+(env-gas 0)
+(select accounts (constantly true))
+(expect "Cost: select with no colum filter" 111 (env-gas))
+
+(env-gas 0)
+(select accounts-with-nickname ["balance"] (constantly true))
+(expect "Cost: select with 1 out of 2 colum filter" 110 (env-gas))
+
+(env-gas 0)
+(select accounts-with-nickname ["balance", "nickname"] (constantly true))
+(expect "Cost: select with 2 out of 2 colum filter" 111 (env-gas))
+
+(env-gas 0)
+(select accounts-with-nickname [] (constantly true))
+(expect "Cost: select with empty column list" 110 (env-gas))
+
+(env-gas 0)
+(select accounts-with-nickname (constantly true))
+(expect "Cost: select with no colum filter" 110 (env-gas))
+
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: sort
+;; cost of sort + 1 per sort field
+(begin-tx)
+(env-gas 0)
+(sort [3 1 2])
+(expect "Cost: sort list" 2 (env-gas))
+
+(env-gas 0)
+(sort ['age, 'name] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
+(expect "Cost: sort object with field" 4 (env-gas))
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: concatenation
+;; (cost of +) + (2 * cost of make-list) + (size of fist list + size of snd list)
+(begin-tx)
+(env-gas 0)
+(+ (make-list 11 "a") (make-list 5 "b"))
+(expect "Cost: concatenation of two lists" 19 (env-gas))
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: read data
+;; cost of read = 15
+;; cost per read column = 1
+(begin-tx)
+(use basic-module)
+
+(env-gas 0)
+(read accounts "a")
+(expect "Cost: read row, no column filter, 1 column schema" 17 (env-gas)) ;; TODO where's the extra 1 coming from?
+
+(env-gas 0)
+(read accounts "a" [])
+(expect "Cost: read row, empty list column filter, 1 column schema" 16 (env-gas))
+
+(env-gas 0)
+(read accounts "a" ["balance"])
+(expect "Cost: read row, 1 column filter, 1 column schema" 16 (env-gas))
+
+(env-gas 0)
+(read accounts-with-nickname "a")
+(expect "Cost: read, no column filter, 2 columns schema" 17 (env-gas))
+
+(env-gas 0)
+(read accounts-with-nickname "a" [])
+(expect "Cost: read row, empty list column filter, 2 column schema" 17 (env-gas))
+
+(env-gas 0)
+(read accounts-with-nickname "a" ["balance"])
+(expect "Cost: read row, 1 column filter, 2 column schema" 17 (env-gas))
+
+(env-gas 0)
+(read accounts-with-nickname "a" ["balance", "nickname"])
+(expect "Cost: read row, 2 column filter, 2 column schema" 17 (env-gas))
+
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: create keysets and namespaces
+;;
+(begin-tx)
+(env-data {"short-key": ["s"],
+           "long-key": ["s", "a"] })
+
+(env-gas 0)
+(define-keyset "a" (read-keyset "short-key"))
+(expect "Cost: defining keyset with short name" 2284 (env-gas))
+;; define-keyset is 2000, read-keyset is 1, plus size of keyset name, plus keyset itself
+;; TODO: does size of keyset account for unaccounted gas?
+
+(env-gas 0)
+(define-keyset "a-key" (read-keyset "short-key"))
+(expect "Cost: defining keyset with longer name" 2292 (env-gas))
+
+(env-gas 0)
+(define-keyset "c" (read-keyset "long-key"))
+(expect "Cost: defining keyset with short name and longer keyset" 2381 (env-gas))
+
+(env-gas 0)
+(define-namespace "a" (keyset-ref-guard "a-key") (keyset-ref-guard "a-key"))
+(expect "Cost: defining namespace with short name" 2232 (env-gas))
+;; define-namespace costs 2000, plus size of namespace itself, keyset-ref-guard is 1
+;; TODO does this account for gas charge?
+
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: using keysets and namespaces
+;;
+(begin-tx)
+(env-keys ["s"])
+
+(env-gas 0)
+(namespace "a")
+(expect "Cost: using namespace" 15 (env-gas))
+;; namespace is 13, plus 1 for reading namespace
+;; TODO where is the other 1 coming from?
+
+(env-gas 0)
+(enforce-keyset "a")
+(expect "Cost: using keyset" 12 (env-gas))
+;; enforce-keyset is 11
+;; TODO again the off by 1
+
+(commit-tx)

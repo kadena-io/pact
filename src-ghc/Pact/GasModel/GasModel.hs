@@ -255,7 +255,7 @@ gasPriceExplanation = [purpose, numCores, os, hardwareNotes,
     purpose = "Purpose: Calculate the gas price of Pact native functions using a data-driven model"
     numCores = "Number of cores available for benchmarks: " <> T.pack (show numCapabilities)
     os = "Operating System: <INSERT OS>"
-    hardwareNotes = "More inforamtion on hardware used: <INSERT MORE INFORMATION ON HARDWARE USED>"
+    hardwareNotes = "More information on hardware used: <INSERT MORE INFORMATION ON HARDWARE USED>"
     implementation = "Implementation: For every native function, executes and benchmarks "
                      <> "(using Criterion) simple examples of said function."
     numOfIterations = "Number of iterations: Each function's tests are run three times against each backend type and averaged."
