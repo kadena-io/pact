@@ -15,6 +15,7 @@ import Criterion.Main
 
 import Data.Aeson
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
@@ -86,7 +87,7 @@ entity = Just $ EntityName "entity"
 
 loadBenchModule :: PactDbEnv e -> IO (ModuleData Ref,PersistModuleData)
 loadBenchModule db = do
-  m <- pack <$> readFile "tests/bench/bench.pact"
+  m <- decodeUtf8 <$> BS.readFile "tests/bench/bench.pact"
   pc <- parseCode m
   let md = MsgData
            (object
