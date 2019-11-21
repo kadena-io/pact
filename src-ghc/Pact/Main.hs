@@ -36,6 +36,7 @@ import Control.Monad.State.Strict
 import Data.List
 import qualified Data.HashMap.Strict as HM
 import Data.Text (unpack)
+import qualified Data.Text.IO as T
 
 import Text.Trifecta as TF hiding (err)
 
@@ -161,7 +162,7 @@ locatePactReplScript fp = do
 compileOnly :: String -> IO (Either String [Term Name])
 compileOnly fp = do
   !pr <- TF.parseFromFileEx exprsOnly fp
-  src <- readFile fp
+  src <- T.readFile fp
   s <- initReplState (Script False fp) Nothing
   (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
 

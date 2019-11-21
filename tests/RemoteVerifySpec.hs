@@ -17,7 +17,7 @@ import Control.Monad.Trans.Except
 
 import Data.Bifunctor (first)
 import Data.Either
-import Data.Text (Text, unpack)
+import Data.Text (Text)
 
 import NeatInterpolation (text)
 
@@ -48,7 +48,7 @@ data TestFailure
 loadCode :: Text -> IO (Either TestFailure ReplState)
 loadCode code = do
   replState0 <- initReplState StringEval (Just "http://localhost:3000")
-  (eTerm, replState) <- runStateT (evalRepl' $ unpack code) replState0
+  (eTerm, replState) <- runStateT (evalRepl' code) replState0
   pure $ case eTerm of
     Left err -> Left $ ReplError err
     Right _t -> Right replState

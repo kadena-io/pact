@@ -27,6 +27,7 @@ import           Data.Function
 import           Data.List
 import           Data.Text                    (unpack, pack, replace)
 import qualified Data.Text                    as T
+import qualified Data.Text.IO                 as T
 import           System.IO
 
 import qualified Pact.Analyze.Feature as Analyze
@@ -123,13 +124,13 @@ renderExamples h f es = do
   hPutStrLn h "```lisp"
   forM_ es $ \example -> do
     let (eTy, e) = case example of
-          ExecErrExample str -> (ExecErr, unpack str)
-          LitExample     str -> (Lit,     unpack str)
-          ExecExample    str -> (Exec,    unpack str)
+          ExecErrExample str -> (ExecErr, str)
+          LitExample     str -> (Lit,     str)
+          ExecExample    str -> (Exec,    str)
     case eTy of
-      Lit -> hPutStrLn h e
+      Lit -> T.hPutStrLn h e
       _ -> do
-        hPutStrLn h $ "pact> " ++ e
+        T.hPutStrLn h $ "pact> " <> e
         r <- evalRepl FailureTest e
         case (r,eTy) of
           (Right r',_)       -> hPutStrLn h $ renderCompactString r'
@@ -137,7 +138,7 @@ renderExamples h f es = do
           (Left err,_)       ->
             throwM $ userError $
               "Error rendering example for function " ++
-              renderCompactString f ++ ": " ++ e ++ ": " ++ err
+              renderCompactString f ++ ": " ++ T.unpack e ++ ": " ++ err
   hPutStrLn h "```"
 
 renderProperties :: Handle -> IO ()

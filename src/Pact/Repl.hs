@@ -67,6 +67,8 @@ import qualified Data.Map.Strict as M
 import Data.Monoid (appEndo)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import Text.Trifecta.Delta
@@ -138,11 +140,11 @@ pipeLoop prompt h lastResult = do
   isEof <- liftIO (hIsEOF h)
   let retVal = maybe rSuccess (return.Right) lastResult
   if isEof then retVal else do
-    line <- trim <$> liftIO (hGetLine h)
-    r <- if null line then rSuccess
+    line <- trimText <$> liftIO (T.hGetLine h)
+    r <- if T.null line then rSuccess
          else do
            d <- getDelta
-           errToUnit $ parsedCompileEval line $ TF.parseString exprsOnly d line
+           errToUnit $ parsedCompileEval line $ TF.parseByteString exprsOnly d (encodeUtf8 line)
     case r of
       Left _ -> do
         outStrLn HErr "Aborting execution"
@@ -168,16 +170,16 @@ colors :: ReplMode -> RenderColor
 colors Interactive = RColor
 colors _ = RPlain
 
-parsedCompileEval :: String -> TF.Result [Exp Parsed] -> Repl (Either String (Term Name))
+parsedCompileEval :: Text -> TF.Result [Exp Parsed] -> Repl (Either String (Term Name))
 parsedCompileEval src r = do
   let fc (Left e) _ = return $ Left e
       fc _ exp = compileEval src exp
   handleParse r $ \es -> foldM fc (Right (toTerm True)) es
 
 
-handleCompile :: String -> Exp Parsed -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
+handleCompile :: Text -> Exp Parsed -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
 handleCompile src exp a =
-    case compile (mkStringInfo src) exp of
+    case compile (mkTextInfo src) exp of
       Right t -> a t
       Left er -> do
           case _iInfo (peInfo er) of
@@ -188,7 +190,7 @@ handleCompile src exp a =
             Nothing -> outStrLn HErr $ "[No location]: " ++ renderCompactString' (peDoc er)
           Left <$> renderErr er
 
-compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
+compileEval :: Text -> Exp Parsed -> Repl (Either String (Term Name))
 compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
 
 
@@ -311,7 +313,7 @@ loadFile f = do
   rFile .= Just computedPath
   catch (do
           pr <- TF.parseFromFileEx exprsOnly computedPath
-          src <- liftIO $ readFile computedPath
+          src <- liftIO $ T.readFile computedPath
           when (isPactFile f) $ rEvalState.evalRefs.rsLoaded .= HM.empty
           r <- parsedCompileEval src pr
           when (isPactFile f) $ void useReplLib
@@ -341,6 +343,9 @@ outStrLn h s = use rMode >>= \m -> out m h True s
 
 trim :: String -> String
 trim = dropWhileEnd isSpace . dropWhile isSpace
+
+trimText :: Text -> Text
+trimText = T.dropWhileEnd isSpace . T.dropWhile isSpace
 
 
 rSuccess :: Monad m => m (Either a (Term Name))
@@ -404,18 +409,18 @@ unsetReplLib :: ReplState -> ReplState
 unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`HM.difference` (moduleToMap replDefs))
 
 -- | evaluate string in repl monad
-evalPact :: String -> Repl (Either String (Term Name))
-evalPact cmd = parsedCompileEval cmd (TF.parseString exprsOnly mempty cmd)
+evalPact :: Text -> Repl (Either String (Term Name))
+evalPact cmd = parsedCompileEval cmd (TF.parseByteString exprsOnly mempty $ encodeUtf8 cmd)
 
 -- | evaluate string in repl monad, loading lib functions first.
-evalRepl' :: String -> Repl (Either String (Term Name))
+evalRepl' :: Text -> Repl (Either String (Term Name))
 evalRepl' cmd = useReplLib >> evalPact cmd
 
-evalRepl :: ReplMode -> String -> IO (Either String (Term Name))
+evalRepl :: ReplMode -> Text -> IO (Either String (Term Name))
 evalRepl m cmd = initReplState m Nothing >>= evalStateT (evalRepl' cmd)
 
-evalString :: Bool -> String -> IO Value
-evalString showLog cmd = do
+evalText :: Bool -> Text -> IO Value
+evalText showLog cmd = do
   (er,s) <- initReplState StringEval Nothing >>= runStateT (evalRepl' cmd)
   return $ object $ case (showLog,er) of
     (False,Right v) -> [ "success" A..= v]
@@ -423,13 +428,16 @@ evalString showLog cmd = do
     (False,Left e) -> ["failure" A..= e ]
     (True,Left e) -> ["failure" A..= (_rOut s ++ e) ]
 
+evalString :: Bool -> String -> IO Value
+evalString showLog cmd = evalText showLog $ T.pack cmd
 
 
-_eval :: String -> IO (Term Name)
+
+_eval :: Text -> IO (Term Name)
 _eval cmd = evalRepl (Script True "_eval") cmd >>= \r ->
             case r of Left e -> throwM (userError $ " Failure: " ++ show e); Right v -> return v
 
-_run :: String -> IO ()
+_run :: Text -> IO ()
 _run cmd = void $ evalRepl Interactive cmd
 
 _testAccounts :: IO ()

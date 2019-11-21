@@ -127,7 +127,7 @@ renderTestFailure = \case
 compile' :: ModuleName -> Text -> IO (Either TestFailure (ModuleData Ref))
 compile' modName code = do
   replState0 <- initReplState StringEval Nothing
-  (_, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
+  (_, replState) <- runStateT (evalRepl' code) replState0
   moduleM <- replLookupModule replState modName
   pure $ case moduleM of
     Left err -> Left $ ReplError (show err)

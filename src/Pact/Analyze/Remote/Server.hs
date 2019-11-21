@@ -21,7 +21,6 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import           Data.Foldable              (traverse_)
 import qualified Data.HashMap.Strict        as HM
 import           Data.String                (IsString, fromString)
-import qualified Data.Text                  as T
 import           Data.Void                  (Void)
 import           Network.Wai.Handler.Warp   (run)
 import           Servant
@@ -143,7 +142,6 @@ loadModules mods0 = do
     loadModule = void
                . ExceptT
                . evalRepl'
-               . T.unpack
                . (\code -> "(begin-tx)" <> code <> "(commit-tx)")
                . _unCode
                . moduleDefCode

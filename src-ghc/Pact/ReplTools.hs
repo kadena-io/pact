@@ -15,7 +15,7 @@ import Control.Monad.State.Strict
 
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Data.Text (Text, unpack)
+import Data.Text (Text, pack, unpack)
 
 import Text.Trifecta as TF hiding (line)
 import qualified Text.Trifecta.Delta as TF
@@ -127,7 +127,7 @@ handleMultilineInput input prevLines lastResult =
          haskelineLoop [] Nothing
 
        parsed -> do
-         ret <- lift $ errToUnit $ parsedCompileEval joinedInput parsed
+         ret <- lift $ errToUnit $ parsedCompileEval (pack joinedInput) parsed
          case ret of
            Left _  -> haskelineLoop [] Nothing
            Right t -> haskelineLoop [] (Just t)

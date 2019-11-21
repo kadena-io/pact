@@ -6,6 +6,7 @@ import Test.Hspec
 import Pact.Repl
 import Pact.Repl.Types
 import Data.Either
+import Data.Text (Text)
 import Control.Monad.State.Strict
 import Pact.Types.Term
 import Pact.Types.Exp
@@ -17,7 +18,7 @@ spec = do
   describe "runBadTests" $ runBadTests
   describe "prettyLit" $ prettyLit
 
-evalString' :: String -> IO (Either String (Term Name), ReplState)
+evalString' :: Text -> IO (Either String (Term Name), ReplState)
 evalString' cmd = initReplState StringEval Nothing >>= runStateT (evalRepl' cmd)
 
 loadBadParens :: Spec
