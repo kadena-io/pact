@@ -37,6 +37,7 @@ import Control.Lens hiding (prism)
 import Control.Monad
 import Control.Monad.State
 
+import qualified Data.ByteString as BS
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -44,8 +45,8 @@ import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.String
-import Data.Text (Text,pack,unpack)
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text (Text,unpack)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Vector as V
 
 import Text.Megaparsec as MP
@@ -678,7 +679,10 @@ _parseS :: String -> TF.Result ([Exp Parsed],MkInfo)
 _parseS s = (,mkStringInfo s) <$> TF.parseString exprsOnly mempty s
 
 _parseF :: FilePath -> IO (TF.Result ([Exp Parsed],MkInfo))
-_parseF fp = readFile fp >>= \s -> fmap (,mkStringInfo s) <$> TF.parseFromFileEx exprsOnly fp
+_parseF fp = do
+  bs <- BS.readFile fp
+  let s = decodeUtf8 bs
+  fmap (,mkTextInfo s) <$> TF.parseFromFileEx exprsOnly fp
 
 _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
@@ -692,7 +696,7 @@ _compileFile f = do
 
 _atto :: FilePath -> IO [Term Name]
 _atto fp = do
-  f <- pack <$> readFile fp
+  f <- decodeUtf8 <$> BS.readFile fp
   rs <- case parseExprs f of
     Left s -> throwIO $ userError s
     Right es -> return $ map (compile (mkStringInfo (unpack f))) es

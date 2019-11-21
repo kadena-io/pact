@@ -184,7 +184,9 @@ mkApiReqExec ar@ApiReq{..} fp = do
   (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
-      (Just f,Nothing) -> liftIO (readFile f)
+      (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
+                          either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
+                          eitherDecode
       _ -> dieAR "Expected either a 'code' or 'codeFile' entry"
     cdata <- case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)

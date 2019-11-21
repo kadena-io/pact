@@ -39,11 +39,13 @@ import Control.Monad
 import Control.Monad.Fail (MonadFail)
 import qualified Data.Aeson as A
 import qualified Data.Attoparsec.Text as AP
+import qualified Data.ByteString as BS
 import Data.Char (digitToInt)
 import Data.Decimal
 import Data.List
 import Data.Serialize (Serialize)
-import Data.Text (Text)
+import Data.Text (Text, unpack)
+import Data.Text.Encoding
 import GHC.Generics (Generic)
 import Prelude
 import Text.Trifecta as TF
@@ -193,7 +195,10 @@ parsePact code = ParsedCode code <$> parseExprs code
 
 
 _parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
-_parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
+_parseF p fp = do
+  bs <- BS.readFile fp
+  let s = unpack $ decodeUtf8 bs
+  fmap (,s) <$> TF.parseFromFileEx p fp
 
 
 _parseS :: String -> TF.Result [Exp Parsed]
