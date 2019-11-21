@@ -23,6 +23,7 @@ import Control.Lens
 import Control.Monad
 import Data.Default
 import Data.Maybe (isJust)
+import qualified Data.Set as S
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -90,7 +91,7 @@ installCapability =
     [("capability",TyFun $ funType' tTyBool [])
     ])
   [LitExample "(install-capability (PAY \"alice\" \"bob\" 10.0))"]
-  "Specifies, and validates install of, a _managed_ CAPABILITY, defined in a 'defcap' \
+  "Specifies, and provisions install of, a _managed_ CAPABILITY, defined in a 'defcap' \
   \in which a '@managed' tag designates a single parameter to be managed by a specified function. \
   \After install, CAPABILITY must still be brought into scope using 'with-capability', at which time \
   \the 'manager function' is invoked to validate the request. \
@@ -104,7 +105,7 @@ installCapability =
   \The function should perform whatever logic, presumably linear, to validate the request, \
   \and return the new managed value representing the 'balance' of the request. \
   \NOTE that signatures scoped to a managed capability cause the capability to be automatically \
-  \installed."
+  \provisioned for install similarly to one installed with this function."
 
   where
     installCapability' i as = case as of
@@ -112,11 +113,9 @@ installCapability =
 
         enforceNotWithinDefcap i "install-capability"
 
-        already <- evalCap i CapManaged True cap
-
-        case already of
-          NewlyInstalled _ -> return $ tStr $ "Installed capability"
-          _ -> evalError' i $ "Unexpected result from managed install"
+        (ucap,_,_) <- appToCap cap
+        evalCapabilities . capAutonomous %= S.insert ucap
+        return $ tStr $ "Installed capability"
 
       _ -> argsError' i as
 
