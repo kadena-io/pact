@@ -16,6 +16,7 @@
 (env-gaslimit 30000)
 
 (env-gas 0)
+(env-gaslog)
 (module basic-module GOV
   (defcap GOV () true)
 
@@ -63,10 +64,14 @@
         res3))
   )
 )
+(env-gaslog)
+(expect "module gas" 2676 (env-gas))
 ;; Creating table here instead of in another transaction gives slightly cheaper gas
-;;(env-gas 0)
-;;(create-table accounts)
-;;(expect "Cost: creating table with short name" 1090 (env-gas))
+; REASON: governance invoked
+;(env-gas 0)
+;(create-table accounts)
+;(env-gaslog) ;["TOTAL: 105" "create-table:GUnreduced: 15" "create-table:GWrite: 90"]
+;(expect "Cost: creating table with short name" 105 (env-gas))
 (commit-tx)
 
 ; ============================================================ ;
@@ -75,9 +80,11 @@
 (begin-tx)
 (use basic-module)
 
+(env-gaslog)
 (env-gas 0)
 (create-table accounts)
-(expect "Cost: creating table (15) with short name" 106 (env-gas)) ;; TODO where is this extra 1 coming from
+(env-gaslog) ;; ["TOTAL: 106" "create-table:GUnreduced: 15" "GOV:GUserApp: 1" "create-table:GWrite: 90"]
+(expect "Cost: creating table (15) with short name" 106 (env-gas))
 
 (env-gas 0)
 (create-table accounts-with-longname)
@@ -135,8 +142,7 @@
 
 (env-gas 0) ;; reset gas state
 (map (+ 1) (make-list 1000 8))
-;; TODO Doesn't seem to take into account cost of `make-list` (costs 1)
-;; where is 4 coming from?
+(env-gaslog)
 (expect "Cost: Mapping over long list (make-list 1, map 4, + 1)" 1063 (env-gas))
 (commit-tx)
 
@@ -182,9 +188,11 @@
 ;;
 (begin-tx)
 (env-gas 0)
+(env-gaslog)
 (interface i
   (defconst G true)
 )
+(env-gaslog)
 (expect "Cost: short interface name, one member" 202 (env-gas))
 
 (env-gas 0)
@@ -260,7 +268,7 @@ d.G3
 (env-gaslog)
 (continue-pact 1)
 (env-gaslog)
-(expect "Cost: defpact, yield 1 value, short keys/values" 216 (env-gas))
+(expect "Cost: defpact, yield 1 value, short keys/values" 215 (env-gas))
 ;; TODO ^ why is this so expensive?
 ;; defpact cost is 1, yield is 3, plus size of yielded value
 
@@ -272,7 +280,7 @@ d.G3
 
 (env-gas 0)
 (continue-pact 3)
-(expect "Cost: defpact, yield 2 values" 396 (env-gas)) ;; TODO why so high?
+(expect "Cost: defpact, yield 2 values" 395 (env-gas)) ;; TODO why so high?
 
 (env-gas 0)
 (continue-pact 4)
@@ -288,31 +296,31 @@ d.G3
 
 (env-gas 0)
 (select accounts ["balance"] (constantly true))
-(expect "Cost: select with 1 out of 1 colum filter" 112 (env-gas))
+(expect "Cost: select with 1 out of 1 column filter" 36 (env-gas))
 
 (env-gas 0)
 (select accounts [] (constantly true))
-(expect "Cost: select with empty column list" 111 (env-gas))
+(expect "Cost: select with empty column list" 35 (env-gas))
 
 (env-gas 0)
 (select accounts (constantly true))
-(expect "Cost: select with no colum filter" 111 (env-gas))
+(expect "Cost: select with no column filter" 35 (env-gas))
 
 (env-gas 0)
 (select accounts-with-nickname ["balance"] (constantly true))
-(expect "Cost: select with 1 out of 2 colum filter" 110 (env-gas))
+(expect "Cost: select with 1 out of 2 column filter" 34 (env-gas))
 
 (env-gas 0)
 (select accounts-with-nickname ["balance", "nickname"] (constantly true))
-(expect "Cost: select with 2 out of 2 colum filter" 111 (env-gas))
+(expect "Cost: select with 2 out of 2 column filter" 35 (env-gas))
 
 (env-gas 0)
 (select accounts-with-nickname [] (constantly true))
-(expect "Cost: select with empty column list" 110 (env-gas))
+(expect "Cost: select with empty column list" 34 (env-gas))
 
 (env-gas 0)
 (select accounts-with-nickname (constantly true))
-(expect "Cost: select with no colum filter" 110 (env-gas))
+(expect "Cost: select with no colum filter" 34 (env-gas))
 
 (commit-tx)
 
@@ -335,7 +343,7 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (+ (make-list 11 "a") (make-list 5 "b"))
-(expect "Cost: concatenation of two lists" 19 (env-gas))
+(expect "Cost: concatenation of two lists" 21 (env-gas))
 (commit-tx)
 
 ; ============================================================ ;
@@ -347,31 +355,31 @@ d.G3
 
 (env-gas 0)
 (read accounts "a")
-(expect "Cost: read row, no column filter, 1 column schema" 17 (env-gas)) ;; TODO where's the extra 1 coming from?
+(expect "Cost: read row, no column filter, 1 column schema" 12 (env-gas)) ;; TODO where's the extra 1 coming from?
 
 (env-gas 0)
 (read accounts "a" [])
-(expect "Cost: read row, empty list column filter, 1 column schema" 16 (env-gas))
+(expect "Cost: read row, empty list column filter, 1 column schema" 11 (env-gas))
 
 (env-gas 0)
 (read accounts "a" ["balance"])
-(expect "Cost: read row, 1 column filter, 1 column schema" 16 (env-gas))
+(expect "Cost: read row, 1 column filter, 1 column schema" 11 (env-gas))
 
 (env-gas 0)
 (read accounts-with-nickname "a")
-(expect "Cost: read, no column filter, 2 columns schema" 17 (env-gas))
+(expect "Cost: read, no column filter, 2 columns schema" 12 (env-gas))
 
 (env-gas 0)
 (read accounts-with-nickname "a" [])
-(expect "Cost: read row, empty list column filter, 2 column schema" 17 (env-gas))
+(expect "Cost: read row, empty list column filter, 2 column schema" 12 (env-gas))
 
 (env-gas 0)
 (read accounts-with-nickname "a" ["balance"])
-(expect "Cost: read row, 1 column filter, 2 column schema" 17 (env-gas))
+(expect "Cost: read row, 1 column filter, 2 column schema" 12 (env-gas))
 
 (env-gas 0)
 (read accounts-with-nickname "a" ["balance", "nickname"])
-(expect "Cost: read row, 2 column filter, 2 column schema" 17 (env-gas))
+(expect "Cost: read row, 2 column filter, 2 column schema" 12 (env-gas))
 
 (commit-tx)
 
@@ -384,21 +392,21 @@ d.G3
 
 (env-gas 0)
 (define-keyset "a" (read-keyset "short-key"))
-(expect "Cost: defining keyset with short name" 2284 (env-gas))
+(expect "Cost: defining keyset with short name" 304 (env-gas))
 ;; define-keyset is 2000, read-keyset is 1, plus size of keyset name, plus keyset itself
 ;; TODO: does size of keyset account for unaccounted gas?
 
 (env-gas 0)
 (define-keyset "a-key" (read-keyset "short-key"))
-(expect "Cost: defining keyset with longer name" 2292 (env-gas))
+(expect "Cost: defining keyset with longer name" 312 (env-gas))
 
 (env-gas 0)
 (define-keyset "c" (read-keyset "long-key"))
-(expect "Cost: defining keyset with short name and longer keyset" 2381 (env-gas))
+(expect "Cost: defining keyset with short name and longer keyset" 401 (env-gas))
 
 (env-gas 0)
 (define-namespace "a" (keyset-ref-guard "a-key") (keyset-ref-guard "a-key"))
-(expect "Cost: defining namespace with short name" 2232 (env-gas))
+(expect "Cost: defining namespace with short name" 269 (env-gas))
 ;; define-namespace costs 2000, plus size of namespace itself, keyset-ref-guard is 1
 ;; TODO does this account for gas charge?
 
@@ -412,13 +420,13 @@ d.G3
 
 (env-gas 0)
 (namespace "a")
-(expect "Cost: using namespace" 15 (env-gas))
+(expect "Cost: using namespace" 14 (env-gas))
 ;; namespace is 13, plus 1 for reading namespace
 ;; TODO where is the other 1 coming from?
 
 (env-gas 0)
 (enforce-keyset "a")
-(expect "Cost: using keyset" 12 (env-gas))
+(expect "Cost: using keyset" 9 (env-gas))
 ;; enforce-keyset is 11
 ;; TODO again the off by 1
 

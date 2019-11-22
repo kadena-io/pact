@@ -21,10 +21,11 @@ computeGas i args = do
     (info,name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
   evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args),g1):)
-  evalGas .= g0 + g1
-  if g1 > fromIntegral _geGasLimit then
-    throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty g1
-    else return g1
+  let gUsed = g0 + g1
+  evalGas .= gUsed
+  if gUsed > fromIntegral _geGasLimit then
+    throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
+    else return gUsed
 
 
 -- | Pre-compute gas for some application before some action.
