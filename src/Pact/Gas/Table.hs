@@ -82,15 +82,9 @@ defaultGasTable =
   ,("contains", 2)
   ,("create-module-guard", 1)
   ,("create-pact-guard", 1)
-  ,("create-table", 15)
   ,("create-user-guard", 1)
   ,("days", 4)
   ,("decrypt-cc20p1305", 33)
-  ,("define-keyset", 20)
-  ,("define-namespace", 25)
-  ,("describe-keyset", 7)
-  ,("describe-module", 10)
-  ,("describe-table", 3)
   ,("diff-time", 8)
   ,("drop", 3)
   ,("enforce", 1)
@@ -108,18 +102,14 @@ defaultGasTable =
   ,("hours", 4)
   ,("identity", 2)
   ,("if", 1)
-  ,("insert", 25)
-  ,("install-capability", 3) -- TODO benchmark
+  ,("install-capability", 3)
   ,("int-to-str", 1)
   ,("is-charset", 1)
-  ,("keylog", 11)
-  ,("keys", 10)
   ,("keys-2", 1)
   ,("keys-all", 1)
   ,("keys-any", 1)
   ,("keyset-ref-guard", 7)
   ,("length", 1)
-  ,("list-modules", 8)
   ,("ln", 6)
   ,("log", 3)
   ,("make-list",1)
@@ -138,14 +128,13 @@ defaultGasTable =
   ,("read-decimal", 1)
   ,("read-integer", 1)
   ,("read-keyset", 1)
-  ,("read-msg", 10) -- TODO retest
+  ,("read-msg", 10)
   ,("read-string", 1)
   ,("remove", 2)
   ,("require-capability", 1)
   ,("resume", 2)
   ,("reverse", 2)
   ,("round", 1)
-  ,("select", 24)
   ,("shift", 1)
   ,("sort", 2)
   ,("sqrt", 6)
@@ -154,28 +143,53 @@ defaultGasTable =
   ,("time", 2)
   ,("try", 1)
   ,("tx-hash", 1)
-  ,("txids", 10)
-  ,("txlog", 3)
   ,("typeof", 2)
-  ,("update", 25)
   ,("validate-keypair", 29)
   ,("verify-spv", 100) -- deprecated
   ,("where", 2)
   ,("with-capability", 2)
   ,("with-default-read", 14)
   ,("with-read", 13)
-  ,("write", 25)
   ,("xor", 1)
   ,("yield", 2)
   ,("|", 1)
   ,("~", 1)
+  -- IO
+  -- DDL
+  ,("create-table", 250)
+  -- Registries
+  ,("define-keyset", 25)
+  ,("define-namespace", 25)
+  -- Single row
+  ,("insert", 100)
+  ,("update", 100)
+  ,("write", 100)
+  -- Multi row read, tx penalty
+  ,("keys", 200)
+  ,("select", 200)
+
+  -- Metadata, tx penalty
+  ,("describe-keyset", 100)
+  ,("describe-module", 100)
+  ,("describe-table", 100)
+  ,("list-modules", 100)
+
+  -- History, massive tx penalty
+  ,("keylog", 100000)
+  ,("txids", 100000)
+  ,("txlog", 100000)
+
+
   ]
 
+expLengthPenalty :: Integral i => i -> Gas
+expLengthPenalty v = let lv = logBase (100::Float) (fromIntegral v) in 1 + floor (lv^(10::Int))
 
 tableGasModel :: GasCostConfig -> GasModel
 tableGasModel gasConfig =
   let run name ga = case ga of
-        GMakeList v -> let lv = logBase (100::Float) (fromIntegral v) in 1 + floor (lv^(10::Int))
+        GMakeList v -> expLengthPenalty v
+        GSort len -> expLengthPenalty len
         GSelect mColumns -> case mColumns of
           Nothing -> 1
           Just [] -> 1
@@ -211,7 +225,7 @@ tableGasModel gasConfig =
           WriteKeySet ksName ks ->
             (memoryCost ksName (_gasCostConfig_writeBytesCost gasConfig))
             + (memoryCost ks (_gasCostConfig_writeBytesCost gasConfig))
-          WriteYield obj -> (memoryCost obj (_gasCostConfig_writeBytesCost gasConfig))
+          WriteYield obj -> (memoryCost (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
         GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
         GModuleDecl _moduleName _mCode -> (_gasCostConfig_moduleCost gasConfig)
         GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
@@ -228,7 +242,7 @@ tableGasModel gasConfig =
 
 
 perByteFactor :: Float
-perByteFactor = 1.0
+perByteFactor = 0.1
 
 memoryCost :: (SizeOf a) => a -> Gas -> Gas
 memoryCost val (Gas cost) = Gas totalCost

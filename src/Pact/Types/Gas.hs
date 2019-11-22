@@ -90,6 +90,8 @@ data WriteValue
 data GasArgs
   = GSelect (Maybe [(Info,FieldKey)])
   -- ^ Cost of selecting columns from a user table
+  | GSort Int
+  -- ^ Cost of performing sort on any list
   | GSortFieldLookup Int
   -- ^ Cost of sorting by lookup fields
   | GConcatenation Int Int
