@@ -192,7 +192,8 @@ checkManaged i (applyF,installF) cap@SigCapability{..} cdef = case _dDefMeta cde
     checkSigs dcm = case getStatic dcm cap of
       Left e -> evalError' cdef e
       Right capStatic -> do
-        sigCaps <- S.unions <$> view eeMsgSigs
+        autos <- use $ evalCapabilities . capAutonomous
+        sigCaps <- (S.union autos . S.unions) <$> view eeMsgSigs
         foldM (matchSig dcm capStatic) Nothing sigCaps
 
     matchSig _ _ r@Just{} _ = return r
@@ -215,8 +216,9 @@ checkSigCaps sigs = go
   where
     go = do
       granted <- getAllStackCaps
-      return $ M.filter (match granted) sigs
+      autos <- use $ evalCapabilities . capAutonomous
+      return $ M.filter (match (S.null autos) granted) sigs
 
-    match granted sigCaps =
-      S.null sigCaps ||
+    match allowEmpty granted sigCaps =
+      (S.null sigCaps && allowEmpty) ||
       not (S.null (S.intersection granted sigCaps))

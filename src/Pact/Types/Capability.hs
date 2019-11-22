@@ -24,7 +24,7 @@ module Pact.Types.Capability
   , UserCapability
   , ManagedCapability(..), mcInstalled, mcStatic, mcManaged, mcManageParamIndex, mcManageParamName, mcMgrFun
   , decomposeManaged, decomposeManaged', matchManaged
-  , Capabilities(..), capStack, capManaged, capModuleAdmin
+  , Capabilities(..), capStack, capManaged, capModuleAdmin, capAutonomous
   , CapScope(..)
   , CapSlot(..), csCap, csComposed, csScope
   ) where
@@ -158,10 +158,11 @@ data Capabilities = Capabilities
     -- initialized from signature set.
   , _capModuleAdmin :: (Set ModuleName)
     -- ^ Set of module admin capabilities.
+  , _capAutonomous :: (Set UserCapability)
   }
   deriving (Eq,Show,Generic)
 
-instance Default Capabilities where def = Capabilities [] mempty mempty
+instance Default Capabilities where def = Capabilities [] mempty mempty mempty
 instance NFData Capabilities
 
 makeLenses ''ManagedCapability
