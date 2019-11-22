@@ -129,6 +129,7 @@ instance Pretty GasArgs where
     GInterfaceDecl {} -> "GInterfaceDecl"
     GUserApp {} -> "GUserApp"
     GMakeList i -> "GMakeList:" <> pretty i
+    GSort i -> "GSort:" <> pretty i
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
