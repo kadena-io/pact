@@ -352,7 +352,7 @@ write wt partial i as = do
     [table@TTable {..},TLitString key,(TObject (Object ps _ _ _) _)] -> do
       ps' <- enforcePactValue' ps
       cost0 <- computeGas (Right i) (GUnreduced [])
-      cost1 <- computeGas (Right i) (GWrite (WriteData wt (asString key) ps'))
+      cost1 <- computeGas (Right i) (GPreWrite (WriteData wt (asString key) ps'))
       guardTable i table
       case _tTableType of
         TyAny -> return ()
@@ -367,7 +367,7 @@ createTable' :: GasRNativeFun e
 createTable' g i [t@TTable {..}] = do
   guardTable i t
   let (UserTables tn) = userTable t
-  computeGas' g i (GWrite (WriteTable (asString tn))) $
+  computeGas' g i (GPreWrite (WriteTable (asString tn))) $
     success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
 createTable' _ i as = argsError i as
 

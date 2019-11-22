@@ -567,9 +567,10 @@ gasLog _ _ = do
   evalLogGas .= Just []
   case gl of
     Nothing -> return $ tStr $ "Enabled gas log"
-    Just logs -> let total = sum (map snd logs) in return $ toTList tTyString def $ (tStr ("TOTAL: " <> tShow total):) $
-      reverse $ flip map logs $ \(n,g) ->
-      tStr $ renderCompactText' $ pretty n <> ": " <> pretty g
+    Just logs -> let total = sum (map snd logs) in
+      return $ toTList tTyString def $ (tStr ("TOTAL: " <> tShow total):) $
+        reverse $ flip map logs $ \(n,g) ->
+        tStr $ renderCompactText' $ pretty n <> ": " <> pretty g
 
 
 setGasPrice :: RNativeFun LibState

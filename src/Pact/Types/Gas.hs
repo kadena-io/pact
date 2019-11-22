@@ -76,6 +76,17 @@ data ReadValue
   | ReadKeySet KeySetName KeySet
   | ReadYield Yield
 
+instance Pretty ReadValue where
+  pretty g = case g of
+    ReadData {} -> "ReadData"
+    ReadKey {} -> "ReadKey"
+    ReadTxId -> "ReadTxId"
+    ReadModule {} -> "ReadModule"
+    ReadInterface {} -> "ReadInterface"
+    ReadNamespace {} -> "ReadNamespace"
+    ReadKeySet {} -> "ReadKeySet"
+    ReadYield {} -> "ReadYield"
+
 
 data WriteValue
   = WriteData WriteType Text (ObjectMap PactValue)
@@ -85,6 +96,16 @@ data WriteValue
   | WriteNamespace (Namespace PactValue)
   | WriteKeySet KeySetName KeySet
   | WriteYield Yield
+
+instance Pretty WriteValue where
+  pretty g = case g of
+    WriteData ty _ _ -> "WriteData:" <> pretty ty
+    WriteTable {} -> "WriteTable"
+    WriteModule {} -> "WriteModule"
+    WriteInterface {} -> "WriteInterface"
+    WriteNamespace {} -> "WriteNamespace"
+    WriteKeySet {} -> "WriteKeySet"
+    WriteYield {} -> "WriteYield"
 
 
 data GasArgs
@@ -98,7 +119,7 @@ data GasArgs
   -- ^ Cost of using a native function
   | GPostRead ReadValue
   -- ^ Cost for reading from database
-  | GWrite WriteValue
+  | GPreWrite WriteValue
   -- ^ Cost of writing to the database
   | GModuleMember (ModuleDef (Term Name))
   -- ^ TODO documentation
@@ -119,8 +140,8 @@ instance Pretty GasArgs where
     GSortFieldLookup i -> "GSortFieldLookup:" <> pretty i
     GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
     GUnreduced {} -> "GUnreduced"
-    GPostRead {} -> "GPostRead"
-    GWrite {} -> "GWrite"
+    GPostRead rv -> "GPostRead:" <> pretty rv
+    GPreWrite wv -> "GWrite:" <> pretty wv
     GModuleMember {} -> "GModuleMember"
     GModuleDecl {} -> "GModuleDecl"
     GUse {} -> "GUse"

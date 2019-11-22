@@ -73,11 +73,11 @@ defineKeyset g0 fi as = case as of
       old <- readRow i KeySets ksn
       case old of
         Nothing -> do
-          computeGas' g0 fi (GWrite (WriteKeySet ksn ks)) $
+          computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
             writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do
           (g1,_) <- computeGas' g0 fi (GPostRead (ReadKeySet ksn oldKs)) $ return ()
-          computeGas' g1 fi (GWrite (WriteKeySet ksn ks)) $ do
+          computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks)) $ do
             runSysOnly $ enforceKeySet i (Just ksn) oldKs
             writeRow i Write KeySets ksn ks & success "Keyset defined"
 

@@ -196,7 +196,7 @@ tableGasModel gasConfig =
           ReadNamespace _ns ->  _gasCostConfig_readColumnCost gasConfig
           ReadKeySet _ksName _ks ->  _gasCostConfig_readColumnCost gasConfig
           ReadYield (Yield _obj _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
-        GWrite w -> case w of
+        GPreWrite w -> case w of
           WriteData _type key obj ->
             (memoryCost key (_gasCostConfig_writeBytesCost gasConfig))
             + (memoryCost obj (_gasCostConfig_writeBytesCost gasConfig))

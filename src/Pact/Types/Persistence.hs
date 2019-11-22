@@ -182,6 +182,11 @@ data WriteType =
   Write
   deriving (Eq,Ord,Show,Enum,Bounded)
 
+instance Pretty WriteType where
+  pretty g = case g of
+    Insert -> "Insert"
+    Update -> "Update"
+    Write -> "Write"
 
 
 -- | Transaction ids are non-negative 64-bit integers and
