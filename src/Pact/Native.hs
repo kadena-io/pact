@@ -343,19 +343,19 @@ fromNamespacePactValue (Namespace n userg adming) =
 
 
 defineNamespaceDef :: NativeDef
-defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
+defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
   [LitExample "(define-namespace 'my-namespace (read-keyset 'my-keyset))"]
   "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
   \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
   \and GUARD will be rotated in its place."
   where
-    defineNamespace :: RNativeFun e
-    defineNamespace i as = case as of
-      [TLitString nsn, TGuard userg _, TGuard adming _] -> go i nsn userg adming
+    defineNamespace :: GasRNativeFun e
+    defineNamespace g i as = case as of
+      [TLitString nsn, TGuard userg _, TGuard adming _] -> go g i nsn userg adming
       _ -> argsError i as
 
-    go fi nsn ug ag = do
+    go g0 fi nsn ug ag = do
       let name = NamespaceName nsn
           info = _faInfo fi
           newNs = Namespace name ug ag
@@ -365,14 +365,14 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
         Just ns@(Namespace _ _ oldg) -> do
           -- if namespace is defined, enforce old guard
           nsPactValue <- toNamespacePactValue info ns
-          _ <- computeGas (Right fi) (GPostRead (ReadNamespace nsPactValue))
+          (g1,_) <- computeGas' g0 fi (GPostRead (ReadNamespace nsPactValue)) $ return ()
           enforceGuard fi oldg
-          _ <- computeGas (Right fi) (GWrite (WriteNamespace newNsPactValue))
-          writeNamespace info name newNsPactValue
+          computeGas' g1 fi (GWrite (WriteNamespace newNsPactValue)) $
+            writeNamespace info name newNsPactValue
         Nothing -> do
           enforcePolicy info name newNs
-          _ <- computeGas (Right fi) (GWrite (WriteNamespace newNsPactValue))
-          writeNamespace info name newNsPactValue
+          computeGas' g0 fi (GWrite (WriteNamespace newNsPactValue)) $
+            writeNamespace info name newNsPactValue
 
     enforcePolicy info nn ns = do
       policy <- view eeNamespacePolicy
@@ -405,7 +405,7 @@ defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNames
 
 
 namespaceDef :: NativeDef
-namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
+namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
   (funType tTyString [("namespace", tTyString)])
   [LitExample "(namespace 'my-namespace)"]
   "Set the current namespace to NAMESPACE. All expressions that occur in a current \
@@ -414,12 +414,12 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
   \namespace calls in the same tx will set a new namespace for all declarations \
   \until either the next namespace declaration, or the end of the tx."
   where
-    namespace :: RNativeFun e
-    namespace i as = case as of
-      [TLitString nsn] -> go i nsn
+    namespace :: GasRNativeFun e
+    namespace g i as = case as of
+      [TLitString nsn] -> go g i nsn
       _ -> argsError i as
 
-    go fa ns = do
+    go g0 fa ns = do
       let name = NamespaceName ns
           info = _faInfo fa
 
@@ -427,10 +427,10 @@ namespaceDef = setTopLevelOnly $ defRNative "namespace" namespace
       case (fromNamespacePactValue <$> mNs) of
         Just n@(Namespace ns' g _) -> do
           nsPactValue <- toNamespacePactValue info n
-          _ <- computeGas (Right fa) (GPostRead (ReadNamespace nsPactValue))
-          enforceGuard fa g
-          success ("Namespace set to " <> (asString ns')) $
-            evalRefs . rsNamespace .= (Just n)
+          computeGas' g0 fa (GPostRead (ReadNamespace nsPactValue)) $ do
+            enforceGuard fa g
+            success ("Namespace set to " <> (asString ns')) $
+              evalRefs . rsNamespace .= (Just n)
         Nothing  -> evalError info $
           "namespace: '" <> pretty name <> "' not defined"
 
@@ -500,7 +500,7 @@ foldDef = defNative "fold" fold'
   "Iteratively reduce LIST by applying APP to last result and element, starting with INIT."
 
 makeListDef :: NativeDef
-makeListDef = defRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
+makeListDef = defGasRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
   ["(make-list 5 true)"]
   "Create list by repeating VALUE LENGTH times."
 
@@ -515,7 +515,7 @@ filterDef = defNative "filter" filter'
   "Filter LIST by applying APP to each element. For each true result, the original value is kept."
 
 sortDef :: NativeDef
-sortDef = defRNative "sort" sort'
+sortDef = defGasRNative "sort" sort'
   (funType (TyList a) [("values",TyList a)] <>
    funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
   ["(sort [3 1 2])", "(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])"]
@@ -641,7 +641,7 @@ langDefs =
      ["(typeof \"hello\")"] "Returns type of X as string."
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
-    ,defRNative (specialForm YieldSF) yield
+    ,defGasRNative (specialForm YieldSF) yield
      (funType yieldv [("object",yieldv)] <>
       funType yieldv [("object", yieldv), ("target-chain",tTyString)])
      [ LitExample "(yield { \"amount\": 100.0 })"
@@ -725,11 +725,11 @@ map' i as = argsError' i as
 list :: RNativeFun e
 list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set type here
 
-makeList :: RNativeFun e
-makeList i [TLitInteger len,value] = case typeof value of
-  Right ty -> return $ toTList ty def $ replicate (fromIntegral len) value
+makeList :: GasRNativeFun e
+makeList g i [TLitInteger len,value] = case typeof value of
+  Right ty -> computeGas' g i (GMakeList len) $ return $ toTList ty def $ replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
-makeList i as = argsError i as
+makeList _ i as = argsError i as
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l
@@ -863,8 +863,8 @@ listModules i _ = do
   mods <- keys (_faInfo i) Modules
   return $ toTermList tTyString $ map asString mods
 
-yield :: RNativeFun e
-yield i as = case as of
+yield :: GasRNativeFun e
+yield g i as = case as of
   [u@(TObject t _)] -> go t Nothing u
   [u@(TObject t _), (TLitString cid)] -> go t (Just $ ChainId cid) u
   _ -> argsError i as
@@ -881,21 +881,22 @@ yield i as = case as of
               if _peStepHasRollback pe
                 then evalError' i "Cross-chain yield not allowed in step with rollback"
                 else fmap (Yield o') $ provenanceOf i t
-          _ <- computeGas (Right i) (GWrite (WriteYield y))
-          evalPactExec . _Just . peYield .= Just y
-          return u
+          computeGas' g i (GWrite (WriteYield y)) $ do
+            evalPactExec . _Just . peYield .= Just y
+            return u
 
 resume :: NativeFun e
 resume i as = case as of
-  [TBinding ps bd (BindSchema _) bi] -> gasUnreduced i as $ do
+  [TBinding ps bd (BindSchema _) bi] -> do
+    (g0,_) <- gasUnreduced i as $ return ()
     rm <- preview $ eePactStep . _Just . psResume . _Just
     case rm of
       Nothing -> evalError' i "Resume: no yielded value in context"
       Just y -> do
-        _ <- computeGas (Right i) (GPostRead (ReadYield y))
-        o <- fmap fromPactValue . _yData <$> enforceYield i y
-        l <- bindObjectLookup (toTObjectMap TyAny def o)
-        bindReduce ps bd bi l
+        computeGas' g0 i (GPostRead (ReadYield y)) $ do
+          o <- fmap fromPactValue . _yData <$> enforceYield i y
+          l <- bindObjectLookup (toTObjectMap TyAny def o)
+          bindReduce ps bd bi l
   _ -> argsError' i as
 
 where' :: NativeFun e
@@ -905,21 +906,20 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
 where' i as = argsError' i as
 
 
-sort' :: RNativeFun e
-sort' _ [l@(TList v _ _)] | V.null v = pure l
-sort' _ [TList{..}] = liftIO $ do
+sort' :: GasRNativeFun e
+sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)
+sort' g _ [TList{..}] = liftIO $ do
   m <- V.thaw _tList
   (`V.sortBy` m) $ \x y -> case (x,y) of
     (TLiteral xl _,TLiteral yl _) -> xl `compare` yl
     _ -> EQ
-  toTListV _tListType def <$> V.freeze m
-sort' fa [TList fields _ fi,l@(TList vs lty _)]
+  (g,) . toTListV _tListType def <$> V.freeze m
+sort' g0 fa [TList fields _ fi,l@(TList vs lty _)]
   | V.null fields = evalError fi "Empty fields list"
-  | V.null vs = return l
+  | V.null vs = return (g0,l)
   | otherwise = do
       fields' <- asKeyList fields
-      _ <- computeGas (Right fa) (GSortFieldLookup (S.size fields'))
-      liftIO $ do
+      computeGas' g0 fa (GSortFieldLookup (S.size fields')) $ liftIO $ do
         m <- V.thaw vs
         (`V.sortBy` m) $ \x y -> case (x,y) of
           (TObject (Object (ObjectMap xo) _ _ _) _,TObject (Object (ObjectMap yo) _ _ _) _) ->
@@ -930,7 +930,7 @@ sort' fa [TList fields _ fi,l@(TList vs lty _)]
             in foldr go EQ fields'
           _ -> EQ
         toTListV lty def <$> V.freeze m
-sort' i as = argsError i as
+sort' _ i as = argsError i as
 
 
 enforceVersion :: RNativeFun e

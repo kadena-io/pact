@@ -25,7 +25,7 @@ module Pact.Types.Runtime
    toPactId,
    Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
-   EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
+   EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,evalLogGas,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -181,10 +181,12 @@ data EvalState = EvalState {
     , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
+      -- | Gas logging
+    , _evalLogGas :: Maybe [(Text,Gas)]
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def 0 def
+instance Default EvalState where def = EvalState def def def 0 def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
@@ -217,7 +219,7 @@ catchesPactError action =
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  (_gas,r) <- act -- TODO opportunity for per-call gas logging here
+  (_gas,r) <- act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}

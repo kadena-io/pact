@@ -3,7 +3,7 @@
 ; ============================================================ ;
 ;; TEST: Out of gas error
 ;;
-(env-gaslimit 10)
+(env-gaslimit 11)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
 (expect-failure "out of gas" (+ 1 2))
@@ -77,27 +77,27 @@
 
 (env-gas 0)
 (create-table accounts)
-(expect "Cost: creating table with short name" 1091 (env-gas)) ;; TODO where is this extra 1 coming from
+(expect "Cost: creating table (15) with short name" 106 (env-gas)) ;; TODO where is this extra 1 coming from
 
 (env-gas 0)
 (create-table accounts-with-longname)
-(expect "Cost: creating table with longer name" 1118 (env-gas))
+(expect "Cost: creating table (15) with longer name" 133 (env-gas))
 
 (env-gas 0)
 (create-table accounts-with-nickname)
-(expect "Cost: creating table with longer name, more columns" 1118 (env-gas))
+(expect "Cost: creating table (15) with longer name, more columns" 133 (env-gas))
 
 (env-gas 0)
 (insert accounts-with-nickname "a" {"balance": 1.0, "nickname": "a"})
-(expect "Cost: inserting simple row" 3427 (env-gas))
+(expect "Cost: inserting simple row (25)" 452 (env-gas))
 
 (env-gas 0)
 (insert accounts-with-nickname "a-longer-key" {"balance": 1.0, "nickname": "b"})
-(expect "Cost: inserting row with longer key name" 3449 (env-gas))
+(expect "Cost: inserting row (25) with longer key name" 474 (env-gas))
 
 (env-gas 0)
 (insert accounts-with-nickname "c" {"balance": 1.0, "nickname": "aaa"})
-(expect "Cost: insert row with longer column value" 3431 (env-gas))
+(expect "Cost: insert row (24) with longer column value" 456 (env-gas))
 
 (insert accounts "a" {"balance": 1.0})
 (insert accounts "b" {"balance": 10.0})
@@ -106,15 +106,17 @@
 
 ; ============================================================ ;
 ;; TEST: cost of transfer
-;;
+
 (begin-tx)
 (use basic-module)
 (insert accounts "Alice" {"balance": 10.0 })
 (insert accounts "Bob" {"balance": 0.0 })
 
 (env-gas 0)
+(env-gaslog)
 (transfer "Alice" "Bob" 5.0)
-(expect "Cost: simple transfer" 6523 (env-gas))
+(env-gaslog)
+(expect "Cost: simple transfer (with-read 2x, update 2x=76" 559 (env-gas))
 
 (expect "Alice was debited 5" 5.0 (balance "Alice"))
 (expect "Bob was credited 5" 5.0 (balance "Bob"))
@@ -126,15 +128,16 @@
 ;;
 (begin-tx)
 (env-gas 0)
+(env-gaslog)
 (make-list 1000 8)
-(env-gas)
-(expect "gas cost of make-list" 1 (env-gas))
+(env-gaslog)
+(expect "gas cost of make-list" 59 (env-gas))
 
 (env-gas 0) ;; reset gas state
 (map (+ 1) (make-list 1000 8))
 ;; TODO Doesn't seem to take into account cost of `make-list` (costs 1)
 ;; where is 4 coming from?
-(expect "Cost: Mapping over long list" 1004 (env-gas))
+(expect "Cost: Mapping over long list (make-list 1, map 4, + 1)" 1063 (env-gas))
 (commit-tx)
 
 ; ============================================================ ;
@@ -144,10 +147,12 @@
 ;; Double charging for declaring module? And writing to db?
 ;;
 (begin-tx)
+(env-gaslog)
 (env-gas 0)
 (module a G
   (defcap G () true)
 )
+(env-gaslog)
 (expect "Cost: short module name, one member" 202 (env-gas))
 
 (env-gas 0)
@@ -252,7 +257,9 @@ d.G3
 (expect "Cost: defpact application" 1 (env-gas))
 
 (env-gas 0)
+(env-gaslog)
 (continue-pact 1)
+(env-gaslog)
 (expect "Cost: defpact, yield 1 value, short keys/values" 216 (env-gas))
 ;; TODO ^ why is this so expensive?
 ;; defpact cost is 1, yield is 3, plus size of yielded value

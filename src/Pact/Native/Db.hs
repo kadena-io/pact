@@ -67,7 +67,7 @@ dbDefs =
       partialize = set tySchemaPartial AnySubschema
       a = mkTyVar "a" []
   in ("Database",
-    [setTopLevelOnly $ defRNative "create-table" createTable'
+    [setTopLevelOnly $ defGasRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
      [LitExample "(create-table accounts)"] "Create table TABLE."
 
@@ -129,7 +129,7 @@ dbDefs =
      (funType tTyObjectAny [("table",tableTy)])
      [LitExample "(describe-table accounts)"]
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
-    ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
+    ,setTopLevelOnly $ defGasRNative "describe-keyset" descKeySet
      (funType tTyObjectAny [("keyset",tTyString)]) [] "Get metadata for KEYSET."
     ,setTopLevelOnly $ defRNative "describe-module" descModule
      (funType tTyObjectAny [("module",tTyString)])
@@ -144,15 +144,14 @@ descTable _ [TTable {..}] = return $ toTObject TyAny def [
   ("type", toTerm $ pack $ showPretty _tTableType)]
 descTable i as = argsError i as
 
-descKeySet :: RNativeFun e
-descKeySet i [TLitString t] = do
+descKeySet :: GasRNativeFun e
+descKeySet g i [TLitString t] = do
   r <- readRow (_faInfo i) KeySets (KeySetName t)
   case r of
-    Just v -> do
-      _ <- computeGas (Right i) (GPostRead (ReadKeySet (KeySetName t) v))
-      return $ toTerm v
+    Just v -> computeGas' g i (GPostRead (ReadKeySet (KeySetName t) v)) $
+              return $ toTerm v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t
-descKeySet i as = argsError i as
+descKeySet _ i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
@@ -364,13 +363,13 @@ write wt partial i as = do
     _ -> argsError i ts
 
 
-createTable' :: RNativeFun e
-createTable' i [t@TTable {..}] = do
+createTable' :: GasRNativeFun e
+createTable' g i [t@TTable {..}] = do
   guardTable i t
   let (UserTables tn) = userTable t
-  _ <- computeGas (Right i) (GWrite (WriteTable (asString tn)))
-  success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
-createTable' i as = argsError i as
+  computeGas' g i (GWrite (WriteTable (asString tn))) $
+    success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
+createTable' _ i as = argsError i as
 
 guardTable :: Pretty n => FunApp -> Term n -> Eval e ()
 guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModuleName $

@@ -21,7 +21,7 @@ import Pact.Types.Term
 -- able to find instances where GReduced was in present use, so I've removed it for now.
 
 data GasCostConfig = GasCostConfig
-  { _gasCostConfig_primTable :: Map Text ([Term Ref] -> Gas)
+  { _gasCostConfig_primTable :: Map Text Gas
   , _gasCostConfig_selectColumnCost :: Gas -- up-front cost per column in a select operation
   , _gasCostConfig_readColumnCost :: Gas -- cost per column to read a row
   , _gasCostConfig_sortFactor :: Gas
@@ -51,145 +51,131 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   }
 
-defaultGasTable :: Map Text ([Term Ref] -> Gas)
+defaultGasTable :: Map Text Gas
 defaultGasTable =
   Map.fromList
-  [
-   -- General native functions
-    ("at",                   const 2)
-   ,("base64-decode",        const 1) -- TODO benchmark
-   ,("base64-encode",        const 1) -- TODO benchmark
-   ,("bind",                 const 5)
-   ,("chain-data",           const 1)
-   ,("compose",              const 1)
-   ,("constantly",           const 1)
-   ,("contains",             const 1)
-   ,("define-namespace",     const 2000)
-   ,("drop",                 const 3)
-   ,("enforce",              const 1)
-   ,("enforce-one",          const 6)
-   ,("enforce-pact-version", const 1)
-   ,("filter",               const 3)
-   ,("fold",                 const 3)
-   ,("format",               const 4)
-   ,("hash",                 const 6)
-   ,("identity",             const 2)
-   ,("if",                   const 1)
-   ,("int-to-str",           const 1)
-   ,("is-charset",           const 1) -- TODO benchmark
-   ,("length",               const 1)
-   ,("list-modules",         const 12)
-   ,("make-list",            const 1)
-   ,("map",                  const 3)
-   ,("namespace",            const 13)
-   ,("pact-id",              const 1)
-   ,("pact-version",         const 1)
-   ,("read-decimal",         const 1)
-   ,("read-integer",         const 1)
-   ,("read-msg",             const 1)
-   ,("read-string",          const 1)
-   ,("remove",               const 3)
-   ,("resume",               const 2)
-   ,("reverse",              const 2)
-   ,("sort",                 const 2)
-   ,("str-to-int",           const 1)
-   ,("take",                 const 3)
-   ,("try",                  const 1)
-   ,("tx-hash",              const 1)
-   ,("typeof",               const 2)
-   ,("where",                const 2)
-   ,("yield",                const 3)
+  [("!=", 2)
+  ,("&", 1)
+  ,("*", 3)
+  ,("+", 1)
+  ,("-", 1)
+  ,("/", 3)
+  ,("<", 2)
+  ,("<=", 2)
+  ,("=", 2)
+  ,(">", 2)
+  ,(">=", 2)
+  ,("^", 4)
+  ,("abs", 1)
+  ,("add-time", 3)
+  ,("and", 1)
+  ,("and?", 1)
+  ,("at", 2)
+  ,("base64-decode", 1)
+  ,("base64-encode", 1)
+  ,("bind", 4)
+  ,("ceiling", 1)
+  ,("chain-data", 1)
+  ,("compose", 1)
+  ,("compose-capability", 2)
+  ,("constantly", 1)
+  ,("contains", 2)
+  ,("create-module-guard", 1)
+  ,("create-pact-guard", 1)
+  ,("create-table", 15)
+  ,("create-user-guard", 1)
+  ,("days", 4)
+  ,("decrypt-cc20p1305", 33)
+  ,("define-keyset", 20)
+  ,("define-namespace", 25)
+  ,("describe-keyset", 7)
+  ,("describe-module", 10)
+  ,("describe-table", 3)
+  ,("diff-time", 8)
+  ,("drop", 3)
+  ,("enforce", 1)
+  ,("enforce-guard", 8)
+  ,("enforce-keyset", 8)
+  ,("enforce-one", 6)
+  ,("enforce-pact-version", 1)
+  ,("exp", 5)
+  ,("filter", 3)
+  ,("floor", 1)
+  ,("fold", 3)
+  ,("format", 4)
+  ,("format-time", 4)
+  ,("hash", 5)
+  ,("hours", 4)
+  ,("identity", 2)
+  ,("if", 1)
+  ,("insert", 25)
+  ,("install-capability", 3) -- TODO benchmark
+  ,("int-to-str", 1)
+  ,("is-charset", 1)
+  ,("keylog", 11)
+  ,("keys", 10)
+  ,("keys-2", 1)
+  ,("keys-all", 1)
+  ,("keys-any", 1)
+  ,("keyset-ref-guard", 7)
+  ,("length", 1)
+  ,("list-modules", 8)
+  ,("ln", 6)
+  ,("log", 3)
+  ,("make-list",1)
+  ,("map", 4)
+  ,("minutes", 4)
+  ,("mod", 1)
+  ,("namespace", 12)
+  ,("not", 1)
+  ,("not?", 1)
+  ,("or", 1)
+  ,("or?", 1)
+  ,("pact-id", 1)
+  ,("pact-version", 1)
+  ,("parse-time", 2)
+  ,("read", 10)
+  ,("read-decimal", 1)
+  ,("read-integer", 1)
+  ,("read-keyset", 1)
+  ,("read-msg", 10) -- TODO retest
+  ,("read-string", 1)
+  ,("remove", 2)
+  ,("require-capability", 1)
+  ,("resume", 2)
+  ,("reverse", 2)
+  ,("round", 1)
+  ,("select", 24)
+  ,("shift", 1)
+  ,("sort", 2)
+  ,("sqrt", 6)
+  ,("str-to-int", 1)
+  ,("take", 3)
+  ,("time", 2)
+  ,("try", 1)
+  ,("tx-hash", 1)
+  ,("txids", 10)
+  ,("txlog", 3)
+  ,("typeof", 2)
+  ,("update", 25)
+  ,("validate-keypair", 29)
+  ,("verify-spv", 100) -- deprecated
+  ,("where", 2)
+  ,("with-capability", 2)
+  ,("with-default-read", 14)
+  ,("with-read", 13)
+  ,("write", 25)
+  ,("xor", 1)
+  ,("yield", 2)
+  ,("|", 1)
+  ,("~", 1)
+  ]
 
-   -- Operators native functions
-   ,("!=",      const 2)
-   ,("&",       const 1)
-   ,("*",       const 3)
-   ,("+",       const 1)
-   ,("-",       const 1)
-   ,("/",       const 2)
-   ,("<",       const 2)
-   ,("<=",      const 2)
-   ,("=",       const 2)
-   ,(">",       const 2)
-   ,(">=",      const 2)
-   ,("^",       const 4)
-   ,("abs",     const 1)
-   ,("and",     const 1)
-   ,("and?",    const 1)
-   ,("ceiling", const 5)
-   ,("exp",     const 4)
-   ,("floor",   const 5)
-   ,("ln",      const 6)
-   ,("log",     const 3)
-   ,("mod",     const 1)
-   ,("not",     const 1)
-   ,("not?",    const 1)
-   ,("or",      const 1)
-   ,("or?",     const 1)
-   ,("round",   const 5)
-   ,("shift",   const 1)
-   ,("sqrt",    const 5)
-   ,("xor",     const 1)
-   ,("|",       const 1)
-   ,("~",       const 1)
-
-   -- Time native functions
-   ,("add-time",    const 3)
-   ,("days",        const 4)
-   ,("diff-time",   const 9)
-   ,("format-time", const 4)
-   ,("hours",       const 4)
-   ,("minutes",     const 3)
-   ,("parse-time",  const 2)
-   ,("time",        const 2)
-
-   -- Commitments native functions
-   ,("decrypt-cc20p1305", const 34)
-   ,("validate-keypair",  const 28)
-
-   -- Keyset native functions
-   ,("define-keyset",  const 2000)
-   ,("enforce-keyset", const 11)
-   ,("keys-2",         const 1)
-   ,("keys-all",       const 1)
-   ,("keys-any",       const 1)
-   ,("read-keyset",    const 1)
-
-   -- Database native functions
-   ,("create-table",      const 1000)
-   ,("describe-keyset",   const 10)
-   ,("describe-module",   const 10)
-   ,("describe-table",    const 3)
-   ,("insert",            const 3000)
-   ,("keylog",            const 100)
-   ,("keys",              const 100)
-   ,("read",              const 15)
-   ,("select",            const 100)
-   ,("txids",             const 100)
-   ,("txlog",             const 7)
-   ,("update",            const 3000)
-   ,("with-default-read", const 20)
-   ,("with-read",         const 20)
-   ,("write",             const 3000)
-
-   -- Capabilities native functions
-   ,("compose-capability",  const 1)
-   ,("create-module-guard", const 1)
-   ,("create-pact-guard",   const 1)
-   ,("create-user-guard",   const 1)
-   ,("enforce-guard",       const 11)
-   ,("install-capability",  const 1) -- TODO benchmark
-   ,("keyset-ref-guard",    const 1)
-   ,("require-capability",  const 1)
-   ,("with-capability",     const 2)
-
-   -- Deprecated functions
-   ,("verify-spv",          const 1)
-   ]
 
 tableGasModel :: GasCostConfig -> GasModel
 tableGasModel gasConfig =
   let run name ga = case ga of
+        GMakeList v -> let lv = logBase (100::Float) (fromIntegral v) in 1 + floor (lv^(10::Int))
         GSelect mColumns -> case mColumns of
           Nothing -> 1
           Just [] -> 1
@@ -198,8 +184,8 @@ tableGasModel gasConfig =
           fromIntegral n * _gasCostConfig_sortFactor gasConfig
         GConcatenation i j ->
           fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
-        GUnreduced ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
-          Just g -> g ts
+        GUnreduced _ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
+          Just g -> g
           Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
         GPostRead r -> case r of
           ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap cols))

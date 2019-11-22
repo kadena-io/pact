@@ -59,9 +59,9 @@ instance ToJSON PactValue where
 instance FromJSON PactValue where
   parseJSON v =
     (PLiteral <$> parseJSON v) <|>
+    (PObject <$> parseJSON v) <|>
     (PList <$> parseJSON v) <|>
-    (PGuard <$> parseJSON v) <|>
-    (PObject <$> parseJSON v)
+    (PGuard <$> parseJSON v)
 
 instance Pretty PactValue where
   pretty (PLiteral l) = pretty l

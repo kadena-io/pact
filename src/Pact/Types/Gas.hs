@@ -110,6 +110,23 @@ data GasArgs
   -- ^ Cost of creating an interface
   | GUserApp DefType
   -- ^ Cost of using a function, capability, or defpact
+  | GMakeList Integer
+  -- ^ Cost of make-list
+
+instance Pretty GasArgs where
+  pretty g = case g of
+    GSelect {} -> "GSelect"
+    GSortFieldLookup i -> "GSortFieldLookup:" <> pretty i
+    GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
+    GUnreduced {} -> "GUnreduced"
+    GPostRead {} -> "GPostRead"
+    GWrite {} -> "GWrite"
+    GModuleMember {} -> "GModuleMember"
+    GModuleDecl {} -> "GModuleDecl"
+    GUse {} -> "GUse"
+    GInterfaceDecl {} -> "GInterfaceDecl"
+    GUserApp {} -> "GUserApp"
+    GMakeList i -> "GMakeList:" <> pretty i
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)

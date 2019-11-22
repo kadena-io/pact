@@ -182,6 +182,9 @@ replDefs = ("Repl",
      ,defZRNative "env-gasmodel" setGasModel (funType tTyString [("model",tTyString)])
        []
        "Update gas model to the model named MODEL."
+     ,defZRNative "env-gaslog" gasLog (funType tTyString [])
+       []
+       "Enable and obtain gas logging"
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
        []
        "Verify MODULE, checking that all properties hold."
@@ -556,6 +559,18 @@ envGas _ [TLitInteger g] = do
   evalGas .= fromIntegral g
   return $ tStr $ "Set gas to " <> tShow g
 envGas i as = argsError i as
+
+
+gasLog :: RNativeFun LibState
+gasLog _ _ = do
+  gl <- use evalLogGas
+  evalLogGas .= Just []
+  case gl of
+    Nothing -> return $ tStr $ "Enabled gas log"
+    Just logs -> let total = sum (map snd logs) in return $ toTList tTyString def $ (tStr ("TOTAL: " <> tShow total):) $
+      reverse $ flip map logs $ \(n,g) ->
+      tStr $ renderCompactText' $ pretty n <> ": " <> pretty g
+
 
 setGasPrice :: RNativeFun LibState
 setGasPrice _ [TLiteral (LDecimal d) _] = do
