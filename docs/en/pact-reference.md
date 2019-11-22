@@ -1322,7 +1322,7 @@ a keyset with the namespace. Namespace scope is entered by declaring the namespa
 (use my-namespace.my-module)
 ```
 
-Code may be appended to the namespace by simply entering the re-entering the namespace and declaring new code definitions. All definitions _must_ occur within a namespace, as the global namespace (the empty namespace) is reserved for Kadena code.
+Code may be appended to the namespace by simply re-entering the namespace and declaring new code definitions. All definitions _must_ occur within a namespace, as the global namespace (the empty namespace) is reserved for Kadena code.
 
 Examples of valid namespace definition and scoping:
 
