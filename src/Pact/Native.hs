@@ -908,18 +908,19 @@ where' i as = argsError' i as
 
 sort' :: GasRNativeFun e
 sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)
-sort' g _ [TList{..}] = liftIO $ do
+sort' g i [TList{..}] = computeGas' g i (GSort (V.length _tList)) $ liftIO $ do
   m <- V.thaw _tList
   (`V.sortBy` m) $ \x y -> case (x,y) of
     (TLiteral xl _,TLiteral yl _) -> xl `compare` yl
     _ -> EQ
-  (g,) . toTListV _tListType def <$> V.freeze m
+  toTListV _tListType def <$> V.freeze m
 sort' g0 fa [TList fields _ fi,l@(TList vs lty _)]
   | V.null fields = evalError fi "Empty fields list"
   | V.null vs = return (g0,l)
   | otherwise = do
+      (g1,_) <- computeGas' g0 fa (GSort (V.length vs)) $ return ()
       fields' <- asKeyList fields
-      computeGas' g0 fa (GSortFieldLookup (S.size fields')) $ liftIO $ do
+      computeGas' g1 fa (GSortFieldLookup (S.size fields')) $ liftIO $ do
         m <- V.thaw vs
         (`V.sortBy` m) $ \x y -> case (x,y) of
           (TObject (Object (ObjectMap xo) _ _ _) _,TObject (Object (ObjectMap yo) _ _ _) _) ->

@@ -65,7 +65,7 @@
   )
 )
 (env-gaslog)
-(expect "module gas" 2676 (env-gas))
+(expect "module gas" 1343 (env-gas))
 ;; Creating table here instead of in another transaction gives slightly cheaper gas
 ; REASON: governance invoked
 ;(env-gas 0)
@@ -431,3 +431,7 @@ d.G3
 ;; TODO again the off by 1
 
 (commit-tx)
+
+
+;; TODO sort
+;; TODO write an object

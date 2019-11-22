@@ -111,6 +111,8 @@ instance Pretty WriteValue where
 data GasArgs
   = GSelect (Maybe [(Info,FieldKey)])
   -- ^ Cost of selecting columns from a user table
+  | GSort Int
+  -- ^ Cost of performing sort on any list
   | GSortFieldLookup Int
   -- ^ Cost of sorting by lookup fields
   | GConcatenation Int Int
@@ -148,6 +150,7 @@ instance Pretty GasArgs where
     GInterfaceDecl {} -> "GInterfaceDecl"
     GUserApp {} -> "GUserApp"
     GMakeList i -> "GMakeList:" <> pretty i
+    GSort i -> "GSort:" <> pretty i
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
