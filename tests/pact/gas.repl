@@ -27,9 +27,13 @@
   (defschema account
     balance:decimal)
 
+  (defschema obj-table
+    name:object)
+
   (deftable accounts:{account})
   (deftable accounts-with-longname:{account})
   (deftable accounts-with-nickname:{account-with-nickname})
+  (deftable objs-table:{obj-table})
 
   (defun transfer (senderId receiverId amount)
     "Send money from sender to receiver"
@@ -65,13 +69,13 @@
   )
 )
 (env-gaslog)
-(expect "module gas" 1343 (env-gas))
+(expect "module gas" 295 (env-gas))
 ;; Creating table here instead of in another transaction gives slightly cheaper gas
 ; REASON: governance invoked
 ;(env-gas 0)
 ;(create-table accounts)
-;(env-gaslog) ;["TOTAL: 105" "create-table:GUnreduced: 15" "create-table:GWrite: 90"]
-;(expect "Cost: creating table with short name" 105 (env-gas))
+;(env-gaslog) ;["TOTAL: 259" "create-table:GUnreduced: 250" "create-table:GWrite: 9"]
+;(expect "Cost: creating table with short name" 259 (env-gas))
 (commit-tx)
 
 ; ============================================================ ;
@@ -83,28 +87,28 @@
 (env-gaslog)
 (env-gas 0)
 (create-table accounts)
-(env-gaslog) ;; ["TOTAL: 106" "create-table:GUnreduced: 15" "GOV:GUserApp: 1" "create-table:GWrite: 90"]
-(expect "Cost: creating table (15) with short name" 106 (env-gas))
+(env-gaslog) ;; ["TOTAL: 260" "create-table:GUnreduced: 250" "GOV:GUserApp: 1" "create-table:GWrite: 9"]
+(expect "Cost: creating table with short name" 260 (env-gas))
 
 (env-gas 0)
 (create-table accounts-with-longname)
-(expect "Cost: creating table (15) with longer name" 133 (env-gas))
+(expect "Cost: creating table (15) with longer name" 262 (env-gas))
 
 (env-gas 0)
 (create-table accounts-with-nickname)
-(expect "Cost: creating table (15) with longer name, more columns" 133 (env-gas))
+(expect "Cost: creating table (15) with longer name, more columns" 262 (env-gas))
 
 (env-gas 0)
 (insert accounts-with-nickname "a" {"balance": 1.0, "nickname": "a"})
-(expect "Cost: inserting simple row (25)" 452 (env-gas))
+(expect "Cost: inserting simple row (25)" 143 (env-gas))
 
 (env-gas 0)
 (insert accounts-with-nickname "a-longer-key" {"balance": 1.0, "nickname": "b"})
-(expect "Cost: inserting row (25) with longer key name" 474 (env-gas))
+(expect "Cost: inserting row (25) with longer key name" 146 (env-gas))
 
 (env-gas 0)
 (insert accounts-with-nickname "c" {"balance": 1.0, "nickname": "aaa"})
-(expect "Cost: insert row (24) with longer column value" 456 (env-gas))
+(expect "Cost: insert row (24) with longer column value" 144 (env-gas))
 
 (insert accounts "a" {"balance": 1.0})
 (insert accounts "b" {"balance": 10.0})
@@ -123,7 +127,7 @@
 (env-gaslog)
 (transfer "Alice" "Bob" 5.0)
 (env-gaslog)
-(expect "Cost: simple transfer (with-read 2x, update 2x=76" 559 (env-gas))
+(expect "Cost: simple transfer" 281 (env-gas))
 
 (expect "Alice was debited 5" 5.0 (balance "Alice"))
 (expect "Bob was credited 5" 5.0 (balance "Bob"))
@@ -139,6 +143,12 @@
 (make-list 1000 8)
 (env-gaslog)
 (expect "gas cost of make-list" 59 (env-gas))
+
+(env-gas 0)
+(env-gaslog)
+(make-list 5000 8)
+(env-gaslog)
+(expect "gas cost of longer make-list" 470 (env-gas))
 
 (env-gas 0) ;; reset gas state
 (map (+ 1) (make-list 1000 8))
@@ -159,27 +169,27 @@
   (defcap G () true)
 )
 (env-gaslog)
-(expect "Cost: short module name, one member" 202 (env-gas))
+(expect "Cost: short module name, one member" 23 (env-gas))
 
 (env-gas 0)
 (module simple-simple G
   (defcap G () true)
 )
-(expect "Cost: longer module name, one member" 250 (env-gas))
+(expect "Cost: longer module name, one member" 28 (env-gas))
 
 (env-gas 0)
 (module b G
   (defcap G () true)
   (defun f () true)
 )
-(expect "Cost: short module name, two members" 243 (env-gas))
+(expect "Cost: short module name, two members" 28 (env-gas))
 
 (env-gas 0)
 (module c G
   (defcap G () true)
   (defun fun () true)
 )
-(expect "Cost: short module name, two members, longer member name" 247 (env-gas))
+(expect "Cost: short module name, two members, longer member name" 29 (env-gas))
 (commit-tx)
 
 ; ============================================================ ;
@@ -193,27 +203,27 @@
   (defconst G true)
 )
 (env-gaslog)
-(expect "Cost: short interface name, one member" 202 (env-gas))
+(expect "Cost: short interface name, one member" 23 (env-gas))
 
 (env-gas 0)
 (interface my-interface
   (defconst G true)
 )
-(expect "Cost: longer interface name, one member" 246 (env-gas))
+(expect "Cost: longer interface name, one member" 27 (env-gas))
 
 (env-gas 0)
 (interface j
   (defconst G true)
   (defconst f true)
 )
-(expect "Cost: short interface name, two members" 243 (env-gas))
+(expect "Cost: short interface name, two members" 28 (env-gas))
 
 (env-gas 0)
 (interface k
   (defconst G true)
   (defconst fun true)
 )
-(expect "Cost: short interface name, two members, longer member name" 247 (env-gas))
+(expect "Cost: short interface name, two members, longer member name" 29 (env-gas))
 (commit-tx)
 
 ; ============================================================ ;
@@ -245,7 +255,7 @@
   (implements k)
   (defconst G3 k.G)
 )
-(expect "Cost: using interface" 282 (env-gas))
+(expect "Cost: using interface" 33 (env-gas))
 (commit-tx)
 
 (begin-tx)
@@ -268,7 +278,7 @@ d.G3
 (env-gaslog)
 (continue-pact 1)
 (env-gaslog)
-(expect "Cost: defpact, yield 1 value, short keys/values" 215 (env-gas))
+(expect "Cost: defpact, yield 1 value, short keys/values" 21 (env-gas))
 ;; TODO ^ why is this so expensive?
 ;; defpact cost is 1, yield is 3, plus size of yielded value
 
@@ -280,7 +290,7 @@ d.G3
 
 (env-gas 0)
 (continue-pact 3)
-(expect "Cost: defpact, yield 2 values" 395 (env-gas)) ;; TODO why so high?
+(expect "Cost: defpact, yield 2 values" 39 (env-gas)) ;; TODO why so high?
 
 (env-gas 0)
 (continue-pact 4)
@@ -296,31 +306,31 @@ d.G3
 
 (env-gas 0)
 (select accounts ["balance"] (constantly true))
-(expect "Cost: select with 1 out of 1 column filter" 36 (env-gas))
+(expect "Cost: select with 1 out of 1 column filter" 212 (env-gas))
 
 (env-gas 0)
 (select accounts [] (constantly true))
-(expect "Cost: select with empty column list" 35 (env-gas))
+(expect "Cost: select with empty column list" 211 (env-gas))
 
 (env-gas 0)
 (select accounts (constantly true))
-(expect "Cost: select with no column filter" 35 (env-gas))
+(expect "Cost: select with no column filter" 211 (env-gas))
 
 (env-gas 0)
 (select accounts-with-nickname ["balance"] (constantly true))
-(expect "Cost: select with 1 out of 2 column filter" 34 (env-gas))
+(expect "Cost: select with 1 out of 2 column filter" 210 (env-gas))
 
 (env-gas 0)
 (select accounts-with-nickname ["balance", "nickname"] (constantly true))
-(expect "Cost: select with 2 out of 2 column filter" 35 (env-gas))
+(expect "Cost: select with 2 out of 2 column filter" 211 (env-gas))
 
 (env-gas 0)
 (select accounts-with-nickname [] (constantly true))
-(expect "Cost: select with empty column list" 34 (env-gas))
+(expect "Cost: select with empty column list" 210 (env-gas))
 
 (env-gas 0)
 (select accounts-with-nickname (constantly true))
-(expect "Cost: select with no colum filter" 34 (env-gas))
+(expect "Cost: select with no colum filter" 210 (env-gas))
 
 (commit-tx)
 
@@ -330,11 +340,24 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (sort [3 1 2])
-(expect "Cost: sort list" 2 (env-gas))
+(expect "Cost: sort list" 3 (env-gas))
 
 (env-gas 0)
 (sort ['age, 'name] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
-(expect "Cost: sort object with field" 4 (env-gas))
+(expect "Cost: sort object with field" 5 (env-gas))
+
+(env-gas 0)
+(env-gaslog)
+(sort (make-list 10 "a"))
+(env-gaslog)
+(expect "Cost: sort short list" 5 (env-gas))
+
+(env-gas 0)
+(env-gaslog)
+(sort (make-list 1000 "a"))
+(env-gaslog)
+(expect "Cost: sort short list" 119 (env-gas))
+
 (commit-tx)
 
 ; ============================================================ ;
@@ -392,21 +415,21 @@ d.G3
 
 (env-gas 0)
 (define-keyset "a" (read-keyset "short-key"))
-(expect "Cost: defining keyset with short name" 304 (env-gas))
+(expect "Cost: defining keyset with short name" 55 (env-gas))
 ;; define-keyset is 2000, read-keyset is 1, plus size of keyset name, plus keyset itself
 ;; TODO: does size of keyset account for unaccounted gas?
 
 (env-gas 0)
 (define-keyset "a-key" (read-keyset "short-key"))
-(expect "Cost: defining keyset with longer name" 312 (env-gas))
+(expect "Cost: defining keyset with longer name" 56 (env-gas))
 
 (env-gas 0)
 (define-keyset "c" (read-keyset "long-key"))
-(expect "Cost: defining keyset with short name and longer keyset" 401 (env-gas))
+(expect "Cost: defining keyset with short name and longer keyset" 64 (env-gas))
 
 (env-gas 0)
 (define-namespace "a" (keyset-ref-guard "a-key") (keyset-ref-guard "a-key"))
-(expect "Cost: defining namespace with short name" 269 (env-gas))
+(expect "Cost: defining namespace with short name" 62 (env-gas))
 ;; define-namespace costs 2000, plus size of namespace itself, keyset-ref-guard is 1
 ;; TODO does this account for gas charge?
 
@@ -432,6 +455,48 @@ d.G3
 
 (commit-tx)
 
+; ============================================================ ;
+;; TEST: writing objects
+;;
+(begin-tx)
+(use basic-module)
 
-;; TODO sort
-;; TODO write an object
+(env-gas 0)
+(env-gaslog)
+(create-table objs-table)
+(env-gaslog)
+(expect "Cost: Create table with obj schema" 261 (env-gas))
+
+(env-gas 0)
+(env-gaslog)
+(insert objs-table "a" {"name": {"a": 1, "b": 2}})
+(env-gaslog)
+(expect "Cost: Insert row with small object" 144 (env-gas))
+
+(env-gas 0)
+(env-gaslog)
+(insert objs-table "b" {"name": {"a": 1,
+                                 "b": 2.0090909999999999999999,
+                                 "d": "aaaaaaaaaaaaaaaaaaaaaaa",
+                                 "f": [1 1 1 1 1 1 1 1 1 1 1 1],
+                                 "g": {"aa": 1, "bb": 2, "cc": 3},
+                                 "c": true,
+                                 "e": (time "2016-07-22T12:00:00Z")}})
+(env-gaslog)
+(expect "Cost: Insert row with every (most) types of pact value" 318 (env-gas))
+
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: read-msg
+;;
+(begin-tx)
+(env-data {"a": (make-list 100 0)})
+
+(env-gas 0)
+(env-gaslog)
+(read-msg)
+(env-gaslog)
+(expect "Cost: reading small data object" 10 (env-gas))
+
+(commit-tx)
