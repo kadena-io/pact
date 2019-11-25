@@ -19,20 +19,22 @@ computeGas i args = do
   g0 <- use evalGas
   let
     (info,name) = either id (_faInfo &&& _faName) i
-    g1 = g0 + runGasModel _geGasModel name args
-  evalGas .= g1
-  if g1 > fromIntegral _geGasLimit then
-    throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty g1
-    else return g1
+    g1 = runGasModel _geGasModel name args
+  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args),g1):)
+  let gUsed = g0 + g1
+  evalGas .= gUsed
+  if gUsed > fromIntegral _geGasLimit then
+    throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
+    else return gUsed
 
 
 -- | Pre-compute gas for some application before some action.
-computeGas' :: FunApp -> GasArgs -> Eval e a -> Eval e (Gas,a)
-computeGas' i gs action = computeGas (Right i) gs >>= \g -> (g,) <$> action
+computeGas' :: Gas -> FunApp -> GasArgs -> Eval e a -> Eval e (Gas,a)
+computeGas' g0 i gs action = computeGas (Right i) gs >>= \g -> (g0 + g,) <$> action
 
 -- | Pre-compute gas for some application with unreduced args before some action.
 gasUnreduced :: FunApp -> [Term Ref] -> Eval e a -> Eval e (Gas,a)
-gasUnreduced i as = computeGas' i (GUnreduced as)
+gasUnreduced i as = computeGas' 0 i (GUnreduced as)
 
 -- | GasEnv for suppressing gas charging.
 freeGasEnv :: GasEnv

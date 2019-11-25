@@ -372,7 +372,9 @@ instance HasInfo n => HasInfo (Ref' n) where
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Show,ToJSON,FromJSON,Generic,NFData)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,ToJSON,FromJSON,Generic,NFData)
+
+instance Show Gas where show (Gas g) = show g
 
 instance Pretty Gas where
   pretty (Gas i) = pretty i

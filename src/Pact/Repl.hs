@@ -66,7 +66,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Monoid (appEndo)
 import Data.Text (Text, pack, unpack)
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import Text.Trifecta.Delta
@@ -311,7 +311,8 @@ loadFile f = do
   rFile .= Just computedPath
   catch (do
           pr <- TF.parseFromFileEx exprsOnly computedPath
-          src <- liftIO $ readFile computedPath
+          srcBS <- liftIO $ BS.readFile computedPath
+          let src = unpack $ decodeUtf8 srcBS
           when (isPactFile f) $ rEvalState.evalRefs.rsLoaded .= HM.empty
           r <- parsedCompileEval src pr
           when (isPactFile f) $ void useReplLib

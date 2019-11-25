@@ -308,11 +308,6 @@
           ,(PAY "alice" "carl" 1)] }] )
 
 (expect-failure
- "Failure on external install"
- (install-capability (PAY "alice" "bob" 10)))
-
-
-(expect-failure
  "Payment should fail on different sender"
  "not installed"
  (pay "dave" "bob" 6))
@@ -460,3 +455,132 @@
  "D acquirable post-install"
  true
  (acquireD true))
+
+
+;; test autonomous and sig-scoped
+(commit-tx)
+(begin-tx)
+
+
+(module cap-install-test G
+  (defcap G () true)
+
+  (defschema sch guard:guard)
+  (deftable tbl:{sch})
+
+  (defcap C (id:string param:integer flag:bool)
+    @managed flag C-mgr
+    (enforce-guard (at 'guard (read tbl id))))
+  (defun C-mgr (m r) m)
+
+  (defun go (id param)
+    (with-capability (C id param true) "success"))
+
+  (defun setup (id guard)
+    (insert tbl id { 'guard: guard }))
+
+  )
+
+(create-table tbl)
+
+(module auto-cap-mod G
+  (defcap G () (enforce false "no admin"))
+  (defconst AUTO_ID "auto-cap-mod")
+  (defun setup-auto ()
+    (cap-install-test.setup AUTO_ID (create-module-guard "m")))
+  (defun go-auto ()
+    "make call in-module to allow module guard to pass"
+    (go AUTO_ID 0))
+  )
+
+;; setup autonomous account
+(setup-auto)
+;; setup alice account
+(env-data { "alice": ["alice"], "bob": ["bob"] })
+(setup "alice" (read-keyset 'alice))
+(setup "bob" (read-keyset 'bob))
+
+(commit-tx)
+(begin-tx)
+(use auto-cap-mod)
+(use cap-install-test)
+
+;; scenario: user signs but does not scope cap and not installed
+(env-keys ["alice"])
+(expect-failure
+ "alice acquire fails with nothing installed"
+ "not installed"
+ (go "alice" 0))
+
+;; scenario: autonomous call fails with no cap installed
+(expect-failure
+ "autonomous failure with nothing installed"
+ "not installed"
+ (go-auto))
+
+;; scenario: alice signs with no scope, direct install fails to acquire.
+(env-keys ["alice"])
+(install-capability (C "alice" 0 true))
+(expect-failure
+ "Autonomous install on unscoped user sig cannot acquire"
+ "Keyset failure"
+ (go "alice" 0))
+
+;; scenario: autonomous install, but fails anyway because call is not from module.
+(install-capability (C AUTO_ID 0 true))
+(expect-failure
+ "Install for a module-admin-guarded cap w/o module access cannot acquire"
+ "no admin"
+ (go AUTO_ID 0))
+
+;; success if called from auto context
+(expect
+ "Install for a module-admin-guarded cap w/ module access acquires."
+ "success"
+ (go-auto))
+
+;; scenario: bob installs with sig and succeeds
+(env-sigs [{"key": "bob", "caps": [(C "bob" 0 true)]}])
+(expect
+ "Bob succeeds with sig-scoped install"
+ "success"
+ (go "bob" 0))
+
+;; scenario: attacker tries different-parameterized cap than on sig list, fails
+(install-capability (C "bob" 1 true))
+(expect-failure
+ "Attack with different parameters than signature cap fails"
+ "Keyset failure"
+ (go "bob" 1))
+
+(commit-tx)
+(begin-tx)
+
+;;; test empty caps after autonomous tx
+;;;
+(module test-empty-cap GOV
+  (defcap GOV () true)
+
+  (defcap GUARD (g)
+    (enforce-guard (read-keyset g)))
+
+  (defun enforce-cap (g)
+    (with-capability (GUARD g)
+      true))
+
+  (defun enforce-wo-cap (g)
+    (enforce-guard (read-keyset g)))
+)
+
+(env-data {"alice-keyset": ["alice"]})
+
+;; scenario: alice signs empty caps for non-managed cap, works
+(env-sigs [{ "key": "alice", "caps": []}])
+(expect "empty works with bare keyset read"  true (enforce-wo-cap "alice-keyset"))
+(expect "empty works with keyset read in guard"  true (enforce-wo-cap "alice-keyset"))
+
+;; scenario: alice signs caps, only works in non-managed cap
+(env-sigs [{ "key": "alice", "caps": [(GUARD "alice-keyset")]}])
+(expect "cap-scoped works with cap" true (enforce-cap "alice-keyset"))
+(expect-failure "cap-scoped does not work without cap" "Keyset failure"
+                (enforce-wo-cap "alice-keyset"))

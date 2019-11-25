@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -47,7 +48,7 @@ modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
     mod' i as = argsError i as
 
 addDef :: NativeDef
-addDef = defRNative "+" plus plusTy
+addDef = defGasRNative "+" plus plusTy
   [ "(+ 1 2)"
   , "(+ 5.0 0.5)"
   , "(+ \"every\" \"body\")"
@@ -57,26 +58,25 @@ addDef = defRNative "+" plus plusTy
   "Add numbers, concatenate strings/lists, or merge objects."
   where
 
-    plus :: RNativeFun e
-    plus fi [TLitString a,TLitString b] = gasConcat fi (T.length a) (T.length b) >>
+    plus :: GasRNativeFun e
+    plus g fi [TLitString a,TLitString b] = gasConcat g fi (T.length a) (T.length b) $
       (return (tStr $ a <> b))
-    plus fi [TList a aty _,TList b bty _] = gasConcat fi (length a) (length b) >>
+    plus g fi [TList a aty _,TList b bty _] = gasConcat g fi (length a) (length b) $
       return (TList
       (a <> b)
       (if aty == bty then aty else TyAny)
       def)
-    plus fi [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
-      gasConcat fi (M.size as) (M.size bs) >>
+    plus g fi [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
+      gasConcat g fi (M.size as) (M.size bs) $
       return ((`TObject` def) $ Object
            (ObjectMap $ M.union as bs)
            (if aty == bty then aty else TyAny)
            def
            def)
-    plus i as = binop' (+) (+) i as
+    plus g i as = (g,) <$> binop' (+) (+) i as
     {-# INLINE plus #-}
 
-    gasConcat :: FunApp -> Int -> Int -> Eval e Gas
-    gasConcat fi aLength bLength = computeGas (Right fi) (GConcatenation aLength bLength)
+    gasConcat g fi aLength bLength = computeGas' g fi (GConcatenation aLength bLength)
 
     plusTy :: FunTypes n
     plusTy = coerceBinNum <> binTy plusA plusA plusA

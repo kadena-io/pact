@@ -33,9 +33,11 @@ import Control.Applicative
 import Control.Lens
 import Control.Monad.State.Strict
 
+import qualified Data.ByteString as BS
 import Data.List
 import qualified Data.HashMap.Strict as HM
 import Data.Text (unpack)
+import Data.Text.Encoding (decodeUtf8)
 
 import Text.Trifecta as TF hiding (err)
 
@@ -161,7 +163,8 @@ locatePactReplScript fp = do
 compileOnly :: String -> IO (Either String [Term Name])
 compileOnly fp = do
   !pr <- TF.parseFromFileEx exprsOnly fp
-  src <- readFile fp
+  srcBS <- BS.readFile fp
+  let src = unpack $ decodeUtf8 srcBS
   s <- initReplState (Script False fp) Nothing
   (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
 

@@ -273,7 +273,7 @@ eval (TModule (MDModule m) bod i) =
       _ -> void $ acquireModuleAdminCapability (_mName m) $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
-    _ <- computeGas (Left (i,"module")) (GWrite (WriteModule (_mName m) (_mCode m)))
+    _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 
@@ -285,7 +285,7 @@ eval (TModule (MDInterface m) bod i) =
     void $ lookupModule i (_interfaceName mangledI) >>= traverse
       (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
     (g,govI) <- loadInterface mangledI bod i gas
-    _ <- computeGas (Left (i, "interface")) (GWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
+    _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 eval t = enscope t >>= reduce

@@ -41,7 +41,7 @@ keyDefs =
     in
     ("Keysets",[
      readKeysetDef
-    ,setTopLevelOnly $ defRNative "define-keyset" defineKeyset
+    ,setTopLevelOnly $ defGasRNative "define-keyset" defineKeyset
      (funType tTyString [("name",tTyString),("keyset",tTyString)] <>
       funType tTyString [("name",tTyString)])
      [LitExample "(define-keyset 'admin-keyset (read-keyset \"keyset\"))"]
@@ -61,8 +61,8 @@ keyDefs =
 readKeySet' :: FunApp -> Text -> Eval e KeySet
 readKeySet' i key = parseMsgKey i "read-keyset" key
 
-defineKeyset :: RNativeFun e
-defineKeyset fi as = case as of
+defineKeyset :: GasRNativeFun e
+defineKeyset g0 fi as = case as of
   [TLitString name,TGuard (GKeySet ks) _] -> go name ks
   [TLitString name] -> readKeySet' fi name >>= go name
   _ -> argsError fi as
@@ -73,13 +73,13 @@ defineKeyset fi as = case as of
       old <- readRow i KeySets ksn
       case old of
         Nothing -> do
-          _ <- computeGas (Right fi) (GWrite (WriteKeySet ksn ks))
-          writeRow i Write KeySets ksn ks & success "Keyset defined"
+          computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
+            writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do
-          _ <- computeGas (Right fi) (GPostRead (ReadKeySet ksn oldKs))
-          _ <- computeGas (Right fi) (GWrite (WriteKeySet ksn ks))
-          runSysOnly $ enforceKeySet i (Just ksn) oldKs
-          writeRow i Write KeySets ksn ks & success "Keyset defined"
+          (g1,_) <- computeGas' g0 fi (GPostRead (ReadKeySet ksn oldKs)) $ return ()
+          computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks)) $ do
+            runSysOnly $ enforceKeySet i (Just ksn) oldKs
+            writeRow i Write KeySets ksn ks & success "Keyset defined"
 
 keyPred :: (Integer -> Integer -> Bool) -> RNativeFun e
 keyPred predfun _ [TLitInteger count,TLitInteger matched] =
