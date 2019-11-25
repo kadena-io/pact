@@ -129,7 +129,7 @@ true
 
 ### define-namespace {#define-namespace}
 
-*namespace*&nbsp;`string` *guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
+*namespace*&nbsp;`string` *user-guard*&nbsp;`guard` *admin-guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
 
 
 Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in its place.

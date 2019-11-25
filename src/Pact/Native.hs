@@ -345,7 +345,7 @@ fromNamespacePactValue (Namespace n userg adming) =
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defRNative "define-namespace" defineNamespace
-  (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
+  (funType tTyString [("namespace", tTyString), ("user-guard", tTyGuard Nothing), ("admin-guard", tTyGuard Nothing)])
   [LitExample "(define-namespace 'my-namespace (read-keyset 'user-ks)) (read-keyset 'admin-ks)"]
   "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
   \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
