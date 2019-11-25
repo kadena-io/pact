@@ -1,11 +1,982 @@
 function,description,sqliteDbAverage (ns),mockDbAverage (ns)
+!=,"(!= longNumber longNumber)
+",5724.757894309411,5691.526009286451
+!=,"(!= medNumber medNumber)
+",5721.5721376345855,5643.895403950376
+!=,"(!= smallNumber smallNumber)
+",5572.950911281224,5632.350846492153
+!=,"(!= longString longString)
+",6578.08960235235,6559.564582388431
+!=,"(!= medString medString)
+",5637.20343809701,5596.754330400708
+!=,"(!= smallString smallString)
+",5189.049703634234,5209.372894187169
+!=,"(!= longNumber.0 longNumber.0)
+",5662.78078417274,5681.85351995979
+!=,"(!= medNumber.0 medNumber.0)
+",5688.662729275397,5514.769542114328
+!=,"(!= smallNumber.0 smallNumber.0)
+",5671.882701971699,5687.832175939212
+!=,"(!= longNumberList longNumberList)
+",9034068.574263627,8862011.051568137
+!=,"(!= medNumberList medNumberList)
+",43593.79341063651,43218.31687770761
+!=,"(!= smallNumberList smallNumberList)
+",11082.16355536441,11036.808488607692
+!=,"(!= longOjectMap longOjectMap)
+",2.8957249978852835e7,2.9305723453231394e7
+!=,"(!= medOjectMap medOjectMap)
+",68471.68633253755,67688.1619130032
+!=,"(!= smallOjectMap smallOjectMap)
+",12020.070753551161,11970.901123873571
+&,"(& longNumber longNumber)
+",5139.787582114235,5197.181636105399
+&,"(& medNumber medNumber)
+",5167.347574022712,5186.038815239083
+&,"(& smallNumber smallNumber)
+",5078.090650691557,5196.006161654851
+*,"(* longNumber longNumber)
+",5498.801783093718,5488.67235651578
+*,"(* medNumber medNumber)
+",5542.84473381766,5462.15225786722
+*,"(* smallNumber smallNumber)
+",5508.240931146131,5467.513841049866
+*,"(* longNumber.0 longNumber.0)
+",13578.252953882118,13462.782439441855
+*,"(* medNumber.0 medNumber.0)
+",13855.709271758213,13631.968012497347
+*,"(* smallNumber.0 smallNumber.0)
+",13735.775236351627,13656.745670924092
+*,"(* longNumber.0 longNumber)
+",13444.774190306283,13660.616554015554
+*,"(* medNumber.0 medNumber)
+",13626.432359364422,13373.58240071698
+*,"(* smallNumber.0 smallNumber)
+",13544.45574570916,13136.404945465352
++,"(+ longNumber longNumber)
+",5550.623274308874,5496.394884332348
++,"(+ medNumber medNumber)
+",5534.3567199605795,5517.227192821544
++,"(+ smallNumber smallNumber)
+",5258.089691042962,5363.999415576932
++,"(+ longNumber.0 longNumber.0)
+",5793.379210835735,5757.163463239526
++,"(+ medNumber.0 medNumber.0)
+",5736.957921950394,5793.033666219922
++,"(+ smallNumber.0 smallNumber.0)
+",5449.048509952053,5754.168096008808
++,"(+ longNumber.0 longNumber)
+",6059.447626671298,6051.867545695928
++,"(+ medNumber.0 medNumber)
+",6020.4912150469545,6028.806081297105
++,"(+ smallNumber.0 smallNumber)
+",6026.603591791284,6007.8450384463185
++,"(+ longString longString)
+",8967.880076320655,8686.003306221573
++,"(+ medString medString)
+",5394.924994703827,5705.640313460249
++,"(+ smallString smallString)
+",5781.132118597831,5723.023858704973
++,"(+ longOjectMap longOjectMap)
+",2.8759804293607276e7,2.8311248048227802e7
++,"(+ medOjectMap medOjectMap)
+",68391.82289608828,67954.57829441245
++,"(+ smallOjectMap smallOjectMap)
+",12635.583715862003,12484.138030556045
+-,"(- longNumber longNumber)
+",5294.965878715957,5272.745869228953
+-,"(- medNumber medNumber)
+",5271.146502432982,5241.880275789625
+-,"(- smallNumber smallNumber)
+",5257.1323824731335,5269.080433855208
+-,"(- longNumber.0 longNumber.0)
+",5735.611668071419,5729.319300078482
+-,"(- medNumber.0 medNumber.0)
+",5714.439099838935,5695.401273196981
+-,"(- smallNumber.0 smallNumber.0)
+",5772.283341016391,5711.484272477671
+-,"(- longNumber.0 longNumber)
+",6250.106340261485,6101.0798682013665
+-,"(- medNumber.0 medNumber)
+",6251.912451941441,6298.775830838461
+-,"(- smallNumber.0 smallNumber)
+",6189.82050248792,6206.1506711424345
+-,"(- longNumber)
+",5324.0880992142775,5279.404190966073
+-,"(- medNumber)
+",5336.96353816652,5354.687649541174
+-,"(- smallNumber)
+",5325.704415084304,5294.024575924747
+-,"(- longNumber.0)
+",5120.793655840381,5200.891514911776
+-,"(- medNumber.0)
+",5274.562686348571,5268.538192607152
+-,"(- smallNumber.0)
+",5324.191843524689,5312.719969080096
+/,"(/ longNumber longNumber)
+",5386.403108964397,5340.69316751009
+/,"(/ medNumber medNumber)
+",5403.14362430602,5356.450358245745
+/,"(/ smallNumber smallNumber)
+",5397.226538001033,5260.916071695555
+/,"(/ longNumber.0 longNumber.0)
+",13474.457521121105,13507.376968277924
+/,"(/ medNumber.0 medNumber.0)
+",13461.308483838946,13325.597916817065
+/,"(/ smallNumber.0 smallNumber.0)
+",13135.317070301287,13207.88066250826
+/,"(/ longNumber.0 longNumber)
+",13311.056750089641,13173.729042130615
+/,"(/ medNumber.0 medNumber)
+",13016.369931185369,12872.311144239558
+/,"(/ smallNumber.0 smallNumber)
+",12992.853387164216,13143.083147306861
+<,"(< longNumber longNumber)
+",5592.177989541794,5569.406568984986
+<,"(< medNumber medNumber)
+",5546.104860850913,5552.020601574267
+<,"(< smallNumber smallNumber)
+",5530.42326036653,5442.6333275891675
+<,"(< longNumber.0 longNumber.0)
+",5739.792336570837,5481.352290204748
+<,"(< medNumber.0 medNumber.0)
+",5752.601972911278,5741.063014052271
+<,"(< smallNumber.0 smallNumber.0)
+",5498.368131675529,5621.48745420379
+<,"(< longString longString)
+",32221.993665302954,31956.11460861817
+<,"(< medString medString)
+",5855.440116224327,5812.0995922429
+<,"(< smallString smallString)
+",5642.156553850259,5551.939115525257
+<,"(< (time ""2016-07-22T12:00:00Z"") (time ""2018-07-22T12:00:00Z""))
+",13343.405815458123,13388.923175201553
+<=,"(<= longNumber longNumber)
+",5708.718363794105,5709.202402100892
+<=,"(<= medNumber medNumber)
+",5746.04916293636,5780.539889757728
+<=,"(<= smallNumber smallNumber)
+",5724.666886341737,5728.251238542686
+<=,"(<= longNumber.0 longNumber.0)
+",5555.820068297394,5541.9860056627185
+<=,"(<= medNumber.0 medNumber.0)
+",5614.097985031414,5510.629436955341
+<=,"(<= smallNumber.0 smallNumber.0)
+",5591.946056084697,5553.6144842505355
+<=,"(<= longString longString)
+",32521.135175538937,32440.047795814986
+<=,"(<= medString medString)
+",6004.041808427927,6025.983366823431
+<=,"(<= smallString smallString)
+",5659.802728177092,5686.05627692006
+<=,"(<= (time ""2016-07-22T12:00:00Z"") (time ""2018-07-22T12:00:00Z""))
+",13648.709516364717,13534.140483709823
+=,"(= longNumber longNumber)
+",5702.965682132061,5715.0386425381175
+=,"(= medNumber medNumber)
+",5710.803889592621,5693.515379930373
+=,"(= smallNumber smallNumber)
+",5766.321254616066,5709.298728581398
+=,"(= longNumber.0 longNumber.0)
+",5641.691912290759,5645.38845134279
+=,"(= medNumber.0 medNumber.0)
+",5664.340976031014,5677.9002290140825
+=,"(= smallNumber.0 smallNumber.0)
+",5656.041674630931,5644.996912485577
+=,"(= longString longString)
+",6605.050655460515,6678.716949641828
+=,"(= medString medString)
+",5230.816881199342,5225.5613909997455
+=,"(= smallString smallString)
+",5631.252359831839,5646.544204118916
+=,"(= longOjectMap longOjectMap)
+",2.8359743132164225e7,2.8769935693267643e7
+=,"(= medOjectMap medOjectMap)
+",68344.6388666217,67837.45394264728
+=,"(= smallOjectMap smallOjectMap)
+",11935.73684955144,11940.299319372423
+=,"(= longNumberList longNumberList)
+",9104408.093457317,8928488.564314766
+=,"(= medNumberList medNumberList)
+",43494.16229850728,42890.2473775301
+=,"(= smallNumberList smallNumberList)
+",11144.273590406277,11249.337497894825
+=,"(= (time ""2016-07-22T12:00:00Z"") (time ""2018-07-22T12:00:00Z""))
+",13217.46259435472,13154.992644587515
+>,"(> longNumber longNumber)
+",5465.257488045187,5566.030392399846
+>,"(> medNumber medNumber)
+",5591.346866843436,5631.666325764956
+>,"(> smallNumber smallNumber)
+",5603.041424118713,5550.5760548383005
+>,"(> longNumber.0 longNumber.0)
+",5675.279817740153,5705.051885146418
+>,"(> medNumber.0 medNumber.0)
+",5724.684538990406,5692.022618442711
+>,"(> smallNumber.0 smallNumber.0)
+",5766.433533644096,5761.438768067083
+>,"(> longString longString)
+",31329.354404366983,32478.748489617952
+>,"(> medString medString)
+",5803.367471003175,5790.981299307497
+>,"(> smallString smallString)
+",5627.025736719693,5605.131157439783
+>,"(> (time ""2016-07-22T12:00:00Z"") (time ""2018-07-22T12:00:00Z""))
+",13437.410930443906,13559.420651088889
+>=,"(>= longNumber longNumber)
+",5722.699350195423,5708.495125489229
+>=,"(>= medNumber medNumber)
+",5744.788764968192,5686.037711878456
+>=,"(>= smallNumber smallNumber)
+",5698.985171077081,5695.449176366093
+>=,"(>= longNumber.0 longNumber.0)
+",5573.648444953622,5545.095642435091
+>=,"(>= medNumber.0 medNumber.0)
+",5525.332183711926,5515.741547693542
+>=,"(>= smallNumber.0 smallNumber.0)
+",5509.633329753172,5568.02813527536
+>=,"(>= longString longString)
+",32357.846007534066,32309.104791920952
+>=,"(>= medString medString)
+",5925.58577853048,5964.413721412898
+>=,"(>= smallString smallString)
+",5649.611189192204,5659.666615371584
+>=,"(>= (time ""2016-07-22T12:00:00Z"") (time ""2018-07-22T12:00:00Z""))
+",13643.447383340497,13324.620134579678
+^,"(^ 2 longNumber)
+",14767.905112122666,14871.34176443239
+^,"(^ 2 medNumber)
+",6276.540204173151,6326.231677302637
+^,"(^ 2 smallNumber)
+",5913.7656623031025,5850.743087235563
+^,"(^ 2.1 longNumber.1)
+",15667.508000102707,15755.393877191562
+^,"(^ 2.1 medNumber.1)
+",14758.681416868376,14196.189361020422
+^,"(^ 2.1 smallNumber.1)
+",18931.961990080545,19026.12415541316
+^,"(^ 2.1 longNumber)
+",14895.45488376602,15177.482001380966
+^,"(^ 2.1 medNumber)
+",13992.208924322376,13958.970756031626
+^,"(^ 2.1 smallNumber)
+",18931.68042512627,18994.009578923607
+abs,"(abs -longNumber)
+",5345.354939719705,5349.897632160228
+abs,"(abs -medNumber)
+",5369.032701410306,5320.629845213713
+abs,"(abs -smallNumber)
+",5304.092156072174,5326.439282829932
+abs,"(abs -longNumber.0)
+",5317.906449327242,5300.353736879021
+abs,"(abs -medNumber.0)
+",5266.301904924899,5261.593122897356
+abs,"(abs -smallNumber.0)
+",5309.223688959286,5355.2476171646695
+add-time,"(add-time (time ""2016-07-22T12:00:00Z"") 15)
+",10031.473281463663,10092.718853105305
+and,"(and false true)
+",5038.9616143382445,5020.482628679198
+and?,"(and? (identity) (identity) true)
+",6674.899405415618,6712.51854997717
+at,"(at 9999 longEscapedStrList)
+",2988762.1949262433,2997239.273000957
+at,"(at 99 medEscapedStrList)
+",22034.75847358732,21852.286221087717
+at,"(at 9 smallEscapedStrList)
+",8226.094253202938,8192.786239140392
+at,"(at ""a1"" longOjectMap)
+",8357199.876846847,8221371.313116063
+at,"(at ""a1"" medOjectMap)
+",31222.522212552925,30891.454237040685
+at,"(at ""a1"" smallOjectMap)
+",8442.756348569903,8322.48396882579
+base64-decode,"(base64-encode ""aaaaaaaaaa"")
+",5029.672335598184,5106.753411669421
+base64-decode,"(base64-encode ""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"")
+",5327.59861076114,5272.598317469295
+base64-decode,"(base64-encode ""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"")
+",7665.895685420451,7645.486254244727
+base64-encode,"(base64-decode ""YWFhYWFhYWFhYQ"")
+",4885.480075420109,5115.01523363863
+base64-encode,"(base64-decode ""YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ"")
+",5552.586297538473,5640.10330995292
+base64-encode,"(base64-decode ""YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ"")
+",8293.41999433203,8461.585178856549
+bind,"(bind longOjectMap longBinding a1)
+",3.326575526429211e7,3.3530966254126478e7
+bind,"(bind medOjectMap medBinding a1)
+",90147.48785779004,89744.160397485
+bind,"(bind smallOjectMap smallBinding a1)
+",14762.83037378636,14712.290046838601
+ceiling,"(ceiling longNumber.12345)
+",7571.911296053154,7504.617909354204
+ceiling,"(ceiling medNumber.12345)
+",7579.399063298343,7543.831988409064
+ceiling,"(ceiling smallNumber.12345)
+",7574.354757249799,7542.30355833159
+ceiling,"(ceiling longNumber.12345 4)
+",6747.514034718272,6660.940670677377
+ceiling,"(ceiling medNumber.12345 4)
+",6655.265566873757,6637.177221492089
+ceiling,"(ceiling smallNumber.12345 4)
+",6607.800568600419,6713.143075692555
+chain-data,"(chain-data)
+",6217.488789111095,6154.650686842586
+compose,"(compose (+ 0) (+ 0) 0)
+",7066.615882003352,7043.632313143021
+compose-capability,"(compose-capability (accounts.GOV))
+",7862.699159637479,7750.620661843867
+constantly,"(constantly 0 ""firstIgnore"")
+",4929.538921121748,4933.244393589265
+constantly,"(constantly 0 ""firstIgnore"" ""secondIgnore"")
+",4989.098637498793,5003.549705276141
+constantly,"(constantly 0 ""firstIgnore"" ""secondIgnore"" ""thirdIgnore"")
+",5083.956232992112,5083.969978948347
+contains,"(contains longNumber longNumberList)
+",3411139.9300206117,3445411.075073646
+contains,"(contains medNumber medNumberList)
+",25842.223080324362,25602.869050839243
+contains,"(contains smallNumber smallNumberList)
+",8961.257413153733,8919.087790252679
+contains,"(contains ""a1"" longOjectMap)
+",8357244.788299809,8363635.1691173315
+contains,"(contains ""a1"" medOjectMap)
+",31101.738107558413,31387.882035768616
+contains,"(contains ""a1"" smallOjectMap)
+",8479.840676367117,7807.94292077921
+contains,"(contains ""alongNumber"" longString)
+",179312.66250087353,179560.70986034407
+contains,"(contains ""amedNumber"" medString)
+",7198.108619917268,7237.799995445843
+contains,"(contains ""asmallNumber"" smallString)
+",5803.006896827889,5792.054895123579
+create-module-guard,"(create-module-guard ""test"")
+",5335.101943069261,5258.152427675647
+create-pact-guard,"(create-pact-guard ""test"")
+",5325.0721490403,5347.680525723508
+create-table,"(create-table accounts.accounts-for-testing-table-creation)
+",40335.95541241984,6485.487155656253
+create-user-guard,"(create-user-guard (accounts.enforce-true))
+",5471.64311124833,5639.377020774282
+days,"(days longNumber)
+",13191.551230033407,13282.30279464572
+days,"(days medNumber)
+",13099.484709356993,13057.711334834865
+days,"(days smallNumber)
+",13171.844679916006,13013.013877873515
+decrypt-cc20p1305,"(decrypt-cc20p1305
+""Zi1REj5-iA""
+""AAAAAAECAwQFBgcI""
+""YWFk""
+""FYP6lG7xq7aExvoaHIH8Jg""
+""8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a""
+""5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"")
+",86921.44047664374,87130.80201920574
+define-keyset,"(define-keyset ""some-loaded-keyset"" some-loaded-keyset)
+: rotating keyset",54188.72357398609,6327.583324550916
+define-keyset,"(define-keyset ""some-keyset-name-not-present-already"" some-loaded-keyset)
+",54644.91206499582,6179.874048951436
+define-namespace,"(define-namespace 'some-other-namespace some-loaded-keyset some-loaded-keyset)
+",59199.70909363969,6992.295014040726
+define-namespace,"(define-namespace 'my-namespace some-loaded-keyset some-loaded-keyset)
+: Defining namespace with the same name as one already defined.",73765.42187412088,7468.146596777998
+describe-keyset,"(describe-keyset ""some-loaded-keyset"")
+",21584.67936038879,5375.091438239898
+describe-module,"(describe-module ""accounts"")
+",28908.55942379654,28283.213600932562
+describe-table,"(describe-table accounts.accounts)
+",11613.828717728864,11562.833302447274
+diff-time,"(diff-time (time ""2016-07-22T12:00:00Z"")
+(time ""2018-07-22T12:00:00Z""))
+",24173.246709110022,23693.491132097726
+drop,"(drop 1 longNumberList)
+",3496858.0010311306,3473152.4445767812
+drop,"(drop 1 medNumberList)
+",26122.06133948441,25939.53969446696
+drop,"(drop 1 smallNumberList)
+",8723.512260334826,8734.060590549854
+drop,"(drop -1 longNumberList)
+",3648305.4213005938,3656382.941675274
+drop,"(drop -1 medNumberList)
+",27482.73124052265,27112.748781547514
+drop,"(drop -1 smallNumberList)
+",8865.566219285723,8780.167410009524
+drop,"(drop longEscapedStrList longOjectMap)
+",2.5797532774378035e7,2.594468718078795e7
+drop,"(drop medEscapedStrList medOjectMap)
+",87493.27746072963,86844.8563546821
+drop,"(drop smallEscapedStrList smallOjectMap)
+",13643.072701403906,13387.933415823574
+drop,"(drop [""a1""] longOjectMap)
+",1.0613607443986379e7,1.0485793688498436e7
+drop,"(drop [""a1""] medOjectMap)
+",40939.24140306615,41285.78907558093
+drop,"(drop [""a1""] smallOjectMap)
+",11105.367843847334,10938.670201687657
+enforce,"(enforce true ""some-error-message"")
+",5354.520620471404,5347.138301478678
+enforce-guard,"(enforce-guard ""some-loaded-keyset"")
+",23150.973386891917,5962.743037462288
+enforce-keyset,"(enforce-keyset 'some-loaded-keyset)
+",23057.784899913608,5950.106619655875
+enforce-one,"(enforce-one ""some-error-message"" longEnforceList)
+",2.551054528793494e7,2.5726209861307714e7
+enforce-one,"(enforce-one ""some-error-message"" medEnforceList)
+",110507.59165830746,109974.26710655009
+enforce-one,"(enforce-one ""some-error-message"" smallEnforceList)
+",17518.075559245943,17357.744791328387
+enforce-pact-version,"(enforce-pact-version ""3.0"")
+",4679.793923107055,4699.471889922948
+exp,"(exp 1)
+",17529.777917791314,17668.47980495117
+exp,"(exp 10)
+",16435.535692534457,16938.486334443554
+exp,"(exp 100)
+",12922.053905765011,12729.015443914504
+filter,"(filter (constantly true) longNumberList)
+",6266858.743550521,6257470.0646079555
+filter,"(filter (constantly true) medNumberList)
+",51642.06693490261,51944.96394622782
+filter,"(filter (constantly true) smallNumberList)
+",11509.94811601504,11298.853422454626
+floor,"(floor longNumber.12345)
+",7666.9344318276635,7646.5752197367265
+floor,"(floor medNumber.12345)
+",7691.467492809806,7667.12745933132
+floor,"(floor smallNumber.12345)
+",7688.012882260123,7642.05643509778
+floor,"(floor longNumber.12345 4)
+",6620.399887414082,6579.052334706019
+floor,"(floor medNumber.12345 4)
+",6663.995386016545,6592.167846075812
+floor,"(floor smallNumber.12345 4)
+",6447.891371086516,6612.336472074602
+fold,"(fold (constantly 0) 1 longNumberList)
+",5001019.786065313,4988963.486106655
+fold,"(fold (constantly 0) 1 medNumberList)
+",46330.29743680833,45457.068205173615
+fold,"(fold (constantly 0) 1 smallNumberList)
+",10791.91082705232,10803.343213102498
+format,"(format ""{}...{}"" longEscapedStrList)
+",3.7027394850140605e9,3.7080379947984614e9
+format,"(format ""{}...{}"" medEscapedStrList)
+",280623.2493089616,280666.85104808764
+format,"(format ""{}...{}"" smallEscapedStrList)
+",12335.254355157864,12250.032597579979
+format,"(format ""{}...{}"" longNumberList)
+",3.0890937674722257e9,3.088402702958244e9
+format,"(format ""{}...{}"" medNumberList)
+",256813.37734164073,256150.05628758247
+format,"(format ""{}...{}"" smallNumberList)
+",16529.60945707041,16246.142732441775
+format-time,"(format-time ""%F"" (time ""2016-07-22T12:00:00Z""))
+",10513.546733861811,10734.320156327974
+format-time,"(format-time ""%Y-%m-%dT%H:%M:%S%N"" (time ""2016-07-23T13:30:45Z""))
+",14494.277589902666,14202.972343161548
+hash,"(hash longString)
+",29225.18106283226,29314.845504625642
+hash,"(hash medString)
+",8599.940029069714,8612.13395931605
+hash,"(hash smallString)
+",8490.624118999023,8382.901678786606
+hash,"(hash longOjectMap)
+",2.8972165430376735e7,2.8747007677888006e7
+hash,"(hash medOjectMap)
+",109260.48830281069,110568.08493241074
+hash,"(hash smallOjectMap)
+",22698.442364863917,21771.816237861305
+hours,"(hours longNumber)
+",13149.458314912417,13220.109182279559
+hours,"(hours medNumber)
+",13136.679407940968,12875.766799590807
+hours,"(hours smallNumber)
+",13086.463928509052,13132.949716159312
+identity,"(identity longNumberList)
+",3479245.473523462,3471446.754151879
+identity,"(identity medNumberList)
+",25808.636160340004,25785.61315663865
+identity,"(identity smallNumberList)
+",8547.46369846784,8422.681643744068
+if,"(if true ""then-clause"" ""else-clause"")
+",5123.005214929707,5030.176348206114
 insert,"(insert accounts.accounts
         ""some-id-that-is-not-present""
         { ""balance"": 0.0 }
 )
-",34229.385000851704,3842.6720837316147
+",56571.705044836905,9068.065030444375
+install-capability,"(install-capability (accounts.MANAGEDCAP """" """"))
+",10451.153273867496,10283.927832849336
+int-to-str,"(int-to-str 64 10000)
+",5096.987908726741,5059.3931901105325
+int-to-str,"(int-to-str 2 10000)
+",7110.059908496455,7050.925355390816
+int-to-str,"(int-to-str 3 10000)
+",6694.795077343352,6674.706140286634
+int-to-str,"(int-to-str 4 10000)
+",6548.555169687439,6576.968293035814
+int-to-str,"(int-to-str 5 10000)
+",6543.060849115482,6559.220006143741
+int-to-str,"(int-to-str 6 10000)
+",6621.961428955093,6512.9419844998765
+int-to-str,"(int-to-str 7 10000)
+",6454.68618543568,6445.522935899233
+int-to-str,"(int-to-str 8 10000)
+",6392.9897038546915,6422.847289037746
+int-to-str,"(int-to-str 9 10000)
+",6465.375795824067,6395.406163092735
+int-to-str,"(int-to-str 10 10000)
+",6457.118459570539,6430.150473424451
+int-to-str,"(int-to-str 11 10000)
+",6253.085139129165,6189.477647413729
+int-to-str,"(int-to-str 12 10000)
+",6244.390941548986,6232.283229691835
+int-to-str,"(int-to-str 13 10000)
+",6291.919575479995,6301.017444778609
+int-to-str,"(int-to-str 14 10000)
+",6267.828163465988,6261.908013404888
+int-to-str,"(int-to-str 15 10000)
+",6316.655574559104,6340.486311574212
+int-to-str,"(int-to-str 16 10000)
+",6294.160896112068,6233.710495341856
+int-to-str,"(int-to-str 64 100)
+",5303.169282510961,5108.01833244711
+int-to-str,"(int-to-str 2 100)
+",6568.799854500351,6519.336721900632
+int-to-str,"(int-to-str 3 100)
+",6446.92874657654,6407.797503665058
+int-to-str,"(int-to-str 4 100)
+",6332.379218937473,6213.536148130127
+int-to-str,"(int-to-str 5 100)
+",5940.213961702316,5884.788392639734
+int-to-str,"(int-to-str 6 100)
+",5965.5786716737975,5873.225449792947
+int-to-str,"(int-to-str 7 100)
+",5993.463636373325,5856.609881070028
+int-to-str,"(int-to-str 8 100)
+",5978.307763152734,5882.502913305962
+int-to-str,"(int-to-str 9 100)
+",5975.068528032928,5925.97213040364
+int-to-str,"(int-to-str 10 100)
+",5963.119475715289,5894.919904790285
+int-to-str,"(int-to-str 11 100)
+",6014.3316819414495,5971.499654015487
+int-to-str,"(int-to-str 12 100)
+",6006.668703739258,5915.891028888754
+int-to-str,"(int-to-str 13 100)
+",5916.507151512647,5915.840794784515
+int-to-str,"(int-to-str 14 100)
+",5987.4111646473475,5858.053108472125
+int-to-str,"(int-to-str 15 100)
+",6152.532690495661,5972.532846949777
+int-to-str,"(int-to-str 16 100)
+",6022.577523310262,5820.7099475418445
+int-to-str,"(int-to-str 64 10)
+",5177.629170358766,5154.477461431917
+int-to-str,"(int-to-str 2 10)
+",6346.72738467038,6116.196958666299
+int-to-str,"(int-to-str 3 10)
+",5974.444734878093,5931.888427026802
+int-to-str,"(int-to-str 4 10)
+",6028.06519291718,5957.8016931419015
+int-to-str,"(int-to-str 5 10)
+",6072.55026604274,6007.741691026476
+int-to-str,"(int-to-str 6 10)
+",6011.163008441104,6010.008176200299
+int-to-str,"(int-to-str 7 10)
+",6049.529756065739,5975.678768669463
+int-to-str,"(int-to-str 8 10)
+",6009.564618719684,6026.6821213376
+int-to-str,"(int-to-str 9 10)
+",6034.067870657091,5967.353181287548
+int-to-str,"(int-to-str 10 10)
+",5992.541520124472,6011.501249728237
+int-to-str,"(int-to-str 11 10)
+",5983.9459741768615,5998.911215409754
+int-to-str,"(int-to-str 12 10)
+",6029.680494745085,5636.077127265397
+int-to-str,"(int-to-str 13 10)
+",6030.6909788918665,5925.619285793124
+int-to-str,"(int-to-str 14 10)
+",5973.097781858305,6011.079766131194
+int-to-str,"(int-to-str 15 10)
+",6001.549204587463,5856.522010019701
+int-to-str,"(int-to-str 16 10)
+",5934.534750489587,5913.407463449469
+interface,"(interface my-interface
+  (defun say-hello:string (name:string))
+)
+
+(module some-random-module GOV
+  (implements my-interface)
+  (defcap GOV ()
+    true
+  )
+
+  (defun say-hello:string (name:string)
+    name)
+)
+",85594.92553459997,51835.75364565591
+is-charset,"(is-charset CHARSET_ASCII ""hello world"")
+",5591.6161912213165,5281.935216232756
+is-charset,"(is-charset CHARSET_ASCII ""I am nÖt ascii"")
+",5568.667262134601,5452.93522883027
+is-charset,"(is-charset CHARSET_LATIN1 ""I am nÖt ascii, but I am latin1!"")
+",5619.07938925404,5614.255061453601
+keylog,"(keylog accounts.accounts ""someId"" 0)
+",30284.167423792165,7016.627419188789
+keys,"(keys accounts.accounts)
+",28506.462567426643,6518.590282691036
+keys-2,"(keys-2 3 1)
+",5243.508082346633,5135.290312708156
+keys-all,"(keys-all 3 3)
+",5454.833772157222,5486.223816768099
+keys-any,"(keys-any 10 1)
+",5568.517170455486,5527.784503054317
+keyset-ref-guard,"(keyset-ref-guard ""some-loaded-keyset"")
+",21378.42301048011,5172.969019154542
+length,"(length longNumberList)
+",2969877.9986725207,2981771.5037078294
+length,"(length medNumberList)
+",21325.341134939365,21505.073793313728
+length,"(length smallNumberList)
+",7949.904839726747,7905.181575792662
+length,"(length longString)
+",17009.58846953705,17006.90977210464
+length,"(length medString)
+",5449.096070019073,5422.008432028698
+length,"(length smallString)
+",5303.325160697744,5277.007015057803
+length,"(length longOjectMap)
+",8312796.130845818,8265204.130897127
+length,"(length medOjectMap)
+",29791.01350791204,29272.43999184133
+length,"(length smallOjectMap)
+",8015.205769984376,8162.048528264503
+list-modules,"(list-modules)
+",22818.52164694481,4839.137143079046
+ln,"(ln longNumber)
+",17062.303364961826,17011.241606110852
+ln,"(ln medNumber)
+",17429.92522437241,17412.329039455704
+ln,"(ln smallNumber)
+",17665.54314934448,17379.39199832521
+ln,"(ln longNumber.1)
+",18463.015836371094,18176.91508502701
+ln,"(ln medNumber.1)
+",18461.50171387795,18186.565484732408
+ln,"(ln smallNumber.1)
+",18791.28240652771,18286.37696912396
+log,"(log 2 longNumber)
+",5563.40075395512,5339.315717357439
+log,"(log 2 medNumber)
+",5611.905381367494,5558.49560886453
+log,"(log 2 smallNumber)
+",5521.02122398229,5392.240675519969
+log,"(log 2 longNumber.1)
+",19160.80445772095,18943.32818094468
+log,"(log 2 medNumber.1)
+",19268.841978719163,19571.375394297156
+log,"(log 2 smallNumber.1)
+",19097.2761107845,19154.609709632405
+make-list,"(make-list longNumber true)
+",669693.9381708981,669704.3234532011
+make-list,"(make-list medNumber true)
+",11024.932555368587,10957.355940101435
+make-list,"(make-list smallNumber true)
+",6191.277544435777,6101.094149365861
+map,"(map (identity) longNumberList)
+",7850070.806159173,7851094.292533037
+map,"(map (identity) medNumberList)
+",67887.01514553584,67622.37112655483
+map,"(map (identity) smallNumberList)
+",13167.904464391162,13051.786530545112
+minutes,"(minutes longNumber)
+",12796.88453043535,12932.824315833686
+minutes,"(minutes medNumber)
+",12998.220820237731,12748.140222127195
+minutes,"(minutes smallNumber)
+",13180.934346907947,13048.57542178523
+mod,"(mod longNumber 2)
+",5517.312191061526,5454.412864727103
+mod,"(mod medNumber 2)
+",5530.555845381452,5448.961537627022
+mod,"(mod smallNumber 2)
+",5504.584470895924,5450.448122555983
+module,"(module some-random-module GOV
+  (defcap GOV ()
+    true ))
+",283584.58424986666,19976.912842714908
+module,"(module accounts GOV [...some module code ...]) update module
+",461257.2480074141,117874.09326974461
+namespace,"(namespace 'my-namespace)
+",34360.62605828152,6590.9522567546155
+not,"(not true)
+",5256.034295590388,5222.54506146167
+not?,"(not? (identity) true)
+",5884.511911517213,5798.711638490123
+or,"(or false false)
+",5077.296823974488,5104.9736469030695
+or?,"(or? (identity) (identity) true)
+",6084.710603464271,5995.022999259094
+pact-id,"(pact-id)
+",4901.573198796231,4939.747608273487
+pact-version,"(pact-version)
+",5048.566696714534,4983.692487013245
+parse-time,"(parse-time ""%F"" ""2016-07-22"")
+",8467.596766791728,8266.82914369471
+parse-time,"(parse-time ""%Y-%m-%dT%H:%M:%S%N"" ""2016-07-23T13:30:45+00:00"")
+",10488.281127756507,10323.331244748735
+read,"(read accounts.accounts ""someId"")
+",29226.72893043787,7861.646509840683
+read-decimal,"(read-decimal ""amount"")
+ with amount=longDecimal",6821.065168757455,6732.225643677961
+read-decimal,"(read-decimal ""amount"")
+ with amount=medDecimal",6595.656007327995,6552.6277988233605
+read-decimal,"(read-decimal ""amount"")
+ with amount=smallDecimal",6364.220413545332,6340.090716188058
+read-integer,"(read-integer ""amount"")
+ with amount=longNumber",5505.791844138821,5507.308673083769
+read-integer,"(read-integer ""amount"")
+ with amount=medNumber",5522.893581217082,5505.152591001771
+read-integer,"(read-integer ""amount"")
+ with amount=smallNumber",5568.903675127018,5500.4299597510035
+read-keyset,"(read-keyset 'my-keyset)
+",7022.786238266402,6841.605323684368
+read-msg,"(read-msg)
+ with msg=longObjectMap",7.845828185357998e7,7.87536542252721e7
+read-msg,"(read-msg)
+ with msg=medObjectMap",628744.323563722,627832.0318904086
+read-msg,"(read-msg)
+ with msg=smallObjectMap",72011.68873305789,72347.80801192533
+read-string,"(read-string ""name"")
+ with name=longString",5510.614510787974,5420.311315899103
+read-string,"(read-string ""name"")
+ with name=medString",5463.605765570158,5453.945240264354
+read-string,"(read-string ""name"")
+ with name=smallString",5387.930885382098,5358.905452903564
+remove,"(remove ""a1"" longOjectMap)
+",1.0051955215152236e7,1.002847965481361e7
+remove,"(remove ""a1"" medOjectMap)
+",37439.888100030636,37440.6220115243
+remove,"(remove ""a1"" smallOjectMap)
+",8935.813802472503,8616.382985524635
+require-capability,"(require-capability (accounts.GOV))
+",6337.89664261942,6236.032405557947
+resume,"(resume longBinding a1)
+",2.0647185306512833e7,2.095300233896877e7
+resume,"(resume medBinding a1)
+",52732.56130895924,53345.88579912049
+resume,"(resume smallBinding a1)
+",5460.058896925348,5376.19601014907
+resume,"(resume longBinding a1)
+ with provenance",2.0679468632649314e7,2.047032083645028e7
+resume,"(resume medBinding a1)
+ with provenance",60856.724019253954,59688.61738961813
+resume,"(resume smallBinding a1)
+ with provenance",10457.649778517973,10245.963674345412
+reverse,"(reverse longNumberList)
+",3651295.9248739793,3642999.5776893906
+reverse,"(reverse medNumberList)
+",26782.413981232967,26374.648875374038
+reverse,"(reverse smallNumberList)
+",8613.218373374864,8249.41017395466
+round,"(round longNumber.12345)
+",7904.5049180399465,7833.056602807325
+round,"(round medNumber.12345)
+",7931.123395960588,7789.108809926071
+round,"(round smallNumber.12345)
+",7928.806061578049,7853.102719496055
+round,"(round longNumber.12345 4)
+",6769.787339204406,6658.714597032678
+round,"(round medNumber.12345 4)
+",6903.581463482514,6531.761717572245
+round,"(round smallNumber.12345 4)
+",6810.445340326155,6717.737016663422
+select,"(select accounts.accounts
+  (where ""balance"" (constantly true))
+)
+",64300.74110877232,6965.279119112354
+shift,"(shift 2 longNumber)
+",5650.328028947707,5563.159999073853
+shift,"(shift 2 medNumber)
+",5550.9009467120295,5448.905410343358
+shift,"(shift 2 smallNumber)
+",5504.1653811568285,5400.7443391363195
+shift,"(shift -2 longNumber)
+",5437.897919023373,5246.732816984085
+shift,"(shift -2 medNumber)
+",5376.266071020859,5222.970994666294
+shift,"(shift -2 smallNumber)
+",5445.128688176496,5333.639630516747
+sort,"(sort longNumberList)
+",5608113.997432959,5568171.726643474
+sort,"(sort medNumberList)
+",35844.52836959695,36042.579175536965
+sort,"(sort smallNumberList)
+",9697.595237240052,9669.964299326246
+sqrt,"(sqrt longNumber)
+",12015.350016428556,11912.268829257453
+sqrt,"(sqrt medNumber)
+",12193.245815770315,12815.978205290585
+sqrt,"(sqrt smallNumber)
+",17332.62280807455,17181.46271609246
+sqrt,"(sqrt longNumber.1)
+",17421.118379225416,17291.34143219994
+sqrt,"(sqrt medNumber.1)
+",17943.416246909794,18170.35765281291
+sqrt,"(sqrt smallNumber.1)
+",17905.68658477251,17774.76347933155
+str-to-int,"(str-to-int ""10000"")
+",5659.094956868669,5552.714948605441
+str-to-int,"(str-to-int ""100"")
+",5614.5156591846435,5531.876076761284
+str-to-int,"(str-to-int ""10"")
+",5481.297180049573,5408.546212319977
+str-to-int,"(str-to-int 16 ""186A0"")
+",5933.6746834372825,5868.002868195923
+str-to-int,"(str-to-int 16 ""64"")
+",5689.44667969209,5656.128716921997
+str-to-int,"(str-to-int 16 ""a"")
+",5636.857771245347,5575.995774482942
+str-to-int,"(str-to-int 2 ""11000011010100000"")
+",6575.065895935409,6648.496016061376
+str-to-int,"(str-to-int 2 ""1100100"")
+",6126.789293217623,6090.693218705394
+str-to-int,"(str-to-int 2 ""1010"")
+",5627.905812925576,5595.510765787054
+str-to-int,"(str-to-int 64 ""AYag"")
+",5442.616951301549,5433.3169514232
+str-to-int,"(str-to-int 64 ""ZA"")
+",5066.838767989232,5151.259503665601
+str-to-int,"(str-to-int 64 ""Cg"")
+",5162.7458925621695,5213.421428543483
+take,"(take 1 longNumberList)
+",2962184.060711703,2946219.289001358
+take,"(take 1 medNumberList)
+",21937.428557737818,21903.904601189948
+take,"(take 1 smallNumberList)
+",7800.057059894891,8033.459386144677
+take,"(take -1 longNumberList)
+",2960122.9060079344,2961778.825081228
+take,"(take -1 medNumberList)
+",22395.025538985716,22087.875197872985
+take,"(take -1 smallNumberList)
+",8364.489568819656,8108.752028406389
+take,"(take longEscapedStrList longOjectMap)
+",2.7724228336749703e7,2.7973681583062816e7
+take,"(take medEscapedStrList medOjectMap)
+",92436.68123557906,93250.64043112852
+take,"(take smallEscapedStrList smallOjectMap)
+",15064.167296912354,14898.035759573138
+take,"(take [""a1""] longOjectMap)
+",8578270.639135735,8669373.55445903
+take,"(take [""a1""] medOjectMap)
+",35155.87175676312,34337.07435792831
+take,"(take [""a1""] smallOjectMap)
+",10842.796849907934,10261.713033045688
+time,"(time ""2016-07-22T12:00:00Z"")
+",8514.48920102944,8532.908892439089
+try,"(try true (enforce true ""this will definitely pass""))
+",6349.744504471182,6331.739817681807
+try,"(try true (enforce false ""this will definitely fail""))
+",6456.948793164247,6565.6733803164525
+tx-hash,"(tx-hash)
+",4826.178565282196,4699.75983361836
+txids,"(txids accounts.accounts 0)
+",29852.173400087893,6871.502796238281
+txlog,"(txlog accounts.accounts 0)
+",11369.86836427075,6255.462256777205
+typeof,"(typeof longOjectMap)
+",8290055.668049918,8301883.172256529
+typeof,"(typeof medOjectMap)
+",33479.01245651424,32913.70309266727
+typeof,"(typeof smallOjectMap)
+",9606.056022047362,9321.186158161996
+typeof,"(typeof longString)
+",6088.845681957424,6050.729414934261
+typeof,"(typeof medString)
+",5887.1148795459485,6032.409270389023
+typeof,"(typeof smallString)
+",6074.416295080933,5956.175503165851
+typeof,"(typeof longNumberList)
+",2965455.8147286237,2983828.6822695336
+typeof,"(typeof medNumberList)
+",23976.75070241951,24120.88366765519
+typeof,"(typeof smallNumberList)
+",9734.395514324753,9645.906924561563
+typeof,"(typeof longNumber)
+",6170.795257544712,6073.107975102051
+typeof,"(typeof medNumber)
+",6089.58869620677,6091.6493440317545
+typeof,"(typeof smallNumber)
+",6145.806674322324,6098.496341142917
+update,"(update accounts.accounts
+        ""someId""
+        { ""balance"": 10.0 }
+)
+",66863.36514213389,8759.271727409729
+use,"(use accounts)
+",10040.167683316082,10145.088577536675
+validate-keypair,"(validate-keypair
+""8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a""
+""77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"")
+",75697.88616925843,75821.40406799986
+where,"(where ""a1"" (constantly true) longOjectMap)
+",7572111.212135854,7724088.756351832
+where,"(where ""a1"" (constantly true) medOjectMap)
+",31651.088026287234,31256.426866740807
+where,"(where ""a1"" (constantly true) smallOjectMap)
+",8681.010533425906,8029.280326664281
+with-capability,"(accounts.test-with-cap-func)
+",8523.48829623151,8330.580437673934
+with-default-read,"(with-default-read
+   accounts.accounts
+   ""someId""
+   { ""balance"": 1.0 }
+   { ""balance"":= bal }
+   bal
+)
+",37890.339204423864,11141.238314613443
+with-read,"(with-read
+   accounts.accounts
+   ""someId""
+   { ""balance"":= bal }
+   bal
+)
+",36787.78331046616,9962.311536819485
 write,"(write accounts.accounts
        ""some-id-that-is-not-present""
        { ""balance"": 0.0 }
 )
-",44158.85202263007,3893.334605499831
+",65018.29349815858,8769.057767639179
+xor,"(xor 2 longNumber)
+",5537.559248993319,5555.08896544847
+xor,"(xor 2 medNumber)
+",5549.640038380254,5556.848190613538
+xor,"(xor 2 smallNumber)
+",5379.598372587776,5377.286458018326
+yield,"(yield longOjectMap)
+",1.251792877649323e7,1.2462082347929316e7
+yield,"(yield medOjectMap)
+",45891.75381247544,45242.21912618226
+yield,"(yield smallOjectMap)
+",10303.581409053428,10025.189086563832
+yield,"(yield longOjectMap ""some-chain-id"")
+",1.2395204610616336e7,1.2481664985297086e7
+yield,"(yield medOjectMap ""some-chain-id"")
+",38290.24722514159,38630.58218116145
+yield,"(yield smallOjectMap ""some-chain-id"")
+",4848.952213593158,4789.649155956582
+|,"(| 2 longNumber)
+",5203.718165040586,5213.338416441626
+|,"(| 2 medNumber)
+",5124.284641978089,5089.896421337607
+|,"(| 2 smallNumber)
+",5156.197349208072,5098.194018915969
+~,"(~ longNumber)
+",5313.709886003711,5297.495777067552
+~,"(~ medNumber)
+",5286.040237077755,5177.642999702682
+~,"(~ smallNumber)
+",5280.592245516115,5138.24091301393

@@ -76,6 +76,17 @@ data ReadValue
   | ReadKeySet KeySetName KeySet
   | ReadYield Yield
 
+instance Pretty ReadValue where
+  pretty g = case g of
+    ReadData {} -> "ReadData"
+    ReadKey {} -> "ReadKey"
+    ReadTxId -> "ReadTxId"
+    ReadModule {} -> "ReadModule"
+    ReadInterface {} -> "ReadInterface"
+    ReadNamespace {} -> "ReadNamespace"
+    ReadKeySet {} -> "ReadKeySet"
+    ReadYield {} -> "ReadYield"
+
 
 data WriteValue
   = WriteData WriteType Text (ObjectMap PactValue)
@@ -86,10 +97,22 @@ data WriteValue
   | WriteKeySet KeySetName KeySet
   | WriteYield Yield
 
+instance Pretty WriteValue where
+  pretty g = case g of
+    WriteData ty _ _ -> "WriteData:" <> pretty ty
+    WriteTable {} -> "WriteTable"
+    WriteModule {} -> "WriteModule"
+    WriteInterface {} -> "WriteInterface"
+    WriteNamespace {} -> "WriteNamespace"
+    WriteKeySet {} -> "WriteKeySet"
+    WriteYield {} -> "WriteYield"
+
 
 data GasArgs
   = GSelect (Maybe [(Info,FieldKey)])
   -- ^ Cost of selecting columns from a user table
+  | GSort Int
+  -- ^ Cost of performing sort on any list
   | GSortFieldLookup Int
   -- ^ Cost of sorting by lookup fields
   | GConcatenation Int Int
@@ -98,7 +121,7 @@ data GasArgs
   -- ^ Cost of using a native function
   | GPostRead ReadValue
   -- ^ Cost for reading from database
-  | GWrite WriteValue
+  | GPreWrite WriteValue
   -- ^ Cost of writing to the database
   | GModuleMember (ModuleDef (Term Name))
   -- ^ TODO documentation
@@ -110,6 +133,24 @@ data GasArgs
   -- ^ Cost of creating an interface
   | GUserApp DefType
   -- ^ Cost of using a function, capability, or defpact
+  | GMakeList Integer
+  -- ^ Cost of make-list
+
+instance Pretty GasArgs where
+  pretty g = case g of
+    GSelect {} -> "GSelect"
+    GSortFieldLookup i -> "GSortFieldLookup:" <> pretty i
+    GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
+    GUnreduced {} -> "GUnreduced"
+    GPostRead rv -> "GPostRead:" <> pretty rv
+    GPreWrite wv -> "GWrite:" <> pretty wv
+    GModuleMember {} -> "GModuleMember"
+    GModuleDecl {} -> "GModuleDecl"
+    GUse {} -> "GUse"
+    GInterfaceDecl {} -> "GInterfaceDecl"
+    GUserApp {} -> "GUserApp"
+    GMakeList i -> "GMakeList:" <> pretty i
+    GSort i -> "GSort:" <> pretty i
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
