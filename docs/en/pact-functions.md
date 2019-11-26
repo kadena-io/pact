@@ -1640,6 +1640,16 @@ Set environment confidential ENTITY id, or unset with no argument.
 ```
 
 
+### env-exec-config {#env-exec-config}
+
+*allow-module-install*&nbsp;`bool` *allow-history-in-tx*&nbsp;`bool` *&rarr;*&nbsp;`object:*`
+
+ *&rarr;*&nbsp;`object:*`
+
+
+Set or query execution config flags: ALLOW-MODULE-INSTALL allows module and interface installs; ALLOW-HISTORY-IN-TX allows history calls (tx-log, etc) in non-local execution
+
+
 ### env-gas {#env-gas}
 
  *&rarr;*&nbsp;`integer`
@@ -1656,6 +1666,14 @@ Query gas state, or set it to GAS.
 
 
 Set environment gas limit to LIMIT.
+
+
+### env-gaslog {#env-gaslog}
+
+ *&rarr;*&nbsp;`string`
+
+
+Enable and obtain gas logging
 
 
 ### env-gasmodel {#env-gasmodel}
