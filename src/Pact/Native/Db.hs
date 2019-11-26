@@ -25,6 +25,7 @@ import Bound
 import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
 import Control.Monad
+import Control.Monad.Reader (ask)
 import Data.Default
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
@@ -311,7 +312,8 @@ keys' _ i as = argsError i as
 
 
 txids' :: GasRNativeFun e
-txids' g i [table@TTable {..},TLitInteger key] =
+txids' g i [table@TTable {..},TLitInteger key] = do
+  checkNonLocalAllowed i
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyInteger def) . map toTerm) $ do
       guardTable i table
@@ -319,7 +321,8 @@ txids' g i [table@TTable {..},TLitInteger key] =
 txids' _ i as = argsError i as
 
 txlog :: GasRNativeFun e
-txlog g i [table@TTable {..},TLitInteger tid] =
+txlog g i [table@TTable {..},TLitInteger tid] = do
+  checkNonLocalAllowed i
   gasPostReads i g (toTList TyAny def . map txlogToObj) $ do
       guardTable i table
       getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
@@ -332,8 +335,17 @@ txlogToObj TxLog{..} = toTObject TyAny def
   , ("value", toTObjectMap TyAny def (fmap fromPactValue _txValue))
   ]
 
+checkNonLocalAllowed :: HasInfo i => i -> Eval e ()
+checkNonLocalAllowed i = do
+  env <- ask
+  let allowedInTx = view (eeExecutionConfig . ecAllowHistoryInTx) env
+      mode = view eeMode env
+  unless (mode == Local || allowedInTx) $ evalError' i $
+    "Operation only permitted in local execution mode"
+
 keylog :: GasRNativeFun e
 keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
+  checkNonLocalAllowed i
   let postProc = toTList TyAny def . map toTxidObj
         where toTxidObj (t,r) =
                 toTObject TyAny def [("txid", toTerm t),("value",columnsToObject _tTableType (_txValue r))]

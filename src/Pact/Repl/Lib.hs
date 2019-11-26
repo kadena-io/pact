@@ -185,6 +185,12 @@ replDefs = ("Repl",
      ,defZRNative "env-gaslog" gasLog (funType tTyString [])
        []
        "Enable and obtain gas logging"
+     ,defZRNative "env-exec-config" envExecConfig
+      (funType (tTyObject TyAny) [("allow-module-install",tTyBool),("allow-history-in-tx",tTyBool)] <>
+       funType (tTyObject TyAny) [])
+      []
+      ("Set or query execution config flags: ALLOW-MODULE-INSTALL allows module and interface " <>
+      "installs; ALLOW-HISTORY-IN-TX allows history calls (tx-log, etc) in non-local execution")
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
        []
        "Verify MODULE, checking that all properties hold."
@@ -578,6 +584,20 @@ setGasPrice _ [TLiteral (LDecimal d) _] = do
   setenv (eeGasEnv . geGasPrice) (wrap (wrap d))
   return $ tStr $ "Set gas price to " <> tShow d
 setGasPrice i as = argsError i as
+
+envExecConfig :: RNativeFun LibState
+envExecConfig i as = case as of
+  [TLitBool allowMod,TLitBool allowHist] -> do
+    let ec = ExecutionConfig allowMod allowHist
+    setenv eeExecutionConfig ec
+    report ec
+  [] -> view eeExecutionConfig >>= report
+  _ -> argsError i as
+  where
+    report ExecutionConfig{..} = return $ toTObject TyAny def $
+      [("allow-module-install",toTerm _ecAllowModuleInstall)
+      ,("allow-history-in-tx",toTerm _ecAllowHistoryInTx)]
+
 
 setGasRate :: RNativeFun LibState
 setGasRate _ [TLitInteger r] = do

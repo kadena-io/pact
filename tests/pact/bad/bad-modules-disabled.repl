@@ -1,0 +1,4 @@
+(env-exec-config false true)
+(module M G
+  (defcap G () true)
+  (defun foo () true))
