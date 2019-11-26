@@ -21,7 +21,7 @@ module Pact.Types.Runtime
    PactId(..),
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
-   eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,
+   eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    toPactId,
    Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
@@ -119,6 +119,17 @@ class PureSysOnly e
 -- SysRead supports pure operations as well.
 class PureSysOnly e => PureReadOnly e
 
+
+-- | Execution-wide configuration parameters.
+data ExecutionConfig = ExecutionConfig
+  { ecAllowModuleInstall :: Bool
+  -- ^ Permit 'module' and 'interface' actions.
+  , ecAllowHistoryInTx :: Bool
+  -- ^ Allow database history actions in non-local execution.
+  } deriving (Eq,Show)
+
+instance Default ExecutionConfig where def = ExecutionConfig True True
+
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
       -- | Environment references.
@@ -149,6 +160,8 @@ data EvalEnv e = EvalEnv {
     , _eeSPVSupport :: SPVSupport
       -- | Env public data
     , _eePublicData :: PublicData
+      -- | Execution configuration flags
+    , _eeExecutionConfig :: ExecutionConfig
     }
 makeLenses ''EvalEnv
 
@@ -373,6 +386,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     permissiveNamespacePolicy
     _eeSPVSupport
     _eePublicData
+    _eeExecutionConfig
 
 mkSysOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysOnly e))
 mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
