@@ -157,8 +157,9 @@ setupEvalEnv
   -> NamespacePolicy
   -> SPVSupport
   -> PublicData
+  -> ExecutionConfig
   -> EvalEnv e
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
   EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
@@ -174,6 +175,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd =
   , _eeNamespacePolicy = np
   , _eeSPVSupport = spv
   , _eePublicData = pd
+  , _eeExecutionConfig = ec
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss

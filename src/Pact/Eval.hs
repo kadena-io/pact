@@ -250,6 +250,7 @@ eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) 
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval (TModule (MDModule m) bod i) =
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
+    checkAllowModule i
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
     -- enforce old module governance
@@ -279,6 +280,7 @@ eval (TModule (MDModule m) bod i) =
 
 eval (TModule (MDInterface m) bod i) =
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
+    checkAllowModule i
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m
     -- enforce no upgrades
@@ -289,6 +291,11 @@ eval (TModule (MDInterface m) bod i) =
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 eval t = enscope t >>= reduce
+
+checkAllowModule :: Info -> Eval e ()
+checkAllowModule i = do
+  allowed <- view $ eeExecutionConfig . ecAllowModuleInstall
+  unless allowed $ evalError i $ "Module/interface install not supported"
 
 
 toPersistDirect' :: Term Name -> Eval e PersistDirect

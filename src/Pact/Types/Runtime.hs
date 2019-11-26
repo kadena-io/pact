@@ -32,6 +32,7 @@ module Pact.Types.Runtime
    KeyPredBuiltins(..),keyPredBuiltins,
    NamespacePolicy(..),
    permissiveNamespacePolicy,
+   ExecutionConfig(..),ecAllowModuleInstall,ecAllowHistoryInTx,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -122,11 +123,12 @@ class PureSysOnly e => PureReadOnly e
 
 -- | Execution-wide configuration parameters.
 data ExecutionConfig = ExecutionConfig
-  { ecAllowModuleInstall :: Bool
+  { _ecAllowModuleInstall :: Bool
   -- ^ Permit 'module' and 'interface' actions.
-  , ecAllowHistoryInTx :: Bool
+  , _ecAllowHistoryInTx :: Bool
   -- ^ Allow database history actions in non-local execution.
   } deriving (Eq,Show)
+makeLenses ''ExecutionConfig
 
 instance Default ExecutionConfig where def = ExecutionConfig True True
 
