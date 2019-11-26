@@ -47,6 +47,7 @@ import Control.Monad.Catch
 import Control.Lens hiding (List)
 import Data.Default
 import qualified Data.Map.Strict as M
+import Data.Set (Set)
 import qualified Data.Set as S
 import Control.Monad.State
 import Data.Foldable
@@ -341,7 +342,7 @@ data AST n =
   _aExec :: AST n,
   _aRollback :: Maybe (AST n),
   _aYieldResume :: Maybe (YieldResume n),
-  _aModel :: ![Exp Info]
+  _aModel :: !(Set (Exp Info))
   }
 
   deriving (Eq,Functor,Foldable,Traversable,Show)

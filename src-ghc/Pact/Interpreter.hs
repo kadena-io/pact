@@ -157,6 +157,7 @@ evalContinuation ss runner ee cm = case (_cmProof cm) of
   where
     setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
 
+
 setupEvalEnv
   :: PactDbEnv e
   -> Maybe EntityName

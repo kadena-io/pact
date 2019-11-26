@@ -526,7 +526,7 @@ solveConstraint ifn info refName (Ref t) evalMap = do
     Just (Ref s) ->
       case (t, s) of
         (TDef (Def _n _mn dt (FunType args rty) _ m dmeta _) _,
-          TDef (Def _n' _mn' dt' (FunType args' rty') _ _ dmeta' _) _) -> do
+          TDef (Def _n' _mn' dt' (FunType args' rty') _ m' dmeta' _) _) -> do
           match s "Def type mismatch" dt dt'
           matchWith termEq1 s "Return type mismatch" rty rty'
           match s "Arity mismatch" (length args) (length args')
@@ -536,21 +536,25 @@ solveConstraint ifn info refName (Ref t) evalMap = do
             match a "Argument name mismatch" n n'
             matchWith termEq1 a ("Argument type mismatch for " <> n) ty ty'
           -- the model concatenation step: we reinsert the ref back into the map with new models
-          pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
+          pure $ HM.insert refName (Ref $ tDef . dMeta <>~ (m' <> m) $ s) em
         _ -> evalError' s $ "found overlapping refs - please resolve: " <> pretty t
 
   where
     match :: (HasInfo i, Eq v, Pretty v) => i -> Text -> v -> v -> Eval e ()
     match = matchWith (==)
+
     matchWith :: (HasInfo i, Pretty v) => (v -> v -> Bool) -> i -> Text -> v -> v -> Eval e ()
     matchWith test i desc expected actual = unless (expected `test` actual) $
       evalError' i $ pretty desc <> " with " <> pretty ifn <> ": found " <>
         pretty actual <> ", expected " <> pretty expected
+
     termEq1 :: Eq1 f => f (Term Ref) -> f (Term Ref) -> Bool
     termEq1 = liftEq termEq
+
     -- | For DefcapMeta, we just want the mgr fun names to match
     defMetaEq :: DefMeta (Term Ref) -> DefMeta (Term Ref) -> Bool
     defMetaEq a b = getDefName a == getDefName b
+
     getDefName (DMDefcap (DefcapMeta (TVar (Ref (TDef Def {..} _)) _) an)) = Just (_dDefName,an)
     getDefName _ = Nothing
 

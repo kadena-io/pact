@@ -11,6 +11,7 @@ import Control.Monad.Trans.Except
 import Data.Bifunctor (first)
 import Data.Default (def)
 import qualified Data.HashMap.Strict as HM
+import Data.Set
 
 import Pact.Repl
 import Pact.Repl.Types
@@ -49,17 +50,17 @@ compareModelSpec = describe "Module models" $ do
       -- test function modules
       hasAllExps mfunModels ifunModels
 
-hasAllExps :: [Exp Info] -> [Exp Info] -> Spec
+hasAllExps :: Set (Exp Info) -> Set (Exp Info) -> Spec
 hasAllExps mexps iexps = forM_ iexps $ \e ->
   it "should find all exps defined in interface in corresponding module" $
     (e,mexps) `shouldSatisfy` (\_ -> any (expEquality e) mexps)
 
-aggregateFunctionModels :: ModuleData Ref -> [Exp Info]
+aggregateFunctionModels :: ModuleData Ref -> Set (Exp Info)
 aggregateFunctionModels ModuleData{..} =
   foldMap (extractExp . snd) $ HM.toList _mdRefMap
   where
     extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=m} _ _) _)) = m
-    extractExp _ = []
+    extractExp _ = mempty
 
 -- Because models will necessarily have conflicting Info values
 -- we need to define a new form of equality which forgets

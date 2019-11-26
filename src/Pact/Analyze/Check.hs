@@ -44,7 +44,7 @@ import           Control.Lens               (at, each, filtered, ifoldl,
                                              toListOf, traverseOf, traversed,
                                              view, (%~), (&), (.~), (<&>), (?~),
                                              (^.), (^..), (^?), (^?!), (^@..),
-                                             _2, _Left)
+                                             _2, _Left, to)
 import           Control.Monad              (void, (<=<))
 import           Control.Monad.Except       (Except, ExceptT (ExceptT),
                                              catchError, liftEither,
@@ -56,6 +56,7 @@ import           Control.Monad.State.Strict (evalStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Data.Bifunctor             (first)
 import           Data.Either                (partitionEithers)
+import           Data.Foldable              (toList)
 import qualified Data.HashMap.Strict        as HM
 import           Data.List                  (isPrefixOf)
 import qualified Data.List                  as List
@@ -577,7 +578,7 @@ moduleTables modules modRefs consts = do
             mkInvariant :: Exp Info -> Either String (Invariant 'TyBool)
             mkInvariant = expToInvariant vidStart invEnv vidTys consts SBool
 
-        invariants <- case schemas ^? ix schemaName._Ref.tMeta.mModel of
+        invariants <- case schemas ^? ix schemaName._Ref.tMeta.mModel.to toList of
           -- no model = no invariants
           Nothing    -> pure []
           Just model -> case normalizeListLit model of
@@ -671,7 +672,7 @@ applicableCheck (DefName funName) (ModuleCheck _ _ propScope) =
 -- List literals are valid either with no commas or with commas interspersed
 -- between each element. Remove all commas.
 normalizeListLit :: [Exp i] -> Maybe [Exp i]
-normalizeListLit lits = case lits of
+normalizeListLit lits = case toList lits of
   _ : CommaExp : _ -> removeCommas lits
   _                ->
     let isComma = \case { CommaExp -> True; _ -> False }
@@ -696,10 +697,10 @@ normalizeListLit lits = case lits of
 -- * '(defproperty foo (a:integer b:integer) (> a b))'
 -- * '(property foo)'
 parseModuleModelDecl
-  :: [Exp Info]
+  :: Set (Exp Info)
   -> Either ParseFailure
        [Either (Text, DefinedProperty (Exp Info)) ModuleCheck]
-parseModuleModelDecl exps = traverse parseDecl exps where
+parseModuleModelDecl exps = traverse parseDecl $ toList exps where
 
   parseDecl exp@(ParenList (EAtom' "defproperty" : rest)) = case rest of
     [ EAtom' propname, ParenList args, body ] -> do
@@ -906,7 +907,7 @@ moduleFunCheck tables modCheckExps consts propDefs defTerm funTy = do
 
   checks <- case defTerm of
     TDef def info ->
-      let model = _mModel (_dMeta def)
+      let model = toList $ _mModel (_dMeta def)
       in case normalizeListLit model of
         Nothing -> throwError $ ModuleParseFailure
           -- reconstruct an `Exp Info` for this list
@@ -1020,7 +1021,7 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _ _) defpactRefs = do
     <- hoist generalize $ for steps $ \((step, args, info), pactType) ->
       case step of
         TC.Step _ _ exec _ _ model -> ((exec,args,info),) <$>
-          stepCheck tables consts propDefs pactType model
+          stepCheck tables consts propDefs pactType (toList model)
         _ -> error
           "invariant violation: anything but a step is unexpected in stepChecks"
 
@@ -1109,7 +1110,7 @@ scopeCheckInterface
   -> [ScopeError]
 scopeCheckInterface globalNames refs = refs <&&> \case
   Pact.Direct _ -> [ScopeInvalidDirectRef]
-  Pact.Ref defn -> case defn ^? tDef . dMeta . mModel of
+  Pact.Ref defn -> case defn ^? tDef . dMeta . mModel . to toList of
     Nothing -> []
     Just model -> case normalizeListLit model of
       Nothing ->

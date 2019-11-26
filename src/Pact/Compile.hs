@@ -44,6 +44,7 @@ import qualified Data.HashSet as HS
 import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
+import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
@@ -363,32 +364,32 @@ data ModelAllowed
   = ModelAllowed
   | ModelNotAllowed
 
-data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
+data AtPair = DocPair Text | ModelPair (S.Set (Exp Info)) deriving (Eq,Ord)
 
 modelOnly :: Compile Meta
 modelOnly = do
   symbol "@model"
   (ListExp props _ _i, _) <- list' Brackets
-  pure $ Meta Nothing props
+  pure $ Meta Nothing (S.fromList props)
 
 meta :: ModelAllowed -> Compile Meta
 meta modelAllowed =
   -- hiding labels/errors here because otherwise they hang around for all module errors
   hidden atPairs <|> hidden (try docStr) <|> return def
   where
-    docStr = Meta <$> (Just <$> str) <*> pure []
+    docStr = Meta <$> (Just <$> str) <*> pure mempty
     docPair = symbol "@doc" >> (DocPair <$> str)
     modelPair = do
       symbol "@model"
       (ListExp exps _ _i, _) <- list' Brackets
-      pure (ModelPair exps)
+      pure (ModelPair $ S.fromList exps)
     whenModelAllowed a = case modelAllowed of
       ModelAllowed -> a
       ModelNotAllowed -> unexpected' "@model not allowed in this declaration"
     atPairs = do
       ps <- sort <$> (some (docPair <|> modelPair))
       case ps of
-        [DocPair doc] -> return (Meta (Just doc) [])
+        [DocPair doc] -> return (Meta (Just doc) mempty)
         [ModelPair es] -> whenModelAllowed $ return (Meta Nothing es)
         [DocPair doc, ModelPair es] -> whenModelAllowed $ return (Meta (Just doc) es)
         _ -> expected $ case modelAllowed of
@@ -514,7 +515,7 @@ defSig dt = do
 
 step :: Compile (Term Name)
 step = do
-  m <- option (Meta Nothing []) modelOnly
+  m <- option (Meta Nothing mempty) modelOnly
   cont <- try (Step <$> (Just <$> valueLevel) <*> valueLevel) <|>
           (Step Nothing <$> valueLevel)
   i <- contextInfo
@@ -523,7 +524,7 @@ step = do
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
   i <- contextInfo
-  m <- option (Meta Nothing []) modelOnly
+  m <- option (Meta Nothing mempty) modelOnly
   s <- try (Step <$> (Just <$> valueLevel) <*> valueLevel <*>
             (Just <$> valueLevel) <*> pure i)
        <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)

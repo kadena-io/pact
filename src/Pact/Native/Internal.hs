@@ -128,7 +128,7 @@ defRNative name fun = defNative name (reduced fun)
 defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
 defSchema n doc fields =
   (n,
-   TSchema (TypeName $ asString n) Nothing (Meta (Just doc) [])
+   TSchema (TypeName $ asString n) Nothing (Meta (Just doc) mempty)
    (map (\(fr,ty) -> Arg (asString fr) ty def) fields)
    def)
 
@@ -136,7 +136,7 @@ defConst :: NativeDefName -> Text -> Type (Term Name) -> Term Name -> NativeDef
 defConst name doc ty term = (name, TConst arg Nothing cval meta def )
   where
     arg = Arg (asString name) ty def
-    meta = Meta (Just doc) []
+    meta = Meta (Just doc) mempty
     cval = CVEval term term
 
 foldDefs :: Monad m => [m a] -> m [a]

@@ -133,7 +133,7 @@ import Pact.Types.Util
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
-  , _mModel :: ![Exp Info]   -- ^ models
+  , _mModel :: !(Set (Exp Info))   -- ^ models
   } deriving (Eq, Show, Generic)
 
 instance Pretty Meta where
@@ -142,9 +142,10 @@ instance Pretty Meta where
 
 instance NFData Meta
 
-prettyModel :: [Exp Info] -> Doc
-prettyModel []    = mempty
-prettyModel props = "@model " <> list (pretty <$> props)
+prettyModel :: Set (Exp Info) -> Doc
+prettyModel props
+  | S.null props = mempty
+  | otherwise = "@model " <> list (pretty <$> toList props)
 
 instance ToJSON Meta where toJSON = lensyToJSON 2
 instance FromJSON Meta where parseJSON = lensyParseJSON 2
@@ -155,7 +156,7 @@ instance Semigroup Meta where
   (Meta d m) <> (Meta d' m') = Meta (d <> d') (m <> m')
 
 instance Monoid Meta where
-  mempty = Meta Nothing []
+  mempty = Meta Nothing mempty
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
   deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
