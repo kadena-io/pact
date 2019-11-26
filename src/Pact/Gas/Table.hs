@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 module Pact.Gas.Table where
 
+import Data.Decimal
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -241,7 +242,7 @@ tableGasModel gasConfig =
       }
 
 
-perByteFactor :: Float
+perByteFactor :: Decimal
 perByteFactor = 0.1
 
 memoryCost :: (SizeOf a) => a -> Gas -> Gas
