@@ -1,7 +1,8 @@
+{-# LANGUAGE ApplicativeDo     #-}
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types        #-}
-{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE TypeOperators     #-}
 
 -- | HTTP Server for GHCJS to use verification from the browser (where we can't

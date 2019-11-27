@@ -1,5 +1,6 @@
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE Rank2Types #-}
 -- |
 -- Module      :  Pact.Types.Parser
 -- Copyright   :  (C) 2016 Stuart Popejoy
