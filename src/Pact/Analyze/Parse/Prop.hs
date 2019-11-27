@@ -1,4 +1,3 @@
-{-# LANGUAGE ApplicativeDo         #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
