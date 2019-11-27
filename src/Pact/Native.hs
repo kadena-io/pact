@@ -84,6 +84,7 @@ import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
 import Pact.Types.Hash
+import Pact.Types.Names
 import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Runtime
@@ -344,15 +345,17 @@ fromNamespacePactValue (Namespace n userg adming) =
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNamespace
-  (funType tTyString [("namespace", tTyString), ("guard", tTyGuard Nothing)])
-  [LitExample "(define-namespace 'my-namespace (read-keyset 'my-keyset))"]
+  (funType tTyString [("namespace", tTyString), ("user-guard", tTyGuard Nothing), ("admin-guard", tTyGuard Nothing)])
+  [LitExample "(define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))"]
   "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
   \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
   \and GUARD will be rotated in its place."
   where
     defineNamespace :: GasRNativeFun e
     defineNamespace g i as = case as of
-      [TLitString nsn, TGuard userg _, TGuard adming _] -> go g i nsn userg adming
+      [TLitString nsn, TGuard userg _, TGuard adming _] -> case parseName (_faInfo i) nsn of
+        Left _ -> evalError' i $ "invalid namespace name format: " <> pretty nsn
+        Right _ -> go g i nsn userg adming
       _ -> argsError i as
 
     go g0 fi nsn ug ag = do
