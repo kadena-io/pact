@@ -95,7 +95,7 @@ type EvalInput = Either (Maybe PactExec) [Term Name]
 type EvalOutput = ([Term Name],[TxLog Value],Maybe TxId)
 
 -- | Interpreter indirection for executing user action.
-data Interpreter e = Interpreter
+newtype Interpreter e = Interpreter
   { interpreter :: Eval e [Term Name] -> Eval e [Term Name] }
 
 -- | Default interpreter performs no indirection.

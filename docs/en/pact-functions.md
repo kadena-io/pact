@@ -134,7 +134,7 @@ true
 
 Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in its place.
 ```lisp
-(define-namespace 'my-namespace (read-keyset 'user-ks)) (read-keyset 'admin-ks)
+(define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1647,7 +1647,11 @@ Set environment confidential ENTITY id, or unset with no argument.
  *&rarr;*&nbsp;`object:*`
 
 
-Set or query execution config flags: ALLOW-MODULE-INSTALL allows module and interface installs; ALLOW-HISTORY-IN-TX allows history calls (tx-log, etc) in non-local execution
+Queries, or with arguments, sets execution config flags. ALLOW-MODULE-INSTALL allows module and interface installs; ALLOW-HISTORY-IN-TX allows history calls (tx-log, etc) in non-local execution
+```lisp
+pact> (env-exec-config true false) (env-exec-config)
+{"allow-history-in-tx": false,"allow-module-install": true}
+```
 
 
 ### env-gas {#env-gas}
@@ -1657,7 +1661,11 @@ Set or query execution config flags: ALLOW-MODULE-INSTALL allows module and inte
 *gas*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Query gas state, or set it to GAS.
+Query gas state, or set it to GAS. Note that certain plaforms may charge additional gas that is not captured by the interpreter gas model, such as an overall transaction-size cost.
+```lisp
+pact> (env-gasmodel "table") (env-gaslimit 10) (env-gas 0) (map (+ 1) [1 2 3]) (env-gas)
+7
+```
 
 
 ### env-gaslimit {#env-gaslimit}
@@ -1673,7 +1681,11 @@ Set environment gas limit to LIMIT.
  *&rarr;*&nbsp;`string`
 
 
-Enable and obtain gas logging
+Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect.
+```lisp
+pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)
+["TOTAL: 7" "map:GUnreduced: 4" "+:GUnreduced: 1" "+:GUnreduced: 1" "+:GUnreduced: 1"]
+```
 
 
 ### env-gasmodel {#env-gasmodel}

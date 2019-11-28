@@ -171,8 +171,9 @@ replDefs = ("Repl",
        []
        "Set environment gas limit to LIMIT."
      ,defZRNative "env-gas" envGas (funType tTyInteger [] <> funType tTyString [("gas",tTyInteger)])
-       []
-       "Query gas state, or set it to GAS."
+       ["(env-gasmodel \"table\") (env-gaslimit 10) (env-gas 0) (map (+ 1) [1 2 3]) (env-gas)"]
+       ("Query gas state, or set it to GAS. Note that certain plaforms may charge additional gas that is not captured " <>
+        "by the interpreter gas model, such as an overall transaction-size cost.")
      ,defZRNative "env-gasprice" setGasPrice (funType tTyString [("price",tTyDecimal)])
        []
        "Set environment gas price to PRICE."
@@ -183,13 +184,13 @@ replDefs = ("Repl",
        []
        "Update gas model to the model named MODEL."
      ,defZRNative "env-gaslog" gasLog (funType tTyString [])
-       []
-       "Enable and obtain gas logging"
+       ["(env-gasmodel \"table\") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)"]
+       "Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect."
      ,defZRNative "env-exec-config" envExecConfig
       (funType (tTyObject TyAny) [("allow-module-install",tTyBool),("allow-history-in-tx",tTyBool)] <>
        funType (tTyObject TyAny) [])
-      []
-      ("Set or query execution config flags: ALLOW-MODULE-INSTALL allows module and interface " <>
+      ["(env-exec-config true false) (env-exec-config)"]
+      ("Queries, or with arguments, sets execution config flags. ALLOW-MODULE-INSTALL allows module and interface " <>
       "installs; ALLOW-HISTORY-IN-TX allows history calls (tx-log, etc) in non-local execution")
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
        []
