@@ -1,0 +1,4 @@
+(env-data { "k" : ["k"] })
+(env-keys ["k"])
+(define-namespace "1-namespace" (read-keyset "k") (read-keyset "k"))
+(namespace "1-namespace")
