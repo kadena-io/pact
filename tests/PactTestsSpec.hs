@@ -98,6 +98,8 @@ badErrors = M.fromList
     "Definitions in default namespace are not authorized")
   ,(pfx "bad-dupe-def.repl"
    ,"definition name conflict")
+  ,(pfx "bad-modules-disabled.repl"
+   ,"Module/interface install not supported")
   ,(pfx "bad-ns-def.repl"
    ,"invalid namespace name format")
   ]

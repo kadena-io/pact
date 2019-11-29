@@ -98,9 +98,10 @@ loadBenchModule db = do
             ])
            Nothing
            pactInitialHash
+           [Signer Nothing pk Nothing []]
   let e = setupEvalEnv db entity Transactional md initRefStore
-          freeGasEnv permissiveNamespacePolicy noSPVSupport def
-  (r :: Either SomeException EvalResult) <- try $ evalExec [Signer Nothing pk Nothing []] defaultInterpreter e pc
+          freeGasEnv permissiveNamespacePolicy noSPVSupport def def
+  (r :: Either SomeException EvalResult) <- try $ evalExec  defaultInterpreter e pc
   void $ eitherDie "loadBenchModule (load)" $ fmapL show r
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
   p <- either (die "loadBenchModule" . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
@@ -115,12 +116,12 @@ benchNFIO bname = bench bname . nfIO
 
 runPactExec :: String -> [Signer] -> Value -> Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
 runPactExec msg ss cdata benchMod dbEnv pc = do
-  let md = MsgData cdata Nothing pactInitialHash
+  let md = MsgData cdata Nothing pactInitialHash ss
       e = setupEvalEnv dbEnv entity Transactional md
-          initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
+          initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def def
       s = defaultInterpreterState $
         maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
-  (r :: Either SomeException EvalResult) <- try $! evalExec ss s e pc
+  (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
   r' <- eitherDie ("runPactExec': " ++ msg) $ fmapL show r
   return $! toJSON $ _erOutput r'
 

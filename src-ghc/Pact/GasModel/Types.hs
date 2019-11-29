@@ -11,20 +11,20 @@ module Pact.GasModel.Types
   , GasTestResult(..)
 
   , getDescription
-  
+
   , GasUnitTests(..)
   , concatGasUnitTests
   , mapOverGasUnitTests
 
   , NoopNFData(..)
-  
+
   , defGasUnitTests
   , createGasUnitTests
 
   , setState
   , setEnv
-  
-  
+
+
   ) where
 
 import Control.Concurrent (readMVar)
@@ -182,7 +182,7 @@ defMockGasSetup =
   mockSetupCleanup
 
 
--- | Helper functions for manipulating Gas Tests 
+-- | Helper functions for manipulating Gas Tests
 setState :: (EvalState -> EvalState) -> GasSetup e -> GasSetup e
 setState f setup = setState'
   where
@@ -227,7 +227,7 @@ getLoadedState code = do
 defEvalEnv :: PactDbEnv e -> EvalEnv e
 defEvalEnv db =
   setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-  initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def
+  initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def def
   where entity = Just $ EntityName "entity"
 
 -- MockDb
@@ -241,7 +241,7 @@ defMockDb :: MockDb
 defMockDb = mockdb
   where
     mockdb = def { mockRead = MockRead rowRead }
-    
+
     rowRead :: Domain k v -> k -> Method () (Maybe v)
     rowRead UserTables {} _ = rc (Just acctRow)
     rowRead KeySets (KeySetName ks)

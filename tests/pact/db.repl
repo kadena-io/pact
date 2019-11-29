@@ -46,6 +46,21 @@
 
 (expect "keylog works" [{"txid": 1, "value": ROW_A}] (keylog persons ID_A 1))
 
+(env-exec-config true false)
+(expect-failure
+ "txids disabled"
+ "Operation only permitted in local execution mode"
+ (txids persons 0))
+(expect-failure
+ "txlog disabled"
+ "Operation only permitted in local execution mode"
+ (txlog persons 1))
+(expect-failure
+ "keylog disabled"
+ "Operation only permitted in local execution mode"
+ (keylog persons ID_A 1))
+
+
 (insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
 (expect "object stored as object" "object:*" (typeof (at "stuff" (read stuff "k"))))
 
