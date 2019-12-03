@@ -301,9 +301,17 @@ instance ToJSON PactResult where
   toJSON (PactResult (Right s)) =
     object [ "status" .= ("success" :: String)
            , "data" .= s ]
-  toJSON (PactResult (Left f)) =
+  toJSON (PactResult (Left pe)) =
     object [ "status" .= ("failure" :: String)
-           , "error" .= f ]
+           , "error" .= perror pe
+           ]
+    where
+      perror (PactError t i _ d) = object
+        [ "type" .= t
+        , "info" .= renderInfo i
+        , "message" .= show d
+        ]
+
 instance FromJSON PactResult where
   parseJSON (A.Object o) = PactResult <$>
                            ((Left <$> o .: "error") <|>
