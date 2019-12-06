@@ -279,7 +279,6 @@ benchmark bench
   default-language:    Haskell2010
 
 executable gasmodel
-  type:                exitcode-stdio-1.0
   main-is:             GasModel.hs
   build-depends:       base
                      , pact
