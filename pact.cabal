@@ -360,3 +360,4 @@ test-suite hspec
                 , SchemeSpec
                 , HistoryServiceSpec
                 , GasModelSpec
+                , GoldenSpec
