@@ -5,6 +5,7 @@ resolver: lts-14.7
 extra-deps:
   # --- Missing from Stackage --- #
   - ed25519-donna-0.1.1
+  - hspec-golden-0.1.0.1
 
   # --- Forced Downgrades --- #
   - sbv-8.2
