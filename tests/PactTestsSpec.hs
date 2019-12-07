@@ -61,7 +61,7 @@ runScript :: String -> SpecWith ()
 runScript fp = describe fp $ do
   (r,ReplState{..}) <- runIO $ execScript' Quiet fp
   case r of
-    Left e -> it "runScript Either" $ expectationFailure e
+    Left e -> it ("failed to load " ++ fp) $ expectationFailure e
     Right _ -> do
       LibState{..} <- runIO $ readMVar $ _eePactDbVar _rEnv
       forM_ _rlsTests $ \TestResult {..} -> it (unpack trName) $ case trFailure of

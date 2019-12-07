@@ -315,6 +315,7 @@ test-suite hspec
               , filepath
               , hedgehog >= 1.0.1 && < 1.1
               , hspec
+              , hspec-golden >= 0.1
               , hw-hspec-hedgehog == 0.1.*
               , intervals
               , lens

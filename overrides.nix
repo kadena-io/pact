@@ -147,4 +147,10 @@ in {
     ver = "0.2.10.0";
     sha256 = "16xpq9qb1ipl0mb86rlb3bx29xvgcwirpm2ds0ynxjh0ylwzavkk";
   });
+
+  hspec-golden = dontCheck (callHackageDirect {
+    pkg = "hspec-golden";
+    ver = "0.1.0.1";
+    sha256 = "1fplsb3rb6f3w20cncr0zrjpf7x4kc3njy8l016p5wxxh3hkgdrs";
+  });
 }
