@@ -1,0 +1,16 @@
+
+(module auto-caps-mod GOV
+  (defcap GOV () true)
+  (defcap CAP_A:bool (name:string)
+    @managed
+    true)
+  (defcap CAP_B:bool (name:string times:integer)
+    @managed times capBMgr
+    true)
+  (defun capBMgr:integer (mgd:integer rqd:integer)
+    (enforce (> mgd 0) "all done")
+    (- mgd 1))
+  (defun doA (name)
+    (with-capability (CAP_A name) true))
+  (defun doB (name times)
+    (with-capability (CAP_B name times) true)))
