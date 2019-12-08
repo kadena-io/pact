@@ -22,7 +22,8 @@ module Pact.Types.Capability
   , CapEvalResult(..)
   , SigCapability(..)
   , UserCapability
-  , ManagedCapability(..), mcInstalled, mcStatic, mcManaged, mcManageParamIndex, mcManageParamName, mcMgrFun
+  , ManagedCapability(..), mcInstalled, mcStatic, mcManaged
+  , UserManagedCap(..), umcManagedValue, umcManageParamIndex, umcManageParamName, umcMgrFun
   , decomposeManaged, decomposeManaged', matchManaged
   , Capabilities(..), capStack, capManaged, capModuleAdmin, capAutonomous
   , CapScope(..)
@@ -106,19 +107,25 @@ data CapSlot c = CapSlot
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
 instance NFData c => NFData (CapSlot c)
 
+data UserManagedCap = UserManagedCap
+  { _umcManagedValue :: PactValue
+    -- ^ mutating value
+  , _umcManageParamIndex :: Int
+    -- ^ index of managed param value
+  , _umcManageParamName :: Text
+    -- ^ name of managed param value
+  , _umcMgrFun :: Def Ref
+    -- ^ manager function
+  } deriving (Show,Generic)
+instance NFData UserManagedCap
+
 data ManagedCapability c = ManagedCapability
   { _mcInstalled :: CapSlot c
-    -- ^ original installed capability, unmutated, with composed caps.
+    -- ^ original installed capability
   , _mcStatic :: UserCapability
-    -- ^ Cap without mutating
-  , _mcManaged :: PactValue
-    -- ^ mutating value
-  , _mcManageParamIndex :: Int
-    -- ^ index of managed param value
-  , _mcManageParamName :: Text
-    -- ^ name of managed param value
-  , _mcMgrFun :: Def Ref
-    -- ^ manager function
+    -- ^ Cap without any mutating components (for auto, same as installed)
+  , _mcManaged :: Either Bool UserManagedCap
+    -- ^ either auto-managed or user-managed
   } deriving (Show,Generic,Foldable)
 
 -- | Given arg index, split capability args into (before,at,after)
@@ -136,16 +143,20 @@ decomposeManaged' idx cap@SigCapability{..} = case decomposeManaged idx cap of
 {-# INLINABLE decomposeManaged' #-}
 
 -- | Match static value to managed.
-matchManaged :: ManagedCapability c -> UserCapability -> Bool
-matchManaged ManagedCapability{..} cap@SigCapability{..} = case decomposeManaged' _mcManageParamIndex cap of
-  Nothing -> False
-  Just (c,_) -> c == _mcStatic
+matchManaged :: ManagedCapability UserCapability -> UserCapability -> Bool
+matchManaged ManagedCapability{..} cap@SigCapability{..} = case _mcManaged of
+  Left {} -> _mcStatic == cap
+  Right UserManagedCap{..} -> case decomposeManaged' _umcManageParamIndex cap of
+    Nothing -> False
+    Just (c,_) -> c == _mcStatic
 {-# INLINABLE matchManaged #-}
 
 instance Eq a => Eq (ManagedCapability a) where a == b = _mcStatic a == _mcStatic b
 instance Ord a => Ord (ManagedCapability a) where a `compare` b = _mcStatic a `compare` _mcStatic b
 instance Pretty a => Pretty (ManagedCapability a) where
-  pretty ManagedCapability {..} = pretty _mcStatic <> "~" <> pretty _mcManaged
+  pretty ManagedCapability {..} = pretty _mcStatic <> "~" <> mgd _mcManaged
+    where mgd (Left b) = pretty b
+          mgd (Right UserManagedCap{..}) = pretty _umcManagedValue
 instance NFData a => NFData (ManagedCapability a)
 
 
@@ -168,3 +179,4 @@ instance NFData Capabilities
 makeLenses ''ManagedCapability
 makeLenses ''Capabilities
 makeLenses ''CapSlot
+makeLenses ''UserManagedCap

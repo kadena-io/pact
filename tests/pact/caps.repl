@@ -584,3 +584,67 @@
 (expect "cap-scoped works with cap" true (enforce-cap "alice-keyset"))
 (expect-failure "cap-scoped does not work without cap" "Keyset failure"
                 (enforce-wo-cap "alice-keyset"))
+
+
+(commit-tx)
+(begin-tx)
+
+
+;;; test auto-managed caps and iface matching
+
+(interface auto-caps-iface
+  (defcap CAP_A:bool (name:string) @managed)
+  (defcap CAP_B:bool (name:string times:integer) @managed)
+  )
+(commit-tx)
+
+(begin-tx)
+
+(module auto-caps-mod GOV
+  (implements auto-caps-iface)
+  (defcap GOV () true)
+  (defcap CAP_A:bool (name:string)
+    @managed
+    true)
+  (defcap CAP_B:bool (name:string times:integer)
+    @managed times capBMgr
+    true)
+  (defun capBMgr:integer (mgd:integer rqd:integer)
+    (enforce (> mgd 0) "all done")
+    (- mgd 1))
+  (defun doA (name)
+    (with-capability (CAP_A name) true))
+  (defun doB (name times)
+    (with-capability (CAP_B name times) true)))
+
+(expect
+ "auto managed installs"
+ "Installed capability"
+ (install-capability (CAP_A "auto-a")))
+
+(expect
+ "user managed unspecified installs"
+ "Installed capability"
+ (install-capability (CAP_B "auto-b" 2)))
+
+(expect
+ "auto managed succeeds"
+ true
+ (doA "auto-a"))
+(expect-failure
+ "auto managed fails after first time"
+ "Capability already fired"
+ (doA "auto-a"))
+
+(expect
+ "user managed unspecified succeeds [2]"
+ true
+ (doB "auto-b" 2))
+(expect
+ "user managed unspecified succeeds [1]"
+ true
+ (doB "auto-b" 1))
+(expect-failure
+ "user managed unspecified fails"
+ "all done"
+ (doB "auto-b" 0))
