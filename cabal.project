@@ -3,10 +3,11 @@ packages:
 
 package pact
     tests: True
-    -- profiling: True
-    -- profiling-detail: all-functions
 
 debug-info: True
+
+constraints:
+    megaparsec < 8
 
 source-repository-package
     type: git
