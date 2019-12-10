@@ -24,6 +24,7 @@ module Pact.Types.Capability
   , UserCapability
   , ManagedCapability(..), mcInstalled, mcStatic, mcManaged
   , UserManagedCap(..), umcManagedValue, umcManageParamIndex, umcManageParamName, umcMgrFun
+  , AutoManagedCap(..), amcActive
   , decomposeManaged, decomposeManaged', matchManaged
   , Capabilities(..), capStack, capManaged, capModuleAdmin, capAutonomous
   , CapScope(..)
@@ -107,24 +108,35 @@ data CapSlot c = CapSlot
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
 instance NFData c => NFData (CapSlot c)
 
+-- | Model a managed capability where a user-provided function
+-- maintains a selected parameter value.
 data UserManagedCap = UserManagedCap
   { _umcManagedValue :: PactValue
     -- ^ mutating value
   , _umcManageParamIndex :: Int
-    -- ^ index of managed param value
+    -- ^ index of managed param value in defcap
   , _umcManageParamName :: Text
-    -- ^ name of managed param value
+    -- ^ name of managed param value in defcap
   , _umcMgrFun :: Def Ref
     -- ^ manager function
   } deriving (Show,Generic)
 instance NFData UserManagedCap
 
+-- | Model an auto-managed "one-shot" capability.
+newtype AutoManagedCap = AutoManagedCap
+  { _amcActive :: Bool
+  } deriving (Show, Generic)
+
+instance NFData AutoManagedCap
+instance Pretty AutoManagedCap where
+  pretty = viaShow
+
 data ManagedCapability c = ManagedCapability
   { _mcInstalled :: CapSlot c
     -- ^ original installed capability
   , _mcStatic :: UserCapability
-    -- ^ Cap without any mutating components (for auto, same as installed)
-  , _mcManaged :: Either Bool UserManagedCap
+    -- ^ Cap without any mutating components (for auto, same as cap in installed)
+  , _mcManaged :: Either AutoManagedCap UserManagedCap
     -- ^ either auto-managed or user-managed
   } deriving (Show,Generic,Foldable)
 
@@ -180,3 +192,4 @@ makeLenses ''ManagedCapability
 makeLenses ''Capabilities
 makeLenses ''CapSlot
 makeLenses ''UserManagedCap
+makeLenses ''AutoManagedCap

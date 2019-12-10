@@ -124,7 +124,7 @@ evalUserCapability i af scope cap cdef test = go scope
         mkMC = case _dDefMeta cdef of
           Nothing -> evalError' i $ "Installing managed capability without @managed metadata"
           Just (DMDefcap (DefcapManaged dcm)) -> case dcm of
-            Nothing -> return $! ManagedCapability cs (_csCap cs) (Left True)
+            Nothing -> return $! ManagedCapability cs (_csCap cs) (Left (AutoManagedCap True))
             Just (argName,mgrFunRef) -> case defCapMetaParts cap argName cdef of
               Left e -> evalError' cdef e
               Right (idx,static,v) -> case mgrFunRef of
@@ -188,10 +188,11 @@ checkManaged i (applyF,installF) cap@SigCapability{..} cdef = case _dDefMeta cde
           | cap' /= _mcStatic -> cont
           | otherwise -> check mc umc rv
 
-    doOneShot mc True = do
-      evalCapabilities . capManaged %= S.insert (set mcManaged (Left False) mc)
+    doOneShot mc (AutoManagedCap True) = do
+      evalCapabilities . capManaged %=
+        S.insert (set (mcManaged . _Left . amcActive) False mc)
       return $ Just $ _csComposed (_mcInstalled mc)
-    doOneShot _mc False = evalError' i $ "Capability already fired"
+    doOneShot _mc (AutoManagedCap False) = evalError' i $ "Capability already fired"
 
     check mc@ManagedCapability{..} umc@UserManagedCap{..} rv = do
       newMgdValue <- applyF _umcMgrFun _umcManagedValue rv
