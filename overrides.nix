@@ -20,11 +20,11 @@ in {
 
   Glob = whenGhcjs dontCheck super.Glob;
 
-  aeson = dontCheck (callHackageDirect {
+  aeson = enableCabalFlag (dontCheck (callHackageDirect {
     pkg = "aeson";
     ver = "1.4.5.0";
     sha256 = "0imcy5kkgrdrdv7zkhkjvwpdp4sms5jba708xsap1vl9c2s63n5a";
-  });
+  })) "cffi";
 
   algebraic-graphs = whenGhcjs dontCheck super.algebraic-graphs;
   base-compat-batteries = whenGhcjs dontCheck super.base-compat-batteries;
