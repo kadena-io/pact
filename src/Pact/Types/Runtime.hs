@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -147,23 +148,23 @@ data EvalEnv e = EvalEnv {
       -- | Step value for 'pact' executions.
     , _eePactStep :: !(Maybe PactStep)
       -- | Back-end state MVar.
-    , _eePactDbVar :: MVar e
+    , _eePactDbVar :: !(MVar e)
       -- | Back-end function record.
-    , _eePactDb :: PactDb e
+    , _eePactDb :: !(PactDb e)
       -- | Pure indicator
-    , _eePurity :: Purity
+    , _eePurity :: !Purity
       -- | Transaction hash
-    , _eeHash :: Hash
+    , _eeHash :: !Hash
       -- | Gas Environment
-    , _eeGasEnv :: GasEnv
+    , _eeGasEnv :: !GasEnv
       -- | Namespace Policy
-    , _eeNamespacePolicy :: NamespacePolicy
+    , _eeNamespacePolicy :: !NamespacePolicy
       -- | SPV backend
-    , _eeSPVSupport :: SPVSupport
+    , _eeSPVSupport :: !SPVSupport
       -- | Env public data
-    , _eePublicData :: PublicData
+    , _eePublicData :: {-# UNPACK #-} !PublicData
       -- | Execution configuration flags
-    , _eeExecutionConfig :: ExecutionConfig
+    , _eeExecutionConfig :: !ExecutionConfig
     }
 makeLenses ''EvalEnv
 
@@ -174,11 +175,11 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Name Ref
+      _rsLoaded :: !(HM.HashMap Name Ref)
       -- | Modules that were loaded, and flag if updated.
-    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
+    , _rsLoadedModules :: !(HM.HashMap ModuleName (ModuleData Ref, Bool))
       -- | Current Namespace
-    , _rsNamespace :: Maybe (Namespace (Term Name))
+    , _rsNamespace :: !(Maybe (Namespace (Term Name)))
     } deriving (Eq,Show,Generic)
 makeLenses ''RefState
 instance NFData RefState
@@ -193,9 +194,9 @@ data EvalState = EvalState {
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
       -- | Gas tally
-    , _evalGas :: Gas
+    , _evalGas :: {-# UNPACK #-} !Gas
       -- | Capability list
-    , _evalCapabilities :: Capabilities
+    , _evalCapabilities :: !Capabilities
       -- | Gas logging
     , _evalLogGas :: Maybe [(Text,Gas)]
     } deriving (Show, Generic)
@@ -234,7 +235,7 @@ catchesPactError action =
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  (_gas,r) <- act
+  (_gas, !r) <- act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
@@ -362,7 +363,7 @@ mkPureEnv :: (EvalEnv e -> f) -> Purity ->
              EvalEnv e -> Eval e (EvalEnv f)
 mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
   v <- liftIO $ newMVar (holder env)
-  return $ EvalEnv
+  return $! EvalEnv
     _eeRefStore
     _eeMsgSigs
     _eeMsgBody

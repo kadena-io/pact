@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
@@ -63,21 +64,21 @@ import Pact.Types.Term (ToTerm)
 -- | Main parser for Pact expressions.
 expr :: (MonadFail m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
 expr = do
-  delt <- position
+  !delt <- position
   let inf = do
-        end <- position
-        let len = bytes end - bytes delt
-        return $ Parsed delt (fromIntegral len)
-      separator t s = symbol t >> (ESeparator . SeparatorExp s <$> inf)
+        !end <- position
+        let !len = bytes end - bytes delt
+        return $! Parsed delt (fromIntegral len)
+      separator !t !s = symbol t >> (ESeparator . SeparatorExp s <$!> inf)
   msum
-    [ TF.try (ELiteral <$> (LiteralExp <$> token number <*> inf)) <?> "number"
-    , ELiteral <$> (LiteralExp . LString <$> stringLiteral <*> inf) <?> "string"
-    , ELiteral <$> (LiteralExp . LString <$> (symbolic '\'' >> ident style) <*> inf) <?> "symbol"
-    , ELiteral <$> (LiteralExp <$> bool <*> inf) <?> "bool"
-    , (qualifiedAtom >>= \(a,qs) -> EAtom . AtomExp a qs <$> inf) <?> "atom"
-    , EList <$> (ListExp <$> parens (many expr) <*> pure Parens <*> inf) <?> "(list)"
-    , EList <$> (ListExp <$> braces (many expr) <*> pure Braces <*> inf) <?> "[list]"
-    , EList <$> (ListExp <$> brackets (many expr) <*> pure Brackets <*> inf) <?> "{list}"
+    [ TF.try (ELiteral <$!> (LiteralExp <$!> token number <*> inf)) <?> "number"
+    , ELiteral <$!> (LiteralExp . LString <$!> stringLiteral <*> inf) <?> "string"
+    , ELiteral <$!> (LiteralExp . LString <$!> (symbolic '\'' >> ident style) <*> inf) <?> "symbol"
+    , ELiteral <$!> (LiteralExp <$!> bool <*> inf) <?> "bool"
+    , (qualifiedAtom >>= \(a,qs) -> EAtom . AtomExp a qs <$!> inf) <?> "atom"
+    , EList <$!> (ListExp <$!> parens (many expr) <*> pure Parens <*> inf) <?> "(list)"
+    , EList <$!> (ListExp <$!> braces (many expr) <*> pure Braces <*> inf) <?> "[list]"
+    , EList <$!> (ListExp <$!> brackets (many expr) <*> pure Brackets <*> inf) <?> "{list}"
     , separator ":=" ColonEquals
     , separator ":" Colon
     , separator "," Comma
@@ -91,17 +92,17 @@ number = do
   -- parser because we want to disallow whitespace following the negative sign
   -- (token parsers apply `whiteSpace` after every token). With a whitespace we
   -- consider this an expression rather than a literal.
-  neg <- maybe id (const negate) <$> optional (char '-')
-  num <- some digit
-  dec <- optional (dot *> some digit)
-  let strToNum = foldl' (\x d -> 10*x + toInteger (digitToInt d))
+  !neg <- maybe id (const negate) <$> optional (char '-')
+  !num <- some digit
+  !dec <- optional (dot *> some digit)
+  let strToNum = foldl' (\x d -> x `seq` d `seq` 10*x + toInteger (digitToInt d))
   case dec of
-    Nothing -> return $ LInteger (neg (strToNum 0 num))
-    Just d ->
+    Nothing -> return $! LInteger $! (neg (strToNum 0 num))
+    Just !d ->
       let precision = length d
       in if precision > 255
          then fail $ "decimal precision overflow (255 max): " ++ show num ++ "." ++ show d
-         else return $ LDecimal $ Decimal
+         else return $! LDecimal $! Decimal
            (fromIntegral precision)
            (neg (strToNum (strToNum 0 num) d))
 {-# INLINE number #-}
@@ -110,7 +111,7 @@ number = do
 qualifiedAtom :: (MonadFail p, TokenParsing p) => p (Text,[Text])
 qualifiedAtom = ident style `sepBy` dot >>= \as -> case reverse as of
   [] -> fail "qualifiedAtom"
-  (a:qs) -> return (a,reverse qs)
+  (!a:qs) -> return (a,reverse qs)
 
 bool :: (Monad m, DeltaParsing m) => PactParser m Literal
 bool = msum
@@ -137,15 +138,15 @@ newtype ParsedDecimal = ParsedDecimal Decimal
 
 instance A.FromJSON ParsedDecimal where
   parseJSON (A.String s) =
-    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
-                        Right (LDecimal d) -> return d
-                        Right (LInteger i) -> return (fromIntegral i)
-                        _ -> fail $ "Failure parsing decimal string: " ++ show s
-  parseJSON (A.Number n) = return $ ParsedDecimal (fromRational $ toRational n)
+    ParsedDecimal <$!> case AP.parseOnly (unPactParser number) s of
+                         Right (LDecimal !d) -> return d
+                         Right (LInteger !i) -> return $! (fromIntegral i)
+                         _ -> fail $ "Failure parsing decimal string: " ++ show s
+  parseJSON (A.Number !n) = return $! ParsedDecimal $! (fromRational $ toRational n)
   parseJSON v = fail $ "Failure parsing decimal: " ++ show v
 
 instance A.ToJSON ParsedDecimal where
-  toJSON (ParsedDecimal d) = A.Number $ fromRational $ toRational d
+  toJSON (ParsedDecimal d) = A.Number $! fromRational $ toRational d
 
 instance Show ParsedDecimal where
   show (ParsedDecimal d) = show d
@@ -163,17 +164,17 @@ newtype ParsedInteger = ParsedInteger Integer
 
 instance A.FromJSON ParsedInteger where
   parseJSON (A.String s) =
-    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
-                        Right (LInteger i) -> return i
-                        _ -> fail $ "Failure parsing integer string: " ++ show s
-  parseJSON (A.Number n) = return $ ParsedInteger (round n)
+    ParsedInteger <$!> case AP.parseOnly (unPactParser number) s of
+                         Right (LInteger !i) -> return i
+                         _ -> fail $ "Failure parsing integer string: " ++ show s
+  parseJSON (A.Number n) = return $! ParsedInteger $! (round n)
   parseJSON v@A.Object{} = A.parseJSON v >>= \i -> case i of
-    PLiteral (LInteger li) -> return $ ParsedInteger li
+    PLiteral (LInteger !li) -> return $! ParsedInteger li
     _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
 
 instance A.ToJSON ParsedInteger where
-  toJSON (ParsedInteger i) = A.Number (fromIntegral i)
+  toJSON (ParsedInteger i) = A.Number $! (fromIntegral i)
 
 instance Wrapped ParsedInteger
 
@@ -189,7 +190,7 @@ parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
 
 -- | ParsedCode version of 'parseExprs'
 parsePact :: Text -> Either String ParsedCode
-parsePact code = ParsedCode code <$> parseExprs code
+parsePact code = ParsedCode code <$!> parseExprs code
 {-# INLINABLE parsePact #-}
 
 

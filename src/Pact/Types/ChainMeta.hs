@@ -32,6 +32,7 @@ import GHC.Generics
 
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
+import Control.Monad
 
 import Data.Aeson
 import Data.Default (Default, def)
@@ -94,7 +95,7 @@ data PublicMeta = PublicMeta
   { _pmChainId :: !ChainId
   , _pmSender :: !Text
   , _pmGasLimit :: !GasLimit
-  , _pmGasPrice :: !GasPrice
+  , _pmGasPrice :: {-# UNPACK #-} !GasPrice
   , _pmTTL :: !TTLSeconds
   , _pmCreationTime :: !TxCreationTime
   } deriving (Eq, Show, Generic)
@@ -114,7 +115,7 @@ instance ToJSON PublicMeta where
 
 instance FromJSON PublicMeta where
   parseJSON = withObject "PublicMeta" $ \o -> PublicMeta
-    <$> o .: "chainId"
+    <$!> o .: "chainId"
     <*> o .: "sender"
     <*> o .: "gasLimit"
     <*> o .: "gasPrice"
@@ -141,9 +142,9 @@ instance HasPlafMeta () where
   getPublicMeta = const def
 
 data PublicData = PublicData
-  { _pdPublicMeta :: !PublicMeta
-  , _pdBlockHeight :: !Word64
-  , _pdBlockTime :: !Int64
+  { _pdPublicMeta :: {-# UNPACK #-} !PublicMeta
+  , _pdBlockHeight :: {-# UNPACK #-} !Word64
+  , _pdBlockTime :: {-# UNPACK #-} !Int64
   , _pdPrevBlockHash :: !Text
   }
   deriving (Show, Eq, Generic)

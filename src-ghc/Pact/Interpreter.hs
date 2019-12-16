@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -68,7 +69,7 @@ import Pact.Types.SPV
 
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
-  pdPactDb :: !(PactDb e),
+  pdPactDb :: {-# UNPACK #-} !(PactDb e),
   pdPactDbVar :: !(MVar e)
   }
 
@@ -159,10 +160,10 @@ setupEvalEnv
   -> PublicData
   -> ExecutionConfig
   -> EvalEnv e
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
+setupEvalEnv !dbEnv !ent !mode !msgData !refStore !gasEnv !np !spv !pd !ec =
   EvalEnv {
     _eeRefStore = refStore
-  , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
+  , _eeMsgSigs = mkMsgSigs $! mdSigners msgData
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
   , _eeEntity = ent
@@ -182,7 +183,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
       where
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
-            pk = PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
+            pk = PublicKey $! encodeUtf8 $ fromMaybe _siPubKey _siAddress
 
 
 initRefStore :: RefStore
@@ -210,11 +211,11 @@ initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 interpret :: Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
 interpret runner evalEnv terms = do
-  ((rs,logs,txid),state) <-
+  ((!rs,!logs,!txid),state) <-
     runEval def evalEnv $ evalTerms runner terms
-  let gas = _evalGas state
-      pactExec = _evalPactExec state
-      modules = _rsLoadedModules $ _evalRefs state
+  let !gas = _evalGas state
+      !pactExec = _evalPactExec state
+      !modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
   return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
 
@@ -229,16 +230,16 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
 
     start act = do
-      txid <- evalBeginTx def
-      (,txid) <$> act
+      !txid <- evalBeginTx def
+      (,txid) <$!> act
 
-    end (rs,txid) = do
-      logs <- evalCommitTx def
-      return (rs,logs,txid)
+    end (!rs,!txid) = do
+      !logs <- evalCommitTx def
+      return $! (rs,logs,txid)
 
     runInput = case input of
       Right ts -> mapM eval ts
-      Left pe -> (:[]) <$> resumePact def pe
+      Left pe -> (:[]) <$!> resumePact def pe
 
 
 {-# INLINE evalTerms #-}

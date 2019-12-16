@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -18,7 +19,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DerivingStrategies #-}
 
 -- |
 -- Module      :  Pact.Types.Term
@@ -403,7 +403,7 @@ data BindType n =
   -- | Normal "let" bind
   BindLet |
   -- | Schema-style binding, with string value for key
-  BindSchema { _bType :: n }
+  BindSchema { _bType :: !n }
   deriving (Eq,Functor,Foldable,Traversable,Ord,Show,Generic)
 
 instance (Pretty n) => Pretty (BindType n) where
@@ -513,7 +513,7 @@ newtype ModuleHash = ModuleHash { _mhHash :: Hash }
 data Module g = Module
   { _mName :: !ModuleName
   , _mGovernance :: !(Governance g)
-  , _mMeta :: !Meta
+  , _mMeta :: {-# UNPACK #-} !Meta
   , _mCode :: !Code
   , _mHash :: !ModuleHash
   , _mBlessed :: !(HS.HashSet ModuleHash)
@@ -533,7 +533,7 @@ instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 data Interface = Interface
   { _interfaceName :: !ModuleName
   , _interfaceCode :: !Code
-  , _interfaceMeta :: !Meta
+  , _interfaceMeta :: {-# UNPACK #-} !Meta
   , _interfaceImports :: [Use]
   } deriving (Eq,Show,Generic)
 instance Pretty Interface where
@@ -561,7 +561,7 @@ instance ToJSON g => ToJSON (ModuleDef g) where
   toJSON (MDInterface i) = toJSON i
 
 instance FromJSON g => FromJSON (ModuleDef g) where
-  parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
+  parseJSON v = MDModule <$!> parseJSON v <|> MDInterface <$!> parseJSON v
 
 moduleDefName :: ModuleDef g -> ModuleName
 moduleDefName (MDModule m) = _mName m
@@ -592,8 +592,8 @@ instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
 
 -- | Def metadata specific to 'DefType'.
 -- Currently only specified for Defcap.
-data DefMeta n =
-  DMDefcap !(DefcapMeta n)
+newtype DefMeta n =
+  DMDefcap (DefcapMeta n)
   deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
 instance NFData n => NFData (DefMeta n)
 instance Pretty n => Pretty (DefMeta n) where
@@ -609,7 +609,7 @@ data Def n = Def
   , _dDefType :: !DefType
   , _dFunType :: !(FunType (Term n))
   , _dDefBody :: !(Scope Int Term n)
-  , _dMeta :: !Meta
+  , _dMeta :: {-# UNPACK #-} !Meta
   , _dDefMeta :: !(Maybe (DefMeta (Term n)))
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
@@ -638,11 +638,10 @@ derefDef :: Def Ref -> Name
 derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
 
-
 data Namespace a = Namespace
-  { _nsName :: NamespaceName
-  , _nsUser :: (Guard a)
-  , _nsAdmin :: (Guard a)
+  { _nsName :: !NamespaceName
+  , _nsUser :: !(Guard a)
+  , _nsAdmin :: !(Guard a)
   } deriving (Eq, Show, Generic)
 
 instance Pretty (Namespace a) where
@@ -798,7 +797,7 @@ instance Pretty n => Pretty (Step n) where
 -- | Pact evaluable term.
 data Term n =
     TModule {
-      _tModuleDef :: ModuleDef (Term n)
+      _tModuleDef :: !(ModuleDef (Term n))
     , _tModuleBody :: !(Scope () Term n)
     , _tInfo :: !Info
     } |
@@ -824,7 +823,7 @@ data Term n =
       _tConstArg :: !(Arg (Term n))
     , _tModule :: !(Maybe ModuleName)
     , _tConstVal :: !(ConstVal (Term n))
-    , _tMeta :: !Meta
+    , _tMeta :: {-# UNPACK #-} !Meta
     , _tInfo :: !Info
     } |
     TApp {
@@ -848,7 +847,7 @@ data Term n =
     TSchema {
       _tSchemaName :: !TypeName
     , _tModule :: !(Maybe ModuleName)
-    , _tMeta :: !Meta
+    , _tMeta :: {-# UNPACK #-} !Meta
     , _tFields :: ![Arg (Term n)]
     , _tInfo :: !Info
     } |
@@ -866,7 +865,7 @@ data Term n =
     } |
     TStep {
       _tStep :: Step (Term n)
-    , _tMeta :: !Meta
+    , _tMeta :: {-# UNPACK #-} !Meta
     , _tInfo :: !Info
     } |
     TTable {
@@ -874,7 +873,7 @@ data Term n =
     , _tModuleName :: ModuleName
     , _tHash :: !ModuleHash
     , _tTableType :: !(Type (Term n))
-    , _tMeta :: !Meta
+    , _tMeta :: {-# UNPACK #-} !Meta
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Generic)
@@ -963,6 +962,8 @@ prettyTypeTerm t = SPNormal t
 instance Applicative Term where
     pure = return
     (<*>) = ap
+    {-# INLINE pure #-}
+    {-# INLINE (<*>) #-}
 
 instance Monad Term where
     return a = TVar a def
@@ -983,6 +984,8 @@ instance Monad Term where
     TStep (Step ent e r si) meta i >>= f = TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) meta i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
+    {-# INLINE return #-}
+    {-# INLINE (>>=) #-}
 
 
 termCodec :: (ToJSON n,FromJSON n) => Codec (Term n)
@@ -1066,7 +1069,6 @@ termCodec = Codec enc dec
     hash' = "hash"
 
 
-
 instance (ToJSON n, FromJSON n) => FromJSON (Term n) where
   parseJSON = decoder termCodec
 
@@ -1111,28 +1113,29 @@ guardTypeOf g = case g of
   GPact {} -> GTyPact
   GUser {} -> GTyUser
   GModule {} -> GTyModule
+{-# INLINE guardTypeOf #-}
 
 -- | Return a Pact type, or a String description of non-value Terms.
 -- Does not handle partial schema types.
 typeof :: Term a -> Either Text (Type (Term a))
 typeof t = case t of
-      TLiteral l _ -> Right $ TyPrim $ litToPrim l
+      TLiteral l _ -> Right $! TyPrim $! litToPrim l
       TModule {} -> Left "module"
-      TList {..} -> Right $ TyList _tListType
-      TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
+      TList {..} -> Right $! TyList _tListType
+      TDef {..} -> Left $! pack $ defTypeRep (_dDefType _tDef)
       TNative {..} -> Left "defun"
-      TConst {..} -> Left $ "const:" <> _aName _tConstArg
+      TConst {..} -> Left $! "const:" <> _aName _tConstArg
       TApp {..} -> Left "app"
       TVar {..} -> Left "var"
       TBinding {..} -> case _tBindType of
         BindLet -> Left "let"
-        BindSchema bt -> Right $ TySchema TyBinding bt def
-      TObject (Object {..}) _ -> Right $ TySchema TyObject _oObjectType def
-      TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
+        BindSchema bt -> Right $! TySchema TyBinding bt def
+      TObject (Object {..}) _ -> Right $! TySchema TyObject _oObjectType def
+      TGuard {..} -> Right $! TyPrim $! TyGuard $! Just $! guardTypeOf _tGuard
       TUse {} -> Left "use"
       TStep {} -> Left "step"
-      TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
-      TTable {..} -> Right $ TySchema TyTable _tTableType def
+      TSchema {..} -> Left $! "defobject:" <> asString _tSchemaName
+      TTable {..} -> Right $! TySchema TyTable _tTableType def
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -1165,6 +1168,7 @@ canEq TTable{} TTable{} = True
 canEq TSchema{} TSchema{} = True
 canEq TGuard{} TGuard{} = True
 canEq _ _ = False
+{-# INLINE canEq #-}
 
 -- | Support pact `=` for value-level terms.
 -- and TVar for types.
@@ -1184,6 +1188,7 @@ termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && a
   where argEq = liftEq (liftEq termEq)
 termEq (TVar a _) (TVar b _) = a == b
 termEq _ _ = False
+{-# INLINE termEq #-}
 
 
 makeLenses ''Term
