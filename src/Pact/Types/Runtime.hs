@@ -225,17 +225,17 @@ runEval' s env act =
 
 catchesPactError :: (MonadCatch m) => m a -> m (Either PactError a)
 catchesPactError action =
-  catches (Right <$> action)
+  catches (Right <$!> action)
   [ Handler (\(e :: PactError) -> return $ Left e)
    ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . viaShow $ e)
   ]
-
+{-# INLINABLE catchesPactError #-}
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  (_gas, !r) <- act
+  (!_, !r) <- act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
@@ -245,7 +245,7 @@ method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
   handleAll (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
-
+{-# INLINABLE method #-}
 
 --
 -- Methods for invoking backend function-record function.

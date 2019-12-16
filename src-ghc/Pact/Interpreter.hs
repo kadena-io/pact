@@ -69,7 +69,7 @@ import Pact.Types.SPV
 
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
-  pdPactDb :: {-# UNPACK #-} !(PactDb e),
+  pdPactDb :: !(PactDb e),
   pdPactDbVar :: !(MVar e)
   }
 
@@ -128,9 +128,10 @@ data EvalResult = EvalResult
 
 -- | Execute pact statements.
 evalExec :: Interpreter e -> EvalEnv e -> ParsedCode -> IO EvalResult
-evalExec runner evalEnv ParsedCode {..} = do
+evalExec !runner !evalEnv !ParsedCode{..} = do
   terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
   interpret runner evalEnv (Right terms)
+{-# INLINABLE evalExec #-}
 
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
@@ -147,6 +148,7 @@ evalContinuation runner ee cm = case (_cmProof cm) of
     interpret runner (setStep (_peYield pe)) (Left $ Just pe)
   where
     setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
+{-# INLINABLE evalContinuation #-}
 
 setupEvalEnv
   :: PactDbEnv e
@@ -240,6 +242,4 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
     runInput = case input of
       Right ts -> mapM eval ts
       Left pe -> (:[]) <$!> resumePact def pe
-
-
-{-# INLINE evalTerms #-}
+{-# INLINABLE evalTerms #-}

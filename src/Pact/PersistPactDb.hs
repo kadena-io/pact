@@ -53,7 +53,7 @@ import Pact.Types.Logger
 
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv
-  { _db :: p
+  { _db :: !p
   , _persist :: Persister p
   , _logger :: Logger
   , _txRecord :: M.Map TxTable [TxLog Value]
