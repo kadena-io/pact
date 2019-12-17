@@ -418,10 +418,13 @@ defunOrCap dt = do
 
 defcapManaged :: DefType -> Compile (Maybe (DefMeta (Term Name)))
 defcapManaged dt = case dt of
-  Defcap -> optional $ (mkMeta <$> (symbol "@managed" *> userAtom) <*> userVar)
+  Defcap -> optional doDefcapMeta
   _ -> return Nothing
   where
-    mkMeta AtomExp{..} fun = DMDefcap $ DefcapMeta fun _atomAtom
+    doDefcapMeta = symbol "@managed" *>
+      ((DMDefcap . DefcapManaged) <$> (doUserMgd <|> doAuto))
+    doUserMgd = Just <$> ((,) <$> (_atomAtom <$> userAtom) <*> userVar)
+    doAuto = pure Nothing
 
 defpact :: Compile (Term Name)
 defpact = do

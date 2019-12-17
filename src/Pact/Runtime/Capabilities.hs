@@ -34,6 +34,7 @@ import Control.Lens hiding (DefName)
 import Data.Default
 import Data.Foldable
 import Data.List
+import Data.Text (Text)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -122,13 +123,15 @@ evalUserCapability i af scope cap cdef test = go scope
           return (NewlyInstalled mc)
         mkMC = case _dDefMeta cdef of
           Nothing -> evalError' i $ "Installing managed capability without @managed metadata"
-          Just (DMDefcap dcm@(DefcapMeta mgrFunRef argName)) -> case defCapMetaParts cap dcm cdef of
-            Left e -> evalError' cdef e
-            Right (idx,static,v) -> case mgrFunRef of
-              (TVar (Ref (TDef d di)) _) -> case _dDefType d of
-                Defun -> return $! ManagedCapability cs static v idx argName d
-                _ -> evalError' di $ "Capability manager ref must be defun"
-              t -> evalError' t $ "Capability manager ref must be a function"
+          Just (DMDefcap (DefcapManaged dcm)) -> case dcm of
+            Nothing -> return $! ManagedCapability cs (_csCap cs) (Left (AutoManagedCap True))
+            Just (argName,mgrFunRef) -> case defCapMetaParts cap argName cdef of
+              Left e -> evalError' cdef e
+              Right (idx,static,v) -> case mgrFunRef of
+                (TVar (Ref (TDef d di)) _) -> case _dDefType d of
+                  Defun -> return $! ManagedCapability cs static $ Right $ UserManagedCap v idx argName d
+                  _ -> evalError' di $ "Capability manager ref must be defun"
+                t -> evalError' t $ "Capability manager ref must be a function"
 
     -- Callstack: check if managed, in which case push, otherwise
     -- push and test.
@@ -148,8 +151,8 @@ evalUserCapability i af scope cap cdef test = go scope
 
     pushSlot s = evalCapabilities . capStack %= (s:)
 
-defCapMetaParts :: UserCapability -> DefcapMeta a -> Def Ref -> Either Doc (Int, SigCapability, PactValue)
-defCapMetaParts cap (DefcapMeta _ argName) cdef = case findArg argName of
+defCapMetaParts :: UserCapability -> Text -> Def Ref -> Either Doc (Int, SigCapability, PactValue)
+defCapMetaParts cap argName cdef = case findArg argName of
   Nothing -> Left $ "Invalid managed argument name: " <> pretty argName
   Just idx -> case decomposeManaged' idx cap of
     Nothing -> Left $ "Missing argument index from capability: " <> pretty idx
@@ -176,18 +179,30 @@ checkManaged i (applyF,installF) cap@SigCapability{..} cdef = case _dDefMeta cde
 
     die = evalError' i $ "Managed capability not installed: " <> pretty cap
 
-    testMC (mc@ManagedCapability{..}) cont = case decomposeManaged' _mcManageParamIndex cap of
-      Nothing -> cont
-      Just (cap',rv)
-        | cap' /= _mcStatic -> cont
-        | otherwise -> check mc rv
+    testMC (mc@ManagedCapability{..}) cont = case _mcManaged of
+      Left oneShot | cap == _mcStatic -> doOneShot mc oneShot
+                   | otherwise -> cont
+      Right umc@UserManagedCap{..} -> case decomposeManaged' _umcManageParamIndex cap of
+        Nothing -> cont
+        Just (cap',rv)
+          | cap' /= _mcStatic -> cont
+          | otherwise -> check mc umc rv
 
-    check mc@ManagedCapability{..} rv = do
-      newMgdValue <- applyF _mcMgrFun _mcManaged rv
-      evalCapabilities . capManaged %= S.insert (set mcManaged newMgdValue mc)
+    doOneShot mc (AutoManagedCap True) = do
+      evalCapabilities . capManaged %=
+        S.insert (set (mcManaged . _Left . amcActive) False mc)
+      return $ Just $ _csComposed (_mcInstalled mc)
+    doOneShot _mc (AutoManagedCap False) = evalError' i $ "Capability already fired"
+
+    check mc@ManagedCapability{..} umc@UserManagedCap{..} rv = do
+      newMgdValue <- applyF _umcMgrFun _umcManagedValue rv
+      let newUmc = set umcManagedValue newMgdValue umc
+      evalCapabilities . capManaged %= S.insert (set mcManaged (Right newUmc) mc)
       return $ Just $ _csComposed _mcInstalled
 
-    getStatic dcm c = view _2 <$> defCapMetaParts c dcm cdef
+    getStatic (DefcapManaged dcm) c = case dcm of
+      Nothing -> return c
+      Just (argName,_) -> view _2 <$> defCapMetaParts c argName cdef
 
     checkSigs dcm = case getStatic dcm cap of
       Left e -> evalError' cdef e

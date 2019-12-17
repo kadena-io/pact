@@ -576,19 +576,33 @@ moduleDefMeta (MDModule m) = _mMeta m
 moduleDefMeta (MDInterface m) = _interfaceMeta m
 
 -- | Metadata specific to Defcaps.
-data DefcapMeta n = DefcapMeta
-  { _dcManagerFun :: n
-    -- ^ Name/Ref referring to associated manager fun.
-  , _dcManagedParam :: Text
+data DefcapMeta n = DefcapManaged
+  { _dcManaged :: Maybe (Text,n)
+    -- ^ "Auto" managed or user-managed by (param,function)
   }
   deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
 instance NFData n => NFData (DefcapMeta n)
 instance Pretty n => Pretty (DefcapMeta n) where
-  pretty (DefcapMeta f p) = "@managed " <> pretty f <> " " <> pretty p
+  pretty (DefcapManaged m) = case m of
+    Nothing -> tag
+    Just (p,f) -> tag <> " " <> pretty f <> " " <> pretty p
+    where
+      tag = "@managed"
 instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
-  toJSON = lensyToJSON 3
+  toJSON (DefcapManaged (Just (p,f))) = object
+    [ "managerFun" .= f
+    , "managedParam" .= p
+    ]
+  toJSON (DefcapManaged Nothing) = object [ "managerAuto" .= True ]
 instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
-  parseJSON = lensyParseJSON 3
+  parseJSON v = parseUser v <|> parseAuto v
+    where
+      parseUser = withObject "DefcapMeta" $ \o -> (DefcapManaged . Just) <$>
+        ((,) <$> o .: "managedParam" <*> o .: "managerFun")
+      parseAuto = withObject "DefcapMeta" $ \o -> do
+        b <- o .: "managerAuto"
+        if b then pure (DefcapManaged Nothing)
+        else fail "Expected True"
 
 -- | Def metadata specific to 'DefType'.
 -- Currently only specified for Defcap.
