@@ -188,18 +188,18 @@ userTable' t = error $ "creating user table from non-TTable: " ++ show t
 
 
 read' :: GasRNativeFun e
-read' g0 i as@(table@TTable {}:TLitString key:rest) = do
+read' !g0 !i as@(table@TTable {}:TLitString key:rest) = do
   cols <- case rest of
     [] -> return []
-    [l] -> colsToList (argsError i as) l
+    [!l] -> colsToList (argsError i as) l
     _ -> argsError i as
-  guardTable i table
-  mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
+  void $! guardTable i table
+  !mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
   case mrow of
     Nothing -> failTx (_faInfo i) $ "read: row not found: " <> pretty key
     Just cs -> do
-      g <- gasPostRead i g0 cs
-      fmap (g,) $ case cols of
+      !g <- gasPostRead i g0 cs
+      fmap (g,) $! case cols of
         [] -> return $ columnsToObject (_tTableType table) cs
         _ -> columnsToObject' (_tTableType table) cols cs
 
@@ -284,23 +284,23 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
 withDefaultRead fi as = argsError' fi as
 
 withRead :: NativeFun e
-withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
-  let argsToReduce = [table',key']
+withRead !fi !as@[!table',!key',!b@(TBinding !ps !bd (BindSchema _) _)] = do
+  let !argsToReduce = [table',key']
   (!g0,!tk) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tk of
-    [table@TTable {..},TLitString key] -> do
-      guardTable fi table
-      mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
+    [!table@TTable {..},TLitString !key] -> do
+      void $! guardTable fi table
+      !mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " <> pretty key
-        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
+        (Just !row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
 bindToRow :: [BindPair (Term Ref)] ->
              Scope Int Term Ref -> Term Ref -> ObjectMap PactValue -> Eval e (Term Name)
-bindToRow ps bd b (ObjectMap row) =
-  bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
+bindToRow !ps !bd !b (ObjectMap !row) =
+  bindReduce ps bd (_tInfo b) $! \s -> fromPactValue <$!> M.lookup (FieldKey s) row
 
 keys' :: GasRNativeFun e
 keys' g i [table@TTable {..}] =
@@ -358,38 +358,38 @@ keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
 keylog _ i as = argsError i as
 
 write :: WriteType -> SchemaPartial -> NativeFun e
-write wt partial i as = do
-  ts <- mapM reduce as
+write !wt !partial !i !as = do
+  !ts <- mapM reduce as
   case ts of
-    [table@TTable {..},TLitString key,(TObject (Object ps _ _ _) _)] -> do
-      ps' <- enforcePactValue' ps
-      cost0 <- computeGas (Right i) (GUnreduced [])
-      cost1 <- computeGas (Right i) (GPreWrite (WriteData wt (asString key) ps'))
-      guardTable i table
+    [!table@TTable {..},TLitString !key,(TObject (Object !ps _ _ _) _)] -> do
+      !ps' <- enforcePactValue' ps
+      !cost0 <- computeGas (Right i) (GUnreduced [])
+      !cost1 <- computeGas (Right i) (GPreWrite (WriteData wt (asString key) ps'))
+      void $! guardTable i table
       case _tTableType of
         TyAny -> return ()
         TyVar {} -> return ()
-        tty -> void $ checkUserType partial (_faInfo i) ps tty
-      r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) ps'
-      return (cost0 + cost1, r)
+        !tty -> void $! checkUserType partial (_faInfo i) ps tty
+      !r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) ps'
+      return $! (cost0 + cost1, r)
     _ -> argsError i ts
 
 
 createTable' :: GasRNativeFun e
-createTable' g i [t@TTable {..}] = do
-  guardTable i t
-  let (UserTables tn) = userTable t
-  computeGas' g i (GPreWrite (WriteTable (asString tn))) $
+createTable' !g !i [!t@TTable {..}] = do
+  void $! guardTable i t
+  let (UserTables !tn) = userTable t
+  computeGas' g i (GPreWrite (WriteTable (asString tn))) $!
     success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
 createTable' _ i as = argsError i as
 
 guardTable :: Pretty n => FunApp -> Term n -> Eval e ()
-guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModuleName $
+guardTable !i TTable {..} = guardForModuleCall (_faInfo i) _tModuleName $!
   enforceBlessedHashes i _tModuleName _tHash
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> ModuleHash -> Eval e ()
-enforceBlessedHashes i mn h = getModule i mn >>= \m -> case (_mdModule m) of
+enforceBlessedHashes !i !mn !h = getModule i mn >>= \m -> case (_mdModule m) of
         MDModule Module{..}
           | h == _mHash -> return () -- current version ok
           | h `HS.member` _mBlessed -> return () -- hash is blessed
