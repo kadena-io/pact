@@ -244,7 +244,7 @@ call s act = do
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAll (throwErr DbError i . viaShow) (liftIO $! f _eePactDb _eePactDbVar)
 {-# INLINABLE method #-}
 
 --
@@ -253,23 +253,23 @@ method i f = do
 
 -- | Invoke '_readRow'
 readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v)
-readRow i d k = method i $ \db -> _readRow db d k
+readRow !i !d !k = method i $ \db -> _readRow db d k
 
 -- | Invoke '_writeRow'
 writeRow :: (AsString k,ToJSON v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
-writeRow i w d k v = method i $ \db -> _writeRow db w d k v
+writeRow !i !w !d !k !v = method i $ \db -> _writeRow db w d k v
 
 -- | Invoke '_keys'
 keys :: (AsString k,IsString k) => Info -> Domain k v -> Eval e [k]
-keys i t = method i $ \db -> _keys db t
+keys !i !t = method i $ \db -> _keys db t
 
 -- | Invoke '_txids'
 txids :: Info -> TableName -> TxId -> Eval e [TxId]
-txids i tn tid = method i $ \db -> _txids db tn tid
+txids !i !tn !tid = method i $ \db -> _txids db tn tid
 
 -- | Invoke '_createUserTable'
 createUserTable :: Info -> TableName -> ModuleName -> Eval e ()
-createUserTable i t m = method i $ \db -> _createUserTable db t m
+createUserTable !i !t !m = method i $ \db -> _createUserTable db t m
 
 -- | Invoke _getUserTableInfo
 getUserTableInfo :: Info -> TableName -> Eval e ModuleName

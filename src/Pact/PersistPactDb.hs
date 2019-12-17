@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
@@ -114,12 +115,12 @@ instance Logging (StateT (DbEnv p) IO) where
   {-# INLINE log #-}
 
 runMVState :: MVar (DbEnv p) -> MVState p a -> IO a
-runMVState v a = modifyMVar v (runStateT a >=> \(r,m') -> return (m',r))
+runMVState v a = modifyMVar v $! runStateT a >=> \(!r,!m') -> return $! (m',r)
 {-# INLINE runMVState #-}
 
 
 doPersist :: (Persister p -> Persist p a) -> MVState p a
-doPersist f = get >>= \m -> liftIO (f (_persist m) (_db m)) >>= \(db',r) -> db .= db' >> return r
+doPersist f = get >>= \(!m) -> liftIO (f (_persist m) (_db m)) >>= \(db',r) -> db .= db' >> return r
 {-# INLINE doPersist #-}
 
 toTableId :: Domain k v -> TableId
@@ -179,7 +180,7 @@ doBegin m = do
       rollback
     Nothing -> return ()
   resetTemp
-  doPersist $ \p -> P.beginTx p m
+  doPersist $! \p -> P.beginTx p m
   mode .= Just m
   case m of
     Transactional -> Just <$> use txId
@@ -190,17 +191,17 @@ doCommit :: MVState p [TxLog Value]
 doCommit = use mode >>= \mm -> case mm of
     Nothing -> rollback >> throwDbError "doCommit: Not in transaction"
     Just m -> do
-      txrs <- M.toList <$> use txRecord
+      txrs <- M.toList <$!> use txRecord
       if (m == Transactional) then do
         -- grab current txid and increment in state
         tid' <- state (fromIntegral . _txId &&& over txId succ)
         -- write txlog
-        forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
+        forM_ txrs $! \(t,es) -> doPersist $! \p -> writeValue p t Write tid' es
         -- commit
-        doPersist P.commitTx
-        resetTemp
+        void $! doPersist P.commitTx
+        void $! resetTemp
       else rollback
-      return (concatMap snd txrs)
+      return $! concatMap snd txrs
 {-# INLINE doCommit #-}
 
 
@@ -250,54 +251,54 @@ resetTemp = txRecord .= M.empty >> mode .= Nothing
 {-# INLINE resetTemp #-}
 
 writeSys :: (AsString k,PactDbValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
-writeSys s wt tbl k v = runMVState s $ do
+writeSys !s !wt !tbl !k !v = runMVState s $ do
   debug "writeSys" (tbl,asString k)
-  doPersist $ \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) v
+  doPersist $! \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) v
   record (TxTable tbl) k v
 
 {-# INLINE writeSys #-}
 
 writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> ObjectMap PactValue -> IO ()
-writeUser s wt tn rk row = runMVState s $ do
-  let ut = userDataTable tn
-      tt = userTxRecord tn
-      rk' = DataKey (asString rk)
-  olds <- readUserTable' tn rk
+writeUser !s !wt !tn !rk !row = runMVState s $! do
+  let !ut = userDataTable tn
+      !tt = userTxRecord tn
+      !rk' = DataKey (asString rk)
+  !olds <- readUserTable' tn rk
   let ins = do
         debug "writeUser: insert" (tn,rk)
-        doPersist $ \p -> writeValue p ut Insert rk' row
+        doPersist $! \p -> writeValue p ut Insert rk' row
         finish row
       upd oldrow = do
-        let row' = ObjectMap (M.union (_objectMap row) (_objectMap oldrow))
-        doPersist $ \p -> writeValue p ut Update rk' row'
+        let !row' = ObjectMap (M.union (_objectMap row) (_objectMap oldrow))
+        doPersist $! \p -> writeValue p ut Update rk' row'
         finish row'
       finish row' = record tt rk row'
   case (olds,wt) of
-    (Nothing,Insert) -> ins
+    (Nothing,Insert) -> void $! ins
     (Just _,Insert) -> throwDbError $ "Insert: row found for key " <> pretty rk
-    (Nothing,Write) -> ins
-    (Just old,Write) -> upd old
-    (Just old,Update) -> upd old
+    (Nothing,Write) -> void $! ins
+    (Just !old,Write) -> void $! upd old
+    (Just !old,Update) -> void $! upd old
     (Nothing,Update) -> throwDbError $ "Update: no row found for key " <> pretty rk
-{-# INLINE writeUser #-}
+{-# INLINABLE writeUser #-}
 
 record :: (AsString k, PactDbValue v) => TxTable -> k -> v -> MVState p ()
-record tt k v = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
+record !tt !k !v = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
 {-# INLINE record #-}
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO ModuleName
-getUserTableInfo' e tn = runMVState e $ do
-  r <- doPersist $ \p -> readValue p (DataTable userTableInfo) (DataKey $ asString tn)
+getUserTableInfo' !e !tn = runMVState e $ do
+  r <- doPersist $! \p -> readValue p (DataTable userTableInfo) (DataKey $ asString tn)
   case r of
-    (Just (UserTableInfo mn)) -> return mn
-    Nothing -> throwDbError $ "getUserTableInfo: no such table: " <> pretty tn
+    (Just (UserTableInfo !mn)) -> return mn
+    Nothing -> throwDbError $! "getUserTableInfo: no such table: " <> pretty tn
 {-# INLINE getUserTableInfo' #-}
 
 
 createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> IO ()
-createUserTable' s tn mn = runMVState s $ do
+createUserTable' !s !tn !mn = runMVState s $ do
   let uti = UserTableInfo mn
-  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (DataKey $ asString tn) uti
+  doPersist $! \p -> writeValue p (DataTable userTableInfo) Insert (DataKey $ asString tn) uti
   record (TxTable userTableInfo) tn uti
   createTable' (userTable tn)
 
