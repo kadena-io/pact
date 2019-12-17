@@ -206,28 +206,28 @@ read' !g0 !i as@(table@TTable {}:TLitString key:rest) = do
 read' _ i as = argsError i as
 
 gasPostRead :: Readable r => FunApp -> Gas -> r -> Eval e Gas
-gasPostRead i g0 row = (g0 +) <$> computeGas (Right i) (GPostRead $ readable row)
+gasPostRead i g0 row = (g0 +) <$!> computeGas (Right i) (GPostRead $ readable row)
 
 gasPostRead' :: Readable r => FunApp -> Gas -> r -> Eval e a -> Eval e (Gas,a)
-gasPostRead' i g0 row action = gasPostRead i g0 row >>= \g -> (g,) <$> action
+gasPostRead' i g0 row action = gasPostRead i g0 row >>= \g -> (g,) <$!> action
 
 -- | TODO improve post-streaming
 gasPostReads :: Readable r => FunApp -> Gas -> ([r] -> a) -> Eval e [r] -> Eval e (Gas,a)
 gasPostReads i g0 postProcess action = do
-  rs <- action
-  (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
+  !rs <- action
+  (,postProcess rs) <$!> foldM (gasPostRead i) g0 rs
 
 columnsToObject :: Type (Term Name) -> ObjectMap PactValue -> Term Name
-columnsToObject ty m = TObject (Object (fmap fromPactValue m) ty def def) def
+columnsToObject !ty !m = TObject (Object (fmap fromPactValue m) ty def def) def
 
 columnsToObject' :: Type (Term Name) -> [(Info,FieldKey)] ->
                     ObjectMap PactValue -> Eval m (Term Name)
-columnsToObject' ty cols (ObjectMap m) = do
-  ps <- forM cols $ \(ci,col) ->
+columnsToObject' !ty !cols (ObjectMap !m) = do
+  ps <- forM cols $! \(ci,col) ->
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
                   Just v -> return (col, fromPactValue v)
-  return $ TObject (Object (ObjectMap (M.fromList ps)) ty def def) def
+  return $! TObject (Object (ObjectMap (M.fromList ps)) ty def def) def
 
 
 
