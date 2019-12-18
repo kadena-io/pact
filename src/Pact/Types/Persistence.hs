@@ -215,13 +215,13 @@ type Method e a = MVar e -> IO a
 -- | Fun-record type for Pact back-ends.
 data PactDb e = PactDb {
     -- | Read a domain value at key, throwing an exception if not found.
-    _readRow :: forall k v . (IsString k,FromJSON v) =>
+    _readRow :: forall k v . (IsString k,FromJSON v, Show v) =>
                 Domain k v -> k -> Method e (Maybe v)
     -- | Write a domain value at key. WriteType argument governs key behavior.
   , _writeRow :: forall k v . (AsString k,ToJSON v) =>
                  WriteType -> Domain k v -> k -> v -> Method e ()
     -- | Retrieve all keys for a domain.
-  , _keys :: forall k v . (IsString k,AsString k) => Domain k v -> Method e [k]
+  , _keys :: forall k v . (IsString k,AsString k, Show k) => Domain k v -> Method e [k]
     -- | Retrieve all transaction ids greater than supplied txid for table.
   , _txids ::  TableName -> TxId -> Method e [TxId]
     -- | Create a user table.
@@ -242,6 +242,6 @@ data PactDb e = PactDb {
     -- Releases TxId for re-use.
   , _rollbackTx :: Method e ()
     -- | Get transaction log for table. TxLogs are expected to be user-visible format.
-  , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
+  , _getTxLog :: forall k v . (IsString k,FromJSON v, Show v) =>
                  Domain k v -> TxId -> Method e [TxLog v]
 }
