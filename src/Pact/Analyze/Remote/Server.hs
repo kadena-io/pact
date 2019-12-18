@@ -71,7 +71,7 @@ initializeRepl = do
       -- Stub out all keyset accesses to return a dummy value. We don't care
       -- about real keys because we're not going to be doing any concrete
       -- execution.
-      _readRow' :: forall k v. (IsString k, A.FromJSON v)
+      _readRow' :: forall k v. (IsString k, A.FromJSON v, Show v)
                 => Domain k v
                 -> k
                 -> Method LibState (Maybe v)
