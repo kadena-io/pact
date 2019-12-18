@@ -252,7 +252,7 @@ method i f = do
 --
 
 -- | Invoke '_readRow'
-readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v)
+readRow :: (IsString k,FromJSON v, Show v) => Info -> Domain k v -> k -> Eval e (Maybe v)
 readRow !i !d !k = method i $ \db -> _readRow db d k
 
 -- | Invoke '_writeRow'
@@ -260,7 +260,7 @@ writeRow :: (AsString k,ToJSON v) => Info -> WriteType -> Domain k v -> k -> v -
 writeRow !i !w !d !k !v = method i $ \db -> _writeRow db w d k v
 
 -- | Invoke '_keys'
-keys :: (AsString k,IsString k) => Info -> Domain k v -> Eval e [k]
+keys :: (AsString k,IsString k, Show k) => Info -> Domain k v -> Eval e [k]
 keys !i !t = method i $ \db -> _keys db t
 
 -- | Invoke '_txids'
@@ -288,7 +288,7 @@ rollbackTx :: Info -> Eval e ()
 rollbackTx i = method i $ \db -> _rollbackTx db
 
 -- | Invoke _getTxLog
-getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog v]
+getTxLog :: (IsString k,FromJSON v, Show v) => Info -> Domain k v -> TxId -> Eval e [TxLog v]
 getTxLog i d t = method i $ \db -> _getTxLog db d t
 
 
@@ -358,7 +358,7 @@ disallowed opName _ = throwM $ PactError EvalError def def $ "Illegal database a
 
 -- | Construct a delegate pure eval environment.
 mkPureEnv :: (EvalEnv e -> f) -> Purity ->
-             (forall k v . (IsString k,FromJSON v) =>
+             (forall k v . (IsString k,FromJSON v, Show v) =>
               Domain k v -> k -> Method f (Maybe v)) ->
              EvalEnv e -> Eval e (EvalEnv f)
 mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
@@ -393,7 +393,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
 
 mkSysOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysOnly e))
 mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
-  let read' :: forall e'. MVar (EnvSysOnly e') -> IO (Maybe v)
+  let read' :: MVar (EnvSysOnly e') -> IO (Maybe v)
       read' e = withMVar e $ \(EnvSysOnly EvalEnv {..}) ->
                   _readRow _eePactDb dom key _eePactDbVar
   in case dom of
@@ -406,4 +406,6 @@ mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
 
 mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
 mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->
-  withMVar e $ \(EnvReadOnly EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+  let read' :: (IsString k, FromJSON v, Show v) => Domain k v -> k -> MVar (EnvReadOnly e) -> IO (Maybe v)
+      read' d' k' e' = withMVar e' $ \(EnvReadOnly EvalEnv {..}) -> _readRow _eePactDb d' k' _eePactDbVar
+  in read' d k e
