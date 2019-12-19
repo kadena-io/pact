@@ -560,10 +560,15 @@ solveConstraint ifn info refName (Ref t) evalMap = do
         pretty actual <> ", expected " <> pretty expected
     termEq1 :: Eq1 f => f (Term Ref) -> f (Term Ref) -> Bool
     termEq1 = liftEq termEq
-    -- | For DefcapMeta, we just want the mgr fun names to match
+    -- | For DefcapMeta, we only enforce if iface specifies user mgd fun, in which case
+    -- we just want the mgr fun names to match
     defMetaEq :: DefMeta (Term Ref) -> DefMeta (Term Ref) -> Bool
-    defMetaEq a b = getDefName a == getDefName b
-    getDefName (DMDefcap (DefcapMeta (TVar (Ref (TDef Def {..} _)) _) an)) = Just (_dDefName,an)
+    defMetaEq (DMDefcap (DefcapManaged ifaceDM)) (DMDefcap (DefcapManaged implDM)) = case (ifaceDM,implDM) of
+      -- interface auto or unspecified: OK
+      (Nothing,_) -> True
+      -- interface explicit: match name+arg
+      (Just a,Just b) -> getDefName a == getDefName b
+    getDefName (an,TVar (Ref (TDef Def {..} _)) _) = Just (_dDefName,an)
     getDefName _ = Nothing
 
 

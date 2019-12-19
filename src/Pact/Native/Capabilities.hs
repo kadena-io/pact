@@ -16,7 +16,6 @@
 module Pact.Native.Capabilities
   ( capDefs
   , evalCap
-  , getMgrFun
   ) where
 
 import Control.Lens
@@ -131,19 +130,6 @@ evalCap i scope inModule a@App{..} = do
         g <- computeUserAppGas d _appInfo
         void $ evalUserAppBody d prep _appInfo g reduceBody
 
-getMgrFun :: Def Ref -> Eval e (Maybe (Def Ref))
-getMgrFun capDef = case _dDefMeta capDef of
-  Nothing -> return Nothing
-  Just (DMDefcap (DefcapMeta t _)) -> case t of
-    (TVar (Ref (TDef d _)) i) -> do
-      unless (_dDefType d == Defun) $
-        evalError i $ "Manager function must be defun"
-      return $ Just d
-    _ -> evalError' t $ "@managed must refer to a def of type " <> pretty mgrFunTy
-  where
-    ctype = tTyObject (mkSchemaVar "c-type")
-    mgrFunTy :: FunType (Term Name)
-    mgrFunTy = funType' ctype [("installed", ctype),("requested", ctype)]
 
 -- | Continuation to tie the knot with Pact.Eval (ie, 'apply') and also because the capDef is
 -- more accessible here.

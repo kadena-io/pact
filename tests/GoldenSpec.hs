@@ -19,14 +19,19 @@ import Test.Hspec.Golden
 
 import Pact.Repl
 import Pact.Repl.Types
+import Pact.Types.Names
 import Pact.Types.Persistence
 
 spec :: Spec
-spec = describe "goldenAccounts" $ goldenAccounts
+spec = do
+  describe "goldenAccounts" $
+    goldenModule "accounts-module" "golden/golden.accounts.repl" "accounts"
+  describe "goldenAutoCap" $
+    goldenModule "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod"
 
-goldenAccounts :: Spec
-goldenAccounts = after_ (cleanupActual tn) $ do
-
+goldenModule
+  :: String -> FilePath -> ModuleName -> Spec
+goldenModule tn fp mn = after_ (cleanupActual tn) $ do
   (r,s) <- runIO $ execScript' Quiet fp
   it ("loads " ++ fp) $ r `shouldSatisfy` isRight
   mr <- runIO $ replLookupModule s mn
@@ -36,10 +41,6 @@ goldenAccounts = after_ (cleanupActual tn) $ do
       Left e -> it "failed to convert to PersistDirect" $ expectationFailure (show e)
       Right m' -> do
         it "matches golden" $ golden tn m'
-  where
-    fp = "golden/golden.accounts.repl"
-    mn = "accounts"
-    tn = "accounts-module"
 
 
 cleanupActual :: String -> IO ()

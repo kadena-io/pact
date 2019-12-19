@@ -1702,8 +1702,8 @@ importing module code, or implementing modules:
    ;; or
    (use my-namespace.my-module)
 
-Code may be appended to the namespace by simply entering the re-entering
-the namespace and declaring new code definitions. All definitions *must*
+Code may be appended to the namespace by simply re-entering the
+namespace and declaring new code definitions. All definitions *must*
 occur within a namespace, as the global namespace (the empty namespace)
 is reserved for Kadena code.
 
@@ -2023,6 +2023,23 @@ This allows third-party code to directly enact payments. Managed
 capabilities are an important feature to allow smart contracts to
 directly call some other trusted code in a tightly-constrained context.
 
+Automatic “one-shot” capability management
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A managed capability that does not specify a manager function is
+“auto-managed”, meaning that after install, the capability can be
+granted exactly once for the given parameters. Further attempts will
+fail after the initial grant goes out of scope.
+
+In the following example, the capability will have “one-shot” automatic
+management:
+
+::
+
+   (defcap VOTE (member:string)
+     @managed
+     (validate-member member))
+
 Guards vs Capabilities
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2113,8 +2130,8 @@ way.
 Testing scoping signatures with capabilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Scoped signatures can be testsed using the new ``env-sigs`` REPL
-function as follows:
+Scoped signatures can be tested using the new ``env-sigs`` REPL function
+as follows:
 
 .. code:: lisp
 

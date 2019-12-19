@@ -1553,6 +1553,7 @@ If the capability _manager function_ doesn't grant the request, the untrusted co
 The common usage of this is to grant a payment to third-party code, such that the third-party code
 can directly transfer on behalf of the user some amount of coin, but only up to the indicated amount.
 
+
 #### The TRANSFER managed capability
 
 ```
@@ -1572,6 +1573,20 @@ Once the amount is exceeded, the capability can no longer be brought into scope.
 
 This allows third-party code to directly enact payments. Managed capabilities are an important feature to allow
 smart contracts to directly call some other trusted code in a tightly-constrained context.
+
+
+#### Automatic "one-shot" capability management
+A managed capability that does not specify a manager function is "auto-managed", meaning that
+after install, the capability can be granted exactly once for the given parameters. Further attempts
+will fail after the initial grant goes out of scope.
+
+In the following example, the capability will have "one-shot" automatic management:
+
+```
+(defcap VOTE (member:string)
+  @managed
+  (validate-member member))
+```
 
 
 ### Guards vs Capabilities
@@ -1644,7 +1659,7 @@ appropriate way.
 
 ### Testing scoping signatures with capabilities
 
-Scoped signatures can be testsed using the
+Scoped signatures can be tested using the
 new `env-sigs` REPL function as follows:
 
 ```lisp
