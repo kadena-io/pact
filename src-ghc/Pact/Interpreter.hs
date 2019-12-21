@@ -129,7 +129,7 @@ data EvalResult = EvalResult
 -- | Execute pact statements.
 evalExec :: Interpreter e -> EvalEnv e -> ParsedCode -> IO EvalResult
 evalExec !runner !evalEnv !ParsedCode{..} = do
-  terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
+  terms <- throwEither $! compileExps (mkTextInfo _pcCode) _pcExps
   interpret runner evalEnv (Right terms)
 {-# INLINABLE evalExec #-}
 
@@ -212,9 +212,9 @@ initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 
 interpret :: Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
-interpret runner evalEnv terms = do
-  ((!rs,!logs,!txid),state) <-
-    runEval def evalEnv $ evalTerms runner terms
+interpret !runner !evalEnv !terms = do
+  ((!rs,!logs,!txid), !state) <-
+    runEval def evalEnv $! evalTerms runner terms
   let !gas = _evalGas state
       !pactExec = _evalPactExec state
       !modules = _rsLoadedModules $ _evalRefs state
@@ -222,16 +222,16 @@ interpret runner evalEnv terms = do
   return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
-evalTerms interp input = withRollback (start (interpreter interp runInput) >>= end)
+evalTerms !interp !input = withRollback $! start (interpreter interp runInput) >>= end
 
   where
 
-    withRollback act = handle (\(e :: SomeException) -> safeRollback >> throwM e) act
+    withRollback !act = handle (\(e :: SomeException) -> safeRollback >> throwM e) act
 
     safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
 
-    start act = do
+    start !act = do
       !txid <- evalBeginTx def
       (,txid) <$!> act
 
@@ -240,6 +240,6 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
       return $! (rs,logs,txid)
 
     runInput = case input of
-      Right ts -> mapM eval ts
-      Left pe -> (:[]) <$!> resumePact def pe
+      Right !ts -> mapM eval ts
+      Left !pe -> (:[]) <$!> resumePact def pe
 {-# INLINABLE evalTerms #-}

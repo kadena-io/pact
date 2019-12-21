@@ -213,7 +213,7 @@ newtype Eval e a =
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.
 runEval :: EvalState -> EvalEnv e -> Eval e a -> IO (a,EvalState)
-runEval s env act = runStateT (runReaderT (unEval act) env) s
+runEval !s !env !act = runStateT (runReaderT (unEval act) env) s
 {-# INLINE runEval #-}
 
 -- | "Dev" runEval' is the old version that always returns the state
@@ -221,7 +221,7 @@ runEval s env act = runStateT (runReaderT (unEval act) env) s
 runEval' :: EvalState -> EvalEnv e -> Eval e a ->
            IO (Either PactError a,EvalState)
 runEval' s env act =
-  runStateT (catchesPactError $ runReaderT (unEval act) env) s
+  runStateT (catchesPactError $! runReaderT (unEval act) env) s
 
 catchesPactError :: (MonadCatch m) => m a -> m (Either PactError a)
 catchesPactError action =
@@ -273,19 +273,19 @@ createUserTable !i !t !m = method i $ \db -> _createUserTable db t m
 
 -- | Invoke _getUserTableInfo
 getUserTableInfo :: Info -> TableName -> Eval e ModuleName
-getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
+getUserTableInfo !i !t = method i $! \db -> _getUserTableInfo db t
 
 -- | Invoke _beginTx
 beginTx :: Info -> ExecutionMode -> Eval e (Maybe TxId)
-beginTx i t = method i $ \db -> _beginTx db t
+beginTx !i !t = method i $! \db -> _beginTx db t
 
 -- | Invoke _commitTx
 commitTx :: Info -> Eval e [TxLog Value]
-commitTx i = method i $ \db -> _commitTx db
+commitTx !i = method i $! \db -> _commitTx db
 
 -- | Invoke _rollbackTx
 rollbackTx :: Info -> Eval e ()
-rollbackTx i = method i $ \db -> _rollbackTx db
+rollbackTx !i = method i $! \db -> _rollbackTx db
 
 -- | Invoke _getTxLog
 getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog v]

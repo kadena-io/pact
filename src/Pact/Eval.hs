@@ -74,7 +74,7 @@ import Pact.Types.Runtime
 
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
-evalBeginTx i = view eeMode >>= beginTx i
+evalBeginTx !i = view eeMode >>= beginTx i
 {-# INLINE evalBeginTx #-}
 
 evalRollbackTx :: Info -> Eval e ()
