@@ -8,37 +8,40 @@ module GoldenSpec
 
   where
 
-import Control.Lens
 import Control.Exception
+import Control.Lens
 import Data.Aeson
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Either
+import Data.Text (Text)
 import System.Directory
 
 import Test.Hspec
 import Test.Hspec.Golden
 
 
+import Pact.Gas
+import Pact.Interpreter
+import Pact.Parse
 import Pact.Repl
 import Pact.Repl.Types
+import Pact.Server.PactService
+import Pact.Types.Command
+import Pact.Types.Logger
 import Pact.Types.Names
 import Pact.Types.Persistence
-import Pact.Parse
-import Pact.Interpreter
-import Pact.Types.Runtime
-import Pact.Types.Command
 import Pact.Types.RPC
-import Pact.Types.Logger
-import Pact.Gas
+import Pact.Types.Runtime
 import Pact.Types.SPV
-import Pact.Server.PactService
 
 spec :: Spec
 spec = do
   describe "goldenAccounts" $
     goldenModule "accounts-module" "golden/golden.accounts.repl" "accounts"
-    [("successCR",acctsSuccessCR)]
+    [("successCR",acctsSuccessCR)
+    ,("failureCR",acctsFailureCR)
+    ]
   describe "goldenAutoCap" $
     goldenModule "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
 
@@ -61,15 +64,32 @@ subTestName :: String -> String -> String
 subTestName tn n = tn ++ "-" ++ n
 
 acctsSuccessCR :: String -> ReplState -> Spec
-acctsSuccessCR tn s = do
+acctsSuccessCR tn s = doCRTest tn s "1"
+
+acctsFailureCR :: String -> ReplState -> Spec
+acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
+
+doCRTest :: String -> ReplState -> Text -> Spec
+doCRTest tn s code = do
   let dbEnv = PactDbEnv (view (rEnv . eePactDb) s) (view (rEnv . eePactDbVar) s)
       cmd = Command payload [] initialHash
       payload = Payload exec "" pubMeta [] Nothing
       pubMeta = def
-      parsedCode = either error id $ parsePact "1"
+      parsedCode = either error id $ parsePact code
       exec = Exec $ ExecMsg parsedCode Null
-  r <- runIO $ applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 "" noSPVSupport Local cmd (ProcSucc cmd)
-  it "matches golden" $ golden tn r
+  r <- runIO $ applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 ""
+       noSPVSupport Local cmd (ProcSucc cmd)
+  -- due to weird StackTrace encoding, we are only interested in ToJSON, so we'll
+  -- golden on the encoded LBS only
+  let encoded = encode r
+  it "matches golden encoded" $ Golden
+    { output = encoded
+    , encodePretty = show
+    , writeToFile = BL.writeFile
+    , readFromFile = BL.readFile
+    , testName = tn
+    , directory = "golden"
+    }
 
 
 cleanupActual :: String -> [String] -> IO ()
@@ -79,7 +99,6 @@ cleanupActual testname subs = do
   where
     go tn = catch (removeFile $ "golden/" ++ tn ++ "/actual")
             (\(_ :: SomeException) -> return ())
-
 
 golden :: (Show a,FromJSON a,ToJSON a) => String -> a -> Golden a
 golden name obj = Golden
