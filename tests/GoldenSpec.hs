@@ -79,17 +79,27 @@ doCRTest tn s code = do
       exec = Exec $ ExecMsg parsedCode Null
   r <- runIO $ applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 ""
        noSPVSupport Local cmd (ProcSucc cmd)
-  -- due to weird StackTrace encoding, we are only interested in ToJSON, so we'll
-  -- golden on the encoded LBS only
-  let encoded = encode r
+  -- StackFrame and Info have pathological instances which impacts failure JSON
+  -- out of CommandResult. Therefore this golden does not ensure equality of
+  -- de-serialized CRs, but instead that
+  -- a) ToJSON instances are backward-compat
+  -- b) "Output roundtrip": A de-serialized CR will result in the same ToJSON output.
+  -- NOTE: an implication of "output roundtrip" is, on a golden failure, expected
+  -- and actual are reversed, as the golden is read with 'readFromFile' which roundtrips.
   it "matches golden encoded" $ Golden
-    { output = encoded
+    { output = encode r
     , encodePretty = show
     , writeToFile = BL.writeFile
-    , readFromFile = BL.readFile
+    , readFromFile = readOutputRountrip
     , testName = tn
     , directory = "golden"
     }
+  where
+    -- hacks 'readFromFile' to run the golden value through the roundtrip.
+    readOutputRountrip = fmap (tryEncode . eitherDecode) . BL.readFile
+    tryEncode :: Either String (CommandResult Hash) -> BL.ByteString
+    tryEncode (Left e) = error e
+    tryEncode (Right cr) = encode cr
 
 
 cleanupActual :: String -> [String] -> IO ()

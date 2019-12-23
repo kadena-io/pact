@@ -21,10 +21,12 @@ module Pact.Types.Info
    mkInfo,
    renderInfo,
    renderParsed,
+   parseRenderedInfo,
    HasInfo(..)
    ) where
 
 
+import Control.Monad
 import Text.Trifecta.Delta
 import Data.List
 import Prelude
@@ -32,7 +34,8 @@ import Data.Text (Text,unpack)
 import Data.Text.Encoding
 import qualified Data.Text as T
 import Data.Aeson
-import Data.Aeson.Types
+import Data.Aeson.Types as A
+import Data.Attoparsec.Text as AP
 import Data.String
 import Data.Default
 import GHC.Generics (Generic)
@@ -112,6 +115,28 @@ renderParsed (Parsed d _) = case d of
   (Columns c _) -> "<interactive>:0:" ++ show c
   (Tab _ c _ ) -> "<interactive>:0:" ++ show c
 
+-- | Lame parsing of 'renderInfo' parsing for UX only.
+parseRenderedInfo :: AP.Parser Info
+parseRenderedInfo = peekChar >>= \c -> case c of
+  Nothing -> return (Info Nothing)
+  Just _ -> do
+    fOrI <- takeTill isColon
+    colon'
+    ln <- round <$> scientific
+    colon'
+    cn <- round <$> scientific
+    let delt = case fOrI of
+          "<interactive>"
+            | ln == 0 -> Columns cn 0
+            | otherwise -> Lines (pred ln) cn 0 0
+          f -> Directed (encodeUtf8 f) (pred ln) cn 0 0
+    return (Info (Just ("",(Parsed delt 0))))
+  where
+    colon' = void $ char ':'
+    isColon = (== ':')
+
+_parseInfo :: Text -> Either String Info
+_parseInfo = AP.parseOnly parseRenderedInfo
 
 class HasInfo a where
   getInfo :: a -> Info
@@ -142,6 +167,6 @@ instance FromJSON Info where
         4 -> Tab <$> col 1 <*> col 2 <*> col 3
         3 -> Columns <$> col 1 <*> col 2
         _ -> fail "Delta: invalid JSON"
-        where col :: FromJSON v => Int -> Parser v
+        where col :: FromJSON v => Int -> A.Parser v
               col i = parseJSON (d V.! i)
               parsed p = Parsed <$> p <*> col 0
