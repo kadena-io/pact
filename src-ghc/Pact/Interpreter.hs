@@ -49,6 +49,7 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
+import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import System.Directory
 
@@ -123,6 +124,8 @@ data EvalResult = EvalResult
     -- ^ Modules loaded, with flag indicating "newly loaded"
   , _erTxId :: !(Maybe TxId)
     -- ^ Transaction id, if executed transactionally
+  , _erLogGas :: Maybe [(Text, Gas)]
+    -- ^ Details on each gas consumed/charged
   } deriving (Eq,Show)
 
 -- | Execute pact statements.
@@ -213,10 +216,11 @@ interpret runner evalEnv terms = do
   ((rs,logs,txid),state) <-
     runEval def evalEnv $ evalTerms runner terms
   let gas = _evalGas state
+      gasLogs = _evalLogGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
-  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid
+  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid gasLogs
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
 evalTerms interp input = withRollback (start (interpreter interp runInput) >>= end)

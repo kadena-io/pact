@@ -196,7 +196,7 @@ data EvalState = EvalState {
     , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
-      -- | Gas logging
+      -- | Tracks gas logs if enabled (i.e. Just)
     , _evalLogGas :: Maybe [(Text,Gas)]
     } deriving (Show, Generic)
 makeLenses ''EvalState
