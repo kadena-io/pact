@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DerivingStrategies #-}
 -- |
 -- Module      :  Pact.Types.ChainId
 -- Copyright   :  (C) 2019 Stuart Popejoy, Emily Pillmore
@@ -26,10 +26,12 @@ import GHC.Generics
 import Control.DeepSeq
 import Control.Lens
 
-import Data.Aeson (ToJSON, FromJSON)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Data.Text
+
+import Servant.API (ToHttpApiData(..))
 
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
@@ -47,6 +49,9 @@ newtype ChainId = ChainId { _chainId :: Text }
     )
 
 instance Wrapped ChainId
+
+instance ToHttpApiData ChainId where
+  toUrlPiece = _chainId
 
 -- | Lens into the text value of a 'ChainId'
 --
