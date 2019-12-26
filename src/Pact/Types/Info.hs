@@ -127,7 +127,9 @@ parseRenderedInfo = peekChar >>= \c -> case c of
     cn <- round <$> scientific
     let delt = case fOrI of
           "<interactive>"
+            -- heuristic: ln == 0 means Columns ...
             | ln == 0 -> Columns cn 0
+            -- otherwise Lines, which reverses the 'succ' above
             | otherwise -> Lines (pred ln) cn 0 0
           f -> Directed (encodeUtf8 f) (pred ln) cn 0 0
     return (Info (Just ("",(Parsed delt 0))))

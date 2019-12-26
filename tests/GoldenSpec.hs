@@ -90,13 +90,13 @@ doCRTest tn s code = do
     { output = encode r
     , encodePretty = show
     , writeToFile = BL.writeFile
-    , readFromFile = readOutputRountrip
+    , readFromFile = readOutputRoundtrip
     , testName = tn
     , directory = "golden"
     }
   where
     -- hacks 'readFromFile' to run the golden value through the roundtrip.
-    readOutputRountrip = fmap (tryEncode . eitherDecode) . BL.readFile
+    readOutputRoundtrip = fmap (tryEncode . eitherDecode) . BL.readFile
     tryEncode :: Either String (CommandResult Hash) -> BL.ByteString
     tryEncode (Left e) = error e
     tryEncode (Right cr) = encode cr
