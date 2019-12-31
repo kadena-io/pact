@@ -63,6 +63,7 @@ data Option =
   | OServer { _oConfigYaml :: FilePath }
   | OSignReq { _oReqYaml :: FilePath }
   | OAddSigsReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
+  | OSignCmd { _oSignCmd :: FilePath, _oSignKeyFile :: FilePath }
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
@@ -101,6 +102,12 @@ replOpts =
     (OSignReq <$> O.strOption (O.short 'w' <> O.long "sign" <> O.metavar "REQ_YAML" <>
                              O.help "Sign hash")
     ) <|>
+    (OSignCmd
+     <$> O.strOption (O.long "signcmd" <> O.metavar "CMD_YAML" <>
+                      O.help "Add signatures to a command")
+     <*> O.argument O.str
+        (O.metavar "KEY_FILE" <> O.help "File path to a public/private key pair")
+    ) <|>
     pure ORepl -- would be nice to bail on unrecognized args here
   where
     localFlag = O.flag False True (O.short 'l' <> O.long "local" <> O.help "Format for /local endpoint")
@@ -135,6 +142,7 @@ main = do
     OApiReq cf l y -> apiReq' cf l y
     OSignReq y -> signReq y
     OAddSigsReq y l -> addSigsReq y l
+    OSignCmd cf kf -> signCmdFile cf kf
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS

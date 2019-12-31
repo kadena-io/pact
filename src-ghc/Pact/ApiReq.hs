@@ -28,12 +28,19 @@ module Pact.ApiReq
     ,mkKeyPairs
     ,SignReq(..),signReq
     ,AddSigsReq(..),addSigsReq
+    ,signCmd
+    ,signCmdFile
+    ,normalizeSigs
+    ,validateNonemptySigs
     ) where
 
 import Control.Applicative
+import Control.Error
+import Control.Lens hiding ((.=))
 import Control.Monad.Catch
 import Control.Monad.State.Strict
 import Data.Aeson
+import Data.Aeson.Lens
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
@@ -44,12 +51,15 @@ import Data.Maybe
 import Data.Text (Text, pack)
 import Data.Text.Encoding
 import Data.Thyme.Clock
+import qualified Data.Vector as V
+import qualified Data.Vector.Mutable as MV
 import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude
 import System.Directory
 import System.FilePath
 
+import Pact.Parse
 import Pact.Types.API
 import Pact.Types.Capability
 import Pact.Types.Command
@@ -190,6 +200,88 @@ signReq fp = do
   kps <- mkKeyPairs _srKeyPairs
   sigs <- mapM (signHash (fromUntypedHash _srHash)) (map fst kps)
   BS.putStrLn $ Y.encode sigs
+
+signCmdFile :: FilePath -> FilePath -> IO ()
+signCmdFile cmdFile keyFile = do
+  c :: Command Text <- decodeYaml cmdFile
+  v :: Value <- decodeYaml keyFile
+
+  let ekp = do
+        -- These keys are from genKeys in Main.hs. Might want to convert to a
+        -- dedicated data type at some point.
+        pub <- parseB16TextOnly =<< (note "Error parsing public key" $ v ^? key "public" . _String)
+        sec <- parseB16TextOnly =<< (note "Error parsing secret key" $ v ^? key "secret" . _String)
+
+        payload <- traverse parsePact =<< (eitherDecodeStrict' $ encodeUtf8 $ _cmdPayload c)
+        kp <- importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS sec)
+        return (kp, payload :: Payload Value ParsedCode)
+  case ekp of
+    Left e -> dieAR $ "Could not parse key file: " <> e
+    Right (kp, payload) -> do
+      c2 <- signCmd kp $ normalizeSigs $ Command payload (_cmdSigs c) (_cmdHash c)
+      BS.putStrLn $ Y.encode (c2 { _cmdPayload = _cmdPayload c })
+
+-- | Normalizes a 'Command'. This function is idempotent and the returned
+-- 'Command' will satisfy the following properties:
+--
+-- * The sigs array will be the same length as the signers array
+-- * All sigs in the input command that are valid for any of the signers will be present in the output command
+-- * All non-empty sigs will be valid signatures for the corresponding signers entry
+-- * All other elements of the sigs array will be empty strings
+-- * normalizeSigs c >>= validateNonemptySigs == True
+--
+-- TODO Write tests for these properties
+normalizeSigs :: Command (Payload Value ParsedCode) -> Command (Payload Value ParsedCode)
+normalizeSigs c@Command{..} = do
+  if numSigners == numSigs && validateNonemptySigs c
+    then c
+    else Command _cmdPayload (V.toList normalizedSigs) _cmdHash
+  where
+    signers = _pSigners _cmdPayload
+    numSigners = length signers
+    numSigs = length _cmdSigs
+    initialSigs = V.replicate numSigners (UserSig "")
+    normalizedSigs = V.modify (\v -> mapM_ (addSig v) _cmdSigs) initialSigs
+    addSig v s =
+      case findSigLocation _cmdHash signers s of
+        Nothing -> return ()
+        Just i -> MV.write v i s
+
+-- | Signs a 'Command' with the supplied key pair.
+signCmd :: SomeKeyPair -> Command (Payload v p) -> IO (Command (Payload v p))
+signCmd kp c = do
+  sig <- signHash (_cmdHash c) kp
+  let signers = _pSigners $ _cmdPayload c
+  let numSigners = length signers
+  let initialSigs =
+        if length (_cmdSigs c) == numSigners
+          then V.fromList $ _cmdSigs c
+          else V.replicate numSigners (UserSig "")
+      sigs = V.modify (addSigs (_cmdHash c) signers sig) initialSigs
+  return $ Command (_cmdPayload c) (V.toList sigs) (_cmdHash c)
+  where
+    addSigs h signers newSig sigs =
+      case findSigLocation h signers newSig of
+        Nothing -> return ()
+        Just i -> MV.write sigs i newSig
+
+-- | Returns Left if there was some kind of decoding error, otherwise returns
+-- Right Bool indicating whether the nonempty signatures in the command were
+-- valid.
+validateNonemptySigs :: Command (Payload Value ParsedCode) -> Bool
+validateNonemptySigs Command{..} =
+  all (\(sig, signer) -> emptySig sig || verifyUserSig _cmdHash sig signer) sigSignerPairs
+  where
+    sigSignerPairs = zip _cmdSigs $ _pSigners _cmdPayload
+    emptySig (UserSig s) = s == ""
+
+-- | Returns the index of a particular 'UserSig' in a list of signers or Nothing
+-- if the signature does not match any of the signers.
+findSigLocation :: PactHash -> [Signer] -> UserSig -> Maybe Int
+findSigLocation h signers sig = go 0 signers
+  where
+    go _ [] = Nothing
+    go i (s:ss) = if verifyUserSig h sig s then Just i else go (i+1) ss
 
 addSigsReq :: FilePath -> Bool -> IO ()
 addSigsReq fp local = do

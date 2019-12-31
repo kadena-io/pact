@@ -16,7 +16,7 @@ let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
       sha256 = "0zzchj9pc9y50acvj8zbm94bgbvbxzxz2b0xd2zbck90bribwm5b";
     };
 in {
-  pact = doCoverage (addBuildDepend super.pact pkgs.z3);
+  pact = addBuildDepend super.pact pkgs.z3;
 
   Glob = whenGhcjs dontCheck super.Glob;
 
