@@ -30,10 +30,13 @@ module Pact.Types.Command
   , mkCommand'
   , mkUnsignedCommand
   , signHash
+  , signCommand
+  , normalizeSigs
   , keyPairToSigner
   , keyPairsToSigners
   , verifyUserSig
   , verifyCommand
+  , validateNonemptySigs
   , SomeKeyPairCaps
 #else
   , PPKScheme(..)
@@ -62,6 +65,8 @@ import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
 import Data.Maybe  (fromMaybe)
+import qualified Data.Vector as V
+import qualified Data.Vector.Mutable as MV
 
 import GHC.Generics
 
@@ -176,6 +181,58 @@ mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
 signHash :: TypedHash h -> SomeKeyPair -> IO UserSig
 signHash hsh cred = UserSig . toB16Text <$> sign cred (toUntypedHash hsh)
 
+-- | Normalizes a 'Command'. This function is idempotent and the returned
+-- 'Command' will satisfy the following properties:
+--
+-- * The sigs array will be the same length as the signers array
+-- * All sigs in the input command that are valid for any of the signers will be present in the output command
+-- * All non-empty sigs will be valid signatures for the corresponding signers entry
+-- * All other elements of the sigs array will be empty strings
+-- * normalizeSigs c >>= validateNonemptySigs == True
+--
+-- TODO Write tests for these properties
+normalizeSigs :: Command (Payload Value ParsedCode) -> Command (Payload Value ParsedCode)
+normalizeSigs c@Command{..} = do
+  if numSigners == numSigs && validateNonemptySigs c
+    then c
+    else Command _cmdPayload (V.toList normalizedSigs) _cmdHash
+  where
+    signers = _pSigners _cmdPayload
+    numSigners = length signers
+    numSigs = length _cmdSigs
+    initialSigs = V.replicate numSigners (UserSig "")
+    normalizedSigs = V.modify (\v -> mapM_ (addSig v) _cmdSigs) initialSigs
+    addSig v s =
+      case findSigLocation _cmdHash signers s of
+        Nothing -> return ()
+        Just i -> MV.write v i s
+
+-- | Signs a 'Command' with the supplied key pair.
+signCommand :: SomeKeyPair -> Command (Payload v p) -> IO (Command (Payload v p))
+signCommand kp c = do
+  sig <- signHash (_cmdHash c) kp
+  let signers = _pSigners $ _cmdPayload c
+  let numSigners = length signers
+  let initialSigs =
+        if length (_cmdSigs c) == numSigners
+          then V.fromList $ _cmdSigs c
+          else V.replicate numSigners (UserSig "")
+      sigs = V.modify (addSigs (_cmdHash c) signers sig) initialSigs
+  return $ Command (_cmdPayload c) (V.toList sigs) (_cmdHash c)
+  where
+    addSigs h signers newSig sigs =
+      case findSigLocation h signers newSig of
+        Nothing -> return ()
+        Just i -> MV.write sigs i newSig
+
+-- | Returns the index of a particular 'UserSig' in a list of signers or Nothing
+-- if the signature does not match any of the signers.
+findSigLocation :: PactHash -> [Signer] -> UserSig -> Maybe Int
+findSigLocation h signers sig = go 0 signers
+  where
+    go _ [] = Nothing
+    go i (s:ss) = if verifyUserSig h sig s then Just i else go (i+1) ss
+
 -- VALIDATING TRANSACTIONS
 
 verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
@@ -196,6 +253,16 @@ verifyCommand orig@Command{..} =
 
     verifiedHash = verifyHash _cmdHash _cmdPayload
 {-# INLINE verifyCommand #-}
+
+-- | Returns Left if there was some kind of decoding error, otherwise returns
+-- Right Bool indicating whether the nonempty signatures in the command were
+-- valid.
+validateNonemptySigs :: Command (Payload Value ParsedCode) -> Bool
+validateNonemptySigs Command{..} =
+  all (\(sig, signer) -> emptySig sig || verifyUserSig _cmdHash sig signer) sigSignerPairs
+  where
+    sigSignerPairs = zip _cmdSigs $ _pSigners _cmdPayload
+    emptySig (UserSig s) = s == ""
 
 hasInvalidSigs :: PactHash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers
