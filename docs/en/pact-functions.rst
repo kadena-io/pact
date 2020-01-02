@@ -42,6 +42,30 @@ Index LIST at IDX, or get value with key IDX from OBJECT.
    pact> (at "bar" { "foo": 1, "bar": 2 })
    2
 
+base64-decode
+~~~~~~~~~~~~~
+
+*string* ``string`` *→* ``string``
+
+Decode STRING from unpadded base64
+
+.. code:: lisp
+
+   pact> (base64-decode "aGVsbG8gd29ybGQh")
+   "hello world!"
+
+base64-encode
+~~~~~~~~~~~~~
+
+*string* ``string`` *→* ``string``
+
+Encode STRING as unpadded base64
+
+.. code:: lisp
+
+   pact> (base64-encode "hello world!")
+   "aGVsbG8gd29ybGQh"
+
 bind
 ~~~~
 
@@ -122,7 +146,8 @@ Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry.
 define-namespace
 ~~~~~~~~~~~~~~~~
 
-*namespace* ``string`` *guard* ``guard`` *→* ``string``
+*namespace* ``string`` *user-guard* ``guard`` *admin-guard* ``guard``
+*→* ``string``
 
 Create a namespace called NAMESPACE where ownership and use of the
 namespace is controlled by GUARD. If NAMESPACE is already defined, then
@@ -131,7 +156,7 @@ will be rotated in its place.
 
 .. code:: lisp
 
-   (define-namespace 'my-namespace (read-keyset 'my-keyset))
+   (define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))
 
 Top level only: this function will fail if used in module code.
 
@@ -412,7 +437,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.3.0"
+   "3.3.1"
 
 Top level only: this function will fail if used in module code.
 
@@ -1617,7 +1642,7 @@ install-capability
 
 *capability* ``-> bool`` *→* ``string``
 
-Specifies, and validates install of, a *managed* CAPABILITY, defined in
+Specifies, and provisions install of, a *managed* CAPABILITY, defined in
 a ‘defcap’ in which a ‘@managed’ tag designates a single parameter to be
 managed by a specified function. After install, CAPABILITY must still be
 brought into scope using ‘with-capability’, at which time the ‘manager
@@ -1655,7 +1680,8 @@ current managed value and that of the requested capability. The function
 should perform whatever logic, presumably linear, to validate the
 request, and return the new managed value representing the ‘balance’ of
 the request. NOTE that signatures scoped to a managed capability cause
-the capability to be automatically installed.
+the capability to be automatically provisioned for install similarly to
+one installed with this function.
 
 .. code:: lisp
 
@@ -1872,6 +1898,24 @@ Set environment confidential ENTITY id, or unset with no argument.
    (env-entity "my-org")
    (env-entity)
 
+env-exec-config
+~~~~~~~~~~~~~~~
+
+*allow-module-install* ``bool`` *allow-history-in-tx* ``bool``
+*→* ``object:*``
+
+*→* ``object:*``
+
+Queries, or with arguments, sets execution config flags.
+ALLOW-MODULE-INSTALL allows module and interface installs;
+ALLOW-HISTORY-IN-TX allows history calls (tx-log, etc) in non-local
+execution
+
+.. code:: lisp
+
+   pact> (env-exec-config true false) (env-exec-config)
+   {"allow-history-in-tx": false,"allow-module-install": true}
+
 env-gas
 ~~~~~~~
 
@@ -1879,7 +1923,14 @@ env-gas
 
 *gas* ``integer`` *→* ``string``
 
-Query gas state, or set it to GAS.
+Query gas state, or set it to GAS. Note that certain plaforms may charge
+additional gas that is not captured by the interpreter gas model, such
+as an overall transaction-size cost.
+
+.. code:: lisp
+
+   pact> (env-gasmodel "table") (env-gaslimit 10) (env-gas 0) (map (+ 1) [1 2 3]) (env-gas)
+   7
 
 env-gaslimit
 ~~~~~~~~~~~~
@@ -1887,6 +1938,19 @@ env-gaslimit
 *limit* ``integer`` *→* ``string``
 
 Set environment gas limit to LIMIT.
+
+env-gaslog
+~~~~~~~~~~
+
+*→* ``string``
+
+Enable and obtain gas logging. Bracket around the code whose gas logs
+you want to inspect.
+
+.. code:: lisp
+
+   pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)
+   ["TOTAL: 7" "map:GUnreduced: 4" "+:GUnreduced: 1" "+:GUnreduced: 1" "+:GUnreduced: 1"]
 
 env-gasmodel
 ~~~~~~~~~~~~

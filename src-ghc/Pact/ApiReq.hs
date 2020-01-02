@@ -37,6 +37,7 @@ import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
+import Data.Int
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe
@@ -78,6 +79,40 @@ data ApiSigner = ApiSigner {
 instance ToJSON ApiSigner where toJSON = lensyToJSON 3
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3
 
+data ApiPublicMeta = ApiPublicMeta
+  { _apmChainId :: Maybe ChainId
+  , _apmSender :: Maybe Text
+  , _apmGasLimit :: Maybe GasLimit
+  , _apmGasPrice :: Maybe GasPrice
+  , _apmTTL :: Maybe TTLSeconds
+  , _apmCreationTime :: Maybe TxCreationTime
+  } deriving (Eq, Show, Generic)
+
+instance ToJSON ApiPublicMeta where
+  toJSON (ApiPublicMeta cid s gl gp ttl ct) = object $ concat
+    [ "chainId" .?= cid
+    , "sender" .?= s
+    , "gasLimit" .?= gl
+    , "gasPrice" .?= gp
+    , "ttl" .?= ttl
+    , "creationTime" .?= ct
+    ]
+    where
+      k .?= v = case v of
+        Nothing -> mempty
+        Just v' -> [k .= v']
+
+
+instance FromJSON ApiPublicMeta where
+  parseJSON = withObject "ApiPublicMeta" $ \o -> ApiPublicMeta
+    <$> o .:? "chainId"
+    <*> o .:? "sender"
+    <*> o .:? "gasLimit"
+    <*> o .:? "gasPrice"
+    <*> o .:? "ttl"
+    <*> o .:? "creationTime"
+
+
 data ApiReq = ApiReq {
   _ylType :: Maybe String,
   _ylPactTxHash :: Maybe Hash,
@@ -91,7 +126,7 @@ data ApiReq = ApiReq {
   _ylKeyPairs :: Maybe [ApiKeyPair],
   _ylSigners :: Maybe [ApiSigner],
   _ylNonce :: Maybe String,
-  _ylPublicMeta :: Maybe PublicMeta,
+  _ylPublicMeta :: Maybe ApiPublicMeta,
   _ylNetworkId :: Maybe NetworkId
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
@@ -113,28 +148,33 @@ data AddSigsReq = AddSigsReq
 instance ToJSON AddSigsReq where toJSON = lensyToJSON 4
 instance FromJSON AddSigsReq where parseJSON = lensyParseJSON 4
 
+
+
 apiReq :: FilePath -> Bool -> IO ()
 apiReq f l = apiReq' f l False
 
 apiReq' :: FilePath -> Bool -> Bool -> IO ()
-apiReq' fp local yaml = do
-  (_,exec) <- mkApiReq fp
+apiReq' fp local unsignedReq = do
+  (_,exec) <- mkApiReq' unsignedReq fp
   let doEncode :: ToJSON b => b -> IO ()
-      doEncode | yaml = BS.putStrLn . Y.encodeWith options
+      doEncode | unsignedReq = BS.putStrLn . Y.encodeWith options
                | otherwise = putJSON
       options = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
-  if local || yaml then
+  if local || unsignedReq then
     doEncode exec
     else
     doEncode $ SubmitBatch $ exec :| []
 
 mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
-mkApiReq fp = do
+mkApiReq fp = mkApiReq' False fp
+
+mkApiReq' :: Bool -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
+mkApiReq' unsignedReq fp = do
   ar@ApiReq {..} <- decodeYaml fp
   case _ylType of
-    Just "exec" -> mkApiReqExec ar fp
-    Just "cont" -> mkApiReqCont ar fp
-    Nothing -> mkApiReqExec ar fp -- Default
+    Just "exec" -> mkApiReqExec unsignedReq ar fp
+    Just "cont" -> mkApiReqCont unsignedReq ar fp
+    Nothing -> mkApiReqExec unsignedReq ar fp -- Default
     _ -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
 
 decodeYaml :: FromJSON b => FilePath -> IO b
@@ -166,21 +206,25 @@ addSigsReq fp local = do
     cmd Command{..} sigs = Command _cmdPayload sigs _cmdHash
 
 withKeypairsOrSigner
-  :: ApiReq
+  :: Bool
+  -> ApiReq
   -> ([SomeKeyPairCaps] -> IO a)
   -> ([Signer] -> IO a)
   -> IO a
-withKeypairsOrSigner ApiReq{..} keypairAction signerAction =
-  case (_ylSigners,_ylKeyPairs) of
-    (Nothing,Just kps) -> mkKeyPairs kps >>= keypairAction
-    (Just ss,Nothing) -> signerAction $ map toSigner ss
-    (_,_) -> dieAR "Must set only one of 'keyPairs' or 'signers'"
+withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
+  case (_ylSigners,_ylKeyPairs,unsignedReq) of
+    (Nothing,Just kps,False) -> mkKeyPairs kps >>= keypairAction
+    (Nothing,Nothing,False) -> keypairAction []
+    (Just {},_,False) -> dieAR "'signers' invalid in command request"
+    (Just ss,Nothing,True) -> signerAction $ map toSigner ss
+    (Nothing,Nothing,True) -> dieAR "'signers' required for unsigned request"
+    (_,Just {},True) -> dieAR "'keyPairs' invalid in unsigned request"
   where
     toSigner ApiSigner{..} = Signer _asScheme _asPublic _asAddress (fromMaybe [] _asCaps)
 
 
-mkApiReqExec :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
-mkApiReqExec ar@ApiReq{..} fp = do
+mkApiReqExec :: Bool -> ApiReq -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
+mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
   (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
@@ -194,11 +238,30 @@ mkApiReqExec ar@ApiReq{..} fp = do
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
     return (code,cdata)
-  let pubMeta = fromMaybe def _ylPublicMeta
-  cmd <- withKeypairsOrSigner ar
+  pubMeta <- mkPubMeta _ylPublicMeta
+  cmd <- withKeypairsOrSigner unsignedReq ar
     (\ks -> mkExec code cdata pubMeta ks _ylNetworkId _ylNonce)
     (\ss -> mkUnsignedExec code cdata pubMeta ss _ylNetworkId _ylNonce)
   return ((ar,code,cdata,pubMeta), cmd)
+
+mkPubMeta :: Maybe ApiPublicMeta -> IO PublicMeta
+mkPubMeta apm = case apm of
+  Nothing -> return def
+  (Just ApiPublicMeta {..}) -> do
+    ct <- case _apmCreationTime of
+      Nothing -> getCurrentCreationTime
+      Just t -> return t
+    return $ PublicMeta
+      { _pmChainId = fromMaybe "" _apmChainId
+      , _pmSender = fromMaybe "" _apmSender
+      , _pmGasLimit = fromMaybe 0 _apmGasLimit
+      , _pmGasPrice = fromMaybe 0 _apmGasPrice
+      , _pmTTL = fromMaybe 1800 _apmTTL
+      , _pmCreationTime = ct
+      }
+
+
+
 
 mkNonce :: Maybe String -> IO Text
 mkNonce = maybe (pack . show <$> getCurrentTime) (return . pack)
@@ -256,8 +319,8 @@ mkUnsignedExec code mdata pubMeta kps nid ridm = do
   return $ decodeUtf8 <$> cmd
 
 
-mkApiReqCont :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
-mkApiReqCont ar@ApiReq{..} fp = do
+mkApiReqCont :: Bool -> ApiReq -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
+mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
   apiPactId <- case _ylPactTxHash of
     Just t -> return t
     Nothing -> dieAR "Expected a 'pactTxHash' entry"
@@ -278,9 +341,9 @@ mkApiReqCont ar@ApiReq{..} fp = do
                           eitherDecode
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
-  let pubMeta = fromMaybe def _ylPublicMeta
-      pactId = toPactId apiPactId
-  cmd <- withKeypairsOrSigner ar
+  let pactId = toPactId apiPactId
+  pubMeta <- mkPubMeta _ylPublicMeta
+  cmd <- withKeypairsOrSigner unsignedReq ar
     (\ks -> mkCont pactId step rollback cdata pubMeta ks _ylNonce _ylProof _ylNetworkId)
     (\ss -> mkUnsignedCont pactId step rollback cdata pubMeta ss _ylNonce _ylProof _ylNetworkId)
   return ((ar,"",cdata,pubMeta), cmd)

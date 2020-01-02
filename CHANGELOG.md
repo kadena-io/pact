@@ -1,3 +1,20 @@
+3.4.0
+---
+
+Note this is the version that deploys with Chainweb 1.4.x, with a finalized gas model
+and managed capability improvements (auto-management, autonomous management)
+
+* Improve ApiReq for creationTime, TTL, haddocks for PublicMeta and friends (#753)
+* Allow for flexible interface manager spec, and "auto-managed" caps (#746)
+* Cover module persistence with golden test (#745)
+* Execution config (#741)
+* Fail `define-namespace` on bad atom structure (#737)
+* Finalize gas model (#734)
+* Use ByteString readFile and explicit UTF8 decoding (#735)
+* Enable autonomous managed capabilities (#733)
+* benchmark and improve rounding (#732)
+
+
 3.3.1
 ---
 
