@@ -5,6 +5,7 @@ on:
     branches:
     - master
     - github-ci
+    - doug/compact-signing-ci
 
 jobs:
   build:
