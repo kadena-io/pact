@@ -60,9 +60,10 @@ data Option =
   | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
   | ORepl
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool, _oReqUnsigned :: Bool }
+  | OUApiReq { _oReqYaml :: FilePath }
   | OServer { _oConfigYaml :: FilePath }
   | OSignReq { _oReqYaml :: FilePath }
-  | OAddSigsReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
+  | OAddSigsReq { _oSigData :: FilePath, _oKeyFile :: FilePath }
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
@@ -90,13 +91,13 @@ replOpts =
       <*> localFlag
       <*> pure False
     ) <|>
-    (OApiReq <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
+    (OUApiReq <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
                              O.help "Format unsigned API request JSON using REQ_YAML file")
-      <*> pure True <*> pure True
     ) <|>
-    (OAddSigsReq <$> O.strOption (O.short 'd' <> O.long "addsigs" <> O.metavar "REQ_YAML" <>
+    (OAddSigsReq
+     <$> O.strOption (O.short 'd' <> O.long "addsigs" <> O.metavar "SIG_DATA" <>
                              O.help "Add signature to command")
-      <*> localFlag
+     <*> O.argument O.str (O.metavar "KEY_FILE" <> O.help "File path to a public/private key pair")
     ) <|>
     (OSignReq <$> O.strOption (O.short 'w' <> O.long "sign" <> O.metavar "REQ_YAML" <>
                              O.help "Sign hash")
@@ -133,8 +134,9 @@ main = do
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
     OApiReq cf l y -> apiReq' cf l y
+    OUApiReq cf -> uapiReq cf
     OSignReq y -> signReq y
-    OAddSigsReq y l -> addSigsReq y l
+    OAddSigsReq sd kf -> addSigsReq sd kf
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS

@@ -22,26 +22,38 @@ module Pact.ApiReq
     ,ApiReq(..)
     ,apiReq
     ,apiReq'
+    ,uapiReq
     ,mkApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
     ,SignReq(..),signReq
     ,AddSigsReq(..),addSigsReq
+    ,SigData(..)
+    ,commandToSigData
+    ,sampleSigData
     ) where
 
 import Control.Applicative
+import Control.Error
+import Control.Lens hiding ((.=))
 import Control.Monad.Catch
 import Control.Monad.State.Strict
 import Data.Aeson
+import Data.Aeson.Lens
+import Data.Aeson.Types
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
+import qualified Data.HashMap.Strict as HM
 import Data.Int
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.Map as M
 import Data.Maybe
+import Data.String
 import Data.Text (Text, pack)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Thyme.Clock
 import qualified Data.Yaml as Y
@@ -50,6 +62,7 @@ import Prelude
 import System.Directory
 import System.FilePath
 
+import Pact.Parse
 import Pact.Types.API
 import Pact.Types.Capability
 import Pact.Types.Command
@@ -148,6 +161,109 @@ data AddSigsReq = AddSigsReq
 instance ToJSON AddSigsReq where toJSON = lensyToJSON 4
 instance FromJSON AddSigsReq where parseJSON = lensyParseJSON 4
 
+newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
+  deriving (Eq,Ord,Show,Generic)
+
+instance IsString PublicKeyHex where
+  fromString = PublicKeyHex . pack
+instance ToJSONKey PublicKeyHex
+instance FromJSONKey PublicKeyHex
+instance ToJSON PublicKeyHex where
+  toJSON (PublicKeyHex hex) = String hex
+instance FromJSON PublicKeyHex where
+  parseJSON = withText "PublicKeyHex" $ \t -> do
+    if T.length t == 64 && isRight (parseB16TextOnly t)
+      then return $ PublicKeyHex t
+      else fail "Public key must have 64 hex characters"
+
+-- | This type is designed to represent signatures in all possible situations
+-- where they might be wanted. It must satisfy at least the following
+-- requirements:
+--
+-- 1. It must support multisig.
+-- 2. It must have values representing state both before and after all the
+-- signatures have been supplied.
+-- 3. It must be usable in a cold wallet setting where transfer may be high
+-- latency with low bandwidth. This means having the option to leave out the
+-- payload to facilitate easier transmission via QR codes and other low
+-- bandwidth channels.
+data SigData a = SigData
+  { _sigDataHash :: PactHash
+  , _sigDataSigs :: [(PublicKeyHex, Maybe UserSig)]
+  , _sigDataCmd :: Maybe a
+  } deriving (Eq,Show,Generic)
+
+commandToSigData :: Command Text -> Either String (SigData Text)
+commandToSigData c = do
+  let ep = traverse parsePact =<< (eitherDecodeStrict' $ encodeUtf8 $ _cmdPayload c)
+  case ep :: Either String (Payload Value ParsedCode) of
+    Left e -> Left $ "Error decoding payload: " <> e
+    Right p -> do
+      let sigs = map (\s -> (PublicKeyHex $ _siPubKey s, Nothing)) $ _pSigners p
+      Right $ SigData (_cmdHash c) sigs (Just $ _cmdPayload c)
+
+sigDataToCommand :: SigData Text -> Either String (Command Text)
+sigDataToCommand (SigData _ _ Nothing) = Left "Can't reconstruct command"
+sigDataToCommand (SigData h sigList (Just c)) = do
+  payload :: Payload Value ParsedCode <- traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 c)
+  let sigMap = M.fromList sigList
+  let sigs = catMaybes $ map (\signer -> join $ M.lookup (PublicKeyHex $ _siPubKey signer) sigMap) $ _pSigners payload
+  pure $ Command c sigs h
+
+sampleSigData :: SigData Text
+sampleSigData = SigData (either error id $ fromText' "b57_gSRIwDEo6SAYseppem57tykcEJkmbTFlCHDs0xc") [("acbe76b30ccaf57e269a0cd5eeeb7293e7e84c7d68e6244a64c4adf4d2df6ea1", Nothing)] Nothing
+
+instance ToJSON a => ToJSON (SigData a) where
+  toJSON (SigData h s c) = object $ concat
+    [ ["hash" .= h]
+    , ["sigs" .= object (map (\(k,ms) -> (unPublicKeyHex k, maybe Null (toJSON . _usSig) ms)) s)]
+    , "cmd" .?= c
+    ]
+    where
+      k .?= v = case v of
+        Nothing -> mempty
+        Just v' -> [k .= v']
+
+instance FromJSON a => FromJSON (SigData a) where
+  parseJSON = withObject "SigData" $ \o -> do
+    h <- o .: "hash"
+    s <- withObject "SigData Pairs" f =<< (o .: "sigs")
+    c <- o .:? "cmd"
+    pure $ SigData h s c
+    where
+      f = mapM g . HM.toList
+      g (k,Null) = pure (PublicKeyHex k, Nothing)
+      g (k,String t) = pure (PublicKeyHex k, Just $ UserSig t)
+      g (_,v) = typeMismatch "Signature should be String or Null" v
+
+addSigToSigData :: SomeKeyPair -> SigData a -> IO (SigData a)
+addSigToSigData kp sd = do
+  sig <- signHash (_sigDataHash sd) kp
+  let k = PublicKeyHex $ toB16Text $ getPublic kp
+  return $ sd { _sigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _sigDataSigs sd }
+
+addSigsReq :: FilePath -> FilePath -> IO ()
+addSigsReq sdFile keyFile = do
+  sd :: SigData Text <- decodeYaml sdFile
+  v :: Value <- decodeYaml keyFile
+
+  let ekp = do
+        -- These keys are from genKeys in Main.hs. Might want to convert to a
+        -- dedicated data type at some point.
+        pub <- parseB16TextOnly =<< (note "Error parsing public key" $ v ^? key "public" . _String)
+        sec <- parseB16TextOnly =<< (note "Error parsing secret key" $ v ^? key "secret" . _String)
+
+        importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS sec)
+  case ekp of
+    Left e -> dieAR $ "Could not parse key file: " <> e
+    Right kp -> do
+      sd2 <- addSigToSigData kp sd
+      case sigDataToCommand sd2 of
+        Left e -> putStrLn $ "Error in signature data: " <> e
+        Right c -> do
+         case verifyCommand $ fmap encodeUtf8 c of
+            ProcSucc a -> putJSON (fmap (fmap _pcCode) a :: Command (Payload Value Text))
+            ProcFail _ -> BS.putStrLn $ Y.encode sd2
 
 
 apiReq :: FilePath -> Bool -> IO ()
@@ -164,6 +280,16 @@ apiReq' fp local unsignedReq = do
     doEncode exec
     else
     doEncode $ SubmitBatch $ exec :| []
+
+uapiReq :: FilePath -> IO ()
+uapiReq fp = do
+  (_,exec) <- mkApiReq' True fp
+  let doEncode :: ToJSON b => b -> IO ()
+      doEncode = BS.putStrLn . Y.encodeWith options
+      options = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
+  case commandToSigData exec of
+    Left e -> dieAR $ "Error decoding command: " <> e
+    Right a -> doEncode a
 
 mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReq fp = mkApiReq' False fp
@@ -190,20 +316,6 @@ signReq fp = do
   kps <- mkKeyPairs _srKeyPairs
   sigs <- mapM (signHash (fromUntypedHash _srHash)) (map fst kps)
   BS.putStrLn $ Y.encode sigs
-
-addSigsReq :: FilePath -> Bool -> IO ()
-addSigsReq fp local = do
-  AddSigsReq{..} <- decodeYaml fp
-  let c = cmd _asrUnsigned _asrSigs
-  case verifyCommand (encodeUtf8 <$> c) of
-    ProcFail s -> dieAR $ "Validate failed: " ++ s
-    ProcSucc (_ :: Command (Payload Value ParsedCode)) -> return ()
-  if local then
-    putJSON c
-    else
-    putJSON $ SubmitBatch $ c :| []
-  where
-    cmd Command{..} sigs = Command _cmdPayload sigs _cmdHash
 
 withKeypairsOrSigner
   :: Bool

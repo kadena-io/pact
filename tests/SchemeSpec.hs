@@ -226,10 +226,9 @@ testSigNonMalleability = do
     cmdWithWrongNumSig <- mkCommandTest [kp, wrongKp] [signer] "(somePactFunction)"
     shouldBeProcFail (verifyCommand cmdWithWrongNumSig)
 
-
 testSigsRoundtrip :: Spec
 testSigsRoundtrip = runIO $ do
   apiReq' "tests/sign-scripts/unsigned-exec.yaml" True True
   apiReq' "tests/sign-scripts/unsigned-cont.yaml" True True
   signReq "tests/sign-scripts/sign-req.yaml"
-  addSigsReq "tests/sign-scripts/add-sigs.yaml" False
+  addSigsReq "tests/sign-scripts/add-sigs.yaml" "tests/sign-scripts/key.yaml"
