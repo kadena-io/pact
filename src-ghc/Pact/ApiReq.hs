@@ -261,10 +261,14 @@ addSigsReq sdFile keyFile = do
       case sigDataToCommand sd2 of
         Left e -> putStrLn $ "Error in signature data: " <> e
         Right c -> do
-         case verifyCommand $ fmap encodeUtf8 c of
-            ProcSucc a -> putJSON (fmap (fmap _pcCode) a :: Command (Payload Value Text))
-            ProcFail _ -> BS.putStrLn $ Y.encode sd2
+          let res = verifyCommand $ fmap encodeUtf8 c
+          case res :: ProcessedCommand Value ParsedCode of
+            ProcSucc _ -> putJSON (SubmitBatch $ c :| [])
+            ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd2
 
+
+yamlOptions :: Y.EncodeOptions
+yamlOptions = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
 
 apiReq :: FilePath -> Bool -> IO ()
 apiReq f l = apiReq' f l False
@@ -273,9 +277,8 @@ apiReq' :: FilePath -> Bool -> Bool -> IO ()
 apiReq' fp local unsignedReq = do
   (_,exec) <- mkApiReq' unsignedReq fp
   let doEncode :: ToJSON b => b -> IO ()
-      doEncode | unsignedReq = BS.putStrLn . Y.encodeWith options
+      doEncode | unsignedReq = BS.putStrLn . Y.encodeWith yamlOptions
                | otherwise = putJSON
-      options = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
   if local || unsignedReq then
     doEncode exec
     else
@@ -285,8 +288,7 @@ uapiReq :: FilePath -> IO ()
 uapiReq fp = do
   (_,exec) <- mkApiReq' True fp
   let doEncode :: ToJSON b => b -> IO ()
-      doEncode = BS.putStrLn . Y.encodeWith options
-      options = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
+      doEncode = BS.putStrLn . Y.encodeWith yamlOptions
   case commandToSigData exec of
     Left e -> dieAR $ "Error decoding command: " <> e
     Right a -> doEncode a
