@@ -63,7 +63,7 @@ data Option =
   | OUApiReq { _oReqYaml :: FilePath }
   | OServer { _oConfigYaml :: FilePath }
   | OSignReq { _oReqYaml :: FilePath }
-  | OAddSigsReq { _oSigData :: FilePath, _oKeyFile :: FilePath }
+  | OAddSigsReq { _oKeyFile :: FilePath }
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
@@ -95,9 +95,8 @@ replOpts =
                              O.help "Format unsigned API request JSON using REQ_YAML file")
     ) <|>
     (OAddSigsReq
-     <$> O.strOption (O.short 'd' <> O.long "addsigs" <> O.metavar "SIG_DATA" <>
-                             O.help "Add signature to command")
-     <*> O.argument O.str (O.metavar "KEY_FILE" <> O.help "File path to a public/private key pair")
+     <$> O.strOption (O.short 'd' <> O.long "addsigs" <> O.metavar "KEY_FILE" <>
+                      O.help "Add signature to command passed on stdin")
     ) <|>
     (OSignReq <$> O.strOption (O.short 'w' <> O.long "sign" <> O.metavar "REQ_YAML" <>
                              O.help "Sign hash")
@@ -136,7 +135,7 @@ main = do
     OApiReq cf l y -> apiReq' cf l y
     OUApiReq cf -> uapiReq cf
     OSignReq y -> signReq y
-    OAddSigsReq sd kf -> addSigsReq sd kf
+    OAddSigsReq kf -> BS.getContents >>= addSigsReq kf
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS

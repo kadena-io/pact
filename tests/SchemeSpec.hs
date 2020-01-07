@@ -7,6 +7,7 @@ import Test.Hspec
 import System.IO.Error
 import Data.Text (Text)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString          as BS
 import Data.Aeson as A
 import qualified Control.Lens             as Lens
 import qualified Data.ByteString.Base16   as B16
@@ -231,4 +232,5 @@ testSigsRoundtrip = runIO $ do
   apiReq' "tests/sign-scripts/unsigned-exec.yaml" True True
   apiReq' "tests/sign-scripts/unsigned-cont.yaml" True True
   signReq "tests/sign-scripts/sign-req.yaml"
-  addSigsReq "tests/sign-scripts/add-sigs.yaml" "tests/sign-scripts/key.yaml"
+
+  BS.getContents >>= addSigsReq "tests/sign-scripts/key.yaml"

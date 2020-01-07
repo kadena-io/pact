@@ -42,6 +42,7 @@ import Control.Monad.State.Strict
 import Data.Aeson
 import Data.Aeson.Lens
 import Data.Aeson.Types
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
@@ -242,9 +243,9 @@ addSigToSigData kp sd = do
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ sd { _sigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _sigDataSigs sd }
 
-addSigsReq :: FilePath -> FilePath -> IO ()
-addSigsReq sdFile keyFile = do
-  sd :: SigData Text <- decodeYaml sdFile
+addSigsReq :: FilePath -> ByteString -> IO ()
+addSigsReq keyFile bs = do
+  sd :: SigData Text <- either (dieAR . show) return $ Y.decodeEither' bs
   v :: Value <- decodeYaml keyFile
 
   let ekp = do
