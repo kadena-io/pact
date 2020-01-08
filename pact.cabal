@@ -72,6 +72,7 @@ library
                      , Pact.Types.PactError
                      , Pact.Types.PactValue
                      , Pact.Types.Parser
+                     , Pact.Types.Perf
                      , Pact.Types.Persistence
                      , Pact.Types.Pretty
                      , Pact.Types.RPC

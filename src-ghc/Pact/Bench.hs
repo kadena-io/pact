@@ -38,13 +38,21 @@ import Pact.Types.Crypto
 import Pact.Types.Lang
 import Pact.Types.Logger
 import Pact.Types.PactValue
+import Pact.Types.Perf
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.SQLite
 import Pact.Native.Internal
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)
 import Pact.Types.Capability
+
+data DoPerf = None | Db | Interp | All
+  deriving (Eq,Show)
+-- | This needs to be 'None' in CI/git.
+doPerf :: DoPerf
+doPerf = None
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -114,12 +122,12 @@ parseCode m = ParsedCode m <$> eitherDie "parseCode" (parseExprs m)
 benchNFIO :: NFData a => String -> IO a -> Benchmark
 benchNFIO bname = bench bname . nfIO
 
-runPactExec :: String -> [Signer] -> Value -> Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
-runPactExec msg ss cdata benchMod dbEnv pc = do
+runPactExec :: PerfTimer -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
+runPactExec pt msg ss cdata benchMod dbEnv pc = do
   let md = MsgData cdata Nothing pactInitialHash ss
       e = setupEvalEnv dbEnv entity Transactional md
           initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def def
-      s = defaultInterpreterState $
+      s = perfInterpreter (pack msg) pt $ defaultInterpreterState $
         maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
   r' <- eitherDie ("runPactExec': " ++ msg) $ fmapL show r
@@ -162,15 +170,25 @@ mkBenchCmd kps (str, t) = do
 pk :: Text
 pk = "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
 
+perfEnv :: Text -> PerfTimer -> PactDbEnv p -> PactDbEnv p
+perfEnv n pt (PactDbEnv db mv) = PactDbEnv (perfPactDb n pt db) mv
+
+perfInterpreter :: Text -> PerfTimer -> Interpreter e -> Interpreter e
+perfInterpreter msg pt (Interpreter i) = Interpreter $ \runInput ->
+  perf pt (msg <> ":" <> "interp") $! i runInput
+
 main :: IO ()
 main = do
+  !fperf <- mkFilePerf "pact-bench-perf"
+  let !dbpt = if doPerf == Db || doPerf == All then fperf else def
+      !ipt = if doPerf == Interp || doPerf == All then fperf else def
   !pub <- eitherDie "pub" $ parseB16TextOnly pk
   !priv <- eitherDie "priv" $
     parseB16TextOnly "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
   !keyPair <- eitherDie "keyPair" $
     importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS priv)
   !parsedExps <- force <$> mapM (mapM (eitherDie "parseExps" . parseExprs)) exps
-  !pureDb <- mkPureEnv neverLog
+  !pureDb <- perfEnv "puredb" dbpt <$> mkPureEnv neverLog
   initSchema pureDb
   (benchMod',benchMod) <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
@@ -181,22 +199,22 @@ main = do
 
     !signer = [Signer Nothing pk Nothing []]
     !msigner = [Signer Nothing pk Nothing mcaps]
-  void $ runPactExec "initPureDb" signer Null Nothing pureDb benchCmd
+  void $ runPactExec def "initPureDb" signer Null Nothing pureDb benchCmd
   !mockDb <- mkMockEnv def { mockRead = MockRead (benchRead benchMod) }
   void $ loadBenchModule mockDb
-  void $ runPactExec "initMockDb" signer Null Nothing mockDb benchCmd
+  void $ runPactExec def "initMockDb" signer Null Nothing mockDb benchCmd
   !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue (benchReadValue benchMod) }
   void $ loadBenchModule mockPersistDb
-  void $ runPactExec "initMockPersistDb" signer Null Nothing mockPersistDb benchCmd
+  void $ runPactExec def "initMockPersistDb" signer Null Nothing mockPersistDb benchCmd
   cmds_ <- traverse (mkBenchCmd [(keyPair,[])]) exps
   !cmds <- return $!! cmds_
   let sqliteFile = "log/bench.sqlite"
-  sqliteDb <- mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile []) neverLog
+  sqliteDb <- perfEnv "sqlite" dbpt <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   void $ loadBenchModule sqliteDb
-  void $ runPactExec "initSqliteDb" signer Null Nothing sqliteDb benchCmd
+  void $ runPactExec def "initSqliteDb" signer Null Nothing sqliteDb benchCmd
   mbenchCmd <- parseCode "(bench.mbench)"
-  void $ runPactExec "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
+  void $ runPactExec def "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
   !round0 <- parseCode "(round 123.456789)"
   !round4 <- parseCode "(round 123.456789 4)"
 
@@ -212,29 +230,38 @@ main = do
     [ benchParse
     , benchCompile parsedExps
     , benchVerify cmds
-    , benchNFIO "puredb"
-      (runPactExec "puredb" signer Null Nothing pureDb benchCmd)
-    , benchNFIO "mockdb"
-      (runPactExec "mockdb" signer Null Nothing mockDb benchCmd)
-    , benchNFIO "mockpersist"
-      (runPactExec "mockpersist" signer Null Nothing mockPersistDb benchCmd)
-    , benchNFIO "sqlite"
-      (runPactExec "sqlite" signer Null Nothing sqliteDb benchCmd)
-    , benchNFIO "mockdb-withmod"
-      (runPactExec "mockdb-withmod" signer Null (Just benchMod') mockDb benchCmd)
-    , benchNFIO "mockpersist-withmod"
-      (runPactExec "mockpersist-withmod" signer Null (Just benchMod') mockPersistDb benchCmd)
-    , sqlEnv $ benchNFIO "sqlite-withmod"
-      (runPactExec "sqlite-withmod" signer Null (Just benchMod') sqliteDb benchCmd)
-      -- puredb transfer no caps
-    , benchNFIO "puredb-withmod"
-      (runPactExec "puredb-withmod" signer Null (Just benchMod') pureDb benchCmd)
-      -- puredb transfer caps
-    , benchNFIO "puredb-withmod-caps" $
-      runPactExec "puredb-withmod-bench-mcaps" msigner Null (Just benchMod') pureDb benchCmd
-      -- puredb mgd-transfer caps
-    , benchNFIO "puredb-withmod-caps-mbench" $
-      runPactExec "puredb-withmod-mbench" msigner Null (Just benchMod') pureDb mbenchCmd
-    , benchNFIO "round0" $ runPactExec "round0" [] Null Nothing pureDb round0
-    , benchNFIO "round4" $ runPactExec "round4" [] Null Nothing pureDb round4
+    , bgroup "db"
+      [ bgroup "uncached"
+        [ benchNFIO "puredb"
+          (runPactExec ipt "uncached/puredb" signer Null Nothing pureDb benchCmd)
+        , benchNFIO "mockdb"
+          (runPactExec ipt "uncached/mockdb" signer Null Nothing mockDb benchCmd)
+        , benchNFIO "mockpersist"
+          (runPactExec ipt "uncached/mockpersist" signer Null Nothing mockPersistDb benchCmd)
+        , sqlEnv $ benchNFIO "sqlite"
+          (runPactExec ipt "uncached/sqlite" signer Null Nothing sqliteDb benchCmd)
+        ]
+      , bgroup "cached"
+        [ benchNFIO "puredb"
+          (runPactExec ipt "cached/puredb" signer Null (Just benchMod') pureDb benchCmd)
+        , benchNFIO "mockdb"
+          (runPactExec ipt "cached/mockdb" signer Null (Just benchMod') mockDb benchCmd)
+        , benchNFIO "mockpersist"
+          (runPactExec ipt "cached/mockpersist" signer Null (Just benchMod') mockPersistDb benchCmd)
+        , sqlEnv $ benchNFIO "sqlite"
+          (runPactExec ipt "cached/sqlite" signer Null (Just benchMod') sqliteDb benchCmd)
+        ]
+      ]
+    , bgroup "caps"
+      [ benchNFIO "unmanaged" $
+        -- puredb transfer caps
+        runPactExec def "caps/unmanaged" msigner Null (Just benchMod') pureDb benchCmd
+      , benchNFIO "managed" $
+        -- puredb mgd-transfer caps
+        runPactExec def "caps/managed" msigner Null (Just benchMod') pureDb mbenchCmd
+      ]
+    , bgroup "round"
+      [ benchNFIO "round0" $ runPactExec def "round0" [] Null Nothing pureDb round0
+      , benchNFIO "round4" $ runPactExec def "round4" [] Null Nothing pureDb round4
+      ]
     ]
