@@ -32,6 +32,8 @@ module Pact.ApiReq
     ,SigData(..)
     ,commandToSigData
     ,sampleSigData
+    ,combineSigs
+    ,combineSigDatas
     ) where
 
 import Control.Applicative
@@ -52,6 +54,7 @@ import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
 import Data.Maybe
+import qualified Data.Set as S
 import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
@@ -191,6 +194,7 @@ instance FromJSON PublicKeyHex where
 data SigData a = SigData
   { _sigDataHash :: PactHash
   , _sigDataSigs :: [(PublicKeyHex, Maybe UserSig)]
+  -- ^ This is not a map because the order must be the same as the signers inside the command.
   , _sigDataCmd :: Maybe a
   } deriving (Eq,Show,Generic)
 
@@ -237,15 +241,68 @@ instance FromJSON a => FromJSON (SigData a) where
       g (k,String t) = pure (PublicKeyHex k, Just $ UserSig t)
       g (_,v) = typeMismatch "Signature should be String or Null" v
 
+combineSigs :: [FilePath] -> IO ()
+combineSigs fs = do
+  sigs <- mapM loadSigData fs
+  case partitionEithers sigs of
+    ([], rs) -> combineSigDatas rs
+    (ls, _) -> do
+      putStrLn "One or more files had errors:"
+      mapM_ putStrLn ls
+
+combineSigDatas :: [SigData Text] -> IO ()
+combineSigDatas [] = error "Nothing to combine"
+combineSigDatas sds@(sd:_) = do
+  let hashes = S.fromList $ map _sigDataHash sds
+      cmds = S.fromList $ map _sigDataCmd sds
+  when (S.size hashes > 1 || S.size cmds > 1) $ do
+    error "SigData files contain more than one unique hash or command.  Aborting..."
+  let sigMap = foldl1 f $ map _sigDataSigs sds
+  printCommandIfDone $ sd { _sigDataSigs = sigMap }
+  where
+    f accum sigs
+      | length accum /= length sigs = error "Sig lists have different lengths"
+      | otherwise = zipWith g accum sigs
+    g (pAccum,sAccum) (p,s) =
+      if pAccum /= p
+        then error $ unlines [ "Sig mismatch:"
+                             , show pAccum
+                             , show p
+                             , "All signatures must be in the same order"
+                             ]
+        else (pAccum, sAccum <|> s)
+
+
+loadSigData :: FilePath -> IO (Either String (SigData Text))
+loadSigData fp = do
+  res <- Y.decodeFileEither fp
+  return $ case res of
+    Left e -> Left $ "Error loading SigData file " <> fp <> ": " <> show e
+    Right sd -> Right sd
+
 addSigToSigData :: SomeKeyPair -> SigData a -> IO (SigData a)
 addSigToSigData kp sd = do
   sig <- signHash (_sigDataHash sd) kp
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ sd { _sigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _sigDataSigs sd }
 
-addSigsReq :: FilePath -> ByteString -> IO ()
-addSigsReq keyFile bs = do
-  sd :: SigData Text <- either (dieAR . show) return $ Y.decodeEither' bs
+addSigsReq :: [FilePath] -> ByteString -> IO ()
+addSigsReq keyFiles bs = do
+  sd <- either (error . show) return $ Y.decodeEither' bs
+  printCommandIfDone =<< foldM addSigReq sd keyFiles
+
+printCommandIfDone :: SigData Text -> IO ()
+printCommandIfDone sd =
+  case sigDataToCommand sd of
+    Left _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd
+    Right c -> do
+      let res = verifyCommand $ fmap encodeUtf8 c
+      case res :: ProcessedCommand Value ParsedCode of
+        ProcSucc _ -> putJSON (SubmitBatch $ c :| [])
+        ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd
+
+addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
+addSigReq sd keyFile = do
   v :: Value <- decodeYaml keyFile
 
   let ekp = do
@@ -256,16 +313,8 @@ addSigsReq keyFile bs = do
 
         importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS sec)
   case ekp of
-    Left e -> dieAR $ "Could not parse key file: " <> e
-    Right kp -> do
-      sd2 <- addSigToSigData kp sd
-      case sigDataToCommand sd2 of
-        Left e -> putStrLn $ "Error in signature data: " <> e
-        Right c -> do
-          let res = verifyCommand $ fmap encodeUtf8 c
-          case res :: ProcessedCommand Value ParsedCode of
-            ProcSucc _ -> putJSON (SubmitBatch $ c :| [])
-            ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd2
+    Left e -> dieAR $ "Could not parse key file " <> keyFile <> ": " <> e
+    Right kp -> addSigToSigData kp sd
 
 
 yamlOptions :: Y.EncodeOptions
@@ -285,14 +334,15 @@ apiReq' fp local unsignedReq = do
     else
     doEncode $ SubmitBatch $ exec :| []
 
-uapiReq :: FilePath -> IO ()
-uapiReq fp = do
+uapiReq :: FilePath -> Bool -> IO ()
+uapiReq fp tiny = do
   (_,exec) <- mkApiReq' True fp
   let doEncode :: ToJSON b => b -> IO ()
       doEncode = BS.putStrLn . Y.encodeWith yamlOptions
+      applyTiny a = if tiny then a { _sigDataCmd = Nothing } else a
   case commandToSigData exec of
     Left e -> dieAR $ "Error decoding command: " <> e
-    Right a -> doEncode a
+    Right a -> doEncode $ applyTiny a
 
 mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReq fp = mkApiReq' False fp
