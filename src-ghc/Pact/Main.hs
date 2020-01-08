@@ -60,10 +60,10 @@ data Option =
   | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
   | ORepl
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool, _oReqUnsigned :: Bool }
-  | OUApiReq { _oReqYaml :: FilePath }
+  | OUApiReq { _oReqYaml :: FilePath, _oTinySigData :: Bool }
   | OServer { _oConfigYaml :: FilePath }
   | OSignReq { _oReqYaml :: FilePath }
-  | OAddSigsReq { _oKeyFile :: FilePath }
+  | OAddSigsReq { _oKeyFile :: [FilePath] }
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
@@ -91,12 +91,14 @@ replOpts =
       <*> localFlag
       <*> pure False
     ) <|>
-    (OUApiReq <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
-                             O.help "Format unsigned API request JSON using REQ_YAML file")
+    (OUApiReq
+     <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
+                      O.help "Format unsigned API request JSON using REQ_YAML file")
+     <*> O.flag False True (O.short 't' <> O.long "tiny" <> O.help "Tiny sig format omitting the command")
     ) <|>
     (OAddSigsReq
-     <$> O.strOption (O.short 'd' <> O.long "addsigs" <> O.metavar "KEY_FILE" <>
-                      O.help "Add signature to command passed on stdin")
+     <$> many (O.strOption (O.short 'd' <> O.long "addsigs" <> O.metavar "KEY_FILE" <>
+                      O.help "Add signature to command passed on stdin"))
     ) <|>
     (OSignReq <$> O.strOption (O.short 'w' <> O.long "sign" <> O.metavar "REQ_YAML" <>
                              O.help "Sign hash")
@@ -133,7 +135,7 @@ main = do
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
     OApiReq cf l y -> apiReq' cf l y
-    OUApiReq cf -> uapiReq cf
+    OUApiReq cf tiny -> uapiReq cf tiny
     OSignReq y -> signReq y
     OAddSigsReq kf -> BS.getContents >>= addSigsReq kf
 

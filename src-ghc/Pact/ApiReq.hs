@@ -243,9 +243,20 @@ addSigToSigData kp sd = do
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ sd { _sigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _sigDataSigs sd }
 
-addSigsReq :: FilePath -> ByteString -> IO ()
-addSigsReq keyFile bs = do
-  sd :: SigData Text <- either (dieAR . show) return $ Y.decodeEither' bs
+addSigsReq :: [FilePath] -> ByteString -> IO ()
+addSigsReq keyFiles bs = do
+  sd <- either (dieAR . show) return $ Y.decodeEither' bs
+  sd2 <- foldM addSigReq sd keyFiles
+  case sigDataToCommand sd2 of
+    Left _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd2
+    Right c -> do
+      let res = verifyCommand $ fmap encodeUtf8 c
+      case res :: ProcessedCommand Value ParsedCode of
+        ProcSucc _ -> putJSON (SubmitBatch $ c :| [])
+        ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd2
+
+addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
+addSigReq sd keyFile = do
   v :: Value <- decodeYaml keyFile
 
   let ekp = do
@@ -256,16 +267,8 @@ addSigsReq keyFile bs = do
 
         importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS sec)
   case ekp of
-    Left e -> dieAR $ "Could not parse key file: " <> e
-    Right kp -> do
-      sd2 <- addSigToSigData kp sd
-      case sigDataToCommand sd2 of
-        Left e -> putStrLn $ "Error in signature data: " <> e
-        Right c -> do
-          let res = verifyCommand $ fmap encodeUtf8 c
-          case res :: ProcessedCommand Value ParsedCode of
-            ProcSucc _ -> putJSON (SubmitBatch $ c :| [])
-            ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd2
+    Left e -> dieAR $ "Could not parse key file " <> keyFile <> ": " <> e
+    Right kp -> addSigToSigData kp sd
 
 
 yamlOptions :: Y.EncodeOptions
@@ -285,14 +288,15 @@ apiReq' fp local unsignedReq = do
     else
     doEncode $ SubmitBatch $ exec :| []
 
-uapiReq :: FilePath -> IO ()
-uapiReq fp = do
+uapiReq :: FilePath -> Bool -> IO ()
+uapiReq fp tiny = do
   (_,exec) <- mkApiReq' True fp
   let doEncode :: ToJSON b => b -> IO ()
       doEncode = BS.putStrLn . Y.encodeWith yamlOptions
+      applyTiny a = if tiny then a { _sigDataCmd = Nothing } else a
   case commandToSigData exec of
     Left e -> dieAR $ "Error decoding command: " <> e
-    Right a -> doEncode a
+    Right a -> doEncode $ applyTiny a
 
 mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReq fp = mkApiReq' False fp
