@@ -60,11 +60,11 @@ data Option =
   | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
   | ORepl
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool, _oReqUnsigned :: Bool }
-  | OUApiReq { _oReqYaml :: FilePath, _oTinySigData :: Bool }
+  | OUApiReq { _oReqYaml :: FilePath }
   | OServer { _oConfigYaml :: FilePath }
   | OSignReq { _oReqYaml :: FilePath }
-  | OAddSigsReq { _oKeyFiles :: [FilePath] }
-  | OCombineSigs { _oSigFiles :: [FilePath] }
+  | OAddSigsReq { _oKeyFiles :: [FilePath], _oReqLocal :: Bool }
+  | OCombineSigs { _oSigFiles :: [FilePath], _oReqLocal :: Bool }
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
@@ -97,17 +97,17 @@ replOpts =
     (OUApiReq
      <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
                       O.help "Format unsigned API request JSON using REQ_YAML file")
-     <*> O.flag False True (O.short 't' <> O.long "tiny" <> O.help "Tiny sig format omitting the command")
     ) <|>
     (OSignReq <$> O.strOption (O.short 'w' <> O.long "sign" <> O.metavar "REQ_YAML" <>
                              O.help "Sign hash")
     ) <|>
     pure ORepl -- would be nice to bail on unrecognized args here
-  where
-    localFlag = O.flag False True (O.short 'l' <> O.long "local" <> O.help "Format for /local endpoint")
+
+localFlag :: O.Parser Bool
+localFlag = O.flag False True (O.short 'l' <> O.long "local" <> O.help "Format for /local endpoint")
 
 combineSigsParser :: O.Mod O.CommandFields Option
-combineSigsParser = O.command "combine-sigs" $ O.info (OCombineSigs <$> parser <**> O.helper) i
+combineSigsParser = O.command "combine-sigs" $ O.info (OCombineSigs <$> parser <*> localFlag <**> O.helper) i
   where
     parser = many $ O.strArgument
              ( O.metavar "SIG_FILE"
@@ -118,7 +118,7 @@ combineSigsParser = O.command "combine-sigs" $ O.info (OCombineSigs <$> parser <
     synopsis = "Combine multiple signature files"
 
 addSigParser :: O.Mod O.CommandFields Option
-addSigParser = O.command "add-sig" $ O.info (OAddSigsReq <$> parser <**> O.helper) i
+addSigParser = O.command "add-sig" $ O.info (OAddSigsReq <$> parser <*> localFlag <**> O.helper) i
   where
     parser = many $ O.strArgument
              ( O.metavar "KEY_FILE"
@@ -157,10 +157,10 @@ main = do
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
     OApiReq cf l y -> apiReq' cf l y
-    OUApiReq cf tiny -> uapiReq cf tiny
+    OUApiReq cf -> uapiReq cf
     OSignReq y -> signReq y
-    OAddSigsReq kf -> BS.getContents >>= addSigsReq kf
-    OCombineSigs sigs -> combineSigs sigs
+    OAddSigsReq kf l -> BS.getContents >>= addSigsReq kf l
+    OCombineSigs sigs l -> combineSigs sigs l
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS

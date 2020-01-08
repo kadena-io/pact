@@ -241,24 +241,24 @@ instance FromJSON a => FromJSON (SigData a) where
       g (k,String t) = pure (PublicKeyHex k, Just $ UserSig t)
       g (_,v) = typeMismatch "Signature should be String or Null" v
 
-combineSigs :: [FilePath] -> IO ()
-combineSigs fs = do
+combineSigs :: [FilePath] -> Bool -> IO ()
+combineSigs fs outputLocal = do
   sigs <- mapM loadSigData fs
   case partitionEithers sigs of
-    ([], rs) -> combineSigDatas rs
+    ([], rs) -> combineSigDatas rs outputLocal
     (ls, _) -> do
       putStrLn "One or more files had errors:"
       mapM_ putStrLn ls
 
-combineSigDatas :: [SigData Text] -> IO ()
-combineSigDatas [] = error "Nothing to combine"
-combineSigDatas sds@(sd:_) = do
+combineSigDatas :: [SigData Text] -> Bool -> IO ()
+combineSigDatas [] _ = error "Nothing to combine"
+combineSigDatas sds outputLocal = do
   let hashes = S.fromList $ map _sigDataHash sds
-      cmds = S.fromList $ map _sigDataCmd sds
-  when (S.size hashes > 1 || S.size cmds > 1) $ do
-    error "SigData files contain more than one unique hash or command.  Aborting..."
-  let sigMap = foldl1 f $ map _sigDataSigs sds
-  printCommandIfDone $ sd { _sigDataSigs = sigMap }
+      cmds = S.fromList $ catMaybes $ map _sigDataCmd sds
+  when (S.size hashes /= 1 || S.size cmds /= 1) $ do
+    error "SigData files must contain exactly one unique hash and command.  Aborting..."
+  let sigs = foldl1 f $ map _sigDataSigs sds
+  printCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
   where
     f accum sigs
       | length accum /= length sigs = error "Sig lists have different lengths"
@@ -286,19 +286,20 @@ addSigToSigData kp sd = do
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ sd { _sigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _sigDataSigs sd }
 
-addSigsReq :: [FilePath] -> ByteString -> IO ()
-addSigsReq keyFiles bs = do
+addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ()
+addSigsReq keyFiles outputLocal bs = do
   sd <- either (error . show) return $ Y.decodeEither' bs
-  printCommandIfDone =<< foldM addSigReq sd keyFiles
+  printCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
 
-printCommandIfDone :: SigData Text -> IO ()
-printCommandIfDone sd =
+printCommandIfDone :: Bool -> SigData Text -> IO ()
+printCommandIfDone outputLocal sd =
   case sigDataToCommand sd of
     Left _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd
     Right c -> do
       let res = verifyCommand $ fmap encodeUtf8 c
+          out = if outputLocal then encode c else encode (SubmitBatch (c :| []))
       case res :: ProcessedCommand Value ParsedCode of
-        ProcSucc _ -> putJSON (SubmitBatch $ c :| [])
+        ProcSucc _ -> BSL.putStrLn out
         ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd
 
 addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
@@ -334,15 +335,14 @@ apiReq' fp local unsignedReq = do
     else
     doEncode $ SubmitBatch $ exec :| []
 
-uapiReq :: FilePath -> Bool -> IO ()
-uapiReq fp tiny = do
+uapiReq :: FilePath -> IO ()
+uapiReq fp = do
   (_,exec) <- mkApiReq' True fp
   let doEncode :: ToJSON b => b -> IO ()
       doEncode = BS.putStrLn . Y.encodeWith yamlOptions
-      applyTiny a = if tiny then a { _sigDataCmd = Nothing } else a
   case commandToSigData exec of
     Left e -> dieAR $ "Error decoding command: " <> e
-    Right a -> doEncode $ applyTiny a
+    Right a -> doEncode a
 
 mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
 mkApiReq fp = mkApiReq' False fp
