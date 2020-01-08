@@ -32,6 +32,8 @@ module Pact.ApiReq
     ,SigData(..)
     ,commandToSigData
     ,sampleSigData
+    ,combineSigs
+    ,combineSigDatas
     ) where
 
 import Control.Applicative
@@ -52,6 +54,7 @@ import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
 import Data.Maybe
+import qualified Data.Set as S
 import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
@@ -237,6 +240,33 @@ instance FromJSON a => FromJSON (SigData a) where
       g (k,String t) = pure (PublicKeyHex k, Just $ UserSig t)
       g (_,v) = typeMismatch "Signature should be String or Null" v
 
+combineSigs :: [FilePath] -> IO ()
+combineSigs fs = do
+  sigs <- mapM loadSigData fs
+  case partitionEithers sigs of
+    ([], rs) -> combineSigDatas rs
+    (ls, _) -> do
+      putStrLn "One or more files had errors:"
+      mapM_ putStrLn ls
+
+combineSigDatas :: [SigData Text] -> IO ()
+combineSigDatas [] = error "Nothing to combine"
+combineSigDatas sds@(sd:_) = do
+  let hashes = S.fromList $ map _sigDataHash sds
+      cmds = S.fromList $ map _sigDataCmd sds
+  when (S.size hashes > 1 || S.size cmds > 1) $ do
+    error "SigData files contain more than one unique hash or command.  Aborting..."
+  let sigMaps = map (M.filter isJust . M.fromList . _sigDataSigs) sds
+  printCommandIfDone $ sd { _sigDataSigs = M.toList $ M.unions sigMaps }
+
+
+loadSigData :: FilePath -> IO (Either String (SigData Text))
+loadSigData fp = do
+  res <- Y.decodeFileEither fp
+  return $ case res of
+    Left e -> Left $ "Error loading SigData file " <> fp <> ": " <> show e
+    Right sd -> Right sd
+
 addSigToSigData :: SomeKeyPair -> SigData a -> IO (SigData a)
 addSigToSigData kp sd = do
   sig <- signHash (_sigDataHash sd) kp
@@ -245,15 +275,18 @@ addSigToSigData kp sd = do
 
 addSigsReq :: [FilePath] -> ByteString -> IO ()
 addSigsReq keyFiles bs = do
-  sd <- either (dieAR . show) return $ Y.decodeEither' bs
-  sd2 <- foldM addSigReq sd keyFiles
-  case sigDataToCommand sd2 of
-    Left _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd2
+  sd <- either (error . show) return $ Y.decodeEither' bs
+  printCommandIfDone =<< foldM addSigReq sd keyFiles
+
+printCommandIfDone :: SigData Text -> IO ()
+printCommandIfDone sd =
+  case sigDataToCommand sd of
+    Left _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd
     Right c -> do
       let res = verifyCommand $ fmap encodeUtf8 c
       case res :: ProcessedCommand Value ParsedCode of
         ProcSucc _ -> putJSON (SubmitBatch $ c :| [])
-        ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd2
+        ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd
 
 addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
 addSigReq sd keyFile = do

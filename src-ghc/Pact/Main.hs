@@ -64,10 +64,13 @@ data Option =
   | OServer { _oConfigYaml :: FilePath }
   | OSignReq { _oReqYaml :: FilePath }
   | OAddSigsReq { _oKeyFile :: [FilePath] }
+  | OCombineSigs { _oSigFiles :: [FilePath] }
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
 replOpts =
+    O.subparser commandParser
+    <|>
     O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version")
     <|>
     O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins")
@@ -107,6 +110,11 @@ replOpts =
   where
     localFlag = O.flag False True (O.short 'l' <> O.long "local" <> O.help "Format for /local endpoint")
 
+commandParser :: O.Mod O.CommandFields Option
+commandParser = O.command "combine-sigs" $ O.info
+  (OCombineSigs <$> many (O.strArgument $ O.metavar "SIG_FILE"))
+  (O.progDesc "Combine multiple signature files")
+
 argParser :: O.ParserInfo Option
 argParser = O.info (O.helper <*> replOpts)
             (O.fullDesc <> O.header "The Pact Smart Contract Language Interpreter")
@@ -138,6 +146,7 @@ main = do
     OUApiReq cf tiny -> uapiReq cf tiny
     OSignReq y -> signReq y
     OAddSigsReq kf -> BS.getContents >>= addSigsReq kf
+    OCombineSigs sigs -> combineSigs sigs
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS
