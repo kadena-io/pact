@@ -194,6 +194,7 @@ instance FromJSON PublicKeyHex where
 data SigData a = SigData
   { _sigDataHash :: PactHash
   , _sigDataSigs :: [(PublicKeyHex, Maybe UserSig)]
+  -- ^ This is not a map because the order must be the same as the signers inside the command.
   , _sigDataCmd :: Maybe a
   } deriving (Eq,Show,Generic)
 
@@ -256,8 +257,20 @@ combineSigDatas sds@(sd:_) = do
       cmds = S.fromList $ map _sigDataCmd sds
   when (S.size hashes > 1 || S.size cmds > 1) $ do
     error "SigData files contain more than one unique hash or command.  Aborting..."
-  let sigMaps = map (M.filter isJust . M.fromList . _sigDataSigs) sds
-  printCommandIfDone $ sd { _sigDataSigs = M.toList $ M.unions sigMaps }
+  let sigMap = foldl1 f $ map _sigDataSigs sds
+  printCommandIfDone $ sd { _sigDataSigs = sigMap }
+  where
+    f accum sigs
+      | length accum /= length sigs = error "Sig lists have different lengths"
+      | otherwise = zipWith g accum sigs
+    g (pAccum,sAccum) (p,s) =
+      if pAccum /= p
+        then error $ unlines [ "Sig mismatch:"
+                             , show pAccum
+                             , show p
+                             , "All signatures must be in the same order"
+                             ]
+        else (pAccum, sAccum <|> s)
 
 
 loadSigData :: FilePath -> IO (Either String (SigData Text))
