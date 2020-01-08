@@ -32,11 +32,11 @@ module Pact.Types.Persistence
    ModuleData(..),mdModule,mdRefMap,
    PersistModuleData,
    ExecutionMode(..),
-   PerfDb(..),perfPactDb
+   perfPactDb
    ) where
 
 import Control.Applicative ((<|>))
-import Control.Concurrent.MVar (MVar,newMVar,withMVar)
+import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 import Data.Aeson hiding (Object)
@@ -249,25 +249,20 @@ data PactDb e = PactDb {
 }
 
 
-data PerfDb a = PerfDb
-  { ppdPerfTimer :: PerfTimer
-  , ppdDbVar :: MVar a }
-
 -- | Instrument some 'PactDb' with perf timing.
-perfPactDb :: Text -> PerfTimer -> MVar e -> PactDb e -> IO (MVar (PerfDb e), PactDb (PerfDb e))
-perfPactDb n pt mv PactDb{..} = perfDb >>= \pdb -> return (pdb,PactDb
-  { _readRow = \d k e -> perf' e "readRow" $ _readRow d k
-  , _writeRow = \w d k v e -> perf' e "writeRow" $ _writeRow w d k v
-  , _keys = \d e -> perf' e "keys" $ _keys d
-  , _txids = \t i e -> perf' e "txids" $ _txids t i
-  , _createUserTable = \t m e -> perf' e "createUserTable" $ _createUserTable t m
-  , _getUserTableInfo = \t e -> perf' e "getUserTableInfo" $ _getUserTableInfo t
-  , _beginTx = \m e -> perf' e "beginTx" $ _beginTx m
-  , _commitTx = \e -> perf' e "commitTx" $ _commitTx
-  , _rollbackTx = \e -> perf' e "rollbackTx" $ _rollbackTx
-  , _getTxLog = \d i e -> perf' e "getTxLog" $ _getTxLog d i
-  })
+perfPactDb :: Text -> PerfTimer -> PactDb a -> PactDb a
+perfPactDb n pt PactDb{..} = PactDb
+  { _readRow = \d k e -> perf' "readRow" $ _readRow d k e
+  , _writeRow = \w d k v e -> perf' "writeRow" $ _writeRow w d k v e
+  , _keys = \d e -> perf' "keys" $ _keys d e
+  , _txids = \t i e -> perf' "txids" $ _txids t i e
+  , _createUserTable = \t m e -> perf' "createUserTable" $ _createUserTable t m e
+  , _getUserTableInfo = \t e -> perf' "getUserTableInfo" $ _getUserTableInfo t e
+  , _beginTx = \m e -> perf' "beginTx" $ _beginTx m e
+  , _commitTx = \e -> perf' "commitTx" $ _commitTx e
+  , _rollbackTx = \e -> perf' "rollbackTx" $ _rollbackTx e
+  , _getTxLog = \d i e -> perf' "getTxLog" $ _getTxLog d i e
+  }
   where
-    perfDb = newMVar $ PerfDb pt mv
-    perf' :: MVar (PerfDb e) -> Text -> Method e a -> IO a
-    perf' dbmv t a = withMVar dbmv $ \(PerfDb p v) -> perf p (n <> ":" <> t) (a v)
+    perf' :: Text -> IO a -> IO a
+    perf' t = perf pt (n <> ":" <> t)

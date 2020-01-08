@@ -170,8 +170,8 @@ mkBenchCmd kps (str, t) = do
 pk :: Text
 pk = "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
 
-perfEnv :: Text -> PerfTimer -> PactDbEnv p -> IO (PactDbEnv (PerfDb p))
-perfEnv n pt (PactDbEnv db mv) = perfPactDb n pt mv db >>= \(pmv,pdb) -> return $! PactDbEnv pdb pmv
+perfEnv :: Text -> PerfTimer -> PactDbEnv p -> PactDbEnv p
+perfEnv n pt (PactDbEnv db mv) = PactDbEnv (perfPactDb n pt db) mv
 
 perfInterpreter :: Text -> PerfTimer -> Interpreter e -> Interpreter e
 perfInterpreter msg pt (Interpreter i) = Interpreter $ \runInput ->
@@ -188,10 +188,8 @@ main = do
   !keyPair <- eitherDie "keyPair" $
     importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS priv)
   !parsedExps <- force <$> mapM (mapM (eitherDie "parseExps" . parseExprs)) exps
-  !pureDb <- do
-    pdb <- mkPureEnv neverLog
-    initSchema pdb
-    perfEnv "puredb" dbpt pdb
+  !pureDb <- perfEnv "puredb" dbpt <$> mkPureEnv neverLog
+  initSchema pureDb
   (benchMod',benchMod) <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
   let
@@ -211,10 +209,8 @@ main = do
   cmds_ <- traverse (mkBenchCmd [(keyPair,[])]) exps
   !cmds <- return $!! cmds_
   let sqliteFile = "log/bench.sqlite"
-  sqliteDb <- do
-    sdb <- mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
-    initSchema sdb
-    perfEnv "sqlite" dbpt sdb
+  sqliteDb <- perfEnv "sqlite" dbpt <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
+  initSchema sqliteDb
   void $ loadBenchModule sqliteDb
   void $ runPactExec def "initSqliteDb" signer Null Nothing sqliteDb benchCmd
   mbenchCmd <- parseCode "(bench.mbench)"
@@ -225,8 +221,7 @@ main = do
 
 
   let cleanupSqlite = do
-        (PerfDb _ mv) <- readMVar $ pdPactDbVar sqliteDb
-        c <- readMVar mv
+        c <- readMVar $ pdPactDbVar sqliteDb
         void $ closeSQLite $ _db c
         removeFile sqliteFile
       sqlEnv b = envWithCleanup (return ()) (const cleanupSqlite) (const b)
