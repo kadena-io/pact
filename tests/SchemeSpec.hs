@@ -233,4 +233,4 @@ testSigsRoundtrip = runIO $ do
   apiReq' "tests/sign-scripts/unsigned-cont.yaml" True True
   signReq "tests/sign-scripts/sign-req.yaml"
 
-  BS.readFile "tests/sign-scripts/add-sigs.yaml" >>= addSigsReq ["tests/sign-scripts/key.yaml"]
+  BS.readFile "tests/sign-scripts/add-sigs.yaml" >>= addSigsReq ["tests/sign-scripts/key.yaml"] False
