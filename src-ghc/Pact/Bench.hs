@@ -224,7 +224,7 @@ main :: IO ()
 main = do
   -- uncomment below to see if "-N" is working, important for file perf log
   -- print =<< getNumCapabilities
-  !fperf <- mkFilePerf "pact-bench-perf" -- foo
+  !fperf <- if doPerf /= None then mkFilePerf "pact-bench-perf" else def
   let !dbPerf = if doPerf == Db || doPerf == All then fperf else def
       !interpPerf = if doPerf == Interp || doPerf == All then fperf else def
   !pub <- eitherDie "pub" $ parseB16TextOnly pk
@@ -254,7 +254,7 @@ main = do
   cmds_ <- traverse (mkBenchCmd [(keyPair,[])]) exps
   !cmds <- return $!! cmds_
   let sqliteFile = "log/bench.sqlite"
-  sqliteDb <- perfEnv "sqlite" dbPerf <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile []) neverLog
+  sqliteDb <- perfEnv "sqlite" dbPerf <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   void $ loadBenchModule sqliteDb
   void $ runPactExec def "initSqliteDb" signer Null Nothing sqliteDb benchCmd
@@ -269,7 +269,7 @@ main = do
         c <- readMVar $ pdPactDbVar sqliteDb
         void $ closeSQLite $ _db c
         removeFile sqliteFile
-      sqlEnv b = envWithCleanup (return ()) (const cleanupSqlite) (const b)
+      closeSqlEnv b = envWithCleanup (return ()) (const cleanupSqlite) (const b)
 
   defaultMain
     [ benchParse
@@ -283,7 +283,7 @@ main = do
           (runPactExec interpPerf "uncached/mockdb" signer Null Nothing mockDb benchCmd)
         , benchNFIO "mockpersist"
           (runPactExec interpPerf "uncached/mockpersist" signer Null Nothing mockPersistDb benchCmd)
-        , sqlEnv $ benchNFIO "sqlite"
+        , benchNFIO "sqlite"
           (runPactExec interpPerf "uncached/sqlite" signer Null Nothing sqliteDb benchCmd)
         ]
       , bgroup "cached"
@@ -293,7 +293,7 @@ main = do
           (runPactExec interpPerf "cached/mockdb" signer Null (Just benchMod') mockDb benchCmd)
         , benchNFIO "mockpersist"
           (runPactExec interpPerf "cached/mockpersist" signer Null (Just benchMod') mockPersistDb benchCmd)
-        , sqlEnv $ benchNFIO "sqlite"
+        , closeSqlEnv $ benchNFIO "sqlite"
           (runPactExec interpPerf "cached/sqlite" signer Null (Just benchMod') sqliteDb benchCmd)
         ]
       ]

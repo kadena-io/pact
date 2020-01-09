@@ -275,7 +275,7 @@ benchmark bench
   build-depends:       base
                      , pact
   hs-source-dirs:      executables pact-lang-api.js
-  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-options:         -Wall -threaded -rtsopts "-with-rtsopts=-N" -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
