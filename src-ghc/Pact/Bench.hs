@@ -55,9 +55,19 @@ import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)
 import Pact.Types.Capability
 
-data DoPerf = None | Db | Interp | All
+-- | Flags for enabling file-based perf bracketing,
+-- see 'mkFilePerf' below.
+data DoPerf =
+    None -- disabled
+  | Db -- PactDb method bracketing
+  | Interp -- Bracketing around interpreter and in EvalEnv
+  | All -- Both
   deriving (Eq,Show)
--- | This needs to be 'None' in CI/git.
+
+-- | This needs to be 'None' in CI/git
+-- file-based perf is done manually to investigate issues
+-- but slows down benchmarks.
+-- CI just runs the regular benchmarks.
 doPerf :: DoPerf
 doPerf = None
 
@@ -202,8 +212,9 @@ mkFilePerf fp = do
     liftIO $ do
       e <- time
       writeChan c $! unpack $ msg <> ": " <> pack (show (e .-. s))
-      --f <- time
-      --writeChan c $! "chan: " <> (show (f .-. e))
+      -- uncomment below to time the chan write itself
+      -- f <- time
+      -- writeChan c $! "chan: " <> (show (f .-. e))
       return r
 
   where
@@ -211,17 +222,18 @@ mkFilePerf fp = do
 
 main :: IO ()
 main = do
-  print =<< getNumCapabilities
+  -- uncomment below to see if "-N" is working, important for file perf log
+  -- print =<< getNumCapabilities
   !fperf <- mkFilePerf "pact-bench-perf" -- foo
-  let !dbpt = if doPerf == Db || doPerf == All then fperf else def
-      !ipt = if doPerf == Interp || doPerf == All then fperf else def
+  let !dbPerf = if doPerf == Db || doPerf == All then fperf else def
+      !interpPerf = if doPerf == Interp || doPerf == All then fperf else def
   !pub <- eitherDie "pub" $ parseB16TextOnly pk
   !priv <- eitherDie "priv" $
     parseB16TextOnly "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
   !keyPair <- eitherDie "keyPair" $
     importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS priv)
   !parsedExps <- force <$> mapM (mapM (eitherDie "parseExps" . parseExprs)) exps
-  !pureDb <- perfEnv "puredb" dbpt <$> mkPureEnv neverLog
+  !pureDb <- perfEnv "puredb" dbPerf <$> mkPureEnv neverLog
   initSchema pureDb
   (benchMod',benchMod) <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
@@ -242,7 +254,7 @@ main = do
   cmds_ <- traverse (mkBenchCmd [(keyPair,[])]) exps
   !cmds <- return $!! cmds_
   let sqliteFile = "log/bench.sqlite"
-  sqliteDb <- perfEnv "sqlite" dbpt <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
+  sqliteDb <- perfEnv "sqlite" dbPerf <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   void $ loadBenchModule sqliteDb
   void $ runPactExec def "initSqliteDb" signer Null Nothing sqliteDb benchCmd
@@ -266,23 +278,23 @@ main = do
     , bgroup "db"
       [ bgroup "uncached"
         [ benchNFIO "puredb"
-          (runPactExec ipt "uncached/puredb" signer Null Nothing pureDb benchCmd)
+          (runPactExec interpPerf "uncached/puredb" signer Null Nothing pureDb benchCmd)
         , benchNFIO "mockdb"
-          (runPactExec ipt "uncached/mockdb" signer Null Nothing mockDb benchCmd)
+          (runPactExec interpPerf "uncached/mockdb" signer Null Nothing mockDb benchCmd)
         , benchNFIO "mockpersist"
-          (runPactExec ipt "uncached/mockpersist" signer Null Nothing mockPersistDb benchCmd)
+          (runPactExec interpPerf "uncached/mockpersist" signer Null Nothing mockPersistDb benchCmd)
         , sqlEnv $ benchNFIO "sqlite"
-          (runPactExec ipt "uncached/sqlite" signer Null Nothing sqliteDb benchCmd)
+          (runPactExec interpPerf "uncached/sqlite" signer Null Nothing sqliteDb benchCmd)
         ]
       , bgroup "cached"
         [ benchNFIO "puredb"
-          (runPactExec ipt "cached/puredb" signer Null (Just benchMod') pureDb benchCmd)
+          (runPactExec interpPerf "cached/puredb" signer Null (Just benchMod') pureDb benchCmd)
         , benchNFIO "mockdb"
-          (runPactExec ipt "cached/mockdb" signer Null (Just benchMod') mockDb benchCmd)
+          (runPactExec interpPerf "cached/mockdb" signer Null (Just benchMod') mockDb benchCmd)
         , benchNFIO "mockpersist"
-          (runPactExec ipt "cached/mockpersist" signer Null (Just benchMod') mockPersistDb benchCmd)
+          (runPactExec interpPerf "cached/mockpersist" signer Null (Just benchMod') mockPersistDb benchCmd)
         , sqlEnv $ benchNFIO "sqlite"
-          (runPactExec ipt "cached/sqlite" signer Null (Just benchMod') sqliteDb benchCmd)
+          (runPactExec interpPerf "cached/sqlite" signer Null (Just benchMod') sqliteDb benchCmd)
         ]
       ]
     , bgroup "caps"
