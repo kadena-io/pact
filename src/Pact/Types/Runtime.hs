@@ -40,7 +40,8 @@ module Pact.Types.Runtime
    module Pact.Types.Gas,
    module Pact.Types.ChainMeta,
    module Pact.Types.PactError,
-   liftIO
+   liftIO,
+   eperf
    ) where
 
 
@@ -411,3 +412,6 @@ mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
 mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
 mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->
   withMVar e $ \(EnvReadOnly EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+
+eperf :: Text -> Eval e a -> Eval e a
+eperf m a = view eePerfTimer >>= \pt -> perf pt m a

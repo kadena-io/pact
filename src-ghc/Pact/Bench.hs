@@ -8,8 +8,9 @@ import Control.Arrow
 import Control.Concurrent
 import Control.DeepSeq
 import Control.Error
-import Control.Monad.Catch
 import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Catch
 
 import Criterion.Main
 
@@ -20,14 +21,20 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import Data.Text (unpack, pack)
+import Data.Text (Text,unpack, pack)
 import Data.Text.Encoding
 
+-- import GHC.Clock
+import Data.Thyme.Clock
+import Data.AffineSpace
+
+import System.IO
 import System.Directory
 import Unsafe.Coerce
 
 import Pact.Compile
 import Pact.Gas
+import Pact.Gas.Table
 import Pact.Interpreter
 import Pact.MockDb
 import Pact.Parse
@@ -108,13 +115,15 @@ loadBenchModule db = do
            pactInitialHash
            [Signer Nothing pk Nothing []]
   let e = setupEvalEnv db entity Transactional md initRefStore
-          freeGasEnv permissiveNamespacePolicy noSPVSupport def def
+          prodGasEnv permissiveNamespacePolicy noSPVSupport def def
   (r :: Either SomeException EvalResult) <- try $ evalExec  defaultInterpreter e pc
   void $ eitherDie "loadBenchModule (load)" $ fmapL show r
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
   p <- either (die "loadBenchModule" . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
   return (benchMod,p)
 
+prodGasEnv :: GasEnv
+prodGasEnv = GasEnv 100000 0.01 $ tableGasModel defaultGasConfig
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie "parseCode" (parseExprs m)
@@ -125,7 +134,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PerfTimer -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
   let md = MsgData cdata Nothing pactInitialHash ss
-      e = setupEvalEnv dbEnv entity Transactional md
+      e = (\ee -> ee { _eePerfTimer = pt }) $ setupEvalEnv dbEnv entity Transactional md
           initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def def
       s = perfInterpreter (pack msg) pt $ defaultInterpreterState $
         maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
@@ -177,9 +186,33 @@ perfInterpreter :: Text -> PerfTimer -> Interpreter e -> Interpreter e
 perfInterpreter msg pt (Interpreter i) = Interpreter $ \runInput ->
   perf pt (msg <> ":" <> "interp") $! i runInput
 
+
+mkFilePerf :: FilePath -> IO PerfTimer
+mkFilePerf fp = do
+  h <- openFile fp WriteMode
+  c <- newChan
+  void $ forkIO $ forever $ do
+    m <- getChanContents c
+    (`mapM_` m) $ \s -> do
+      hPutStrLn h s
+      hFlush h
+  return $ PerfTimer $ \msg a -> do
+    s <- liftIO $ time
+    r <- a
+    liftIO $ do
+      e <- time
+      writeChan c $! unpack $ msg <> ": " <> pack (show (e .-. s))
+      --f <- time
+      --writeChan c $! "chan: " <> (show (f .-. e))
+      return r
+
+  where
+    time = getCurrentTime
+
 main :: IO ()
 main = do
-  !fperf <- mkFilePerf "pact-bench-perf"
+  print =<< getNumCapabilities
+  !fperf <- mkFilePerf "pact-bench-perf" -- foo
   let !dbpt = if doPerf == Db || doPerf == All then fperf else def
       !ipt = if doPerf == Interp || doPerf == All then fperf else def
   !pub <- eitherDie "pub" $ parseB16TextOnly pk
