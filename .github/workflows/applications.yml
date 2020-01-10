@@ -1,0 +1,207 @@
+name: Build and publish application binaries
+
+on:
+  push:
+    branches:
+    - master
+    - github-ci
+    - ci/*
+
+jobs:
+  build:
+    name: Build master with ${{ matrix.ghc }} / ${{ matrix.cabal }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ['8.6.5', '8.8.1']
+        cabal: ['3.0']
+        os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-10.14', 'windows-latest']
+        cabalcache: ['true']
+        distcache: ['true']
+        exclude:
+        - os: 'windows-latest'
+          ghc: '8.6.5'
+        include: 
+        - os: 'windows-latest'
+          storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
+
+      # Cabal Cache
+      CABAL_CACHE: ./tmp/bin/cabal-cache
+      CABAL_CACHE_BUCKET: kadena-cabal-cache
+      SYNC_TO_CACHE: $CABAL_CACHE sync-to-archive --threads 16 --archive-uri s3://$CABAL_CACHE_BUCKET/${{ matrix.os }} --region us-east-1 ${{ matrix.storepath }}
+      SYNC_FROM_CACHE: $CABAL_CACHE sync-from-archive --threads 16 --archive-uri s3://$CABAL_CACHE_BUCKET/${{ matrix.os }} --region us-east-1 ${{ matrix.storepath }}
+
+      # Dist Cache
+      DIST_CACHE_BUCKET: kadena-cabal-cache
+      SYNC_TO_DIST_CACHE: aws s3 sync dist-newstyle "s3://kadena-cabal-cache/dist/${{ matrix.os }}/${{ matrix.ghc }}/dist-newstyle"
+      SYNC_FROM_DIST_CACHE: aws s3 sync "s3://kadena-cabal-cache/dist/${{ matrix.os }}/${{ matrix.ghc }}/dist-newstyle" dist-newstyle && rm -rf dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-*/setup
+
+      # Aritfacts
+      ARTIFACT_BUCKET: kadena-cabal-cache
+      BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.${{ github.sha }}.tar.gz
+      LATEST_BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.tar.gz"
+
+    steps:
+    # Setup
+    - name: Checkout repository
+      uses: actions/checkout@v1
+    - name: Install cabal-cache
+      if: matrix.cabalcache == 'true' && !contains(matrix.os, 'windows')
+      run: |
+        [[ "${{ matrix.os }}" =~ ubuntu ]] && OS="linux" || OS="osx"
+        mkdir -p "./tmp/bin"
+        curl -Ls "https://github.com/haskell-works/cabal-cache/releases/download/v1.0.1.1/cabal-cache_x86_64_${OS}.tar.gz" | tar -xzC "./tmp/bin/"
+    - name: Install cabal-cache
+      if: matrix.cabalcache == 'true' && contains(matrix.os, 'windows')
+      shell: bash
+      run: |
+        mkdir -p "./tmp/bin"
+        curl -Ls "https://kadena-cabal-cache.s3.amazonaws.com/cabal-cache/cabal-cache_x86_64_windows.tar.gz" | tar -xzC "./tmp/bin/"
+
+    # Non Haskell dependencies
+    - name: Install non-Haskell dependencies (ubuntu)
+      if: contains(matrix.os, 'ubuntu')
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git librocksdb-dev zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
+    - name: Install non-Haskell dependencies (macOS)
+      if: contains(matrix.os, 'mac')
+      run: |
+        brew update
+        brew unlink python@2
+        brew install awscli
+    - name: Install non-Haskell dependencies (windows)
+      if: contains(matrix.os, 'windows')
+      run: choco install -y -r awscli
+
+    # Haskell Setup
+    - name: Install Haskell (macOS)
+      if: contains(matrix.os, 'macOS')
+      run: |
+        curl -sL https://haskell.futurice.com/haskell-on-macos.py | python3 - --make-dirs --paths.d --ghc-alias=${{ matrix.ghc }} --cabal-alias=3.0.0.0 install ghc-${{ matrix.ghc }} cabal-install-3.0.0.0
+        ln -s /opt/cabal/3.0.0.0 /opt/cabal/3.0
+    - name: Install Haskell (windows)
+      if: contains(matrix.os, 'windows')
+      shell: bash
+      run: |
+        mkdir -p /c/tools/msys64/mingw64/lib
+        choco install -r -y cabal --version 3.0.0.0
+        choco install -r -y ghc --version 8.8.1
+    - name: Set GHC and Cabal version (ubuntu, macOS)
+      if: "!contains(matrix.os, 'windows')"
+      uses: actions/setup-haskell@v1
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
+    - name: Set GHC and Cabal version (windows)
+      if: "contains(matrix.os, 'windows')"
+      shell: bash
+      run: |
+        echo "::add-path::/c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin"
+        echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-8.8.1\\bin"
+        echo "::add-path::/c/ProgramData/chocolatey/lib/cabal/tools/cabal-3.0.0.0"
+        echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\cabal\\tools\\cabal-3.0.0.0"
+        echo "::add-path::/c/Users/runneradmin/AppData/Roaming/cabal/bin"
+        echo "::add-path::C:\\Users\\runneradmin\\AppData\\Roaming\\cabal\\bin"
+        echo "::add-path::/c/Program Files/Amazon/AWSCLI/bin"
+        echo "::add-path::C:\\Program Files\\Amazon\\AWSCLI\\bin"
+
+        # these are needed for cabal-cache to work
+        ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin/ghc-pkg-8.8.1
+
+    # Project Setup
+    - name: Append cabal.project
+      shell: bash
+      run: |
+        cat >> cabal.project <<EOF
+        documentation: False
+        package pact
+          documentation: False
+        package thyme
+          tests: False
+        EOF
+    - name: Append cabal.project (only ghc-8.8.1)
+      if: matrix.ghc == '8.8.1'
+      shell: bash
+      run: |
+        cat >> cabal.project <<EOF
+        package pact
+          ghc-options: -Wwarn
+          haddock-options: --optghc=-Wwarn
+        allow-newer:
+          pact:*
+          algebraic-graphs
+          base-compat
+          time
+          unix
+        constraints:
+          direct-sqlite==2.3.24
+        EOF
+    - name: Sync from dist cache
+      if: matrix.distcache == 'true'
+      shell: bash
+      run: eval $SYNC_FROM_DIST_CACHE
+      continue-on-error: true
+
+    # Build
+    - name: Update package database
+      shell: bash
+      run: cabal v2-update
+    - name: Configure build
+      shell: bash
+      run: |
+        grep -q "ghc-${{ matrix.ghc }}" dist-newstyle/cache/plan.json || cabal v2-configure
+    - name: Sync from cabal cache
+      shell: bash
+      if: matrix.cabalcache == 'true'
+      run: eval $SYNC_FROM_CACHE
+    - name: Install build dependencies
+      shell: bash
+      run: cabal v2-build exe:pact --only-dependencies
+    - name: Build
+      shell: bash
+      run: cabal v2-build exe:pact
+    - name: Sync dist cache
+      if: always() && (matrix.distcache == 'true')
+      shell: bash
+      run: eval $SYNC_TO_DIST_CACHE
+    - name: Sync cabal cache
+      if: always() && (matrix.cabalcache == 'true')
+      shell: bash
+      run: eval $SYNC_TO_CACHE
+
+    # Publish Artifacts
+    - name: Prepare artifacts
+      shell: bash
+      run: |
+        mkdir -p dist-newstyle/artifacts/applications
+        cp dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-*/x/pact/opt/build/pact/pact dist-newstyle/artifacts/applications
+    - name: Publish applications
+      uses: actions/upload-artifact@v1
+      with:
+        name: pact-applications.${{ matrix.ghc }}.${{ matrix.os }}
+        path: dist-newstyle/artifacts/applications
+
+    # Publish to S3
+    - name: Publish applications to S3
+      shell: bash
+      run: |
+        tar -C ./dist-newstyle/artifacts/applications/ -czf $BINFILE '.'
+        echo "created tar file: $BINFILE"
+        ls $BINFILE
+        aws s3 cp $BINFILE s3://$ARTIFACT_BUCKET/pact/
+        echo "uploaded tar file to S3"
+        aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$BINFILE --acl public-read
+        echo "set public read permission"
+    - name: Link latest-build application in S3
+      if: contains(github.ref, 'master')
+      shell: bash
+      run: |
+        aws s3 cp s3://$ARTIFACT_BUCKET/pact/$BINFILE s3://$ARTIFACT_BUCKET/pact/$LATEST_BINFILE
+        aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$LATEST_BINFILE --acl public-read
+
