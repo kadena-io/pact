@@ -6,6 +6,7 @@ on:
     - master
     - github-ci
     - ci/*
+    - ci/doug/compact-signing-stdin
 
 jobs:
   build:
