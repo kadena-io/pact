@@ -18,7 +18,7 @@ jobs:
         cabal: ['3.0']
         os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-10.14', 'windows-latest']
         cabalcache: ['true']
-        distcache: ['true']
+        distcache: ['false']
         exclude:
         - os: 'windows-latest'
           ghc: '8.6.5'
