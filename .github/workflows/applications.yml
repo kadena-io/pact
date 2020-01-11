@@ -180,7 +180,7 @@ jobs:
       shell: bash
       run: |
         mkdir -p dist-newstyle/artifacts/applications
-        cp dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-*/x/pact/opt/build/pact/pact dist-newstyle/artifacts/applications
+        cp dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-*/x/pact/build/pact/pact dist-newstyle/artifacts/applications
     - name: Publish applications
       uses: actions/upload-artifact@v1
       with:
