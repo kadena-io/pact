@@ -241,12 +241,12 @@ library
   if !impl(ghcjs) && !os(windows)
     build-depends: unix
 
-  if !impl(ghcjs) && !os(windows) && !flag(cryptonite-ed25519)
+  if !impl(ghcjs) && !flag(cryptonite-ed25519)
     build-depends:
         crypto-api
       , ed25519-donna
 
-  if !impl(ghcjs) && (os(windows) || flag(cryptonite-ed25519))
+  if !impl(ghcjs) && flag(cryptonite-ed25519)
     cpp-options: -DCRYPTONITE_ED25519
 
   hs-source-dirs:      src
