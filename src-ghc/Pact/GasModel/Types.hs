@@ -45,7 +45,7 @@ import qualified Data.Text as T
 
 
 import Pact.Eval (eval)
-import Pact.Gas
+import Pact.Gas.Table
 import Pact.GasModel.Utils
 import Pact.Interpreter
 import Pact.MockDb
@@ -227,8 +227,9 @@ getLoadedState code = do
 defEvalEnv :: PactDbEnv e -> EvalEnv e
 defEvalEnv db =
   setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-  initRefStore freeGasEnv permissiveNamespacePolicy noSPVSupport def def
+  initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def def
   where entity = Just $ EntityName "entity"
+        prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
 
 -- MockDb
 --

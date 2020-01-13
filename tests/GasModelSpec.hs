@@ -9,8 +9,10 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
 
 import Control.Exception (bracket)
+import Control.Monad (void)
 import Data.List (foldl')
 
+import Pact.Types.Runtime
 import Pact.Types.Util (asString)
 import Pact.GasModel.GasModel
 import Pact.GasModel.Types
@@ -23,7 +25,7 @@ import Pact.Native
 spec :: Spec
 spec = describe "gas model tests" $ do
   describe "untestedNativesCheck" untestedNativesCheck
-  describe "allGasTestsShouldPass" allGasTestsShouldPass
+  describe "allGasTestsAndGoldenShouldPass" allGasTestsAndGoldenShouldPass
   describe "allNativesInGasTable" allNativesInGasTable
 
 untestedNativesCheck :: Spec
@@ -34,18 +36,12 @@ untestedNativesCheck = do
     (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1",
                  "verify-spv", "public-chain-data", "list"])
 
-allGasTestsShouldPass :: Spec
-allGasTestsShouldPass = do
-  it "gas model tests should not return a PactError" $ do
-    let
-      runSingleNativeTests t = mapOverGasUnitTests t run run
-      run expr dbSetup = do
-        (res,_) <- bracket
-                   (setupEnv dbSetup)
-                   (gasSetupCleanup dbSetup)
-                   (mockRun expr)
-        eitherDie (getDescription expr dbSetup) res
-    mapM_ (runSingleNativeTests . snd) (HM.toList unitTests)
+allGasTestsAndGoldenShouldPass :: Spec
+allGasTestsAndGoldenShouldPass = do
+  it "gas model tests should not return a PactError and pass golden" $ do
+    void $ gasTestResults
+    -- ^ fails if one of the gas tests throws a pact error
+
 
 allNativesInGasTable :: Spec
 allNativesInGasTable = do
@@ -58,3 +54,13 @@ allNativesInGasTable = do
     (S.fromList absentNatives)
     `shouldBe`
     (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
+
+
+gasTestResults :: IO [GasTestResult ([Term Name], EvalState)]
+gasTestResults = do
+  let runSingleNativeTests t = mapOverGasUnitTests t run run
+      run expr dbSetup = do
+        (res, st) <- bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
+        res' <- eitherDie (getDescription expr dbSetup) res
+        return (res', st)
+  concat <$> mapM (runSingleNativeTests . snd) (HM.toList unitTests)
