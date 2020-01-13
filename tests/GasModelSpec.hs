@@ -3,15 +3,17 @@
 module GasModelSpec (spec) where
 
 import Test.Hspec
+import Test.Hspec.Golden
 
 import qualified Data.Set as S
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
 
 import Control.Exception (bracket)
-import Control.Monad (void)
 import Data.List (foldl')
 
+
+import GoldenSpec (golden, cleanupActual)
 import Pact.Types.Runtime
 import Pact.Types.Util (asString)
 import Pact.GasModel.GasModel
@@ -37,11 +39,18 @@ untestedNativesCheck = do
                  "verify-spv", "public-chain-data", "list"])
 
 allGasTestsAndGoldenShouldPass :: Spec
-allGasTestsAndGoldenShouldPass = do
-  it "gas model tests should not return a PactError and pass golden" $ do
-    void $ gasTestResults
-    -- ^ fails if one of the gas tests throws a pact error
+allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
+  res <- runIO gasTestResults
+  -- ^ fails if one of the gas tests throws a pact error
 
+  let gasCost = _evalGas . snd . _gasTestResultSqliteDb
+      -- ^ only do golden test for sqlite results
+      toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
+      allActualOutputsGolden = map toGoldenOutput res
+
+  it "gas model tests should not return a PactError and pass golden" $ do
+    (golden "gas-model" allActualOutputsGolden)
+      {encodePretty = show} -- TODO effective, but how to minimize the output?
 
 allNativesInGasTable :: Spec
 allNativesInGasTable = do
