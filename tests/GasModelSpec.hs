@@ -48,7 +48,7 @@ allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
       toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
       allActualOutputsGolden = map toGoldenOutput res
 
-  it "gas model tests should not return a PactError and pass golden" $ do
+  it "gas model tests should not return a PactError, but should pass golden" $ do
     (golden "gas-model" allActualOutputsGolden)
       {encodePretty = show} -- TODO effective, but how to minimize the output?
 
