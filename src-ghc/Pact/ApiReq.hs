@@ -29,6 +29,7 @@ module Pact.ApiReq
     ,mkKeyPairs
     ,SignReq(..),signReq
     ,AddSigsReq(..),addSigsReq
+    ,signStdinReq
     ,SigData(..)
     ,commandToSigData
     ,sampleSigData
@@ -71,6 +72,7 @@ import Pact.Types.API
 import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Crypto
+import Pact.Types.Hash (Hash(..))
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.SPV
@@ -157,7 +159,6 @@ data SignReq = SignReq
 instance ToJSON SignReq where toJSON = lensyToJSON 3
 instance FromJSON SignReq where parseJSON = lensyParseJSON 3
 
-
 data AddSigsReq = AddSigsReq
   { _asrUnsigned :: Command Text
   , _asrSigs :: [UserSig]
@@ -241,6 +242,18 @@ instance FromJSON a => FromJSON (SigData a) where
       g (k,String t) = pure (PublicKeyHex k, Just $ UserSig t)
       g (_,v) = typeMismatch "Signature should be String or Null" v
 
+data SigHashData = SigHashData
+  { _shdSigDataHash :: PactHash
+  , _shdSigDataSigs :: [(PublicKeyHex, Maybe UserSig)]
+  }
+  deriving Show
+
+defSigHashData :: RequestKey -> SigHashData
+defSigHashData theHash  = SigHashData
+  { _shdSigDataHash = hash $ unHash $ unRequestKey theHash
+  , _shdSigDataSigs = []
+  }
+
 combineSigs :: [FilePath] -> Bool -> IO ()
 combineSigs fs outputLocal = do
   sigs <- mapM loadSigData fs
@@ -286,10 +299,29 @@ addSigToSigData kp sd = do
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ sd { _sigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _sigDataSigs sd }
 
+addSigToHashData :: SomeKeyPair -> SigHashData -> IO SigHashData
+addSigToHashData kp shd = do
+  sig <- signHash (_shdSigDataHash shd) kp
+  let k = PublicKeyHex $ toB16Text $ getPublic kp
+  return $ shd
+    { _shdSigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _shdSigDataSigs shd}
+
 addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ()
 addSigsReq keyFiles outputLocal bs = do
   sd <- either (error . show) return $ Y.decodeEither' bs
   printCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
+
+signStdinReq :: [FilePath] -> Bool -> ByteString -> IO ()
+signStdinReq keyFiles _outputLocal bs = do
+  rk <- either (error . show) return $ Y.decodeEither' bs :: IO RequestKey
+  sigHashData <- foldM addSigToHash (defSigHashData rk) keyFiles
+  --TODO: what do we want to print here...
+  print sigHashData
+
+addSigToHash :: SigHashData -> FilePath -> IO SigHashData
+addSigToHash sigHashData keyFile = do
+  kp <- importKeyFile keyFile
+  addSigToHashData kp sigHashData
 
 printCommandIfDone :: Bool -> SigData Text -> IO ()
 printCommandIfDone outputLocal sd =
@@ -304,19 +336,22 @@ printCommandIfDone outputLocal sd =
 
 addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
 addSigReq sd keyFile = do
-  v :: Value <- decodeYaml keyFile
+  kp <- importKeyFile keyFile
+  addSigToSigData kp sd
 
+importKeyFile :: FilePath -> IO SomeKeyPair
+importKeyFile keyFile = do
+  v :: Value <- decodeYaml keyFile
   let ekp = do
         -- These keys are from genKeys in Main.hs. Might want to convert to a
         -- dedicated data type at some point.
-        pub <- parseB16TextOnly =<< (note "Error parsing public key" $ v ^? key "public" . _String)
-        sec <- parseB16TextOnly =<< (note "Error parsing secret key" $ v ^? key "secret" . _String)
+        pub <- parseB16TextOnly =<< note "Error parsing public key" (v ^? key "public" . _String)
+        sec <- parseB16TextOnly =<< note "Error parsing secret key" (v ^? key "secret" . _String)
 
         importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS sec)
   case ekp of
     Left e -> dieAR $ "Could not parse key file " <> keyFile <> ": " <> e
-    Right kp -> addSigToSigData kp sd
-
+    Right kp -> return kp
 
 yamlOptions :: Y.EncodeOptions
 yamlOptions = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
