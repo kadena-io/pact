@@ -7,7 +7,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 
 -- |
 -- Module      :  Pact.ApiReq
@@ -46,6 +45,7 @@ import Data.Aeson
 import Data.Aeson.Lens
 import Data.Aeson.Types
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
@@ -248,9 +248,9 @@ data SigHashData = SigHashData
   }
   deriving Show
 
-defSigHashData :: RequestKey -> SigHashData
-defSigHashData theHash  = SigHashData
-  { _shdSigDataHash = hash $ unHash $ unRequestKey theHash
+defSigHashData :: ByteString -> SigHashData
+defSigHashData bs  = SigHashData
+  { _shdSigDataHash = hash bs
   , _shdSigDataSigs = []
   }
 
@@ -313,9 +313,9 @@ addSigsReq keyFiles outputLocal bs = do
 
 signStdinReq :: [FilePath] -> Bool -> ByteString -> IO ()
 signStdinReq keyFiles _outputLocal bs = do
-  rk <- either (error . show) return $ Y.decodeEither' bs :: IO RequestKey
-  sigHashData <- foldM addSigToHash (defSigHashData rk) keyFiles
-  --TODO: what do we want to print here...
+  let b64 = either (error . show) id $ B64.decode bs
+  sigHashData <- foldM addSigToHash (defSigHashData b64) keyFiles
+  --TODO: decide what to output here...
   print sigHashData
 
 addSigToHash :: SigHashData -> FilePath -> IO SigHashData
@@ -371,7 +371,7 @@ apiReq' fp local unsignedReq = do
     doEncode $ SubmitBatch $ exec :| []
 
 uapiReq :: FilePath -> IO ()
-uapiReq fp = do
+  uapiReq fp = do
   (_,exec) <- mkApiReq' True fp
   let doEncode :: ToJSON b => b -> IO ()
       doEncode = BS.putStrLn . Y.encodeWith yamlOptions
