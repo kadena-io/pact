@@ -45,7 +45,6 @@ import Data.Aeson
 import Data.Aeson.Lens
 import Data.Aeson.Types
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
@@ -248,6 +247,16 @@ data SigHashData = SigHashData
   }
   deriving Show
 
+-- command line output structure for SigHashData
+newtype SigHashOutput = SigHashOutput
+  { _shoSigDataSigs :: [(PublicKeyHex, UserSig)] }
+
+instance Show SigHashOutput where
+  show sho =
+    "<public_key>: <signature>\n" ++
+    concatMap (\o  -> (show . unPublicKeyHex . fst) o ++ ": " ++ (show . _usSig . snd) o ++ "\n")
+              (_shoSigDataSigs sho)
+
 defSigHashData :: ByteString -> SigHashData
 defSigHashData bs  = SigHashData
   { _shdSigDataHash = hash bs
@@ -285,7 +294,6 @@ combineSigDatas sds outputLocal = do
                              ]
         else (pAccum, sAccum <|> s)
 
-
 loadSigData :: FilePath -> IO (Either String (SigData Text))
 loadSigData fp = do
   res <- Y.decodeFileEither fp
@@ -304,7 +312,7 @@ addSigToHashData kp shd = do
   sig <- signHash (_shdSigDataHash shd) kp
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ shd
-    { _shdSigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _shdSigDataSigs shd}
+    { _shdSigDataSigs = M.toList $ M.insert k (Just sig) $ M.fromList $ _shdSigDataSigs shd}
 
 addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ()
 addSigsReq keyFiles outputLocal bs = do
@@ -313,10 +321,9 @@ addSigsReq keyFiles outputLocal bs = do
 
 signStdinReq :: [FilePath] -> Bool -> ByteString -> IO ()
 signStdinReq keyFiles _outputLocal bs = do
-  let b64 = either (error . show) id $ B64.decode bs
-  sigHashData <- foldM addSigToHash (defSigHashData b64) keyFiles
-  --TODO: decide what to output here...
-  print sigHashData
+  sigHashData <- foldM addSigToHash (defSigHashData bs) keyFiles
+  let out = SigHashOutput $ (\(a, b) -> (a, fromJust b)) <$> (_shdSigDataSigs sigHashData)
+  print out
 
 addSigToHash :: SigHashData -> FilePath -> IO SigHashData
 addSigToHash sigHashData keyFile = do
@@ -371,7 +378,7 @@ apiReq' fp local unsignedReq = do
     doEncode $ SubmitBatch $ exec :| []
 
 uapiReq :: FilePath -> IO ()
-  uapiReq fp = do
+uapiReq fp = do
   (_,exec) <- mkApiReq' True fp
   let doEncode :: ToJSON b => b -> IO ()
       doEncode = BS.putStrLn . Y.encodeWith yamlOptions
