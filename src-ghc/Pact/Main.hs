@@ -72,7 +72,7 @@ replOpts :: O.Parser Option
 replOpts =
     O.subparser (addSigParser <> combineSigsParser)
     <|>
-    O.subparser (signStdinParser)
+    O.subparser signStdinParser
     <|>
     O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version")
     <|>
@@ -172,7 +172,7 @@ main = do
     OApiReq cf l y -> apiReq' cf l y
     OUApiReq cf -> uapiReq cf
     OSignReq y -> signReq y
-    OSignStdinReq kf l -> BS.getContents >>= signStdinReq kf l
+    OSignStdinReq kf l -> getStdInBS >>= signStdinReq kf l
     OAddSigsReq kf l -> BS.getContents >>= addSigsReq kf l
     OCombineSigs sigs l -> combineSigs sigs l
 

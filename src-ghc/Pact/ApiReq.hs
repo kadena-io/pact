@@ -21,6 +21,7 @@ module Pact.ApiReq
     ,ApiReq(..)
     ,apiReq
     ,apiReq'
+    ,getStdInBS
     ,uapiReq
     ,mkApiReq
     ,mkExec
@@ -64,6 +65,7 @@ import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude
 import System.Directory
+import System.Exit
 import System.FilePath
 
 import Pact.Parse
@@ -257,11 +259,16 @@ instance Show SigHashOutput where
     concatMap (\o  -> (show . unPublicKeyHex . fst) o ++ ": " ++ (show . _usSig . snd) o ++ "\n")
               (_shoSigDataSigs sho)
 
-defSigHashData :: ByteString -> SigHashData
-defSigHashData bs  = SigHashData
-  { _shdSigDataHash = hash bs
-  , _shdSigDataSigs = []
-  }
+defSigHashData :: ByteString -> IO SigHashData
+defSigHashData bs = do
+  decoded <- case decodeBase64UrlUnpadded bs of
+    Left e ->  die $ "Base64Url decode failed: " ++ e
+    Right s -> return s
+  let thePactHash = fromUntypedHash$ Hash decoded
+  return SigHashData
+    { _shdSigDataHash = thePactHash
+    , _shdSigDataSigs = []
+    }
 
 combineSigs :: [FilePath] -> Bool -> IO ()
 combineSigs fs outputLocal = do
@@ -319,10 +326,18 @@ addSigsReq keyFiles outputLocal bs = do
   sd <- either (error . show) return $ Y.decodeEither' bs
   printCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
 
+-- get ByteString from stdin w/out the trailing cr
+getStdInBS :: IO ByteString
+getStdInBS = do
+  bs <- BS.getContents
+  return $
+    if BS.last bs == '\n' then BS.init bs else bs
+
 signStdinReq :: [FilePath] -> Bool -> ByteString -> IO ()
 signStdinReq keyFiles _outputLocal bs = do
-  sigHashData <- foldM addSigToHash (defSigHashData bs) keyFiles
-  let out = SigHashOutput $ (\(a, b) -> (a, fromJust b)) <$> (_shdSigDataSigs sigHashData)
+  defSigHash <- defSigHashData bs
+  sigHashData <- foldM addSigToHash defSigHash keyFiles
+  let out = SigHashOutput $ (\(a, b) -> (a, fromJust b)) <$> _shdSigDataSigs sigHashData
   print out
 
 addSigToHash :: SigHashData -> FilePath -> IO SigHashData
