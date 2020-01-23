@@ -21,7 +21,6 @@ module Pact.ApiReq
      ApiKeyPair(..)
     ,ApiReq(..)
     ,apiReq
-    ,apiReq'
     ,uapiReq
     ,mkApiReq
     ,mkExec
@@ -337,18 +336,12 @@ yamlOptions :: Y.EncodeOptions
 yamlOptions = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
 
 apiReq :: FilePath -> Bool -> IO ()
-apiReq f l = apiReq' f l False
-
-apiReq' :: FilePath -> Bool -> Bool -> IO ()
-apiReq' fp local unsignedReq = do
-  (_,exec) <- mkApiReq' unsignedReq fp
-  let doEncode :: ToJSON b => b -> IO ()
-      doEncode | unsignedReq = BS.putStrLn . Y.encodeWith yamlOptions
-               | otherwise = putJSON
-  if local || unsignedReq then
-    doEncode exec
+apiReq fp local = do
+  (_,exec) <- mkApiReq' False fp
+  if local then
+    putJSON exec
     else
-    doEncode $ SubmitBatch $ exec :| []
+    putJSON $ SubmitBatch $ exec :| []
 
 uapiReq :: FilePath -> IO ()
 uapiReq fp = do

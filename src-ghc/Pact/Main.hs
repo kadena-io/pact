@@ -61,7 +61,7 @@ data Option =
   | OGenKey
   | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
   | ORepl
-  | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool, _oReqUnsigned :: Bool }
+  | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
   | OUApiReq { _oReqYaml :: FilePath }
   | OServer { _oConfigYaml :: FilePath }
   | OAddSigsReq { _oKeyFiles :: [FilePath], _oReqLocal :: Bool }
@@ -94,7 +94,6 @@ replOpts =
     (OApiReq <$> O.strOption (O.short 'a' <> O.long "apireq" <> O.metavar "REQ_YAML" <>
                              O.help "Format API request JSON using REQ_YAML file")
       <*> localFlag
-      <*> pure False
     ) <|>
     (OUApiReq
      <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
@@ -125,7 +124,7 @@ addSigParser = O.command "add-sig" $ O.info (OAddSigsReq <$> parser <*> localFla
     i = O.fullDesc
         <> O.header synopsis
         <> O.progDesc synopsis
-    synopsis = "Add a signature to a signature data file."
+    synopsis = "Add a signature to a signature data from stdin"
 
 signParser :: O.Mod O.CommandFields Option
 signParser = O.command "sign" $ O.info (OSignCmd <$> parser <**> O.helper) i
@@ -136,7 +135,7 @@ signParser = O.command "sign" $ O.info (OSignCmd <$> parser <**> O.helper) i
     i = O.fullDesc
         <> O.header synopsis
         <> O.progDesc synopsis
-    synopsis = "Add a signature to a signature data file."
+    synopsis = "Sign arbitrary base64url-encoded data from stdin"
 
 
 argParser :: O.ParserInfo Option
@@ -166,7 +165,7 @@ main = do
         | otherwise -> execScript dolog fp >>= exitLoad
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
-    OApiReq cf l y -> apiReq' cf l y
+    OApiReq cf l -> apiReq cf l
     OUApiReq cf -> uapiReq cf
     OAddSigsReq kf l -> BS.getContents >>= addSigsReq kf l
     OCombineSigs sigs l -> combineSigs sigs l
