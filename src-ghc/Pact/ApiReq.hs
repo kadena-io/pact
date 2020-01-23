@@ -27,7 +27,6 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
-    ,SignReq(..),signReq
     ,AddSigsReq(..),addSigsReq
     ,SigData(..)
     ,commandToSigData
@@ -378,13 +377,6 @@ decodeYaml fp = either (dieAR . show) return =<<
 
 putJSON :: ToJSON b => b -> IO ()
 putJSON = BSL.putStrLn . encode
-
-signReq :: FilePath -> IO ()
-signReq fp = do
-  SignReq{..} <- decodeYaml fp
-  kps <- mkKeyPairs _srKeyPairs
-  sigs <- mapM (signHash (fromUntypedHash _srHash)) (map fst kps)
-  BS.putStrLn $ Y.encode sigs
 
 signCmd
   :: FilePath

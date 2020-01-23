@@ -64,7 +64,6 @@ data Option =
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool, _oReqUnsigned :: Bool }
   | OUApiReq { _oReqYaml :: FilePath }
   | OServer { _oConfigYaml :: FilePath }
-  | OSignReq { _oReqYaml :: FilePath }
   | OAddSigsReq { _oKeyFiles :: [FilePath], _oReqLocal :: Bool }
   | OCombineSigs { _oSigFiles :: [FilePath], _oReqLocal :: Bool }
   | OSignCmd { _oSigFile :: FilePath }
@@ -100,9 +99,6 @@ replOpts =
     (OUApiReq
      <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
                       O.help "Format unsigned API request JSON using REQ_YAML file")
-    ) <|>
-    (OSignReq <$> O.strOption (O.short 'w' <> O.long "sign" <> O.metavar "REQ_YAML" <>
-                             O.help "Sign hash")
     ) <|>
     pure ORepl -- would be nice to bail on unrecognized args here
 
@@ -172,7 +168,6 @@ main = do
     OGenKey -> genKeys
     OApiReq cf l y -> apiReq' cf l y
     OUApiReq cf -> uapiReq cf
-    OSignReq y -> signReq y
     OAddSigsReq kf l -> BS.getContents >>= addSigsReq kf l
     OCombineSigs sigs l -> combineSigs sigs l
     OSignCmd kf -> signCmd kf =<< fmap (encodeUtf8 . T.strip) T.getContents
