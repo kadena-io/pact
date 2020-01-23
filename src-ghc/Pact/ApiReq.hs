@@ -34,6 +34,7 @@ module Pact.ApiReq
     ,sampleSigData
     ,combineSigs
     ,combineSigDatas
+    ,signCmd
     ) where
 
 import Control.Applicative
@@ -212,6 +213,7 @@ sigDataToCommand (SigData _ _ Nothing) = Left "Can't reconstruct command"
 sigDataToCommand (SigData h sigList (Just c)) = do
   payload :: Payload Value ParsedCode <- traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 c)
   let sigMap = M.fromList sigList
+  -- It is ok to use a map here because we're iterating over the signers list and only using the map for lookup.
   let sigs = catMaybes $ map (\signer -> join $ M.lookup (PublicKeyHex $ _siPubKey signer) sigMap) $ _pSigners payload
   pure $ Command c sigs h
 
@@ -284,7 +286,18 @@ addSigToSigData :: SomeKeyPair -> SigData a -> IO (SigData a)
 addSigToSigData kp sd = do
   sig <- signHash (_sigDataHash sd) kp
   let k = PublicKeyHex $ toB16Text $ getPublic kp
-  return $ sd { _sigDataSigs = M.toList $ M.adjust (const $ Just sig) k $ M.fromList $ _sigDataSigs sd }
+  return $ sd { _sigDataSigs = addSigToList k sig $ _sigDataSigs sd }
+
+addSigToList
+  :: PublicKeyHex
+  -> UserSig
+  -> [(PublicKeyHex, Maybe UserSig)]
+  -> [(PublicKeyHex, Maybe UserSig)]
+addSigToList _ _ [] = []
+addSigToList k s ((pk,pus):ps) =
+  if k == pk
+    then (pk, Just s) : addSigToList k s ps
+    else (pk, pus) : addSigToList k s ps
 
 addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ()
 addSigsReq keyFiles outputLocal bs = do
@@ -304,19 +317,22 @@ printCommandIfDone outputLocal sd =
 
 addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
 addSigReq sd keyFile = do
-  v :: Value <- decodeYaml keyFile
+  kp <- importKeyFile keyFile
+  addSigToSigData kp sd
 
+importKeyFile :: FilePath -> IO SomeKeyPair
+importKeyFile keyFile = do
+  v :: Value <- decodeYaml keyFile
   let ekp = do
         -- These keys are from genKeys in Main.hs. Might want to convert to a
         -- dedicated data type at some point.
-        pub <- parseB16TextOnly =<< (note "Error parsing public key" $ v ^? key "public" . _String)
-        sec <- parseB16TextOnly =<< (note "Error parsing secret key" $ v ^? key "secret" . _String)
+        pub <- parseB16TextOnly =<< note "Error parsing public key" (v ^? key "public" . _String)
+        sec <- parseB16TextOnly =<< note "Error parsing secret key" (v ^? key "secret" . _String)
 
         importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS sec)
   case ekp of
     Left e -> dieAR $ "Could not parse key file " <> keyFile <> ": " <> e
-    Right kp -> addSigToSigData kp sd
-
+    Right kp -> return kp
 
 yamlOptions :: Y.EncodeOptions
 yamlOptions = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
@@ -369,6 +385,19 @@ signReq fp = do
   kps <- mkKeyPairs _srKeyPairs
   sigs <- mapM (signHash (fromUntypedHash _srHash)) (map fst kps)
   BS.putStrLn $ Y.encode sigs
+
+signCmd
+  :: FilePath
+  -> ByteString
+  -- ^ Takse a base64url encoded ByteString
+  -> IO ()
+signCmd keyFile bs = do
+  kp <- importKeyFile keyFile
+  case decodeBase64UrlUnpadded bs of
+    Left e -> dieAR $ "stdin was not valid base64url: " <> e
+    Right h -> do
+      UserSig sig <- signHash (fromUntypedHash $ Hash h) kp
+      BS.putStrLn $ Y.encode $ object [ toB16Text (getPublic kp) .= sig ]
 
 withKeypairsOrSigner
   :: Bool
