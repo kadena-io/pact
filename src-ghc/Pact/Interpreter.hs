@@ -213,8 +213,10 @@ initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 interpret :: Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
 interpret runner evalEnv terms = do
+  print terms
   ((rs,logs,txid),state) <-
     runEval def evalEnv $ evalTerms runner terms
+
   let gas = _evalGas state
       gasLogs = _evalLogGas state
       pactExec = _evalPactExec state

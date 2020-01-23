@@ -79,6 +79,8 @@ module Pact.Types.Term
    Gas(..)
    , module Pact.Types.Names
    , _TDefCaps
+   , _TDef
+   , _DefCapName
    ) where
 
 
@@ -86,7 +88,7 @@ import Bound
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.DeepSeq
-import Control.Lens (Plated(..), Fold, folding, universe, makeLenses, makePrisms)
+import Control.Lens hiding ((.=), DefName)
 import Control.Monad
 #if MIN_VERSION_aeson(1,4,3)
 import Data.Aeson hiding (pairs,Object, (<?>))
@@ -654,9 +656,9 @@ derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
 -- | A 'Fold' into the defcap-type 'Def' structures
 --
-_DefCap :: Fold (Def n) (Def n)
-_DefCap = folding $ \d -> case d of
-  Def _ _ Defcap _ _ _ _ _ -> Just d
+_DefCapName :: Fold (Def n) DefName
+_DefCapName = folding $ \d -> case d of
+  Def n _ Defcap _ _ _ _ _ -> Just n
   _ -> Nothing
 
 data Namespace a = Namespace
@@ -904,6 +906,24 @@ deriving instance Show n => Show (Term n)
 deriving instance Eq n => Eq (Term n)
 instance NFData n => NFData (Term n)
 
+instance Plated (Term n) where
+    plate f t = case t of
+      TModule d b i -> (\d' b' -> TModule d' b' i) <$> traverse f d <$> plate f b
+      TList l ty i -> (\l' ty' -> TList l' ty' i) <$> traverse f l <*> traverse f ty
+      TNative n fn fty es d tl i -> (\fty' -> TNative n fn fty' es d tl i) <$> traverse (traverse f) fty
+      TConst arg mn cval m i -> (\arg' cval' -> TConst arg' mn cval' m i)
+        <$> traverse f arg
+        <*> traverse f cval
+      TApp a i -> (\a' -> TApp a' i) <$> traverse f a
+      TBinding bp b bty i -> (\bp' bty' -> TBinding bp' b bty' i)
+        <$> traverse (traverse f) bp
+        <*> traverse (traverse f) bty
+      TSchema tyn mn m args i -> (\args' -> TSchema tyn mn m args' i) <$> traverse (traverse f) args
+      TGuard g i -> (\g' -> TGuard g' i) <$> traverse f g
+      TStep s m i -> (\s' -> TStep s' m i) <$> traverse f s
+      TTable tn mn h tty m i -> (\tty' -> TTable tn mn h tty' m i) <$> traverse f tty
+      _ -> pure t
+
 instance HasInfo (Term n) where
   getInfo t = case t of
     TApp{..} -> getInfo _tApp
@@ -1093,24 +1113,6 @@ instance (ToJSON n, FromJSON n) => FromJSON (Term n) where
 instance (ToJSON n, FromJSON n) => ToJSON (Term n) where
   toJSON = encoder termCodec
 
-instance Plated (Term n) where
-    plate f t = case t of
-      TModule d b i -> (\d' -> TModule d' b i) <$> traverse f d
-      TList l ty i -> (\l' ty' -> TList l' ty' i) <$> traverse f l <*> traverse f ty
-      TNative n fn fty es d tl i -> (\fty' -> TNative n fn fty' es d tl i) <$> traverse (traverse f) fty
-      TConst arg mn cval m i -> (\arg' cval' -> TConst arg' mn cval' m i)
-        <$> traverse f arg
-        <*> traverse f cval
-      TApp a i -> (\a' -> TApp a' i) <$> traverse f a
-      TBinding bp b bty i -> (\bp' bty' -> TBinding bp' b bty' i)
-        <$> traverse (traverse f) bp
-        <*> traverse (traverse f) bty
-      TSchema tyn mn m args i -> (\args' -> TSchema tyn mn m args' i) <$> traverse (traverse f) args
-      TGuard g i -> (\g' -> TGuard g' i) <$> traverse f g
-      TStep s m i -> (\s' -> TStep s' m i) <$> traverse f s
-      TTable tn mn h tty m i -> (\tty' -> TTable tn mn h tty' m i) <$> traverse f tty
-      _ -> pure t
-
 class ToTerm a where
     toTerm :: a -> Term m
 instance ToTerm Bool where toTerm = tLit . LBool
@@ -1274,10 +1276,16 @@ deriveShow1 ''Module
 deriveShow1 ''Governance
 deriveShow1 ''Step
 
+_TDef :: Traversal' (Term n) (Def n)
+_TDef f t = case t of
+  TDef d i -> (\d' -> TDef d' i) <$> f d
+  u -> pure u
+
+
 -- | Collect defcaps for an ast
 --
-_TDefCaps :: Term n -> [Term n]
-_TDefCaps t = universe t
+_TDefCaps :: Term n -> [DefName]
+_TDefCaps t = t ^.. cosmos . _TDef . _DefCap
 
 
 -- | Demonstrate Term/Bound JSON marshalling with nested bound and free vars.

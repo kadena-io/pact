@@ -318,6 +318,7 @@ loadFile f = do
           r <- parsedCompileEval src pr
           when (isPactFile f) $ void useReplLib
           restoreFile
+          liftIO $ print r
           return r)
          $ \(e :: SomeException) -> do
                restoreFile

@@ -88,3 +88,5 @@ instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value), A.FromJSON (f a))
   parseJSON = A.withObject "Scope" $ \o -> do
     f <- o A..: "scope"
     Scope <$> traverse A.parseJSON f
+
+instance (Plated (t n)) => Plated (Scope t n) where
