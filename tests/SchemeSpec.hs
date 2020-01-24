@@ -6,6 +6,8 @@ module SchemeSpec (spec) where
 import Test.Hspec
 import System.IO.Error
 import Data.Text (Text)
+import qualified Data.Text as T
+import Data.Text.Encoding
 import Data.ByteString (ByteString)
 import qualified Data.ByteString          as BS
 import Data.Aeson as A
@@ -229,8 +231,16 @@ testSigNonMalleability = do
 
 testSigsRoundtrip :: Spec
 testSigsRoundtrip = runIO $ do
-  apiReq' "tests/sign-scripts/unsigned-exec.yaml" True True
-  apiReq' "tests/sign-scripts/unsigned-cont.yaml" True True
-  signReq "tests/sign-scripts/sign-req.yaml"
+  uapiReq "tests/sign-scripts/unsigned-exec.yaml"
+  uapiReq "tests/sign-scripts/unsigned-cont.yaml"
 
-  BS.readFile "tests/sign-scripts/add-sigs.yaml" >>= addSigsReq ["tests/sign-scripts/key.yaml"] False
+  signRes <- signCmd "tests/sign-scripts/key.yaml" "i1S2rUgEyfBl393oWEwts3DzuyCvraemXA9A1Bno6sg"
+  signRes `shouldBe` "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804: c72ac57ac1f03cd264b4e0db1ef681894e42b02b5ddcb115ee2f776ba8048c2afd15a4c1e46b20248bb015ba395689a90ac93b5193173f3af6e495b4ce09ce03\n"
+
+  addSigsRes <- addSigsReq ["tests/sign-scripts/key.yaml"] False =<< BS.readFile "tests/sign-scripts/add-sigs.yaml"
+  addSigsExpected <- BS.readFile "tests/sign-scripts/addSigsExpected.yaml"
+  T.strip (decodeUtf8 addSigsRes) `shouldBe` T.strip (decodeUtf8 addSigsExpected)
+
+  combineSigsRes <- combineSigs ["tests/sign-scripts/add-sigs.yaml", "tests/sign-scripts/bare-sig.yaml"] False
+  combineSigsExpected <- BS.readFile "tests/sign-scripts/combineSigsExpected.yaml"
+  T.strip (decodeUtf8 combineSigsRes) `shouldBe` T.strip (decodeUtf8 combineSigsExpected)

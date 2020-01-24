@@ -34,6 +34,7 @@ import Control.Lens
 import Control.Monad.State.Strict
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS8
 import Data.List
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
@@ -62,7 +63,7 @@ data Option =
   | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
   | ORepl
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
-  | OUApiReq { _oReqYaml :: FilePath }
+  | OUnsignedReq { _oReqYaml :: FilePath }
   | OServer { _oConfigYaml :: FilePath }
   | OAddSigsReq { _oKeyFiles :: [FilePath], _oReqLocal :: Bool }
   | OCombineSigs { _oSigFiles :: [FilePath], _oReqLocal :: Bool }
@@ -95,7 +96,7 @@ replOpts =
                              O.help "Format API request JSON using REQ_YAML file")
       <*> localFlag
     ) <|>
-    (OUApiReq
+    (OUnsignedReq
      <$> O.strOption (O.short 'u' <> O.long "unsigned" <> O.metavar "REQ_YAML" <>
                       O.help "Format unsigned API request JSON using REQ_YAML file")
     ) <|>
@@ -166,10 +167,10 @@ main = do
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
     OApiReq cf l -> apiReq cf l
-    OUApiReq cf -> uapiReq cf
-    OAddSigsReq kf l -> BS.getContents >>= addSigsReq kf l
-    OCombineSigs sigs l -> combineSigs sigs l
-    OSignCmd kf -> signCmd kf =<< fmap (encodeUtf8 . T.strip) T.getContents
+    OUnsignedReq cf -> uapiReq cf
+    OAddSigsReq kf l -> BS8.putStrLn =<< addSigsReq kf l =<< BS.getContents
+    OCombineSigs sigs l -> BS8.putStrLn =<< combineSigs sigs l
+    OSignCmd kf -> BS8.putStrLn =<< signCmd kf =<< fmap (encodeUtf8 . T.strip) T.getContents
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS

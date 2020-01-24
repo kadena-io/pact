@@ -241,16 +241,15 @@ instance FromJSON a => FromJSON (SigData a) where
       g (k,String t) = pure (PublicKeyHex k, Just $ UserSig t)
       g (_,v) = typeMismatch "Signature should be String or Null" v
 
-combineSigs :: [FilePath] -> Bool -> IO ()
+combineSigs :: [FilePath] -> Bool -> IO ByteString
 combineSigs fs outputLocal = do
   sigs <- mapM loadSigData fs
   case partitionEithers sigs of
     ([], rs) -> combineSigDatas rs outputLocal
     (ls, _) -> do
-      putStrLn "One or more files had errors:"
-      mapM_ putStrLn ls
+      error $ unlines $ "One or more files had errors:" : ls
 
-combineSigDatas :: [SigData Text] -> Bool -> IO ()
+combineSigDatas :: [SigData Text] -> Bool -> IO ByteString
 combineSigDatas [] _ = error "Nothing to combine"
 combineSigDatas sds outputLocal = do
   let hashes = S.fromList $ map _sigDataHash sds
@@ -258,7 +257,7 @@ combineSigDatas sds outputLocal = do
   when (S.size hashes /= 1 || S.size cmds /= 1) $ do
     error "SigData files must contain exactly one unique hash and command.  Aborting..."
   let sigs = foldl1 f $ map _sigDataSigs sds
-  printCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
+  returnCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
   where
     f accum sigs
       | length accum /= length sigs = error "Sig lists have different lengths"
@@ -297,21 +296,21 @@ addSigToList k s ((pk,pus):ps) =
     then (pk, Just s) : addSigToList k s ps
     else (pk, pus) : addSigToList k s ps
 
-addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ()
+addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ByteString
 addSigsReq keyFiles outputLocal bs = do
   sd <- either (error . show) return $ Y.decodeEither' bs
-  printCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
+  returnCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
 
-printCommandIfDone :: Bool -> SigData Text -> IO ()
-printCommandIfDone outputLocal sd =
+returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
+returnCommandIfDone outputLocal sd =
   case sigDataToCommand sd of
-    Left _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd
+    Left _ -> return $ Y.encodeWith yamlOptions sd
     Right c -> do
       let res = verifyCommand $ fmap encodeUtf8 c
           out = if outputLocal then encode c else encode (SubmitBatch (c :| []))
-      case res :: ProcessedCommand Value ParsedCode of
-        ProcSucc _ -> BSL.putStrLn out
-        ProcFail _ -> BS.putStrLn $ Y.encodeWith yamlOptions sd
+      return $ case res :: ProcessedCommand Value ParsedCode of
+        ProcSucc _ -> BSL.toStrict out
+        ProcFail _ -> Y.encodeWith yamlOptions sd
 
 addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
 addSigReq sd keyFile = do
@@ -375,14 +374,14 @@ signCmd
   :: FilePath
   -> ByteString
   -- ^ Takse a base64url encoded ByteString
-  -> IO ()
+  -> IO ByteString
 signCmd keyFile bs = do
   kp <- importKeyFile keyFile
   case decodeBase64UrlUnpadded bs of
     Left e -> dieAR $ "stdin was not valid base64url: " <> e
     Right h -> do
       UserSig sig <- signHash (fromUntypedHash $ Hash h) kp
-      BS.putStrLn $ Y.encode $ object [ toB16Text (getPublic kp) .= sig ]
+      return $ Y.encode $ object [ toB16Text (getPublic kp) .= sig ]
 
 withKeypairsOrSigner
   :: Bool
