@@ -371,17 +371,20 @@ putJSON :: ToJSON b => b -> IO ()
 putJSON = BSL.putStrLn . encode
 
 signCmd
-  :: FilePath
+  :: [FilePath]
   -> ByteString
   -- ^ Takse a base64url encoded ByteString
   -> IO ByteString
-signCmd keyFile bs = do
-  kp <- importKeyFile keyFile
+signCmd keyFiles bs = do
   case decodeBase64UrlUnpadded bs of
     Left e -> dieAR $ "stdin was not valid base64url: " <> e
     Right h -> do
-      UserSig sig <- signHash (fromUntypedHash $ Hash h) kp
-      return $ Y.encode $ object [ toB16Text (getPublic kp) .= sig ]
+      kps <- mapM importKeyFile keyFiles
+      let signSingle kp = do
+            sig <- signHash (fromUntypedHash $ Hash h) kp
+            return $ toB16Text (getPublic kp) .= _usSig sig
+      sigs <- mapM signSingle kps
+      return $ Y.encode $ object sigs
 
 withKeypairsOrSigner
   :: Bool
