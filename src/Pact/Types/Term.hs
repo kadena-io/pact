@@ -908,7 +908,7 @@ instance NFData n => NFData (Term n)
 
 instance Plated (Term n) where
     plate f t = case t of
-      TModule d b i -> (\d' b' -> TModule d' b' i) <$> traverse f d <*> pure b
+      TModule d (Scope b) i -> (\d' b' -> TModule d' b' i) <$> traverse f d <*> (Scope <$> (traverse (traverse (plate f)) b))
       TList l ty i -> (\l' ty' -> TList l' ty' i) <$> traverse f l <*> traverse f ty
       TNative n fn fty es d tl i -> (\fty' -> TNative n fn fty' es d tl i) <$> traverse (traverse f) fty
       TConst arg mn cval m i -> (\arg' cval' -> TConst arg' mn cval' m i)
@@ -923,9 +923,6 @@ instance Plated (Term n) where
       TStep s m i -> (\s' -> TStep s' m i) <$> traverse f s
       TTable tn mn h tty m i -> (\tty' -> TTable tn mn h tty' m i) <$> traverse f tty
       _ -> pure t
-
-instance (Plated (t n)) => Plated (Scope a t n) where
-  plate f (Scope t) = Scope <$> plate f t
 
 instance HasInfo (Term n) where
   getInfo t = case t of
@@ -1282,13 +1279,12 @@ deriveShow1 ''Step
 _TDef :: Traversal' (Term n) (Def n)
 _TDef f t = case t of
   TDef d i -> (\d' -> TDef d' i) <$> f d
-  u -> pure u
-
+  u -> pure u\
 
 -- | Collect defcaps for an ast
 --
 _TDefCaps :: Term n -> [DefName]
-_TDefCaps t = t ^.. cosmos . _TDef . _DefCap
+_TDefCaps t = t ^.. cosmos . _TDef . _DefCapName
 
 
 -- | Demonstrate Term/Bound JSON marshalling with nested bound and free vars.
