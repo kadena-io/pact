@@ -1,0 +1,13 @@
+(interface I
+  (defcap CAP:bool (a:string b:integer)
+    @managed b mgr)
+  (defun mgr:integer (a:integer b:integer)))
+
+(module M G
+  (defcap G () true)
+  (implements I)
+  ;; auto @managed
+  (defcap CAP:bool (a:string b:integer) @managed
+    true)
+  (defun mgr:integer (a:integer b:integer) 1)
+  )

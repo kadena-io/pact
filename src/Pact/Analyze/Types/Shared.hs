@@ -527,14 +527,14 @@ mkESchema tys = case go tys of
                   ESchema unsorted -> ESchema $ normalizeSchema unsorted
   where
     go :: [(Text, EType)] -> ESchema
-    go [] = ESchema SNil'
+    go [] = ESchema (SingList SNil)
     go ((name, (EType ty)):rest) =
       case go rest of
-        ESchema restSchema ->
+        ESchema (SingList restSchema) ->
           case someSymbolVal (T.unpack name) of
             SomeSymbol (_ :: Proxy k) ->
               withSing ty $ withTypeable ty $
-                ESchema $ SCons' (SSymbol @k) ty restSchema
+                ESchema $ SingList (SCons (SSymbol @k) ty restSchema)
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'mkInvariantEnv'.
@@ -757,20 +757,20 @@ type family ConcreteObj (a :: [(Symbol, Ty)]) where
 
 -- | Eliminator for objects
 foldrObject
-  :: (SBV (ConcreteObj schema) :< SingList schema)
+  :: (SBV (ConcreteObj schema) , SingList schema)
   -> a
   -> (forall k b.
        KnownSymbol k
     => SingSymbol k -> SBV (Concrete b) -> SingTy b -> a -> a)
   -> a
-foldrObject (_   :< SNil')              base _f = base
-foldrObject (obj :< SCons' k ty schema) base f
-  = withSymVal ty $ withSymVal (SObjectUnsafe schema) $
-  f k (_1 obj) ty (foldrObject (_2 obj :< schema) base f)
+foldrObject (_   , (SingList SNil))              base _f = base
+foldrObject (obj , (SingList (SCons k ty schema))) base f
+  = withSymVal ty $ withSymVal (SObjectUnsafe (SingList schema)) $
+  f k (_1 obj) ty (foldrObject (_2 obj , (SingList schema)) base f)
 
 foldObject
   :: Monoid a
-  => (SBV (ConcreteObj schema) :< SingList schema)
+  => (SBV (ConcreteObj schema) , SingList schema)
   -> (forall k b.
        KnownSymbol k
     => SingSymbol k -> SBV (Concrete b) -> SingTy b -> a)
@@ -864,9 +864,9 @@ withEq = withDict . singMkEq
       SGuard       -> Dict
       SAny         -> Dict
       SList ty'    -> withEq ty' Dict
-      SObjectUnsafe SNil'   -> Dict
-      SObjectUnsafe (SCons' _ ty' tys)
-        -> withEq ty' $ withDict (singMkEq (SObjectUnsafe tys)) Dict
+      SObjectUnsafe (SingList SNil)   -> Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
+        -> withEq ty' $ withDict (singMkEq (SObjectUnsafe (SingList tys))) Dict
 
 withOrd :: SingTy a -> (Ord (Concrete a) => b) -> b
 withOrd = withDict . singMkOrd
@@ -882,9 +882,9 @@ withOrd = withDict . singMkOrd
       SGuard       -> Dict
       SAny         -> Dict
       SList ty'    -> withOrd ty' Dict
-      SObjectUnsafe SNil'   -> Dict
-      SObjectUnsafe (SCons' _ ty' tys)
-        -> withOrd ty' $ withDict (singMkOrd (SObjectUnsafe tys)) Dict
+      SObjectUnsafe (SingList SNil)   -> Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
+        -> withOrd ty' $ withDict (singMkOrd (SObjectUnsafe (SingList tys))) Dict
 
 withShow :: SingTy a -> (Show (Concrete a) => b) -> b
 withShow = withDict . singMkShow
@@ -900,9 +900,9 @@ withShow = withDict . singMkShow
       SGuard       -> Dict
       SAny         -> Dict
       SList ty'    -> withShow ty' Dict
-      SObjectUnsafe SNil'   -> Dict
-      SObjectUnsafe (SCons' _ ty' tys)
-        -> withShow ty' $ withDict (singMkShow (SObjectUnsafe tys)) Dict
+      SObjectUnsafe (SingList SNil)   -> Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
+        -> withShow ty' $ withDict (singMkShow (SObjectUnsafe (SingList tys))) Dict
 
 withPretty :: SingTy a -> (Pretty (Concrete a) => b) -> b
 withPretty = withDict . singMkPretty
@@ -918,10 +918,10 @@ withPretty = withDict . singMkPretty
       SGuard       -> Dict
       SAny         -> Dict
       SList ty'    -> withPretty ty' Dict
-      SObjectUnsafe SNil'   -> Dict
-      SObjectUnsafe (SCons' _ ty' tys)
+      SObjectUnsafe (SingList SNil)   -> Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withPretty ty' $
-           withDict (singMkPretty (SObjectUnsafe tys)) Dict
+           withDict (singMkPretty (SObjectUnsafe (SingList tys))) Dict
 
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable = withDict . singMkTypeable
@@ -963,10 +963,10 @@ withSMTValue = withDict . singMkSMTValue
       SGuard     -> Dict
       SAny       -> Dict
       SList ty'  -> withSMTValue ty' $ withTypeable ty' Dict
-      SObjectUnsafe SNil' -> Dict
-      SObjectUnsafe (SCons' _ ty' tys)
+      SObjectUnsafe (SingList SNil) -> Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withSMTValue ty' $
-           withDict (singMkSMTValue (SObjectUnsafe tys)) Dict
+           withDict (singMkSMTValue (SObjectUnsafe (SingList tys))) Dict
 
 withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
 withHasKind = withDict . singMkHasKind
@@ -982,10 +982,10 @@ withHasKind = withDict . singMkHasKind
       SGuard     -> Dict
       SAny       -> Dict
       SList ty'  -> withHasKind ty' $ withTypeable ty' Dict
-      SObjectUnsafe SNil' -> Dict
-      SObjectUnsafe (SCons' _ ty' tys)
+      SObjectUnsafe (SingList SNil) -> Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withHasKind ty' $
-           withDict (singMkHasKind (SObjectUnsafe tys)) Dict
+           withDict (singMkHasKind (SObjectUnsafe (SingList tys))) Dict
 
 instance SMTValue (Object AConcrete '[]) where
   sexprToVal _ = Just $ Object SNil
@@ -1015,10 +1015,10 @@ withSymVal = withDict . singMkSymVal
       SGuard      -> Dict
       SAny        -> Dict
       SList ty'   -> withSymVal ty' Dict
-      SObjectUnsafe SNil' -> Dict
-      SObjectUnsafe (SCons' _ ty' tys)
+      SObjectUnsafe (SingList SNil) -> Dict
+      SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withSymVal ty' $
-           withDict (singMkSymVal (SObjectUnsafe tys)) Dict
+           withDict (singMkSymVal (SObjectUnsafe (SingList tys))) Dict
 
 instance Eq (tm ('TyObject '[])) => Ord (Object tm '[]) where
   compare _ _ = EQ
@@ -1095,16 +1095,16 @@ columnMapToSchema (ColumnMap colMap) = go (Map.toList colMap) where
   go [] = EType SObjectNil
   go ((ColumnName colName, EType ty) : tys) = case someSymbolVal colName of
     SomeSymbol (_ :: Proxy k) -> withSing ty $ withTypeable ty $ case go tys of
-      EType (SObject tys') -> EType $ mkSObject $ SCons' (SSymbol @k) ty tys'
+      EType (SObject (SingList tys')) -> EType $ mkSObject $ SingList (SCons (SSymbol @k) ty tys')
       _ -> vacuousMatch "columnMapToSchema always returns (EType SObject)"
   go _ = vacuousMatch "both list constructors already covered"
 
 schemaToColumns :: SingTy ('TyObject schema) -> [(String, EType)]
 schemaToColumns (SObjectUnsafe schema) = case schema of
-  SNil'
+  SingList SNil
     -> []
-  SCons' k v vs
-    -> (symbolVal k, EType v) : schemaToColumns (SObjectUnsafe vs)
+  SingList (SCons k v vs)
+    -> (symbolVal k, EType v) : schemaToColumns (SObjectUnsafe (SingList vs))
 
 objTypeFilter :: (String -> Bool) -> SingTy ('TyObject schema) -> EType
 objTypeFilter f objTy

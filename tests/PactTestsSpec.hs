@@ -102,6 +102,8 @@ badErrors = M.fromList
    ,"Module/interface install not supported")
   ,(pfx "bad-ns-def.repl"
    ,"invalid namespace name format")
+  ,(pfx "bad-defcap-explicit-mgr-auto-impl.repl"
+   ,"Defmeta mismatch with I: found @managed, expected @managed b")
   ]
   where
     pfx = ("tests/pact/bad/" ++)

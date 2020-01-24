@@ -585,7 +585,7 @@ instance NFData n => NFData (DefcapMeta n)
 instance Pretty n => Pretty (DefcapMeta n) where
   pretty (DefcapManaged m) = case m of
     Nothing -> tag
-    Just (p,f) -> tag <> " " <> pretty f <> " " <> pretty p
+    Just (p,f) -> tag <> " " <> pretty p <> " " <> pretty f
     where
       tag = "@managed"
 instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
