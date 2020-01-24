@@ -1,3 +1,8 @@
+3.5.0
+---
+
+* Add the commands `sign`, `add-sig`, and `combine-sigs` for working with signatures (#759)
+
 3.4.0
 ---
 
