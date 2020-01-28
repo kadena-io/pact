@@ -11,9 +11,14 @@ import qualified Data.Map as Map
 
 import Control.Exception (bracket)
 import Data.List (foldl')
+import Test.QuickCheck
+import Test.QuickCheck.Gen (Gen(..))
+import Test.QuickCheck.Random (mkQCGen)
 
 
 import GoldenSpec (golden, cleanupActual)
+import Pact.Types.SizeOf
+import Pact.Types.PactValue
 import Pact.Types.Runtime
 import Pact.Types.Util (asString)
 import Pact.GasModel.GasModel
@@ -29,6 +34,7 @@ spec = describe "gas model tests" $ do
   describe "untestedNativesCheck" untestedNativesCheck
   describe "allGasTestsAndGoldenShouldPass" allGasTestsAndGoldenShouldPass
   describe "allNativesInGasTable" allNativesInGasTable
+  describe "goldenSizeOfPactValues" goldenSizeOfPactValues
 
 untestedNativesCheck :: Spec
 untestedNativesCheck = do
@@ -50,7 +56,28 @@ allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
 
   it "gas model tests should not return a PactError, but should pass golden" $ do
     (golden "gas-model" allActualOutputsGolden)
-      {encodePretty = show} -- TODO effective, but how to minimize the output?
+      { encodePretty = show } -- effective, but a lot of output is shown
+
+goldenSizeOfPactValues :: Spec
+goldenSizeOfPactValues = do
+  let seed = 10000000000 :: Int
+      genWithSeed i (MkGen g) = MkGen (\_ n -> g (mkQCGen i) n)
+      genSomeLiteralPV = genWithSeed seed $ PLiteral <$> arbitrary
+      genSomeListPV = genWithSeed seed $ PList <$> genPactValueList RecurseTwice
+      genSomeObjectPV = genWithSeed seed $ PObject <$> genPactValueObjectMap RecurseTwice
+      genSomeGuardPV = genWithSeed seed $ PGuard <$> genPactValueGuard RecurseTwice
+
+  someGoldenSizeOfPactValue "literal" genSomeLiteralPV
+  someGoldenSizeOfPactValue "list" genSomeListPV
+  someGoldenSizeOfPactValue "object-map" genSomeObjectPV
+  someGoldenSizeOfPactValue "guard" genSomeGuardPV
+
+someGoldenSizeOfPactValue :: String -> Gen PactValue -> Spec
+someGoldenSizeOfPactValue desc genPV = after_ (cleanupActual (testPrefix <> desc) []) $ do
+  pv <- runIO $ generate $ genPV
+  it ("passes sizeOf golden test with pseudo-random " <> desc <> " pact value") $ do
+    golden (testPrefix <> desc) (sizeOf pv, pv)
+  where testPrefix = "size-of-pactvalue-"
 
 allNativesInGasTable :: Spec
 allNativesInGasTable = do
@@ -63,7 +90,6 @@ allNativesInGasTable = do
     (S.fromList absentNatives)
     `shouldBe`
     (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
-
 
 gasTestResults :: IO [GasTestResult ([Term Name], EvalState)]
 gasTestResults = do
