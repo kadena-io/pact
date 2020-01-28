@@ -39,6 +39,8 @@ import Control.Lens
 
 import Data.Aeson (ToJSON(..), FromJSON(..))
 
+import Test.QuickCheck
+
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -56,6 +58,9 @@ data Provenance = Provenance
   , _pModuleHash :: ModuleHash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
+
+instance Arbitrary Provenance where
+  arbitrary = Provenance <$> arbitrary <*> arbitrary
 
 instance Pretty Provenance where
   pretty (Provenance c h) = "(chain = \"" <> pretty c <> "\" hash=\"" <> pretty h <> "\")"
@@ -76,6 +81,11 @@ data Yield = Yield
   , _yProvenance :: !(Maybe Provenance)
     -- ^ Provenance data
   } deriving (Eq, Show, Generic)
+
+instance Arbitrary Yield where
+  arbitrary = Yield <$> (genPactValueObjectMap RecurseTwice) <*> frequency
+    [ (1, pure Nothing)
+    , (4, Just <$> arbitrary) ]
 
 instance NFData Yield
 instance ToJSON Yield where toJSON = lensyToJSON 2

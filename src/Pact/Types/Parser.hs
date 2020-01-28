@@ -14,6 +14,7 @@ module Pact.Types.Parser
     PactParser(..)
   , symbols
   , style
+  , _styleAllowsLetterDigitSymbols
   )
   where
 
@@ -43,6 +44,16 @@ symbols = oneOf "%#+-_&$@<>=^?*!|/~"
 style :: CharParsing m => IdentifierStyle m
 style = IdentifierStyle "atom"
         (letter <|> symbols)
+        (letter <|> digit <|> symbols)
+        (HS.fromList ["true","false"])
+        Symbol
+        ReservedIdentifier
+
+-- helper function used when generating arbitrary strings
+-- uses same character set for start of text as for rest of it.
+_styleAllowsLetterDigitSymbols :: CharParsing m => IdentifierStyle m
+_styleAllowsLetterDigitSymbols = IdentifierStyle "atom"
+        (letter <|> digit <|> symbols)
         (letter <|> digit <|> symbols)
         (HS.fromList ["true","false"])
         Symbol

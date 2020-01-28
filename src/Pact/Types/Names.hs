@@ -36,6 +36,7 @@ import Control.Monad
 import Data.Aeson (ToJSON(..), FromJSON(..), withText)
 import qualified Data.Attoparsec.Text as AP
 import Data.Default
+import Data.Either
 import Data.Function
 import Data.Hashable
 import Data.Maybe
@@ -44,6 +45,7 @@ import Data.Text (Text,pack)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
 import Prelude
+import Test.QuickCheck
 import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 
 
@@ -57,12 +59,20 @@ import Pact.Types.Util
 newtype NamespaceName = NamespaceName Text
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData, SizeOf)
 
+instance Arbitrary NamespaceName where
+  arbitrary = NamespaceName <$> genBareText
+
 
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
   } deriving (Eq, Ord, Generic, Show)
 
+instance Arbitrary ModuleName where
+  -- assumes most modules names defined inside a namespace
+  arbitrary = ModuleName <$> genBareText <*> frequency
+    [ (4, Just <$> arbitrary)
+    , (1, pure Nothing) ]
 instance Hashable ModuleName where
   hashWithSalt s (ModuleName n Nothing)   =
     s `hashWithSalt` (0::Int) `hashWithSalt` n
@@ -94,8 +104,10 @@ instance Pretty ModuleName where
 instance ToJSON ModuleName where toJSON = lensyToJSON 3
 instance FromJSON ModuleName where parseJSON = lensyParseJSON 3
 
+
 newtype DefName = DefName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
+
 
 data QualifiedName = QualifiedName
   { _qnQual :: ModuleName
@@ -103,6 +115,8 @@ data QualifiedName = QualifiedName
   , _qnInfo :: Info
   } deriving (Generic,Show)
 
+instance Arbitrary QualifiedName where
+  arbitrary = QualifiedName <$> arbitrary <*> genBareText <*> arbitrary
 instance Eq QualifiedName where
   (QualifiedName a b _c) == (QualifiedName d e _f) =
     a == d && b == e
@@ -144,6 +158,8 @@ data BareName = BareName
   { _bnName :: Text
   , _bnInfo :: Info
   } deriving (Generic,Eq,Show)
+instance Arbitrary BareName where
+  arbitrary = BareName <$> genBareText <*> arbitrary
 instance Pretty BareName where
   pretty BareName{..} = pretty _bnName
 instance HasInfo BareName where getInfo = _bnInfo
@@ -159,6 +175,12 @@ data Name
   = QName QualifiedName
   | Name BareName
   deriving (Generic, Show)
+
+instance Arbitrary Name where
+  -- assumes most names are qualified names
+  arbitrary = frequency
+    [ (4, QName <$> arbitrary)
+    , (1, Name <$> arbitrary) ]
 
 instance HasInfo Name where
   getInfo (QName q) = getInfo q

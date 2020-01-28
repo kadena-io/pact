@@ -621,6 +621,15 @@ safeGenAnyTerm = (do
     -- also, sometimes term generation fails for mysterious reasons
     `catch` (\(_e :: SomeException) -> discard)
 
+
+-- For debugging
+printSafeGenAnyTerm :: IO ()
+printSafeGenAnyTerm = do
+  let g :: Gen (ETerm, GenState) = runStack genAnyTerm
+  (t,_) <- Gen.sample g
+  print $ pretty t
+
+
 genFormatTime :: Gen (ETerm, GenState)
 genFormatTime = do
   format <- genFormat

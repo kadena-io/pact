@@ -44,6 +44,7 @@ import Control.DeepSeq
 import Data.SBV (Mergeable (symbolicMerge))
 #endif
 import qualified Data.Vector as V
+import Test.QuickCheck
 
 import Pact.Types.Orphans ()
 import Pact.Types.Pretty
@@ -58,6 +59,16 @@ data Parsed = Parsed {
   _pLength :: Int
   } deriving (Eq,Show,Ord,Generic)
 
+instance Arbitrary Parsed where
+  arbitrary = Parsed <$> genDelta <*> arbitrary
+    where
+      genPositiveInt64 = getPositive <$> arbitrary
+      genFilename = encodeUtf8 <$> genBareText
+      genDelta = oneof
+        [ Columns <$> genPositiveInt64 <*> genPositiveInt64
+        , Tab <$> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64
+        , Lines <$> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64
+        , Directed <$> genFilename <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 ]
 instance NFData Parsed
 instance Default Parsed where def = Parsed mempty 0
 instance HasBytes Parsed where bytes = bytes . _pDelta
@@ -74,9 +85,12 @@ instance Pretty Code where
     | otherwise = pretty c
     where maxLen = 30
 
+instance Arbitrary Code where
+  arbitrary = Code <$> resize 1000 genBareText
+
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
-newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Eq,Ord,Generic)
+newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Eq,Ord,Generic,Arbitrary)
 
 instance NFData Info
 instance Show Info where

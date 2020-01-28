@@ -28,6 +28,10 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word8)
 import GHC.Exts (Int(..))
+import Test.QuickCheck hiding (mapSize)
+import Test.QuickCheck.Instances()
+
+import Pact.Types.Orphans()
 
 
 
@@ -42,7 +46,7 @@ import GHC.Exts (Int(..))
 -- 1. http://wiki.haskell.org/GHC/Memory_Footprint
 -- 2. https://stackoverflow.com/questions/3254758/memory-footprint-of-haskell-data-types
 
-class SizeOf t where
+class (Arbitrary t) => SizeOf t where
   sizeOf :: t -> Bytes
 
 
@@ -74,14 +78,14 @@ instance (SizeOf v) => SizeOf (Vector v) where
       vectorLength = fromIntegral (V.length v)
       sizeOfContents = V.foldl' (\acc pv -> acc + (sizeOf pv)) 0 v
 
-instance SizeOf a => SizeOf (Set a) where
+instance (Ord a, SizeOf a) => SizeOf (Set a) where
   sizeOf s = setSize
     where
       setSize = ((1 + 3 * setLength) * wordSize) + sizeOfSet
       setLength = fromIntegral $ S.size s
       sizeOfSet = S.foldl' (\acc a -> acc + sizeOf a) 0 s
 
-instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
+instance (Ord k, SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
   sizeOf m = mapSize
     where
       mapSize = (6 * mapLength * wordSize) + sizeOfKeys + sizeOfValues
