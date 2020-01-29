@@ -2,6 +2,11 @@
 ---
 
 * Add the commands `sign`, `add-sig`, and `combine-sigs` for working with signatures (#759)
+* Decode StackFrame in JSON output (#755)
+* CommandResult golden coverage (#754)
+* Use CFFI for aeson (upstreamed from chainweb) (#749)
+* Add gas logs to eval result (#748)
+* Misc updates to docs
 
 3.4.0
 ---
