@@ -131,8 +131,8 @@ jobs:
         package thyme
           tests: False
         EOF
-    - name: Append cabal.project (only ghc-8.8.1)
-      if: matrix.ghc == '8.8.1'
+    - name: Append cabal.project (only ghc-8.8)
+      if: startsWith(matrix.ghc, '8.8')
       shell: bash
       run: |
         cat >> cabal.project <<EOF
