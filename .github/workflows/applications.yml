@@ -14,9 +14,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.6.5', '8.8.1']
+        ghc: ['8.6.5', '8.8.2']
         cabal: ['3.0']
-        os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-10.14', 'windows-latest']
+        os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-latest', 'windows-latest']
         cabalcache: ['true']
         distcache: ['false']
         exclude:
@@ -55,13 +55,13 @@ jobs:
       run: |
         [[ "${{ matrix.os }}" =~ ubuntu ]] && OS="linux" || OS="osx"
         mkdir -p "./tmp/bin"
-        curl -Ls "https://github.com/haskell-works/cabal-cache/releases/download/v1.0.1.1/cabal-cache_x86_64_${OS}.tar.gz" | tar -xzC "./tmp/bin/"
+        curl -Ls "https://github.com/haskell-works/cabal-cache/releases/download/v1.0.1.1/cabal-cache_x86_64_${OS}.tar.gz" | tar -f - -xzC "./tmp/bin/"
     - name: Install cabal-cache
       if: matrix.cabalcache == 'true' && contains(matrix.os, 'windows')
       shell: bash
       run: |
         mkdir -p "./tmp/bin"
-        curl -Ls "https://kadena-cabal-cache.s3.amazonaws.com/cabal-cache/cabal-cache_x86_64_windows.tar.gz" | tar -xzC "./tmp/bin/"
+        curl -Ls "https://kadena-cabal-cache.s3.amazonaws.com/cabal-cache/cabal-cache_x86_64_windows.tar.gz" | tar -f - -xzC "./tmp/bin/"
 
     # Non Haskell dependencies
     - name: Install non-Haskell dependencies (ubuntu)
