@@ -54,18 +54,19 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Text.Trifecta as Trifecta
 import Data.Char
 import Data.Either (isRight)
 import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
+import Control.Applicative ((<|>))
 import Control.Concurrent
 import Control.Lens hiding (Empty)
 import Control.Monad.Fail (MonadFail)
 import Test.QuickCheck hiding (Result, Success)
-import qualified Text.Trifecta as Trifecta
 
-import Pact.Types.Parser (style, _styleAllowsLetterDigitSymbols)
+import Pact.Types.Parser (style, symbols)
 
 
 
@@ -260,4 +261,8 @@ genBareText = genText
         -- set of approved symbols, or digits.
         bareRestCharParser :: Text -> Either String Text
         bareRestCharParser = AP.parseOnly $
-          (Trifecta.ident _styleAllowsLetterDigitSymbols) <* Trifecta.eof
+          (Trifecta.ident style') <* Trifecta.eof
+
+        -- Uses same character set for start of text as for rest of it.
+        -- Useful when randomly generating texts character by character.
+        style' = style { Trifecta._styleStart = (Trifecta.letter <|> Trifecta.digit <|> symbols) }
