@@ -208,7 +208,7 @@ required: true
 
 name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
 type: integer         # Platform will validate time as within some range of network time.
-required: true
+required: false
 ```
 
 #### The `exec` payload {#exec-payload}
@@ -965,7 +965,7 @@ The execution request yaml for a public blockchain takes the following keys:
     gasLimit: integer gas limit
     gasPrice: decimal gas price
     ttl: integer time-to-live value
-    creationTime: integer tx execution time after offset
+    creationTime: optional integer tx execution time after offset
   type: exec
 ```
 
@@ -992,7 +992,7 @@ The continuation request yaml for a public blockchain takes the following keys:
     gasLimit: integer gas limit
     gasPrice: decimal gas price
     ttl: integer time-to-live value
-    creationTime: integer tx execution time after offset
+    creationTime: optional integer tx execution time after offset
   nonce: optional request nonce, will use current time if not provided
   type: cont
 ```
