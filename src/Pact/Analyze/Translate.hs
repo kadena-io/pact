@@ -402,7 +402,7 @@ maybeTranslateUserType
   -- ^ Set of keys to keep (if this is a partial schema)
   -> Pact.UserType
   -> Maybe QType
-maybeTranslateUserType _ (Pact.Schema _ _ [] _) = Just $ EType $ mkSObject SNil'
+maybeTranslateUserType _ (Pact.Schema _ _ [] _) = Just $ EType $ mkSObject (SingList SNil)
 maybeTranslateUserType restrictKeys (Pact.Schema a b (Pact.Arg name ty _:tys) c) = do
   subTy@(EType (SObject tys'))
     <- maybeTranslateUserType restrictKeys $ Pact.Schema a b tys c
@@ -736,7 +736,7 @@ translateStep firstStep = \case
       pure entity'
     Some ty exec' <- translateNode exec
     postVertex    <- extendPath
-    pure (Step (exec' :< ty) p mEntity Nothing Nothing, postVertex, rollback)
+    pure (Step (exec' , ty) p mEntity Nothing Nothing, postVertex, rollback)
   astNode -> throwError' $ UnexpectedPactNode astNode
 
 lookupCapability :: CapName -> TranslateM Capability
@@ -1313,11 +1313,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
         -- the filtered schema contains only the columns we want
         eFilteredSchema = foldrSingList
-          (ESchema SNil')
-          (\k ty (ESchema subSchema) ->
+          (ESchema (SingList SNil))
+          (\k ty (ESchema (SingList subSchema)) ->
             if symbolVal k `Set.member` columnSet
-            then ESchema $ SCons' k ty subSchema
-            else ESchema subSchema)
+            then ESchema $ SingList (SCons k ty subSchema)
+            else ESchema (SingList subSchema))
           tableSchema
 
     let tname = TableName (T.unpack table)

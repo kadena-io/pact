@@ -234,7 +234,7 @@ evalPropSpecific (PropRead objTy@(SObjectUnsafe fields) ba tn pRk) = do
   aValFields <- foldrSingList
     (pure $ Some SObjectNil $ AnSBV $ literal ())
     (\k ty accum -> do
-      Some objTy'@(SObject schema) (AnSBV obj) <- accum
+      Some objTy'@(SObject (SingList schema)) (AnSBV obj) <- accum
       let fieldName = symbolVal k
           cn = ColumnName fieldName
 
@@ -242,7 +242,7 @@ evalPropSpecific (PropRead objTy@(SObjectUnsafe fields) ba tn pRk) = do
         (qeAnalyzeState.typedCell ty (beforeAfterLens ba) tn' cn sRk sFalse)
 
       withSymVal ty $ withSymVal objTy' $ pure $ Some
-        (SObjectUnsafe (SCons' k ty schema))
+        (SObjectUnsafe (SingList (SCons k ty schema)))
         (AnSBV (tuple (SBVI.SBV sval, obj))))
     fields
 
