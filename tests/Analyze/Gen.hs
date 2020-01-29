@@ -646,9 +646,9 @@ bob   = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"
 genEnv :: GenEnv
 genEnv = GenEnv
   [("accounts", ESchema $ normalizeSchema $
-      SCons' (SSymbol @"balance") SInteger $
-        SCons' (SSymbol @"name") SStr
-          SNil'
+      SingList $ SCons (SSymbol @"balance") SInteger $
+        SCons (SSymbol @"name") SStr
+          SNil
     )]
   [ (Pact.mkKeySet [alice, bob] "keys-all", Guard 0)
   , (Pact.mkKeySet [alice, bob] "keys-any", Guard 1)

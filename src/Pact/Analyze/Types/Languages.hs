@@ -309,16 +309,16 @@ mkUnsortedLiteralObject
   -> [(Text, Existential tm)]
   -> m (Existential (Core tm))
 mkUnsortedLiteralObject _ [] = pure $
-  let ty = mkSObject SNil'
+  let ty = mkSObject (SingList SNil)
   in Some ty (LiteralObject ty (Object SNil))
 mkUnsortedLiteralObject err ((name, Some ty tm) : tms) = do
   someObj <- mkUnsortedLiteralObject err tms
   case someObj of
-    Some (SObject objTy) (LiteralObject _ (Object obj)) ->
+    Some (SObject (SingList objTy)) (LiteralObject _ (Object obj)) ->
       case someSymbolVal (Text.unpack name) of
         SomeSymbol (_proxy :: Proxy k) -> withTypeable ty $ withSing ty $ pure $
           let sym    = SSymbol @k
-              objTy' = SObjectUnsafe (SCons' sym ty objTy)
+              objTy' = SObjectUnsafe (SingList (SCons sym ty objTy))
           in Some objTy' $
                LiteralObject objTy' $
                  Object $ SCons sym (Column ty tm) obj
@@ -1385,7 +1385,7 @@ data Term (a :: Ty) where
 
 data PactStep where
   Step
-    :: Term a :< SingTy a  -- exec
+    :: (Term a, SingTy a)  -- exec
     -> Path                -- corresponds to the graph edge for this step
     -> Maybe (Term 'TyStr) -- entity
     -- first:  Nothing
@@ -1532,7 +1532,7 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   Resume tid       -> showString "Resume " . showsPrec 11 tid
 
 instance Show PactStep where
-  showsPrec _ (Step (exec :< execTy) path mEntity mCancelVid mRollback) =
+  showsPrec _ (Step (exec , execTy) path mEntity mCancelVid mRollback) =
      showString "Step "
    . withSing execTy (showsTm 11 exec)
    . showChar ' '
@@ -1620,7 +1620,7 @@ prettyTerm ty = \case
   Resume _tid           -> "resume"
 
 instance Pretty PactStep where
-  pretty (Step (exec :< execTy) _ mEntity _ mRollback) = parensSep $
+  pretty (Step (exec , execTy) _ mEntity _ mRollback) = parensSep $
     maybe ["step"] (\_ -> ["step-with-rollback"]) mRollback
       ++ maybe [] (\entity -> [prettyTm entity]) mEntity
       ++ [singPrettyTm execTy exec]

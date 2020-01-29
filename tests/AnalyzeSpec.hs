@@ -1582,9 +1582,9 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ Inj Success
 
     let schema = mkSObject $
-          SCons' (SSymbol @"name") SStr $
-            SCons' (SSymbol @"balance") SInteger $
-              SNil'
+          SingList $ SCons (SSymbol @"name") SStr $
+            SCons (SSymbol @"balance") SInteger $
+              SNil
     expectPass code $ Valid $ CoreProp $ StrComparison Eq
       (PObjAt schema (Lit' "name") (Inj Result))
       (Lit' "stu" :: Prop 'TyStr)
@@ -2856,9 +2856,9 @@ spec = describe "analyze" $ do
       -- let pairSchema = Schema $
       --       Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
       let pairSchema = mkSObject $
-            SCons' (SSymbol @"x") SInteger $
-              SCons' (SSymbol @"y") SInteger $
-                SNil'
+            SingList $ SCons (SSymbol @"x") SInteger $
+              SCons (SSymbol @"y") SInteger $
+                SNil
           litPair = Object $
             SCons (SSymbol @"x") (Column sing 0) $
             SCons (SSymbol @"y") (Column sing 1) $
@@ -2873,7 +2873,7 @@ spec = describe "analyze" $ do
             -- Map.singleton "foo" (EObject pairSchema litPair)
 
           nestedSchema =
-            mkSObject $ SCons' (SSymbol @"foo") pairSchema SNil'
+            mkSObject $ SingList $ SCons (SSymbol @"foo") pairSchema SNil
            -- Schema $
            --  Map.singleton "foo" (EObjectTy pairSchema)
 
@@ -2889,11 +2889,11 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right (Some nestedSchema nestedObj)
 
-      let xSchema = mkSObject $ SCons' (SSymbol @"x") SInteger SNil'
+      let xSchema = mkSObject $ SingList $ SCons (SSymbol @"x") SInteger SNil
           xySchema = mkSObject $
-            SCons' (SSymbol @"x") SInteger $
-              SCons' (SSymbol @"y") SInteger
-                SNil'
+            SingList $ SCons (SSymbol @"x") SInteger $
+              SCons (SSymbol @"y") SInteger
+                SNil
 
           xyObj = CoreProp $ LiteralObject xySchema $ Object $
             SCons (SSymbol @"x") (Column sing 0) $
@@ -3154,9 +3154,9 @@ spec = describe "analyze" $ do
   describe "Pretty" $
     it "schema looks okay" $ do
       let schema = mkSObject $
-            SCons' (SSymbol @"name") SStr $
-              SCons' (SSymbol @"balance") SInteger
-                SNil'
+            SingList $ SCons (SSymbol @"name") SStr $
+              SCons (SSymbol @"balance") SInteger
+                SNil
       pretty' schema `shouldBe` "{balance: integer,name: string}"
 
   describe "at-properties verify" $ do
@@ -3351,7 +3351,7 @@ spec = describe "analyze" $ do
         |]
 
       let acct = PVar 1 "acct"
-          objTy = mkSObject $ SCons' (SSymbol @"balance") SInteger SNil'
+          objTy = mkSObject $ SingList $ SCons (SSymbol @"balance") SInteger SNil
           readBalance ba = PObjAt objTy "balance"
             (PropSpecific $ PropRead objTy ba "accounts" acct)
       expectTrace CheckDefpact code
@@ -3481,7 +3481,7 @@ spec = describe "analyze" $ do
     let acct           = PVar 1 "acct"
         objTy         = -- Schema $ Map.singleton "balance" $ EType SInteger
           mkSObject $
-            SCons' (SSymbol @"balance") SInteger SNil'
+            SingList $ SCons (SSymbol @"balance") SInteger SNil
         readBalance ba = PObjAt objTy "balance"
           (PropSpecific $ PropRead objTy ba "accounts" acct)
         exists ba      = PropSpecific (RowExists "accounts" acct ba)
