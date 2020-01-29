@@ -60,21 +60,14 @@ allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
 
 goldenSizeOfPactValues :: Spec
 goldenSizeOfPactValues = do
-  let seed = 10000000000 :: Int
-      genWithSeed i (MkGen g) = MkGen (\_ n -> g (mkQCGen i) n)
-      genSomeLiteralPV = genWithSeed seed $ PLiteral <$> arbitrary
-      genSomeListPV = genWithSeed seed $ PList <$> genPactValueList RecurseTwice
-      genSomeObjectPV = genWithSeed seed $ PObject <$> genPactValueObjectMap RecurseTwice
-      genSomeGuardPV = genWithSeed seed $ PGuard <$> genPactValueGuard RecurseTwice
-
-  someGoldenSizeOfPactValue "literal" genSomeLiteralPV
-  someGoldenSizeOfPactValue "list" genSomeListPV
-  someGoldenSizeOfPactValue "object-map" genSomeObjectPV
-  someGoldenSizeOfPactValue "guard" genSomeGuardPV
+  someGoldenSizeOfPactValue "literal" (genSomeLiteralPactValue seed)
+  someGoldenSizeOfPactValue "list" (genSomeListPactValue seed)
+  someGoldenSizeOfPactValue "object-map" (genSomeObjectPactValue seed)
+  someGoldenSizeOfPactValue "guard" (genSomeGuardPactValue seed)
 
 someGoldenSizeOfPactValue :: String -> Gen PactValue -> Spec
 someGoldenSizeOfPactValue desc genPV = after_ (cleanupActual (testPrefix <> desc) []) $ do
-  pv <- runIO $ generate $ genPV
+  pv <- runIO $ generate genPV
   it ("passes sizeOf golden test with pseudo-random " <> desc <> " pact value") $ do
     golden (testPrefix <> desc) (sizeOf pv, pv)
   where testPrefix = "size-of-pactvalue-"
@@ -99,3 +92,36 @@ gasTestResults = do
         res' <- eitherDie (getDescription expr dbSetup) res
         return (res', st)
   concat <$> mapM (runSingleNativeTests . snd) (HM.toList unitTests)
+
+
+-- Utils
+--
+-- To run a generator in the repl:
+-- `import Pact.Types.Pretty`
+-- `import Data.Aeson (toJSON)`
+-- `fmap (pretty . toJSON) (generate $ genSomeLiteralPactValue seed)`
+
+-- | Generator of some psuedo-random Literal pact value
+genSomeLiteralPactValue :: Int -> Gen PactValue
+genSomeLiteralPactValue s = genWithSeed s $ PLiteral <$> arbitrary
+
+-- | Generator of some psuedo-random List pact value
+genSomeListPactValue :: Int -> Gen PactValue
+genSomeListPactValue s = genWithSeed s $ PList <$> genPactValueList RecurseTwice
+
+-- | Generator of some psuedo-random ObjectMap pact value
+genSomeObjectPactValue :: Int -> Gen PactValue
+genSomeObjectPactValue s = genWithSeed s $ PObject <$> genPactValueObjectMap RecurseTwice
+
+-- | Generator of some psuedo-random Guard pact value
+genSomeGuardPactValue :: Int -> Gen PactValue
+genSomeGuardPactValue s = genWithSeed s $ PGuard <$> genPactValueGuard RecurseTwice
+
+-- | Generate arbitrary value with the provided "random" seed.
+-- Allows for replicating arbitrary values.
+genWithSeed :: Int -> Gen a -> Gen a
+genWithSeed i (MkGen g) = MkGen (\_ n -> g (mkQCGen i) n)
+
+-- | Random seed used to generate the pact values in the sizeOf golden tests
+seed :: Int
+seed = 10000000000
