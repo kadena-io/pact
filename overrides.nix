@@ -20,6 +20,13 @@ in {
 
   Glob = whenGhcjs dontCheck super.Glob;
 
+#  QuickCheck = dontCheck (self.callCabal2nix "QuickCheck" (pkgs.fetchFromGitHub {
+#    owner = "nick8325";
+#    repo = "quickcheck";
+#    rev = "af14a56beda3bb02239ffb0ef7f8e9b393fec8e4";
+#    sha256 = "1ip5y14a99j2zmfnnvg8ifh2lg6qlrg8hkn088qn4smd5sp6r6dy";
+#  }) {});
+
   aeson = if self.ghc.isGhcjs or false
     then dontCheck (self.callCabal2nix "aeson" (pkgs.fetchFromGitHub {
         owner = "obsidiansystems";
@@ -93,6 +100,12 @@ in {
     ver = "7.0.5";
     sha256 = "1wizfz8vdplz3sf81vh33sny6p8ynhlpvjxqjpsym7ssb186h0f1";
   });
+
+#  QuickCheck = dontCheck (callHackageDirect {
+#    pkg = "QuickCheck";
+#    ver = "2.13.2";
+#    sha256 = "00wax0d6c1rzk1kchykanxmdrfswbf77sw34aaz44vqhgwya1zzl";
+#  });
 
   sbv = dontCheck (callHackageDirect {
     pkg = "sbv";
