@@ -208,7 +208,7 @@ required: true
 
 name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
 type: integer         # Platform will validate time as within some range of network time.
-required: false
+required: true
 ```
 
 #### The `exec` payload {#exec-payload}
@@ -2071,7 +2071,7 @@ Additionally, interfaces my make use of module declarations, admitting use of th
 (interface my-interface
     (defun hello-number:string (number:integer)
       @doc "Return the string \"Hello, $number!\" when given a string"
-      	)
+        )
 
     (defconst SOME_CONSTANT 3)
 )
