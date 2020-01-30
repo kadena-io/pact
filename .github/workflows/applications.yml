@@ -97,7 +97,7 @@ jobs:
       run: |
         mkdir -p /c/tools/msys64/mingw64/lib
         choco install -r -y cabal --version 3.0.0.0
-        choco install -r -y ghc --version 8.8.1
+        choco install -r -y ghc --version ${{ matrix.ghc }}
     - name: Set GHC and Cabal version (ubuntu, macOS)
       if: "!contains(matrix.os, 'windows')"
       uses: actions/setup-haskell@v1
@@ -108,8 +108,8 @@ jobs:
       if: "contains(matrix.os, 'windows')"
       shell: bash
       run: |
-        echo "::add-path::/c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin"
-        echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-8.8.1\\bin"
+        echo "::add-path::/c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc}}/bin"
+        echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-${{ matrix.ghc }}\\bin"
         echo "::add-path::/c/ProgramData/chocolatey/lib/cabal/tools/cabal-3.0.0.0"
         echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\cabal\\tools\\cabal-3.0.0.0"
         echo "::add-path::/c/Users/runneradmin/AppData/Roaming/cabal/bin"
@@ -118,7 +118,7 @@ jobs:
         echo "::add-path::C:\\Program Files\\Amazon\\AWSCLI\\bin"
 
         # these are needed for cabal-cache to work
-        ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin/ghc-pkg-8.8.1
+        ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg-${{ matrix.ghc }}
 
     # Project Setup
     - name: Append cabal.project
