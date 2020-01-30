@@ -5,15 +5,20 @@ module GasModelSpec (spec) where
 import Test.Hspec
 import Test.Hspec.Golden
 
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Set as S
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
 
-import Control.Exception (bracket)
+import Control.Exception (bracket, throwIO)
+import Control.Monad (when)
+import Data.Aeson (eitherDecode, encode)
+import Data.Int (Int64)
 import Data.List (foldl')
 import Test.QuickCheck
 import Test.QuickCheck.Gen (Gen(..))
 import Test.QuickCheck.Random (mkQCGen)
+import System.Directory
 
 
 import GoldenSpec (golden, cleanupActual)
@@ -60,17 +65,8 @@ allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
 
 goldenSizeOfPactValues :: Spec
 goldenSizeOfPactValues = do
-  someGoldenSizeOfPactValue "literal" (genSomeLiteralPactValue seed)
-  someGoldenSizeOfPactValue "list" (genSomeListPactValue seed)
-  someGoldenSizeOfPactValue "object-map" (genSomeObjectPactValue seed)
-  someGoldenSizeOfPactValue "guard" (genSomeGuardPactValue seed)
+  mapM_ (someGoldenSizeOfPactValue . fst) pactValuesDescAndGen
 
-someGoldenSizeOfPactValue :: String -> Gen PactValue -> Spec
-someGoldenSizeOfPactValue desc genPV = after_ (cleanupActual (testPrefix <> desc) []) $ do
-  pv <- runIO $ generate genPV
-  it ("passes sizeOf golden test with pseudo-random " <> desc <> " pact value") $ do
-    golden (testPrefix <> desc) (sizeOf pv, pv)
-  where testPrefix = "size-of-pactvalue-"
 
 allNativesInGasTable :: Spec
 allNativesInGasTable = do
@@ -96,6 +92,66 @@ gasTestResults = do
 
 -- Utils
 --
+
+-- | Pseudo golden test of the Gas Model's sizeOf function.
+-- Enforces that the sizeOf function remains the same for some pre-generated,
+-- psuedo-random pact value.
+someGoldenSizeOfPactValue :: String -> Spec
+someGoldenSizeOfPactValue desc = do
+  it ("passes sizeOf golden test with pseudo-random " <> desc <> " pact value") $ do
+    (goldenSize, goldenPactValue) <- jsonDecode (goldenPactValueFilePath desc)
+    let actualSize = sizeOf goldenPactValue
+    actualSize `shouldBe` goldenSize
+
+  where jsonDecode :: FilePath -> IO (Int64, PactValue)
+        jsonDecode fp = do
+          isGoldenFilePresent <- doesFileExist fp
+          when (not isGoldenFilePresent) $ throwIO $ userError $
+            "Golden pact value file does not exist: " ++ show fp
+          r <- eitherDecode <$> BL.readFile fp
+          case r of
+            Left e -> throwIO $ userError $ "golden decode failed: " ++ show e
+            Right v -> return v
+
+-- | Genearates golden files expected in `someGoldenSizeOfPactValue`
+-- Creates a golden file in the format of (sizeOf <somePactValue>, <somePactValue>)
+_generateGoldenPactValues :: IO ()
+_generateGoldenPactValues = mapM_ f pactValuesDescAndGen
+  where
+    f (desc, genPv) = do
+      let fp = goldenPactValueFilePath desc
+      _ <- createDirectoryIfMissing False (goldenPactValueDirectory desc)
+      isGoldenFilePresent <- doesFileExist fp
+      when (not isGoldenFilePresent) (createGolden fp genPv)
+
+    createGolden fp genPv = do
+      -- TODO add quickcheck propeties for json roundtrips
+      pv <- generate $
+            suchThat genPv satisfiesRoundtripJSON
+      jsonEncode fp (sizeOf pv, pv)
+
+    jsonEncode :: FilePath -> (Int64, PactValue) -> IO ()
+    jsonEncode fp = BL.writeFile fp . encode
+
+
+-- | List of pact value pseudo-random generators and their descriptions
+pactValuesDescAndGen :: [(String, Gen PactValue)]
+pactValuesDescAndGen =
+  [ ("literal", genSomeLiteralPactValue seed)
+  , ("list", genSomeListPactValue seed)
+  , ("object-map", genSomeObjectPactValue seed)
+  , ("guard", genSomeGuardPactValue seed)
+  ]
+
+goldenPactValueDirectory :: String -> FilePath
+goldenPactValueDirectory desc = goldenDirectory <> "/" <> testPrefix <> desc
+  where goldenDirectory = "golden"
+        testPrefix = "size-of-pactvalue-"
+
+goldenPactValueFilePath :: String -> FilePath
+goldenPactValueFilePath desc = (goldenPactValueDirectory desc) <> "/golden"
+
+
 -- To run a generator in the repl:
 -- `import Pact.Types.Pretty`
 -- `import Data.Aeson (toJSON)`

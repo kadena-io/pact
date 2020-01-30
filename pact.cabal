@@ -190,7 +190,7 @@ library
                      , old-locale >= 1.0.0.7 && < 1.1
                      , optparse-applicative >= 0.12.1.0 && < 0.16
                      , parsers >= 0.12.4 && < 0.13
-                     , QuickCheck >= 2.12.6
+                     , QuickCheck >= 2.13.2
                      , quickcheck-instances >= 0.3
                      , reflection
                      , safe >= 0.3.11 && < 0.4
