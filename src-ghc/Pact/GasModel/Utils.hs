@@ -58,7 +58,7 @@ import Control.Exception (throwIO)
 import Data.Aeson (toJSON, ToJSON(..))
 import Data.Default (def)
 import Data.List.NonEmpty (NonEmpty(..))
-import NeatInterpolation (text)
+import NeatInterpolation (trimming)
 
 
 import qualified Data.Aeson as A
@@ -279,7 +279,7 @@ acctModuleNameText :: T.Text
 acctModuleNameText = asString acctModuleName
 
 accountsModule :: ModuleName -> T.Text
-accountsModule moduleName = [text|
+accountsModule moduleName = [trimming|
      (module $moduleNameText GOV
 
        (defcap GOV ()

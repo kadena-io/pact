@@ -16,7 +16,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty as NEL
 import Data.Text (Text, unpack)
 import qualified Data.Text as T
-import NeatInterpolation (text)
+import NeatInterpolation (trimming)
 import Network.HTTP.Client (Manager)
 import qualified Network.HTTP.Client as HTTP
 import Prelude hiding (concat)
@@ -40,6 +40,9 @@ import Pact.Types.SPV
 #if ! MIN_VERSION_servant_client(0,16,0)
 type ClientError = ServantError
 #endif
+
+text :: QuasiQuoter
+text = trimming
 
 ---- TESTS -----
 

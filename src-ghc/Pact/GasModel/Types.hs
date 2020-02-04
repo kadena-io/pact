@@ -34,7 +34,7 @@ import Control.Lens hiding ((.=),DefName)
 import Data.Default (def)
 import Data.List (foldl')
 import Data.Maybe (fromMaybe)
-import NeatInterpolation (text)
+import NeatInterpolation (trimming)
 import System.Directory (removeFile)
 
 
@@ -266,7 +266,7 @@ defSqliteBackend = do
   let env = defEvalEnv sqliteDb
       setupExprs =
         (accountsModule acctModuleName) <>
-        [text| (create-table $acctModuleNameText.accounts)
+        [trimming| (create-table $acctModuleNameText.accounts)
                (insert $acctModuleNameText.accounts
                   "someId"
                   { "balance": 0.0 })

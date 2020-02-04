@@ -12,6 +12,7 @@ extra-deps:
 
   # --- Forced Upgrades --- #
   - trifecta-2.1
+  - neat-interpolation-0.5.0.1
 
   # --- Custom Pins --- #
   - git: https://github.com/kadena-io/thyme.git

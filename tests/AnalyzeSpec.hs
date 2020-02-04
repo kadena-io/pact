@@ -27,7 +27,7 @@ import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           GHC.Stack                    (HasCallStack, withFrozenCallStack)
-import           NeatInterpolation            (text)
+import           NeatInterpolation            (trimming)
 import           Prelude                      hiding (read)
 import           Test.Hspec                   (Spec, describe,
                                                expectationFailure, it,
@@ -50,6 +50,9 @@ import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
+
+text :: QuasiQuoter
+text = trimming
 
 wrap :: Text -> Text -> Text
 wrap code model =

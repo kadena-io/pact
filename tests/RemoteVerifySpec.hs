@@ -19,7 +19,7 @@ import Data.Bifunctor (first)
 import Data.Either
 import Data.Text (Text, unpack)
 
-import NeatInterpolation (text)
+import NeatInterpolation (trimming)
 
 import qualified Network.HTTP.Client as HTTP
 
@@ -73,7 +73,7 @@ serveAndRequest port body = do
 testSingleModule :: Spec
 testSingleModule = do
   replState0 <- runIO $ either (error.show) id <$> loadCode
-    [text|
+    [trimming|
       (env-keys ["admin"])
       (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
       (begin-tx)
@@ -116,7 +116,7 @@ testUnsortedModules = do
     fmap (view Remote.responseLines) resp `shouldBe`
     (Right ["Property proven valid",""])
   where
-    code = [text|
+    code = [trimming|
       (env-keys ["admin"])
       (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
       (begin-tx)

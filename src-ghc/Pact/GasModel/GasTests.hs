@@ -18,7 +18,7 @@ import Data.Default (def)
 import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import Data.List.NonEmpty (NonEmpty(..))
-import NeatInterpolation (text)
+import NeatInterpolation (trimming)
 
 
 import qualified Data.Aeson as A
@@ -38,7 +38,6 @@ import Pact.Types.Capability
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
-
 
 -- | Gas benchmark tests for Pact native functions
 allNatives :: [NativeDefName]
@@ -212,7 +211,7 @@ unitTestFromDef nativeName = tests
 interfaceTests :: NativeDefName -> GasUnitTests
 interfaceTests = defGasUnitTests allExprs
   where
-    interfaceExprText = [text|
+    interfaceExprText = [trimming|
     (interface my-interface
       (defun say-hello:string (name:string))
     )
@@ -234,12 +233,12 @@ interfaceTests = defGasUnitTests allExprs
 moduleTests :: NativeDefName -> GasUnitTests
 moduleTests = defGasUnitTests allExprs
   where
-    moduleExprText = [text|
+    moduleExprText = [trimming|
     (module some-random-module GOV
       (defcap GOV ()
         true ))|]
     moduleExpr = defPactExpression moduleExprText
-    moduleRotateDesc = [text|(module accounts GOV [...some module code ...]) update module|]
+    moduleRotateDesc = [trimming|(module accounts GOV [...some module code ...]) update module|]
     moduleRotateExpr = PactExpression (accountsModule acctModuleName) (Just moduleRotateDesc)
     allExprs = moduleExpr :| [moduleRotateExpr]
 
@@ -247,7 +246,7 @@ moduleTests = defGasUnitTests allExprs
 useTests :: NativeDefName -> GasUnitTests
 useTests = defGasUnitTests allExprs
   where
-    useExpr = defPactExpression [text| (use $acctModuleNameText) |]
+    useExpr = defPactExpression [trimming| (use $acctModuleNameText) |]
     allExprs = useExpr :| []
 
 
@@ -256,7 +255,7 @@ enforceGuardTests :: NativeDefName -> GasUnitTests
 enforceGuardTests = tests
   where
     enforceGuardExpr = defPactExpression
-      [text| (enforce-guard "$sampleLoadedKeysetName") |]
+      [trimming| (enforce-guard "$sampleLoadedKeysetName") |]
     allExprs = enforceGuardExpr :| []
 
     signEnvWithKeyset = setEnv (set eeMsgSigs (M.fromList $ F.toList samplePubKeysWithCaps))
@@ -272,7 +271,7 @@ keysetRefGuardTests :: NativeDefName -> GasUnitTests
 keysetRefGuardTests = defGasUnitTests allExprs
   where
     keysetRefGuardExpr =
-      defPactExpression [text| (keyset-ref-guard "$sampleLoadedKeysetName") |]
+      defPactExpression [trimming| (keyset-ref-guard "$sampleLoadedKeysetName") |]
     allExprs = keysetRefGuardExpr :| []
 
 
@@ -281,7 +280,7 @@ createUserGuardTests = defGasUnitTests allExprs
   where
     createUserGuardExpr =
       defPactExpression
-      [text| (create-user-guard ($acctModuleNameText.enforce-true)) |]
+      [trimming| (create-user-guard ($acctModuleNameText.enforce-true)) |]
     allExprs = createUserGuardExpr :| []
 
 
@@ -289,7 +288,7 @@ createPactGuardTests :: NativeDefName -> GasUnitTests
 createPactGuardTests = tests
   where
     createPactGuardExpr =
-      defPactExpression [text| (create-pact-guard "test") |]
+      defPactExpression [trimming| (create-pact-guard "test") |]
     allExprs = createPactGuardExpr :| []
 
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
@@ -308,7 +307,7 @@ createPactGuardTests = tests
 createModuleGuardTests :: NativeDefName -> GasUnitTests
 createModuleGuardTests = tests
   where
-    createModuleGuardExpr = PactExpression [text| (create-module-guard "test") |] Nothing
+    createModuleGuardExpr = PactExpression [trimming| (create-module-guard "test") |] Nothing
     allExprs = createModuleGuardExpr :| []
 
     updateStackFrame = setState (set evalCallStack [someStackFrame])
@@ -324,7 +323,7 @@ installCapabilityTests :: NativeDefName -> GasUnitTests
 installCapabilityTests = defGasUnitTests allExprs
   where
     installCapExpr =
-      defPactExpression [text|(install-capability ($acctModuleNameText.MANAGEDCAP "" ""))|]
+      defPactExpression [trimming|(install-capability ($acctModuleNameText.MANAGEDCAP "" ""))|]
     allExprs = installCapExpr :| []
 
 
@@ -332,7 +331,7 @@ withCapabilityTests :: NativeDefName -> GasUnitTests
 withCapabilityTests = defGasUnitTests allExprs
   where
     withCapExpr =
-      defPactExpression [text| ($acctModuleNameText.test-with-cap-func) |]
+      defPactExpression [trimming| ($acctModuleNameText.test-with-cap-func) |]
     allExprs = withCapExpr :| []
 
 
@@ -340,7 +339,7 @@ requireCapabilityTests :: NativeDefName -> GasUnitTests
 requireCapabilityTests = tests
   where
     requireCapExpr =
-      defPactExpression [text| (require-capability ($acctModuleNameText.GOV)) |]
+      defPactExpression [trimming| (require-capability ($acctModuleNameText.GOV)) |]
     allExprs = requireCapExpr :| []
 
     cap = SigCapability (QualifiedName acctModuleName "GOV" def) []
@@ -357,7 +356,7 @@ composeCapabilityTests :: NativeDefName -> GasUnitTests
 composeCapabilityTests = tests
   where
     composeCapExpr =
-      defPactExpression [text| (compose-capability ($acctModuleNameText.GOV)) |]
+      defPactExpression [trimming| (compose-capability ($acctModuleNameText.GOV)) |]
     allExprs = composeCapExpr :| []
 
     capInStackframe =
@@ -381,14 +380,14 @@ txlogTests :: NativeDefName -> GasUnitTests
 txlogTests = defGasUnitTests allExprs
   where
     txLogExpr =
-      defPactExpression [text| (txlog $acctModuleNameText.accounts 0) |]
+      defPactExpression [trimming| (txlog $acctModuleNameText.accounts 0) |]
     allExprs = txLogExpr :| []
 
 txidsTests :: NativeDefName -> GasUnitTests
 txidsTests = defGasUnitTests allExprs
   where
     txIdsExpr =
-      defPactExpression [text| (txids $acctModuleNameText.accounts 0) |]
+      defPactExpression [trimming| (txids $acctModuleNameText.accounts 0) |]
     allExprs = txIdsExpr :| []
 
 
@@ -396,7 +395,7 @@ keylogTests :: NativeDefName -> GasUnitTests
 keylogTests = defGasUnitTests allExprs
   where
     keyLogExpr =
-      defPactExpression [text| (keylog $acctModuleNameText.accounts "someId" 0) |]
+      defPactExpression [trimming| (keylog $acctModuleNameText.accounts "someId" 0) |]
     allExprs = keyLogExpr :| []
 
 
@@ -404,7 +403,7 @@ keysTests :: NativeDefName -> GasUnitTests
 keysTests = defGasUnitTests allExprs
   where
     keysExprs =
-      defPactExpression [text| (keys $acctModuleNameText.accounts) |]
+      defPactExpression [trimming| (keys $acctModuleNameText.accounts) |]
     allExprs = keysExprs :| []
 
 
@@ -413,7 +412,7 @@ selectTests = defGasUnitTests allExprs
   where
     selectExpr =
       defPactExpression
-      [text| (select $acctModuleNameText.accounts
+      [trimming| (select $acctModuleNameText.accounts
                (where "balance" (constantly true))
              ) |]
     allExprs = selectExpr :| []
@@ -423,7 +422,7 @@ withReadTests :: NativeDefName -> GasUnitTests
 withReadTests = defGasUnitTests allExprs
   where
     withReadExpr =
-      defPactExpression [text| (with-read
+      defPactExpression [trimming| (with-read
                 $acctModuleNameText.accounts
                 "someId"
                 { "balance":= bal }
@@ -437,7 +436,7 @@ withDefaultReadTests :: NativeDefName -> GasUnitTests
 withDefaultReadTests = defGasUnitTests allExprs
   where
     withDefReadExpr =
-      defPactExpression [text| (with-default-read
+      defPactExpression [trimming| (with-default-read
                 $acctModuleNameText.accounts
                 "someId"
                 { "balance": 1.0 }
@@ -452,7 +451,7 @@ readTests :: NativeDefName -> GasUnitTests
 readTests = defGasUnitTests allExprs
   where
     readExpr =
-      defPactExpression [text| (read $acctModuleNameText.accounts "someId") |]
+      defPactExpression [trimming| (read $acctModuleNameText.accounts "someId") |]
     allExprs = readExpr :| []
 
 
@@ -460,7 +459,7 @@ writeTests :: NativeDefName -> GasUnitTests
 writeTests = defGasUnitTests allExprs
   where
     writeExpr =
-      defPactExpression [text| (write $acctModuleNameText.accounts
+      defPactExpression [trimming| (write $acctModuleNameText.accounts
                     "some-id-that-is-not-present"
                     { "balance": 0.0 }
              ) |]
@@ -471,7 +470,7 @@ updateTests :: NativeDefName -> GasUnitTests
 updateTests = defGasUnitTests allExprs
   where
     updateExpr =
-      defPactExpression [text| (update $acctModuleNameText.accounts
+      defPactExpression [trimming| (update $acctModuleNameText.accounts
                      "someId"
                      { "balance": 10.0 }
              ) |]
@@ -482,7 +481,7 @@ insertTests :: NativeDefName -> GasUnitTests
 insertTests = defGasUnitTests allExprs
   where
     insertExpr =
-      defPactExpression [text| (insert $acctModuleNameText.accounts
+      defPactExpression [trimming| (insert $acctModuleNameText.accounts
                      "some-id-that-is-not-present"
                      { "balance": 0.0 }
              )|]
@@ -493,7 +492,7 @@ describeTableTests :: NativeDefName -> GasUnitTests
 describeTableTests = defGasUnitTests allExprs
   where
     describeTableExpr =
-      defPactExpression [text| (describe-table $acctModuleNameText.accounts) |]
+      defPactExpression [trimming| (describe-table $acctModuleNameText.accounts) |]
     allExprs = describeTableExpr :| []
 
 
@@ -501,7 +500,7 @@ describeModuleTests :: NativeDefName -> GasUnitTests
 describeModuleTests = defGasUnitTests allExprs
   where
     describeModuleExpr =
-      defPactExpression [text| (describe-module "$acctModuleNameText") |]
+      defPactExpression [trimming| (describe-module "$acctModuleNameText") |]
     allExprs = describeModuleExpr :| []
 
 
@@ -509,7 +508,7 @@ describeKeysetTests :: NativeDefName -> GasUnitTests
 describeKeysetTests = defGasUnitTests allExprs
   where
     describeKeysetExpr =
-      defPactExpression [text| (describe-keyset "$sampleLoadedKeysetName") |]
+      defPactExpression [trimming| (describe-keyset "$sampleLoadedKeysetName") |]
     allExprs = describeKeysetExpr :| []
 
 
@@ -518,7 +517,7 @@ createTableTests = defGasUnitTests allExprs
   where
     createTableExpr =
       defPactExpression
-      [text| (create-table $acctModuleNameText.accounts-for-testing-table-creation) |]
+      [trimming| (create-table $acctModuleNameText.accounts-for-testing-table-creation) |]
     allExprs = createTableExpr :| []
 
 
@@ -528,8 +527,8 @@ defineKeysetTests = tests
   where
     simpleExpr =
       defPactExpression
-      [text| (define-keyset "some-keyset-name-not-present-already" $sampleLoadedKeysetName) |]
-    rotateExprText = [text| (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName) |]
+      [trimming| (define-keyset "some-keyset-name-not-present-already" $sampleLoadedKeysetName) |]
+    rotateExprText = [trimming| (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName) |]
     rotateExpr = PactExpression rotateExprText (Just $ rotateExprText <> ": rotating keyset")
     allExprs = rotateExpr :| [simpleExpr]
 
@@ -547,7 +546,7 @@ defineKeysetTests = tests
 enforceKeysetTests :: NativeDefName -> GasUnitTests
 enforceKeysetTests = tests
   where
-    enforceKeysetExpr = defPactExpression [text| (enforce-keyset '$sampleLoadedKeysetName) |]
+    enforceKeysetExpr = defPactExpression [trimming| (enforce-keyset '$sampleLoadedKeysetName) |]
     allExprs = enforceKeysetExpr :| []
 
     updateEnvMsgSig = setEnv (set eeMsgSigs (M.fromList $ F.toList samplePubKeysWithCaps))
@@ -562,7 +561,7 @@ enforceKeysetTests = tests
 readKeysetTests :: NativeDefName -> GasUnitTests
 readKeysetTests = tests
   where
-    readKeysetExpr = defPactExpression [text| (read-keyset 'my-keyset) |]
+    readKeysetExpr = defPactExpression [trimming| (read-keyset 'my-keyset) |]
     allExprs = readKeysetExpr :| []
 
     dataWithKeyset = toPactKeyset "my-keyset" "something" Nothing
@@ -578,21 +577,21 @@ readKeysetTests = tests
 keysAnyTests :: NativeDefName -> GasUnitTests
 keysAnyTests = defGasUnitTests allExprs
   where
-    keysAnyExpr = defPactExpression [text|(keys-any 10 1)|]
+    keysAnyExpr = defPactExpression [trimming|(keys-any 10 1)|]
     allExprs = keysAnyExpr :| []
 
 
 keysAllTests :: NativeDefName -> GasUnitTests
 keysAllTests = defGasUnitTests allExprs
   where
-    keysAllExpr = defPactExpression [text|(keys-all 3 3)|]
+    keysAllExpr = defPactExpression [trimming|(keys-all 3 3)|]
     allExprs = keysAllExpr :| []
 
 
 keys2Tests :: NativeDefName -> GasUnitTests
 keys2Tests = defGasUnitTests allExprs
   where
-    keys2Expr = defPactExpression [text|(keys-2 3 1)|]
+    keys2Expr = defPactExpression [trimming|(keys-2 3 1)|]
     allExprs = keys2Expr :| []
 
 
@@ -601,7 +600,7 @@ decryptCc20p1305Tests :: NativeDefName -> GasUnitTests
 decryptCc20p1305Tests = defGasUnitTests allExprs
   where
     decryptExpr =
-      defPactExpression [text| (decrypt-cc20p1305
+      defPactExpression [trimming| (decrypt-cc20p1305
               "Zi1REj5-iA"
               "AAAAAAECAwQFBgcI"
               "YWFk"
@@ -616,7 +615,7 @@ validateKeypairTests :: NativeDefName -> GasUnitTests
 validateKeypairTests = defGasUnitTests allExprs
   where
     validateExpr =
-      defPactExpression [text| (validate-keypair
+      defPactExpression [trimming| (validate-keypair
              "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
              "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a") |]
     allExprs = validateExpr :| []
@@ -627,14 +626,14 @@ addTimeTests :: NativeDefName -> GasUnitTests
 addTimeTests = defGasUnitTests allExprs
   where
     addTimeExpr =
-      defPactExpression [text| (add-time (time "2016-07-22T12:00:00Z") 15) |]
+      defPactExpression [trimming| (add-time (time "2016-07-22T12:00:00Z") 15) |]
     allExprs = addTimeExpr :| []
 
 
 daysTests :: NativeDefName -> GasUnitTests
 daysTests = defGasUnitTests allExprs
   where
-    daysExprText n = [text| (days $n) |]
+    daysExprText n = [trimming| (days $n) |]
     allExprs = NEL.map (createPactExpr daysExprText) sizesExpr
 
 
@@ -642,7 +641,7 @@ diffTimeTests :: NativeDefName -> GasUnitTests
 diffTimeTests = defGasUnitTests allExprs
   where
     diffTime =
-      defPactExpression [text| (diff-time (time "2016-07-22T12:00:00Z")
+      defPactExpression [trimming| (diff-time (time "2016-07-22T12:00:00Z")
                         (time "2018-07-22T12:00:00Z"))
       |]
     allExprs = diffTime :| []
@@ -652,9 +651,9 @@ formatTimeTests :: NativeDefName -> GasUnitTests
 formatTimeTests = defGasUnitTests allExprs
   where
     formatTimeSimpleExpr =
-      defPactExpression [text| (format-time "%F" (time "2016-07-22T12:00:00Z")) |]
+      defPactExpression [trimming| (format-time "%F" (time "2016-07-22T12:00:00Z")) |]
     formatTimeComplexExpr =
-      defPactExpression [text| (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z")) |]
+      defPactExpression [trimming| (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z")) |]
 
     allExprs = formatTimeSimpleExpr :|
                [formatTimeComplexExpr]
@@ -663,7 +662,7 @@ formatTimeTests = defGasUnitTests allExprs
 hoursTests :: NativeDefName -> GasUnitTests
 hoursTests = defGasUnitTests allExprs
   where
-    hoursExprText n = [text| (hours $n) |]
+    hoursExprText n = [trimming| (hours $n) |]
     allExprs = NEL.map (createPactExpr hoursExprText) sizesExpr
 
 
@@ -671,7 +670,7 @@ minutesTests :: NativeDefName -> GasUnitTests
 minutesTests = defGasUnitTests allExprs
   where
     minutesExpr n =
-      [text| (minutes $n) |]
+      [trimming| (minutes $n) |]
     allExprs = NEL.map (createPactExpr minutesExpr) sizesExpr
 
 
@@ -679,9 +678,9 @@ parseTimeTests :: NativeDefName -> GasUnitTests
 parseTimeTests = defGasUnitTests allExprs
   where
     parseTimeSimpleExpr =
-      defPactExpression [text| (parse-time "%F" "2016-07-22") |]
+      defPactExpression [trimming| (parse-time "%F" "2016-07-22") |]
     parseTimeComplexExpr =
-      defPactExpression [text| (parse-time "%Y-%m-%dT%H:%M:%S%N" "2016-07-23T13:30:45+00:00") |]
+      defPactExpression [trimming| (parse-time "%Y-%m-%dT%H:%M:%S%N" "2016-07-23T13:30:45+00:00") |]
     allExprs =  parseTimeSimpleExpr :|
                [parseTimeComplexExpr]
 
@@ -690,7 +689,7 @@ timeTests :: NativeDefName -> GasUnitTests
 timeTests = defGasUnitTests allExprs
   where
     timeExpr =
-      defPactExpression [text| (time "2016-07-22T12:00:00Z") |]
+      defPactExpression [trimming| (time "2016-07-22T12:00:00Z") |]
     allExprs = timeExpr :| []
 
 
@@ -698,7 +697,7 @@ timeTests = defGasUnitTests allExprs
 reverseBitsOptTests :: NativeDefName -> GasUnitTests
 reverseBitsOptTests = defGasUnitTests allExprs
   where
-    reverseBitsExpr x = [text| (~ $x) |]
+    reverseBitsExpr x = [trimming| (~ $x) |]
 
     allExprs = NEL.map (createPactExpr reverseBitsExpr) sizesExpr
 
@@ -706,7 +705,7 @@ reverseBitsOptTests = defGasUnitTests allExprs
 bitwiseOrOptTests :: NativeDefName -> GasUnitTests
 bitwiseOrOptTests = defGasUnitTests allExprs
   where
-    bitwiseOrExpr x = [text| (| 2 $x) |]
+    bitwiseOrExpr x = [trimming| (| 2 $x) |]
 
     allExprs = NEL.map (createPactExpr bitwiseOrExpr) sizesExpr
 
@@ -714,7 +713,7 @@ bitwiseOrOptTests = defGasUnitTests allExprs
 xorOptTests :: NativeDefName -> GasUnitTests
 xorOptTests = defGasUnitTests allExprs
   where
-    xorExpr x = [text| (xor 2 $x) |]
+    xorExpr x = [trimming| (xor 2 $x) |]
 
     allExprs = NEL.map (createPactExpr xorExpr) sizesExpr
 
@@ -722,8 +721,8 @@ xorOptTests = defGasUnitTests allExprs
 sqrtOptTests :: NativeDefName -> GasUnitTests
 sqrtOptTests = defGasUnitTests allExprs
   where
-    sqrtExpr x = [text| (sqrt $x) |]
-    sqrtDecimalExpr x = [text| (sqrt $x.1) |]
+    sqrtExpr x = [trimming| (sqrt $x) |]
+    sqrtDecimalExpr x = [trimming| (sqrt $x.1) |]
 
     allExprs = NEL.map (createPactExpr sqrtExpr) sizesExpr
       <> NEL.map (createPactExpr sqrtDecimalExpr) sizesExpr
@@ -733,9 +732,9 @@ shiftOptTests :: NativeDefName -> GasUnitTests
 shiftOptTests = defGasUnitTests allExprs
   where
     shiftExpr x =
-      [text| (shift 2 $x) |]
+      [trimming| (shift 2 $x) |]
     shiftNegExpr x =
-      [text| (shift -2 $x) |]
+      [trimming| (shift -2 $x) |]
 
     allExprs = NEL.map (createPactExpr shiftExpr) sizesExpr
       <> NEL.map (createPactExpr shiftNegExpr) sizesExpr
@@ -745,9 +744,9 @@ roundOptTests :: NativeDefName -> GasUnitTests
 roundOptTests = defGasUnitTests allExprs
   where
     roundExpr x =
-      [text| (round $x.12345) |]
+      [trimming| (round $x.12345) |]
     roundPrecExpr x =
-      [text| (round $x.12345 4) |]
+      [trimming| (round $x.12345 4) |]
 
     allExprs = NEL.map (createPactExpr roundExpr) sizesExpr
       <> NEL.map (createPactExpr roundPrecExpr) sizesExpr
@@ -756,7 +755,7 @@ roundOptTests = defGasUnitTests allExprs
 orFuncOptTests :: NativeDefName -> GasUnitTests
 orFuncOptTests = defGasUnitTests allExprs
   where
-    orFuncExpr = defPactExpression [text| (or? (identity) (identity) true) |]
+    orFuncExpr = defPactExpression [trimming| (or? (identity) (identity) true) |]
 
     allExprs = orFuncExpr :| []
 
@@ -764,7 +763,7 @@ orFuncOptTests = defGasUnitTests allExprs
 orOptTests :: NativeDefName -> GasUnitTests
 orOptTests = defGasUnitTests allExprs
   where
-    orExpr = defPactExpression [text| (or false false) |]
+    orExpr = defPactExpression [trimming| (or false false) |]
 
     allExprs = orExpr :| []
 
@@ -772,7 +771,7 @@ orOptTests = defGasUnitTests allExprs
 notFuncOptTests :: NativeDefName -> GasUnitTests
 notFuncOptTests = defGasUnitTests allExprs
   where
-    notFuncExpr = defPactExpression [text| (not? (identity) true) |]
+    notFuncExpr = defPactExpression [trimming| (not? (identity) true) |]
 
     allExprs = notFuncExpr :| []
 
@@ -780,7 +779,7 @@ notFuncOptTests = defGasUnitTests allExprs
 notOptTests :: NativeDefName -> GasUnitTests
 notOptTests = defGasUnitTests allExprs
   where
-    notExpr = defPactExpression [text| (not true) |]
+    notExpr = defPactExpression [trimming| (not true) |]
 
     allExprs = notExpr :| []
 
@@ -789,7 +788,7 @@ modOptTests :: NativeDefName -> GasUnitTests
 modOptTests = defGasUnitTests allExprs
   where
     modExpr x =
-      [text| (mod $x 2) |]
+      [trimming| (mod $x 2) |]
 
     allExprs = NEL.map (createPactExpr modExpr) sizesExpr
 
@@ -799,9 +798,9 @@ logOptTests :: NativeDefName -> GasUnitTests
 logOptTests = defGasUnitTests allExprs
   where
     logExpr y =
-      [text| (log 2 $y) |]
+      [trimming| (log 2 $y) |]
     logDecimalExpr y =
-      [text| (log 2 $y.1) |]
+      [trimming| (log 2 $y.1) |]
 
     allExprs = NEL.map (createPactExpr logExpr) sizesExpr
       <> NEL.map (createPactExpr logDecimalExpr) sizesExpr
@@ -812,9 +811,9 @@ lnOptTests :: NativeDefName -> GasUnitTests
 lnOptTests = defGasUnitTests allExprs
   where
     lnExpr x =
-      [text| (ln $x) |]
+      [trimming| (ln $x) |]
     lnDecimalExpr x =
-      [text| (ln $x.1) |]
+      [trimming| (ln $x.1) |]
 
     allExprs = NEL.map (createPactExpr lnExpr) sizesExpr
       <> NEL.map (createPactExpr lnDecimalExpr) sizesExpr
@@ -824,9 +823,9 @@ floorOptTests :: NativeDefName -> GasUnitTests
 floorOptTests = defGasUnitTests allExprs
   where
     floorExpr x =
-      [text| (floor $x.12345) |]
+      [trimming| (floor $x.12345) |]
     floorPrecExpr x =
-      [text| (floor $x.12345 4) |]
+      [trimming| (floor $x.12345 4) |]
 
     allExprs = NEL.map (createPactExpr floorExpr) sizesExpr
       <> NEL.map (createPactExpr floorPrecExpr) sizesExpr
@@ -836,11 +835,11 @@ expOptTests :: NativeDefName -> GasUnitTests
 expOptTests = defGasUnitTests allExprs
   where
     expExprSmall =
-      defPactExpression [text| (exp 1) |]
+      defPactExpression [trimming| (exp 1) |]
     expExprMed =
-      defPactExpression [text| (exp 10) |]
+      defPactExpression [trimming| (exp 10) |]
     expExprLarge =
-      defPactExpression [text| (exp 100) |]
+      defPactExpression [trimming| (exp 100) |]
 
     allExprs =  expExprSmall :|
                [expExprMed
@@ -851,9 +850,9 @@ ceilingOptTests :: NativeDefName -> GasUnitTests
 ceilingOptTests = defGasUnitTests allExprs
   where
     ceilingExpr x =
-      [text| (ceiling $x.12345) |]
+      [trimming| (ceiling $x.12345) |]
     ceilingPrecExpr x =
-      [text| (ceiling $x.12345 4) |]
+      [trimming| (ceiling $x.12345 4) |]
 
     allExprs = NEL.map (createPactExpr ceilingExpr) sizesExpr
       <> NEL.map (createPactExpr ceilingPrecExpr) sizesExpr
@@ -863,7 +862,7 @@ andFuncOptTests :: NativeDefName -> GasUnitTests
 andFuncOptTests = defGasUnitTests allExprs
   where
     andFuncExpr =
-      defPactExpression [text| (and? (identity) (identity) true) |]
+      defPactExpression [trimming| (and? (identity) (identity) true) |]
 
     allExprs = andFuncExpr :| []
 
@@ -872,7 +871,7 @@ andOptTests :: NativeDefName -> GasUnitTests
 andOptTests = defGasUnitTests allExprs
   where
     andExpr =
-      defPactExpression [text| (and false true) |]
+      defPactExpression [trimming| (and false true) |]
 
     allExprs = andExpr :| []
 
@@ -881,9 +880,9 @@ absOptTests :: NativeDefName -> GasUnitTests
 absOptTests = defGasUnitTests allExprs
   where
     absExpr x =
-      [text| (abs -$x) |]
+      [trimming| (abs -$x) |]
     absDecimalExpr x =
-      [text| (abs -$x.0) |]
+      [trimming| (abs -$x.0) |]
 
     allExprs = NEL.map (createPactExpr absExpr) sizesExpr
       <> NEL.map (createPactExpr absDecimalExpr) sizesExpr
@@ -893,11 +892,11 @@ raiseOptTests :: NativeDefName -> GasUnitTests
 raiseOptTests = defGasUnitTests allExprs
   where
     raiseExpr y =
-      [text| (^ 2 $y) |]
+      [trimming| (^ 2 $y) |]
     raiseDecimalExpr y =
-      [text| (^ 2.1 $y.1) |]
+      [trimming| (^ 2.1 $y.1) |]
     raiseBothExpr y =
-      [text| (^ 2.1 $y) |]
+      [trimming| (^ 2.1 $y) |]
 
     allExprs = NEL.map (createPactExpr raiseExpr) sizesExpr
       <> NEL.map (createPactExpr raiseDecimalExpr) sizesExpr
@@ -908,11 +907,11 @@ greaterThanEqOptTests :: NativeDefName -> GasUnitTests
 greaterThanEqOptTests = defGasUnitTests allExprs
   where
     greaterEqExpr x =
-      [text| (>= $x $x) |]
+      [trimming| (>= $x $x) |]
     greaterEqDecimalExpr x =
-      [text| (>= $x.0 $x.0) |]
+      [trimming| (>= $x.0 $x.0) |]
     greaterEqTimeExpr =
-      [text| (>= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+      [trimming| (>= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
 
     allExprs = NEL.map (createPactExpr greaterEqExpr) sizesExpr
       <> NEL.map (createPactExpr greaterEqDecimalExpr) sizesExpr
@@ -924,11 +923,11 @@ greaterThanOptTests :: NativeDefName -> GasUnitTests
 greaterThanOptTests = defGasUnitTests allExprs
   where
     greaterExpr x =
-      [text| (> $x $x) |]
+      [trimming| (> $x $x) |]
     greaterDecimalExpr x =
-      [text| (> $x.0 $x.0) |]
+      [trimming| (> $x.0 $x.0) |]
     greaterTimeExpr =
-      [text| (> (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+      [trimming| (> (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
 
     allExprs = NEL.map (createPactExpr greaterExpr) sizesExpr
       <> NEL.map (createPactExpr greaterDecimalExpr) sizesExpr
@@ -940,11 +939,11 @@ equalOptTests :: NativeDefName -> GasUnitTests
 equalOptTests = defGasUnitTests allExprs
   where
     eqExpr x =
-      [text| (= $x $x) |]
+      [trimming| (= $x $x) |]
     eqDecimalExpr x =
-      [text| (= $x.0 $x.0) |]
+      [trimming| (= $x.0 $x.0) |]
     eqTimeExpr =
-      [text| (= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+      [trimming| (= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
 
     allExprs = NEL.map (createPactExpr eqExpr) sizesExpr
       <> NEL.map (createPactExpr eqDecimalExpr) sizesExpr
@@ -958,11 +957,11 @@ lessThanEqualOptTests :: NativeDefName -> GasUnitTests
 lessThanEqualOptTests = defGasUnitTests allExprs
   where
     lessEqExpr x =
-      [text| (<= $x $x) |]
+      [trimming| (<= $x $x) |]
     lessEqDecimalExpr x =
-      [text| (<= $x.0 $x.0) |]
+      [trimming| (<= $x.0 $x.0) |]
     lessEqTimeExpr =
-      [text| (<= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+      [trimming| (<= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
 
     allExprs = NEL.map (createPactExpr lessEqExpr) sizesExpr
       <> NEL.map (createPactExpr lessEqDecimalExpr) sizesExpr
@@ -974,11 +973,11 @@ lessThanOptTests :: NativeDefName -> GasUnitTests
 lessThanOptTests = defGasUnitTests allExprs
   where
     lessExpr x =
-      [text| (< $x $x) |]
+      [trimming| (< $x $x) |]
     lessDecimalExpr x =
-      [text| (< $x.0 $x.0) |]
+      [trimming| (< $x.0 $x.0) |]
     lessTimeExpr =
-      [text| (< (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
+      [trimming| (< (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z")) |]
 
     allExprs = NEL.map (createPactExpr lessExpr) sizesExpr
       <> NEL.map (createPactExpr lessDecimalExpr) sizesExpr
@@ -990,11 +989,11 @@ divOptTests :: NativeDefName -> GasUnitTests
 divOptTests = defGasUnitTests allExprs
   where
     divExpr x =
-      [text| (/ $x $x) |]
+      [trimming| (/ $x $x) |]
     divDecimalExpr x =
-      [text| (/ $x.0 $x.0) |]
+      [trimming| (/ $x.0 $x.0) |]
     divBothExpr x =
-      [text| (/ $x.0 $x) |]
+      [trimming| (/ $x.0 $x) |]
 
     allExprs = NEL.map (createPactExpr divExpr) sizesExpr
       <> NEL.map (createPactExpr divDecimalExpr) sizesExpr
@@ -1005,15 +1004,15 @@ subOptTests :: NativeDefName -> GasUnitTests
 subOptTests = defGasUnitTests allExprs
   where
     subExpr x =
-      [text| (- $x $x) |]
+      [trimming| (- $x $x) |]
     subDecimalExpr x =
-      [text| (- $x.0 $x.0) |]
+      [trimming| (- $x.0 $x.0) |]
     subBothExpr x =
-      [text| (- $x.0 $x) |]
+      [trimming| (- $x.0 $x) |]
     subOneExpr x =
-      [text| (- $x) |]
+      [trimming| (- $x) |]
     subOneDecimalExpr x =
-      [text| (- $x.0) |]
+      [trimming| (- $x.0) |]
 
     allExprs = NEL.map (createPactExpr subExpr) sizesExpr
       <> NEL.map (createPactExpr subDecimalExpr) sizesExpr
@@ -1026,11 +1025,11 @@ addOptTests :: NativeDefName -> GasUnitTests
 addOptTests = defGasUnitTests allExprs
   where
     addExpr x =
-      [text| (+ $x $x) |]
+      [trimming| (+ $x $x) |]
     addDecimalExpr x =
-      [text| (+ $x.0 $x.0) |]
+      [trimming| (+ $x.0 $x.0) |]
     addBothExpr x =
-      [text| (+ $x.0 $x) |]
+      [trimming| (+ $x.0 $x) |]
 
     allExprs = NEL.map (createPactExpr addExpr) sizesExpr
       <> NEL.map (createPactExpr addDecimalExpr) sizesExpr
@@ -1043,11 +1042,11 @@ multOptTests :: NativeDefName -> GasUnitTests
 multOptTests = defGasUnitTests allExprs
   where
     multIntExpr x =
-      [text| (* $x $x) |]
+      [trimming| (* $x $x) |]
     multDecimalExpr x =
-      [text| (* $x.0 $x.0) |]
+      [trimming| (* $x.0 $x.0) |]
     multBothExpr x =
-      [text| (* $x.0 $x) |]
+      [trimming| (* $x.0 $x) |]
 
     allExprs = NEL.map (createPactExpr multIntExpr) sizesExpr
       <> NEL.map (createPactExpr multDecimalExpr) sizesExpr
@@ -1058,7 +1057,7 @@ bitwiseOptTests :: NativeDefName -> GasUnitTests
 bitwiseOptTests = defGasUnitTests allExprs
   where
     bitwiseExpr x =
-      [text| (& $x $x) |]
+      [trimming| (& $x $x) |]
 
     allExprs = NEL.map (createPactExpr bitwiseExpr) sizesExpr
 
@@ -1067,9 +1066,9 @@ notEqualOptTests :: NativeDefName -> GasUnitTests
 notEqualOptTests = defGasUnitTests allExprs
   where
     notEqualExpr x =
-      [text| (!= $x $x) |]
+      [trimming| (!= $x $x) |]
     notEqualDecimalExpr x =
-      [text| (!= $x.0 $x.0) |]
+      [trimming| (!= $x.0 $x.0) |]
 
     allExprs = NEL.map (createPactExpr notEqualExpr) sizesExpr
       <> NEL.map (createPactExpr notEqualExpr) escapedStringsExpr
@@ -1084,7 +1083,7 @@ whereTests :: NativeDefName -> GasUnitTests
 whereTests = defGasUnitTests allExprs
   where
     whereExpr obj =
-      [text| (where "a1" (constantly true) $obj) |]
+      [trimming| (where "a1" (constantly true) $obj) |]
 
     allExprs = NEL.map (createPactExpr whereExpr) strKeyIntValMapsExpr
 
@@ -1093,7 +1092,7 @@ typeOfTests :: NativeDefName -> GasUnitTests
 typeOfTests = defGasUnitTests allExprs
   where
     typeOfExpr t =
-      [text| (typeof $t) |]
+      [trimming| (typeof $t) |]
 
     allExprs = NEL.map (createPactExpr typeOfExpr) strKeyIntValMapsExpr
       <> NEL.map (createPactExpr typeOfExpr) escapedStringsExpr
@@ -1104,7 +1103,7 @@ typeOfTests = defGasUnitTests allExprs
 txHashTests :: NativeDefName -> GasUnitTests
 txHashTests = defGasUnitTests allExprs
   where
-    txHashExpr = defPactExpression [text| (tx-hash) |]
+    txHashExpr = defPactExpression [trimming| (tx-hash) |]
     allExprs = txHashExpr :| []
 
 
@@ -1112,9 +1111,9 @@ tryTests :: NativeDefName -> GasUnitTests
 tryTests = defGasUnitTests allExprs
   where
     tryPassExpr =
-      defPactExpression [text| (try true (enforce true "this will definitely pass")) |]
+      defPactExpression [trimming| (try true (enforce true "this will definitely pass")) |]
     tryFailExpr =
-      defPactExpression [text| (try true (enforce false "this will definitely fail")) |]
+      defPactExpression [trimming| (try true (enforce false "this will definitely fail")) |]
 
     allExprs = tryPassExpr :| [ tryFailExpr ]
 
@@ -1123,17 +1122,17 @@ takeTests :: NativeDefName -> GasUnitTests
 takeTests = defGasUnitTests allExprs
   where
     takeFirstExpr t =
-       [text| (take 1 $t) |]
+       [trimming| (take 1 $t) |]
     takeLastExpr t =
-       [text| (take -1 $t) |]
+       [trimming| (take -1 $t) |]
     takeKeysExpr (PactExpression keyList keyDesc', PactExpression obj objDesc') =
       PactExpression
-      [text| (take $keyList $obj) |]
-      (Just [text| (take $keyListDesc $objDesc) |])
+      [trimming| (take $keyList $obj) |]
+      (Just [trimming| (take $keyListDesc $objDesc) |])
       where keyListDesc = fromMaybe keyList keyDesc'
             objDesc = fromMaybe obj objDesc'
     takeSingleKeyExpr obj =
-       [text| (take ["a1"] $obj) |]
+       [trimming| (take ["a1"] $obj) |]
 
     keysToTakeArgs = NEL.zip escapedStrListsExpr strKeyIntValMapsExpr
 
@@ -1148,20 +1147,20 @@ strToIntTests :: NativeDefName -> GasUnitTests
 strToIntTests = defGasUnitTests allExprs
   where
     str2intExpr valInt =
-      PactExpression [text| (str-to-int $valStr) |] Nothing
+      PactExpression [trimming| (str-to-int $valStr) |] Nothing
         where valStr = escapeText $ intToStr valInt
 
-    str2intLongHex = defPactExpression [text| (str-to-int 16 "186A0") |]
-    str2intMedHex = defPactExpression [text| (str-to-int 16 "64") |]
-    str2intSmallHex = defPactExpression [text| (str-to-int 16 "a") |]
+    str2intLongHex = defPactExpression [trimming| (str-to-int 16 "186A0") |]
+    str2intMedHex = defPactExpression [trimming| (str-to-int 16 "64") |]
+    str2intSmallHex = defPactExpression [trimming| (str-to-int 16 "a") |]
 
-    str2intLongBinary = defPactExpression [text| (str-to-int 2 "11000011010100000") |]
-    str2intMedBinary = defPactExpression [text| (str-to-int 2 "1100100") |]
-    str2intSmallBinary = defPactExpression [text| (str-to-int 2 "1010") |]
+    str2intLongBinary = defPactExpression [trimming| (str-to-int 2 "11000011010100000") |]
+    str2intMedBinary = defPactExpression [trimming| (str-to-int 2 "1100100") |]
+    str2intSmallBinary = defPactExpression [trimming| (str-to-int 2 "1010") |]
 
-    str2intLongBase64 = defPactExpression [text| (str-to-int 64 "AYag") |]
-    str2intMedBase64 = defPactExpression [text| (str-to-int 64 "ZA") |]
-    str2intSmallBase64 = defPactExpression [text| (str-to-int 64 "Cg") |]
+    str2intLongBase64 = defPactExpression [trimming| (str-to-int 64 "AYag") |]
+    str2intMedBase64 = defPactExpression [trimming| (str-to-int 64 "ZA") |]
+    str2intSmallBase64 = defPactExpression [trimming| (str-to-int 64 "Cg") |]
 
     allExprs = NEL.map (str2intExpr . snd) sizes
       <> (  str2intLongHex :|
@@ -1186,7 +1185,7 @@ base64EncodeTests = defGasUnitTests exprs
       let s = toB64UrlUnpaddedText
             $ T.encodeUtf8
             $ T.replicate i "a"
-      in defPactExpression [text| (base64-decode "$s") |]
+      in defPactExpression [trimming| (base64-decode "$s") |]
 
     fshort = f 10
     fmedium = f 100
@@ -1199,7 +1198,7 @@ base64DecodeTests = defGasUnitTests exprs
 
     f i =
       let s = T.replicate i "a"
-      in defPactExpression [text| (base64-encode "$s") |]
+      in defPactExpression [trimming| (base64-encode "$s") |]
 
     fshort = f 10
     fmedium = f 100
@@ -1210,7 +1209,7 @@ sortTests :: NativeDefName -> GasUnitTests
 sortTests = defGasUnitTests allExprs
   where
     sortListExpr li =
-      [text| (sort $li) |]
+      [trimming| (sort $li) |]
 
     reversedListsExpr = NEL.map format intLists
       where
@@ -1227,7 +1226,7 @@ reverseTests :: NativeDefName -> GasUnitTests
 reverseTests = defGasUnitTests allExprs
   where
     reverseExpr li =
-      [text| (reverse $li) |]
+      [trimming| (reverse $li) |]
 
     allExprs = NEL.map (createPactExpr reverseExpr) intListsExpr
 
@@ -1236,7 +1235,7 @@ removeTests :: NativeDefName -> GasUnitTests
 removeTests = defGasUnitTests allExprs
   where
     removeExpr obj =
-      [text| (remove "a1" $obj) |]
+      [trimming| (remove "a1" $obj) |]
 
     allExprs = NEL.map (createPactExpr removeExpr) strKeyIntValMapsExpr
 
@@ -1244,7 +1243,7 @@ removeTests = defGasUnitTests allExprs
 pactIdTests :: NativeDefName -> GasUnitTests
 pactIdTests = tests
   where
-    pactIdExpr = defPactExpression [text|(pact-id)|]
+    pactIdExpr = defPactExpression [trimming|(pact-id)|]
 
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
                           (PactId "somePactId")
@@ -1259,8 +1258,8 @@ pactIdTests = tests
 yieldTests :: NativeDefName -> GasUnitTests
 yieldTests = tests
   where
-    yieldExpr obj = [text| (yield $obj) |]
-    yieldExprWithTargetChain obj = [text| (yield $obj "some-chain-id") |]
+    yieldExpr obj = [trimming| (yield $obj) |]
+    yieldExprWithTargetChain obj = [trimming| (yield $obj "some-chain-id") |]
 
     mockPactExec = Just $ PactExec 2 Nothing Nothing 0
                           (PactId "somePactId")
@@ -1304,7 +1303,7 @@ yieldTests = tests
 resumeTests :: NativeDefName -> GasUnitTests
 resumeTests nativeName = tests
   where
-    resumeExprText binding = [text|(resume $binding a1)|]
+    resumeExprText binding = [trimming|(resume $binding a1)|]
 
     addProvenanceDesc (PactExpression expr desc) =
       PactExpression
@@ -1384,7 +1383,7 @@ pactVersionTests :: NativeDefName -> GasUnitTests
 pactVersionTests = defGasUnitTests allExprs
   where
     versionExpr =
-      defPactExpression [text| (pact-version) |]
+      defPactExpression [trimming| (pact-version) |]
 
     allExprs = versionExpr :| []
 
@@ -1392,7 +1391,7 @@ pactVersionTests = defGasUnitTests allExprs
 readStringTests :: NativeDefName -> GasUnitTests
 readStringTests nativeName = tests
   where
-    readStringExprText = [text|(read-string "name")|]
+    readStringExprText = [trimming|(read-string "name")|]
 
     readStringExpr desc =
       PactExpression
@@ -1417,7 +1416,7 @@ readStringTests nativeName = tests
 readMsgTests :: NativeDefName -> GasUnitTests
 readMsgTests nativeName = tests
   where
-    readMsgExprText = [text|(read-msg)|]
+    readMsgExprText = [trimming|(read-msg)|]
     readMsgExpr desc =
       PactExpression
       readMsgExprText
@@ -1441,7 +1440,7 @@ readMsgTests nativeName = tests
 readIntegerTests :: NativeDefName -> GasUnitTests
 readIntegerTests nativeName = tests
   where
-    readIntExprText = [text|(read-integer "amount")|]
+    readIntExprText = [trimming|(read-integer "amount")|]
     readIntExpr desc =
       PactExpression
       readIntExprText
@@ -1465,7 +1464,7 @@ readIntegerTests nativeName = tests
 readDecimalTests :: NativeDefName -> GasUnitTests
 readDecimalTests nativeName = tests
   where
-    readDecExprText = [text|(read-decimal "amount")|]
+    readDecExprText = [trimming|(read-decimal "amount")|]
     readDecExpr desc =
       PactExpression
       readDecExprText
@@ -1493,7 +1492,7 @@ mapTests :: NativeDefName -> GasUnitTests
 mapTests = defGasUnitTests allExprs
   where
     mapExpr li =
-      [text| (map (identity) $li) |]
+      [trimming| (map (identity) $li) |]
 
     allExprs = NEL.map (createPactExpr mapExpr) intListsExpr
 
@@ -1502,7 +1501,7 @@ makeListTests :: NativeDefName -> GasUnitTests
 makeListTests = defGasUnitTests allExprs
   where
     makeListExpr len =
-      [text| (make-list $len true) |]
+      [trimming| (make-list $len true) |]
 
     allExprs = NEL.map (createPactExpr makeListExpr) sizesExpr
 
@@ -1511,7 +1510,7 @@ listModulesTests :: NativeDefName -> GasUnitTests
 listModulesTests = defGasUnitTests allExprs
   where
     listModulesExpr =
-      defPactExpression [text| (list-modules) |]
+      defPactExpression [trimming| (list-modules) |]
 
     allExprs = listModulesExpr :| []
 
@@ -1520,7 +1519,7 @@ lengthTests :: NativeDefName -> GasUnitTests
 lengthTests = defGasUnitTests allExprs
   where
     lengthExpr t =
-      [text| (length $t) |]
+      [trimming| (length $t) |]
 
     allExprs =
          NEL.map (createPactExpr lengthExpr) intListsExpr
@@ -1531,11 +1530,11 @@ isCharsetTests :: NativeDefName -> GasUnitTests
 isCharsetTests = defGasUnitTests allExprs
   where
     isCharsetExprAscii =
-      defPactExpression [text|(is-charset CHARSET_ASCII "hello world")|]
+      defPactExpression [trimming|(is-charset CHARSET_ASCII "hello world")|]
     isCharsetExprNotAscii =
-      defPactExpression [text|(is-charset CHARSET_ASCII "I am nÖt ascii")|]
+      defPactExpression [trimming|(is-charset CHARSET_ASCII "I am nÖt ascii")|]
     isCharsetExprLatin1 =
-      defPactExpression [text|(is-charset CHARSET_LATIN1 "I am nÖt ascii, but I am latin1!")|]
+      defPactExpression [trimming|(is-charset CHARSET_LATIN1 "I am nÖt ascii, but I am latin1!")|]
     allExprs = isCharsetExprAscii :|
                [isCharsetExprNotAscii, isCharsetExprLatin1]
 
@@ -1544,7 +1543,7 @@ intToStrTests :: NativeDefName -> GasUnitTests
 intToStrTests = defGasUnitTests allExprs
   where
     int2strExpr (valInt,baseInt) =
-      defPactExpression [text| (int-to-str $base $val) |]
+      defPactExpression [trimming| (int-to-str $base $val) |]
       where base = intToStr baseInt
             val = intToStr valInt
 
@@ -1561,7 +1560,7 @@ ifTests :: NativeDefName -> GasUnitTests
 ifTests = defGasUnitTests allExprs
   where
     ifExpr =
-      defPactExpression [text| (if true "then-clause" "else-clause") |]
+      defPactExpression [trimming| (if true "then-clause" "else-clause") |]
 
     allExprs = ifExpr :| []
 
@@ -1570,7 +1569,7 @@ identityTests :: NativeDefName -> GasUnitTests
 identityTests = defGasUnitTests allExprs
   where
     identityExpr val =
-      [text| (identity $val) |]
+      [trimming| (identity $val) |]
 
     allExprs = NEL.map (createPactExpr identityExpr) intListsExpr
 
@@ -1579,7 +1578,7 @@ hashTests :: NativeDefName -> GasUnitTests
 hashTests = defGasUnitTests allExprs
   where
     hashExpr val =
-      [text| (hash $val) |]
+      [trimming| (hash $val) |]
 
     allExprs =
          NEL.map (createPactExpr hashExpr) escapedStringsExpr
@@ -1590,8 +1589,8 @@ formatTests = defGasUnitTests allExprs
   where
     formatExpr (str,(PactExpression expr desc')) =
       PactExpression
-      [text| (format "$str" $expr )|]
-      (Just [text| (format "{}...{}" $desc)|])
+      [trimming| (format "$str" $expr )|]
+      (Just [trimming| (format "{}...{}" $desc)|])
       where desc = fromMaybe expr desc'
 
     curlyBraces =
@@ -1610,7 +1609,7 @@ foldTests :: NativeDefName -> GasUnitTests
 foldTests = defGasUnitTests allExprs
   where
     foldExpr li =
-      [text| (fold (constantly 0) 1 $li) |]
+      [trimming| (fold (constantly 0) 1 $li) |]
     allExprs = NEL.map (createPactExpr foldExpr) intListsExpr
 
 
@@ -1618,7 +1617,7 @@ filterTests :: NativeDefName -> GasUnitTests
 filterTests = defGasUnitTests allExprs
   where
     filterExpr li =
-      [text| (filter (constantly true) $li)|]
+      [trimming| (filter (constantly true) $li)|]
     allExprs = NEL.map (createPactExpr filterExpr) intListsExpr
 
 
@@ -1626,13 +1625,13 @@ enforceOneTests :: NativeDefName -> GasUnitTests
 enforceOneTests = defGasUnitTests allExprs
   where
     enforceOneExpr tests =
-      [text| (enforce-one "some-error-message" $tests) |]
+      [trimming| (enforce-one "some-error-message" $tests) |]
 
     enforcePass = MockExpr
-      [text| (enforce true "this-should-always-succeed") |]
+      [trimming| (enforce true "this-should-always-succeed") |]
 
     enforceFail = MockExpr
-      [text| (enforce false "skip me") |]
+      [trimming| (enforce false "skip me") |]
 
     -- | Lists of failing enforce statements with a passing one at the end
     --   example: [ [ (enforce-statement) (enforce-statement) ] ]
@@ -1653,7 +1652,7 @@ enforcePactVersionTests :: NativeDefName -> GasUnitTests
 enforcePactVersionTests = defGasUnitTests allExprs
   where
     enforcePactVersionExpr =
-      defPactExpression [text| (enforce-pact-version "3.0")|]
+      defPactExpression [trimming| (enforce-pact-version "3.0")|]
     allExprs = enforcePactVersionExpr :| []
 
 
@@ -1663,24 +1662,24 @@ enforceTests :: NativeDefName -> GasUnitTests
 enforceTests = defGasUnitTests allExprs
   where
     allExprs =
-      defPactExpression [text| (enforce true "some-error-message")|] :| []
+      defPactExpression [trimming| (enforce true "some-error-message")|] :| []
 
 
 dropTests :: NativeDefName -> GasUnitTests
 dropTests = defGasUnitTests allExprs
   where
     dropFirstExpr t =
-      [text| (drop 1 $t) |]
+      [trimming| (drop 1 $t) |]
     dropLastExpr t =
-      [text| (drop -1 $t) |]
+      [trimming| (drop -1 $t) |]
     dropKeysExpr (PactExpression keyList keyListDesc', PactExpression obj objDesc') =
       PactExpression
-      [text| (drop $keyList $obj) |]
-      (Just $ [text| (drop $keyListDesc $objDesc) |])
+      [trimming| (drop $keyList $obj) |]
+      (Just $ [trimming| (drop $keyListDesc $objDesc) |])
       where keyListDesc = fromMaybe keyList keyListDesc'
             objDesc = fromMaybe obj objDesc'
     dropSingleKeyExpr obj =
-      [text| (drop ["a1"] $obj) |]
+      [trimming| (drop ["a1"] $obj) |]
 
     keysToDropArgs = NEL.zip escapedStrListsExpr strKeyIntValMapsExpr
 
@@ -1694,7 +1693,7 @@ dropTests = defGasUnitTests allExprs
 namespaceTests :: NativeDefName -> GasUnitTests
 namespaceTests = tests
   where
-    namespaceExpr = defPactExpression [text| (namespace '$sampleNamespaceName) |]
+    namespaceExpr = defPactExpression [trimming| (namespace '$sampleNamespaceName) |]
 
     updateEnvWithSig =
       setEnv $ set eeMsgSigs (M.fromList $ F.toList samplePubKeysWithCaps)
@@ -1713,11 +1712,11 @@ defineNamespaceTests = tests
     simpleDefTests = defGasUnitTests (simpleDefExpr :| [])
       where
         simpleDefExpr =
-          defPactExpression [text| (define-namespace 'some-other-namespace $sampleLoadedKeysetName $sampleLoadedKeysetName) |]
+          defPactExpression [trimming| (define-namespace 'some-other-namespace $sampleLoadedKeysetName $sampleLoadedKeysetName) |]
 
     rotateNamespaceTests = rotateTests
       where
-        rotateExprText = [text| (define-namespace '$sampleNamespaceName $sampleLoadedKeysetName $sampleLoadedKeysetName) |]
+        rotateExprText = [trimming| (define-namespace '$sampleNamespaceName $sampleLoadedKeysetName $sampleLoadedKeysetName) |]
         rotateExpr =
           PactExpression
           rotateExprText
@@ -1738,18 +1737,18 @@ containsTests = defGasUnitTests allExprs
   where
     containsListExpr (PactExpression val valDesc', PactExpression li liDesc') =
       PactExpression
-      [text| (contains $val $li) |]
-      (Just [text| (contains $valDesc $liDesc) |])
+      [trimming| (contains $val $li) |]
+      (Just [trimming| (contains $valDesc $liDesc) |])
       where valDesc = fromMaybe val valDesc'
             liDesc = fromMaybe li liDesc'
 
     containsObjExpr obj =
-      [text| (contains "a1" $obj) |]
+      [trimming| (contains "a1" $obj) |]
 
     containsStrExpr (PactExpression val valDesc', PactExpression str strDesc') =
       PactExpression
-      [text| (contains "a$val" $str) |]
-      (Just [text| (contains "a$valDesc" $strDesc) |])
+      [trimming| (contains "a$val" $str) |]
+      (Just [trimming| (contains "a$valDesc" $strDesc) |])
       where valDesc = fromMaybe val valDesc'
             strDesc = fromMaybe str strDesc'
 
@@ -1766,11 +1765,11 @@ constantlyTests :: NativeDefName -> GasUnitTests
 constantlyTests = defGasUnitTests allExprs
   where
     singleIgnoreExpr =
-      defPactExpression [text| (constantly 0 "firstIgnore") |]
+      defPactExpression [trimming| (constantly 0 "firstIgnore") |]
     doubleIgnoreExpr =
-      defPactExpression [text| (constantly 0 "firstIgnore" "secondIgnore") |]
+      defPactExpression [trimming| (constantly 0 "firstIgnore" "secondIgnore") |]
     tripleIgnoreExpr =
-      defPactExpression [text| (constantly 0 "firstIgnore" "secondIgnore" "thirdIgnore") |]
+      defPactExpression [trimming| (constantly 0 "firstIgnore" "secondIgnore" "thirdIgnore") |]
     allExprs =
       singleIgnoreExpr :| [doubleIgnoreExpr, tripleIgnoreExpr]
 
@@ -1779,14 +1778,14 @@ composeTests :: NativeDefName -> GasUnitTests
 composeTests = defGasUnitTests allExprs
   where
     composeExpr =
-      defPactExpression [text| (compose (+ 0) (+ 0) 0) |]
+      defPactExpression [trimming| (compose (+ 0) (+ 0) 0) |]
     allExprs = composeExpr :| []
 
 
 chainDataTests :: NativeDefName -> GasUnitTests
 chainDataTests = defGasUnitTests allExprs
   where
-    allExprs = (defPactExpression [text| (chain-data) |]) :| []
+    allExprs = (defPactExpression [trimming| (chain-data) |]) :| []
 
 
 atTests :: NativeDefName -> GasUnitTests
@@ -1794,12 +1793,12 @@ atTests = defGasUnitTests allExprs
   where
     atListExpr (PactExpression idx _, PactExpression li liDesc') =
       PactExpression
-      [text| (at $idx $li) |]
-      (Just [text| (at $idx $liDesc) |])
+      [trimming| (at $idx $li) |]
+      (Just [trimming| (at $idx $liDesc) |])
       where liDesc = fromMaybe li liDesc'
 
     atObjExpr obj =
-      [text| (at "a1" $obj) |]
+      [trimming| (at "a1" $obj) |]
 
     listIndices = NEL.map
                   (\(desc,i) -> (PactExpression (toText $ MockInt $ pred i) (Just desc)))
@@ -1812,7 +1811,7 @@ atTests = defGasUnitTests allExprs
 bindTests :: NativeDefName -> GasUnitTests
 bindTests = defGasUnitTests allExprs
   where
-    bindExprText obj bind = [text| (bind $obj $bind a1) |]
+    bindExprText obj bind = [trimming| (bind $obj $bind a1) |]
     bindExpr (PactExpression obj objDesc', PactExpression binding bindingDesc') =
       PactExpression
       (bindExprText obj binding)

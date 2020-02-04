@@ -173,4 +173,10 @@ in {
     ver = "0.1.0.1";
     sha256 = "1fplsb3rb6f3w20cncr0zrjpf7x4kc3njy8l016p5wxxh3hkgdrs";
   });
+
+  neat-interpolation = dontCheck (callHackageDirect {
+    pkg = "neat-interpolation";
+    ver = "0.5.0.1";
+    sha256 = "10ss12dvgrcbgp4kh1g0i91h30m79kl4v2k37k18lv9q06kjhx5j";
+  });
 }
