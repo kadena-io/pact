@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 module Pact.Gas.Table where
 
-import Data.Decimal
+import Data.Ratio
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -183,12 +183,21 @@ defaultGasTable =
 
   ]
 
+{-# NOINLINE defaultGasTable #-}
+
 expLengthPenalty :: Integral i => i -> Gas
 expLengthPenalty v = let lv = logBase (100::Float) (fromIntegral v) in 1 + floor (lv^(10::Int))
+{-# INLINE expLengthPenalty #-}
 
 tableGasModel :: GasCostConfig -> GasModel
 tableGasModel gasConfig =
   let run name ga = case ga of
+        GUnreduced _ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
+          Just g -> g
+          Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
+        GUserApp t -> case t of
+          Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
+          _ -> _gasCostConfig_functionApplicationCost gasConfig
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
         GSelect mColumns -> case mColumns of
@@ -199,9 +208,6 @@ tableGasModel gasConfig =
           fromIntegral n * _gasCostConfig_sortFactor gasConfig
         GConcatenation i j ->
           fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
-        GUnreduced _ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
-          Just g -> g
-          Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
         GPostRead r -> case r of
           ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
@@ -232,21 +238,26 @@ tableGasModel gasConfig =
         GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
-        GUserApp t -> case t of
-          Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
-          _ -> _gasCostConfig_functionApplicationCost gasConfig
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
       , runGasModel = run
       }
+{-# INLINE tableGasModel #-}
 
 
-perByteFactor :: Decimal
-perByteFactor = 0.1
+perByteFactor :: Rational
+perByteFactor = 1%10
+{-# NOINLINE perByteFactor #-}
 
 memoryCost :: (SizeOf a) => a -> Gas -> Gas
 memoryCost val (Gas cost) = Gas totalCost
   where costFrac = realToFrac cost
         sizeFrac = realToFrac (sizeOf val)
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
+{-# INLINE memoryCost #-}
+
+
+-- | Gas model that charges varible (positive) rate per tracked operation
+defaultGasModel :: GasModel
+defaultGasModel = tableGasModel defaultGasConfig
