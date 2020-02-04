@@ -22,6 +22,7 @@ import System.Directory
 
 
 import GoldenSpec (golden, cleanupActual)
+import Pact.Types.Exp
 import Pact.Types.SizeOf
 import Pact.Types.PactValue
 import Pact.Types.Runtime
@@ -137,11 +138,10 @@ _generateGoldenPactValues = mapM_ f pactValuesDescAndGen
 -- | List of pact value pseudo-random generators and their descriptions
 pactValuesDescAndGen :: [(String, Gen PactValue)]
 pactValuesDescAndGen =
-  [ ("literal", genSomeLiteralPactValue seed)
-  , ("list", genSomeListPactValue seed)
-  , ("object-map", genSomeObjectPactValue seed)
-  , ("guard", genSomeGuardPactValue seed)
-  ]
+  genSomeLiteralPactValues seed <>
+  genSomeGuardPactValues seed <>
+  [ ("list", genSomeListPactValue seed)
+  , ("object-map", genSomeObjectPactValue seed) ]
 
 goldenPactValueDirectory :: String -> FilePath
 goldenPactValueDirectory desc = goldenDirectory <> "/" <> testPrefix <> desc
@@ -157,9 +157,15 @@ goldenPactValueFilePath desc = (goldenPactValueDirectory desc) <> "/golden"
 -- `import Data.Aeson (toJSON)`
 -- `fmap (pretty . toJSON) (generate $ genSomeLiteralPactValue seed)`
 
--- | Generator of some psuedo-random Literal pact value
-genSomeLiteralPactValue :: Int -> Gen PactValue
-genSomeLiteralPactValue s = genWithSeed s $ PLiteral <$> arbitrary
+-- | Generator of some psuedo-random Literal pact values
+genSomeLiteralPactValues :: Int -> [(String, Gen PactValue)]
+genSomeLiteralPactValues s =
+  [ ("literal-string", f genLiteralString)
+  , ("literal-integer", f genLiteralInteger)
+  , ("literal-decimal", f genLiteralDecimal)
+  , ("literal-bool", f genLiteralBool)
+  , ("literal-time", f genLiteralTime) ]
+  where f g = PLiteral <$> genWithSeed s g
 
 -- | Generator of some psuedo-random List pact value
 genSomeListPactValue :: Int -> Gen PactValue
@@ -169,9 +175,15 @@ genSomeListPactValue s = genWithSeed s $ PList <$> genPactValueList RecurseTwice
 genSomeObjectPactValue :: Int -> Gen PactValue
 genSomeObjectPactValue s = genWithSeed s $ PObject <$> genPactValueObjectMap RecurseTwice
 
--- | Generator of some psuedo-random Guard pact value
-genSomeGuardPactValue :: Int -> Gen PactValue
-genSomeGuardPactValue s = genWithSeed s $ PGuard <$> genPactValueGuard RecurseTwice
+-- | Generator of some psuedo-random Guard pact values
+genSomeGuardPactValues :: Int -> [(String, Gen PactValue)]
+genSomeGuardPactValues s =
+  [ ("guard-pact", f $ GPact <$> arbitrary)
+  , ("guard-keySet", f $ GKeySet <$> arbitrary)
+  , ("guard-keySetRef", f $ GKeySetRef <$> arbitrary)
+  , ("guard-module", f $ GModule <$> arbitrary)
+  , ("guard-user", f $ genUserGuard RecurseTwice) ]
+  where f g = PGuard <$> genWithSeed s g
 
 -- | Generate arbitrary value with the provided "random" seed.
 -- Allows for replicating arbitrary values.

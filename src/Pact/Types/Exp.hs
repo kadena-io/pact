@@ -25,6 +25,11 @@ module Pact.Types.Exp
  (
    Literal(..),
    _LString,_LInteger,_LDecimal,_LBool,_LTime,
+   genLiteralString,
+   genLiteralInteger,
+   genLiteralDecimal,
+   genLiteralBool,
+   genLiteralTime,
    simpleISO8601,formatLTime,
    litToPrim,
    LiteralExp(..),AtomExp(..),ListExp(..),SeparatorExp(..),
@@ -60,7 +65,7 @@ import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Type
 import Pact.Types.Codec
-import Pact.Types.Util (satisfiesRoundtripJSON, genBareText)
+import Pact.Types.Util (genBareText)
 
 
 
@@ -75,6 +80,22 @@ genArbitraryUTCTime = toUTCTime <$> genDay <*> genDiffTime
     genDiffTime = secondsToDiffTime <$> choose (0, 86400)
     toUTCTime day' diff' = (UTCTime day' diff') ^. from utcTime
 
+genLiteralString :: Gen Literal
+genLiteralString = LString <$> resize 100 genBareText
+
+genLiteralInteger :: Gen Literal
+genLiteralInteger =
+  LInteger <$> resize (fromInteger ((snd jsIntegerBounds) * 10)) arbitrary
+
+genLiteralDecimal :: Gen Literal
+genLiteralDecimal = LDecimal <$> resize 1000 arbitrary
+
+genLiteralBool :: Gen Literal
+genLiteralBool = LBool <$> arbitrary
+
+genLiteralTime :: Gen Literal
+genLiteralTime = LTime <$> genArbitraryUTCTime
+
 
 data Literal =
     LString { _lString :: !Text } |
@@ -86,14 +107,14 @@ data Literal =
 
 -- | Custom generator of potentially large, arbitrary Literals
 instance Arbitrary Literal where
-  arbitrary = suchThat g satisfiesRoundtripJSON
-    where g = oneof
-            [ LString <$> resize 100 genBareText
-            , LInteger <$> resize (fromInteger ((snd jsIntegerBounds) * 10)) arbitrary
-            , LDecimal <$> resize 1000 arbitrary
-            , LBool <$> arbitrary
-            , LTime <$> genArbitraryUTCTime
-            ]
+  arbitrary =
+    oneof
+    [ genLiteralString
+    , genLiteralInteger
+    , genLiteralDecimal
+    , genLiteralBool
+    , genLiteralTime
+    ]
 
 instance Serialize Literal
 instance NFData Literal

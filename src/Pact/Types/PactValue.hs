@@ -31,6 +31,7 @@ module Pact.Types.PactValue
   , genPactValueObjectMap
   , genPactValueList
   , genPactValueGuard
+  , genUserGuard
   ) where
 
 import Control.Applicative ((<|>))
@@ -49,8 +50,6 @@ import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
-import Pact.Types.Util (satisfiesRoundtripJSON)
-
 
 -- | Determines how deep a generated PactValue _could_ be.
 -- Restricts how many times a recursive PactValue constructor (i.e. PObject, PList, and PGuard)
@@ -91,11 +90,13 @@ genPactValueList :: PactValueGeneratorSize -> Gen (Vector PactValue)
 genPactValueList genSize = V.fromList <$> listOf1 (genSomePactValue genSize)
 
 genPactValueGuard :: PactValueGeneratorSize -> Gen (Guard PactValue)
-genPactValueGuard genSize = oneof (genTerminatingPactValueGuard <> [GUser <$> genUserGuard])
-  where genUserGuard = do
-          args <- listOf1 (genSomePactValue genSize)
-          fun <- arbitrary  -- TODO enforce that it's a non-native Name
-          pure $ UserGuard fun args
+genPactValueGuard genSize = oneof (genTerminatingPactValueGuard <> [genUserGuard genSize])
+
+genUserGuard :: PactValueGeneratorSize -> Gen (Guard PactValue)
+genUserGuard genSize = do
+  args <- listOf1 (genSomePactValue genSize)
+  fun <- arbitrary  -- TODO enforce that it's a non-native Name
+  pure $ GUser $ UserGuard fun args
 
 
 data PactValue
@@ -106,7 +107,7 @@ data PactValue
   deriving (Eq,Show,Generic,Ord)
 
 instance Arbitrary PactValue where
-  arbitrary = suchThat (genSomePactValue RecurseTwice) satisfiesRoundtripJSON
+  arbitrary = genSomePactValue RecurseTwice
 
 instance NFData PactValue
 
