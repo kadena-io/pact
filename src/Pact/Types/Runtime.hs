@@ -22,6 +22,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
+   eePerfTimer,
    toPactId,
    Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
@@ -39,7 +40,8 @@ module Pact.Types.Runtime
    module Pact.Types.Gas,
    module Pact.Types.ChainMeta,
    module Pact.Types.PactError,
-   liftIO
+   liftIO,
+   eperf
    ) where
 
 
@@ -67,6 +69,7 @@ import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.PactError
+import Pact.Types.Perf
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
@@ -164,6 +167,8 @@ data EvalEnv e = EvalEnv {
     , _eePublicData :: PublicData
       -- | Execution configuration flags
     , _eeExecutionConfig :: ExecutionConfig
+      -- | Perf logger/bracketer
+    , _eePerfTimer :: PerfTimer
     }
 makeLenses ''EvalEnv
 
@@ -389,6 +394,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eeSPVSupport
     _eePublicData
     _eeExecutionConfig
+    _eePerfTimer
 
 mkSysOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysOnly e))
 mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
@@ -406,3 +412,6 @@ mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
 mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
 mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->
   withMVar e $ \(EnvReadOnly EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+
+eperf :: Text -> Eval e a -> Eval e a
+eperf m a = view eePerfTimer >>= \pt -> perf pt m a

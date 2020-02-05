@@ -19,7 +19,8 @@
 -- 'Codec' pairs 'ToJSON' and 'FromJSON' marshalling.
 --
 module Pact.Types.Codec
-  ( Codec(..)
+  ( jsIntegerBounds
+  , Codec(..)
   , integerCodec
   , decimalCodec
   , timeCodec
