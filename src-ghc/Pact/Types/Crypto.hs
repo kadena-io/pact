@@ -67,6 +67,7 @@ import qualified Pact.Types.ECDSA      as ECDSA
 #ifdef CRYPTONITE_ED25519
 import qualified Crypto.Error          as E
 import qualified Crypto.PubKey.Ed25519 as Ed25519
+import qualified Data.ByteArray        as B
 #else
 import "crypto-api" Crypto.Random
 import qualified Crypto.Ed25519.Pure as Ed25519

@@ -263,13 +263,13 @@ peekFields
   -> S RowKey
   -> SingTy ('TyObject ty)
   -> Analyze (Map Text AVal)
-peekFields _tn _sRk (SObjectUnsafe SNil') =
+peekFields _tn _sRk (SObjectUnsafe (SingList SNil)) =
   pure $ Map.empty
-peekFields tn sRk (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
+peekFields tn sRk (SObjectUnsafe (SingList (SCons sym fieldType subSchema))) = do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
-      subObjTy   = SObjectUnsafe subSchema
+      subObjTy   = SObjectUnsafe (SingList subSchema)
   sDirty <- use $ cellWritten tn cn sRk
   av <- readField tn cn sRk sDirty fieldType
   avs <- peekFields tn sRk subObjTy
@@ -281,13 +281,13 @@ readFields
   -> TagId
   -> SingTy ('TyObject ty)
   -> Analyze (S (ConcreteObj ty))
-readFields _tn _sRk _tid (SObjectUnsafe SNil') =
+readFields _tn _sRk _tid (SObjectUnsafe (SingList SNil)) =
   pure (withProv (FromRow Map.empty) (literal ()))
-readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
+readFields tn sRk tid (SObjectUnsafe (SingList (SCons sym fieldType subSchema))) = do
   let fieldName  = symbolVal sym
       tFieldName = T.pack fieldName
       cn         = ColumnName fieldName
-      subObjTy   = SObjectUnsafe subSchema
+      subObjTy   = SObjectUnsafe (SingList subSchema)
   columnRead tn cn .= sTrue
   sDirty <- use $ cellWritten tn cn sRk
   av     <- readField tn cn sRk sDirty fieldType
@@ -303,10 +303,10 @@ readFields tn sRk tid (SObjectUnsafe (SCons' sym fieldType subSchema)) = do
       "impossible: unexpected type of cell provenance in readFields"
 
 mkChainData :: SingTy ('TyObject ty) -> Analyze (S (ConcreteObj ty))
-mkChainData (SObjectUnsafe SNil') = pure $ sansProv $ literal ()
-mkChainData (SObjectUnsafe (SCons' sym (fieldType :: SingTy v) subSchema)) = do
+mkChainData (SObjectUnsafe (SingList SNil)) = pure $ sansProv $ literal ()
+mkChainData (SObjectUnsafe (SingList (SCons sym (fieldType :: SingTy v) subSchema))) = do
   let fieldName = symbolVal sym
-      subObjTy = SObjectUnsafe subSchema
+      subObjTy = SObjectUnsafe (SingList subSchema)
       sbv = withHasKind fieldType $ uninterpret $ "chain_data_" <>
         (map (\c -> if c == '-' then '_' else c) fieldName)
 
@@ -334,7 +334,7 @@ readField tn cn sRk sDirty ty
   = mkAVal <$> use (typedCell ty id tn cn sRk sDirty)
 
 aValsOfObj :: SingList schema -> SBV (ConcreteObj schema) -> Map Text AVal
-aValsOfObj schema obj = foldObject (obj :< schema) $ \sym (SBVI.SBV sval) _
+aValsOfObj schema obj = foldObject (obj , schema) $ \sym (SBVI.SBV sval) _
   -> Map.singleton (T.pack (symbolVal sym)) (AVal Nothing sval)
 
 writeFields
@@ -416,11 +416,11 @@ capabilityAppToken (Capability schema capName) vids = do
 
   where
     buildObject :: SingList schema -> [AVal] -> SBV (ConcreteObj schema)
-    buildObject SNil' [] = literal ()
-    buildObject (SCons' _sym ty tys) ((AVal _ sval):avals) =
-      withSymVal ty $ withSymVal (SObjectUnsafe tys) $ tuple
+    buildObject (SingList SNil) [] = literal ()
+    buildObject (SingList (SCons _sym ty tys)) ((AVal _ sval):avals) =
+      withSymVal ty $ withSymVal (SObjectUnsafe (SingList tys)) $ tuple
         ( SBVI.SBV sval
-        , buildObject tys avals
+        , buildObject (SingList tys) avals
         )
     buildObject _ _ = error "invariant violation: list length mismatch"
 
@@ -556,6 +556,7 @@ evalTerm = \case
         -- assume invariants for values already in the DB:
         applyInvariants tn rowAVals $ mapM_ addConstraint
         pure rowAVals
+      _ -> throwErrorNoLoc $ FailureMessage $ "evalTerm: Write: Unrecognized type in row position: " <> T.pack (show rowETy)
 
     writeFields writeType tid tn sRk obj objTy
 
@@ -728,7 +729,7 @@ evalTerm = \case
     (rollbacks, _) <- ifoldlM
       (\stepNo (rollbacks, successChoice)
         --                 ^ do we make it to this step?
-        (Step (tm :< ty) successPath {- s_n -} mEntity mCancelVid mRollback) ->
+        (Step (tm , ty) successPath {- s_n -} mEntity mCancelVid mRollback) ->
         withSing ty $ do
 
         -- update yielded values

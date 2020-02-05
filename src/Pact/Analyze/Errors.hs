@@ -31,7 +31,6 @@ data AnalyzeFailureNoLoc
   | FailureMessage Text
   | OpaqueValEncountered
   | VarNotInScope Text VarId
-  | UnsupportedObjectInDbCell
   | DisallowedWrite TableName Pact.WriteType DbRestriction
   | DisallowedRead TableName DbRestriction
   -- For cases we don't handle yet:
@@ -67,7 +66,6 @@ describeAnalyzeFailureNoLoc = \case
     -- inference or the need for a type annotation?
     --
     OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
-    UnsupportedObjectInDbCell -> "We encountered the use of an object in a DB cell, which we don't yet support. " <> pleaseReportThis
     DisallowedRead tn res -> "Encountered disallowed DB read from table " <> tShow tn <> " in " <> restrictionContextName res <> " context"
     DisallowedWrite tn writeType res -> "Encountered disallowed DB " <> T.toLower (tShow writeType) <> " to table " <> tShow tn <> " in " <> restrictionContextName res <> " context"
 

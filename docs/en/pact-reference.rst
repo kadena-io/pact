@@ -253,7 +253,7 @@ Public meta
 
    name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
    type: integer         # Platform will validate time as within some range of network time.
-   required: true
+   required: false
 
 .. _exec-payload:
 
@@ -1200,7 +1200,7 @@ keys:
        gasLimit: integer gas limit
        gasPrice: decimal gas price
        ttl: integer time-to-live value
-       creationTime: integer tx execution time after offset
+       creationTime: optional integer tx execution time after offset
      type: exec
 
 The continuation request yaml for a public blockchain takes the
@@ -1228,12 +1228,142 @@ following keys:
        gasLimit: integer gas limit
        gasPrice: decimal gas price
        ttl: integer time-to-live value
-       creationTime: integer tx execution time after offset
+       creationTime: optional integer tx execution time after offset
      nonce: optional request nonce, will use current time if not provided
      type: cont
 
 Note that the optional “proof” field only makes sense when using
 cross-chain continuations.
+
+Signing Transactions
+--------------------
+
+As of Pact 3.5.0, the ``pact`` command line tool now has several
+commands to facilitate signing transactions. Here’s a full script
+showing how these commands can be used to prepare an unsigned version of
+the transaction and add signatures to it. This transcript assumes that
+the details of the transaction has been specified in a file called
+``tx.yaml``.
+
+::
+
+   # At some earlier time generate and save some public/private key pairs.
+   pact -g > alice-key.yaml
+   pact -g > bob-key.yaml
+
+   # Convert a transaction into an unsigned prepared form that is signatures can be added to
+   pact -u tx.yaml > tx-unsigned.yaml
+
+   # Sign the prepared transaction with one or more keys
+   cat tx-unsigned.yaml | pact add-sig alice-key.yaml > tx-signed-alice.yaml
+   cat tx-unsigned.yaml | pact add-sig bob-key.yaml > tx-signed-bob.yaml
+
+   # Combine the signatures into a fully signed transaction ready to send to the blockchain
+   pact combine-sigs tx-signed-alice.yaml tx-signed-bob.yaml > tx-final.json
+
+The ``add-sig`` command takes the output of ``pact -u`` on standard
+input and one or more key files as command line arguments. It adds the
+appropriate signatures to to the transaction and prints the result to
+stdout.
+
+The ``combine-sigs`` command takes multiple unsigned (from ``pact -u``)
+and signed (from ``pact add-sig``) transaction files as command line
+arguments and outputs the command and all the signatures on stdout.
+
+Both ``add-sig`` and ``combine-sigs`` will output YAML if the output
+transaction hasn’t accumulated enough signatures to be valid. If all the
+necessary signatures are present, then they will output JSON in final
+form that is ready to be sent to the blockchain on the ```/send``
+endpoint <#send>`__. If you would like to do a test run of the
+transaction, you can use the ``-l`` flag to generate output suitable for
+use with the ```/local`` endpoint <#local>`__.
+
+The above example adds signatures in parallel, but the ``add-sig``
+command can also be used to add signatures sequentially in separate
+steps or all at once in a single step as shown in the following two
+examples:
+
+::
+
+   cat tx-unsigned.yaml | pact add-sig alice-key.yaml | pact add-sig bob-key.yaml
+   cat tx-unsigned.yaml | pact add-sig alice-key.yaml add-sig bob-key.yaml
+
+Offline Signing with a Cold Wallet
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some cold wallet signing procedures use QR codes to get transaction data
+on and off the cold wallet machine. Since QR codes can transmit a fairly
+limited amount of information these signing commands are also designed
+to work with a more compact data format that doesn’t require the full
+command to generate signatures. Here’s an example of what
+``tx-unsigned.yaml`` might look like in the above example:
+
+::
+
+   hash: KY6RFunty4WazQiCsKsYD-ovu-_XQByfY6scTxi9gQQ
+   sigs:
+     368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca: null
+     6be2f485a7af75fedb4b7f153a903f7e6000ca4aa501179c91a2450b777bd2a7: null
+   cmd: '{"networkId":"mainnet01","payload":{"exec":{"data":{"ks":{"pred":"keys-all","keys":["368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca"]}},"code":"(coin.transfer-create \"alice\" \"bob\" (read-keyset \"ks\") 100.1)\n(coin.transfer \"bob\" \"alice\" 0.1)"}},"signers":[{"pubKey":"6be2f485a7af75fedb4b7f153a903f7e6000ca4aa501179c91a2450b777bd2a7","clist":[{"args":["alice","bob",100.1],"name":"coin.TRANSFER"},{"args":[],"name":"coin.GAS"}]},{"pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca","clist":[{"args":["bob","alice",0.1],"name":"coin.TRANSFER"}]}],"meta":{"creationTime":1580316382,"ttl":7200,"gasLimit":1200,"chainId":"0","gasPrice":1.0e-5,"sender":"alice"},"nonce":"2020-01-29 16:46:22.916695 UTC"}'
+
+To get a condensed version for signing on a cold wallet all you have to
+do is drop the ``cmd`` field. This can be done manually or scripted with
+``cat tx-unsigned.yaml | grep -v "^cmd:"``. The result would look like
+this:
+
+::
+
+   hash: KY6RFunty4WazQiCsKsYD-ovu-_XQByfY6scTxi9gQQ
+   sigs:
+     368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca: null
+     6be2f485a7af75fedb4b7f153a903f7e6000ca4aa501179c91a2450b777bd2a7: null
+
+Keep in mind that when you sign these condensed versions, you won’t be
+able to submit the output directly to the blockchain. You’ll have to use
+``combine-sigs`` to combine those signatures with the original
+``tx-unsigned.yaml`` file which has the full command.
+
+Detached Signature Transaction Format
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The YAML input expected by ``pact -u`` is similar to the `Public
+Blockchain YAML format <#request-yaml-public-chain>`__ described above
+with one major difference. Instead of the ``keyPairs`` field which
+requires both the public and secret keys, ``pact -u`` expects a
+``signers`` field that only needs a public key. This allows signatures
+to be added on incrementally as described above without needing private
+keys to all be present when the transaction is constructed.
+
+Here is an example of how the above ``tx.yaml`` file might look:
+
+::
+
+   code: |-
+     (coin.transfer-create "alice" "bob" (read-keyset "ks") 100.1)
+     (coin.transfer "bob" "alice" 0.1)
+   data:
+     ks:
+       keys: [368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca]
+       pred: "keys-all"
+   publicMeta:
+     chainId: "0"
+     sender: alice
+     gasLimit: 1200
+     gasPrice: 0.0000000001
+     ttl: 7200
+   networkId: "mainnet01"
+   signers:
+     - public: 6be2f485a7af75fedb4b7f153a903f7e6000ca4aa501179c91a2450b777bd2a7
+       caps:
+         - name: "coin.TRANSFER"
+           args: ["alice", "bob", 100.1]
+         - name: "coin.GAS"
+           args: []
+     - public: 368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca
+       caps:
+         - name: "coin.TRANSFER"
+           args: ["bob", "alice", 0.1]
+   type: exec
 
 Concepts
 ========

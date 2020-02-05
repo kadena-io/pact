@@ -30,8 +30,6 @@ module Pact.Analyze.Types.Types
   , foldHList
   , hListLength
   , pattern UnSingList
-  , pattern SNil'
-  , pattern SCons'
   , pattern SObject
   , pattern SObjectNil
   , pattern SObjectCons
@@ -51,9 +49,6 @@ module Pact.Analyze.Types.Types
   , foldSObject
   , SingI(sing)
   , SingTy
-
-  , (:<)
-  , pattern (:<)
   ) where
 
 import           Data.Kind                    (Type)
@@ -122,41 +117,27 @@ pattern UnSingList l <- (SingList -> l) where
   UnSingList (SingList l) = l
 
 eraseList :: HList f m -> SingList m
-eraseList SNil          = SNil'
+eraseList SNil          = SingList SNil
 eraseList (SCons k _ l) = SCons' k sing (eraseList l)
 
-pattern SNil' :: () => schema ~ '[] => SingList schema
-pattern SNil' = SingList SNil
-
+-- | Not exported; wanted to delete but freaky patterns still in here use it
 pattern SCons'
   :: ()
   => (SingI v, KnownSymbol k, Typeable v, schema ~ ('(k, v) ': tys))
   => SingSymbol k -> Sing v -> SingList tys -> SingList schema
 pattern SCons' k v vs = SingList (SCons k v (UnSingList vs))
 
-{-# COMPLETE SNil', SCons' #-}
-
 pattern SObject :: () => obj ~ 'TyObject schema => SingList schema -> Sing obj
 pattern SObject a <- SObjectUnsafe a
 
--- This pragma doesn't work because of data instances
--- https://ghc.haskell.org/trac/ghc/ticket/14059
-{-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SGuard, SAny, SList,
-  SObject #-}
-
 pattern SObjectNil :: () => obj ~ 'TyObject '[] => Sing obj
-pattern SObjectNil = SObjectUnsafe SNil'
+pattern SObjectNil = SObjectUnsafe (SingList SNil)
 
 pattern SObjectCons
   :: ()
   => (SingI v, KnownSymbol k, Typeable v, obj ~ 'TyObject ('(k, v) ': tys))
   => SingSymbol k -> Sing v -> SingList tys -> Sing obj
 pattern SObjectCons k v vs = SObjectUnsafe (SCons' k v vs)
-
--- This pragma doesn't work because of data instances
--- https://ghc.haskell.org/trac/ghc/ticket/14059
-{-# COMPLETE SInteger, SBool, SStr, STime, SDecimal, SGuard, SAny, SList,
-  SObjectNil, SObjectCons #-}
 
 data instance Sing (a :: Ty) where
   SInteger      ::               Sing 'TyInteger
@@ -215,7 +196,7 @@ cmpSym a b = symbolVal a `compare` symbolVal b
 singListEq
   :: forall (a :: [(Symbol, Ty)]) (b :: [(Symbol, Ty)]).
      SingList a -> SingList b -> Maybe (a :~: b)
-singListEq SNil' SNil' = Just Refl
+singListEq (SingList SNil) (SingList SNil) = Just Refl
 singListEq (SingList (SCons k1 v1 n1)) (SingList (SCons k2 v2 n2)) = do
   Refl <- eqSym k1 k2
   Refl <- singEq v1 v2
@@ -230,9 +211,9 @@ foldrSingList
      => SingSymbol k -> SingTy b -> a -> a)
   -> SingList schema
   -> a
-foldrSingList base _ SNil' = base
-foldrSingList base f (SCons' sym ty schema)
-  = f sym ty $ foldrSingList base f schema
+foldrSingList base _ (SingList SNil) = base
+foldrSingList base f (SingList (SCons sym ty l))
+  = f sym ty $ foldrSingList base f (SingList l)
 
 foldSingList
   :: Monoid a
@@ -332,15 +313,8 @@ instance SingI lst => SingI ('TyObject lst) where
   sing = SObjectUnsafe sing
 
 instance SingI ('[] :: [(Symbol, Ty)]) where
-  sing = SNil'
+  sing = SingList SNil
 
 instance (KnownSymbol k, SingI v, Typeable v, SingI kvs)
   => SingI (('(k, v) ': kvs) :: [(Symbol, Ty)]) where
   sing = SCons' SSymbol sing sing
-
-type (a :< b) = (a, b)
-
-pattern (:<) :: a -> b -> (a, b)
-pattern a :< b = (a, b)
-
-{-# complete (:<) #-}

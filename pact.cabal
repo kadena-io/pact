@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             3.4.0
+version:             3.5.0
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -242,12 +242,12 @@ library
   if !impl(ghcjs) && !os(windows)
     build-depends: unix
 
-  if !impl(ghcjs) && !os(windows) && !flag(cryptonite-ed25519)
+  if !impl(ghcjs) && !flag(cryptonite-ed25519)
     build-depends:
         crypto-api
       , ed25519-donna
 
-  if !impl(ghcjs) && (os(windows) || flag(cryptonite-ed25519))
+  if !impl(ghcjs) && flag(cryptonite-ed25519)
     cpp-options: -DCRYPTONITE_ED25519
 
   hs-source-dirs:      src
