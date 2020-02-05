@@ -1,6 +1,6 @@
 # stack yaml for ghc builds
 
-resolver: lts-14.22
+resolver: lts-14.23
 
 extra-deps:
   # --- Missing from Stackage --- #
@@ -13,6 +13,7 @@ extra-deps:
   # --- Forced Upgrades --- #
   - trifecta-2.1
   - megaparsec-8.0.0
+  - neat-interpolation-0.5.1
 
   # --- Custom Pins --- #
   - git: https://github.com/kadena-io/thyme.git

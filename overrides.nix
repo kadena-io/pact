@@ -90,8 +90,14 @@ in {
 
   megaparsec = dontCheck (callHackageDirect {
     pkg = "megaparsec";
-    ver = "7.0.5";
-    sha256 = "1wizfz8vdplz3sf81vh33sny6p8ynhlpvjxqjpsym7ssb186h0f1";
+    ver = "8.0.0";
+    sha256 = "1bk4jsa69maryj97jcvxxc211icvnkr21xrj2bqq9ddfizkq5lg0";
+  });
+
+  neat-interpolation = dontCheck (callHackageDirect {
+    pkg = "neat-interpolation";
+    ver = "0.5.1";
+    sha256 = "08a4wns23m11h6v1v4nar8pg8i1gmjnf4jnkrzn9mcvvb672fx9k";
   });
 
   sbv = dontCheck (callHackageDirect {
