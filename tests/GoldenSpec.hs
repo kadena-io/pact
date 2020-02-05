@@ -4,7 +4,12 @@
 
 module GoldenSpec
 
-  (spec)
+  (
+      spec
+    , golden
+    , cleanupActual
+
+  )
 
   where
 

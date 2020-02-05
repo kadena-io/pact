@@ -93,6 +93,7 @@ import Data.Aeson hiding (pairs,Object, (<?>))
 import Data.Aeson hiding (pairs,Object)
 #endif
 import qualified Data.ByteString.UTF8 as BS
+import Data.Char (isAlphaNum)
 import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
@@ -119,6 +120,7 @@ import qualified Data.Vector as V
 import Data.Word (Word64, Word32)
 import GHC.Generics (Generic)
 import Prelude
+import Test.QuickCheck hiding (Success)
 import Text.Show.Deriving
 
 import Pact.Types.Codec
@@ -160,6 +162,9 @@ instance Monoid Meta where
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
   deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
 
+instance Arbitrary PublicKey where
+  arbitrary = PublicKey <$> encodeUtf8 <$> T.pack <$> vectorOf 64 genValidPublicKeyChar
+    where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
 instance Serialize PublicKey
 instance NFData PublicKey
 instance FromJSON PublicKey where
@@ -188,6 +193,17 @@ instance SizeOf KeySet where
   sizeOf (KeySet pkArr ksPred) =
     (constructorCost 2) + (sizeOf pkArr) + (sizeOf ksPred)
 
+instance Arbitrary KeySet where
+  arbitrary = do
+    pks <- listOf1 arbitrary
+    name <- frequency
+      [ (3, pure "keys-all")
+      , (2, pure "keys-any")
+      , (1, pure "keys-2")
+      , (1, genBareText)
+      ]
+    pure $ mkKeySet pks name
+
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
 instance FromJSON KeySet where
@@ -206,15 +222,23 @@ mkKeySet pks n = KeySet (S.fromList pks) (Name $ BareName n def)
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,SizeOf)
 
+instance Arbitrary KeySetName where
+  arbitrary = KeySetName <$> genBareText
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
 newtype PactId = PactId Text
     deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,ToTerm,SizeOf)
 
+instance Arbitrary PactId where
+  arbitrary = PactId <$> hashToText <$> arbitrary
+
 data PactGuard = PactGuard
   { _pgPactId :: !PactId
   , _pgName :: !Text
   } deriving (Eq,Generic,Show,Ord)
+
+instance Arbitrary PactGuard where
+  arbitrary = PactGuard <$> arbitrary <*> genBareText
 
 instance NFData PactGuard
 
@@ -236,6 +260,9 @@ data ModuleGuard = ModuleGuard
   , _mgName :: !Text
   } deriving (Eq,Generic,Show,Ord)
 
+instance Arbitrary ModuleGuard where
+  arbitrary = ModuleGuard <$> arbitrary <*> genBareText
+
 instance NFData ModuleGuard
 
 instance Pretty ModuleGuard where
@@ -255,6 +282,9 @@ data UserGuard a = UserGuard
   { _ugFun :: !Name
   , _ugArgs :: ![a]
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable,Ord)
+
+instance (Arbitrary a) => Arbitrary (UserGuard a) where
+  arbitrary = UserGuard <$> arbitrary <*> arbitrary
 
 instance NFData a => NFData (UserGuard a)
 
@@ -278,6 +308,15 @@ data Guard a
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
   deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
+
+-- potentially long output due to constrained recursion of PactValue
+instance (Arbitrary a) => Arbitrary (Guard a) where
+  arbitrary = oneof
+    [ GPact <$> arbitrary
+    , GKeySet <$> arbitrary
+    , GKeySetRef <$> arbitrary
+    , GModule <$> arbitrary
+    , GUser <$> arbitrary ]
 
 instance NFData a => NFData (Guard a)
 
@@ -507,8 +546,12 @@ instance FromJSON g => FromJSON (Governance g) where
 -- | Newtype wrapper differentiating 'Hash'es from module hashes
 --
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
-  deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText, SizeOf)
-  deriving newtype (NFData)
+  deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText)
+  deriving newtype (NFData, SizeOf)
+
+instance Arbitrary ModuleHash where
+  -- Coin contract is about 20K characters
+  arbitrary = ModuleHash <$> resize 20000 arbitrary
 
 data Module g = Module
   { _mName :: !ModuleName
@@ -659,6 +702,9 @@ data Namespace a = Namespace
   , _nsAdmin :: (Guard a)
   } deriving (Eq, Show, Generic)
 
+instance (Arbitrary a) => Arbitrary (Namespace a) where
+  arbitrary = Namespace <$> arbitrary <*> arbitrary <*> arbitrary
+
 instance Pretty (Namespace a) where
   pretty Namespace{..} = "(namespace " <> prettyString (asString' _nsName) <> ")"
 
@@ -721,11 +767,19 @@ newtype FieldKey = FieldKey Text
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
+instance Arbitrary FieldKey where
+  arbitrary = resize 50 (FieldKey <$> genBareText)
+
+
 -- | Simple dictionary for object values.
 newtype ObjectMap v = ObjectMap { _objectMap :: (M.Map FieldKey v) }
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable,Generic,SizeOf)
 
 instance NFData v => NFData (ObjectMap v)
+
+-- potentially long output due to constrained recursion of PactValue
+instance (Eq v, FromJSON v, ToJSON v, Arbitrary v) => Arbitrary (ObjectMap v) where
+  arbitrary = ObjectMap <$> M.fromList <$> listOf1 arbitrary
 
 -- | O(n) conversion to list. Adapted from 'M.toAscList'
 objectMapToListWith :: (FieldKey -> v -> r) -> ObjectMap v -> [r]

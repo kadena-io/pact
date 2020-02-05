@@ -28,11 +28,15 @@ import Data.Default
 import Control.DeepSeq
 import Bound
 import Control.Applicative ((<|>))
+import Test.QuickCheck (Arbitrary(..))
 
 
 instance Serialize Micro
 instance Serialize NominalDiffTime
 instance Serialize UTCTime
+
+instance (Arbitrary i) => Arbitrary (DecimalRaw i) where
+  arbitrary = Decimal <$> arbitrary <*> arbitrary
 
 instance (Serialize i) => Serialize (DecimalRaw i) where
     put (Decimal p i) = put p >> put i

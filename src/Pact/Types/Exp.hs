@@ -25,6 +25,11 @@ module Pact.Types.Exp
  (
    Literal(..),
    _LString,_LInteger,_LDecimal,_LBool,_LTime,
+   genLiteralString,
+   genLiteralInteger,
+   genLiteralDecimal,
+   genLiteralBool,
+   genLiteralTime,
    simpleISO8601,formatLTime,
    litToPrim,
    LiteralExp(..),AtomExp(..),ListExp(..),SeparatorExp(..),
@@ -39,25 +44,57 @@ module Pact.Types.Exp
 
 
 import Control.Applicative
-import Control.Lens (makePrisms)
+import Control.Lens (makePrisms, (^.), from)
 import Data.List
 import Control.Monad
 import Prelude
 import Data.Text (Text,pack)
 import Data.Aeson
 import Data.Thyme
+import Data.Thyme.Time.Core (secondsToDiffTime)
 import System.Locale
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
 import Data.Serialize (Serialize)
 import Data.String (IsString)
+import Test.QuickCheck
 
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Type
 import Pact.Types.Codec
+import Pact.Types.Util (genBareText)
+
+
+
+-- | Custom generator of arbitrary UTCTime from
+-- years 1000-01-1 to 2100-12-31
+genArbitraryUTCTime :: Gen UTCTime
+genArbitraryUTCTime = toUTCTime <$> genDay <*> genDiffTime
+  where
+    -- years 1000-01-1 to 2100-12-31
+    genDay = ModifiedJulianDay <$> choose (-313698, 88434)
+    -- no leap second
+    genDiffTime = secondsToDiffTime <$> choose (0, 86400)
+    toUTCTime day' diff' = (UTCTime day' diff') ^. from utcTime
+
+genLiteralString :: Gen Literal
+genLiteralString = LString <$> resize 100 genBareText
+
+genLiteralInteger :: Gen Literal
+genLiteralInteger =
+  LInteger <$> resize (fromInteger ((snd jsIntegerBounds) * 10)) arbitrary
+
+genLiteralDecimal :: Gen Literal
+genLiteralDecimal = LDecimal <$> resize 1000 arbitrary
+
+genLiteralBool :: Gen Literal
+genLiteralBool = LBool <$> arbitrary
+
+genLiteralTime :: Gen Literal
+genLiteralTime = LTime <$> genArbitraryUTCTime
 
 
 data Literal =
@@ -67,6 +104,17 @@ data Literal =
     LBool { _lBool :: !Bool } |
     LTime { _lTime :: !UTCTime }
         deriving (Eq,Generic,Ord,Show)
+
+-- | Custom generator of potentially large, arbitrary Literals
+instance Arbitrary Literal where
+  arbitrary =
+    oneof
+    [ genLiteralString
+    , genLiteralInteger
+    , genLiteralDecimal
+    , genLiteralBool
+    , genLiteralTime
+    ]
 
 instance Serialize Literal
 instance NFData Literal

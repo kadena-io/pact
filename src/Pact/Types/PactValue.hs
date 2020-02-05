@@ -22,22 +22,81 @@ module Pact.Types.PactValue
   , toPactValue
   , toPactValueLenient
   , fromPactValue
+
+  -- | Helper functions for generating arbitrary pact values
+  , PactValueGeneratorSize(..)
+  , decreaseGenSize
+  , genSomePactValue
+  , genTerminatingPactValueGuard
+  , genPactValueObjectMap
+  , genPactValueList
+  , genPactValueGuard
+  , genUserGuard
   ) where
 
 import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
+import qualified Data.Map.Strict as M
 import Data.Text (Text)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.Generics hiding (Meta)
+import Test.QuickCheck
 
 import Pact.Types.Exp
 import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
+
+-- | Determines how deep a generated PactValue _could_ be.
+-- Restricts how many times a recursive PactValue constructor (i.e. PObject, PList, and PGuard)
+-- can be called when creating a PactValue.
+genSomePactValue :: PactValueGeneratorSize -> Gen PactValue
+genSomePactValue TerminateFast = oneof
+  [ PLiteral <$> arbitrary
+  , PGuard <$> (oneof genTerminatingPactValueGuard) ]
+genSomePactValue s = oneof
+  [ PLiteral <$> arbitrary
+  , PList <$> genPactValueList (decreaseGenSize s)
+  , PObject <$> genPactValueObjectMap (decreaseGenSize s)
+  , PGuard <$> genPactValueGuard (decreaseGenSize s) ]
+
+data PactValueGeneratorSize = TerminateFast | RecurseOnce | RecurseTwice
+
+decreaseGenSize :: PactValueGeneratorSize -> PactValueGeneratorSize
+decreaseGenSize TerminateFast = TerminateFast -- lowest value
+decreaseGenSize RecurseOnce = TerminateFast
+decreaseGenSize RecurseTwice = RecurseOnce
+
+genTerminatingPactValueGuard :: [Gen (Guard PactValue)]
+genTerminatingPactValueGuard =
+  [ GPact <$> arbitrary
+  , GKeySet <$> arbitrary
+  , GKeySetRef <$> arbitrary
+  , GModule <$> arbitrary ]
+
+genPactValueObjectMap :: PactValueGeneratorSize -> Gen (ObjectMap PactValue)
+genPactValueObjectMap genSize = ObjectMap <$> M.fromList <$> genMap
+  where genOneKeyValue = do
+          f <- arbitrary :: Gen FieldKey
+          pv <- genSomePactValue genSize
+          pure (f, pv)
+        genMap = listOf1 genOneKeyValue
+
+genPactValueList :: PactValueGeneratorSize -> Gen (Vector PactValue)
+genPactValueList genSize = V.fromList <$> listOf1 (genSomePactValue genSize)
+
+genPactValueGuard :: PactValueGeneratorSize -> Gen (Guard PactValue)
+genPactValueGuard genSize = oneof (genTerminatingPactValueGuard <> [genUserGuard genSize])
+
+genUserGuard :: PactValueGeneratorSize -> Gen (Guard PactValue)
+genUserGuard genSize = do
+  args <- listOf1 (genSomePactValue genSize)
+  fun <- arbitrary  -- TODO enforce that it's a non-native Name
+  pure $ GUser $ UserGuard fun args
 
 
 data PactValue
@@ -46,6 +105,9 @@ data PactValue
   | PObject (ObjectMap PactValue)
   | PGuard (Guard PactValue)
   deriving (Eq,Show,Generic,Ord)
+
+instance Arbitrary PactValue where
+  arbitrary = genSomePactValue RecurseTwice
 
 instance NFData PactValue
 
