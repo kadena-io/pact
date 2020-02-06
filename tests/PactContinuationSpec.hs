@@ -16,7 +16,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty as NEL
 import Data.Text (Text, unpack)
 import qualified Data.Text as T
-import NeatInterpolation (trimming)
+import NeatInterpolation (text)
 import Network.HTTP.Client (Manager)
 import qualified Network.HTTP.Client as HTTP
 import Prelude hiding (concat)
@@ -151,7 +151,7 @@ testCorrectNextStep mgr = do
 
 threeStepPactCode :: T.Text -> T.Text
 threeStepPactCode moduleName =
-  [trimming| (define-keyset 'k (read-keyset "admin-keyset"))
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
              (module $moduleName 'k
               (defpact tester ()
                 (step "step 0")
@@ -231,7 +231,7 @@ testErrStep mgr = do
 
 errorStepPactCode :: T.Text -> T.Text
 errorStepPactCode moduleName =
-  [trimming| (define-keyset 'k (read-keyset "admin-keyset"))
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
              (module $moduleName 'k
                (defpact tester ()
                  (step "step 0")
@@ -288,7 +288,7 @@ testCorrectRollbackStep mgr = do
 
 pactWithRollbackCode :: T.Text -> T.Text
 pactWithRollbackCode moduleName =
-  [trimming| (define-keyset 'k (read-keyset "admin-keyset"))
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
              (module $moduleName 'k
                (defpact tester ()
                  (step-with-rollback "step 0" "rollback 0")
@@ -349,7 +349,7 @@ testRollbackErr mgr = do
 
 pactWithRollbackErrCode :: T.Text -> T.Text
 pactWithRollbackErrCode moduleName =
-  [trimming| (define-keyset 'k (read-keyset "admin-keyset"))
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
              (module $moduleName 'k
                (defpact tester ()
                  (step-with-rollback "step 0" "rollback 0")
@@ -429,7 +429,7 @@ testValidYield mgr = do
 
 pactWithYield :: T.Text -> T.Text
 pactWithYield moduleName =
-  [trimming| (define-keyset 'k (read-keyset "admin-keyset"))
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
              (module $moduleName 'k
                (defpact tester (name)
                  (step
@@ -472,7 +472,7 @@ testNoYield mgr = do
 
 pactWithYieldErr :: T.Text -> T.Text
 pactWithYieldErr moduleName =
-  [trimming| (define-keyset 'k (read-keyset "admin-keyset"))
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
              (module $moduleName 'k
                (defpact tester (name)
                  (step
@@ -513,7 +513,7 @@ testResetYield mgr = do
 
 pactWithSameNameYield :: T.Text -> T.Text
 pactWithSameNameYield moduleName =
-  [trimming| (define-keyset 'k (read-keyset "admin-keyset"))
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
              (module $moduleName 'k
                (defpact tester ()
                  (step
@@ -596,7 +596,7 @@ testCrossChainYield mgr = step0
 
 pactCrossChainYield :: T.Text
 pactCrossChainYield =
-  [trimming|
+  [text|
     (module cross-chain-tester GOV
       (defcap GOV () true)
       (defschema schema-a a-result:string)
