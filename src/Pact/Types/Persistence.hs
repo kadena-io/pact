@@ -31,7 +31,8 @@ module Pact.Types.Persistence
    PersistDirect(..),toPersistDirect,fromPersistDirect,
    ModuleData(..),mdModule,mdRefMap,
    PersistModuleData,
-   ExecutionMode(..)
+   ExecutionMode(..),
+   perfPactDb
    ) where
 
 import Control.Applicative ((<|>))
@@ -51,6 +52,7 @@ import GHC.Generics (Generic)
 import Pact.Types.Continuation
 import Pact.Types.Exp
 import Pact.Types.PactValue
+import Pact.Types.Perf
 import Pact.Types.Pretty
 import Pact.Types.Term
 import Pact.Types.Type
@@ -245,3 +247,22 @@ data PactDb e = PactDb {
   , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
                  Domain k v -> TxId -> Method e [TxLog v]
 }
+
+
+-- | Instrument some 'PactDb' with perf timing.
+perfPactDb :: Text -> PerfTimer -> PactDb a -> PactDb a
+perfPactDb n pt PactDb{..} = PactDb
+  { _readRow = \d k e -> perf' "readRow" $ _readRow d k e
+  , _writeRow = \w d k v e -> perf' "writeRow" $ _writeRow w d k v e
+  , _keys = \d e -> perf' "keys" $ _keys d e
+  , _txids = \t i e -> perf' "txids" $ _txids t i e
+  , _createUserTable = \t m e -> perf' "createUserTable" $ _createUserTable t m e
+  , _getUserTableInfo = \t e -> perf' "getUserTableInfo" $ _getUserTableInfo t e
+  , _beginTx = \m e -> perf' "beginTx" $ _beginTx m e
+  , _commitTx = \e -> perf' "commitTx" $ _commitTx e
+  , _rollbackTx = \e -> perf' "rollbackTx" $ _rollbackTx e
+  , _getTxLog = \d i e -> perf' "getTxLog" $ _getTxLog d i e
+  }
+  where
+    perf' :: Text -> IO a -> IO a
+    perf' t = perf pt (n <> ":" <> t)

@@ -21,6 +21,7 @@ module Pact.Types.Util
     ParseText(..)
   , fromText, fromText'
   -- | JSON helpers
+  , satisfiesRoundtripJSON, roundtripJSONToEither
   , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
@@ -40,23 +41,32 @@ module Pact.Types.Util
   , failMaybe, maybeToEither
   -- | Wrapping utilities
   , rewrap, rewrapping, wrap, unwrap
+  -- | Arbitrary generator utils
+  , genBareText
   ) where
 
 import Data.Aeson
 import Data.Aeson.Types
 import GHC.Generics
 import Data.ByteString (ByteString)
+import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Text.Trifecta as Trifecta
 import Data.Char
+import Data.Either (isRight)
 import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
+import Control.Applicative ((<|>))
 import Control.Concurrent
 import Control.Lens hiding (Empty)
 import Control.Monad.Fail (MonadFail)
+import Test.QuickCheck hiding (Result, Success)
+
+import Pact.Types.Parser (style, symbols)
 
 
 
@@ -76,6 +86,14 @@ resultToEither (Error s) = Left s
 
 fromText' :: ParseText a => Text -> Either String a
 fromText' = resultToEither . fromText
+
+satisfiesRoundtripJSON :: (Eq a, FromJSON a, ToJSON a) => a -> Bool
+satisfiesRoundtripJSON i = case (roundtripJSONToEither i) of
+  Left _ -> False
+  Right j -> i == j
+
+roundtripJSONToEither :: (FromJSON a, ToJSON a) => a -> Either String a
+roundtripJSONToEither = resultToEither . fromJSON . toJSON
 
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
@@ -210,3 +228,41 @@ wrap = view _Unwrapped'
 -- | Utility to destruct a 'Wrapped a'
 unwrap :: Wrapped a => a -> Unwrapped a
 unwrap = view _Wrapped'
+
+-- | Utility to generate arbitrary non empty text
+-- restricted to alphabetic unicode, numbers, and some symbols.
+-- Will not generate strings "true" and "false", but could generate
+-- other native function names.
+genBareText :: Gen Text
+genBareText = genText
+  where genText :: Gen Text
+        genText = do
+          start <- genStartChar
+          rest <- genRestOfString
+          pure $ pack ([start] <> rest)
+
+        genStartChar :: Gen Char
+        genStartChar = suchThat arbitrary (isValidBareChar bareStartCharParser)
+
+        genRestOfString :: Gen [Char]
+        genRestOfString = listOf (suchThat arbitrary (isValidBareChar bareRestCharParser))
+
+        isValidBareChar :: (Text -> Either String Text) -> Char -> Bool
+        isValidBareChar parser c = isRight (parser (pack [c]))
+
+        -- Checks that Text provided starts with letter or
+        -- set of approved symbols.
+        -- Similar parser used with BareName.
+        bareStartCharParser :: Text -> Either String Text
+        bareStartCharParser = AP.parseOnly $
+          (Trifecta.ident style) <* Trifecta.eof
+
+        -- Checks that Text provided starts with letter,
+        -- set of approved symbols, or digits.
+        bareRestCharParser :: Text -> Either String Text
+        bareRestCharParser = AP.parseOnly $
+          (Trifecta.ident style') <* Trifecta.eof
+
+        -- Uses same character set for start of text as for rest of it.
+        -- Useful when randomly generating texts character by character.
+        style' = style { Trifecta._styleStart = (Trifecta.letter <|> Trifecta.digit <|> symbols) }

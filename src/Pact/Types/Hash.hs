@@ -35,9 +35,10 @@ import Data.Aeson
 import GHC.Generics
 import Pact.Types.SizeOf
 import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Reflection
 import Data.Proxy
+import Test.QuickCheck
 
 #if !defined(ghcjs_HOST_OS)
 
@@ -57,6 +58,10 @@ import Crypto.Hash.Blake2Native
 -- so other hash values are kosher (such as an ETH sha256, etc).
 newtype Hash = Hash { unHash :: ByteString }
   deriving (Eq, Ord, Generic, Hashable, Serialize,SizeOf)
+
+instance Arbitrary Hash where
+  -- TODO: add generators for other hash types
+  arbitrary = pactHash <$> encodeUtf8 <$> resize 1000 arbitrary
 
 instance Show Hash where
   show (Hash h) = show $ encodeBase64UrlUnpadded h

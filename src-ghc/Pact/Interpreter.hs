@@ -179,6 +179,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
   , _eeSPVSupport = spv
   , _eePublicData = pd
   , _eeExecutionConfig = ec
+  , _eePerfTimer = def
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss

@@ -10,7 +10,6 @@ import Control.Lens
 import Control.Arrow
 import Data.Word
 import Pact.Types.Pretty
-import Pact.Gas.Table
 
 -- | Compute gas for some application or evaluation.
 computeGas :: Either (Info,Text) FunApp -> GasArgs -> Eval e Gas
@@ -26,6 +25,7 @@ computeGas i args = do
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
     else return gUsed
+{-# INLINABLE computeGas #-}
 
 
 -- | Pre-compute gas for some application before some action.
@@ -46,8 +46,3 @@ constGasModel r = GasModel
   { gasModelName = "fixed " <> tShow r
   , gasModelDesc = "constant rate gas model with fixed rate " <> tShow r
   , runGasModel = \_ _ -> fromIntegral r }
-
-
--- | Gas model that charges varible (positive) rate per tracked operation
-defaultGasModel :: GasModel
-defaultGasModel = tableGasModel defaultGasConfig

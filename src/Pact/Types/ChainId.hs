@@ -30,12 +30,14 @@ import Data.Aeson (FromJSON, ToJSON)
 import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Data.Text
+import Test.QuickCheck (Arbitrary(..))
 
 import Servant.API (ToHttpApiData(..))
 
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term (ToTerm(..))
+import Pact.Types.Util (genBareText)
 
 -- | Expresses unique platform-specific chain identifier.
 --
@@ -47,6 +49,9 @@ newtype ChainId = ChainId { _chainId :: Text }
     , Serialize, ToTerm, NFData
     , SizeOf
     )
+
+instance Arbitrary ChainId where
+  arbitrary = ChainId <$> genBareText
 
 instance Wrapped ChainId
 
