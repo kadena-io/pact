@@ -648,3 +648,26 @@
  "user managed unspecified fails"
  "all done"
  (doB "auto-b" 0))
+
+
+;; user guard bugs
+(module ug-bugs G
+  (defcap G () true)
+
+  (defun good () true)
+
+  (defun enforce-one-in-guard (g)
+    (enforce-one
+     "should be able to enforce inner guard"
+     [(enforce-guard g)]))
+
+  (defun runtime-tc-guard-list (foo:[guard])
+    foo)
+)
+
+(expect
+ "enforce-one in guard ok" true
+ (enforce-guard
+  (create-user-guard
+   (enforce-one-in-guard
+    (create-user-guard (good))))))

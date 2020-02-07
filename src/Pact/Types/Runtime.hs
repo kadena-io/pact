@@ -132,6 +132,8 @@ data ExecutionFlag
   = FlagDisableModuleInstall
   -- | Disable database history queries in transactional mode (local-only)
   | FlagDisableHistoryInTransactionalMode
+  -- | Preserve guard runtime bugs: runtime tc prob, enforce-one purity
+  | FlagPreserveGuardBugs
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
