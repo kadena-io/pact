@@ -294,7 +294,7 @@ eval t = enscope t >>= reduce
 
 checkAllowModule :: Info -> Eval e ()
 checkAllowModule i = do
-  disabled <- executionFlagSet FlagDisableModuleInstall
+  disabled <- isExecutionFlagSet FlagDisableModuleInstall
   when disabled $ evalError i $ "Module/interface install not supported"
 
 

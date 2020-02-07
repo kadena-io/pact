@@ -33,7 +33,7 @@ module Pact.Types.Runtime
    KeyPredBuiltins(..),keyPredBuiltins,
    NamespacePolicy(..),
    permissiveNamespacePolicy,
-   ExecutionConfig(..),ExecutionFlag(..),ecFlags,executionFlagSet,flagRep,flagReps,
+   ExecutionConfig(..),ExecutionFlag(..),ecFlags,isExecutionFlagSet,flagRep,flagReps,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -253,8 +253,8 @@ catchesPactError action =
    ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . viaShow $ e)
   ]
 
-executionFlagSet :: ExecutionFlag -> Eval e Bool
-executionFlagSet f = S.member f <$> view (eeExecutionConfig . ecFlags)
+isExecutionFlagSet :: ExecutionFlag -> Eval e Bool
+isExecutionFlagSet f = S.member f <$> view (eeExecutionConfig . ecFlags)
 
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
