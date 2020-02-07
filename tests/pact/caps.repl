@@ -651,6 +651,7 @@
 
 
 ;; user guard bugs
+
 (module ug-bugs G
   (defcap G () true)
 
@@ -671,3 +672,14 @@
   (create-user-guard
    (enforce-one-in-guard
     (create-user-guard (good))))))
+
+(env-exec-config ["PreserveGuardBugs"])
+(expect-failure
+ "preserve bugs: enforce-one in guard fails"
+ "attempting db read in sys-only context"
+ (enforce-guard
+  (create-user-guard
+   (enforce-one-in-guard
+    (create-user-guard (good))))))
+
+(env-exec-config [])

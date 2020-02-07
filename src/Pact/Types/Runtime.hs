@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -24,7 +25,7 @@ module Pact.Types.Runtime
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eePerfTimer,
    toPactId,
-   Purity(..),PureSysOnly,PureReadOnly,EnvSysOnly(..),EnvReadOnly(..),mkSysOnlyEnv,mkReadOnlyEnv,
+   Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,evalLogGas,
    Eval(..),runEval,runEval',catchesPactError,
@@ -117,11 +118,6 @@ data Purity =
   deriving (Eq,Show,Ord,Bounded,Enum)
 instance Default Purity where def = PImpure
 
--- | Marker class for 'PSysOnly' environments.
-class PureSysOnly e
--- | Marker class for 'PReadOnly' environments.
--- SysRead supports pure operations as well.
-class PureSysOnly e => PureReadOnly e
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -366,76 +362,6 @@ argsError i as = throwArgsError i as "Invalid arguments"
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
-
-
---
--- Purity stuff.
---
-
-newtype EnvSysOnly e = EnvSysOnly (EvalEnv e)
-
-instance PureSysOnly (EnvSysOnly e)
-
-newtype EnvReadOnly e = EnvReadOnly (EvalEnv e)
-
-instance PureReadOnly (EnvReadOnly e)
-instance PureSysOnly (EnvReadOnly e)
-
-disallowed :: Text -> Method e a
-disallowed opName _ = throwM $ PactError EvalError def def $ "Illegal database access attempt (" <> pretty opName <> ")"
-
--- | Construct a delegate pure eval environment.
-mkPureEnv :: (EvalEnv e -> f) -> Purity ->
-             (forall k v . (IsString k,FromJSON v) =>
-              Domain k v -> k -> Method f (Maybe v)) ->
-             EvalEnv e -> Eval e (EvalEnv f)
-mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
-  v <- liftIO $ newMVar (holder env)
-  return $ EvalEnv
-    _eeRefStore
-    _eeMsgSigs
-    _eeMsgBody
-    _eeMode
-    _eeEntity
-    _eePactStep
-    v
-    PactDb {
-      _readRow = readRowImpl
-    , _writeRow = \_ _ _ _ -> disallowed "writeRow"
-    , _keys = const (disallowed "keys")
-    , _txids = \_ _ -> (disallowed "txids")
-    , _createUserTable = \_ _ -> disallowed "createUserTable"
-    , _getUserTableInfo = const (disallowed "getUserTableInfo")
-    , _beginTx = const (disallowed "beginTx")
-    , _commitTx = disallowed "commitTx"
-    , _rollbackTx = disallowed  "rollbackTx"
-    , _getTxLog = \_ _ -> disallowed "getTxLog"
-    }
-    purity
-    _eeHash
-    _eeGasEnv
-    permissiveNamespacePolicy
-    _eeSPVSupport
-    _eePublicData
-    _eeExecutionConfig
-    _eePerfTimer
-
-mkSysOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysOnly e))
-mkSysOnlyEnv = mkPureEnv EnvSysOnly PSysOnly (\(dom :: Domain key v) key ->
-  let read' :: forall e'. MVar (EnvSysOnly e') -> IO (Maybe v)
-      read' e = withMVar e $ \(EnvSysOnly EvalEnv {..}) ->
-                  _readRow _eePactDb dom key _eePactDbVar
-  in case dom of
-       UserTables _ -> disallowed "readRow"
-       KeySets -> read'
-       Modules -> read'
-       Namespaces -> read'
-       Pacts -> read')
-
-
-mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
-mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->
-  withMVar e $ \(EnvReadOnly EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
 
 eperf :: Text -> Eval e a -> Eval e a
 eperf m a = view eePerfTimer >>= \pt -> perf pt m a

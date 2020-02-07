@@ -31,7 +31,6 @@ module Pact.Eval
     ,resolveFreeVars,resolveArg,resolveRef,lookupModule
     ,enforceKeySet,enforceKeySetName
     ,deref
-    ,runSysOnly,runReadOnly,Purity
     ,liftTerm,apply
     ,acquireModuleAdmin
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
@@ -45,10 +44,7 @@ module Pact.Eval
 import Bound
 import Control.Lens hiding (DefName)
 import Control.Monad
-import Control.Monad.Catch (throwM)
-import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Control.Monad.State.Strict
 import Data.Aeson (Value)
 import Data.Default
 import Data.Foldable
@@ -61,7 +57,6 @@ import qualified Data.Vector as V
 import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Safe
-import Unsafe.Coerce
 
 import Pact.Gas
 import Pact.Runtime.Capabilities
@@ -69,6 +64,7 @@ import Pact.Runtime.Typecheck
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
+import Pact.Types.Purity
 import Pact.Types.Runtime
 
 
@@ -943,21 +939,3 @@ enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothi
 
 instantiate' :: Scope n Term a -> Term a
 instantiate' = instantiate1 (toTerm ("No bindings" :: Text))
-
-runSysOnly :: Eval (EnvSysOnly e) a -> Eval e a
-runSysOnly action = ask >>= \env -> case _eePurity env of
-  PSysOnly -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkSysOnlyEnv env >>= runWithEnv action
-
-runReadOnly :: HasInfo i => i -> Eval (EnvReadOnly e) a -> Eval e a
-runReadOnly i action = ask >>= \env -> case _eePurity env of
-  PSysOnly -> evalError' i "internal error: attempting db read in sys-only context"
-  PReadOnly -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkReadOnlyEnv env >>= runWithEnv action
-
-runWithEnv :: Eval f b -> EvalEnv f -> Eval e b
-runWithEnv action pureEnv = do
-  s <- get
-  (o,s') <- liftIO $ runEval' s pureEnv action
-  put s'
-  either throwM return o

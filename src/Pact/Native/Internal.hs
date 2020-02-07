@@ -57,6 +57,7 @@ import Pact.Types.Capability
 import Pact.Types.Native
 import Pact.Types.PactValue
 import Pact.Types.Pretty
+import Pact.Types.Purity
 import Pact.Types.Runtime
 
 
