@@ -33,7 +33,7 @@ module Pact.Types.Runtime
    KeyPredBuiltins(..),keyPredBuiltins,
    NamespacePolicy(..),
    permissiveNamespacePolicy,
-   ExecutionConfig(..),ecAllowModuleInstall,ecAllowHistoryInTx,
+   ExecutionConfig(..),ExecutionFlag(..),ecFlags,executionFlagSet,flagRep,flagReps,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -59,7 +59,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
-import Data.Text (Text,)
+import Data.Text (Text,pack)
 import GHC.Generics (Generic)
 
 import Pact.Types.Capability
@@ -123,17 +123,36 @@ class PureSysOnly e
 -- SysRead supports pure operations as well.
 class PureSysOnly e => PureReadOnly e
 
+-- | Execution flags specify behavior of the runtime environment,
+-- with an orientation towards some alteration of a default behavior.
+-- Thus, a flag should _not_ describe "normal behavior" (the default),
+-- but instead should enable some "unusual" option.
+data ExecutionFlag
+  -- | Disable user module install
+  = FlagDisableModuleInstall
+  -- | Disable database history queries in transactional mode (local-only)
+  | FlagDisableHistoryInTransactionalMode
+  deriving (Eq,Ord,Show,Enum,Bounded)
 
--- | Execution-wide configuration parameters.
-data ExecutionConfig = ExecutionConfig
-  { _ecAllowModuleInstall :: Bool
-  -- ^ Permit 'module' and 'interface' actions.
-  , _ecAllowHistoryInTx :: Bool
-  -- ^ Allow database history actions in non-local execution.
-  } deriving (Eq,Show)
+-- | Flag string representation
+flagRep :: ExecutionFlag -> Text
+flagRep = pack . drop 4 . show
+
+-- | Flag string representations
+flagReps :: M.Map Text ExecutionFlag
+flagReps = M.fromList $ map go [minBound .. maxBound]
+  where go f = (flagRep f,f)
+
+instance Pretty ExecutionFlag where
+  pretty = pretty . flagRep
+
+-- | Execution configuration flags, where empty is the "default".
+newtype ExecutionConfig = ExecutionConfig
+  { _ecFlags :: S.Set ExecutionFlag }
 makeLenses ''ExecutionConfig
-
-instance Default ExecutionConfig where def = ExecutionConfig True True
+instance Default ExecutionConfig where def = ExecutionConfig def
+instance Pretty ExecutionConfig where
+  pretty = pretty . S.toList . _ecFlags
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
@@ -233,6 +252,9 @@ catchesPactError action =
   [ Handler (\(e :: PactError) -> return $ Left e)
    ,Handler (\(e :: SomeException) -> return $ Left . PactError EvalError def def . viaShow $ e)
   ]
+
+executionFlagSet :: ExecutionFlag -> Eval e Bool
+executionFlagSet f = S.member f <$> view (eeExecutionConfig . ecFlags)
 
 
 -- | Bracket interpreter action pushing and popping frame on call stack.

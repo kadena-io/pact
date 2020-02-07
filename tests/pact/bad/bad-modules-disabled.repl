@@ -1,4 +1,4 @@
-(env-exec-config false true)
+(env-exec-config ["DisableModuleInstall"])
 (module M G
   (defcap G () true)
   (defun foo () true))

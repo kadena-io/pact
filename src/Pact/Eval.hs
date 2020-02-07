@@ -294,8 +294,8 @@ eval t = enscope t >>= reduce
 
 checkAllowModule :: Info -> Eval e ()
 checkAllowModule i = do
-  allowed <- view $ eeExecutionConfig . ecAllowModuleInstall
-  unless allowed $ evalError i $ "Module/interface install not supported"
+  disabled <- executionFlagSet FlagDisableModuleInstall
+  when disabled $ evalError i $ "Module/interface install not supported"
 
 
 toPersistDirect' :: Term Name -> Eval e PersistDirect

@@ -187,11 +187,11 @@ replDefs = ("Repl",
        ["(env-gasmodel \"table\") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)"]
        "Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect."
      ,defZRNative "env-exec-config" envExecConfig
-      (funType (tTyObject TyAny) [("allow-module-install",tTyBool),("allow-history-in-tx",tTyBool)] <>
-       funType (tTyObject TyAny) [])
-      ["(env-exec-config true false) (env-exec-config)"]
-      ("Queries, or with arguments, sets execution config flags. ALLOW-MODULE-INSTALL allows module and interface " <>
-      "installs; ALLOW-HISTORY-IN-TX allows history calls (tx-log, etc) in non-local execution")
+      (funType (TyList tTyString) [("flags",TyList tTyString)] <>
+       funType (TyList tTyString) [])
+      ["(env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)"]
+      ("Queries, or with arguments, sets execution config flags. Valid flags: " <>
+       tShow (M.keys flagReps))
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
        []
        "Verify MODULE, checking that all properties hold."
@@ -588,16 +588,20 @@ setGasPrice i as = argsError i as
 
 envExecConfig :: RNativeFun LibState
 envExecConfig i as = case as of
-  [TLitBool allowMod,TLitBool allowHist] -> do
-    let ec = ExecutionConfig allowMod allowHist
+  [TList reps _ _] -> do
+    fs <- forM reps $ \s -> case s of
+      TLitString r -> case M.lookup r flagReps of
+        Nothing -> evalError' i $ "Invalid flag, allowed: " <> viaShow (M.keys flagReps)
+        Just f -> return f
+      _ -> argsError i as
+    let ec = ExecutionConfig $ S.fromList $ V.toList fs
     setenv eeExecutionConfig ec
     report ec
   [] -> view eeExecutionConfig >>= report
   _ -> argsError i as
   where
-    report ExecutionConfig{..} = return $ toTObject TyAny def $
-      [("allow-module-install",toTerm _ecAllowModuleInstall)
-      ,("allow-history-in-tx",toTerm _ecAllowHistoryInTx)]
+    report ExecutionConfig{..} = return $ toTList tTyString def $
+      map (tStr . flagRep) $ S.toList _ecFlags
 
 
 setGasRate :: RNativeFun LibState
