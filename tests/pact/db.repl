@@ -46,7 +46,7 @@
 
 (expect "keylog works" [{"txid": 1, "value": ROW_A}] (keylog persons ID_A 1))
 
-(env-exec-config true false)
+(env-exec-config ["DisableHistoryInTransactionalMode"])
 (expect-failure
  "txids disabled"
  "Operation only permitted in local execution mode"

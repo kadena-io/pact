@@ -338,9 +338,9 @@ txlogToObj TxLog{..} = toTObject TyAny def
 checkNonLocalAllowed :: HasInfo i => i -> Eval e ()
 checkNonLocalAllowed i = do
   env <- ask
-  let allowedInTx = view (eeExecutionConfig . ecAllowHistoryInTx) env
-      mode = view eeMode env
-  unless (mode == Local || allowedInTx) $ evalError' i $
+  disabledInTx <- isExecutionFlagSet FlagDisableHistoryInTransactionalMode
+  let mode = view eeMode env
+  when (mode == Transactional && disabledInTx) $ evalError' i $
     "Operation only permitted in local execution mode"
 
 keylog :: GasRNativeFun e
