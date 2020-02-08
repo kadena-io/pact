@@ -183,6 +183,10 @@
   ; defconst + user guards
   (defun f () true)
   (defconst USER_GUARD (create-user-guard (f)))
+
+
+  (defun rtc-guard-list (foo:[guard])
+    true)
 )
 
 (create-table persons)
@@ -209,3 +213,20 @@
 (typecheck 'tctest)
 
 (rtc-empty-string-list [])
+
+(env-exec-config [])
+
+(expect
+ "rtc doesn't die on guard lists"
+ true
+ (rtc-guard-list [USER_GUARD,USER_GUARD]))
+
+(expect
+ "rtc doesn't die on guard+keyset lists"
+ true
+ (rtc-guard-list [USER_GUARD,(keyset-ref-guard 'keyset)]))
+
+(expect-failure
+ "rtc fails on guard+non guard list"
+ "expected [guard], found [*]"
+ (rtc-guard-list [USER_GUARD,1]))

@@ -334,8 +334,9 @@ isVarTy _ = False
 
 -- | a `canUnifyWith` b means a "can represent/contains" b
 canUnifyWith :: Eq n => Type n -> Type n -> Bool
+canUnifyWith a b | a == b = True
 canUnifyWith TyAny _ = True
-canUnifyWith _ TyAny = True
+canUnifyWith _ TyAny = False
 canUnifyWith (TyVar (SchemaVar _)) TyUser {} = True
 canUnifyWith (TyVar SchemaVar {}) (TyVar SchemaVar {}) = True
 canUnifyWith (TyVar (TypeVar _ ac)) (TyVar (TypeVar _ bc)) = all (`elem` ac) bc
@@ -343,7 +344,11 @@ canUnifyWith (TyVar (TypeVar _ cs)) b = null cs || b `elem` cs
 canUnifyWith (TyList a) (TyList b) = a `canUnifyWith` b
 canUnifyWith (TySchema _ aTy aP) (TySchema _ bTy bP)
   = aTy `canUnifyWith` bTy && bP `isSubPartial` aP
-canUnifyWith a b = a == b
+canUnifyWith (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
+  (Nothing,Just _) -> True
+  (Just _,Nothing) -> True
+  _ -> a == b
+canUnifyWith _ _ = False
 {-# INLINE canUnifyWith #-}
 
 -- | @a `isSubPartial` b@ means that @a <= b@ in the lattice given by
