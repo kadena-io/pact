@@ -650,9 +650,9 @@
  (doB "auto-b" 0))
 
 
-;; user guard bugs
+;; enforce-one-in-user-guard bug
 
-(module ug-bugs G
+(module enforce-one-in-user-guard-bug G
   (defcap G () true)
 
   (defun good () true)
