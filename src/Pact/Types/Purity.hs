@@ -133,7 +133,7 @@ runSysOnly action = ask >>= \env -> mkSysOnlyEnv env >>= runWithEnv action
 runReadOnly :: HasInfo i => i -> Eval (PureEnv PEReadOnly e) a -> Eval e a
 runReadOnly i action = ask >>= \env -> case _eePurity env of
   PSysOnly -> do
-    f <- isExecutionFlagSet FlagPreserveGuardBugs
+    f <- isExecutionFlagSet FlagOldReadOnlyBehavior
     if not f then
       mkSysOnlyEnv env >>= runWithEnv action
     else

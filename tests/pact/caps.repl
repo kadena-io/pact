@@ -662,8 +662,6 @@
      "should be able to enforce inner guard"
      [(enforce-guard g)]))
 
-  (defun runtime-tc-guard-list (foo:[guard])
-    foo)
 )
 
 (expect
@@ -673,7 +671,7 @@
    (enforce-one-in-guard
     (create-user-guard (good))))))
 
-(env-exec-config ["PreserveGuardBugs"])
+(env-exec-config ["OldReadOnlyBehavior"])
 (expect-failure
  "preserve bugs: enforce-one in guard fails"
  "attempting db read in sys-only context"
@@ -681,5 +679,3 @@
   (create-user-guard
    (enforce-one-in-guard
     (create-user-guard (good))))))
-
-(env-exec-config [])
