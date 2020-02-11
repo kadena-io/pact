@@ -75,6 +75,7 @@ library
                      , Pact.Types.Perf
                      , Pact.Types.Persistence
                      , Pact.Types.Pretty
+                     , Pact.Types.Purity
                      , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans

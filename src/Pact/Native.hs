@@ -87,6 +87,7 @@ import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
+import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 

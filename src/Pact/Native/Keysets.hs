@@ -17,6 +17,7 @@ import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.Types.Purity
 import Pact.Types.Runtime
 
 readKeysetDef :: NativeDef
