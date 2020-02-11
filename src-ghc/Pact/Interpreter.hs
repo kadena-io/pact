@@ -233,9 +233,17 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
     safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
 
+    withPreliminaryPactExecSet f =
+      case input of
+        Left pe -> modify (set evalPactExec pe) >> f
+        _ -> f
+    withPactExecReset f = modify (set evalPactExec Nothing) >> f
+
     start act = do
       txid <- evalBeginTx def
-      (,txid) <$> act
+      -- Temporarily sets the pact exec in the environment to provide users
+      -- with continuation-level information.
+      withPreliminaryPactExecSet $ (,txid) <$> act
 
     end (rs,txid) = do
       logs <- evalCommitTx def
@@ -243,7 +251,9 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
 
     runInput = case input of
       Right ts -> mapM eval ts
-      Left pe -> (:[]) <$> resumePact def pe
+      -- Resets the pact exec in the environment to guarantee that only
+      -- valid continuations are executed.
+      Left pe -> withPactExecReset $ (:[]) <$> resumePact def pe
 
 
 {-# INLINE evalTerms #-}
