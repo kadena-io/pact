@@ -186,7 +186,16 @@
 
 
   (defun rtc-guard-list (foo:[guard])
+    "for testing runtime tc on guard list"
     true)
+
+  (defun tc-guard-list ()
+    (rtc-guard-list [USER_GUARD,USER_GUARD])
+    (rtc-guard-list [USER_GUARD,(keyset-ref-guard 'keyset)]))
+
+  (defun fails-guard-list ()
+    (rtc-guard-list [USER_GUARD,1]))
+
 )
 
 (create-table persons)
