@@ -253,7 +253,7 @@ Public meta
 
    name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
    type: integer         # Platform will validate time as within some range of network time.
-   required: false
+   required: true
 
 .. _exec-payload:
 
