@@ -118,7 +118,7 @@ jobs:
         echo "::add-path::C:\\Program Files\\Amazon\\AWSCLI\\bin"
 
         # these are needed for cabal-cache to work
-        ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin/ghc-pkg-${{ matrix.ghc }}
+        ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg-${{ matrix.ghc }}
 
     # Project Setup
     - name: Append cabal.project
