@@ -130,6 +130,8 @@ data ExecutionFlag
   | FlagDisableHistoryInTransactionalMode
   -- | Preserve runReadOnly failing inside of runSysOnly
   | FlagOldReadOnlyBehavior
+  -- | Disable table module guard for read operations in local
+  | FlagAllowReadInLocal
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
