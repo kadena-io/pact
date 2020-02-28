@@ -18,7 +18,6 @@ jobs:
         cabal: ['3.0']
         os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-latest', 'windows-latest']
         cabalcache: ['true']
-        distcache: ['false']
         exclude:
         - os: 'windows-latest'
           ghc: '8.6.5'
@@ -35,11 +34,6 @@ jobs:
       CABAL_CACHE_BUCKET: kadena-cabal-cache
       SYNC_TO_CACHE: $CABAL_CACHE sync-to-archive --threads 16 --archive-uri s3://$CABAL_CACHE_BUCKET/${{ matrix.os }} --region us-east-1 ${{ matrix.storepath }}
       SYNC_FROM_CACHE: $CABAL_CACHE sync-from-archive --threads 16 --archive-uri s3://$CABAL_CACHE_BUCKET/${{ matrix.os }} --region us-east-1 ${{ matrix.storepath }}
-
-      # Dist Cache
-      DIST_CACHE_BUCKET: kadena-cabal-cache
-      SYNC_TO_DIST_CACHE: aws s3 sync dist-newstyle "s3://kadena-cabal-cache/dist/${{ matrix.os }}/${{ matrix.ghc }}/dist-newstyle"
-      SYNC_FROM_DIST_CACHE: aws s3 sync "s3://kadena-cabal-cache/dist/${{ matrix.os }}/${{ matrix.ghc }}/dist-newstyle" dist-newstyle && rm -rf dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-*/setup
 
       # Aritfacts
       ARTIFACT_BUCKET: kadena-cabal-cache
@@ -148,11 +142,14 @@ jobs:
         constraints:
           direct-sqlite==2.3.24
         EOF
-    - name: Sync from dist cache
-      if: matrix.distcache == 'true'
-      shell: bash
-      run: eval $SYNC_FROM_DIST_CACHE
-      continue-on-error: true
+        
+    - uses: actions/cache@v1
+      name: Cache dist-newstyle
+      with:
+        path: dist-newstyle
+        key: ${{ matrix.os }}-${{ matrix.ghc }}-dist-newstyle-${{ github.sha }}
+        restore-keys: |
+          ${{ matrix.os }}-${{ matrix.ghc }}-dist-newstyle-
 
     # Build
     - name: Update package database
@@ -172,10 +169,6 @@ jobs:
     - name: Build
       shell: bash
       run: cabal v2-build exe:pact
-    - name: Sync dist cache
-      if: always() && (matrix.distcache == 'true')
-      shell: bash
-      run: eval $SYNC_TO_DIST_CACHE
     - name: Sync cabal cache
       if: always() && (matrix.cabalcache == 'true')
       shell: bash
