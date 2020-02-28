@@ -195,6 +195,7 @@ jobs:
 
     # Publish to S3
     - name: Publish applications to S3
+      if: false && false
       shell: bash
       run: |
         tar -C ./dist-newstyle/artifacts/applications/ -czf $BINFILE '.'
@@ -205,7 +206,7 @@ jobs:
         aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$BINFILE --acl public-read
         echo "set public read permission"
     - name: Link latest-build application in S3
-      if: contains(github.ref, 'master')
+      if: false && contains(github.ref, 'master')
       shell: bash
       run: |
         aws s3 cp s3://$ARTIFACT_BUCKET/pact/$BINFILE s3://$ARTIFACT_BUCKET/pact/$LATEST_BINFILE
