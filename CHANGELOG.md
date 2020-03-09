@@ -8,6 +8,8 @@
 * Add gas logs to eval result (#748)
 * Add missing case in Eval (#764)
 * Misc updates to docs
+* Add "Literate Flags" in execution config (#722)
+* Add flag to allow reads in local (#777)
 
 3.4.0
 ---

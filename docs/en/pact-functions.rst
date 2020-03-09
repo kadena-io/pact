@@ -1906,7 +1906,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“OldReadOnlyBehavior”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“OldReadOnlyBehavior”]
 
 .. code:: lisp
 
