@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
@@ -13,7 +14,9 @@ module Pact.Analyze.Eval.Prop where
 
 import           Control.Lens               (Lens', at, ix, view, (%=), (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
+#if !MIN_VERSION_base(4,13,0)
 import           Control.Monad.Fail         (MonadFail(..))
+#endif
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT (..))
 import           Data.Default               (def)

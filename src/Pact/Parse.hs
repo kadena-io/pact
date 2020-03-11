@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
@@ -36,7 +37,9 @@ import Control.Applicative
 import Control.DeepSeq (NFData)
 import Control.Lens (Wrapped(..))
 import Control.Monad
+#if !MIN_VERSION_base(4,13,0)
 import Control.Monad.Fail (MonadFail)
+#endif
 import qualified Data.Aeson as A
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS

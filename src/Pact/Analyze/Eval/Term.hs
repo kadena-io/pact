@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
@@ -20,7 +21,9 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               _Just, ifoldlM)
 import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, MonadError (throwError))
+#if !MIN_VERSION_base(4,13,0)
 import           Control.Monad.Fail          (MonadFail(..))
+#endif
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
