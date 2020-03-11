@@ -21,7 +21,7 @@ jobs:
         exclude:
         - os: 'windows-latest'
           ghc: '8.6.5'
-        include: 
+        include:
         - os: 'windows-latest'
           storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
 
@@ -62,7 +62,7 @@ jobs:
       if: contains(matrix.os, 'ubuntu')
       run: |
         sudo apt-get update
-        sudo apt-get install -y git librocksdb-dev zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
+        sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
     - name: Install non-Haskell dependencies (macOS)
       if: contains(matrix.os, 'mac')
       run: |
@@ -142,7 +142,7 @@ jobs:
         constraints:
           direct-sqlite==2.3.24
         EOF
-        
+
     - uses: actions/cache@v1
       name: Cache dist-newstyle
       with:
@@ -204,4 +204,3 @@ jobs:
       run: |
         aws s3 cp s3://$ARTIFACT_BUCKET/pact/$BINFILE s3://$ARTIFACT_BUCKET/pact/$LATEST_BINFILE
         aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$LATEST_BINFILE --acl public-read
-
