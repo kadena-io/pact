@@ -1,0 +1,38 @@
+name: Build
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - ci/*
+
+jobs:
+  build:
+    name: CI
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        resolver: ['stack.yaml']
+    steps:
+      - name: Install non-Haskell dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
+
+      - name: Setup Stack
+        uses: mstksg/setup-stack@v1
+
+      - name: Clone project
+        uses: actions/checkout@v2
+
+      - name: Cache dependencies
+        uses: actions/cache@v1
+        with:
+          path: ~/.stack
+          key: ${{ runner.os }}-${{ matrix.resolver }}-${{ hashFiles('stack.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.resolver }}-
+
+      - name: Build and run tests
+        run: 'stack build --fast --no-terminal --stack-yaml=${{ matrix.resolver }}'
