@@ -19,7 +19,7 @@ jobs:
       - name: Setup GHC
         uses: actions/setup-haskell@v1
         with:
-          ghc-version: "8.8.2"
+          ghc-version: "8.8.3"
 
       - name: Setup Stack
         uses: mstksg/setup-stack@v1
@@ -31,9 +31,9 @@ jobs:
         uses: actions/cache@v1
         with:
           path: ~/.stack
-          key: ${{ runner.os }}-stack882-${{ hashFiles('stack.yaml') }}
+          key: ${{ runner.os }}-stack883-${{ hashFiles('stack.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-stack882-
+            ${{ runner.os }}-stack883-
 
       - name: Build
         run: 'stack build --fast --no-terminal --system-ghc'

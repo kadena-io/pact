@@ -153,8 +153,7 @@ before_install:
     echo "OS X Z3 $Z3";
   fi
 - export Z3Base=`basename $Z3 .zip`
-# - wget --quiet -L -O z3.zip "https://github.com${Z3/blob/raw}"
-- wget -L -O z3.zip "https://github.com${Z3/blob/raw}"
+- wget --quiet -L -O z3.zip "https://github.com${Z3/blob/raw}"
 - unzip -q z3.zip -d z3_downloaded
 - /bin/rm z3.zip
 - export PATH=$PATH:$PWD/z3_downloaded/$Z3Base/bin
