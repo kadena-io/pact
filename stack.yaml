@@ -2,6 +2,8 @@
 
 resolver: lts-15.4
 
+ghc-options: {"$locals": -funclutter-valid-hole-fits -fmax-relevant-binds=0}
+
 extra-deps:
   # --- Missing from Stackage --- #
   - ed25519-donna-0.1.1
