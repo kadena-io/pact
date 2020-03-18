@@ -549,7 +549,6 @@ evalTerm = \case
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk writeSucceeds
 
-    -- Just rowETy <- view $ aeTableSchemas.at tn
     view (aeTableSchemas.at tn) >>= \case
       Nothing -> failing "Bad pattern match"
       Just rowETy -> do

@@ -650,8 +650,7 @@ inferPreProp preProp = case preProp of
     asum
       [ do haystack' <- checkPreProp SStr haystack
            pure $ Some SBool $ CoreProp $ StrContains needle' haystack'
-      , do
-        inferPreProp haystack >>= \case
+      , inferPreProp haystack >>= \case
           Some objTy@SObject{} obj ->
             pure $ Some SBool $ CoreProp $ ObjContains objTy needle' obj
           _ -> empty
