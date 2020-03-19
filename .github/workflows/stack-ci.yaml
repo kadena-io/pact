@@ -14,12 +14,18 @@ jobs:
       - name: Install non-Haskell dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
+          sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev
+
+      - name: Setup Z3
+        uses: pavpanchekha/setup-z3@v1.2
+        with:
+          version: "4.8.7"
+          architecture: "x64"
 
       - name: Setup GHC
         uses: actions/setup-haskell@v1
         with:
-          ghc-version: "8.6.5"
+          ghc-version: "8.8.3"
 
       - name: Setup Stack
         uses: mstksg/setup-stack@v1
@@ -31,9 +37,9 @@ jobs:
         uses: actions/cache@v1
         with:
           path: ~/.stack
-          key: ${{ runner.os }}-stack-${{ hashFiles('stack.yaml') }}
+          key: ${{ runner.os }}-stack883-${{ hashFiles('stack.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-stack-
+            ${{ runner.os }}-stack883-
 
       - name: Build
-        run: 'stack build --fast --no-terminal --system-ghc'
+        run: "stack test --fast --no-terminal --system-ghc"

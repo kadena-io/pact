@@ -13,7 +13,6 @@ module Pact.Analyze.Parse.Types where
 import           Control.Applicative        (Alternative)
 import           Control.Lens               (makeLenses, (<&>))
 import           Control.Monad.Except       (MonadError (throwError))
-import           Control.Monad.Fail
 import           Control.Monad.Reader       (ReaderT)
 import           Control.Monad.State.Strict (StateT)
 import qualified Data.HashMap.Strict        as HM
@@ -21,7 +20,6 @@ import           Data.Map                   (Map)
 import qualified Data.Map                   as Map
 import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
-import           Data.String                (fromString, IsString)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
@@ -158,9 +156,6 @@ data PropCheckEnv = PropCheckEnv
 
 newtype EitherFail e a = EitherFail { _getEither :: Either e a }
     deriving (Show, Eq, Ord, Functor, Applicative, Alternative, Monad, MonadError e)
-
-instance IsString str => MonadFail (EitherFail str) where
-    fail = EitherFail . Left . fromString
 
 type ParseEnv = Map Text VarId
 

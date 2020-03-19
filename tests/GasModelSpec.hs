@@ -26,7 +26,6 @@ import Pact.Types.Exp
 import Pact.Types.SizeOf
 import Pact.Types.PactValue
 import Pact.Types.Runtime
-import Pact.Types.Util (asString)
 import Pact.GasModel.GasModel
 import Pact.GasModel.Types
 import Pact.GasModel.Utils
