@@ -36,4 +36,4 @@ jobs:
             ${{ runner.os }}-stack883-
 
       - name: Build
-        run: 'stack build --fast --no-terminal --system-ghc'
+        run: 'stack test --fast --no-terminal --system-ghc'
