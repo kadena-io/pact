@@ -4,7 +4,6 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -63,9 +62,6 @@ import Data.Text.Encoding
 import Control.Applicative ((<|>))
 import Control.Concurrent
 import Control.Lens hiding (Empty)
-#if !MIN_VERSION_base(4,13,0)
-import Control.Monad.Fail (MonadFail)
-#endif
 import Test.QuickCheck hiding (Result, Success)
 
 import Pact.Types.Parser (style, symbols)
