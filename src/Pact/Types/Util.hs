@@ -38,7 +38,7 @@ module Pact.Types.Util
   , modifyMVar', modifyingMVar, useMVar
   -- | Miscellany
   , tShow, maybeDelim
-  , failMaybe, maybeToEither
+  , maybeToEither
   -- | Wrapping utilities
   , rewrap, rewrapping, wrap, unwrap
   -- | Arbitrary generator utils
@@ -160,9 +160,6 @@ toB16JSON s = String $ toB16Text s
 
 toB16Text :: ByteString -> Text
 toB16Text s = decodeUtf8 $ B16.encode s
-
-failMaybe :: MonadFail m => String -> Maybe a -> m a
-failMaybe err m = maybe (fail err) return m
 
 maybeToEither :: String -> Maybe a -> Either String a
 maybeToEither err Nothing = Left err
