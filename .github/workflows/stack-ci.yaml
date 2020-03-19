@@ -14,7 +14,13 @@ jobs:
       - name: Install non-Haskell dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
+          sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev
+
+      - name: Setup Z3
+        uses: pavpanchekha/setup-z3@v1.2
+        with:
+          version: "4.8.7"
+          architecture: "x64"
 
       - name: Setup GHC
         uses: actions/setup-haskell@v1
@@ -36,4 +42,4 @@ jobs:
             ${{ runner.os }}-stack883-
 
       - name: Build
-        run: 'stack test --fast --no-terminal --system-ghc'
+        run: "stack test --fast --no-terminal --system-ghc"
