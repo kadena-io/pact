@@ -1415,6 +1415,9 @@ flexibility in designing data access, and is intended to enshrine the module as 
 See also [module guards](#module-guards) for how this concept can be leveraged to protect more than
 just tables.
 
+Note that as of Pact 3.5, the option has been added to selectively allow unguarded reads and transaction history
+access in local mode only, at the discretion of the node operator.
+
 ### Row-level keysets {#rowlevelkeysets}
 
 Keysets can be stored as a column value in a row, allowing for *row-level* authorization.

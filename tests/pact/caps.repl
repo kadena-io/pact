@@ -648,3 +648,34 @@
  "user managed unspecified fails"
  "all done"
  (doB "auto-b" 0))
+
+
+;; enforce-one-in-user-guard bug
+
+(module enforce-one-in-user-guard-bug G
+  (defcap G () true)
+
+  (defun good () true)
+
+  (defun enforce-one-in-guard (g)
+    (enforce-one
+     "should be able to enforce inner guard"
+     [(enforce-guard g)]))
+
+)
+
+(expect
+ "enforce-one in guard ok" true
+ (enforce-guard
+  (create-user-guard
+   (enforce-one-in-guard
+    (create-user-guard (good))))))
+
+(env-exec-config ["OldReadOnlyBehavior"])
+(expect-failure
+ "preserve bugs: enforce-one in guard fails"
+ "attempting db read in sys-only context"
+ (enforce-guard
+  (create-user-guard
+   (enforce-one-in-guard
+    (create-user-guard (good))))))

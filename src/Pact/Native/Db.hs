@@ -54,6 +54,19 @@ instance Readable (TxLog (ObjectMap PactValue)) where
 instance Readable (TxId, TxLog (ObjectMap PactValue)) where
   readable = ReadData . _txValue . snd
 
+-- | Parameterize calls to 'guardTable' with op.
+data GuardTableOp
+  = GtRead
+  | GtSelect
+  | GtWithRead
+  | GtWithDefaultRead
+  | GtKeys
+  | GtTxIds
+  | GtTxLog
+  | GtKeyLog
+  | GtWrite
+  | GtCreateTable
+
 
 dbDefs :: NativeModule
 dbDefs =
@@ -193,7 +206,7 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
     [] -> return []
     [l] -> colsToList (argsError i as) l
     _ -> argsError i as
-  guardTable i table
+  guardTable i table GtRead
   mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
   case mrow of
     Nothing -> failTx (_faInfo i) $ "read: row not found: " <> pretty key
@@ -243,7 +256,7 @@ select' :: FunApp -> [Term Ref] -> Maybe [(Info,FieldKey)] ->
 select' i _ cols' app@TApp{} tbl@TTable{} = do
     g0 <- computeGas (Right i) (GUnreduced [])
     g1 <- computeGas (Right i) $ GSelect cols'
-    guardTable i tbl
+    guardTable i tbl GtSelect
     let fi = _faInfo i
         tblTy = _tTableType tbl
     ks <- keys fi (userTable tbl)
@@ -275,7 +288,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
   (!g0,!tkd) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tkd of
     [table@TTable {..}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
-      guardTable fi table
+      guardTable fi table GtWithDefaultRead
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue' defaultRow)
@@ -289,7 +302,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
   (!g0,!tk) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tk of
     [table@TTable {..},TLitString key] -> do
-      guardTable fi table
+      guardTable fi table GtWithRead
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " <> pretty key
@@ -306,7 +319,7 @@ keys' :: GasRNativeFun e
 keys' g i [table@TTable {..}] =
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
-      guardTable i table
+      guardTable i table GtKeys
       keys (_faInfo i) (userTable table)
 keys' _ i as = argsError i as
 
@@ -316,7 +329,7 @@ txids' g i [table@TTable {..},TLitInteger key] = do
   checkNonLocalAllowed i
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyInteger def) . map toTerm) $ do
-      guardTable i table
+      guardTable i table GtTxIds
       txids (_faInfo i) (userTable' table) (fromIntegral key)
 txids' _ i as = argsError i as
 
@@ -324,7 +337,7 @@ txlog :: GasRNativeFun e
 txlog g i [table@TTable {..},TLitInteger tid] = do
   checkNonLocalAllowed i
   gasPostReads i g (toTList TyAny def . map txlogToObj) $ do
-      guardTable i table
+      guardTable i table GtTxLog
       getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
 txlog _ i as = argsError i as
 
@@ -338,9 +351,9 @@ txlogToObj TxLog{..} = toTObject TyAny def
 checkNonLocalAllowed :: HasInfo i => i -> Eval e ()
 checkNonLocalAllowed i = do
   env <- ask
-  let allowedInTx = view (eeExecutionConfig . ecAllowHistoryInTx) env
-      mode = view eeMode env
-  unless (mode == Local || allowedInTx) $ evalError' i $
+  disabledInTx <- isExecutionFlagSet FlagDisableHistoryInTransactionalMode
+  let mode = view eeMode env
+  when (mode == Transactional && disabledInTx) $ evalError' i $
     "Operation only permitted in local execution mode"
 
 keylog :: GasRNativeFun e
@@ -350,7 +363,7 @@ keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
         where toTxidObj (t,r) =
                 toTObject TyAny def [("txid", toTerm t),("value",columnsToObject _tTableType (_txValue r))]
   gasPostReads i g postProc $ do
-    guardTable i table
+    guardTable i table GtKeyLog
     tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
     logs <- fmap concat $ forM tids $ \tid -> map (tid,) <$> getTxLog (_faInfo i) (userTable table) tid
     return $ filter (\(_,TxLog {..}) -> _txKey == key) logs
@@ -365,7 +378,7 @@ write wt partial i as = do
       ps' <- enforcePactValue' ps
       cost0 <- computeGas (Right i) (GUnreduced [])
       cost1 <- computeGas (Right i) (GPreWrite (WriteData wt (asString key) ps'))
-      guardTable i table
+      guardTable i table GtWrite
       case _tTableType of
         TyAny -> return ()
         TyVar {} -> return ()
@@ -377,16 +390,26 @@ write wt partial i as = do
 
 createTable' :: GasRNativeFun e
 createTable' g i [t@TTable {..}] = do
-  guardTable i t
+  guardTable i t GtCreateTable
   let (UserTables tn) = userTable t
   computeGas' g i (GPreWrite (WriteTable (asString tn))) $
     success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
 createTable' _ i as = argsError i as
 
-guardTable :: Pretty n => FunApp -> Term n -> Eval e ()
-guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModuleName $
-  enforceBlessedHashes i _tModuleName _tHash
-guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
+guardTable :: Pretty n => FunApp -> Term n -> GuardTableOp -> Eval e ()
+guardTable i TTable {..} dbop =
+  checkLocalBypass $
+    guardForModuleCall (_faInfo i) _tModuleName $
+      enforceBlessedHashes i _tModuleName _tHash
+  where checkLocalBypass notBypassed = do
+          localBypassEnabled <- isExecutionFlagSet FlagAllowReadInLocal
+          case dbop of
+            GtWrite -> notBypassed
+            GtCreateTable -> notBypassed
+            _ | localBypassEnabled -> return ()
+              | otherwise -> notBypassed
+
+guardTable i t _ = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> ModuleHash -> Eval e ()
 enforceBlessedHashes i mn h = getModule i mn >>= \m -> case (_mdModule m) of

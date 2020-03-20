@@ -1,5 +1,5 @@
-{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE Rank2Types #-}
 -- |
 -- Module      :  Pact.Types.Parser
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -18,17 +18,15 @@ module Pact.Types.Parser
   where
 
 
-import Text.Trifecta
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Fail (MonadFail)
-import Prelude
+import Text.Trifecta
 import qualified Data.HashSet as HS
 import Text.Parser.Token.Highlight
 import Text.Parser.Token.Style
 
 newtype PactParser p a = PactParser { unPactParser :: p a }
-  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadFail, Parsing, CharParsing, DeltaParsing)
+  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, DeltaParsing)
 
 instance TokenParsing p => TokenParsing (PactParser p) where
   someSpace   = PactParser $ buildSomeSpaceParser someSpace $ CommentStyle "" "" ";" False

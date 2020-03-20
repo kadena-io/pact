@@ -1901,20 +1901,17 @@ Set environment confidential ENTITY id, or unset with no argument.
 env-exec-config
 ~~~~~~~~~~~~~~~
 
-*allow-module-install* ``bool`` *allow-history-in-tx* ``bool``
-*→* ``object:*``
+*flags* ``[string]`` *→* ``[string]``
 
-*→* ``object:*``
+*→* ``[string]``
 
-Queries, or with arguments, sets execution config flags.
-ALLOW-MODULE-INSTALL allows module and interface installs;
-ALLOW-HISTORY-IN-TX allows history calls (tx-log, etc) in non-local
-execution
+Queries, or with arguments, sets execution config flags. Valid flags:
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“OldReadOnlyBehavior”]
 
 .. code:: lisp
 
-   pact> (env-exec-config true false) (env-exec-config)
-   {"allow-history-in-tx": false,"allow-module-install": true}
+   pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
+   ["DisableHistoryInTransactionalMode"]
 
 env-gas
 ~~~~~~~

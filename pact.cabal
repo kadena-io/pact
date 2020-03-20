@@ -72,8 +72,10 @@ library
                      , Pact.Types.PactError
                      , Pact.Types.PactValue
                      , Pact.Types.Parser
+                     , Pact.Types.Perf
                      , Pact.Types.Persistence
                      , Pact.Types.Pretty
+                     , Pact.Types.Purity
                      , Pact.Types.RPC
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
@@ -163,7 +165,7 @@ library
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.5
                      , algebraic-graphs >= 0.2 && < 0.6
-                     , prettyprinter >= 1.2 && < 1.4
+                     , prettyprinter >= 1.2 && < 1.6.1
                      , prettyprinter-ansi-terminal >= 1.1 && < 1.2
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.9.0.0 && < 4.14
@@ -185,11 +187,13 @@ library
                      , hspec >= 2.2.4 && < 2.8
                      , lens >= 4.14 && < 4.19
                      , lens-aeson >= 1.0.0.5 && < 1.2
-                     , megaparsec >= 7
+                     , megaparsec >= 7 && < 8
                      , mtl >= 2.2.1 && < 2.3
                      , old-locale >= 1.0.0.7 && < 1.1
                      , optparse-applicative >= 0.12.1.0 && < 0.16
                      , parsers >= 0.12.4 && < 0.13
+                     , QuickCheck >= 2.12.6.1
+                     , quickcheck-instances >= 0.3
                      , reflection
                      , safe >= 0.3.11 && < 0.4
                      , scientific >= 0.3.4.9 && < 0.4
@@ -212,7 +216,7 @@ library
                      , servant-client
                      , servant-client-core
                      , servant-swagger
-                     , swagger2 >= 2.3 && < 2.5
+                     , swagger2 >= 2.3 && < 2.6
 
   if impl(ghcjs)
     build-depends:
@@ -231,7 +235,7 @@ library
                 , memory
                 , neat-interpolation >= 0.3.2.4
                 , safe-exceptions >= 0.1.5.0 && < 0.2
-                , sbv >= 7.11 && < 8.3
+                , sbv >= 7.11 && < 8.7
                 , servant-server
                 , statistics >= 0.13.3 && < 0.16
                 , wai-cors
@@ -274,7 +278,7 @@ benchmark bench
   build-depends:       base
                      , pact
   hs-source-dirs:      executables pact-lang-api.js
-  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-options:         -Wall -threaded -rtsopts "-with-rtsopts=-N" -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
@@ -296,7 +300,7 @@ test-suite hspec
     type:             exitcode-stdio-1.0
   hs-source-dirs:   tests
   default-language: Haskell2010
-  ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-depends:
                 base
               , Decimal
@@ -324,6 +328,7 @@ test-suite hspec
               , prettyprinter
               , prettyprinter-ansi-terminal
               , prettyprinter-convert-ansi-wl-pprint
+              , QuickCheck
               , text
               , transformers
               , unordered-containers

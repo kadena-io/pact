@@ -13,7 +13,6 @@ module Pact.Analyze.Eval.Prop where
 
 import           Control.Lens               (Lens', at, ix, view, (%=), (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
-import           Control.Monad.Fail         (MonadFail(..))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT (..))
 import           Data.Default               (def)
@@ -47,9 +46,6 @@ newtype Query a
     { queryAction :: StateT SymbolicSuccess (ReaderT QueryEnv (ExceptT AnalyzeFailure Alloc)) a }
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure, MonadState SymbolicSuccess, MonadAlloc)
-
-instance MonadFail Query where
-    fail = throwError . AnalyzeFailure def . fromString
 
 instance (Mergeable a) => Mergeable (Query a) where
   -- We merge the result and state, performing any 'Alloc' actions that occur
@@ -233,20 +229,27 @@ evalPropSpecific (PropRead objTy@(SObjectUnsafe fields) ba tn pRk) = do
 
   aValFields <- foldrSingList
     (pure $ Some SObjectNil $ AnSBV $ literal ())
-    (\k ty accum -> do
-      Some objTy'@(SObject (SingList schema)) (AnSBV obj) <- accum
-      let fieldName = symbolVal k
-          cn = ColumnName fieldName
+    (\k ty accum -> accum >>= \case
+      Some objTy'@(SObject (SingList schema)) (AnSBV obj) -> do
+        let fieldName = symbolVal k
+            cn = ColumnName fieldName
 
-      AVal _prov sval <- mkAVal <$> view
-        (qeAnalyzeState.typedCell ty (beforeAfterLens ba) tn' cn sRk sFalse)
+        res <- mkAVal <$> view
+          (qeAnalyzeState.typedCell ty (beforeAfterLens ba) tn' cn sRk sFalse)
 
-      withSymVal ty $ withSymVal objTy' $ pure $ Some
-        (SObjectUnsafe (SingList (SCons k ty schema)))
-        (AnSBV (tuple (SBVI.SBV sval, obj))))
+        case res of
+          OpaqueVal -> badPat
+          AVal _prov sval -> do
+            withSymVal ty $ withSymVal objTy' $ pure $ Some
+              (SObjectUnsafe (SingList (SCons k ty schema)))
+              (AnSBV (tuple (SBVI.SBV sval, obj)))
+      Some _ _ -> badPat)
     fields
 
   case aValFields of
     Some ty (AnSBV obj) -> case singEq ty objTy of
       Nothing   -> throwErrorNoLoc "expected a different object type"
       Just Refl -> pure $ sansProv obj
+  where
+    badPat :: Query a
+    badPat = throwError $ AnalyzeFailure def "Bad pattern match"

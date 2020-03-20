@@ -1,17 +1,19 @@
 # stack yaml for ghc builds
 
-resolver: lts-14.18
+resolver: lts-15.4
+
+ghc-options: {"$locals": -funclutter-valid-hole-fits -fmax-relevant-binds=0}
 
 extra-deps:
   # --- Missing from Stackage --- #
   - ed25519-donna-0.1.1
   - hspec-golden-0.1.0.1
+  - direct-sqlite-2.3.26
+  - sbv-8.6
 
   # --- Forced Downgrades --- #
-  - sbv-8.2
-
-  # --- Forced Upgrades --- #
-  - trifecta-2.1
+  - megaparsec-7.0.5
+  - prettyprinter-1.6.0
 
   # --- Custom Pins --- #
   - git: https://github.com/kadena-io/thyme.git

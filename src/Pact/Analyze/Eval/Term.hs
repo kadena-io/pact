@@ -20,7 +20,6 @@ import           Control.Lens                (At (at), Lens', preview, use,
                                               _Just, ifoldlM)
 import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, MonadError (throwError))
-import           Control.Monad.Fail          (MonadFail(..))
 import           Control.Monad.Reader        (MonadReader (ask, local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
@@ -73,8 +72,8 @@ newtype Analyze a
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState EvalAnalyzeState, MonadError AnalyzeFailure)
 
-instance MonadFail Analyze where
-    fail = throwError . AnalyzeFailure def . fromString
+failing :: String -> Analyze a
+failing = throwError . AnalyzeFailure def . fromString
 
 instance Analyzer Analyze where
   type TermOf Analyze = Term
@@ -294,11 +293,12 @@ readFields tn sRk tid (SObjectUnsafe (SingList (SCons sym fieldType subSchema)))
   tagAccessCell mtReads tid tFieldName av
   case av of
     OpaqueVal -> throwErrorNoLoc "Opaque value encountered in table read"
-    AVal (Just (FromCell oc)) sval
-      -> withSymVal fieldType $ withSymVal subObjTy $ do
-        S (Just (FromRow ocMap)) obj' <- readFields tn sRk tid subObjTy
-        pure $ withProv (FromRow $ Map.insert cn oc ocMap) $
-          tuple (SBVI.SBV sval, obj')
+    AVal (Just (FromCell oc)) sval -> withSymVal fieldType $ withSymVal subObjTy $ do
+      readFields tn sRk tid subObjTy >>= \case
+        S (Just (FromRow ocMap)) obj' -> pure
+          $ withProv (FromRow $ Map.insert cn oc ocMap)
+          $ tuple (SBVI.SBV sval, obj')
+        _ -> failing "Bad pattern match"
     AVal _ _ -> error
       "impossible: unexpected type of cell provenance in readFields"
 
@@ -549,30 +549,32 @@ evalTerm = \case
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk writeSucceeds
 
-    Just rowETy <- view $ aeTableSchemas.at tn
-    prevAVals <- case rowETy of
-      EType rowTy@(SObject _) -> do
-        rowAVals <- peekFields tn sRk rowTy
-        -- assume invariants for values already in the DB:
-        applyInvariants tn rowAVals $ mapM_ addConstraint
-        pure rowAVals
-      _ -> throwErrorNoLoc $ FailureMessage $ "evalTerm: Write: Unrecognized type in row position: " <> T.pack (show rowETy)
+    view (aeTableSchemas.at tn) >>= \case
+      Nothing -> failing "Bad pattern match"
+      Just rowETy -> do
+        prevAVals <- case rowETy of
+          EType rowTy@(SObject _) -> do
+            rowAVals <- peekFields tn sRk rowTy
+            -- assume invariants for values already in the DB:
+            applyInvariants tn rowAVals $ mapM_ addConstraint
+            pure rowAVals
+          _ -> throwErrorNoLoc $ FailureMessage $ "evalTerm: Write: Unrecognized type in row position: " <> T.pack (show rowETy)
 
-    writeFields writeType tid tn sRk obj objTy
+        writeFields writeType tid tn sRk obj objTy
 
-    let newAVals = aValsOfObj schema (_sSbv obj)
-        -- NOTE: left-biased union prefers the new values:
-        nextAVals = Map.union newAVals prevAVals
+        let newAVals = aValsOfObj schema (_sSbv obj)
+            -- NOTE: left-biased union prefers the new values:
+            nextAVals = Map.union newAVals prevAVals
 
-    applyInvariants tn nextAVals $ \invariants' ->
-      let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
-          fs = ZipList $ (\s -> fmap (_sSbv s .&&)) <$> invariants'
-      in maintainsInvariants . at tn . _Just %= (fs <*>)
+        applyInvariants tn nextAVals $ \invariants' ->
+          let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
+              fs = ZipList $ (\s -> fmap (_sSbv s .&&)) <$> invariants'
+          in maintainsInvariants . at tn . _Just %= (fs <*>)
 
-    --
-    -- TODO: make a constant on the pact side that this uses:
-    --
-    pure $ literalS "Write succeeded"
+        --
+        -- TODO: make a constant on the pact side that this uses:
+        --
+        pure $ literalS "Write succeeded"
 
   Let _name vid eterm body -> do
     av <- evalETerm eterm
