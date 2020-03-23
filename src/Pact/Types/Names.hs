@@ -22,7 +22,7 @@ module Pact.Types.Names
   , NativeDefName(..)
   , DefName(..)
   , TableName(..)
-  , ModuleName(..), mnName, mnNamespace
+  , ModuleName(..), mnName, mnNamespace, parseModuleName
   , Name(..), parseName
   , QualifiedName(..), parseQualifiedName
   , BareName(..)
@@ -103,6 +103,17 @@ instance Pretty ModuleName where
 
 instance ToJSON ModuleName where toJSON = lensyToJSON 3
 instance FromJSON ModuleName where parseJSON = lensyParseJSON 3
+
+moduleNameParser :: (TokenParsing m, Monad m) => m ModuleName
+moduleNameParser = do
+  a <- ident style
+  b <- optional (dot *> ident style)
+  case b of
+    Nothing -> return (ModuleName a Nothing) <?> "module name"
+    Just b' -> return (ModuleName b' (Just . NamespaceName $ a)) <?> "namespaced module name"
+
+parseModuleName :: Text -> Either String ModuleName
+parseModuleName = AP.parseOnly (moduleNameParser <* eof)
 
 
 newtype DefName = DefName Text
