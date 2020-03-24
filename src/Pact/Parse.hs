@@ -36,7 +36,6 @@ import Control.Applicative
 import Control.DeepSeq (NFData)
 import Control.Lens (Wrapped(..))
 import Control.Monad
-import Control.Monad.Fail (MonadFail)
 import qualified Data.Aeson as A
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS
@@ -61,7 +60,7 @@ import Pact.Types.Term (ToTerm)
 
 
 -- | Main parser for Pact expressions.
-expr :: (MonadFail m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
+expr :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
 expr = do
   delt <- position
   let inf = do
@@ -84,7 +83,7 @@ expr = do
     ]
 {-# INLINE expr #-}
 
-number :: (MonadFail m, TokenParsing m, DeltaParsing m) => PactParser m Literal
+number :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m Literal
 number = do
   -- Tricky: note that we use `char :: CharParsing m => Char -> m Char` rather
   -- than `symbolic :: TokenParsing m => Char -> m Char` here. We use the char
@@ -100,16 +99,16 @@ number = do
     Just d ->
       let precision = length d
       in if precision > 255
-         then fail $ "decimal precision overflow (255 max): " ++ show num ++ "." ++ show d
+         then unexpected $ "decimal precision overflow (255 max): " ++ show num ++ "." ++ show d
          else return $ LDecimal $ Decimal
            (fromIntegral precision)
            (neg (strToNum (strToNum 0 num) d))
 {-# INLINE number #-}
 
 
-qualifiedAtom :: (MonadFail p, TokenParsing p) => p (Text,[Text])
+qualifiedAtom :: (Monad p, TokenParsing p) => p (Text,[Text])
 qualifiedAtom = ident style `sepBy` dot >>= \as -> case reverse as of
-  [] -> fail "qualifiedAtom"
+  [] -> unexpected "qualifiedAtom"
   (a:qs) -> return (a,reverse qs)
 
 bool :: (Monad m, DeltaParsing m) => PactParser m Literal
@@ -121,12 +120,12 @@ bool = msum
 
 
 -- | Parse one or more Pact expressions.
-exprs :: (MonadFail m, TokenParsing m, DeltaParsing m) => PactParser m [Exp Parsed]
+exprs :: (TokenParsing m, DeltaParsing m) => PactParser m [Exp Parsed]
 exprs = some expr
 
 -- | Parse one or more Pact expressions and EOF.
 -- Unnecessary with Atto's 'parseOnly'.
-exprsOnly :: (MonadFail m, TokenParsing m, DeltaParsing m) => m [Exp Parsed]
+exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [Exp Parsed]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
 -- | JSON serialization for 'readDecimal' and public meta info;

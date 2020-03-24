@@ -12,6 +12,8 @@
 
   (deftable persons:{person})
 
+  (deftable persons2:{person})
+
   (defconst ID_A "A")
   (defconst ROW_A:object{person}
     { 'name:"joe", 'age:46, "dob":(parse-time "%F" "1970-01-01") })
@@ -73,13 +75,94 @@
 (expect "read-persons2 works w/o admin key" ROW_A (dbtest2.read-persons2 ID_A))
 (commit-tx)
 
+;;
+;; test admin table guards
+(env-exec-config []) ;; clear disable history flag
 (begin-tx)
 (use dbtest)
-(expect-failure "insert protected by admin key" (insert persons "foo" ROW_A))
-(expect-failure "keys protected by admin key" (keys persons))
-(expect-failure "txids protected by admin key" (txids persons 0))
-(expect-failure "txlog protected by admin key" (txlog persons 2))
-(expect-failure "keylogs protected by admin key" (keylog persons "" 2))
+(expect-failure
+ "write protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (write persons "foo" ROW_A))
+(expect-failure
+ "update protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (update persons "foo" ROW_A))
+(expect-failure
+ "insert protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (insert persons "foo" ROW_A))
+(expect-failure
+ "keys protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (keys persons))
+(expect-failure
+ "txids protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (txids persons 0))
+(expect-failure
+ "txlog protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (txlog persons 2))
+(expect-failure
+ "keylogs protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (keylog persons "" 2))
+(expect-failure
+ "read protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (read persons ID_A))
+(expect-failure
+ "with-read protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (with-read persons ID_A { 'name:= name } name))
+(expect-failure
+ "with-default-read protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (with-default-read persons ID_A { 'name: "stu" } { 'name:= name } name))
+(expect-failure
+ "select protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (select persons (constantly true)))
+(expect-failure
+ "keys protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (keys persons))
+(expect-failure
+ "create-table protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ (create-table persons2))
 
 ;; just making sure this doesn't blow up, output is still TBD on better Term output in general
 (describe-table persons)
+
+(commit-tx)
+;; test disabling admin table guards
+(env-exec-config ["AllowReadInLocal"])
+(use dbtest)
+(expect-failure
+ "write protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
+ (write persons "foo" ROW_A))
+(expect-failure
+ "update protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
+ (update persons "foo" ROW_A))
+(expect-failure
+ "insert protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
+ (insert persons "foo" ROW_A))
+(expect
+ "keys allowed in local" [ID_A]
+ (keys persons))
+(expect
+ "txids allowed in local" [1]
+ (txids persons 0))
+(expect
+ "txlog allowed in local" [ID_A]
+ (map (at "key") (txlog persons 1)))
+(expect
+ "keylogs allowed in local" [1]
+ (map (at "txid") (keylog persons ID_A 1)))
+(expect
+ "read allowed in local" "joe"
+ (at "name" (read persons ID_A)))
+(expect
+ "with-read allowed in local" "joe"
+ (with-read persons ID_A { 'name:= name } name))
+(expect
+ "with-default-read allowed in local" "stu"
+ (with-default-read persons "zzz" { 'name: "stu" } { 'name:= name } name))
+(expect
+ "select allowed in local" [46]
+ (map (at "age") (select persons (constantly true))))
+(expect
+ "keys allowed in local" [ID_A]
+ (keys persons))
+(expect-failure
+ "create-table protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
+ (create-table persons2))

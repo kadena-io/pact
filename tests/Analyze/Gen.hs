@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -18,7 +19,9 @@ import           Control.Monad.State.Strict (MonadState, StateT (runStateT))
 import qualified Data.Decimal               as Decimal
 import qualified Data.Map.Strict            as Map
 import qualified Data.Text                  as T
+#if !MIN_VERSION_base(4,13,0)
 import           Data.Type.Equality         ((:~:) (Refl))
+#endif
 import           GHC.Natural                (Natural)
 import           GHC.Stack                  (HasCallStack)
 import           Hedgehog                   hiding (Update, Var)

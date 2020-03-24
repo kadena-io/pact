@@ -18,11 +18,10 @@ jobs:
         cabal: ['3.0']
         os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-latest', 'windows-latest']
         cabalcache: ['true']
-        distcache: ['false']
         exclude:
         - os: 'windows-latest'
           ghc: '8.6.5'
-        include: 
+        include:
         - os: 'windows-latest'
           storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
 
@@ -35,11 +34,6 @@ jobs:
       CABAL_CACHE_BUCKET: kadena-cabal-cache
       SYNC_TO_CACHE: $CABAL_CACHE sync-to-archive --threads 16 --archive-uri s3://$CABAL_CACHE_BUCKET/${{ matrix.os }} --region us-east-1 ${{ matrix.storepath }}
       SYNC_FROM_CACHE: $CABAL_CACHE sync-from-archive --threads 16 --archive-uri s3://$CABAL_CACHE_BUCKET/${{ matrix.os }} --region us-east-1 ${{ matrix.storepath }}
-
-      # Dist Cache
-      DIST_CACHE_BUCKET: kadena-cabal-cache
-      SYNC_TO_DIST_CACHE: aws s3 sync dist-newstyle "s3://kadena-cabal-cache/dist/${{ matrix.os }}/${{ matrix.ghc }}/dist-newstyle"
-      SYNC_FROM_DIST_CACHE: aws s3 sync "s3://kadena-cabal-cache/dist/${{ matrix.os }}/${{ matrix.ghc }}/dist-newstyle" dist-newstyle && rm -rf dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-*/setup
 
       # Aritfacts
       ARTIFACT_BUCKET: kadena-cabal-cache
@@ -68,7 +62,7 @@ jobs:
       if: contains(matrix.os, 'ubuntu')
       run: |
         sudo apt-get update
-        sudo apt-get install -y git librocksdb-dev zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
+        sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
     - name: Install non-Haskell dependencies (macOS)
       if: contains(matrix.os, 'mac')
       run: |
@@ -97,7 +91,7 @@ jobs:
       run: |
         mkdir -p /c/tools/msys64/mingw64/lib
         choco install -r -y cabal --version 3.0.0.0
-        choco install -r -y ghc --version 8.8.1
+        choco install -r -y ghc --version ${{ matrix.ghc }}
     - name: Set GHC and Cabal version (ubuntu, macOS)
       if: "!contains(matrix.os, 'windows')"
       uses: actions/setup-haskell@v1
@@ -108,8 +102,8 @@ jobs:
       if: "contains(matrix.os, 'windows')"
       shell: bash
       run: |
-        echo "::add-path::/c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin"
-        echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-8.8.1\\bin"
+        echo "::add-path::/c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin"
+        echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-${{ matrix.ghc }}\\bin"
         echo "::add-path::/c/ProgramData/chocolatey/lib/cabal/tools/cabal-3.0.0.0"
         echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\cabal\\tools\\cabal-3.0.0.0"
         echo "::add-path::/c/Users/runneradmin/AppData/Roaming/cabal/bin"
@@ -118,7 +112,7 @@ jobs:
         echo "::add-path::C:\\Program Files\\Amazon\\AWSCLI\\bin"
 
         # these are needed for cabal-cache to work
-        ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-8.8.1/bin/ghc-pkg-8.8.1
+        ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg-${{ matrix.ghc }}
 
     # Project Setup
     - name: Append cabal.project
@@ -148,11 +142,14 @@ jobs:
         constraints:
           direct-sqlite==2.3.24
         EOF
-    - name: Sync from dist cache
-      if: matrix.distcache == 'true'
-      shell: bash
-      run: eval $SYNC_FROM_DIST_CACHE
-      continue-on-error: true
+
+    - uses: actions/cache@v1
+      name: Cache dist-newstyle
+      with:
+        path: dist-newstyle
+        key: ${{ matrix.os }}-${{ matrix.ghc }}-dist-newstyle-${{ github.sha }}
+        restore-keys: |
+          ${{ matrix.os }}-${{ matrix.ghc }}-dist-newstyle-
 
     # Build
     - name: Update package database
@@ -172,10 +169,6 @@ jobs:
     - name: Build
       shell: bash
       run: cabal v2-build exe:pact
-    - name: Sync dist cache
-      if: always() && (matrix.distcache == 'true')
-      shell: bash
-      run: eval $SYNC_TO_DIST_CACHE
     - name: Sync cabal cache
       if: always() && (matrix.cabalcache == 'true')
       shell: bash
@@ -195,6 +188,7 @@ jobs:
 
     # Publish to S3
     - name: Publish applications to S3
+      if: "!contains(matrix.os, 'windows')"
       shell: bash
       run: |
         tar -C ./dist-newstyle/artifacts/applications/ -czf $BINFILE '.'
@@ -205,9 +199,8 @@ jobs:
         aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$BINFILE --acl public-read
         echo "set public read permission"
     - name: Link latest-build application in S3
-      if: contains(github.ref, 'master')
+      if: "!contains(matrix.os, 'windows') && contains(github.ref, 'master')"
       shell: bash
       run: |
         aws s3 cp s3://$ARTIFACT_BUCKET/pact/$BINFILE s3://$ARTIFACT_BUCKET/pact/$LATEST_BINFILE
         aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$LATEST_BINFILE --acl public-read
-

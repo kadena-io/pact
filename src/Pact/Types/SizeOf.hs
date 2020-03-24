@@ -27,7 +27,6 @@ import Data.Thyme hiding (Vector)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word8)
-import GHC.Exts (Int(..))
 import Test.QuickCheck hiding (mapSize)
 import Test.QuickCheck.Instances()
 

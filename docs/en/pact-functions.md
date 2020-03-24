@@ -1647,7 +1647,7 @@ Set environment confidential ENTITY id, or unset with no argument.
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["DisableHistoryInTransactionalMode","DisableModuleInstall","OldReadOnlyBehavior"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","OldReadOnlyBehavior"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
