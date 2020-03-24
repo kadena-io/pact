@@ -2,20 +2,23 @@
 
 module ParserSpec (spec) where
 
+import Data.Default
 import Test.Hspec
 import Pact.Repl
 import Pact.Repl.Types
 import Data.Either
 import Control.Monad.State.Strict
-import Pact.Types.Term
 import Pact.Types.Exp
+import Pact.Types.Names
 import Pact.Types.Pretty
+import Pact.Types.Term
 
 spec :: Spec
 spec = do
   describe "loadBadParens" $ loadBadParens
   describe "runBadTests" $ runBadTests
   describe "prettyLit" $ prettyLit
+  describe "names" $ parseNames
 
 evalString' :: String -> IO (Either String (Term Name), ReplState)
 evalString' cmd = initReplState StringEval Nothing >>= runStateT (evalRepl' cmd)
@@ -51,3 +54,10 @@ prettyLit = do
   it "true prints properly" $ pretty (LBool True) `shouldBe` "true"
   it "false prints properly" $ pretty (LBool False) `shouldBe` "false"
   it "string prints properly" $ pretty (LString "hello world") `shouldBe` "\"hello world\""
+
+parseNames :: Spec
+parseNames = do
+  it "parses module name" $ parseModuleName "m" `shouldBe` Right (ModuleName "m" Nothing)
+  it "parses namespaced module name" $ parseModuleName "n.m" `shouldBe` Right (ModuleName "m" (Just (NamespaceName "n")))
+  it "parses qualified name" $ parseQualifiedName def "m.r" `shouldBe` Right (QualifiedName "m" "r" def)
+  it "parses namespaced qualified name" $ parseQualifiedName def "n.m.r" `shouldBe` Right (QualifiedName "n.m" "r" def)
