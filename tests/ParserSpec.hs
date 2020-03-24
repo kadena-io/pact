@@ -18,7 +18,7 @@ spec = do
   describe "loadBadParens" $ loadBadParens
   describe "runBadTests" $ runBadTests
   describe "prettyLit" $ prettyLit
-  describe "names" $ parseNames
+  parseNames
 
 evalString' :: String -> IO (Either String (Term Name), ReplState)
 evalString' cmd = initReplState StringEval Nothing >>= runStateT (evalRepl' cmd)
@@ -57,7 +57,24 @@ prettyLit = do
 
 parseNames :: Spec
 parseNames = do
-  it "parses module name" $ parseModuleName "m" `shouldBe` Right (ModuleName "m" Nothing)
-  it "parses namespaced module name" $ parseModuleName "n.m" `shouldBe` Right (ModuleName "m" (Just (NamespaceName "n")))
-  it "parses qualified name" $ parseQualifiedName def "m.r" `shouldBe` Right (QualifiedName "m" "r" def)
-  it "parses namespaced qualified name" $ parseQualifiedName def "n.m.r" `shouldBe` Right (QualifiedName "n.m" "r" def)
+  let
+    positive name test = it ("should parse " <> name) test
+    negative name parse = it ("should not parse " <> name) $ parse `shouldSatisfy` isLeft
+
+  describe "parseModuleName" $ do
+    positive "a module name" $ parseModuleName "m" `shouldBe` Right (ModuleName "m" Nothing)
+    positive "a namespaced module name" $ parseModuleName "n.m" `shouldBe` Right (ModuleName "m" (Just (NamespaceName "n")))
+
+    negative "the empty string" $ parseModuleName ""
+    negative "a single dot" $ parseModuleName "."
+    negative "extra dots" $ parseModuleName "a..b"
+    negative "three components" $ parseModuleName "a.b.c"
+
+  describe "parseQualifiedName" $ do
+    positive "a qualified name" $ parseQualifiedName def "m.r" `shouldBe` Right (QualifiedName "m" "r" def)
+    positive "a namespaced qualified name" $ parseQualifiedName def "n.m.r" `shouldBe` Right (QualifiedName "n.m" "r" def)
+
+    negative "the empty string" $ parseQualifiedName def ""
+    negative "a single dot" $ parseQualifiedName def "."
+    negative "extra dots" $ parseQualifiedName def "a..b"
+    negative "four components" $ parseQualifiedName def "a.b.c.d"
