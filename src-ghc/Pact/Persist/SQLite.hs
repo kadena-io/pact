@@ -16,7 +16,6 @@ import Control.Monad
 import Control.Monad.Except hiding (liftEither)
 import Data.Aeson
 import qualified Data.Map.Strict as M
-import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.String
 import Database.SQLite3.Direct as SQ3
@@ -58,14 +57,11 @@ toUtf8 :: Text -> Utf8
 toUtf8 = Utf8 . encodeUtf8
 
 tableName :: Table k -> Utf8
-tableName (DataTable t) = toUtf8 $ sanitize t <> "_DATA"
-tableName (TxTable t) = toUtf8 $ sanitize t <> "_TX"
+tableName (DataTable t) = toUtf8 $ "[" <> sanitize t <> "_DATA" <> "]"
+tableName (TxTable t) = toUtf8 $ "[" <> sanitize t <> "_TX" <> "]"
 
--- Example of TableId: "USER_free.payments_accounts-table"
 sanitize :: TableId -> Text
-sanitize (TableId t) =
-  T.replace "-" "_" $
-  T.replace "." "_NAMESPACE_" t
+sanitize (TableId t) = t
 
 persister :: Persister SQLite
 persister = Persister {
