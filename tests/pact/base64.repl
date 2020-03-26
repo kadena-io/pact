@@ -24,3 +24,28 @@
   "base64 decoding fails on non base64-encoded input"
   "Could not decode string"
   (base64-decode "aGVsbG8gd29ybGQh%"))
+
+(expect-failure
+  "base64 decoding fails on garbage input 1"
+  "Could not decode string"
+  (base64-decode "aaa"))
+
+(expect-failure
+  "base64 decoding fails on garbage input 2"
+  "Could not decode string"
+  (base64-decode "asdflk"))
+
+(expect-failure
+  "base64 decoding fails on garbage input 3"
+  "Could not decode string"
+  (base64-decode "!@#$%&"))
+
+(expect-failure
+  "base64 decoding fails on garbage input 4"
+  "Could not decode string"
+  (base64-decode "\x0237"))
+
+(expect-failure
+  "base64 decoding fails on garbage input 5"
+  "Could not decode string"
+  (base64-decode "+\x0000"))

@@ -136,7 +136,11 @@ toB64UrlUnpaddedText :: ByteString -> Text
 toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 
 fromB64UrlUnpaddedText :: ByteString -> Either String Text
-fromB64UrlUnpaddedText = fmap decodeUtf8 . decodeBase64UrlUnpadded
+fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
+  Right bs' -> case decodeUtf8' bs' of
+    Left _ -> Left $ "Base64URL decode failed: invalid unicode"
+    Right t -> Right t
+  Left e -> Left $ "Base64URL decode failed: " ++ e
 
 parseB16JSON :: Value -> Parser ByteString
 parseB16JSON = withText "Base16" parseB16Text
