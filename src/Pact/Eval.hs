@@ -250,7 +250,8 @@ eval (TModule (MDModule m) bod i) =
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
     -- enforce old module governance
-    oldM <- lookupModule i (_mName m)
+    preserveModuleNameBug <- isExecutionFlagSet FlagPreserveModuleNameBug
+    oldM <- lookupModule i $ _mName $ if preserveModuleNameBug then m else mangledM
     case oldM of
       Nothing -> return ()
       Just (ModuleData omd _) ->

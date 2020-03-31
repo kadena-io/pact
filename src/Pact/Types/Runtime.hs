@@ -132,6 +132,8 @@ data ExecutionFlag
   | FlagOldReadOnlyBehavior
   -- | Disable table module guard for read operations in local
   | FlagAllowReadInLocal
+  -- | Preserve namespace module governance bug
+  | FlagPreserveModuleNameBug
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
