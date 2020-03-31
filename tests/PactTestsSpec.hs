@@ -104,6 +104,8 @@ badErrors = M.fromList
    ,"invalid namespace name format")
   ,(pfx "bad-defcap-explicit-mgr-auto-impl.repl"
    ,"Defmeta mismatch with I: found @managed, expected @managed b")
+  ,(pfx "bad-namespace-upgrade.repl"
+   ,"autonomous")
   ]
   where
     pfx = ("tests/pact/bad/" ++)
