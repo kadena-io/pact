@@ -357,7 +357,7 @@ continuePact i as = case as of
       viewLibState (view rlsPacts) >>= \pacts ->
         case M.lookup pactId pacts of
           Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
-          Just PactExec{..} -> do
+          Just PactExec{} -> do
             evalPactExec .= Nothing
             local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
 

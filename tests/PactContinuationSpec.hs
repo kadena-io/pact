@@ -893,7 +893,7 @@ data CommandResultCheck = CommandResultCheck
 
 
 makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
-makeCheck c@Command{..} expect = CommandResultCheck (cmdToRequestKey c) expect
+makeCheck c@Command{} expect = CommandResultCheck (cmdToRequestKey c) expect
 
 runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
 runAll mgr cmds = runAll' mgr cmds noSPVSupport
