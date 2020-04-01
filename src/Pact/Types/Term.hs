@@ -98,7 +98,7 @@ import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
 import Data.Foldable
-import Data.Functor.Classes (Eq1(..))
+import Data.Functor.Classes -- (Show1(..), Eq1(..))
 import Data.Function
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -383,7 +383,7 @@ data FunApp = FunApp {
     , _faDefType :: !DefType
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
-    } deriving (Show,Eq,Generic)
+    } deriving (Generic)
 instance NFData FunApp
 instance ToJSON FunApp where toJSON = lensyToJSON 3
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
@@ -395,7 +395,7 @@ data Ref' d =
   Direct d |
   -- | Unevaulated/un-reduced term, never a native.
   Ref (Term (Ref' d))
-  deriving (Eq,Show,Functor,Foldable,Traversable,Generic)
+  deriving (Functor,Foldable,Traversable,Generic)
 
 instance NFData d => NFData (Ref' d)
 
@@ -671,12 +671,7 @@ data Def n = Def
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
-deriving instance Show n => Show (Def n)
-deriving instance Eq n => Eq (Def n)
 instance NFData n => NFData (Def n)
-instance Eq n => Ord (Def n) where
-  a `compare` b = nm a `compare` nm b
-    where nm d = (_dModule d, _dDefName d)
 
 instance HasInfo (Def n) where getInfo = _dInfo
 
@@ -808,7 +803,7 @@ data Object n = Object
   , _oObjectType :: !(Type (Term n))
   , _oKeyOrder :: Maybe [FieldKey]
   , _oInfo :: !Info
-  } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
+  } deriving (Functor,Foldable,Traversable,Generic)
 
 instance HasInfo (Object n) where getInfo = _oInfo
 
@@ -948,8 +943,6 @@ data Term n =
     deriving (Functor,Foldable,Traversable,Generic)
 
 
-deriving instance Show n => Show (Term n)
-deriving instance Eq n => Eq (Term n)
 instance NFData n => NFData (Term n)
 
 instance HasInfo (Term n) where
@@ -1214,10 +1207,30 @@ pattern TLitInteger i <- TLiteral (LInteger i) _
 pattern TLitBool :: Bool -> Term t
 pattern TLitBool b <- TLiteral (LBool b) _
 
-
 tLit :: Literal -> Term n
 tLit = (`TLiteral` def)
 {-# INLINE tLit #-}
+
+$( return [] )
+instance Eq n => Ord (Def n) where
+  a `compare` b = nm a `compare` nm b
+    where nm d = (_dModule d, _dDefName d)
+
+deriving instance Show n => Show (Def n)
+deriving instance Eq n => Eq (Def n)
+
+deriving instance Show n => Show (Object n)
+deriving instance Eq n => Eq (Object n)
+
+deriving instance Show n => Show (Term n)
+deriving instance Eq n => Eq (Term n)
+
+deriving instance Eq d => Eq (Ref' d)
+deriving instance Show d => Show (Ref' d)
+
+deriving instance Eq FunApp
+deriving instance Show FunApp
+
 
 -- | Convenience for OverloadedStrings annoyances
 tStr :: Text -> Term n
@@ -1253,7 +1266,41 @@ termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && a
 termEq (TVar a _) (TVar b _) = a == b
 termEq _ _ = False
 
+instance Eq1 Guard where liftEq = $(makeLiftEq ''Guard)
+instance Eq1 UserGuard where liftEq = $(makeLiftEq ''UserGuard)
+instance Eq1 Term where liftEq = $(makeLiftEq ''Term)
+instance Eq1 BindPair where liftEq = $(makeLiftEq ''BindPair)
+instance Eq1 App where liftEq = $(makeLiftEq ''App)
+instance Eq1 BindType where liftEq = $(makeLiftEq ''BindType)
+instance Eq1 ConstVal where liftEq = $(makeLiftEq ''ConstVal)
+instance Eq1 DefcapMeta where liftEq = $(makeLiftEq ''DefcapMeta)
+instance Eq1 DefMeta where liftEq = $(makeLiftEq ''DefMeta)
+instance Eq1 Def where liftEq = $(makeLiftEq ''Def)
+instance Eq1 ModuleDef where liftEq = $(makeLiftEq ''ModuleDef)
+instance Eq1 Module where liftEq = $(makeLiftEq ''Module)
+instance Eq1 Governance where liftEq = $(makeLiftEq ''Governance)
+instance Eq1 ObjectMap where liftEq = $(makeLiftEq ''ObjectMap)
+instance Eq1 Object where liftEq = $(makeLiftEq ''Object)
+instance Eq1 Step where liftEq = $(makeLiftEq ''Step)
 
+instance Show1 Guard where liftShowsPrec = $(makeLiftShowsPrec ''Guard)
+instance Show1 UserGuard where liftShowsPrec = $(makeLiftShowsPrec ''UserGuard)
+instance Show1 Term where liftShowsPrec = $(makeLiftShowsPrec ''Term)
+instance Show1 BindPair where liftShowsPrec = $(makeLiftShowsPrec ''BindPair)
+instance Show1 App where liftShowsPrec = $(makeLiftShowsPrec ''App)
+instance Show1 ObjectMap where liftShowsPrec = $(makeLiftShowsPrec ''ObjectMap)
+instance Show1 Object where liftShowsPrec = $(makeLiftShowsPrec ''Object)
+instance Show1 BindType where liftShowsPrec = $(makeLiftShowsPrec ''BindType)
+instance Show1 ConstVal where liftShowsPrec = $(makeLiftShowsPrec ''ConstVal)
+instance Show1 DefcapMeta where liftShowsPrec = $(makeLiftShowsPrec ''DefcapMeta)
+instance Show1 DefMeta where liftShowsPrec = $(makeLiftShowsPrec ''DefMeta)
+instance Show1 Def where liftShowsPrec = $(makeLiftShowsPrec ''Def)
+instance Show1 ModuleDef where liftShowsPrec = $(makeLiftShowsPrec ''ModuleDef)
+instance Show1 Module where liftShowsPrec = $(makeLiftShowsPrec ''Module)
+instance Show1 Governance where liftShowsPrec = $(makeLiftShowsPrec ''Governance)
+instance Show1 Step where liftShowsPrec = $(makeLiftShowsPrec ''Step)
+
+makeLenses ''Step
 makeLenses ''Term
 makeLenses ''Namespace
 makeLenses ''FunApp
@@ -1267,42 +1314,7 @@ makeLenses ''Def
 makePrisms ''DefType
 makeLenses ''Object
 makeLenses ''BindPair
-makeLenses ''Step
 makeLenses ''ModuleHash
-
-deriveEq1 ''Guard
-deriveEq1 ''UserGuard
-deriveEq1 ''Term
-deriveEq1 ''BindPair
-deriveEq1 ''App
-deriveEq1 ''BindType
-deriveEq1 ''ConstVal
-deriveEq1 ''DefcapMeta
-deriveEq1 ''DefMeta
-deriveEq1 ''Def
-deriveEq1 ''ModuleDef
-deriveEq1 ''Module
-deriveEq1 ''Governance
-deriveEq1 ''ObjectMap
-deriveEq1 ''Object
-deriveEq1 ''Step
-
-deriveShow1 ''Guard
-deriveShow1 ''UserGuard
-deriveShow1 ''Term
-deriveShow1 ''BindPair
-deriveShow1 ''App
-deriveShow1 ''ObjectMap
-deriveShow1 ''Object
-deriveShow1 ''BindType
-deriveShow1 ''ConstVal
-deriveShow1 ''DefcapMeta
-deriveShow1 ''DefMeta
-deriveShow1 ''Def
-deriveShow1 ''ModuleDef
-deriveShow1 ''Module
-deriveShow1 ''Governance
-deriveShow1 ''Step
 
 -- | Demonstrate Term/Bound JSON marshalling with nested bound and free vars.
 _roundtripJSON :: String

@@ -1,10 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Type
@@ -36,6 +36,7 @@ module Pact.Types.Type
 
 import Data.Eq.Deriving
 import Text.Show.Deriving
+import Data.Functor.Classes
 
 import Control.Applicative
 import Control.Lens hiding ((.=))
@@ -369,11 +370,20 @@ makeLenses ''Arg
 makeLenses ''TypeVar
 makeLenses ''TypeVarName
 
-deriveShow1 ''TypeVar
-deriveShow1 ''Arg
-deriveShow1 ''FunType
-deriveShow1 ''Type
-deriveEq1 ''TypeVar
-deriveEq1 ''Arg
-deriveEq1 ''FunType
-deriveEq1 ''Type
+instance Show1 Arg where
+    liftShowsPrec = $(makeLiftShowsPrec ''Arg)
+instance Show1 Type where
+    liftShowsPrec = $(makeLiftShowsPrec ''Type)
+instance Show1 TypeVar where
+    liftShowsPrec = $(makeLiftShowsPrec ''TypeVar)
+instance Show1 FunType where
+    liftShowsPrec = $(makeLiftShowsPrec ''FunType)
+
+instance Eq1 FunType where
+    liftEq = $(makeLiftEq ''FunType)
+instance Eq1 Arg where
+    liftEq = $(makeLiftEq ''Arg)
+instance Eq1 TypeVar where
+    liftEq = $(makeLiftEq ''TypeVar)
+instance Eq1 Type where
+    liftEq = $(makeLiftEq ''Type)
