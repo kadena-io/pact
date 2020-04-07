@@ -12,7 +12,7 @@ extra-deps:
   - sbv-8.6
 
   # --- Forced Upgrades --- #
-  - neat-interpolation-0.5.1
+  - neat-interpolation-0.3.2.6
 
   # --- Forced Downgrades --- #
   - prettyprinter-1.6.0
