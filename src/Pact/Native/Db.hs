@@ -287,7 +287,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
   let argsToReduce = [table',key',defaultRow']
   (!g0,!tkd) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tkd of
-    [table@TTable {..}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
+    [table@TTable {}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
       guardTable fi table GtWithDefaultRead
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
@@ -301,7 +301,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
   let argsToReduce = [table',key']
   (!g0,!tk) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tk of
-    [table@TTable {..},TLitString key] -> do
+    [table@TTable {},TLitString key] -> do
       guardTable fi table GtWithRead
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
@@ -316,7 +316,7 @@ bindToRow ps bd b (ObjectMap row) =
   bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
 
 keys' :: GasRNativeFun e
-keys' g i [table@TTable {..}] =
+keys' g i [table@TTable {}] =
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
       guardTable i table GtKeys
@@ -325,7 +325,7 @@ keys' _ i as = argsError i as
 
 
 txids' :: GasRNativeFun e
-txids' g i [table@TTable {..},TLitInteger key] = do
+txids' g i [table@TTable {},TLitInteger key] = do
   checkNonLocalAllowed i
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyInteger def) . map toTerm) $ do
@@ -334,7 +334,7 @@ txids' g i [table@TTable {..},TLitInteger key] = do
 txids' _ i as = argsError i as
 
 txlog :: GasRNativeFun e
-txlog g i [table@TTable {..},TLitInteger tid] = do
+txlog g i [table@TTable {},TLitInteger tid] = do
   checkNonLocalAllowed i
   gasPostReads i g (toTList TyAny def . map txlogToObj) $ do
       guardTable i table GtTxLog

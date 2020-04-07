@@ -167,7 +167,7 @@ checkManaged
   -> UserCapability
   -> Def Ref
   -> Eval e (Maybe [UserCapability])
-checkManaged i (applyF,installF) cap@SigCapability{..} cdef = case _dDefMeta cdef of
+checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef of
   Nothing -> return Nothing
   Just (DMDefcap dcm) -> use (evalCapabilities . capManaged) >>= go dcm . S.toList
   where

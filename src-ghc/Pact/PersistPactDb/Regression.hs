@@ -56,15 +56,15 @@ runRegression p = do
       usert = UserTables user1
       toPV :: ToTerm a => a -> PactValue
       toPV = toPactValueLenient . toTerm'
-  createUserTable' v user1 "someModule"
+  createUserTable' v user1 "free.some-Module"
   assertEquals' "output of commit 2"
     [TxLog "SYS_usertables" "user1" $
-     object [ ("utModule" .= object [ ("name" .= String "someModule"), ("namespace" .= Null)])
+     object [ ("utModule" .= object [ ("name" .= String "some-Module"), ("namespace" .= String "free")])
             ]
      ]
     (commit v)
   void $ begin v
-  assertEquals' "user table info correct" "someModule" $ _getUserTableInfo pactdb user1 v
+  assertEquals' "user table info correct" "free.some-Module" $ _getUserTableInfo pactdb user1 v
   let row = ObjectMap $ M.fromList [("gah",PLiteral (LDecimal 123.454345))]
   _writeRow pactdb Insert usert "key1" row v
   assertEquals' "user insert" (Just row) (_readRow pactdb usert "key1" v)
