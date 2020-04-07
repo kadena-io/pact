@@ -145,8 +145,6 @@ expToPreProp = \case
     pretty SPropRead <> " must specify a time ('before or 'after). example: " <>
     "(= result (read accounts user 'before))"
 
-  exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
-    "Property object access must use a static string or symbol"
   exp@(BraceList exps) ->
     let go (keyExp : Colon' : valExp : rest) = Map.insert
           <$> case keyExp of

@@ -349,7 +349,7 @@ data AST n =
 instance Pretty t => Pretty (AST t) where
   pretty a = case a of
      Prim {..} -> sep [ pn, equals, pretty _aPrimValue ]
-     Var {..} -> pn
+     Var {} -> pn
      Object {..} -> sep
        [ pn
        , pretty _aObject
@@ -373,7 +373,7 @@ instance Pretty t => Pretty (AST t) where
        , indent 2 $ parensSep [ indent 2 $ vsep $ map pretty _aAppArgs ]
        , indent 2 $ pretty _aAppFun
        ]
-     Table {..} -> pn
+     Table {} -> pn
      Step {..} ->
        let rb x = case _aRollback of
                   Nothing -> x

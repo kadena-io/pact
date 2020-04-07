@@ -100,7 +100,7 @@ runPipedRepl :: ReplState -> Handle -> IO (Either () (Term Name))
 runPipedRepl = runPipedRepl' False
 
 runPipedRepl' :: Bool -> ReplState -> Handle -> IO (Either () (Term Name))
-runPipedRepl' p s@ReplState{..} h =
+runPipedRepl' p s@ReplState{} h =
     evalStateT (useReplLib >> pipeLoop p h Nothing) s
 
 initReplState :: MonadIO m => ReplMode -> Maybe String -> m ReplState

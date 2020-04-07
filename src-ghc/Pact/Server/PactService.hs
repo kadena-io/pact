@@ -53,7 +53,7 @@ initPactService CommandConfig {..} loggers spv = do
       blockTime = 0
       prevBlockHash = ""
 
-  let mkCEI p@PactDbEnv {..} = do
+  let mkCEI p@PactDbEnv {} = do
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface

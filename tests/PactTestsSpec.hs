@@ -70,7 +70,7 @@ runScript fp = describe fp $ do
 
 runBadScript :: String -> SpecWith ()
 runBadScript fp = describe ("bad-" ++ fp) $ do
-  (r,ReplState{..}) <- runIO $ execScript' Quiet fp
+  (r,ReplState{}) <- runIO $ execScript' Quiet fp
   let expectedError = M.lookup fp badErrors
   it "has error in badErrors" $ expectedError `shouldSatisfy` isJust
   it ("failed as expected: " ++ show expectedError) $
