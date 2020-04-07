@@ -1211,10 +1211,10 @@ tLit :: Literal -> Term n
 tLit = (`TLiteral` def)
 {-# INLINE tLit #-}
 
-$( return [] )
 instance Eq n => Ord (Def n) where
   a `compare` b = nm a `compare` nm b
     where nm d = (_dModule d, _dDefName d)
+  {-# INLINE compare #-}
 
 deriving instance Show n => Show (Def n)
 deriving instance Eq n => Eq (Def n)
@@ -1265,6 +1265,11 @@ termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && a
   where argEq = liftEq (liftEq termEq)
 termEq (TVar a _) (TVar b _) = a == b
 termEq _ _ = False
+
+-- This template splice forces GHC to start a new top-level group. This is needed to
+-- break cylces in dependencies between TH generated instances.
+--
+$( return [] )
 
 instance Eq1 Guard where liftEq = $(makeLiftEq ''Guard)
 instance Eq1 UserGuard where liftEq = $(makeLiftEq ''UserGuard)
