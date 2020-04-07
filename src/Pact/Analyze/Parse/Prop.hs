@@ -145,8 +145,6 @@ expToPreProp = \case
     pretty SPropRead <> " must specify a time ('before or 'after). example: " <>
     "(= result (read accounts user 'before))"
 
-  exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
-    "Property object access must use a static string or symbol"
   exp@(BraceList exps) ->
     let go (keyExp : Colon' : valExp : rest) = Map.insert
           <$> case keyExp of
@@ -593,13 +591,13 @@ inferPreProp preProp = case preProp of
       _ -> throwErrorIn preProp $
         "can't infer the types of the arguments to " <> pretty opName
 
-  PreApp s [lst] | s == SReverse -> do
-    Some (SList ty) lst' <- inferPreProp lst
-    pure $ Some (SList ty) $ CoreProp $ ListReverse ty lst'
+  PreApp s [lst] | s == SReverse -> inferPreProp lst >>= \case
+    Some (SList ty) lst' -> pure $ Some (SList ty) $ CoreProp $ ListReverse ty lst'
+    _ -> empty
 
-  PreApp s [lst] | s == SSort -> do
-    Some (SList ty) lst' <- inferPreProp lst
-    pure $ Some (SList ty) $ CoreProp $ ListSort ty lst'
+  PreApp s [lst] | s == SSort -> inferPreProp lst >>= \case
+    Some (SList ty) lst' -> pure $ Some (SList ty) $ CoreProp $ ListSort ty lst'
+    _ -> empty
 
   PreApp s [index, lstOrObj] | s == SListTake {- == SObjectDrop -} -> do
     Some ty lstOrObj' <- inferPreProp lstOrObj
@@ -650,8 +648,10 @@ inferPreProp preProp = case preProp of
     asum
       [ do haystack' <- checkPreProp SStr haystack
            pure $ Some SBool $ CoreProp $ StrContains needle' haystack'
-      , do Some objTy@SObject{} obj <- inferPreProp haystack
-           pure $ Some SBool $ CoreProp $ ObjContains objTy needle' obj
+      , inferPreProp haystack >>= \case
+          Some objTy@SObject{} obj ->
+            pure $ Some SBool $ CoreProp $ ObjContains objTy needle' obj
+          _ -> empty
       ]
 
   PreApp s [arg] | s == STypeof -> do

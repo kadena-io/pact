@@ -1,0 +1,14 @@
+(begin-tx)
+(env-data { "k": ["k"]})
+(env-keys ["k"])
+(define-namespace 'ns (read-keyset 'k) (read-keyset 'k))
+(namespace 'ns)
+(module foo AUTONOMOUS
+  (defcap AUTONOMOUS () (enforce false 'autonomous)))
+(commit-tx)
+
+(begin-tx)
+(namespace 'ns)
+;; following should fail, as ns.foo is non-upgradeable
+(module foo AUTONOMOUS
+  (defcap AUTONOMOUS () (enforce true "wheee")))

@@ -70,7 +70,7 @@ runScript fp = describe fp $ do
 
 runBadScript :: String -> SpecWith ()
 runBadScript fp = describe ("bad-" ++ fp) $ do
-  (r,ReplState{..}) <- runIO $ execScript' Quiet fp
+  (r,ReplState{}) <- runIO $ execScript' Quiet fp
   let expectedError = M.lookup fp badErrors
   it "has error in badErrors" $ expectedError `shouldSatisfy` isJust
   it ("failed as expected: " ++ show expectedError) $
@@ -104,6 +104,8 @@ badErrors = M.fromList
    ,"invalid namespace name format")
   ,(pfx "bad-defcap-explicit-mgr-auto-impl.repl"
    ,"Defmeta mismatch with I: found @managed, expected @managed b")
+  ,(pfx "bad-namespace-upgrade.repl"
+   ,"autonomous")
   ]
   where
     pfx = ("tests/pact/bad/" ++)

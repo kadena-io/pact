@@ -156,7 +156,7 @@ decomposeManaged' idx cap@SigCapability{..} = case decomposeManaged idx cap of
 
 -- | Match static value to managed.
 matchManaged :: ManagedCapability UserCapability -> UserCapability -> Bool
-matchManaged ManagedCapability{..} cap@SigCapability{..} = case _mcManaged of
+matchManaged ManagedCapability{..} cap@SigCapability{} = case _mcManaged of
   Left {} -> _mcStatic == cap
   Right UserManagedCap{..} -> case decomposeManaged' _umcManageParamIndex cap of
     Nothing -> False

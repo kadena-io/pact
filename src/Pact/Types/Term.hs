@@ -1188,10 +1188,10 @@ typeof t = case t of
       TModule {} -> Left "module"
       TList {..} -> Right $ TyList _tListType
       TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
-      TNative {..} -> Left "defun"
+      TNative {} -> Left "defun"
       TConst {..} -> Left $ "const:" <> _aName _tConstArg
-      TApp {..} -> Left "app"
-      TVar {..} -> Left "var"
+      TApp {} -> Left "app"
+      TVar {} -> Left "var"
       TBinding {..} -> case _tBindType of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt def

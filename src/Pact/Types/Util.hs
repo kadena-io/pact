@@ -4,7 +4,6 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -38,7 +37,7 @@ module Pact.Types.Util
   , modifyMVar', modifyingMVar, useMVar
   -- | Miscellany
   , tShow, maybeDelim
-  , failMaybe, maybeToEither
+  , maybeToEither
   -- | Wrapping utilities
   , rewrap, rewrapping, wrap, unwrap
   -- | Arbitrary generator utils
@@ -63,7 +62,6 @@ import Data.Text.Encoding
 import Control.Applicative ((<|>))
 import Control.Concurrent
 import Control.Lens hiding (Empty)
-import Control.Monad.Fail (MonadFail)
 import Test.QuickCheck hiding (Result, Success)
 
 import Pact.Types.Parser (style, symbols)
@@ -138,7 +136,11 @@ toB64UrlUnpaddedText :: ByteString -> Text
 toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 
 fromB64UrlUnpaddedText :: ByteString -> Either String Text
-fromB64UrlUnpaddedText = fmap decodeUtf8 . decodeBase64UrlUnpadded
+fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
+  Right bs' -> case decodeUtf8' bs' of
+    Left _ -> Left $ "Base64URL decode failed: invalid unicode"
+    Right t -> Right t
+  Left e -> Left $ "Base64URL decode failed: " ++ e
 
 parseB16JSON :: Value -> Parser ByteString
 parseB16JSON = withText "Base16" parseB16Text
@@ -158,9 +160,6 @@ toB16JSON s = String $ toB16Text s
 
 toB16Text :: ByteString -> Text
 toB16Text s = decodeUtf8 $ B16.encode s
-
-failMaybe :: MonadFail m => String -> Maybe a -> m a
-failMaybe err m = maybe (fail err) return m
 
 maybeToEither :: String -> Maybe a -> Either String a
 maybeToEither err Nothing = Left err

@@ -162,7 +162,7 @@ installSigCap SigCapability{..} cdef = do
     NewlyInstalled mc -> return mc
     _ -> evalError' cdef "Unexpected result from managed sig cap install"
   where
-    mkApp d@Def{..} as =
+    mkApp d@Def{} as =
       App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
           (map liftTerm as) (getInfo d)
 
@@ -179,7 +179,7 @@ requireCapability =
   "Specifies and tests for existing grant of CAPABILITY, failing if not found in environment."
   where
     requireCapability' :: NativeFun e
-    requireCapability' i [TApp a@App{..} _] = gasUnreduced i [] $ do
+    requireCapability' i [TApp a@App{} _] = gasUnreduced i [] $ do
       (cap,_,_) <- appToCap a
       granted <- capabilityAcquired cap
       unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap

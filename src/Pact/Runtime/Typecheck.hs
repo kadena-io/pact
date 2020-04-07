@@ -121,19 +121,22 @@ typecheckTerm i spec t = do
                -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
     paramCheck TyAny _ _ = tcOK -- no spec
     paramCheck pspec pty check
-      | pspec == pty = tcOK -- equality OK
+      | pspec `canUnifyWith` pty = tcOK -- equality OK
       | otherwise = do
           -- run check function to get actual content type
           checked <- check pspec
           -- final check expects full match with toplevel 'spec'
-          if checked == spec then tcOK else tcFail checked
+          if spec `canUnifyWith` checked then tcOK else tcFail checked
 
     -- | infer list value type
     checkList es lty = return $ TyList $
                     case nub (map typeof $ V.toList es) of
                       [Right a] -> a -- uniform value type: return it
                       [] -> lty -- empty: return specified
-                      _ -> TyAny -- otherwise untyped
+                      ltys -> if all isGuard ltys then TyPrim (TyGuard Nothing) else TyAny
+
+    isGuard (Right (TyPrim TyGuard {})) = True
+    isGuard _ = False
 
   case (spec,ty,t) of
     (_,_,_) | spec == ty -> tcOK -- identical types always OK
@@ -148,11 +151,7 @@ typecheckTerm i spec t = do
     -- check object
     (TySchema TyObject ospec specPartial,TySchema TyObject oty _,TObject {..}) ->
       paramCheck ospec oty (checkUserType specPartial i (_oObject _tObject))
-    (TyPrim (TyGuard a),TyPrim (TyGuard b),_) -> case (a,b) of
-      (Nothing,Just _) -> tcOK
-      (Just _,Nothing) -> tcOK
-      (c,d) -> if c == d then tcOK else tcFail ty
-    _ -> tcFail ty
+    _ -> if spec `canUnifyWith` ty then tcOK else tcFail ty
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
 -- Total flag allows for partial row types if False.

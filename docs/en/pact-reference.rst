@@ -253,7 +253,7 @@ Public meta
 
    name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
    type: integer         # Platform will validate time as within some range of network time.
-   required: false
+   required: true
 
 .. _exec-payload:
 
@@ -1787,6 +1787,10 @@ module as the main “user data access API”.
 
 See also `module guards <#module-guards>`__ for how this concept can be
 leveraged to protect more than just tables.
+
+Note that as of Pact 3.5, the option has been added to selectively allow
+unguarded reads and transaction history access in local mode only, at
+the discretion of the node operator.
 
 .. _rowlevelkeysets:
 
