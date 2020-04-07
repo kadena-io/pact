@@ -98,7 +98,7 @@ import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
 import Data.Foldable
-import Data.Functor.Classes -- (Show1(..), Eq1(..))
+import Data.Functor.Classes
 import Data.Function
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
