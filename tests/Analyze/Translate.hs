@@ -1,8 +1,15 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+#if __GLASGOW_HASKELL__ >= 810
+{-# options_ghc -fmax-pmcheck-models=100000000 #-}
+#else
 {-# options_ghc -fmax-pmcheck-iterations=100000000 #-}
+#endif
+
 module Analyze.Translate where
 
 import           Control.Lens              hiding (op, (...))

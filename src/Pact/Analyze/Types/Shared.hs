@@ -832,7 +832,7 @@ type family ConcreteList (a :: [Ty]) where
 --
 --     SingTy a <--- sing ---- SingI a
 withSing :: SingTy a -> (SingI a => b) -> b
-withSing = withDict . singMkSing where
+withSing a = withDict $ singMkSing a where
 
     singMkSing :: SingTy a -> Dict (SingI a)
     singMkSing = \case
@@ -851,7 +851,7 @@ withSing = withDict . singMkSing where
     withHListDict (SCons _k _ty tys) f = withHListDict tys f
 
 withEq :: SingTy a -> (Eq (Concrete a) => b) -> b
-withEq = withDict . singMkEq
+withEq a = withDict $ singMkEq a
   where
 
     singMkEq :: SingTy a -> Dict (Eq (Concrete a))
@@ -869,7 +869,7 @@ withEq = withDict . singMkEq
         -> withEq ty' $ withDict (singMkEq (SObjectUnsafe (SingList tys))) Dict
 
 withOrd :: SingTy a -> (Ord (Concrete a) => b) -> b
-withOrd = withDict . singMkOrd
+withOrd a = withDict $ singMkOrd a
   where
 
     singMkOrd :: SingTy a -> Dict (Ord (Concrete a))
@@ -887,7 +887,7 @@ withOrd = withDict . singMkOrd
         -> withOrd ty' $ withDict (singMkOrd (SObjectUnsafe (SingList tys))) Dict
 
 withShow :: SingTy a -> (Show (Concrete a) => b) -> b
-withShow = withDict . singMkShow
+withShow a = withDict $ singMkShow a
   where
 
     singMkShow :: SingTy a -> Dict (Show (Concrete a))
@@ -905,7 +905,7 @@ withShow = withDict . singMkShow
         -> withShow ty' $ withDict (singMkShow (SObjectUnsafe (SingList tys))) Dict
 
 withPretty :: SingTy a -> (Pretty (Concrete a) => b) -> b
-withPretty = withDict . singMkPretty
+withPretty a = withDict $ singMkPretty a
   where
 
     singMkPretty :: SingTy a -> Dict (Pretty (Concrete a))
@@ -924,7 +924,7 @@ withPretty = withDict . singMkPretty
            withDict (singMkPretty (SObjectUnsafe (SingList tys))) Dict
 
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
-withTypeable = withDict . singMkTypeable
+withTypeable a = withDict $ singMkTypeable a
   where
 
     singMkTypeable :: SingTy a -> Dict (Typeable a, Typeable (Concrete a))
@@ -950,7 +950,7 @@ withTypeable = withDict . singMkTypeable
       = withTypeableListDict tys $ withTypeable ty f
 
 withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
-withSMTValue = withDict . singMkSMTValue
+withSMTValue a = withDict $ singMkSMTValue a
   where
 
     singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
@@ -969,7 +969,7 @@ withSMTValue = withDict . singMkSMTValue
            withDict (singMkSMTValue (SObjectUnsafe (SingList tys))) Dict
 
 withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
-withHasKind = withDict . singMkHasKind
+withHasKind a = withDict $ singMkHasKind a
   where
 
     singMkHasKind :: SingTy a -> Dict (HasKind (Concrete a))
@@ -1002,7 +1002,7 @@ instance
     Just (a, Object as) -> Just $ Object $ SCons SSymbol (Column sing a) as
 
 withSymVal :: SingTy a -> (SymVal (Concrete a) => b) -> b
-withSymVal = withDict . singMkSymVal
+withSymVal a = withDict $ singMkSymVal a
   where
 
     singMkSymVal :: SingTy a -> Dict (SymVal (Concrete a))
