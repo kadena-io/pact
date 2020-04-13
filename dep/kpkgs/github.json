@@ -1,8 +1,8 @@
 {
   "owner": "kadena-io",
   "repo": "kpkgs",
-  "branch": "colin/uppin-pact-deps",
+  "branch": "master",
   "private": false,
-  "rev": "4d23ad7a2d73f5eb8751cace06e6064a0f8651d4",
-  "sha256": "0xcw7y6yvplg8mzxs47vv137641bkglvpjaym01hbcq2wvr64dk1"
+  "rev": "f0e8d1a21d5632a8ad7e8a9bbb94b0f7d4340274",
+  "sha256": "09nnniljjvbf811m0a92dg47pz79yix8hvfajbzklwavf1fffv24"
 }
