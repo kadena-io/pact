@@ -177,8 +177,9 @@ jobs:
     - name: Prepare artifacts
       shell: bash
       run: |
+        export VER=$(grep '^version' pact.cabal | sed -e 's/.*: *//')
         mkdir -p dist-newstyle/artifacts/applications
-        cp dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-*/x/pact/build/pact/pact dist-newstyle/artifacts/applications
+        cp dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-${VER}/x/pact/build/pact/pact dist-newstyle/artifacts/applications
     - name: Publish applications
       uses: actions/upload-artifact@v1
       with:
