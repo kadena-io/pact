@@ -12,8 +12,8 @@ extra-deps:
   - sbv-8.6
 
   # --- Forced Downgrades --- #
-  - megaparsec-7.0.5
-  - prettyprinter-1.6.0
+  - neat-interpolation-0.3.2.6  # >= 0.4 changes gas model output
+  - prettyprinter-1.6.0         # >= 1.6.1 breaks bin compat in Chainweb blocks
 
   # --- Custom Pins --- #
   - git: https://github.com/kadena-io/thyme.git

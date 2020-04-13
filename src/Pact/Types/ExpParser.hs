@@ -82,7 +82,7 @@ instance Stream Cursor where
   chunkToTokens Proxy = id
   chunkLength Proxy = length
   chunkEmpty Proxy = null
-  reachOffset _ ps = (pstateSourcePos ps,"reachOffset-unsupported",ps)
+  reachOffset _ ps = ("reachOffset-unsupported",ps)
   -- ^ assuming this is unused (undefined passed unit tests), but
   -- if the unsupported shows up then we need something better
   showTokens Proxy ts = renderCompactString $ toList ts
@@ -197,7 +197,7 @@ pTokenEpsilon :: forall e s m a. Stream s
   => (Token s -> Maybe a)
   -> S.Set (ErrorItem (Token s))
   -> ParsecT e s m a
-pTokenEpsilon test ps = ParsecT $ \s@(State input o pst) _ _ eok eerr ->
+pTokenEpsilon test ps = ParsecT $ \s@(State input o pst _) _ _ eok eerr ->
   case take1_ input of
     Nothing ->
       let us = pure EndOfInput
@@ -207,9 +207,9 @@ pTokenEpsilon test ps = ParsecT $ \s@(State input o pst) _ _ eok eerr ->
         Nothing ->
           let us = (Just . Tokens . nes) c
           in eerr (TrivialError o us ps)
-                  (State input o pst)
+                  (State input o pst [])
         Just x ->
-          eok x (State cs (o + 1) pst) mempty -- this is only change from 'pToken'
+          eok x (State cs (o + 1) pst []) mempty -- this is only change from 'pToken'
 -- {-# INLINE pToken #-}
 
 -- | Call commit continuation with current state.

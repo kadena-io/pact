@@ -86,8 +86,8 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
     adminKeys <- genKeys
     let makeExecCmdWith = makeExecCmd adminKeys
 
-    moduleCmd <- makeExecCmdWith (unpack (threeStepPactCode "nestedPact"))
-    nestedExecPactCmd <- makeExecCmdWith ("(nestedPact.tester)" ++ " (nestedPact.tester)")
+    moduleCmd <- makeExecCmdWith (threeStepPactCode "nestedPact")
+    nestedExecPactCmd <- makeExecCmdWith ("(nestedPact.tester)" <> " (nestedPact.tester)")
     allResults <- runAll mgr [moduleCmd, nestedExecPactCmd]
 
     runResults allResults $ do
@@ -134,8 +134,8 @@ testCorrectNextStep mgr = do
   let moduleName = "testCorrectNextStep"
   adminKeys <- genKeys
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd       <- makeExecCmdWith (unpack (threeStepPactCode moduleName))
-  executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd       <- makeExecCmdWith (threeStepPactCode moduleName)
+  executePactCmd  <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contNextStepCmd <- makeContCmdWith 1 "test3"
@@ -149,16 +149,14 @@ testCorrectNextStep mgr = do
     checkStateCmd `failsWith` stepMisMatchMsg False 1 1
 
 
-threeStepPactCode :: String -> T.Text
-threeStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
-     where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
-            (module|]
-           endCode = [text| 'k
+threeStepPactCode :: T.Text -> T.Text
+threeStepPactCode moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module $moduleName 'k
               (defpact tester ()
                 (step "step 0")
                 (step "step 1")
-                (step "step 2")))
-              |]
+                (step "step 2"))) |]
 
 
 
@@ -169,8 +167,8 @@ testIncorrectNextStep mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd         <- makeExecCmdWith (unpack (threeStepPactCode moduleName))
-  executePactCmd    <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd         <- makeExecCmdWith (threeStepPactCode moduleName)
+  executePactCmd    <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   incorrectStepCmd  <- makeContCmdWith 2 "test3"
@@ -190,8 +188,8 @@ testLastStep mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (unpack (threeStepPactCode moduleName))
-  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd        <- makeExecCmdWith (threeStepPactCode moduleName)
+  executePactCmd   <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contNextStep1Cmd <- makeContCmdWith 1 "test3"
@@ -216,8 +214,8 @@ testErrStep mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (unpack (errorStepPactCode moduleName))
-  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd        <- makeExecCmdWith (errorStepPactCode moduleName)
+  executePactCmd   <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contErrStepCmd   <- makeContCmdWith 1 "test3"
@@ -231,16 +229,14 @@ testErrStep mgr = do
     checkStateCmd `failsWith` stepMisMatchMsg False 2 0
 
 
-errorStepPactCode :: String -> T.Text
-errorStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
-     where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
-                          (module|]
-           endCode = [text| 'k
-              (defpact tester ()
-                (step "step 0")
-                (step (+ "will throw error in step 1"))
-                (step "step 2")))
-              |]
+errorStepPactCode :: T.Text -> T.Text
+errorStepPactCode moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module $moduleName 'k
+               (defpact tester ()
+                 (step "step 0")
+                 (step (+ "will throw error in step 1"))
+             (step "step 2")))|]
 
 -- ROLLBACK TESTS
 
@@ -269,8 +265,8 @@ testCorrectRollbackStep mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd       <- makeExecCmdWith (unpack (pactWithRollbackCode moduleName))
-  executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd       <- makeExecCmdWith (pactWithRollbackCode moduleName)
+  executePactCmd  <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
       makeContCmdWithRollback = makeContCmd adminKeys True Null executePactCmd
@@ -290,15 +286,14 @@ testCorrectRollbackStep mgr = do
 
 
 
-pactWithRollbackCode :: String -> T.Text
-pactWithRollbackCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
-  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
-                       (module|]
-        endCode = [text| 'k
-            (defpact tester ()
-              (step-with-rollback "step 0" "rollback 0")
-              (step-with-rollback "step 1" "rollback 1")
-              (step               "step 2")))
+pactWithRollbackCode :: T.Text -> T.Text
+pactWithRollbackCode moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module $moduleName 'k
+               (defpact tester ()
+                 (step-with-rollback "step 0" "rollback 0")
+                 (step-with-rollback "step 1" "rollback 1")
+                 (step               "step 2")))
             |]
 
 
@@ -308,8 +303,8 @@ testIncorrectRollbackStep mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd       <- makeExecCmdWith (unpack (pactWithRollbackCode moduleName))
-  executePactCmd  <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd       <- makeExecCmdWith (pactWithRollbackCode moduleName)
+  executePactCmd  <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
       makeContCmdWithRollback = makeContCmd adminKeys True Null executePactCmd
@@ -333,8 +328,8 @@ testRollbackErr mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (unpack (pactWithRollbackErrCode moduleName))
-  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd        <- makeExecCmdWith (pactWithRollbackErrCode moduleName)
+  executePactCmd   <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
       makeContCmdWithRollback = makeContCmd adminKeys True Null executePactCmd
@@ -352,16 +347,14 @@ testRollbackErr mgr = do
     checkStateCmd `succeedsWith` textVal "step 2"
 
 
-pactWithRollbackErrCode :: String -> T.Text
-pactWithRollbackErrCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
-  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
-                       (module|]
-        endCode = [text| 'k
-            (defpact tester ()
-              (step-with-rollback "step 0" "rollback 0")
-              (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
-              (step               "step 2")))
-            |]
+pactWithRollbackErrCode :: T.Text -> T.Text
+pactWithRollbackErrCode moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module $moduleName 'k
+               (defpact tester ()
+                 (step-with-rollback "step 0" "rollback 0")
+                 (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
+                 (step               "step 2")))|]
 
 
 testNoRollbackFunc :: HTTP.Manager -> Expectation
@@ -370,8 +363,8 @@ testNoRollbackFunc mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (unpack (threeStepPactCode moduleName))
-  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd        <- makeExecCmdWith (threeStepPactCode moduleName)
+  executePactCmd   <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
       makeContCmdWithRollback = makeContCmd adminKeys True Null executePactCmd
@@ -414,8 +407,8 @@ testValidYield mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd          <- makeExecCmdWith (unpack (pactWithYield moduleName))
-  executePactCmd     <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")")
+  moduleCmd          <- makeExecCmdWith (pactWithYield moduleName)
+  executePactCmd     <- makeExecCmdWith ("(" <> moduleName <> ".tester \"testing\")")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
                         -- pact takes an input
@@ -434,25 +427,23 @@ testValidYield mgr = do
       pactIdNotFoundMsg executePactCmd
 
 
-pactWithYield :: String -> T.Text
-pactWithYield moduleName = T.concat [begCode, T.pack moduleName, endCode]
-  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
-                       (module|]
-        endCode = [text| 'k
-            (defpact tester (name)
-              (step
-                (let ((result0 (+ name "->Step0")))
-                  (yield { "step0-result": result0})
-                  result0))
-              (step
-                (resume {"step0-result" := res0 }
-                  (let ((result1 (+ res0 "->Step1")))
-                    (yield {"step1-result": result1})
-                    result1)))
-              (step
-                (resume { "step1-result" := res1 }
-                      (+ res1 "->Step2")))))
-            |]
+pactWithYield :: T.Text -> T.Text
+pactWithYield moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module $moduleName 'k
+               (defpact tester (name)
+                 (step
+                   (let ((result0 (+ name "->Step0")))
+                     (yield { "step0-result": result0})
+                     result0))
+                 (step
+                   (resume {"step0-result" := res0 }
+                   (let ((result1 (+ res0 "->Step1")))
+                     (yield {"step1-result": result1})
+                     result1)))
+                 (step
+                   (resume { "step1-result" := res1 }
+                      (+ res1 "->Step2")))))|]
 
 
 testNoYield :: HTTP.Manager -> Expectation
@@ -461,8 +452,8 @@ testNoYield mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd      <- makeExecCmdWith (unpack (pactWithYieldErr moduleName))
-  executePactCmd <- makeExecCmdWith ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
+  moduleCmd      <- makeExecCmdWith (pactWithYieldErr moduleName)
+  executePactCmd <- makeExecCmdWith ("(" <> moduleName <> ".tester \"testing\")") -- pact takes an input
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   noYieldStepCmd <- makeContCmdWith 1 "test3"
@@ -479,21 +470,19 @@ testNoYield mgr = do
     checkStateCmd `failsWith` stepMisMatchMsg False 1 1
 
 
-pactWithYieldErr :: String -> T.Text
-pactWithYieldErr moduleName = T.concat [begCode, T.pack moduleName, endCode]
-  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
-                       (module|]
-        endCode = [text| 'k
-            (defpact tester (name)
-              (step
-                (let ((result0 (+ name "->Step0")))
-                  (yield { "step0-result": result0 })
-                result0))
-              (step "step 1 has no yield")
-              (step
-                (resume { "step0-result" := res0 }
-                      (+ res0 "->Step2")))))
-            |]
+pactWithYieldErr :: T.Text -> T.Text
+pactWithYieldErr moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module $moduleName 'k
+               (defpact tester (name)
+                 (step
+                   (let ((result0 (+ name "->Step0")))
+                    (yield { "step0-result": result0 })
+                    result0))
+                 (step "step 1 has no yield")
+                 (step
+                   (resume { "step0-result" := res0 }
+                      (+ res0 "->Step2")))))|]
 
 
 testResetYield :: HTTP.Manager -> Expectation
@@ -502,8 +491,8 @@ testResetYield mgr = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (unpack (pactWithSameNameYield moduleName))
-  executePactCmd   <- makeExecCmdWith ("(" ++ moduleName ++ ".tester)")
+  moduleCmd        <- makeExecCmdWith (pactWithSameNameYield moduleName)
+  executePactCmd   <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   yieldSameKeyCmd  <- makeContCmdWith 1 "test3"
@@ -522,24 +511,22 @@ testResetYield mgr = do
 
 
 
-pactWithSameNameYield :: String -> T.Text
-pactWithSameNameYield moduleName = T.concat [begCode, T.pack moduleName, endCode]
-  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
-                       (module|]
-        endCode = [text| 'k
-            (defpact tester ()
-              (step
-                (let ((result0 "step 0"))
-                  (yield { "result": result0 })
-                result0))
-              (step
-                (let ((result1 "step 1"))
-                  (yield { "result": result1 })
-                result1))
-              (step
-                (resume { "result" := res }
-                     res)))))
-            |]
+pactWithSameNameYield :: T.Text -> T.Text
+pactWithSameNameYield moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module $moduleName 'k
+               (defpact tester ()
+                 (step
+                   (let ((result0 "step 0"))
+                    (yield { "result": result0 })
+                    result0))
+                 (step
+                   (let ((result1 "step 1"))
+                    (yield { "result": result1 })
+                    result1))
+                 (step
+                   (resume { "result" := res }
+                     res)))))|]
 
 
 testCrossChainYield :: HTTP.Manager -> Expectation
@@ -554,7 +541,7 @@ testCrossChainYield mgr = step0
       adminKeys <- genKeys
 
       let makeExecCmdWith = makeExecCmd adminKeys
-      moduleCmd        <- makeExecCmdWith (unpack pactCrossChainYield)
+      moduleCmd        <- makeExecCmdWith pactCrossChainYield
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
 
       chain0Results <- runAll mgr [moduleCmd,executePactCmd]
@@ -829,9 +816,10 @@ failsWith cmd r = ask >>= liftIO . shouldMatch'
 runResults :: r -> ReaderT r m a -> m a
 runResults rs act = runReaderT act rs
 
-makeExecCmd :: SomeKeyPair -> String -> IO (Command Text)
+makeExecCmd :: SomeKeyPair -> Text -> IO (Command Text)
 makeExecCmd keyPairs code =
-  mkExec code (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing Nothing
+  mkExec (T.unpack code)
+  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing Nothing
 
 
 formatPubKeyForCmd :: SomeKeyPair -> Value
