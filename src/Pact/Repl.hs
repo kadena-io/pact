@@ -205,7 +205,7 @@ pureEval ei e = do
           Just pe -> do
             use (rEnv.eePactDbVar) >>= \mv -> liftIO $ modifyMVar_ mv $ return . over rlsPacts (M.insert (_pePactId pe) pe)
         rEvalState .= es
-        updateForOp a
+        updateForOp ei a
     Left err -> do
         serr <- renderErr err
         if mode == FailureTest || mode == StringEval
@@ -251,8 +251,8 @@ renderErr a
       return $ renderInfo i ++ ":" ++ renderCompactString' (peDoc a)
   | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peDoc a)
 
-updateForOp :: Term Name -> Repl (Either String (Term Name))
-updateForOp a = do
+updateForOp :: Info -> Term Name -> Repl (Either String (Term Name))
+updateForOp i a = do
   mv <- use (rEnv.eePactDbVar)
   mode <- use rMode
   op <- liftIO $ modifyMVar mv $ \v -> return (set rlsOp Noop v,view rlsOp v)
@@ -266,14 +266,15 @@ updateForOp a = do
                     replState <- liftIO $ readMVar mv
                     let verifyUri = _rlsVerifyUri replState
                     (initReplState mode verifyUri >>= put >> void useReplLib)
-                  (a <$) <$> loadFile fp
+                  liftIO $ print a
+                  (a <$) <$> loadFile i fp
     TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)
     Print t -> do
       let rep = case t of TLitString s -> unpack s
                           _ -> show t
       outStrLn HOut rep
       return (Right a)
-    Tx i t n -> doTx i t n
+    Tx ti t n -> doTx ti t n
 
 doTx :: Info -> Tx -> Maybe Text -> Repl (Either String (Term Name))
 doTx i t n = do
@@ -299,8 +300,8 @@ doTx i t n = do
 
 -- | load and evaluate a Pact file.
 -- Track file and use current file to mangle directory as necessary.
-loadFile :: FilePath -> Repl (Either String (Term Name))
-loadFile f = do
+loadFile :: Info -> FilePath -> Repl (Either String (Term Name))
+loadFile i f = do
   curFileM <- use rFile
   let computedPath = case curFileM of
         Nothing -> f -- no current file, just use f
@@ -321,7 +322,10 @@ loadFile f = do
           return r)
          $ \(e :: SomeException) -> do
                restoreFile
-               outStrLn HErr $ "load: file load failed: " ++ f ++ ", " ++ show e
+               pe <- renderErr $
+                 PactError EvalError i def $
+                 "load: file load failed: " <> pretty f <> ", " <> viaShow e
+               outStrLn HErr pe
                return (Left (show e))
 
 out :: ReplMode -> Hdl -> Bool -> String -> Repl ()
@@ -369,7 +373,7 @@ execScript dolog f = do
 execScript' :: ReplMode -> FilePath -> IO (Either String (Term Name),ReplState)
 execScript' m fp = do
   s <- initReplState m Nothing
-  runStateT (useReplLib >> loadFile fp) s
+  runStateT (useReplLib >> loadFile def fp) s
 
 evalReplEval :: Info -> ReplState -> Eval LibState a -> IO (Either PactError (a, ReplState))
 evalReplEval i rs e = do
