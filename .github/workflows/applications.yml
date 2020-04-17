@@ -75,8 +75,7 @@ jobs:
       run: choco install -y -r awscli
 
     # Haskell Setup
-    - name: Set GHC and Cabal version (ubuntu, macOS)
-      if: "!contains(matrix.os, 'windows')"
+    - name: Set GHC and Cabal version
       uses: actions/setup-haskell@c4e863e92fcd479e2fcec8fe81921baa76000fca
       with:
         ghc-version: ${{ matrix.ghc }}
