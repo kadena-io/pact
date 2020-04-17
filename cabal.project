@@ -6,9 +6,6 @@ package pact
 
 debug-info: True
 
-constraints:
-    megaparsec < 8
-
 source-repository-package
     type: git
     location: https://github.com/kadena-io/thyme.git
