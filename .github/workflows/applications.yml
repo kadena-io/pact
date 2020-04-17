@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.6.5', '8.8.2', '8.10.1']
+        ghc: ['8.6.5', '8.8.3', '8.10.1']
         cabal: ['3.2']
         os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-latest', 'windows-latest']
         cabalcache: ['true']
@@ -128,8 +128,9 @@ jobs:
       run: |
         cat >> cabal.project <<EOF
         allow-newer: *
+        package cassava
+          flags: -bytestring--lt-0_10_4
         EOF
-
     - uses: actions/cache@v1
       name: Cache dist-newstyle
       with:
