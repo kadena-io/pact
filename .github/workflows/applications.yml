@@ -23,6 +23,9 @@ jobs:
           ghc: '8.6.5'
         - os: 'macOS-latest'
           ghc: '8.6.5'
+        - os: 'windows-latest'
+          ghc: '8.8.3'
+        # windows builds with ghc-8.8.3 seem to run out of memory on github runners
         include:
         - os: 'windows-latest'
           storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
