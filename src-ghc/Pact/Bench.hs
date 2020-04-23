@@ -21,7 +21,7 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import Data.Text (unpack, pack)
+import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
 
 -- import GHC.Clock
@@ -237,6 +237,7 @@ main = do
   initSchema pureDb
   (benchMod',benchMod) <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
+  !bench10Cmds <- parseCode (intercalate " " (replicate 10 "(bench.bench)"))
   let
     !params = [PLiteral $ LString "Acct1",PLiteral $ LString "Acct2", PLiteral $ LDecimal 1.0]
     !mcaps = [SigCapability (QualifiedName "bench" "MTRANSFER" def) params
@@ -258,6 +259,7 @@ main = do
   initSchema sqliteDb
   void $ loadBenchModule sqliteDb
   void $ runPactExec def "initSqliteDb" signer Null Nothing sqliteDb benchCmd
+  void $ runPactExec def "initSqliteDb" signer Null Nothing sqliteDb bench10Cmds
   mbenchCmd <- parseCode "(bench.mbench)"
   void $ runPactExec def "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
   !round0 <- parseCode "(round 123.456789)"
@@ -293,8 +295,18 @@ main = do
           (runPactExec interpPerf "cached/mockdb" signer Null (Just benchMod') mockDb benchCmd)
         , benchNFIO "mockpersist"
           (runPactExec interpPerf "cached/mockpersist" signer Null (Just benchMod') mockPersistDb benchCmd)
-        , closeSqlEnv $ benchNFIO "sqlite"
+        , benchNFIO "sqlite"
           (runPactExec interpPerf "cached/sqlite" signer Null (Just benchMod') sqliteDb benchCmd)
+        ]
+      , bgroup "cached-10x"
+        [ benchNFIO "puredb"
+          (runPactExec interpPerf "cached/puredb" signer Null (Just benchMod') pureDb bench10Cmds)
+        , benchNFIO "mockdb"
+          (runPactExec interpPerf "cached/mockdb" signer Null (Just benchMod') mockDb bench10Cmds)
+        , benchNFIO "mockpersist"
+          (runPactExec interpPerf "cached/mockpersist" signer Null (Just benchMod') mockPersistDb bench10Cmds)
+        , closeSqlEnv $ benchNFIO "sqlite"
+          (runPactExec interpPerf "cached/sqlite" signer Null (Just benchMod') sqliteDb bench10Cmds)
         ]
       ]
     , bgroup "caps"
