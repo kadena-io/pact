@@ -12,7 +12,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Catch
 
-import Criterion.Main
+import Criterion.Main hiding (env)
 
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -33,6 +33,7 @@ import System.Directory
 import Unsafe.Coerce
 
 import Pact.Compile
+import Pact.Eval (eval)
 import Pact.Gas
 import Pact.Gas.Table
 import Pact.Interpreter
@@ -85,6 +86,25 @@ exps = map (either id (unpack &&& id)) [
   Right "(+ 1 2) (foo.bar true -23.345875)"
   ]
 
+pureExps :: [(String,Text)]
+pureExps = map (unpack &&& id)
+  [ "1"
+  , "1 2"
+  , "[1 2]"
+  , "[1 2 3]"
+  , "{ 'a: 1 }"
+  , "{ 'a: 1, 'b: 2 }"
+  , "(identity 1)"
+  , "(+ 1 2)"
+  , "(+ 1 (+ 1 2))"
+  , "(+ 1 (+ 1 (+ 1 2)))"
+  , "(+ 1 (+ 1 (+ 1 (+ 1 2))))"
+  , "(let ((a 1)) (+ a a))"
+  , "(let ((a 1) (b 2)) (+ a b))"
+  , "(let* ((a 1) (b a)) (+ a b))"
+  , "(bind { 'a: 1 } { 'a := a } a)"
+  ]
+
 benchParse :: Benchmark
 benchParse = bgroup "parse" $ (`map` exps) $
              \(bname,ex) -> bench bname $ (`whnf` ex) $ \e -> case parseExprs e of
@@ -94,6 +114,14 @@ benchParse = bgroup "parse" $ (`map` exps) $
 benchCompile :: [(String,[Exp Parsed])] -> Benchmark
 benchCompile es = bgroup "compile" $ (`map` es) $
   \(bname,exs) -> bench bname $ nf (map (either (error . show) show . compile mkEmptyInfo)) exs
+
+compileExp :: Text -> IO [Term Name]
+compileExp code = do
+  pcs <- _pcExps <$> parseCode code
+  forM pcs $ \pc -> do
+    either (\e -> die "compileExp" $ "compile failed on " ++ show code ++ ": " ++ show e) return $
+      compile mkEmptyInfo pc
+
 
 benchVerify :: [(String,Command ByteString)] -> Benchmark
 benchVerify cs = bgroup "verify" $ (`map` cs) $
@@ -151,6 +179,20 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
   r' <- eitherDie ("runPactExec': " ++ msg) $ fmapL show r
   return $! toJSON $ _erOutput r'
+
+execPure :: PerfTimer -> PactDbEnv e -> (String,[Term Name]) -> IO String
+execPure pt dbEnv (n,ts) = do
+  let md = MsgData Null Nothing pactInitialHash []
+      env = (\ee -> ee { _eePerfTimer = pt }) $ setupEvalEnv dbEnv entity Local md
+            initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def def
+  o <- try $ runEval def env $ mapM eval ts
+  case o of
+    Left (e :: SomeException) -> die "execPure" (n ++ ": " ++ show e)
+    Right rs -> return $!! concatMap show $ fst rs
+
+benchPures :: PerfTimer -> PactDbEnv e -> [(String,[Term Name])] -> Benchmark
+benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
+  \p -> benchNFIO (fst p) $ execPure pt dbEnv p
 
 benchKeySet :: KeySet
 benchKeySet = mkKeySet [PublicKey "benchadmin"] ">"
@@ -252,8 +294,7 @@ main = do
   !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue (benchReadValue benchMod) }
   void $ loadBenchModule mockPersistDb
   void $ runPactExec def "initMockPersistDb" signer Null Nothing mockPersistDb benchCmd
-  cmds_ <- traverse (mkBenchCmd [(keyPair,[])]) exps
-  !cmds <- return $!! cmds_
+  !cmds <- force <$> traverse (mkBenchCmd [(keyPair,[])]) exps
   let sqliteFile = "log/bench.sqlite"
   sqliteDb <- perfEnv "sqlite" dbPerf <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
@@ -264,6 +305,7 @@ main = do
   void $ runPactExec def "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
   !round0 <- parseCode "(round 123.456789)"
   !round4 <- parseCode "(round 123.456789 4)"
+  !pures <- force <$> mapM (mapM compileExp) pureExps
 
 
 
@@ -277,6 +319,7 @@ main = do
     [ benchParse
     , benchCompile parsedExps
     , benchVerify cmds
+    , benchPures fperf mockDb pures
     , bgroup "db"
       [ bgroup "uncached"
         [ benchNFIO "puredb"
