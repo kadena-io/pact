@@ -113,13 +113,13 @@ benchParse = bgroup "parse" $ (`map` exps) $
 
 benchCompile :: [(String,[Exp Parsed])] -> Benchmark
 benchCompile es = bgroup "compile" $ (`map` es) $
-  \(bname,exs) -> bench bname $ nf (map (either (error . show) show . compile mkEmptyInfo)) exs
+  \(bname,exs) -> bench bname $ nf (map (either (error . show) force . compile mkEmptyInfo)) exs
 
 compileExp :: Text -> IO [Term Name]
 compileExp code = do
   pcs <- _pcExps <$> parseCode code
   forM pcs $ \pc -> do
-    either (\e -> die "compileExp" $ "compile failed on " ++ show code ++ ": " ++ show e) return $
+    either (\e -> die "compileExp" $ show code ++ ": " ++ show e) (return $!!) $
       compile mkEmptyInfo pc
 
 
@@ -169,7 +169,8 @@ parseCode m = ParsedCode m <$> eitherDie "parseCode" (parseExprs m)
 benchNFIO :: NFData a => String -> IO a -> Benchmark
 benchNFIO bname = bench bname . nfIO
 
-runPactExec :: PerfTimer -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) -> PactDbEnv e -> ParsedCode -> IO Value
+runPactExec :: PerfTimer -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
+               PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
   let md = MsgData cdata Nothing pactInitialHash ss
       e = (\ee -> ee { _eePerfTimer = pt }) $ setupEvalEnv dbEnv entity Transactional md
@@ -178,9 +179,9 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
         maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
   r' <- eitherDie ("runPactExec': " ++ msg) $ fmapL show r
-  return $! toJSON $ _erOutput r'
+  return $!! _erOutput r'
 
-execPure :: PerfTimer -> PactDbEnv e -> (String,[Term Name]) -> IO String
+execPure :: PerfTimer -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
   let md = MsgData Null Nothing pactInitialHash []
       env = (\ee -> ee { _eePerfTimer = pt }) $ setupEvalEnv dbEnv entity Local md
@@ -188,7 +189,7 @@ execPure pt dbEnv (n,ts) = do
   o <- try $ runEval def env $ mapM eval ts
   case o of
     Left (e :: SomeException) -> die "execPure" (n ++ ": " ++ show e)
-    Right rs -> return $!! concatMap show $ fst rs
+    Right rs -> return $!! fst rs
 
 benchPures :: PerfTimer -> PactDbEnv e -> [(String,[Term Name])] -> Benchmark
 benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
