@@ -68,7 +68,7 @@ in (rp.ghcMusl64.override {
 
           sbv = dontHaddock (dontCheck (callHackageDirect {
             pkg = "sbv";
-            ver = "8.2";
+            ver = "8.6";
             sha256 = "1isa8p9dnahkljwj0kz10119dwiycf11jvzdc934lnjv1spxkc9k";
           }));
 

@@ -7,9 +7,9 @@ cache:
 before_test:
   - "curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-x86_64"
   - "7z x stack.zip stack.exe"
-  - "curl -sS -oz3.zip -L --insecure https://github.com/Z3Prover/z3/releases/download/Z3-4.8.5/z3-4.8.5-x64-win.zip"
+  - "curl -sS -oz3.zip -L --insecure https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-win.zip"
   - "7z x z3.zip -oc:\\z3 -r"
-  - "set PATH=C:\\z3\\z3-4.8.5-x64-win\\bin;%PATH%"
+  - "set PATH=C:\\z3\\z3-4.8.7-x64-win\\bin;%PATH%"
 
 environment:
   global:
