@@ -26,13 +26,9 @@ import           Data.SBV                     (isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
-import           GHC.Stack                    (HasCallStack, withFrozenCallStack)
 import           NeatInterpolation            (text)
 import           Prelude                      hiding (read)
-import           Test.Hspec                   (Spec, describe,
-                                               expectationFailure, it,
-                                               pendingWith, runIO, shouldBe,
-                                               shouldSatisfy)
+import           Test.Hspec
 import qualified Test.HUnit                   as HUnit
 
 import           Pact.Parse                   (parseExprs)
@@ -201,7 +197,7 @@ testEnv = TestEnv (error "no tested code") (Valid Success') "unnamed" $ \case
   Just err
     -> HUnit.assertFailure $ "Verification failure: " ++ show err
 
-expectTest :: TestEnv -> Spec
+expectTest :: HasCallStack => TestEnv -> Spec
 expectTest (TestEnv code check name p) = do
   res <- runIO $ runCheck CheckDefun code check
   it name $ p res
@@ -214,18 +210,18 @@ handlePositiveTestResult = \case
   Just tf -> HUnit.assertFailure =<< renderTestFailure tf
 
 expectVerified :: HasCallStack => Text -> Spec
-expectVerified = withFrozenCallStack $ expectVerified' ""
+expectVerified = expectVerified' ""
 
 expectVerified' :: HasCallStack => Text -> Text -> Spec
-expectVerified' model code = withFrozenCallStack $ do
+expectVerified' model code = do
   res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ handlePositiveTestResult res
 
 expectFalsified :: HasCallStack => Text -> Spec
-expectFalsified = withFrozenCallStack $ expectFalsified' ""
+expectFalsified = expectFalsified' ""
 
 expectFalsifiedMessage :: HasCallStack => Text -> Text -> Spec
-expectFalsifiedMessage code needleMsg = withFrozenCallStack $ do
+expectFalsifiedMessage code needleMsg = do
   res <- runIO $ runVerification $ wrap code ""
   it "passes in-code checks" $
     res `shouldSatisfy` \case
@@ -235,26 +231,26 @@ expectFalsifiedMessage code needleMsg = withFrozenCallStack $ do
         False
 
 expectFalsified' :: HasCallStack => Text -> Text -> Spec
-expectFalsified' model code = withFrozenCallStack $ do
+expectFalsified' model code = do
   res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
 expectPass :: HasCallStack => Text -> Check -> Spec
-expectPass code check = withFrozenCallStack $ expectTest
+expectPass code check = expectTest
   testEnv { testCode = wrap code ""
           , testCheck = check
           , testPred = handlePositiveTestResult
           }
 
 expectFail :: HasCallStack => Text -> Check -> Spec
-expectFail code check = withFrozenCallStack $ expectTest
+expectFail code check = expectTest
   testEnv { testCode  = wrap code ""
           , testCheck = check
           , testPred  = (`shouldSatisfy` isJust)
           }
 
 expectFailureMessage :: HasCallStack => Text -> Text -> Spec
-expectFailureMessage code needleMsg = withFrozenCallStack $ expectTest
+expectFailureMessage code needleMsg = expectTest
   testEnv { testCode = wrap code ""
           , testCheck = Valid (CoreProp $ IntegerComparison Eq 0 0)
           , testPred =
@@ -634,7 +630,14 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce-keyset (at "ks" (read keysets "123"))))
           |]
-    expectFailureMessage code "disallowed DB read"
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+    -- this used to verify that `enforce-keyset` failed on read
+    -- but this hasn't been true for a while, arguments to
+    -- `enforce-keyset` are normally evaluated, while the actual
+    -- enforcement is pure. This test isn't terribly useful
+    -- but leaving the code around if needed later.
+    -- expectFailureMessage code "disallowed DB read"
 
   describe "enforce-guard" $ do
     let code =
@@ -654,7 +657,14 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce-guard (at "ks" (read keysets "123"))))
           |]
-    expectFailureMessage code "disallowed DB read"
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+    -- this used to verify that `enforce-guard` failed on read
+    -- but this hasn't been true for a while, arguments to
+    -- `enforce-guard` are normally evaluated, while the actual
+    -- enforcement is pure. This test isn't terribly useful
+    -- but leaving the code around if needed later.
+    -- expectFailureMessage code "disallowed DB read"
 
   describe "read-decimal" $ do
     let code =
@@ -1200,7 +1210,7 @@ spec = describe "analyze" $ do
     expectPass code $ Valid Abort'
 
   let expectCapGovPass :: Text -> Check -> Spec
-      expectCapGovPass code check = withFrozenCallStack $ expectTest $ testEnv
+      expectCapGovPass code check = expectTest $ testEnv
         { testCode =
             [text|
               (begin-tx)
@@ -3259,7 +3269,7 @@ spec = describe "analyze" $ do
         expectTrace
           :: HasCallStack
           => CheckableType -> Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
-        expectTrace checkType code prop tests = withFrozenCallStack $ do
+        expectTrace checkType code prop tests = do
           res <- runIO $ runCheck checkType (wrap code "") $ Valid prop
           it "produces the correct trace" $
             case res of

@@ -452,12 +452,16 @@ evalTerm = \case
 
   Enforce mTid cond -> do
 
-    -- TODO: `Enforce` conflates `enforce` and `enforce-guard`, and
-    -- the latter does NOT restrict db access. For now, making Analyze
-    -- more permissive than `enforce` but less permissive than `enforce-guard`.
-    -- NB it's worth considering whether `enforce` can be read-only.
-
-    cond' <- restrictingDbAccess DisallowWrites $ evalTerm cond
+    -- DB restrictions are only applied at this level in `enforce`.
+    -- `enforce-guard` (GuardPasses) strictly evaluates the guard argument without
+    -- db restrictions; db restrictions apply on operation of the guard.
+    -- Note that the model here does not "run" guards, see note for 'GuardPasses'.
+    -- `require-capability` (HasGrant) makes no restrictions.
+    let dbRestriction = case cond of
+          GuardPasses {} -> Nothing
+          HasGrant {} -> Nothing
+          _ -> Just DisallowDb
+    cond' <- maybe id restrictingDbAccess dbRestriction $ evalTerm cond
     maybe (pure ()) (`tagAssert` cond') mTid
     succeeds %= (.&& cond')
     pure sTrue
@@ -653,6 +657,10 @@ evalTerm = \case
     -- constructions only appear within `Enforce` constructions. so if we have
     -- metadata sitting around for a cell that this guard came from, mark that
     -- cell as enforced.
+
+    -- NOTE: this also means we cannot represent the actual db restrictions
+    -- found in Pact.Native.Internal.enforceGuard, as we never "run the guard".
+
     case guard ^? sProv._Just._FromCell of
       Just (OriginatingCell tn sCn sRk sDirty) ->
         cellEnforced tn sCn sRk %= (.|| sNot sDirty)
