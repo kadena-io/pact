@@ -123,11 +123,14 @@ renderTestFailure = \case
 compile' :: ModuleName -> Text -> IO (Either TestFailure (ModuleData Ref))
 compile' modName code = do
   replState0 <- initReplState StringEval Nothing
-  (_, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
-  moduleM <- replLookupModule replState modName
-  pure $ case moduleM of
-    Left err -> Left $ ReplError (show err)
-    Right m -> Right m
+  (r, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
+  case r of
+    Left e -> return $ Left $ ReplError (show e)
+    Right {} -> do
+      moduleM <- replLookupModule replState modName
+      pure $ case moduleM of
+        Left err -> Left $ ReplError (show err)
+        Right m -> Right m
 
 compile :: Text -> IO (Either TestFailure (ModuleData Ref))
 compile = compile' "test"
@@ -4034,6 +4037,8 @@ spec = describe "analyze" $ do
           balance))
       |]
 
+  coinTest
+
   describe "succeeds-when / fails-when" $ do
     expectVerified [text|
       (defun test:bool (x:integer)
@@ -4093,3 +4098,80 @@ spec = describe "analyze" $ do
         (enforce false ""))
       |]
       "Vacuous property encountered!"
+
+
+expectVerified'' :: HasCallStack => Text -> Spec
+expectVerified'' code = do
+  res <- runIO $ runVerification $ code
+  it "passes in-code checks" $ handlePositiveTestResult res
+
+
+coinTest :: Spec
+coinTest = describe "coin-test" $ expectVerified''
+  [text|
+
+(module test GOVERNANCE
+
+  @model
+    [ (defproperty conserves-mass
+        (= (column-delta coin-table 'balance) 0.0))
+    ]
+
+  (defschema coin-schema
+    @doc "The coin contract token schema"
+    @model [ (invariant (>= balance 0.0)) ]
+
+    balance:decimal
+    guard:guard)
+
+  (deftable coin-table:{coin-schema})
+
+  (defcap GOVERNANCE () true)
+
+  (defun transfer-create:string
+    ( sender:string
+      receiver:string
+      receiver-guard:guard
+      amount:decimal )
+
+    @model [ (property conserves-mass) ]
+
+    (enforce (!= sender receiver)
+      "sender cannot be the receiver of a transfer")
+
+    (enforce (> amount 0.0)
+      "transfer amount must be positive")
+
+    ;; minimum precision
+    (enforce
+      (= (floor amount 12)
+         amount)
+      (format "Amount violates minimum precision: {}" [amount]))
+
+    ;; debit
+    (with-read coin-table sender
+      { "balance" := balance }
+
+      (enforce (<= amount balance) "Insufficient funds")
+
+      (update coin-table sender
+        { "balance" : (- balance amount) }
+        ))
+
+    ;; credit
+    (with-default-read coin-table receiver
+      { "balance" : 0.0, "guard" : receiver-guard }
+      { "balance" := balance, "guard" := retg }
+      ; we don't want to overwrite an existing guard with the user-supplied one
+      (enforce (= retg receiver-guard)
+        "account guards do not match")
+
+      (write coin-table receiver
+        { "balance" : (+ balance amount)
+        , "guard"   : retg
+        })
+      )
+
+  )
+)
+  |]
