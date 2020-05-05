@@ -1574,6 +1574,19 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SInteger $ inject @(Numerical Term) $
       BitwiseOp op args'
 
+  AST_NFun _node "is-charset" [ a, b ] -> do
+    cset <- translateNode a
+    inp <- translateNode b
+    case (cset,inp) of
+      (Some SInteger _cset',Some SStr inp') -> do
+        -- TODO this looks toward a "soft unsupported" by allowing
+        -- analysis to proceed when seeing an unsupported term.
+        -- Here, it's replacing `(is-charset cs inp)` with
+        -- `(constantly true inp)`.
+        -- TODO at a minimum need a way to warn about this.
+        pure $ Some SBool $ CoreTerm $ Constantly SStr (Lit' True) inp'
+      _ -> failing $ "Pattern match failure"
+
   _ -> throwError' $ UnexpectedNode astNode
 
 captureOneFreeVar :: TranslateM (VarId, Text, EType)

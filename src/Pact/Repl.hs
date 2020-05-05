@@ -90,6 +90,10 @@ repl = repl' Interactive
 repl' :: ReplMode -> IO (Either () (Term Name))
 repl' m = initReplState m Nothing >>= \s -> runPipedRepl' (m == Interactive) s stdin
 
+-- | Repl that doesn't die on normal errors
+_repl :: IO ()
+_repl = forever $ repl
+
 isPactFile :: String -> Bool
 isPactFile fp = endsWith fp ".pact"
 
@@ -266,7 +270,6 @@ updateForOp i a = do
                     replState <- liftIO $ readMVar mv
                     let verifyUri = _rlsVerifyUri replState
                     (initReplState mode verifyUri >>= put >> void useReplLib)
-                  liftIO $ print a
                   (a <$) <$> loadFile i fp
     TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)
     Print t -> do

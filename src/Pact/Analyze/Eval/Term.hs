@@ -451,7 +451,13 @@ evalTerm = \case
       (evalTerm else')
 
   Enforce mTid cond -> do
-    cond' <- restrictingDbAccess DisallowDb $ evalTerm cond
+
+    -- TODO: `Enforce` conflates `enforce` and `enforce-guard`, and
+    -- the latter does NOT restrict db access. For now, making Analyze
+    -- more permissive than `enforce` but less permissive than `enforce-guard`.
+    -- NB it's worth considering whether `enforce` can be read-only.
+
+    cond' <- restrictingDbAccess DisallowWrites $ evalTerm cond
     maybe (pure ()) (`tagAssert` cond') mTid
     succeeds %= (.&& cond')
     pure sTrue
