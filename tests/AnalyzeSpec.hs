@@ -1960,17 +1960,18 @@ spec = describe "analyze" $ do
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
 
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
-      CoreProp (StrComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
-        .=>
-        CoreProp (IntegerComparison Eq
-          (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
+    expectPass code $ Valid $ Success' .=>
+      (Inj $ Forall 1 "row" (EType SStr) $
+        CoreProp (StrComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
+          .=>
+          CoreProp (IntegerComparison Eq
+            (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3))
 
     expectPass code $ PropertyHolds $ Inj $ Exists 1 "row" (EType SStr) $
       CoreProp (IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
-    expectPass code $ Valid $
+    expectPass code $ Valid $ Success' .=>
       CoreProp (IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (Lit' "bob"))) 3)
 
@@ -4112,63 +4113,34 @@ coinTest = describe "coin-test" $ expectVerified''
 
 (module test GOVERNANCE
 
-  @model
-    [ (defproperty conserves-mass
-        (= (column-delta coin-table 'balance) 0.0))
-    ]
-
   (defschema coin-schema
     @doc "The coin contract token schema"
-    @model [ (invariant (>= balance 0.0)) ]
-
-    balance:decimal
-    guard:guard)
+    balance:decimal)
 
   (deftable coin-table:{coin-schema})
 
   (defcap GOVERNANCE () true)
 
-  (defun transfer-create:string
-    ( sender:string
-      receiver:string
-      receiver-guard:guard
-      amount:decimal )
-
-    @model [ (property conserves-mass) ]
-
-    (enforce (!= sender receiver)
-      "sender cannot be the receiver of a transfer")
-
-    (enforce (> amount 0.0)
-      "transfer amount must be positive")
-
-    ;; minimum precision
-    (enforce
-      (= (floor amount 12)
-         amount)
-      (format "Amount violates minimum precision: {}" [amount]))
+  (defun transfer-create:string ()
+    @model [ (property (= (column-delta coin-table 'balance) 0.0)) ]
 
     ;; debit
-    (with-read coin-table sender
-      { "balance" := balance }
+    (with-read coin-table "sender"
+      { "balance" := sender-balance }
 
-      (enforce (<= amount balance) "Insufficient funds")
+      (enforce (= 10.0 sender-balance) "")
 
-      (update coin-table sender
-        { "balance" : (- balance amount) }
+      (update coin-table "sender"
+        { "balance" : (- sender-balance 10.0) }
         ))
 
     ;; credit
-    (with-default-read coin-table receiver
-      { "balance" : 0.0, "guard" : receiver-guard }
-      { "balance" := balance, "guard" := retg }
-      ; we don't want to overwrite an existing guard with the user-supplied one
-      (enforce (= retg receiver-guard)
-        "account guards do not match")
+    (with-default-read coin-table "receiver"
+      { "balance" : 0.0 }
+      { "balance" := receiver-balance }
 
-      (write coin-table receiver
-        { "balance" : (+ balance amount)
-        , "guard"   : retg
+      (write coin-table "receiver"
+        { "balance" : (+ receiver-balance 10.0)
         })
       )
 
