@@ -57,7 +57,7 @@ import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Data.Bifunctor             (first)
 import           Data.Either                (partitionEithers)
 import qualified Data.HashMap.Strict        as HM
-import           Data.List                  (isPrefixOf)
+import           Data.List                  (isPrefixOf,nub)
 import qualified Data.List                  as List
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
@@ -381,7 +381,8 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov)
   (FunData funInfo pactArgs body) funName checkType = runExceptT $ do
     let modName = moduleDefName $ _mdModule moduleData
 
-    (args, stepChoices, tm, graph) <- hoist generalize $
+    -- ignoring warnings here as they will be collected in 'verifyFunctionProperty'
+    (args, stepChoices, tm, graph, _) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation modName funName
         funInfo caps pactArgs body checkType
 
@@ -452,12 +453,12 @@ verifyFunctionProperty
   -> Text
   -> CheckableType
   -> Located Check
-  -> IO (Either CheckFailure CheckSuccess)
+  -> IO [Either CheckFailure CheckSuccess]
 verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
   (FunData funInfo pactArgs body) funName checkType
-  (Located propInfo check) = runExceptT $ do
+  (Located propInfo check) = fmap sequence' $ runExceptT $ do
     let modName = moduleDefName (_mdModule moduleData)
-    (args, stepChoices, tm, graph) <- hoist generalize $
+    (args, stepChoices, tm, graph, warnings) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation modName funName funInfo caps pactArgs body checkType
 
@@ -517,13 +518,19 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
       (AnalysisResult _ _txSucc prop _, model) <- setupSmtProblem
 
       void $ lift $ SBV.output prop
-      hoist SBV.query $ do
+      r <- hoist SBV.query $ do
         withExceptT (smtToCheckFailure propInfo) $
           resultQuery goal model
+      -- note here that it is important that the main result is first
+      -- for 'verifyCheck'/unit tests
+      return $ (Right r : map (Left . translateToCheckFailure) warnings)
 
   where
     goal :: Goal
     goal = checkGoal check
+
+    sequence' (Left a) = [Left a]
+    sequence' (Right rs) = rs
 
     config :: SBV.SMTConfig
     config = SBV.z3 { SBVI.allowQuantifiedQueries = True }
@@ -1028,7 +1035,7 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _ _) defpactRefs = do
     Left errs         -> throwError $ ModuleParseFailure errs
     Right stepChecks' -> pure stepChecks'
 
-  lift $ ifor stepChecks' $
+  lift $ fmap (fmap (nub . concat)) $ ifor stepChecks' $
     \(name, _stepNum) ((node, args, info), checks) -> for checks $
      verifyFunctionProperty env (FunData info args [node]) name CheckPactStep
 
@@ -1098,7 +1105,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
       _            -> error
         "invariant violation: anything but a TopFun is unexpected in funChecks"
 
-  pure (funChecks'', invariantChecks)
+  pure (nub . concat <$> funChecks'', invariantChecks)
 
 -- | Check that every property variable is in scope.
 scopeCheckInterface
@@ -1270,13 +1277,18 @@ verifyCheck moduleData funName check checkType = do
   gov    <- moduleGovernance moduleData
 
   let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov
+      -- 'verifyFunctionProperty' puts the "real" error at the head, and
+      -- this function is only for unit tests, so this preserves that usage.
+      -- No I don't feel like busting out NonEmpty :)
+      head' [] = error "Unexpected empty result from `verifyFunctionProperty`"
+      head' (r:_) = r
 
   case moduleFun moduleData funName of
     Just funRef -> do
       toplevel <- lift $ typecheck funRef
       case toplevel of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
-        Right (TopFun fun _) -> ExceptT $ fmap Right $
+        Right (TopFun fun _) -> fmap head' $ ExceptT $ fmap Right $
           verifyFunctionProperty checkEnv (mkFunInfo fun) funName checkType $
             Located info check
         Right _

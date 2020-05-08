@@ -49,6 +49,7 @@ import           GHC.Natural                (Natural)
 import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
+import qualified Pact.Types.Info as P
 import           Pact.Types.Lang            (Info, Literal (..), Type
   (TyFun, TyPrim, TySchema, TyUser, TyVar), SchemaPartial(PartialSchema))
 import qualified Pact.Types.Lang            as Pact
@@ -99,6 +100,7 @@ data TranslateFailureNoLoc
   | CapabilityNotFound CapName
   | BadPartialBind EType [String]
   | UnexpectedDefaultReadType EType EType
+  | UnsupportedNonFatal Text
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -132,6 +134,7 @@ describeTranslateFailureNoLoc = \case
   CapabilityNotFound (CapName cn) -> "Found a reference to capability that does not exist: " <> T.pack cn
   BadPartialBind (EType objTy) columnNames -> "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
   UnexpectedDefaultReadType (EType expected) (EType received) -> "Bad type in a `with-default-read`: we expected " <> tShow expected <> " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
+  UnsupportedNonFatal msg -> "Unsupported operation: " <> msg
 
 data TranslateEnv
   = TranslateEnv
@@ -244,6 +247,8 @@ data TranslateState
       -- Vars representing nondeterministic choice between two branches. These
       -- are used for continuing on or rolling back in evaluation of pacts.
     , _tsStepChoices   :: [VarId]
+    , _tsWarnings :: [TranslateFailure]
+      -- ^ Non-fatal translation problems
     }
 
 makeLenses ''TranslateFailure
@@ -1574,20 +1579,20 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SInteger $ inject @(Numerical Term) $
       BitwiseOp op args'
 
-  AST_NFun _node "is-charset" [ a, b ] -> do
+  AST_NFun node "is-charset" [ a, b ] -> do
     cset <- translateNode a
     inp <- translateNode b
     case (cset,inp) of
       (Some SInteger _cset',Some SStr inp') -> do
-        -- TODO this looks toward a "soft unsupported" by allowing
-        -- analysis to proceed when seeing an unsupported term.
-        -- Here, it's replacing `(is-charset cs inp)` with
-        -- `(constantly true inp)`.
-        -- TODO at a minimum need a way to warn about this.
+        warnUnsupported node "is-charset unsupported, expression will always succeed"
         pure $ Some SBool $ CoreTerm $ Constantly SStr (Lit' True) inp'
       _ -> failing $ "Pattern match failure"
 
   _ -> throwError' $ UnexpectedNode astNode
+
+-- | Accumulate a non-fatal translation problem
+warnUnsupported :: Node -> Text -> TranslateM ()
+warnUnsupported n t = tsWarnings %= (TranslateFailure (P.getInfo n) (UnsupportedNonFatal t):)
 
 captureOneFreeVar :: TranslateM (VarId, Text, EType)
 captureOneFreeVar = do
@@ -1631,11 +1636,11 @@ runTranslation
   -> [Named Node]
   -> [AST Node]
   -> CheckableType
-  -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph)
+  -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph, [TranslateFailure])
 runTranslation modName funName info caps pactArgs body checkType = do
     (args, translationVid)     <- runArgsTranslation
-    (tm, (stepChoices, graph)) <- runBodyTranslation args translationVid
-    pure (args, stepChoices, tm, graph)
+    (tm, (stepChoices, graph, warnings)) <- runBodyTranslation args translationVid
+    pure (args, stepChoices, tm, graph, warnings)
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
@@ -1651,7 +1656,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
     runBodyTranslation
       :: [Arg]
       -> VarId
-      -> Except TranslateFailure (ETerm, ([VarId], ExecutionGraph))
+      -> Except TranslateFailure (ETerm, ([VarId], ExecutionGraph, [TranslateFailure]))
     runBodyTranslation args nextVarId =
       let vertex0    = 0
           nextVertex = succ vertex0
@@ -1660,7 +1665,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
           nextGuard  = Guard 0
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId nextGuard graph0
-            vertex0 nextVertex Map.empty mempty path0 Map.empty [] []
+            vertex0 nextVertex Map.empty mempty path0 Map.empty [] [] []
           translation = do
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
@@ -1684,6 +1689,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
           handleState translateState =
             ( _tsStepChoices translateState
             , mkExecutionGraph vertex0 path0 translateState
+            , _tsWarnings translateState
             )
       in fmap (fmap handleState) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info caps args)
@@ -1708,7 +1714,7 @@ translateNodeNoGraph node =
       nextGuard      = Guard 0
       graph0         = pure vertex0
       translateState = TranslateState nextTagId 0 nextGuard graph0 vertex0
-        nextVertex Map.empty mempty path0 Map.empty [] []
+        nextVertex Map.empty mempty path0 Map.empty [] [] []
 
       translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0
         (pure 0) (pure 0)
