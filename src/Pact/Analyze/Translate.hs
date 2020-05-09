@@ -101,6 +101,7 @@ data TranslateFailureNoLoc
   | BadPartialBind EType [String]
   | UnexpectedDefaultReadType EType EType
   | UnsupportedNonFatal Text
+  | CapabilityProtected CapName
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -135,11 +136,13 @@ describeTranslateFailureNoLoc = \case
   BadPartialBind (EType objTy) columnNames -> "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
   UnexpectedDefaultReadType (EType expected) (EType received) -> "Bad type in a `with-default-read`: we expected " <> tShow expected <> " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
   UnsupportedNonFatal msg -> "Unsupported operation: " <> msg
+  CapabilityProtected cap -> "Top-level execution protected by capability: " <> tShow cap
 
 data TranslateEnv
   = TranslateEnv
     { _teInfo           :: Info
     , _teCapabilities   :: Map CapName Capability
+      -- ^ capabilities defined in module
     , _teNodeVars       :: Map Node (Munged, VarId)
     , _teRecoverability :: Recoverability
     , _teScopesEntered  :: Natural
@@ -597,14 +600,17 @@ translateBinding (Named unmunged' node _) = do
   pure $ Located info $ Binding vid (Unmunged unmunged') munged varType
 
 translateBody :: [AST Node] -> TranslateM ETerm
-translateBody = \case
+translateBody = translateBody' False
+
+translateBody' :: Bool -> [AST Node] -> TranslateM ETerm
+translateBody' topLevel = \case
   []       -> do
     info <- view envInfo
     throwError $ TranslateFailure info EmptyBody
-  [ast]    -> translateNode ast
+  [ast]    -> translateNode' topLevel ast
   ast:asts -> do
-    someExpr      <- translateNode ast
-    Some ty exprs <- translateBody asts
+    someExpr      <- translateNode' topLevel ast
+    Some ty exprs <- translateBody' topLevel asts
     pure $ Some ty $ Sequence someExpr exprs
 
 -- Pact translation:
@@ -698,7 +704,7 @@ translatePact nodes = do
         Just rollbackA -> withNewStep RollbackScope [] $ do
           rollback <- (,)
             <$> startNewSubpath
-            <*> translateNode rollbackA
+            <*> translateNode' True rollbackA
           postRollback <- extendPath
           pure (postRollback, cancel : cancels, Just rollback : rollbacks)
       )
@@ -739,11 +745,13 @@ translateStep firstStep = \case
     mEntity <- for entity $ \tm -> translateNode tm >>= \case
       Some SStr entity' -> pure entity'
       _ -> failing "Pattern match failure"
-    Some ty exec' <- translateNode exec
+    Some ty exec' <- translateNode' True exec
     postVertex    <- extendPath
+    -- TODO rollbacks don't have top-level cap-protection support
     pure (Step (exec' , ty) p mEntity Nothing Nothing, postVertex, rollback)
   astNode -> throwError' $ UnexpectedPactNode astNode
 
+-- | Lookup defined capability (`defcap`) and fail if not found.
 lookupCapability :: CapName -> TranslateM Capability
 lookupCapability capName = do
   mCap <- view $ teCapabilities.at capName
@@ -856,8 +864,14 @@ genGuard = do
   tsNextGuard %= succ
   pure g
 
+-- | Main translate workhorse function.
 translateNode :: AST Node -> TranslateM ETerm
-translateNode astNode = withAstContext astNode $ case astNode of
+translateNode = translateNode' False
+
+-- | Main translate workhorse function, variant that
+-- tracks if working at "top level".
+translateNode' :: Bool -> AST Node -> TranslateM ETerm
+translateNode' topLevel astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
     withTranslatedBindings bindings $ \bindingTs -> do
       withNewScope LetScope bindingTs $
@@ -1298,8 +1312,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
             bindingTs
       recov <- view teRecoverability
       tid <- genTagId
-      emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
-      pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
+      if not topLevel then do
+        emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
+        pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
+      else do
+        -- at topLevel, require-capability creates a "private function".
+        -- TODO design property to express this constraint, and track it here.
+        -- For now, simply emit "warning" that function is "protected by" cap,
+        -- and emit a True value.
+        translateWarning' $ CapabilityProtected capName
+        pure $ Some SBool $ Lit' True
+
 
   AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) ->
     translateCapabilityApp modName (CapName $ T.unpack funName) bindings appBodyA
@@ -1584,15 +1607,21 @@ translateNode astNode = withAstContext astNode $ case astNode of
     inp <- translateNode b
     case (cset,inp) of
       (Some SInteger _cset',Some SStr inp') -> do
-        warnUnsupported node "is-charset unsupported, expression will always succeed"
+        translateWarning node $
+          UnsupportedNonFatal "is-charset unsupported, expression will always succeed"
         pure $ Some SBool $ CoreTerm $ Constantly SStr (Lit' True) inp'
       _ -> failing $ "Pattern match failure"
 
   _ -> throwError' $ UnexpectedNode astNode
 
--- | Accumulate a non-fatal translation problem
-warnUnsupported :: Node -> Text -> TranslateM ()
-warnUnsupported n t = tsWarnings %= (TranslateFailure (P.getInfo n) (UnsupportedNonFatal t):)
+-- | Accumulate a non-fatal translation issue
+translateWarning :: P.HasInfo i => i -> TranslateFailureNoLoc -> TranslateM ()
+translateWarning i w = tsWarnings %= (TranslateFailure (P.getInfo i) w:)
+
+-- | Accumulate a non-fatal translation issue, using
+-- top-level location.
+translateWarning' :: TranslateFailureNoLoc -> TranslateM ()
+translateWarning' w = view teInfo >>= \i -> translateWarning i w
 
 captureOneFreeVar :: TranslateM (VarId, Text, EType)
 captureOneFreeVar = do
@@ -1674,13 +1703,13 @@ runTranslation modName funName info caps pactArgs body checkType = do
             res <- case checkType of
               CheckDefun ->
                 withNewScope (FunctionScope modName funName) bindingTs $
-                  translateBody body
+                  translateBody' True body
               CheckDefpact ->
                 withNewScope (PactScope modName funName) bindingTs $
                   Some SStr . Pact <$> translatePact body
               CheckPactStep ->
                 withNewStep StepScope bindingTs $
-                  translateBody body
+                  translateBody' True body
               CheckDefconst
                 -> error "invariant violation: this cannot be a constant"
             _ <- extendPath -- form final edge for any remaining events
