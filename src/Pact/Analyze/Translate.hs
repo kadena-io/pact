@@ -1583,16 +1583,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
     cset <- translateNode a
     inp <- translateNode b
     case (cset,inp) of
-      (Some SInteger _cset',Some SStr inp') -> do
-        warnUnsupported node "is-charset unsupported, expression will always succeed"
-        pure $ Some SBool $ CoreTerm $ Constantly SStr (Lit' True) inp'
+      (Some SInteger _cset',Some SStr _inp') -> do
+        addWarning node $ UnsupportedNonFatal "is-charset: substituting true expression"
+        pure $ Some SBool $ Lit' True
       _ -> failing $ "Pattern match failure"
 
   _ -> throwError' $ UnexpectedNode astNode
 
 -- | Accumulate a non-fatal translation problem
-warnUnsupported :: Node -> Text -> TranslateM ()
-warnUnsupported n t = tsWarnings %= (TranslateFailure (P.getInfo n) (UnsupportedNonFatal t):)
+addWarning :: P.HasInfo i => i -> TranslateFailureNoLoc -> TranslateM ()
+addWarning n w = tsWarnings %= (TranslateFailure (P.getInfo n) w:)
 
 captureOneFreeVar :: TranslateM (VarId, Text, EType)
 captureOneFreeVar = do
