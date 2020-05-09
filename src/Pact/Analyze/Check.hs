@@ -61,7 +61,7 @@ import           Data.List                  (isPrefixOf,nub)
 import qualified Data.List                  as List
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
-import           Data.Maybe                 (mapMaybe)
+import           Data.Maybe                 (mapMaybe, catMaybes)
 import           Data.SBV                   (Symbolic)
 import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Control           as SBV
@@ -226,8 +226,8 @@ data VerificationFailure
   | NonDefTerm (Pact.Term (Ref' (Pact.Term Pact.Name)))
   deriving Show
 
-describeCheckSuccess :: CheckSuccess -> Text
-describeCheckSuccess = \case
+_describeCheckSuccess :: CheckSuccess -> Text
+_describeCheckSuccess = \case
   SatisfiedProperty model -> "Property satisfied with model:\n"
                           <> showModel model
   ProvedTheorem           -> "Property proven valid"
@@ -289,8 +289,8 @@ describeCheckFailure (CheckFailure info failure) = case failure of
   where
     prefix info' = T.pack (renderInfo info') <> ":Warning: "
 
-describeCheckResult :: CheckResult -> Text
-describeCheckResult = either describeCheckFailure describeCheckSuccess
+describeCheckResult :: CheckResult -> Maybe Text
+describeCheckResult = either (Just . describeCheckFailure) (const Nothing)
 
 falsifyingModel :: CheckFailure -> Maybe (Model 'Concrete)
 falsifyingModel (CheckFailure _ (SmtFailure (Invalid m))) = Just m
@@ -1252,8 +1252,8 @@ renderVerifiedModule = \case
     let propResults'      = toListOf (traverse.each)          propResults
         stepResults'      = toListOf (traverse.each)          stepResults
         invariantResults' = toListOf (traverse.traverse.each) invariantResults
-        allResuls         = propResults' <> stepResults' <> invariantResults'
-    in fmap describeCheckResult allResuls <>
+        allResults         = propResults' <> stepResults' <> invariantResults'
+    in (catMaybes $ fmap describeCheckResult allResults) <>
          [describeVerificationWarnings warnings]
 
 -- | Verifies a one-off 'Check' for a function.

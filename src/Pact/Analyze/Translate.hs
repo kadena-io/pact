@@ -23,10 +23,10 @@ module Pact.Analyze.Translate where
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
-                                             to, toListOf, use, view, zoom,
+                                             to, toListOf, use, view, zoom, locally,
                                              (%=), (%~), (+~), (.=), (.~),
                                              (<>~), (?=), (^.), (<&>), _1, (^..))
-import           Control.Monad              (join, replicateM, (>=>))
+import           Control.Monad              (join, replicateM, (>=>),)
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
@@ -54,7 +54,7 @@ import           Pact.Types.Lang            (Info, Literal (..), Type
   (TyFun, TyPrim, TySchema, TyUser, TyVar), SchemaPartial(PartialSchema))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
-import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
+import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
@@ -101,6 +101,7 @@ data TranslateFailureNoLoc
   | BadPartialBind EType [String]
   | UnexpectedDefaultReadType EType EType
   | UnsupportedNonFatal Text
+  | UnscopedCapability CapName [Text]
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -135,6 +136,9 @@ describeTranslateFailureNoLoc = \case
   BadPartialBind (EType objTy) columnNames -> "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
   UnexpectedDefaultReadType (EType expected) (EType received) -> "Bad type in a `with-default-read`: we expected " <> tShow expected <> " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
   UnsupportedNonFatal msg -> "Unsupported operation: " <> msg
+  UnscopedCapability (CapName cap) vars -> "Direct execution restricted by capability (" <> T.pack cap <>
+    (T.concat $ map (" " <>) vars) <> ")"
+
 
 data TranslateEnv
   = TranslateEnv
@@ -148,11 +152,12 @@ data TranslateEnv
     -- (see @mkTranslateEnv@) but in testing these return a constant @0@.
     , _teGenTagId       :: forall m. MonadState TagId  m => m TagId
     , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
+    , _teCapsInScope    :: Set CapName
     }
 
 mkTranslateEnv :: Info -> [Capability] -> [Arg] -> TranslateEnv
 mkTranslateEnv info caps args
-  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id)
+  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id) mempty
   where
     -- NOTE: like in Check's moduleFunChecks, this assumes that toplevel
     -- function arguments are the only variables for which we do not use munged
@@ -1287,7 +1292,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
     let capName = CapName $ T.unpack funName
     appET <- translateCapabilityApp modName capName bindings appBodyA
-    Some ty withBodyT <- translateBody withBodyA
+    Some ty withBodyT <- locally teCapsInScope (Set.insert capName) $
+      translateBody withBodyA
     pure $ Some ty $ WithCapability appET withBodyT
 
   AST_RequireCapability node (AST_InlinedApp _ funName bindings _) -> do
@@ -1298,8 +1304,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
             bindingTs
       recov <- view teRecoverability
       tid <- genTagId
-      emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
-      pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
+      inScope <- Set.member capName <$> view teCapsInScope
+      if inScope then do
+        emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
+        pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
+      else do
+        addWarning' $ UnscopedCapability capName (map (_nnName . fst) bindings)
+        pure $ Some SBool $ Lit' True
 
   AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) ->
     translateCapabilityApp modName (CapName $ T.unpack funName) bindings appBodyA
@@ -1590,9 +1601,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   _ -> throwError' $ UnexpectedNode astNode
 
--- | Accumulate a non-fatal translation problem
+-- | Accumulate a non-fatal translation issue
 addWarning :: P.HasInfo i => i -> TranslateFailureNoLoc -> TranslateM ()
 addWarning n w = tsWarnings %= (TranslateFailure (P.getInfo n) w:)
+
+-- | Accumulate a non-fatal translation issue warning on top-level node
+addWarning' :: TranslateFailureNoLoc -> TranslateM ()
+addWarning' w = view teInfo >>= \i -> addWarning i w
 
 captureOneFreeVar :: TranslateM (VarId, Text, EType)
 captureOneFreeVar = do
@@ -1717,7 +1732,7 @@ translateNodeNoGraph node =
         nextVertex Map.empty mempty path0 Map.empty [] [] []
 
       translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0
-        (pure 0) (pure 0)
+        (pure 0) (pure 0) mempty
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $
