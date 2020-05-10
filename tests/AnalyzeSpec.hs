@@ -4015,6 +4015,28 @@ spec = describe "analyze" $ do
               "bar")))
         |]
 
+    describe "unused variable in property" $
+      expectVerified [text|
+
+        (defun validate-length (a:string)
+          (enforce (>= (length a) 3) "")
+          (enforce (<= (length a) 256) "")
+        )
+
+        (defpact foo (a:string)
+          @model [ (property (and
+                              (>= (length a) 3)
+                              (<= (length a) 256)))
+                 ]
+
+          (step 1)
+          (step (validate-length a))
+          )
+
+        |]
+
+
+
   describe "with-default-read" $ do
     expectVerified [text|
       (defun test:integer (acct:string)

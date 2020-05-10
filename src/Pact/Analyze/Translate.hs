@@ -101,7 +101,7 @@ data TranslateFailureNoLoc
   | BadPartialBind EType [String]
   | UnexpectedDefaultReadType EType EType
   | UnsupportedNonFatal Text
-  | UnscopedCapability CapName [Text]
+  | UnscopedCapability CapName
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -136,8 +136,7 @@ describeTranslateFailureNoLoc = \case
   BadPartialBind (EType objTy) columnNames -> "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
   UnexpectedDefaultReadType (EType expected) (EType received) -> "Bad type in a `with-default-read`: we expected " <> tShow expected <> " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
   UnsupportedNonFatal msg -> "Unsupported operation: " <> msg
-  UnscopedCapability (CapName cap) vars -> "Direct execution restricted by capability (" <> T.pack cap <>
-    (T.concat $ map (" " <>) vars) <> ")"
+  UnscopedCapability (CapName cap) -> "Direct execution restricted by capability " <> T.pack cap
 
 
 data TranslateEnv
@@ -1309,7 +1308,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
         pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
       else do
-        addWarning' $ UnscopedCapability capName (map (_nnName . fst) bindings)
+        addWarning' $ UnscopedCapability capName
         pure $ Some SBool $ Lit' True
 
   AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) ->
