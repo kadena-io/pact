@@ -4015,7 +4015,7 @@ spec = describe "analyze" $ do
               "bar")))
         |]
 
-    describe "unused variable in property" $
+    describe "defpact property timeout on only one step" $
       expectVerified [text|
 
         (defun validate-length (a:string)
