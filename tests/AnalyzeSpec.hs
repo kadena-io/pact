@@ -4015,22 +4015,15 @@ spec = describe "analyze" $ do
               "bar")))
         |]
 
-    describe "defpact property timeout on only one step" $
+    describe "defpact property timeout on 2nd step only" $
       expectVerified [text|
 
-        (defun validate-length (a:string)
-          (enforce (>= (length a) 3) "")
-          (enforce (<= (length a) 256) "")
-        )
-
         (defpact foo (a:string)
-          @model [ (property (and
-                              (>= (length a) 3)
-                              (<= (length a) 256)))
+          @model [ (property (<= (length a) 256))
                  ]
 
           (step 1)
-          (step (validate-length a))
+          (step (enforce (<= (length a) 256) ""))
           )
 
         |]
