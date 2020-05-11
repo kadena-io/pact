@@ -242,6 +242,7 @@ expectPass code check = expectTest
   testEnv { testCode = wrap code ""
           , testCheck = check
           , testPred = handlePositiveTestResult
+          , testName = "expectPass"
           }
 
 expectFail :: HasCallStack => Text -> Check -> Spec
@@ -249,6 +250,7 @@ expectFail code check = expectTest
   testEnv { testCode  = wrap code ""
           , testCheck = check
           , testPred  = (`shouldSatisfy` isJust)
+          , testName = "expectFail"
           }
 
 expectFailureMessage :: HasCallStack => Text -> Text -> Spec
@@ -261,6 +263,7 @@ expectFailureMessage code needleMsg = expectTest
                           needleMsg `T.isInfixOf` (describeCheckFailure cf)
                         _ ->
                           False
+          , testName = "expectFailureMessage"
           }
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
