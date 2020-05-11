@@ -183,22 +183,12 @@ checkInterface code = do
 -- | 'TestEnv' represents the environment a test runs in. Used with
 -- 'expectTest'.
 data TestEnv = TestEnv
-  { testCode  :: Text
-  , testCheck :: Check
-  , testName  :: String
-  , testPred  :: Maybe TestFailure -> IO ()
+  { testCode  :: !Text
+  , testCheck :: !Check
+  , testName  :: !String
+  , testPred  :: !(Maybe TestFailure -> IO ())
   }
 
--- | A default 'TestEnv', which checks for success. Note that this default
--- environment lacks 'testCode'.
-testEnv :: TestEnv
-testEnv = TestEnv (error "no tested code") (Valid Success') "unnamed" $ \case
-  Nothing
-    -> pure ()
-  Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
-    -> pendingWith msg
-  Just err
-    -> HUnit.assertFailure $ "Verification failure: " ++ show err
 
 expectTest :: HasCallStack => TestEnv -> Spec
 expectTest (TestEnv code check name p) =
@@ -239,7 +229,7 @@ expectFalsified' model code =
 
 expectPass :: HasCallStack => Text -> Check -> Spec
 expectPass code check = expectTest
-  testEnv { testCode = wrap code ""
+  TestEnv { testCode = wrap code ""
           , testCheck = check
           , testPred = handlePositiveTestResult
           , testName = "expectPass"
@@ -247,7 +237,7 @@ expectPass code check = expectTest
 
 expectFail :: HasCallStack => Text -> Check -> Spec
 expectFail code check = expectTest
-  testEnv { testCode  = wrap code ""
+  TestEnv { testCode  = wrap code ""
           , testCheck = check
           , testPred  = (`shouldSatisfy` isJust)
           , testName = "expectFail"
@@ -255,7 +245,7 @@ expectFail code check = expectTest
 
 expectFailureMessage :: HasCallStack => Text -> Text -> Spec
 expectFailureMessage code needleMsg = expectTest
-  testEnv { testCode = wrap code ""
+  TestEnv { testCode = wrap code ""
           , testCheck = Valid (CoreProp $ IntegerComparison Eq 0 0)
           , testPred =
               \res -> res `shouldSatisfy` \case
@@ -1215,7 +1205,7 @@ spec = describe "analyze" $ do
     expectPass code $ Valid Abort'
 
   let expectCapGovPass :: Text -> Check -> Spec
-      expectCapGovPass code check = expectTest $ testEnv
+      expectCapGovPass code check = expectTest $ TestEnv
         { testCode =
             [text|
               (begin-tx)
@@ -1683,7 +1673,7 @@ spec = describe "analyze" $ do
       Success' .=> Inj (RowExists "tokens" "stu" After)
 
   let expectFailsTypechecking code =
-        expectTest $ testEnv
+        expectTest $ TestEnv
           { testCode = wrap code ""
           , testName = "fails typechecking"
           , testCheck = Satisfiable Success'
