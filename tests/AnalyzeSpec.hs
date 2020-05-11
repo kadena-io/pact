@@ -4053,7 +4053,34 @@ spec = describe "analyze" $ do
           balance))
       |]
 
-  coinTest
+    expectVerified [text|
+
+      (defun test:string ()
+        @model [ (property (= (column-delta accounts 'balance) 0)) ]
+
+        ;; debit
+        (with-read accounts "sender"
+          { "balance" := sender-balance }
+
+          (enforce (= 10 sender-balance) "")
+
+          (update accounts "sender"
+            { "balance" : (- sender-balance 10) }
+            ))
+
+        ;; credit
+        (with-default-read accounts "receiver"
+          { "balance" : 0 }
+          { "balance" := receiver-balance }
+
+          (write accounts "receiver"
+            { "balance" : (+ receiver-balance 10)
+            })
+          )
+
+      )
+
+  |]
 
   describe "succeeds-when / fails-when" $ do
     expectVerified [text|
@@ -4114,51 +4141,3 @@ spec = describe "analyze" $ do
         (enforce false ""))
       |]
       "Vacuous property encountered!"
-
-
-expectVerified'' :: HasCallStack => Text -> Spec
-expectVerified'' code = do
-  res <- runIO $ runVerification $ code
-  it "passes in-code checks" $ handlePositiveTestResult res
-
-
-coinTest :: Spec
-coinTest = describe "coin-test" $ expectVerified''
-  [text|
-
-(module test GOVERNANCE
-
-  (defschema coin-schema
-    @doc "The coin contract token schema"
-    balance:decimal)
-
-  (deftable coin-table:{coin-schema})
-
-  (defcap GOVERNANCE () true)
-
-  (defun transfer-create:string ()
-    @model [ (property (= (column-delta coin-table 'balance) 0.0)) ]
-
-    ;; debit
-    (with-read coin-table "sender"
-      { "balance" := sender-balance }
-
-      (enforce (= 10.0 sender-balance) "")
-
-      (update coin-table "sender"
-        { "balance" : (- sender-balance 10.0) }
-        ))
-
-    ;; credit
-    (with-default-read coin-table "receiver"
-      { "balance" : 0.0 }
-      { "balance" := receiver-balance }
-
-      (write coin-table "receiver"
-        { "balance" : (+ receiver-balance 10.0)
-        })
-      )
-
-  )
-)
-  |]
