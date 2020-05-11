@@ -18,6 +18,7 @@ module Pact.Analyze.Check
   , renderVerifiedModule
   , verifyCheck
   , describeCheckFailure
+  , describeCheckResult
   , describeParseFailure
   , describeVerificationWarnings
   , falsifyingModel
@@ -1262,7 +1263,7 @@ verifyCheck
   -> Text           -- ^ the name of the function
   -> Check          -- ^ the check we're running
   -> CheckableType
-  -> ExceptT VerificationFailure IO CheckResult
+  -> ExceptT VerificationFailure IO [CheckResult]
 verifyCheck moduleData funName check checkType = do
   let info       = dummyInfo
       moduleName = moduleDefName $ moduleData ^. mdModule
@@ -1277,20 +1278,15 @@ verifyCheck moduleData funName check checkType = do
   gov    <- moduleGovernance moduleData
 
   let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov
-      -- 'verifyFunctionProperty' puts the "real" error at the head, and
-      -- this function is only for unit tests, so this preserves that usage.
-      -- No I don't feel like busting out NonEmpty :)
-      head' [] = error "Unexpected empty result from `verifyFunctionProperty`"
-      head' (r:_) = r
 
   case moduleFun moduleData funName of
     Just funRef -> do
       toplevel <- lift $ typecheck funRef
       case toplevel of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
-        Right (TopFun fun _) -> fmap head' $ ExceptT $ fmap Right $
+        Right (TopFun fun _) -> ExceptT $ fmap Right $
           verifyFunctionProperty checkEnv (mkFunInfo fun) funName checkType $
             Located info check
         Right _
           -> error "invariant violation: verifyCheck called on non-function"
-    Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
+    Nothing -> pure [Left $ CheckFailure info $ NotAFunction funName]

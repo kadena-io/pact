@@ -23,7 +23,7 @@ module Pact.Analyze.Translate where
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
-                                             to, toListOf, use, view, zoom, locally,
+                                             to, toListOf, use, view, zoom,
                                              (%=), (%~), (+~), (.=), (.~),
                                              (<>~), (?=), (^.), (<&>), _1, (^..))
 import           Control.Monad              (join, replicateM, (>=>),)
@@ -151,12 +151,11 @@ data TranslateEnv
     -- (see @mkTranslateEnv@) but in testing these return a constant @0@.
     , _teGenTagId       :: forall m. MonadState TagId  m => m TagId
     , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
-    , _teCapsInScope    :: Set CapName
     }
 
 mkTranslateEnv :: Info -> [Capability] -> [Arg] -> TranslateEnv
 mkTranslateEnv info caps args
-  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id) mempty
+  = TranslateEnv info caps' nodeVars mempty 0 (genId id) (genId id)
   where
     -- NOTE: like in Check's moduleFunChecks, this assumes that toplevel
     -- function arguments are the only variables for which we do not use munged
@@ -253,6 +252,8 @@ data TranslateState
     , _tsStepChoices   :: [VarId]
     , _tsWarnings :: [TranslateFailure]
       -- ^ Non-fatal translation problems
+    , _tsStaticCapsInScope :: Set CapName
+      -- ^ Statically track caps possibly brought into scope
     }
 
 makeLenses ''TranslateFailure
@@ -1291,7 +1292,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
     let capName = CapName $ T.unpack funName
     appET <- translateCapabilityApp modName capName bindings appBodyA
-    Some ty withBodyT <- locally teCapsInScope (Set.insert capName) $
+    Some ty withBodyT <- trackCapScope capName $
       translateBody withBodyA
     pure $ Some ty $ WithCapability appET withBodyT
 
@@ -1303,16 +1304,26 @@ translateNode astNode = withAstContext astNode $ case astNode of
             bindingTs
       recov <- view teRecoverability
       tid <- genTagId
-      inScope <- Set.member capName <$> view teCapsInScope
+      inScope <- Set.member capName <$> use tsStaticCapsInScope
       if inScope then do
         emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
         pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
-      else do
+        else do
+        -- we have statically proven there is no way this capability can come into scope.
+        -- Weirdly, we want to warn about this instead of fail, as in many cases this is
+        -- intentional (functions "protected" from direct execution by a cap).
+        -- TODO consider some kind of declaration that would make this happen for all
+        -- properties of a defun. Right now properties are independent so there is
+        -- no way to "inform" properties of a protected function that a capability is
+        -- intentionally preventing direct execution.
         addWarning' $ UnscopedCapability capName
         pure $ Some SBool $ Lit' True
 
-  AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) ->
-    translateCapabilityApp modName (CapName $ T.unpack funName) bindings appBodyA
+  AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) -> do
+    let capName = CapName $ T.unpack funName
+    app <- translateCapabilityApp modName (CapName $ T.unpack funName) bindings appBodyA
+    tsStaticCapsInScope %= Set.insert capName
+    return app
 
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
@@ -1608,6 +1619,16 @@ addWarning n w = tsWarnings %= (TranslateFailure (P.getInfo n) w:)
 addWarning' :: TranslateFailureNoLoc -> TranslateM ()
 addWarning' w = view teInfo >>= \i -> addWarning i w
 
+-- | Implements cap scoping, which can accumulate further caps
+-- via compose-capability. Reverts state after running action.
+trackCapScope :: CapName -> TranslateM r -> TranslateM r
+trackCapScope capName act = do
+  current <- use tsStaticCapsInScope
+  tsStaticCapsInScope %= Set.insert capName
+  r <- act
+  tsStaticCapsInScope .= current
+  return r
+
 captureOneFreeVar :: TranslateM (VarId, Text, EType)
 captureOneFreeVar = do
   vs <- use tsFoundVars
@@ -1679,7 +1700,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
           nextGuard  = Guard 0
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId nextGuard graph0
-            vertex0 nextVertex Map.empty mempty path0 Map.empty [] [] []
+            vertex0 nextVertex Map.empty mempty path0 Map.empty [] [] [] mempty
           translation = do
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
@@ -1728,10 +1749,10 @@ translateNodeNoGraph node =
       nextGuard      = Guard 0
       graph0         = pure vertex0
       translateState = TranslateState nextTagId 0 nextGuard graph0 vertex0
-        nextVertex Map.empty mempty path0 Map.empty [] [] []
+        nextVertex Map.empty mempty path0 Map.empty [] [] [] mempty
 
       translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0
-        (pure 0) (pure 0) mempty
+        (pure 0) (pure 0)
 
   in (`evalStateT` translateState) $
        (`runReaderT` translateEnv) $

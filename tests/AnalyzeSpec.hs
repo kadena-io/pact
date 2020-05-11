@@ -21,7 +21,7 @@ import           Data.Foldable                (asum, find, for_)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Maybe                   (fromJust, isJust, isNothing)
+import           Data.Maybe
 import           Data.SBV                     (isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
@@ -29,7 +29,6 @@ import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
 import           Prelude                      hiding (read)
 import           Test.Hspec
-import qualified Test.HUnit                   as HUnit
 
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
@@ -158,16 +157,20 @@ runVerification code = do
             ]
 
 runCheck :: CheckableType -> Text -> Check -> IO (Maybe TestFailure)
-runCheck checkType code check = do
+runCheck checkType code check =
+  either Just (const Nothing) <$> runCheck' checkType code check
+
+runCheck' :: CheckableType -> Text -> Check -> IO (Either TestFailure [CheckResult])
+runCheck' checkType code check = do
   eModuleData <- compile code
   case eModuleData of
-    Left tf -> pure $ Just tf
+    Left tf -> pure $ Left tf
     Right moduleData -> do
       result <- runExceptT $ verifyCheck moduleData "test" check checkType
       pure $ case result of
-        Left failure    -> Just $ VerificationFailure failure
-        Right (Left cf) -> Just $ TestCheckFailure cf
-        Right (Right _) -> Nothing
+        Left failure    -> Left $ VerificationFailure failure
+        Right (Left cf:_) -> Left $ TestCheckFailure cf
+        Right rs -> Right rs
 
 checkInterface :: Text -> IO (Maybe TestFailure)
 checkInterface code = do
@@ -195,12 +198,14 @@ expectTest (TestEnv code check name p) =
   before (runCheck CheckDefun code check) $
   it name p
 
-handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> IO ()
+
+handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> Expectation
 handlePositiveTestResult = \case
   Nothing -> pure ()
   Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
     -> pendingWith msg
-  Just tf -> HUnit.assertFailure =<< renderTestFailure tf
+  Just tf -> expectationFailure =<< renderTestFailure tf
+
 
 expectVerified :: HasCallStack => Text -> Spec
 expectVerified = expectVerified' ""
@@ -226,6 +231,21 @@ expectFalsified' :: HasCallStack => Text -> Text -> Spec
 expectFalsified' model code =
   before (runVerification $ wrap code model) $
   it "passes in-code checks" $ (`shouldSatisfy` isJust)
+
+expectPassWithWarning :: HasCallStack => Text -> Text -> Check -> Spec
+expectPassWithWarning code wgText check =
+  before (runCheck' CheckDefun (wrap code "") check) $
+  it "expectPassWithWarning" $ \r -> case r of
+    Left e -> expectationFailure =<< renderTestFailure e
+    Right rs -> case filter findWg rs of
+      [] -> expectationFailure $ "no warning found for " ++ show wgText ++ ": [" ++
+        T.unpack (T.intercalate "," (catMaybes $ map describeCheckResult rs)) ++ "]"
+      _ -> return ()
+  where
+    findWg (Left w) = wgText `T.isInfixOf` describeCheckFailure w
+    findWg _ = False
+
+
 
 expectPass :: HasCallStack => Text -> Check -> Spec
 expectPass code check = expectTest
@@ -1050,7 +1070,7 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (require-capability (CAP 100)))
           |]
-    expectPass code $ Valid Abort'
+    expectPassWithWarning code "Direct execution restricted by capability CAP" $ Valid Success'
 
   describe "requesting token that was granted" $ do
     let code =
@@ -1080,7 +1100,7 @@ spec = describe "analyze" $ do
               (with-capability (FOO 2)
                 (require-capability (BAR false))))
           |]
-    expectPass code $ Valid Abort'
+    expectPassWithWarning code "Direct execution restricted by capability BAR" $ Valid Success'
 
   describe "requesting token that was not granted for the same args" $ do
     let code =
@@ -1683,9 +1703,9 @@ spec = describe "analyze" $ do
             Just (VerificationFailure (ModuleCheckFailure (CheckFailure _ TypecheckFailure{})))
               -> pure ()
             Nothing
-              -> HUnit.assertFailure "Unexpectedly passed"
+              -> expectationFailure "Unexpectedly passed"
             Just otherFailure
-              -> HUnit.assertFailure $ "Wrong verification failure: " <>
+              -> expectationFailure $ "Wrong verification failure: " <>
                 show otherFailure
           }
 
@@ -1919,9 +1939,9 @@ spec = describe "analyze" $ do
                 it "should have no keyset provenance" $ do
                   ksProvs `shouldBe` Map.empty
 
-              [] -> runIO $ HUnit.assertFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
+              [] -> runIO $ expectationFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
 
-              other -> runIO $ HUnit.assertFailure $ show other
+              other -> runIO $ expectationFailure $ show other
 
   describe "cell-delta.integer" $ do
     let code =
@@ -3271,10 +3291,10 @@ spec = describe "analyze" $ do
             case res of
               Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
                 let trace = _etEvents (Model.linearize model)
-                unless (tests `match` trace) $ HUnit.assertFailure $
+                unless (tests `match` trace) $ expectationFailure $
                   "trace doesn't match:\n\n" ++ show trace
               _ ->
-                HUnit.assertFailure "unexpected lack of falsifying model"
+                expectationFailure "unexpected lack of falsifying model"
 
     describe "is a linearized trace of events" $ do
       let code =
