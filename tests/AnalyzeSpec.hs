@@ -201,9 +201,9 @@ testEnv = TestEnv (error "no tested code") (Valid Success') "unnamed" $ \case
     -> HUnit.assertFailure $ "Verification failure: " ++ show err
 
 expectTest :: HasCallStack => TestEnv -> Spec
-expectTest (TestEnv code check name p) = do
-  res <- runIO $ runCheck CheckDefun code check
-  it name $ p res
+expectTest (TestEnv code check name p) =
+  before (runCheck CheckDefun code check) $
+  it name p
 
 handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> IO ()
 handlePositiveTestResult = \case
@@ -216,27 +216,26 @@ expectVerified :: HasCallStack => Text -> Spec
 expectVerified = expectVerified' ""
 
 expectVerified' :: HasCallStack => Text -> Text -> Spec
-expectVerified' model code = do
-  res <- runIO $ runVerification $ wrap code model
-  it "passes in-code checks" $ handlePositiveTestResult res
+expectVerified' model code =
+  before (runVerification $ wrap code model) $
+  it "passes in-code checks" $ handlePositiveTestResult
 
 expectFalsified :: HasCallStack => Text -> Spec
 expectFalsified = expectFalsified' ""
 
 expectFalsifiedMessage :: HasCallStack => Text -> Text -> Spec
-expectFalsifiedMessage code needleMsg = do
-  res <- runIO $ runVerification $ wrap code ""
-  it "passes in-code checks" $
+expectFalsifiedMessage code needleMsg =
+  before (runVerification $ wrap code "") $
+  it "passes in-code checks" $ \res ->
     res `shouldSatisfy` \case
       Just (TestCheckFailure cf) ->
         needleMsg `T.isInfixOf` (describeCheckFailure cf)
-      _ ->
-        False
+      _ -> False
 
 expectFalsified' :: HasCallStack => Text -> Text -> Spec
-expectFalsified' model code = do
-  res <- runIO $ runVerification $ wrap code model
-  it "passes in-code checks" $ res `shouldSatisfy` isJust
+expectFalsified' model code =
+  before (runVerification $ wrap code model) $
+  it "passes in-code checks" $ (`shouldSatisfy` isJust)
 
 expectPass :: HasCallStack => Text -> Check -> Spec
 expectPass code check = expectTest
@@ -3273,9 +3272,9 @@ spec = describe "analyze" $ do
         expectTrace
           :: HasCallStack
           => CheckableType -> Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
-        expectTrace checkType code prop tests = do
-          res <- runIO $ runCheck checkType (wrap code "") $ Valid prop
-          it "produces the correct trace" $
+        expectTrace checkType code prop tests =
+          before (runCheck checkType (wrap code "") $ Valid prop) $
+          it "produces the correct trace" $ \res ->
             case res of
               Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
                 let trace = _etEvents (Model.linearize model)
@@ -3646,8 +3645,8 @@ spec = describe "analyze" $ do
             @model [(property (= result (at 2 list)))]
             (at 2 list))
           |]
-    result <- runIO $ runVerification code6'''
-    it "query fails" $ result `shouldSatisfy` isJust
+    before (runVerification code6''') $
+      it "query fails" $ (`shouldSatisfy` isJust)
 
   describe "string contains" $ do
     let code7 = [text|
