@@ -338,7 +338,8 @@ aValsOfObj schema obj = foldObject (obj , schema) $ \sym (SBVI.SBV sval) _
   -> Map.singleton (T.pack (symbolVal sym)) (AVal Nothing sval)
 
 writeFields
-  :: S Bool -- | Did the row being written previously exist?
+  :: S Bool
+     -- ^ Did the row being written previously exist?
   -> TagId -> TableName -> S RowKey
   -> S (ConcreteObj ty) -> SingTy ('TyObject ty)
   -> Analyze ()
