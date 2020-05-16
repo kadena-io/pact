@@ -21,19 +21,14 @@ import           Data.Foldable                (asum, find, for_)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Maybe                   (fromJust, isJust, isNothing)
+import           Data.Maybe
 import           Data.SBV                     (isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
-import           GHC.Stack                    (HasCallStack, withFrozenCallStack)
 import           NeatInterpolation            (text)
 import           Prelude                      hiding (read)
-import           Test.Hspec                   (Spec, describe,
-                                               expectationFailure, it,
-                                               pendingWith, runIO, shouldBe,
-                                               shouldSatisfy)
-import qualified Test.HUnit                   as HUnit
+import           Test.Hspec
 
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
@@ -127,11 +122,14 @@ renderTestFailure = \case
 compile' :: ModuleName -> Text -> IO (Either TestFailure (ModuleData Ref))
 compile' modName code = do
   replState0 <- initReplState StringEval Nothing
-  (_, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
-  moduleM <- replLookupModule replState modName
-  pure $ case moduleM of
-    Left err -> Left $ ReplError (show err)
-    Right m -> Right m
+  (r, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
+  case r of
+    Left e -> return $ Left $ ReplError (show e)
+    Right {} -> do
+      moduleM <- replLookupModule replState modName
+      pure $ case moduleM of
+        Left err -> Left $ ReplError (show err)
+        Right m -> Right m
 
 compile :: Text -> IO (Either TestFailure (ModuleData Ref))
 compile = compile' "test"
@@ -159,16 +157,20 @@ runVerification code = do
             ]
 
 runCheck :: CheckableType -> Text -> Check -> IO (Maybe TestFailure)
-runCheck checkType code check = do
+runCheck checkType code check =
+  either Just (const Nothing) <$> runCheck' checkType code check
+
+runCheck' :: CheckableType -> Text -> Check -> IO (Either TestFailure [CheckResult])
+runCheck' checkType code check = do
   eModuleData <- compile code
   case eModuleData of
-    Left tf -> pure $ Just tf
+    Left tf -> pure $ Left tf
     Right moduleData -> do
       result <- runExceptT $ verifyCheck moduleData "test" check checkType
       pure $ case result of
-        Left failure    -> Just $ VerificationFailure failure
-        Right (Left cf) -> Just $ TestCheckFailure cf
-        Right (Right _) -> Nothing
+        Left failure    -> Left $ VerificationFailure failure
+        Right (Left cf:_) -> Left $ TestCheckFailure cf
+        Right rs -> Right rs
 
 checkInterface :: Text -> IO (Maybe TestFailure)
 checkInterface code = do
@@ -184,78 +186,86 @@ checkInterface code = do
 -- | 'TestEnv' represents the environment a test runs in. Used with
 -- 'expectTest'.
 data TestEnv = TestEnv
-  { testCode  :: Text
-  , testCheck :: Check
-  , testName  :: String
-  , testPred  :: Maybe TestFailure -> IO ()
+  { testCode  :: !Text
+  , testCheck :: !Check
+  , testName  :: !String
+  , testPred  :: !(Maybe TestFailure -> IO ())
   }
 
--- | A default 'TestEnv', which checks for success. Note that this default
--- environment lacks 'testCode'.
-testEnv :: TestEnv
-testEnv = TestEnv (error "no tested code") (Valid Success') "unnamed" $ \case
-  Nothing
-    -> pure ()
-  Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
-    -> pendingWith msg
-  Just err
-    -> HUnit.assertFailure $ "Verification failure: " ++ show err
 
-expectTest :: TestEnv -> Spec
-expectTest (TestEnv code check name p) = do
-  res <- runIO $ runCheck CheckDefun code check
-  it name $ p res
+expectTest :: HasCallStack => TestEnv -> Spec
+expectTest (TestEnv code check name p) =
+  before (runCheck CheckDefun code check) $
+  it name p
 
-handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> IO ()
+
+handlePositiveTestResult :: HasCallStack => Maybe TestFailure -> Expectation
 handlePositiveTestResult = \case
   Nothing -> pure ()
   Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
     -> pendingWith msg
-  Just tf -> HUnit.assertFailure =<< renderTestFailure tf
+  Just tf -> expectationFailure =<< renderTestFailure tf
+
 
 expectVerified :: HasCallStack => Text -> Spec
-expectVerified = withFrozenCallStack $ expectVerified' ""
+expectVerified = expectVerified' ""
 
 expectVerified' :: HasCallStack => Text -> Text -> Spec
-expectVerified' model code = withFrozenCallStack $ do
-  res <- runIO $ runVerification $ wrap code model
-  it "passes in-code checks" $ handlePositiveTestResult res
+expectVerified' model code =
+  before (runVerification $ wrap code model) $
+  it "passes in-code checks" $ handlePositiveTestResult
 
 expectFalsified :: HasCallStack => Text -> Spec
-expectFalsified = withFrozenCallStack $ expectFalsified' ""
+expectFalsified = expectFalsified' ""
 
 expectFalsifiedMessage :: HasCallStack => Text -> Text -> Spec
-expectFalsifiedMessage code needleMsg = withFrozenCallStack $ do
-  res <- runIO $ runVerification $ wrap code ""
-  it "passes in-code checks" $
+expectFalsifiedMessage code needleMsg =
+  before (runVerification $ wrap code "") $
+  it "passes in-code checks" $ \res ->
     res `shouldSatisfy` \case
       Just (TestCheckFailure cf) ->
         needleMsg `T.isInfixOf` (describeCheckFailure cf)
-      _ ->
-        False
+      _ -> False
 
 expectFalsified' :: HasCallStack => Text -> Text -> Spec
-expectFalsified' model code = withFrozenCallStack $ do
-  res <- runIO $ runVerification $ wrap code model
-  it "passes in-code checks" $ res `shouldSatisfy` isJust
+expectFalsified' model code =
+  before (runVerification $ wrap code model) $
+  it "passes in-code checks" $ (`shouldSatisfy` isJust)
+
+expectPassWithWarning :: HasCallStack => Text -> Text -> Check -> Spec
+expectPassWithWarning code wgText check =
+  before (runCheck' CheckDefun (wrap code "") check) $
+  it "expectPassWithWarning" $ \r -> case r of
+    Left e -> expectationFailure =<< renderTestFailure e
+    Right rs -> case filter findWg rs of
+      [] -> expectationFailure $ "no warning found for " ++ show wgText ++ ": [" ++
+        T.unpack (T.intercalate "," (catMaybes $ map describeCheckResult rs)) ++ "]"
+      _ -> return ()
+  where
+    findWg (Left w) = wgText `T.isInfixOf` describeCheckFailure w
+    findWg _ = False
+
+
 
 expectPass :: HasCallStack => Text -> Check -> Spec
-expectPass code check = withFrozenCallStack $ expectTest
-  testEnv { testCode = wrap code ""
+expectPass code check = expectTest
+  TestEnv { testCode = wrap code ""
           , testCheck = check
           , testPred = handlePositiveTestResult
+          , testName = "expectPass"
           }
 
 expectFail :: HasCallStack => Text -> Check -> Spec
-expectFail code check = withFrozenCallStack $ expectTest
-  testEnv { testCode  = wrap code ""
+expectFail code check = expectTest
+  TestEnv { testCode  = wrap code ""
           , testCheck = check
           , testPred  = (`shouldSatisfy` isJust)
+          , testName = "expectFail"
           }
 
 expectFailureMessage :: HasCallStack => Text -> Text -> Spec
-expectFailureMessage code needleMsg = withFrozenCallStack $ expectTest
-  testEnv { testCode = wrap code ""
+expectFailureMessage code needleMsg = expectTest
+  TestEnv { testCode = wrap code ""
           , testCheck = Valid (CoreProp $ IntegerComparison Eq 0 0)
           , testPred =
               \res -> res `shouldSatisfy` \case
@@ -263,6 +273,7 @@ expectFailureMessage code needleMsg = withFrozenCallStack $ expectTest
                           needleMsg `T.isInfixOf` (describeCheckFailure cf)
                         _ ->
                           False
+          , testName = "expectFailureMessage"
           }
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
@@ -634,7 +645,14 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce-keyset (at "ks" (read keysets "123"))))
           |]
-    expectFailureMessage code "disallowed DB read"
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+    -- this used to verify that `enforce-keyset` failed on read
+    -- but this hasn't been true for a while, arguments to
+    -- `enforce-keyset` are normally evaluated, while the actual
+    -- enforcement is pure. This test isn't terribly useful
+    -- but leaving the code around if needed later.
+    -- expectFailureMessage code "disallowed DB read"
 
   describe "enforce-guard" $ do
     let code =
@@ -654,7 +672,14 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce-guard (at "ks" (read keysets "123"))))
           |]
-    expectFailureMessage code "disallowed DB read"
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
+    -- this used to verify that `enforce-guard` failed on read
+    -- but this hasn't been true for a while, arguments to
+    -- `enforce-guard` are normally evaluated, while the actual
+    -- enforcement is pure. This test isn't terribly useful
+    -- but leaving the code around if needed later.
+    -- expectFailureMessage code "disallowed DB read"
 
   describe "read-decimal" $ do
     let code =
@@ -1045,7 +1070,7 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (require-capability (CAP 100)))
           |]
-    expectPass code $ Valid Abort'
+    expectPassWithWarning code "Direct execution restricted by capability CAP" $ Valid Success'
 
   describe "requesting token that was granted" $ do
     let code =
@@ -1075,7 +1100,7 @@ spec = describe "analyze" $ do
               (with-capability (FOO 2)
                 (require-capability (BAR false))))
           |]
-    expectPass code $ Valid Abort'
+    expectPassWithWarning code "Direct execution restricted by capability BAR" $ Valid Success'
 
   describe "requesting token that was not granted for the same args" $ do
     let code =
@@ -1200,7 +1225,7 @@ spec = describe "analyze" $ do
     expectPass code $ Valid Abort'
 
   let expectCapGovPass :: Text -> Check -> Spec
-      expectCapGovPass code check = withFrozenCallStack $ expectTest $ testEnv
+      expectCapGovPass code check = expectTest $ TestEnv
         { testCode =
             [text|
               (begin-tx)
@@ -1668,7 +1693,7 @@ spec = describe "analyze" $ do
       Success' .=> Inj (RowExists "tokens" "stu" After)
 
   let expectFailsTypechecking code =
-        expectTest $ testEnv
+        expectTest $ TestEnv
           { testCode = wrap code ""
           , testName = "fails typechecking"
           , testCheck = Satisfiable Success'
@@ -1678,9 +1703,9 @@ spec = describe "analyze" $ do
             Just (VerificationFailure (ModuleCheckFailure (CheckFailure _ TypecheckFailure{})))
               -> pure ()
             Nothing
-              -> HUnit.assertFailure "Unexpectedly passed"
+              -> expectationFailure "Unexpectedly passed"
             Just otherFailure
-              -> HUnit.assertFailure $ "Wrong verification failure: " <>
+              -> expectationFailure $ "Wrong verification failure: " <>
                 show otherFailure
           }
 
@@ -1914,9 +1939,9 @@ spec = describe "analyze" $ do
                 it "should have no keyset provenance" $ do
                   ksProvs `shouldBe` Map.empty
 
-              [] -> runIO $ HUnit.assertFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
+              [] -> runIO $ expectationFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
 
-              other -> runIO $ HUnit.assertFailure $ show other
+              other -> runIO $ expectationFailure $ show other
 
   describe "cell-delta.integer" $ do
     let code =
@@ -1947,17 +1972,18 @@ spec = describe "analyze" $ do
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
 
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
-      CoreProp (StrComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
-        .=>
-        CoreProp (IntegerComparison Eq
-          (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
+    expectPass code $ Valid $ Success' .=>
+      (Inj $ Forall 1 "row" (EType SStr) $
+        CoreProp (StrComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
+          .=>
+          CoreProp (IntegerComparison Eq
+            (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3))
 
     expectPass code $ PropertyHolds $ Inj $ Exists 1 "row" (EType SStr) $
       CoreProp (IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
-    expectPass code $ Valid $
+    expectPass code $ Valid $ Success' .=>
       CoreProp (IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (Lit' "bob"))) 3)
 
@@ -3259,16 +3285,16 @@ spec = describe "analyze" $ do
         expectTrace
           :: HasCallStack
           => CheckableType -> Text -> Prop 'TyBool -> [TraceEvent -> Bool] -> Spec
-        expectTrace checkType code prop tests = withFrozenCallStack $ do
-          res <- runIO $ runCheck checkType (wrap code "") $ Valid prop
-          it "produces the correct trace" $
+        expectTrace checkType code prop tests =
+          before (runCheck checkType (wrap code "") $ Valid prop) $
+          it "produces the correct trace" $ \res ->
             case res of
               Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
                 let trace = _etEvents (Model.linearize model)
-                unless (tests `match` trace) $ HUnit.assertFailure $
+                unless (tests `match` trace) $ expectationFailure $
                   "trace doesn't match:\n\n" ++ show trace
               _ ->
-                HUnit.assertFailure "unexpected lack of falsifying model"
+                expectationFailure "unexpected lack of falsifying model"
 
     describe "is a linearized trace of events" $ do
       let code =
@@ -3632,8 +3658,8 @@ spec = describe "analyze" $ do
             @model [(property (= result (at 2 list)))]
             (at 2 list))
           |]
-    result <- runIO $ runVerification code6'''
-    it "query fails" $ result `shouldSatisfy` isJust
+    before (runVerification code6''') $
+      it "query fails" $ (`shouldSatisfy` isJust)
 
   describe "string contains" $ do
     let code7 = [text|
@@ -4001,6 +4027,21 @@ spec = describe "analyze" $ do
               "bar")))
         |]
 
+    xdescribe "defpact property timeout on 2nd step only" $
+      expectVerified [text|
+
+        (defpact foo (a:string)
+          @model [ (property (<= (length a) 256))
+                 ]
+
+          (step 1)
+          (step (enforce (<= (length a) 256) ""))
+          )
+
+        |]
+
+
+
   describe "with-default-read" $ do
     expectVerified [text|
       (defun test:integer (acct:string)
@@ -4023,6 +4064,35 @@ spec = describe "analyze" $ do
         (with-default-read accounts acct { 'balance: 0 } { 'balance := balance }
           balance))
       |]
+
+    expectVerified [text|
+
+      (defun test:string ()
+        @model [ (property (= (column-delta accounts 'balance) 0)) ]
+
+        ;; debit
+        (with-read accounts "sender"
+          { "balance" := sender-balance }
+
+          (enforce (= 10 sender-balance) "")
+
+          (update accounts "sender"
+            { "balance" : (- sender-balance 10) }
+            ))
+
+        ;; credit
+        (with-default-read accounts "receiver"
+          { "balance" : 0 }
+          { "balance" := receiver-balance }
+
+          (write accounts "receiver"
+            { "balance" : (+ receiver-balance 10)
+            })
+          )
+
+      )
+
+  |]
 
   describe "succeeds-when / fails-when" $ do
     expectVerified [text|

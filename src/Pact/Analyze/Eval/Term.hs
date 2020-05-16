@@ -338,12 +338,14 @@ aValsOfObj schema obj = foldObject (obj , schema) $ \sym (SBVI.SBV sval) _
   -> Map.singleton (T.pack (symbolVal sym)) (AVal Nothing sval)
 
 writeFields
-  :: Pact.WriteType -> TagId -> TableName -> S RowKey
+  :: S Bool
+     -- ^ Did the row being written previously exist?
+  -> TagId -> TableName -> S RowKey
   -> S (ConcreteObj ty) -> SingTy ('TyObject ty)
   -> Analyze ()
 writeFields _ _ _ _ _ SObjectNil = pure ()
 
-writeFields writeType tid tn sRk (S mProv obj)
+writeFields isNewRow tid tn sRk (S mProv obj)
   (SObjectCons sym fieldType subObjTy)
   = withSymVal fieldType $ withSymVal (SObjectUnsafe subObjTy) $ do
   let fieldName  = symbolVal sym
@@ -370,14 +372,11 @@ writeFields writeType tid tn sRk (S mProv obj)
             cell = typedCell ty id tn cn sRk sTrue
             next = mkS mProv sVal
 
-        -- (only) in the case of an insert, we know the cell did not
-        -- previously exist
-        prev <- if writeType == Pact.Insert
-          then pure (literalS 0)
-          else use cell
+        prevCellValue <- use cell
+        let prevValue = iteS isNewRow (literalS 0) prevCellValue
 
         cell .= next
-        let diff = next `minus` prev
+        let diff = next `minus` prevValue
         mkCellDeltaL tn cn sRk %= plus diff
         mkColDeltaL  tn cn     %= plus diff
 
@@ -386,7 +385,7 @@ writeFields writeType tid tn sRk (S mProv obj)
     SDecimal -> writeDelta SDecimal (+) (-) decCellDelta decColumnDelta
     _        -> typedCell fieldType id tn cn sRk sTrue .= mkS mProv sVal
 
-  writeFields writeType tid tn sRk (S mProv (obj SBVT.^. SBVT._2))
+  writeFields isNewRow tid tn sRk (S mProv (obj SBVT.^. SBVT._2))
     (SObjectUnsafe subObjTy)
 
 writeFields _ _ _ _ _ _ = vacuousMatch "the previous two cases are complete"
@@ -451,7 +450,17 @@ evalTerm = \case
       (evalTerm else')
 
   Enforce mTid cond -> do
-    cond' <- restrictingDbAccess DisallowDb $ evalTerm cond
+
+    -- DB restrictions are only applied at this level in `enforce`.
+    -- `enforce-guard` (GuardPasses) strictly evaluates the guard argument without
+    -- db restrictions; db restrictions apply on operation of the guard.
+    -- Note that the model here does not "run" guards, see note for 'GuardPasses'.
+    -- `require-capability` (HasGrant) makes no restrictions.
+    let dbRestriction = case cond of
+          GuardPasses {} -> Nothing
+          HasGrant {} -> Nothing
+          _ -> Just DisallowDb
+    cond' <- maybe id restrictingDbAccess dbRestriction $ evalTerm cond
     maybe (pure ()) (`tagAssert` cond') mTid
     succeeds %= (.&& cond')
     pure sTrue
@@ -560,7 +569,8 @@ evalTerm = \case
             pure rowAVals
           _ -> throwErrorNoLoc $ FailureMessage $ "evalTerm: Write: Unrecognized type in row position: " <> T.pack (show rowETy)
 
-        writeFields writeType tid tn sRk obj objTy
+        let isNewRow = sNot thisRowExists
+        writeFields isNewRow tid tn sRk obj objTy
 
         let newAVals = aValsOfObj schema (_sSbv obj)
             -- NOTE: left-biased union prefers the new values:
@@ -647,6 +657,10 @@ evalTerm = \case
     -- constructions only appear within `Enforce` constructions. so if we have
     -- metadata sitting around for a cell that this guard came from, mark that
     -- cell as enforced.
+
+    -- NOTE: this also means we cannot represent the actual db restrictions
+    -- found in Pact.Native.Internal.enforceGuard, as we never "run the guard".
+
     case guard ^? sProv._Just._FromCell of
       Just (OriginatingCell tn sCn sRk sDirty) ->
         cellEnforced tn sCn sRk %= (.|| sNot sDirty)

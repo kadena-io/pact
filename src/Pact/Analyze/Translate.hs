@@ -26,7 +26,7 @@ import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, toListOf, use, view, zoom,
                                              (%=), (%~), (+~), (.=), (.~),
                                              (<>~), (?=), (^.), (<&>), _1, (^..))
-import           Control.Monad              (join, replicateM, (>=>))
+import           Control.Monad              (join, replicateM, (>=>),)
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
@@ -49,11 +49,12 @@ import           GHC.Natural                (Natural)
 import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
+import qualified Pact.Types.Info as P
 import           Pact.Types.Lang            (Info, Literal (..), Type
   (TyFun, TyPrim, TySchema, TyUser, TyVar), SchemaPartial(PartialSchema))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
-import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
+import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
@@ -99,6 +100,8 @@ data TranslateFailureNoLoc
   | CapabilityNotFound CapName
   | BadPartialBind EType [String]
   | UnexpectedDefaultReadType EType EType
+  | UnsupportedNonFatal Text
+  | UnscopedCapability CapName
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -132,6 +135,9 @@ describeTranslateFailureNoLoc = \case
   CapabilityNotFound (CapName cn) -> "Found a reference to capability that does not exist: " <> T.pack cn
   BadPartialBind (EType objTy) columnNames -> "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
   UnexpectedDefaultReadType (EType expected) (EType received) -> "Bad type in a `with-default-read`: we expected " <> tShow expected <> " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
+  UnsupportedNonFatal msg -> "Unsupported operation: " <> msg
+  UnscopedCapability (CapName cap) -> "Direct execution restricted by capability " <> T.pack cap
+
 
 data TranslateEnv
   = TranslateEnv
@@ -244,6 +250,10 @@ data TranslateState
       -- Vars representing nondeterministic choice between two branches. These
       -- are used for continuing on or rolling back in evaluation of pacts.
     , _tsStepChoices   :: [VarId]
+    , _tsWarnings :: [TranslateFailure]
+      -- ^ Non-fatal translation problems
+    , _tsStaticCapsInScope :: Set CapName
+      -- ^ Statically track caps possibly brought into scope
     }
 
 makeLenses ''TranslateFailure
@@ -1282,7 +1292,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
     let capName = CapName $ T.unpack funName
     appET <- translateCapabilityApp modName capName bindings appBodyA
-    Some ty withBodyT <- translateBody withBodyA
+    Some ty withBodyT <- trackCapScope capName $
+      translateBody withBodyA
     pure $ Some ty $ WithCapability appET withBodyT
 
   AST_RequireCapability node (AST_InlinedApp _ funName bindings _) -> do
@@ -1293,11 +1304,26 @@ translateNode astNode = withAstContext astNode $ case astNode of
             bindingTs
       recov <- view teRecoverability
       tid <- genTagId
-      emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
-      pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
+      inScope <- Set.member capName <$> use tsStaticCapsInScope
+      if inScope then do
+        emit $ TraceRequireGrant recov capName bindingTs $ Located (nodeInfo node) tid
+        pure $ Some SBool $ Enforce Nothing $ HasGrant tid cap vars
+        else do
+        -- we have statically proven there is no way this capability can come into scope.
+        -- Weirdly, we want to warn about this instead of fail, as in many cases this is
+        -- intentional (functions "protected" from direct execution by a cap).
+        -- TODO consider some kind of declaration that would make this happen for all
+        -- properties of a defun. Right now properties are independent so there is
+        -- no way to "inform" properties of a protected function that a capability is
+        -- intentionally preventing direct execution.
+        addWarning' $ UnscopedCapability capName
+        pure $ Some SBool $ Lit' True
 
-  AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) ->
-    translateCapabilityApp modName (CapName $ T.unpack funName) bindings appBodyA
+  AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) -> do
+    let capName = CapName $ T.unpack funName
+    app <- translateCapabilityApp modName (CapName $ T.unpack funName) bindings appBodyA
+    tsStaticCapsInScope %= Set.insert capName
+    return app
 
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
@@ -1574,7 +1600,34 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SInteger $ inject @(Numerical Term) $
       BitwiseOp op args'
 
+  AST_NFun node "is-charset" [ a, b ] -> do
+    cset <- translateNode a
+    inp <- translateNode b
+    case (cset,inp) of
+      (Some SInteger _cset',Some SStr _inp') -> do
+        addWarning node $ UnsupportedNonFatal "is-charset: substituting true expression"
+        pure $ Some SBool $ Lit' True
+      _ -> failing $ "Pattern match failure"
+
   _ -> throwError' $ UnexpectedNode astNode
+
+-- | Accumulate a non-fatal translation issue
+addWarning :: P.HasInfo i => i -> TranslateFailureNoLoc -> TranslateM ()
+addWarning n w = tsWarnings %= (TranslateFailure (P.getInfo n) w:)
+
+-- | Accumulate a non-fatal translation issue warning on top-level node
+addWarning' :: TranslateFailureNoLoc -> TranslateM ()
+addWarning' w = view teInfo >>= \i -> addWarning i w
+
+-- | Implements cap scoping, which can accumulate further caps
+-- via compose-capability. Reverts state after running action.
+trackCapScope :: CapName -> TranslateM r -> TranslateM r
+trackCapScope capName act = do
+  current <- use tsStaticCapsInScope
+  tsStaticCapsInScope %= Set.insert capName
+  r <- act
+  tsStaticCapsInScope .= current
+  return r
 
 captureOneFreeVar :: TranslateM (VarId, Text, EType)
 captureOneFreeVar = do
@@ -1618,11 +1671,11 @@ runTranslation
   -> [Named Node]
   -> [AST Node]
   -> CheckableType
-  -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph)
+  -> Except TranslateFailure ([Arg], [VarId], ETerm, ExecutionGraph, [TranslateFailure])
 runTranslation modName funName info caps pactArgs body checkType = do
     (args, translationVid)     <- runArgsTranslation
-    (tm, (stepChoices, graph)) <- runBodyTranslation args translationVid
-    pure (args, stepChoices, tm, graph)
+    (tm, (stepChoices, graph, warnings)) <- runBodyTranslation args translationVid
+    pure (args, stepChoices, tm, graph, warnings)
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
@@ -1638,7 +1691,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
     runBodyTranslation
       :: [Arg]
       -> VarId
-      -> Except TranslateFailure (ETerm, ([VarId], ExecutionGraph))
+      -> Except TranslateFailure (ETerm, ([VarId], ExecutionGraph, [TranslateFailure]))
     runBodyTranslation args nextVarId =
       let vertex0    = 0
           nextVertex = succ vertex0
@@ -1647,7 +1700,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
           nextGuard  = Guard 0
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId nextGuard graph0
-            vertex0 nextVertex Map.empty mempty path0 Map.empty [] []
+            vertex0 nextVertex Map.empty mempty path0 Map.empty [] [] [] mempty
           translation = do
             -- For our toplevel 'FunctionScope', we reuse variables we've
             -- already generated during argument translation:
@@ -1671,6 +1724,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
           handleState translateState =
             ( _tsStepChoices translateState
             , mkExecutionGraph vertex0 path0 translateState
+            , _tsWarnings translateState
             )
       in fmap (fmap handleState) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info caps args)
@@ -1695,7 +1749,7 @@ translateNodeNoGraph node =
       nextGuard      = Guard 0
       graph0         = pure vertex0
       translateState = TranslateState nextTagId 0 nextGuard graph0 vertex0
-        nextVertex Map.empty mempty path0 Map.empty [] []
+        nextVertex Map.empty mempty path0 Map.empty [] [] [] mempty
 
       translateEnv = TranslateEnv dummyInfo Map.empty Map.empty mempty 0
         (pure 0) (pure 0)

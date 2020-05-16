@@ -88,6 +88,7 @@ instance Ord TcId where
 -- show instance is important, used as variable name
 instance Show TcId where show TcId {..} = unpack _tiName ++ show _tiId
 instance Pretty TcId where pretty = viaShow
+instance HasInfo TcId where getInfo = _tiInfo
 
 
 -- | Role of an AST in an overload.
@@ -273,6 +274,7 @@ instance Show Node where
   show (Node i t) = show i ++ "::" ++ show t
 instance Pretty Node where
   pretty (Node i t) = pretty i <> "::" <> pretty t
+instance HasInfo Node where getInfo = getInfo . _aId
 
 -- | Pair an unescaped, unmangled "bare" name with something.
 data Named i = Named {
