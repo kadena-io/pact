@@ -4027,7 +4027,7 @@ spec = describe "analyze" $ do
               "bar")))
         |]
 
-    describe "defpact property timeout on 2nd step only" $
+    xdescribe "defpact property timeout on 2nd step only" $
       expectVerified [text|
 
         (defpact foo (a:string)
