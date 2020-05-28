@@ -90,6 +90,7 @@ library
                      , Pact.Typechecker
 
   if flag(ghc-flags)
+    build-tool-depends: hsinspect:hsinspect
     ghc-options: -fplugin GhcFlags.Plugin
     build-depends: ghcflags
 

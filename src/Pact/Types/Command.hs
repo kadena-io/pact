@@ -118,7 +118,6 @@ data ProcessedCommand m a =
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
-
 #if !defined(ghcjs_HOST_OS)
 
 type SomeKeyPairCaps = (SomeKeyPair,[SigCapability])
@@ -295,8 +294,10 @@ instance FromJSON UserSig where
     UserSig <$> o .: "sig"
 
 
-newtype PactResult = PactResult (Either PactError PactValue)
-  deriving (Eq, Show, Generic)
+newtype PactResult = PactResult
+  { _pactResult :: Either PactError PactValue
+  } deriving (Eq, Show, Generic,NFData)
+
 instance ToJSON PactResult where
   toJSON (PactResult (Right s)) =
     object [ "status" .= ("success" :: String)
@@ -304,6 +305,7 @@ instance ToJSON PactResult where
   toJSON (PactResult (Left f)) =
     object [ "status" .= ("failure" :: String)
            , "error" .= f ]
+
 instance FromJSON PactResult where
   parseJSON (A.Object o) = PactResult <$>
                            ((Left <$> o .: "error") <|>
@@ -327,9 +329,10 @@ data CommandResult l = CommandResult {
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
   } deriving (Eq,Show,Generic)
+
 instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3
 instance (FromJSON l) => FromJSON (CommandResult l) where parseJSON = lensyParseJSON 3
-
+instance NFData a => NFData (CommandResult a)
 
 cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
@@ -351,7 +354,7 @@ requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey)
+  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, NFData)
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk
