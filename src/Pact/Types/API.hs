@@ -27,6 +27,7 @@ module Pact.Types.API
 
 import Control.Applicative ((<|>))
 import Control.Arrow
+import Control.DeepSeq (NFData)
 import Control.Lens hiding ((.=))
 import Control.Monad
 import Data.Text (Text)
@@ -40,7 +41,7 @@ import Pact.Types.Command
 import Pact.Types.Runtime
 
 newtype RequestKeys = RequestKeys { _rkRequestKeys :: NonEmpty RequestKey }
-  deriving (Show, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic, NFData)
 makeLenses ''RequestKeys
 
 instance ToJSON RequestKeys where
