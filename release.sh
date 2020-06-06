@@ -71,8 +71,8 @@ mkdir -p $ldir
 mkdir -p $mdir
 
 s3url="s3://pact-builds/kadena-io/pact/$build/$build"
-lurl="$s3url.$linuxid/.stack-work/dist/x86_64-linux/Cabal-2.4.0.1/build/pact/pact"
-murl="$s3url.$osxid/.stack-work/dist/x86_64-osx/Cabal-2.4.0.1/build/pact/pact"
+lurl="$s3url.$linuxid/.stack-work/dist/x86_64-linux/Cabal-3.0.1.0/build/pact/pact"
+murl="$s3url.$osxid/.stack-work/dist/x86_64-osx/Cabal-3.0.1.0/build/pact/pact"
 
 # linux
 
