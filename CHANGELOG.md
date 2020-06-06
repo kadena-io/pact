@@ -1,4 +1,4 @@
-3.6.0
+3.5.1
 ---
 
 * `NFData` instances for common Pact Service types (#800)
