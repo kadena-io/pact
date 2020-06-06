@@ -1,3 +1,17 @@
+3.6.0
+---
+
+* `NFData` instances for common Pact Service types (#800)
+* Analysis (#798): 
+  * Soft support for `is-charset` (analysis does not choke on this primitive)
+  * Fix column delta calculation
+  * Static Cap tracing 
+  * Upgraded to SBV 8.6
+* Additional benchmarks for 10x operations/tx (#795)
+* Fix bad commandline rendering from tool on load failure (#793)
+* Better sanitization of sqlite db names (#787)
+* Bugfix for `base64` primitives (#788)
+
 3.5.0
 ---
 
