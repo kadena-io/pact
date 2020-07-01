@@ -23,6 +23,8 @@ module Pact.ApiReq
     ,apiReq
     ,uapiReq
     ,mkApiReq
+    ,mkApiReqCmd
+    ,ApiReqParts
     ,mkExec
     ,mkCont
     ,mkKeyPairs
@@ -33,6 +35,7 @@ module Pact.ApiReq
     ,combineSigs
     ,combineSigDatas
     ,signCmd
+    ,decodeYaml
     ) where
 
 import Control.Applicative
@@ -57,6 +60,7 @@ import qualified Data.Set as S
 import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.Text.Encoding
 import Data.Thyme.Clock
 import qualified Data.Yaml as Y
@@ -130,18 +134,18 @@ instance FromJSON ApiPublicMeta where
 
 
 data ApiReq = ApiReq {
-  _ylType :: Maybe String,
+  _ylType :: Maybe Text,
   _ylPactTxHash :: Maybe Hash,
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
   _ylData :: Maybe Value,
   _ylProof :: Maybe ContProof,
   _ylDataFile :: Maybe FilePath,
-  _ylCode :: Maybe String,
+  _ylCode :: Maybe Text,
   _ylCodeFile :: Maybe FilePath,
   _ylKeyPairs :: Maybe [ApiKeyPair],
   _ylSigners :: Maybe [ApiSigner],
-  _ylNonce :: Maybe String,
+  _ylNonce :: Maybe Text,
   _ylPublicMeta :: Maybe ApiPublicMeta,
   _ylNetworkId :: Maybe NetworkId
   } deriving (Eq,Show,Generic)
@@ -216,7 +220,8 @@ sigDataToCommand (SigData h sigList (Just c)) = do
   pure $ Command c sigs h
 
 sampleSigData :: SigData Text
-sampleSigData = SigData (either error id $ fromText' "b57_gSRIwDEo6SAYseppem57tykcEJkmbTFlCHDs0xc") [("acbe76b30ccaf57e269a0cd5eeeb7293e7e84c7d68e6244a64c4adf4d2df6ea1", Nothing)] Nothing
+sampleSigData = SigData (either error id $ fromText' "b57_gSRIwDEo6SAYseppem57tykcEJkmbTFlCHDs0xc")
+  [("acbe76b30ccaf57e269a0cd5eeeb7293e7e84c7d68e6244a64c4adf4d2df6ea1", Nothing)] Nothing
 
 instance ToJSON a => ToJSON (SigData a) where
   toJSON (SigData h s c) = object $ concat
@@ -351,18 +356,34 @@ uapiReq fp = do
     Left e -> dieAR $ "Error decoding command: " <> e
     Right a -> doEncode a
 
-mkApiReq :: FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
+-- | parts read/rationalized from a processed ApiReq:
+-- the ApiReq, code, msg data, PublicMeta
+type ApiReqParts = (ApiReq,Text,Value,PublicMeta)
+
+-- | Assemble a command and parts from a ApiReq YAML file.
+mkApiReq :: FilePath -> IO (ApiReqParts,Command Text)
 mkApiReq fp = mkApiReq' False fp
 
-mkApiReq' :: Bool -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
-mkApiReq' unsignedReq fp = do
-  ar@ApiReq {..} <- decodeYaml fp
+mkApiReq' :: Bool -> FilePath -> IO (ApiReqParts,Command Text)
+mkApiReq' unsignedReq fp = mkApiReqCmd unsignedReq fp =<< decodeYaml fp
+
+-- | Assemble a command and parts from an ApiReq.
+mkApiReqCmd
+  :: Bool
+     -- ^ make "unsigned command" for offline signing
+  -> FilePath
+     -- ^ filepath for chdir for loading files
+  -> ApiReq
+     -- ^ he ApiReq
+  -> IO (ApiReqParts, Command Text)
+mkApiReqCmd unsignedReq fp ar@ApiReq{..} =
   case _ylType of
     Just "exec" -> mkApiReqExec unsignedReq ar fp
     Just "cont" -> mkApiReqCont unsignedReq ar fp
     Nothing -> mkApiReqExec unsignedReq ar fp -- Default
     _ -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
 
+-- | Decode yaml or fail in IO.
 decodeYaml :: FromJSON b => FilePath -> IO b
 decodeYaml fp = either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
@@ -404,12 +425,12 @@ withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
     toSigner ApiSigner{..} = Signer _asScheme _asPublic _asAddress (fromMaybe [] _asCaps)
 
 
-mkApiReqExec :: Bool -> ApiReq -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
+mkApiReqExec :: Bool -> ApiReq -> FilePath -> IO (ApiReqParts,Command Text)
 mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
   (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
-      (Just f,Nothing) -> liftIO (readFile f)
+      (Just f,Nothing) -> liftIO (T.readFile f)
       _ -> dieAR "Expected either a 'code' or 'codeFile' entry"
     cdata <- case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
@@ -444,13 +465,13 @@ mkPubMeta apm = case apm of
 
 
 
-mkNonce :: Maybe String -> IO Text
-mkNonce = maybe (pack . show <$> getCurrentTime) (return . pack)
+mkNonce :: Maybe Text -> IO Text
+mkNonce = maybe (pack . show <$> getCurrentTime) return
 
 -- | Construct an Exec request message
 --
 mkExec
-  :: String
+  :: Text
     -- ^ code
   -> Value
     -- ^ optional environment data
@@ -460,7 +481,7 @@ mkExec
     -- ^ signing keypairs + caplists
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
-  -> Maybe String
+  -> Maybe Text
     -- ^ optional nonce
   -> IO (Command Text)
 mkExec code mdata pubMeta kps nid ridm = do
@@ -470,13 +491,13 @@ mkExec code mdata pubMeta kps nid ridm = do
          pubMeta
          rid
          nid
-         (Exec (ExecMsg (pack code) mdata))
+         (Exec (ExecMsg code mdata))
   return $ decodeUtf8 <$> cmd
 
 -- | Construct an Exec request message
 --
 mkUnsignedExec
-  :: String
+  :: Text
     -- ^ code
   -> Value
     -- ^ optional environment data
@@ -486,7 +507,7 @@ mkUnsignedExec
     -- ^ payload signers
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
-  -> Maybe String
+  -> Maybe Text
     -- ^ optional nonce
   -> IO (Command Text)
 mkUnsignedExec code mdata pubMeta kps nid ridm = do
@@ -496,11 +517,11 @@ mkUnsignedExec code mdata pubMeta kps nid ridm = do
          pubMeta
          rid
          nid
-         (Exec (ExecMsg (pack code) mdata))
+         (Exec (ExecMsg code mdata))
   return $ decodeUtf8 <$> cmd
 
 
-mkApiReqCont :: Bool -> ApiReq -> FilePath -> IO ((ApiReq,String,Value,PublicMeta),Command Text)
+mkApiReqCont :: Bool -> ApiReq -> FilePath -> IO (ApiReqParts,Command Text)
 mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
   apiPactId <- case _ylPactTxHash of
     Just t -> return t
@@ -544,7 +565,7 @@ mkCont
     -- ^ command public metadata
   -> [SomeKeyPairCaps]
     -- ^ signing keypairs
-  -> Maybe String
+  -> Maybe Text
     -- ^ optional nonce
   -> Maybe ContProof
     -- ^ optional continuation proof (required for cross-chain)
@@ -577,7 +598,7 @@ mkUnsignedCont
     -- ^ command public metadata
   -> [Signer]
     -- ^ payload signers
-  -> Maybe String
+  -> Maybe Text
     -- ^ optional nonce
   -> Maybe ContProof
     -- ^ optional continuation proof (required for cross-chain)

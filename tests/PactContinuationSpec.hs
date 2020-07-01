@@ -679,7 +679,7 @@ decValue = Just . PLiteral . LDecimal
 
 checkContHash
   :: HasCallStack
-  => [(ApiReq,String,Value,PublicMeta)]
+  => [ApiReqParts]
   -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
   -> PactHash
   -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
@@ -818,7 +818,7 @@ runResults rs act = runReaderT act rs
 
 makeExecCmd :: SomeKeyPair -> Text -> IO (Command Text)
 makeExecCmd keyPairs code =
-  mkExec (T.unpack code)
+  mkExec code
   (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing Nothing
 
 
@@ -833,7 +833,7 @@ makeContCmd
   -> Value        -- data
   -> Command Text -- cmd to get pact Id from
   -> Int          -- step
-  -> String       -- nonce
+  -> Text         -- nonce
   -> IO (Command Text)
 makeContCmd = makeContCmd' Nothing
 
@@ -845,7 +845,7 @@ makeContCmd'
   -> Value        -- data
   -> Command Text -- cmd to get pact Id from
   -> Int          -- step
-  -> String       -- nonce
+  -> Text         -- nonce
   -> IO (Command Text)
 makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
   mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM Nothing
