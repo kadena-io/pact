@@ -374,7 +374,7 @@ mkApiReqCmd
   -> FilePath
      -- ^ filepath for chdir for loading files
   -> ApiReq
-     -- ^ he ApiReq
+     -- ^ the ApiReq
   -> IO (ApiReqParts, Command Text)
 mkApiReqCmd unsignedReq fp ar@ApiReq{..} =
   case _ylType of
