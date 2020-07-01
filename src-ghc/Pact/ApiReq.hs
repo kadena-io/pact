@@ -60,7 +60,6 @@ import qualified Data.Set as S
 import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import Data.Text.Encoding
 import Data.Thyme.Clock
 import qualified Data.Yaml as Y
@@ -430,7 +429,7 @@ mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
   (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
-      (Just f,Nothing) -> liftIO (T.readFile f)
+      (Just f,Nothing) -> liftIO (decodeUtf8 <$> BS.readFile f)
       _ -> dieAR "Expected either a 'code' or 'codeFile' entry"
     cdata <- case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
