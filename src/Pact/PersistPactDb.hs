@@ -1,13 +1,14 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Server.PersistPactDb
@@ -53,12 +54,12 @@ import Pact.Types.Logger
 
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv
-  { _db :: p
-  , _persist :: Persister p
-  , _logger :: Logger
-  , _txRecord :: M.Map TxTable [TxLog Value]
-  , _txId :: TxId
-  , _mode :: Maybe ExecutionMode
+  { _db :: !p
+  , _persist :: !(Persister p)
+  , _logger :: !Logger
+  , _txRecord :: !(M.Map TxTable [TxLog Value])
+  , _txId :: !TxId
+  , _mode :: !(Maybe ExecutionMode)
   }
 makeLenses ''DbEnv
 
@@ -114,12 +115,17 @@ instance Logging (StateT (DbEnv p) IO) where
   {-# INLINE log #-}
 
 runMVState :: MVar (DbEnv p) -> MVState p a -> IO a
-runMVState v a = modifyMVar v (runStateT a >=> \(r,m') -> return (m',r))
+runMVState v a = modifyMVar v $! \s -> do
+    (!r, !m') <- runStateT a s
+    return (m',r)
 {-# INLINE runMVState #-}
 
 
 doPersist :: (Persister p -> Persist p a) -> MVState p a
-doPersist f = get >>= \m -> liftIO (f (_persist m) (_db m)) >>= \(db',r) -> db .= db' >> return r
+doPersist f = get >>= \m -> do
+    (!db', !r) <- liftIO $ f (_persist m) (_db m)
+    modify' $ set db db'
+    return r
 {-# INLINE doPersist #-}
 
 toTableId :: Domain k v -> TableId
@@ -133,16 +139,16 @@ pactdb :: PactDb (DbEnv p)
 pactdb = PactDb
   { _readRow = \d k e ->
        case d of
-           KeySets    -> readSysTable e (DataTable keysetsTable) (asString k)
-           Modules    -> readSysTable e (DataTable modulesTable) (asString k)
+           KeySets -> readSysTable e (DataTable keysetsTable) (asString k)
+           Modules -> readSysTable e (DataTable modulesTable) (asString k)
            Namespaces -> readSysTable e (DataTable namespacesTable) (asString k)
            Pacts -> readSysTable e (DataTable pactsTable) (asString k)
            (UserTables t) -> readUserTable e t k
 
  , _writeRow = \wt d k v e ->
        case d of
-           KeySets    -> writeSys e wt keysetsTable k v
-           Modules    -> writeSys e wt modulesTable k v
+           KeySets -> writeSys e wt keysetsTable k v
+           Modules -> writeSys e wt modulesTable k v
            Namespaces -> writeSys e wt namespacesTable k v
            Pacts -> writeSys e wt pactsTable k v
            (UserTables t) -> writeUser e wt t k v
@@ -180,7 +186,7 @@ doBegin m = do
     Nothing -> return ()
   resetTemp
   doPersist $ \p -> P.beginTx p m
-  mode .= Just m
+  modify' $ set mode (Just m)
   case m of
     Transactional -> Just <$> use txId
     Local -> pure Nothing
@@ -209,7 +215,7 @@ rollback = do
   (r :: Either SomeException ()) <- try (doPersist P.rollbackTx)
   case r of
     Left e -> logError $ "rollback: " ++ show e
-    Right _ -> return ()
+    Right !_ -> return ()
   resetTemp
 
 
@@ -246,7 +252,9 @@ readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t (DataKey k)
 {-# INLINE readSysTable #-}
 
 resetTemp :: MVState p ()
-resetTemp = txRecord .= M.empty >> mode .= Nothing
+resetTemp = do
+    modify' $ set txRecord M.empty
+    modify' $ set mode Nothing
 {-# INLINE resetTemp #-}
 
 writeSys :: (AsString k,PactDbValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
@@ -282,7 +290,13 @@ writeUser s wt tn rk row = runMVState s $ do
 {-# INLINE writeUser #-}
 
 record :: (AsString k, PactDbValue v) => TxTable -> k -> v -> MVState p ()
-record tt k v = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
+record tt k v = modify'
+    $ over txRecord
+    $ M.insertWith append tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
+  where
+    -- strict append (it would be better to use a datastructure with efficient append)
+    append [] b = b
+    append (h:t) b = let !x = append t b in h : x
 {-# INLINE record #-}
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO ModuleName

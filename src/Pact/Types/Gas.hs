@@ -67,14 +67,14 @@ instance Wrapped GasPrice
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
 data ReadValue
-  = ReadData (ObjectMap PactValue)
-  | ReadKey RowKey
+  = ReadData !(ObjectMap PactValue)
+  | ReadKey !RowKey
   | ReadTxId
-  | ReadModule ModuleName Code
-  | ReadInterface ModuleName Code
-  | ReadNamespace (Namespace PactValue)
-  | ReadKeySet KeySetName KeySet
-  | ReadYield Yield
+  | ReadModule !ModuleName !Code
+  | ReadInterface !ModuleName !Code
+  | ReadNamespace !(Namespace PactValue)
+  | ReadKeySet !KeySetName !KeySet
+  | ReadYield !Yield
 
 instance Pretty ReadValue where
   pretty g = case g of
@@ -89,13 +89,13 @@ instance Pretty ReadValue where
 
 
 data WriteValue
-  = WriteData WriteType Text (ObjectMap PactValue)
-  | WriteTable Text
-  | WriteModule ModuleName Code
-  | WriteInterface ModuleName Code
-  | WriteNamespace (Namespace PactValue)
-  | WriteKeySet KeySetName KeySet
-  | WriteYield Yield
+  = WriteData !WriteType !Text !(ObjectMap PactValue)
+  | WriteTable !Text
+  | WriteModule !ModuleName !Code
+  | WriteInterface !ModuleName !Code
+  | WriteNamespace !(Namespace PactValue)
+  | WriteKeySet !KeySetName !KeySet
+  | WriteYield !Yield
 
 instance Pretty WriteValue where
   pretty g = case g of
@@ -109,31 +109,31 @@ instance Pretty WriteValue where
 
 
 data GasArgs
-  = GSelect (Maybe [(Info,FieldKey)])
+  = GSelect !(Maybe [(Info,FieldKey)])
   -- ^ Cost of selecting columns from a user table
-  | GSort Int
+  | GSort !Int
   -- ^ Cost of performing sort on any list
-  | GSortFieldLookup Int
+  | GSortFieldLookup !Int
   -- ^ Cost of sorting by lookup fields
-  | GConcatenation Int Int
+  | GConcatenation !Int !Int
   -- ^ Cost of concatenating two strings, lists, and objects
-  | GUnreduced [Term Ref]
+  | GUnreduced ![Term Ref]
   -- ^ Cost of using a native function
-  | GPostRead ReadValue
+  | GPostRead !ReadValue
   -- ^ Cost for reading from database
-  | GPreWrite WriteValue
+  | GPreWrite !WriteValue
   -- ^ Cost of writing to the database
-  | GModuleMember (ModuleDef (Term Name))
+  | GModuleMember !(ModuleDef (Term Name))
   -- ^ TODO documentation
-  | GModuleDecl ModuleName Code
+  | GModuleDecl !ModuleName !Code
   -- ^ Cost of creating a module
-  | GUse ModuleName (Maybe ModuleHash)
+  | GUse ModuleName !(Maybe ModuleHash)
   -- ^ Cost of using a (potentially blessed) module
-  | GInterfaceDecl ModuleName Code
+  | GInterfaceDecl !ModuleName !Code
   -- ^ Cost of creating an interface
-  | GUserApp DefType
+  | GUserApp !DefType
   -- ^ Cost of using a function, capability, or defpact
-  | GMakeList Integer
+  | GMakeList !Integer
   -- ^ Cost of make-list
 
 instance Pretty GasArgs where
@@ -164,9 +164,9 @@ instance FromJSON GasLimit where
 instance Wrapped GasLimit
 
 data GasModel = GasModel
-  { gasModelName :: Text
-  , gasModelDesc :: Text
-  , runGasModel :: Text -> GasArgs -> Gas
+  { gasModelName :: !Text
+  , gasModelDesc :: !Text
+  , runGasModel :: !(Text -> GasArgs -> Gas)
   }
 
 instance Show GasModel where
@@ -176,8 +176,8 @@ instance Pretty GasModel where
   pretty m = viaShow m
 
 data GasEnv = GasEnv
-  { _geGasLimit :: GasLimit
-  , _geGasPrice :: GasPrice
-  , _geGasModel :: GasModel
+  { _geGasLimit :: !GasLimit
+  , _geGasPrice :: !GasPrice
+  , _geGasModel :: !GasModel
   }
 makeLenses ''GasEnv
