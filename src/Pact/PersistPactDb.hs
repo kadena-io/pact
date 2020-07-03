@@ -292,7 +292,7 @@ writeUser s wt tn rk row = runMVState s $ do
 record :: (AsString k, PactDbValue v) => TxTable -> k -> v -> MVState p ()
 record tt k v = modify'
     $ over txRecord
-    $ M.insertWith append tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
+    $ M.insertWith (flip append) tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
   where
     -- strict append (it would be better to use a datastructure with efficient append)
     append [] b = b
