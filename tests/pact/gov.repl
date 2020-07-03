@@ -64,3 +64,33 @@
 (use govtest)
 (env-hash (hash "tx1"))
 (expect-failure "admin grant fails on new tx for tx1" (read votes "bob"))
+(commit-tx)
+
+
+(begin-tx)
+(define-namespace 'user (sig-keyset) (sig-keyset))
+(namespace 'user)
+(module ns-gov GOV
+  (defcap GOV () (enforce false "autonomous-ns-gov"))
+  (defschema s x:string)
+  (deftable t:{s}))
+(create-table t)
+(commit-tx)
+
+(expect-failure
+ "gov not granted after install"
+ "autonomous-ns-gov"
+ (write user.ns-gov.t "a" { 's: "x" }))
+
+(begin-tx)
+(namespace 'user)
+(env-exec-config ["PreserveNsModuleInstallBug"])
+(module ns-gov-bug GOV
+  (defcap GOV () (enforce false "autonomous-ns-gov-bug"))
+  (defschema s x:string)
+  (deftable t:{s}))
+(expect-failure
+ "ns gov bug preserved"
+ "autonomous-ns-gov-bug"
+ (create-table t))
+(commit-tx)

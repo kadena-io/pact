@@ -268,7 +268,10 @@ eval (TModule (MDModule m) bod i) =
       -- that doesn't exist yet. Of course, if governance is
       -- busted somehow, this means we won't find out, and
       -- can't fix it later.
-      _ -> void $ acquireModuleAdminCapability (_mName m) $ return ()
+      _ -> do
+        capMName <-
+          ifExecutionFlagSet' FlagPreserveNsModuleInstallBug (_mName m) (_mName mangledM)
+        void $ acquireModuleAdminCapability capMName $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))

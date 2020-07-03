@@ -35,6 +35,7 @@ module Pact.Types.Runtime
    NamespacePolicy(..),
    permissiveNamespacePolicy,
    ExecutionConfig(..),ExecutionFlag(..),ecFlags,isExecutionFlagSet,flagRep,flagReps,
+   ifExecutionFlagSet,ifExecutionFlagSet',
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -134,6 +135,8 @@ data ExecutionFlag
   | FlagAllowReadInLocal
   -- | Preserve namespace module governance bug
   | FlagPreserveModuleNameBug
+  -- | Preserve namespace module acquire gov bug
+  | FlagPreserveNsModuleInstallBug
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -257,6 +260,16 @@ catchesPactError action =
 
 isExecutionFlagSet :: ExecutionFlag -> Eval e Bool
 isExecutionFlagSet f = S.member f <$> view (eeExecutionConfig . ecFlags)
+
+ifExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e a -> Eval e a
+ifExecutionFlagSet f onTrue onFalse = do
+  b <- isExecutionFlagSet f
+  if b then onTrue else onFalse
+
+ifExecutionFlagSet' :: ExecutionFlag -> a -> a -> Eval e a
+ifExecutionFlagSet' f onTrue onFalse =
+  ifExecutionFlagSet f (return onTrue) (return onFalse)
+
 
 
 -- | Bracket interpreter action pushing and popping frame on call stack.

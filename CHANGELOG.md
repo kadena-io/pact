@@ -1,11 +1,16 @@
+3.5.2
+---
+* ApiReq: expose builder, migrate String -> Text (#805)
+* Fix install module governance issue
+
 3.5.1
 ---
 
 * `NFData` instances for common Pact Service types (#800)
-* Analysis (#798): 
+* Analysis (#798):
   * Soft support for `is-charset` (analysis does not choke on this primitive)
   * Fix column delta calculation
-  * Static Cap tracing 
+  * Static Cap tracing
   * Upgraded to SBV 8.6
 * Additional benchmarks for 10x operations/tx (#795)
 * Fix bad commandline rendering from tool on load failure (#793)

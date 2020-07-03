@@ -437,7 +437,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.5.1"
+   "3.5.2"
 
 Top level only: this function will fail if used in module code.
 
@@ -1906,7 +1906,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“OldReadOnlyBehavior”,“PreserveModuleNameBug”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“OldReadOnlyBehavior”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”]
 
 .. code:: lisp
 

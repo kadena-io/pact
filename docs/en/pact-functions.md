@@ -393,7 +393,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.5.1"
+"3.5.2"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1647,7 +1647,7 @@ Set environment confidential ENTITY id, or unset with no argument.
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","OldReadOnlyBehavior","PreserveModuleNameBug"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","OldReadOnlyBehavior","PreserveModuleNameBug","PreserveNsModuleInstallBug"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
