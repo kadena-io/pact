@@ -127,7 +127,7 @@ data GasArgs
   -- ^ TODO documentation
   | GModuleDecl !ModuleName !Code
   -- ^ Cost of creating a module
-  | GUse ModuleName !(Maybe ModuleHash)
+  | GUse !ModuleName !(Maybe ModuleHash)
   -- ^ Cost of using a (potentially blessed) module
   | GInterfaceDecl !ModuleName !Code
   -- ^ Cost of creating an interface
