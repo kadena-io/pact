@@ -25,7 +25,6 @@ import qualified Data.Decimal                 as Decimal
 import           Data.SBV                     (HasKind (kindOf), SDivisible (..),
                                                SymVal (..), oneIf, sNot, (.&&),
                                                (.==), (.>), (.^), (.||))
-import           Data.SBV.Control             (SMTValue (sexprToVal))
 import           Data.SBV.Dynamic             (svAbs, svPlus, svTimes, svUNeg)
 import           Data.SBV.Internals           (CV (..), CVal (CInteger),
                                                SBV (SBV), SVal (SVal),
@@ -197,8 +196,6 @@ instance SymVal Decimal where
   literal a = SBV . SVal SBVI.KUnbounded . Left . normCV $ CV SBVI.KUnbounded (CInteger (unDecimal a))
   fromCV (CV _ (CInteger x)) = Decimal x
   fromCV x = error $ "in instance SymVal Decimal: expected CWInteger, found: " ++ show x
-
-instance SMTValue Decimal where sexprToVal = fmap Decimal . sexprToVal
 
 instance Pretty Decimal where
   pretty (Decimal dec) =
