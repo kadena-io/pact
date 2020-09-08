@@ -236,7 +236,7 @@ library
                 , memory
                 , neat-interpolation >= 0.3 && < 0.4
                 , safe-exceptions >= 0.1.5.0 && < 0.2
-                , sbv >= 8.7
+                , sbv >= 8.8
                 , servant-server
                 , statistics >= 0.13.3 && < 0.16
                 , wai-cors

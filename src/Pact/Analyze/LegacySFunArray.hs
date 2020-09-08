@@ -58,7 +58,8 @@ instance SymArray SFunArray where
   readArray     (SFunArray f)                 = f
   writeArray    (SFunArray f) a b             = SFunArray (\a' -> ite (a .== a') b (f a'))
   mergeArrays t (SFunArray g)   (SFunArray h) = SFunArray (\x -> ite t (g x) (h x))
-  newArrayInState                             = undefined
+  newArrayInState                             = error "LegacySFunArray: newArrayInState is not implemented"
+  sListArray                                  = error "LegacySFunArray: sListArray is not implemented"
 
 instance SymVal b => Mergeable (SFunArray a b) where
   symbolicMerge _ = mergeArrays

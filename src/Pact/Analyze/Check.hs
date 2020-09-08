@@ -327,12 +327,14 @@ resultQuery goal model0 = do
     Validation ->
       case satResult of
         SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
+        SBV.DSat _ -> throwError . Invalid =<< lift (saturateModel model0)
         SBV.Unsat -> pure ProvedTheorem
         SBV.Unk   -> throwError . mkUnknown =<< lift SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
         SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
+        SBV.DSat _ -> SatisfiedProperty <$> lift (saturateModel model0)
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . mkUnknown =<< lift SBV.getUnknownReason
 
