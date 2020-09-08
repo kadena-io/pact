@@ -98,6 +98,7 @@ doCRTest tn s code = do
     , readFromFile = readOutputRoundtrip
     , testName = tn
     , directory = "golden"
+    , failFirstTime = False
     }
   where
     -- hacks 'readFromFile' to run the golden value through the roundtrip.
@@ -123,6 +124,7 @@ golden name obj = Golden
   , readFromFile = jsonDecode
   , testName = name
   , directory = "golden"
+  , failFirstTime = False
   }
   where
     elide s | length s < 256 = s
