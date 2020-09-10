@@ -11,6 +11,7 @@ extra-deps:
   - direct-sqlite-2.3.26
   - sbv-8.8
   - megaparsec-9.0.0
+  - neat-interpolation-0.5.1.2
 
   # --- Forced Downgrades --- #
   - prettyprinter-1.6.0         # >= 1.6.1 breaks bin compat in Chainweb blocks
