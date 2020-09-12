@@ -72,7 +72,6 @@ data Cursor = Cursor
   } deriving (Show)
 instance Default Cursor where def = Cursor def def
 
-
 -- | Adapt Cursor to MP Stream
 instance Stream Cursor where
   type Token Cursor = Exp Info
@@ -82,10 +81,6 @@ instance Stream Cursor where
   chunkToTokens Proxy = id
   chunkLength Proxy = length
   chunkEmpty Proxy = null
-  reachOffset _ ps = ("reachOffset-unsupported",ps)
-  -- ^ assuming this is unused (undefined passed unit tests), but
-  -- if the unsupported shows up then we need something better
-  showTokens Proxy ts = renderCompactString $ toList ts
   take1_ Cursor{..} = case _cStream of
     [] -> Nothing
     (t:ts) -> Just (t, Cursor _cContext ts)

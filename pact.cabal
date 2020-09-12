@@ -171,7 +171,9 @@ library
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.9.0.0 && < 4.14
                      , base16-bytestring >=0.1.1.6 && < 0.2
-                     , base64-bytestring >= 1.0.0.1
+                     -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which
+                     -- can cause pact failures (e.g. (env-hash "aa"))
+                     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
                      , cassava >= 0.5
@@ -188,7 +190,7 @@ library
                      , hspec >= 2.2.4 && < 2.8
                      , lens >= 4.14 && < 4.19
                      , lens-aeson >= 1.0.0.5 && < 1.2
-                     , megaparsec >= 8
+                     , megaparsec >= 9
                      , mtl >= 2.2.1 && < 2.3
                      , old-locale >= 1.0.0.7 && < 1.1
                      , optparse-applicative >= 0.12.1.0 && < 0.16
@@ -217,7 +219,7 @@ library
                      , servant-client
                      , servant-client-core
                      , servant-swagger
-                     , swagger2 >= 2.3 && < 2.6
+                     , swagger2 >= 2.3
 
   if impl(ghcjs)
     build-depends:
@@ -234,9 +236,9 @@ library
                 , haskeline >= 0.7.3 && < 0.8
                 , http-client
                 , memory
-                , neat-interpolation >= 0.3 && < 0.4
+                , neat-interpolation >= 0.4
                 , safe-exceptions >= 0.1.5.0 && < 0.2
-                , sbv >= 8.7
+                , sbv >= 8.8
                 , servant-server
                 , statistics >= 0.13.3 && < 0.16
                 , wai-cors
@@ -319,7 +321,7 @@ test-suite hspec
               , filepath
               , hedgehog >= 1.0.1 && < 1.1
               , hspec
-              , hspec-golden >= 0.1
+              , hspec-golden >= 0.1.0.2
               , hw-hspec-hedgehog == 0.1.*
               , intervals
               , lens

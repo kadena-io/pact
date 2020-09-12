@@ -147,7 +147,7 @@
 (expect "!= moduleGuard moduleGuard" true (!= (tm.mk "2") (tm.mk "1")))
 
 "===== pact guard equality"
-(env-hash "aa")
+(env-hash "YQo")
 (let ((pgs (tm.p "1" "2")))
   (expect "= pactGuard pactGuard" true (= (at 0 pgs) (at 0 pgs)))
   (expect "not = pactGuard pactGuard" false (= (at 1 pgs) (at 0 pgs)))
@@ -191,3 +191,14 @@
 (expect "neg take beyond range" [1 2 3 4 5] (take -10 [1 2 3 4 5]))
 (expect "pos take at 63-bit boundary" (take 9223372036854775807 [1 2 3 4 5]) (take 9223372036854775808 [1 2 3 4 5]))
 (expect "neg take at 63-bit boundary" (take -9223372036854775807 [1 2 3 4 5]) (take -9223372036854775808 [1 2 3 4 5]))
+
+"===== env-hash"
+(expect "env-hash" "Set tx hash to YQo" (env-hash "YQo"))
+
+;; versions of base64-bytestring < 1.2 accept invalid base64 encodings. The
+;; following test case is expected to fail after upgrading to
+;; base64-bytestring > 1.2.0.0. This would be a breaking change and it must
+;; be guaranteed that mainnet history isn't affected.
+;; (expect-failure "env-hash invalid base64" (env-hash "aa"))
+(expect "env-hash invalid base64" "Set tx hash to aa" (env-hash "aa"))
+

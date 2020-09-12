@@ -7,12 +7,13 @@ ghc-options: {"$locals": -funclutter-valid-hole-fits -fmax-relevant-binds=0}
 extra-deps:
   # --- Missing from Stackage --- #
   - ed25519-donna-0.1.1
-  - hspec-golden-0.1.0.1
+  - hspec-golden-0.1.0.2
   - direct-sqlite-2.3.26
-  - sbv-8.7
+  - sbv-8.8
+  - megaparsec-9.0.0
+  - neat-interpolation-0.5.1.2
 
   # --- Forced Downgrades --- #
-  - neat-interpolation-0.3.2.6  # >= 0.4 changes gas model output
   - prettyprinter-1.6.0         # >= 1.6.1 breaks bin compat in Chainweb blocks
 
   # --- Custom Pins --- #
