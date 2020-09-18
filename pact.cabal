@@ -170,7 +170,7 @@ library
                      , prettyprinter-ansi-terminal >= 1.1 && < 1.2
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.9.0.0 && < 4.14
-                     , base16-bytestring >=0.1.1.6 && < 0.2
+                     , base16-bytestring >=1.0
                      -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which
                      -- can cause pact failures (e.g. (env-hash "aa"))
                      , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
@@ -309,7 +309,7 @@ test-suite hspec
               , Decimal
               , HUnit
               , aeson
-              , base16-bytestring >=0.1.1.6 && < 0.2
+              , base16-bytestring >=1.0
               , bound
               , bytestring
               , containers

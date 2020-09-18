@@ -25,8 +25,10 @@ import Pact.Types.Hash
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----
 
-getByteString :: ByteString -> ByteString
-getByteString = fst . B16.decode
+getByteString :: HasCallStack => ByteString -> ByteString
+getByteString x = case B16.decode x of
+    Left e -> error $ "getByteString: failed to decode hex: " <> show e
+    Right r -> r
 
 
 type Address = Maybe Text
