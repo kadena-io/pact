@@ -375,7 +375,9 @@ isVarTy :: Type v -> Bool
 isVarTy TyVar {} = True
 isVarTy _ = False
 
--- | a `canUnifyWith` b means a "can represent/contains" b
+-- | Used by runtime typechecking to unify a specification with a value,
+-- 'a canUnifyWith b' means 'a' "can represent/contains" 'b'.
+-- In use, 'a' is the spec, and 'b' is the value type being unified with 'a'.
 canUnifyWith :: Eq n => Type n -> Type n -> Bool
 canUnifyWith a b | a == b = True
 canUnifyWith TyAny _ = True
@@ -391,7 +393,7 @@ canUnifyWith (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
   (Nothing,Just _) -> True
   (Just _,Nothing) -> True
   _ -> a == b
-canUnifyWith (TyModSpec a) (TyModSpec b) = all (`elem` a) b
+canUnifyWith (TyModSpec a) (TyModSpec b) = all (`elem` b) a
 canUnifyWith _ _ = False
 {-# INLINE canUnifyWith #-}
 

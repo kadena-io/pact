@@ -12,9 +12,11 @@ import Pact.Types.PactValue
 
 spec :: Spec
 spec = do
-  describe "JSONPersistables" testJSONPersist
-  describe "JSONColumns "testJSONColumns
--- describe "JSONModules" testJSONModules
+  describe "JSONRoundtrips" $ do
+    describe "testJSONPersist" testJSONPersist
+    describe "testJSONColumns "testJSONColumns
+    xdescribe "testJSONModules" testJSONModules
+  describe "testUnification" testUnification
 
 rt :: (FromJSON a,ToJSON a,Show a,Eq a) => a -> Spec
 rt p = it ("roundtrips " ++ show p) $ decode (encode p) `shouldBe` Just p
@@ -32,8 +34,20 @@ testJSONColumns :: Spec
 testJSONColumns =
   rt (ObjectMap (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
 
-{- major TODO for module code!
 testJSONModules :: Spec
-testJSONModules =
-  rt (Module "mname" "mk" "code!")
--}
+testJSONModules = return () -- TODO cover module persistence
+
+
+testUnification :: Spec
+testUnification = do
+
+  it "mod spec unifies with a module that implements spec and another iface" $
+      (TyModSpec [ifaceA], TyModSpec [ifaceA,ifaceB]) `shouldSatisfy`
+      (uncurry canUnifyWith)
+
+  -- TODO: add other cases, TyList and TySchema being important candidates
+
+  where
+    ifaceA, ifaceB :: String
+    ifaceA = "ifaceA"
+    ifaceB = "ifaceB"
