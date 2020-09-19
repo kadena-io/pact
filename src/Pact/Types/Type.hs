@@ -16,23 +16,55 @@
 --
 
 module Pact.Types.Type
- (
-   TypeName(..),
-   Arg(..),aInfo,aName,aType,
-   FunType(..),ftArgs,ftReturn,
-   FunTypes,funTypes,prettyFunTypes,
-   PrimType(..),
-   GuardType(..),
-   tyInteger,tyDecimal,tyTime,tyBool,tyString,
-   tyList,tyObject,tyKeySet,tyTable,
-   SchemaType(..),
-   SchemaPartial(..),
-   TypeVarName(..),typeVarName,
-   TypeVar(..),tvName,tvConstraint,
-   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tySchemaPartial,tyUser,tyVar,tyGuard,
-   mkTyVar,mkTyVar',mkSchemaVar,
-   isAnyTy,isVarTy,canUnifyWith
-   ) where
+  (
+    TypeName(..)
+  , Arg(..)
+  , aInfo
+  , aName
+  , aType
+  , FunType(..)
+  , ftArgs
+  , ftReturn
+  , FunTypes
+  , funTypes
+  , prettyFunTypes
+  , PrimType(..)
+  , GuardType(..)
+  , SchemaType(..)
+  , SchemaPartial(..)
+  , TypeVarName(..)
+  , typeVarName
+  , TypeVar(..)
+  , tvName
+  , tvConstraint
+  , Type(..)
+  , tyFunType
+  , tyListType
+  , tySchema
+  , tySchemaType
+  , tySchemaPartial
+  , tyUser
+  , tyVar
+  , tyGuard
+  , tyModSpecInterfaces
+  , mkTyVar
+  , mkTyVar'
+  , mkSchemaVar
+  , isAnyTy
+  , isVarTy
+  , canUnifyWith
+  -- * String representations
+  , tyInteger
+  , tyDecimal
+  , tyTime
+  , tyBool
+  , tyString
+  , tyList
+  , tyObject
+  , tyKeySet
+  , tyTable
+
+  ) where
 
 import Data.Eq.Deriving
 import Text.Show.Deriving
@@ -278,7 +310,9 @@ data Type v =
   , _tySchemaType :: Type v
   , _tySchemaPartial :: SchemaPartial } |
   TyFun { _tyFunType :: FunType v } |
-  TyUser { _tyUser :: v }
+  TyUser { _tyUser :: v } |
+  TyModSpec
+  { _tyModSpecInterfaces :: [v] }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)
@@ -291,6 +325,7 @@ instance (Pretty o) => Pretty (Type o) where
     TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
+    TyModSpec is    -> "module{" <> prettyList (is) <> "}"
     TyAny          -> "*"
 
 instance ToJSON v => ToJSON (Type v) where
@@ -302,6 +337,7 @@ instance ToJSON v => ToJSON (Type v) where
     TySchema st ty p -> object [ "schema" .= st, "type" .= ty, "partial" .= p ]
     TyFun f -> toJSON f
     TyUser v -> toJSON v
+    TyModSpec is -> object [ "modspec" .= is ]
 
 instance FromJSON v => FromJSON (Type v) where
   parseJSON v =
@@ -310,9 +346,16 @@ instance FromJSON v => FromJSON (Type v) where
     (TyPrim <$> parseJSON v) <|>
     (TyFun <$> parseJSON v) <|>
     (TyUser <$> parseJSON v) <|>
-    (withObject "TyList" (\o -> TyList <$> o .: "list") v) <|>
+    (withObject "TyList"
+      (\o -> TyList <$> o .: "list") v) <|>
     (withObject "TySchema"
-     (\o -> TySchema <$> o .: "schema" <*> o .: "type" <*> o .: "partial") v)
+      (\o -> TySchema
+        <$> o .: "schema"
+        <*> o .: "type"
+        <*> o .: "partial")
+      v) <|>
+    (withObject "TyModSpec"
+      (\o -> TyModSpec <$> o .: "modspec") v)
 
 
 
@@ -348,6 +391,7 @@ canUnifyWith (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
   (Nothing,Just _) -> True
   (Just _,Nothing) -> True
   _ -> a == b
+canUnifyWith (TyModSpec a) (TyModSpec b) = all (`elem` a) b
 canUnifyWith _ _ = False
 {-# INLINE canUnifyWith #-}
 
