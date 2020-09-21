@@ -42,19 +42,19 @@ testUnification :: Spec
 testUnification = do
 
   it "mod spec unifies with a module with greater coverage" $
-      (TyModSpec [ifaceA], TyModSpec [ifaceA,ifaceB]) `shouldSatisfy`
+      (TyModRef [ifaceA], TyModRef [ifaceA,ifaceB]) `shouldSatisfy`
       (uncurry canUnifyWith)
 
   it "mod spec unifies with a module with same coverage" $
-      (TyModSpec [ifaceA,ifaceB], TyModSpec [ifaceA,ifaceB]) `shouldSatisfy`
+      (TyModRef [ifaceA,ifaceB], TyModRef [ifaceA,ifaceB]) `shouldSatisfy`
       (uncurry canUnifyWith)
 
   it "mod spec does not unify with a module with less coverage" $
-      (TyModSpec [ifaceA,ifaceB], TyModSpec [ifaceA]) `shouldSatisfy`
+      (TyModRef [ifaceA,ifaceB], TyModRef [ifaceA]) `shouldSatisfy`
       (not . uncurry canUnifyWith)
 
   it "mod spec does not unify with a module with different coverage" $
-      (TyModSpec [ifaceB], TyModSpec [ifaceA]) `shouldSatisfy`
+      (TyModRef [ifaceB], TyModRef [ifaceA]) `shouldSatisfy`
       (not . uncurry canUnifyWith)
 
   -- TODO: add other cases, TyList and TySchema being important candidates

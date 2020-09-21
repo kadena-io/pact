@@ -52,7 +52,7 @@ import           System.Locale              (defaultTimeLocale)
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
                  ( Info, Literal (..)
-                 , Type (TyFun, TyPrim, TySchema, TyUser, TyVar, TyModSpec)
+                 , Type (TyFun, TyPrim, TySchema, TyUser, TyVar, TyModRef)
                  , SchemaPartial (PartialSchema)
                  )
 import qualified Pact.Types.Lang            as Pact
@@ -486,7 +486,7 @@ maybeTranslateType' restrictKeys = \case
 
   TyFun _             -> empty
 
-  TyModSpec _ -> empty -- TODO when mod specs are supported
+  TyModRef _ -> empty -- TODO support mod refs
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
