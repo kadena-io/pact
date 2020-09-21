@@ -42,24 +42,25 @@ testUnification :: Spec
 testUnification = do
 
   it "mod spec unifies with a module with greater coverage" $
-      (TyModRef [ifaceA], TyModRef [ifaceA,ifaceB]) `shouldSatisfy`
+      (modRef [ifaceA], modRef [ifaceA,ifaceB]) `shouldSatisfy`
       (uncurry canUnifyWith)
 
   it "mod spec unifies with a module with same coverage" $
-      (TyModRef [ifaceA,ifaceB], TyModRef [ifaceA,ifaceB]) `shouldSatisfy`
+      (modRef [ifaceA,ifaceB], modRef [ifaceA,ifaceB]) `shouldSatisfy`
       (uncurry canUnifyWith)
 
   it "mod spec does not unify with a module with less coverage" $
-      (TyModRef [ifaceA,ifaceB], TyModRef [ifaceA]) `shouldSatisfy`
+      (modRef [ifaceA,ifaceB], modRef [ifaceA]) `shouldSatisfy`
       (not . uncurry canUnifyWith)
 
   it "mod spec does not unify with a module with different coverage" $
-      (TyModRef [ifaceB], TyModRef [ifaceA]) `shouldSatisfy`
+      (modRef [ifaceB], modRef [ifaceA]) `shouldSatisfy`
       (not . uncurry canUnifyWith)
 
   -- TODO: add other cases, TyList and TySchema being important candidates
 
   where
-    ifaceA, ifaceB :: String
     ifaceA = "ifaceA"
     ifaceB = "ifaceB"
+    modRef :: [ModuleName] -> Type ()
+    modRef = TyModRef
