@@ -50,8 +50,11 @@ import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
 import qualified Pact.Types.Info as P
-import           Pact.Types.Lang            (Info, Literal (..), Type
-  (TyFun, TyPrim, TySchema, TyUser, TyVar), SchemaPartial(PartialSchema))
+import           Pact.Types.Lang
+                 ( Info, Literal (..)
+                 , Type (TyFun, TyPrim, TySchema, TyUser, TyVar, TyModRef)
+                 , SchemaPartial (PartialSchema)
+                 )
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
@@ -482,6 +485,8 @@ maybeTranslateType' restrictKeys = \case
       _         -> empty
 
   TyFun _             -> empty
+
+  TyModRef _ -> empty -- TODO support mod refs
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
