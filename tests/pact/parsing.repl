@@ -1,23 +1,44 @@
+;; parsing.repl: success means forms in this file parsed successfully.
+;; errors have to be handled via "bad" scripts in tests/pact/bad
+
+;; semicolon in expr
+;; ===========
 (+ 1 2
   ;
   )
 
-(define-keyset 'k (sig-keyset))
+;; in-module productions
+;; note this is parsed, compiled, and loaded, so not just parsing
+;; ===========
+(module mod-parse-test G
+  "test in-module parsing"
+  (defcap G () true)
 
-(module foo-mod 'k
-  "this defines foo"
-  (defun foo ()
+  (defun defun-with-semicolon ()
     "parses with semicolon"
     1
     ;
     ;;
-    )
   )
 
+  (defun modref-types
+    ( ref:module{bar.baz, quux} )
+    "test module ref parsing"
+    1)
+
+)
+
+
+
+
+;; semicolon in expr again
 (+ 1
   ; This is fine
   2
   )
 
-(expect "parse list with commas or no" [1 "2" true (+ 3 4)]
-        [1, "2", true, (+ 3 4)])
+
+(expect
+ "list equivalence with commas or without"
+ [1 "2" true (+ 3 4)]
+ [1, "2", true, (+ 3 4)])

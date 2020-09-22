@@ -607,6 +607,7 @@ parseType = msum
   , parseUserSchemaType
   , parseSchemaType tyObject TyObject
   , parseSchemaType tyTable TyTable
+  , parseModuleRef
   , TyPrim TyInteger <$ symbol tyInteger
   , TyPrim TyDecimal <$ symbol tyDecimal
   , TyPrim TyTime    <$ symbol tyTime
@@ -624,6 +625,10 @@ parseSchemaType :: Text -> SchemaType -> Compile (Type (Term Name))
 parseSchemaType tyRep sty = symbol tyRep >>
   (TySchema sty <$> (parseUserSchemaType <|> pure TyAny) <*> pure def)
 
+parseModuleRef :: Compile (Type (Term Name))
+parseModuleRef = symbol "module" >>
+  (TyModRef <$> withList' Braces
+   (qualifiedModuleName `sepBy1` sep Comma))
 
 parseUserSchemaType :: Compile (Type (Term Name))
 parseUserSchemaType = withList Braces $ \ListExp{} -> TyUser <$> varAtom

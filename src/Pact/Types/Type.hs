@@ -66,31 +66,32 @@ module Pact.Types.Type
 
   ) where
 
-import Data.Eq.Deriving
-import Text.Show.Deriving
 
 import Control.Applicative
+import Control.DeepSeq
 import Control.Lens hiding ((.=))
-import Data.List
 import Control.Monad
-import Prelude
 import Data.Aeson
-import Data.String
+import Data.Default (Default(..))
+import Data.Eq.Deriving
+import Data.Foldable
+import Data.Hashable
+import Data.List
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Set (Set, isSubsetOf)
 import qualified Data.Set as Set
+import Data.String
+import Data.Text (Text,unpack)
 import Data.Thyme.Format.Aeson ()
 import GHC.Generics (Generic)
-import Data.Hashable
-import Data.List.NonEmpty (NonEmpty (..))
-import Data.Foldable
-import Control.DeepSeq
-import Data.Text (Text,unpack)
-import Data.Default (Default(..))
+import Prelude
+import Text.Show.Deriving
 
+import Pact.Types.Codec
+import Pact.Types.Info
+import Pact.Types.Names
 import Pact.Types.Pretty
 import Pact.Types.Util
-import Pact.Types.Info
-import Pact.Types.Codec
 
 
 newtype TypeName = TypeName Text
@@ -312,7 +313,7 @@ data Type v =
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v } |
   TyModRef
-  { _tyModRefInterfaces :: [v] }
+  { _tyModRefInterfaces :: [ModuleName] }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)

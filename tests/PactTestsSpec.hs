@@ -106,6 +106,10 @@ badErrors = M.fromList
    ,"Defmeta mismatch with I: found @managed, expected @managed b")
   ,(pfx "bad-namespace-upgrade.repl"
    ,"autonomous")
+  ,(pfx "bad-modrefs.repl"
+   ,"Expected: qualified module name reference")
+  ,(pfx "bad-modrefs-empty.repl"
+   ,"Unexpected end of input")
   ]
   where
     pfx = ("tests/pact/bad/" ++)
