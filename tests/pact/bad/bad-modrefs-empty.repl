@@ -1,7 +1,0 @@
-(module bad-modrefs G
-  (defcap G () true)
-  (defun modref-types
-    ( ref:module{} )
-    "test modref with empty list"
-    1)
-)

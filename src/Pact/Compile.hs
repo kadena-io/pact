@@ -543,18 +543,8 @@ abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int T
 abstractBody term args = abstractBody' args <$> bodyForm term
 
 abstractBody' :: [Arg (Term Name)] -> Term Name -> Scope Int Term Name
-abstractBody' args body = introspect <$> abstract (`elemIndex` argNames) body
-  where
-    argNames = map arg2Name args
-    modRefArgs = M.fromList $ (`concatMap` args) $ \a -> case _aType a of
-      TyModRef ifaces -> [(_aName a,ifaces)]
-      _ -> []
-    introspect :: Name -> Name
-    introspect qn@(QName (QualifiedName (ModuleName refName Nothing) memberName i)) =
-      case M.lookup refName modRefArgs of
-        Nothing -> qn
-        Just ifaces -> DName $ DynamicName memberName refName ifaces i
-    introspect n = n
+abstractBody' args = abstract (`elemIndex` bNames)
+  where bNames = map arg2Name args
 
 
 letForm :: Compile (Term Name)
@@ -569,7 +559,8 @@ letsForm :: Compile (Term Name)
 letsForm = do
   bindings <- letBindings
   let nest (binding:rest) = do
-        scope <- abstractBody' [_bpArg binding] <$> case rest of
+        let bName = [arg2Name (_bpArg binding)]
+        scope <- abstract (`elemIndex` bName) <$> case rest of
           [] -> bodyForm valueLevel
           _ -> do
             rest' <- nest rest
