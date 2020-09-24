@@ -28,7 +28,7 @@ module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
-    ,resolveFreeVars,resolveArg,resolveRef,lookupModule
+    ,resolveArg,resolveRef,lookupModule
     ,enforceKeySet,enforceKeySetName
     ,deref
     ,liftTerm,apply
@@ -601,6 +601,7 @@ resolveRef _i nn@Name {} = do
   case nm of
     d@Just {} -> return d
     Nothing -> preuse $ evalRefs . rsLoaded . ix nn
+resolveRef _i (DName DynamicName {..}) = error ("Dynamic resolution unimplemented") -- TODO
 
 -- | This should be impure. See 'evaluateDefs'. Refs are
 -- expected to exist, and if they don't, it is a serious bug
