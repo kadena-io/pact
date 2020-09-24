@@ -25,6 +25,7 @@ module Pact.Types.Names
   , ModuleName(..), mnName, mnNamespace, parseModuleName
   , Name(..), parseName
   , QualifiedName(..), parseQualifiedName
+  , DynamicName(..)
   , BareName(..)
   ) where
 
@@ -181,10 +182,30 @@ instance SizeOf BareName where
   sizeOf (BareName n i) =
     (constructorCost 2) + (sizeOf n) + (sizeOf i)
 
+data DynamicName = DynamicName
+    { _dynMember :: Text
+    , _dynRefArg :: Text
+    , _dynInterfaces :: [ModuleName]
+    , _dynInfo :: Info
+    } deriving (Generic,Eq,Show)
+instance NFData DynamicName
+instance Arbitrary DynamicName where
+  arbitrary = DynamicName <$> genBareText <*> genBareText <*> arbitrary <*> arbitrary
+instance HasInfo DynamicName where getInfo = _dynInfo
+instance Pretty DynamicName where
+  pretty DynamicName{..} = pretty _dynRefArg <> "." <> pretty _dynMember
+instance AsString DynamicName where asString = renderCompactText
+instance SizeOf DynamicName where
+  sizeOf DynamicName{..} =
+    sizeOf _dynMember + sizeOf _dynRefArg
+    + sizeOf _dynInterfaces + sizeOf _dynInfo
+
+
 -- | A named reference from source.
 data Name
   = QName QualifiedName
   | Name BareName
+  | DName DynamicName
   deriving (Generic, Show)
 
 instance Arbitrary Name where
@@ -196,15 +217,18 @@ instance Arbitrary Name where
 instance HasInfo Name where
   getInfo (QName q) = getInfo q
   getInfo (Name n) = getInfo n
+  getInfo (DName d) = getInfo d
 
 instance Pretty Name where
   pretty = \case
     QName q -> pretty q
     Name n -> pretty n
+    DName d -> pretty d
 
 instance SizeOf Name where
   sizeOf (QName qn) = (constructorCost 1) + sizeOf qn
   sizeOf (Name bn) = (constructorCost 1) + sizeOf bn
+  sizeOf (DName dn) = (constructorCost 1) + sizeOf dn
 
 instance AsString Name where asString = renderCompactText
 
@@ -230,17 +254,34 @@ nameParser i = (QName <$> qualifiedNameParser i <?> "qualifiedName") <|>
 
 
 instance Hashable Name where
-  hashWithSalt s (Name (BareName t _)) = s `hashWithSalt` (0::Int) `hashWithSalt` t
-  hashWithSalt s (QName (QualifiedName q n _)) = s `hashWithSalt` (1::Int) `hashWithSalt` q `hashWithSalt` n
+  hashWithSalt s (Name (BareName t _)) =
+    s `hashWithSalt` (0::Int) `hashWithSalt` t
+  hashWithSalt s (QName (QualifiedName q n _)) =
+    s `hashWithSalt` (1::Int) `hashWithSalt` q `hashWithSalt` n
+  hashWithSalt s (DName DynamicName{..}) =
+    s `hashWithSalt` (2::Int) `hashWithSalt` _dynMember
+    `hashWithSalt` _dynRefArg `hashWithSalt` _dynInterfaces
 instance Eq Name where
-  (QName (QualifiedName a b _)) == (QName (QualifiedName c d _)) = (a,b) == (c,d)
-  (Name (BareName a _)) == (Name (BareName b _)) = a == b
+  (QName (QualifiedName a b _)) == (QName (QualifiedName c d _)) =
+    (a,b) == (c,d)
+  (Name (BareName a _)) == (Name (BareName b _)) =
+    a == b
+  (DName (DynamicName a b c _)) == (DName (DynamicName d e f _)) =
+    (a,b,c) == (d,e,f)
   _ == _ = False
 instance Ord Name where
-  (QName (QualifiedName a b _)) `compare` (QName (QualifiedName c d _)) = (a,b) `compare` (c,d)
-  (Name (BareName a _)) `compare` (Name (BareName b _)) = a `compare` b
+  (QName (QualifiedName a b _)) `compare` (QName (QualifiedName c d _)) =
+    (a,b) `compare` (c,d)
+  (Name (BareName a _)) `compare` (Name (BareName b _)) =
+    a `compare` b
+  (DName (DynamicName a b c _)) `compare` (DName (DynamicName d e f _)) =
+    (a,b,c) `compare` (d,e,f)
   Name {} `compare` QName {} = LT
+  Name {} `compare` DName {} = LT
+  QName {} `compare` DName {} = LT
   QName {} `compare` Name {} = GT
+  DName {} `compare` Name {} = GT
+  DName {} `compare` QName {} = GT
 
 
 newtype NativeDefName = NativeDefName Text
