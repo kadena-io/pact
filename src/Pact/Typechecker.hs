@@ -734,8 +734,8 @@ unifyConstraints ac bc
 
 -- | Instantiate a Bound scope as AST nodes or references.
 scopeToBody :: Info -> [AST Node] -> Scope BoundIndex Term (Either Ref (AST Node)) -> TC [AST Node]
-scopeToBody i _args _bod = do
-  bt <- error "TODO: typecheck bound indices" -- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
+scopeToBody i args bod = do
+  bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
     (TList ts _ _) | not (V.null ts) -> mapM toAST (V.toList ts) -- verifies non-empty body.
     _ -> die i "Malformed def body"
@@ -1033,11 +1033,13 @@ toUserType' :: Show n => Term (Either Ref n) -> TC UserType
 toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
-bindArgs :: Info -> [a] -> Int -> TC a
-bindArgs i args b =
-  case args `atMay` b of
-    Nothing -> die i $ "Missing arg: " ++ show b ++ ", " ++ show (length args) ++ " provided"
-    Just a -> return a
+bindArgs :: Info -> [a] -> BoundIndex -> TC a
+bindArgs i args (Positional b) = case args `atMay` b of
+  Nothing -> die i $ "Missing arg: " ++ show b ++ ", " ++ show (length args) ++ " provided"
+  Just a -> return a
+bindArgs i _args (Dynamic d) = die i
+  $ "Typechecking dynamic references is unsupported: "
+  <> show d
 
 -- Temporary data type we're using to define 'Abbrev' for this 'Either'.
 newtype AbbrevNode = AbbrevNode (Either Ref (AST Node))
