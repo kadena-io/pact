@@ -733,9 +733,9 @@ unifyConstraints ac bc
   where intersection = ac `intersect` bc
 
 -- | Instantiate a Bound scope as AST nodes or references.
-scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> TC [AST Node]
-scopeToBody i args bod = do
-  bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
+scopeToBody :: Info -> [AST Node] -> Scope BoundIndex Term (Either Ref (AST Node)) -> TC [AST Node]
+scopeToBody i _args _bod = do
+  bt <- error "TODO: typecheck bound indices" -- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
     (TList ts _ _) | not (V.null ts) -> mapM toAST (V.toList ts) -- verifies non-empty body.
     _ -> die i "Malformed def body"

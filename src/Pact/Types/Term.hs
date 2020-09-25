@@ -76,7 +76,8 @@ module Pact.Types.Term
    prettyTypeTerm,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
-   Gas(..)
+   Gas(..),
+   BoundIndex(..)
    , module Pact.Types.Names
    ) where
 
@@ -543,6 +544,20 @@ instance FromJSON g => FromJSON (Governance g) where
     Governance <$> (Left <$> o .: "keyset" <|>
                     Right <$> o .: "capability")
 
+data BoundIndex
+  = StdIndex !Int
+  | RefIndex !DynamicName
+  deriving (Eq, Show, Generic)
+
+instance NFData BoundIndex
+instance ToJSON BoundIndex
+instance FromJSON BoundIndex
+
+instance Pretty BoundIndex where
+    pretty = \case
+      StdIndex i -> pretty i
+      RefIndex n -> pretty n
+
 -- | Newtype wrapper differentiating 'Hash'es from module hashes
 --
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
@@ -665,7 +680,7 @@ data Def n = Def
   , _dModule :: !ModuleName
   , _dDefType :: !DefType
   , _dFunType :: !(FunType (Term n))
-  , _dDefBody :: !(Scope Int Term n)
+  , _dDefBody :: !(Scope BoundIndex Term n)
   , _dMeta :: !Meta
   , _dDefMeta :: !(Maybe (DefMeta (Term n)))
   , _dInfo :: !Info
@@ -905,7 +920,7 @@ data Term n =
     } |
     TBinding {
       _tBindPairs :: ![BindPair (Term n)]
-    , _tBindBody :: !(Scope Int Term n)
+    , _tBindBody :: !(Scope BoundIndex Term n)
     , _tBindType :: BindType (Type (Term n))
     , _tInfo :: !Info
     } |
@@ -1319,12 +1334,12 @@ _roundtripJSON | r == (Success tmod) = show r
              [tlet1]))
            def
     tlet1 = TBinding []
-           (abstract (\b -> if b == na then Just 0 else Nothing)
+           (abstract (\b -> if b == na then Just (StdIndex 0) else Nothing)
             (toTList TyAny def
              [(TVar na def),tlet2])) -- bound var + let
            BindLet def
     tlet2 = TBinding []
-           (abstract (\b -> if b == nb then Just 0 else Nothing)
+           (abstract (\b -> if b == nb then Just (StdIndex 0) else Nothing)
             (toTList TyAny def
              [(TVar na def),(TVar nb def)])) -- free var + bound var
            BindLet def

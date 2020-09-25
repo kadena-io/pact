@@ -89,7 +89,7 @@ parseMsgKey' i msg key = do
       Just v -> go v
 
 
-bindReduce :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info ->
+bindReduce :: [BindPair (Term Ref)] -> Scope BoundIndex Term Ref -> Info ->
               (Text -> Maybe (Term Name)) -> Eval e (Term Name)
 bindReduce ps bd bi lkpFun = do
   !(vs :: [BindPair (Term Ref)]) <- forM ps $ \(BindPair a k) -> do

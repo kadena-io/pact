@@ -311,7 +311,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
 withRead fi as = argsError' fi as
 
 bindToRow :: [BindPair (Term Ref)] ->
-             Scope Int Term Ref -> Term Ref -> ObjectMap PactValue -> Eval e (Term Name)
+             Scope BoundIndex Term Ref -> Term Ref -> ObjectMap PactValue -> Eval e (Term Name)
 bindToRow ps bd b (ObjectMap row) =
   bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
 

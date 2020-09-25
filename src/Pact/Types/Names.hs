@@ -191,6 +191,8 @@ data DynamicName = DynamicName
 instance NFData DynamicName
 instance Arbitrary DynamicName where
   arbitrary = DynamicName <$> genBareText <*> genBareText <*> arbitrary <*> arbitrary
+instance ToJSON DynamicName
+instance FromJSON DynamicName
 instance HasInfo DynamicName where getInfo = _dynInfo
 instance Pretty DynamicName where
   pretty DynamicName{..} = pretty _dynRefArg <> "." <> pretty _dynMember

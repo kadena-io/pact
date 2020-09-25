@@ -356,12 +356,12 @@ someModuleData :: ModuleData Ref
 someModuleData = ModuleData modDef refMap
   where refMap = HM.empty
         ref = Direct $ TVar (Name $ BareName "" def) def
-        fst' :: Ref -> Maybe Int
+        fst' :: Ref -> Maybe BoundIndex
         fst' = const Nothing
         scd' :: Term Ref
         scd' = TVar ref def
 
-        scopeOfRef :: Scope Int Term Ref
+        scopeOfRef :: Scope BoundIndex Term Ref
         scopeOfRef = abstract fst' scd'
 
         defOfRef = Def (DefName "") someModuleName Defun (FunType [] TyAny) scopeOfRef def def def
