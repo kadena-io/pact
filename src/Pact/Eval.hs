@@ -601,7 +601,7 @@ resolveRef _i nn@Name {} = do
   case nm of
     d@Just {} -> return d
     Nothing -> preuse $ evalRefs . rsLoaded . ix nn
-resolveRef _i (DName DynamicName {..}) = error ("Dynamic resolution unimplemented") -- TODO
+resolveRef _i (DName DynamicName {..}) = undefined
 
 -- | This should be impure. See 'evaluateDefs'. Refs are
 -- expected to exist, and if they don't, it is a serious bug
