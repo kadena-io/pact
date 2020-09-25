@@ -545,18 +545,27 @@ instance FromJSON g => FromJSON (Governance g) where
                     Right <$> o .: "capability")
 
 data BoundIndex
-  = StdIndex !Int
-  | RefIndex !DynamicName
+  = Positional !Int
+  | Dynamic !DynamicName
   deriving (Eq, Show, Generic)
 
 instance NFData BoundIndex
-instance ToJSON BoundIndex
-instance FromJSON BoundIndex
+
+instance ToJSON BoundIndex where
+  toJSON = \case
+    Positional i -> toJSON i
+    Dynamic i -> object [ "dynamic" .= i ]
+
+instance FromJSON BoundIndex where
+  parseJSON = withObject "BoundIndex" $ \o -> (p o <|> q o)
+    where
+      p o = Dynamic <$> o .: "dynamic"
+      q o = Positional <$> o .: "i"
 
 instance Pretty BoundIndex where
-    pretty = \case
-      StdIndex i -> pretty i
-      RefIndex n -> pretty n
+  pretty = \case
+    Positional i -> pretty i
+    Dynamic n -> pretty n
 
 -- | Newtype wrapper differentiating 'Hash'es from module hashes
 --
@@ -1334,12 +1343,12 @@ _roundtripJSON | r == (Success tmod) = show r
              [tlet1]))
            def
     tlet1 = TBinding []
-           (abstract (\b -> if b == na then Just (StdIndex 0) else Nothing)
+           (abstract (\b -> if b == na then Just (Positional 0) else Nothing)
             (toTList TyAny def
              [(TVar na def),tlet2])) -- bound var + let
            BindLet def
     tlet2 = TBinding []
-           (abstract (\b -> if b == nb then Just (StdIndex 0) else Nothing)
+           (abstract (\b -> if b == nb then Just (Positional 0) else Nothing)
             (toTList TyAny def
              [(TVar na def),(TVar nb def)])) -- free var + bound var
            BindLet def

@@ -674,10 +674,10 @@ reduceLet ps bod i = do
 
 {-# INLINE resolveArg #-}
 resolveArg :: Info -> [Term n] -> BoundIndex -> Term n
-resolveArg ai as (StdIndex i) = case atMay as i of
+resolveArg ai as (Positional i) = case atMay as i of
   Nothing -> appError ai $ "Missing argument value at index " <> pretty i
   Just i' -> i'
-resolveArg _i _as (RefIndex _) = error "TODO: resolveArg for bound indices"
+resolveArg _i _as (Dynamic _) = error "TODO: resolveArg for dynamic references"
 
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))

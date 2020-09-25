@@ -543,21 +543,18 @@ abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Bound
 abstractBody term args = abstractBody' args <$> bodyForm term
 
 abstractBody' :: [Arg (Term Name)] -> Term Name -> Scope BoundIndex Term Name
-abstractBody' args body = abstract go body
+abstractBody' args body = introspect <$> abstract (fmap Positional . flip elemIndex argNames) body
   where
-    go n = case n of
-      qn@(QName (QualifiedName (ModuleName refName Nothing) memberName i)) ->
-        case M.lookup refName modRefArgs of
-          Nothing -> StdIndex <$> elemIndex qn argNames
-          Just ifs -> Just $ RefIndex $ DynamicName memberName refName ifs i
-      _ -> StdIndex <$> n `elemIndex` argNames
-
     argNames = map arg2Name args
-
     modRefArgs = M.fromList $ (`concatMap` args) $ \a -> case _aType a of
       TyModRef ifaces -> [(_aName a,ifaces)]
       _ -> []
-
+    introspect :: Name -> Name
+    introspect qn@(QName (QualifiedName (ModuleName refName Nothing) memberName i)) =
+      case M.lookup refName modRefArgs of
+        Nothing -> qn
+        Just ifaces -> DName $ DynamicName memberName refName ifaces i
+    introspect n = n
 
 
 letForm :: Compile (Term Name)
