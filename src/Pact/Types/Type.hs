@@ -313,7 +313,7 @@ data Type v =
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v } |
   TyModule
-  { _tyModuleSpec :: [ModuleName] }
+  { _tyModuleSpec :: Set ModuleName }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)
@@ -326,7 +326,7 @@ instance (Pretty o) => Pretty (Type o) where
     TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
-    TyModule is    -> "module{" <> prettyList (is) <> "}"
+    TyModule is    -> "module{" <> prettyList (Set.toList is) <> "}"
     TyAny          -> "*"
 
 instance ToJSON v => ToJSON (Type v) where

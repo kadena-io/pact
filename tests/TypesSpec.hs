@@ -9,6 +9,7 @@ import Data.Aeson
 import Data.Default
 import Data.Map.Strict (fromList)
 import qualified Data.HashSet as HS
+import qualified Data.Set as S
 
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -87,4 +88,4 @@ testUnification = do
     ifaceA = "ifaceA"
     ifaceB = "ifaceB"
     modRef :: [ModuleName] -> Type ()
-    modRef = TyModule
+    modRef = TyModule . S.fromList

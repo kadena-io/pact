@@ -603,6 +603,7 @@ resolveRef _i nn@Name {} = do
     Nothing -> preuse $ evalRefs . rsLoaded . ix nn
 resolveRef _i (DName DynamicName {..}) = undefined
 
+
 -- | This should be impure. See 'evaluateDefs'. Refs are
 -- expected to exist, and if they don't, it is a serious bug
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref

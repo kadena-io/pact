@@ -25,6 +25,9 @@ import qualified Data.Attoparsec.Internal.Types as APT
 import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Default
+import Data.Hashable
+import Data.Set (Set)
+import qualified Data.Set as S
 import Control.DeepSeq
 import Bound
 import Control.Applicative ((<|>))
@@ -92,3 +95,9 @@ instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value), A.FromJSON (f a))
   parseJSON = A.withObject "Scope" $ \o -> do
     f <- o A..: "scope"
     Scope <$> traverse A.parseJSON f
+
+-- -------------------------------------------------------------------- --
+-- Set's Hashable orphan
+
+instance Hashable a => Hashable (Set a) where
+  hashWithSalt n = hashWithSalt n . S.toList

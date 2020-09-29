@@ -44,6 +44,7 @@ import qualified Data.HashSet as HS
 import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
+import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
@@ -300,7 +301,7 @@ varAtom = do
       commit
       return $ TDynamic
         (TVar (Name (BareName q _atomInfo)) _atomInfo)
-        (TVar (DName (DynamicName _atomAtom q [] _atomInfo)) _atomInfo)
+        (TVar (DName (DynamicName _atomAtom q mempty _atomInfo)) _atomInfo)
         _atomInfo
     ([ns,q],_) -> do
       checkReserved ns >> checkReserved q
@@ -556,14 +557,14 @@ abstractBody' args body = enrichDynamic <$> abstract (`elemIndex` bNames) body
 
     modRefArgs = M.fromList $ (`concatMap` args) $ \a ->
       case _aType a of
-        TyModule ifaces -> [(_aName a,ifaces)]
+        TyModule ifaces -> [(_aName a, ifaces)]
         _ -> []
 
-    enrichDynamic n@(DName dyn@(DynamicName _ ref [] _)) =
-      case M.lookup ref modRefArgs of
-        Just ifs ->
-          DName (dyn { _dynInterfaces = ifs })
+    enrichDynamic n@(DName dyn@(DynamicName _ ref ifs _))
+      | S.null ifs = case M.lookup ref modRefArgs of
+        Just ifs' -> DName (dyn { _dynInterfaces = ifs' })
         Nothing -> n
+      | otherwise = n
     enrichDynamic n = n
 
 
@@ -646,7 +647,7 @@ parseSchemaType tyRep sty = symbol tyRep >>
 
 parseModuleRef :: Compile (Type (Term Name))
 parseModuleRef = symbol "module" >>
-  (TyModule <$> withList' Braces
+  (TyModule . S.fromList <$> withList' Braces
    (qualifiedModuleName `sepBy1` sep Comma))
 
 parseUserSchemaType :: Compile (Type (Term Name))

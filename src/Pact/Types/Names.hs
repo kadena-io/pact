@@ -33,19 +33,17 @@ module Pact.Types.Names
 import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
-import Control.Monad
 import Data.Aeson (ToJSON(..), FromJSON(..), withText)
 import qualified Data.Attoparsec.Text as AP
 import Data.Default
-import Data.Either
-import Data.Function
 import Data.Hashable
-import Data.Maybe
+import Data.Set (Set)
 import Data.String
 import Data.Text (Text,pack)
 import qualified Data.Text as T
+
 import GHC.Generics (Generic)
-import Prelude
+
 import Test.QuickCheck
 import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
 
@@ -185,7 +183,7 @@ instance SizeOf BareName where
 data DynamicName = DynamicName
     { _dynMember :: Text
     , _dynRefArg :: Text
-    , _dynInterfaces :: [ModuleName]
+    , _dynInterfaces :: Set ModuleName
     , _dynInfo :: Info
     } deriving (Generic,Eq,Show)
 instance NFData DynamicName

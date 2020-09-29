@@ -1215,7 +1215,7 @@ typeof :: Term a -> Either Text (Type (Term a))
 typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
       TModule md _ _ -> case md of
-        MDModule Module {..} -> Right $ TyModule _mInterfaces
+        MDModule Module {..} -> Right $ TyModule $ S.fromList _mInterfaces
         _ -> Left "interface"
       TList {..} -> Right $ TyList _tListType
       TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
