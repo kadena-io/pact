@@ -73,7 +73,8 @@ expr = do
     , ELiteral <$> (LiteralExp . LString <$> stringLiteral <*> inf) <?> "string"
     , ELiteral <$> (LiteralExp . LString <$> (symbolic '\'' >> ident style) <*> inf) <?> "symbol"
     , ELiteral <$> (LiteralExp <$> bool <*> inf) <?> "bool"
-    , (qualifiedAtom >>= \(a,qs) -> EAtom . AtomExp a qs <$> inf) <?> "atom"
+    , TF.try (dynamicAtom >>= \(a,qs) -> EAtom . AtomExp a qs True <$> inf) <?> "dyn-atom"
+    , (qualifiedAtom >>= \(a,qs) -> EAtom . AtomExp a qs False <$> inf) <?> "atom"
     , EList <$> (ListExp <$> parens (many expr) <*> pure Parens <*> inf) <?> "(list)"
     , EList <$> (ListExp <$> braces (many expr) <*> pure Braces <*> inf) <?> "[list]"
     , EList <$> (ListExp <$> brackets (many expr) <*> pure Brackets <*> inf) <?> "{list}"
@@ -110,6 +111,13 @@ qualifiedAtom :: (Monad p, TokenParsing p) => p (Text,[Text])
 qualifiedAtom = ident style `sepBy` dot >>= \as -> case reverse as of
   [] -> unexpected "qualifiedAtom"
   (a:qs) -> return (a,reverse qs)
+
+dynamicAtom :: (Monad p, TokenParsing p) => p (Text,[Text])
+dynamicAtom = do
+  ref <- ident style
+  void $ colon >> colon
+  var <- ident style
+  return (var,[ref])
 
 bool :: (Monad m, DeltaParsing m) => PactParser m Literal
 bool = msum

@@ -46,7 +46,7 @@ module Pact.Types.Type
   , tyUser
   , tyVar
   , tyGuard
-  , tyModRefInterfaces
+  , tyModuleSpec
   , mkTyVar
   , mkTyVar'
   , mkSchemaVar
@@ -312,8 +312,8 @@ data Type v =
   , _tySchemaPartial :: SchemaPartial } |
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v } |
-  TyModRef
-  { _tyModRefInterfaces :: [ModuleName] }
+  TyModule
+  { _tyModuleSpec :: [ModuleName] }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)
@@ -326,7 +326,7 @@ instance (Pretty o) => Pretty (Type o) where
     TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
-    TyModRef is    -> "module{" <> prettyList (is) <> "}"
+    TyModule is    -> "module{" <> prettyList (is) <> "}"
     TyAny          -> "*"
 
 instance ToJSON v => ToJSON (Type v) where
@@ -338,7 +338,7 @@ instance ToJSON v => ToJSON (Type v) where
     TySchema st ty p -> object [ "schema" .= st, "type" .= ty, "partial" .= p ]
     TyFun f -> toJSON f
     TyUser v -> toJSON v
-    TyModRef is -> object [ "modspec" .= is ]
+    TyModule is -> object [ "modspec" .= is ]
 
 instance FromJSON v => FromJSON (Type v) where
   parseJSON v =
@@ -355,8 +355,8 @@ instance FromJSON v => FromJSON (Type v) where
         <*> o .: "type"
         <*> o .: "partial")
       v) <|>
-    (withObject "TyModRef"
-      (\o -> TyModRef <$> o .: "modspec") v)
+    (withObject "TyModule"
+      (\o -> TyModule <$> o .: "modspec") v)
 
 
 
@@ -394,7 +394,7 @@ canUnifyWith (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
   (Nothing,Just _) -> True
   (Just _,Nothing) -> True
   _ -> a == b
-canUnifyWith (TyModRef a) (TyModRef b) = all (`elem` b) a
+canUnifyWith (TyModule a) (TyModule b) = all (`elem` b) a
 canUnifyWith _ _ = False
 {-# INLINE canUnifyWith #-}
 

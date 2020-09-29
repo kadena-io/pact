@@ -63,4 +63,4 @@ testUnification = do
     ifaceA = "ifaceA"
     ifaceB = "ifaceB"
     modRef :: [ModuleName] -> Type ()
-    modRef = TyModRef
+    modRef = TyModule

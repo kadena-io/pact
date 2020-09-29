@@ -289,17 +289,24 @@ varAtom :: Compile (Term Name)
 varAtom = do
   AtomExp{..} <- atom
   checkReserved _atomAtom
-  n <- case _atomQualifiers of
-    [] -> return $ Name $ BareName _atomAtom _atomInfo
-    [q] -> do
+  let var n = TVar n _atomInfo <$ commit
+  case (_atomQualifiers,_atomDynamic) of
+    ([],_) -> var $ Name $ BareName _atomAtom _atomInfo
+    ([q],False) -> do
       checkReserved q
-      return $ QName $ QualifiedName (ModuleName q Nothing) _atomAtom _atomInfo
-    [ns,q] -> do
+      var $ QName $ QualifiedName (ModuleName q Nothing) _atomAtom _atomInfo
+    ([q],True) -> do
+      checkReserved q
+      commit
+      return $ TDynamic
+        (TVar (Name (BareName q _atomInfo)) _atomInfo)
+        (TVar (DName (DynamicName _atomAtom q [] _atomInfo)) _atomInfo)
+        _atomInfo
+    ([ns,q],_) -> do
       checkReserved ns >> checkReserved q
-      return $ QName $ QualifiedName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
+      var $ QName $
+        QualifiedName (ModuleName q (Just . NamespaceName $ ns)) _atomAtom _atomInfo
     _ -> expected "bareword or qualified atom"
-  commit
-  return $ TVar n _atomInfo
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
@@ -543,20 +550,21 @@ abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Bound
 abstractBody term args = abstractBody' args <$> bodyForm term
 
 abstractBody' :: [Arg (Term Name)] -> Term Name -> Scope BoundIndex Term Name
-abstractBody' args body = abstract go body
+abstractBody' args body = enrichDynamic <$> abstract (fmap Positional . (`elemIndex` bNames)) body
   where
-    go n = case n of
-      qn@(QName (QualifiedName (ModuleName refName Nothing) memberName i)) ->
-        case M.lookup refName modRefArgs of
-          Nothing -> Positional <$> elemIndex qn argNames
-          Just ifs -> Just $ Dynamic $ DynamicName memberName refName ifs i
-      _ -> Positional <$> elemIndex n argNames
+    bNames = map arg2Name args
 
-    argNames = map arg2Name args
+    modRefArgs = M.fromList $ (`concatMap` args) $ \a ->
+      case _aType a of
+        TyModule ifaces -> [(_aName a,ifaces)]
+        _ -> []
 
-    modRefArgs = M.fromList $ (`concatMap` args) $ \a -> case _aType a of
-      TyModRef ifaces -> [(_aName a,ifaces)]
-      _ -> []
+    enrichDynamic n@(DName dyn@(DynamicName _ ref [] _)) =
+      case M.lookup ref modRefArgs of
+        Just ifs ->
+          DName (dyn { _dynInterfaces = ifs })
+        Nothing -> n
+    enrichDynamic n = n
 
 
 letForm :: Compile (Term Name)
@@ -638,7 +646,7 @@ parseSchemaType tyRep sty = symbol tyRep >>
 
 parseModuleRef :: Compile (Type (Term Name))
 parseModuleRef = symbol "module" >>
-  (TyModRef <$> withList' Braces
+  (TyModule <$> withList' Braces
    (qualifiedModuleName `sepBy1` sep Comma))
 
 parseUserSchemaType :: Compile (Type (Term Name))
