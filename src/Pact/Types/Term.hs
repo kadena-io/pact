@@ -79,8 +79,7 @@ module Pact.Types.Term
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
    Gas(..),
-   BoundIndex(..)
-   , module Pact.Types.Names
+   module Pact.Types.Names
    ) where
 
 
@@ -546,28 +545,6 @@ instance FromJSON g => FromJSON (Governance g) where
     Governance <$> (Left <$> o .: "keyset" <|>
                     Right <$> o .: "capability")
 
-data BoundIndex
-  = Positional !Int
-  | Dynamic !DynamicName
-  deriving (Eq, Show, Generic)
-
-instance NFData BoundIndex
-
-instance ToJSON BoundIndex where
-  toJSON = \case
-    Positional i -> toJSON i
-    Dynamic i -> object [ "dynamic" .= i ]
-
-instance FromJSON BoundIndex where
-  parseJSON = withObject "BoundIndex" $ \o -> (p o <|> q o)
-    where
-      p o = Dynamic <$> o .: "dynamic"
-      q o = Positional <$> o .: "i"
-
-instance Pretty BoundIndex where
-  pretty = \case
-    Positional i -> pretty i
-    Dynamic n -> pretty n
 
 -- | Newtype wrapper differentiating 'Hash'es from module hashes
 --
@@ -691,7 +668,7 @@ data Def n = Def
   , _dModule :: !ModuleName
   , _dDefType :: !DefType
   , _dFunType :: !(FunType (Term n))
-  , _dDefBody :: !(Scope BoundIndex Term n)
+  , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
   , _dDefMeta :: !(Maybe (DefMeta (Term n)))
   , _dInfo :: !Info
@@ -931,7 +908,7 @@ data Term n =
     } |
     TBinding {
       _tBindPairs :: ![BindPair (Term n)]
-    , _tBindBody :: !(Scope BoundIndex Term n)
+    , _tBindBody :: !(Scope Int Term n)
     , _tBindType :: BindType (Type (Term n))
     , _tInfo :: !Info
     } |
@@ -1358,30 +1335,3 @@ deriveShow1 ''ModuleDef
 deriveShow1 ''Module
 deriveShow1 ''Governance
 deriveShow1 ''Step
-
--- | Demonstrate Term/Bound JSON marshalling with nested bound and free vars.
-_roundtripJSON :: String
-_roundtripJSON | r == (Success tmod) = show r
-               | otherwise = error ("Mismatch: " ++ show r ++ ", " ++ show tmod)
-  where
-    r = fromJSON v
-    v = toJSON tmod
-    tmod = TModule
-           (MDModule (Module "foo" (Governance (Right (tStr "hi")))
-                      def "" (ModuleHash pactInitialHash) HS.empty [] []))
-           (abstract (const (Just ()))
-            (toTList TyAny def
-             [tlet1]))
-           def
-    tlet1 = TBinding []
-           (abstract (\b -> if b == na then Just (Positional 0) else Nothing)
-            (toTList TyAny def
-             [(TVar na def),tlet2])) -- bound var + let
-           BindLet def
-    tlet2 = TBinding []
-           (abstract (\b -> if b == nb then Just (Positional 0) else Nothing)
-            (toTList TyAny def
-             [(TVar na def),(TVar nb def)])) -- free var + bound var
-           BindLet def
-    na = Name $ BareName "a" def
-    nb = Name $ BareName "b" def

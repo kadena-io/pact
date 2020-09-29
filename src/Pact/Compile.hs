@@ -546,11 +546,11 @@ letBindings = withList' Parens $
               some $ withList' Parens $
               BindPair <$> arg <*> valueLevel
 
-abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope BoundIndex Term Name)
+abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)
 abstractBody term args = abstractBody' args <$> bodyForm term
 
-abstractBody' :: [Arg (Term Name)] -> Term Name -> Scope BoundIndex Term Name
-abstractBody' args body = enrichDynamic <$> abstract (fmap Positional . (`elemIndex` bNames)) body
+abstractBody' :: [Arg (Term Name)] -> Term Name -> Scope Int Term Name
+abstractBody' args body = enrichDynamic <$> abstract (`elemIndex` bNames) body
   where
     bNames = map arg2Name args
 

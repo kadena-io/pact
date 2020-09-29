@@ -4,8 +4,11 @@ module TypesSpec (spec) where
 
 import Test.Hspec
 
+import Bound
 import Data.Aeson
+import Data.Default
 import Data.Map.Strict (fromList)
+import qualified Data.HashSet as HS
 
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -15,27 +18,48 @@ spec = do
   describe "JSONRoundtrips" $ do
     describe "testJSONPersist" testJSONPersist
     describe "testJSONColumns "testJSONColumns
-    xdescribe "testJSONModules" testJSONModules
+    describe "testJSONModules" testJSONModules
   describe "testUnification" testUnification
 
-rt :: (FromJSON a,ToJSON a,Show a,Eq a) => a -> Spec
-rt p = it ("roundtrips " ++ show p) $ decode (encode p) `shouldBe` Just p
+rt :: (FromJSON a,ToJSON a,Show a,Eq a) => String -> a -> Spec
+rt n p = it ("roundtrips " ++ n) $ decode (encode p) `shouldBe` Just p
 
 testJSONPersist :: Spec
 testJSONPersist = do
-  rt (PLiteral (LInteger 123))
-  rt (PLiteral (LDecimal 123.34857))
-  rt (PLiteral (LBool False))
-  rt (PLiteral (LString "hello"))
-  rt (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
-  rt (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
+  rt "integer" (PLiteral (LInteger 123))
+  rt "decimal" (PLiteral (LDecimal 123.34857))
+  rt "bool" (PLiteral (LBool False))
+  rt "string" (PLiteral (LString "hello"))
+  rt "time" (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
+  rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
 
 testJSONColumns :: Spec
 testJSONColumns =
-  rt (ObjectMap (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
+  rt "object" (ObjectMap (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
 
 testJSONModules :: Spec
-testJSONModules = return () -- TODO cover module persistence
+testJSONModules = rt "module" tmod
+  where
+    tmod = TModule
+           (MDModule (Module "foo" (Governance (Right (tStr "hi")))
+                      def "" (ModuleHash pactInitialHash) HS.empty [] []))
+           (abstract (const (Just ()))
+            (toTList TyAny def
+             [tlet1]))
+           def
+    tlet1 = TBinding []
+           (abstract (\b -> if b == na then Just 0 else Nothing)
+            (toTList TyAny def
+             [(TVar na def),tlet2])) -- bound var + let
+           BindLet def
+    tlet2 = TBinding []
+           (abstract (\b -> if b == nb then Just 0 else Nothing)
+            (toTList TyAny def
+             [(TVar na def),(TVar nb def)])) -- free var + bound var
+           BindLet def
+    na = Name $ BareName "a" def
+    nb = Name $ BareName "b" def
+
 
 
 testUnification :: Spec

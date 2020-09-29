@@ -733,7 +733,7 @@ unifyConstraints ac bc
   where intersection = ac `intersect` bc
 
 -- | Instantiate a Bound scope as AST nodes or references.
-scopeToBody :: Info -> [AST Node] -> Scope BoundIndex Term (Either Ref (AST Node)) -> TC [AST Node]
+scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> TC [AST Node]
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
@@ -1010,6 +1010,7 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
+toAST TDynamic {..} = die _tInfo "Dynamics not supported TODO"
 
 trackPrim :: Info -> PrimType -> PrimValue (AST Node) -> TC (AST Node)
 trackPrim inf pty v = do
@@ -1033,13 +1034,10 @@ toUserType' :: Show n => Term (Either Ref n) -> TC UserType
 toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
-bindArgs :: Info -> [a] -> BoundIndex -> TC a
-bindArgs i args (Positional b) = case args `atMay` b of
+bindArgs :: Info -> [a] -> Int -> TC a
+bindArgs i args b = case args `atMay` b of
   Nothing -> die i $ "Missing arg: " ++ show b ++ ", " ++ show (length args) ++ " provided"
   Just a -> return a
-bindArgs i _args (Dynamic d) = die i
-  $ "Typechecking dynamic references is unsupported: "
-  <> show d
 
 -- Temporary data type we're using to define 'Abbrev' for this 'Either'.
 newtype AbbrevNode = AbbrevNode (Either Ref (AST Node))

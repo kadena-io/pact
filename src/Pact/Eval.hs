@@ -655,6 +655,7 @@ reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
+reduce TDynamic {} = error "TODO"
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
@@ -665,7 +666,7 @@ reduceBody (TList bs _ _) =
   V.last <$> V.mapM reduce bs
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
-reduceLet :: [BindPair (Term Ref)] -> Scope BoundIndex Term Ref -> Info -> Eval e (Term Name)
+reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
   ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduce t) ps
   typecheck ps'
@@ -673,11 +674,10 @@ reduceLet ps bod i = do
 
 
 {-# INLINE resolveArg #-}
-resolveArg :: Info -> [Term n] -> BoundIndex -> Term n
-resolveArg ai as (Positional i) = case atMay as i of
+resolveArg :: Info -> [Term n] -> Int -> Term n
+resolveArg ai as i = case atMay as i of
   Nothing -> appError ai $ "Missing argument value at index " <> pretty i
   Just i' -> i'
-resolveArg _i _as (Dynamic _) = error "TODO: resolveArg for dynamic references"
 
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
