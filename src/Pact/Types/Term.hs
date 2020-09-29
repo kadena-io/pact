@@ -86,7 +86,7 @@ import Bound
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.DeepSeq
-import Control.Lens (makeLenses,makePrisms)
+import Control.Lens (makeLenses,makePrisms,Plated(..))
 import Control.Monad
 #if MIN_VERSION_aeson(1,4,3)
 import Data.Aeson hiding (pairs,Object, (<?>))
@@ -1164,6 +1164,71 @@ instance (ToJSON n, FromJSON n) => FromJSON (Term n) where
 
 instance (ToJSON n, FromJSON n) => ToJSON (Term n) where
   toJSON = encoder termCodec
+
+
+plateTerm :: Applicative f => (Term n -> f (Term m)) -> Term n -> f (Term m)
+plateTerm f t = case t of
+  (TApp (App af as ai) i) ->
+    (`TApp` ai) <$>
+    (App <$> f af <*> traverse f as <*> pure i)
+  (TList l ty i) ->
+    TList <$> traverse f l <*> traverse f ty <*> pure i
+  (TObject (Object om ty fk oi) i) ->
+    (`TObject` i) <$>
+    (Object <$> traverse f om <*> traverse f ty <*> pure fk <*> pure oi)
+  (TGuard g i) ->
+    (`TGuard` i) <$> plateGuard g
+  (TBinding ps body ty i) ->
+    TBinding <$> traverse (traverse f) ps <*> plateScope body
+    <*> traverse (traverse f) ty <*> pure i
+  (TModule mdef body i) ->
+    TModule <$> plateMDef mdef <*> plateScope body <*> pure i
+  (TDef (Def n m dt fty body meta dmeta di) i) ->
+    (`TDef` i) <$>
+    (Def n m dt <$> traverse f fty <*> plateScope body
+     <*> pure meta <*> traverse (traverse f) dmeta <*> pure di)
+  (TNative n fun ftys exs docs top i) ->
+    TNative n fun <$> traverse (traverse f) ftys
+    <*> pure exs <*> pure docs <*> pure top <*> pure i
+  (TConst arg m val meta i) ->
+    TConst <$> traverse f arg <*> pure m <*> traverse f val
+    <*> pure meta <*> pure i
+  (TSchema n m meta fields i) ->
+    TSchema n m meta <$> traverse (traverse f) fields <*> pure i
+  (TStep step meta i) ->
+    TStep <$> traverse f step <*> pure meta <*> pure i
+  (TTable n m hsh ty meta i) ->
+    TTable n m hsh <$> traverse f ty <*> pure meta <*> pure i
+  TVar {} -> f t
+  TLiteral {} -> f t
+  TUse {} -> f t
+
+  where
+
+    plateScope s = Scope <$> traverse (traverse f) (unscope s)
+
+    plateMDef m = case m of
+      (MDModule (Module n gov meta code hsh blessed ifaces imps)) ->
+        MDModule <$>
+        (Module n <$> traverse f gov <*> pure meta <*> pure code <*> pure hsh
+         <*> pure blessed <*> pure ifaces <*> pure imps)
+      (MDInterface i) -> pure $ MDInterface i
+
+    plateGuard g = case g of
+      GPact p -> pure $ GPact p
+      GKeySet k -> pure $ GKeySet k
+      GKeySetRef r -> pure $ GKeySetRef r
+      GModule m -> pure $ GModule m
+      GUser (UserGuard uf uas) ->
+        GUser . UserGuard uf <$> traverse f uas
+
+
+instance Plated (Term Name) where
+  plate = plateTerm
+
+instance Plated (Term Ref) where
+  plate = plateTerm
+
 
 class ToTerm a where
     toTerm :: a -> Term m
