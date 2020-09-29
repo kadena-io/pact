@@ -1028,7 +1028,7 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tTableName <> ":" <> pretty (fmap prettyTypeTerm _tTableType)
       , pretty _tMeta
       ]
-    TDynamic ref var _i -> pretty ref <> "->" <> pretty var
+    TDynamic ref var _i -> pretty ref <> "::" <> pretty var
 
     where
       prettyFunType (FunType as r) = pretty (FunType (map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))

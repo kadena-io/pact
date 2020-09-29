@@ -601,10 +601,10 @@ resolveRef _i nn@Name {} = do
   case nm of
     d@Just {} -> return d
     Nothing -> preuse $ evalRefs . rsLoaded . ix nn
-resolveRef _i (DName (DynamicName _ ref sigs i)) = do
-  a <- foldM (resolveDynamic i ref) Nothing sigs
+resolveRef _i (DName d@(DynamicName mem _ sigs i)) = do
+  a <- foldM (resolveDynamic i mem) Nothing sigs
   case a of
-    Nothing -> evalError' i $ "resolveRef: module member not found: " <> pretty ref
+    Nothing -> evalError' i $ "resolveRef: dynamic ref not found: " <> pretty d
     Just r -> return $ Just r
 
 -- | Perform module name lookup and locate the TDef or TConst associated with a
@@ -615,38 +615,21 @@ resolveDynamic
   => i
     -- ^ local info object
   -> Text
-    -- ^ module ref to resolve
+    -- ^ interface member to resolve
   -> Maybe Ref
     -- ^ if just, then module ref is found so shortcircuit
   -> ModuleName
     -- ^ module signature to grep for reference
   -> Eval e (Maybe Ref)
-resolveDynamic i ref acc n = case acc of
-  Just r -> case r of
-    Direct t -> evalError' i
-      $ "resolution error: found native reference while resolving module ref: "
-      <> pretty t
-    Ref t -> case t of
-      TConst{} -> return (Just r)
-      TDef{} -> return (Just r)
-      _ -> evalError' i
-        $ "resolution error: found reference to non-functional or constant term in module ref: "
-        <> pretty t
+resolveDynamic i mem acc n = case acc of
+  Just r -> return $ Just r
   Nothing -> do
     md <- resolveModule i n
     case md of
       Nothing -> return Nothing
-      Just (ModuleData MDModule{} _) -> evalError' i
-        $ "resolution error: found reference to module in signature list: "
-        <> pretty n
-      Just (ModuleData _ refs) -> return $ refs ^? ix ref
-
--- data DynamicName = DynamicName
---     { _dynMember :: Text
---     , _dynRefArg :: Text
---     , _dynInterfaces :: Set ModuleName
---     , _dynInfo :: Info
---     } deriving (Generic,Eq,Show)
+      Just (ModuleData MDModule{} _) ->
+        evalError' i $ "resolveDynamic: expected interface: " <> pretty n
+      Just (ModuleData _ members) -> return $ members ^? ix mem
 
 -- | This should be impure. See 'evaluateDefs'. Refs are
 -- expected to exist, and if they don't, it is a serious bug

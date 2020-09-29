@@ -38,7 +38,7 @@
 (module test G
   (defcap G () true)
   (defun testAImpl (aImpl:module{ifaceA})
-    1
+    (aImpl::opA1 "hi")
     )
   )
 
