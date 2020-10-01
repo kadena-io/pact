@@ -43,4 +43,5 @@
   )
 
 
-;; (test.testAImpl implA)
+(test.testAImpl implA)
+(test.testAImpl ns.implAB)

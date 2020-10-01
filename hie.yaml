@@ -1,0 +1,12 @@
+cradle:
+  multi:
+    - path: "./"
+      config:
+        cradle:
+          cabal:
+            - path: "./src"
+              component: "pact:lib:pact"
+            - path: "./src-ghc"
+              component: "pact:exe:pact"
+            - path: "./test"
+              component: "pact:test:hspec"

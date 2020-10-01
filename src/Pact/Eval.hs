@@ -591,16 +591,35 @@ moduleResolver lkp i mn = do
 
 
 resolveRef :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
-resolveRef i (QName (QualifiedName q n _)) = moduleResolver (lookupQn n) i q
+resolveRef i (QName (QualifiedName q@(ModuleName _qn ns) n _)) = moduleResolver (lookupQn n) i q
   where
     lookupQn n' i' q' = do
       m <- lookupModule i' q'
-      return $ join $ HM.lookup n' . _mdRefMap <$> m
-resolveRef _i nn@Name {} = do
+      case m of
+        Nothing -> return Nothing
+        Just m' -> case HM.lookup n' $ _mdRefMap m' of
+          Nothing
+            | isNothing ns -> error "here1"
+            | otherwise -> error "here2"
+          Just r -> return $ Just r
+resolveRef i nn@(Name (BareName bn _)) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
-    Nothing -> preuse $ evalRefs . rsLoaded . ix nn
+    Nothing -> do
+      n <- preuse $ evalRefs . rsLoaded . ix nn
+      case n of
+        Nothing -> do
+          let mn = ModuleName bn Nothing
+          md <- resolveModule i mn
+          case md of
+            Just (ModuleData m@MDModule{} _) -> do
+              let i' = getInfo i
+                  m' = (`TDef` i') <$> m
+              return $ Just $ Ref $ TModule m' (abstract (const Nothing) (TLiteral (LString "hack") i')) i'
+            Just _ -> evalError' i $ "resolveRef: found interface argument to module reference: " <> pretty mn
+            Nothing -> return Nothing
+        Just r -> return $ Just r
 resolveRef _i (DName d@(DynamicName mem _ sigs i)) = do
   a <- foldM (resolveDynamic i mem) Nothing sigs
   case a of
@@ -678,12 +697,17 @@ reduce (TObject (Object ps t ko oi) i) =
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
-reduce t@TModule{} = evalError (_tInfo t) "Modules and Interfaces only allowed at top level"
+reduce TModule{..} = TModule
+  <$> traverse reduce _tModuleDef
+  <*> return (abstract (const Nothing) $ TLiteral (LString "hack redux") def)
+  <*> return _tInfo
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
 reduce TDynamic {} = error "TODO"
+reduce TModRef{..} = error "TODO"
+
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
@@ -736,7 +760,8 @@ reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
-reduceApp (App r _ ai) = evalError ai $ "Expected def: " <> pretty r
+reduceApp (App m@(TModule _md _ _) _ _ai) = error $ "HERE: " <> show m
+reduceApp (App r _ _ai) = error $ "Expected def: " <> show r
 
 -- | precompute "UserApp" cost
 computeUserAppGas :: Def Ref -> Info -> Eval e Gas
@@ -941,7 +966,7 @@ resumePactExec i req ctx = do
 appError :: Info -> Doc -> Term n
 appError i errDoc = TApp (App (msg errDoc) [] i) i
 
-resolveFreeVars ::  Info -> Scope d Term Name ->  Eval e (Scope d Term Ref)
+resolveFreeVars ::  Info -> Scope Int Term Name -> Eval e (Scope Int Term Ref)
 resolveFreeVars i b = traverse r b where
     r fv = resolveRef i fv >>= \m -> case m of
              Nothing -> evalError i $ "Cannot resolve " <> pretty fv

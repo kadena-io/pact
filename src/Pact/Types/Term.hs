@@ -71,7 +71,7 @@ module Pact.Types.Term
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,
    tNativeTopLevelOnly,tObject,tSchemaName,
    tTableName,tTableType,tVar,tStep,tModuleName,
-   tDynModRef,tDynMember,
+   tDynModRef,tDynMember,tModRef,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -940,6 +940,10 @@ data Term n =
     , _tMeta :: !Meta
     , _tInfo :: !Info
     } |
+    TModRef {
+      _tModRef :: !ModuleName
+    , _tInfo :: !Info
+    } |
     TTable {
       _tTableName :: !TableName
     , _tModuleName :: ModuleName
@@ -978,6 +982,7 @@ instance HasInfo (Term n) where
     TUse{..} -> getInfo _tUse
     TVar{..} -> _tInfo
     TDynamic{..} -> _tInfo
+    TModRef{..} -> _tInfo
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
@@ -1029,7 +1034,7 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tMeta
       ]
     TDynamic ref var _i -> pretty ref <> "::" <> pretty var
-
+    TModRef mn _i -> pretty mn
     where
       prettyFunType (FunType as r) = pretty (FunType (map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))
 
@@ -1066,8 +1071,9 @@ instance Monad Term where
     TTable {..} >>= f =
       TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
     TDynamic r m i >>= f = TDynamic (r >>= f) (m >>= f) i
+    TModRef mn i >>= _ = TModRef mn i
 
-termCodec :: (ToJSON n,FromJSON n) => Codec (Term n)
+termCodec :: (ToJSON n, FromJSON n) => Codec (Term n)
 termCodec = Codec enc dec
   where
     enc t = case t of
@@ -1097,6 +1103,7 @@ termCodec = Codec enc dec
            , meta .= tmeta, inf i ]
       TDynamic r m i ->
         ob [ dynRef .= r, dynMem .= m, inf i ]
+      TModRef mn i -> ob [ modName .= mn, inf i ]
 
     dec decval =
       let wo n f = withObject n f decval
@@ -1132,6 +1139,7 @@ termCodec = Codec enc dec
         <|> wo "Dynamic"
             (\o -> TDynamic <$> o .: dynRef <*> o .: dynMem <*> inf' o)
 
+        <|> wo "ModRef" (\o -> TModRef <$> o .: modName <*> inf' o)
 
     ob = object
     moduleDef = "module"
@@ -1233,6 +1241,7 @@ typeof t = case t of
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
       TDynamic {} -> Left "dynamic"
+      TModRef {} -> Left "modref"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
