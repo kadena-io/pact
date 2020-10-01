@@ -34,6 +34,7 @@ import Data.Text (pack)
 
 import Pact.Eval
 import Pact.Runtime.Typecheck
+import Pact.Runtime.Utils
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime

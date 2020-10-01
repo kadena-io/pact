@@ -51,6 +51,7 @@ library
                      , Pact.Repl.Types
                      , Pact.Runtime.Capabilities
                      , Pact.Runtime.Typecheck
+                     , Pact.Runtime.Utils
                      , Pact.Server.API
                      , Pact.Types.API
                      , Pact.Types.Capability

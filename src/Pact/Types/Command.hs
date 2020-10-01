@@ -44,9 +44,9 @@ module Pact.Types.Command
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..),usSig
   , PactResult(..)
-  , PactSuccess(..), successValue, successEvents
-  , PactEvent(..), eventName, eventParams, eventModuleHash
-  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
+  , PactSuccess(..), successValue, successEvents, pactSuccess
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs
+  , crContinuation,crMetaData
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
@@ -295,15 +295,6 @@ instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do
     UserSig <$> o .: "sig"
 
-data PactEvent = PactEvent
-  { _eventName :: QualifiedName
-  , _eventParams :: [PactValue]
-  , _eventModuleHash :: ModuleHash
-  } deriving (Eq, Show, Generic)
-instance NFData PactEvent
-instance ToJSON PactEvent where toJSON = lensyToJSON 6
-instance FromJSON PactEvent where parseJSON = lensyParseJSON 6
-
 data PactSuccess = PactSuccess
   { _successValue :: PactValue
   , _successEvents :: [PactEvent]
@@ -322,6 +313,9 @@ instance FromJSON PactSuccess where
       parseFull = withObject "PactSuccess" $ \o ->
         PactSuccess <$> o .: "value" <*> o .: "events"
 
+-- smart constructor for no events
+pactSuccess :: PactValue -> PactSuccess
+pactSuccess pv = PactSuccess pv []
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactError PactSuccess
@@ -401,4 +395,3 @@ makeLenses ''CommandResult
 makePrisms ''ProcessedCommand
 makePrisms ''ExecutionMode
 makeLenses ''PactSuccess
-makeLenses ''PactEvent

@@ -100,7 +100,7 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 testPactContinuation :: HTTP.Manager -> Spec
 testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
-    let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
+    let cmdData = (PactResult . Right . pactSuccess . PLiteral . LDecimal) 3
         --expRes = Just $ CommandResult _ ((Just . TxId) 0) cmdData (Gas 0)
     cr <- testSimpleServerCmd mgr
     (_crResult <$> cr)`shouldBe` Just cmdData
@@ -932,7 +932,7 @@ doPoll mgr req = do
 
 toActualResult :: PactResult -> ActualResult
 toActualResult (PactResult (Left (PactError _ _ _ d))) = ActualResult . Left $ show d
-toActualResult (PactResult (Right pv)) = ActualResult . Right $ pv
+toActualResult (PactResult (Right (PactSuccess pv _))) = ActualResult $ Right pv
 
 
 resultShouldBe :: HasCallStack => ActualResult -> ExpectResult -> Expectation

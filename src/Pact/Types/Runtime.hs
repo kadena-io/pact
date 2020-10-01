@@ -20,6 +20,7 @@
 module Pact.Types.Runtime
  ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwEitherText,throwErr,
    PactId(..),
+   PactEvent(..), eventName, eventParams, eventModuleHash,
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
@@ -27,7 +28,8 @@ module Pact.Types.Runtime
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
-   EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,evalLogGas,
+   EvalState(..),evalRefs,evalCallStack,evalPactExec,
+   evalGas,evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -35,7 +37,7 @@ module Pact.Types.Runtime
    NamespacePolicy(..),
    permissiveNamespacePolicy,
    ExecutionConfig(..),ExecutionFlag(..),ecFlags,isExecutionFlagSet,flagRep,flagReps,
-   ifExecutionFlagSet,ifExecutionFlagSet',
+   ifExecutionFlagSet,ifExecutionFlagSet', whenExecutionFlagSet,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -71,6 +73,7 @@ import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.PactError
+import Pact.Types.PactValue
 import Pact.Types.Perf
 import Pact.Types.Persistence
 import Pact.Types.Pretty
@@ -137,6 +140,8 @@ data ExecutionFlag
   | FlagPreserveModuleNameBug
   -- | Preserve namespace module acquire gov bug
   | FlagPreserveNsModuleInstallBug
+  -- | Allow emission of pact events
+  | FlagSupportPactEvents
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -213,6 +218,17 @@ makeLenses ''RefState
 instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing
 
+data PactEvent = PactEvent
+  { _eventName :: QualifiedName
+  , _eventParams :: [PactValue]
+  , _eventModuleHash :: ModuleHash
+  } deriving (Eq, Show, Generic)
+instance NFData PactEvent
+instance ToJSON PactEvent where toJSON = lensyToJSON 6
+instance FromJSON PactEvent where parseJSON = lensyParseJSON 6
+makeLenses ''PactEvent
+
+
 -- | Interpreter mutable state.
 data EvalState = EvalState {
       -- | New or imported modules and defs.
@@ -227,10 +243,12 @@ data EvalState = EvalState {
     , _evalCapabilities :: Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)
     , _evalLogGas :: Maybe [(Text,Gas)]
+      -- | Accumulate events
+    , _evalEvents :: ![PactEvent]
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def 0 def def
+instance Default EvalState where def = EvalState def def def 0 def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
@@ -270,6 +288,9 @@ ifExecutionFlagSet' :: ExecutionFlag -> a -> a -> Eval e a
 ifExecutionFlagSet' f onTrue onFalse =
   ifExecutionFlagSet f (return onTrue) (return onFalse)
 
+whenExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e ()
+whenExecutionFlagSet f onTrue =
+  ifExecutionFlagSet f (void onTrue) (return ())
 
 
 -- | Bracket interpreter action pushing and popping frame on call stack.

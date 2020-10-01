@@ -22,7 +22,6 @@ import Pact.Types.Hash
 import Pact.Types.Server
 import Pact.Types.Term
 import Pact.Types.Runtime (PactError(..),PactErrorType(..))
-import Pact.Types.PactValue (PactValue)
 import Pact.Types.Pretty (viaShow)
 
 
@@ -51,7 +50,7 @@ cmd = Command "" [] initialHash
 rq :: RequestKey
 rq = RequestKey pactInitialHash
 
-res :: Either PactError PactValue
+res :: Either PactError PactSuccess
 res = Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
 
 cr :: CommandResult Hash

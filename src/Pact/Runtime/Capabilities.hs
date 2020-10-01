@@ -42,6 +42,7 @@ import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Runtime.Utils
 
 -- | Tie the knot with Pact.Eval by having caller supply `apply` etc
 type ApplyMgrFun e = Def Ref -> PactValue -> PactValue -> Eval e PactValue
@@ -103,7 +104,8 @@ evalUserCapability i af scope cap cdef test = go scope
 
     go CapManaged = do
       ci <- capabilityInstalled cap
-      when ci $ evalError' i $ "Duplicate install of managed capability " <> pretty cap
+      when ci $ evalError' i $
+        "Duplicate install of managed capability " <> pretty cap
       push >> test >> popCapStack installManaged
     go CapCallStack = ifNotAcquired evalStack
     go CapComposed = ifNotAcquired evalComposed
@@ -115,43 +117,53 @@ evalUserCapability i af scope cap cdef test = go scope
         then return AlreadyAcquired
         else act >> return NewlyAcquired
 
-
+    -- managed: assemble managed cap for install.
+    -- TODO: given this is install code, why the indirection
+    -- 'InstallMgd e'?
     installManaged cs = mkMC >>= install
       where
         install mc = do
           evalCapabilities . capManaged %= S.insert mc
           return (NewlyInstalled mc)
         mkMC = case _dDefMeta cdef of
-          Nothing -> evalError' i $ "Installing managed capability without @managed metadata"
+          Nothing -> evalError' i $
+            "Installing managed capability without @managed metadata"
           Just (DMDefcap (DefcapManaged dcm)) -> case dcm of
-            Nothing -> return $! ManagedCapability cs (_csCap cs) (Left (AutoManagedCap True))
+            Nothing -> return $!
+              ManagedCapability cs (_csCap cs) (Left (AutoManagedCap True))
             Just (argName,mgrFunRef) -> case defCapMetaParts cap argName cdef of
               Left e -> evalError' cdef e
               Right (idx,static,v) -> case mgrFunRef of
                 (TVar (Ref (TDef d di)) _) -> case _dDefType d of
-                  Defun -> return $! ManagedCapability cs static $ Right $ UserManagedCap v idx argName d
+                  Defun -> return $!
+                    ManagedCapability cs static $
+                      Right $ UserManagedCap v idx argName d
                   _ -> evalError' di $ "Capability manager ref must be defun"
                 t -> evalError' t $ "Capability manager ref must be a function"
 
-    -- Callstack: check if managed, in which case push, otherwise
-    -- push and test.
+    -- Callstack: check if managed, in which case push/emit,
+    -- otherwise push and test.
     evalStack = checkManaged i af cap cdef >>= \r -> case r of
       Nothing -> push >> test
-      Just composed -> pushSlot (CapSlot scope cap composed)
+      Just composed -> emitCap >> pushSlot (CapSlot scope cap composed)
 
-    -- Composed: check if managed, in which case install onto head,
+    -- Composed: check if managed, in which case install onto head/emit,
     -- otherwise push, test, pop and install onto head
     evalComposed = checkManaged i af cap cdef >>= \r -> case r of
       Nothing -> push >> test >> popCapStack installComposed
-      Just composed -> installComposed (CapSlot scope cap composed)
+      Just composed -> emitCap >> installComposed (CapSlot scope cap composed)
 
-    installComposed c = evalCapabilities . capStack . _head . csComposed %= (_csCap c:)
+    installComposed c =
+      evalCapabilities . capStack . _head . csComposed %= (_csCap c:)
 
     push = pushSlot (CapSlot scope cap [])
 
+    emitCap = emitEvent i (_scName cap) (_scArgs cap)
+
     pushSlot s = evalCapabilities . capStack %= (s:)
 
-defCapMetaParts :: UserCapability -> Text -> Def Ref -> Either Doc (Int, SigCapability, PactValue)
+defCapMetaParts :: UserCapability -> Text -> Def Ref
+                -> Either Doc (Int, SigCapability, PactValue)
 defCapMetaParts cap argName cdef = case findArg argName of
   Nothing -> Left $ "Invalid managed argument name: " <> pretty argName
   Just idx -> case decomposeManaged' idx cap of
@@ -160,6 +172,12 @@ defCapMetaParts cap argName cdef = case findArg argName of
   where
     findArg an = findIndex ((==) an . _aName) $ _ftArgs (_dFunType cdef)
 
+-- Check managed state, if any, to approve acquisition.
+-- Handles lazy installation of sig + auto caps, as a fallback
+-- case if no matching installed managed caps are found.
+-- Once found/matched, compute installed logic to approve acquisition.
+-- Upon success return composed caps that were assembled during install
+-- to copy into acquired slot.
 checkManaged
   :: HasInfo i
   => i
@@ -168,25 +186,32 @@ checkManaged
   -> Def Ref
   -> Eval e (Maybe [UserCapability])
 checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef of
+  -- not managed: noop
   Nothing -> return Nothing
+  -- managed: go
   Just (DMDefcap dcm) -> use (evalCapabilities . capManaged) >>= go dcm . S.toList
   where
+    -- go: main loop over installed managed caps set
+    -- empty case: attempt lazy install and test
     go dcm [] = do
       checkSigs dcm >>= \r -> case r of
         Nothing -> die
         Just mc -> testMC mc die
+    -- test installed from set
     go dcm (mc:mcs) = testMC mc (go dcm mcs)
 
     die = evalError' i $ "Managed capability not installed: " <> pretty cap
 
+    -- test an already-installed mgd cap by executing mgmt functionality
     testMC (mc@ManagedCapability{..}) cont = case _mcManaged of
       Left oneShot | cap == _mcStatic -> doOneShot mc oneShot
                    | otherwise -> cont
-      Right umc@UserManagedCap{..} -> case decomposeManaged' _umcManageParamIndex cap of
-        Nothing -> cont
-        Just (cap',rv)
-          | cap' /= _mcStatic -> cont
-          | otherwise -> check mc umc rv
+      Right umc@UserManagedCap{..} ->
+        case decomposeManaged' _umcManageParamIndex cap of
+          Nothing -> cont
+          Just (cap',rv)
+            | cap' /= _mcStatic -> cont
+            | otherwise -> check mc umc rv
 
     doOneShot mc (AutoManagedCap True) = do
       evalCapabilities . capManaged %=
@@ -194,6 +219,7 @@ checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef 
       return $ Just $ _csComposed (_mcInstalled mc)
     doOneShot _mc (AutoManagedCap False) = evalError' i $ "Capability already fired"
 
+    -- execute manager function and compute/store result
     check mc@ManagedCapability{..} umc@UserManagedCap{..} rv = do
       newMgdValue <- applyF _umcMgrFun _umcManagedValue rv
       let newUmc = set umcManagedValue newMgdValue umc
@@ -204,6 +230,8 @@ checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef 
       Nothing -> return c
       Just (argName,_) -> view _2 <$> defCapMetaParts c argName cdef
 
+    -- check sig and autonomous caps for match
+    -- to install.
     checkSigs dcm = case getStatic dcm cap of
       Left e -> evalError' cdef e
       Right capStatic -> do
