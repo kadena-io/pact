@@ -121,7 +121,9 @@ resultSuccess :: Maybe TxId ->
                  Maybe PactExec ->
                  [TxLog Value] ->
                  CommandResult Hash
-resultSuccess tx cmd gas a pe l = CommandResult cmd tx (PactResult . Right $ a) gas (Just hshLog) pe Nothing
+resultSuccess tx cmd gas a pe l =
+  CommandResult cmd tx (PactResult . Right $ PactSuccess a [])
+  gas (Just hshLog) pe Nothing
   where hshLog = fullToHashLogCr l
 
 fullToHashLogCr :: [TxLog Value] -> Hash

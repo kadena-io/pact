@@ -44,6 +44,8 @@ module Pact.Types.Command
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..),usSig
   , PactResult(..)
+  , PactSuccess(..), successValue, successEvents
+  , PactEvent(..), eventName, eventParams, eventModuleHash
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
@@ -293,9 +295,36 @@ instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do
     UserSig <$> o .: "sig"
 
+data PactEvent = PactEvent
+  { _eventName :: QualifiedName
+  , _eventParams :: [PactValue]
+  , _eventModuleHash :: ModuleHash
+  } deriving (Eq, Show, Generic)
+instance NFData PactEvent
+instance ToJSON PactEvent where toJSON = lensyToJSON 6
+instance FromJSON PactEvent where parseJSON = lensyParseJSON 6
+
+data PactSuccess = PactSuccess
+  { _successValue :: PactValue
+  , _successEvents :: [PactEvent]
+  } deriving (Eq, Show, Generic)
+instance NFData PactSuccess
+instance ToJSON PactSuccess where
+  toJSON PactSuccess{..} = case _successEvents of
+    [] -> toJSON _successValue -- legacy format
+    _ -> object [ "value" .= _successValue
+                , "events" .= _successEvents ]
+
+instance FromJSON PactSuccess where
+  parseJSON v = parseFull v <|> parseLegacy v
+    where
+      parseLegacy pv = (`PactSuccess` []) <$> parseJSON pv
+      parseFull = withObject "PactSuccess" $ \o ->
+        PactSuccess <$> o .: "value" <*> o .: "events"
+
 
 newtype PactResult = PactResult
-  { _pactResult :: Either PactError PactValue
+  { _pactResult :: Either PactError PactSuccess
   } deriving (Eq, Show, Generic,NFData)
 
 instance ToJSON PactResult where
@@ -371,3 +400,5 @@ makeLenses ''Payload
 makeLenses ''CommandResult
 makePrisms ''ProcessedCommand
 makePrisms ''ExecutionMode
+makeLenses ''PactSuccess
+makeLenses ''PactEvent
