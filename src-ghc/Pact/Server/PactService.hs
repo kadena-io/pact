@@ -120,9 +120,10 @@ resultSuccess :: Maybe TxId ->
                  PactValue ->
                  Maybe PactExec ->
                  [TxLog Value] ->
+                 [PactEvent] ->
                  CommandResult Hash
-resultSuccess tx cmd gas a pe l =
-  CommandResult cmd tx (PactResult . Right $ PactSuccess a [])
+resultSuccess tx cmd gas a pe l evs =
+  CommandResult cmd tx (PactResult . Right $ PactSuccess a evs)
   gas (Just hshLog) pe Nothing
   where hshLog = fullToHashLogCr l
 
@@ -145,7 +146,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
                 initRefStore _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData def
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
-  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs
+  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
 
 
 applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p (CommandResult Hash)
@@ -156,4 +157,4 @@ applyContinuation rk hsh signers cm = do
                 (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) initRefStore
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData def
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
-  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs
+  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

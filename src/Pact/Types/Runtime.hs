@@ -37,7 +37,8 @@ module Pact.Types.Runtime
    NamespacePolicy(..),
    permissiveNamespacePolicy,
    ExecutionConfig(..),ExecutionFlag(..),ecFlags,isExecutionFlagSet,flagRep,flagReps,
-   ifExecutionFlagSet,ifExecutionFlagSet', whenExecutionFlagSet,
+   ifExecutionFlagSet,ifExecutionFlagSet',
+   whenExecutionFlagSet, unlessExecutionFlagSet,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -140,8 +141,8 @@ data ExecutionFlag
   | FlagPreserveModuleNameBug
   -- | Preserve namespace module acquire gov bug
   | FlagPreserveNsModuleInstallBug
-  -- | Allow emission of pact events
-  | FlagSupportPactEvents
+  -- | Disable emission of pact events
+  | FlagDisablePactEvents
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -291,6 +292,11 @@ ifExecutionFlagSet' f onTrue onFalse =
 whenExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e ()
 whenExecutionFlagSet f onTrue =
   ifExecutionFlagSet f (void onTrue) (return ())
+
+unlessExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e ()
+unlessExecutionFlagSet f onFalse =
+  ifExecutionFlagSet f (return ()) (void onFalse)
+
 
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
