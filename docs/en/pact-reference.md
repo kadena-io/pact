@@ -462,10 +462,12 @@ If there are events, the pact value and events are returned in the following JSO
 
 ##### `value`
 _type:_ **[PactValue](#pact-values)** `required`
+
 Pact result value.
 
 ##### `events`
-_type:_ **[ [PactEvent](#pact-event) ]**
+_type:_ **[ [PactEvent](#pact-event) ]** `optional`
+
 Pact events.
 
 #### Pact events {#pact-event}
@@ -474,18 +476,22 @@ Pact events represent named, provable events that transpired in a transaction, i
 
 ##### `name`
 _type:_ **string** `required`
+
 Event name or "topic"
 
-##### `params` `required`
-_type:_ **[ [PactValue](#pact-values) ]**
+##### `params`
+_type:_ **[ [PactValue](#pact-values) ]** `required`
+
 Values representing the parameterization of this event.
 
 ##### `module`
 _type:_ **string** `required`
+
 Fully-qualified module name that sourced the event.
 
 ##### `moduleHash`
 _type:_ **string (base64url)** `required`
+
 Hash of sourcing module.
 
 
