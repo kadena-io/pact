@@ -296,8 +296,8 @@ instance FromJSON UserSig where
     UserSig <$> o .: "sig"
 
 data PactSuccess = PactSuccess
-  { _successValue :: PactValue
-  , _successEvents :: [PactEvent]
+  { _successValue :: !PactValue
+  , _successEvents :: ![PactEvent]
   } deriving (Eq, Show, Generic)
 instance NFData PactSuccess
 instance ToJSON PactSuccess where

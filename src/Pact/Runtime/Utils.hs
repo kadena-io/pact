@@ -100,9 +100,9 @@ getCallingModule i = maybe resolveErr ((=<<) isModule . getModule i) =<< findCal
 
 
 emitEvent :: HasInfo i => i -> QualifiedName -> [PactValue] -> Eval e ()
-emitEvent i name params = unlessExecutionFlagSet FlagDisablePactEvents $ do
+emitEvent i qn@QualifiedName{..} params = unlessExecutionFlagSet FlagDisablePactEvents $ do
   callMod <- getCallingModule i
-  unless (_mName callMod == _qnQual name) $ evalError' i $
-    "emitEvent: event '" <> pretty name <>
+  unless (_mName callMod == _qnQual) $ evalError' i $
+    "emitEvent: event '" <> pretty qn <>
     "' does not match emitting module: " <> pretty (_mName callMod)
-  evalEvents %= (PactEvent name params (_mHash callMod):)
+  evalEvents %= (PactEvent _qnName params _qnQual (_mHash callMod):)

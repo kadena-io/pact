@@ -20,7 +20,7 @@
 module Pact.Types.Runtime
  ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwEitherText,throwErr,
    PactId(..),
-   PactEvent(..), eventName, eventParams, eventModuleHash,
+   PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
@@ -220,9 +220,10 @@ instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing
 
 data PactEvent = PactEvent
-  { _eventName :: QualifiedName
-  , _eventParams :: [PactValue]
-  , _eventModuleHash :: ModuleHash
+  { _eventName :: !Text
+  , _eventParams :: ![PactValue]
+  , _eventModule :: !ModuleName
+  , _eventModuleHash :: !ModuleHash
   } deriving (Eq, Show, Generic)
 instance NFData PactEvent
 instance ToJSON PactEvent where toJSON = lensyToJSON 6
