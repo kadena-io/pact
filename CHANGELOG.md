@@ -1,3 +1,7 @@
+3.6
+---
+* Pact events (#819)
+
 3.5.2
 ---
 * ApiReq: expose builder, migrate String -> Text (#805)
