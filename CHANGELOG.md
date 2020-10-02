@@ -1,6 +1,8 @@
 3.6
 ---
 * Pact events (#819)
+* Type-only module reference support (#814,#816)
+* Update SBV and other deps (#812)
 
 3.5.2
 ---
