@@ -81,8 +81,9 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
       createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
       managedPay `succeedsWith'`
         (Just $ PactSuccess (textVal' "Transfer succeeded")
-         [PactEvent (QualifiedName "accounts" "PAY" def)
+         [PactEvent "PAY"
           [textVal' "Alice",textVal' "Bob",decValue' 0.9]
+          "accounts"
           mhash])
       managedPayFails `failsWith` Just "insufficient balance"
 
