@@ -461,7 +461,7 @@ during the course of the transaction. If there are no events, the JSON contains 
 If there are events, the pact value and events are returned in the following JSON structure:
 
 ##### `value`
-_type:_ **[PactValue](#pact-values)**
+_type:_ **[PactValue](#pact-values)** `required`
 Pact result value.
 
 ##### `events`
