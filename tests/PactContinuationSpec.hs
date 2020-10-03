@@ -82,7 +82,7 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
       managedPay `succeedsWith'`
         (Just $ PactSuccess (textVal' "Transfer succeeded")
          [PactEvent "PAY"
-          [textVal' "Alice",textVal' "Bobb",decValue' 0.9]
+          [textVal' "Alice",textVal' "Bob",decValue' 0.9]
           "accounts"
           mhash])
       managedPayFails `failsWith` Just "insufficient balance"
