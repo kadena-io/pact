@@ -332,10 +332,11 @@ _type:_ **string (base64url)** `required`
 Request key of the command.
 
 ###### `"result"`
-_type:_ [Pact Error](#pact-errors) **or** [Pact Value](#pact-values) `required`
+_type:_ [Pact Error](#pact-errors) **or** [Pact Success](#pact-success) `required`
 
 The result of a pact execution. It will either be a [pact error](#pact-errors)
-or the last [pact value](#pact-values) outputted by a successful execution.
+or a success value containing the last [pact value](#pact-values) outputted by a successful execution
+along with any [events](#pact-event).
 
 ###### `"txId"`
 _type:_ **string (base64url)** `optional`
@@ -453,8 +454,54 @@ children:
 }
 ```
 
-#### Pact values returned {#pact-values}
-A successful pact execution will return a value that is valid JSON. A pact
+#### Pact success values {#pact-success}
+
+A successful pact execution returns the output value and any events that may have been emitted
+during the course of the transaction.
+
+For backward compatibility, if the event list is empty, then the Pact success value
+is simply a single [Pact Value](#pact-values). If there are events, an object is returned
+with the following attributes:
+
+##### `value`
+_type:_ **[PactValue](#pact-values)** `required`
+
+Pact result value. Note this is the actual value (not an object with key "value" if `events` is
+empty, for backward compatibility.
+
+##### `events`
+_type:_ **[ [PactEvent](#pact-event) ]** `required`
+
+List of pact events.
+
+#### Pact events {#pact-event}
+
+Pact events represent named, provable events that transpired in a transaction, in the following format:
+
+##### `name`
+_type:_ **string** `required`
+
+Event name or "topic"
+
+##### `params`
+_type:_ **[ [PactValue](#pact-values) ]** `required`
+
+Values representing the parameterization of this event.
+
+##### `module`
+_type:_ **string** `required`
+
+Fully-qualified module name that sourced the event.
+
+##### `moduleHash`
+_type:_ **string (base64url)** `required`
+
+Hash of sourcing module.
+
+
+#### Pact Values {#pact-values}
+Pact values are those values representable in Pact with an equivalent JSON representation and as
+such can be used in input and output in the API. A pact
 value can be one of the following: a literal string, integer, decimal, boolean,
 or time; a list of other pact values; an object mapping textual keys to pact
 values; or [guards](#guard-types), which can be pact (continuation) guards,
@@ -1714,6 +1761,14 @@ In the following example, the capability will have "one-shot" automatic manageme
   @managed
   (validate-member member))
 ```
+
+#### Managed capabilities and Events
+Upon acquisition, managed capabilities emit ["Pact Events"](#pact-event) in the output for the granted
+capability (not the installed parameterization but the actual managed value). As such, managed capabilities
+represent "facts" that can be proven via SPV in a public blockchain context.
+
+Events are planned to become a general-purpose mechanism but as of Pact 3.6 are only emitted by managed
+capabilities.
 
 
 ### Guards vs Capabilities

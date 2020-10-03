@@ -31,9 +31,6 @@ module Pact.Native.Internal
   ,module Pact.Gas
   ,(<>)
   ,getPactId,enforceGuardDef,guardForModuleCall
-  ,findCallingModule
-  ,getCallingModule
-  ,getModule
   ,provenanceOf
   ,enforceYield
   ,appToCap
@@ -59,7 +56,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
-
+import Pact.Runtime.Utils
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -150,41 +147,6 @@ funType t as = funTypes $ funType' t as
 funType' :: Type n -> [(Text,Type n)] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
--- | Lookup a module and fail if not found.
-getModule :: HasInfo i => i -> ModuleName -> Eval e (ModuleData Ref)
-getModule i mn = lookupModule i mn >>= \r -> case r of
-  Just m -> return m
-  Nothing -> evalError' i $ "Unable to resolve module " <> pretty mn
-
--- | Look up the name of the most current module in the stack
---
-findCallingModule :: Eval e (Maybe ModuleName)
-findCallingModule =
-  preuse $ evalCallStack . traverse . sfApp . _Just . _1 . faModule . _Just
-
--- | Retrieve current calling module data or fail if not found
---
-getCallingModule :: HasInfo i => i -> Eval e (Module (Def Ref))
-getCallingModule i = maybe resolveErr ((=<<) isModule . getModule i) =<< findCallingModule
-  where
-    resolveErr = evalError' i
-      "Unable to resolve current calling module"
-
-    isModule md = case _mdModule md of
-      MDModule m -> return m
-      MDInterface n -> evalError' i
-        $ "Internal error: getCallingModule: called from interface"
-        <> pretty (_interfaceName n)
-
--- | See if some entity was called by a module
---
-calledByModule :: Module n -> Eval e Bool
-calledByModule Module{..} =
-  maybe False (const True) <$> searchCallStackApps forModule
-  where
-    forModule :: FunApp -> Maybe ()
-    forModule FunApp{..} | _faModule == Just _mName = Just ()
-                         | otherwise = Nothing
 
 tTyInteger :: Type n; tTyInteger = TyPrim TyInteger
 tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal

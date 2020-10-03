@@ -23,9 +23,9 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 
-import Pact.Native.Internal
 import Pact.PersistPactDb (DbEnv)
 import Pact.Persist.Pure (PureDb)
+import Pact.Runtime.Utils
 import Pact.Types.Runtime
 import Pact.Types.Pretty (Pretty, pretty, renderCompactText)
 

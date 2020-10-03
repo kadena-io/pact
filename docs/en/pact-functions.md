@@ -1502,7 +1502,7 @@ Specifies and tests for existing grant of CAPABILITY, failing if not found in en
 *capability*&nbsp;` -> bool` *body*&nbsp;`[*]` *&rarr;*&nbsp;`<a>`
 
 
-Specifies and requests grant of _acquired_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap.
+Specifies and requests grant of _acquired_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap. Acquire of a managed capability results in emission of the equivalent event.
 ```lisp
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```
@@ -1647,7 +1647,7 @@ Set environment confidential ENTITY id, or unset with no argument.
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","OldReadOnlyBehavior","PreserveModuleNameBug","PreserveNsModuleInstallBug"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePactEvents","OldReadOnlyBehavior","PreserveModuleNameBug","PreserveNsModuleInstallBug"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]

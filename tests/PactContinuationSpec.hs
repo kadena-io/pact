@@ -53,6 +53,10 @@ spec = describe "pacts in dev server" $ do
   describe "testNestedPacts" $ testNestedPacts mgr
   describe "testManagedCaps" $ testManagedCaps mgr
 
+_runOne :: (HTTP.Manager -> Spec) -> Spec
+_runOne test = do
+  mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
+  test mgr
 
 testManagedCaps :: HTTP.Manager -> Spec
 testManagedCaps mgr = before_ flushDb $ after_ flushDb $
@@ -68,11 +72,19 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
     let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd,managedPay,managedPayFails]
     allResults <- runAll mgr allCmds
 
+    mhash <- either (fail . show) (return . ModuleHash . Hash) $
+      parseB64UrlUnpaddedText' "HniQBJ-NUJan20k4t6MiqpzhqkSsKmIzN5ef76pcLCU"
+
     runResults allResults $ do
       sysModuleCmd `succeedsWith` textVal "system module loaded"
       acctModuleCmd `succeedsWith` textVal "TableCreated"
       createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
-      managedPay `succeedsWith` Nothing
+      managedPay `succeedsWith'`
+        (Just $ PactSuccess (textVal' "Transfer succeeded")
+         [PactEvent "PAY"
+          [textVal' "Alice",textVal' "Bobb",decValue' 0.9]
+          "accounts"
+          mhash])
       managedPayFails `failsWith` Just "insufficient balance"
 
 
@@ -100,7 +112,7 @@ testNestedPacts mgr = before_ flushDb $ after_ flushDb $
 testPactContinuation :: HTTP.Manager -> Spec
 testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
-    let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
+    let cmdData = (PactResult . Right . pactSuccess . PLiteral . LDecimal) 3
         --expRes = Just $ CommandResult _ ((Just . TxId) 0) cmdData (Gas 0)
     cr <- testSimpleServerCmd mgr
     (_crResult <$> cr)`shouldBe` Just cmdData
@@ -675,7 +687,10 @@ twoPartyEscrow testCmds mgr act = do
     act (_cmdHash runEscrowCmd)
 
 decValue :: Decimal -> Maybe PactValue
-decValue = Just . PLiteral . LDecimal
+decValue = Just . decValue'
+
+decValue' :: Decimal -> PactValue
+decValue' = PLiteral . LDecimal
 
 checkContHash
   :: HasCallStack
@@ -805,7 +820,11 @@ shouldMatch' crc@CommandResultCheck{..} results = checkResult _crcExpect apiRes
 
 succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
                 ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-succeedsWith cmd r = ask >>= liftIO . shouldMatch'
+succeedsWith cmd r = succeedsWith' cmd (pactSuccess <$> r)
+
+succeedsWith' :: HasCallStack => Command Text -> Maybe PactSuccess ->
+                ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+succeedsWith' cmd r = ask >>= liftIO . shouldMatch'
                      (makeCheck cmd (ExpectResult . Right $ r))
 
 failsWith :: HasCallStack => Command Text -> Maybe String ->
@@ -851,7 +870,10 @@ makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
   mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM Nothing
 
 textVal :: Text -> Maybe PactValue
-textVal = Just . PLiteral . LString
+textVal = Just . textVal'
+
+textVal' :: Text -> PactValue
+textVal' = PLiteral . LString
 
 getPactId :: Command Text -> PactId
 getPactId cmd = toPactId hsh
@@ -869,9 +891,9 @@ stepMisMatchMsg isRollback attemptStep currStep = Just msg
         msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
               <> show attemptStep <> ", " <> show currStep <> ")"
 
-newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe PactValue))
+newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe PactSuccess))
   deriving (Eq, Show)
-newtype ActualResult = ActualResult (Either String PactValue)
+newtype ActualResult = ActualResult (Either String PactSuccess)
   deriving (Eq, Show)
 
 data CommandResultCheck = CommandResultCheck
@@ -932,7 +954,7 @@ doPoll mgr req = do
 
 toActualResult :: PactResult -> ActualResult
 toActualResult (PactResult (Left (PactError _ _ _ d))) = ActualResult . Left $ show d
-toActualResult (PactResult (Right pv)) = ActualResult . Right $ pv
+toActualResult (PactResult (Right pv)) = ActualResult $ Right pv
 
 
 resultShouldBe :: HasCallStack => ActualResult -> ExpectResult -> Expectation
