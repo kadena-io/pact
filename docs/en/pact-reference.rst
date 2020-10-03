@@ -562,20 +562,26 @@ Pact success values
 ~~~~~~~~~~~~~~~~~~~
 
 A successful pact execution returns the output value and any events that
-may have been emitted during the course of the transaction. If there are
-no events, the JSON contains a single `Pact Value <#pact-values>`__. If
-there are events, the pact value and events are returned in the
-following JSON structure:
+may have been emitted during the course of the transaction.
+
+For backward compatibility, if the event list is empty, then the Pact
+success value is simply a single `Pact Value <#pact-values>`__. If there
+are events, an object is returned with the following attributes:
 
 ``value``
 ^^^^^^^^^
 
-*type:* `PactValue <#pact-values>`__ Pact result value.
+*type:* `PactValue <#pact-values>`__ ``required``
+
+Pact result value. Note this is the actual value (not an object with key
+“value” if ``events`` is empty, for backward compatibility.
 
 ``events``
 ^^^^^^^^^^
 
-*type:* **[**\ `PactEvent <#pact-event>`__\ **]** Pact events.
+*type:* **[**\ `PactEvent <#pact-event>`__\ **]** ``required``
+
+List of pact events.
 
 .. _pact-event:
 
@@ -588,24 +594,30 @@ transaction, in the following format:
 ``name``
 ^^^^^^^^
 
-*type:* **string** ``required`` Event name or “topic”
+*type:* **string** ``required``
 
-``params`` ``required``
-^^^^^^^^^^^^^^^^^^^^^^^
+Event name or “topic”
 
-*type:* **[**\ `PactValue <#pact-values>`__\ **]** Values representing
-the parameterization of this event.
+``params``
+^^^^^^^^^^
+
+*type:* **[**\ `PactValue <#pact-values>`__\ **]** ``required``
+
+Values representing the parameterization of this event.
 
 ``module``
 ^^^^^^^^^^
 
-*type:* **string** ``required`` Fully-qualified module name that sourced
-the event.
+*type:* **string** ``required``
+
+Fully-qualified module name that sourced the event.
 
 ``moduleHash``
 ^^^^^^^^^^^^^^
 
-*type:* **string (base64url)** ``required`` Hash of sourcing module.
+*type:* **string (base64url)** ``required``
+
+Hash of sourcing module.
 
 Pact Values
 ~~~~~~~~~~~

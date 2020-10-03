@@ -457,18 +457,22 @@ children:
 #### Pact success values {#pact-success}
 
 A successful pact execution returns the output value and any events that may have been emitted
-during the course of the transaction. If there are no events, the JSON contains a single [Pact Value](#pact-values).
-If there are events, the pact value and events are returned in the following JSON structure:
+during the course of the transaction.
+
+For backward compatibility, if the event list is empty, then the Pact success value
+is simply a single [Pact Value](#pact-values). If there are events, an object is returned
+with the following attributes:
 
 ##### `value`
 _type:_ **[PactValue](#pact-values)** `required`
 
-Pact result value.
+Pact result value. Note this is the actual value (not an object with key "value" if `events` is
+empty, for backward compatibility.
 
 ##### `events`
-_type:_ **[ [PactEvent](#pact-event) ]** `optional`
+_type:_ **[ [PactEvent](#pact-event) ]** `required`
 
-Pact events.
+List of pact events.
 
 #### Pact events {#pact-event}
 
