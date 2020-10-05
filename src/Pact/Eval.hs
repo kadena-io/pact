@@ -716,8 +716,12 @@ reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
-reduce TDynamic {} = error "TODO"
-reduce TModRef{..} = error "TODO"
+reduce t@TDynamic {} = evalError (_tInfo t)
+  $ "Dynamic reference at invalid location: "
+  <> pretty t
+reduce t@TModRef{} = evalError (_tInfo t)
+  $ "Module reference at invalid location: "
+  <> pretty t
 
 
 mkDirect :: Term Name -> Term Ref
@@ -782,10 +786,12 @@ reduceApp (App (TDynamic tref tmem _) as ai) = do
   DefName mem <- case tmem of
     TVar (Ref (TDef d _)) _
       | _dDefType d == Defun -> return $ _dDefName d
-      | otherwise -> error $ show d
-    t -> error $ show t -- evalError ai
-      -- $ "Unable to resolve dynamic module member: "
-      -- <> pretty
+      | otherwise -> evalError' ai
+        $ "Unable to resolve non-defun dynamic references: "
+        <> pretty tmem
+    _ -> evalError' ai
+      $ "Unable to resolve dynamic module member: "
+      <> pretty tmem
 
   md <- resolveModule ai $ _mName ref
   case md of
@@ -797,7 +803,7 @@ reduceApp (App (TDynamic tref tmem _) as ai) = do
     Nothing -> evalError' ai
       $ "Unable to resolve dynamic module reference: "
       <> pretty (_mName ref)
-reduceApp (App r _ _ai) = error $ "Expected def: " <> show r
+reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
 
 -- | precompute "UserApp" cost
 computeUserAppGas :: Def Ref -> Info -> Eval e Gas
