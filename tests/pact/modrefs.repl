@@ -42,6 +42,7 @@
     )
   )
 
+(commit-tx)
 
 (test.testAImpl implA)
-; (test.testAImpl ns.implAB)
+(test.testAImpl ns.implAB)

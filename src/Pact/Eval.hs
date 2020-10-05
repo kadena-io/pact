@@ -592,17 +592,27 @@ moduleResolver lkp i mn = do
 
 
 resolveRef :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
-resolveRef i (QName (QualifiedName q@(ModuleName _qn ns) n _)) = moduleResolver (lookupQn n) i q
+resolveRef i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResolver (lookupQn n) i q
   where
     lookupQn n' i' q' = do
       m <- lookupModule i' q'
       case m of
-        Nothing -> return Nothing
-        Just m' -> case HM.lookup n' $ _mdRefMap m' of
-          Nothing
-            | isNothing ns -> error "here1"
-            | otherwise -> error "here2"
-          Just r -> return $ Just r
+        Nothing
+          | isJust ns -> evalError' i
+            $ "resolveRef: Unable to resolve module reference: "
+            <> pretty q
+          | otherwise -> do
+            let mn = ModuleName n (Just $ NamespaceName refNs)
+            md <- resolveModule i' mn
+            case md of
+              Just (ModuleData m'@MDModule{} _) -> do
+                let inf = getInfo i
+                    tdef = (`TDef` inf) <$> m'
+                return $ Just $ Ref $
+                  TModule tdef (abstract (const Nothing) (TLiteral (LString "hack") inf)) inf
+              Just _ -> evalError' i $ "resolveRef: found interface argument to module reference: " <> pretty mn
+              Nothing -> return Nothing
+        Just m' -> return $ HM.lookup n' $ _mdRefMap m'
 resolveRef i nn@(Name (BareName bn _)) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
