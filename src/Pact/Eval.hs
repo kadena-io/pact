@@ -764,34 +764,29 @@ reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 -- show m resolve the function right then and there. make a qualified name, call resolveref. you need to call the TDef case
 reduceApp (App (TDynamic tref tmem _) as ai) = do
   ref <- reduce tref >>= \case
-    TVar (Name (BareName n _)) _ -> return n
+    TModule (MDModule m) _ _ -> return m
     _ -> evalError' ai
       $ "Unable to resolve dynamic module reference: "
-      <> pretty tmem
-
-  mem <- reduce tmem >>= \case
-    TVar (DName n) _ -> return n
-    _ -> evalError ai
-      $ "Unable to resolve dynamic module member: "
       <> pretty tref
 
-  unless (_dynRefArg mem == ref)
-    $ evalError' ai
-    $ "Unable to resolve dynamic reference"
-    <> pretty tref
+  DefName mem <- case tmem of
+    TVar (Ref (TDef d _)) _
+      | _dDefType d == Defun -> return $ _dDefName d
+      | otherwise -> error $ show d
+    t -> error $ show t -- evalError ai
+      -- $ "Unable to resolve dynamic module member: "
+      -- <> pretty
 
-  let mn = ModuleName ref Nothing
-
-  md <- resolveModule ai mn
+  md <- resolveModule ai $ _mName ref
   case md of
-    Just (ModuleData _ refs) -> case HM.lookup (_dynMember mem) refs of
+    Just (ModuleData _ refs) -> case HM.lookup mem refs of
       Just (Ref t@TDef{}) -> reduceApp $ App t as ai
       _ -> evalError' ai
         $ "Unknown module ref: "
         <> pretty tref
     Nothing -> evalError' ai
       $ "Unable to resolve dynamic module reference: "
-      <> pretty mn
+      <> pretty (_mName ref)
 reduceApp (App r _ _ai) = error $ "Expected def: " <> show r
 
 -- | precompute "UserApp" cost
