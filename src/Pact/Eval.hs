@@ -1,6 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
@@ -760,7 +761,37 @@ reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
-reduceApp (App m@(TModule _md _ _) _ _ai) = error $ "HERE: " <> show m
+-- show m resolve the function right then and there. make a qualified name, call resolveref. you need to call the TDef case
+reduceApp (App (TDynamic tref tmem _) as ai) = do
+  ref <- reduce tref >>= \case
+    TVar (Name (BareName n _)) _ -> return n
+    _ -> evalError' ai
+      $ "Unable to resolve dynamic module reference: "
+      <> pretty tmem
+
+  mem <- reduce tmem >>= \case
+    TVar (DName n) _ -> return n
+    _ -> evalError ai
+      $ "Unable to resolve dynamic module member: "
+      <> pretty tref
+
+  unless (_dynRefArg mem == ref)
+    $ evalError' ai
+    $ "Unable to resolve dynamic reference"
+    <> pretty tref
+
+  let mn = ModuleName ref Nothing
+
+  md <- resolveModule ai mn
+  case md of
+    Just (ModuleData _ refs) -> case HM.lookup (_dynMember mem) refs of
+      Just (Ref t@TDef{}) -> reduceApp $ App t as ai
+      _ -> evalError' ai
+        $ "Unknown module ref: "
+        <> pretty tref
+    Nothing -> evalError' ai
+      $ "Unable to resolve dynamic module reference: "
+      <> pretty mn
 reduceApp (App r _ _ai) = error $ "Expected def: " <> show r
 
 -- | precompute "UserApp" cost
