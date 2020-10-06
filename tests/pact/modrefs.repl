@@ -40,9 +40,30 @@
   (defun testAImpl (aImpl:module{ifaceA})
     (aImpl::opA1 "hi")
     )
+
+  (defun callTestAImpl ()
+    (testAImpl implA)
+    (testAImpl ns.implAB)
+    )
   )
 
 (commit-tx)
+(begin-tx)
+
+(module test2 G
+  (defcap G () true)
+
+  (defun callTestAImpl ()
+    (let
+      ((a (test.testAImpl implA))
+       (b (test.testAImpl ns.implAB)))
+
+      (format "{}{}" [a b])
+    )
+  )
+)
 
 (test.testAImpl implA)
 (test.testAImpl ns.implAB)
+(test.callTestAImpl)
+(test2.callTestAImpl)
