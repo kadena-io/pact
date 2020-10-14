@@ -1103,7 +1103,7 @@ termCodec = Codec enc dec
            , meta .= tmeta, inf i ]
       TDynamic r m i ->
         ob [ dynRef .= r, dynMem .= m, inf i ]
-      TModRef mn i -> ob [ modName .= mn, inf i ]
+      TModRef mn i -> ob [ modRef .= mn, inf i ]
 
     dec decval =
       let wo n f = withObject n f decval
@@ -1139,7 +1139,7 @@ termCodec = Codec enc dec
         <|> wo "Dynamic"
             (\o -> TDynamic <$> o .: dynRef <*> o .: dynMem <*> inf' o)
 
-        <|> wo "ModRef" (\o -> TModRef <$> o .: modName <*> inf' o)
+        <|> wo "ModRef" (\o -> TModRef <$> o .: modRef <*> inf' o)
 
     ob = object
     moduleDef = "module"
@@ -1168,6 +1168,7 @@ termCodec = Codec enc dec
     hash' = "hash"
     dynRef = "dref"
     dynMem = "dmem"
+    modRef = "modref"
 
 
 
@@ -1222,9 +1223,7 @@ guardTypeOf g = case g of
 typeof :: Term a -> Either Text (Type (Term a))
 typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
-      TModule md _ _ -> case md of
-        MDModule Module {..} -> Right $ TyModule $ S.fromList _mInterfaces
-        _ -> Left "interface"
+      TModule{}-> Left "module"
       TList {..} -> Right $ TyList _tListType
       TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
       TNative {} -> Left "defun"
@@ -1241,7 +1240,7 @@ typeof t = case t of
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
       TDynamic {} -> Left "dynamic"
-      TModRef {} -> Left "modref"
+      TModRef mn _ -> Right $ TyModule (S.singleton mn)
 {-# INLINE typeof #-}
 
 -- | Return string type description.

@@ -596,23 +596,12 @@ resolveRef i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResolve
   where
     lookupQn n' i' q' = do
       m <- lookupModule i' q'
-      case m of
-        Nothing
-          | isJust ns -> evalError' i
-            $ "resolveRef: Unable to resolve module reference: "
-            <> pretty q
-          | otherwise -> do
-            let mn = ModuleName n (Just $ NamespaceName refNs)
-            md <- resolveModule i' mn
-            case md of
-              Just (ModuleData m'@MDModule{} _) -> do
-                let inf = getInfo i
-                    tdef = (`TDef` inf) <$> m'
-                return $ Just $ Ref $
-                  TModule tdef (abstract (const Nothing) (TLiteral (LString "hack") inf)) inf
-              Just _ -> evalError' i $ "resolveRef: found interface argument to module reference: " <> pretty mn
-              Nothing -> return Nothing
-        Just m' -> return $ HM.lookup n' $ _mdRefMap m'
+      case (m, ns) of
+        (Just m', _) -> return $ HM.lookup n' $ _mdRefMap m'
+        (Nothing, Just{}) -> return Nothing
+        (Nothing, Nothing) -> do
+          let mn = ModuleName n (Just $ NamespaceName refNs)
+          return $ Just $ Ref $ TModRef mn (getInfo i)
 resolveRef i nn@(Name (BareName bn _)) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
@@ -620,17 +609,10 @@ resolveRef i nn@(Name (BareName bn _)) = do
     Nothing -> do
       n <- preuse $ evalRefs . rsLoaded . ix nn
       case n of
+        Just r -> return $ Just r
         Nothing -> do
           let mn = ModuleName bn Nothing
-          md <- resolveModule i mn
-          case md of
-            Just (ModuleData m@MDModule{} _) -> do
-              let i' = getInfo i
-                  m' = (`TDef` i') <$> m
-              return $ Just $ Ref $ TModule m' (abstract (const Nothing) (TLiteral (LString "hack") i')) i'
-            Just _ -> evalError' i $ "resolveRef: found interface argument to module reference: " <> pretty mn
-            Nothing -> return Nothing
-        Just r -> return $ Just r
+          return $ Just $ Ref $ TModRef mn (getInfo i)
 resolveRef _i (DName d@(DynamicName mem _ sigs i)) = do
   a <- foldM (resolveDynamic i mem) Nothing sigs
   case a of
@@ -708,10 +690,7 @@ reduce (TObject (Object ps t ko oi) i) =
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
-reduce TModule{..} = TModule
-  <$> traverse reduce _tModuleDef
-  <*> return (abstract (const Nothing) $ TLiteral (LString "hack redux") def)
-  <*> return _tInfo
+reduce TModule{..} = evalError _tInfo "Modules and Interfaces only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
@@ -719,9 +698,7 @@ reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTa
 reduce t@TDynamic {} = evalError (_tInfo t)
   $ "Dynamic reference at invalid location: "
   <> pretty t
-reduce t@TModRef{} = evalError (_tInfo t)
-  $ "Module reference at invalid location: "
-  <> pretty t
+reduce t@TModRef{} = unsafeReduce t
 
 
 mkDirect :: Term Name -> Term Ref
@@ -775,22 +752,17 @@ reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
--- show m resolve the function right then and there. make a qualified name, call resolveref. you need to call the TDef case
 reduceApp (App (TDynamic tref tmem _) as ai) = do
   ref <- reduce tref >>= \case
     TModule (MDModule m) _ _ -> return m
     _ -> evalError' ai
-      $ "Unable to resolve dynamic module reference: "
+      $ "reduceApp: invalid reference to non-module"
       <> pretty tref
 
   DefName mem <- case tmem of
-    TVar (Ref (TDef d _)) _
-      | _dDefType d == Defun -> return $ _dDefName d
-      | otherwise -> evalError' ai
-        $ "Unable to resolve non-defun dynamic references: "
-        <> pretty tmem
+    TVar (Ref (TDef d _)) _ -> return $ _dDefName d
     _ -> evalError' ai
-      $ "Unable to resolve dynamic module member: "
+      $ "reduceApp: unable to resolve dynamic module member: "
       <> pretty tmem
 
   md <- resolveModule ai $ _mName ref
@@ -801,7 +773,7 @@ reduceApp (App (TDynamic tref tmem _) as ai) = do
         $ "Unknown module ref: "
         <> pretty tref
     Nothing -> evalError' ai
-      $ "Unable to resolve dynamic module reference: "
+      $ "reduceApp: unable to resolve dynamic module reference: "
       <> pretty (_mName ref)
 reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
 
@@ -1008,7 +980,7 @@ resumePactExec i req ctx = do
 appError :: Info -> Doc -> Term n
 appError i errDoc = TApp (App (msg errDoc) [] i) i
 
-resolveFreeVars ::  Info -> Scope Int Term Name -> Eval e (Scope Int Term Ref)
+resolveFreeVars ::  Info -> Scope d Term Name ->  Eval e (Scope d Term Ref)
 resolveFreeVars i b = traverse r b where
     r fv = resolveRef i fv >>= \m -> case m of
              Nothing -> evalError i $ "Cannot resolve " <> pretty fv

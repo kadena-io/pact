@@ -189,11 +189,14 @@ data DynamicName = DynamicName
 instance NFData DynamicName
 instance Arbitrary DynamicName where
   arbitrary = DynamicName <$> genBareText <*> genBareText <*> arbitrary <*> arbitrary
-instance ToJSON DynamicName
-instance FromJSON DynamicName
+instance ToJSON DynamicName where
+  toJSON = lensyToJSON 4
+instance FromJSON DynamicName where
+  parseJSON = lensyParseJSON 4
+
 instance HasInfo DynamicName where getInfo = _dynInfo
 instance Pretty DynamicName where
-  pretty DynamicName{..} = pretty _dynRefArg <> "." <> pretty _dynMember
+  pretty DynamicName{..} = pretty _dynRefArg <> "::" <> pretty _dynMember
 instance AsString DynamicName where asString = renderCompactText
 instance SizeOf DynamicName where
   sizeOf DynamicName{..} =
