@@ -44,8 +44,7 @@ module Pact.Types.Command
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..),usSig
   , PactResult(..)
-  , PactSuccess(..), successValue, successEvents, pactSuccess
-  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
   , crContinuation,crMetaData
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
@@ -295,30 +294,8 @@ instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do
     UserSig <$> o .: "sig"
 
-data PactSuccess = PactSuccess
-  { _successValue :: !PactValue
-  , _successEvents :: ![PactEvent]
-  } deriving (Eq, Show, Generic)
-instance NFData PactSuccess
-instance ToJSON PactSuccess where
-  toJSON PactSuccess{..} = case _successEvents of
-    [] -> toJSON _successValue -- legacy format
-    _ -> object [ "value" .= _successValue
-                , "events" .= _successEvents ]
-
-instance FromJSON PactSuccess where
-  parseJSON v = parseFull v <|> parseLegacy v
-    where
-      parseLegacy pv = (`PactSuccess` []) <$> parseJSON pv
-      parseFull = withObject "PactSuccess" $ \o ->
-        PactSuccess <$> o .: "value" <*> o .: "events"
-
--- smart constructor for no events
-pactSuccess :: PactValue -> PactSuccess
-pactSuccess pv = PactSuccess pv []
-
 newtype PactResult = PactResult
-  { _pactResult :: Either PactError PactSuccess
+  { _pactResult :: Either PactError PactValue
   } deriving (Eq, Show, Generic,NFData)
 
 instance ToJSON PactResult where
@@ -351,10 +328,33 @@ data CommandResult l = CommandResult {
   , _crContinuation :: !(Maybe PactExec)
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
+  -- | Events
+  , _crEvents :: [PactEvent]
   } deriving (Eq,Show,Generic)
 
-instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3
-instance (FromJSON l) => FromJSON (CommandResult l) where parseJSON = lensyParseJSON 3
+instance (ToJSON l) => ToJSON (CommandResult l) where
+  toJSON CommandResult{..} = object $
+      [ "reqKey" .= _crReqKey
+      , "txId" .= _crTxId
+      , "result" .= _crResult
+      , "gas" .= _crGas
+      , "logs" .= _crLogs
+      , "continuation" .= _crContinuation
+      , "metaData" .= _crMetaData ] ++
+      [ "events" .= _crEvents | not (null _crEvents) ]
+instance (FromJSON l) => FromJSON (CommandResult l) where
+  parseJSON = withObject "CommandResult" $ \o -> CommandResult
+      <$> o .: "reqKey"
+      <*> o .: "txId"
+      <*> o .: "result"
+      <*> o .: "gas"
+      <*> o .: "logs"
+      <*> o .: "continuation"
+      <*> o .: "metaData"
+      <*> (events <$> o .:? "events")
+    where
+      events Nothing = []
+      events (Just es) = es
 instance NFData a => NFData (CommandResult a)
 
 cmdToRequestKey :: Command a -> RequestKey
@@ -394,4 +394,3 @@ makeLenses ''Payload
 makeLenses ''CommandResult
 makePrisms ''ProcessedCommand
 makePrisms ''ExecutionMode
-makeLenses ''PactSuccess

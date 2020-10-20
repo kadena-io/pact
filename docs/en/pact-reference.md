@@ -332,11 +332,10 @@ _type:_ **string (base64url)** `required`
 Request key of the command.
 
 ###### `"result"`
-_type:_ [Pact Error](#pact-errors) **or** [Pact Success](#pact-success) `required`
+_type:_ [Pact Error](#pact-errors) **or** [Pact Value](#pact-values) `required`
 
 The result of a pact execution. It will either be a [pact error](#pact-errors)
-or a success value containing the last [pact value](#pact-values) outputted by a successful execution
-along with any [events](#pact-event).
+or the last [pact value](#pact-values) outputted by a successful execution.
 
 ###### `"txId"`
 _type:_ **string (base64url)** `optional`
@@ -417,6 +416,13 @@ children:
         required: true
 ```
 
+###### `"events"`
+_type:_ **array ([Pact Event](#pact-event)** `optional`
+
+Includes events that were emitted during the course of the transaction. If events
+are empty they are not included in the JSON.
+
+
 ##### Example command result
 ```JSON
 // successful command result
@@ -430,7 +436,13 @@ children:
   "logs":"wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8",
   "metaData":null,
   "continuation":null,
-  "txId":null
+  "txId":null,
+  "events": [ {
+    "name": "TRANSFER",
+    "params": ["Alice", "Bob", 10.0],
+    "module": "coin",
+    "moduleHash": "ut_J_ZNkoyaPUEJhiwVeWnkSQn9JT9sQCWKdjjVVrWo"
+  } ]
 }
 ```
 ```JSON
@@ -453,26 +465,6 @@ children:
   "txId":null
 }
 ```
-
-#### Pact success values {#pact-success}
-
-A successful pact execution returns the output value and any events that may have been emitted
-during the course of the transaction.
-
-For backward compatibility, if the event list is empty, then the Pact success value
-is simply a single [Pact Value](#pact-values). If there are events, an object is returned
-with the following attributes:
-
-##### `value`
-_type:_ **[PactValue](#pact-values)** `required`
-
-Pact result value. Note this is the actual value (not an object with key "value" if `events` is
-empty, for backward compatibility.
-
-##### `events`
-_type:_ **[ [PactEvent](#pact-event) ]** `required`
-
-List of pact events.
 
 #### Pact events {#pact-event}
 

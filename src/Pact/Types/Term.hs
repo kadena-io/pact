@@ -39,7 +39,7 @@ module Pact.Types.Term
    PactId(..),
    UserGuard(..),
    ModuleGuard(..),
-   Guard(..),
+   Guard(..),_GPact,_GKeySet,_GKeySetRef,_GModule,_GUser,
    DefType(..),_Defun,_Defpact,_Defcap,
    defTypeRep,
    FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
@@ -1269,6 +1269,7 @@ makeLenses ''Object
 makeLenses ''BindPair
 makeLenses ''Step
 makeLenses ''ModuleHash
+makePrisms ''Guard
 
 deriveEq1 ''Guard
 deriveEq1 ''UserGuard

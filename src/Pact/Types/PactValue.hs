@@ -3,6 +3,7 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.PactValue
@@ -22,7 +23,10 @@ module Pact.Types.PactValue
   , toPactValue
   , toPactValueLenient
   , fromPactValue
-
+  , _PLiteral
+  , _PList
+  , _PObject
+  , _PGuard
   -- | Helper functions for generating arbitrary pact values
   , PactValueGeneratorSize(..)
   , decreaseGenSize
@@ -36,6 +40,7 @@ module Pact.Types.PactValue
 
 import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
+import Control.Lens (makePrisms)
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
 import qualified Data.Map.Strict as M
@@ -160,3 +165,5 @@ toPactValueLenient t = case toPactValue t of
   Right (PLiteral (LInteger l)) -> PLiteral (LDecimal (fromIntegral l))
   Right v -> v
   Left _ -> PLiteral $ LString $ renderCompactText t
+
+makePrisms ''PactValue

@@ -112,7 +112,7 @@ resultFailure :: Maybe TxId ->
                  RequestKey ->
                  PactError ->
                  CommandResult Hash
-resultFailure tx cmd a = CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing
+resultFailure tx cmd a = CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing []
 
 resultSuccess :: Maybe TxId ->
                  RequestKey ->
@@ -123,8 +123,8 @@ resultSuccess :: Maybe TxId ->
                  [PactEvent] ->
                  CommandResult Hash
 resultSuccess tx cmd gas a pe l evs =
-  CommandResult cmd tx (PactResult . Right $ PactSuccess a evs)
-  gas (Just hshLog) pe Nothing
+  CommandResult cmd tx (PactResult $ Right a)
+    gas (Just hshLog) pe Nothing evs
   where hshLog = fullToHashLogCr l
 
 fullToHashLogCr :: [TxLog Value] -> Hash

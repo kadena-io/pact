@@ -65,7 +65,7 @@ spec = describe "Servant API client tests" $ do
     res <- bracket $! do
       r <- runClientM (localClient cmd) clientEnv
       return r
-    let cmdPactResult = (PactResult . Right . pactSuccess . PLiteral . LDecimal) 3
+    let cmdPactResult = (PactResult . Right . PLiteral . LDecimal) 3
     (_crResult <$> res) `shouldBe` (Right cmdPactResult)
 
   it "correctly runs a simple command with pact error locally" $ do
@@ -84,7 +84,7 @@ spec = describe "Servant API client tests" $ do
       -- print (res,res')
       return (res,res')
     res `shouldBe` (Right (RequestKeys [rk]))
-    let cmdData = (PactResult . Right . pactSuccess . PLiteral . LDecimal) 3
+    let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
     case res' of
       Left _ -> expectationFailure "client request failed"
       Right r -> case r of

@@ -414,12 +414,11 @@ Request key of the command.
 ''''''''''''
 
 *type:* `Pact Error <#pact-errors>`__ **or** `Pact
-Success <#pact-success>`__ ``required``
+Value <#pact-values>`__ ``required``
 
 The result of a pact execution. It will either be a `pact
-error <#pact-errors>`__ or a success value containing the last `pact
-value <#pact-values>`__ outputted by a successful execution along with
-any `events <#pact-event>`__.
+error <#pact-errors>`__ or the last `pact value <#pact-values>`__
+outputted by a successful execution.
 
 ``"txId"``
 ''''''''''
@@ -516,6 +515,14 @@ child attributes:
            type: string (base64url)
            required: true
 
+``"events"``
+''''''''''''
+
+*type:* **array (**\ `Pact Event <#pact-event>`__ ``optional``
+
+Includes events that were emitted during the course of the transaction.
+If events are empty they are not included in the JSON.
+
 Example command result
 ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -532,7 +539,13 @@ Example command result
      "logs":"wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8",
      "metaData":null,
      "continuation":null,
-     "txId":null
+     "txId":null,
+     "events": [ {
+       "name": "TRANSFER",
+       "params": ["Alice", "Bob", 10.0],
+       "module": "coin",
+       "moduleHash": "ut_J_ZNkoyaPUEJhiwVeWnkSQn9JT9sQCWKdjjVVrWo"
+     } ]
    }
 
 .. code:: json
@@ -555,33 +568,6 @@ Example command result
      "continuation":null,
      "txId":null
    }
-
-.. _pact-success:
-
-Pact success values
-~~~~~~~~~~~~~~~~~~~
-
-A successful pact execution returns the output value and any events that
-may have been emitted during the course of the transaction.
-
-For backward compatibility, if the event list is empty, then the Pact
-success value is simply a single `Pact Value <#pact-values>`__. If there
-are events, an object is returned with the following attributes:
-
-``value``
-^^^^^^^^^
-
-*type:* `PactValue <#pact-values>`__ ``required``
-
-Pact result value. Note this is the actual value (not an object with key
-“value” if ``events`` is empty, for backward compatibility.
-
-``events``
-^^^^^^^^^^
-
-*type:* **[**\ `PactEvent <#pact-event>`__\ **]** ``required``
-
-List of pact events.
 
 .. _pact-event:
 

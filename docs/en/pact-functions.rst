@@ -437,7 +437,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.5.2"
+   "3.6.0.1"
 
 Top level only: this function will fail if used in module code.
 
