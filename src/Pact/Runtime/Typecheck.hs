@@ -138,6 +138,8 @@ typecheckTerm i spec t = do
     isGuard (Right (TyPrim TyGuard {})) = True
     isGuard _ = False
 
+    termElem haystack needle = any (termEq needle) haystack
+
   case (spec,ty,t) of
     (_,_,_) | spec == ty -> tcOK -- identical types always OK
     (TyAny,_,_) -> tcOK -- var args are untyped
@@ -151,6 +153,8 @@ typecheckTerm i spec t = do
     -- check object
     (TySchema TyObject ospec specPartial,TySchema TyObject oty _,TObject {..}) ->
       paramCheck ospec oty (checkUserType specPartial i (_oObject _tObject))
+    (TyModule specIfaces,TyModule tyIfaces,_)
+      | all (termElem tyIfaces) specIfaces -> tcOK
     _ -> if spec `canUnifyWith` ty then tcOK else tcFail ty
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.

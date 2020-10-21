@@ -71,7 +71,7 @@ module Pact.Types.Term
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,
    tNativeTopLevelOnly,tObject,tSchemaName,
    tTableName,tTableType,tVar,tStep,tModuleName,
-   tDynModRef,tDynMember,tModRef,
+   tDynModRef,tDynMember,tModRef,tModSpec,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -942,6 +942,7 @@ data Term n =
     } |
     TModRef {
       _tModRef :: !ModuleName
+    , _tModSpec :: ![ModuleName]
     , _tInfo :: !Info
     } |
     TTable {
@@ -1034,7 +1035,8 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tMeta
       ]
     TDynamic ref var _i -> pretty ref <> "::" <> pretty var
-    TModRef mn _i -> pretty mn
+    TModRef mn is _i | null is -> pretty mn
+                     | otherwise -> pretty mn <> commaBraces' is
     where
       prettyFunType (FunType as r) = pretty (FunType (map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))
 
@@ -1071,7 +1073,7 @@ instance Monad Term where
     TTable {..} >>= f =
       TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
     TDynamic r m i >>= f = TDynamic (r >>= f) (m >>= f) i
-    TModRef mn i >>= _ = TModRef mn i
+    TModRef mn is i >>= _ = TModRef mn is i
 
 termCodec :: (ToJSON n, FromJSON n) => Codec (Term n)
 termCodec = Codec enc dec
@@ -1103,7 +1105,7 @@ termCodec = Codec enc dec
            , meta .= tmeta, inf i ]
       TDynamic r m i ->
         ob [ dynRef .= r, dynMem .= m, inf i ]
-      TModRef mn i -> ob [ modRef .= mn, inf i ]
+      TModRef mn is i -> ob [ modRef .= mn, modRefSpec .= is, inf i ]
 
     dec decval =
       let wo n f = withObject n f decval
@@ -1139,7 +1141,8 @@ termCodec = Codec enc dec
         <|> wo "Dynamic"
             (\o -> TDynamic <$> o .: dynRef <*> o .: dynMem <*> inf' o)
 
-        <|> wo "ModRef" (\o -> TModRef <$> o .: modRef <*> inf' o)
+        <|> wo "ModRef"
+            (\o -> TModRef <$> o .: modRef <*> o .: modRefSpec <*> inf' o)
 
     ob = object
     moduleDef = "module"
@@ -1169,6 +1172,7 @@ termCodec = Codec enc dec
     dynRef = "dref"
     dynMem = "dmem"
     modRef = "modref"
+    modRefSpec = "spec"
 
 
 
@@ -1240,7 +1244,7 @@ typeof t = case t of
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
       TDynamic {} -> Left "dynamic"
-      TModRef mn _ -> Right $ TyModule (S.singleton mn)
+      TModRef _mn is _ -> Right $ TyModule $ (`map` is) $ \i -> TModRef i [] def
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -1291,6 +1295,7 @@ termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g &&
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && argEq d h
   where argEq = liftEq (liftEq termEq)
 termEq (TVar a _) (TVar b _) = a == b
+termEq (TModRef am as _) (TModRef bm bs _) = am == bm && as == bs
 termEq _ _ = False
 
 

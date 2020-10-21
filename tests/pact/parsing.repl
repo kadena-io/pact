@@ -10,6 +10,14 @@
 ;; in-module productions
 ;; note this is parsed, compiled, and loaded, so not just parsing
 ;; ===========
+(interface quux (defun f ()))
+
+(define-namespace 'bar (sig-keyset) (sig-keyset))
+
+(namespace 'bar)
+
+(interface baz (defun f ()))
+
 (module mod-parse-test G
   "test in-module parsing"
   (defcap G () true)

@@ -26,6 +26,7 @@ module Pact.Types.Names
   , Name(..), parseName
   , QualifiedName(..), parseQualifiedName
   , DynamicName(..)
+  , dynInfo, dynInterfaces, dynMember, dynRefArg
   , BareName(..)
   ) where
 
@@ -300,3 +301,4 @@ newtype TableName = TableName Text
 instance Pretty TableName where pretty (TableName s) = pretty s
 
 makeLenses ''ModuleName
+makeLenses ''DynamicName
