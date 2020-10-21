@@ -37,18 +37,21 @@
 
 (module test G
   (defcap G () true)
-  (defun testAImpl (aImpl:module{ifaceAgg})
+  (defun testAImpl (aImpl:module{ifaceA})
     (aImpl::opA1 "hi")
     )
 
   (defun callTestAImpl ()
-    (testAImpl implA)
-    (testAImpl ns.implAB)
+    [(testAImpl ns.implAB)
+     (testAImpl implA)
+     ]
     )
   )
 
 (commit-tx)
 (begin-tx)
+
+(namespace 'ns)
 
 (module test2 G
   (defcap G () true)
@@ -56,18 +59,21 @@
   (defun callTestAImpl ()
     (let
       ((a (test.testAImpl implA))
-       (b (test.testAImpl ns.implAB)))
+       (b (test.testAImpl implAB)))
 
       [a b]
     )
   )
-)
+  )
+
+(commit-tx)
+(begin-tx)
 
 (expect "bare modref resolution succeeds"
         true (test.testAImpl implA))
 (expect "namespaced modref resolution succeeds"
         false (test.testAImpl ns.implAB))
-(expect "inside-module bare modref call succeeds"
-        false (test.callTestAImpl))
-(expect "inside-module qual modref call succeeds"
-        [true,false] (test2.callTestAImpl))
+(expect "in-module modref call succeeds"
+        [false,true] (test.callTestAImpl))
+(expect "in-module qual dynamic, implicit modref ns call succeeds"
+        [true,false] (ns.test2.callTestAImpl))
