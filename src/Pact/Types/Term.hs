@@ -64,6 +64,7 @@ module Pact.Types.Term
    Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
+   ModRef(..),modRefName,modRefSpec,modRefInfo,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
@@ -71,7 +72,7 @@ module Pact.Types.Term
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,
    tNativeTopLevelOnly,tObject,tSchemaName,
    tTableName,tTableType,tVar,tStep,tModuleName,
-   tDynModRef,tDynMember,tModRef,tModSpec,
+   tDynModRef,tDynMember,tModRef,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -865,6 +866,25 @@ instance Pretty n => Pretty (Step n) where
       ]
 
 
+-- | A reference to a module or interface.
+data ModRef = ModRef
+    { _modRefName :: !ModuleName
+      -- ^ Fully-qualified module name.
+    , _modRefSpec :: !(Maybe [ModuleName])
+      -- ^ Specification: for modules, 'Just' implemented interfaces;
+      -- for interfaces, 'Nothing'.
+    , _modRefInfo :: !Info
+    } deriving (Eq,Show,Generic)
+instance NFData ModRef
+instance HasInfo ModRef where getInfo = _modRefInfo
+instance Pretty ModRef where
+  pretty (ModRef mn sm _i) = case sm of
+    Just is -> pretty mn <> commaBraces' is
+    Nothing -> pretty mn
+instance ToJSON ModRef where toJSON = lensyToJSON 4
+instance FromJSON ModRef where parseJSON = lensyParseJSON 4
+instance Ord ModRef where
+  (ModRef a b _) `compare` (ModRef c d _) = (a,b) `compare` (c,d)
 
 -- | Pact evaluable term.
 data Term n =
@@ -941,8 +961,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TModRef {
-      _tModRef :: !ModuleName
-    , _tModSpec :: ![ModuleName]
+      _tModRef :: !ModRef
     , _tInfo :: !Info
     } |
     TTable {
@@ -1035,8 +1054,7 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tMeta
       ]
     TDynamic ref var _i -> pretty ref <> "::" <> pretty var
-    TModRef mn is _i | null is -> pretty mn
-                     | otherwise -> pretty mn <> commaBraces' is
+    TModRef mr _ -> pretty mr
     where
       prettyFunType (FunType as r) = pretty (FunType (map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))
 
@@ -1073,7 +1091,7 @@ instance Monad Term where
     TTable {..} >>= f =
       TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
     TDynamic r m i >>= f = TDynamic (r >>= f) (m >>= f) i
-    TModRef mn is i >>= _ = TModRef mn is i
+    TModRef mr i >>= _ = TModRef mr i
 
 termCodec :: (ToJSON n, FromJSON n) => Codec (Term n)
 termCodec = Codec enc dec
@@ -1105,7 +1123,7 @@ termCodec = Codec enc dec
            , meta .= tmeta, inf i ]
       TDynamic r m i ->
         ob [ dynRef .= r, dynMem .= m, inf i ]
-      TModRef mn is i -> ob [ modRef .= mn, modRefSpec .= is, inf i ]
+      TModRef mr _i -> toJSON mr
 
     dec decval =
       let wo n f = withObject n f decval
@@ -1141,8 +1159,7 @@ termCodec = Codec enc dec
         <|> wo "Dynamic"
             (\o -> TDynamic <$> o .: dynRef <*> o .: dynMem <*> inf' o)
 
-        <|> wo "ModRef"
-            (\o -> TModRef <$> o .: modRef <*> o .: modRefSpec <*> inf' o)
+        <|> parseWithInfo TModRef
 
     ob = object
     moduleDef = "module"
@@ -1171,8 +1188,6 @@ termCodec = Codec enc dec
     hash' = "hash"
     dynRef = "dref"
     dynMem = "dmem"
-    modRef = "modref"
-    modRefSpec = "spec"
 
 
 
@@ -1244,7 +1259,8 @@ typeof t = case t of
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
       TDynamic {} -> Left "dynamic"
-      TModRef _mn is _ -> Right $ TyModule $ (`map` is) $ \i -> TModRef i [] def
+      TModRef (ModRef _mn is _) _ ->
+        Right $ TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing def) def)) is
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -1295,7 +1311,7 @@ termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g &&
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && argEq d h
   where argEq = liftEq (liftEq termEq)
 termEq (TVar a _) (TVar b _) = a == b
-termEq (TModRef am as _) (TModRef bm bs _) = am == bm && as == bs
+termEq (TModRef (ModRef am as _) _) (TModRef (ModRef bm bs _) _) = am == bm && as == bs
 termEq _ _ = False
 
 
@@ -1314,6 +1330,7 @@ makeLenses ''Object
 makeLenses ''BindPair
 makeLenses ''Step
 makeLenses ''ModuleHash
+makeLenses ''ModRef
 
 deriveEq1 ''Guard
 deriveEq1 ''UserGuard

@@ -312,7 +312,9 @@ data Type v =
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v } |
   TyModule
-  { _tyModuleSpec :: [v] }
+  { _tyModuleSpec :: Maybe [v]
+    -- ^ Nothing for interfaces, implemented ifaces for modules
+  }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)

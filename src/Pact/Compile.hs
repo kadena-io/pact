@@ -566,7 +566,7 @@ abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames)
 
     enrichDynamic n@(DName dyn@(DynamicName _ ref ifs _))
       | S.null ifs = case M.lookup ref modRefArgs of
-        Just ifs' -> DName . setIfs dyn . S.fromList <$> traverse ifVarName ifs'
+        Just ifs' -> DName . setIfs dyn . S.fromList <$> traverse ifVarName (fromMaybe [] ifs')
         Nothing -> return n
       | otherwise = return n
     enrichDynamic n = return n
@@ -638,7 +638,7 @@ parseType = msum
   , parseUserSchemaType
   , parseSchemaType tyObject TyObject
   , parseSchemaType tyTable TyTable
-  , parseModuleRef
+  , parseModuleRefType
   , TyPrim TyInteger <$ symbol tyInteger
   , TyPrim TyDecimal <$ symbol tyDecimal
   , TyPrim TyTime    <$ symbol tyTime
@@ -656,9 +656,9 @@ parseSchemaType :: Text -> SchemaType -> Compile (Type (Term Name))
 parseSchemaType tyRep sty = symbol tyRep >>
   (TySchema sty <$> (parseUserSchemaType <|> pure TyAny) <*> pure def)
 
-parseModuleRef :: Compile (Type (Term Name))
-parseModuleRef = symbol "module" >>
-  (TyModule <$> withList' Braces
+parseModuleRefType :: Compile (Type (Term Name))
+parseModuleRefType = symbol "module" >>
+  (TyModule . Just <$> withList' Braces
    ((snd <$> qualifiedModuleName) `sepBy1` sep Comma))
 
 parseUserSchemaType :: Compile (Type (Term Name))

@@ -621,8 +621,12 @@ resolveModRef i mn = moduleResolver lkp i mn
   where
     lkp _ m = lookupModule i m >>= \r -> return $ case r of
       Nothing -> Nothing
-      (Just (ModuleData (MDModule mdm) _)) -> return $ Ref $ TModRef (_mName mdm) (_mInterfaces mdm) (getInfo i)
-      (Just (ModuleData (MDInterface mdi) _)) -> return $ Ref $ TModRef (_interfaceName mdi) [] (getInfo i)
+      (Just (ModuleData (MDModule mdm) _)) ->
+        return $ Ref $ (`TModRef` (getInfo i)) $
+        ModRef (_mName mdm) (Just $ _mInterfaces mdm) (getInfo i)
+      (Just (ModuleData (MDInterface mdi) _)) ->
+        return $ Ref $ (`TModRef` (getInfo i)) $
+        ModRef (_interfaceName mdi) Nothing (getInfo i)
 
 
 -- | Perform module name lookup and locate the TDef or TConst associated with a
@@ -760,7 +764,7 @@ reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem _) as ai) = do
   ref <- reduce tref >>= \case
-    TModRef m _ _ -> return m
+    TModRef (ModRef m _ _) _ -> return m
     _ -> evalError' ai
       $ "reduceApp: expected module reference: "
       <> pretty tref

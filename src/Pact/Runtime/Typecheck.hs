@@ -29,6 +29,7 @@ module Pact.Runtime.Typecheck
 
 import Control.Arrow hiding (app)
 import Control.Monad
+import Data.Functor.Classes
 import Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -138,7 +139,10 @@ typecheckTerm i spec t = do
     isGuard (Right (TyPrim TyGuard {})) = True
     isGuard _ = False
 
-    termElem haystack needle = any (termEq needle) haystack
+    checkSpecs = liftEq $ \specIfaces tyIfaces ->
+      all (termElem tyIfaces) specIfaces
+      where
+        termElem haystack needle = any (termEq needle) haystack
 
   case (spec,ty,t) of
     (_,_,_) | spec == ty -> tcOK -- identical types always OK
@@ -153,8 +157,8 @@ typecheckTerm i spec t = do
     -- check object
     (TySchema TyObject ospec specPartial,TySchema TyObject oty _,TObject {..}) ->
       paramCheck ospec oty (checkUserType specPartial i (_oObject _tObject))
-    (TyModule specIfaces,TyModule tyIfaces,_)
-      | all (termElem tyIfaces) specIfaces -> tcOK
+    (TyModule specSpec,TyModule tySpec,_)
+      | checkSpecs specSpec tySpec -> tcOK
     _ -> if spec `canUnifyWith` ty then tcOK else tcFail ty
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
