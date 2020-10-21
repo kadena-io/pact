@@ -1,10 +1,13 @@
 (begin-tx)
 
+;; root namespace iface
+
 (interface ifaceA
   (defun opA1:bool (s:string))
 
   )
 
+;; root namespace impl
 
 (module implA G
   (defcap G () true)
@@ -12,16 +15,20 @@
   (defun opA1:bool (s:string) true)
   )
 
+;; namespace ns
+
 (define-namespace 'ns (sig-keyset) (sig-keyset))
 
 (namespace 'ns)
+
+;; ns namespace iface
 
 (interface ifaceB
   (defun opB1:integer (s:string))
 
   )
 
-
+;; ns namespace impl
 
 (module implAB G
   (defcap G () true)
@@ -77,3 +84,18 @@
         [false,true] (test.callTestAImpl))
 (expect "in-module qual dynamic, implicit modref ns call succeeds"
         [true,false] (ns.test2.callTestAImpl))
+
+
+(module test-db G
+  (defcap G () true)
+  (defschema sch mod:module{ifaceA})
+  (deftable tbl:{sch})
+  (defun write-mod-ref (key:string mod:module{ifaceA})
+    (write tbl key {'mod: mod}))
+  (defun read-mod-ref (key:string)
+    (at 'mod (read tbl key))))
+(create-table tbl)
+
+(write-mod-ref "a" implA)
+(expect "roundtrip succeeds" implA
+        (read-mod-ref "a"))

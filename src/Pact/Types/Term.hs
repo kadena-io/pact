@@ -65,6 +65,7 @@ module Pact.Types.Term
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
    ModRef(..),modRefName,modRefSpec,modRefInfo,
+   modRefTy,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
@@ -885,6 +886,10 @@ instance ToJSON ModRef where toJSON = lensyToJSON 4
 instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
   (ModRef a b _) `compare` (ModRef c d _) = (a,b) `compare` (c,d)
+instance Arbitrary ModRef where
+  arbitrary = ModRef <$> arbitrary <*> arbitrary <*> pure def
+instance SizeOf ModRef where
+  sizeOf (ModRef n s _) = constructorCost 1 + sizeOf n + sizeOf s
 
 -- | Pact evaluable term.
 data Term n =
@@ -1259,9 +1264,12 @@ typeof t = case t of
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
       TDynamic {} -> Left "dynamic"
-      TModRef (ModRef _mn is _) _ ->
-        Right $ TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing def) def)) is
+      TModRef m _ -> Right $ modRefTy m
 {-# INLINE typeof #-}
+
+-- | Populate 'TyModule' using a 'ModRef'
+modRefTy :: ModRef -> Type (Term a)
+modRefTy (ModRef _mn is _) = TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing def) def)) is
 
 -- | Return string type description.
 typeof' :: Pretty a => Term a -> Text

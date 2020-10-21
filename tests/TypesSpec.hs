@@ -9,7 +9,6 @@ import Data.Aeson
 import Data.Default
 import Data.Map.Strict (fromList)
 import qualified Data.HashSet as HS
-import qualified Data.Set as S
 
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -33,6 +32,7 @@ testJSONPersist = do
   rt "string" (PLiteral (LString "hello"))
   rt "time" (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
   rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
+  rt "modref" (PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
 
 testJSONColumns :: Spec
 testJSONColumns =
@@ -87,5 +87,5 @@ testUnification = do
   where
     ifaceA = "ifaceA"
     ifaceB = "ifaceB"
-    modRef :: [ModuleName] -> Type ()
-    modRef = TyModule . S.fromList
+    modRef :: [ModuleName] -> Type (Term ())
+    modRef is = modRefTy (ModRef "a" (Just is) def)
