@@ -75,6 +75,7 @@ import Data.Aeson
 import Data.Default (Default(..))
 import Data.Eq.Deriving
 import Data.Foldable
+import Data.Functor.Classes
 import Data.Hashable
 import Data.List
 import Data.List.NonEmpty (NonEmpty (..))
@@ -396,7 +397,8 @@ canUnifyWith (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
   (Nothing,Just _) -> True
   (Just _,Nothing) -> True
   _ -> a == b
-canUnifyWith (TyModule a) (TyModule b) = all (`elem` b) a -- not very useful without `termEq`
+canUnifyWith (TyModule a) (TyModule b) =
+  liftEq (\x y -> all (`elem` y) x) a b -- not very useful without `termEq` :(
 canUnifyWith _ _ = False
 {-# INLINE canUnifyWith #-}
 
