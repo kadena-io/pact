@@ -75,6 +75,7 @@ import Data.Aeson
 import Data.Default (Default(..))
 import Data.Eq.Deriving
 import Data.Foldable
+import Data.Functor.Classes
 import Data.Hashable
 import Data.List
 import Data.List.NonEmpty (NonEmpty (..))
@@ -89,7 +90,6 @@ import Text.Show.Deriving
 
 import Pact.Types.Codec
 import Pact.Types.Info
-import Pact.Types.Names
 import Pact.Types.Pretty
 import Pact.Types.Util
 
@@ -313,7 +313,9 @@ data Type v =
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v } |
   TyModule
-  { _tyModuleSpec :: Set ModuleName }
+  { _tyModuleSpec :: Maybe [v]
+    -- ^ Nothing for interfaces, implemented ifaces for modules
+  }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)
@@ -326,8 +328,9 @@ instance (Pretty o) => Pretty (Type o) where
     TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
-    TyModule is    -> "module{" <> prettyList (Set.toList is) <> "}"
+    TyModule is    -> "module" <> commaBraces' is
     TyAny          -> "*"
+
 
 instance ToJSON v => ToJSON (Type v) where
   toJSON t = case t of
@@ -394,7 +397,8 @@ canUnifyWith (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
   (Nothing,Just _) -> True
   (Just _,Nothing) -> True
   _ -> a == b
-canUnifyWith (TyModule a) (TyModule b) = all (`elem` b) a
+canUnifyWith (TyModule a) (TyModule b) =
+  liftEq (\x y -> all (`elem` y) x) a b -- not very useful without `termEq` :(
 canUnifyWith _ _ = False
 {-# INLINE canUnifyWith #-}
 

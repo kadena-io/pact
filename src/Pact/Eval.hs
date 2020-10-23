@@ -599,9 +599,8 @@ resolveRef i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResolve
       case (m, ns) of
         (Just m', _) -> return $ HM.lookup n' $ _mdRefMap m'
         (Nothing, Just{}) -> return Nothing
-        (Nothing, Nothing) -> do
-          let mn = ModuleName n (Just $ NamespaceName refNs)
-          return $ Just $ Ref $ TModRef mn (getInfo i)
+        (Nothing, Nothing) -> resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
+
 resolveRef i nn@(Name (BareName bn _)) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
@@ -610,14 +609,25 @@ resolveRef i nn@(Name (BareName bn _)) = do
       n <- preuse $ evalRefs . rsLoaded . ix nn
       case n of
         Just r -> return $ Just r
-        Nothing -> do
-          let mn = ModuleName bn Nothing
-          return $ Just $ Ref $ TModRef mn (getInfo i)
+        Nothing -> resolveModRef i $ ModuleName bn Nothing
 resolveRef _i (DName d@(DynamicName mem _ sigs i)) = do
   a <- foldM (resolveDynamic i mem) Nothing sigs
   case a of
     Nothing -> evalError' i $ "resolveRef: dynamic ref not found: " <> pretty d
     Just r -> return $ Just r
+
+resolveModRef :: HasInfo i => i -> ModuleName -> Eval e (Maybe Ref)
+resolveModRef i mn = moduleResolver lkp i mn
+  where
+    lkp _ m = lookupModule i m >>= \r -> return $ case r of
+      Nothing -> Nothing
+      (Just (ModuleData (MDModule mdm) _)) ->
+        return $ Ref $ (`TModRef` (getInfo i)) $
+        ModRef (_mName mdm) (Just $ _mInterfaces mdm) (getInfo i)
+      (Just (ModuleData (MDInterface mdi) _)) ->
+        return $ Ref $ (`TModRef` (getInfo i)) $
+        ModRef (_interfaceName mdi) Nothing (getInfo i)
+
 
 -- | Perform module name lookup and locate the TDef or TConst associated with a
 -- module reference.
@@ -754,9 +764,9 @@ reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem _) as ai) = do
   ref <- reduce tref >>= \case
-    TModule (MDModule m) _ _ -> return m
+    TModRef (ModRef m _ _) _ -> return m
     _ -> evalError' ai
-      $ "reduceApp: invalid reference to non-module"
+      $ "reduceApp: expected module reference: "
       <> pretty tref
 
   DefName mem <- case tmem of
@@ -765,16 +775,16 @@ reduceApp (App (TDynamic tref tmem _) as ai) = do
       $ "reduceApp: unable to resolve dynamic module member: "
       <> pretty tmem
 
-  md <- resolveModule ai $ _mName ref
+  md <- resolveModule ai ref
   case md of
     Just (ModuleData _ refs) -> case HM.lookup mem refs of
       Just (Ref t@TDef{}) -> reduceApp $ App t as ai
       _ -> evalError' ai
-        $ "Unknown module ref: "
+        $ "reduceApp: unknown module ref: "
         <> pretty tref
     Nothing -> evalError' ai
       $ "reduceApp: unable to resolve dynamic module reference: "
-      <> pretty (_mName ref)
+      <> pretty ref
 reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
 
 -- | precompute "UserApp" cost

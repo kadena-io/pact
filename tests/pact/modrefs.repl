@@ -1,10 +1,13 @@
 (begin-tx)
 
+;; root namespace iface
+
 (interface ifaceA
   (defun opA1:bool (s:string))
 
   )
 
+;; root namespace impl
 
 (module implA G
   (defcap G () true)
@@ -12,23 +15,27 @@
   (defun opA1:bool (s:string) true)
   )
 
+;; namespace ns
+
 (define-namespace 'ns (sig-keyset) (sig-keyset))
 
 (namespace 'ns)
 
+;; ns namespace iface
+
 (interface ifaceB
-  (defun opB1:bool (s:string))
+  (defun opB1:integer (s:string))
 
   )
 
-
+;; ns namespace impl
 
 (module implAB G
   (defcap G () true)
   (implements ifaceA)
   (implements ifaceB)
-  (defun opA1:bool (s:string) true)
-  (defun opB1:bool (s:string) true)
+  (defun opA1:bool (s:string) false)
+  (defun opB1:integer (s:string) 0)
   )
 
 (commit-tx)
@@ -42,13 +49,16 @@
     )
 
   (defun callTestAImpl ()
-    (testAImpl implA)
-    (testAImpl ns.implAB)
+    [(testAImpl ns.implAB)
+     (testAImpl implA)
+     ]
     )
   )
 
 (commit-tx)
 (begin-tx)
+
+(namespace 'ns)
 
 (module test2 G
   (defcap G () true)
@@ -56,14 +66,36 @@
   (defun callTestAImpl ()
     (let
       ((a (test.testAImpl implA))
-       (b (test.testAImpl ns.implAB)))
+       (b (test.testAImpl implAB)))
 
-      (format "{}{}" [a b])
+      [a b]
     )
   )
-)
+  )
 
-(test.testAImpl implA)
-(test.testAImpl ns.implAB)
-(test.callTestAImpl)
-(test2.callTestAImpl)
+(commit-tx)
+(begin-tx)
+
+(expect "bare modref resolution succeeds"
+        true (test.testAImpl implA))
+(expect "namespaced modref resolution succeeds"
+        false (test.testAImpl ns.implAB))
+(expect "in-module modref call succeeds"
+        [false,true] (test.callTestAImpl))
+(expect "in-module qual dynamic, implicit modref ns call succeeds"
+        [true,false] (ns.test2.callTestAImpl))
+
+
+(module test-db G
+  (defcap G () true)
+  (defschema sch mod:module{ifaceA})
+  (deftable tbl:{sch})
+  (defun write-mod-ref (key:string mod:module{ifaceA})
+    (write tbl key {'mod: mod}))
+  (defun read-mod-ref (key:string)
+    (at 'mod (read tbl key))))
+(create-table tbl)
+
+(write-mod-ref "a" implA)
+(expect "roundtrip succeeds" implA
+        (read-mod-ref "a"))

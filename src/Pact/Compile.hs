@@ -176,15 +176,18 @@ currentModuleName :: Compile ModuleName
 currentModuleName = _msName <$> moduleState
 
 -- | Construct a potentially namespaced module name from qualified atom
-qualifiedModuleName :: Compile ModuleName
+-- also returns TVar for use with modref types
+qualifiedModuleName :: Compile (ModuleName,Term Name)
 qualifiedModuleName = do
   AtomExp{..} <- atom
   checkReserved _atomAtom
   case _atomQualifiers of
-    []  -> return $ ModuleName _atomAtom Nothing
+    []  -> return (ModuleName _atomAtom Nothing
+                  ,TVar (Name (BareName _atomAtom _atomInfo)) _atomInfo)
     [n] -> do
       checkReserved n
-      return $ ModuleName _atomAtom (Just . NamespaceName $ n)
+      return (ModuleName _atomAtom (Just . NamespaceName $ n)
+             ,TVar (QName (QualifiedName (ModuleName n Nothing) _atomAtom _atomInfo)) _atomInfo)
     _   -> expected "qualified module name reference"
 
 freshTyVar :: Compile (Type (Term Name))
@@ -450,9 +453,10 @@ defpact = do
       \is complete)"
     _ -> pure ()
   i <- contextInfo
+  abody <- abstractBody' args (TList (V.fromList body) TyAny bi)
   return $ TDef
     (Def (DefName defname) modName Defpact (FunType args returnTy)
-      (abstractBody' args (TList (V.fromList body) TyAny bi))
+      abody
       m Nothing i) i
 
 moduleForm :: Compile (Term Name)
@@ -478,7 +482,7 @@ moduleForm = do
 
 implements :: Compile ()
 implements = do
-  ifn <- qualifiedModuleName
+  (ifn,_) <- qualifiedModuleName
   overModuleState msImplements (ifn:)
 
 
@@ -548,10 +552,10 @@ letBindings = withList' Parens $
               BindPair <$> arg <*> valueLevel
 
 abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)
-abstractBody term args = abstractBody' args <$> bodyForm term
+abstractBody term args = abstractBody' args =<< bodyForm term
 
-abstractBody' :: [Arg (Term Name)] -> Term Name -> Scope Int Term Name
-abstractBody' args body = enrichDynamic <$> abstract (`elemIndex` bNames) body
+abstractBody' :: [Arg (Term Name)] -> Term Name -> Compile (Scope Int Term Name)
+abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames) body
   where
     bNames = map arg2Name args
 
@@ -562,11 +566,18 @@ abstractBody' args body = enrichDynamic <$> abstract (`elemIndex` bNames) body
 
     enrichDynamic n@(DName dyn@(DynamicName _ ref ifs _))
       | S.null ifs = case M.lookup ref modRefArgs of
-        Just ifs' -> DName (dyn { _dynInterfaces = ifs' })
-        Nothing -> n
-      | otherwise = n
-    enrichDynamic n = n
+        Just ifs' -> DName . setIfs dyn . S.fromList <$> traverse ifVarName (fromMaybe [] ifs')
+        Nothing -> return n
+      | otherwise = return n
+    enrichDynamic n = return n
 
+    setIfs s ifs = set dynInterfaces ifs s
+
+    ifVarName (TVar (Name (BareName n _)) _) =
+      return $ ModuleName n Nothing
+    ifVarName (TVar (QName (QualifiedName (ModuleName ns Nothing) mn _)) _) =
+      return $ ModuleName mn (Just $ NamespaceName ns)
+    ifVarName _ = expected "interface reference"
 
 letForm :: Compile (Term Name)
 letForm = do
@@ -580,7 +591,7 @@ letsForm :: Compile (Term Name)
 letsForm = do
   bindings <- letBindings
   let nest (binding:rest) = do
-        scope <- abstractBody' [_bpArg binding] <$> case rest of
+        scope <- abstractBody' [_bpArg binding] =<< case rest of
           [] -> bodyForm valueLevel
           _ -> do
             rest' <- nest rest
@@ -591,7 +602,7 @@ letsForm = do
 
 useForm :: Compile (Term Name)
 useForm = do
-  mn <- qualifiedModuleName
+  (mn,_) <- qualifiedModuleName
   i <- contextInfo
   h <- optional hash'
   l <- optional $ withList' Brackets (some userAtom <* eof)
@@ -627,7 +638,7 @@ parseType = msum
   , parseUserSchemaType
   , parseSchemaType tyObject TyObject
   , parseSchemaType tyTable TyTable
-  , parseModuleRef
+  , parseModuleRefType
   , TyPrim TyInteger <$ symbol tyInteger
   , TyPrim TyDecimal <$ symbol tyDecimal
   , TyPrim TyTime    <$ symbol tyTime
@@ -645,10 +656,10 @@ parseSchemaType :: Text -> SchemaType -> Compile (Type (Term Name))
 parseSchemaType tyRep sty = symbol tyRep >>
   (TySchema sty <$> (parseUserSchemaType <|> pure TyAny) <*> pure def)
 
-parseModuleRef :: Compile (Type (Term Name))
-parseModuleRef = symbol "module" >>
-  (TyModule . S.fromList <$> withList' Braces
-   (qualifiedModuleName `sepBy1` sep Comma))
+parseModuleRefType :: Compile (Type (Term Name))
+parseModuleRefType = symbol "module" >>
+  (TyModule . Just <$> withList' Braces
+   ((snd <$> qualifiedModuleName) `sepBy1` sep Comma))
 
 parseUserSchemaType :: Compile (Type (Term Name))
 parseUserSchemaType = withList Braces $ \ListExp{} -> TyUser <$> varAtom
