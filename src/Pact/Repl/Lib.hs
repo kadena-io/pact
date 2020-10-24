@@ -72,6 +72,7 @@ import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
+import Pact.Runtime.Utils
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState

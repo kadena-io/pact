@@ -12,7 +12,7 @@ import Control.Concurrent
 
 spec :: Spec
 spec = do
-  it "regress Pure" (void regressPure)
+  it "regress Pure" (void $ regressPure neverLog)
   describe "regress SQLite" regressSQLite
 
 
@@ -21,8 +21,8 @@ regressSQLite = do
   let f = "deleteme.sqllite"
   db <- runIO $ do
     doesFileExist f >>= \b -> when b (removeFile f)
-    sl <- SQLite.initSQLite (SQLite.SQLiteConfig "deleteme.sqllite" []) alwaysLog
-    mv <- runRegression (initDbEnv alwaysLog SQLite.persister sl)
+    sl <- SQLite.initSQLite (SQLite.SQLiteConfig "deleteme.sqllite" []) neverLog
+    mv <- runRegression (initDbEnv neverLog SQLite.persister sl)
     _db <$> readMVar mv
   it "SQLite successfully closes" $ SQLite.closeSQLite db `shouldReturn` (Right ())
   runIO $ removeFile f

@@ -69,7 +69,7 @@ import Pact.Types.Info (Info)
 import Pact.Types.PactValue
 import Pact.Types.Persistence (TxId)
 import Pact.Types.Pretty
-import Pact.Types.Runtime (PactError,PactErrorType,StackFrame)
+import Pact.Types.Runtime (PactError,PactErrorType,StackFrame,PactEvent)
 import Pact.Types.Swagger
 import Pact.Types.Term
 import Pact.Types.Util
@@ -216,6 +216,10 @@ instance ToSchema PollResponses where
 instance (ToSchema a) => ToSchema (CommandResult a) where
   declareNamedSchema = (swaggerDescription "result of attempting to execute a pact command") .
     (lensyDeclareNamedSchema 3)
+
+instance ToSchema PactEvent where
+  declareNamedSchema = (swaggerDescription "events emitted in transaction") .
+      (genericDeclareNamedSchema defaultSchemaOptions)
 
 instance ToSchema TxId where
   declareNamedSchema = (swaggerDescription "command's transaction id") .

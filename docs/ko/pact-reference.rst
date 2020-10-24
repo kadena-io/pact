@@ -1,4 +1,4 @@
-|image0|
+|image1|
 
 Pact 스마트 컨트랙트 언어 레퍼런스
 ==================================
@@ -3640,7 +3640,7 @@ verify
 
 MODULE 을 검증하여 모든 속성들이 유지되는지 검사합니다.
 
-|image1|
+|image2|
 
 Pact 속성 검사 시스템
 =====================
@@ -3876,7 +3876,7 @@ API 설명서를 참조하세요.
 키셋 인증
 ~~~~~~~~~
 
-Pact에서는 키를 사전 정의된 이름(\ ``define-keyset``\ 로 정의)으로
+Pact에서는 키를 사전 정의된 이름(``define-keyset``\ 로 정의)으로
 참조하거나 값 형태로 배포할 수 있습니다. 속성 검사 시스템은 두 가지
 스타일의 키셋 사용을 모두 지원합니다.
 
@@ -5150,5 +5150,5 @@ row-enforced
 
 속성에서만 지원됩니다.
 
-.. |image0| image:: img/kadena-logo-210px.png
 .. |image1| image:: img/kadena-logo-210px.png
+.. |image2| image:: img/kadena-logo-210px.png

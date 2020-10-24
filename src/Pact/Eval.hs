@@ -29,7 +29,7 @@ module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
-    ,resolveArg,resolveRef,lookupModule
+    ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
     ,deref
     ,liftTerm,apply
@@ -39,7 +39,6 @@ module Pact.Eval
     ,resumePact
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
-    ,searchCallStackApps
     ) where
 
 import Bound
@@ -62,12 +61,12 @@ import Safe
 import Pact.Gas
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
+import Pact.Runtime.Utils
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
-
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -126,11 +125,6 @@ enforceKeySet i ksn KeySet{..} = go
 -- | Hoist Name back to ref
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
-
--- | Search up through call stack apps to find the first `Just a`
-searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)
-searchCallStackApps f = uses evalCallStack $
-  preview (traverse . sfApp . _Just . _1 . to f . _Just)
 
 -- | Eval a function by name with supplied args, and guard against recursive execution.
 evalByName :: Name -> [Term Name] -> Info -> Eval e (Term Name)
@@ -216,29 +210,7 @@ evalNamespace info setter m = do
     allowRoot (SimpleNamespacePolicy f) = f Nothing
     allowRoot (SmartNamespacePolicy ar _) = ar
 
--- | Lookup module in state or database with exact match on 'ModuleName'.
-lookupModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
-lookupModule i mn = do
-  loaded <- preuse $ evalRefs . rsLoadedModules . ix mn
-  case loaded of
-    Just (m,_) -> return $ Just m
-    Nothing -> do
-      stored <- readRow (getInfo i) Modules mn
-      case stored of
-        Just mdStored -> do
-          _ <- computeGas (Left ((getInfo i), "lookup module")) $ case (_mdModule mdStored) of
-            MDModule m -> GPostRead (ReadModule (_mName m) (_mCode m))
-            MDInterface int -> GPostRead (ReadInterface (_interfaceName int) (_interfaceCode int))
-          natives <- view $ eeRefStore . rsNatives
-          let natLookup (NativeDefName n) = case HM.lookup (Name (BareName n def)) natives of
-                Just (Direct t) -> Just t
-                _ -> Nothing
-          case traverse (traverse (fromPersistDirect natLookup)) mdStored of
-            Right md -> do
-              evalRefs . rsLoadedModules %= HM.insert mn (md,False)
-              return $ Just md
-            Left e -> evalError' i $ "Internal error: module restore failed: " <> pretty e
-        Nothing -> return Nothing
+
 
 
 -- | Evaluate top-level term.

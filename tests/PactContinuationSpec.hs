@@ -53,6 +53,10 @@ spec = describe "pacts in dev server" $ do
   describe "testNestedPacts" $ testNestedPacts mgr
   describe "testManagedCaps" $ testManagedCaps mgr
 
+_runOne :: (HTTP.Manager -> Spec) -> Spec
+_runOne test = do
+  mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
+  test mgr
 
 testManagedCaps :: HTTP.Manager -> Spec
 testManagedCaps mgr = before_ flushDb $ after_ flushDb $
@@ -68,11 +72,19 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
     let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd,managedPay,managedPayFails]
     allResults <- runAll mgr allCmds
 
+    mhash <- either (fail . show) (return . ModuleHash . Hash) $
+      parseB64UrlUnpaddedText' "HniQBJ-NUJan20k4t6MiqpzhqkSsKmIzN5ef76pcLCU"
+
     runResults allResults $ do
       sysModuleCmd `succeedsWith` textVal "system module loaded"
       acctModuleCmd `succeedsWith` textVal "TableCreated"
       createAcctCmd `succeedsWith`  Nothing -- Alice should be funded with $100
-      managedPay `succeedsWith` Nothing
+      managedPay `succeedsWith'`
+        (Just $ (textVal' "Transfer succeeded",
+         [PactEvent "PAY"
+          [textVal' "Alice",textVal' "Bob",decValue' 0.9]
+          "accounts"
+          mhash]))
       managedPayFails `failsWith` Just "insufficient balance"
 
 
@@ -675,7 +687,10 @@ twoPartyEscrow testCmds mgr act = do
     act (_cmdHash runEscrowCmd)
 
 decValue :: Decimal -> Maybe PactValue
-decValue = Just . PLiteral . LDecimal
+decValue = Just . decValue'
+
+decValue' :: Decimal -> PactValue
+decValue' = PLiteral . LDecimal
 
 checkContHash
   :: HasCallStack
@@ -801,11 +816,20 @@ shouldMatch' crc@CommandResultCheck{..} results = checkResult _crcExpect apiRes
     apiRes = HM.lookup _crcReqKey results
     checkResult expect result = case result of
       Nothing -> expectationFailure $ "Failed to find ApiResult for " ++ show crc
-      Just CommandResult{..} -> (toActualResult _crResult) `resultShouldBe` expect
+      Just CommandResult{..} -> (toActualResult _crResult _crEvents) `resultShouldBe` expect
+    toActualResult (PactResult (Left (PactError _ _ _ d))) _ = ActualResult . Left $ show d
+    toActualResult (PactResult (Right pv)) es = ActualResult $ Right (pv,es)
+
+
+
 
 succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
                 ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-succeedsWith cmd r = ask >>= liftIO . shouldMatch'
+succeedsWith cmd r = succeedsWith' cmd ((,[]) <$> r)
+
+succeedsWith' :: HasCallStack => Command Text -> Maybe (PactValue,[PactEvent]) ->
+                ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+succeedsWith' cmd r = ask >>= liftIO . shouldMatch'
                      (makeCheck cmd (ExpectResult . Right $ r))
 
 failsWith :: HasCallStack => Command Text -> Maybe String ->
@@ -851,7 +875,10 @@ makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
   mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM Nothing
 
 textVal :: Text -> Maybe PactValue
-textVal = Just . PLiteral . LString
+textVal = Just . textVal'
+
+textVal' :: Text -> PactValue
+textVal' = PLiteral . LString
 
 getPactId :: Command Text -> PactId
 getPactId cmd = toPactId hsh
@@ -869,9 +896,9 @@ stepMisMatchMsg isRollback attemptStep currStep = Just msg
         msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
               <> show attemptStep <> ", " <> show currStep <> ")"
 
-newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe PactValue))
+newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe (PactValue,[PactEvent])))
   deriving (Eq, Show)
-newtype ActualResult = ActualResult (Either String PactValue)
+newtype ActualResult = ActualResult (Either String (PactValue,[PactEvent]))
   deriving (Eq, Show)
 
 data CommandResultCheck = CommandResultCheck
@@ -928,11 +955,6 @@ doPoll :: Manager -> Poll -> IO (Either ClientError PollResponses)
 doPoll mgr req = do
   baseUrl <- serverBaseUrl
   runClientM (pollClient req) (mkClientEnv mgr baseUrl)
-
-
-toActualResult :: PactResult -> ActualResult
-toActualResult (PactResult (Left (PactError _ _ _ d))) = ActualResult . Left $ show d
-toActualResult (PactResult (Right pv)) = ActualResult . Right $ pv
 
 
 resultShouldBe :: HasCallStack => ActualResult -> ExpectResult -> Expectation

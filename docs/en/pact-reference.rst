@@ -1,4 +1,4 @@
-|image0|
+|image1|
 
 Pact Smart Contract Language Reference
 ======================================
@@ -515,6 +515,14 @@ child attributes:
            type: string (base64url)
            required: true
 
+``"events"``
+''''''''''''
+
+*type:* **array (**\ `Pact Event <#pact-event>`__ ``optional``
+
+Includes events that were emitted during the course of the transaction.
+If events are empty they are not included in the JSON.
+
 Example command result
 ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -531,7 +539,13 @@ Example command result
      "logs":"wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8",
      "metaData":null,
      "continuation":null,
-     "txId":null
+     "txId":null,
+     "events": [ {
+       "name": "TRANSFER",
+       "params": ["Alice", "Bob", 10.0],
+       "module": "coin",
+       "moduleHash": "ut_J_ZNkoyaPUEJhiwVeWnkSQn9JT9sQCWKdjjVVrWo"
+     } ]
    }
 
 .. code:: json
@@ -555,18 +569,53 @@ Example command result
      "txId":null
    }
 
-.. _pact-values:
+.. _pact-event:
 
-Pact values returned
-~~~~~~~~~~~~~~~~~~~~
+Pact events
+~~~~~~~~~~~
 
-A successful pact execution will return a value that is valid JSON. A
-pact value can be one of the following: a literal string, integer,
-decimal, boolean, or time; a list of other pact values; an object
-mapping textual keys to pact values; or `guards <#guard-types>`__, which
-can be pact (continuation) guards, module guards, user guards, keysets,
-or references to a keysets. Below is the JSON representation of these
-values:
+Pact events represent named, provable events that transpired in a
+transaction, in the following format:
+
+``name``
+^^^^^^^^
+
+*type:* **string** ``required``
+
+Event name or “topic”
+
+``params``
+^^^^^^^^^^
+
+*type:* **[**\ `PactValue <#pact-values>`__\ **]** ``required``
+
+Values representing the parameterization of this event.
+
+``module``
+^^^^^^^^^^
+
+*type:* **string** ``required``
+
+Fully-qualified module name that sourced the event.
+
+``moduleHash``
+^^^^^^^^^^^^^^
+
+*type:* **string (base64url)** ``required``
+
+Hash of sourcing module.
+
+Pact Values
+~~~~~~~~~~~
+
+Pact values are those values representable in Pact with an equivalent
+JSON representation and as such can be used in input and output in the
+API. A pact value can be one of the following: a literal string,
+integer, decimal, boolean, or time; a list of other pact values; an
+object mapping textual keys to pact values; or
+`guards <#guard-types>`__, which can be pact (continuation) guards,
+module guards, user guards, keysets, or references to a keysets. Below
+is the JSON representation of these values:
 
 Types
 ^^^^^
@@ -2173,6 +2222,18 @@ management:
    (defcap VOTE (member:string)
      @managed
      (validate-member member))
+
+Managed capabilities and Events
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Upon acquisition, managed capabilities emit `“Pact
+Events” <#pact-event>`__ in the output for the granted capability (not
+the installed parameterization but the actual managed value). As such,
+managed capabilities represent “facts” that can be proven via SPV in a
+public blockchain context.
+
+Events are planned to become a general-purpose mechanism but as of Pact
+3.6 are only emitted by managed capabilities.
 
 Guards vs Capabilities
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -4100,4 +4161,4 @@ The update format is a JSON object:
 Note that the JSON row value uses the same encoding as found in the user
 data table.
 
-.. |image0| image:: img/kadena-logo-210px.png
+.. |image1| image:: img/kadena-logo-210px.png

@@ -46,6 +46,7 @@ spec = do
     goldenModule "accounts-module" "golden/golden.accounts.repl" "accounts"
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
+    ,("eventCR",eventCR)
     ]
   describe "goldenAutoCap" $
     goldenModule "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
@@ -73,6 +74,19 @@ acctsSuccessCR tn s = doCRTest tn s "1"
 
 acctsFailureCR :: String -> ReplState -> Spec
 acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
+
+eventCR :: String -> ReplState -> Spec
+eventCR tn s = doCRTest tn s $
+    "(module events-test G \
+    \  (defcap G () true) \
+    \  (defcap CAP (name:string amount:decimal) @managed \
+    \    true) \
+    \  (defun f (name:string amount:decimal) \
+    \    (install-capability (CAP name amount)) \
+    \    (with-capability (CAP name amount) 1))) \
+    \ (events-test.f \"Alice\" 10.1)"
+
+
 
 doCRTest :: String -> ReplState -> Text -> Spec
 doCRTest tn s code = do

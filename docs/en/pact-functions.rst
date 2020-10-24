@@ -170,7 +170,7 @@ drop
 
 Drop COUNT values from LIST (or string), or entries having keys in KEYS
 from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the
-interval (-2:sup:`63,2`\ 63), it is truncated to that range.
+interval (-2\ :sup:`63,2`\ 63), it is truncated to that range.
 
 .. code:: lisp
 
@@ -437,7 +437,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.5.2"
+   "3.6.0.1"
 
 Top level only: this function will fail if used in module code.
 
@@ -585,7 +585,7 @@ take
 
 Take COUNT values from LIST (or string), or entries having keys in KEYS
 from OBJECT. If COUNT is negative, take from end. If COUNT exceeds the
-interval (-2:sup:`63,2`\ 63), it is truncated to that range.
+interval (-2\ :sup:`63,2`\ 63), it is truncated to that range.
 
 .. code:: lisp
 
@@ -1725,7 +1725,8 @@ installation/granting of the token, which will then be revoked upon
 completion of BODY. Nested ‘with-capability’ calls for the same token
 will detect the presence of the token, and will not re-apply CAPABILITY,
 but simply execute BODY. ‘with-capability’ cannot be called from within
-an evaluating defcap.
+an evaluating defcap. Acquire of a managed capability results in
+emission of the equivalent event.
 
 .. code:: lisp
 
@@ -1906,7 +1907,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“OldReadOnlyBehavior”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“DisablePactEvents”,“OldReadOnlyBehavior”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”]
 
 .. code:: lisp
 

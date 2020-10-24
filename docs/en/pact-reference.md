@@ -416,6 +416,13 @@ children:
         required: true
 ```
 
+###### `"events"`
+_type:_ **array ([Pact Event](#pact-event)** `optional`
+
+Includes events that were emitted during the course of the transaction. If events
+are empty they are not included in the JSON.
+
+
 ##### Example command result
 ```JSON
 // successful command result
@@ -429,7 +436,13 @@ children:
   "logs":"wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8",
   "metaData":null,
   "continuation":null,
-  "txId":null
+  "txId":null,
+  "events": [ {
+    "name": "TRANSFER",
+    "params": ["Alice", "Bob", 10.0],
+    "module": "coin",
+    "moduleHash": "ut_J_ZNkoyaPUEJhiwVeWnkSQn9JT9sQCWKdjjVVrWo"
+  } ]
 }
 ```
 ```JSON
@@ -453,8 +466,34 @@ children:
 }
 ```
 
-#### Pact values returned {#pact-values}
-A successful pact execution will return a value that is valid JSON. A pact
+#### Pact events {#pact-event}
+
+Pact events represent named, provable events that transpired in a transaction, in the following format:
+
+##### `name`
+_type:_ **string** `required`
+
+Event name or "topic"
+
+##### `params`
+_type:_ **[ [PactValue](#pact-values) ]** `required`
+
+Values representing the parameterization of this event.
+
+##### `module`
+_type:_ **string** `required`
+
+Fully-qualified module name that sourced the event.
+
+##### `moduleHash`
+_type:_ **string (base64url)** `required`
+
+Hash of sourcing module.
+
+
+#### Pact Values {#pact-values}
+Pact values are those values representable in Pact with an equivalent JSON representation and as
+such can be used in input and output in the API. A pact
 value can be one of the following: a literal string, integer, decimal, boolean,
 or time; a list of other pact values; an object mapping textual keys to pact
 values; or [guards](#guard-types), which can be pact (continuation) guards,
@@ -1714,6 +1753,14 @@ In the following example, the capability will have "one-shot" automatic manageme
   @managed
   (validate-member member))
 ```
+
+#### Managed capabilities and Events
+Upon acquisition, managed capabilities emit ["Pact Events"](#pact-event) in the output for the granted
+capability (not the installed parameterization but the actual managed value). As such, managed capabilities
+represent "facts" that can be proven via SPV in a public blockchain context.
+
+Events are planned to become a general-purpose mechanism but as of Pact 3.6 are only emitted by managed
+capabilities.
 
 
 ### Guards vs Capabilities
