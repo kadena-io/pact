@@ -467,7 +467,7 @@ evaluateConstraints
   -> Eval e (Module n, HM.HashMap Text Ref)
 evaluateConstraints info m evalMap = do
   (m',evalMap',newIfs) <- foldM evaluateConstraint (m, evalMap, []) $ _mInterfaces m
-  return (set mInterfaces newIfs m',evalMap')
+  return (set mInterfaces (reverse newIfs) m',evalMap')
   where
     evaluateConstraint (m', refMap, newIfs) ifn = do
       refData <- resolveModule info ifn
