@@ -465,10 +465,11 @@ evaluateConstraints
   -> (Module n)
   -> HM.HashMap Text Ref
   -> Eval e (Module n, HM.HashMap Text Ref)
-evaluateConstraints info m evalMap =
-  foldM evaluateConstraint (m, evalMap) $ _mInterfaces m
+evaluateConstraints info m evalMap = do
+  (m',evalMap',newIfs) <- foldM evaluateConstraint (m, evalMap, []) $ _mInterfaces m
+  return (set mInterfaces newIfs m',evalMap')
   where
-    evaluateConstraint (m', refMap) ifn = do
+    evaluateConstraint (m', refMap, newIfs) ifn = do
       refData <- resolveModule info ifn
       case refData of
         Nothing -> evalError info $
@@ -476,7 +477,8 @@ evaluateConstraints info m evalMap =
         Just (ModuleData (MDInterface Interface{..}) irefs) -> do
           em' <- HM.foldrWithKey (solveConstraint ifn info) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
-          pure (um, em')
+          newIf <- ifExecutionFlagSet' FlagPreserveModuleIfacesBug ifn _interfaceName
+          pure (um, em', newIf:newIfs)
         Just _ -> evalError info "Unexpected: module found in interface position while solving constraints"
 
 -- | Compare implemented member signatures with their definitions.
@@ -662,8 +664,8 @@ reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
-reduce t@TDef {} = return $ toTerm $ pack $ show t
-reduce t@TNative {} = return $ toTerm $ pack $ show t
+reduce t@TDef {} = toTerm <$> compatPretty t
+reduce t@TNative {} = toTerm <$> compatPretty t
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
   CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
@@ -677,11 +679,15 @@ reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
-reduce t@TDynamic {} = evalError (_tInfo t)
-  $ "Dynamic reference at invalid location: "
-  <> pretty t
 reduce t@TModRef{} = unsafeReduce t
+reduce (TDynamic tref tmem i)  = reduceDynamic tref tmem i >>= \rd -> case rd of
+  Left v -> return v
+  Right d -> reduce (TDef d (getInfo d))
 
+compatPretty :: (Show a, Pretty a) => a -> Eval e Text
+compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
+  (pack $ show t)
+  (renderCompactText t)
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
@@ -734,30 +740,41 @@ reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
-reduceApp (App (TDynamic tref tmem _) as ai) = do
+reduceApp (App (TDynamic tref tmem ti) as ai) =
+  reduceDynamic tref tmem ti >>= \rd -> case rd of
+    Left v -> evalError ti $ "reduceApp: expected module member for dynamic: " <> pretty v
+    Right d -> reduceApp $ App (TDef d (getInfo d)) as ai
+reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
+
+-- | Evaluate a dynamic ref to either a fully-reduced value from a 'TConst'
+-- or a module member 'Def' for applying.
+reduceDynamic
+    :: HasInfo i
+    => Term Ref
+    -> Term (Ref' (Term Name))
+    -> i
+    -> Eval e (Either (Term Name) (Def (Ref' (Term Name))))
+reduceDynamic tref tmem i = do
   ref <- reduce tref >>= \case
     TModRef (ModRef m _ _) _ -> return m
-    _ -> evalError' ai
-      $ "reduceApp: expected module reference: "
-      <> pretty tref
+    _ -> evalError' i $ "reduceDynamic: expected module reference: " <> pretty tref
 
-  DefName mem <- case tmem of
-    TVar (Ref (TDef d _)) _ -> return $ _dDefName d
-    _ -> evalError' ai
-      $ "reduceApp: unable to resolve dynamic module member: "
-      <> pretty tmem
+  case tmem of
+    TVar (Ref (TConst {})) _ -> Left <$> reduce tmem
+    TVar (Ref (TDef d _)) _ -> do
+      let (DefName mem) = _dDefName d
+      md <- resolveModule i ref
+      case md of
+        Just (ModuleData _ refs) -> case HM.lookup mem refs of
+          Just (Ref (TDef mdef _)) -> return (Right mdef)
+          _ -> evalError' i $ "reduceDynamic: unknown module ref: " <> pretty tref
+        Nothing -> evalError' i
+          $ "reduceDynamic: unable to resolve dynamic module reference: "
+          <> pretty ref
+    _ -> evalError' i
+         $ "reduceDynamic: unexpected dynamic module member: " <> pretty tmem
 
-  md <- resolveModule ai ref
-  case md of
-    Just (ModuleData _ refs) -> case HM.lookup mem refs of
-      Just (Ref t@TDef{}) -> reduceApp $ App t as ai
-      _ -> evalError' ai
-        $ "reduceApp: unknown module ref: "
-        <> pretty tref
-    Nothing -> evalError' ai
-      $ "reduceApp: unable to resolve dynamic module reference: "
-      <> pretty ref
-reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
+
 
 -- | precompute "UserApp" cost
 computeUserAppGas :: Def Ref -> Info -> Eval e Gas
