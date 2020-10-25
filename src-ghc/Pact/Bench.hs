@@ -207,16 +207,14 @@ acctRow = ObjectMap $ M.fromList
 benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)
 benchRead _ KeySets _ = rc (Just benchKeySet)
 benchRead _ UserTables {} _ = rc (Just acctRow)
-benchRead benchMod Modules mn | mn == "bench" = rc (Just benchMod)
+benchRead benchMod Modules _ = rc (Just benchMod)
 benchRead _ _ _ = rc Nothing
 
 benchReadValue :: PersistModuleData -> Table k -> k -> Persist () (Maybe v)
-benchReadValue benchMod (DataTable t) k
+benchReadValue benchMod (DataTable t) _k
   | t == "SYS_keysets" = rcp $ Just (unsafeCoerce benchKeySet)
   | t == "USER_bench_bench-accounts" = rcp $ Just (unsafeCoerce acctRow)
-  | t == "SYS_modules" = case k of
-      "bench" -> rcp $ Just (unsafeCoerce benchMod)
-      _ -> rcp Nothing
+  | t == "SYS_modules" = rcp $ Just (unsafeCoerce benchMod)
   | otherwise = error (show t)
 benchReadValue _ (TxTable _t) _k = rcp Nothing
 

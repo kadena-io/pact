@@ -446,15 +446,21 @@ evaluateDefs info defs = do
   where
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 
+    -- | traverse to find deps and form graph
     traverseGraph ds = fmap stronglyConnCompR $ forM (HM.toList ds) $ \(dn,d) -> do
       d' <- forM d $ \(f :: Name) -> do
-        dm <- resolveRef f f
+        dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
         case (dm, f) of
-          (Just t, _) -> return (Right t)
+          (Just t, _) -> return (Right t) -- ref found
+          -- for barenames, check decls and finally modules
           (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn ds of
-              Just _ -> return (Left fn)
-              Nothing -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+              Just _ -> return (Left fn) -- decl found
+              Nothing -> resolveModRef f (ModuleName fn Nothing) >>= \r -> case r of
+                Just mr -> return (Right mr) -- mod ref found
+                Nothing ->
+                  evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+          -- for qualified names, simply fail
           (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
 
       return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
@@ -564,18 +570,26 @@ moduleResolver lkp i mn = do
             Just ns -> lkp i $ set mnNamespace (Just . _nsName $ ns) mn
             Nothing -> pure Nothing
 
-
+-- | Workhorse resolution function with cases for qualified name,
+-- bare name, dynamic name.
 resolveRef :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
-resolveRef i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResolver (lookupQn n) i q
+resolveRef i n = resolveRef' False i n
+
+-- | Variation of 'resolveRef' that allows nerfing the module ref attempt on bare names.
+resolveRef' :: HasInfo i => Bool -> i -> Name -> Eval e (Maybe Ref)
+resolveRef' _ i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResolver (lookupQn n) i q
   where
     lookupQn n' i' q' = do
       m <- lookupModule i' q'
       case (m, ns) of
         (Just m', _) -> return $ HM.lookup n' $ _mdRefMap m'
         (Nothing, Just{}) -> return Nothing
-        (Nothing, Nothing) -> resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
-
-resolveRef i nn@(Name (BareName bn _)) = do
+        (Nothing, Nothing) ->
+          -- note that while 'resolveModRef' uses 'moduleResolver' again,
+          -- it's fine since we're supplying an ns-qualified module name
+          -- so it won't re-try like here.
+          resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
+resolveRef' disableModRefs i nn@(Name (BareName bn _)) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
@@ -583,8 +597,10 @@ resolveRef i nn@(Name (BareName bn _)) = do
       n <- preuse $ evalRefs . rsLoaded . ix nn
       case n of
         Just r -> return $ Just r
-        Nothing -> resolveModRef i $ ModuleName bn Nothing
-resolveRef _i (DName d@(DynamicName mem _ sigs i)) = do
+        Nothing
+            | disableModRefs -> return Nothing
+            | otherwise -> resolveModRef i $ ModuleName bn Nothing
+resolveRef' _ _i (DName d@(DynamicName mem _ sigs i)) = do
   a <- foldM (resolveDynamic i mem) Nothing sigs
   case a of
     Nothing -> evalError' i $ "resolveRef: dynamic ref not found: " <> pretty d
