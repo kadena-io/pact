@@ -2693,7 +2693,7 @@ The dereference operator `::` allows a member of an interface specified in the t
   )
 ...
 (defun foo (bar:module{baz})
-  (bar::quux 1.0 "hi") ;; invokes 'quux' on whatever module is passed in
+  (bar::quux 1 "hi") ;; invokes 'quux' on whatever module is passed in
   bar::ONE             ;; directly references interface const
 )
 ```
