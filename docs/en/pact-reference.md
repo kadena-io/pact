@@ -2209,7 +2209,7 @@ and using the [dereference operator](#deref) `::` to invoke a member function of
 ...
 
 (defun foo (bar:module{baz})
-  (bar::quux 1.0 "hi") ;; derefs 'quux' on whatever module is passed in
+  (bar::quux 1 "hi") ;; derefs 'quux' on whatever module is passed in
   bar::ONE             ;; directly references interface const
 )
 
