@@ -21,9 +21,9 @@ jobs:
         exclude:
         - os: 'windows-latest'
           ghc: '8.6.5'
-        include:
-        - os: 'windows-latest'
-          storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
+        # include:
+        # - os: 'windows-latest'
+        #   storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
 
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
