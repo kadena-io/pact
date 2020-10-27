@@ -16,7 +16,7 @@ jobs:
       matrix:
         ghc: ['8.6.5', '8.8.4', '8.10.2']
         cabal: ['3.2']
-        os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-latest', 'windows-latest']
+        os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-latest' ] # windows-latest is temporarily disabled
         cabalcache: ['true']
         exclude:
         - os: 'windows-latest'
