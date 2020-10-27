@@ -66,8 +66,9 @@ jobs:
     - name: Install non-Haskell dependencies (macOS)
       if: contains(matrix.os, 'mac')
       run: |
-        brew update
-        brew unlink python@2
+        # brew update
+        # brew unlink python@2
+        echo 'skip unlinking python@2'
     - name: Install non-Haskell dependencies (windows)
       if: contains(matrix.os, 'windows')
       run: choco install -y -r awscli
@@ -121,6 +122,8 @@ jobs:
         documentation: False
         package thyme
           tests: False
+        constraints:
+          base16-bytestring <1
         EOF
     - name: Append cabal.project (only ghc-8.10)
       if: startsWith(matrix.ghc, '8.10')
