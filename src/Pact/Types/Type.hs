@@ -328,7 +328,7 @@ instance (Pretty o) => Pretty (Type o) where
     TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
-    TyModule is    -> "module" <> commaBraces' is
+    TyModule is    -> "module" <> (maybe "" commaBraces' is)
     TyAny          -> "*"
 
 
