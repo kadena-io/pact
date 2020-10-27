@@ -846,7 +846,7 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
-
+toAST TModRef {..} = die _tInfo "TODO: modrefs should be treated as values"
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
   (Left (Direct t)) ->
@@ -1010,6 +1010,7 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
+toAST TDynamic {..} = die _tInfo "Dynamics not supported TODO"
 
 trackPrim :: Info -> PrimType -> PrimValue (AST Node) -> TC (AST Node)
 trackPrim inf pty v = do
@@ -1034,10 +1035,9 @@ toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUse
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
-bindArgs i args b =
-  case args `atMay` b of
-    Nothing -> die i $ "Missing arg: " ++ show b ++ ", " ++ show (length args) ++ " provided"
-    Just a -> return a
+bindArgs i args b = case args `atMay` b of
+  Nothing -> die i $ "Missing arg: " ++ show b ++ ", " ++ show (length args) ++ " provided"
+  Just a -> return a
 
 -- Temporary data type we're using to define 'Abbrev' for this 'Either'.
 newtype AbbrevNode = AbbrevNode (Either Ref (AST Node))

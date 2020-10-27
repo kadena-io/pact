@@ -24,6 +24,7 @@ module Pact.Types.Pretty
   , bracketsSep
   , colon
   , commaBraces
+  , commaBraces'
   , commaBrackets
   , dot
   , dquotes
@@ -138,6 +139,9 @@ commaBrackets = encloseSep "[" "]" ","
 bracketsSep   = brackets . sep
 parensSep     = parens   . sep
 bracesSep     = braces   . sep
+
+commaBraces' :: Foldable t => Pretty a => t a -> Doc
+commaBraces' = commaBraces . map pretty . toList
 
 renderString'
   :: (Doc -> SimpleDocStream Annot) -> RenderColor -> Doc -> String

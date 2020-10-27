@@ -46,7 +46,7 @@ module Pact.Types.Type
   , tyUser
   , tyVar
   , tyGuard
-  , tyModRefInterfaces
+  , tyModuleSpec
   , mkTyVar
   , mkTyVar'
   , mkSchemaVar
@@ -75,6 +75,7 @@ import Data.Aeson
 import Data.Default (Default(..))
 import Data.Eq.Deriving
 import Data.Foldable
+import Data.Functor.Classes
 import Data.Hashable
 import Data.List
 import Data.List.NonEmpty (NonEmpty (..))
@@ -89,7 +90,6 @@ import Text.Show.Deriving
 
 import Pact.Types.Codec
 import Pact.Types.Info
-import Pact.Types.Names
 import Pact.Types.Pretty
 import Pact.Types.Util
 
@@ -312,8 +312,10 @@ data Type v =
   , _tySchemaPartial :: SchemaPartial } |
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v } |
-  TyModRef
-  { _tyModRefInterfaces :: [ModuleName] }
+  TyModule
+  { _tyModuleSpec :: Maybe [v]
+    -- ^ Nothing for interfaces, implemented ifaces for modules
+  }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData v => NFData (Type v)
@@ -326,8 +328,9 @@ instance (Pretty o) => Pretty (Type o) where
     TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
-    TyModRef is    -> "module{" <> prettyList (is) <> "}"
+    TyModule is    -> "module" <> (maybe "" commaBraces' is)
     TyAny          -> "*"
+
 
 instance ToJSON v => ToJSON (Type v) where
   toJSON t = case t of
@@ -338,7 +341,7 @@ instance ToJSON v => ToJSON (Type v) where
     TySchema st ty p -> object [ "schema" .= st, "type" .= ty, "partial" .= p ]
     TyFun f -> toJSON f
     TyUser v -> toJSON v
-    TyModRef is -> object [ "modspec" .= is ]
+    TyModule is -> object [ "modspec" .= is ]
 
 instance FromJSON v => FromJSON (Type v) where
   parseJSON v =
@@ -355,8 +358,8 @@ instance FromJSON v => FromJSON (Type v) where
         <*> o .: "type"
         <*> o .: "partial")
       v) <|>
-    (withObject "TyModRef"
-      (\o -> TyModRef <$> o .: "modspec") v)
+    (withObject "TyModule"
+      (\o -> TyModule <$> o .: "modspec") v)
 
 
 
@@ -394,7 +397,8 @@ canUnifyWith (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
   (Nothing,Just _) -> True
   (Just _,Nothing) -> True
   _ -> a == b
-canUnifyWith (TyModRef a) (TyModRef b) = all (`elem` b) a
+canUnifyWith (TyModule a) (TyModule b) =
+  liftEq (\x y -> all (`elem` y) x) a b -- not very useful without `termEq` :(
 canUnifyWith _ _ = False
 {-# INLINE canUnifyWith #-}
 

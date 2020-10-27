@@ -93,7 +93,7 @@ badErrors = M.fromList
   ,(pfx "bad-parens.repl",
     "error: expected")
   ,(pfx "bad-import-unimported-reference.repl",
-    "Cannot resolve")
+    "Expected def")
   ,(pfx "bad-root-namespace.repl",
     "Definitions in default namespace are not authorized")
   ,(pfx "bad-dupe-def.repl"

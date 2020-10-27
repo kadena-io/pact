@@ -50,6 +50,7 @@ import Control.Monad
 import Prelude
 import Data.Text (Text,pack)
 import Data.Aeson
+import Data.Maybe (fromMaybe)
 import Data.Thyme
 import Data.Thyme.Time.Core (secondsToDiffTime)
 import System.Locale
@@ -233,21 +234,26 @@ instance Pretty (LiteralExp i) where
 data AtomExp i = AtomExp
   { _atomAtom :: !Text
   , _atomQualifiers :: ![Text]
+  , _atomDynamic :: Bool
   , _atomInfo :: i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
 instance ToJSON i => ToJSON (AtomExp i) where
-  toJSON (AtomExp l q i) =
-    object [ "atom" .= l, "q" .= q, expInfoField .= i ]
+  toJSON (AtomExp l q dyn i) =
+    object $ [ "atom" .= l, "q" .= q, expInfoField .= i ] ++
+    [ "dyn" .= dyn | dyn ]
 instance FromJSON i => FromJSON (AtomExp i) where
   parseJSON = withObject "AtomExp" $ \o ->
-    AtomExp <$> o .: "atom" <*> o .: "q" <*> o .: expInfoField
-
+    AtomExp <$> o .: "atom" <*> o .: "q"
+    <*> (fromMaybe False <$> o .:? "dyn")
+    <*> o .: expInfoField
 instance Pretty (AtomExp i) where
-  pretty (AtomExp atom qs _)
+  pretty (AtomExp atom qs False _)
     = mconcat $ punctuate dot $ fmap pretty $ qs ++ [atom]
+  pretty (AtomExp atom qs True _)
+    = mconcat $ punctuate (colon <> colon) $ fmap pretty $ qs ++ [atom]
 
 data ListExp i = ListExp
   { _listList :: ![(Exp i)]

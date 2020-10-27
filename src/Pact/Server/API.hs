@@ -291,6 +291,9 @@ instance ToSchema PactValue where
     (genericDeclareNamedSchema $
       optionsOf $ optionConstructor $ toNiceString 1)
 
+instance ToSchema ModRef where
+  declareNamedSchema = lensyDeclareNamedSchema 4
+
 
 instance ToSchema Literal where
   declareNamedSchema = genericDeclareNamedSchema $

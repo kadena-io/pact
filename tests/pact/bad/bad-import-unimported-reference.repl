@@ -16,3 +16,5 @@
   (defcap G () true)
   (defun g () (f))
 )
+
+(g.g)

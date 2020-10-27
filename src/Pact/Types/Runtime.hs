@@ -143,6 +143,10 @@ data ExecutionFlag
   | FlagPreserveNsModuleInstallBug
   -- | Disable emission of pact events
   | FlagDisablePactEvents
+  -- | Preserve module implemented interface namespacing bug
+  | FlagPreserveModuleIfacesBug
+  -- | Preserve Show in reduce for Def, Native
+  | FlagPreserveShowDefs
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

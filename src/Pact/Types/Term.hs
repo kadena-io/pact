@@ -64,20 +64,24 @@ module Pact.Types.Term
    Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
+   ModRef(..),modRefName,modRefSpec,modRefInfo,
+   modRefTy,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
-   tNativeDocs,tNativeFun,tNativeName,tNativeExamples,tNativeTopLevelOnly,tObject,tSchemaName,
+   tNativeDocs,tNativeFun,tNativeName,tNativeExamples,
+   tNativeTopLevelOnly,tObject,tSchemaName,
    tTableName,tTableType,tVar,tStep,tModuleName,
+   tDynModRef,tDynMember,tModRef,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
    prettyTypeTerm,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
-   Gas(..)
-   , module Pact.Types.Names
+   Gas(..),
+   module Pact.Types.Names
    ) where
 
 
@@ -543,6 +547,7 @@ instance FromJSON g => FromJSON (Governance g) where
     Governance <$> (Left <$> o .: "keyset" <|>
                     Right <$> o .: "capability")
 
+
 -- | Newtype wrapper differentiating 'Hash'es from module hashes
 --
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
@@ -862,6 +867,29 @@ instance Pretty n => Pretty (Step n) where
       ]
 
 
+-- | A reference to a module or interface.
+data ModRef = ModRef
+    { _modRefName :: !ModuleName
+      -- ^ Fully-qualified module name.
+    , _modRefSpec :: !(Maybe [ModuleName])
+      -- ^ Specification: for modules, 'Just' implemented interfaces;
+      -- for interfaces, 'Nothing'.
+    , _modRefInfo :: !Info
+    } deriving (Eq,Show,Generic)
+instance NFData ModRef
+instance HasInfo ModRef where getInfo = _modRefInfo
+instance Pretty ModRef where
+  pretty (ModRef mn sm _i) = case sm of
+    Just is -> pretty mn <> commaBraces' is
+    Nothing -> pretty mn
+instance ToJSON ModRef where toJSON = lensyToJSON 4
+instance FromJSON ModRef where parseJSON = lensyParseJSON 4
+instance Ord ModRef where
+  (ModRef a b _) `compare` (ModRef c d _) = (a,b) `compare` (c,d)
+instance Arbitrary ModRef where
+  arbitrary = ModRef <$> arbitrary <*> arbitrary <*> pure def
+instance SizeOf ModRef where
+  sizeOf (ModRef n s _) = constructorCost 1 + sizeOf n + sizeOf s
 
 -- | Pact evaluable term.
 data Term n =
@@ -937,12 +965,21 @@ data Term n =
     , _tMeta :: !Meta
     , _tInfo :: !Info
     } |
+    TModRef {
+      _tModRef :: !ModRef
+    , _tInfo :: !Info
+    } |
     TTable {
       _tTableName :: !TableName
     , _tModuleName :: ModuleName
     , _tHash :: !ModuleHash
     , _tTableType :: !(Type (Term n))
     , _tMeta :: !Meta
+    , _tInfo :: !Info
+    } |
+    TDynamic {
+      _tDynModRef :: !(Term n)
+    , _tDynMember :: !(Term n)
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Generic)
@@ -969,6 +1006,8 @@ instance HasInfo (Term n) where
     TTable{..} -> _tInfo
     TUse{..} -> getInfo _tUse
     TVar{..} -> _tInfo
+    TDynamic{..} -> _tInfo
+    TModRef{..} -> _tInfo
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
@@ -1019,7 +1058,8 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tTableName <> ":" <> pretty (fmap prettyTypeTerm _tTableType)
       , pretty _tMeta
       ]
-
+    TDynamic ref var _i -> pretty ref <> "::" <> pretty var
+    TModRef mr _ -> pretty mr
     where
       prettyFunType (FunType as r) = pretty (FunType (map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))
 
@@ -1044,27 +1084,34 @@ instance Monad Term where
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f =
       TBinding (map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
-    TObject (Object bs t kf oi) i >>= f = TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
+    TObject (Object bs t kf oi) i >>= f =
+      TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i
     TGuard g i >>= f = TGuard (fmap (>>= f) g) i
     TUse u i >>= _ = TUse u i
-    TStep (Step ent e r si) meta i >>= f = TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) meta i
-    TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
-    TTable {..} >>= f = TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
+    TStep (Step ent e r si) meta i >>= f =
+      TStep (Step (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) si) meta i
+    TSchema {..} >>= f =
+      TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
+    TTable {..} >>= f =
+      TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
+    TDynamic r m i >>= f = TDynamic (r >>= f) (m >>= f) i
+    TModRef mr i >>= _ = TModRef mr i
 
-
-termCodec :: (ToJSON n,FromJSON n) => Codec (Term n)
+termCodec :: (ToJSON n, FromJSON n) => Codec (Term n)
 termCodec = Codec enc dec
   where
     enc t = case t of
       TModule d b i -> ob [ moduleDef .= d, body .= b, inf i ]
       TList ts ty i -> ob [ list' .= ts, type' .= ty, inf i ]
       TDef d _i -> toJSON d
-      -- TODO native is all statically-declared
+      -- TNative intentionally not marshallable
       TNative n _fn tys _exs d tl i ->
-        ob [ natName .= n, natFun .= Null {- TODO fn -}, natFunTypes .= tys, natExamples .= Null {- TODO exs -},
+        ob [ natName .= n, natFun .= Null {- TODO fn -}
+           , natFunTypes .= tys, natExamples .= Null {- TODO exs -},
              natDocs .= d, natTopLevel .= tl, inf i ]
-      TConst d m c met i -> ob [ constArg .= d, modName .= m, constVal .= c, meta .= met, inf i ]
+      TConst d m c met i ->
+        ob [ constArg .= d, modName .= m, constVal .= c, meta .= met, inf i ]
       TApp a _i -> toJSON a
       TVar n i -> ob [ var .= n, inf i ]
       TBinding bs b c i -> ob [pairs .= bs, body .= b, type' .= c, inf i]
@@ -1074,25 +1121,32 @@ termCodec = Codec enc dec
       TUse u _i -> toJSON u
       TStep s tmeta i -> ob [body .= s, meta .= tmeta, inf i]
       TSchema sn smod smeta sfs i ->
-        ob [ schemaName .= sn, modName .= smod, meta .= smeta, fields .= sfs, inf i ]
+        ob [ schemaName .= sn, modName .= smod, meta .= smeta
+           , fields .= sfs, inf i ]
       TTable tn tmod th tty tmeta i ->
-        ob [ tblName .= tn, modName .= tmod, hash' .= th, type' .= tty, meta .= tmeta,
-             inf i ]
+        ob [ tblName .= tn, modName .= tmod, hash' .= th, type' .= tty
+           , meta .= tmeta, inf i ]
+      TDynamic r m i ->
+        ob [ dynRef .= r, dynMem .= m, inf i ]
+      TModRef mr _i -> toJSON mr
+
     dec decval =
       let wo n f = withObject n f decval
           parseWithInfo f = uncurry f . (id &&& getInfo) <$> parseJSON decval
       in
         wo "Module" (\o -> TModule <$> o .: moduleDef <*> o .: body <*> inf' o)
-        <|> wo "List" (\o -> TList <$> o .: list' <*> o .: type' <*> inf' o)
+        <|> wo "List"
+            (\o -> TList <$> o .: list' <*> o .: type' <*> inf' o)
         <|> parseWithInfo TDef
-      -- TODO native is all statically-declared
-      --(wo "Native" $ \o -> TNative <$>  natName <*> pure Null {- TODO fn -}, natFunTypes <*> natExamples .= Null {- TODO exs -},
-      --natDocs <*> natTopLevel <*> inf i )
+      -- TNative intentionally not marshallable
         <|> wo "Const"
-            (\o -> TConst <$> o .: constArg <*> o .: modName <*> o .: constVal <*> o .: meta <*> inf' o )
+            (\o -> TConst <$> o .: constArg <*> o .: modName
+              <*> o .: constVal <*> o .: meta <*> inf' o )
         <|> parseWithInfo TApp
         <|> wo "Var" (\o -> TVar <$>  o .: var <*> inf' o )
-        <|> wo "Binding" (\o -> TBinding <$> o .: pairs <*> o .: body <*> o .: type' <*> inf' o)
+        <|> wo "Binding"
+            (\o -> TBinding <$> o .: pairs <*> o .: body
+              <*> o .: type' <*> inf' o)
         <|> parseWithInfo TObject
         <|> wo "Literal" (\o -> TLiteral <$> o .: literal <*> inf' o)
         <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
@@ -1101,11 +1155,16 @@ termCodec = Codec enc dec
             (\o -> TStep <$> o .: body <*> o .: meta <*> inf' o)
        --  parseWithInfo TStep
         <|> wo "Schema"
-            (\o -> TSchema <$>  o .: schemaName <*> o .: modName <*> o .: meta <*> o .: fields <*> inf' o )
+            (\o -> TSchema <$>  o .: schemaName <*> o .: modName
+              <*> o .: meta <*> o .: fields <*> inf' o )
         <|> wo "Table"
-            (\o -> TTable <$>  o .: tblName <*> o .: modName <*> o .: hash' <*> o .: type'
-                   <*> o .: meta <*> inf' o )
+            (\o -> TTable <$>  o .: tblName <*> o .: modName
+              <*> o .: hash' <*> o .: type'
+              <*> o .: meta <*> inf' o )
+        <|> wo "Dynamic"
+            (\o -> TDynamic <$> o .: dynRef <*> o .: dynMem <*> inf' o)
 
+        <|> parseWithInfo TModRef
 
     ob = object
     moduleDef = "module"
@@ -1132,6 +1191,8 @@ termCodec = Codec enc dec
     fields = "fields"
     tblName = "name"
     hash' = "hash"
+    dynRef = "dref"
+    dynMem = "dmem"
 
 
 
@@ -1140,6 +1201,7 @@ instance (ToJSON n, FromJSON n) => FromJSON (Term n) where
 
 instance (ToJSON n, FromJSON n) => ToJSON (Term n) where
   toJSON = encoder termCodec
+
 
 class ToTerm a where
     toTerm :: a -> Term m
@@ -1185,7 +1247,7 @@ guardTypeOf g = case g of
 typeof :: Term a -> Either Text (Type (Term a))
 typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
-      TModule {} -> Left "module"
+      TModule{}-> Left "module"
       TList {..} -> Right $ TyList _tListType
       TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
       TNative {} -> Left "defun"
@@ -1201,7 +1263,13 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
+      TDynamic {} -> Left "dynamic"
+      TModRef m _ -> Right $ modRefTy m
 {-# INLINE typeof #-}
+
+-- | Populate 'TyModule' using a 'ModRef'
+modRefTy :: ModRef -> Type (Term a)
+modRefTy (ModRef _mn is _) = TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing def) def)) is
 
 -- | Return string type description.
 typeof' :: Pretty a => Term a -> Text
@@ -1251,6 +1319,7 @@ termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g &&
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && argEq d h
   where argEq = liftEq (liftEq termEq)
 termEq (TVar a _) (TVar b _) = a == b
+termEq (TModRef (ModRef am as _) _) (TModRef (ModRef bm bs _) _) = am == bm && as == bs
 termEq _ _ = False
 
 
@@ -1269,6 +1338,7 @@ makeLenses ''Object
 makeLenses ''BindPair
 makeLenses ''Step
 makeLenses ''ModuleHash
+makeLenses ''ModRef
 makePrisms ''Guard
 
 deriveEq1 ''Guard
@@ -1304,30 +1374,3 @@ deriveShow1 ''ModuleDef
 deriveShow1 ''Module
 deriveShow1 ''Governance
 deriveShow1 ''Step
-
--- | Demonstrate Term/Bound JSON marshalling with nested bound and free vars.
-_roundtripJSON :: String
-_roundtripJSON | r == (Success tmod) = show r
-               | otherwise = error ("Mismatch: " ++ show r ++ ", " ++ show tmod)
-  where
-    r = fromJSON v
-    v = toJSON tmod
-    tmod = TModule
-           (MDModule (Module "foo" (Governance (Right (tStr "hi")))
-                      def "" (ModuleHash pactInitialHash) HS.empty [] []))
-           (abstract (const (Just ()))
-            (toTList TyAny def
-             [tlet1]))
-           def
-    tlet1 = TBinding []
-           (abstract (\b -> if b == na then Just 0 else Nothing)
-            (toTList TyAny def
-             [(TVar na def),tlet2])) -- bound var + let
-           BindLet def
-    tlet2 = TBinding []
-           (abstract (\b -> if b == nb then Just 0 else Nothing)
-            (toTList TyAny def
-             [(TVar na def),(TVar nb def)])) -- free var + bound var
-           BindLet def
-    na = Name $ BareName "a" def
-    nb = Name $ BareName "b" def
