@@ -2790,7 +2790,7 @@ interfaces specified in the type.
    ...
 
    (defun foo (bar:module{baz})
-     (bar::quux 1.0 "hi") ;; derefs 'quux' on whatever module is passed in
+     (bar::quux 1 "hi") ;; derefs 'quux' on whatever module is passed in
      bar::ONE             ;; directly references interface const
    )
 
@@ -3441,7 +3441,7 @@ at run-time.
      )
    ...
    (defun foo (bar:module{baz})
-     (bar::quux 1.0 "hi") ;; invokes 'quux' on whatever module is passed in
+     (bar::quux 1 "hi") ;; invokes 'quux' on whatever module is passed in
      bar::ONE             ;; directly references interface const
    )
 
