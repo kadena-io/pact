@@ -1211,6 +1211,7 @@ Namespaces are defined using [define-namespace](#define-namespace). Namespaces a
 - [models](pact-properties.html)
 - [capabilities](#caps)
 - [imports](#use)
+- [implements](#implements)
 
 When a module is declared, all references to native functions, interfaces, or definitions from other modules are resolved. Resolution failure results in transaction rollback.
 
@@ -2164,6 +2165,61 @@ Declaring models shares the same syntax with modules:
 )
 ```
 
+Module References {#modrefs}
+---
+
+Pact 3.7 gains a form of _genericism_ with _module references_. This is motivated by the desire to interoperate between
+modules that implement a common interface, and to be able to treat the indicated module as a data value to gain
+_polymorphism_ across modules.
+
+Modules and interfaces thus need to be referenced directly, which is simply accomplished by issuing their name in code.
+
+```lisp
+(module foo 'k
+  (defun bar () 0))
+
+(namespace ns)
+
+(interface bar
+  (defun quux:string ()))
+
+(module zzz 'k
+  (implements bar)
+  (defun quux:string () "zzz"))
+
+foo ;; module reference to 'foo', of type 'module'
+ns.bar ;; module reference to `bar` interface, also of type 'module'
+ns.zzz ;; module reference to `zzz` module, of type 'module{ns.bar}'
+```
+
+Using a module reference in a function is accomplished by specifying the type of the module reference argument,
+and using the [dereference operator](#deref) `::` to invoke a member function of the interfaces specified in the type.
+
+```lisp
+(interface baz
+  (defun quux:bool (a:integer b:string))
+  (defconst ONE 1)
+  )
+(module impl 'k
+  (implements baz)
+  (defun quux:bool (a:integer b:string)
+    (> (length b) a))
+  )
+
+...
+
+(defun foo (bar:module{baz})
+  (bar::quux 1 "hi") ;; derefs 'quux' on whatever module is passed in
+  bar::ONE             ;; directly references interface const
+)
+
+...
+
+(foo impl) ;; 'impl' references the module defined above, of type 'module{baz}'
+```
+
+Module references can be used as normal pact values, which includes storage in the database.
+
 
 
 Computational Model {#computation}
@@ -2251,14 +2307,6 @@ signatures can harm readability. However types can help document an API, so this
 
 ### Control Flow {#controlflow}
 Pact supports conditionals via [if](pact-functions.html#if), bounded looping, and of course function application.
-
-#### "If" considered harmful {#evilif}
-Consider avoiding `if` wherever possible: every branch makes code harder to understand and more
-prone to bugs. The best practice is to put "what am I doing" code in the front-end, and "validate
-this transaction which I intend to succeed" code in the smart contract.
-
-Pact's original design left out `if` altogether (and looping), but it was decided that users should
-be able to judiciously use these features as necessary.
 
 #### Use enforce {#use-the-enforce-luke}
 "If" should never be used to enforce business logic invariants: instead, [enforce](pact-functions.html#enforce) is
@@ -2612,6 +2660,7 @@ a type literal or user type specification.
 - `list`, or `[type]` to specify the list type
 - `object`, which can be further typed with a schema
 - `table`, which can be further typed with a schema
+- `module`, which must be further typed with required interfaces.
 
 ### Schema type literals
 
@@ -2620,6 +2669,33 @@ A schema defined with [defschema](#defschema) is referenced by name enclosed in 
 ```lisp
 table:{accounts}
 object:{person}
+```
+
+### Module type literals
+
+[Module references](#modrefs) are specified by the interfaces they demand as a comma-delimited list.
+
+```
+module:{fungible-v2,user.votable}
+```
+
+
+Dereference operator {#deref}
+---
+
+The dereference operator `::` allows a member of an interface specified in the type of a
+[module reference](#modrefs) to be invoked at run-time.
+
+```lisp
+(interface baz
+  (defun quux:bool (a:integer b:string))
+  (defconst ONE 1)
+  )
+...
+(defun foo (bar:module{baz})
+  (bar::quux 1 "hi") ;; invokes 'quux' on whatever module is passed in
+  bar::ONE             ;; directly references interface const
+)
 ```
 
 ### What can be typed
@@ -2972,6 +3048,20 @@ BODY is composed of definitions that will be scoped in the module. Valid product
       (update accounts to { "balance": (+ tbal amount) }))))
 )
 ```
+
+### implements {#implements}
+```
+(implements INTERFACE)
+```
+
+Specify that containing module _implements_ interface INTERFACE. This requires the module to implement
+all functions, pacts, and capabilities specified in INTERFACE with identical signatures (same argument
+names and declared types).
+
+Note that [models](pact-properties.html) declared for the implemented interface and its members will be
+appended to whatever models are declared within the implementing module.
+
+A module thus specified can be used as a [module reference](#modrefs) for the specified interface(s).
 
 Expressions {#expression}
 ---
