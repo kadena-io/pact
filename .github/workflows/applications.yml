@@ -90,8 +90,8 @@ jobs:
       shell: bash
       run: |
         mkdir -p /c/tools/msys64/mingw64/lib
-        choco install -r -y cabal --version 3.2.0.0
-        choco install -r -y ghc --version ${{ matrix.ghc }}
+        choco install -r -y cabal --version 3.2.0.0 --allow-downgrade
+        choco install -r -y ghc --version ${{ matrix.ghc }} --allow-downgrade
     - name: Set GHC and Cabal version (ubuntu, macOS)
       if: "!contains(matrix.os, 'windows')"
       uses: actions/setup-haskell@v1
