@@ -77,6 +77,7 @@ module Pact.Types.Term
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
+   canUnifyWith,
    prettyTypeTerm,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
@@ -1321,6 +1322,12 @@ termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && a
 termEq (TVar a _) (TVar b _) = a == b
 termEq (TModRef (ModRef am as _) _) (TModRef (ModRef bm bs _) _) = am == bm && as == bs
 termEq _ _ = False
+
+-- | Workhorse runtime typechecker on `Type (Term n)` to specialize
+-- 'unifiesWith' on Term/'termEq'.
+-- First argument is spec, second is value.
+canUnifyWith :: Eq n => Type (Term n) -> Type (Term n) -> Bool
+canUnifyWith = unifiesWith termEq
 
 
 makeLenses ''Term
