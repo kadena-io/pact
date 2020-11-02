@@ -308,6 +308,12 @@ instance Show PrivateKeyBS where
 
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic)
+instance ToJSON SignatureBS where
+  toJSON (SigBS p) = toB16JSON p
+instance FromJSON SignatureBS where
+  parseJSON = withText "SignatureBS" $ \s -> do
+    s' <- parseB16Text s
+    return $ SigBS s'
 
 
 
