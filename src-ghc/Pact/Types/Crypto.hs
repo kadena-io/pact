@@ -56,6 +56,7 @@ import qualified Data.Text.Encoding as T
 
 import Data.Aeson                        as A
 import Data.Aeson.Types                  as A
+import Data.Hashable
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
 
@@ -277,7 +278,7 @@ instance Show SomeKeyPair where
 
 
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Hashable)
 instance ToJSON PublicKeyBS where
   toJSON (PubBS p) = toB16JSON p
 instance FromJSON PublicKeyBS where
@@ -299,7 +300,7 @@ instance FromJSONKey PublicKeyBS where
 
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Hashable)
 instance ToJSON PrivateKeyBS where
   toJSON (PrivBS p) = toB16JSON p
 instance FromJSON PrivateKeyBS where
@@ -314,7 +315,7 @@ instance Show PrivateKeyBS where
   show (PrivBS b) = T.unpack $ toB16Text b
 
 newtype SignatureBS = SigBS ByteString
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Show, Generic, Hashable)
 instance ToJSON SignatureBS where
   toJSON (SigBS p) = toB16JSON p
 instance FromJSON SignatureBS where
