@@ -59,11 +59,13 @@ import Data.Aeson.Types                  as A
 import Data.Hashable
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
+import Data.Swagger (ToSchema(..))
 
 
 import Pact.Types.Util
 import Pact.Types.Hash
 import Pact.Types.Scheme               as ST
+import Pact.Types.Swagger
 import qualified Pact.Types.ECDSA      as ECDSA
 
 #ifdef CRYPTONITE_ED25519
@@ -297,6 +299,8 @@ instance ToJSONKey PublicKeyBS where
 instance FromJSONKey PublicKeyBS where
     fromJSONKey = FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
     {-# INLINE fromJSONKey #-}
+instance ToSchema PublicKeyBS where
+  declareNamedSchema = declareGenericString
 
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
@@ -313,6 +317,8 @@ instance IsString PrivateKeyBS where
     Right b -> PrivBS b
 instance Show PrivateKeyBS where
   show (PrivBS b) = T.unpack $ toB16Text b
+instance ToSchema PrivateKeyBS where
+  declareNamedSchema = declareGenericString
 
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic, Hashable)
@@ -322,6 +328,8 @@ instance FromJSON SignatureBS where
   parseJSON = withText "SignatureBS" $ \s -> do
     s' <- parseB16Text s
     return $ SigBS s'
+instance ToSchema SignatureBS where
+  declareNamedSchema = declareGenericString
 
 
 
