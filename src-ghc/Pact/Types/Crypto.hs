@@ -59,7 +59,7 @@ import Data.Aeson.Types                  as A
 import Data.Hashable
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
-import Data.Swagger (ToSchema(..))
+import Data.Swagger()
 
 
 import Pact.Types.Util
