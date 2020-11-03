@@ -631,6 +631,15 @@
  "auto managed succeeds"
  true
  (doA "auto-a"))
+
+(expect
+ "event emitted"
+ [ {"module-hash": "tamOeF6_B0tR-uIFfVewUwmea3Z7cqRypPfTPwrA_zA"
+    ,"name": "auto-caps-mod.CAP_A"
+    ,"params": ["auto-a"]
+    }]
+ (env-events true))
+
 (expect-failure
  "auto managed fails after first time"
  "Capability already fired"
