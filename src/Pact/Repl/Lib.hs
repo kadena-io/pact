@@ -222,6 +222,13 @@ replDefs = ("Repl",
         ("ns-policy-fun",TyFun $ funType' tTyBool [("ns",tTyString),("ns-admin",tTyGuard Nothing)])])
       [LitExample "(env-namespace-policy (my-ns-policy-fun))"]
       "Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN."
+     ,defZRNative "env-events" envEvents
+      (funType (TyList (tTyObject TyAny)) [("clear",tTyBool)])
+      [LitExample "(env-events true)"]
+      ("Retreive any accumulated events and optionally clear event state. " <>
+       "Object returned has fields 'name' (fully-qualified event name), " <>
+       "'params' (event parameters), 'module-hash' (hash of emitting module).")
+
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -690,3 +697,14 @@ envNamespacePolicy i as@[ar,TApp app _] = reduce ar >>= \ar' -> case ar' of
   where
     toQName Def{..} = QualifiedName _dModule (asString _dDefName) _dInfo
 envNamespacePolicy i as = argsError' i as
+
+
+envEvents :: RNativeFun LibState
+envEvents _i [TLiteral (LBool clear) _] = do
+  es <- use evalEvents
+  when clear $ evalEvents .= []
+  return $ toTList TyAny def $ (`map` es) $ \PactEvent{..} -> toTObject TyAny def $
+    [("name",toTerm (renderCompactText _eventModule <> "." <> _eventName))
+    ,("params",toTList TyAny def $ map fromPactValue _eventParams)
+    ,("module-hash",toTerm $ asString _eventModuleHash)]
+envEvents i as = argsError i as
