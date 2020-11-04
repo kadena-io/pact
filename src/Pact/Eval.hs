@@ -545,6 +545,7 @@ solveConstraint ifn info refName (Ref t) evalMap = do
       -- interface explicit: match name+arg
       (Just a,Just b) -> getDefName a == getDefName b
       (Just _,Nothing) -> False
+    defMetaEq a b = a == b
     getDefName (an,TVar (Ref (TDef Def {..} _)) _) = Just (_dDefName,an)
     getDefName _ = Nothing
 

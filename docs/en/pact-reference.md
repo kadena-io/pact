@@ -419,7 +419,7 @@ children:
 ###### `"events"`
 _type:_ **array ([Pact Event](#pact-event)** `optional`
 
-Includes events that were emitted during the course of the transaction. If events
+Includes [events](#pact-event) that were emitted during the course of the transaction. If events
 are empty they are not included in the JSON.
 
 
@@ -1560,7 +1560,7 @@ pact> (more-hello 3)
 
 ```
 
-Guards and Capabilities {#caps}
+Guards, Capabilities and Events {#caps}
 ---
 
 Pact 3.0 introduces powerful new concepts to allow programmers to express and implement authorization schemes correctly and easily:
@@ -1755,13 +1755,6 @@ In the following example, the capability will have "one-shot" automatic manageme
   (validate-member member))
 ```
 
-#### Managed capabilities and Events
-Upon acquisition, managed capabilities emit ["Pact Events"](#pact-event) in the output for the granted
-capability (not the installed parameterization but the actual managed value). As such, managed capabilities
-represent "facts" that can be proven via SPV in a public blockchain context.
-
-Events are planned to become a general-purpose mechanism but as of Pact 3.6 are only emitted by managed
-capabilities.
 
 
 ### Guards vs Capabilities
@@ -1984,6 +1977,44 @@ The following example shows how a "hash timelock" guard can be made, to implemen
       (enforce (> (at "block-time" (chain-data)) timeout) "Timeout not passed"))
       ]))
 ```
+
+### Events
+
+Pact 3.7 introduces [events](#pact-event) which are emitted in the course of a transaction and included in
+the transaction receipt to allow for monitoring and proving via SPV that a particular event transpired.
+
+In Pact, events are modeled as capabilities, for the following reasons:
+- Capabilities already have the right shape for an event, which is essentially arbitrary data
+published under a topic or name. With capabilities, the capability name is the topic, and the
+arguments are the data.
+- The acquisition of managed capabilities are a bona-fide event. Events complete the managed
+lifecycle, where you might install/approve a capability of some quantity on the way in, but
+not necessarily see what quantity was used. With events, the output of the actually acquired
+capability is present in the receipt.
+- Capabilities are protected such that they can only be acquired in module code, which is appropriate
+as well for events.
+
+#### The @event metadata tag
+Any capability can cause events to be emitted upon acquisition by using the `@event` metadata tag.
+
+```lisp
+(defcap BURN(qty:decimal)
+  @event
+  ...
+)
+```
+`@event` cannot be used alongside `@managed`, because ...
+
+#### Managed capabilities are automatically eventing
+
+Managed capabilites emit events automatically with the parameters specified in acquisition (as
+opposed to install). From an eventing point of view, managed capabilities are those capabilities
+that can only "happen once". Whereas, a non-managed, eventing capability can fire events an arbitrary
+amount of times.
+
+#### Testing for events
+
+Use [`env-events`](#env-events) to test for emitted events in repl scripts.
 
 Generalized Module Governance {#module-governance}
 ---
