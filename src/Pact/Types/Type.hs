@@ -52,7 +52,7 @@ module Pact.Types.Type
   , mkSchemaVar
   , isAnyTy
   , isVarTy
-  , canUnifyWith
+  , unifiesWith
   -- * String representations
   , tyInteger
   , tyDecimal
@@ -380,27 +380,28 @@ isVarTy TyVar {} = True
 isVarTy _ = False
 
 -- | Used by runtime typechecking to unify a specification with a value,
--- 'a canUnifyWith b' means 'a' "can represent/contains" 'b'.
+-- 'a unifiesWith b' means 'a' "can represent/contains" 'b'.
 -- In use, 'a' is the spec, and 'b' is the value type being unified with 'a'.
-canUnifyWith :: Eq n => Type n -> Type n -> Bool
-canUnifyWith a b | a == b = True
-canUnifyWith TyAny _ = True
-canUnifyWith _ TyAny = False
-canUnifyWith (TyVar (SchemaVar _)) TyUser {} = True
-canUnifyWith (TyVar SchemaVar {}) (TyVar SchemaVar {}) = True
-canUnifyWith (TyVar (TypeVar _ ac)) (TyVar (TypeVar _ bc)) = all (`elem` ac) bc
-canUnifyWith (TyVar (TypeVar _ cs)) b = null cs || b `elem` cs
-canUnifyWith (TyList a) (TyList b) = a `canUnifyWith` b
-canUnifyWith (TySchema _ aTy aP) (TySchema _ bTy bP)
-  = aTy `canUnifyWith` bTy && bP `isSubPartial` aP
-canUnifyWith (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
+-- First argument is 'Eq1' predicate.
+unifiesWith :: (n -> n -> Bool) -> Type n -> Type n -> Bool
+unifiesWith f a b | liftEq f a b = True
+unifiesWith _ TyAny _ = True
+unifiesWith _ _ TyAny = False
+unifiesWith _ (TyVar (SchemaVar _)) TyUser {} = True
+unifiesWith _ (TyVar SchemaVar {}) (TyVar SchemaVar {}) = True
+unifiesWith f (TyVar (TypeVar _ ac)) (TyVar (TypeVar _ bc)) = all (\b -> elem1 f b ac) bc
+unifiesWith f (TyVar (TypeVar _ cs)) b = null cs || elem1 f b cs
+unifiesWith f (TyList a) (TyList b) = unifiesWith f a b
+unifiesWith f (TySchema _ aTy aP) (TySchema _ bTy bP)
+  = unifiesWith f aTy bTy && bP `isSubPartial` aP
+unifiesWith _ (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
   (Nothing,Just _) -> True
   (Just _,Nothing) -> True
   _ -> a == b
-canUnifyWith (TyModule a) (TyModule b) =
-  liftEq (\x y -> all (`elem` y) x) a b -- not very useful without `termEq` :(
-canUnifyWith _ _ = False
-{-# INLINE canUnifyWith #-}
+unifiesWith f (TyModule a) (TyModule b) =
+  liftEq (\x y -> all (\xe -> elem' f xe y) x) a b
+unifiesWith _ _ _ = False
+{-# INLINE unifiesWith #-}
 
 -- | @a `isSubPartial` b@ means that @a <= b@ in the lattice given by
 -- @SchemaPartial@, ie, that @a@ is smaller than @b@.
@@ -411,7 +412,12 @@ isSubPartial AnySubschema _ = True
 isSubPartial _ AnySubschema = False
 isSubPartial (PartialSchema a) (PartialSchema b) = a `isSubsetOf` b
 
+elem1 :: (Foldable t, Eq1 f) =>
+         (a -> a -> Bool) -> f a -> t (f a) -> Bool
+elem1 f = elem' (liftEq f)
 
+elem' :: Foldable t => (a -> a -> Bool) -> a -> t a -> Bool
+elem' f = any . f
 
 
 makeLenses ''Type

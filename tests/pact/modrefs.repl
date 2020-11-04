@@ -113,3 +113,15 @@
 (write-mod-ref "a" implA)
 (expect "roundtrip succeeds" implA
         (read-mod-ref "a"))
+
+;; TODO move this test to tc.repl when static TC supports modrefs
+(module test3 G
+  (defcap G () true)
+  (defschema s a:integer)
+  (defun f (refs:[module{ifaceA}])
+    1))
+
+(expect
+ "runtime tc list of modrefs succeeds"
+ 1
+ (f [implA ns.implAB]))
