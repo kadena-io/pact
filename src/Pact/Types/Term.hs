@@ -880,9 +880,7 @@ data ModRef = ModRef
 instance NFData ModRef
 instance HasInfo ModRef where getInfo = _modRefInfo
 instance Pretty ModRef where
-  pretty (ModRef mn sm _i) = case sm of
-    Just is -> pretty mn <> commaBraces' is
-    Nothing -> pretty mn
+  pretty (ModRef mn _sm _i) = pretty mn
 instance ToJSON ModRef where toJSON = lensyToJSON 4
 instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
