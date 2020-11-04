@@ -105,4 +105,4 @@ emitEvent i qn@QualifiedName{..} params = unlessExecutionFlagSet FlagDisablePact
   unless (_mName callMod == _qnQual) $ evalError' i $
     "emitEvent: event '" <> pretty qn <>
     "' does not match emitting module: " <> pretty (_mName callMod)
-  evalEvents %= (PactEvent _qnName params _qnQual (_mHash callMod):)
+  evalEvents %= (++ [PactEvent _qnName params _qnQual (_mHash callMod)])

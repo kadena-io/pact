@@ -634,7 +634,7 @@
 
 (expect
  "event emitted"
- [ {"module-hash": "tamOeF6_B0tR-uIFfVewUwmea3Z7cqRypPfTPwrA_zA"
+ [ {"module-hash": (at 'hash (describe-module 'auto-caps-mod))
     ,"name": "auto-caps-mod.CAP_A"
     ,"params": ["auto-a"]
     }]
@@ -653,6 +653,18 @@
  "user managed unspecified succeeds [1]"
  true
  (doB "auto-b" 1))
+(expect
+ "events in order"
+ [ {"module-hash": (at 'hash (describe-module 'auto-caps-mod))
+    ,"name": "auto-caps-mod.CAP_B"
+    ,"params": ["auto-b" 2]
+    },
+   {"module-hash": (at 'hash (describe-module 'auto-caps-mod))
+    ,"name": "auto-caps-mod.CAP_B"
+    ,"params": ["auto-b" 1]
+    }
+   ]
+ (env-events true))
 (expect-failure
  "user managed unspecified fails"
  "all done"
