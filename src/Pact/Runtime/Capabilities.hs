@@ -126,8 +126,6 @@ evalUserCapability i af scope cap cdef test = go scope
           evalCapabilities . capManaged %= S.insert mc
           return (NewlyInstalled mc)
         mkMC = case _dDefMeta cdef of
-          Nothing -> evalError' i $
-            "Installing managed capability without @managed metadata"
           Just (DMDefcap (DefcapManaged dcm)) -> case dcm of
             Nothing -> return $!
               ManagedCapability cs (_csCap cs) (Left (AutoManagedCap True))
@@ -140,17 +138,19 @@ evalUserCapability i af scope cap cdef test = go scope
                       Right $ UserManagedCap v idx argName d
                   _ -> evalError' di $ "Capability manager ref must be defun"
                 t -> evalError' t $ "Capability manager ref must be a function"
+          _ -> evalError' i $
+            "Installing managed capability without @managed metadata"
 
     -- Callstack: check if managed, in which case push/emit,
     -- otherwise push and test.
     evalStack = checkManaged i af cap cdef >>= \r -> case r of
-      Nothing -> push >> test
+      Nothing -> push >> test >> emitMaybe
       Just composed -> emitCap >> pushSlot (CapSlot scope cap composed)
 
     -- Composed: check if managed, in which case install onto head/emit,
     -- otherwise push, test, pop and install onto head
     evalComposed = checkManaged i af cap cdef >>= \r -> case r of
-      Nothing -> push >> test >> popCapStack installComposed
+      Nothing -> push >> test >> emitMaybe >> popCapStack installComposed
       Just composed -> emitCap >> installComposed (CapSlot scope cap composed)
 
     installComposed c =
@@ -159,6 +159,9 @@ evalUserCapability i af scope cap cdef test = go scope
     push = pushSlot (CapSlot scope cap [])
 
     emitCap = emitEvent i (_scName cap) (_scArgs cap)
+
+    emitMaybe =
+      when (_dDefMeta cdef == Just (DMDefcap DefcapEvent)) emitCap
 
     pushSlot s = evalCapabilities . capStack %= (s:)
 
@@ -186,10 +189,12 @@ checkManaged
   -> Def Ref
   -> Eval e (Maybe [UserCapability])
 checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef of
-  -- not managed: noop
-  Nothing -> return Nothing
   -- managed: go
-  Just (DMDefcap dcm) -> use (evalCapabilities . capManaged) >>= go dcm . S.toList
+  Just (DMDefcap dcm@DefcapManaged {}) ->
+    use (evalCapabilities . capManaged) >>= go dcm . S.toList
+  -- otherwise noop
+  _ -> return Nothing
+
   where
     -- go: main loop over installed managed caps set
     -- empty case: attempt lazy install and test
@@ -229,6 +234,7 @@ checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef 
     getStatic (DefcapManaged dcm) c = case dcm of
       Nothing -> return c
       Just (argName,_) -> view _2 <$> defCapMetaParts c argName cdef
+    getStatic DefcapEvent c = return c
 
     -- check sig and autonomous caps for match
     -- to install.

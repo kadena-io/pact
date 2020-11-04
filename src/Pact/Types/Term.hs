@@ -625,10 +625,13 @@ moduleDefMeta (MDModule m) = _mMeta m
 moduleDefMeta (MDInterface m) = _interfaceMeta m
 
 -- | Metadata specific to Defcaps.
-data DefcapMeta n = DefcapManaged
+data DefcapMeta n =
+  DefcapManaged
   { _dcManaged :: Maybe (Text,n)
     -- ^ "Auto" managed or user-managed by (param,function)
-  }
+  } |
+  DefcapEvent
+    -- ^ Eventing defcap.
   deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
 instance NFData n => NFData (DefcapMeta n)
 instance Pretty n => Pretty (DefcapMeta n) where
@@ -637,14 +640,16 @@ instance Pretty n => Pretty (DefcapMeta n) where
     Just (p,f) -> tag <> " " <> pretty p <> " " <> pretty f
     where
       tag = "@managed"
+  pretty DefcapEvent = "@event"
 instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
   toJSON (DefcapManaged (Just (p,f))) = object
     [ "managerFun" .= f
     , "managedParam" .= p
     ]
   toJSON (DefcapManaged Nothing) = object [ "managerAuto" .= True ]
+  toJSON DefcapEvent = "event"
 instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
-  parseJSON v = parseUser v <|> parseAuto v
+  parseJSON v = parseUser v <|> parseAuto v <|> parseEvent v
     where
       parseUser = withObject "DefcapMeta" $ \o -> (DefcapManaged . Just) <$>
         ((,) <$> o .: "managedParam" <*> o .: "managerFun")
@@ -652,6 +657,9 @@ instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
         b <- o .: "managerAuto"
         if b then pure (DefcapManaged Nothing)
         else fail "Expected True"
+      parseEvent = withText "DefcapMeta" $ \t ->
+        if t == "event" then pure DefcapEvent
+        else fail "Expected 'event'"
 
 -- | Def metadata specific to 'DefType'.
 -- Currently only specified for Defcap.

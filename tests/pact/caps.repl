@@ -700,3 +700,42 @@
   (create-user-guard
    (enforce-one-in-guard
     (create-user-guard (good))))))
+
+
+(env-events true) ;; clear events
+
+(module events G
+  (defcap G () true)
+  (defcap TOP (msg:string)
+    @event
+    (compose-capability (COMPOSED 1))
+    (compose-capability (MIDDLE)))
+
+  (defcap MIDDLE ()
+    (compose-capability (COMPOSED 1)) ;; shouldn't fire twice
+    (compose-capability (COMPOSED 2)) ;; should fire
+    )
+
+  (defcap COMPOSED (i:integer)
+    @event
+    true)
+
+  (defun go(msg:string)
+    (with-capability (TOP msg)
+      1))
+)
+
+(go "hi")
+(expect
+ "nested events test"
+ [ { "module-hash": (at 'hash (describe-module 'events))
+     , "name": "events.COMPOSED"
+     , "params": [1] }
+   { "module-hash": (at 'hash (describe-module 'events))
+     , "name": "events.COMPOSED"
+     , "params": [2] }
+   { "module-hash": (at 'hash (describe-module 'events))
+     , "name": "events.TOP"
+     , "params": ["hi"] }
+   ]
+ (env-events true))
