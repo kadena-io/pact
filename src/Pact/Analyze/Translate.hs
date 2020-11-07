@@ -1619,7 +1619,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     t1 <- translateNode b
     case (t0, t1) of
       (Some STime _, Some STime _) -> do
-        addWarning node $ UnsupportedNonFatal "diff-time: substituting true expression"
+        addWarning node $ UnsupportedNonFatal "diff-time: substituting 0.0"
         pure $ Some SDecimal $ Lit' 0.0
       _ -> failing $ "Pattern match failure"
   _ -> throwError' $ UnexpectedNode astNode
