@@ -181,9 +181,13 @@ replDefs = ("Repl",
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        []
        "Update gas model to charge constant RATE."
-     ,defZRNative "env-gasmodel" setGasModel (funType tTyString [("model",tTyString)])
-       []
-       "Update gas model to the model named MODEL."
+     ,defZRNative "env-gasmodel" setGasModel
+      (funType tTyString [("model",tTyString)] <>
+       funType tTyString [] <>
+       funType tTyString [("model",tTyString),("rate",tTyInteger)])
+      [ExecExample "(env-gasmodel)",ExecExample "(env-gasmodel 'table)",ExecExample "(env-gasmodel 'fixed 1)"]
+      ("Update or query current gas model. With just MODEL, \"table\" is supported; " <>
+       "with MODEL and RATE, 'fixed' is supported. With no args, output current model.")
      ,defZRNative "env-gaslog" gasLog (funType tTyString [])
        ["(env-gasmodel \"table\") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)"]
        "Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect."

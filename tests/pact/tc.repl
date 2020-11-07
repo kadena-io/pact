@@ -196,6 +196,8 @@
   (defun fails-guard-list ()
     (rtc-guard-list [USER_GUARD,1]))
 
+  (defun rtc-object-list (l:[object{schema-a}]) 1)
+
 )
 
 (create-table persons)
@@ -237,5 +239,11 @@
 
 (expect-failure
  "rtc fails on guard+non guard list"
- "expected [guard], found [*]"
+ "expected guard, found integer"
+ ;; "expected [guard], found [*]" <-- old error, will need compat check
  (rtc-guard-list [USER_GUARD,1]))
+
+(expect
+ "rtc object lists"
+ 1
+ (rtc-object-list (let ((a {'a:1}) (b {'a: 2})) [a b])))

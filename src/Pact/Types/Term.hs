@@ -77,6 +77,7 @@ module Pact.Types.Term
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
+   canUnifyWith,
    prettyTypeTerm,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,canEq,
@@ -624,10 +625,13 @@ moduleDefMeta (MDModule m) = _mMeta m
 moduleDefMeta (MDInterface m) = _interfaceMeta m
 
 -- | Metadata specific to Defcaps.
-data DefcapMeta n = DefcapManaged
+data DefcapMeta n =
+  DefcapManaged
   { _dcManaged :: Maybe (Text,n)
     -- ^ "Auto" managed or user-managed by (param,function)
-  }
+  } |
+  DefcapEvent
+    -- ^ Eventing defcap.
   deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
 instance NFData n => NFData (DefcapMeta n)
 instance Pretty n => Pretty (DefcapMeta n) where
@@ -636,14 +640,16 @@ instance Pretty n => Pretty (DefcapMeta n) where
     Just (p,f) -> tag <> " " <> pretty p <> " " <> pretty f
     where
       tag = "@managed"
+  pretty DefcapEvent = "@event"
 instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
   toJSON (DefcapManaged (Just (p,f))) = object
     [ "managerFun" .= f
     , "managedParam" .= p
     ]
   toJSON (DefcapManaged Nothing) = object [ "managerAuto" .= True ]
+  toJSON DefcapEvent = "event"
 instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
-  parseJSON v = parseUser v <|> parseAuto v
+  parseJSON v = parseUser v <|> parseAuto v <|> parseEvent v
     where
       parseUser = withObject "DefcapMeta" $ \o -> (DefcapManaged . Just) <$>
         ((,) <$> o .: "managedParam" <*> o .: "managerFun")
@@ -651,6 +657,9 @@ instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
         b <- o .: "managerAuto"
         if b then pure (DefcapManaged Nothing)
         else fail "Expected True"
+      parseEvent = withText "DefcapMeta" $ \t ->
+        if t == "event" then pure DefcapEvent
+        else fail "Expected 'event'"
 
 -- | Def metadata specific to 'DefType'.
 -- Currently only specified for Defcap.
@@ -879,9 +888,7 @@ data ModRef = ModRef
 instance NFData ModRef
 instance HasInfo ModRef where getInfo = _modRefInfo
 instance Pretty ModRef where
-  pretty (ModRef mn sm _i) = case sm of
-    Just is -> pretty mn <> commaBraces' is
-    Nothing -> pretty mn
+  pretty (ModRef mn _sm _i) = pretty mn
 instance ToJSON ModRef where toJSON = lensyToJSON 4
 instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
@@ -1321,6 +1328,12 @@ termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && a
 termEq (TVar a _) (TVar b _) = a == b
 termEq (TModRef (ModRef am as _) _) (TModRef (ModRef bm bs _) _) = am == bm && as == bs
 termEq _ _ = False
+
+-- | Workhorse runtime typechecker on `Type (Term n)` to specialize
+-- 'unifiesWith' on Term/'termEq'.
+-- First argument is spec, second is value.
+canUnifyWith :: Eq n => Type (Term n) -> Type (Term n) -> Bool
+canUnifyWith = unifiesWith termEq
 
 
 makeLenses ''Term
