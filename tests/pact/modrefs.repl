@@ -128,6 +128,7 @@
 (commit-tx)
 (begin-tx)
 
+
 (interface i
   (defun f:bool ())
   (defcap CAP:bool ())
@@ -139,7 +140,7 @@
   (implements i)
   (defun f:bool () true)
 
-  (defcap CAP:bool () true)
+  (defcap CAP:bool () (enforce true "success"))
 )
 
 (module implD g
@@ -148,7 +149,7 @@
   (implements i)
   (defun f:bool () true)
 
-  (defcap CAP:bool () false)
+  (defcap CAP:bool () (enforce false "failure"))
 )
 
 (commit-tx)
@@ -157,19 +158,42 @@
 (module test-caps g
   (defcap g () true)
 
-  (defun test (m:module{i})
+  (defun test1 (m:module{i})
     (with-capability (m::CAP)
       true)
     )
 
+  (defun test2 (m:module{i})
+    (require-capability (m::CAP))
+    true)
+
 )
+
+; implC tests
 
 (expect
   "module reference to successful cap works properly in with-capability"
   true
-  (test-caps.test implC))
+  (test-caps.test1 implC))
+
+(expect-failure
+  "module reference to unscoped cap fails - implC"
+  (test-caps.test2 implC))
+
+; enscope implC.CAP
+(test-capability (implC.CAP))
+
+(expect
+  "module reference to scoped, successful cap succeeds - implC"
+  true
+  (test-caps.test2 implC))
+
+; implD tests
 
 (expect-failure
   "module reference to failing cap works properly in with-capability"
-  ""
-  (test-caps.test implD))
+  (test-caps.test1 implD))
+
+(expect-failure
+  "module reference to unscoped cap fails - implD"
+  (test-caps.test2 implD))
