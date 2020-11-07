@@ -1,9 +1,4 @@
-packages:
-    pact.cabal
-
-package pact
-
--- debug-info: True
+packages: .
 
 source-repository-package
     type: git
