@@ -175,7 +175,7 @@ pattern SquareList :: [Exp t] -> Exp t
 pattern SquareList elems <- Pact.EList (ListExp elems Brackets _i)
 
 pattern EAtom' :: Text -> Exp t
-pattern EAtom' name <- EAtom (AtomExp name [] _i)
+pattern EAtom' name <- EAtom (AtomExp name [] False _i)
 
 pattern ELiteral' :: Literal -> Exp t
 pattern ELiteral' lit <- ELiteral (LiteralExp lit _i)

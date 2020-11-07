@@ -1,0 +1,1 @@
+{"gas":0,"result":{"status":"success","data":1},"reqKey":"DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g","logs":"cqZ-6rAE2TTv8ZXj8EbwsR_eUOp_RquGGnt4nnc4ck4","events":[{"params":["Alice",10.1],"name":"CAP","module":{"namespace":null,"name":"events-test"},"moduleHash":"fBdyelQUFqIWDrvMFLe0_WJ6DpEpCsnAhBR2X7nd71U"}],"metaData":null,"continuation":null,"txId":null}

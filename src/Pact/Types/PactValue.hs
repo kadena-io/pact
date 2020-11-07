@@ -3,6 +3,7 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.PactValue
@@ -22,7 +23,11 @@ module Pact.Types.PactValue
   , toPactValue
   , toPactValueLenient
   , fromPactValue
-
+  , _PLiteral
+  , _PList
+  , _PGuard
+  , _PObject
+  , _PModRef
   -- | Helper functions for generating arbitrary pact values
   , PactValueGeneratorSize(..)
   , decreaseGenSize
@@ -36,6 +41,7 @@ module Pact.Types.PactValue
 
 import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
+import Control.Lens (makePrisms)
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
 import qualified Data.Map.Strict as M
@@ -104,6 +110,7 @@ data PactValue
   | PList (Vector PactValue)
   | PObject (ObjectMap PactValue)
   | PGuard (Guard PactValue)
+  | PModRef ModRef
   deriving (Eq,Show,Generic,Ord)
 
 instance Arbitrary PactValue where
@@ -116,6 +123,7 @@ instance ToJSON PactValue where
   toJSON (PObject o) = toJSON o
   toJSON (PList v) = toJSON v
   toJSON (PGuard x) = toJSON x
+  toJSON (PModRef m) = toJSON m
 
 
 instance FromJSON PactValue where
@@ -123,19 +131,22 @@ instance FromJSON PactValue where
     (PLiteral <$> parseJSON v) <|>
     (PList <$> parseJSON v) <|>
     (PGuard <$> parseJSON v) <|>
-    (PObject <$> parseJSON v)
+    (PObject <$> parseJSON v) <|>
+    (PModRef <$> parseJSON v)
 
 instance Pretty PactValue where
   pretty (PLiteral l) = pretty l
   pretty (PObject l) = pretty l
   pretty (PList l) = pretty (V.toList l)
   pretty (PGuard l) = pretty l
+  pretty (PModRef m) = pretty m
 
 instance SizeOf PactValue where
   sizeOf (PLiteral l) = (constructorCost 1) + (sizeOf l)
   sizeOf (PList v) = (constructorCost 1) + (sizeOf v)
   sizeOf (PObject o) = (constructorCost 1) + (sizeOf o)
   sizeOf (PGuard g) = (constructorCost 1) + (sizeOf g)
+  sizeOf (PModRef m) = (constructorCost 1) + (sizeOf m)
 
 
 -- | Strict conversion.
@@ -144,6 +155,7 @@ toPactValue (TLiteral l _) = pure $ PLiteral l
 toPactValue (TObject (Object o _ _ _) _) = PObject <$> traverse toPactValue o
 toPactValue (TList l _ _) = PList <$> V.mapM toPactValue l
 toPactValue (TGuard x _) = PGuard <$> traverse toPactValue x
+toPactValue (TModRef m _) = pure $ PModRef m
 toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
 
 fromPactValue :: PactValue -> Term Name
@@ -151,6 +163,7 @@ fromPactValue (PLiteral l) = TLiteral l def
 fromPactValue (PObject o) = TObject (Object (fmap fromPactValue o) TyAny def def) def
 fromPactValue (PList l) = TList (fmap fromPactValue l) TyAny def
 fromPactValue (PGuard x) = TGuard (fmap fromPactValue x) def
+fromPactValue (PModRef r) = TModRef r def
 
 -- | Lenient conversion, implying that conversion back won't necc. succeed.
 -- Integers are coerced to Decimal for simple representation.
@@ -160,3 +173,6 @@ toPactValueLenient t = case toPactValue t of
   Right (PLiteral (LInteger l)) -> PLiteral (LDecimal (fromIntegral l))
   Right v -> v
   Left _ -> PLiteral $ LString $ renderCompactText t
+
+
+makePrisms ''PactValue

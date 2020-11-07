@@ -1,0 +1,199 @@
+(begin-tx)
+
+;; root namespace iface
+
+(interface ifaceA
+  (defun opA1:bool (s:string))
+
+  )
+
+;; root namespace impl
+
+(module implA G
+  (defcap G () true)
+  (implements ifaceA)
+  (defun opA1:bool (s:string) true)
+  )
+
+;; namespace ns
+
+(define-namespace 'ns (sig-keyset) (sig-keyset))
+
+(namespace 'ns)
+
+;; ns namespace iface
+
+(interface ifaceB
+  (defun opB1:integer (s:string))
+  (defconst B_CONST 1)
+  )
+
+;; ns namespace impl
+
+(module implAB G
+  (defcap G () true)
+  (implements ifaceA)
+  (implements ifaceB)
+  (defun opA1:bool (s:string) false)
+  (defun opB1:integer (s:string) 0)
+  )
+
+(commit-tx)
+
+(begin-tx)
+
+(module test G
+  (defcap G () true)
+  (defun testAImpl (aImpl:module{ifaceA})
+    (aImpl::opA1 "hi")
+    )
+
+  (defun testBImpl (bImpl:module{ns.ifaceB})
+    (bImpl::opB1 "hey"))
+
+  (defun callTestAImpl ()
+    [(testAImpl ns.implAB)
+     (testAImpl implA)
+     ]
+    )
+
+  (defun test-const (bImpl:module{ns.ifaceB})
+    bImpl::B_CONST
+    )
+
+  )
+
+(commit-tx)
+(begin-tx)
+
+(namespace 'ns)
+
+(module test2 G
+  (defcap G () true)
+
+  (defun callTestAImpl ()
+    (let
+      ((a (test.testAImpl implA))
+       (b (test.testAImpl implAB)))
+
+      [a b]
+    )
+  )
+  )
+
+(commit-tx)
+(begin-tx)
+
+(expect "bare modref resolution succeeds"
+        true (test.testAImpl implA))
+(expect "ns modref resolution succeeds"
+        0 (test.testBImpl ns.implAB))
+(expect "namespaced modref resolution succeeds"
+        false (test.testAImpl ns.implAB))
+(expect "in-module modref call succeeds"
+        [false,true] (test.callTestAImpl))
+(expect "in-module qual dynamic, implicit modref ns call succeeds"
+        [true,false] (ns.test2.callTestAImpl))
+
+(expect "const ref succeeds"
+        1 (test.test-const ns.implAB))
+
+;; test mod-ref persistence
+(module test-db G
+  (defcap G () true)
+  (defschema sch mod:module{ifaceA})
+  (deftable tbl:{sch})
+  (defun write-mod-ref (key:string mod:module{ifaceA})
+    (write tbl key {'mod: mod}))
+  (defun read-mod-ref (key:string)
+    (at 'mod (read tbl key))))
+(create-table tbl)
+
+(write-mod-ref "a" implA)
+(expect "roundtrip succeeds" implA
+        (read-mod-ref "a"))
+
+;; TODO move this test to tc.repl when static TC supports modrefs
+(module test3 G
+  (defcap G () true)
+  (defschema s a:integer)
+  (defun f (refs:[module{ifaceA}])
+    1))
+
+(expect
+ "runtime tc list of modrefs succeeds"
+ 1
+ (f [implA ns.implAB]))
+
+(commit-tx)
+(begin-tx)
+
+
+(interface i
+  (defun f:bool ())
+  (defcap CAP:bool ())
+)
+
+(module implC g
+  (defcap g () true)
+
+  (implements i)
+  (defun f:bool () true)
+
+  (defcap CAP:bool () (enforce true "success"))
+)
+
+(module implD g
+  (defcap g () true)
+
+  (implements i)
+  (defun f:bool () true)
+
+  (defcap CAP:bool () (enforce false "failure"))
+)
+
+(commit-tx)
+(begin-tx)
+
+(module test-caps g
+  (defcap g () true)
+
+  (defun test1 (m:module{i})
+    (with-capability (m::CAP)
+      true)
+    )
+
+  (defun test2 (m:module{i})
+    (require-capability (m::CAP))
+    true)
+
+)
+
+; implC tests
+
+(expect
+  "module reference to successful cap works properly in with-capability"
+  true
+  (test-caps.test1 implC))
+
+(expect-failure
+  "module reference to unscoped cap fails - implC"
+  (test-caps.test2 implC))
+
+; enscope implC.CAP
+(test-capability (implC.CAP))
+
+(expect
+  "module reference to scoped, successful cap succeeds - implC"
+  true
+  (test-caps.test2 implC))
+
+; implD tests
+
+(expect-failure
+  "module reference to failing cap works properly in with-capability"
+  (test-caps.test1 implD))
+
+(expect-failure
+  "module reference to unscoped cap fails - implD"
+  (test-caps.test2 implD))

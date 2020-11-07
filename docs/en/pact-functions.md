@@ -393,7 +393,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.5.2"
+"3.7"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1640,6 +1640,17 @@ Set environment confidential ENTITY id, or unset with no argument.
 ```
 
 
+### env-events {#env-events}
+
+*clear*&nbsp;`bool` *&rarr;*&nbsp;`[object:*]`
+
+
+Retreive any accumulated events and optionally clear event state. Object returned has fields 'name' (fully-qualified event name), 'params' (event parameters), 'module-hash' (hash of emitting module).
+```lisp
+(env-events true)
+```
+
+
 ### env-exec-config {#env-exec-config}
 
 *flags*&nbsp;`[string]` *&rarr;*&nbsp;`[string]`
@@ -1647,7 +1658,7 @@ Set environment confidential ENTITY id, or unset with no argument.
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePactEvents","OldReadOnlyBehavior","PreserveModuleNameBug","PreserveNsModuleInstallBug"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePactEvents","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
@@ -1692,8 +1703,20 @@ pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) 
 
 *model*&nbsp;`string` *&rarr;*&nbsp;`string`
 
+ *&rarr;*&nbsp;`string`
 
-Update gas model to the model named MODEL.
+*model*&nbsp;`string` *rate*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Update or query current gas model. With just MODEL, "table" is supported; with MODEL and RATE, 'fixed' is supported. With no args, output current model.
+```lisp
+pact> (env-gasmodel)
+"Current gas model is 'fixed 0': constant rate gas model with fixed rate 0"
+pact> (env-gasmodel 'table)
+"Set gas model to table-based cost model"
+pact> (env-gasmodel 'fixed 1)
+"Set gas model to constant rate gas model with fixed rate 1"
+```
 
 
 ### env-gasprice {#env-gasprice}

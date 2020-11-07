@@ -248,7 +248,7 @@ _go = do
   addNewKeys [Command "" [] initialHash]
   let rq = RequestKey pactInitialHash
       res = PactResult $ Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
-  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing res (Gas 0) Nothing Nothing Nothing)])
+  updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing res (Gas 0) Nothing Nothing Nothing [])])
   mv <- liftIO $ newEmptyMVar
   queryForResults (HashSet.singleton rq, mv)
   v <- liftIO $ takeMVar mv

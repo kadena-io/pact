@@ -181,9 +181,13 @@ replDefs = ("Repl",
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        []
        "Update gas model to charge constant RATE."
-     ,defZRNative "env-gasmodel" setGasModel (funType tTyString [("model",tTyString)])
-       []
-       "Update gas model to the model named MODEL."
+     ,defZRNative "env-gasmodel" setGasModel
+      (funType tTyString [("model",tTyString)] <>
+       funType tTyString [] <>
+       funType tTyString [("model",tTyString),("rate",tTyInteger)])
+      [ExecExample "(env-gasmodel)",ExecExample "(env-gasmodel 'table)",ExecExample "(env-gasmodel 'fixed 1)"]
+      ("Update or query current gas model. With just MODEL, \"table\" is supported; " <>
+       "with MODEL and RATE, 'fixed' is supported. With no args, output current model.")
      ,defZRNative "env-gaslog" gasLog (funType tTyString [])
        ["(env-gasmodel \"table\") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)"]
        "Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect."
@@ -222,6 +226,13 @@ replDefs = ("Repl",
         ("ns-policy-fun",TyFun $ funType' tTyBool [("ns",tTyString),("ns-admin",tTyGuard Nothing)])])
       [LitExample "(env-namespace-policy (my-ns-policy-fun))"]
       "Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN."
+     ,defZRNative "env-events" envEvents
+      (funType (TyList (tTyObject TyAny)) [("clear",tTyBool)])
+      [LitExample "(env-events true)"]
+      ("Retreive any accumulated events and optionally clear event state. " <>
+       "Object returned has fields 'name' (fully-qualified event name), " <>
+       "'params' (event parameters), 'module-hash' (hash of emitting module).")
+
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -690,3 +701,14 @@ envNamespacePolicy i as@[ar,TApp app _] = reduce ar >>= \ar' -> case ar' of
   where
     toQName Def{..} = QualifiedName _dModule (asString _dDefName) _dInfo
 envNamespacePolicy i as = argsError' i as
+
+
+envEvents :: RNativeFun LibState
+envEvents _i [TLiteral (LBool clear) _] = do
+  es <- use evalEvents
+  when clear $ evalEvents .= []
+  return $ toTList TyAny def $ (`map` es) $ \PactEvent{..} -> toTObject TyAny def $
+    [("name",toTerm (renderCompactText _eventModule <> "." <> _eventName))
+    ,("params",toTList TyAny def $ map fromPactValue _eventParams)
+    ,("module-hash",toTerm $ asString _eventModuleHash)]
+envEvents i as = argsError i as
