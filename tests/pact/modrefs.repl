@@ -98,8 +98,7 @@
 (expect "const ref succeeds"
         1 (test.test-const ns.implAB))
 
-
-
+;; test mod-ref persistence
 (module test-db G
   (defcap G () true)
   (defschema sch mod:module{ifaceA})
@@ -113,3 +112,52 @@
 (write-mod-ref "a" implA)
 (expect "roundtrip succeeds" implA
         (read-mod-ref "a"))
+
+(commit-tx)
+(begin-tx)
+
+(interface i
+  (defun f:bool ())
+  (defcap CAP:bool ())
+)
+
+(module implC g
+  (defcap g () true)
+
+  (implements i)
+  (defun f:bool () true)
+
+  (defcap CAP:bool () true)
+)
+
+(module implD g
+  (defcap g () true)
+
+  (implements i)
+  (defun f:bool () true)
+
+  (defcap CAP:bool () false)
+)
+
+(commit-tx)
+(begin-tx)
+
+(module test-caps g
+  (defcap g () true)
+
+  (defun test (m:module{i})
+    (with-capability (m::CAP)
+      true)
+    )
+
+)
+
+(expect
+  "module reference to successful cap works properly in with-capability"
+  true
+  (test-caps.test implC))
+
+(expect-failure
+  "module reference to failing cap works properly in with-capability"
+  ""
+  (test-caps.test implD))

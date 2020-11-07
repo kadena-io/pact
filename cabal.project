@@ -2,9 +2,8 @@ packages:
     pact.cabal
 
 package pact
-    tests: True
 
-debug-info: True
+-- debug-info: True
 
 source-repository-package
     type: git
