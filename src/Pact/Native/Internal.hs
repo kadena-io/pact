@@ -1,6 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -247,12 +248,19 @@ enforceYield fa y = case _yProvenance y of
 -- | Validate App of indicated DefType and return Def
 requireDefApp :: DefType -> App (Term Ref) -> Eval e (Def Ref)
 requireDefApp dt App{..} = case _appFun of
-  (TVar (Ref (TDef d@Def{..} _)) _)
-    | _dDefType == dt -> return d
-    | otherwise -> evalError _appInfo $ "Can only apply " <> pretty dt <>
-                            " here, found: " <> pretty _dDefType
+  (TVar (Ref (TDef d@Def{..} _)) _) -> matchDefTy d
+  (TVar (Ref (TDynamic tref tmem ti)) _) -> reduceDynamic tref tmem ti >>= \case
+    Left v -> evalError ti $ "requireDefApp: expected module member for dynamic: " <> pretty v
+    Right d -> matchDefTy d
   t -> evalError (_tInfo t) $ "def required: " <> pretty _appFun
-
+  where
+    matchDefTy d
+      | _dDefType d == dt = return d
+      | otherwise = evalError _appInfo
+        $ "Can only apply "
+        <> pretty dt
+        <> " here, found: "
+        <> pretty (_dDefType d)
 
 argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
 argsToParams i = mapM $ \arg -> case toPactValue arg of
