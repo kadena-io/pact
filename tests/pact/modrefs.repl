@@ -197,3 +197,25 @@
 (expect-failure
   "module reference to unscoped cap fails - implD"
   (test-caps.test2 implD))
+
+
+;; test modules in interfaces
+
+(interface modref-iface-def
+  (defun mid-impl:bool (a:string)))
+
+(interface modref-iface-ref
+  (defun mir-impl:bool (m:module{modref-iface-def} a:string)))
+
+(module modref-iface-impl G
+  (defcap G () true)
+  (implements modref-iface-def)
+  (implements modref-iface-ref)
+  (defun mid-impl:bool (a:string) (= a "hi"))
+  (defun mir-impl:bool (m:module{modref-iface-def} a:string)
+    (m::mid-impl a)))
+
+(expect
+ "exercise interface with modref impl"
+ true
+ (modref-iface-impl.mir-impl modref-iface-impl "hi"))
