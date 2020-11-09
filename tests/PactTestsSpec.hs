@@ -4,9 +4,13 @@ module PactTestsSpec (spec) where
 
 import Test.Hspec
 
+import Control.Concurrent
+import Control.Monad.State.Strict
+
 import Data.List
-import Data.Maybe
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import Data.Maybe
 import Data.Text (unpack)
 
 import Pact.Repl
@@ -15,8 +19,6 @@ import Pact.Types.Runtime
 
 import System.Directory
 import System.FilePath
-import Control.Monad
-import Control.Concurrent
 
 spec :: Spec
 spec = do
@@ -113,3 +115,9 @@ badErrors = M.fromList
   ]
   where
     pfx = ("tests/pact/bad/" ++)
+
+-- ghci utility to load a string and get the refmap
+_evalRefMap
+  :: String -> IO (HM.HashMap ModuleName (ModuleData Ref, Bool))
+_evalRefMap cmd = fmap (_rsLoadedModules . _evalRefs . _rEvalState . snd)
+  (initReplState Quiet Nothing >>= runStateT (evalRepl' cmd))
