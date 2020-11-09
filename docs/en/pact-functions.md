@@ -1626,6 +1626,18 @@ pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any"
 ```
 
 
+### env-enable-repl-natives {#env-enable-repl-natives}
+
+*enable*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Control whether REPL native functions are allowed in module code. When enabled, fixture functions like 'env-sigs' are allowed in module code.
+```lisp
+pact> (env-enable-repl-natives true)
+"Repl natives enabled"
+```
+
+
 ### env-entity {#env-entity}
 
  *&rarr;*&nbsp;`string`

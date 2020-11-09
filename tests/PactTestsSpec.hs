@@ -112,6 +112,8 @@ badErrors = M.fromList
    ,"Expected: qualified module name reference")
   ,(pfx "bad-modrefs-empty.repl"
    ,"Unexpected end of input")
+  ,(pfx "bad-repl-native.repl"
+   ,"module restore failed: Native lookup failed")
   ]
   where
     pfx = ("tests/pact/bad/" ++)
