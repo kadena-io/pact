@@ -232,7 +232,11 @@ replDefs = ("Repl",
       ("Retreive any accumulated events and optionally clear event state. " <>
        "Object returned has fields 'name' (fully-qualified event name), " <>
        "'params' (event parameters), 'module-hash' (hash of emitting module).")
-
+     ,defZRNative "env-enable-repl-natives" enableReplNatives
+      (funType tTyString [("enable",tTyBool)])
+      [ExecExample "(env-enable-repl-natives true)"]
+      ("Control whether REPL native functions are allowed in module code. " <>
+       "When enabled, fixture functions like 'env-sigs' are allowed in module code.")
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -712,3 +716,11 @@ envEvents _i [TLiteral (LBool clear) _] = do
     ,("params",toTList TyAny def $ map fromPactValue _eventParams)
     ,("module-hash",toTerm $ asString _eventModuleHash)]
 envEvents i as = argsError i as
+
+enableReplNatives :: RNativeFun LibState
+enableReplNatives _i [TLiteral (LBool enable) _] = do
+  let (msg,defs) | enable = ("enabled",nativeDefs <> moduleToMap replDefs)
+                 | otherwise = ("disabled",nativeDefs)
+  setenv ( eeRefStore . rsNatives ) defs
+  return $ tStr $ "Repl natives " <> msg
+enableReplNatives i as = argsError i as
