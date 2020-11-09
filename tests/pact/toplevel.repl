@@ -47,3 +47,11 @@
 (expect-failure "bad-pact-version" (bad-pact-version))
 (expect-failure "bad-list-modules" (bad-list-modules))
 (expect-failure "bad-enforce-pact-version" (bad-enforce-pact-version (pact-version)))
+
+(env-enable-repl-natives true)
+(module repl-natives 'k
+  (defun f () (env-sigs [{"bob",[]}])))
+(expect
+ "env-sigs in module"
+ "Setting transaction signatures/caps"
+ (f))
