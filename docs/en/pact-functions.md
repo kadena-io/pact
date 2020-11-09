@@ -393,7 +393,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.7"
+"3.6.0.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1921,4 +1921,16 @@ Typecheck MODULE, optionally enabling DEBUG output.
 
 
 Verify MODULE, checking that all properties hold.
+
+
+### with-applied-env {#with-applied-env}
+
+*exec*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Evaluate EXEC with any pending environment changes applied. Normally, environment changes must execute at top-level for the change to take effect. This allows scoped application of non-toplevel environment changes.
+```lisp
+pact> (let ((a 1)) (env-data { 'b: 1 }) (with-applied-env (+ a (read-integer 'b))))
+2
+```
 

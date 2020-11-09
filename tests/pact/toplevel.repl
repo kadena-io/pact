@@ -55,3 +55,17 @@
  "env-sigs in module"
  "Setting transaction signatures/caps"
  (f))
+
+(env-data { 'b: "hello"})
+(expect
+ "with-applied-env: env-data takes immediate, scoped effect"
+ 3
+ (let ((a 1))
+   (env-data { 'b: 2 }) ;; normally would not be in effect until next top-level
+   (with-applied-env
+    (+ a (read-integer 'b)))))
+
+(expect
+ "old env unchanged"
+ "hello"
+ (read-msg 'b))
