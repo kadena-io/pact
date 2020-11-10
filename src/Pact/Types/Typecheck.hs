@@ -38,7 +38,8 @@ module Pact.Types.Typecheck
     Named (..),
     AstBindType (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
-    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,
+    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,aDynMember,
+    aDynModRef,
     Visit(..),Visitor,
     YieldResume(..),yrYield,yrResume,yrCrossChain
   ) where
@@ -344,6 +345,11 @@ data AST n =
   _aRollback :: Maybe (AST n),
   _aYieldResume :: Maybe (YieldResume n),
   _aModel :: ![Exp Info]
+  } |
+  Dynamic {
+  _aNode :: n,
+  _aDynModRef :: AST n,
+  _aDynMember :: AST n
   }
 
   deriving (Eq,Functor,Foldable,Traversable,Show)
@@ -385,6 +391,7 @@ instance Pretty t => Pretty (AST t) where
             , indent 2 $ "Entity" <> colon <+> pretty _aEntity
             , indent 2 $ pretty _aExec
             ]
+     Dynamic{..} -> sep [pn, pretty _aDynModRef, pretty _aDynMember]
    where pn = pretty (_aNode a)
 
 

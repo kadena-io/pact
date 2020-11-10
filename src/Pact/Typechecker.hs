@@ -131,6 +131,7 @@ walkAST f t@Step {} = do
     <*> pure (_aYieldResume a)
     <*> pure (_aModel a)
   f Post t'
+walkAST f t@Dynamic {} = f Pre t >>= f Post
 
 isConcreteTy :: Type n -> Bool
 isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
@@ -1010,7 +1011,7 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
-toAST TDynamic {..} = die _tInfo "Dynamics not supported TODO"
+toAST TDynamic {..} = undefined
 
 trackPrim :: Info -> PrimType -> PrimValue (AST Node) -> TC (AST Node)
 trackPrim inf pty v = do
