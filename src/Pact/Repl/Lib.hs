@@ -237,6 +237,12 @@ replDefs = ("Repl",
       [ExecExample "(env-enable-repl-natives true)"]
       ("Control whether REPL native functions are allowed in module code. " <>
        "When enabled, fixture functions like 'env-sigs' are allowed in module code.")
+     ,defZNative "with-applied-env" withEnv
+      (funType a [("exec",a)])
+      [ExecExample "(let ((a 1)) (env-data { 'b: 1 }) (with-applied-env (+ a (read-integer 'b))))"]
+      ("Evaluate EXEC with any pending environment changes applied. " <>
+       "Normally, environment changes must execute at top-level for the change to take effect. " <>
+       "This allows scoped application of non-toplevel environment changes.")
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -724,3 +730,11 @@ enableReplNatives _i [TLiteral (LBool enable) _] = do
   setenv ( eeRefStore . rsNatives ) defs
   return $ tStr $ "Repl natives " <> msg
 enableReplNatives i as = argsError i as
+
+withEnv :: ZNativeFun LibState
+withEnv _ [exec] = do
+  updates <- modifyLibState $ \ls -> case _rlsOp ls of
+    UpdateEnv e -> (set rlsOp Noop ls,e)
+    _ -> (ls,Endo id)
+  local (appEndo updates) $ reduce exec
+withEnv i as = argsError' i as
