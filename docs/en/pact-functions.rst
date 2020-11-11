@@ -437,7 +437,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.6.0.1"
+   "3.7"
 
 Top level only: this function will fail if used in module code.
 
@@ -1885,6 +1885,19 @@ coerced to JSON.
    pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
    "Setting transaction data"
 
+env-enable-repl-natives
+~~~~~~~~~~~~~~~~~~~~~~~
+
+*enable* ``bool`` *→* ``string``
+
+Control whether REPL native functions are allowed in module code. When
+enabled, fixture functions like ‘env-sigs’ are allowed in module code.
+
+.. code:: lisp
+
+   pact> (env-enable-repl-natives true)
+   "Repl natives enabled"
+
 env-entity
 ~~~~~~~~~~
 
@@ -1898,6 +1911,19 @@ Set environment confidential ENTITY id, or unset with no argument.
 
    (env-entity "my-org")
    (env-entity)
+
+env-events
+~~~~~~~~~~
+
+*clear* ``bool`` *→* ``[object:*]``
+
+Retreive any accumulated events and optionally clear event state. Object
+returned has fields ‘name’ (fully-qualified event name), ‘params’ (event
+parameters), ‘module-hash’ (hash of emitting module).
+
+.. code:: lisp
+
+   (env-events true)
 
 env-exec-config
 ~~~~~~~~~~~~~~~
@@ -1955,7 +1981,22 @@ env-gasmodel
 
 *model* ``string`` *→* ``string``
 
-Update gas model to the model named MODEL.
+*→* ``string``
+
+*model* ``string`` *rate* ``integer`` *→* ``string``
+
+Update or query current gas model. With just MODEL, “table” is
+supported; with MODEL and RATE, ‘fixed’ is supported. With no args,
+output current model.
+
+.. code:: lisp
+
+   pact> (env-gasmodel)
+   "Current gas model is 'fixed 0': constant rate gas model with fixed rate 0"
+   pact> (env-gasmodel 'table)
+   "Set gas model to table-based cost model"
+   pact> (env-gasmodel 'fixed 1)
+   "Set gas model to constant rate gas model with fixed rate 1"
 
 env-gasprice
 ~~~~~~~~~~~~
@@ -2157,3 +2198,18 @@ verify
 *module* ``string`` *→* ``string``
 
 Verify MODULE, checking that all properties hold.
+
+with-applied-env
+~~~~~~~~~~~~~~~~
+
+*exec* ``<a>`` *→* ``<a>``
+
+Evaluate EXEC with any pending environment changes applied. Normally,
+environment changes must execute at top-level for the change to take
+effect. This allows scoped application of non-toplevel environment
+changes.
+
+.. code:: lisp
+
+   pact> (let ((a 1)) (env-data { 'b: 1 }) (with-applied-env (+ a (read-integer 'b))))
+   2
