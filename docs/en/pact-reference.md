@@ -416,7 +416,7 @@ children:
         required: true
 ```
 
-###### `"events"`
+###### `"events"` {#events-field}
 _type:_ **array ([Pact Event](#pact-event)** `optional`
 
 Includes [events](#pact-event) that were emitted during the course of the transaction. If events
@@ -1564,7 +1564,7 @@ Guards, Capabilities and Events {#caps}
 ---
 
 Pact 3.0 introduces powerful new concepts to allow programmers to express and implement authorization schemes correctly and easily:
-_guards_, which generalize keysets, and _capabilities_, which generalize authorizations or rights.
+_guards_, which generalize keysets, and _capabilities_, which generalize authorizations or rights. In Pact 3.7, capabilities also function as (events)[#events].
 
 ### Guards
 A guard is essentially a predicate function over some environment that enables a pass-fail operation, `enforce-guard`,
@@ -1822,8 +1822,7 @@ for some already-granted ticket.
 
 As a result, **`defcap`s cannot be executed directly**, as arbitrary execution would violate the semantics described here.
 This is an important security property as it ensures that the granting code can only be called in approved
-contexts, inside the module.the
-appropriate way.
+contexts, inside the module.
 
 ### Testing scoping signatures with capabilities
 
@@ -1952,9 +1951,6 @@ initial data. For instance, a user guard could be designed to require two separa
   (enforce-guard (at "guard" (read guard-table "both"))))
 ```
 
-NOTE: user-guard syntax is experimental and will most likely change in a near-term release
-to support direct application of arguments (closure-style).
-
 User guards can seem similar to capabilities but are different, namely in that they can be stored in the
 database and passed around like plain data. Capabilities are in-module rights that can only be enforced
 within the declaring module, and offer scoping and the other benefits mentioned above. User guards
@@ -2014,7 +2010,7 @@ amount of times.
 
 #### Testing for events
 
-Use [`env-events`](#env-events) to test for emitted events in repl scripts.
+Use `[env-events](#env-events)` to test for emitted events in repl scripts.
 
 Generalized Module Governance {#module-governance}
 ---

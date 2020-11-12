@@ -515,6 +515,8 @@ child attributes:
            type: string (base64url)
            required: true
 
+.. _events-field:
+
 ``"events"``
 ''''''''''''
 
@@ -1976,7 +1978,8 @@ Guards, Capabilities and Events
 Pact 3.0 introduces powerful new concepts to allow programmers to
 express and implement authorization schemes correctly and easily:
 *guards*, which generalize keysets, and *capabilities*, which generalize
-authorizations or rights.
+authorizations or rights. In Pact 3.7, capabilities also function as
+(events)[#events].
 
 Guards
 ~~~~~~
@@ -2308,8 +2311,7 @@ or ``require-capability`` asks for some already-granted ticket.
 As a result, **``defcap``\ s cannot be executed directly**, as arbitrary
 execution would violate the semantics described here. This is an
 important security property as it ensures that the granting code can
-only be called in approved contexts, inside the module.the appropriate
-way.
+only be called in approved contexts, inside the module.
 
 Testing scoping signatures with capabilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2458,10 +2460,6 @@ could be designed to require two separate keysets to be enforced:
    (defun enforce-both-guard ()
      (enforce-guard (at "guard" (read guard-table "both"))))
 
-NOTE: user-guard syntax is experimental and will most likely change in a
-near-term release to support direct application of arguments
-(closure-style).
-
 User guards can seem similar to capabilities but are different, namely
 in that they can be stored in the database and passed around like plain
 data. Capabilities are in-module rights that can only be enforced within
@@ -2488,8 +2486,6 @@ implement atomic swaps.
          (enforce-keyset signer-ks)
          (enforce (> (at "block-time" (chain-data)) timeout) "Timeout not passed"))
          ]))
-
-.. _events-1:
 
 Events
 ~~~~~~
@@ -2537,7 +2533,7 @@ events an arbitrary amount of times.
 Testing for events
 ^^^^^^^^^^^^^^^^^^
 
-Use ```env-events`` <#env-events>`__ to test for emitted events in repl
+Use ``[env-events](#env-events)`` to test for emitted events in repl
 scripts.
 
 .. _module-governance:
