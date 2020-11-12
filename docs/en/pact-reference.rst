@@ -1979,7 +1979,7 @@ Pact 3.0 introduces powerful new concepts to allow programmers to
 express and implement authorization schemes correctly and easily:
 *guards*, which generalize keysets, and *capabilities*, which generalize
 authorizations or rights. In Pact 3.7, capabilities also function as
-(events)[#events].
+`events <#events>`__.
 
 Guards
 ~~~~~~
@@ -2533,7 +2533,7 @@ events an arbitrary amount of times.
 Testing for events
 ^^^^^^^^^^^^^^^^^^
 
-Use ``[env-events](#env-events)`` to test for emitted events in repl
+Use `env-events <#env-events>`__ to test for emitted events in repl
 scripts.
 
 .. _module-governance:

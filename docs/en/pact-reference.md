@@ -1564,7 +1564,7 @@ Guards, Capabilities and Events {#caps}
 ---
 
 Pact 3.0 introduces powerful new concepts to allow programmers to express and implement authorization schemes correctly and easily:
-_guards_, which generalize keysets, and _capabilities_, which generalize authorizations or rights. In Pact 3.7, capabilities also function as (events)[#events].
+_guards_, which generalize keysets, and _capabilities_, which generalize authorizations or rights. In Pact 3.7, capabilities also function as [events](#events).
 
 ### Guards
 A guard is essentially a predicate function over some environment that enables a pass-fail operation, `enforce-guard`,
@@ -2010,7 +2010,7 @@ amount of times.
 
 #### Testing for events
 
-Use `[env-events](#env-events)` to test for emitted events in repl scripts.
+Use [env-events](#env-events) to test for emitted events in repl scripts.
 
 Generalized Module Governance {#module-governance}
 ---
