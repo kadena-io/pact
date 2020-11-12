@@ -515,8 +515,6 @@ child attributes:
            type: string (base64url)
            required: true
 
-.. _events-field:
-
 ``"events"``
 ''''''''''''
 
@@ -1979,7 +1977,7 @@ Pact 3.0 introduces powerful new concepts to allow programmers to
 express and implement authorization schemes correctly and easily:
 *guards*, which generalize keysets, and *capabilities*, which generalize
 authorizations or rights. In Pact 3.7, capabilities also function as
-`events <#events>`__.
+`events <#pact-events>`__.
 
 Guards
 ~~~~~~
@@ -2486,6 +2484,8 @@ implement atomic swaps.
          (enforce-keyset signer-ks)
          (enforce (> (at "block-time" (chain-data)) timeout) "Timeout not passed"))
          ]))
+
+.. _pact-events:
 
 Events
 ~~~~~~

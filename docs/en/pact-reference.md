@@ -416,7 +416,7 @@ children:
         required: true
 ```
 
-###### `"events"` {#events-field}
+###### `"events"`
 _type:_ **array ([Pact Event](#pact-event)** `optional`
 
 Includes [events](#pact-event) that were emitted during the course of the transaction. If events
@@ -1564,7 +1564,7 @@ Guards, Capabilities and Events {#caps}
 ---
 
 Pact 3.0 introduces powerful new concepts to allow programmers to express and implement authorization schemes correctly and easily:
-_guards_, which generalize keysets, and _capabilities_, which generalize authorizations or rights. In Pact 3.7, capabilities also function as [events](#events).
+_guards_, which generalize keysets, and _capabilities_, which generalize authorizations or rights. In Pact 3.7, capabilities also function as [events](#pact-events).
 
 ### Guards
 A guard is essentially a predicate function over some environment that enables a pass-fail operation, `enforce-guard`,
@@ -1974,7 +1974,7 @@ The following example shows how a "hash timelock" guard can be made, to implemen
       ]))
 ```
 
-### Events
+### Events {#pact-events}
 
 Pact 3.7 introduces [events](#pact-event) which are emitted in the course of a transaction and included in
 the transaction receipt to allow for monitoring and proving via SPV that a particular event transpired.
