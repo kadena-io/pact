@@ -47,7 +47,7 @@ import Data.Maybe
 import Criterion
 import Criterion.Types
 
-import Control.Monad.State.Strict (get)
+import Control.Monad.State.Strict (get,put)
 
 import Statistics.Types (Estimate(..))
 
@@ -429,24 +429,30 @@ pactState i as = case as of
           ,("pactId",toTerm _pePactId)]
 
 
-txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name
-txmsg n tid s = tStr $ s <> " Tx " <> pack (show tid) <> maybe "" (": " <>) n
-
-
 tx :: Tx -> RNativeFun LibState
-tx Begin i as = do
-  tname <- case as of
-             [TLitString n] -> return $ Just n
-             [] -> return Nothing
-             _ -> argsError i as
-  setop $ Tx (_faInfo i) Begin tname
-  setLibState $ set rlsTxName tname
-  return (tStr "")
-tx t i [] = do
-  tname <- modifyLibState (set rlsTxName Nothing &&& view rlsTxName)
-  setop (Tx (_faInfo i) t tname)
-  return (tStr "")
-tx _ i as = argsError i as
+tx t fi as = case t of
+  Begin -> go doBegin
+  Commit -> withFinish (evalCommitTx i)
+  Rollback -> withFinish (evalRollbackTx i)
+  where
+    doBegin = do
+      tname <- case as of
+        [TLitString n] -> return $ Just n
+        [] -> return Nothing
+        _ -> argsError fi as
+      tid <- evalBeginTx i
+      setLibState $ set rlsTx (tid,tname)
+      txMsg (tid,tname)
+
+    withFinish a = case as of
+      [] -> a >> do
+        put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) def
+        modifyLibState (set rlsTx (Nothing,Nothing) &&& view rlsTx) >>= txMsg
+      _ -> argsError fi as
+
+    txMsg (tid,tname) = return $ tStr $ tShow t <> " Tx" <> maybeDelim " " tid <> maybeDelim ":" tname
+
+    i = getInfo fi
 
 recordTest :: Text -> Maybe (FunApp,Text) -> Eval LibState ()
 recordTest name failure = setLibState $ over rlsTests (++ [TestResult name failure])
