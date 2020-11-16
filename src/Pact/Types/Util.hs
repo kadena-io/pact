@@ -207,8 +207,8 @@ tShow :: Show a => a -> Text
 tShow = pack . show
 
 -- | Show with prepended delimter if not 'Nothing'
-maybeDelim :: Show a => Text -> Maybe a -> Text
-maybeDelim d t = maybe "" ((d <>) . tShow) t
+maybeDelim :: AsString a => Text -> Maybe a -> Text
+maybeDelim d t = maybe "" ((d <>) . asString) t
 
 -- | Re-wrapping lens.
 rewrapping :: (Profunctor p, Functor f, Wrapped b, Wrapped a,

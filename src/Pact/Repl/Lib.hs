@@ -147,9 +147,11 @@ replDefs = ("Repl",
       ("Set environment confidential ENTITY id, or unset with no argument.")
      ,defZRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
-      [LitExample "(begin-tx \"load module\")"] "Begin transaction with optional NAME."
-     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) [LitExample "(commit-tx)"] "Commit transaction."
-     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) [LitExample "(rollback-tx)"] "Rollback transaction."
+      [ExecExample "(begin-tx \"load module\")"] "Begin transaction with optional NAME."
+     ,defZRNative "commit-tx" (tx Commit) (funType tTyString [])
+      [ExecExample "(begin-tx) (commit-tx)"] "Commit transaction."
+     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString [])
+      [ExecExample "(begin-tx \"Third Act\") (rollback-tx)"] "Rollback transaction."
      ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
       ["(expect \"Sanity prevails.\" 4 (+ 2 2))"]
       "Evaluate ACTUAL and verify that it equals EXPECTED."
@@ -430,29 +432,32 @@ pactState i as = case as of
 
 
 tx :: Tx -> RNativeFun LibState
-tx t fi as = case t of
-  Begin -> go doBegin
-  Commit -> withFinish (evalCommitTx i)
-  Rollback -> withFinish (evalRollbackTx i)
+tx t fi as = do
+
+  (tid,tname) <- case (t,as) of
+    (Begin,[TLitString n]) -> doBegin (Just n)
+    (Begin,[]) -> doBegin Nothing
+    (Commit,[]) -> evalCommitTx i >> resetTx
+    (Rollback,[]) -> evalRollbackTx i >> resetTx
+    _ -> argsError fi as
+
+  -- reset to repl lib
+  put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) def
+  return $ tStr $ tShow t <> " Tx"
+      <> maybeDelim " " tid <> maybeDelim ": " tname
+
   where
-    doBegin = do
-      tname <- case as of
-        [TLitString n] -> return $ Just n
-        [] -> return Nothing
-        _ -> argsError fi as
-      tid <- evalBeginTx i
-      setLibState $ set rlsTx (tid,tname)
-      txMsg (tid,tname)
-
-    withFinish a = case as of
-      [] -> a >> do
-        put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) def
-        modifyLibState (set rlsTx (Nothing,Nothing) &&& view rlsTx) >>= txMsg
-      _ -> argsError fi as
-
-    txMsg (tid,tname) = return $ tStr $ tShow t <> " Tx" <> maybeDelim " " tid <> maybeDelim ":" tname
 
     i = getInfo fi
+
+    doBegin tname = do
+      tid <- evalBeginTx i
+      setLibState $ set rlsTx (tid,tname)
+      return (tid,tname)
+
+    resetTx = modifyLibState
+      (set rlsTx (Nothing,Nothing) &&& view rlsTx)
+
 
 recordTest :: Text -> Maybe (FunApp,Text) -> Eval LibState ()
 recordTest name failure = setLibState $ over rlsTests (++ [TestResult name failure])
