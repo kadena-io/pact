@@ -17,7 +17,7 @@ jobs:
           sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev
 
       - name: Setup Z3
-        uses: pavpanchekha/setup-z3@v1.2
+        uses: pavpanchekha/setup-z3@v1.2.6
         with:
           version: "4.8.7"
           architecture: "x64"
@@ -25,10 +25,9 @@ jobs:
       - name: Setup GHC
         uses: actions/setup-haskell@v1
         with:
-          ghc-version: "8.8.3"
-
-      - name: Setup Stack
-        uses: mstksg/setup-stack@v1
+          ghc-version: "8.8.4"
+          enable-stack: true
+          stack-version: 'latest'
 
       - name: Clone project
         uses: actions/checkout@v2
@@ -37,9 +36,9 @@ jobs:
         uses: actions/cache@v1
         with:
           path: ~/.stack
-          key: ${{ runner.os }}-stack883-${{ hashFiles('stack.yaml') }}
+          key: ${{ runner.os }}-stack884-${{ hashFiles('stack.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-stack883-
+            ${{ runner.os }}-stack884-
 
       - name: Build
         run: "stack test --fast --no-terminal --system-ghc"
