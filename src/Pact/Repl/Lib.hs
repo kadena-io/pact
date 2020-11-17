@@ -23,8 +23,9 @@ module Pact.Repl.Lib where
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
-import Control.Monad.Reader
 import Control.Monad.Catch
+import Control.Monad.Reader
+import Control.Monad.State.Strict (get,put)
 
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
@@ -39,6 +40,7 @@ import Data.Thyme.Time.Core
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
 
+
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 import Data.Maybe
@@ -46,8 +48,6 @@ import Data.Maybe
 
 import Criterion
 import Criterion.Types
-
-import Control.Monad.State.Strict (get,put)
 
 import Statistics.Types (Estimate(..))
 
