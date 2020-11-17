@@ -503,6 +503,8 @@ expectFail i as = case as of
                                     <> "', got '" <> pack e <> "'"
       _ -> argsError' i as
 
+-- | Use stack frames for 'FunApp's to enrich test name, using
+-- presence of module name as a heuristic of the "user stack".
 enrichTestName :: Text -> Eval e Text
 enrichTestName msg= use evalCallStack >>= return . foldl' go msg
   where
