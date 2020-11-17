@@ -17,7 +17,7 @@ jobs:
           sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev
 
       - name: Setup Z3
-        uses: pavpanchekha/setup-z3
+        uses: pavpanchekha/setup-z3@1.2.1
         with:
           version: "4.8.7"
           architecture: "x64"
