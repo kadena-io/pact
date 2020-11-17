@@ -30,6 +30,7 @@ import Control.Monad.State.Strict (get,put)
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
+import Data.Foldable
 import qualified Data.Map.Strict as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
@@ -441,8 +442,9 @@ tx t fi as = do
     (Rollback,[]) -> evalRollbackTx i >> resetTx
     _ -> argsError fi as
 
-  -- reset to repl lib
-  put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) def
+  -- reset to repl lib, preserve call stack
+  cs <- use evalCallStack
+  put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) $ set evalCallStack cs def
   return $ tStr $ tShow t <> " Tx"
       <> maybeDelim " " tid <> maybeDelim ": " tname
 
@@ -469,11 +471,12 @@ testFailure :: FunApp -> Text -> Text -> Eval LibState (Term Name)
 testFailure i name msg = recordTest name (Just (i,msg)) >> return (tStr msg)
 
 expect :: RNativeFun LibState
-expect i [TLitString a,b,c] =
+expect i [TLitString a,b,c] = do
+  a' <- enrichTestName a
   if b `termEq` c
-  then testSuccess a $ "Expect: success: " <> a
-  else testFailure i a $ renderCompactText' $
-       "FAILURE: " <> pretty a <> ": expected " <> pretty b <> ":" <> pretty (typeof' b) <>
+  then testSuccess a' $ "Expect: success: " <> a'
+  else testFailure i a' $ renderCompactText' $
+       "FAILURE: " <> pretty a' <> ": expected " <> pretty b <> ":" <> pretty (typeof' b) <>
        ", received " <> pretty c <> ":" <> pretty (typeof' c)
 expect i as = argsError i as
 
@@ -489,14 +492,24 @@ expectFail i as = case as of
     tfailure msg details = testFailure i msg $ "FAILURE: " <> msg <> ": " <> details
     go doc errM expr = reduce doc >>= \d -> case d of
       TLitString msg -> do
+        msg' <- enrichTestName msg
         r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
         case r of
-          Right v -> tfailure msg $ "expected failure, got result = " <> pack (showPretty v)
+          Right v -> tfailure msg' $ "expected failure, got result = " <> pack (showPretty v)
           Left e -> case errM of
-            Nothing -> tsuccess msg
-            Just err | err `isInfixOf` e -> tsuccess msg
-                     | otherwise -> tfailure msg $ "expected error message to contain '" <> pack err <> "', got '" <> pack e <> "'"
+            Nothing -> tsuccess msg'
+            Just err | err `isInfixOf` e -> tsuccess msg'
+                     | otherwise -> tfailure msg' $ "expected error message to contain '" <> pack err
+                                    <> "', got '" <> pack e <> "'"
       _ -> argsError' i as
+
+enrichTestName :: Text -> Eval e Text
+enrichTestName msg= use evalCallStack >>= return . foldl' go msg
+  where
+    go m StackFrame{..} = case preview (_Just . _1 . faModule . _Just) _sfApp of
+      Just {} -> _sfName <> "." <> m
+      _ -> m
+
 
 bench' :: ZNativeFun LibState
 #if !defined(ghcjs_HOST_OS)
