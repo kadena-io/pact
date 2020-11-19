@@ -16,7 +16,7 @@ jobs:
       matrix:
         ghc: ['8.6.5', '8.8.4', '8.10.2']
         cabal: ['3.2']
-        os: ['ubuntu-16.04', 'ubuntu-18.04', 'macOS-latest' ] # windows-latest is temporarily disabled
+        os: ['ubuntu-16.04', 'ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ] # windows-latest is temporarily disabled
         cabalcache: ['true']
         exclude:
         - os: 'windows-latest'
@@ -28,34 +28,16 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
-
-      # Cabal Cache
-      CABAL_CACHE: ./tmp/bin/cabal-cache
-      CABAL_CACHE_BUCKET: kadena-cabal-cache
-      SYNC_TO_CACHE: $CABAL_CACHE sync-to-archive --threads 16 --archive-uri s3://$CABAL_CACHE_BUCKET/${{ matrix.os }} --region us-east-1 ${{ matrix.storepath }}
-      SYNC_FROM_CACHE: $CABAL_CACHE sync-from-archive --threads 16 --archive-uri s3://$CABAL_CACHE_BUCKET/${{ matrix.os }} --region us-east-1 ${{ matrix.storepath }}
-
+      AWS_DEFAULT_REGION: us-east-1
+      
       # Aritfacts
       ARTIFACT_BUCKET: kadena-cabal-cache
       BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.${{ github.sha }}.tar.gz
       LATEST_BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.master.tar.gz"
 
     steps:
-    # Setup
     - name: Checkout repository
-      uses: actions/checkout@v1
-    - name: Install cabal-cache
-      if: matrix.cabalcache == 'true' && !contains(matrix.os, 'windows')
-      run: |
-        [[ "${{ matrix.os }}" =~ ubuntu ]] && OS="linux" || OS="osx"
-        mkdir -p "./tmp/bin"
-        curl -Ls "https://github.com/haskell-works/cabal-cache/releases/download/v1.0.1.1/cabal-cache_x86_64_${OS}.tar.gz" | tar -f - -xzC "./tmp/bin/"
-    - name: Install cabal-cache
-      if: matrix.cabalcache == 'true' && contains(matrix.os, 'windows')
-      shell: bash
-      run: |
-        mkdir -p "./tmp/bin"
-        curl -Ls "https://kadena-cabal-cache.s3.amazonaws.com/cabal-cache/cabal-cache_x86_64_windows.tar.gz" | tar -f - -xzC "./tmp/bin/"
+      uses: actions/checkout@v2
 
     # Non Haskell dependencies
     - name: Install non-Haskell dependencies (ubuntu)
@@ -72,42 +54,27 @@ jobs:
       run: choco install -y -r awscli
 
     # Haskell Setup
-    - name: Install Haskell (ubuntu)
-      if: contains(matrix.os, 'ubuntu')
-      run: |
-          sudo add-apt-repository ppa:hvr/ghc
-          sudo apt-get update
-          sudo apt-get install ghc-${{ matrix.ghc }}
-    - name: Install Haskell (macOS)
-      if: contains(matrix.os, 'macOS')
-      run: |
-        curl -sL https://haskell.futurice.com/haskell-on-macos.py | python3 - --make-dirs --paths.d --ghc-alias=${{ matrix.ghc }} --cabal-alias=3.2.0.0 install ghc-${{ matrix.ghc }} cabal-install-3.2.0.0
-        ln -s /opt/cabal/3.2.0.0 /opt/cabal/3.2
-    - name: Install Haskell (windows)
-      if: contains(matrix.os, 'windows')
-      shell: bash
-      run: |
-        mkdir -p /c/tools/msys64/mingw64/lib
-        choco install -r -y cabal --version 3.2.0.0 --allow-downgrade
-        choco install -r -y ghc --version ${{ matrix.ghc }} --allow-downgrade
-    - name: Set GHC and Cabal version (ubuntu, macOS)
-      if: "!contains(matrix.os, 'windows')"
+    - name: Install GHC and Cabal
       uses: actions/setup-haskell@v1
       with:
-        ghc-version: ${{ matrix.ghc }}
-        cabal-version: ${{ matrix.cabal }}
-    - name: Set GHC and Cabal version (windows)
+         ghc-version: ${{ matrix.ghc }}
+         cabal-version: ${{ matrix.cabal }}
+    - name: Confirm GHC and Cabal installation
+      run: |
+        ghc --version
+        cabal --version
+    - name: Setup PATHs (windows)
       if: "contains(matrix.os, 'windows')"
       shell: bash
       run: |
-        echo "::add-path::/c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin"
-        echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-${{ matrix.ghc }}\\bin"
-        echo "::add-path::/c/ProgramData/chocolatey/lib/cabal/tools/cabal-3.2.0.0"
-        echo "::add-path::C:\\ProgramData\\chocolatey\\lib\\cabal\\tools\\cabal-3.2.0.0"
-        echo "::add-path::/c/Users/runneradmin/AppData/Roaming/cabal/bin"
-        echo "::add-path::C:\\Users\\runneradmin\\AppData\\Roaming\\cabal\\bin"
-        echo "::add-path::/c/Program Files/Amazon/AWSCLI/bin"
-        echo "::add-path::C:\\Program Files\\Amazon\\AWSCLI\\bin"
+        echo "/c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin" >> $GITHUB_PATH
+        echo "C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-${{ matrix.ghc }}\\bin" >> $GITHUB_PATH
+        echo "/c/ProgramData/chocolatey/lib/cabal/tools/cabal-3.2.0.0" >> $GITHUB_PATH
+        echo "C:\\ProgramData\\chocolatey\\lib\\cabal\\tools\\cabal-3.2.0.0" >> $GITHUB_PATH
+        echo "/c/Users/runneradmin/AppData/Roaming/cabal/bin" >> $GITHUB_PATH
+        echo "C:\\Users\\runneradmin\\AppData\\Roaming\\cabal\\bin" >> $GITHUB_PATH
+        echo "/c/Program Files/Amazon/AWSCLI/bin" >> $GITHUB_PATH
+        echo "C:\\Program Files\\Amazon\\AWSCLI\\bin" >> $GITHUB_PATH
 
         # these are needed for cabal-cache to work
         ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg-${{ matrix.ghc }}
@@ -145,22 +112,24 @@ jobs:
       shell: bash
       run: cabal v2-update
     - name: Configure build
-      shell: bash
-      run: cabal v2-build exe:pact --dry-run
+      run: |
+        cabal v2-build exe:pact --dry-run
+        cabal v2-freeze
     - name: Sync from cabal cache
-      shell: bash
       if: matrix.cabalcache == 'true'
-      run: eval $SYNC_FROM_CACHE
+      uses: larskuhtz/cabal-cache-action@ecc751af6d31b3ed5a3b4aefdefd0ed6ef4cb414
+      with:
+        bucket: "kadena-cabal-cache"
+        region: "us-east-1"
+        folder: "${{ matrix.os }}"
+        aws_access_key_id: "${{ secrets.kadena_cabal_cache_aws_access_key_id }}"
+        aws_secret_access_key: "${{ secrets.kadena_cabal_cache_aws_secret_access_key }}"
     - name: Install build dependencies
       shell: bash
       run: cabal v2-build exe:pact --only-dependencies
     - name: Build
       shell: bash
       run: cabal v2-build exe:pact
-    - name: Sync cabal cache
-      if: always() && (matrix.cabalcache == 'true')
-      shell: bash
-      run: eval $SYNC_TO_CACHE
 
     # Publish Artifacts
     - name: Prepare artifacts

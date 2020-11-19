@@ -2,11 +2,11 @@
 module Pact.Repl.Types
   ( ReplMode(..)
   , Hdl(..)
-  , ReplState(..),rEnv,rEvalState,rMode,rOut,rFile,rTermOut,rTxId
+  , ReplState(..),rEnv,rEvalState,rMode,rOut,rFile,rTermOut
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts
+  , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts
   , Tx(..)
   , SPVMockKey(..)
   , getAllModules
@@ -52,21 +52,24 @@ data ReplState = ReplState {
     , _rOut :: String
     , _rTermOut :: [Term Name]
     , _rFile :: Maybe FilePath
-    , _rTxId :: Maybe TxId
     }
 
 type Repl a = StateT ReplState IO a
 
-
-data LibOp =
-    Noop |
-    UpdateEnv (Endo (EvalEnv LibState)) |
-    Load FilePath Bool |
-    Tx Info Tx (Maybe Text) |
-    Print (Term Name) |
-    TcErrors [String]
+-- | A REPL operation that requires top-level evaluation.
+data LibOp
+    = Noop
+    | UpdateEnv (Endo (EvalEnv LibState))
+      -- ^ mutate the read-only environment
+    | Load FilePath Bool
+      -- ^ load a filepath script
+    | Print (Term Name)
+      -- ^ print to terminal
+    | TcErrors [String]
+      -- ^ special output for typechecker
 instance Default LibOp where def = Noop
 
+-- | Transaction action type.
 data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 
 newtype SPVMockKey = SPVMockKey (Text, (Object Name))
@@ -83,7 +86,7 @@ instance Ord SPVMockKey where
 data LibState = LibState
   { _rlsPure :: MVar (DbEnv PureDb)
   , _rlsOp :: LibOp
-  , _rlsTxName :: Maybe Text
+  , _rlsTx :: (Maybe TxId, Maybe Text)
   , _rlsTests :: [TestResult]
   , _rlsVerifyUri :: Maybe String
   , _rlsMockSPV :: M.Map SPVMockKey (Object Name)

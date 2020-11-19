@@ -248,7 +248,7 @@ enforceYield fa y = case _yProvenance y of
 -- | Validate App of indicated DefType and return Def
 requireDefApp :: DefType -> App (Term Ref) -> Eval e (Def Ref)
 requireDefApp dt App{..} = case _appFun of
-  (TVar (Ref (TDef d@Def{..} _)) _) -> matchDefTy d
+  (TVar (Ref (TDef d@Def{} _)) _) -> matchDefTy d
   TDynamic tref tmem ti -> reduceDynamic tref tmem ti >>= \case
     Left v -> evalError ti $ "requireDefApp: expected module member for dynamic: " <> pretty v
     Right d -> matchDefTy d

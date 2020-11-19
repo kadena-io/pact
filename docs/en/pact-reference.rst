@@ -520,8 +520,8 @@ child attributes:
 
 *type:* **array (**\ `Pact Event <#pact-event>`__ ``optional``
 
-Includes events that were emitted during the course of the transaction.
-If events are empty they are not included in the JSON.
+Includes `events <#pact-event>`__ that were emitted during the course of
+the transaction. If events are empty they are not included in the JSON.
 
 Example command result
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -1970,13 +1970,14 @@ example:
 
 .. _caps:
 
-Guards and Capabilities
------------------------
+Guards, Capabilities and Events
+-------------------------------
 
 Pact 3.0 introduces powerful new concepts to allow programmers to
 express and implement authorization schemes correctly and easily:
 *guards*, which generalize keysets, and *capabilities*, which generalize
-authorizations or rights.
+authorizations or rights. In Pact 3.7, capabilities also function as
+`events <#pact-events>`__.
 
 Guards
 ~~~~~~
@@ -2224,18 +2225,6 @@ management:
      @managed
      (validate-member member))
 
-Managed capabilities and Events
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Upon acquisition, managed capabilities emit `“Pact
-Events” <#pact-event>`__ in the output for the granted capability (not
-the installed parameterization but the actual managed value). As such,
-managed capabilities represent “facts” that can be proven via SPV in a
-public blockchain context.
-
-Events are planned to become a general-purpose mechanism but as of Pact
-3.6 are only emitted by managed capabilities.
-
 Guards vs Capabilities
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2320,8 +2309,7 @@ or ``require-capability`` asks for some already-granted ticket.
 As a result, **``defcap``\ s cannot be executed directly**, as arbitrary
 execution would violate the semantics described here. This is an
 important security property as it ensures that the granting code can
-only be called in approved contexts, inside the module.the appropriate
-way.
+only be called in approved contexts, inside the module.
 
 Testing scoping signatures with capabilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2470,10 +2458,6 @@ could be designed to require two separate keysets to be enforced:
    (defun enforce-both-guard ()
      (enforce-guard (at "guard" (read guard-table "both"))))
 
-NOTE: user-guard syntax is experimental and will most likely change in a
-near-term release to support direct application of arguments
-(closure-style).
-
 User guards can seem similar to capabilities but are different, namely
 in that they can be stored in the database and passed around like plain
 data. Capabilities are in-module rights that can only be enforced within
@@ -2500,6 +2484,57 @@ implement atomic swaps.
          (enforce-keyset signer-ks)
          (enforce (> (at "block-time" (chain-data)) timeout) "Timeout not passed"))
          ]))
+
+.. _pact-events:
+
+Events
+~~~~~~
+
+Pact 3.7 introduces `events <#pact-event>`__ which are emitted in the
+course of a transaction and included in the transaction receipt to allow
+for monitoring and proving via SPV that a particular event transpired.
+
+In Pact, events are modeled as capabilities, for the following reasons:
+- Capabilities already have the right shape for an event, which is
+essentially arbitrary data published under a topic or name. With
+capabilities, the capability name is the topic, and the arguments are
+the data. - The acquisition of managed capabilities are a bona-fide
+event. Events complete the managed lifecycle, where you might
+install/approve a capability of some quantity on the way in, but not
+necessarily see what quantity was used. With events, the output of the
+actually acquired capability is present in the receipt. - Capabilities
+are protected such that they can only be acquired in module code, which
+is appropriate as well for events.
+
+The @event metadata tag
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Any capability can cause events to be emitted upon acquisition by using
+the ``@event`` metadata tag.
+
+.. code:: lisp
+
+   (defcap BURN(qty:decimal)
+     @event
+     ...
+   )
+
+``@event`` cannot be used alongside ``@managed``, because …
+
+Managed capabilities are automatically eventing
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Managed capabilites emit events automatically with the parameters
+specified in acquisition (as opposed to install). From an eventing point
+of view, managed capabilities are those capabilities that can only
+“happen once”. Whereas, a non-managed, eventing capability can fire
+events an arbitrary amount of times.
+
+Testing for events
+^^^^^^^^^^^^^^^^^^
+
+Use `env-events <#env-events>`__ to test for emitted events in repl
+scripts.
 
 .. _module-governance:
 
