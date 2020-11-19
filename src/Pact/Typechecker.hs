@@ -1019,6 +1019,11 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
 toAST t@TDynamic {..} = do
   n <- trackIdNode =<< freshId _tInfo (renderCompactText t)
   r <- toAST _tDynModRef
+
+  -- do some shit with m and r to resolve the member early.
+  -- This will NOT work because the body is unscoped
+  -- (hence unresolved) at this point.
+
   m <- toFun _tDynMember
   return $ Dynamic n r m
 
