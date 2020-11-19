@@ -414,6 +414,7 @@ maybeTranslateUserType
   -- ^ Set of keys to keep (if this is a partial schema)
   -> Pact.UserType
   -> Maybe QType
+maybeTranslateUserType _ Pact.ModSpec{} = Just $ EType $ mkSObject (SingList SNil)
 maybeTranslateUserType _ (Pact.Schema _ _ [] _) = Just $ EType $ mkSObject (SingList SNil)
 maybeTranslateUserType restrictKeys (Pact.Schema a b (Pact.Arg name ty _:tys) c) = do
   subTy@(EType (SObject tys'))
@@ -436,7 +437,6 @@ maybeTranslateUserType restrictKeys (Pact.Schema a b (Pact.Arg name ty _:tys) c)
             insert (SSymbol @sym) ty' (UnSingList tys')
 
   else Just subTy
-maybeTranslateUserType _ _ = error "TODO"
 
 maybeTranslateUserType' :: Pact.UserType -> Maybe EType
 maybeTranslateUserType' = maybeTranslateUserType Nothing >=> downcastQType

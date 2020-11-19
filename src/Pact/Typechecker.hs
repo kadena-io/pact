@@ -740,8 +740,8 @@ scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> T
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
-    (TList ts _ _) | not (V.null ts) -> mapM toAST (V.toList ts) -- verifies non-empty body.
-    _ -> die i "Malformed def body"
+    TList ts _ _  | null ts -> mapM toAST (V.toList ts) -- verifies non-empty body.
+    _ -> die i $ "Malformed def body: " <> show (args, bod, bt)
 
 pfx :: Text -> Text -> Text
 pfx s = ((s <> "_") <>)
@@ -790,7 +790,9 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
   return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs
-toFun (TDynamic _mem _ref _i) = error "BOOM"
+toFun (TDynamic mem ref i) = case (mem, ref) of
+  (TVar (Right Var{}) _, TVar (Left (Ref r)) _) -> toFun $ Left <$> r
+  _ -> die i "Malformed mod ref"
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
