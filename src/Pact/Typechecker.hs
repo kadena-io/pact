@@ -60,7 +60,7 @@ import Safe hiding (at)
 import Pact.Types.Native
 import Pact.Types.Pretty
 import qualified Pact.Types.Runtime as Term
-import Pact.Types.Runtime hiding (App,appInfo,Object,Step)
+import Pact.Types.Runtime hiding (App,appInfo,Object,Step,ModRef)
 import Pact.Types.Typecheck
 
 die :: MonadThrow m => Info -> String -> m a
@@ -132,6 +132,7 @@ walkAST f t@Step {} = do
     <*> pure (_aModel a)
   f Post t'
 walkAST f t@Dynamic {} = f Pre t >>= f Post
+walkAST f t@ModRef{} = f Pre t >>= f Post
 
 isConcreteTy :: Type n -> Bool
 isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
@@ -270,7 +271,7 @@ handleSpecialOverload _ m = m
 findSchemaField :: Text -> UserType -> Maybe (Type UserType)
 findSchemaField fname Schema {..} =
       foldl (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _utFields
-
+findSchemaField _ ModSpec{} = Nothing
 
 asPrimString :: AST Node -> TC Text
 asPrimString (Prim _ (PrimLit (LString s))) = return s
@@ -680,6 +681,7 @@ unifyTypes l r = case (l,r) of
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam Just a b
   (TySchema sa a spa,TySchema sb b spb) | sa == sb -> unifyParam (specializePartial spa spb) a b
+  (TyModule{}, TyModule{}) -> error "TODO"
   _ -> Nothing
   where
     -- | Unifies param and uses bias to return parent, with additional test/modifier f
@@ -788,6 +790,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
   return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs
+toFun (TDynamic _mem _ref _i) = error "BOOM"
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
@@ -1011,7 +1014,11 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
-toAST TDynamic {..} = undefined
+toAST TDynamic {..} = do
+  n <- trackIdNode =<< freshId _tInfo (renderCompactText $ show _tInfo)
+  r <- toAST _tDynModRef
+  m <- toFun _tDynMember
+  return $ Dynamic n r m
 
 trackPrim :: Info -> PrimType -> PrimValue (AST Node) -> TC (AST Node)
 trackPrim inf pty v = do
@@ -1033,6 +1040,9 @@ toUserType t = case t of
 
 toUserType' :: Show n => Term (Either Ref n) -> TC UserType
 toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
+toUserType' TModRef {..} = case _modRefSpec _tModRef of
+  Nothing -> return $ ModSpec (_modRefName _tModRef)
+  Just {} -> die _tInfo "toUserType': expected interface modref"
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
@@ -1182,4 +1192,4 @@ typecheckModule dbg (ModuleData (MDModule m) rm) = do
         (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
   fst <$> foldM tc (([],[]),0) (HM.elems rm)
-typecheckModule _ _ = return mempty
+typecheckModule _ (ModuleData MDInterface{} _) = return mempty

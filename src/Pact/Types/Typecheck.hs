@@ -38,7 +38,7 @@ module Pact.Types.Typecheck
     Named (..),
     AstBindType (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
-    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,aDynMember,
+    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,aDynMember,aModRefName, aModRefSpec,
     aDynModRef,
     Visit(..),Visitor,
     YieldResume(..),yrYield,yrResume,yrCrossChain
@@ -53,7 +53,7 @@ import Control.Monad.State
 import Data.Foldable
 import Data.Text (Text, unpack)
 
-import Pact.Types.Lang hiding (App,Object,Step)
+import Pact.Types.Lang hiding (App,Object,Step,ModRef)
 import Pact.Types.Pretty
 import Pact.Types.Native
 
@@ -64,16 +64,23 @@ instance Exception CheckerException
 instance Show CheckerException where show (CheckerException i s) = renderInfo i ++ ": " ++ s
 
 -- | Model a user type. Currently only Schemas are supported..
-data UserType = Schema {
-  _utName :: TypeName,
-  _utModule :: Maybe ModuleName,
-  _utFields :: [Arg UserType],
-  _utInfo :: Info
-  } deriving (Eq,Ord)
+data UserType
+  = Schema
+    { _utName :: TypeName
+    , _utModule :: Maybe ModuleName
+    , _utFields :: [Arg UserType]
+    , _utInfo :: Info
+    }
+  | ModSpec
+    { _utModName :: ModuleName
+    }
+  deriving (Eq,Ord)
 instance Show UserType where
   show Schema {..} = "{" ++ unpack (maybe "" ((<>) "." . asString) _utModule) ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
+  show (ModSpec mn) = show mn
 instance Pretty UserType where
   pretty Schema {..} = braces (pretty _utModule <> dot <> pretty _utName)
+  pretty (ModSpec mn) = pretty mn
 
 -- | An ID for an AST node.
 data TcId = TcId {
@@ -349,9 +356,13 @@ data AST n =
   Dynamic {
   _aNode :: n,
   _aDynModRef :: AST n,
-  _aDynMember :: AST n
+  _aDynMember :: Fun n
+  } |
+  ModRef {
+  _aNode :: n,
+  _aModRefName :: ModuleName,
+  _aModRefSpec :: Maybe [ModuleName]
   }
-
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
 instance Pretty t => Pretty (AST t) where
@@ -392,6 +403,8 @@ instance Pretty t => Pretty (AST t) where
             , indent 2 $ pretty _aExec
             ]
      Dynamic{..} -> sep [pn, pretty _aDynModRef, pretty _aDynMember]
+
+     ModRef{..} -> sep [pn, pretty _aModRefName]
    where pn = pretty (_aNode a)
 
 

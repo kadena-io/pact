@@ -436,6 +436,7 @@ maybeTranslateUserType restrictKeys (Pact.Schema a b (Pact.Arg name ty _:tys) c)
             insert (SSymbol @sym) ty' (UnSingList tys')
 
   else Just subTy
+maybeTranslateUserType _ _ = error "TODO"
 
 maybeTranslateUserType' :: Pact.UserType -> Maybe EType
 maybeTranslateUserType' = maybeTranslateUserType Nothing >=> downcastQType

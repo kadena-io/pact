@@ -57,6 +57,7 @@ import           Control.Monad.State.Strict (evalStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Data.Bifunctor             (first)
 import           Data.Either                (partitionEithers)
+import           Data.Foldable              (foldl')
 import qualified Data.HashMap.Strict        as HM
 import           Data.List                  (isPrefixOf,nub)
 import qualified Data.List                  as List
@@ -220,6 +221,7 @@ data VerificationFailure
   | ModuleCheckFailure CheckFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
   | InvalidDirectReference
+  | ModuleSpecInSchemaPosition Pact.ModuleName
   | ExpectedConcreteModule
   | FailedConstTranslation String
   | SchemalessTable Info
@@ -572,17 +574,18 @@ moduleTables modules modRefs consts = do
           (name, Ref (table@TTable {})) -> Just (name, table)
           _                             -> Nothing
 
+      schemas = modRefs ^. defschemas
+
   for tables $ \(tabName, tab) -> do
     (TopTable _info _name tableTy _meta, _tcState)
       <- lift $ runTC 0 False $ typecheckTopLevel (Ref tab)
     case tableTy of
-      Pact.TyUser schema -> do
+      Pact.TyUser (TC.ModSpec mn) -> throwError $ ModuleSpecInSchemaPosition mn
+      Pact.TyUser (schema@TC.Schema{_utName,_utFields}) -> do
         VarEnv vidStart invEnv vidTys <- hoist generalize $
           mkInvariantEnv schema
 
-        let TC.Schema{_utName,_utFields} = schema
-            schemaName = asString _utName
-            schemas = modRefs ^. defschemas
+        let schemaName = asString _utName
 
             mkInvariant :: Exp Info -> Either String (Invariant 'TyBool)
             mkInvariant = expToInvariant vidStart invEnv vidTys consts SBool
@@ -756,7 +759,7 @@ parseModuleModelDecl exps = traverse parseDecl exps where
 
 -- | Organize the module's refs by type
 moduleRefs :: ModuleData Ref -> ModuleRefs
-moduleRefs (ModuleData _ refMap) = foldl f noRefs (HM.toList refMap)
+moduleRefs (ModuleData _ refMap) = foldl' f noRefs (HM.toList refMap)
   where
     f accum (name, ref) = case ref of
       Ref (TDef (Def{_dDefType, _dDefBody}) _) ->
@@ -802,6 +805,7 @@ data VarEnv = VarEnv
 -- determined by the lexicographic order of variable names. Also see
 -- 'varIdColumns'.
 mkInvariantEnv :: UserType -> Except VerificationFailure VarEnv
+mkInvariantEnv (TC.ModSpec mn) = throwError $ ModuleSpecInSchemaPosition mn
 mkInvariantEnv TC.Schema{_utFields} = do
   tys <- Map.fromList . map (first (env Map.!)) <$>
     traverse (translateArgTy "schema field's") _utFields
@@ -1248,6 +1252,9 @@ renderVerifiedModule = \case
   Left (SchemalessTable info) ->
     [T.pack (renderInfo info) <>
       ":Warning: Verification requires all tables to have schemas"
+    ]
+  Left (ModuleSpecInSchemaPosition mn) ->
+    ["Found modref spec in schema position: " <> renderCompactText mn
     ]
   Left (ScopeErrors errs) ->
     ":Warning: Scope checking errors" : fmap describeScopeError errs

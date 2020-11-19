@@ -467,11 +467,14 @@ mkTableColumnMap tables f defValue = TableMap $ Map.fromList $
 mkSymbolicCells :: [Table] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
   where
-    cellsList = tables <&> \Table { _tableName, _tableType = Pact.Schema _ _ fields _ } ->
-      let fields'  = Map.fromList $
-            map (\(Pact.Arg argName ty _i) -> (argName, ty)) fields
+    cellsList = tables <&> \Table { _tableName, _tableType } ->
+        let fields' = case _tableType of
+              Pact.Schema _ _ fields _ -> Map.fromList $
+                map (\(Pact.Arg argName ty _i) -> (argName, ty)) fields
+              Pact.ModSpec{} -> mempty
 
-      in (TableName (T.unpack _tableName), mkCells _tableName fields')
+        in (TableName (T.unpack _tableName), mkCells _tableName fields')
+
 
     mkCells :: Text -> Map Text (Pact.Type Pact.UserType) -> SymbolicCells
     mkCells tableName fields = ifoldl
