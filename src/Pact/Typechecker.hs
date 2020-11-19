@@ -741,7 +741,7 @@ scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
     TList ts _ _  | null ts -> mapM toAST (V.toList ts) -- verifies non-empty body.
-    _ -> die i $ "Malformed def body: " <> show (args, bod, bt)
+    _ -> die i $ "Malformed def body"
 
 pfx :: Text -> Text -> Text
 pfx s = ((s <> "_") <>)
@@ -1016,8 +1016,8 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
-toAST TDynamic {..} = do
-  n <- trackIdNode =<< freshId _tInfo (renderCompactText $ show _tInfo)
+toAST t@TDynamic {..} = do
+  n <- trackIdNode =<< freshId _tInfo (renderCompactText t)
   r <- toAST _tDynModRef
   m <- toFun _tDynMember
   return $ Dynamic n r m
