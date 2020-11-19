@@ -1556,7 +1556,8 @@ The following functions are loaded automatically into the interactive REPL, or w
 
 Begin transaction with optional NAME.
 ```lisp
-(begin-tx "load module")
+pact> (begin-tx "load module")
+"Begin Tx 0: load module"
 ```
 
 
@@ -1578,7 +1579,8 @@ Benchmark execution of EXPRS.
 
 Commit transaction.
 ```lisp
-(commit-tx)
+pact> (begin-tx) (commit-tx)
+"Commit Tx 0"
 ```
 
 
@@ -1882,7 +1884,8 @@ Output VALUE to terminal as unquoted, unescaped text.
 
 Rollback transaction.
 ```lisp
-(rollback-tx)
+pact> (begin-tx "Third Act") (rollback-tx)
+"Rollback Tx 0: Third Act"
 ```
 
 
