@@ -1017,7 +1017,7 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _ _) defpactRefs = do
       maybeDef <- lift $ typecheck ref
       case maybeDef of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
-        Right (TopFun (FDefun info _ _ Defpact funType args steps) _meta)
+        Right (TopFun (FDefun info _ _ Defpact funType args steps _) _meta)
           -> pure $ ifoldl
             (\i stepAccum step ->
               stepAccum & at (name, i) ?~ ((step, args, info), funType))
@@ -1068,7 +1068,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
         maybeFun <- lift $ typecheck ref
         case maybeFun of
           Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
-          Right topfun@(TopFun (FDefun _ _ _ defType funType _ _) _)
+          Right topfun@(TopFun (FDefun _ _ _ defType funType _ _ _) _)
             -> let checkType = case defType of
                      Defpact -> CheckDefpact
                      Defun   -> CheckDefun

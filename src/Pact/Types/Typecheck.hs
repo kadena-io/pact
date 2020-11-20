@@ -33,7 +33,7 @@ module Pact.Types.Typecheck
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
-    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,fDefType,
+    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,fDefType,fRetId,
     Node (..),aId,aTy,
     Named (..),
     AstBindType (..),
@@ -251,7 +251,8 @@ data Fun t =
     _fDefType :: DefType,
     _fType   :: FunType UserType,
     _fArgs   :: [Named t],
-    _fBody   :: [AST t]
+    _fBody   :: [AST t],
+    _fRetId :: TcId
     }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 

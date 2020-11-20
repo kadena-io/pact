@@ -1,0 +1,1 @@
+../tests/PactTestsSpec.hs

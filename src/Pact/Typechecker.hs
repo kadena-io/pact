@@ -740,7 +740,7 @@ scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> T
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
-    (TList ts _ _) | not (V.null ts) -> mapM toAST (V.toList ts) -- verifies non-empty body.
+    TList ts _ _ -> mapM toAST (V.toList ts) -- verifies non-empty body.
     _ -> die i "Malformed def body"
 
 pfx :: Text -> Text -> Text
@@ -788,16 +788,16 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   funType <- traverse toUserType (_dFunType _tDef)
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
-  assocAST funId (last tcs)
-  return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs
-toFun (TDynamic mem ref i) = case (mem, ref) of
+  unless (null tcs) $ assocAST funId (last tcs)
+  return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs funId
+toFun (TDynamic ref mem i) = case (ref, mem) of
   (TVar (Right Var{}) _, TVar (Left (Ref r)) _) -> toFun $ Left <$> r
   _ -> die i "Malformed mod ref"
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
-assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
+assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
   void $ toStepYRs >>= foldM go (Nothing,0::Int)
   where
     lastStep = pred $ length steps
@@ -881,8 +881,10 @@ toAST (TApp Term.App{..} _) = do
   case fun of
 
     FDefun {..} -> do
+      if null _fBody
+      then assocNode _fRetId n -- TODO: is this necessary?
+      else assocAST i (last _fBody)
 
-      assocAST i (last _fBody)
       mkApp fun args
 
     FNative {} -> do
@@ -1019,11 +1021,9 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
 toAST t@TDynamic {..} = do
   n <- trackIdNode =<< freshId _tInfo (renderCompactText t)
   r <- toAST _tDynModRef
-
   -- do some shit with m and r to resolve the member early.
   -- This will NOT work because the body is unscoped
   -- (hence unresolved) at this point.
-
   m <- toFun _tDynMember
   return $ Dynamic n r m
 
