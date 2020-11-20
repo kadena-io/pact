@@ -3,7 +3,13 @@
 (env-data { "msgkeys": { "keys": ["k"], "pred": ">" } })
 (begin-tx)
 (define-keyset 'keyset (read-keyset "msgkeys"))
+
+(interface tctest-iface
+  (defun tcmodref-spec:bool (s:string)))
+
 (module tctest 'keyset
+
+  (implements tctest-iface)
 
   (defschema person
     name:string
@@ -198,6 +204,14 @@
 
   (defun rtc-object-list (l:[object{schema-a}]) 1)
 
+  (defun tcmodref-spec:bool (s:string)
+    true)
+
+  (defun tc-modref:bool (m:module{tctest-iface})
+    (m::tcmodref-spec "test"))
+
+  (defun fails-tc-modref:string (m:module{tctest-iface})
+    (m::tcmodref-spec "test"))
 )
 
 (create-table persons)
