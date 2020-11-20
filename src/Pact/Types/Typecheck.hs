@@ -41,7 +41,9 @@ module Pact.Types.Typecheck
     aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,aDynMember,aModRefName, aModRefSpec,
     aDynModRef,
     Visit(..),Visitor,
-    YieldResume(..),yrYield,yrResume,yrCrossChain
+    YieldResume(..),yrYield,yrResume,yrCrossChain,
+    Schema(..),
+    ModSpec(..)
   ) where
 
 import Control.Monad.Catch
@@ -63,24 +65,25 @@ data CheckerException = CheckerException Info String deriving (Eq,Ord)
 instance Exception CheckerException
 instance Show CheckerException where show (CheckerException i s) = renderInfo i ++ ": " ++ s
 
+data Schema = Schema
+  { _utName :: TypeName
+  , _utModule :: Maybe ModuleName
+  , _utFields :: [Arg UserType]
+  , _utInfo :: Info
+  } deriving (Eq, Ord)
+
+newtype ModSpec = ModSpec { _utModName :: ModuleName }
+  deriving (Eq, Ord)
+
 -- | Model a user type. Currently only Schemas are supported..
-data UserType
-  = Schema
-    { _utName :: TypeName
-    , _utModule :: Maybe ModuleName
-    , _utFields :: [Arg UserType]
-    , _utInfo :: Info
-    }
-  | ModSpec
-    { _utModName :: ModuleName
-    }
+data UserType = UTSchema Schema | UTModSpec ModSpec
   deriving (Eq,Ord)
 instance Show UserType where
-  show Schema {..} = "{" ++ unpack (maybe "" ((<>) "." . asString) _utModule) ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
-  show (ModSpec mn) = show mn
+  show (UTSchema Schema {..}) = "{" ++ unpack (maybe "" ((<>) "." . asString) _utModule) ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
+  show (UTModSpec (ModSpec mn)) = show mn
 instance Pretty UserType where
-  pretty Schema {..} = braces (pretty _utModule <> dot <> pretty _utName)
-  pretty (ModSpec mn) = pretty mn
+  pretty (UTSchema Schema {..}) = braces (pretty _utModule <> dot <> pretty _utName)
+  pretty (UTModSpec (ModSpec mn)) = pretty mn
 
 -- | An ID for an AST node.
 data TcId = TcId {

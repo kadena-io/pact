@@ -95,7 +95,7 @@ import           Pact.Types.Type            (ftArgs, _ftArgs)
 import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
                                              Named, Node, TcId (_tiInfo),
                                              TopLevel (TopConst, TopFun, TopTable),
-                                             UserType (_utFields, _utName),
+                                             UserType (..), Schema (_utFields, _utName),
                                              runTC, tcFailures, toplevelInfo)
 import qualified Pact.Types.Typecheck       as TC
 
@@ -580,8 +580,8 @@ moduleTables modules modRefs consts = do
     (TopTable _info _name tableTy _meta, _tcState)
       <- lift $ runTC 0 False $ typecheckTopLevel (Ref tab)
     case tableTy of
-      Pact.TyUser (TC.ModSpec mn) -> throwError $ ModuleSpecInSchemaPosition mn
-      Pact.TyUser (schema@TC.Schema{_utName,_utFields}) -> do
+      Pact.TyUser (TC.UTModSpec (TC.ModSpec mn)) -> throwError $ ModuleSpecInSchemaPosition mn
+      Pact.TyUser schema@(TC.UTSchema (TC.Schema{_utName,_utFields})) -> do
         VarEnv vidStart invEnv vidTys <- hoist generalize $
           mkInvariantEnv schema
 
@@ -805,8 +805,8 @@ data VarEnv = VarEnv
 -- determined by the lexicographic order of variable names. Also see
 -- 'varIdColumns'.
 mkInvariantEnv :: UserType -> Except VerificationFailure VarEnv
-mkInvariantEnv (TC.ModSpec mn) = throwError $ ModuleSpecInSchemaPosition mn
-mkInvariantEnv TC.Schema{_utFields} = do
+mkInvariantEnv (TC.UTModSpec (TC.ModSpec mn)) = throwError $ ModuleSpecInSchemaPosition mn
+mkInvariantEnv (TC.UTSchema TC.Schema{_utFields}) = do
   tys <- Map.fromList . map (first (env Map.!)) <$>
     traverse (translateArgTy "schema field's") _utFields
   pure $ VarEnv vidStart env tys
@@ -866,13 +866,16 @@ makeFunctionEnv (Pact.FunType argTys resultTy) = do
   pure $ VarEnv envVidStart nameVids vidTys
 
 mkTableEnv :: [Table] -> TableMap (ColumnMap EType)
-mkTableEnv tables = TableMap $ Map.fromList $
-  tables <&> \Table { _tableName, _tableType } ->
-    let fields = _utFields _tableType
-        colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-          \(Pact.Arg argName ty _) ->
-            (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
-    in (TableName (T.unpack _tableName), colMap)
+mkTableEnv tables = TableMap $ Map.fromList $ foldr go [] tables
+  where
+    go Table { _tableName, _tableType } acc = case _tableType of
+      TC.UTModSpec{} -> acc
+      TC.UTSchema schema ->
+        let fields = _utFields schema
+            colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+              \(Pact.Arg argName ty _) ->
+                (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
+        in (TableName (T.unpack _tableName), colMap):acc
 
 -- | Get the set of checks for a step.
 stepCheck

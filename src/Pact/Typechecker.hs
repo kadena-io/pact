@@ -269,9 +269,9 @@ handleSpecialOverload _ m = m
 
 
 findSchemaField :: Text -> UserType -> Maybe (Type UserType)
-findSchemaField fname Schema {..} =
+findSchemaField fname (UTSchema Schema{..}) =
       foldl (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _utFields
-findSchemaField _ ModSpec{} = Nothing
+findSchemaField _ UTModSpec{} = Nothing
 
 asPrimString :: AST Node -> TC Text
 asPrimString (Prim _ (PrimLit (LString s))) = return s
@@ -329,7 +329,7 @@ applySchemas Pre ast = case ast of
     -- (returns partial keys list if subset of specified)
     validateSchema :: UserType -> SchemaPartial
                    -> M.Map FieldKey (AST Node, TcId, Type UserType) -> TC (Maybe (Set Text))
-    validateSchema sch partial pmap = do
+    validateSchema (UTSchema sch) partial pmap = do
       -- smap: lookup from field name to ty
       let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
           filterPartial FullSchema = id
@@ -349,6 +349,9 @@ applySchemas Pre ast = case ast of
             Just u -> assocAstTy (_aNode v) (either id id u)
           return [k]
       return $ if Set.size pks < M.size smap then Just pks else Nothing
+    validateSchema (UTModSpec (ModSpec mn)) _ _ = die def
+      $ "Invalid mod ref in schema position: "
+      <> showPretty mn
 
     lookupAndResolveTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 
@@ -681,7 +684,6 @@ unifyTypes l r = case (l,r) of
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam Just a b
   (TySchema sa a spa,TySchema sb b spb) | sa == sb -> unifyParam (specializePartial spa spb) a b
-  (TyModule{}, TyModule{}) -> error "TODO"
   _ -> Nothing
   where
     -- | Unifies param and uses bias to return parent, with additional test/modifier f
@@ -1046,9 +1048,11 @@ toUserType t = case t of
     derefUT (Direct d) = toUserType' (fmap Right d)
 
 toUserType' :: Show n => Term (Either Ref n) -> TC UserType
-toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
+toUserType' TSchema {..} = fmap UTSchema $ Schema _tSchemaName _tModule
+  <$> mapM (traverse toUserType) _tFields
+  <*> pure _tInfo
 toUserType' TModRef {..} = case _modRefSpec _tModRef of
-  Nothing -> return $ ModSpec (_modRefName _tModRef)
+  Nothing -> return $ UTModSpec (ModSpec $ _modRefName _tModRef)
   Just {} -> die _tInfo "toUserType': expected interface modref"
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 

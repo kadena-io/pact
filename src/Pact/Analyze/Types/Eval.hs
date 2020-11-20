@@ -454,24 +454,27 @@ mkTableColumnMap
   -> (Pact.Type Pact.UserType -> Bool) -- ^ Include this column in the mapping?
   -> a                                 -- ^ Default value
   -> TableMap (ColumnMap a)
-mkTableColumnMap tables f defValue = TableMap $ Map.fromList $
-  tables <&> \Table { _tableName, _tableType } ->
-    let fields = Pact._utFields _tableType
-        colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-          \(Pact.Arg argName ty _) ->
-            if f ty
-            then Just (ColumnName (T.unpack argName), defValue)
-            else Nothing
-    in (TableName (T.unpack _tableName), colMap)
+mkTableColumnMap tables f defValue = TableMap $ Map.fromList $ foldr go [] tables
+  where
+    go Table { _tableName, _tableType } acc = case _tableType of
+      Pact.UTModSpec{} -> acc
+      Pact.UTSchema schema ->
+        let fields = Pact._utFields schema
+            colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+              \(Pact.Arg argName ty _) ->
+                if f ty
+                then Just (ColumnName (T.unpack argName), defValue)
+                else Nothing
+        in (TableName (T.unpack _tableName), colMap):acc
 
 mkSymbolicCells :: [Table] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
   where
     cellsList = tables <&> \Table { _tableName, _tableType } ->
         let fields' = case _tableType of
-              Pact.Schema _ _ fields _ -> Map.fromList $
+              Pact.UTSchema (Pact.Schema _ _ fields _) -> Map.fromList $
                 map (\(Pact.Arg argName ty _i) -> (argName, ty)) fields
-              Pact.ModSpec{} -> mempty
+              Pact.UTModSpec Pact.ModSpec{} -> mempty
 
         in (TableName (T.unpack _tableName), mkCells _tableName fields')
 
