@@ -60,7 +60,7 @@ import Safe hiding (at)
 import Pact.Types.Native
 import Pact.Types.Pretty
 import qualified Pact.Types.Runtime as Term
-import Pact.Types.Runtime hiding (App,appInfo,Object,Step,ModRef)
+import Pact.Types.Runtime hiding (App,appInfo,Object,Step)
 import Pact.Types.Typecheck
 
 die :: MonadThrow m => Info -> String -> m a
@@ -132,7 +132,6 @@ walkAST f t@Step {} = do
     <*> pure (_aModel a)
   f Post t'
 walkAST f t@Dynamic {} = f Pre t >>= f Post
-walkAST f t@ModRef{} = f Pre t >>= f Post
 
 isConcreteTy :: Type n -> Bool
 isConcreteTy ty = not (isAnyTy ty || isVarTy ty)

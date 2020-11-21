@@ -38,7 +38,7 @@ module Pact.Types.Typecheck
     Named (..),
     AstBindType (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
-    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,aDynMember,aModRefName, aModRefSpec,
+    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,aDynMember,
     aDynModRef,
     Visit(..),Visitor,
     YieldResume(..),yrYield,yrResume,yrCrossChain,
@@ -361,11 +361,6 @@ data AST n =
   _aNode :: n,
   _aDynModRef :: AST n,
   _aDynMember :: Fun n
-  } |
-  ModRef {
-  _aNode :: n,
-  _aModRefName :: ModuleName,
-  _aModRefSpec :: Maybe [ModuleName]
   }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
@@ -407,8 +402,6 @@ instance Pretty t => Pretty (AST t) where
             , indent 2 $ pretty _aExec
             ]
      Dynamic{..} -> sep [pn, pretty _aDynModRef, pretty _aDynMember]
-
-     ModRef{..} -> sep [pn, pretty _aModRefName]
    where pn = pretty (_aNode a)
 
 
