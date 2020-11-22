@@ -741,7 +741,7 @@ scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> T
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
-    TList ts _ _ -> mapM toAST (V.toList ts) -- verifies non-empty body.
+    TList ts _ _ -> mapM toAST (V.toList ts) 
     _ -> die i "Malformed def body"
 
 pfx :: Text -> Text -> Text
