@@ -269,7 +269,7 @@ handleSpecialOverload _ m = m
 
 findSchemaField :: Text -> UserType -> Maybe (Type UserType)
 findSchemaField fname (UTSchema Schema{..}) =
-      foldl (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _utFields
+      foldl' (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _schFields
 findSchemaField _ UTModSpec{} = Nothing
 
 asPrimString :: AST Node -> TC Text
@@ -330,7 +330,7 @@ applySchemas Pre ast = case ast of
                    -> M.Map FieldKey (AST Node, TcId, Type UserType) -> TC (Maybe (Set Text))
     validateSchema (UTSchema sch) partial pmap = do
       -- smap: lookup from field name to ty
-      let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+      let smap = filterPartial partial $ M.fromList $ (`map` _schFields sch) $ \(Arg an aty _) -> (an,aty)
           filterPartial FullSchema = id
           filterPartial AnySubschema = id
           filterPartial (PartialSchema ks) = (`M.restrictKeys` ks)
@@ -741,7 +741,7 @@ scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> T
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
-    TList ts _ _ -> mapM toAST (V.toList ts) 
+    TList ts _ _ -> mapM toAST (V.toList ts)
     _ -> die i "Malformed def body"
 
 pfx :: Text -> Text -> Text

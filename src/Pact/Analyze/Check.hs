@@ -95,7 +95,7 @@ import           Pact.Types.Type            (ftArgs, _ftArgs)
 import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
                                              Named, Node, TcId (_tiInfo),
                                              TopLevel (TopConst, TopFun, TopTable),
-                                             UserType (..), Schema (_utFields, _utName),
+                                             UserType (..), Schema (_schFields, _schName),
                                              runTC, tcFailures, toplevelInfo)
 import qualified Pact.Types.Typecheck       as TC
 
@@ -581,11 +581,11 @@ moduleTables modules modRefs consts = do
       <- lift $ runTC 0 False $ typecheckTopLevel (Ref tab)
     case tableTy of
       Pact.TyUser (TC.UTModSpec (TC.ModSpec mn)) -> throwError $ ModuleSpecInSchemaPosition mn
-      Pact.TyUser schema@(TC.UTSchema (TC.Schema{_utName,_utFields})) -> do
+      Pact.TyUser schema@(TC.UTSchema (TC.Schema{_schName,_schFields})) -> do
         VarEnv vidStart invEnv vidTys <- hoist generalize $
           mkInvariantEnv schema
 
-        let schemaName = asString _utName
+        let schemaName = asString _schName
 
             mkInvariant :: Exp Info -> Either String (Invariant 'TyBool)
             mkInvariant = expToInvariant vidStart invEnv vidTys consts SBool
@@ -806,16 +806,16 @@ data VarEnv = VarEnv
 -- 'varIdColumns'.
 mkInvariantEnv :: UserType -> Except VerificationFailure VarEnv
 mkInvariantEnv (TC.UTModSpec (TC.ModSpec mn)) = throwError $ ModuleSpecInSchemaPosition mn
-mkInvariantEnv (TC.UTSchema TC.Schema{_utFields}) = do
+mkInvariantEnv (TC.UTSchema TC.Schema{_schFields}) = do
   tys <- Map.fromList . map (first (env Map.!)) <$>
-    traverse (translateArgTy "schema field's") _utFields
+    traverse (translateArgTy "schema field's") _schFields
   pure $ VarEnv vidStart env tys
 
   where
     -- Order variables lexicographically over their names when assigning
     -- variable IDs.
     env :: Map Text VarId
-    env = Map.fromList $ flip zip [0..] $ List.sort $ map Pact._aName _utFields
+    env = Map.fromList $ flip zip [0..] $ List.sort $ map Pact._aName _schFields
 
     vidStart :: VarId
     vidStart = VarId $ Map.size env
@@ -871,7 +871,7 @@ mkTableEnv tables = TableMap $ Map.fromList $ foldr go [] tables
     go Table { _tableName, _tableType } acc = case _tableType of
       TC.UTModSpec{} -> acc
       TC.UTSchema schema ->
-        let fields = _utFields schema
+        let fields = _schFields schema
             colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
               \(Pact.Arg argName ty _) ->
                 (ColumnName (T.unpack argName),) <$> maybeTranslateType ty

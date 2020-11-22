@@ -459,7 +459,7 @@ mkTableColumnMap tables f defValue = TableMap $ Map.fromList $ foldr go [] table
     go Table { _tableName, _tableType } acc = case _tableType of
       Pact.UTModSpec{} -> acc
       Pact.UTSchema schema ->
-        let fields = Pact._utFields schema
+        let fields = Pact._schFields schema
             colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
               \(Pact.Arg argName ty _) ->
                 if f ty

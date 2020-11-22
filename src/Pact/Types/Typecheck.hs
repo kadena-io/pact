@@ -67,22 +67,22 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 
 data Schema = Schema
   { _schName :: TypeName
-  , _utModule :: Maybe ModuleName
-  , _utFields :: [Arg UserType]
-  , _utInfo :: Info
+  , _schModule :: Maybe ModuleName
+  , _schFields :: [Arg UserType]
+  , _schInfo :: Info
   } deriving (Eq, Ord)
 
-newtype ModSpec = ModSpec { _utModName :: ModuleName }
+newtype ModSpec = ModSpec { _specModName :: ModuleName }
   deriving (Eq, Ord)
 
 -- | Model a user type. Currently only Schemas are supported..
 data UserType = UTSchema Schema | UTModSpec ModSpec
   deriving (Eq,Ord)
 instance Show UserType where
-  show (UTSchema Schema {..}) = "{" ++ unpack (maybe "" ((<>) "." . asString) _utModule) ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
+  show (UTSchema Schema {..}) = "{" ++ unpack (maybe "" ((<>) "." . asString) _schModule) ++ unpack (asString _schName) ++ " " ++ show _schFields ++ "}"
   show (UTModSpec (ModSpec mn)) = show mn
 instance Pretty UserType where
-  pretty (UTSchema Schema {..}) = braces (pretty _utModule <> dot <> pretty _utName)
+  pretty (UTSchema Schema {..}) = braces (pretty _schModule <> dot <> pretty _schName)
   pretty (UTModSpec (ModSpec mn)) = pretty mn
 
 -- | An ID for an AST node.
