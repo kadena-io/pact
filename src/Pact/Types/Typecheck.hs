@@ -66,7 +66,7 @@ instance Exception CheckerException
 instance Show CheckerException where show (CheckerException i s) = renderInfo i ++ ": " ++ s
 
 data Schema = Schema
-  { _utName :: TypeName
+  { _schName :: TypeName
   , _utModule :: Maybe ModuleName
   , _utFields :: [Arg UserType]
   , _utInfo :: Info
