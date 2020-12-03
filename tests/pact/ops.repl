@@ -202,3 +202,5 @@
 ;; (expect-failure "env-hash invalid base64" (env-hash "aa"))
 (expect "env-hash invalid base64" "Set tx hash to aa" (env-hash "aa"))
 
+;; TODO use expect-that for above tests
+(expect-that "expect-that test" (< 2) (+ 1 2))
