@@ -34,7 +34,7 @@ import Data.Foldable
 import qualified Data.Map.Strict as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Thyme.Time.Core
@@ -153,7 +153,8 @@ replDefs = ("Repl",
       [ExecExample "(begin-tx) (commit-tx)"] "Commit transaction."
      ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString [])
       [ExecExample "(begin-tx \"Third Act\") (rollback-tx)"] "Rollback transaction."
-     ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
+     ,defZNative "expect" expect
+      (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
       ["(expect \"Sanity prevails.\" 4 (+ 2 2))"]
       "Evaluate ACTUAL and verify that it equals EXPECTED."
 
@@ -165,6 +166,14 @@ replDefs = ("Repl",
       ]
       "Evaluate EXP and succeed only if it throws an error."
 
+     ,defZNative "expect-that" expectThat
+      (funType tTyString
+       [("doc",tTyString)
+       ,("pred",TyFun (funType' tTyBool [("value",a)]))
+       ,("exp",a)])
+      [ExecExample "(expect-that \"addition\" (< 2) (+ 1 2))"
+      ,ExecErrExample "(expect-that \"addition\" (> 2) (+ 1 2))"]
+      "Evaluate EXP and succeed if value passes predicate PRED."
      ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       [LitExample "(bench (+ 1 2))"] "Benchmark execution of EXPRS."
      ,defZRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
@@ -465,52 +474,91 @@ recordTest :: Text -> Maybe (FunApp,Text) -> Eval LibState ()
 recordTest name failure = setLibState $ over rlsTests (++ [TestResult name failure])
 
 testSuccess :: Text -> Text -> Eval LibState (Term Name)
-testSuccess name msg = recordTest name Nothing >> return (tStr msg)
+testSuccess doc msg = do
+  recordTest doc Nothing
+  return $ tStr $ msg <> ": success: " <> doc
 
-testFailure :: FunApp -> Text -> Text -> Eval LibState (Term Name)
-testFailure i name msg = recordTest name (Just (i,msg)) >> return (tStr msg)
-
-expect :: RNativeFun LibState
-expect i [TLitString a,b,c] = do
-  a' <- enrichTestName a
-  if b `termEq` c
-  then testSuccess a' $ "Expect: success: " <> a'
-  else testFailure i a' $ renderCompactText' $
-       "FAILURE: " <> pretty a' <> ": expected " <> pretty b <> ":" <> pretty (typeof' b) <>
-       ", received " <> pretty c <> ":" <> pretty (typeof' c)
-expect i as = argsError i as
-
-expectFail :: ZNativeFun LibState
-expectFail i as = case as of
-  [doc,expr] -> go doc Nothing expr
-  [doc,err,expr] -> reduce err >>= \e -> case e of
-    TLitString errmsg -> go doc (Just $ unpack errmsg) expr
-    _ -> argsError' i as
-  _ -> argsError' i as
+testFailure :: FunApp -> Text -> Doc -> Eval LibState (Term Name)
+testFailure i doc msg = recordTest doc (Just (i,rmsg)) >> return (tStr rmsg)
   where
-    tsuccess msg = testSuccess msg $ "Expect failure: success: " <> msg
-    tfailure msg details = testFailure i msg $ "FAILURE: " <> msg <> ": " <> details
-    go doc errM expr = reduce doc >>= \d -> case d of
-      TLitString msg -> do
-        msg' <- enrichTestName msg
-        r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
-        case r of
-          Right v -> tfailure msg' $ "expected failure, got result = " <> pack (showPretty v)
-          Left e -> case errM of
-            Nothing -> tsuccess msg'
-            Just err | err `isInfixOf` e -> tsuccess msg'
-                     | otherwise -> tfailure msg' $ "expected error message to contain '" <> pack err
-                                    <> "', got '" <> pack e <> "'"
-      _ -> argsError' i as
+    rmsg = "FAILURE: " <> doc <> ": " <> renderCompactText' msg
 
--- | Use stack frames for 'FunApp's to enrich test name, using
--- presence of module name as a heuristic of the "user stack".
-enrichTestName :: Text -> Eval e Text
-enrichTestName msg= use evalCallStack >>= return . foldl' go msg
+testDoc :: FunApp -> [Term Ref] -> Eval e Text
+testDoc _ (TLitString doc:_) = enrichTestName doc
   where
+    -- | Use stack frames for 'FunApp's to enrich test name, using
+    -- presence of module name as a heuristic of the "user stack".
+    enrichTestName :: Text -> Eval e Text
+    enrichTestName msg = use evalCallStack >>= return . foldl' go msg
+
     go m StackFrame{..} = case preview (_Just . _1 . faModule . _Just) _sfApp of
       Just {} -> _sfName <> "." <> m
       _ -> m
+testDoc i as = argsError' i as
+
+testCatch :: FunApp -> Text -> Eval LibState a -> Doc ->
+             (a -> Eval LibState (Term Name)) -> Eval LibState (Term Name)
+testCatch i doc expr errMsg cont = catchesPactError expr >>= \r -> case r of
+  Right v -> cont v
+  Left e -> testFailure i doc $ errMsg <> ": " <> prettyErr e
+  where
+    prettyErr e = prettyInfo (peInfo e) <> peDoc e
+    prettyInfo a
+        | a == def = ""
+        | otherwise = pretty (renderInfo a) <> ": "
+
+
+expect :: ZNativeFun LibState
+expect i as@[_,b',c'] = do
+  doc <- testDoc i as
+  testCatch i doc (reduce c') "evaluation of actual failed" $ \c ->
+    testCatch i doc (reduce b') "evaluation of expected failed" $ \b ->
+      if b `termEq` c
+      then testSuccess doc "Expect"
+      else testFailure i doc $
+           "expected " <> pretty b <> ":" <> pretty (typeof' b) <>
+           ", received " <> pretty c <> ":" <> pretty (typeof' c)
+expect i as = argsError' i as
+
+expectFail :: ZNativeFun LibState
+expectFail i as = case as of
+  [_,expr] -> go Nothing expr
+  [_,err,expr] -> reduce err >>= \e -> case e of
+    TLitString errmsg -> go (Just $ unpack errmsg) expr
+    _ -> argsError' i as
+  _ -> argsError' i as
+  where
+    tsuccess msg = testSuccess msg "Expect failure"
+    go errM expr = do
+      msg' <- testDoc i as
+      r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
+      case r of
+        Right v -> testFailure i msg' $ "expected failure, got result = " <> pretty v
+        Left e -> case errM of
+          Nothing -> tsuccess msg'
+          Just err
+              | err `isInfixOf` e -> tsuccess msg'
+              | otherwise ->
+                  testFailure i msg' $ "expected error message to contain '" <> pretty err
+                  <> "', got '" <> pretty e <> "'"
+
+expectThat :: ZNativeFun LibState
+expectThat i as@[_,TApp pred' predi,expr'] = do
+  doc <- testDoc i as
+  testCatch i doc (reduce expr') "evaluation of expression failed" $ \v ->
+    testCatch i doc (apply pred' [v]) "evaluation of predicate failed" $ \p -> case p of
+      TLitBool b
+          | b -> testSuccess doc $ "Expect-that"
+          | otherwise ->
+              testFailure i doc $ "did not satisfy"
+              <> prettyPred predi <> ": " <> pretty v <> ":" <> pretty (typeof' v)
+      t -> testFailure i doc $ "predicate did not return boolean: " <> pretty t
+  where
+    prettyPred (Info (Just (c,_))) = " " <> pretty c
+    prettyPred _ = ""
+expectThat i as = argsError' i as
+
+
 
 
 bench' :: ZNativeFun LibState
