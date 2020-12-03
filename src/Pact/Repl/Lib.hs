@@ -487,7 +487,9 @@ testFailure i doc msg = recordTest doc (Just (i,rmsg)) >> return (tStr rmsg)
     rmsg = "FAILURE: " <> doc <> ": " <> renderCompactText' msg
 
 testDoc :: FunApp -> [Term Ref] -> Eval e Text
-testDoc _ (TLitString doc:_) = enrichTestName doc
+testDoc _ (doc'':_) = reduce doc'' >>= \doc' -> case doc' of
+  TLitString doc -> enrichTestName doc
+  _ -> evalError' doc'' "Expected string"
   where
     -- | Use stack frames for 'FunApp's to enrich test name, using
     -- presence of module name as a heuristic of the "user stack".

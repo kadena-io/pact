@@ -204,3 +204,11 @@
 
 ;; TODO use expect-that for above tests
 (expect-that "expect-that test" (< 2) (+ 1 2))
+
+(expect
+ (format "{}" ["expect: computed docstring"]) 1 1)
+(expect-that
+ (format "{}" ["expect-that: computed docstring"]) (= 1) 1)
+(expect-failure
+ (format "{}" ["expect-failure: computed docstring"])
+ (enforce false "unforced error"))
