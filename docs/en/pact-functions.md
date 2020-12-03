@@ -1823,6 +1823,18 @@ pact> (expect-failure "Enforce fails with message" "Expected error" (enforce fal
 ```
 
 
+### expect-that {#expect-that}
+
+*doc*&nbsp;`string` *pred*&nbsp;`value:<a> -> bool` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+
+Evaluate EXP and succeed if value passes predicate PRED.
+```lisp
+pact> (expect-that "addition" (< 2) (+ 1 2))
+"Expect-that: success: addition"
+```
+
+
 ### format-address {#format-address}
 
 *scheme*&nbsp;`string` *public-key*&nbsp;`string` *&rarr;*&nbsp;`string`

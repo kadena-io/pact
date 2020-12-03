@@ -488,14 +488,15 @@ testDoc _ (TLitString doc:_) = enrichTestName doc
     -- | Use stack frames for 'FunApp's to enrich test name, using
     -- presence of module name as a heuristic of the "user stack".
     enrichTestName :: Text -> Eval e Text
-    enrichTestName msg= use evalCallStack >>= return . foldl' go msg
-      where
-        go m StackFrame{..} = case preview (_Just . _1 . faModule . _Just) _sfApp of
-          Just {} -> _sfName <> "." <> m
-          _ -> m
+    enrichTestName msg = use evalCallStack >>= return . foldl' go msg
+
+    go m StackFrame{..} = case preview (_Just . _1 . faModule . _Just) _sfApp of
+      Just {} -> _sfName <> "." <> m
+      _ -> m
 testDoc i as = argsError' i as
 
-testCatch :: FunApp -> Text -> Eval LibState a -> Doc -> (a -> Eval LibState (Term Name)) -> Eval LibState (Term Name)
+testCatch :: FunApp -> Text -> Eval LibState a -> Doc ->
+             (a -> Eval LibState (Term Name)) -> Eval LibState (Term Name)
 testCatch i doc expr errMsg cont = catchesPactError expr >>= \r -> case r of
   Right v -> cont v
   Left e -> testFailure i doc $ errMsg <> ": " <> prettyErr e
@@ -527,17 +528,18 @@ expectFail i as = case as of
   _ -> argsError' i as
   where
     tsuccess msg = testSuccess msg "Expect failure"
-    tfailure msg details = testFailure i msg details
     go errM expr = do
       msg' <- testDoc i as
       r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
       case r of
-        Right v -> tfailure msg' $ "expected failure, got result = " <> pretty v
+        Right v -> testFailure i msg' $ "expected failure, got result = " <> pretty v
         Left e -> case errM of
           Nothing -> tsuccess msg'
-          Just err | err `isInfixOf` e -> tsuccess msg'
-                   | otherwise -> tfailure msg' $ "expected error message to contain '" <> pretty err
-                                  <> "', got '" <> pretty e <> "'"
+          Just err
+              | err `isInfixOf` e -> tsuccess msg'
+              | otherwise ->
+                  testFailure i msg' $ "expected error message to contain '" <> pretty err
+                  <> "', got '" <> pretty e <> "'"
 
 expectThat :: ZNativeFun LibState
 expectThat i as@[_,TApp pred' predi,expr'] = do
@@ -547,11 +549,10 @@ expectThat i as@[_,TApp pred' predi,expr'] = do
       TLitBool b
           | b -> testSuccess doc $ "Expect-that"
           | otherwise ->
-              prettyFail doc $ "did not satisfy"
+              testFailure i doc $ "did not satisfy"
               <> prettyPred predi <> ": " <> pretty v <> ":" <> pretty (typeof' v)
-      t -> prettyFail doc $ "predicate did not return boolean: " <> pretty t
+      t -> testFailure i doc $ "predicate did not return boolean: " <> pretty t
   where
-    prettyFail doc p = testFailure i doc p
     prettyPred (Info (Just (c,_))) = " " <> pretty c
     prettyPred _ = ""
 expectThat i as = argsError' i as
