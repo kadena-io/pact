@@ -195,7 +195,9 @@
  "Keyset failure"
  (test-capability (O)))
 
-(env-sigs [{ 'key: "a", 'caps: [(M 1),(O)] }])
+;; test computed key value
+(let ((a "a"))
+  (env-sigs [{ 'key: a, 'caps: [(M 1),(O)] }]))
 
 (expect
  "Scoped acquire of O succeeds"
