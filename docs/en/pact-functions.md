@@ -1832,6 +1832,8 @@ Evaluate EXP and succeed if value passes predicate PRED.
 ```lisp
 pact> (expect-that "addition" (< 2) (+ 1 2))
 "Expect-that: success: addition"
+pact> (expect-that "addition" (> 2) (+ 1 2))
+"FAILURE: addition: did not satisfy (> 2) : 3:integer"
 ```
 
 

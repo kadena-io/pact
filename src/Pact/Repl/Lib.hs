@@ -171,7 +171,8 @@ replDefs = ("Repl",
        [("doc",tTyString)
        ,("pred",TyFun (funType' tTyBool [("value",a)]))
        ,("exp",a)])
-      ["(expect-that \"addition\" (< 2) (+ 1 2))"]
+      [ExecExample "(expect-that \"addition\" (< 2) (+ 1 2))"
+      ,ExecErrExample "(expect-that \"addition\" (> 2) (+ 1 2))"]
       "Evaluate EXP and succeed if value passes predicate PRED."
      ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       [LitExample "(bench (+ 1 2))"] "Benchmark execution of EXPRS."
