@@ -297,7 +297,7 @@ viewLibState :: (LibState -> a) -> Eval LibState a
 viewLibState f = modifyLibState (id &&& f)
 
 setop :: LibOp -> Eval LibState ()
-setop v = setLibState $ set rlsOp v
+setop v = setLibState $ over rlsOp (<> v)
 
 setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
