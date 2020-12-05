@@ -6,7 +6,7 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsPacts
+  , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV
   , Tx(..)
   , SPVMockKey(..)
   , getAllModules
@@ -98,7 +98,6 @@ data LibState = LibState
   , _rlsTests :: [TestResult]
   , _rlsVerifyUri :: Maybe String
   , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
-  , _rlsPacts :: M.Map PactId PactExec
   }
 
 

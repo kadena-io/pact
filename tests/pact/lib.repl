@@ -43,3 +43,16 @@
 (expect-failure
  "applied env gone"
  (read-keyset 'k))
+
+
+;; run pacts non-toplevel
+(env-enable-repl-natives true)
+(module f g
+  (defcap g () true)
+  (defpact p ()
+    (step 1)
+    (step 2))
+  (defun go ()
+    (p)
+    (continue-pact 1)))
+(expect "non-toplevel pact continuation succeeds" 2 (go))
