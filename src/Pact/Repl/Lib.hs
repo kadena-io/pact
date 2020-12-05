@@ -82,7 +82,7 @@ initLibState loggers verifyUri = do
                 (newLogger loggers "Repl")
                 def 0 def)
   createSchema m
-  return (LibState m Noop def def verifyUri M.empty M.empty)
+  return (LibState m Noop def def verifyUri M.empty)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -391,12 +391,8 @@ continuePact i as = case as of
       (pactId, y) <- unwrapExec pid userResume pe
 
       let pactStep = PactStep (fromIntegral step) rollback pactId y
-      viewLibState (view rlsPacts) >>= \pacts ->
-        case M.lookup pactId pacts of
-          Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
-          Just PactExec{} -> do
-            evalPactExec .= Nothing
-            local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
+      evalPactExec .= Nothing
+      local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
 
     unwrapExec mpid mobj Nothing = do
       pid <- case mpid of
