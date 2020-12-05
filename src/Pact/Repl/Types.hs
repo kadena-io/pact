@@ -69,6 +69,14 @@ data LibOp
       -- ^ special output for typechecker
 instance Default LibOp where def = Noop
 
+-- | Semi-pathological instance that either overwrites
+-- or mappends to 'Endo' in 'UpdateEnv'.
+instance Semigroup LibOp where
+  UpdateEnv a <> UpdateEnv b = UpdateEnv (a <> b)
+  _ <> b = b
+instance Monoid LibOp where
+  mempty = def
+
 -- | Transaction action type.
 data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 
