@@ -347,11 +347,14 @@ setsigs' _ [TList ts _ _] = do
   sigs <- forM ts $ \t -> case t of
     (TObject (Object (ObjectMap om) _ _ _) _) -> do
       case (M.lookup "key" om,M.lookup "caps" om) of
-        (Just (TLitString k),Just (TList clist _ _)) -> do
-          caps <- forM clist $ \cap -> case cap of
-            (TApp a _) -> view _1 <$> appToCap a
-            o -> evalError' o $ "Expected capability invocation"
-          return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
+        (Just k'',Just (TList clist _ _)) -> do
+          reduce k'' >>= \k' -> case k' of
+            TLitString k -> do
+              caps <- forM clist $ \cap -> case cap of
+                (TApp a _) -> view _1 <$> appToCap a
+                o -> evalError' o $ "Expected capability invocation"
+              return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
+            _ -> evalError' k' "Expected string value"
         _ -> evalError' t "Expected object with 'key': string, 'caps': [capability]"
     _ -> evalError' t $ "Expected object"
   setenv eeMsgSigs $ M.fromList $ V.toList sigs
@@ -484,7 +487,9 @@ testFailure i doc msg = recordTest doc (Just (i,rmsg)) >> return (tStr rmsg)
     rmsg = "FAILURE: " <> doc <> ": " <> renderCompactText' msg
 
 testDoc :: FunApp -> [Term Ref] -> Eval e Text
-testDoc _ (TLitString doc:_) = enrichTestName doc
+testDoc _ (doc'':_) = reduce doc'' >>= \doc' -> case doc' of
+  TLitString doc -> enrichTestName doc
+  _ -> evalError' doc'' "Expected string"
   where
     -- | Use stack frames for 'FunApp's to enrich test name, using
     -- presence of module name as a heuristic of the "user stack".
