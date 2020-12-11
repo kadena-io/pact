@@ -60,7 +60,7 @@ import Safe hiding (at)
 import Pact.Types.Native
 import Pact.Types.Pretty
 import qualified Pact.Types.Runtime as Term
-import Pact.Types.Runtime hiding (App,appInfo,Object,Step)
+import Pact.Types.Runtime hiding (App,ModRef,appInfo,Object,Step)
 import Pact.Types.Typecheck
 
 die :: MonadThrow m => Info -> String -> m a
@@ -91,6 +91,7 @@ walkAST :: Monad m => Visitor m n -> AST n -> m (AST n)
 walkAST f t@Prim {} = f Pre t >>= f Post
 walkAST f t@Var {} = f Pre t >>= f Post
 walkAST f t@Table {} = f Pre t >>= f Post
+walkAST f t@ModRef {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
   a <- f Pre t
   t' <- Object (_aNode a) <$>
@@ -853,7 +854,11 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
-toAST TModRef {..} = die _tInfo "TODO: modrefs should be treated as values"
+toAST t@TModRef{..} = do
+  tcid <- freshId _tInfo $ asString $ showPretty t
+  ty <- toUserType' t
+  n <- trackNode (TyUser ty) tcid
+  return $ ModRef n (_modRefName _tModRef) (_modRefSpec _tModRef)
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
   (Left (Direct t)) ->
@@ -1049,7 +1054,7 @@ toUserType' TSchema {..} = fmap UTSchema $ Schema _tSchemaName _tModule
   <*> pure _tInfo
 toUserType' TModRef {..} = case _modRefSpec _tModRef of
   Nothing -> return $ UTModSpec (ModSpec $ _modRefName _tModRef)
-  Just {} -> die _tInfo "toUserType': expected interface modref"
+  Just t -> die _tInfo $ "toUserType': expected interface modref: " <> show t
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
