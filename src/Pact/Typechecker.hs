@@ -856,8 +856,12 @@ toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
 toAST t@TModRef{..} = do
   tcid <- freshId _tInfo $ asString $ showPretty t
-  ty <- toUserType' t
-  n <- trackNode (TyUser ty) tcid
+
+  let ty = TyModule
+        $ fmap (UTModSpec . ModSpec)
+        <$> _modRefSpec _tModRef
+
+  n <- trackNode ty tcid
   return $ ModRef n (_modRefName _tModRef) (_modRefSpec _tModRef)
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
@@ -1054,7 +1058,7 @@ toUserType' TSchema {..} = fmap UTSchema $ Schema _tSchemaName _tModule
   <*> pure _tInfo
 toUserType' TModRef {..} = case _modRefSpec _tModRef of
   Nothing -> return $ UTModSpec (ModSpec $ _modRefName _tModRef)
-  Just t -> die _tInfo $ "toUserType': expected interface modref: " <> show t
+  Just{} -> die _tInfo "toUserType': expected interface modref"
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
