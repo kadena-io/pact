@@ -7,6 +7,9 @@
 (interface tctest-iface
   (defun tcmodref-spec:bool (s:string)))
 
+(interface tctest-iface2
+  (defun tcmodref-spec2:bool (s:string)))
+
 (module tctestImpl g
   (defcap g () true)
 
@@ -15,6 +18,30 @@
   (defun tcmodref-spec:bool (s:string)
     true)
 )
+
+
+(module tctestImpl2 g
+  (defcap g () true)
+
+  (implements tctest-iface2)
+
+  (defun tcmodref-spec2:bool (s:string)
+    true)
+)
+
+(module tctestImplBoth g
+  (defcap g () true)
+
+  (implements tctest-iface2)
+  (implements tctest-iface)
+
+  (defun tcmodref-spec2:bool (s:string)
+    true)
+
+  (defun tcmodref-spec:bool (s:string)
+    true)
+)
+
 
 (module tctest 'keyset
 
@@ -217,8 +244,20 @@
   (defun fails-tc-modref:string (m:module{tctest-iface})
     (m::tcmodref-spec "test"))
 
+  (defun tc-modref2:bool (m:module{tctest-iface, tctest-iface})
+    true)
+
   (defun tc-call-modref:bool ()
     (tc-modref tctestImpl))
+
+  (defun tc-call-modref2:bool ()
+    (and
+      (tc-modref tctestImplBoth)
+      (tc-modref2 tctestImplBoth)))
+
+
+  (defun fails-tc-call-modref:bool ()
+    (tc-modref tctestImpl2))
 )
 
 (create-table persons)

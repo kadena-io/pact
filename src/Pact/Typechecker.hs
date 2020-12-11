@@ -663,7 +663,7 @@ assocNode ai bn = do
     Just (Right _) -> doSub bi bv bty ai av aty
 
 -- | Unify two types and note failure.
-unifyTypes' :: (Pretty n,Eq n) => TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
+unifyTypes' :: TcId -> Type UserType -> Type UserType -> (Either (Type UserType) (Type UserType) -> TC ()) -> TC ()
 unifyTypes' i a b act = case unifyTypes a b of
   Just r -> act r
   Nothing -> do
@@ -671,7 +671,7 @@ unifyTypes' i a b act = case unifyTypes a b of
     return ()
 
 -- | Unify two types, indicating which of the types was more specialized with the Either result.
-unifyTypes :: forall n . Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
+unifyTypes :: Type UserType -> Type UserType -> Maybe (Either (Type UserType) (Type UserType))
 unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
   (TyAny,_) -> Just (Right r)
@@ -684,11 +684,25 @@ unifyTypes l r = case (l,r) of
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam Just a b
   (TySchema sa a spa,TySchema sb b spb) | sa == sb -> unifyParam (specializePartial spa spb) a b
+  (TyModule ms, TyModule ms') -> case (ms, ms') of
+    (Just a, Just b) -> do
+      a' <- traverse toModuleName a
+      b' <- traverse toModuleName b
+      if testElems a' b' then return $ Left l
+      else if testElems b' a' then return $ Right r
+      else Nothing
+    _ -> Nothing
   _ -> Nothing
   where
+    toModuleName (UTModSpec (ModSpec mn)) = return mn
+    toModuleName _ = Nothing
+
+    testElems as bs = all (`elem` bs) as
     -- | Unifies param and uses bias to return parent, with additional test/modifier f
     -- TODO why not specialize param too?
-    unifyParam :: (Type n -> Maybe (Type n)) -> Type n -> Type n -> (Maybe (Either (Type n) (Type n)))
+    unifyParam
+      :: (Type UserType -> Maybe (Type UserType))
+      -> Type UserType -> Type UserType -> Maybe (Either (Type UserType) (Type UserType))
     unifyParam f a b = bimapM (const (f l)) (const (f r)) =<< unifyTypes a b
     specializePartial spa spb u =
       let setPartial p = Just $ set tySchemaPartial p u
@@ -720,14 +734,14 @@ unifyTypes l r = case (l,r) of
         _ -> Nothing
 
 -- | check for unification of (non-var) type against constraints
-checkConstraints :: Eq n => Type n -> [Type n] -> Bool
+checkConstraints :: Type UserType -> [Type UserType] -> Bool
 checkConstraints _ [] = True
 checkConstraints ty constrs = foldl' check False constrs where
   check r con = r || isJust (unifyTypes ty con)
 
 
 -- | Attempt to unify identifying which input "won", or specialize the first type.
-unifyConstraints :: Eq n => [Type n] -> [Type n] -> Maybe (Either [Type n] [Type n])
+unifyConstraints :: [Type UserType] -> [Type UserType] -> Maybe (Either [Type UserType] [Type UserType])
 unifyConstraints ac bc
   | null ac = Just $ Right bc
   | null bc = Just $ Left ac
