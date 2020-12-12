@@ -23,21 +23,24 @@ module Pact.Repl.Lib where
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
-import Control.Monad.Reader
 import Control.Monad.Catch
+import Control.Monad.Reader
+import Control.Monad.State.Strict (get,put)
 
 import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
+import Data.Foldable
 import qualified Data.Map.Strict as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Thyme.Time.Core
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
+
 
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
@@ -46,8 +49,6 @@ import Data.Maybe
 
 import Criterion
 import Criterion.Types
-
-import Control.Monad.State.Strict (get)
 
 import Statistics.Types (Estimate(..))
 
@@ -72,6 +73,7 @@ import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
+import Pact.Runtime.Utils
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -80,7 +82,7 @@ initLibState loggers verifyUri = do
                 (newLogger loggers "Repl")
                 def 0 def)
   createSchema m
-  return (LibState m Noop def def verifyUri M.empty M.empty)
+  return (LibState m Noop def def verifyUri M.empty)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -146,10 +148,13 @@ replDefs = ("Repl",
       ("Set environment confidential ENTITY id, or unset with no argument.")
      ,defZRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
-      [LitExample "(begin-tx \"load module\")"] "Begin transaction with optional NAME."
-     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) [LitExample "(commit-tx)"] "Commit transaction."
-     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) [LitExample "(rollback-tx)"] "Rollback transaction."
-     ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
+      [ExecExample "(begin-tx \"load module\")"] "Begin transaction with optional NAME."
+     ,defZRNative "commit-tx" (tx Commit) (funType tTyString [])
+      [ExecExample "(begin-tx) (commit-tx)"] "Commit transaction."
+     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString [])
+      [ExecExample "(begin-tx \"Third Act\") (rollback-tx)"] "Rollback transaction."
+     ,defZNative "expect" expect
+      (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
       ["(expect \"Sanity prevails.\" 4 (+ 2 2))"]
       "Evaluate ACTUAL and verify that it equals EXPECTED."
 
@@ -161,6 +166,14 @@ replDefs = ("Repl",
       ]
       "Evaluate EXP and succeed only if it throws an error."
 
+     ,defZNative "expect-that" expectThat
+      (funType tTyString
+       [("doc",tTyString)
+       ,("pred",TyFun (funType' tTyBool [("value",a)]))
+       ,("exp",a)])
+      [ExecExample "(expect-that \"addition\" (< 2) (+ 1 2))"
+      ,ExecErrExample "(expect-that \"addition\" (> 2) (+ 1 2))"]
+      "Evaluate EXP and succeed if value passes predicate PRED."
      ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       [LitExample "(bench (+ 1 2))"] "Benchmark execution of EXPRS."
      ,defZRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
@@ -180,9 +193,13 @@ replDefs = ("Repl",
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        []
        "Update gas model to charge constant RATE."
-     ,defZRNative "env-gasmodel" setGasModel (funType tTyString [("model",tTyString)])
-       []
-       "Update gas model to the model named MODEL."
+     ,defZRNative "env-gasmodel" setGasModel
+      (funType tTyString [("model",tTyString)] <>
+       funType tTyString [] <>
+       funType tTyString [("model",tTyString),("rate",tTyInteger)])
+      [ExecExample "(env-gasmodel)",ExecExample "(env-gasmodel 'table)",ExecExample "(env-gasmodel 'fixed 1)"]
+      ("Update or query current gas model. With just MODEL, \"table\" is supported; " <>
+       "with MODEL and RATE, 'fixed' is supported. With no args, output current model.")
      ,defZRNative "env-gaslog" gasLog (funType tTyString [])
        ["(env-gasmodel \"table\") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)"]
        "Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect."
@@ -221,6 +238,23 @@ replDefs = ("Repl",
         ("ns-policy-fun",TyFun $ funType' tTyBool [("ns",tTyString),("ns-admin",tTyGuard Nothing)])])
       [LitExample "(env-namespace-policy (my-ns-policy-fun))"]
       "Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN."
+     ,defZRNative "env-events" envEvents
+      (funType (TyList (tTyObject TyAny)) [("clear",tTyBool)])
+      [LitExample "(env-events true)"]
+      ("Retreive any accumulated events and optionally clear event state. " <>
+       "Object returned has fields 'name' (fully-qualified event name), " <>
+       "'params' (event parameters), 'module-hash' (hash of emitting module).")
+     ,defZRNative "env-enable-repl-natives" enableReplNatives
+      (funType tTyString [("enable",tTyBool)])
+      [ExecExample "(env-enable-repl-natives true)"]
+      ("Control whether REPL native functions are allowed in module code. " <>
+       "When enabled, fixture functions like 'env-sigs' are allowed in module code.")
+     ,defZNative "with-applied-env" withEnv
+      (funType a [("exec",a)])
+      [ExecExample "(let ((a 1)) (env-data { 'b: 1 }) (with-applied-env (+ a (read-integer 'b))))"]
+      ("Evaluate EXEC with any pending environment changes applied. " <>
+       "Normally, environment changes must execute at top-level for the change to take effect. " <>
+       "This allows scoped application of non-toplevel environment changes.")
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -263,7 +297,7 @@ viewLibState :: (LibState -> a) -> Eval LibState a
 viewLibState f = modifyLibState (id &&& f)
 
 setop :: LibOp -> Eval LibState ()
-setop v = setLibState $ set rlsOp v
+setop v = setLibState $ over rlsOp (<> v)
 
 setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
@@ -313,11 +347,14 @@ setsigs' _ [TList ts _ _] = do
   sigs <- forM ts $ \t -> case t of
     (TObject (Object (ObjectMap om) _ _ _) _) -> do
       case (M.lookup "key" om,M.lookup "caps" om) of
-        (Just (TLitString k),Just (TList clist _ _)) -> do
-          caps <- forM clist $ \cap -> case cap of
-            (TApp a _) -> view _1 <$> appToCap a
-            o -> evalError' o $ "Expected capability invocation"
-          return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
+        (Just k'',Just (TList clist _ _)) -> do
+          reduce k'' >>= \k' -> case k' of
+            TLitString k -> do
+              caps <- forM clist $ \cap -> case cap of
+                (TApp a _) -> view _1 <$> appToCap a
+                o -> evalError' o $ "Expected capability invocation"
+              return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
+            _ -> evalError' k' "Expected string value"
         _ -> evalError' t "Expected object with 'key': string, 'caps': [capability]"
     _ -> evalError' t $ "Expected object"
   setenv eeMsgSigs $ M.fromList $ V.toList sigs
@@ -354,12 +391,8 @@ continuePact i as = case as of
       (pactId, y) <- unwrapExec pid userResume pe
 
       let pactStep = PactStep (fromIntegral step) rollback pactId y
-      viewLibState (view rlsPacts) >>= \pacts ->
-        case M.lookup pactId pacts of
-          Nothing -> evalError' i $ "Invalid pact id: " <> pretty pactId
-          Just PactExec{} -> do
-            evalPactExec .= Nothing
-            local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
+      evalPactExec .= Nothing
+      local (set eePactStep $ Just pactStep) $ resumePact (_faInfo i) Nothing
 
     unwrapExec mpid mobj Nothing = do
       pid <- case mpid of
@@ -407,63 +440,127 @@ pactState i as = case as of
           ,("pactId",toTerm _pePactId)]
 
 
-txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name
-txmsg n tid s = tStr $ s <> " Tx " <> pack (show tid) <> maybe "" (": " <>) n
-
-
 tx :: Tx -> RNativeFun LibState
-tx Begin i as = do
-  tname <- case as of
-             [TLitString n] -> return $ Just n
-             [] -> return Nothing
-             _ -> argsError i as
-  setop $ Tx (_faInfo i) Begin tname
-  setLibState $ set rlsTxName tname
-  return (tStr "")
-tx t i [] = do
-  tname <- modifyLibState (set rlsTxName Nothing &&& view rlsTxName)
-  setop (Tx (_faInfo i) t tname)
-  return (tStr "")
-tx _ i as = argsError i as
+tx t fi as = do
+
+  (tid,tname) <- case (t,as) of
+    (Begin,[TLitString n]) -> doBegin (Just n)
+    (Begin,[]) -> doBegin Nothing
+    (Commit,[]) -> evalCommitTx i >> resetTx
+    (Rollback,[]) -> evalRollbackTx i >> resetTx
+    _ -> argsError fi as
+
+  -- reset to repl lib, preserve call stack
+  cs <- use evalCallStack
+  put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) $ set evalCallStack cs def
+  return $ tStr $ tShow t <> " Tx"
+      <> maybeDelim " " tid <> maybeDelim ": " tname
+
+  where
+
+    i = getInfo fi
+
+    doBegin tname = do
+      tid <- evalBeginTx i
+      setLibState $ set rlsTx (tid,tname)
+      return (tid,tname)
+
+    resetTx = modifyLibState
+      (set rlsTx (Nothing,Nothing) &&& view rlsTx)
+
 
 recordTest :: Text -> Maybe (FunApp,Text) -> Eval LibState ()
 recordTest name failure = setLibState $ over rlsTests (++ [TestResult name failure])
 
 testSuccess :: Text -> Text -> Eval LibState (Term Name)
-testSuccess name msg = recordTest name Nothing >> return (tStr msg)
+testSuccess doc msg = do
+  recordTest doc Nothing
+  return $ tStr $ msg <> ": success: " <> doc
 
-testFailure :: FunApp -> Text -> Text -> Eval LibState (Term Name)
-testFailure i name msg = recordTest name (Just (i,msg)) >> return (tStr msg)
+testFailure :: FunApp -> Text -> Doc -> Eval LibState (Term Name)
+testFailure i doc msg = recordTest doc (Just (i,rmsg)) >> return (tStr rmsg)
+  where
+    rmsg = "FAILURE: " <> doc <> ": " <> renderCompactText' msg
 
-expect :: RNativeFun LibState
-expect i [TLitString a,b,c] =
-  if b `termEq` c
-  then testSuccess a $ "Expect: success: " <> a
-  else testFailure i a $ renderCompactText' $
-       "FAILURE: " <> pretty a <> ": expected " <> pretty b <> ":" <> pretty (typeof' b) <>
-       ", received " <> pretty c <> ":" <> pretty (typeof' c)
-expect i as = argsError i as
+testDoc :: FunApp -> [Term Ref] -> Eval e Text
+testDoc _ (doc'':_) = reduce doc'' >>= \doc' -> case doc' of
+  TLitString doc -> enrichTestName doc
+  _ -> evalError' doc'' "Expected string"
+  where
+    -- | Use stack frames for 'FunApp's to enrich test name, using
+    -- presence of module name as a heuristic of the "user stack".
+    enrichTestName :: Text -> Eval e Text
+    enrichTestName msg = use evalCallStack >>= return . foldl' go msg
+
+    go m StackFrame{..} = case preview (_Just . _1 . faModule . _Just) _sfApp of
+      Just {} -> _sfName <> "." <> m
+      _ -> m
+testDoc i as = argsError' i as
+
+testCatch :: FunApp -> Text -> Eval LibState a -> Doc ->
+             (a -> Eval LibState (Term Name)) -> Eval LibState (Term Name)
+testCatch i doc expr errMsg cont = catchesPactError expr >>= \r -> case r of
+  Right v -> cont v
+  Left e -> testFailure i doc $ errMsg <> ": " <> prettyErr e
+  where
+    prettyErr e = prettyInfo (peInfo e) <> peDoc e
+    prettyInfo a
+        | a == def = ""
+        | otherwise = pretty (renderInfo a) <> ": "
+
+
+expect :: ZNativeFun LibState
+expect i as@[_,b',c'] = do
+  doc <- testDoc i as
+  testCatch i doc (reduce c') "evaluation of actual failed" $ \c ->
+    testCatch i doc (reduce b') "evaluation of expected failed" $ \b ->
+      if b `termEq` c
+      then testSuccess doc "Expect"
+      else testFailure i doc $
+           "expected " <> pretty b <> ":" <> pretty (typeof' b) <>
+           ", received " <> pretty c <> ":" <> pretty (typeof' c)
+expect i as = argsError' i as
 
 expectFail :: ZNativeFun LibState
 expectFail i as = case as of
-  [doc,expr] -> go doc Nothing expr
-  [doc,err,expr] -> reduce err >>= \e -> case e of
-    TLitString errmsg -> go doc (Just $ unpack errmsg) expr
+  [_,expr] -> go Nothing expr
+  [_,err,expr] -> reduce err >>= \e -> case e of
+    TLitString errmsg -> go (Just $ unpack errmsg) expr
     _ -> argsError' i as
   _ -> argsError' i as
   where
-    tsuccess msg = testSuccess msg $ "Expect failure: success: " <> msg
-    tfailure msg details = testFailure i msg $ "FAILURE: " <> msg <> ": " <> details
-    go doc errM expr = reduce doc >>= \d -> case d of
-      TLitString msg -> do
-        r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
-        case r of
-          Right v -> tfailure msg $ "expected failure, got result = " <> pack (showPretty v)
-          Left e -> case errM of
-            Nothing -> tsuccess msg
-            Just err | err `isInfixOf` e -> tsuccess msg
-                     | otherwise -> tfailure msg $ "expected error message to contain '" <> pack err <> "', got '" <> pack e <> "'"
-      _ -> argsError' i as
+    tsuccess msg = testSuccess msg "Expect failure"
+    go errM expr = do
+      msg' <- testDoc i as
+      r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
+      case r of
+        Right v -> testFailure i msg' $ "expected failure, got result = " <> pretty v
+        Left e -> case errM of
+          Nothing -> tsuccess msg'
+          Just err
+              | err `isInfixOf` e -> tsuccess msg'
+              | otherwise ->
+                  testFailure i msg' $ "expected error message to contain '" <> pretty err
+                  <> "', got '" <> pretty e <> "'"
+
+expectThat :: ZNativeFun LibState
+expectThat i as@[_,TApp pred' predi,expr'] = do
+  doc <- testDoc i as
+  testCatch i doc (reduce expr') "evaluation of expression failed" $ \v ->
+    testCatch i doc (apply pred' [v]) "evaluation of predicate failed" $ \p -> case p of
+      TLitBool b
+          | b -> testSuccess doc $ "Expect-that"
+          | otherwise ->
+              testFailure i doc $ "did not satisfy"
+              <> prettyPred predi <> ": " <> pretty v <> ":" <> pretty (typeof' v)
+      t -> testFailure i doc $ "predicate did not return boolean: " <> pretty t
+  where
+    prettyPred (Info (Just (c,_))) = " " <> pretty c
+    prettyPred _ = ""
+expectThat i as = argsError' i as
+
+
+
 
 bench' :: ZNativeFun LibState
 #if !defined(ghcjs_HOST_OS)
@@ -689,3 +786,30 @@ envNamespacePolicy i as@[ar,TApp app _] = reduce ar >>= \ar' -> case ar' of
   where
     toQName Def{..} = QualifiedName _dModule (asString _dDefName) _dInfo
 envNamespacePolicy i as = argsError' i as
+
+
+envEvents :: RNativeFun LibState
+envEvents _i [TLiteral (LBool clear) _] = do
+  es <- use evalEvents
+  when clear $ evalEvents .= []
+  return $ toTList TyAny def $ (`map` es) $ \PactEvent{..} -> toTObject TyAny def $
+    [("name",toTerm (renderCompactText _eventModule <> "." <> _eventName))
+    ,("params",toTList TyAny def $ map fromPactValue _eventParams)
+    ,("module-hash",toTerm $ asString _eventModuleHash)]
+envEvents i as = argsError i as
+
+enableReplNatives :: RNativeFun LibState
+enableReplNatives _i [TLiteral (LBool enable) _] = do
+  let (msg,defs) | enable = ("enabled",nativeDefs <> moduleToMap replDefs)
+                 | otherwise = ("disabled",nativeDefs)
+  setenv ( eeRefStore . rsNatives ) defs
+  return $ tStr $ "Repl natives " <> msg
+enableReplNatives i as = argsError i as
+
+withEnv :: ZNativeFun LibState
+withEnv _ [exec] = do
+  updates <- modifyLibState $ \ls -> case _rlsOp ls of
+    UpdateEnv e -> (set rlsOp Noop ls,e)
+    _ -> (ls,Endo id)
+  local (appEndo updates) $ reduce exec
+withEnv i as = argsError' i as

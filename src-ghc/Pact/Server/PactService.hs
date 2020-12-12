@@ -112,7 +112,7 @@ resultFailure :: Maybe TxId ->
                  RequestKey ->
                  PactError ->
                  CommandResult Hash
-resultFailure tx cmd a = CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing
+resultFailure tx cmd a = CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing []
 
 resultSuccess :: Maybe TxId ->
                  RequestKey ->
@@ -120,8 +120,11 @@ resultSuccess :: Maybe TxId ->
                  PactValue ->
                  Maybe PactExec ->
                  [TxLog Value] ->
+                 [PactEvent] ->
                  CommandResult Hash
-resultSuccess tx cmd gas a pe l = CommandResult cmd tx (PactResult . Right $ a) gas (Just hshLog) pe Nothing
+resultSuccess tx cmd gas a pe l evs =
+  CommandResult cmd tx (PactResult $ Right a)
+    gas (Just hshLog) pe Nothing evs
   where hshLog = fullToHashLogCr l
 
 fullToHashLogCr :: [TxLog Value] -> Hash
@@ -143,7 +146,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
                 initRefStore _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData def
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
-  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs
+  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
 
 
 applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p (CommandResult Hash)
@@ -154,4 +157,4 @@ applyContinuation rk hsh signers cm = do
                 (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) initRefStore
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData def
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
-  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs
+  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

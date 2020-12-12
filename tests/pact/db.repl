@@ -166,3 +166,26 @@
 (expect-failure
  "create-table protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
  (create-table persons2))
+
+;; test nested commits
+
+(begin-tx)
+(env-enable-repl-natives true)
+(module nested-tx G
+  (defcap G () true)
+  (defschema s x:integer)
+  (deftable t:{s})
+  (defun test-nested-tx ()
+    (begin-tx)
+    (insert t "a" { 'x: 1 })
+    (commit-tx)
+    (begin-tx)
+    (insert t "b" { 'x: 2 })
+    (rollback-tx)
+    (expect "2nd insert rolled back" ["a"]
+            (keys t))))
+
+(create-table t)
+(commit-tx)
+
+(nested-tx.test-nested-tx)

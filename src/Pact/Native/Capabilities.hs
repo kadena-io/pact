@@ -27,6 +27,7 @@ import qualified Data.Set as S
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Runtime.Capabilities
+import Pact.Runtime.Utils
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -64,7 +65,9 @@ withCapability =
   \resulting in the installation/granting of the token, which will then be revoked \
   \upon completion of BODY. Nested 'with-capability' calls for the same token \
   \will detect the presence of the token, and will not re-apply CAPABILITY, \
-  \but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap."
+  \but simply execute BODY. 'with-capability' cannot be called from within \
+  \an evaluating defcap. Acquire of a managed capability results in emission \
+  \of the equivalent event."
   where
     withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
 
@@ -113,6 +116,8 @@ installCapability =
         enforceNotWithinDefcap i "install-capability"
 
         (ucap,_,_) <- appToCap cap
+        -- note that this doesn't actually "install" but instead
+        -- collects as "autonomous", as opposed to sig-provisioned caps.
         evalCapabilities . capAutonomous %= S.insert ucap
         return $ tStr $ "Installed capability"
 

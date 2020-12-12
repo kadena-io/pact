@@ -55,13 +55,17 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import Data.Aeson                        as A
+import Data.Aeson.Types                  as A
+import Data.Hashable
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
+import Data.Swagger()
 
 
 import Pact.Types.Util
 import Pact.Types.Hash
 import Pact.Types.Scheme               as ST
+import Pact.Types.Swagger
 import qualified Pact.Types.ECDSA      as ECDSA
 
 #ifdef CRYPTONITE_ED25519
@@ -276,7 +280,7 @@ instance Show SomeKeyPair where
 
 
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Hashable)
 instance ToJSON PublicKeyBS where
   toJSON (PubBS p) = toB16JSON p
 instance FromJSON PublicKeyBS where
@@ -289,10 +293,18 @@ instance IsString PublicKeyBS where
     Right b -> PubBS b
 instance Show PublicKeyBS where
   show (PubBS b) = T.unpack $ toB16Text b
+instance ToJSONKey PublicKeyBS where
+    toJSONKey = toJSONKeyText (toB16Text . _pktPublic)
+    {-# INLINE toJSONKey #-}
+instance FromJSONKey PublicKeyBS where
+    fromJSONKey = FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
+    {-# INLINE fromJSONKey #-}
+instance ToSchema PublicKeyBS where
+  declareNamedSchema = declareGenericString
 
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Hashable)
 instance ToJSON PrivateKeyBS where
   toJSON (PrivBS p) = toB16JSON p
 instance FromJSON PrivateKeyBS where
@@ -305,9 +317,19 @@ instance IsString PrivateKeyBS where
     Right b -> PrivBS b
 instance Show PrivateKeyBS where
   show (PrivBS b) = T.unpack $ toB16Text b
+instance ToSchema PrivateKeyBS where
+  declareNamedSchema = declareGenericString
 
 newtype SignatureBS = SigBS ByteString
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Show, Generic, Hashable)
+instance ToJSON SignatureBS where
+  toJSON (SigBS p) = toB16JSON p
+instance FromJSON SignatureBS where
+  parseJSON = withText "SignatureBS" $ \s -> do
+    s' <- parseB16Text s
+    return $ SigBS s'
+instance ToSchema SignatureBS where
+  declareNamedSchema = declareGenericString
 
 
 

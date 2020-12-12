@@ -20,6 +20,7 @@
 module Pact.Types.Runtime
  ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwEitherText,throwErr,
    PactId(..),
+   PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
@@ -27,7 +28,8 @@ module Pact.Types.Runtime
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
-   EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,evalLogGas,
+   EvalState(..),evalRefs,evalCallStack,evalPactExec,
+   evalGas,evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -35,6 +37,8 @@ module Pact.Types.Runtime
    NamespacePolicy(..),
    permissiveNamespacePolicy,
    ExecutionConfig(..),ExecutionFlag(..),ecFlags,isExecutionFlagSet,flagRep,flagReps,
+   ifExecutionFlagSet,ifExecutionFlagSet',
+   whenExecutionFlagSet, unlessExecutionFlagSet,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -70,6 +74,7 @@ import Pact.Types.Gas
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.PactError
+import Pact.Types.PactValue
 import Pact.Types.Perf
 import Pact.Types.Persistence
 import Pact.Types.Pretty
@@ -134,6 +139,14 @@ data ExecutionFlag
   | FlagAllowReadInLocal
   -- | Preserve namespace module governance bug
   | FlagPreserveModuleNameBug
+  -- | Preserve namespace module acquire gov bug
+  | FlagPreserveNsModuleInstallBug
+  -- | Disable emission of pact events
+  | FlagDisablePactEvents
+  -- | Preserve module implemented interface namespacing bug
+  | FlagPreserveModuleIfacesBug
+  -- | Preserve Show in reduce for Def, Native
+  | FlagPreserveShowDefs
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -210,6 +223,18 @@ makeLenses ''RefState
 instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing
 
+data PactEvent = PactEvent
+  { _eventName :: !Text
+  , _eventParams :: ![PactValue]
+  , _eventModule :: !ModuleName
+  , _eventModuleHash :: !ModuleHash
+  } deriving (Eq, Show, Generic)
+instance NFData PactEvent
+instance ToJSON PactEvent where toJSON = lensyToJSON 6
+instance FromJSON PactEvent where parseJSON = lensyParseJSON 6
+makeLenses ''PactEvent
+
+
 -- | Interpreter mutable state.
 data EvalState = EvalState {
       -- | New or imported modules and defs.
@@ -224,10 +249,12 @@ data EvalState = EvalState {
     , _evalCapabilities :: Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)
     , _evalLogGas :: Maybe [(Text,Gas)]
+      -- | Accumulate events
+    , _evalEvents :: ![PactEvent]
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def 0 def def
+instance Default EvalState where def = EvalState def def def 0 def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
@@ -257,6 +284,24 @@ catchesPactError action =
 
 isExecutionFlagSet :: ExecutionFlag -> Eval e Bool
 isExecutionFlagSet f = S.member f <$> view (eeExecutionConfig . ecFlags)
+
+ifExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e a -> Eval e a
+ifExecutionFlagSet f onTrue onFalse = do
+  b <- isExecutionFlagSet f
+  if b then onTrue else onFalse
+
+ifExecutionFlagSet' :: ExecutionFlag -> a -> a -> Eval e a
+ifExecutionFlagSet' f onTrue onFalse =
+  ifExecutionFlagSet f (return onTrue) (return onFalse)
+
+whenExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e ()
+whenExecutionFlagSet f onTrue =
+  ifExecutionFlagSet f (void onTrue) (return ())
+
+unlessExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e ()
+unlessExecutionFlagSet f onFalse =
+  ifExecutionFlagSet f (return ()) (void onFalse)
+
 
 
 -- | Bracket interpreter action pushing and popping frame on call stack.

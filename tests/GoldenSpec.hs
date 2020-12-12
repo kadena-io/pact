@@ -46,6 +46,7 @@ spec = do
     goldenModule "accounts-module" "golden/golden.accounts.repl" "accounts"
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
+    ,("eventCR",eventCR)
     ]
   describe "goldenAutoCap" $
     goldenModule "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
@@ -74,6 +75,19 @@ acctsSuccessCR tn s = doCRTest tn s "1"
 acctsFailureCR :: String -> ReplState -> Spec
 acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
+eventCR :: String -> ReplState -> Spec
+eventCR tn s = doCRTest tn s $
+    "(module events-test G \
+    \  (defcap G () true) \
+    \  (defcap CAP (name:string amount:decimal) @managed \
+    \    true) \
+    \  (defun f (name:string amount:decimal) \
+    \    (install-capability (CAP name amount)) \
+    \    (with-capability (CAP name amount) 1))) \
+    \ (events-test.f \"Alice\" 10.1)"
+
+
+
 doCRTest :: String -> ReplState -> Text -> Spec
 doCRTest tn s code = do
   let dbEnv = PactDbEnv (view (rEnv . eePactDb) s) (view (rEnv . eePactDbVar) s)
@@ -98,6 +112,7 @@ doCRTest tn s code = do
     , readFromFile = readOutputRoundtrip
     , testName = tn
     , directory = "golden"
+    , failFirstTime = False
     }
   where
     -- hacks 'readFromFile' to run the golden value through the roundtrip.
@@ -123,6 +138,7 @@ golden name obj = Golden
   , readFromFile = jsonDecode
   , testName = name
   , directory = "golden"
+  , failFirstTime = False
   }
   where
     elide s | length s < 256 = s

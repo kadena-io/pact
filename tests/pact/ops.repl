@@ -147,7 +147,7 @@
 (expect "!= moduleGuard moduleGuard" true (!= (tm.mk "2") (tm.mk "1")))
 
 "===== pact guard equality"
-(env-hash "aa")
+(env-hash "YQo")
 (let ((pgs (tm.p "1" "2")))
   (expect "= pactGuard pactGuard" true (= (at 0 pgs) (at 0 pgs)))
   (expect "not = pactGuard pactGuard" false (= (at 1 pgs) (at 0 pgs)))

@@ -51,10 +51,10 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 import Pact.Types.SQLite
-import Pact.Native.Internal
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)
 import Pact.Types.Capability
+import Pact.Runtime.Utils
 
 -- | Flags for enabling file-based perf bracketing,
 -- see 'mkFilePerf' below.

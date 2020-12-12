@@ -126,6 +126,8 @@ data EvalResult = EvalResult
     -- ^ Transaction id, if executed transactionally
   , _erLogGas :: Maybe [(Text, Gas)]
     -- ^ Details on each gas consumed/charged
+  , _erEvents :: [PactEvent]
+    -- ^ emitted events
   } deriving (Eq,Show)
 
 -- | Execute pact statements.
@@ -221,7 +223,8 @@ interpret runner evalEnv terms = do
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
-  return $! EvalResult terms (map toPactValueLenient rs) logs pactExec gas modules txid gasLogs
+  return $! EvalResult terms (map toPactValueLenient rs)
+    logs pactExec gas modules txid gasLogs (_evalEvents state)
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
 evalTerms interp input = withRollback (start (interpreter interp runInput) >>= end)

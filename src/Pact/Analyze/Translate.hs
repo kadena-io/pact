@@ -50,8 +50,11 @@ import           GHC.TypeLits
 import           System.Locale              (defaultTimeLocale)
 
 import qualified Pact.Types.Info as P
-import           Pact.Types.Lang            (Info, Literal (..), Type
-  (TyFun, TyPrim, TySchema, TyUser, TyVar), SchemaPartial(PartialSchema))
+import           Pact.Types.Lang
+                 ( Info, Literal (..)
+                 , Type (TyFun, TyPrim, TySchema, TyUser, TyVar, TyModule)
+                 , SchemaPartial (PartialSchema)
+                 )
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
@@ -482,6 +485,8 @@ maybeTranslateType' restrictKeys = \case
       _         -> empty
 
   TyFun _             -> empty
+
+  TyModule _ -> empty -- TODO support mod refs
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -1609,7 +1614,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
         pure $ Some SBool $ Lit' True
       _ -> failing $ "Pattern match failure"
 
+  AST_NFun node "diff-time" [a,b] -> do
+    t0 <- translateNode a
+    t1 <- translateNode b
+    case (t0, t1) of
+      (Some STime _, Some STime _) -> do
+        addWarning node $ UnsupportedNonFatal "diff-time: substituting 0.0"
+        pure $ Some SDecimal $ Lit' 0.0
+      _ -> failing $ "Pattern match failure"
   _ -> throwError' $ UnexpectedNode astNode
+
 
 -- | Accumulate a non-fatal translation issue
 addWarning :: P.HasInfo i => i -> TranslateFailureNoLoc -> TranslateM ()

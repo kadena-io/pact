@@ -1,4 +1,4 @@
-|image0|
+|image1|
 
 The Pact Property Checking System
 =================================
@@ -571,4 +571,4 @@ the following are true:
 -  it’s not possible for a balance to drop below zero, and
 -  it’s not possible for money to be created or destroyed.
 
-.. |image0| image:: img/kadena-logo-210px.png
+.. |image1| image:: img/kadena-logo-210px.png

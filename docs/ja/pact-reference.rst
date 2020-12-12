@@ -1,4 +1,4 @@
-|image0|
+|image1|
 
 Pact スマート コントラクト言語リファレンス
 ==========================================
@@ -32,7 +32,7 @@ Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite
 トランザクションの JSON
 を、ハッシュを構成している値とバイト単位で一致させるには、 JSON
 をペイロード内に文字列として “エンコード”
-(つまり、`“文字列化” <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify>`__)
+(つまり、\ `“文字列化” <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify>`__)
 する必要があります。 ``cmd`` フィールドは、 ``exec`` ペイロードと
 ``cont`` ペイロードの 2 種類のペイロードをサポートしています。
 
@@ -1985,7 +1985,7 @@ API で使用される JSON 形式とは異なる JSON にエンコードされ�
 
 JSON/Javascript で、何をもって “大きな整数” とするかは議論があります。
 当社では ``[-2^53 .. 2^53]`` という範囲を使用しています
-(詳細については、`こちら <http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html>`__\ を参照してください)。
+(詳細については、\ `こちら <http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html>`__\ を参照してください)。
 大きな整数については、文字化された整数値を使用して、JSON シングルトン
 オブジェクトがエンコードされます。
 
@@ -5105,4 +5105,4 @@ row-enforced
 
 プロパティのみでサポートされています。
 
-.. |image0| image:: img/kadena-logo-210px.png
+.. |image1| image:: img/kadena-logo-210px.png

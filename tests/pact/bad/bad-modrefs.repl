@@ -1,0 +1,7 @@
+(module bad-modrefs G
+  (defcap G () true)
+  (defun modref-types
+    ( ref:module{foo.bar.baz} )
+    "test modref with bad interface name"
+    1)
+)

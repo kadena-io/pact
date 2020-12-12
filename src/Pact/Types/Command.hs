@@ -44,7 +44,8 @@ module Pact.Types.Command
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..),usSig
   , PactResult(..)
-  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crContinuation,crMetaData
+  , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
+  , crContinuation,crMetaData
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
@@ -293,7 +294,6 @@ instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do
     UserSig <$> o .: "sig"
 
-
 newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue
   } deriving (Eq, Show, Generic,NFData)
@@ -328,10 +328,33 @@ data CommandResult l = CommandResult {
   , _crContinuation :: !(Maybe PactExec)
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
+  -- | Events
+  , _crEvents :: [PactEvent]
   } deriving (Eq,Show,Generic)
 
-instance (ToJSON l) => ToJSON (CommandResult l) where toJSON = lensyToJSON 3
-instance (FromJSON l) => FromJSON (CommandResult l) where parseJSON = lensyParseJSON 3
+instance (ToJSON l) => ToJSON (CommandResult l) where
+  toJSON CommandResult{..} = object $
+      [ "reqKey" .= _crReqKey
+      , "txId" .= _crTxId
+      , "result" .= _crResult
+      , "gas" .= _crGas
+      , "logs" .= _crLogs
+      , "continuation" .= _crContinuation
+      , "metaData" .= _crMetaData ] ++
+      [ "events" .= _crEvents | not (null _crEvents) ]
+instance (FromJSON l) => FromJSON (CommandResult l) where
+  parseJSON = withObject "CommandResult" $ \o -> CommandResult
+      <$> o .: "reqKey"
+      <*> o .: "txId"
+      <*> o .: "result"
+      <*> o .: "gas"
+      <*> o .: "logs"
+      <*> o .: "continuation"
+      <*> o .: "metaData"
+      <*> (events <$> o .:? "events")
+    where
+      events Nothing = []
+      events (Just es) = es
 instance NFData a => NFData (CommandResult a)
 
 cmdToRequestKey :: Command a -> RequestKey

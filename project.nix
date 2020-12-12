@@ -14,6 +14,14 @@ in {
       };
       packages = {
         pact = kpkgs.gitignoreSource ./.;
+
+        # Example of how to override kpkgs using callHackageDirect
+        # foo = dontCheck (kpkgs.callHackageDirect {
+        #   pkg = "foo";
+        #   ver = "0.1";
+        #   sha256 = "0000000000000000000000000000000000000000000000000000";
+        # } {});
+
       };
       shellToolOverrides = ghc: super: {
         z3 = pkgs.z3;

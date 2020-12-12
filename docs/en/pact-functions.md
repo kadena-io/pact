@@ -393,7 +393,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.5.1"
+"3.7"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1502,7 +1502,7 @@ Specifies and tests for existing grant of CAPABILITY, failing if not found in en
 *capability*&nbsp;` -> bool` *body*&nbsp;`[*]` *&rarr;*&nbsp;`<a>`
 
 
-Specifies and requests grant of _acquired_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap.
+Specifies and requests grant of _acquired_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap. Acquire of a managed capability results in emission of the equivalent event.
 ```lisp
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```
@@ -1556,7 +1556,8 @@ The following functions are loaded automatically into the interactive REPL, or w
 
 Begin transaction with optional NAME.
 ```lisp
-(begin-tx "load module")
+pact> (begin-tx "load module")
+"Begin Tx 0: load module"
 ```
 
 
@@ -1578,7 +1579,8 @@ Benchmark execution of EXPRS.
 
 Commit transaction.
 ```lisp
-(commit-tx)
+pact> (begin-tx) (commit-tx)
+"Commit Tx 0"
 ```
 
 
@@ -1626,6 +1628,18 @@ pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any"
 ```
 
 
+### env-enable-repl-natives {#env-enable-repl-natives}
+
+*enable*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Control whether REPL native functions are allowed in module code. When enabled, fixture functions like 'env-sigs' are allowed in module code.
+```lisp
+pact> (env-enable-repl-natives true)
+"Repl natives enabled"
+```
+
+
 ### env-entity {#env-entity}
 
  *&rarr;*&nbsp;`string`
@@ -1640,6 +1654,17 @@ Set environment confidential ENTITY id, or unset with no argument.
 ```
 
 
+### env-events {#env-events}
+
+*clear*&nbsp;`bool` *&rarr;*&nbsp;`[object:*]`
+
+
+Retreive any accumulated events and optionally clear event state. Object returned has fields 'name' (fully-qualified event name), 'params' (event parameters), 'module-hash' (hash of emitting module).
+```lisp
+(env-events true)
+```
+
+
 ### env-exec-config {#env-exec-config}
 
 *flags*&nbsp;`[string]` *&rarr;*&nbsp;`[string]`
@@ -1647,7 +1672,7 @@ Set environment confidential ENTITY id, or unset with no argument.
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","OldReadOnlyBehavior","PreserveModuleNameBug"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePactEvents","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
@@ -1692,8 +1717,20 @@ pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) 
 
 *model*&nbsp;`string` *&rarr;*&nbsp;`string`
 
+ *&rarr;*&nbsp;`string`
 
-Update gas model to the model named MODEL.
+*model*&nbsp;`string` *rate*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Update or query current gas model. With just MODEL, "table" is supported; with MODEL and RATE, 'fixed' is supported. With no args, output current model.
+```lisp
+pact> (env-gasmodel)
+"Current gas model is 'fixed 0': constant rate gas model with fixed rate 0"
+pact> (env-gasmodel 'table)
+"Set gas model to table-based cost model"
+pact> (env-gasmodel 'fixed 1)
+"Set gas model to constant rate gas model with fixed rate 1"
+```
 
 
 ### env-gasprice {#env-gasprice}
@@ -1786,6 +1823,20 @@ pact> (expect-failure "Enforce fails with message" "Expected error" (enforce fal
 ```
 
 
+### expect-that {#expect-that}
+
+*doc*&nbsp;`string` *pred*&nbsp;`value:<a> -> bool` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+
+Evaluate EXP and succeed if value passes predicate PRED.
+```lisp
+pact> (expect-that "addition" (< 2) (+ 1 2))
+"Expect-that: success: addition"
+pact> (expect-that "addition" (> 2) (+ 1 2))
+"FAILURE: addition: did not satisfy (> 2) : 3:integer"
+```
+
+
 ### format-address {#format-address}
 
 *scheme*&nbsp;`string` *public-key*&nbsp;`string` *&rarr;*&nbsp;`string`
@@ -1847,7 +1898,8 @@ Output VALUE to terminal as unquoted, unescaped text.
 
 Rollback transaction.
 ```lisp
-(rollback-tx)
+pact> (begin-tx "Third Act") (rollback-tx)
+"Rollback Tx 0: Third Act"
 ```
 
 
@@ -1886,4 +1938,16 @@ Typecheck MODULE, optionally enabling DEBUG output.
 
 
 Verify MODULE, checking that all properties hold.
+
+
+### with-applied-env {#with-applied-env}
+
+*exec*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Evaluate EXEC with any pending environment changes applied. Normally, environment changes must execute at top-level for the change to take effect. This allows scoped application of non-toplevel environment changes.
+```lisp
+pact> (let ((a 1)) (env-data { 'b: 1 }) (with-applied-env (+ a (read-integer 'b))))
+2
+```
 

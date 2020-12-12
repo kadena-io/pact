@@ -30,6 +30,8 @@ module Pact.ApiReq
     ,mkKeyPairs
     ,AddSigsReq(..),addSigsReq
     ,SigData(..)
+    ,PublicKeyHex(..)
+    ,sigDataToCommand
     ,commandToSigData
     ,sampleSigData
     ,combineSigs

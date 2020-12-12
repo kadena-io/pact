@@ -222,16 +222,16 @@ saturateModel =
       where
         go :: EType -> AVal -> SBV.Query AVal
         go (EType (ty :: SingTy t)) (AVal _mProv sval)
-          = withSymVal ty $ withSMTValue ty $
+          = withSymVal ty $
             mkAVal' . SBV.literal
               <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
         go _ OpaqueVal = pure OpaqueVal
 
     -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
-    fetchSbv :: (SymVal a, SBV.SMTValue a) => SBV a -> SBV.Query (SBV a)
+    fetchSbv :: (SymVal a) => SBV a -> SBV.Query (SBV a)
     fetchSbv = fmap SBV.literal . SBV.getValue
 
-    fetchS :: (SymVal a, SBV.SMTValue a) => S a -> SBV.Query (S a)
+    fetchS :: (SymVal a) => S a -> SBV.Query (S a)
     fetchS = traverseOf s2Sbv fetchSbv
 
     fetchObject :: UObject -> SBVI.QueryT IO UObject

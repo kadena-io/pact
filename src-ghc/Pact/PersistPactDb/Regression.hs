@@ -134,7 +134,7 @@ assertEquals msg a b | [a,b] `deepseq` a == b = return ()
 assertEquals' :: (Eq a, Show a, NFData a) => String -> a -> IO a -> IO ()
 assertEquals' msg a b = assertEquals msg a =<< b
 
-regressPure :: IO (MVar (DbEnv PureDb))
-regressPure = do
-  let e = initDbEnv alwaysLog persister initPureDb
+regressPure :: Loggers -> IO (MVar (DbEnv PureDb))
+regressPure l = do
+  let e = initDbEnv l persister initPureDb
   runRegression e

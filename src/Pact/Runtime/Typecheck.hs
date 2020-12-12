@@ -29,7 +29,6 @@ module Pact.Runtime.Typecheck
 
 import Control.Arrow hiding (app)
 import Control.Monad
-import Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Vector as V
@@ -98,15 +97,13 @@ typecheckFailed i found spec = evalError' i $
 -- the pair is the type variable itself and the term type.
 typecheckTerm :: forall e . Info -> Type (Term Name) -> Term Name
        -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
-typecheckTerm i spec t = do
+typecheckTerm i' spec' t' = getTy i' t' >>= \ty' -> checkTy i' spec' ty' t'
+  where
+    getTy i t = case typeof t of
+      Left s -> evalError i $ "Invalid type in value location: " <> pretty s
+      Right r -> return r
 
-  ty <- case typeof t of
-    Left s -> evalError i $ "Invalid type in value location: " <> pretty s
-    Right r -> return r
-
-  let
-
-    tcFail found = typecheckFailed i found spec
+    tcFail i spec found = typecheckFailed i found spec
 
     tcOK = return Nothing
 
@@ -115,43 +112,46 @@ typecheckTerm i spec t = do
     -- value param ty 'pty'. If not trivially equal, use 'check'
     -- to determine actual container value type, and compare for equality
     -- with top-level specified type 'spec'.
-    paramCheck :: Type (Term Name)
+    paramCheck :: Info
+               -> Type (Term Name)
+               -> Type (Term Name)
                -> Type (Term Name)
                -> (Type (Term Name) -> Eval e (Type (Term Name)))
                -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
-    paramCheck TyAny _ _ = tcOK -- no spec
-    paramCheck pspec pty check
+    paramCheck _ _ TyAny _ _ = tcOK -- no spec
+    paramCheck i spec pspec pty check
       | pspec `canUnifyWith` pty = tcOK -- equality OK
       | otherwise = do
           -- run check function to get actual content type
           checked <- check pspec
           -- final check expects full match with toplevel 'spec'
-          if spec `canUnifyWith` checked then tcOK else tcFail checked
+          if spec `canUnifyWith` checked then tcOK else tcFail i pspec checked
 
-    -- | infer list value type
-    checkList es lty = return $ TyList $
-                    case nub (map typeof $ V.toList es) of
-                      [Right a] -> a -- uniform value type: return it
-                      [] -> lty -- empty: return specified
-                      ltys -> if all isGuard ltys then TyPrim (TyGuard Nothing) else TyAny
+    -- | Recur through list to validate element type
+    checkList :: V.Vector (Term Name) -> Type (Term Name) -> Eval e (Type (Term Name))
+    checkList es lty = do
+      forM_ es $ \e -> do
+        ty <- getTy (getInfo e) e
+        checkTy (getInfo e) lty ty e
+      return $ TyList lty
 
-    isGuard (Right (TyPrim TyGuard {})) = True
-    isGuard _ = False
+    checkTy i spec ty t = case (spec,ty,t) of
+      (_,_,_) | spec == ty -> tcOK -- identical types always OK
+      (TyAny,_,_) -> tcOK -- var args are untyped
+      (TyVar {..},_,_) ->
+        if spec `canUnifyWith` ty
+        then return $ Just (_tyVar,ty) -- collect found types under vars
+        else tcFail i spec ty -- constraint failed
+      -- check list
+      (TyList lspec,TyList lty,TList {..}) ->
+        paramCheck i spec lspec lty (checkList _tList)
+      -- check object
+      (TySchema TyObject ospec specPartial,TySchema TyObject oty _,TObject {..}) ->
+        paramCheck i spec ospec oty (checkUserType specPartial i (_oObject _tObject))
+      --(TyModule specSpec,TyModule tySpec,_)
+      --  | checkSpecs specSpec tySpec -> tcOK
+      _ -> if spec `canUnifyWith` ty then tcOK else tcFail i spec ty
 
-  case (spec,ty,t) of
-    (_,_,_) | spec == ty -> tcOK -- identical types always OK
-    (TyAny,_,_) -> tcOK -- var args are untyped
-    (TyVar {..},_,_) ->
-      if spec `canUnifyWith` ty
-      then return $ Just (_tyVar,ty) -- collect found types under vars
-      else tcFail ty -- constraint failed
-    -- check list
-    (TyList lspec,TyList lty,TList {..}) ->
-      paramCheck lspec lty (checkList _tList)
-    -- check object
-    (TySchema TyObject ospec specPartial,TySchema TyObject oty _,TObject {..}) ->
-      paramCheck ospec oty (checkUserType specPartial i (_oObject _tObject))
-    _ -> if spec `canUnifyWith` ty then tcOK else tcFail ty
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
 -- Total flag allows for partial row types if False.

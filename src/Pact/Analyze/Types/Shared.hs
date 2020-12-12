@@ -52,7 +52,6 @@ import           Data.SBV                     (EqSymbolic, HasKind, Int64,
                                                oneIf, sFromIntegral, unliteral,
                                                (.<), (.==))
 import qualified Data.SBV                     as SBV
-import           Data.SBV.Control             (SMTValue (..))
 import           Data.SBV.Internals           (CV (..), CVal (..), Kind (..),
                                                SVal (SVal), genMkSymVar)
 import qualified Data.SBV.Internals           as SBVI
@@ -178,9 +177,6 @@ instance SymVal RegistryName where
 instance HasKind RegistryName where
   kindOf _ = KString
 
-instance SMTValue RegistryName where
-  sexprToVal = fmap (RegistryName . T.pack) . sexprToVal
-
 instance Pretty RegistryName where
   pretty (RegistryName name) = "'" <> pretty name
 
@@ -225,7 +221,7 @@ instance IsString CapName where
   fromString = CapName
 
 newtype Str = Str { unStr :: String }
-  deriving (Eq, Ord, Show, SMTValue, HasKind, Typeable, IsString)
+  deriving (Eq, Ord, Show, HasKind, Typeable, IsString)
 
 strToText :: Str -> Text
 strToText (Str str) = T.pack str
@@ -723,7 +719,6 @@ instance Pretty Any where
 
 instance HasKind Any
 instance SymVal Any
-instance SMTValue Any
 
 newtype Guard
   = Guard Integer
@@ -736,9 +731,6 @@ instance SymVal Guard where
 
 instance HasKind Guard where
   kindOf _ = KUnbounded
-
-instance SMTValue Guard where
-  sexprToVal = fmap Guard . sexprToVal
 
 type family Concrete (a :: Ty) where
   Concrete 'TyInteger     = Integer
@@ -789,9 +781,6 @@ instance (Show (Concrete ty)) => Show (AConcrete ty) where
 
 instance (Pretty (Concrete ty)) => Pretty (AConcrete ty) where
   pretty (AConcrete a) = pretty a
-
-instance SMTValue (Concrete ty) => SMTValue (AConcrete ty) where
-  sexprToVal = fmap AConcrete . sexprToVal
 
 instance IsTerm AConcrete where
   singEqTm ty (AConcrete a) (AConcrete b) = withEq ty $ a == b
@@ -949,25 +938,6 @@ withTypeable a = withDict $ singMkTypeable a
     withTypeableListDict (SCons _k ty tys) f
       = withTypeableListDict tys $ withTypeable ty f
 
-withSMTValue :: SingTy a -> (SMTValue (Concrete a) => b) -> b
-withSMTValue a = withDict $ singMkSMTValue a
-  where
-
-    singMkSMTValue :: SingTy a -> Dict (SMTValue (Concrete a))
-    singMkSMTValue = \case
-      SInteger   -> Dict
-      SBool      -> Dict
-      SStr       -> Dict
-      STime      -> Dict
-      SDecimal   -> Dict
-      SGuard     -> Dict
-      SAny       -> Dict
-      SList ty'  -> withSMTValue ty' $ withTypeable ty' Dict
-      SObjectUnsafe (SingList SNil) -> Dict
-      SObjectUnsafe (SingList (SCons _ ty' tys))
-        -> withSMTValue ty' $
-           withDict (singMkSMTValue (SObjectUnsafe (SingList tys))) Dict
-
 withHasKind :: SingTy a -> (HasKind (Concrete a) => b) -> b
 withHasKind a = withDict $ singMkHasKind a
   where
@@ -986,20 +956,6 @@ withHasKind a = withDict $ singMkHasKind a
       SObjectUnsafe (SingList (SCons _ ty' tys))
         -> withHasKind ty' $
            withDict (singMkHasKind (SObjectUnsafe (SingList tys))) Dict
-
-instance SMTValue (Object AConcrete '[]) where
-  sexprToVal _ = Just $ Object SNil
-
-instance
-  ( SMTValue (Concrete ty)
-  , SMTValue (Object AConcrete tys)
-  , KnownSymbol k
-  , SingI ty
-  , Typeable ty
-  ) => SMTValue (Object AConcrete ('(k, ty) ': tys)) where
-  sexprToVal sexpr = case sexprToVal sexpr of
-    Nothing             -> Nothing
-    Just (a, Object as) -> Just $ Object $ SCons SSymbol (Column sing a) as
 
 withSymVal :: SingTy a -> (SymVal (Concrete a) => b) -> b
 withSymVal a = withDict $ singMkSymVal a
