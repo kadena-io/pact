@@ -114,6 +114,13 @@ instance Logging (StateT (DbEnv p) IO) where
   log c s = use logger >>= \l -> liftIO $ logLog l c s
   {-# INLINE log #-}
 
+infix 4 .=!
+
+(.=!) :: MonadState s m => ASetter s s a b -> b -> m ()
+l .=! b = modify' (l .~ b)
+{-# INLINE (.=!) #-}
+
+
 runMVState :: MVar (DbEnv p) -> MVState p a -> IO a
 runMVState v a = modifyMVar v $! \s -> do
     (!r, !m') <- runStateT a s
@@ -124,7 +131,7 @@ runMVState v a = modifyMVar v $! \s -> do
 doPersist :: (Persister p -> Persist p a) -> MVState p a
 doPersist f = get >>= \m -> do
     (!db', !r) <- liftIO $ f (_persist m) (_db m)
-    modify' $ set db db'
+    db .=! db'
     return r
 {-# INLINE doPersist #-}
 
@@ -186,7 +193,7 @@ doBegin m = do
     Nothing -> return ()
   resetTemp
   doPersist $ \p -> P.beginTx p m
-  modify' $ set mode (Just m)
+  mode .=! Just m
   case m of
     Transactional -> Just <$> use txId
     Local -> pure Nothing
@@ -252,9 +259,7 @@ readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t (DataKey k)
 {-# INLINE readSysTable #-}
 
 resetTemp :: MVState p ()
-resetTemp = do
-    modify' $ set txRecord M.empty
-    modify' $ set mode Nothing
+resetTemp = txRecord .=! M.empty >> mode .=! Nothing
 {-# INLINE resetTemp #-}
 
 writeSys :: (AsString k,PactDbValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
