@@ -170,7 +170,7 @@ drop
 
 Drop COUNT values from LIST (or string), or entries having keys in KEYS
 from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the
-interval (-2\ :sup:`63,2`\ 63), it is truncated to that range.
+interval (-2:sup:`63,2`\ 63), it is truncated to that range.
 
 .. code:: lisp
 
@@ -585,7 +585,7 @@ take
 
 Take COUNT values from LIST (or string), or entries having keys in KEYS
 from OBJECT. If COUNT is negative, take from end. If COUNT exceeds the
-interval (-2\ :sup:`63,2`\ 63), it is truncated to that range.
+interval (-2:sup:`63,2`\ 63), it is truncated to that range.
 
 .. code:: lisp
 
@@ -1808,7 +1808,8 @@ Begin transaction with optional NAME.
 
 .. code:: lisp
 
-   (begin-tx "load module")
+   pact> (begin-tx "load module")
+   "Begin Tx 0: load module"
 
 bench
 ~~~~~
@@ -1830,7 +1831,8 @@ Commit transaction.
 
 .. code:: lisp
 
-   (commit-tx)
+   pact> (begin-tx) (commit-tx)
+   "Commit Tx 0"
 
 continue-pact
 ~~~~~~~~~~~~~
@@ -2092,6 +2094,21 @@ Evaluate EXP and succeed only if it throws an error.
    pact> (expect-failure "Enforce fails with message" "Expected error" (enforce false "Expected error"))
    "Expect failure: success: Enforce fails with message"
 
+expect-that
+~~~~~~~~~~~
+
+*doc* ``string`` *pred* ``value:<a> -> bool`` *exp* ``<a>``
+*→* ``string``
+
+Evaluate EXP and succeed if value passes predicate PRED.
+
+.. code:: lisp
+
+   pact> (expect-that "addition" (< 2) (+ 1 2))
+   "Expect-that: success: addition"
+   pact> (expect-that "addition" (> 2) (+ 1 2))
+   "FAILURE: addition: did not satisfy (> 2) : 3:integer"
+
 format-address
 ~~~~~~~~~~~~~~
 
@@ -2160,7 +2177,8 @@ Rollback transaction.
 
 .. code:: lisp
 
-   (rollback-tx)
+   pact> (begin-tx "Third Act") (rollback-tx)
+   "Rollback Tx 0: Third Act"
 
 sig-keyset
 ~~~~~~~~~~

@@ -1,3 +1,13 @@
+3.7
+---
+* Module References (#817,#839)
+* Pact Events:
+  * Backward compatible JSON (#820)
+  * @event tag for capabilities (#830)
+  * `env-events` for testing (#827)
+* Fix runtime typechecker for lists (#825)
+* `with-applied-env`, `expect-that` testing tools
+
 3.6
 ---
 * Pact events (#819)
