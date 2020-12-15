@@ -60,7 +60,7 @@ import Safe hiding (at)
 import Pact.Types.Native
 import Pact.Types.Pretty
 import qualified Pact.Types.Runtime as Term
-import Pact.Types.Runtime hiding (App,appInfo,Object,Step)
+import Pact.Types.Runtime hiding (App,ModRef,appInfo,Object,Step)
 import Pact.Types.Typecheck
 
 die :: MonadThrow m => Info -> String -> m a
@@ -91,6 +91,7 @@ walkAST :: Monad m => Visitor m n -> AST n -> m (AST n)
 walkAST f t@Prim {} = f Pre t >>= f Post
 walkAST f t@Var {} = f Pre t >>= f Post
 walkAST f t@Table {} = f Pre t >>= f Post
+walkAST f t@ModRef {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
   a <- f Pre t
   t' <- Object (_aNode a) <$>
@@ -131,6 +132,7 @@ walkAST f t@Step {} = do
     <*> pure (_aYieldResume a)
     <*> pure (_aModel a)
   f Post t'
+walkAST f t@Dynamic {} = f Pre t >>= f Post
 
 isConcreteTy :: Type n -> Bool
 isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
@@ -267,9 +269,9 @@ handleSpecialOverload _ m = m
 
 
 findSchemaField :: Text -> UserType -> Maybe (Type UserType)
-findSchemaField fname Schema {..} =
-      foldl (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _utFields
-
+findSchemaField fname (UTSchema Schema{..}) =
+      foldl' (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _schFields
+findSchemaField _ UTModSpec{} = Nothing
 
 asPrimString :: AST Node -> TC Text
 asPrimString (Prim _ (PrimLit (LString s))) = return s
@@ -327,9 +329,9 @@ applySchemas Pre ast = case ast of
     -- (returns partial keys list if subset of specified)
     validateSchema :: UserType -> SchemaPartial
                    -> M.Map FieldKey (AST Node, TcId, Type UserType) -> TC (Maybe (Set Text))
-    validateSchema sch partial pmap = do
+    validateSchema (UTSchema sch) partial pmap = do
       -- smap: lookup from field name to ty
-      let smap = filterPartial partial $ M.fromList $ (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+      let smap = filterPartial partial $ M.fromList $ (`map` _schFields sch) $ \(Arg an aty _) -> (an,aty)
           filterPartial FullSchema = id
           filterPartial AnySubschema = id
           filterPartial (PartialSchema ks) = (`M.restrictKeys` ks)
@@ -347,6 +349,9 @@ applySchemas Pre ast = case ast of
             Just u -> assocAstTy (_aNode v) (either id id u)
           return [k]
       return $ if Set.size pks < M.size smap then Just pks else Nothing
+    validateSchema (UTModSpec (ModSpec mn)) _ _ = die def
+      $ "Invalid mod ref in schema position: "
+      <> showPretty mn
 
     lookupAndResolveTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 
@@ -658,7 +663,7 @@ assocNode ai bn = do
     Just (Right _) -> doSub bi bv bty ai av aty
 
 -- | Unify two types and note failure.
-unifyTypes' :: (Pretty n,Eq n) => TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
+unifyTypes' :: TcId -> Type UserType -> Type UserType -> (Either (Type UserType) (Type UserType) -> TC ()) -> TC ()
 unifyTypes' i a b act = case unifyTypes a b of
   Just r -> act r
   Nothing -> do
@@ -666,7 +671,7 @@ unifyTypes' i a b act = case unifyTypes a b of
     return ()
 
 -- | Unify two types, indicating which of the types was more specialized with the Either result.
-unifyTypes :: forall n . Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
+unifyTypes :: Type UserType -> Type UserType -> Maybe (Either (Type UserType) (Type UserType))
 unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
   (TyAny,_) -> Just (Right r)
@@ -679,11 +684,25 @@ unifyTypes l r = case (l,r) of
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam Just a b
   (TySchema sa a spa,TySchema sb b spb) | sa == sb -> unifyParam (specializePartial spa spb) a b
+  (TyModule ms, TyModule ms') -> case (ms, ms') of
+    (Just a, Just b) -> do
+      a' <- traverse toModuleName a
+      b' <- traverse toModuleName b
+      if testElems a' b' then return $ Left l
+      else if testElems b' a' then return $ Right r
+      else Nothing
+    _ -> Nothing
   _ -> Nothing
   where
+    toModuleName (UTModSpec (ModSpec mn)) = return mn
+    toModuleName _ = Nothing
+
+    testElems as bs = all (`elem` bs) as
     -- | Unifies param and uses bias to return parent, with additional test/modifier f
     -- TODO why not specialize param too?
-    unifyParam :: (Type n -> Maybe (Type n)) -> Type n -> Type n -> (Maybe (Either (Type n) (Type n)))
+    unifyParam
+      :: (Type UserType -> Maybe (Type UserType))
+      -> Type UserType -> Type UserType -> Maybe (Either (Type UserType) (Type UserType))
     unifyParam f a b = bimapM (const (f l)) (const (f r)) =<< unifyTypes a b
     specializePartial spa spb u =
       let setPartial p = Just $ set tySchemaPartial p u
@@ -715,14 +734,14 @@ unifyTypes l r = case (l,r) of
         _ -> Nothing
 
 -- | check for unification of (non-var) type against constraints
-checkConstraints :: Eq n => Type n -> [Type n] -> Bool
+checkConstraints :: Type UserType -> [Type UserType] -> Bool
 checkConstraints _ [] = True
 checkConstraints ty constrs = foldl' check False constrs where
   check r con = r || isJust (unifyTypes ty con)
 
 
 -- | Attempt to unify identifying which input "won", or specialize the first type.
-unifyConstraints :: Eq n => [Type n] -> [Type n] -> Maybe (Either [Type n] [Type n])
+unifyConstraints :: [Type UserType] -> [Type UserType] -> Maybe (Either [Type UserType] [Type UserType])
 unifyConstraints ac bc
   | null ac = Just $ Right bc
   | null bc = Just $ Left ac
@@ -737,7 +756,7 @@ scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> T
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
-    (TList ts _ _) | not (V.null ts) -> mapM toAST (V.toList ts) -- verifies non-empty body.
+    TList ts _ _ -> mapM toAST (V.toList ts)
     _ -> die i "Malformed def body"
 
 pfx :: Text -> Text -> Text
@@ -785,13 +804,16 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   funType <- traverse toUserType (_dFunType _tDef)
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
-  assocAST funId (last tcs)
-  return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs
+  unless (null tcs) $ assocAST funId (last tcs)
+  return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs funId
+toFun (TDynamic ref mem i) = case (ref, mem) of
+  (TVar (Right Var{}) _, TVar (Left (Ref r)) _) -> toFun $ Left <$> r
+  _ -> die i "Malformed mod ref"
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
-assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _) _) steps =
+assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
   void $ toStepYRs >>= foldM go (Nothing,0::Int)
   where
     lastStep = pred $ length steps
@@ -846,7 +868,15 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
-toAST TModRef {..} = die _tInfo "TODO: modrefs should be treated as values"
+toAST TModRef{..} = do
+  tcid <- freshId _tInfo $ renderCompactText _tModRef
+
+  let ty = TyModule
+        $ fmap (UTModSpec . ModSpec)
+        <$> _modRefSpec _tModRef
+
+  n <- trackNode ty tcid
+  return $ ModRef n (_modRefName _tModRef) (_modRefSpec _tModRef)
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
   (Left (Direct t)) ->
@@ -875,8 +905,10 @@ toAST (TApp Term.App{..} _) = do
   case fun of
 
     FDefun {..} -> do
+      if null _fBody
+      then assocNode _fRetId n -- TODO: is this necessary?
+      else assocAST i (last _fBody)
 
-      assocAST i (last _fBody)
       mkApp fun args
 
     FNative {} -> do
@@ -1010,7 +1042,11 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
-toAST TDynamic {..} = die _tInfo "Dynamics not supported TODO"
+toAST TDynamic {..} = do
+  r <- toAST _tDynModRef
+  m <- toFun _tDynMember
+  n <- trackIdNode =<< freshId _tInfo (renderCompactText r)
+  return $ Dynamic n r m
 
 trackPrim :: Info -> PrimType -> PrimValue (AST Node) -> TC (AST Node)
 trackPrim inf pty v = do
@@ -1031,7 +1067,12 @@ toUserType t = case t of
     derefUT (Direct d) = toUserType' (fmap Right d)
 
 toUserType' :: Show n => Term (Either Ref n) -> TC UserType
-toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
+toUserType' TSchema {..} = fmap UTSchema $ Schema _tSchemaName _tModule
+  <$> mapM (traverse toUserType) _tFields
+  <*> pure _tInfo
+toUserType' TModRef {..} = case _modRefSpec _tModRef of
+  Nothing -> return $ UTModSpec (ModSpec $ _modRefName _tModRef)
+  Just{} -> die _tInfo "toUserType': expected interface modref"
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
@@ -1181,4 +1222,4 @@ typecheckModule dbg (ModuleData (MDModule m) rm) = do
         (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
   fst <$> foldM tc (([],[]),0) (HM.elems rm)
-typecheckModule _ _ = return mempty
+typecheckModule _ (ModuleData MDInterface{} _) = return mempty

@@ -57,6 +57,7 @@ import           Control.Monad.State.Strict (evalStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Data.Bifunctor             (first)
 import           Data.Either                (partitionEithers)
+import           Data.Foldable              (foldl')
 import qualified Data.HashMap.Strict        as HM
 import           Data.List                  (isPrefixOf,nub)
 import qualified Data.List                  as List
@@ -94,7 +95,7 @@ import           Pact.Types.Type            (ftArgs, _ftArgs)
 import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
                                              Named, Node, TcId (_tiInfo),
                                              TopLevel (TopConst, TopFun, TopTable),
-                                             UserType (_utFields, _utName),
+                                             UserType (..), Schema (_schFields, _schName),
                                              runTC, tcFailures, toplevelInfo)
 import qualified Pact.Types.Typecheck       as TC
 
@@ -220,6 +221,7 @@ data VerificationFailure
   | ModuleCheckFailure CheckFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
   | InvalidDirectReference
+  | ModuleSpecInSchemaPosition Pact.ModuleName
   | ExpectedConcreteModule
   | FailedConstTranslation String
   | SchemalessTable Info
@@ -572,17 +574,18 @@ moduleTables modules modRefs consts = do
           (name, Ref (table@TTable {})) -> Just (name, table)
           _                             -> Nothing
 
+      schemas = modRefs ^. defschemas
+
   for tables $ \(tabName, tab) -> do
     (TopTable _info _name tableTy _meta, _tcState)
       <- lift $ runTC 0 False $ typecheckTopLevel (Ref tab)
     case tableTy of
-      Pact.TyUser schema -> do
+      Pact.TyUser (TC.UTModSpec (TC.ModSpec mn)) -> throwError $ ModuleSpecInSchemaPosition mn
+      Pact.TyUser schema@(TC.UTSchema (TC.Schema{_schName,_schFields})) -> do
         VarEnv vidStart invEnv vidTys <- hoist generalize $
           mkInvariantEnv schema
 
-        let TC.Schema{_utName,_utFields} = schema
-            schemaName = asString _utName
-            schemas = modRefs ^. defschemas
+        let schemaName = asString _schName
 
             mkInvariant :: Exp Info -> Either String (Invariant 'TyBool)
             mkInvariant = expToInvariant vidStart invEnv vidTys consts SBool
@@ -756,7 +759,7 @@ parseModuleModelDecl exps = traverse parseDecl exps where
 
 -- | Organize the module's refs by type
 moduleRefs :: ModuleData Ref -> ModuleRefs
-moduleRefs (ModuleData _ refMap) = foldl f noRefs (HM.toList refMap)
+moduleRefs (ModuleData _ refMap) = foldl' f noRefs (HM.toList refMap)
   where
     f accum (name, ref) = case ref of
       Ref (TDef (Def{_dDefType, _dDefBody}) _) ->
@@ -802,16 +805,17 @@ data VarEnv = VarEnv
 -- determined by the lexicographic order of variable names. Also see
 -- 'varIdColumns'.
 mkInvariantEnv :: UserType -> Except VerificationFailure VarEnv
-mkInvariantEnv TC.Schema{_utFields} = do
+mkInvariantEnv (TC.UTModSpec (TC.ModSpec mn)) = throwError $ ModuleSpecInSchemaPosition mn
+mkInvariantEnv (TC.UTSchema TC.Schema{_schFields}) = do
   tys <- Map.fromList . map (first (env Map.!)) <$>
-    traverse (translateArgTy "schema field's") _utFields
+    traverse (translateArgTy "schema field's") _schFields
   pure $ VarEnv vidStart env tys
 
   where
     -- Order variables lexicographically over their names when assigning
     -- variable IDs.
     env :: Map Text VarId
-    env = Map.fromList $ flip zip [0..] $ List.sort $ map Pact._aName _utFields
+    env = Map.fromList $ flip zip [0..] $ List.sort $ map Pact._aName _schFields
 
     vidStart :: VarId
     vidStart = VarId $ Map.size env
@@ -862,13 +866,16 @@ makeFunctionEnv (Pact.FunType argTys resultTy) = do
   pure $ VarEnv envVidStart nameVids vidTys
 
 mkTableEnv :: [Table] -> TableMap (ColumnMap EType)
-mkTableEnv tables = TableMap $ Map.fromList $
-  tables <&> \Table { _tableName, _tableType } ->
-    let fields = _utFields _tableType
-        colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-          \(Pact.Arg argName ty _) ->
-            (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
-    in (TableName (T.unpack _tableName), colMap)
+mkTableEnv tables = TableMap $ Map.fromList $ foldr go [] tables
+  where
+    go Table { _tableName, _tableType } acc = case _tableType of
+      TC.UTModSpec{} -> acc
+      TC.UTSchema schema ->
+        let fields = _schFields schema
+            colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+              \(Pact.Arg argName ty _) ->
+                (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
+        in (TableName (T.unpack _tableName), colMap):acc
 
 -- | Get the set of checks for a step.
 stepCheck
@@ -1013,7 +1020,7 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _ _) defpactRefs = do
       maybeDef <- lift $ typecheck ref
       case maybeDef of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
-        Right (TopFun (FDefun info _ _ Defpact funType args steps) _meta)
+        Right (TopFun (FDefun info _ _ Defpact funType args steps _) _meta)
           -> pure $ ifoldl
             (\i stepAccum step ->
               stepAccum & at (name, i) ?~ ((step, args, info), funType))
@@ -1064,7 +1071,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
         maybeFun <- lift $ typecheck ref
         case maybeFun of
           Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
-          Right topfun@(TopFun (FDefun _ _ _ defType funType _ _) _)
+          Right topfun@(TopFun (FDefun _ _ _ defType funType _ _ _) _)
             -> let checkType = case defType of
                      Defpact -> CheckDefpact
                      Defun   -> CheckDefun
@@ -1248,6 +1255,9 @@ renderVerifiedModule = \case
   Left (SchemalessTable info) ->
     [T.pack (renderInfo info) <>
       ":Warning: Verification requires all tables to have schemas"
+    ]
+  Left (ModuleSpecInSchemaPosition mn) ->
+    ["Found modref spec in schema position: " <> renderCompactText mn
     ]
   Left (ScopeErrors errs) ->
     ":Warning: Scope checking errors" : fmap describeScopeError errs

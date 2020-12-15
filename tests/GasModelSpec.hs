@@ -52,10 +52,10 @@ untestedNativesCheck = do
 allGasTestsAndGoldenShouldPass :: Spec
 allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
   res <- runIO gasTestResults
-  -- ^ fails if one of the gas tests throws a pact error
+  -- fails if one of the gas tests throws a pact error
 
   let gasCost = _evalGas . snd . _gasTestResultSqliteDb
-      -- ^ only do golden test for sqlite results
+      -- only do golden test for sqlite results
       toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
       allActualOutputsGolden = map toGoldenOutput res
 

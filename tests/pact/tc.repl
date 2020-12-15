@@ -3,6 +3,46 @@
 (env-data { "msgkeys": { "keys": ["k"], "pred": ">" } })
 (begin-tx)
 (define-keyset 'keyset (read-keyset "msgkeys"))
+
+(interface tctest-iface
+  (defun tcmodref-spec:bool (s:string)))
+
+(interface tctest-iface2
+  (defun tcmodref-spec2:bool (s:string)))
+
+(module tc-test-impl g
+  (defcap g () true)
+
+  (implements tctest-iface)
+
+  (defun tcmodref-spec:bool (s:string)
+    true)
+)
+
+
+(module tc-test-impl2 g
+  (defcap g () true)
+
+  (implements tctest-iface2)
+
+  (defun tcmodref-spec2:bool (s:string)
+    true)
+)
+
+(module tc-test-impl-both g
+  (defcap g () true)
+
+  (implements tctest-iface2)
+  (implements tctest-iface)
+
+  (defun tcmodref-spec2:bool (s:string)
+    true)
+
+  (defun tcmodref-spec:bool (s:string)
+    true)
+)
+
+
 (module tctest 'keyset
 
   (defschema person
@@ -198,6 +238,26 @@
 
   (defun rtc-object-list (l:[object{schema-a}]) 1)
 
+  (defun tc-modref:bool (m:module{tctest-iface})
+    (m::tcmodref-spec "test"))
+
+  (defun fails-tc-modref:string (m:module{tctest-iface})
+    (m::tcmodref-spec "test"))
+
+  (defun tc-modref2:bool (m:module{tctest-iface, tctest-iface})
+    true)
+
+  (defun tc-call-modref:bool ()
+    (tc-modref tc-test-impl))
+
+  (defun tc-call-modref2:bool ()
+    (and
+      (tc-modref tc-test-impl-both)
+      (tc-modref2 tc-test-impl-both)))
+
+
+  (defun fails-tc-call-modref:bool ()
+    (tc-modref tc-test-impl2))
 )
 
 (create-table persons)

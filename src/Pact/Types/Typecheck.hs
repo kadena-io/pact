@@ -33,14 +33,17 @@ module Pact.Types.Typecheck
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
-    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,fDefType,
+    Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,fDefType,fRetId,
     Node (..),aId,aTy,
     Named (..),
     AstBindType (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,
-    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,
+    aPrimValue,aEntity,aExec,aRollback,aTableName,aYieldResume,aModel,aDynMember,
+    aDynModRef,aModRefSpec,aModRefName,
     Visit(..),Visitor,
-    YieldResume(..),yrYield,yrResume,yrCrossChain
+    YieldResume(..),yrYield,yrResume,yrCrossChain,
+    Schema(..),
+    ModSpec(..)
   ) where
 
 import Control.Monad.Catch
@@ -52,7 +55,7 @@ import Control.Monad.State
 import Data.Foldable
 import Data.Text (Text, unpack)
 
-import Pact.Types.Lang hiding (App,Object,Step)
+import Pact.Types.Lang hiding (App,Object,Step,ModRef)
 import Pact.Types.Pretty
 import Pact.Types.Native
 
@@ -62,17 +65,25 @@ data CheckerException = CheckerException Info String deriving (Eq,Ord)
 instance Exception CheckerException
 instance Show CheckerException where show (CheckerException i s) = renderInfo i ++ ": " ++ s
 
+data Schema = Schema
+  { _schName :: TypeName
+  , _schModule :: Maybe ModuleName
+  , _schFields :: [Arg UserType]
+  , _schInfo :: Info
+  } deriving (Eq, Ord)
+
+newtype ModSpec = ModSpec { _specModName :: ModuleName }
+  deriving (Eq, Ord)
+
 -- | Model a user type. Currently only Schemas are supported..
-data UserType = Schema {
-  _utName :: TypeName,
-  _utModule :: Maybe ModuleName,
-  _utFields :: [Arg UserType],
-  _utInfo :: Info
-  } deriving (Eq,Ord)
+data UserType = UTSchema Schema | UTModSpec ModSpec
+  deriving (Eq,Ord)
 instance Show UserType where
-  show Schema {..} = "{" ++ unpack (maybe "" ((<>) "." . asString) _utModule) ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
+  show (UTSchema Schema {..}) = "{" ++ unpack (maybe "" ((<>) "." . asString) _schModule) ++ unpack (asString _schName) ++ " " ++ show _schFields ++ "}"
+  show (UTModSpec (ModSpec mn)) = show mn
 instance Pretty UserType where
-  pretty Schema {..} = braces (pretty _utModule <> dot <> pretty _utName)
+  pretty (UTSchema Schema {..}) = braces (pretty _schModule <> dot <> pretty _schName)
+  pretty (UTModSpec (ModSpec mn)) = pretty mn
 
 -- | An ID for an AST node.
 data TcId = TcId {
@@ -243,7 +254,8 @@ data Fun t =
     _fDefType :: DefType,
     _fType   :: FunType UserType,
     _fArgs   :: [Named t],
-    _fBody   :: [AST t]
+    _fBody   :: [AST t],
+    _fRetId :: TcId
     }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
@@ -344,8 +356,17 @@ data AST n =
   _aRollback :: Maybe (AST n),
   _aYieldResume :: Maybe (YieldResume n),
   _aModel :: ![Exp Info]
+  } |
+  Dynamic {
+  _aNode :: n,
+  _aDynModRef :: AST n,
+  _aDynMember :: Fun n
+  } |
+  ModRef {
+  _aNode :: n,
+  _aModRefName :: ModuleName,
+  _aModRefSpec :: Maybe [ModuleName]
   }
-
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
 instance Pretty t => Pretty (AST t) where
@@ -385,6 +406,8 @@ instance Pretty t => Pretty (AST t) where
             , indent 2 $ "Entity" <> colon <+> pretty _aEntity
             , indent 2 $ pretty _aExec
             ]
+     Dynamic{..} -> sep [pn, pretty _aDynModRef, pretty _aDynMember]
+     ModRef{..} -> sep [pn, pretty _aModRefName, pretty _aModRefSpec]
    where pn = pretty (_aNode a)
 
 
