@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 module Pact.Types.Pretty
@@ -129,8 +128,6 @@ instance (Pretty a, Pretty b) => Pretty (a, b) where
   pretty (a, b) = tupled [pretty a, pretty b]
 instance (Pretty a, Pretty b, Pretty c) => Pretty (a, b, c) where
   pretty (a, b, c) = tupled [pretty a, pretty b, pretty c]
-instance (Pretty a, Pretty b) => Pretty (Either a b) where
-  pretty = either pretty pretty
 
 prettyString :: String -> Doc
 prettyString = PP.pretty . pack

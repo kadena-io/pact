@@ -219,5 +219,3 @@
  "exercise interface with modref impl"
  true
  (modref-iface-impl.mir-impl modref-iface-impl "hi"))
-
-(typecheck 'modref-iface-impl)

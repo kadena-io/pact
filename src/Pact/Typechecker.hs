@@ -868,8 +868,8 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
-toAST t@TModRef{..} = do
-  tcid <- freshId _tInfo $ asString $ showPretty t
+toAST TModRef{..} = do
+  tcid <- freshId _tInfo $ renderCompactText _tModRef
 
   let ty = TyModule
         $ fmap (UTModSpec . ModSpec)
@@ -1042,10 +1042,10 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
-toAST t@TDynamic {..} = do
-  n <- trackIdNode =<< freshId _tInfo (renderCompactText t)
+toAST TDynamic {..} = do
   r <- toAST _tDynModRef
   m <- toFun _tDynMember
+  n <- trackIdNode =<< freshId _tInfo (renderCompactText r)
   return $ Dynamic n r m
 
 trackPrim :: Info -> PrimType -> PrimValue (AST Node) -> TC (AST Node)
