@@ -1,0 +1,55 @@
+
+(module cli G
+  (defcap G () (enforce false "X"))
+
+  (defschema data
+    sender:string
+    ttl:integer
+    network:string
+    time:time
+    nonce:string
+    host:string
+    chain:string
+    )
+
+  (deftable state:{data})
+  (defconst S "S")
+  ; https://api.chainweb.com/chainweb/0.0/mainnet01/chain/14/header/branch?minheight=852067&maxheight=852067'
+  (defun init ()
+    (write
+     state S
+     { 'sender: "sender"
+     , 'ttl: 150000
+     , 'network: "mainnet01"
+     , 'time: (parse-time "%F" "1970-01-01")
+     , 'nonce: "nonce"
+     , 'host: "api.chainweb.com"
+     , 'chain: "0"
+       }))
+
+  (defun sender (s:string)
+    (update state S { 'sender: s }))
+
+  (defun cli-state () (read state S))
+
+  (defun ttl (i:integer)
+    (update state S { 'ttl: i }))
+
+  (defun network (s:string)
+    (update state S { 'network: s }))
+
+  (defun ctime (s:string)
+    (update state S { 'ctime: (time s) }))
+
+  (defun nonce (s:string)
+    (update state S { 'nonce: s }))
+
+  (defun host (h:string)
+    (update state S { 'host: h }))
+
+  (defun chain (i:integer)
+    (update state S { 'chain: (format "{}" [i]) }))
+
+  )
+(create-table state)
+(init)

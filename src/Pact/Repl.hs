@@ -42,6 +42,9 @@ module Pact.Repl
   , evalReplEval
   , replGetModules
   , replLookupModule
+  , loadFile
+  , useReplLib
+  , pipeLoop
   ) where
 
 import Prelude hiding (exp)
