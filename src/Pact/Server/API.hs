@@ -399,3 +399,7 @@ instance ToSchema SigCapability where
   declareNamedSchema _ =
     swaggerDescription "a capability and any arguments it requires" $
       namedSchema "SigCapability" $ sketchSchema sigCapExample
+
+
+instance Pretty ClientError where
+  pretty = pretty . show

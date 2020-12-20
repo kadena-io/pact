@@ -230,12 +230,14 @@ library
   if !impl(ghcjs)
     build-depends:
                   async
+                , connection
                 , criterion >= 1.1.4 && < 1.6
                 , cryptonite
                 , direct-sqlite
                 , fast-logger
                 , haskeline >= 0.7.3 && < 0.8
                 , http-client
+                , http-client-tls
                 , memory
                 , neat-interpolation >= 0.4
                 , safe-exceptions >= 0.1.5.0 && < 0.2

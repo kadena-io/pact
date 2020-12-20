@@ -2,54 +2,91 @@
 (module cli G
   (defcap G () (enforce false "X"))
 
+  (defschema keydata
+    public:string
+    secret:string
+    address:string
+    scheme:string)
+
+  (defschema cap
+    name:string
+    args:list
+    signers:[string])
+
   (defschema data
     sender:string
     ttl:integer
-    network:string
-    time:time
+    network-id:string
+    creation-time:time
     nonce:string
     host:string
-    chain:string
+    chain-id:integer
+    chain-count:integer
+    signers:[string]
+    caps:[object{cap}]
     )
+
+  (defconst PACT_CHAIN_ID -1
+    "chain id of a pact -s server")
 
   (deftable state:{data})
   (defconst S "S")
-  ; https://api.chainweb.com/chainweb/0.0/mainnet01/chain/14/header/branch?minheight=852067&maxheight=852067'
+
+  (deftable keystore:{keydata})
+
   (defun init ()
     (write
      state S
      { 'sender: "sender"
      , 'ttl: 150000
-     , 'network: "mainnet01"
-     , 'time: (parse-time "%F" "1970-01-01")
+     , 'network-id: "mainnet01"
+     , 'creation-time: (parse-time "%F" "1970-01-01")
      , 'nonce: "nonce"
-     , 'host: "api.chainweb.com"
-     , 'chain: "0"
-       }))
+     , 'host: "us-e1.chainweb.com"
+     , 'chain-id: 0
+     , 'chain-count: 20
+     , 'signers: []
+     , 'caps: []
+     }))
 
   (defun sender (s:string)
     (update state S { 'sender: s }))
 
   (defun cli-state () (read state S))
 
+  (defun update-state (u:object)
+    (update state S u))
+
   (defun ttl (i:integer)
-    (update state S { 'ttl: i }))
+    (update-state { 'ttl: i }))
 
-  (defun network (s:string)
-    (update state S { 'network: s }))
+  (defun network-id (s:string)
+    (update-state { 'network-id: s }))
 
-  (defun ctime (s:string)
-    (update state S { 'ctime: (time s) }))
+  (defun creation-time (s:string)
+    (update-state { 'creation-time: (time s) }))
 
   (defun nonce (s:string)
-    (update state S { 'nonce: s }))
+    (update-state { 'nonce: s }))
 
   (defun host (h:string)
-    (update state S { 'host: h }))
+    (update-state { 'host: h }))
 
-  (defun chain (i:integer)
-    (update state S { 'chain: (format "{}" [i]) }))
+  (defun chain-id (i:integer)
+    (update-state { 'chain-id: i }))
 
-  )
+  (defun add-key (id:string key:object{keydata})
+    (write keystore id key))
+
+  (defun add-cap1 (name:string args:list signers:[string])
+    (update-state
+     { 'caps:
+       (+ [{ 'name: name
+          , 'args: args
+          , 'signers: signers }]
+          (at 'caps (read state S)))}))
+
+)
 (create-table state)
+(create-table keystore)
 (init)
