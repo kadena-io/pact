@@ -30,6 +30,7 @@ import Data.Function
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.List (sortBy,elemIndex)
+import qualified Data.Set as S
 import Data.Text (Text,unpack,intercalate)
 import Data.Thyme.Time.Core
 import Data.Thyme.Clock
@@ -80,9 +81,21 @@ cliDefs = ("Cli",
       (funType tTyString [("modules", TyList (tTyString))])
       [LitExample "(import ['fungible-v2,'coin])"]
       "Import and load code for MODULES from remote."
+      ,
+      defZRNative "add-keyset" addKeyset
+      (funType tTyString [("keyset",tTyGuard (Just GTyKeySet))])
+      [LitExample "(add-keyset (local (describe-keyset 'abc)))"]
+      "Add all keys in KEYSET to keystore."
      ])
+
   where
        a = mkTyVar "a" []
+
+addKeyset :: RNativeFun LibState
+addKeyset _ [TGuard (GKeySet KeySet {..}) _] = do
+  forM_ (S.toList _ksKeys) $ \k -> evalPact1 $ "(cli.add-key1 \"" <> renderCompactText k <> "\")"
+  return $ tStr $ "Added " <> renderCompactText (S.toList _ksKeys) <> " to keystore"
+addKeyset i as = argsError i as
 
 import' :: RNativeFun LibState
 import' i as = do
@@ -207,6 +220,8 @@ evalPactValue :: Text -> Eval e [PactValue]
 evalPactValue e = evalPact' e >>= traverse toPV
   where
     toPV t = eitherDie t $ toPactValue t
+
+evalPact1 = fmap head . evalPact'
 
 evalPact' :: Text -> Eval e [Term Name]
 evalPact' cmd = compilePact cmd >>= mapM eval

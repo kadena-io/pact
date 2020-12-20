@@ -78,13 +78,40 @@
   (defun add-key (id:string key:object{keydata})
     (write keystore id key))
 
+  (defun add-key1 (key:string)
+    (add-key key { 'public: key, 'secret: "", 'address: "", 'scheme: "" }))
+
   (defun add-cap1 (name:string args:list signers:[string])
-    (update-state
-     { 'caps:
-       (+ [{ 'name: name
-          , 'args: args
-          , 'signers: signers }]
-          (at 'caps (read state S)))}))
+    (let ((ss (map (add-signer) signers)))
+      (update-state
+       { 'caps:
+         (+ [{ 'name: name
+             , 'args: args
+             , 'signers: ss }]
+            (at 'caps (read state S)))})))
+
+
+  (defun add-signer1 (signer:string)
+    "Unsafe add of signer, not checked against keystore"
+    (let ((ss (at 'signers (read state S))))
+      (if (contains signer ss) ""
+        (update-state
+         { 'signers: (+ [signer] ss) }))
+      signer))
+
+  (defun add-signer (signer:string)
+    "Matches SIGNER to keystore to add to signers list."
+    (let ((matched (fold (match-key signer) "" (keys keystore))))
+      (enforce (!= "" matched) "Key not found")
+      (add-signer1 matched)))
+
+  (defun match-key (part:string r:string key:string)
+    (if (= part (take (length part) key))
+        (let ((x 0))
+          (enforce (= "" r) "Multiple matches found")
+          key)
+      r))
+
 
 )
 (create-table state)
