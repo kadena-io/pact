@@ -24,9 +24,12 @@ import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Data.Aeson
+import Data.Aeson hiding (Object)
 import Data.Default
+import Data.Function
+import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
+import Data.List (sortBy,elemIndex)
 import Data.Text (Text,unpack,intercalate)
 import Data.Thyme.Time.Core
 import Data.Thyme.Clock
@@ -96,11 +99,29 @@ import' i as = do
   return $ toTList TyAny def (concat rs)
 
 
-
+termToCode :: Term Ref -> Text
+termToCode (TLiteral l _) = renderCompactText l
+termToCode (TList vs _ _) = "[" <> intercalate " " (V.toList $ termToCode <$> vs) <> "]"
+termToCode (TObject (Object (ObjectMap om) _ ko _) _) =
+  "{" <> intercalate ", " (map go (psort ko $ M.toList $ (termToCode <$> om))) <> "}"
+  where psort Nothing = id
+        psort (Just o) = sortBy (compare `on` ((`elemIndex` o) . fst))
+        go (k,v) = renderCompactText k <> ": " <> v
+termToCode (TApp (App f as _) _) =
+  "(" <> termToCode f <> " " <> intercalate " " (map termToCode as) <> ")"
+termToCode (TConst (Arg n _ _) mn _ _ _) = case mn of
+  Nothing -> n
+  Just m -> renderCompactText m <> "." <> n
+termToCode (TVar v _) = case v of
+  Direct d -> termToCode $ fmap (\_ -> error "Direct with var unsupported") d
+  Ref r -> termToCode r
+termToCode TNative {..} = renderCompactText _tNativeName
+termToCode (TDef Def {..} _) = renderCompactText _dModule <> "." <> renderCompactText _dDefName
+termToCode t = renderCompactText t
 
 local' :: ZNativeFun LibState
 local' i as = do
-  let code = intercalate " " $ map (tShow . getInfo) as
+  let code = intercalate " " $ map termToCode as
   fromPactValue <$> localExec i code
 
 localExec :: HasInfo i => i -> Text -> Eval LibState PactValue
@@ -188,12 +209,15 @@ evalPactValue e = evalPact' e >>= traverse toPV
     toPV t = eitherDie t $ toPactValue t
 
 evalPact' :: Text -> Eval e [Term Name]
-evalPact' cmd = case TF.parseString exprsOnly mempty (unpack cmd) of
+evalPact' cmd = compilePact cmd >>= mapM eval
+
+compilePact :: Text -> Eval e [Term Name]
+compilePact cmd = case TF.parseString exprsOnly mempty (unpack cmd) of
   TF.Success es -> mapM go es
   TF.Failure f -> evalError def $ unAnnotate $ _errDoc f
   where
     go e = case compile (mkTextInfo cmd) e of
-      Right t -> eval t
+      Right t -> return t
       Left l -> evalError (peInfo l) (peDoc l)
 
 
@@ -219,6 +243,9 @@ _eval e = do
     loadCli Nothing
     evalEval def e
   either (error . show) return r
+
+_testCode :: Text -> IO [Text]
+_testCode code = _eval (fmap termToCode <$> (compilePact code >>= mapM enscope))
 
 
 send :: HasInfo i => i -> ClientEnv -> SubmitBatch -> Eval e RequestKeys

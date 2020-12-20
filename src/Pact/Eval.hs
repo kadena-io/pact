@@ -40,6 +40,7 @@ module Pact.Eval
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
     ,reduceDynamic
+    ,enscope
     ) where
 
 import Bound
