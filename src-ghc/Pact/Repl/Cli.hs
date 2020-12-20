@@ -72,20 +72,45 @@ cliDefs = ("Cli",
       (funType tTyString [("cap",TyFun $ funType' tTyBool []),("signers",TyList (tTyString))])
       [LitExample "(add-cap (coin.TRANSFER \"alice\" \"bob\" 10.0) [\"alice\"])"]
       "Add signer capability CAP for SIGNERS"
+      ,
+      defZRNative "import" import'
+      (funType tTyString [("modules", TyList (tTyString))])
+      [LitExample "(import ['fungible-v2,'coin])"]
+      "Import and load code for MODULES from remote."
      ])
   where
        a = mkTyVar "a" []
+
+import' :: RNativeFun LibState
+import' i as = do
+  ms <- forM as $ \a -> case a of
+    TLitString m -> return $ "(describe-module \"" <> m <> "\")"
+    _ -> evalError' a "Expected string"
+  mds <- localExec i $ "[" <> (intercalate " " ms) <> "]"
+  rs <- case mds of
+    PList vs -> forM vs $ \md ->
+      case preview (_PObject . to _objectMap . ix "code" . _PLiteral . _LString) md of
+        Just code -> evalPact' code
+        Nothing -> evalError' i "Expected code"
+    _ -> evalError' i "Expected list"
+  return $ toTList TyAny def (concat rs)
+
+
 
 
 local' :: ZNativeFun LibState
 local' i as = do
   let code = intercalate " " $ map (tShow . getInfo) as
+  fromPactValue <$> localExec i code
+
+localExec :: HasInfo i => i -> Text -> Eval LibState PactValue
+localExec i code = do
   cmd <- buildCmd i code
   env <- buildEndpoint i
   r <- sendLocal i env cmd
   case _pactResult (_crResult r) of
     Left e -> throwM e
-    Right v -> return $ fromPactValue v
+    Right v -> return v
 
 
 infoCode :: HasInfo i => i -> Term n
@@ -110,13 +135,12 @@ cliState i k p = evalExpect i (asString k) (_head . _PObject . to _objectMap . i
 buildEndpoint :: HasInfo i => i -> Eval LibState ClientEnv
 buildEndpoint i = do
   cid <- cliState i "chain-id" (_PLiteral . _LInteger)
-  let pactCid = -1-- <- evalExpect1 i "integer" (_PLiteral . _LInteger) "PACT_CHAIN_ID"
+  pactCid <- evalExpect1 i "integer" (_PLiteral . _LInteger) "PACT_CHAIN_ID"
   let isPact = cid == pactCid
   host <- cliState i "host" (_PLiteral . _LString)
   nw <- cliState i "network-id" (_PLiteral . _LString)
-  --let url | isPact = "http://" <> host <> "/"
-   --       | otherwise
-  let url = "https://" <> host <> "/chainweb/0.0/" <> nw <> "/chain/" <> tShow cid <> "/pact"
+  let url | isPact = "http://" <> host <> "/"
+          | otherwise = "https://" <> host <> "/chainweb/0.0/" <> nw <> "/chain/" <> tShow cid <> "/pact"
   burl <- parseBaseUrl (unpack url)
   -- mgr <- liftIO $ newManager defaultManagerSettings
   liftIO $ getClientEnv burl
@@ -148,25 +172,27 @@ getClientEnv url = flip mkClientEnv url <$> newTlsManagerWith mgrSettings
        (TLSSettingsSimple True False False)
        Nothing
 
-evalExpect1 :: HasInfo i => i -> Text -> Fold PactValue a -> String -> Eval LibState a
+evalExpect1 :: HasInfo i => i -> Text -> Fold PactValue a -> Text -> Eval LibState a
 evalExpect1 i msg f = evalExpect i msg (_head . f)
 
-evalExpect :: HasInfo i => i -> Text -> Fold [PactValue] a -> String -> Eval LibState a
+evalExpect :: HasInfo i => i -> Text -> Fold [PactValue] a -> Text -> Eval LibState a
 evalExpect i msg f cmd = do
   r <- evalPactValue cmd
   case preview f r of
     Nothing -> evalError' i $ "Expected " <> pretty msg <> " for command " <> pretty cmd
     Just v -> return v
 
-evalPactValue :: String -> Eval e [PactValue]
-evalPactValue = fmap (fmap toPactValueLenient) . evalPact'
+evalPactValue :: Text -> Eval e [PactValue]
+evalPactValue e = evalPact' e >>= traverse toPV
+  where
+    toPV t = eitherDie t $ toPactValue t
 
-evalPact' :: String -> Eval e [Term Name]
-evalPact' cmd = case TF.parseString exprsOnly mempty cmd of
+evalPact' :: Text -> Eval e [Term Name]
+evalPact' cmd = case TF.parseString exprsOnly mempty (unpack cmd) of
   TF.Success es -> mapM go es
   TF.Failure f -> evalError def $ unAnnotate $ _errDoc f
   where
-    go e = case compile (mkStringInfo cmd) e of
+    go e = case compile (mkTextInfo cmd) e of
       Right t -> eval t
       Left l -> evalError (peInfo l) (peDoc l)
 
@@ -185,6 +211,14 @@ _cli = do
     loadCli Nothing
     forever $ pipeLoop True stdin Nothing
 
+_eval :: Eval LibState a -> IO a
+_eval e = do
+  s <- initReplState Interactive Nothing
+  (r,_) <- (`evalStateT` s) $ do
+    useReplLib
+    loadCli Nothing
+    evalEval def e
+  either (error . show) return r
 
 
 send :: HasInfo i => i -> ClientEnv -> SubmitBatch -> Eval e RequestKeys

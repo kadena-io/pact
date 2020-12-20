@@ -23,6 +23,7 @@ module Pact.Repl
   ( errToUnit
   , execScript
   , execScript'
+  , evalEval
   , evalPact
   , evalRepl
   , evalRepl'

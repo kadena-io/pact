@@ -26,7 +26,7 @@
     caps:[object{cap}]
     )
 
-  (defconst PACT_CHAIN_ID -1
+  (defconst PACT_CHAIN_ID:integer -1
     "chain id of a pact -s server")
 
   (deftable state:{data})
@@ -90,3 +90,5 @@
 (create-table state)
 (create-table keystore)
 (init)
+(env-gaslimit 5000)
+(env-gasprice 0.00000000001)
