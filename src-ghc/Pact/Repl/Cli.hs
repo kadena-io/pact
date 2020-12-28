@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Module      :  Pact.Repl.Cli
@@ -56,6 +57,7 @@ import Pact.Repl
 import Pact.Repl.Lib
 import Pact.Repl.Types
 import Pact.Types.API
+import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -86,6 +88,16 @@ cliDefs = ("Cli",
       (funType tTyString [("keyset",tTyGuard (Just GTyKeySet))])
       [LitExample "(add-keyset (local (describe-keyset 'abc)))"]
       "Add all keys in KEYSET to keystore."
+      ,
+      defZNative "code" code'
+      (funType tTyString [("exprs",a)])
+      [LitExample "(code (+ 1 2) (/ 3 4))"]
+      "Store EXPRS as current command code."
+      ,
+      defZRNative "rehash" rehash
+      (funType tTyString [])
+      [LitExample "(rehash)"]
+      "Build current command and hash, and update 'env-hash' accordingly."
      ])
 
   where
@@ -137,9 +149,20 @@ local' i as = do
   let code = intercalate " " $ map termToCode as
   fromPactValue <$> localExec i code
 
+code' :: ZNativeFun LibState
+code' i as = do
+  let code = intercalate " " $ map termToCode as
+  evalApp i "cli.set-code" [tStr code]
+
+rehash :: RNativeFun LibState
+rehash i _ = do
+  code <- cliState i "code" (_PLiteral . _LString)
+  cmd <- buildCmd i True code
+  evalApp i "env-hash" $ [tStr $ asString $ _cmdHash cmd]
+
 localExec :: HasInfo i => i -> Text -> Eval LibState PactValue
 localExec i code = do
-  cmd <- buildCmd i code
+  cmd <- buildCmd i False code
   env <- buildEndpoint i
   r <- sendLocal i env cmd
   case _pactResult (_crResult r) of
@@ -147,19 +170,24 @@ localExec i code = do
     Right v -> return v
 
 
-infoCode :: HasInfo i => i -> Term n
-infoCode = tStr . tShow . getInfo
+evalApp :: HasInfo i => i -> Text -> [Term Name] -> Eval e (Term Name)
+evalApp i an as = do
+  let qn = parseQualifiedName (getInfo i) an
+      nn = case qn of
+        Left {} -> Name (BareName an def)
+        Right q -> QName $ q
+  eval (TApp (App (TVar nn def) as def) def)
 
 addCap :: ZNativeFun LibState
-addCap _i [TApp (App n as _) _,signers] = do
-  let name = infoCode n
+addCap i [TApp (App n as _) _,signers] = do
+  let name = tStr $ termToCode n
   as' <- mapM reduce as
   signers' <- reduce signers
-  eval (TApp (App (TVar (QName (QualifiedName "cli" "add-cap1" def)) def)
-               [ name
-               , TList (V.fromList as') TyAny def
-               , signers' ]
-               def) def)
+  evalApp i "cli.add-cap1"
+      [ name
+      , TList (V.fromList as') TyAny def
+      , signers' ]
+
 
 addCap i as = argsError' i as
 
@@ -179,8 +207,8 @@ buildEndpoint i = do
   -- mgr <- liftIO $ newManager defaultManagerSettings
   liftIO $ getClientEnv burl
 
-buildCmd :: HasInfo i => i -> Text -> Eval LibState (Command Text)
-buildCmd i cmd = do
+buildCmd :: HasInfo i => i -> Bool -> Text -> Eval LibState (Command Text)
+buildCmd i includeSigners cmd = do
   ttl <- cliState i "ttl" (_PLiteral . _LInteger)
   nw <- NetworkId <$> cliState i "network-id" (_PLiteral . _LString)
   ctime <- cliState i "creation-time" (_PLiteral . _LTime)
@@ -191,13 +219,48 @@ buildCmd i cmd = do
   gasPrice <- view (eeGasEnv . geGasPrice)
   md <- view eeMsgBody
   let toCT = TxCreationTime . fromIntegral . (`div` 1000000) . toMicroseconds . utcTimeToPOSIXSeconds
-  liftIO $ mkExec cmd md
-    (PublicMeta (ChainId (tShow cid))
-     sender gasLimit gasPrice (fromIntegral ttl)
-     (toCT ctime))
-    []
-    (Just nw)
-    (Just nonce)
+  (signers,sigs) <- if includeSigners then getSigners i else return ([],Nothing)
+  cmdu <- liftIO $ mkUnsignedExec
+      cmd
+      md
+      (PublicMeta (ChainId (tShow cid))
+       sender gasLimit gasPrice (fromIntegral ttl)
+       (toCT ctime))
+      signers
+      (Just nw)
+      (Just nonce)
+  return $ case sigs of
+    Nothing -> cmdu
+    Just ss -> set cmdSigs ss cmdu
+
+getSigners :: HasInfo i => i -> Eval LibState ([Signer],Maybe [UserSig])
+getSigners i = do
+  sss <- cliState i "signers" _PList >>= \ss -> forM (V.toList ss) $ \s ->
+    case preview (_PObject . to _objectMap) s of
+      Just o -> case (str o "signer",str o "signature") of
+        (Just a,Just b) | b == "" -> return (a,Nothing)
+                        | otherwise -> return (a, Just $ UserSig b)
+        _ -> evalError' i $ "invalid signer: " <> pretty s
+      _ -> evalError' i $ "invalid signers"
+  caps <- fmap (M.fromListWith (++) . concat) $ cliState i "caps" _PList >>= \ss -> forM (V.toList ss) $ \s ->
+    case preview (_PObject . to _objectMap) s of
+      Just o -> case (str o "name", lst o "args", lst o "signers") of
+        (Just n,Just as,Just css) -> do
+          qn <- eitherDie i $ parseQualifiedName (getInfo i) n
+          let cap = [SigCapability qn (V.toList as)]
+          forM (V.toList css) $ \cs -> case preview (_PLiteral . _LString) cs of
+            Just ps -> return (ps,cap)
+            _ -> evalError' i $ "invalid signer in cap: " <> pretty cs
+        _ -> evalError' i $ "invalid cap: " <> pretty s
+      _ -> evalError' i $ "invalid caps"
+  return (map (mkSigner caps) (map fst sss),sequence (map snd sss))
+  where
+    str o k = preview (ix k . _PLiteral . _LString) o
+    lst o k = preview (ix k . _PList) o
+    mkSigner caps s = Signer Nothing s Nothing $ case M.lookup s caps of
+      Nothing -> []
+      Just cs -> cs
+
 
 getClientEnv :: BaseUrl -> IO ClientEnv
 getClientEnv url = flip mkClientEnv url <$> newTlsManagerWith mgrSettings

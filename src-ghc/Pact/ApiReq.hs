@@ -28,6 +28,7 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
+    ,mkUnsignedExec
     ,AddSigsReq(..),addSigsReq
     ,SigData(..)
     ,PublicKeyHex(..)

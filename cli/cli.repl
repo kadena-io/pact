@@ -3,15 +3,16 @@
   (defcap G () (enforce false "X"))
 
   (defschema keydata
-    public:string
-    secret:string
-    address:string
-    scheme:string)
+    secret:string)
 
   (defschema cap
     name:string
     args:list
     signers:[string])
+
+  (defschema signer
+    signer:string
+    signature:string)
 
   (defschema data
     sender:string
@@ -22,8 +23,9 @@
     host:string
     chain-id:integer
     chain-count:integer
-    signers:[string]
+    signers:[object{signer}]
     caps:[object{cap}]
+    code:string
     )
 
   (defconst PACT_CHAIN_ID:integer -1
@@ -47,39 +49,44 @@
      , 'chain-count: 20
      , 'signers: []
      , 'caps: []
+     , 'code: ""
      }))
-
-  (defun sender (s:string)
-    (update state S { 'sender: s }))
 
   (defun cli-state () (read state S))
 
-  (defun update-state (u:object)
-    (update state S u))
+  (defun update-state (u:object rh:bool)
+    (update state S u)
+    (if rh (rehash) "State updated"))
+
+  (defun sender (s:string)
+    (update-state { 'sender: s } true))
 
   (defun ttl (i:integer)
-    (update-state { 'ttl: i }))
+    (update-state { 'ttl: i } true))
 
   (defun network-id (s:string)
-    (update-state { 'network-id: s }))
+    (update-state { 'network-id: s } true))
 
   (defun creation-time (s:string)
-    (update-state { 'creation-time: (time s) }))
+    (update-state { 'creation-time: (time s) } true))
 
   (defun nonce (s:string)
-    (update-state { 'nonce: s }))
+    (update-state { 'nonce: s } true))
 
   (defun host (h:string)
-    (update-state { 'host: h }))
+    (update-state { 'host: h } false))
 
   (defun chain-id (i:integer)
-    (update-state { 'chain-id: i }))
+    (update-state { 'chain-id: i } true))
+
+  (defun set-code (s:string)
+    (update-state { 'code: s } true))
 
   (defun add-key (id:string key:object{keydata})
     (write keystore id key))
 
   (defun add-key1 (key:string)
-    (add-key key { 'public: key, 'secret: "", 'address: "", 'scheme: "" }))
+    (add-key key { 'secret: "" }))
 
   (defun add-cap1 (name:string args:list signers:[string])
     (let ((ss (map (add-signer) signers)))
@@ -88,22 +95,29 @@
          (+ [{ 'name: name
              , 'args: args
              , 'signers: ss }]
-            (at 'caps (read state S)))})))
+            (at 'caps (read state S)))}
+       true)))
 
 
-  (defun add-signer1 (signer:string)
-    "Unsafe add of signer, not checked against keystore"
+  (defun add-signer-unsafe (s:string)
     (let ((ss (at 'signers (read state S))))
-      (if (contains signer ss) ""
+      (if (contains s (map (at 'signer) ss)) "Already added"
         (update-state
-         { 'signers: (+ [signer] ss) }))
-      signer))
+         { 'signers: (+ [{'signer:s,'signature:""}] ss) } true))))
 
   (defun add-signer (signer:string)
     "Matches SIGNER to keystore to add to signers list."
     (let ((matched (fold (match-key signer) "" (keys keystore))))
       (enforce (!= "" matched) "Key not found")
-      (add-signer1 matched)))
+      (add-signer-unsafe matched)
+      matched))
+
+  (defun clear-sigs ()
+    (update-state
+     { 'signers:
+       (map (+ { 'signature: "" })
+        (at 'signers (cli-state))) }
+     false))
 
   (defun match-key (part:string r:string key:string)
     (if (= part (take (length part) key))
