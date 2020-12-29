@@ -7,6 +7,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 -- |
 -- Module      :  Pact.Repl.Cli
 -- Copyright   :  (C) 2020 Stuart Popejoy
@@ -26,6 +29,7 @@ import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Aeson hiding (Object)
+import Data.Decimal
 import Data.Default
 import Data.Function
 import qualified Data.Map.Strict as M
@@ -36,6 +40,7 @@ import Data.Text (Text,unpack,intercalate)
 import Data.Thyme.Time.Core
 import Data.Thyme.Clock
 import qualified Data.Vector as V
+import qualified Data.Yaml as Y
 import Network.Connection
 import Network.HTTP.Client hiding (responseBody)
 import Network.HTTP.Client.TLS
@@ -64,15 +69,19 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Server.API
 
-
+data KeyPairFile = KeyPairFile Text Text
+instance FromJSON KeyPairFile where
+  parseJSON = withObject "KeyPairFile" $ \o ->
+    KeyPairFile <$> o .: "public" <*> o .: "secret"
 
 cliDefs :: NativeModule
 cliDefs = ("Cli",
      [
       defZNative "local" local'
-      (funType a [("exec",a)])
-      [LitExample "(local (+ 1 2))"]
-      "Evaluate EXEC on server."
+      (funType a [("exec",a)] <>
+       funType a [])
+      [LitExample "(local (+ 1 2))",LitExample "(local)"]
+      "Evaluate EXEC on server, or without argument, current code value (see 'code')."
       ,
       defZNative "add-cap" addCap
       (funType tTyString [("cap",TyFun $ funType' tTyBool []),("signers",TyList (tTyString))])
@@ -98,6 +107,11 @@ cliDefs = ("Cli",
       (funType tTyString [])
       [LitExample "(rehash)"]
       "Build current command and hash, and update 'env-hash' accordingly."
+      ,
+      defZRNative "add-keyfile" addKeyfile
+      (funType tTyString [("keyfile",tTyString)])
+      [LitExample "(add-keyfile \"keys/000.yaml\")"]
+      "Add a key yaml file for signing."
      ])
 
   where
@@ -109,15 +123,24 @@ addKeyset _ [TGuard (GKeySet KeySet {..}) _] = do
   return $ tStr $ "Added " <> renderCompactText (S.toList _ksKeys) <> " to keystore"
 addKeyset i as = argsError i as
 
+instance Pretty Y.ParseException where
+  pretty = pretty . show
+
+addKeyfile :: RNativeFun LibState
+addKeyfile i [TLitString f] = do
+  (KeyPairFile p _s) <- eitherDie i =<< liftIO (Y.decodeFileEither (unpack f))
+  evalApp i "cli.add-keyfile1" [tStr p, tStr f]
+addKeyfile i as = argsError i as
+
 import' :: RNativeFun LibState
 import' i as = do
   ms <- forM as $ \a -> case a of
     TLitString m -> return $ "(describe-module \"" <> m <> "\")"
     _ -> evalError' a "Expected string"
-  mds <- localExec i $ "[" <> (intercalate " " ms) <> "]"
+  mds <- localExec i False $ "[" <> (intercalate " " ms) <> "]"
   rs <- case mds of
     PList vs -> forM vs $ \md ->
-      case preview (_PObject . to _objectMap . ix "code" . _PLiteral . _LString) md of
+      case preview (_PAt "code" . _PString) md of
         Just code -> evalPact' code
         Nothing -> evalError' i "Expected code"
     _ -> evalError' i "Expected list"
@@ -145,9 +168,12 @@ termToCode (TDef Def {..} _) = renderCompactText _dModule <> "." <> renderCompac
 termToCode t = renderCompactText t
 
 local' :: ZNativeFun LibState
+local' i [] = do
+  code <- cliState i "code" (_PLiteral . _LString)
+  fromPactValue <$> localExec i True code
 local' i as = do
   let code = intercalate " " $ map termToCode as
-  fromPactValue <$> localExec i code
+  fromPactValue <$> localExec i False code
 
 code' :: ZNativeFun LibState
 code' i as = do
@@ -160,15 +186,19 @@ rehash i _ = do
   cmd <- buildCmd i True code
   evalApp i "env-hash" $ [tStr $ asString $ _cmdHash cmd]
 
-localExec :: HasInfo i => i -> Text -> Eval LibState PactValue
-localExec i code = do
-  cmd <- buildCmd i False code
+localExec :: HasInfo i => i -> Bool -> Text -> Eval LibState PactValue
+localExec i includeSigners code = do
+  cmd <- buildCmd i includeSigners code
   env <- buildEndpoint i
   r <- sendLocal i env cmd
   case _pactResult (_crResult r) of
     Left e -> throwM e
     Right v -> return v
 
+evalAppExpect :: HasInfo i => i -> Text -> [Term Name] -> Fold PactValue a -> Eval e a
+evalAppExpect i an as f = evalApp i an as >>= toPV >>= \r -> case preview f r of
+    Nothing -> evalError' i $ "unexpected result for app " <> pretty (an,as)
+    Just v -> return v
 
 evalApp :: HasInfo i => i -> Text -> [Term Name] -> Eval e (Term Name)
 evalApp i an as = do
@@ -192,7 +222,7 @@ addCap i [TApp (App n as _) _,signers] = do
 addCap i as = argsError' i as
 
 cliState :: HasInfo i => i -> FieldKey -> Fold PactValue a -> Eval LibState a
-cliState i k p = evalExpect i (asString k) (_head . _PObject . to _objectMap . ix k . p) "(cli.cli-state)"
+cliState i k p = evalExpect i (asString k) (_head . _PAt k . p) "(cli.cli-state)"
 
 buildEndpoint :: HasInfo i => i -> Eval LibState ClientEnv
 buildEndpoint i = do
@@ -207,14 +237,29 @@ buildEndpoint i = do
   -- mgr <- liftIO $ newManager defaultManagerSettings
   liftIO $ getClientEnv burl
 
+_PString :: Fold PactValue Text
+_PString = _PLiteral . _LString
+_PInteger :: Fold PactValue Integer
+_PInteger = _PLiteral . _LInteger
+_PDecimal :: Fold PactValue Decimal
+_PDecimal = _PLiteral . _LDecimal
+_PTime :: Fold PactValue UTCTime
+_PTime = _PLiteral . _LTime
+_PBool :: Fold PactValue Bool
+_PBool = _PLiteral . _LBool
+_PObjectMap :: Fold PactValue (M.Map FieldKey PactValue)
+_PObjectMap = _PObject . objectMap
+_PAt :: FieldKey -> Fold PactValue PactValue
+_PAt k = _PObjectMap . ix k
+
 buildCmd :: HasInfo i => i -> Bool -> Text -> Eval LibState (Command Text)
 buildCmd i includeSigners cmd = do
-  ttl <- cliState i "ttl" (_PLiteral . _LInteger)
-  nw <- NetworkId <$> cliState i "network-id" (_PLiteral . _LString)
-  ctime <- cliState i "creation-time" (_PLiteral . _LTime)
-  nonce <- cliState i "nonce" (_PLiteral . _LString)
-  cid <- cliState i "chain-id" (_PLiteral . _LInteger)
-  sender <- cliState i "sender" (_PLiteral . _LString)
+  ttl <- cliState i "ttl" _PInteger
+  nw <- NetworkId <$> cliState i "network-id" _PString
+  ctime <- cliState i "creation-time" _PTime
+  nonce <- cliState i "nonce" _PString
+  cid <- cliState i "chain-id" _PInteger
+  sender <- cliState i "sender" _PString
   gasLimit <- view (eeGasEnv . geGasLimit)
   gasPrice <- view (eeGasEnv . geGasPrice)
   md <- view eeMsgBody
@@ -236,31 +281,38 @@ buildCmd i includeSigners cmd = do
 getSigners :: HasInfo i => i -> Eval LibState ([Signer],Maybe [UserSig])
 getSigners i = do
   sss <- cliState i "signers" _PList >>= \ss -> forM (V.toList ss) $ \s ->
-    case preview (_PObject . to _objectMap) s of
-      Just o -> case (str o "signer",str o "signature") of
-        (Just a,Just b) | b == "" -> return (a,Nothing)
-                        | otherwise -> return (a, Just $ UserSig b)
-        _ -> evalError' i $ "invalid signer: " <> pretty s
-      _ -> evalError' i $ "invalid signers"
+    case (str s "signer",str s "signature") of
+      (Just a,Just b)
+          | b /= "" -> return (a, Just $ UserSig b)
+          | otherwise -> do
+              ks <- evalAppExpect i "cli.get-key" [tStr a] (_PAt "file" . _PString)
+              case ks of
+                "" -> return (a, Nothing)
+                kf -> ((a,) . Just) <$> signHashWithFile (unpack kf)
+      _ -> evalError' i $ "invalid signer: " <> pretty s
   caps <- fmap (M.fromListWith (++) . concat) $ cliState i "caps" _PList >>= \ss -> forM (V.toList ss) $ \s ->
-    case preview (_PObject . to _objectMap) s of
-      Just o -> case (str o "name", lst o "args", lst o "signers") of
+    case (str s "name", lst s "args", lst s "signers") of
         (Just n,Just as,Just css) -> do
           qn <- eitherDie i $ parseQualifiedName (getInfo i) n
           let cap = [SigCapability qn (V.toList as)]
-          forM (V.toList css) $ \cs -> case preview (_PLiteral . _LString) cs of
+          forM (V.toList css) $ \cs -> case preview _PString cs of
             Just ps -> return (ps,cap)
             _ -> evalError' i $ "invalid signer in cap: " <> pretty cs
         _ -> evalError' i $ "invalid cap: " <> pretty s
-      _ -> evalError' i $ "invalid caps"
   return (map (mkSigner caps) (map fst sss),sequence (map snd sss))
   where
-    str o k = preview (ix k . _PLiteral . _LString) o
-    lst o k = preview (ix k . _PList) o
+    str o k = preview (_PAt k . _PString) o
+    lst o k = preview (_PAt k . _PList) o
     mkSigner caps s = Signer Nothing s Nothing $ case M.lookup s caps of
       Nothing -> []
       Just cs -> cs
 
+
+signHashWithFile :: FilePath -> Eval LibState UserSig
+signHashWithFile fp = do
+  skp <- liftIO $ importKeyFile fp
+  h <- view eeHash
+  liftIO $ signHash (fromUntypedHash h) skp
 
 getClientEnv :: BaseUrl -> IO ClientEnv
 getClientEnv url = flip mkClientEnv url <$> newTlsManagerWith mgrSettings
@@ -281,9 +333,11 @@ evalExpect i msg f cmd = do
 
 evalPactValue :: Text -> Eval e [PactValue]
 evalPactValue e = evalPact' e >>= traverse toPV
-  where
-    toPV t = eitherDie t $ toPactValue t
 
+toPV :: Term Name -> Eval e PactValue
+toPV t = eitherDie t $ toPactValue t
+
+evalPact1 :: Text -> Eval e (Term Name)
 evalPact1 = fmap head . evalPact'
 
 evalPact' :: Text -> Eval e [Term Name]

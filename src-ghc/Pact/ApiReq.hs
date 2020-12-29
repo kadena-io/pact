@@ -39,6 +39,7 @@ module Pact.ApiReq
     ,combineSigDatas
     ,signCmd
     ,decodeYaml
+    ,importKeyFile
     ) where
 
 import Control.Applicative

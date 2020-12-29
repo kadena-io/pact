@@ -3,7 +3,7 @@
   (defcap G () (enforce false "X"))
 
   (defschema keydata
-    secret:string)
+    file:string)
 
   (defschema cap
     name:string
@@ -86,7 +86,14 @@
     (write keystore id key))
 
   (defun add-key1 (key:string)
-    (add-key key { 'secret: "" }))
+    (add-key key { 'file: "" }))
+
+  (defun add-keyfile1 (key:string file:string)
+    (add-key key { 'file: file })
+    (rehash))
+
+  (defun get-key:object{keydata} (key:string)
+    (read keystore key))
 
   (defun add-cap1 (name:string args:list signers:[string])
     (let ((ss (map (add-signer) signers)))
@@ -98,18 +105,30 @@
             (at 'caps (read state S)))}
        true)))
 
+  (defun sign (signer:string signature:string)
+    (let ((s (add-signer signer)))
+      (update-state
+       { 'signers:
+         (map (sign1 s signature)
+               (at 'signers (cli-state))) } true)))
 
-  (defun add-signer-unsafe (s:string)
+  (defun sign1 (signer:string signature:string s:object{signer})
+    (if (= signer (at 'signer s))
+        (+ { 'signature: signature} s)
+      s))
+
+
+  (defun add-signer-unsafe (s:string sig:string)
     (let ((ss (at 'signers (read state S))))
       (if (contains s (map (at 'signer) ss)) "Already added"
         (update-state
-         { 'signers: (+ [{'signer:s,'signature:""}] ss) } true))))
+         { 'signers: (+ [{'signer:s,'signature:sig}] ss) } true))))
 
   (defun add-signer (signer:string)
     "Matches SIGNER to keystore to add to signers list."
     (let ((matched (fold (match-key signer) "" (keys keystore))))
       (enforce (!= "" matched) "Key not found")
-      (add-signer-unsafe matched)
+      (add-signer-unsafe matched "")
       matched))
 
   (defun clear-sigs ()
