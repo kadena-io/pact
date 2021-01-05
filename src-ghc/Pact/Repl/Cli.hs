@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeApplications #-}
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -28,7 +29,7 @@ import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Data.Aeson hiding (Object)
+import Data.Aeson as Aeson hiding (Object)
 import Data.Decimal
 import Data.Default
 import Data.Function
@@ -38,15 +39,12 @@ import Data.List (sortBy,elemIndex)
 import qualified Data.Set as S
 import Data.Text (Text,unpack,intercalate)
 import Data.Thyme.Time.Core
-import Data.Thyme.Clock
 import qualified Data.Vector as V
 import qualified Data.Yaml as Y
 import Network.Connection
-import Network.HTTP.Client hiding (responseBody)
 import Network.HTTP.Client.TLS
 import Servant.Client.Core
 import Servant.Client
-import Servant.Server
 import System.IO
 -- import System.FilePath
 import Text.Trifecta as TF hiding (line,err,try,newline)
@@ -112,10 +110,27 @@ cliDefs = ("Cli",
       (funType tTyString [("keyfile",tTyString)])
       [LitExample "(add-keyfile \"keys/000.yaml\")"]
       "Add a key yaml file for signing."
+      ,
+      defZRNative "now" now (funType tTyTime []) [LitExample "(now)"]
+      "Return current time"
+      ,
+      defZRNative "send" send (funType tTyString []) [LitExample "(send)"]
+      "Build and send current command."
+      ,
+      defZRNative "poll" poll
+      (funType a [] <> funType a [("req-key",tTyString)])
+      [LitExample "(poll)", LitExample "(poll \"DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g\")"]
+      "Poll for result on server."
+      ,
+      defZRNative "prep-offline" prepOffline
+      (funType tTyString [("file",tTyString)])
+      [LitExample "(prep-offline \"offline.yaml\")"]
+      "Make offline 'unsigned' yaml file."
      ])
 
   where
        a = mkTyVar "a" []
+
 
 addKeyset :: RNativeFun LibState
 addKeyset _ [TGuard (GKeySet KeySet {..}) _] = do
@@ -146,6 +161,20 @@ import' i as = do
     _ -> evalError' i "Expected list"
   return $ toTList TyAny def (concat rs)
 
+now :: RNativeFun LibState
+now _ _ = toTerm <$> liftIO getCurrentTime
+
+
+prepOffline :: RNativeFun LibState
+prepOffline i [TLitString file] = do
+  cmd <- buildCurrentCode i
+  sgs <- getSigners i
+  liftIO $ Y.encodeFile @(SigData Text) (unpack file) $
+      SigData (_cmdHash cmd) (map toSigs (fst sgs)) Nothing
+  return $ tStr $ "Wrote " <> file
+  where
+    toSigs (Signer _ s _ _) = (PublicKeyHex s,Nothing)
+prepOffline i as = argsError i as
 
 termToCode :: Term Ref -> Text
 termToCode (TLiteral l _) = renderCompactText l
@@ -166,6 +195,38 @@ termToCode (TVar v _) = case v of
 termToCode TNative {..} = renderCompactText _tNativeName
 termToCode (TDef Def {..} _) = renderCompactText _dModule <> "." <> renderCompactText _dDefName
 termToCode t = renderCompactText t
+
+buildCurrentCode :: HasInfo i => i -> Eval LibState (Command Text)
+buildCurrentCode i = do
+  code <- cliState i "code" (_PLiteral . _LString)
+  buildCmd i True code
+
+jsonToTerm
+  :: (ToJSON b, HasInfo i, Show b) => i -> b -> Eval e (Term Name)
+jsonToTerm i r = case fromJSON $ toJSON r of
+    Aeson.Success s -> return $ fromPactValue s
+    e -> evalError' i $ "Failed to coerce JSON: " <> (pretty $ show (e,r))
+
+send :: RNativeFun LibState
+send i _ = do
+  cmd <- buildCurrentCode i
+  env <- buildEndpoint i
+  r <- sendTx i env (mkSubmitBatch cmd [])
+  jsonToTerm i r
+
+poll :: RNativeFun LibState
+poll i as = case as of
+  [TLitString k] -> (go . RequestKey) =<< eitherDie i (fromText' k)
+  [] -> do
+    cmd <- buildCurrentCode i
+    go $ RequestKey $ toUntypedHash $ _cmdHash cmd
+  _ -> argsError i as
+  where
+    go :: RequestKey -> Eval LibState (Term Name)
+    go rk = do
+      env <- buildEndpoint i
+      r <- sendPoll i env (mkPoll rk [])
+      jsonToTerm i r
 
 local' :: ZNativeFun LibState
 local' i [] = do
@@ -380,13 +441,17 @@ _testCode :: Text -> IO [Text]
 _testCode code = _eval (fmap termToCode <$> (compilePact code >>= mapM enscope))
 
 
-send :: HasInfo i => i -> ClientEnv -> SubmitBatch -> Eval e RequestKeys
-send i env sb =
+sendTx :: HasInfo i => i -> ClientEnv -> SubmitBatch -> Eval e RequestKeys
+sendTx i env sb =
   liftIO (runClientM (sendClient sb) env) >>= eitherDie i
 
 sendLocal :: HasInfo i => i -> ClientEnv -> Command Text -> Eval e (CommandResult Hash)
 sendLocal i env cmd =
   liftIO (runClientM (localClient cmd) env) >>= eitherDie i
+
+sendPoll :: HasInfo i => i -> ClientEnv -> Poll -> Eval e (PollResponses)
+sendPoll i env p =
+  liftIO (runClientM (pollClient p) env) >>= eitherDie i
 
 eitherDie :: HasInfo i => Pretty a => i -> Either a b -> Eval e b
 eitherDie i = either (evalError' i . pretty) return

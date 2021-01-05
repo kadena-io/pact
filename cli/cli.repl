@@ -2,9 +2,6 @@
 (module cli G
   (defcap G () (enforce false "X"))
 
-  (defschema keydata
-    file:string)
-
   (defschema cap
     name:string
     args:list
@@ -34,7 +31,16 @@
   (deftable state:{data})
   (defconst S "S")
 
+  (defschema keydata
+    file:string)
+
   (deftable keystore:{keydata})
+
+  (defschema account
+    id:string
+    guard:guard)
+
+  (deftable wallet:{account})
 
   (defun init ()
     (write
@@ -42,9 +48,9 @@
      { 'sender: "sender"
      , 'ttl: 150000
      , 'network-id: "mainnet01"
-     , 'creation-time: (parse-time "%F" "1970-01-01")
+     , 'creation-time: (now)
      , 'nonce: "nonce"
-     , 'host: "us-e1.chainweb.com"
+     , 'host: "api.chainweb.com"
      , 'chain-id: 0
      , 'chain-count: 20
      , 'signers: []
@@ -52,7 +58,21 @@
      , 'code: ""
      }))
 
+  (defun sstore (name:string)
+    (write state name (cli-state)))
+
+  (defun sload(name:string)
+    (write state S (read state name)))
+
   (defun cli-state () (read state S))
+
+  (defun mainnet ()
+    (network-id "mainnet01")
+    (host "api.chainweb.com"))
+
+  (defun testnet ()
+    (network-id "testnet04")
+    (host "us1.testnet.chainweb.com"))
 
   (defun update-state (u:object rh:bool)
     (update state S u)
@@ -90,7 +110,8 @@
 
   (defun add-keyfile1 (key:string file:string)
     (add-key key { 'file: file })
-    (rehash))
+    (rehash)
+    (format "Added keyfile for key {}" [key]))
 
   (defun get-key:object{keydata} (key:string)
     (read keystore key))
