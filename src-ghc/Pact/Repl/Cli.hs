@@ -37,7 +37,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.List (sortBy,elemIndex)
 import qualified Data.Set as S
-import Data.Text (Text,unpack,intercalate)
+import Data.Text (Text,pack,unpack,intercalate)
 import Data.Thyme.Time.Core
 import qualified Data.Vector as V
 import qualified Data.Yaml as Y
@@ -169,9 +169,11 @@ prepOffline :: RNativeFun LibState
 prepOffline i [TLitString file] = do
   cmd <- buildCurrentCode i
   sgs <- getSigners i
-  liftIO $ Y.encodeFile @(SigData Text) (unpack file) $
+  curFileM <- viewLibState _rlsFile
+  let f = computePath curFileM (unpack file)
+  liftIO $ Y.encodeFile @(SigData Text) f $
       SigData (_cmdHash cmd) (map toSigs (fst sgs)) Nothing
-  return $ tStr $ "Wrote " <> file
+  return $ tStr $ "Wrote " <> (pack f)
   where
     toSigs (Signer _ s _ _) = (PublicKeyHex s,Nothing)
 prepOffline i as = argsError i as
@@ -207,6 +209,12 @@ jsonToTerm i r = case fromJSON $ toJSON r of
     Aeson.Success s -> return $ fromPactValue s
     e -> evalError' i $ "Failed to coerce JSON: " <> (pretty $ show (e,r))
 
+valueToTerm
+  :: HasInfo i => i -> Value -> Eval e (Term Name)
+valueToTerm i v = case fromJSON v of
+    Aeson.Success s -> return $ fromPactValue s
+    e -> evalError' i $ "Failed to coerce JSON: " <> (pretty $ show (e,v))
+
 send :: RNativeFun LibState
 send i _ = do
   cmd <- buildCurrentCode i
@@ -225,8 +233,24 @@ poll i as = case as of
     go :: RequestKey -> Eval LibState (Term Name)
     go rk = do
       env <- buildEndpoint i
-      r <- sendPoll i env (mkPoll rk [])
-      jsonToTerm i r
+      PollResponses r <- sendPoll i env (mkPoll rk [])
+      case HM.lookup rk r of
+        Just CommandResult{..} -> do
+          met <- valueToTerm i (maybe (String "[empty]") id _crMetaData)
+          return $ toTObject TyAny def $
+            [("result", case _crResult of
+                 (PactResult (Left e)) -> tStr (tShow e)
+                 (PactResult (Right sr)) -> fromPactValue sr)
+            ,("gas",toTerm @Int $ fromIntegral _crGas)
+            ,("meta",met)
+            ,("events",toTList TyAny def $ map ev _crEvents)
+            ]
+        Nothing -> return $ tStr "No response"
+    ev PactEvent{..} = toTObject TyAny def $
+      [("name",toTerm _eventName)
+      ,("params",toTList TyAny def (map fromPactValue _eventParams))
+      ,("module",toTerm (renderCompactText _eventModule))
+      ,("module-hash",toTerm (renderCompactText _eventModuleHash))]
 
 local' :: ZNativeFun LibState
 local' i [] = do

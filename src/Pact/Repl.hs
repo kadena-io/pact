@@ -46,6 +46,7 @@ module Pact.Repl
   , loadFile
   , useReplLib
   , pipeLoop
+  , computePath
   ) where
 
 import Prelude hiding (exp)
@@ -113,7 +114,7 @@ runPipedRepl' p s@ReplState{} h =
 
 initReplState :: MonadIO m => ReplMode -> Maybe String -> m ReplState
 initReplState m verifyUri =
-  liftIO (initPureEvalEnv verifyUri) >>= \e -> return (ReplState e def m def def def)
+  liftIO (initPureEvalEnv verifyUri) >>= \e -> return (ReplState e def m def def)
 
 initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
@@ -225,7 +226,7 @@ pureEval ei e = do
 
 evalEval :: Info -> Eval LibState a -> Repl (Either PactError a, EvalState)
 evalEval ei e = do
-  (ReplState evalE evalS _ _ _ _) <- get
+  (ReplState evalE evalS _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   return $ case er of
     Left (SomeException ex) -> (Left (PactError EvalError ei def (prettyString (show ex))),evalS)
@@ -283,15 +284,12 @@ updateForOp i a = do
 -- Track file and use current file to mangle directory as necessary.
 loadFile :: Info -> FilePath -> Repl (Either String (Term Name))
 loadFile i f = do
-  curFileM <- use rFile
-  let computedPath = case curFileM of
-        Nothing -> f -- no current file, just use f
-        Just curFile
-          | isAbsolute f -> f -- absolute always wins
-          | takeFileName curFile == curFile -> f -- current with no directory loses
-          | otherwise -> combine (takeDirectory curFile) f -- otherwise start with dir of curfile
-      restoreFile = rFile .= curFileM
-  rFile .= Just computedPath
+  mv <- use (rEnv.eePactDbVar)
+  curFileM <- view rlsFile <$> liftIO (readMVar mv)
+  let computedPath = computePath curFileM f
+      setFile f' = liftIO $ modifyMVar_ mv $ return . set rlsFile f'
+      restoreFile = setFile curFileM
+  setFile $ Just computedPath
   catch (do
           pr <- TF.parseFromFileEx exprsOnly computedPath
           srcBS <- liftIO $ BS.readFile computedPath
@@ -308,6 +306,15 @@ loadFile i f = do
                  "load: file load failed: " <> pretty f <> ", " <> viaShow e
                outStrLn HErr pe
                return (Left (show e))
+
+-- | Mangle argument vs current file, if any.
+computePath :: Maybe FilePath -> FilePath -> FilePath
+computePath curFileM f = case curFileM of
+  Nothing -> f -- no current file, just use f
+  Just curFile
+      | isAbsolute f -> f -- absolute always wins
+      | takeFileName curFile == curFile -> f -- current with no directory loses
+      | otherwise -> combine (takeDirectory curFile) f -- otherwise start with dir of curfile
 
 out :: ReplMode -> Hdl -> Bool -> String -> Repl ()
 out m hdl newline str =

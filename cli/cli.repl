@@ -62,7 +62,8 @@
     (write state name (cli-state)))
 
   (defun sload(name:string)
-    (write state S (read state name)))
+    (write state S (read state name))
+    (rehash))
 
   (defun cli-state () (read state S))
 
