@@ -69,11 +69,18 @@
 
   (defun mainnet ()
     (network-id "mainnet01")
-    (host "api.chainweb.com"))
+    (host "api.chainweb.com")
+    (rehash))
 
   (defun testnet ()
     (network-id "testnet04")
-    (host "us1.testnet.chainweb.com"))
+    (host "us1.testnet.chainweb.com")
+    (rehash))
+
+  (defun devnet ()
+    (network-id "development")
+    (host "us1.tn1.chainweb.com")
+    (rehash))
 
   (defun update-state (u:object rh:bool)
     (update state S u)
