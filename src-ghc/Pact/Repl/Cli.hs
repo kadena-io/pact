@@ -34,6 +34,7 @@ import Data.Decimal
 import Data.Default
 import Data.Function
 import qualified Data.Map.Strict as M
+import Data.Maybe
 import qualified Data.HashMap.Strict as HM
 import Data.List (sortBy,elemIndex)
 import qualified Data.Set as S
@@ -124,8 +125,13 @@ cliDefs = ("Cli",
       ,
       defZRNative "prep-offline" prepOffline
       (funType tTyString [("file",tTyString)])
-      [LitExample "(prep-offline \"offline.yaml\")"]
-      "Make offline 'unsigned' yaml file."
+      [LitExample "(prep-offline \"offline-unsigned.yaml\")"]
+      "Make offline 'unsigned' yaml FILE."
+      ,
+      defZRNative "read-offline" readOffline
+      (funType tTyString [("file",tTyString)])
+      [LitExample "(read-offline \"sig.yaml\")"]
+      "Read offline signature yaml FILE."
      ])
 
   where
@@ -177,6 +183,17 @@ prepOffline i [TLitString file] = do
   where
     toSigs (Signer _ s _ _) = (PublicKeyHex s,Nothing)
 prepOffline i as = argsError i as
+
+readOffline :: RNativeFun LibState
+readOffline i [TLitString file] = do
+  SigData{..} <- eitherDie i =<< liftIO (Y.decodeFileEither @(SigData Text) (unpack file))
+  cmd <- buildCurrentCode i
+  when (_cmdHash cmd /= _sigDataHash) $ evalError' i $ "Sig data file hash mismatch: " <> pretty _sigDataHash
+  rs <- forM _sigDataSigs $ \(PublicKeyHex k,sigM) -> forM sigM $ \(UserSig sig) ->
+    evalApp i "cli.sign" [toTerm k,toTerm sig]
+  return $ toTList TyAny def $ catMaybes rs
+
+readOffline i as = argsError i as
 
 termToCode :: Term Ref -> Text
 termToCode (TLiteral l _) = renderCompactText l

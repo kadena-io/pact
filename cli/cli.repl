@@ -139,7 +139,12 @@
       (update-state
        { 'signers:
          (map (sign1 s signature)
-               (at 'signers (cli-state))) } true)))
+               (at 'signers (cli-state))) } true)
+      (format "Added signature {}->{}" (map (elide) [signer signature]))))
+
+  (defun elide:string (s:string)
+    (if (< (length s) 12) s
+      (+ (take 12 s) "...")))
 
   (defun sign1 (signer:string signature:string s:object{signer})
     (if (= signer (at 'signer s))
