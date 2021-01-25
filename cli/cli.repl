@@ -11,6 +11,11 @@
     signer:string
     signature:string)
 
+  (defschema env
+    gaslimit:integer
+    gasprice:decimal
+    msgdata:object)
+
   (defschema data
     sender:string
     ttl:integer
@@ -23,6 +28,7 @@
     signers:[object{signer}]
     caps:[object{cap}]
     code:string
+    env:object{env}
     )
 
   (defconst PACT_CHAIN_ID:integer -1
@@ -32,15 +38,11 @@
   (defconst S "S")
 
   (defschema keydata
+    key:string
+    alias:string
     file:string)
 
   (deftable keystore:{keydata})
-
-  (defschema account
-    id:string
-    guard:guard)
-
-  (deftable wallet:{account})
 
   (defun init ()
     (write
@@ -56,13 +58,28 @@
      , 'signers: []
      , 'caps: []
      , 'code: ""
-     }))
+     , 'env:
+       { 'gaslimit: 5000
+       , 'gasprice: 0.00000000001
+       , 'msgdata: {}
+       }
+     })
+    (conform-env)
+    (rehash))
+
+  (defun conform-env ()
+    (with-read state S
+      { 'env:= e }
+      (env-data (at 'msgdata e))
+      (env-gaslimit (at 'gaslimit e))
+      (env-gasprice (at 'gasprice e))))
 
   (defun sstore (name:string)
     (write state name (cli-state)))
 
   (defun sload(name:string)
     (write state S (read state name))
+    (conform-env)
     (rehash))
 
   (defun cli-state () (read state S))
@@ -84,10 +101,31 @@
 
   (defun update-state (u:object rh:bool)
     (update state S u)
+    (conform-env)
     (if rh (rehash) "State updated"))
 
   (defun sender (s:string)
+    "Set message sender/gaspayer account."
     (update-state { 'sender: s } true))
+
+  (defun sender-key (key:string)
+    "Set message sender/gaspayer account to KEY match in keystore."
+    (sender (find-key key)))
+
+  (defun gaslimit (i:integer)
+    (update-env { 'gaslimit: i }))
+
+  (defun gasprice (d:decimal)
+    (update-env { 'gasprice: d }))
+
+  (defun msgdata (o:object)
+    (update-env { 'msgdata: o }))
+
+  (defun update-env (e:object)
+    (update-state
+     { 'env:
+       (+ e (at 'env (cli-state)))}
+     true))
 
   (defun ttl (i:integer)
     (update-state { 'ttl: i } true))
@@ -110,16 +148,30 @@
   (defun set-code (s:string)
     (update-state { 'code: s } true))
 
-  (defun add-key (id:string key:object{keydata})
-    (write keystore id key))
+  (defun add-key:object{keydata} (key:string)
+    (with-default-read keystore key
+      { 'file: "", 'alias: "" }
+      { 'file:= f, 'alias:= a }
+      (let ((k { 'key: key, 'file: f, 'alias: a }))
+        (write keystore key k)
+        k)))
 
-  (defun add-key1 (key:string)
-    (add-key key { 'file: "" }))
+  (defun add-key-alias:object{keydata} (alias:string key:string)
+    (with-default-read keystore key
+      { 'file: "" }
+      { 'file:= f }
+      (let ((k { 'key: key, 'file: f, 'alias: alias }))
+        (write keystore key k)
+        k)))
 
-  (defun add-keyfile1 (key:string file:string)
-    (add-key key { 'file: file })
-    (rehash)
-    (format "Added keyfile for key {}" [key]))
+  (defun add-keyfile1:object{keydata} (key:string file:string)
+    (with-default-read keystore key
+      { 'alias: "" }
+      { 'alias:= a}
+      (let ((k { 'key: key, 'file: file, 'alias: a }))
+        (write keystore key k)
+        (rehash)
+        k)))
 
   (defun get-key:object{keydata} (key:string)
     (read keystore key))
@@ -160,10 +212,20 @@
 
   (defun add-signer (signer:string)
     "Matches SIGNER to keystore to add to signers list."
-    (let ((matched (fold (match-key signer) "" (keys keystore))))
-      (enforce (!= "" matched) "Key not found")
+    (enforce (!= "" signer) "Empty signer")
+    (let ((matched (find-key signer)))
       (add-signer-unsafe matched "")
       matched))
+
+  (defun add-keyset-signers (aliased-only:bool k:keyset)
+    " Adds all keys in keyset to signers unless ALIASED-ONLY, in which \
+    \ case only adds aliased keys."
+    (let* ((ks (add-keyset k))
+           (ks1 (if aliased-only
+                    (filter (compose (at 'alias) (!= "")) ks)
+                  ks)))
+      (map (compose (at 'key) (add-signer)) ks1)
+      ks1))
 
   (defun clear-sigs ()
     (update-state
@@ -172,11 +234,21 @@
         (at 'signers (cli-state))) }
      false))
 
-  (defun match-key (part:string r:string key:string)
-    (if (= part (take (length part) key))
+  (defun all-keys ()
+    (select keystore (constantly true)))
+
+  (defun find-key:string (k:string)
+    "Searches keystore by key and alias for K, returning key string"
+    (let ((matched (fold (match-key k) "" (all-keys))))
+      (enforce (!= "" matched) (format "Key not found: {}" [k]))
+      matched))
+
+  (defun match-key (part:string r:string key:object{keydata})
+    (if (or (= part (take (length part) (at 'key key)))
+            (= part (take (length part) (at 'alias key))))
         (let ((x 0))
           (enforce (= "" r) "Multiple matches found")
-          key)
+          (at 'key key))
       r))
 
 
@@ -184,5 +256,3 @@
 (create-table state)
 (create-table keystore)
 (init)
-(env-gaslimit 5000)
-(env-gasprice 0.00000000001)

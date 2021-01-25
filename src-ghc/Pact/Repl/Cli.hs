@@ -93,9 +93,9 @@ cliDefs = ("Cli",
       "Import and load code for MODULES from remote."
       ,
       defZRNative "add-keyset" addKeyset
-      (funType tTyString [("keyset",tTyGuard (Just GTyKeySet))])
+      (funType (TyList (tTyObject TyAny)) [("keyset",tTyGuard (Just GTyKeySet))])
       [LitExample "(add-keyset (local (describe-keyset 'abc)))"]
-      "Add all keys in KEYSET to keystore."
+      "Add all keys in KEYSET to keystore, returning keydata objects."
       ,
       defZNative "code" code'
       (funType tTyString [("exprs",a)])
@@ -140,17 +140,18 @@ cliDefs = ("Cli",
 
 addKeyset :: RNativeFun LibState
 addKeyset _ [TGuard (GKeySet KeySet {..}) _] = do
-  forM_ (S.toList _ksKeys) $ \k -> evalPact1 $ "(cli.add-key1 \"" <> renderCompactText k <> "\")"
-  return $ tStr $ "Added " <> renderCompactText (S.toList _ksKeys) <> " to keystore"
+  fmap (toTList TyAny def) $ forM (S.toList _ksKeys) $ \k ->
+    evalPact1 $ "(cli.add-key \"" <> renderCompactText k <> "\")"
 addKeyset i as = argsError i as
 
 instance Pretty Y.ParseException where
   pretty = pretty . show
 
 addKeyfile :: RNativeFun LibState
-addKeyfile i [TLitString f] = do
-  (KeyPairFile p _s) <- eitherDie i =<< liftIO (Y.decodeFileEither (unpack f))
-  evalApp i "cli.add-keyfile1" [tStr p, tStr f]
+addKeyfile i [TLitString f'] = do
+  f <- computeCurPath f'
+  (KeyPairFile p _s) <- eitherDie i =<< liftIO (Y.decodeFileEither f)
+  evalApp i "cli.add-keyfile1" [tStr p, tStr $ pack f]
 addKeyfile i as = argsError i as
 
 import' :: RNativeFun LibState
@@ -175,14 +176,18 @@ prepOffline :: RNativeFun LibState
 prepOffline i [TLitString file] = do
   cmd <- buildCurrentCode i
   sgs <- getSigners i
-  curFileM <- viewLibState _rlsFile
-  let f = computePath curFileM (unpack file)
+  f <- computeCurPath file
   liftIO $ Y.encodeFile @(SigData Text) f $
       SigData (_cmdHash cmd) (map toSigs (fst sgs)) Nothing
   return $ tStr $ "Wrote " <> (pack f)
   where
     toSigs (Signer _ s _ _) = (PublicKeyHex s,Nothing)
 prepOffline i as = argsError i as
+
+computeCurPath :: Text -> Eval LibState FilePath
+computeCurPath file = do
+  curFileM <- viewLibState _rlsFile
+  return $ computePath curFileM (unpack file)
 
 readOffline :: RNativeFun LibState
 readOffline i [TLitString file] = do
