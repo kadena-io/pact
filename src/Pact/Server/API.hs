@@ -106,6 +106,24 @@ type ApiVerify = "verify"
 type ApiVersion = "version"
   :> Get '[PlainText] Text
 
+-- | "pact -s" REST API.
+type PactServerAPI = ApiV1API :<|> ApiVerify :<|> ApiVersion
+
+pactServerAPI :: Proxy PactServerAPI
+pactServerAPI = Proxy
+
+-- | Need this because seems to be only way to reuse the "api/v1" prefix
+data ApiV1Client m = ApiV1Client
+  { v1Send :: SubmitBatch -> m RequestKeys
+  , v1Poll :: Poll -> m PollResponses
+  , v1Listen :: ListenerRequest -> m ListenResponse
+  , v1Local :: Command Text -> m (CommandResult Hash)
+  }
+
+
+-- | Public Pact REST API Swagger
+apiV1Swagger :: Swagger
+apiV1Swagger = toSwagger (Proxy :: Proxy ApiV1API)
 
 #if !defined(ghcjs_HOST_OS)
 sendClient :: SubmitBatch -> ClientM RequestKeys
@@ -125,32 +143,13 @@ verifyClient = client (Proxy @ ApiVerify)
 
 versionClient :: ClientM Text
 versionClient = client (Proxy @ ApiVersion)
-#endif
-
--- | "pact -s" REST API.
-type PactServerAPI = ApiV1API :<|> ApiVerify :<|> ApiVersion
-
-pactServerAPI :: Proxy PactServerAPI
-pactServerAPI = Proxy
-
--- | Need this because seems to be only way to reuse the "api/v1" prefix
-data ApiV1Client m = ApiV1Client
-  { v1Send :: SubmitBatch -> m RequestKeys
-  , v1Poll :: Poll -> m PollResponses
-  , v1Listen :: ListenerRequest -> m ListenResponse
-  , v1Local :: Command Text -> m (CommandResult Hash)
-  }
 
 apiV1Client :: forall m. RunClient m => ApiV1Client m
 apiV1Client = ApiV1Client send poll listen local
   where
     (send :<|> poll :<|> listen :<|> local) :<|> _verify :<|> _version =
       clientIn pactServerAPI (Proxy :: Proxy m)
-
-
--- | Public Pact REST API Swagger
-apiV1Swagger :: Swagger
-apiV1Swagger = toSwagger (Proxy :: Proxy ApiV1API)
+#endif
 
 -- | Full `pact -s` REST API Swagger
 pactServerSwagger :: Swagger
