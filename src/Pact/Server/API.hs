@@ -24,6 +24,7 @@ module Pact.Server.API
   , ApiLocal
   , ApiVerify
   , ApiVersion
+#if !defined(ghcjs_HOST_OS)
   -- | client
   , sendClient
   , pollClient
@@ -31,6 +32,7 @@ module Pact.Server.API
   , localClient
   , verifyClient
   , versionClient
+#endif
   -- | swagger
   , apiV1Swagger
   , pactServerSwagger
