@@ -49,8 +49,10 @@ import Data.Thyme.Clock (UTCTime)
 import Data.Thyme.Time.Core (fromMicroseconds,fromGregorian,mkUTCTime)
 import GHC.Generics
 import Servant.API
+#if !defined(ghcjs_HOST_OS)
 import Servant.Client
 import Servant.Client.Core
+#endif
 import Servant.Swagger
 
 import qualified Pact.Analyze.Remote.Types as Analyze
@@ -84,42 +86,45 @@ type ApiSend = "send"
   :> ReqBody '[JSON] SubmitBatch
   :> Post '[JSON] RequestKeys
 
-sendClient :: SubmitBatch -> ClientM RequestKeys
-sendClient = v1Send apiV1Client
-
 type ApiPoll = "poll"
   :> ReqBody '[JSON] Poll
   :> Post '[JSON] PollResponses
-
-pollClient :: Poll -> ClientM PollResponses
-pollClient = v1Poll apiV1Client
 
 type ApiListen = "listen"
   :> ReqBody '[JSON] ListenerRequest
   :> Post '[JSON] ListenResponse
 
-listenClient :: ListenerRequest -> ClientM ListenResponse
-listenClient = v1Listen apiV1Client
-
 type ApiLocal = "local"
   :> ReqBody '[JSON] (Command Text)
   :> Post '[JSON] (CommandResult Hash)
-
-localClient :: Command Text -> ClientM (CommandResult Hash)
-localClient = v1Local apiV1Client
 
 type ApiVerify = "verify"
   :> ReqBody '[JSON] Analyze.Request
   :> Post '[JSON] Analyze.Response
 
-verifyClient :: Analyze.Request -> ClientM Analyze.Response
-verifyClient = client (Proxy @ ApiVerify)
-
 type ApiVersion = "version"
   :> Get '[PlainText] Text
 
+
+#if !defined(ghcjs_HOST_OS)
+sendClient :: SubmitBatch -> ClientM RequestKeys
+sendClient = v1Send apiV1Client
+
+pollClient :: Poll -> ClientM PollResponses
+pollClient = v1Poll apiV1Client
+
+listenClient :: ListenerRequest -> ClientM ListenResponse
+listenClient = v1Listen apiV1Client
+
+localClient :: Command Text -> ClientM (CommandResult Hash)
+localClient = v1Local apiV1Client
+
+verifyClient :: Analyze.Request -> ClientM Analyze.Response
+verifyClient = client (Proxy @ ApiVerify)
+
 versionClient :: ClientM Text
 versionClient = client (Proxy @ ApiVersion)
+#endif
 
 -- | "pact -s" REST API.
 type PactServerAPI = ApiV1API :<|> ApiVerify :<|> ApiVersion

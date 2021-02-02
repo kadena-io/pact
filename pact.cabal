@@ -217,6 +217,8 @@ library
                      , mmorph >= 1.1 && < 1.2
                      , constraints
                      , servant
+                     , servant-client
+                     , servant-client-core
                      , servant-swagger
                      , swagger2 >= 2.3
 
@@ -238,8 +240,6 @@ library
                 , neat-interpolation >= 0.4
                 , safe-exceptions >= 0.1.5.0 && < 0.2
                 , sbv >= 8.8
-                , servant-client
-                , servant-client-core
                 , servant-server
                 , statistics >= 0.13.3 && < 0.16
                 , wai-cors
