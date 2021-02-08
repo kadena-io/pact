@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -23,6 +24,7 @@ module Pact.Server.API
   , ApiLocal
   , ApiVerify
   , ApiVersion
+#if !defined(ghcjs_HOST_OS)
   -- | client
   , sendClient
   , pollClient
@@ -30,6 +32,7 @@ module Pact.Server.API
   , localClient
   , verifyClient
   , versionClient
+#endif
   -- | swagger
   , apiV1Swagger
   , pactServerSwagger
@@ -49,8 +52,10 @@ import Data.Thyme.Clock (UTCTime)
 import Data.Thyme.Time.Core (fromMicroseconds,fromGregorian,mkUTCTime)
 import GHC.Generics
 import Servant.API
+#if !defined(ghcjs_HOST_OS)
 import Servant.Client
 import Servant.Client.Core
+#endif
 import Servant.Swagger
 
 import qualified Pact.Analyze.Remote.Types as Analyze
@@ -84,42 +89,24 @@ type ApiSend = "send"
   :> ReqBody '[JSON] SubmitBatch
   :> Post '[JSON] RequestKeys
 
-sendClient :: SubmitBatch -> ClientM RequestKeys
-sendClient = v1Send apiV1Client
-
 type ApiPoll = "poll"
   :> ReqBody '[JSON] Poll
   :> Post '[JSON] PollResponses
-
-pollClient :: Poll -> ClientM PollResponses
-pollClient = v1Poll apiV1Client
 
 type ApiListen = "listen"
   :> ReqBody '[JSON] ListenerRequest
   :> Post '[JSON] ListenResponse
 
-listenClient :: ListenerRequest -> ClientM ListenResponse
-listenClient = v1Listen apiV1Client
-
 type ApiLocal = "local"
   :> ReqBody '[JSON] (Command Text)
   :> Post '[JSON] (CommandResult Hash)
-
-localClient :: Command Text -> ClientM (CommandResult Hash)
-localClient = v1Local apiV1Client
 
 type ApiVerify = "verify"
   :> ReqBody '[JSON] Analyze.Request
   :> Post '[JSON] Analyze.Response
 
-verifyClient :: Analyze.Request -> ClientM Analyze.Response
-verifyClient = client (Proxy @ ApiVerify)
-
 type ApiVersion = "version"
   :> Get '[PlainText] Text
-
-versionClient :: ClientM Text
-versionClient = client (Proxy @ ApiVersion)
 
 -- | "pact -s" REST API.
 type PactServerAPI = ApiV1API :<|> ApiVerify :<|> ApiVersion
@@ -135,16 +122,36 @@ data ApiV1Client m = ApiV1Client
   , v1Local :: Command Text -> m (CommandResult Hash)
   }
 
+
+-- | Public Pact REST API Swagger
+apiV1Swagger :: Swagger
+apiV1Swagger = toSwagger (Proxy :: Proxy ApiV1API)
+
+#if !defined(ghcjs_HOST_OS)
+sendClient :: SubmitBatch -> ClientM RequestKeys
+sendClient = v1Send apiV1Client
+
+pollClient :: Poll -> ClientM PollResponses
+pollClient = v1Poll apiV1Client
+
+listenClient :: ListenerRequest -> ClientM ListenResponse
+listenClient = v1Listen apiV1Client
+
+localClient :: Command Text -> ClientM (CommandResult Hash)
+localClient = v1Local apiV1Client
+
+verifyClient :: Analyze.Request -> ClientM Analyze.Response
+verifyClient = client (Proxy @ ApiVerify)
+
+versionClient :: ClientM Text
+versionClient = client (Proxy @ ApiVersion)
+
 apiV1Client :: forall m. RunClient m => ApiV1Client m
 apiV1Client = ApiV1Client send poll listen local
   where
     (send :<|> poll :<|> listen :<|> local) :<|> _verify :<|> _version =
       clientIn pactServerAPI (Proxy :: Proxy m)
-
-
--- | Public Pact REST API Swagger
-apiV1Swagger :: Swagger
-apiV1Swagger = toSwagger (Proxy :: Proxy ApiV1API)
+#endif
 
 -- | Full `pact -s` REST API Swagger
 pactServerSwagger :: Swagger

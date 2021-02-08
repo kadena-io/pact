@@ -10,7 +10,11 @@ in {
     kpkgs.rp.project ({ pkgs, hackGet, ... }: with pkgs.haskell.lib; {
       name = "pact";
       overrides = self: super: {
-        pact = doCoverage (addBuildDepend super.pact pkgs.z3);
+        # The z3 dependency needs to be conditional so pact can be a
+        # dependency of ghcjs apps.
+        pact = if self.ghc.isGhcjs or false
+                 then super.pact
+                 else addBuildDepend super.pact pkgs.z3;
       };
       packages = {
         pact = kpkgs.gitignoreSource ./.;
