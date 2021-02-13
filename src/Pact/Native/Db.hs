@@ -144,8 +144,6 @@ dbDefs =
      (funType tTyObjectAny [("table",tableTy)])
      [LitExample "(describe-table accounts)"]
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
-    ,setTopLevelOnly $ defGasRNative "describe-keyset" descKeySet
-     (funType tTyObjectAny [("keyset",tTyString)]) [] "Get metadata for KEYSET."
     ,setTopLevelOnly $ defRNative "describe-module" descModule
      (funType tTyObjectAny [("module",tTyString)])
      [LitExample "(describe-module 'my-module)"]
@@ -158,15 +156,6 @@ descTable _ [TTable {..}] = return $ toTObject TyAny def [
   ("module", tStr $ asString _tModuleName),
   ("type", toTerm $ pack $ showPretty _tTableType)]
 descTable i as = argsError i as
-
-descKeySet :: GasRNativeFun e
-descKeySet g i [TLitString t] = do
-  r <- readRow (_faInfo i) KeySets (KeySetName t)
-  case r of
-    Just v -> computeGas' g i (GPostRead (ReadKeySet (KeySetName t) v)) $
-              return $ toTerm v
-    Nothing -> evalError' i $ "Keyset not found: " <> pretty t
-descKeySet _ i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
