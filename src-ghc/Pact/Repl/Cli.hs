@@ -30,6 +30,8 @@ import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Aeson as Aeson hiding (Object)
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.Decimal
 import Data.Default
 import Data.Function
@@ -38,7 +40,9 @@ import Data.Maybe
 import qualified Data.HashMap.Strict as HM
 import Data.List (sortBy,elemIndex)
 import qualified Data.Set as S
+import Data.String
 import Data.Text (Text,pack,unpack,intercalate)
+import Data.Text.Encoding
 import Data.Thyme.Time.Core
 import qualified Data.Vector as V
 import qualified Data.Yaml as Y
@@ -82,6 +86,11 @@ cliDefs = ("Cli",
       [LitExample "(local (+ 1 2))",LitExample "(local)"]
       "Evaluate EXEC on server, or without argument, current code value (see 'code')."
       ,
+      defZRNative "eval-local" evalLocal
+      (funType a [("exp",a)])
+      [LitExample "(eval \"(+ 1 2)\")"]
+      "Evaluate EXP locally on server."
+      ,
       defZNative "add-cap" addCap
       (funType tTyString [("cap",TyFun $ funType' tTyBool []),("signers",TyList (tTyString))])
       [LitExample "(add-cap (coin.TRANSFER \"alice\" \"bob\" 10.0) [\"alice\"])"]
@@ -101,6 +110,11 @@ cliDefs = ("Cli",
       (funType tTyString [("exprs",a)])
       [LitExample "(code (+ 1 2) (/ 3 4))"]
       "Store EXPRS as current command code."
+      ,
+      defZRNative "code-file" codeFile
+      (funType tTyString [("file",a)])
+      [LitExample "(code-file \"transfers.repl\")"]
+      "Set current command code to contents of FILE"
       ,
       defZRNative "rehash" rehash
       (funType tTyString [])
@@ -132,6 +146,11 @@ cliDefs = ("Cli",
       (funType tTyString [("file",tTyString)])
       [LitExample "(read-offline \"sig.yaml\")"]
       "Read offline signature yaml FILE."
+      ,
+      defZRNative "show" showCmd
+      (funType tTyString [])
+      [LitExample "(show)"]
+      "Show/print current command."
      ])
 
   where
@@ -162,9 +181,12 @@ import' i as = do
   mds <- localExec i False $ "[" <> (intercalate " " ms) <> "]"
   rs <- case mds of
     PList vs -> forM vs $ \md ->
-      case preview (_PAt "code" . _PString) md of
-        Just code -> evalPact' code
-        Nothing -> evalError' i "Expected code"
+      case (preview (_PAt "code" . _PString) md, preview (_PAt "name". _PString) md) of
+        (Just code,Just mname) -> case fromString (unpack mname) of
+          (ModuleName _ (Just (NamespaceName ns))) ->
+            evalPact' ("(namespace \"" <> ns <> "\") " <> code)
+          _ -> evalPact' code
+        (_,_) -> evalError' i "Expected code, module name"
     _ -> evalError' i "Expected list"
   return $ toTList TyAny def (concat rs)
 
@@ -282,16 +304,46 @@ local' i as = do
   let code = intercalate " " $ map termToCode as
   fromPactValue <$> localExec i False code
 
+evalLocal :: RNativeFun LibState
+evalLocal i [TLitString e] = do
+  fromPactValue <$> localExec i False e
+evalLocal i as = argsError i as
+
 code' :: ZNativeFun LibState
 code' i as = do
   let code = intercalate " " $ map termToCode as
   evalApp i "cli.set-code" [tStr code]
+
+codeFile :: RNativeFun LibState
+codeFile i [TLitString f] = do
+  f' <- computeCurPath f
+  code <- liftIO $ readFile f'
+  evalApp i "cli.set-code" [tStr $ pack code]
+codeFile i as = argsError i as
 
 rehash :: RNativeFun LibState
 rehash i _ = do
   code <- cliState i "code" (_PLiteral . _LString)
   cmd <- buildCmd i True code
   evalApp i "env-hash" $ [tStr $ asString $ _cmdHash cmd]
+
+showCmd :: RNativeFun LibState
+showCmd i _ = do
+  code <- cliState i "code" (_PLiteral . _LString)
+  c@Command{..} <- buildCmd i True code
+  liftIO $ do
+    putStrLn "Hash:"
+    BS.putStr $ "  " <> Y.encode _cmdHash
+    putStrLn "Sigs:"
+    forM_ _cmdSigs $ \s -> BS.putStr $ "  " <> Y.encode s
+    putStrLn "Payload:"
+    BS.putStr . Y.encode . decodeStrict @Value . encodeUtf8 $ _cmdPayload
+    putStrLn "JSON:"
+    BSL.putStrLn $ encode c
+    return $ tStr "---"
+
+
+
 
 localExec :: HasInfo i => i -> Bool -> Text -> Eval LibState PactValue
 localExec i includeSigners code = do
@@ -482,6 +534,11 @@ _eval e = do
     loadCli Nothing
     evalEval def e
   either (error . show) return r
+
+_run :: String -> IO ()
+_run f = do
+  r <- _eval $ evalPact' $ pack f
+  mapM_ (putStrLn . unpack . renderCompactText) r
 
 _testCode :: Text -> IO [Text]
 _testCode code = _eval (fmap termToCode <$> (compilePact code >>= mapM enscope))

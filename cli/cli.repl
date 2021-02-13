@@ -1,4 +1,3 @@
-
 (module cli G
   (defcap G () (enforce false "X"))
 
@@ -133,8 +132,8 @@
   (defun network-id (s:string)
     (update-state { 'network-id: s } true))
 
-  (defun creation-time (s:string)
-    (update-state { 'creation-time: (time s) } true))
+  (defun creation-time (t:time)
+    (update-state { 'creation-time: t } true))
 
   (defun nonce (s:string)
     (update-state { 'nonce: s } true))
