@@ -57,7 +57,9 @@ keyDefs =
      ["(env-data {'k: ['abc]}) (describe-keyset (read-keyset 'k))"] 
      "Get metadata for KEYSET."
     ,setTopLevelOnly $ defGasRNative "describe-guard" descGuard
-     (funType tTyObjectAny [("keyset",tTyString)]) [] "Get metadata for KEYSET."
+     (funType tTyObjectAny [("guard",tTyString)]) 
+     ["(env-data {'k: ['abc]}) (describe-guard (read-keyset 'k))"]
+     "Get metadata for GUARD."
     ,enforceGuardDef "enforce-keyset"
     ,defKeyPred KeysAll (==)
      ["(keys-all 3 3)"] "Keyset predicate function to match all keys in keyset."
