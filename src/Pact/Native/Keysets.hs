@@ -54,12 +54,12 @@ keyDefs =
      \similarly to 'read-keyset'. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value."
     ,setTopLevelOnly $ defGasRNative "describe-keyset" descKeySet
-     (funType tTyObjectAny [("keyset",tTyString)]) 
-     ["(env-data {'k: ['abc]}) (describe-keyset (read-keyset 'k))"] 
+     (funType tTyObjectAny [("keyset",tTyString)])
+     ["(env-data {'k: ['abc]}) (describe-keyset (read-keyset 'k))"]
      "Get metadata for KEYSET."
     ,setTopLevelOnly $ defGasRNative "describe-guard" descGuard
-     (funType tTyObjectAny [("guard",tTyString)]) 
-     ["(env-data {'k: ['abc]}) (describe-guard (read-keyset 'k))"]
+     (funType tTyObjectAny [("guard",tTyString)])
+     ["(env-data {'k: ['abc]}) (define-keyset 'ks (read-keyset 'k)) (describe-guard (keyset-ref-guard 'ks))"]
      "Get metadata for GUARD."
     ,enforceGuardDef "enforce-keyset"
     ,defKeyPred KeysAll (==)
