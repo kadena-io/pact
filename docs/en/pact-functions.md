@@ -1367,4 +1367,4 @@ Top level only: this function will fail if used in module code.
 
 Get metadata for KEYSET.
 ```lisp
-pact> (env-data {'k: ['abc]}) (describe-keyset (read-keyset 'k))
+pact> (env-data {"k": { "pred": "keys-all", "keys": ["abc"] }) (describe-keyset (read-keyset 'k))
